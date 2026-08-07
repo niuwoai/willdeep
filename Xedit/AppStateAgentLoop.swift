@@ -814,6 +814,15 @@ extension AppState {
                 activeExperts: activeExperts,
                 promptProfile: promptProfile
             )
+            let projectWorkspaceRoots = agentWorkspaceRoots(for: runtime.session)
+            if projectWorkspaceRoots.count > 1 {
+                assembledPrompt += """
+
+                === PROJECT WORKSPACE ROOTS ===
+                This Project explicitly authorizes all folders below. Relative paths resolve against the first root; use an absolute path for another root.
+                \(projectWorkspaceRoots.map { "- \($0.path)" }.joined(separator: "\n"))
+                """
+            }
             if let remoteRuntimeDescriptor,
                case .remote(_, let remotePath) = workspaceLocation {
                 let transportLabel = remoteRuntimeDescriptor.transport == .daemon ? "daemon" : "SSH"
@@ -1374,7 +1383,10 @@ extension AppState {
                 let risk = AgentToolRegistry.risk(
                     for: call.toolName,
                     arguments: argsDict,
-                    rootDirectory: workspaceURL
+                    rootDirectory: workspaceURL,
+                    additionalWorkspaceRoots: Array(
+                        self.agentWorkspaceRoots(for: runtime.session).dropFirst()
+                    )
                 )
                 if isPlanProgressReconciliationActive,
                    !AgentPlanAutoContinuationPolicy.allowsToolRiskDuringProgressReconciliation(risk) {
@@ -1387,7 +1399,10 @@ extension AppState {
                 let sandboxDecision = AgentSandboxPolicy.decision(
                     toolName: call.toolName,
                     arguments: argsDict,
-                    rootDirectory: workspaceURL
+                    rootDirectory: workspaceURL,
+                    additionalWorkspaceRoots: Array(
+                        self.agentWorkspaceRoots(for: runtime.session).dropFirst()
+                    )
                 )
 
                 // A dispatch-board child has no operator attached. Never
@@ -1599,6 +1614,9 @@ extension AppState {
                 }
                 return AgentToolContext(
                     rootDirectory: workspaceURL,
+                    additionalWorkspaceRoots: Array(
+                        self.agentWorkspaceRoots(for: runtime.session).dropFirst()
+                    ),
                     workspaceLocation: workspaceLocation,
                     runtimeDescriptor: remoteRuntimeDescriptor,
                     runtimeID: runtime.id,
@@ -1644,12 +1662,13 @@ extension AppState {
                     ),
                     sandboxMode: sandboxMode,
                     isUnattendedDispatchTask: runtime.isUnattendedDispatchTask,
-                    patchProposalSink: { title, diff, applyImmediately in
+                    patchProposalSink: { title, diff, applyImmediately, workspaceRoot in
                         try self.enqueueAgentPatchProposal(
                             for: runtime,
                             messageID: assistantID,
                             title: title,
                             diff: diff,
+                            workspaceRoot: workspaceRoot,
                             autoApplySource: patchAutoApplySource,
                             applyImmediately: applyImmediately
                         )

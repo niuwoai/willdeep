@@ -312,23 +312,15 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
 
     var isPinned: Bool { pinnedAt != nil }
     var isArchived: Bool { archivedAt != nil }
-    /// A session that has become a board goal moves to the Goals destination
-    /// and leaves the workspace sidebar, so it is listed in exactly one place.
-    ///
-    /// The test is deliberately the same one the board uses to adopt a
-    /// session (`AgentDispatchCoordinator.synchronizedGoals`): a non-empty
-    /// goal. Excluding on `interactionMode == .goal` instead used to hide the
-    /// session the moment Goal mode was switched on — before any goal had
-    /// been stated, when the board would not adopt it either — so it vanished
-    /// from both surfaces, taking its workspace group with it if it was the
-    /// only session there.
+    /// Composer mode and Goal-board projection are secondary views of a
+    /// conversation, not ownership transfers. A workspace conversation stays
+    /// in the workspace sidebar whether it is ordinary or Goal-driven.
     var belongsInWorkspaceSidebar: Bool {
-        presentationScope == .workspace && !hasBoardGoal
+        presentationScope == .workspace
     }
 
-    /// True once this session carries a goal substantial enough for the
-    /// Goals board to own it. Must stay in lockstep with the board's own
-    /// adoption filter — see `AgentSidebarGoalVisibilityTests`.
+    /// True once this session carries a goal substantial enough to also be
+    /// projected onto the Goals board.
     var hasBoardGoal: Bool {
         guard let currentGoal else { return false }
         return !currentGoal.isEmpty
@@ -2080,6 +2072,9 @@ struct AgentPatchProposal: Identifiable, Codable, Equatable {
     let messageID: UUID
     let title: String
     let diff: String
+    /// Root selected from the owning Project for this proposal. Nil keeps
+    /// persisted proposals from older versions bound to the session root.
+    let workspaceRootPath: String?
     var status: AgentPatchStatus
     var statusMessage: String?
 
@@ -2088,6 +2083,7 @@ struct AgentPatchProposal: Identifiable, Codable, Equatable {
         messageID: UUID,
         title: String,
         diff: String,
+        workspaceRootPath: String? = nil,
         status: AgentPatchStatus = .pending,
         statusMessage: String? = nil
     ) {
@@ -2095,6 +2091,7 @@ struct AgentPatchProposal: Identifiable, Codable, Equatable {
         self.messageID = messageID
         self.title = title
         self.diff = diff
+        self.workspaceRootPath = workspaceRootPath
         self.status = status
         self.statusMessage = statusMessage
     }

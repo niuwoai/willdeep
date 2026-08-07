@@ -484,9 +484,9 @@ extension AppState {
 
     // MARK: - Interaction modes (ordinary / goal)
 
-    /// Flip between ordinary and Goal conversation behavior. Plans are task
-    /// progress rather than a mode, so leaving Goal preserves its current
-    /// execution plan while entering Goal starts a clean goal cycle.
+    /// Flip how the next turn executes. The selection is presentation-neutral:
+    /// it must not clear history, plans, goals, or move the conversation between
+    /// navigation surfaces.
     func setAgentInteractionMode(_ mode: AgentInteractionMode) {
         ensureActiveAgentSessionForInteractiveControl()
         if mode == .goal,
@@ -498,14 +498,6 @@ extension AppState {
         }
         guard agentInteractionMode != mode else { return }
         agentInteractionMode = mode
-        if mode == .goal {
-            agentCurrentPlan = nil
-        }
-        if mode != .goal {
-            agentCurrentGoal = nil
-            activeRuntime?.goalPlanningState = nil
-            activeRuntime?.goalTurnRecoveryCheckpoint = nil
-        }
         persistActiveAgentSession()
     }
 
@@ -1781,20 +1773,13 @@ extension AppState {
     /// 窗口保持用户当前的浏览状态。这里只确保子进程拿到该路径的
     /// security scope。Remote 会话本来就不动 editor。
     private func syncWorkspaceContext(for session: AgentSession) {
-        let location = session.workspaceLocation ?? session.workspaceRootPath.map { .local(path: $0) }
-        guard case .local(let path) = location, !path.isEmpty else {
-            return
+        for url in agentWorkspaceRoots(for: session) {
+            // Already validated + security-scoped this Project folder on an
+            // earlier switch. A Project may contain several repositories.
+            if securityScopedAccessURLs.contains(url) { continue }
+            guard Self.isExistingDirectory(url) else { continue }
+            _ = activateSecurityScope(for: url)
         }
-
-        let url = URL(fileURLWithPath: path).standardizedFileURL
-        // Already validated + security-scoped this workspace on an earlier
-        // switch (the common case: hopping between two sessions in the same
-        // folder). `activateSecurityScope` would early-return anyway, but the
-        // `isExistingDirectory` stat below still hit the filesystem on every
-        // single session switch — skip it once the scope is live.
-        if securityScopedAccessURLs.contains(url) { return }
-        guard Self.isExistingDirectory(url) else { return }
-        _ = activateSecurityScope(for: url)
     }
 
     /// Lazy lookup: returns the existing runtime for `sessionID` or

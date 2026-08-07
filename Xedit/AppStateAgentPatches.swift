@@ -108,6 +108,7 @@ extension AppState {
             let outcome = resolveAgentPatchApplication(
                 runtime.patchProposals[index].diff,
                 runtime: runtime,
+                workspaceRootPath: runtime.patchProposals[index].workspaceRootPath,
                 appliedMessage: autoApplyStatusMessage(for: source)
             )
             runtime.patchProposals[index].status = outcome.status
@@ -140,25 +141,31 @@ extension AppState {
         }
         guard !indices.isEmpty else { return }
 
-        let combinedDiff = indices
-            .map { runtime.patchProposals[$0].diff }
-            // `AgentPatchApplier` flushes the preceding file when it sees a
-            // `diff --git` header. Plain `---` / `+++` headers alone do not
-            // delimit two independently generated proposal strings.
-            .joined(separator: "\ndiff --git a/.willdeep-review-boundary b/.willdeep-review-boundary\n")
-        let outcome = resolveAgentPatchApplication(
-            combinedDiff,
-            runtime: runtime,
-            appliedMessage: "Applied as part of batch"
-        )
-        for index in indices {
-            runtime.patchProposals[index].status = outcome.status
-            runtime.patchProposals[index].statusMessage = outcome.message
-            synchronizeAgentPatchDecision(runtime.patchProposals[index], in: runtime)
-            resumeAgentPatchDecisionWaiter(
-                id: runtime.patchProposals[index].id,
-                runtime: runtime
+        let groupedIndices = Dictionary(grouping: indices) {
+            runtime.patchProposals[$0].workspaceRootPath ?? ""
+        }
+        for (_, rootIndices) in groupedIndices {
+            let combinedDiff = rootIndices
+                .map { runtime.patchProposals[$0].diff }
+                .joined(separator: "\ndiff --git a/.willdeep-review-boundary b/.willdeep-review-boundary\n")
+            let rootPath = rootIndices.first.flatMap {
+                runtime.patchProposals[$0].workspaceRootPath
+            }
+            let outcome = resolveAgentPatchApplication(
+                combinedDiff,
+                runtime: runtime,
+                workspaceRootPath: rootPath,
+                appliedMessage: "Applied as part of batch"
             )
+            for index in rootIndices {
+                runtime.patchProposals[index].status = outcome.status
+                runtime.patchProposals[index].statusMessage = outcome.message
+                synchronizeAgentPatchDecision(runtime.patchProposals[index], in: runtime)
+                resumeAgentPatchDecisionWaiter(
+                    id: runtime.patchProposals[index].id,
+                    runtime: runtime
+                )
+            }
         }
         persistAgentSession(runtime: runtime)
     }
@@ -228,6 +235,7 @@ extension AppState {
         let outcome = resolveAgentPatchApplication(
             runtime.patchProposals[index].diff,
             runtime: runtime,
+            workspaceRootPath: runtime.patchProposals[index].workspaceRootPath,
             appliedMessage: "Applied"
         )
         runtime.patchProposals[index].status = outcome.status
@@ -460,14 +468,15 @@ extension AppState {
     func resolveAgentPatchApplication(
         _ diff: String,
         runtime: AgentRuntime?,
+        workspaceRootPath: String? = nil,
         appliedMessage: String
     ) -> (status: AgentPatchStatus, message: String) {
         do {
-            try applyAgentPatch(diff, runtime: runtime)
+            try applyAgentPatch(diff, runtime: runtime, workspaceRootPath: workspaceRootPath)
             return (.applied, appliedMessage)
         } catch {
             if case AgentPatchError.hunkDidNotMatch = error,
-               agentPatchIsAlreadyApplied(diff, runtime: runtime) {
+               agentPatchIsAlreadyApplied(diff, runtime: runtime, workspaceRootPath: workspaceRootPath) {
                 return (.applied, L10n.AgentPatch.alreadyApplied)
             }
             return (.failed, error.localizedDescription)
@@ -482,8 +491,15 @@ extension AppState {
         agentPatchIsAlreadyApplied(diff, runtime: activeRuntime)
     }
 
-    func agentPatchIsAlreadyApplied(_ diff: String, runtime: AgentRuntime?) -> Bool {
-        guard let root = agentPatchWorkspaceRoot(for: runtime) else { return false }
+    func agentPatchIsAlreadyApplied(
+        _ diff: String,
+        runtime: AgentRuntime?,
+        workspaceRootPath: String? = nil
+    ) -> Bool {
+        guard let root = try? validatedAgentPatchWorkspaceRoot(
+            workspaceRootPath,
+            runtime: runtime
+        ) else { return false }
         guard let changes = try? AgentPatchApplier.parse(diff), !changes.isEmpty else { return false }
         let standardizedRoot = root.standardizedFileURL
         let rootPath = standardizedRoot.path
@@ -548,21 +564,26 @@ extension AppState {
         messageID: UUID,
         title: String?,
         diff: String,
+        workspaceRoot: URL? = nil,
         autoApplySource: AgentToolApprovalSource? = nil,
         applyImmediately: Bool = false
     ) throws -> AgentPatchProposal {
         let parsed = try AgentPatchApplier.parse(diff)
-        try validateUniqueAgentPatchTargets(parsed, runtime: runtime)
+        let resolvedRoot = try validatedAgentPatchWorkspaceRoot(workspaceRoot?.path, runtime: runtime)
+        try validateUniqueAgentPatchTargets(parsed, root: resolvedRoot)
 
         let proposalIndex: Int
-        if let existingIndex = runtime.patchProposals.firstIndex(where: { $0.diff == diff }) {
+        if let existingIndex = runtime.patchProposals.firstIndex(where: {
+            $0.diff == diff && $0.workspaceRootPath == resolvedRoot.path
+        }) {
             proposalIndex = existingIndex
         } else {
             let trimmedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
             let proposal = AgentPatchProposal(
                 messageID: messageID,
                 title: trimmedTitle?.isEmpty == false ? trimmedTitle! : "Agent Patch",
-                diff: diff
+                diff: diff,
+                workspaceRootPath: resolvedRoot.path
             )
             runtime.patchProposals.append(proposal)
             proposalIndex = runtime.patchProposals.count - 1
@@ -579,6 +600,7 @@ extension AppState {
             let outcome = resolveAgentPatchApplication(
                 diff,
                 runtime: runtime,
+                workspaceRootPath: resolvedRoot.path,
                 appliedMessage: autoApplyStatusMessage(for: effectiveAutoApplySource)
             )
             runtime.patchProposals[proposalIndex].status = outcome.status
@@ -624,21 +646,23 @@ extension AppState {
         try applyAgentPatch(diff, runtime: activeRuntime)
     }
 
-    func applyAgentPatch(_ diff: String, runtime: AgentRuntime?) throws {
+    func applyAgentPatch(
+        _ diff: String,
+        runtime: AgentRuntime?,
+        workspaceRootPath: String? = nil
+    ) throws {
         // Agent mode 下 editor 窗口的 `rootDirectory` 经常是 nil(没在
         // editor 里打开文件夹),但 agent 会话本身锚在一个 workspace 上。
         // 之前只看 `rootDirectory` → 一律报「请先打开项目文件夹」,哪怕
         // 用户明明在 mylinux 这个 workspace 里。改成和 worktree diff 同
         // 一套优先级:已知 git repo root → 会话 workspaceRootPath → editor
         // rootDirectory。
-        guard let resolvedRoot = agentPatchWorkspaceRoot(for: runtime) else {
-            throw AgentPatchError.noWorkspace
-        }
+        let resolvedRoot = try validatedAgentPatchWorkspaceRoot(workspaceRootPath, runtime: runtime)
 
         let changes = try AgentPatchApplier.parse(diff)
         let root = resolvedRoot.standardizedFileURL
         let rootPath = root.path
-        try validateUniqueAgentPatchTargets(changes, runtime: runtime)
+        try validateUniqueAgentPatchTargets(changes, root: root)
         var pendingWrites: [(
             url: URL,
             content: String,
@@ -782,11 +806,8 @@ extension AppState {
 
     private func validateUniqueAgentPatchTargets(
         _ changes: [AgentPatchFileChange],
-        runtime: AgentRuntime?
+        root resolvedRoot: URL
     ) throws {
-        guard let resolvedRoot = agentPatchWorkspaceRoot(for: runtime) else {
-            throw AgentPatchError.noWorkspace
-        }
         let root = resolvedRoot.standardizedFileURL
         let rootPath = root.path
         let canonicalRoot = root.resolvingSymlinksInPath().standardizedFileURL
@@ -922,6 +943,24 @@ extension AppState {
             return repoRoot.standardizedFileURL
         }
         return rootDirectory?.standardizedFileURL
+    }
+
+    private func validatedAgentPatchWorkspaceRoot(
+        _ requestedPath: String?,
+        runtime: AgentRuntime?
+    ) throws -> URL {
+        guard let requestedPath, !requestedPath.isEmpty else {
+            guard let root = agentPatchWorkspaceRoot(for: runtime) else {
+                throw AgentPatchError.noWorkspace
+            }
+            return root.standardizedFileURL
+        }
+        let requested = URL(fileURLWithPath: requestedPath).standardizedFileURL
+        guard let runtime,
+              agentWorkspaceRoots(for: runtime.session).contains(where: { $0.path == requested.path }) else {
+            throw AgentPatchError.pathOutsideWorkspace(requestedPath)
+        }
+        return requested
     }
 
     private func refreshAgentPatchGitStatus(for runtime: AgentRuntime?, workspaceRoot: URL) {

@@ -691,7 +691,7 @@ enum AgentSubagentRunner {
         outputSchema: AgentStructuredSchema? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         writeAccess: AgentSubagentWriteAccess? = nil,
-        patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil,
+        patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil,
         onProgress: ((_ round: Int, _ toolInvocations: Int) -> Void)? = nil
     ) async throws -> Outcome {
         // some.im-gated providers require the session/workspace context headers on
@@ -968,7 +968,7 @@ enum AgentSubagentRunner {
         workspaceLocation: WorkspaceLocation? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         writeAccess: AgentSubagentWriteAccess? = nil,
-        patchProposalSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = nil
+        patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil
     ) async -> String {
         let permitted = profile.effectiveToolNames(writeAccessGranted: writeAccess != nil)
         guard permitted.contains(call.toolName) else {

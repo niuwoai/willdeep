@@ -315,7 +315,8 @@ enum AgentSandboxPolicy {
     nonisolated static func decision(
         toolName: String,
         arguments: [String: AgentJSONValue],
-        rootDirectory: URL?
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = []
     ) -> AgentSandboxDecision {
         switch toolName {
         case "run_command":
@@ -328,7 +329,11 @@ enum AgentSandboxPolicy {
                     prefixRule: nil
                 )
             }
-            return commandDecision(command: command, rootDirectory: rootDirectory)
+            return commandDecision(
+                command: command,
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: additionalWorkspaceRoots
+            )
         case "write_file":
             guard let target = AgentExternalFileWritePolicy.target(
                 arguments: arguments,
@@ -427,7 +432,11 @@ enum AgentSandboxPolicy {
             // command preflight so sensitive paths, credentials, destructive
             // operations and external targets cannot be hidden behind an
             // otherwise read-only executable such as `cat`.
-            return commandDecision(command: command, rootDirectory: rootDirectory)
+            return commandDecision(
+                command: command,
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: additionalWorkspaceRoots
+            )
         case "rename_session":
             return AgentSandboxDecision(
                 mode: .workspaceWrite,
@@ -470,7 +479,11 @@ enum AgentSandboxPolicy {
         }
     }
 
-    nonisolated static func commandDecision(command: String, rootDirectory: URL?) -> AgentSandboxDecision {
+    nonisolated static func commandDecision(
+        command: String,
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = []
+    ) -> AgentSandboxDecision {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return AgentSandboxDecision(
@@ -569,7 +582,11 @@ enum AgentSandboxPolicy {
                       let resolved = resolvePath(token, workingDirectory: workingDirectory, rootDirectory: rootDirectory) else {
                     return false
                 }
-                return !isInsideWorkspace(resolved, rootDirectory: rootDirectory)
+                return !isInsideWorkspace(
+                    resolved,
+                    rootDirectory: rootDirectory,
+                    additionalWorkspaceRoots: additionalWorkspaceRoots
+                )
             }) {
                 needsEscalation = true
                 reasons.append("Environment assignment references a path outside the workspace and must preserve the real target before launch.")
@@ -589,7 +606,11 @@ enum AgentSandboxPolicy {
             if head == "cd" {
                 if let next = tokens.dropFirst().first {
                     if let resolved = resolvePath(next, workingDirectory: workingDirectory, rootDirectory: rootDirectory),
-                       isInsideWorkspace(resolved, rootDirectory: rootDirectory) {
+                       isInsideWorkspace(
+                           resolved,
+                           rootDirectory: rootDirectory,
+                           additionalWorkspaceRoots: additionalWorkspaceRoots
+                       ) {
                         if !segment.runsInPipeline {
                             workingDirectory = resolved
                         }
@@ -676,7 +697,11 @@ enum AgentSandboxPolicy {
                       let resolved = resolvePath(token, workingDirectory: workingDirectory, rootDirectory: rootDirectory) else {
                     return false
                 }
-                return !isInsideWorkspace(resolved, rootDirectory: rootDirectory)
+                return !isInsideWorkspace(
+                    resolved,
+                    rootDirectory: rootDirectory,
+                    additionalWorkspaceRoots: additionalWorkspaceRoots
+                )
             }) {
                 needsEscalation = true
                 reasons.append("Command references a path outside the workspace and must be reviewed before running without the workspace sandbox.")
@@ -922,7 +947,8 @@ enum AgentSandboxPolicy {
     nonisolated static func shellLaunch(
         command: String,
         mode: AgentSandboxMode,
-        rootDirectory: URL?
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = []
     ) -> AgentSandboxLaunch {
         // Pure read-only allowlist commands (git log/status/diff, rg, …) gain
         // nothing from seatbelt — reads were already unrestricted, and the
@@ -938,7 +964,17 @@ enum AgentSandboxPolicy {
         }
         return AgentSandboxLaunch(
             executableURL: URL(fileURLWithPath: sandboxExecPath),
-            arguments: ["-p", seatbeltProfile(mode: mode, rootDirectory: rootDirectory), "/bin/sh", "-c", command]
+            arguments: [
+                "-p",
+                seatbeltProfile(
+                    mode: mode,
+                    rootDirectory: rootDirectory,
+                    additionalWorkspaceRoots: additionalWorkspaceRoots
+                ),
+                "/bin/sh",
+                "-c",
+                command,
+            ]
         )
     }
 
@@ -1115,7 +1151,11 @@ enum AgentSandboxPolicy {
         return result
     }
 
-    nonisolated private static func seatbeltProfile(mode: AgentSandboxMode, rootDirectory: URL?) -> String {
+    nonisolated private static func seatbeltProfile(
+        mode: AgentSandboxMode,
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = []
+    ) -> String {
         // git 等工具几乎所有子命令都会以写模式打开 /dev/null（重定向 hook/pager/gpg
         // 探测输出），交互探测会打开 /dev/tty；(deny default) 下不放行会导致命令恒 EPERM。
         var writeAllows: [String] = [
@@ -1123,9 +1163,14 @@ enum AgentSandboxPolicy {
             "(literal \"/dev/tty\")",
             "(subpath \(profileString(FileManager.default.temporaryDirectory.standardizedFileURL.path)))"
         ]
-        if (mode == .workspaceWrite || mode == .workspaceWriteNetwork),
-           let root = rootDirectory?.standardizedFileURL.path {
-            writeAllows.append("(subpath \(profileString(root)))")
+        if mode == .workspaceWrite || mode == .workspaceWriteNetwork {
+            let roots = [rootDirectory].compactMap { $0 } + additionalWorkspaceRoots
+            var seen = Set<String>()
+            for rootURL in roots {
+                let root = rootURL.standardizedFileURL.path
+                guard seen.insert(root).inserted else { continue }
+                writeAllows.append("(subpath \(profileString(root)))")
+            }
         }
         let writeRule = "(allow file-write* \(writeAllows.joined(separator: " ")))"
         let networkRule = mode == .workspaceWriteNetwork ? "(allow network*)" : "(deny network*)"
@@ -1334,10 +1379,16 @@ enum AgentSandboxPolicy {
         return base?.appendingPathComponent(cleaned).standardizedFileURL
     }
 
-    nonisolated private static func isInsideWorkspace(_ url: URL, rootDirectory: URL?) -> Bool {
-        guard let root = rootDirectory?.standardizedFileURL.path else { return false }
+    nonisolated private static func isInsideWorkspace(
+        _ url: URL,
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = []
+    ) -> Bool {
         let path = url.standardizedFileURL.path
-        return path == root || path.hasPrefix(root + "/")
+        return ([rootDirectory].compactMap { $0 } + additionalWorkspaceRoots).contains { rootURL in
+            let root = rootURL.standardizedFileURL.path
+            return path == root || path.hasPrefix(root + "/")
+        }
     }
 
     nonisolated private static func localPathCheckTokens(for tokens: [String], head: String) -> ArraySlice<String> {

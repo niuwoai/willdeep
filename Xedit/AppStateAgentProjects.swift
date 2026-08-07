@@ -15,6 +15,25 @@ import Combine
 import Foundation
 
 extension AppState {
+    /// Local filesystem roots explicitly authorized by the session's Project.
+    /// The session workspace stays first so relative tool paths remain stable.
+    func agentWorkspaceRoots(for session: AgentSession) -> [URL] {
+        guard case .local(let primaryPath) = session.workspaceLocation
+                ?? session.workspaceRootPath.map({ .local(path: $0) }) else {
+            return []
+        }
+        let projectPaths = session.projectID
+            .flatMap { id in agentProjects.first(where: { $0.id == id }) }?
+            .folderPaths ?? []
+        var seen = Set<String>()
+        return ([primaryPath] + projectPaths).compactMap { rawPath in
+            guard let path = AgentProject.normalizedPath(rawPath), seen.insert(path).inserted else {
+                return nil
+            }
+            return URL(fileURLWithPath: path).standardizedFileURL
+        }
+    }
+
     // MARK: Create / update
 
     /// Turn a plain folder group into a named project, or extend an existing
@@ -30,6 +49,7 @@ extension AppState {
         agentProjects.append(project)
         AgentProjectStore.save(agentProjects)
         rebindAgentSessionsToProjects()
+        activateAgentProjectFolderAccess(projectID: project.id)
         return project
     }
 
@@ -52,6 +72,7 @@ extension AppState {
         agentProjects[index].updatedAt = Date()
         AgentProjectStore.save(agentProjects)
         rebindAgentSessionsToProjects()
+        activateAgentProjectFolderAccess(projectID: id)
         return true
     }
 
@@ -147,6 +168,13 @@ extension AppState {
     func agentProject(forSidebarGroupKey key: String) -> AgentProject? {
         guard let id = AgentSession.projectID(fromSidebarGroupKey: key) else { return nil }
         return agentProjects.first { $0.id == id }
+    }
+
+    private func activateAgentProjectFolderAccess(projectID: UUID) {
+        guard let session = agentSessions.first(where: { $0.projectID == projectID }) else { return }
+        for url in agentWorkspaceRoots(for: session) where Self.isExistingDirectory(url) {
+            _ = activateSecurityScope(for: url)
+        }
     }
 }
 

@@ -10,10 +10,9 @@
 //  groups, and left the group name stuck at whatever the directory happened
 //  to be called.
 //
-//  This is a presentation and grouping concept only. Tools always execute
-//  against the session's own `workspaceLocation`, so nothing here can move
-//  where work actually happens — the separation the Git-worktree support
-//  already established (see `AgentSession.sidebarWorkspaceRootPath`).
+//  Project folders are both sidebar grouping and explicit local tool roots.
+//  Relative paths still resolve against the session's `workspaceLocation`;
+//  absolute paths may address any other folder attached to the Project.
 //
 
 import Foundation

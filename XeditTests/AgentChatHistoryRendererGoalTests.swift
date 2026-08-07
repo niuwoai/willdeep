@@ -3,8 +3,8 @@
 //  WillDeepTests
 //
 //  Split out of AgentChatHistoryRendererTests.swift to keep files under the
-//  repository size limit. Same renderer, second half of the coverage: goal
-//  turn settling, workflow and tool receipt cards, and citation attributes.
+//  repository size limit. Same renderer, second half of the coverage: Goal
+//  transcript stability, workflow and tool receipt cards, and citations.
 //
 
 import AppKit
@@ -15,20 +15,20 @@ import Testing
 @Suite
 struct AgentChatHistoryRendererGoalTests {
     @Test
-    func settledGoalTurnFallsBackToLatestActivityWhenNoSummaryExists() {
+    func goalModeKeepsEveryVisibleMessageWhenNoSummaryExists() {
         let user = AgentMessage(role: .user, content: "继续")
         let planning = AgentMessage(role: .assistant, content: "Planning next pass")
         let verifying = AgentMessage(role: .assistant, content: "Verifying current files")
 
-        let compacted = AgentGoalTranscriptPresentation.settledMessages(
+        let displayed = AgentTranscriptModePresentation.modeInvariantMessages(
             from: [user, planning, verifying]
         )
 
-        #expect(compacted.map(\.id) == [user.id, verifying.id])
+        #expect(displayed.map(\.id) == [user.id, planning.id, verifying.id])
     }
 
     @Test
-    func settledGoalTurnSanitizesProtocolWhenThereIsOnlyOneAssistantMessage() {
+    func goalModeDoesNotRewritePersistedAssistantMessages() {
         let user = AgentMessage(role: .user, content: "交付")
         let final = AgentMessage(
             role: .assistant,
@@ -46,18 +46,16 @@ struct AgentChatHistoryRendererGoalTests {
             )]
         )
 
-        let compacted = AgentGoalTranscriptPresentation.settledMessages(from: [user, final])
+        let displayed = AgentTranscriptModePresentation.modeInvariantMessages(from: [user, final])
 
-        #expect(compacted.map(\.id) == [user.id, final.id])
-        #expect(compacted.last?.content == "已完成。")
-        #expect(compacted.last?.toolCalls.isEmpty == true)
-        #expect(final.content.contains("```progress"))
-        #expect(final.toolCalls.count == 1)
+        #expect(displayed.map(\.id) == [user.id, final.id])
+        #expect(displayed.last?.content == final.content)
+        #expect(displayed.last?.toolCalls == final.toolCalls)
     }
 
     @Test
     @MainActor
-    func rendersSettledGoalRoundSummaryForDesignQA() throws {
+    func rendersGoalRoundWithoutModeDrivenCompactionForDesignQA() throws {
         let startedAt = Date(timeIntervalSince1970: 4_000)
         let user = AgentMessage(role: .user, content: "完成 Goal 回合", createdAt: startedAt)
         let raw = [
@@ -117,7 +115,7 @@ struct AgentChatHistoryRendererGoalTests {
                 createdAt: startedAt.addingTimeInterval(302)
             ),
         ]
-        let compacted = AgentGoalTranscriptPresentation.settledMessages(from: raw)
+        let displayed = AgentTranscriptModePresentation.modeInvariantMessages(from: raw)
             .filter { $0.role == .assistant }
         let view = AgentChatHistoryNSTextView()
         view.drawsBackground = true
@@ -126,17 +124,23 @@ struct AgentChatHistoryRendererGoalTests {
         view.frame = NSRect(x: 0, y: 0, width: 773, height: 578)
         view.textContainer?.size = NSSize(width: 709, height: CGFloat.greatestFiniteMagnitude)
         view.applyMessages(
-            compacted,
+            displayed,
             isDark: false,
             assistantTurnContextMessages: raw,
             baseFontSize: 14
         )
+        let planningTitle = try #require(
+            AgentActivityHeadlinePresentation.make(
+                from: "Planning Goal transcript presentation"
+            )?.title
+        )
 
         #expect(view.string.contains("完成了，Goal 回合现在会在结束后收束为交付小结"))
-        #expect(!view.string.contains("第一次渲染没有收口"))
+        #expect(view.string.contains(planningTitle))
+        #expect(view.string.contains("第一次渲染没有收口"))
         #expect(!view.string.contains("swift test"))
         #expect(!view.string.contains("1: done"))
-        #expect(!view.string.contains(L10n.AgentTurnProgress.title))
+        #expect(view.string.contains(L10n.AgentTurnProgress.title))
 
         let outputPath = ProcessInfo.processInfo.environment[
             "WILLDEEP_GOAL_SUMMARY_DESIGN_QA_OUTPUT"

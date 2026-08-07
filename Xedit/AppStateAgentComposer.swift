@@ -523,12 +523,18 @@ extension AppState {
         let risk = AgentToolRegistry.risk(
             for: toolName,
             arguments: arguments,
-            rootDirectory: workspaceURL
+            rootDirectory: workspaceURL,
+            additionalWorkspaceRoots: Array(
+                agentWorkspaceRoots(for: runtime.session).dropFirst()
+            )
         )
         let sandboxDecision = AgentSandboxPolicy.decision(
             toolName: toolName,
             arguments: arguments,
-            rootDirectory: workspaceURL
+            rootDirectory: workspaceURL,
+            additionalWorkspaceRoots: Array(
+                agentWorkspaceRoots(for: runtime.session).dropFirst()
+            )
         )
         let autoApproval = Self.delegatedComposerApprovalSource(risk: risk)
 
@@ -634,6 +640,9 @@ extension AppState {
         }
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
+            additionalWorkspaceRoots: Array(
+                agentWorkspaceRoots(for: runtime.session).dropFirst()
+            ),
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: remoteRuntimeDescriptor,
             runtimeID: runtime.id,

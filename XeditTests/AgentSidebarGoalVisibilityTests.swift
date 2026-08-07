@@ -2,11 +2,8 @@ import Foundation
 import Testing
 @testable import WillDeep
 
-/// The workspace sidebar and the Goals board must partition sessions: every
-/// workspace-scoped session belongs to exactly one of them. A gap between the
-/// two filters is not a cosmetic bug — the conversation disappears from the
-/// app entirely, and takes its workspace group with it when it is the only
-/// session there.
+/// Goal-board projection is additive. Composer mode and goal metadata must not
+/// remove a workspace conversation from the sidebar.
 @Suite
 @MainActor
 struct AgentSidebarGoalVisibilityTests {
@@ -65,16 +62,16 @@ struct AgentSidebarGoalVisibilityTests {
         #expect(visible.first?.workspaceSidebarGroupKey == "/Users/rocky/Sites/juhe")
     }
 
-    // MARK: The original intent, still honored
+    // MARK: Goal-board projection
 
-    @Test("a session with a real goal moves to the board and leaves the sidebar")
-    func statedGoalMovesToBoard() {
+    @Test("a session with a real goal remains in the sidebar and also appears on the board")
+    func statedGoalAppearsOnBothSurfaces() {
         let stated = session(
             goal: AgentGoal(statement: "Ship the charging-station screen"),
             interactionMode: .goal
         )
 
-        #expect(!stated.belongsInWorkspaceSidebar)
+        #expect(stated.belongsInWorkspaceSidebar)
         #expect(boardAdopts(stated))
     }
 
@@ -85,14 +82,14 @@ struct AgentSidebarGoalVisibilityTests {
             interactionMode: .goal
         )
 
-        #expect(!stated.belongsInWorkspaceSidebar)
+        #expect(stated.belongsInWorkspaceSidebar)
         #expect(boardAdopts(stated))
     }
 
-    // MARK: The partition itself
+    // MARK: Scope ownership
 
-    @Test("every workspace-scoped session lands on exactly one surface")
-    func surfacesPartitionWorkspaceSessions() {
+    @Test("every workspace-scoped session remains in the conversation sidebar")
+    func workspaceScopeAlwaysKeepsConversationVisible() {
         let cases: [AgentSession] = [
             session(),
             session(interactionMode: .goal),
@@ -103,13 +100,34 @@ struct AgentSidebarGoalVisibilityTests {
         ]
 
         for candidate in cases {
-            let inSidebar = candidate.belongsInWorkspaceSidebar
-            let onBoard = boardAdopts(candidate)
-            #expect(
-                inSidebar != onBoard,
-                "session with goal=\(String(describing: candidate.currentGoal?.statement)) mode=\(candidate.interactionMode.rawValue) appeared \(inSidebar && onBoard ? "twice" : "nowhere")"
-            )
+            #expect(candidate.belongsInWorkspaceSidebar)
         }
+    }
+
+    @Test("switching Composer mode preserves messages, plan, goal, and sidebar membership")
+    func composerModeSwitchIsPresentationNeutral() throws {
+        let appState = AppState()
+        let session = appState.startNewAgentSession(inWorkspaceAt: "/tmp/xedit-mode-switch")
+        let runtime = try #require(appState.activeRuntime)
+        let user = AgentMessage(role: .user, content: "检查服务")
+        let progress = AgentMessage(role: .assistant, content: "正在读取日志")
+        let goal = AgentGoal(statement: "检查服务健康")
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [.init(text: "读取日志", status: .inProgress)]
+        )
+        runtime.messages = [user, progress]
+        runtime.currentGoal = goal
+        runtime.currentPlan = plan
+
+        appState.setAgentInteractionMode(.goal)
+        appState.setAgentInteractionMode(.normal)
+
+        #expect(appState.activeAgentSessionID == session.id)
+        #expect(runtime.messages.map(\.id) == [user.id, progress.id])
+        #expect(runtime.currentGoal == goal)
+        #expect(runtime.currentPlan == plan)
+        #expect(runtime.session.belongsInWorkspaceSidebar)
     }
 
     @Test("dispatch-board child sessions stay out of the workspace sidebar")

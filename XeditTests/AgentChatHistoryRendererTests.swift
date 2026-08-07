@@ -1536,7 +1536,7 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
-    func settledGoalTurnKeepsOnlyArtifactsAndFinalDeliverySummary() throws {
+    func goalModeKeepsProcessMessagesArtifactsAndFinalDeliverySummary() throws {
         let startedAt = Date(timeIntervalSince1970: 1_500)
         let user = AgentMessage(role: .user, content: "完成整个目标", createdAt: startedAt)
         let phase = AgentMessage(
@@ -1579,33 +1579,26 @@ struct AgentChatHistoryRendererTests {
             createdAt: startedAt.addingTimeInterval(8)
         )
         let raw = [user, phase, failedAttempt, artifact, final]
-        let compacted = AgentGoalTranscriptPresentation.settledMessages(from: raw)
+        let displayed = AgentTranscriptModePresentation.modeInvariantMessages(from: raw)
 
-        #expect(compacted.map(\.id) == [user.id, artifact.id, final.id])
-        #expect(raw.contains(where: { $0.id == failedAttempt.id }))
-        #expect(raw.last?.content.contains("goal-check") == true)
-        #expect(compacted.last?.content.contains("goal-check") == false)
+        #expect(displayed.map(\.id) == raw.map(\.id))
+        #expect(displayed.last?.content == final.content)
 
         let rendered = AgentChatHistoryRenderer.render(
-            messages: compacted,
+            messages: displayed,
             isDark: false,
             assistantTurnContextMessages: raw
         )
+        let planningTitle = try #require(
+            AgentActivityHeadlinePresentation.make(
+                from: "Planning the implementation"
+            )?.title
+        )
         #expect(rendered.string.contains("完成了，目标已经交付"))
-        #expect(!rendered.string.contains("第一次尝试失败"))
-        #expect(!rendered.string.contains("Planning the implementation"))
+        #expect(rendered.string.contains("第一次尝试失败"))
+        #expect(rendered.string.contains(planningTitle))
         #expect(!rendered.string.contains("goal-check"))
         #expect(attributeCount(.agentChatHistoryAssistantStatusDividerColor, in: rendered) == 1)
         #expect(occurrences(of: "600/60", in: rendered.string) == 1)
-        #expect(firstAttributeRange(
-            .agentChatHistoryMessageCopyText,
-            value: """
-            完成了，目标已经交付。
-
-            - 修改已落盘
-            - 验证已通过
-            """,
-            in: rendered
-        ) != nil)
     }
 }
