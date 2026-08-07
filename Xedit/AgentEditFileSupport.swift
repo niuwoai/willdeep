@@ -16,8 +16,9 @@ import Foundation
 enum AgentEditFileError: LocalizedError, Equatable {
     case emptyOldString
     case identicalReplacement(String)
-    case oldStringNotFound(String)
+    case oldStringNotFound(String, hint: String?)
     case oldStringNotUnique(String, Int)
+    case crlfUnsupported(String)
     case diffRoundTripMismatch(String)
 
     var errorDescription: String? {
@@ -26,10 +27,14 @@ enum AgentEditFileError: LocalizedError, Equatable {
             return "old_string must not be empty. Pass the exact text to replace; to create a new file use create_file."
         case .identicalReplacement(let path):
             return "old_string and new_string are identical for \(path). Provide a new_string that differs from old_string."
-        case .oldStringNotFound(let path):
-            return "old_string was not found in \(path). It must match the current file content EXACTLY, including whitespace and indentation, and must not include read_file line-number prefixes. Re-read the file and copy the text verbatim."
+        case .oldStringNotFound(let path, let hint):
+            let base = "old_string was not found in \(path), even with whitespace-tolerant matching. It must match the current file content, and must not include read_file line-number prefixes. Re-read the file and copy the text verbatim."
+            if let hint { return base + " Hint: " + hint }
+            return base
         case .oldStringNotUnique(let path, let count):
             return "old_string matches \(count) locations in \(path). Include more surrounding lines to make it unique, or pass replace_all=true to replace every occurrence."
+        case .crlfUnsupported(let path):
+            return "The edit region in \(path) uses CRLF (\\r\\n) line endings, which the diff pipeline does not support. Normalize the file to LF first (e.g. run_command with `perl -pi -e 's/\\r\\n/\\n/'`) and retry the edit."
         case .diffRoundTripMismatch(let path):
             return "Internal error: the synthesized diff for \(path) did not round-trip through the patch applier. Please report this; retry with apply_patch as a fallback."
         }
@@ -70,19 +75,52 @@ enum AgentEditFileSupport {
             searchStart = found.upperBound
         }
 
-        guard !ranges.isEmpty else { throw AgentEditFileError.oldStringNotFound(path) }
-        if ranges.count > 1 && !replaceAll {
-            throw AgentEditFileError.oldStringNotUnique(path, ranges.count)
+        // The replacement text actually inserted. Exact matches use
+        // new_string verbatim; the indentation-tolerant fallback re-indents
+        // it to the file's real indentation.
+        var replacement = newString
+
+        if ranges.isEmpty {
+            // Exact match failed. Models frequently reconstruct old_string
+            // with slightly wrong whitespace (mis-stripped read_file line
+            // numbers, trailing spaces, shifted indentation). Recover the
+            // unambiguous cases instead of failing the tool call; anything
+            // still ambiguous or divergent stays a hard error.
+            guard !replaceAll, let flexible = flexibleLineMatch(
+                oldContent: oldContent,
+                oldString: oldString,
+                newString: newString
+            ) else {
+                throw AgentEditFileError.oldStringNotFound(
+                    path,
+                    hint: notFoundHint(oldContent: oldContent, oldString: oldString)
+                )
+            }
+            if flexible.matches.count > 1 {
+                throw AgentEditFileError.oldStringNotUnique(path, flexible.matches.count)
+            }
+            ranges = [flexible.matches[0]]
+            replacement = flexible.replacement
+        } else {
+            if ranges.count > 1 && !replaceAll {
+                throw AgentEditFileError.oldStringNotUnique(path, ranges.count)
+            }
+            if !replaceAll {
+                ranges = [ranges[0]]
+            }
         }
-        if !replaceAll {
-            ranges = [ranges[0]]
+
+        guard oldContent[ranges[0]] != replacement || ranges.count > 1 else {
+            // A whitespace-tolerant match that resolves to the identical
+            // text is a no-op, same as old_string == new_string.
+            throw AgentEditFileError.identicalReplacement(path)
         }
 
         var newContent = ""
         var cursor = oldContent.startIndex
         for range in ranges {
             newContent += oldContent[cursor..<range.lowerBound]
-            newContent += newString
+            newContent += replacement
             cursor = range.upperBound
         }
         newContent += oldContent[cursor...]
@@ -91,7 +129,7 @@ enum AgentEditFileSupport {
             path: path,
             oldContent: oldContent,
             replacedRanges: ranges,
-            replacement: newString
+            replacement: replacement
         )
 
         // The generated diff MUST reproduce `newContent` byte-for-byte through
@@ -100,10 +138,203 @@ enum AgentEditFileSupport {
         guard let change = try? AgentPatchApplier.parse(diff).first,
               let applied = try? AgentPatchApplier.apply(change, to: oldContent),
               applied == newContent else {
+            // The applier parses diffs with a `.newlines` split, so hunk
+            // lines carrying a literal "\r" can never round-trip — surface
+            // the line-ending problem instead of a generic internal error.
+            if oldContent.range(of: "\r", options: .literal) != nil {
+                throw AgentEditFileError.crlfUnsupported(path)
+            }
             throw AgentEditFileError.diffRoundTripMismatch(path)
         }
 
         return Edit(diff: diff, newContent: newContent, occurrences: ranges.count)
+    }
+
+    // MARK: - Whitespace-tolerant fallback matching
+
+    /// Full-line, whitespace-tolerant fallback used when the exact search
+    /// finds nothing. Two tiers, tried in order:
+    ///
+    /// 1. Ignore trailing whitespace per line (also rescues CRLF files —
+    ///    the stray `\r` is trailing whitespace).
+    /// 2. Additionally ignore a UNIFORM indentation shift across all
+    ///    non-blank lines; `new_string` is re-indented by that same shift
+    ///    so the inserted code lands at the file's real indentation.
+    ///
+    /// Matching is whole-line only: every old_string line must correspond
+    /// to one full file line. Returns nil when no window matches (or the
+    /// needle is all-blank, where line matching is meaningless).
+    static func flexibleLineMatch(
+        oldContent: String,
+        oldString: String,
+        newString: String
+    ) -> (matches: [Range<String.Index>], replacement: String)? {
+        let needleEndsWithNewline = oldString.hasSuffix("\n")
+        var needleLines = oldString.components(separatedBy: "\n")
+        if needleEndsWithNewline { needleLines.removeLast() }
+        guard !needleLines.isEmpty,
+              needleLines.contains(where: { !rstrip($0).isEmpty }) else {
+            return nil
+        }
+
+        // Lines with their index ranges, scanned via range(of: "\n") — NOT
+        // Character iteration or count-based offsets: in a CRLF file "\r\n"
+        // is a single Character, so grapheme-based arithmetic misaligns
+        // every line start (and can run past endIndex).
+        struct FileLine {
+            let text: String
+            let start: String.Index
+            let contentEnd: String.Index
+            let next: String.Index
+        }
+        var fileLines: [FileLine] = []
+        var cursor = oldContent.startIndex
+        while true {
+            if let newline = oldContent.range(of: "\n", options: .literal, range: cursor..<oldContent.endIndex) {
+                fileLines.append(FileLine(
+                    text: String(oldContent[cursor..<newline.lowerBound]),
+                    start: cursor,
+                    contentEnd: newline.lowerBound,
+                    next: newline.upperBound
+                ))
+                cursor = newline.upperBound
+                if cursor == oldContent.endIndex { break }
+            } else {
+                fileLines.append(FileLine(
+                    text: String(oldContent[cursor...]),
+                    start: cursor,
+                    contentEnd: oldContent.endIndex,
+                    next: oldContent.endIndex
+                ))
+                break
+            }
+        }
+        guard fileLines.count >= needleLines.count else { return nil }
+
+        func windowRange(start: Int) -> Range<String.Index> {
+            let last = fileLines[start + needleLines.count - 1]
+            return fileLines[start].start..<(needleEndsWithNewline ? last.next : last.contentEnd)
+        }
+
+        // Lines carrying a literal "\r" (CRLF files) can never round-trip
+        // through the applier's `.newlines`-split diff parser — refuse to
+        // match them so the caller reports the line-ending problem instead
+        // of synthesizing a diff that fails downstream.
+        let lineHasCarriageReturn = fileLines.map {
+            $0.text.range(of: "\r", options: .literal) != nil
+        }
+
+        // Tier 1: trailing-whitespace-insensitive.
+        let needleRStripped = needleLines.map(rstrip)
+        var tier1: [Int] = []
+        for start in 0...(fileLines.count - needleLines.count) {
+            var matched = true
+            for offset in 0..<needleLines.count {
+                if lineHasCarriageReturn[start + offset]
+                    || rstrip(fileLines[start + offset].text) != needleRStripped[offset] {
+                    matched = false
+                    break
+                }
+            }
+            if matched { tier1.append(start) }
+        }
+        if !tier1.isEmpty {
+            return (tier1.map { windowRange(start: $0) }, newString)
+        }
+
+        // Tier 2: uniform indentation shift.
+        let needleTrimmed = needleRStripped.map { stripLeadingWhitespace($0) }
+        let needleIndents = needleLines.map { leadingWhitespace(of: $0) }
+        var tier2Starts: [Int] = []
+        var firstShift: (add: String, remove: String)?
+        outer: for start in 0...(fileLines.count - needleLines.count) {
+            var shift: (add: String, remove: String)?
+            for offset in 0..<needleLines.count {
+                if lineHasCarriageReturn[start + offset] { continue outer }
+                let fileLine = rstrip(fileLines[start + offset].text)
+                guard stripLeadingWhitespace(fileLine) == needleTrimmed[offset] else { continue outer }
+                if needleTrimmed[offset].isEmpty { continue } // blank lines don't constrain indent
+                let fileIndent = leadingWhitespace(of: fileLine)
+                let needleIndent = needleIndents[offset]
+                let candidate: (add: String, remove: String)
+                if fileIndent.hasSuffix(needleIndent) {
+                    candidate = (add: String(fileIndent.dropLast(needleIndent.count)), remove: "")
+                } else if needleIndent.hasSuffix(fileIndent) {
+                    candidate = (add: "", remove: String(needleIndent.dropFirst(fileIndent.count)))
+                } else {
+                    continue outer
+                }
+                if let existing = shift {
+                    guard existing == candidate else { continue outer }
+                } else {
+                    shift = candidate
+                }
+            }
+            tier2Starts.append(start)
+            if firstShift == nil { firstShift = shift }
+        }
+        guard !tier2Starts.isEmpty else { return nil }
+
+        let shift = firstShift ?? (add: "", remove: "")
+        let replacement = newString.components(separatedBy: "\n").map { line -> String in
+            guard !rstrip(line).isEmpty else { return line }
+            if !shift.add.isEmpty { return shift.add + line }
+            if !shift.remove.isEmpty, line.hasPrefix(shift.remove) {
+                return String(line.dropFirst(shift.remove.count))
+            }
+            return line
+        }.joined(separator: "\n")
+
+        return (tier2Starts.map { windowRange(start: $0) }, replacement)
+    }
+
+    /// Best-effort diagnosis for an old_string that failed both exact and
+    /// whitespace-tolerant matching, appended to the error so the model
+    /// can self-correct instead of blind-retrying.
+    static func notFoundHint(oldContent: String, oldString: String) -> String? {
+        if oldContent.range(of: "\r\n", options: .literal) != nil {
+            return "the file uses CRLF (\\r\\n) line endings, which edit_file cannot patch. Normalize the file to LF first (e.g. run_command with `perl -pi -e 's/\\r\\n/\\n/'`) and retry."
+        }
+
+        let needleLines = oldString.components(separatedBy: "\n").filter { !rstrip($0).isEmpty }
+        guard !needleLines.isEmpty else { return nil }
+
+        // read_file prefixes every line with a right-aligned line number —
+        // a mis-stripped prefix is the most common self-inflicted mismatch.
+        let prefixed = needleLines.filter {
+            $0.range(of: #"^\s*\d+\s\s"#, options: .regularExpression) != nil
+        }
+        if prefixed.count * 2 >= needleLines.count {
+            return "old_string looks like it still contains read_file line-number prefixes. Strip the leading `<number>  ` from every line and retry."
+        }
+
+        let firstNeedle = stripLeadingWhitespace(rstrip(needleLines[0]))
+        if !firstNeedle.isEmpty {
+            var lineNumber = 0
+            for line in oldContent.components(separatedBy: "\n") {
+                lineNumber += 1
+                if stripLeadingWhitespace(rstrip(line)) == firstNeedle {
+                    return "the first line of old_string matches file line \(lineNumber), but later lines diverge from the file. Re-read that region and copy it verbatim."
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func rstrip(_ line: String) -> String {
+        var s = Substring(line)
+        while let last = s.last, last == " " || last == "\t" || last == "\r" {
+            s.removeLast()
+        }
+        return String(s)
+    }
+
+    private static func stripLeadingWhitespace(_ line: String) -> String {
+        String(line.drop(while: { $0 == " " || $0 == "\t" }))
+    }
+
+    private static func leadingWhitespace(of line: String) -> String {
+        String(line.prefix(while: { $0 == " " || $0 == "\t" }))
     }
 
     /// Build a unified diff whose removed/context lines are copied verbatim
@@ -118,12 +349,16 @@ enum AgentEditFileSupport {
         let oldLines = oldContent.components(separatedBy: "\n")
 
         // Start index of each line; lineStarts.count == oldLines.count.
+        // Scan with range(of:, options: .literal), not firstIndex(of:
+        // Character): in CRLF content "\r\n" is one Character that never
+        // equals "\n" (and non-literal search applies canonical equivalence,
+        // which also refuses to find "\n" inside "\r\n"), which would leave
+        // every line mapped to line 0.
         var lineStarts: [String.Index] = [oldContent.startIndex]
         var scan = oldContent.startIndex
-        while let newline = oldContent[scan...].firstIndex(of: "\n") {
-            let next = oldContent.index(after: newline)
-            lineStarts.append(next)
-            scan = next
+        while let newline = oldContent.range(of: "\n", options: .literal, range: scan..<oldContent.endIndex) {
+            lineStarts.append(newline.upperBound)
+            scan = newline.upperBound
         }
 
         func lineIndex(containing index: String.Index) -> Int {
@@ -146,12 +381,29 @@ enum AgentEditFileSupport {
             var ranges: [Range<String.Index>]
         }
 
+        // Greatest line whose start is strictly before `index` — the line
+        // holding a non-empty range's last character, computed without
+        // index(before:), which is unsafe when upperBound sits between the
+        // scalars of a CRLF "\r\n" grapheme.
+        func lineIndex(endingBefore index: String.Index) -> Int {
+            var low = 0
+            var high = lineStarts.count - 1
+            while low < high {
+                let mid = (low + high + 1) / 2
+                if lineStarts[mid] < index {
+                    low = mid
+                } else {
+                    high = mid - 1
+                }
+            }
+            return low
+        }
+
         var spans: [Span] = []
         for range in replacedRanges {
             let startLine = lineIndex(containing: range.lowerBound)
-            // Ranges are non-empty (oldString is non-empty), so the last
-            // character is upperBound - 1.
-            let endLine = lineIndex(containing: oldContent.index(before: range.upperBound))
+            // Ranges are non-empty (oldString is non-empty).
+            let endLine = lineIndex(endingBefore: range.upperBound)
             if var last = spans.last, startLine <= last.endLine + 1 + contextLineCount * 2 {
                 last.endLine = max(last.endLine, endLine)
                 last.ranges.append(range)

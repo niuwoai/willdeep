@@ -28,6 +28,7 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
     static func action(for session: AgentSession) -> AgentGoalLaunchRecoveryAction {
         let hasCheckpoint = session.goalTurnRecoveryCheckpoint != nil
         guard session.archivedAt == nil,
+              session.presentationScope != .dispatchBoard,
               session.interactionMode == .goal,
               session.executionAgent == .willDeep,
               let goal = session.currentGoal,
@@ -83,6 +84,7 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
         // decisions are revalidated against normalized live state.
         if catalogAction == .restartPlanning {
             guard restoredSession.archivedAt == nil,
+                  restoredSession.presentationScope != .dispatchBoard,
                   restoredSession.interactionMode == .goal,
                   restoredSession.executionAgent == .willDeep,
                   let goal = restoredSession.currentGoal,

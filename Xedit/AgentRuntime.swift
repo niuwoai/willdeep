@@ -21,6 +21,15 @@
 import Foundation
 import Combine
 
+/// Presentation weight of the transcript banner. `error` is the historical
+/// red treatment for genuine failures; `notice` is for banners that merely
+/// hand control back to the user — the run is intact, nothing needs
+/// panicking about.
+nonisolated enum AgentBannerSeverity: Equatable {
+    case error
+    case notice
+}
+
 @MainActor
 final class AgentRuntime: ObservableObject, Identifiable {
     let id: AgentSession.ID
@@ -44,6 +53,14 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Conversation state
 
     @Published var messages: [AgentMessage] = []
+    /// Live text of the currently-streaming assistant message. Fed by
+    /// `AgentStreamingMessageBuffer` at bubble cadence (~10 Hz) and observed
+    /// ONLY by the transcript's streaming bubble subtree. Deliberately a
+    /// plain `let` — its `objectWillChange` must NOT forward through this
+    /// runtime (and from there through AppState) or every flush would again
+    /// invalidate the whole window. Canonical `messages` publishes sync at
+    /// a slower cadence; see AgentStreamingMessageBuffer's header comment.
+    let streamingOverlay = AgentStreamingContentOverlay()
     @Published var contextSummary: String?
     @Published var contextSummaryThroughMessageID: AgentMessage.ID?
     @Published var patchProposals: [AgentPatchProposal] = []
@@ -91,6 +108,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var isCompressingContext: Bool = false
     @Published var errorMessage: String?
     @Published var errorDetails: AgentErrorDetails?
+    /// How loudly the banner should present `errorMessage`. Not every banner
+    /// is a failure: the plan auto-continuation pauses stop a healthy run for
+    /// a bookkeeping reason, and painting those in alarm red reads as "your
+    /// work broke". Always reset alongside `errorMessage`.
+    @Published var errorSeverity: AgentBannerSeverity = .error
     /// True when `errorMessage` is the "some.im not logged in" gate (see
     /// `AppState.someIMLoginRequiredForTurn`). Drives the error card's extra
     /// "去登录 some.im" affordance. Always reset alongside `errorMessage`.
@@ -246,6 +268,18 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// without execution. The plan remains visible, but host auto-continuation
     /// must stop after the planning reply.
     var currentTurnPlanningOnly: Bool = false
+    /// Subagent delegation policy for the turn currently in flight, set from
+    /// the `/subagent` / `/no-subagent` composer commands. `.forbidden`
+    /// removes `spawn_agent` from this turn's tool table; `.required` only
+    /// injects an instruction (see `AgentDelegationPolicy`).
+    var currentTurnDelegationPolicy: AgentDelegationPolicy = .automatic
+    /// Policy staged by a slash command for the *next* dispatch. Consumed
+    /// (and reset) by `dispatchAgentMessage`, or carried into the queued
+    /// message when the runtime is still responding.
+    var pendingDelegationPolicy: AgentDelegationPolicy = .automatic
+    /// `spawn_agent` invocations observed during the current turn. Only used
+    /// to audit whether a `.required` policy was actually honored.
+    var currentTurnSpawnAgentCallCount: Int = 0
     /// Goal may continue across several provider turns, but repeated
     /// no-change self-checks must pause instead of spinning forever.
     var consecutiveGoalRoundsWithoutChecklistProgress: Int = 0

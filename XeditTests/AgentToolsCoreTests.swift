@@ -967,7 +967,11 @@ struct AgentToolsCoreTests {
             name: "run_command",
             arguments: [
                 "command": .string("printf '%s' \"$WILLDEEP_TEST_TOOL_HOME\""),
-                "timeout_seconds": .number(5)
+                // What is under test is environment propagation, not latency.
+                // The printf itself costs 8ms, but under a full-load parallel
+                // run the spawn alone can outlast a tight budget — a 5s ceiling
+                // blew up repeatedly while the rest of the suite was running.
+                "timeout_seconds": .number(Self.headlessCommandTimeoutSeconds)
             ],
             context: context
         )

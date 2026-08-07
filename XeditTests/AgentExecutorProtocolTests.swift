@@ -684,7 +684,15 @@ private final class ACPWriteProbe {
 @Suite("Structured agent process registry")
 @MainActor
 struct AgentExecutorProcessRegistryTests {
-    private static let fullSuiteCompletionAllowanceSeconds: TimeInterval = 20
+    /// How long a test waits for the process to reach a terminal state.
+    private static let fullSuiteCompletionAllowanceSeconds: TimeInterval = 45
+    /// Liveness cap handed to the job itself. It has to stay under the wait
+    /// allowance above, or the wait gives up before the timeout it is meant to
+    /// observe. None of these tests asserts timeout behaviour — they assert
+    /// content — so the old 5s only ever acted as a load-sensitive kill switch:
+    /// piping 272 KB through stdin outran it under a full-load parallel run and
+    /// the job came back SIGTERMed as `.timedOut`.
+    private static let fullSuiteJobTimeoutSeconds: TimeInterval = 30
 
     @Test("Fast process retains session, usage, and final result")
     func fastProcessRetainsAllStructuredEvents() async throws {
@@ -708,7 +716,7 @@ struct AgentExecutorProcessRegistryTests {
         let job = try registry.startExecutor(
             specification: specification,
             runtimeID: UUID(),
-            timeoutSeconds: 5
+            timeoutSeconds: Self.fullSuiteJobTimeoutSeconds
         )
         let completed = try await waitUntilFinished(
             registry: registry,
@@ -740,7 +748,7 @@ struct AgentExecutorProcessRegistryTests {
         let job = try registry.startExecutor(
             specification: specification,
             runtimeID: runtimeID,
-            timeoutSeconds: 5,
+            timeoutSeconds: Self.fullSuiteJobTimeoutSeconds,
             publishesCompletion: false
         )
         _ = try await waitUntilFinished(registry: registry, id: job.id)
@@ -771,7 +779,7 @@ struct AgentExecutorProcessRegistryTests {
         let job = try registry.startExecutor(
             specification: specification,
             runtimeID: UUID(),
-            timeoutSeconds: 5,
+            timeoutSeconds: Self.fullSuiteJobTimeoutSeconds,
             secretRedactionValues: [secret]
         )
         _ = try await waitUntilFinished(registry: registry, id: job.id)
@@ -805,7 +813,7 @@ struct AgentExecutorProcessRegistryTests {
         let job = try registry.startExecutor(
             specification: specification,
             runtimeID: UUID(),
-            timeoutSeconds: 5
+            timeoutSeconds: Self.fullSuiteJobTimeoutSeconds
         )
         let completed = try await waitUntilFinished(
             registry: registry,
@@ -837,7 +845,7 @@ struct AgentExecutorProcessRegistryTests {
         let job = try registry.startExecutor(
             specification: specification,
             runtimeID: UUID(),
-            timeoutSeconds: 5
+            timeoutSeconds: Self.fullSuiteJobTimeoutSeconds
         )
         let completed = try await waitUntilFinished(
             registry: registry,

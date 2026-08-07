@@ -93,6 +93,14 @@ extension AppState {
         set { activeRuntime?.errorDetails = newValue }
     }
 
+    /// Presentation weight of the current banner. Defaults to `.error` so any
+    /// path that sets `agentErrorMessage` without an opinion keeps the old
+    /// red treatment.
+    var agentErrorSeverity: AgentBannerSeverity {
+        get { activeRuntime?.errorSeverity ?? .error }
+        set { activeRuntime?.errorSeverity = newValue }
+    }
+
     /// Whether the current error banner is the some.im login gate — lets the
     /// error card offer a "去登录 some.im" button instead of the generic retry.
     var agentErrorRequiresSomeIMLogin: Bool {

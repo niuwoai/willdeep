@@ -1018,7 +1018,12 @@ struct WillDeepTests {
             skin: nil
         )
         defer { controller.closeTab(id: tab.id) }
-        try await Task.sleep(nanoseconds: 300_000_000)
+        // The login shell's rc files run as foreground children of this pty,
+        // and dispatch is (correctly) refused while they do. Wait for the
+        // prompt instead of a fixed sleep — under a full-load run the startup
+        // easily outlives any constant.
+        let readyState = await AgentTerminalTestSupport.waitForShellReady(tab)
+        #expect(readyState == .shellReady, "login shell never reached its prompt: \(readyState.rawValue)")
 
         let marker = "willdeep-terminal-follow-up-\(UUID().uuidString)"
         let result = try await AgentTerminalTools.sendCommand(
@@ -1407,6 +1412,105 @@ struct WillDeepTests {
         withExtendedLifetime(observation) {}
     }
 
+    @MainActor
+    @Test("streaming buffer feeds the overlay per flush and lags the canonical array")
+    func testAgentStreamingBufferTierSplit() {
+        let assistant = AgentMessage(role: .assistant, content: "")
+        let runtime = AgentRuntime(session: AgentSession(messages: [assistant]))
+        let buffer = AgentStreamingMessageBuffer(runtime: runtime, assistantID: assistant.id)
+        var publishCount = 0
+        let observation = runtime.objectWillChange.sink { publishCount += 1 }
+
+        // ≥2400 chars takes the synchronous immediate-flush path, keeping
+        // the test clock-free. The first visible content additionally syncs
+        // the canonical array right away so the bubble mounts without lag.
+        let first = String(repeating: "a", count: 2_400)
+        buffer.appendTextDelta(first)
+        #expect(publishCount == 1)
+        #expect(runtime.messages[0].content == first)
+        #expect(runtime.streamingOverlay.snapshot(for: assistant.id)?.content == first)
+
+        // Subsequent flushes update only the overlay; the canonical array
+        // (whose publish is forwarded into AppState.objectWillChange, i.e.
+        // a whole-window invalidation) waits for the slow-tier sync.
+        let second = String(repeating: "b", count: 2_400)
+        buffer.appendTextDelta(second)
+        #expect(publishCount == 1)
+        #expect(runtime.messages[0].content == first)
+        #expect(runtime.streamingOverlay.snapshot(for: assistant.id)?.content == first + second)
+
+        // flushPending drains both tiers synchronously.
+        buffer.flushPending()
+        #expect(publishCount == 2)
+        #expect(runtime.messages[0].content == first + second)
+        withExtendedLifetime(observation) {}
+    }
+
+    @MainActor
+    @Test("streaming buffer batches tool-call argument fragments and publishes new calls immediately")
+    func testAgentStreamingBufferToolCallTierSplit() {
+        let assistant = AgentMessage(role: .assistant, content: "")
+        let runtime = AgentRuntime(session: AgentSession(messages: [assistant]))
+        let buffer = AgentStreamingMessageBuffer(runtime: runtime, assistantID: assistant.id)
+        var publishCount = 0
+        let observation = runtime.objectWillChange.sink { publishCount += 1 }
+
+        // A new call appearing (count change) syncs the canonical array
+        // immediately so the live activity timeline mounts promptly.
+        let call = AgentMessageToolCall(
+            externalID: "call-1",
+            toolName: "edit_file",
+            argumentsJSON: "{\"path"
+        )
+        buffer.updateToolCalls([call])
+        #expect(publishCount == 1)
+        #expect(runtime.messages[0].toolCalls.count == 1)
+
+        // Argument fragments growing on the same call ride the slow tier:
+        // overlay live, canonical (and its whole-window forward) unchanged.
+        var grown = call
+        grown.argumentsJSON = "{\"path\":\"a.swift\",\"old_string\":\"before\""
+        buffer.updateToolCalls([grown])
+        #expect(publishCount == 1)
+        #expect(runtime.messages[0].toolCalls[0].argumentsJSON == call.argumentsJSON)
+        #expect(
+            runtime.streamingOverlay.snapshot(for: assistant.id)?
+                .toolCalls?[0].argumentsJSON == grown.argumentsJSON
+        )
+
+        // flushPending lands the final arguments in the canonical array.
+        buffer.flushPending()
+        #expect(publishCount == 2)
+        #expect(runtime.messages[0].toolCalls[0].argumentsJSON == grown.argumentsJSON)
+        withExtendedLifetime(observation) {}
+    }
+
+    @MainActor
+    @Test("streaming overlay applies live text onto the canonical message and ignores stale snapshots")
+    func testAgentStreamingOverlayApplying() {
+        let overlay = AgentStreamingContentOverlay()
+        var message = AgentMessage(role: .assistant, content: "hello")
+        overlay.replace(AgentStreamingContentOverlay.Snapshot(
+            messageID: message.id,
+            content: "hello world",
+            reasoningContent: "thinking"
+        ))
+
+        let live = overlay.applying(to: message)
+        #expect(live.content == "hello world")
+        #expect(live.reasoningContent == "thinking")
+
+        // A canonical value that grew beyond the snapshot (external rewrite,
+        // or a snapshot left over from an earlier turn) wins over the overlay.
+        message.content = "hello world, finalized with a longer rewrite"
+        #expect(overlay.applying(to: message).content == "hello world, finalized with a longer rewrite")
+
+        // Unrelated message ids pass through untouched.
+        let other = AgentMessage(role: .assistant, content: "other")
+        #expect(overlay.applying(to: other).content == "other")
+        #expect(overlay.snapshot(for: other.id) == nil)
+    }
+
     @Test("command palette matcher supports fuzzy and keyword lookup")
     func testCommandPaletteMatcher() {
         let command = PaletteCommand(
@@ -1728,7 +1832,11 @@ struct WillDeepTests {
         #expect(descriptor?.risk == .read)
         #expect(descriptor?.parameters.first(where: { $0.name == "prompt" })?.required == true)
         #expect(descriptor?.parameters.contains(where: { $0.name == "run_in_background" }) == true)
-        #expect(descriptor?.parameters.contains(where: { $0.name == "model" }) == true)
+        // Trades replaced the free-form `model` override: cost policy is the
+        // user's configuration, not a per-call decision by the model.
+        #expect(descriptor?.parameters.contains(where: { $0.name == "model" }) == false)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "profile" }) == true)
+        #expect(descriptor?.parameters.contains(where: { $0.name == "target_file" }) == true)
     }
 
     @Test("run_command exposes background override and user-facing label")
@@ -2815,11 +2923,11 @@ struct WillDeepTests {
     func testAgentTokenEstimateIncludesTools() {
         // Keep a narrow ceiling above the current complete registry so this
         // catches accidental schema explosions without rejecting intentional
-        // additions to the built-in tool surface. Raise it in step with
-        // deliberate registry growth: 35_000 → 37_000 → 38_000, the last bump
-        // covering the tool changes in 4b400fc5, which landed at 37_106 and
-        // left the gate red on 1.228.0-rc7.
-        let maximumExpectedToolSchemaTokens = 38_000
+        // additions to the built-in tool surface. Raised alongside the
+        // character-class estimator: tool schemas are symbol- and
+        // whitespace-dense, exactly the text the old口径 under-counted, so the
+        // same registry now prices ~30% higher without having grown.
+        let maximumExpectedToolSchemaTokens = 48_000
         let messages = [AgentMessage(role: .user, content: "hi")]
         let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)
@@ -2828,11 +2936,61 @@ struct WillDeepTests {
         #expect(withTools < maximumExpectedToolSchemaTokens)
     }
 
-    @Test("agent token estimate ignores Unicode whitespace")
-    func testAgentTokenEstimateIgnoresUnicodeWhitespace() {
+    @Test("agent token estimate bills whitespace and symbol-dense text")
+    func testAgentTokenEstimateCharacterClasses() {
+        // Prose-like ASCII letters stay at the classic ~4 chars/token.
         #expect(AppState.estimateTextTokens("abcd") == 1)
-        #expect(AppState.estimateTextTokens("a b\nc\td") == 1)
-        #expect(AppState.estimateTextTokens("你\u{3000}好") == 2)
+        // Whitespace is no longer free: indentation and newlines dominate
+        // code and terminal output, and pricing them at zero is a large part
+        // of why a full 1M window used to read as 54%.
+        #expect(AppState.estimateTextTokens("a b\nc\td") == 2)
+        #expect(AppState.estimateTextTokens("你\u{3000}好") == 3)
+
+        // Tool-call ids, UUIDs, and paths are symbol-dense; a real tokenizer
+        // splits them far more finely than prose of the same length.
+        let dense = "call_00_JHrT6ia9tttWsQbHglDu8236"
+        let prose = String(repeating: "a", count: dense.count)
+        #expect(AppState.estimateTextTokens(dense) > AppState.estimateTextTokens(prose))
+    }
+
+    /// The gauge must prefer the provider's own `prompt_tokens` when it is
+    /// higher than the local heuristic — the regression that let a session
+    /// report 54% while the provider rejected it at 155% of the window.
+    @Test("context usage anchors on real provider prompt tokens")
+    func testProviderAnchoredUsedTokens() {
+        let anchored = AgentMessage(role: .assistant, content: "ok", promptTokens: 900_000)
+        let messages = [
+            AgentMessage(role: .user, content: "hi"),
+            anchored,
+            AgentMessage(role: .user, content: "more")
+        ]
+        let used = AppState.providerAnchoredUsedTokens(
+            messages: messages,
+            contextSummaryThroughMessageID: nil
+        )
+        #expect(used != nil)
+        // Anchor plus a local estimate of everything appended since.
+        #expect((used ?? 0) > 900_000)
+        // Nothing but the anchor and two short messages — no runaway.
+        #expect((used ?? 0) < 900_100)
+
+        // No real reading at all → caller falls back to the local estimate.
+        #expect(
+            AppState.providerAnchoredUsedTokens(
+                messages: [AgentMessage(role: .user, content: "hi")],
+                contextSummaryThroughMessageID: nil
+            ) == nil
+        )
+
+        // A compression landing at or after the reading invalidates it;
+        // otherwise the gauge would stay pinned high and hide the very
+        // compression that just freed the window.
+        #expect(
+            AppState.providerAnchoredUsedTokens(
+                messages: messages,
+                contextSummaryThroughMessageID: anchored.id
+            ) == nil
+        )
     }
 
     @Test("agent tool-round safety limit supports long multi-step work")

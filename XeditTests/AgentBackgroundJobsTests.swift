@@ -566,11 +566,7 @@ struct AgentBackgroundJobsTests {
             runtimeID: runtimeID,
             timeoutSeconds: 0.4
         )
-        let finished = await waitUntilFinished(
-            registry: registry,
-            id: job.id,
-            timeoutMs: 15000
-        )
+        let finished = await waitUntilFinished(registry: registry, id: job.id)
         #expect(finished)
         #expect(registry.job(id: job.id)?.status == .timedOut)
     }
@@ -1110,10 +1106,18 @@ struct AgentBackgroundJobsTests {
     /// `true` finish doesn't waste much wall-clock; 15s default is
     /// generous enough to survive a loaded CI box running the whole
     /// Swift Testing target concurrently without false failures.
+    /// How long a test will wait for a job to reach a terminal state. This is
+    /// a liveness budget, not an assertion about speed: the jobs here are
+    /// `true` or a trapped `sleep` loop, which finish in milliseconds when the
+    /// box is idle. Under a full-load parallel run the spawn alone can outlast
+    /// a tight budget — 15s lost three of these at once while the rest of the
+    /// suite ran, and the same suite passed in 9.8s on its own.
+    private static let finishBudgetMs = 60_000
+
     private func waitUntilFinished(
         registry: AgentJobRegistry,
         id: UUID,
-        timeoutMs: Int = 15000
+        timeoutMs: Int = Self.finishBudgetMs
     ) async -> Bool {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
         while Date() < deadline {

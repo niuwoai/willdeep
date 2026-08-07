@@ -141,17 +141,24 @@ nonisolated struct AgentDispatchLogicalProject: Codable, Equatable, Identifiable
     var displayName: String
     var primaryWorkspacePath: String
     var localRepositoryIdentity: String?
+    /// The user-managed `AgentProject` this was derived from, when the
+    /// session belongs to one. It makes the board and the sidebar name the
+    /// same project identically, and gives same-project comparison an exact
+    /// answer instead of inferring one from paths and repo fingerprints.
+    var managedProjectID: UUID?
 
     init(
         id: UUID = UUID(),
         displayName: String,
         primaryWorkspacePath: String,
-        localRepositoryIdentity: String? = nil
+        localRepositoryIdentity: String? = nil,
+        managedProjectID: UUID? = nil
     ) {
         self.id = id
         self.displayName = displayName
         self.primaryWorkspacePath = primaryWorkspacePath
         self.localRepositoryIdentity = localRepositoryIdentity
+        self.managedProjectID = managedProjectID
     }
 }
 
