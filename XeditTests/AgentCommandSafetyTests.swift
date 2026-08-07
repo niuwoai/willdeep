@@ -11,6 +11,11 @@ import Testing
 import Foundation
 @testable import WillDeep
 
+/// Ceiling for headless `run_command` spawns driven from tests. Mirrors the
+/// constant in AgentToolsCoreTests: these tests assert behavior, not latency,
+/// and a tight budget is blown by spawn contention under a full-load run.
+private let headlessCommandTimeoutSeconds = 30.0
+
 extension WillDeepTests {
     // MARK: - SafeCommand classification
 
@@ -682,7 +687,11 @@ extension WillDeepTests {
             name: "run_command",
             arguments: [
                 "command": .string("pwd"),
-                "timeout_seconds": .number(5)
+                // Asserts the working directory, not how fast a spawn is. Under
+                // a full-load parallel run the spawn alone can outlast a tight
+                // budget, so keep the same headless ceiling the other
+                // run_command tests use.
+                "timeout_seconds": .number(headlessCommandTimeoutSeconds)
             ],
             context: context
         )
@@ -738,5 +747,39 @@ extension WillDeepTests {
         #expect(path.contains("/usr/local/bin"))
         // Pre-existing entries are preserved; supplemental dirs are appended.
         #expect(path.contains("/usr/bin"))
+    }
+
+}
+
+@Suite
+struct AgentProjectWorkspaceCommandSafetyTests {
+    @Test("read-only commands accept absolute paths in another Project root")
+    func sandboxAcceptsAdditionalProjectRoot() {
+        let primary = URL(fileURLWithPath: "/tmp/willdeep-frontend")
+        let backend = URL(fileURLWithPath: "/tmp/willdeep-backend")
+        let decision = AgentSandboxPolicy.commandDecision(
+            command: "sed -n '1,20p' /tmp/willdeep-backend/app/service.swift",
+            rootDirectory: primary,
+            additionalWorkspaceRoots: [backend]
+        )
+
+        #expect(decision.mode == .readOnly)
+        #expect(!decision.requiresUserApproval)
+    }
+
+    @Test("workspace-write sandbox grants every Project root")
+    func sandboxProfileIncludesAdditionalProjectRoot() {
+        let primary = URL(fileURLWithPath: "/tmp/willdeep-frontend")
+        let backend = URL(fileURLWithPath: "/tmp/willdeep-backend")
+        let launch = AgentSandboxPolicy.shellLaunch(
+            command: "touch /tmp/willdeep-backend/generated.txt",
+            mode: .workspaceWrite,
+            rootDirectory: primary,
+            additionalWorkspaceRoots: [backend]
+        )
+
+        let profile = launch.arguments.dropFirst().first ?? ""
+        #expect(profile.contains("/tmp/willdeep-frontend"))
+        #expect(profile.contains("/tmp/willdeep-backend"))
     }
 }

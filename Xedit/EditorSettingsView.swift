@@ -223,6 +223,10 @@ struct EditorSettingsView: View {
                 )
             }
 
+            Section(L10n.AgentDelegation.profilesSectionTitle) {
+                AgentSubagentProfileSettingsSection()
+            }
+
             Section(L10n.Settings.sectionImageUnderstanding) {
                 Picker(L10n.Settings.ImageUnderstanding.providerLabel, selection: imageProviderBinding) {
                     ForEach(AgentProviderPreset.all.filter(\.supportsImageInput)) { provider in

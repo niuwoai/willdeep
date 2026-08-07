@@ -17,6 +17,7 @@ extension AppState {
     func setAgentError(_ error: Error, for runtime: AgentRuntime) {
         runtime.errorMessage = Self.friendlyMessage(for: error)
         runtime.errorDetails = Self.details(for: error)
+        runtime.errorSeverity = .error
         runtime.errorRequiresSomeIMLogin = false
     }
 
@@ -44,6 +45,7 @@ extension AppState {
     func setSomeIMLoginRequiredError(for runtime: AgentRuntime) {
         runtime.errorMessage = "some.im 未登录，「省心托管」无法工作。请先登录 some.im，然后点「重试」重新发送这条消息。"
         runtime.errorDetails = nil
+        runtime.errorSeverity = .error
         runtime.errorRequiresSomeIMLogin = true
     }
 
@@ -216,6 +218,7 @@ extension AppState {
 
         runtime.errorMessage = nil
         runtime.errorDetails = nil
+        runtime.errorSeverity = .error
         runtime.errorRequiresSomeIMLogin = false
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
@@ -250,6 +253,7 @@ extension AppState {
     func dismissAgentError() {
         agentErrorMessage = nil
         agentErrorDetails = nil
+        agentErrorSeverity = .error
         agentErrorRequiresSomeIMLogin = false
     }
 

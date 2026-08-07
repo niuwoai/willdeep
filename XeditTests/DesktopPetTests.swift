@@ -204,15 +204,36 @@ struct DesktopPetTests {
     @Test
     func animationCadenceCapsForegroundAndBackgroundRedraws() {
         #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: true) == 8)
-        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: false) == 12)
+        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: false) == 8)
         #expect(
             DesktopPetAnimationCadence.minimumInterval(appIsActive: true)
-                > DesktopPetAnimationCadence.minimumInterval(appIsActive: false)
+                >= 1.0 / 8.0
         )
         #expect(
             DesktopPetAnimationCadence.minimumInterval(appIsActive: false)
-                >= 1.0 / 12.0
+                >= 1.0 / 8.0
         )
+    }
+
+    /// The background cadence used to be *faster* than the foreground one. A CA
+    /// transaction flush lays out every window with pending work, so the pet's
+    /// timeline sets the display-cycle beat for the whole app — including the
+    /// far larger main window. Backgrounded is precisely when that cost buys
+    /// the least, so it must never outpace the foreground.
+    @Test
+    func backgroundCadenceNeverOutpacesForeground() {
+        #expect(
+            DesktopPetAnimationCadence.framesPerSecond(appIsActive: false)
+                <= DesktopPetAnimationCadence.framesPerSecond(appIsActive: true)
+        )
+    }
+
+    @Test
+    func animationParksWhenPanelIsOffScreenOrDisabled() {
+        #expect(DesktopPetAnimationGate.shouldAnimate(isEnabled: true, isWindowVisible: true))
+        #expect(!DesktopPetAnimationGate.shouldAnimate(isEnabled: true, isWindowVisible: false))
+        #expect(!DesktopPetAnimationGate.shouldAnimate(isEnabled: false, isWindowVisible: true))
+        #expect(!DesktopPetAnimationGate.shouldAnimate(isEnabled: false, isWindowVisible: false))
     }
 
     @Test @MainActor

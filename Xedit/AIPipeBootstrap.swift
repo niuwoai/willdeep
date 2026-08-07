@@ -20,6 +20,7 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
         // and starts forwarding cross-app login/logout changes.
         SomeIMIntegrationStore.configureSharedSession()
         guard !Self.isRunningUnderXCTest else { return }
+        Self.refreshExistingCommandLineToolIfNeeded()
         // Skill discovery touches bundled, user, legacy, and plugin trees.
         // Warm the shared catalog away from AppKit's main thread so mobile
         // gateway snapshots and the first composer `$` menu are cache hits.
@@ -42,6 +43,26 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
             // 维持一份中继连接。
             MobileGatewayAutostart.shared.startIfNeeded()
         }
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        // SwiftUI may deliver a custom URL only to the scene it selected for
+        // activation. Because Agent is our default scene, relying solely on a
+        // view-level `onOpenURL` can lose `willdeep some-file.txt` before an
+        // Editor scene exists. Capture editor requests at the AppKit boundary;
+        // the live Agent/Editor scene drains them through the shared router.
+        MainActor.assumeIsolated {
+            WillDeepExternalOpenRouter.shared.enqueue(urls)
+        }
+    }
+
+    func application(_ sender: NSApplication, openFiles filenames: [String]) {
+        MainActor.assumeIsolated {
+            WillDeepExternalOpenRouter.shared.enqueue(
+                filenames.map { URL(fileURLWithPath: $0) }
+            )
+        }
+        sender.reply(toOpenOrPrint: .success)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -71,6 +92,18 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
 
     private static var isRunningUnderXCTest: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    private static func refreshExistingCommandLineToolIfNeeded() {
+        guard CommandLineToolInstaller.installState() == .needsUpdate else {
+            return
+        }
+
+        do {
+            try CommandLineToolInstaller.install()
+        } catch {
+            NSLog("WillDeep command-line tool refresh failed: %@", error.localizedDescription)
+        }
     }
 }
 

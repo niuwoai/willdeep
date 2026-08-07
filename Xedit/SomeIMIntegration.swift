@@ -186,6 +186,36 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
     }
 }
 
+/// Holds one lazily-loaded shared session until something explicitly drops it.
+///
+/// Split out of `SomeIMIntegrationStore` so the caching rules are testable
+/// without a Keychain: the real loader is a synchronous `securityd` round trip
+/// that unit tests must never touch (it would read the developer's actual
+/// some.im login), so tests exercise this type with a counting stub instead.
+///
+/// "Nobody is logged in" is a cacheable answer, hence `loaded` is tracked
+/// separately from the value rather than leaning on `value == nil`.
+final class SomeIMSharedSessionMemo {
+    private var loaded = false
+    private var cached: SomeIMSharedSession?
+    /// Number of times the loader actually ran. Exists for tests to assert the
+    /// Keychain is not being re-read on every access.
+    private(set) var loadCount = 0
+
+    func value(loading load: () -> SomeIMSharedSession?) -> SomeIMSharedSession? {
+        if loaded { return cached }
+        cached = load()
+        loaded = true
+        loadCount += 1
+        return cached
+    }
+
+    func invalidate() {
+        loaded = false
+        cached = nil
+    }
+}
+
 enum SomeIMIntegrationStore {
     // Plain immutable constants — `nonisolated` so they can be referenced from
     // the Sendable cross-app session-observer closure below without hopping
@@ -220,6 +250,14 @@ enum SomeIMIntegrationStore {
     private static let migrationLock = NSLock()
     private nonisolated(unsafe) static var migrationAttempted = false
     private nonisolated(unsafe) static var sessionObservation: ObservationToken?
+
+    // Memoized `currentSharedSession()`. Reading the real thing is a
+    // `SecItemCopyMatching` — a synchronous XPC round trip to `securityd` — and
+    // every caller is on the main thread: the mobile-gateway peer re-reads it
+    // every 400ms in `publishSnapshot()`, and the model picker re-reads it on
+    // each menu refresh. A 5s main-thread sample of 1.228.0-rc10 found 89
+    // samples parked in `SharedKeychain.read` for no new information.
+    private nonisolated(unsafe) static let sharedSessionMemo = SomeIMSharedSessionMemo()
     #if DEBUG
     private nonisolated(unsafe) static var testSharedSessionOverrideEnabled = false
     private nonisolated(unsafe) static var testSharedSessionOverride: SomeIMSharedSession?
@@ -245,8 +283,10 @@ enum SomeIMIntegrationStore {
         guard sessionObservation == nil else { return }
         sessionObservation = SomeIMSharedSessionStore.shared.observe { _ in
             // Delivered on the main queue on every login/logout in this or any
-            // other app. Fan out so the account UI and the agent provider
-            // re-read the (already-persisted) shared session.
+            // other app. Drop the memoized session first — the observers this
+            // fans out to immediately re-read it, and for a change made by
+            // *another* app this is the only signal we get.
+            invalidateSharedSessionCache()
             NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
             NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
         }
@@ -277,6 +317,10 @@ enum SomeIMIntegrationStore {
         if let data = try? JSONEncoder().encode(normalized) {
             UserDefaults.standard.set(data, forKey: settingsKey)
         }
+        // `privateKeychainFallbackSession()` folds `baseURL` into the session it
+        // synthesizes, so a settings change can invalidate a memoized session
+        // even though no credential moved.
+        invalidateSharedSessionCache()
     }
 
     static func loadAccount() -> SomeIMAccount? {
@@ -320,6 +364,9 @@ enum SomeIMIntegrationStore {
         } else {
             UserDefaults.standard.removeObject(forKey: accountKey)
         }
+        // Same reason as `saveSettings`: the fallback session borrows email and
+        // tenant from the account cache.
+        invalidateSharedSessionCache()
         NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
     }
 
@@ -469,6 +516,9 @@ enum SomeIMIntegrationStore {
         #endif
         AgentCredentialStore.save("", account: legacyAPIKeyAccount)
         AgentCredentialStore.save("", account: legacySessionTokenAccount)
+        // Both credential stores are now empty; a cache still holding the old
+        // session would keep this app looking signed in.
+        invalidateSharedSessionCache()
         UserDefaults.standard.removeObject(forKey: accountKey)
         UserDefaults.standard.removeObject(forKey: codingPlanStatusKey)
         var settings = loadSettings()
@@ -560,15 +610,35 @@ enum SomeIMIntegrationStore {
 
     private static func currentSharedSession() -> SomeIMSharedSession? {
         #if DEBUG
+        // The test override is deliberately never cached: unit tests set it
+        // directly and expect the very next read to see the new value.
         if testSharedSessionOverrideEnabled {
             return testSharedSessionOverride ?? privateKeychainFallbackSession()
         }
         #endif
-        return SomeIMSharedSessionStore.shared.current() ?? privateKeychainFallbackSession()
+        return sharedSessionMemo.value {
+            SomeIMSharedSessionStore.shared.current() ?? privateKeychainFallbackSession()
+        }
+    }
+
+    /// Drops the memoized shared session so the next read hits the Keychain again.
+    ///
+    /// Every write path must call this *before* anything reads back, because
+    /// `updateSharedSession` verifies its own write by re-reading the session
+    /// and comparing keys — served from a stale cache that check would degrade
+    /// into a tautology that always passes. Cross-app logins/logouts land here
+    /// too, via the `SomeIMSharedSessionStore.observe` hook in
+    /// `configureSharedSession()`.
+    nonisolated static func invalidateSharedSessionCache() {
+        sharedSessionMemo.invalidate()
     }
 
     @discardableResult
     private static func persistSharedSession(_ session: SomeIMSharedSession) -> Bool {
+        // Invalidate up front, not after: callers verify the write by reading
+        // the session back, and that read has to reach the Keychain. This one
+        // call covers the shared-group write and the per-app fallback below.
+        invalidateSharedSessionCache()
         #if DEBUG
         if testSharedSessionPersistFailureEnabled {
             return persistPrivateKeychainFallbackSession(session)
@@ -681,6 +751,10 @@ enum SomeIMIntegrationStore {
             baseURL: loadSettings().baseURL
         )
         let ok = SomeIMSharedSessionStore.shared.login(migrated)
+        // Migration moves credentials between the two stores that
+        // `currentSharedSession()` reads, so whatever it memoized before this
+        // point is stale either way.
+        invalidateSharedSessionCache()
         if ok, SomeIMSharedSessionStore.shared.current()?.apiKey == legacyKey {
             AgentCredentialStore.save("", account: legacyAPIKeyAccount)
             AgentCredentialStore.save("", account: legacySessionTokenAccount)
@@ -768,6 +842,47 @@ struct SomeIMAccount: Codable, Equatable {
         let scaled = value / unit.divisor
         let rendered = formatter.string(from: NSNumber(value: scaled)) ?? String(format: "%.2f", scaled)
         return rendered + unit.suffix
+    }
+
+    /// Carry the display profile (nickname, avatar, email) forward from the
+    /// account this one replaces.
+    ///
+    /// Login responses carry balance but never nickname or avatar — the
+    /// server only returns those from `/customer/me`. Saving a login result
+    /// verbatim therefore blanked whatever profile the app had already
+    /// fetched, which is why an account could end up showing credits with no
+    /// name or picture.
+    ///
+    /// Switching accounts must NOT inherit: a different email means a
+    /// different person, and showing the previous user's avatar would be
+    /// worse than showing none.
+    nonisolated func preservingProfile(from previous: SomeIMAccount?) -> SomeIMAccount {
+        guard let previous else { return self }
+        let incomingEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previousEmail = previous.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !incomingEmail.isEmpty,
+           !previousEmail.isEmpty,
+           incomingEmail.caseInsensitiveCompare(previousEmail) != .orderedSame {
+            return self
+        }
+
+        var merged = self
+        if merged.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            merged.email = previous.email
+        }
+        if merged.nickname?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty == nil {
+            merged.nickname = previous.nickname
+        }
+        if merged.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty == nil {
+            merged.avatarURL = previous.avatarURL
+        }
+        if merged.tenantID?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty == nil {
+            merged.tenantID = previous.tenantID
+        }
+        if merged.profileUpdatedAt == nil {
+            merged.profileUpdatedAt = previous.profileUpdatedAt
+        }
+        return merged
     }
 }
 
@@ -1028,10 +1143,13 @@ enum SomeIMClient {
             return SomeIMBrowserLoginStatus(state: .connected, account: nil)
         }
         let accountData = decoded.account ?? .empty
+        // Browser login can come back without any account block at all; even
+        // when present it carries no nickname/avatar. Keep the profile the
+        // app already has instead of overwriting it with blanks.
         let account = accountData.account(
             fallbackEmail: "",
             fallbackModel: decoded.default_model?.nonEmpty ?? SomeIMIntegrationSettings.defaultTextModel
-        )
+        ).preservingProfile(from: SomeIMIntegrationStore.loadAccount())
         var nextSettings = normalized
         nextSettings.enabled = true
         guard SomeIMIntegrationStore.saveAuthenticatedSession(
@@ -1107,7 +1225,7 @@ enum SomeIMClient {
         let account = decoded.account.account(
             fallbackEmail: email,
             fallbackModel: decoded.default_model.nonEmpty ?? SomeIMIntegrationSettings.defaultTextModel
-        )
+        ).preservingProfile(from: SomeIMIntegrationStore.loadAccount())
         var nextSettings = normalized
         nextSettings.enabled = true
         guard SomeIMIntegrationStore.saveAuthenticatedSession(
@@ -1169,8 +1287,32 @@ enum SomeIMClient {
         return SomeIMIntegrationStore.saveRefreshedAccount(account)
     }
 
+    /// Fetch nickname/avatar, renewing the session token once if it has
+    /// expired.
+    ///
+    /// Customer sessions last 7 days and `/customer/me` accepts nothing else,
+    /// while balance runs on the long-lived api_key. Without this renewal the
+    /// account settles into "credits still update, name and picture never do"
+    /// and cannot recover on its own.
     private static func fetchCustomerProfile(
-        settings _: SomeIMIntegrationSettings,
+        settings: SomeIMIntegrationSettings,
+        sessionToken: String,
+        session: URLSession
+    ) async throws -> (account: AccountData, tenantID: String?) {
+        do {
+            return try await requestCustomerProfile(sessionToken: sessionToken, session: session)
+        } catch {
+            // Exactly one renewal attempt. Looping on a key the server keeps
+            // rejecting would hammer the exchange endpoint for nothing.
+            guard isAuthenticationFailure(error),
+                  let renewed = try? await exchangeSessionToken(settings: settings, session: session) else {
+                throw error
+            }
+            return try await requestCustomerProfile(sessionToken: renewed, session: session)
+        }
+    }
+
+    private static func requestCustomerProfile(
         sessionToken: String,
         session: URLSession
     ) async throws -> (account: AccountData, tenantID: String?) {
@@ -1187,6 +1329,56 @@ enum SomeIMClient {
         let decoded = try decodeEnvelope(CustomerMeData.self, from: data)
         guard let account = decoded.user else { throw AgentClientError.invalidResponse }
         return (account, decoded.tenant?.id)
+    }
+
+    /// Trade the long-lived api_key for a fresh customer session token and
+    /// store it. Returns the new token.
+    ///
+    /// Only the expired-session case should reach here; a failure is left to
+    /// the caller so the profile it already has is kept rather than cleared.
+    @discardableResult
+    static func exchangeSessionToken(
+        settings: SomeIMIntegrationSettings,
+        session: URLSession
+    ) async throws -> String {
+        let apiKey = SomeIMIntegrationStore.loadAPIKey().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else { throw AgentClientError.missingAPIKey }
+        let endpoint = try publicAPIEndpoint(
+            from: controlPlaneOrigin,
+            suffix: "public/client-login/session/exchange"
+        )
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        applyClientLoginSecret(to: &request)
+        AgentNetworkSupport.applyStandardHeaders(to: &request)
+        let data = try await send(request, session: session)
+        let decoded = try decodeEnvelope(SessionExchangeData.self, from: data)
+        let token = decoded.token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw AgentClientError.invalidResponse }
+        _ = SomeIMIntegrationStore.saveSessionToken(token)
+        return token
+    }
+
+    /// Whether an error means "this session token is no longer valid", as
+    /// opposed to a network blip or a server fault — renewing on anything
+    /// else would turn transient failures into pointless exchange traffic.
+    nonisolated static func isAuthenticationFailure(_ error: Error) -> Bool {
+        if case AgentToolError.httpFailed(let status, _) = error {
+            return status == 401 || status == 403
+        }
+        if let urlError = error as? URLError {
+            return urlError.code == .userAuthenticationRequired
+        }
+        return false
+    }
+
+    fileprivate struct SessionExchangeData: Decodable {
+        let token: String
+        let expires_at: String?
+        let tenant_id: String?
     }
 
     static func fetchCodingPlanStatus() async throws -> SomeIMCodingPlanStatus {

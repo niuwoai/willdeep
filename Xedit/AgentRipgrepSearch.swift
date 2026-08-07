@@ -198,7 +198,10 @@ nonisolated enum AgentRipgrepSearch {
               let text = (data["lines"] as? [String: Any])?["text"] as? String else {
             return
         }
-        let snippet = text.trimmingCharacters(in: .newlines).prefix(200)
+        let line = text.trimmingCharacters(in: .newlines)
+        // Mark cut lines so models never copy a truncated snippet into an
+        // edit_file old_string.
+        let snippet = line.count > 200 ? line.prefix(200) + "…[line truncated]" : Substring(line)
         matches.append("\(path):\(lineNumber): \(snippet)")
     }
 

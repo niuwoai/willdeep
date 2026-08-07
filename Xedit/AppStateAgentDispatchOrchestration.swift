@@ -636,11 +636,11 @@ extension AppState {
             delegatedProfile: delegatedProfile,
             source: .hostInstruction
         )
-        agentPrimaryDestination = .dispatchBoard
         monitorDispatchTaskRuntime(
             runtime,
             goalID: goalID,
-            taskID: taskID
+            taskID: taskID,
+            allowsAutomaticRecovery: true
         )
         return .started(runtimeSessionID: runtime.id)
     }
@@ -667,8 +667,9 @@ extension AppState {
     }
 
     /// Reattaches task completion monitoring after the app or dispatch board
-    /// is reopened. Child runtimes are durable, so their final goal state must
-    /// be reconciled before the coordinator can unlock downstream nodes.
+    /// is reopened. Reattachment is deliberately observational: opening the
+    /// board must never launch queued work or replay an interrupted side
+    /// effect. The operator can resume queued/reviewing work explicitly.
     func resumeDispatchGoal(goalID: UUID) {
         guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
               !goal.isPaused else {
@@ -682,11 +683,9 @@ extension AppState {
             monitorDispatchTaskRuntime(
                 taskRuntime,
                 goalID: goalID,
-                taskID: task.id
+                taskID: task.id,
+                allowsAutomaticRecovery: false
             )
-        }
-        if goal.activeTaskCount == 0 {
-            _ = launchReadyDispatchTasks(goalID: goalID)
         }
     }
 
@@ -742,7 +741,8 @@ extension AppState {
         monitorDispatchTaskRuntime(
             runtime,
             goalID: goalID,
-            taskID: taskID
+            taskID: taskID,
+            allowsAutomaticRecovery: true
         )
         return true
     }
@@ -821,7 +821,8 @@ extension AppState {
     private func monitorDispatchTaskRuntime(
         _ runtime: AgentRuntime,
         goalID: UUID,
-        taskID: UUID
+        taskID: UUID,
+        allowsAutomaticRecovery: Bool
     ) {
         guard dispatchMonitoredRuntimeIDsByTaskID[taskID] != runtime.id else {
             return
@@ -845,7 +846,7 @@ extension AppState {
                 let attempts = self.dispatchAutomaticRecoveryAttemptsByTaskID[taskID] ?? 0
                 let goalIsPaused = self.agentDispatchCoordinator.goals
                     .first(where: { $0.id == goalID })?.isPaused ?? true
-                if AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
+                if allowsAutomaticRecovery && AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
                     hasCompletedAcceptance: hasCompletedAcceptance,
                     hasRuntimeError: runtime.errorMessage != nil,
                     isGoalPaused: goalIsPaused,
@@ -887,7 +888,8 @@ extension AppState {
                     state: state
                 )
                 self.dispatchAutomaticRecoveryAttemptsByTaskID[taskID] = nil
-                if state == .failed,
+                if allowsAutomaticRecovery,
+                   state == .failed,
                    let refreshedGoal = self.agentDispatchCoordinator.goals.first(where: {
                        $0.id == goalID
                    }),
@@ -901,7 +903,7 @@ extension AppState {
                        attemptedProfileIDs: refreshedTask.attemptedProfileIDs ?? []
                    ) {
                     _ = self.launchDispatchTask(goalID: goalID, taskID: taskID)
-                } else if state == .merged {
+                } else if allowsAutomaticRecovery, state == .merged {
                     _ = self.launchReadyDispatchTasks(goalID: goalID)
                 }
                 return

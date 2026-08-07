@@ -836,8 +836,11 @@ extension AppState {
             return .readOnly
         }
         switch approvalSource {
+        // Editor subagents patch one approved file inside the workspace and
+        // never touch the network, so they sit with the other
+        // already-approved workspace writers.
         case .workspaceAccess, .goalMode, .dispatchTask, .alwaysAllowList, .trustedServer,
-             .user, .controlLease:
+             .user, .controlLease, .subagentEditor:
             return sandboxDecision.mode == .workspaceWriteNetwork ? .workspaceWriteNetwork : .workspaceWrite
         case .escalated:
             return .escalated

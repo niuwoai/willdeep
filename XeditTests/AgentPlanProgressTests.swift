@@ -502,6 +502,103 @@ struct AgentPlanProgressTests {
         #expect(!AgentPlanAutoContinuationPolicy.allowsToolRiskDuringProgressReconciliation(.userInput))
     }
 
+    @Test("a run that is still executing tools keeps reconciling instead of pausing")
+    func automaticContinuationKeepsReconcilingWhileToolsRun() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "A", status: .inProgress)],
+            summary: ""
+        )
+
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: 2,
+            consecutiveNoProgressReplies: 3,
+            hasQueuedUserMessages: false,
+            evidence: .init(didExecuteTools: true)
+        )
+
+        #expect(decision == .reconcileProgress)
+    }
+
+    @Test("a live background job keeps reconciling and says so in the notice")
+    func automaticContinuationKeepsReconcilingWhileBackgroundJobRuns() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "A", status: .inProgress)],
+            summary: ""
+        )
+
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: 2,
+            consecutiveNoProgressReplies: 4,
+            hasQueuedUserMessages: false,
+            evidence: .init(hasRunningBackgroundJobs: true)
+        )
+        let notice = AgentPlanAutoContinuationPolicy.progressReconciliationNotice(
+            finishReason: "stop",
+            hasRunningBackgroundJobs: true
+        )
+
+        #expect(decision == .reconcileProgress)
+        #expect(notice.contains("background job started by this conversation is still running"))
+        #expect(notice.contains("keep that step `in_progress`"))
+        // Still the full reconciliation contract, not a weaker variant.
+        #expect(notice.contains("exactly one closed `progress` fenced block"))
+        #expect(notice.contains("write, danger, and user-input tools are blocked"))
+    }
+
+    @Test("no-progress evidence never overrides the hard safety limit")
+    func progressEvidenceDoesNotOverrideSafetyLimit() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "A", status: .inProgress)],
+            summary: ""
+        )
+
+        // The 8-round cap is what keeps the evidence path from spinning
+        // forever, so it must win over every activity signal.
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: AgentPlanAutoContinuationPolicy.maximumAutomaticContinuations,
+            consecutiveNoProgressReplies: 9,
+            hasQueuedUserMessages: false,
+            evidence: .init(didExecuteTools: true, hasRunningBackgroundJobs: true)
+        )
+
+        #expect(decision == .pauseAfterLimit)
+    }
+
+    @Test("an idle stalled run still pauses")
+    func automaticContinuationStillPausesWithoutEvidence() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "A", status: .inProgress)],
+            summary: ""
+        )
+
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: 2,
+            consecutiveNoProgressReplies: 3,
+            hasQueuedUserMessages: false,
+            evidence: .none
+        )
+
+        #expect(decision == .pauseAfterNoProgress)
+        #expect(!AgentPlanAutoContinuationPolicy.ProgressEvidence.none.hasAny)
+    }
+
+    @Test("the plain reconciliation notice omits the background-job sentence")
+    func progressReconciliationNoticeOmitsBackgroundJobsWhenNoneRun() {
+        let notice = AgentPlanAutoContinuationPolicy.progressReconciliationNotice(
+            finishReason: "stop"
+        )
+
+        #expect(!notice.contains("background job"))
+    }
+
     @Test("automatic continuation has a hard safety limit")
     func automaticContinuationHasHardSafetyLimit() {
         let plan = AgentPlan(

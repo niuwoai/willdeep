@@ -21,6 +21,14 @@
 import AppKit
 import SwiftUI
 
+/// Identifies what the project sheet is editing: an existing project, or a
+/// plain folder group about to become one.
+struct AgentProjectEditorTarget: Identifiable {
+    let id = UUID()
+    let project: AgentProject?
+    let seedFolderPath: String?
+}
+
 private struct SidebarWorkspaceGroup: Identifiable {
     let id: String
     let displayName: String
@@ -143,6 +151,7 @@ enum AgentSidebarSessionTrailingLayout {
 struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
+    @State private var editingProject: AgentProjectEditorTarget?
     @State private var expandedWorkspaces = AgentSidebarWorkspaceStateStore.load(.expandedWorkspaces)
     /// Workspace keys the user has manually collapsed by clicking the
     /// folder icon — the whole group hides every session row and only
@@ -233,6 +242,13 @@ struct AgentSessionsSidebar: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             someIMAccountFooter
+        }
+        .sheet(item: $editingProject) { target in
+            AgentProjectEditorSheet(
+                existingProject: target.project,
+                seedFolderPath: target.seedFolderPath
+            )
+            .environmentObject(appState)
         }
         // sidebar 整体再 clip 一次:即便 SwiftUI 在 narrow window 下
         // 没把某个子 view 完美约束,溢出的部分也不会糊到 chat / side
@@ -490,6 +506,17 @@ struct AgentSessionsSidebar: View {
                 }
                 if workspace != AgentSession.noWorkspaceSidebarGroupKey {
                     Divider()
+                    // Already a project → edit it. A plain folder group can be
+                    // promoted into one, which is how projects get created.
+                    if let project = appState.agentProject(forSidebarGroupKey: workspace) {
+                        Button(L10n.AgentProjectStrings.editProject) {
+                            editingProject = AgentProjectEditorTarget(project: project, seedFolderPath: nil)
+                        }
+                    } else if let path = localWorkspacePath(for: workspace) {
+                        Button(L10n.AgentProjectStrings.createProject) {
+                            editingProject = AgentProjectEditorTarget(project: nil, seedFolderPath: path)
+                        }
+                    }
                     // Removal only hides the group — sessions stay on disk
                     // and reappear if the same folder is re-added later.
                     Button(L10n.Sidebar.workspaceMenuRemove, role: .destructive) {
@@ -753,11 +780,26 @@ struct AgentSessionsSidebar: View {
     /// TruncatedTooltipText 的 hugWidth 用：同步测出结果，首帧就有正确
     /// 上限。+2 的余量抵消 NSString 测宽与 SwiftUI Text 渲染间的
     /// 亚像素差，防止刚好放得下的标题被削掉最后一个字符的边。
+    ///
+    /// 结果按标题缓存：`sessionRow` 每行调用一次，而侧栏 body 每帧都重跑，于是
+    /// 同一批标题被反复量给同一个字号。采样(1.228.0-rc10,5 秒)里这个函数独占
+    /// 主线程 37 个样本,量的全是上一帧刚量过的东西。`sidebarRowFontSize` 是
+    /// 编译期常量,所以标题本身就是完整的缓存键。
     private static func sessionTitleNaturalWidth(_ title: String) -> CGFloat {
+        if let cached = titleNaturalWidthCache[title] { return cached }
         let font = NSFont.systemFont(ofSize: AgentDesign.sidebarRowFontSize)
-        let width = (title as NSString).size(withAttributes: [.font: font]).width
-        return ceil(width) + 2
+        let width = ceil((title as NSString).size(withAttributes: [.font: font]).width) + 2
+        // 标题数随历史无限增长,缓存不能无界。到顶整体清空而不是做 LRU:代价只是
+        // 接下来一帧重新测量一遍,换掉一整套淘汰逻辑。
+        if titleNaturalWidthCache.count >= titleNaturalWidthCacheLimit {
+            titleNaturalWidthCache.removeAll(keepingCapacity: true)
+        }
+        titleNaturalWidthCache[title] = width
+        return width
     }
+
+    private static var titleNaturalWidthCache: [String: CGFloat] = [:]
+    private static let titleNaturalWidthCacheLimit = 1024
 
     private func presentRenameAlert(for session: AgentSession) {
         let alert = NSAlert()
@@ -1016,6 +1058,15 @@ struct AgentSessionsSidebar: View {
         remoteDescriptors: [UUID: RuntimeDescriptor]
     ) -> String {
         if key == AgentSession.noWorkspaceSidebarGroupKey { return L10n.Workspace.noWorkspace }
+        // A managed project names its own group. Falls through when the
+        // project has since been removed, so a stale key still renders as
+        // something readable rather than "project:<uuid>".
+        if let projectID = AgentSession.projectID(fromSidebarGroupKey: key) {
+            if let project = appState.agentProjects.first(where: { $0.id == projectID }) {
+                return project.resolvedDisplayName
+            }
+            return L10n.Workspace.noWorkspace
+        }
         if let remote = remoteWorkspaceGroup(from: key) {
             let runtime = remoteDescriptors[remote.runtimeID]
             return WorkspacePresentation.remoteDisplayName(runtime: runtime, path: remote.path)

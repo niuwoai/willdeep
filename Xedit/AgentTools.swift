@@ -344,6 +344,8 @@ enum AgentToolRunner {
                 result = try await AgentFileTools.gitStatus(context: activeContext)
             case "list_workspace_sessions":
                 result = try await AgentSessionTools.listWorkspaceSessions(arguments: activeArguments, context: activeContext)
+            case "search_sessions":
+                result = try await AgentSessionTools.searchSessions(arguments: activeArguments, context: activeContext)
             case "suggest_session_title":
                 result = try await AgentSessionTools.suggestSessionTitle(context: activeContext)
             case "rename_session":
@@ -744,7 +746,9 @@ enum AgentToolRunner {
         // Strip an accidental leading `./`; apply_patch resolves the rest
         // workspace-relative and rejects paths outside the workspace.
         let path = rawPath.hasPrefix("./") ? String(rawPath.dropFirst(2)) : rawPath
-        let diff = makeCreationDiff(path: path, content: content)
+        let resolved = try context.resolveWorkspaceURL(path)
+        let relativePath = relativeWorkspacePath(resolved.url, root: resolved.root)
+        let diff = makeCreationDiff(path: relativePath, content: content)
 
         let rawTitle = arguments["title"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = (rawTitle?.isEmpty == false) ? rawTitle! : "创建文件: \(path)"
@@ -755,7 +759,11 @@ enum AgentToolRunner {
             "title": .string(title),
             "apply_immediately": .bool(true)
         ]
-        return try await applyPatch(arguments: patchArguments, context: context)
+        return try await applyPatch(
+            arguments: patchArguments,
+            context: context,
+            targetRoot: resolved.root
+        )
     }
 
     // MARK: edit_file
@@ -770,9 +778,6 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        guard let rootDirectory = context.rootDirectory else {
-            throw AgentToolError.noWorkspace
-        }
         guard let rawPath = arguments["path"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
               !rawPath.isEmpty else {
             throw AgentToolError.missingArgument("path")
@@ -788,11 +793,10 @@ enum AgentToolRunner {
         let replaceAll = arguments["replace_all"]?.boolValue() ?? false
 
         let path = rawPath.hasPrefix("./") ? String(rawPath.dropFirst(2)) : rawPath
-        let root = rootDirectory.standardizedFileURL
-        let url = root.appendingPathComponent(path).standardizedFileURL
-        guard url.path == root.path || url.path.hasPrefix(root.path + "/") else {
-            throw AgentToolError.pathOutsideWorkspace(path)
-        }
+        let resolved = try context.resolveWorkspaceURL(path)
+        let root = resolved.root
+        let url = resolved.url
+        let relativePath = relativeWorkspacePath(url, root: root)
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw AgentToolError.notFound(path)
         }
@@ -805,7 +809,7 @@ enum AgentToolRunner {
         }
 
         let edit = try AgentEditFileSupport.makeEdit(
-            path: path,
+            path: relativePath,
             oldContent: currentContent,
             oldString: oldString,
             newString: newString,
@@ -821,7 +825,11 @@ enum AgentToolRunner {
         if let applyImmediately = arguments["apply_immediately"]?.boolValue() {
             patchArguments["apply_immediately"] = .bool(applyImmediately)
         }
-        let result = try await applyPatch(arguments: patchArguments, context: context)
+        let result = try await applyPatch(
+            arguments: patchArguments,
+            context: context,
+            targetRoot: root
+        )
         let occurrenceLine = edit.occurrences == 1
             ? "Replaced 1 occurrence of old_string in \(path)."
             : "Replaced \(edit.occurrences) occurrences of old_string in \(path)."
@@ -836,7 +844,8 @@ enum AgentToolRunner {
 
     private static func applyPatch(
         arguments: [String: AgentJSONValue],
-        context: AgentToolContext
+        context: AgentToolContext,
+        targetRoot: URL? = nil
     ) async throws -> AgentToolResult {
         guard let rootDirectory = context.rootDirectory else {
             throw AgentToolError.noWorkspace
@@ -858,7 +867,17 @@ enum AgentToolRunner {
             throw AgentToolError.invalidArgument(error.localizedDescription)
         }
 
-        let root = rootDirectory.standardizedFileURL
+        let requestedRoot = try arguments["workspace_root"]?.stringValue().map { rawRoot in
+            let resolved = try context.resolveWorkspaceURL(rawRoot)
+            guard resolved.url.path == resolved.root.path else {
+                throw AgentToolError.invalidArgument("workspace_root must name an exact Project folder root.")
+            }
+            return resolved.root
+        }
+        let root = (targetRoot ?? requestedRoot ?? rootDirectory).standardizedFileURL
+        guard context.workspaceRoots.contains(where: { $0.path == root.path }) else {
+            throw AgentToolError.pathOutsideWorkspace(root.path)
+        }
         let rootPath = root.path
         for change in changes {
             let url = root.appendingPathComponent(change.path).standardizedFileURL
@@ -883,7 +902,7 @@ enum AgentToolRunner {
         // The model sets apply_immediately only when the user explicitly
         // asked to write / save directly without review.
         let applyImmediately = arguments["apply_immediately"]?.boolValue() ?? false
-        let proposal = try await sink(title, diff, applyImmediately)
+        let proposal = try await sink(title, diff, applyImmediately, root)
         let files = changes.map(\.path)
         let fileList = files.map { "- \($0)" }.joined(separator: "\n")
         let fileLabel = files.count == 1 ? "1 file" : "\(files.count) files"
@@ -921,6 +940,13 @@ enum AgentToolRunner {
             \(fileList)
             """
         )
+    }
+
+    private static func relativeWorkspacePath(_ url: URL, root: URL) -> String {
+        let rootPath = root.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        guard path.hasPrefix(rootPath + "/") else { return url.lastPathComponent }
+        return String(path.dropFirst(rootPath.count + 1))
     }
 
     private static func generateImage(
@@ -1078,7 +1104,8 @@ enum AgentToolRunner {
             let launch = AgentSandboxPolicy.shellLaunch(
                 command: command,
                 mode: context.sandboxMode,
-                rootDirectory: context.rootDirectory
+                rootDirectory: context.rootDirectory,
+                additionalWorkspaceRoots: Array(context.workspaceRoots.dropFirst())
             )
             process.executableURL = launch.executableURL
             process.arguments = launch.arguments

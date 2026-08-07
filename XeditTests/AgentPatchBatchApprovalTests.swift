@@ -525,7 +525,7 @@ struct AgentPatchBatchApprovalTests {
             encoding: .utf8
         )
         let sinkStart = try #require(loopSource.range(
-            of: "patchProposalSink: { title, diff, applyImmediately in"
+            of: "patchProposalSink: { title, diff, applyImmediately, workspaceRoot in"
         ))
         let sinkEnd = try #require(loopSource.range(
             of: "editableContentProvider:",

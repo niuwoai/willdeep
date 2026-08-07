@@ -437,6 +437,11 @@ nonisolated struct AgentMessageToolCall: Codable, Equatable {
     var externalID: String
     var toolName: String
     var argumentsJSON: String
+    /// For `spawn_agent`: the run whose per-round transcript is stored in
+    /// `AgentSubagentTranscriptStore`. Persisted with the assistant message
+    /// so the inspector still opens after the session is reopened. Nil for
+    /// every other tool and for runs recorded before this field existed.
+    var subagentRunID: UUID?
 }
 
 nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
@@ -541,6 +546,16 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// 与 widget 不同，此字段**进 CodingKeys 持久化**，
     /// 让"我在这里安排了一个定时任务"的记录随会话保留。
     var scheduledTask: AgentScheduledTaskCard?
+    /// Explicit `/subagent` / `/no-subagent` choice for the turn this user
+    /// message started. Nil on every message that didn't carry an explicit
+    /// directive (including all older sessions), so the transcript marker
+    /// only appears where the user actually asked for it.
+    var delegationPolicy: AgentDelegationPolicy?
+    /// Set on a `.required` turn once it ends without any `spawn_agent`
+    /// call. `/subagent` cannot be enforced in code (see
+    /// `AgentDelegationPolicy`), so the marker says so rather than implying
+    /// the directive was obeyed.
+    var delegationPolicyUnhonored: Bool?
     let createdAt: Date
 
     /// Transient per-tool-call outcome receipts (externalID → 终态),
@@ -583,6 +598,8 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         workflowReport: WorkflowReport? = nil,
         widget: AgentWidget? = nil,
         scheduledTask: AgentScheduledTaskCard? = nil,
+        delegationPolicy: AgentDelegationPolicy? = nil,
+        delegationPolicyUnhonored: Bool? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -614,6 +631,8 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         self.workflowReport = workflowReport
         self.widget = widget
         self.scheduledTask = scheduledTask
+        self.delegationPolicy = delegationPolicy
+        self.delegationPolicyUnhonored = delegationPolicyUnhonored
         self.createdAt = createdAt
     }
 
@@ -628,6 +647,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         case origin, originLabel, requestPrefixHash, requestStablePrefixCharacters
         case managedRoute, workflowReport
         case scheduledTask
+        case delegationPolicy, delegationPolicyUnhonored
         case createdAt
     }
 
@@ -661,6 +681,8 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         managedRoute = try container.decodeIfPresent(AgentManagedRouteDecision.self, forKey: .managedRoute)
         workflowReport = try container.decodeIfPresent(WorkflowReport.self, forKey: .workflowReport)
         scheduledTask = try container.decodeIfPresent(AgentScheduledTaskCard.self, forKey: .scheduledTask)
+        delegationPolicy = try container.decodeIfPresent(AgentDelegationPolicy.self, forKey: .delegationPolicy)
+        delegationPolicyUnhonored = try container.decodeIfPresent(Bool.self, forKey: .delegationPolicyUnhonored)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
     }
 }
@@ -909,6 +931,10 @@ struct AgentQueuedMessage: Identifiable, Equatable {
     var attachedSkills: [AgentSkillEntry]
     var executionAgent: AgentExecutionAgent
     var source: AgentMessageSource
+    /// `/subagent` / `/no-subagent` staged for this message. Queued while the
+    /// runtime was busy, so the directive has to ride along — otherwise it
+    /// would silently degrade to `.automatic` on drain.
+    var delegationPolicy: AgentDelegationPolicy
 
     init(
         id: UUID = UUID(),
@@ -917,7 +943,8 @@ struct AgentQueuedMessage: Identifiable, Equatable {
         textAttachments: [AgentTextAttachment] = [],
         attachedSkills: [AgentSkillEntry] = [],
         executionAgent: AgentExecutionAgent = .willDeep,
-        source: AgentMessageSource = .operatorInput
+        source: AgentMessageSource = .operatorInput,
+        delegationPolicy: AgentDelegationPolicy = .automatic
     ) {
         self.id = id
         self.text = text
@@ -926,5 +953,6 @@ struct AgentQueuedMessage: Identifiable, Equatable {
         self.attachedSkills = attachedSkills
         self.executionAgent = executionAgent
         self.source = source
+        self.delegationPolicy = delegationPolicy
     }
 }

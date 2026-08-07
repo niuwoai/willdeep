@@ -640,6 +640,16 @@ struct AgentTaskMonitorRail: View {
     }
 }
 
+/// The composer's background-task card is a "something is running right now"
+/// indicator. With no live job there is nothing in flight to report, so the
+/// card is omitted entirely rather than rendered in a finished/idle style —
+/// a permanent bar summarizing history is noise above the input box.
+enum AgentBackgroundTaskComposerCardVisibility {
+    nonisolated static func shouldShow(runningJobCount: Int) -> Bool {
+        runningJobCount > 0
+    }
+}
+
 struct AgentSemanticActivityStatusLine: View {
     enum Style {
         case rail
@@ -651,7 +661,10 @@ struct AgentSemanticActivityStatusLine: View {
 
     @ViewBuilder
     var body: some View {
-        if style == .composer, !currentSessionAliveJobs.isEmpty {
+        if style == .composer,
+           AgentBackgroundTaskComposerCardVisibility.shouldShow(
+               runningJobCount: currentSessionAliveJobs.count
+           ) {
             backgroundTaskComposerCard
         } else if let phase {
             TimelineView(.periodic(from: .now, by: 1.0)) { context in
@@ -697,6 +710,10 @@ struct AgentSemanticActivityStatusLine: View {
         }
     }
 
+    /// Only rendered while `currentSessionAliveJobs` is non-empty (see `body`),
+    /// so this card always describes work in flight. It therefore reports just
+    /// the running count: finished jobs are history the user can go read in the
+    /// panel, not a reason to keep a status bar on screen.
     private var backgroundTaskComposerCard: some View {
         let runningJobs = currentSessionAliveJobs
         let leadJob = runningJobs.first
@@ -704,10 +721,10 @@ struct AgentSemanticActivityStatusLine: View {
             appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .backgroundTasks)
         } label: {
             HStack(spacing: 7) {
-                Image(systemName: runningJobs.isEmpty ? "checkmark.circle" : "play.circle.fill")
+                Image(systemName: "play.circle.fill")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(runningJobs.isEmpty ? Color.secondary : Color.green)
-                Text(L10n.AgentJobs.composerSummary(currentSessionJobs.count, runningJobs.count))
+                    .foregroundStyle(Color.green)
+                Text(L10n.AgentJobs.composerRunningSummary(runningJobs.count))
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
                 if let leadJob {
@@ -729,11 +746,11 @@ struct AgentSemanticActivityStatusLine: View {
             .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.green.opacity(runningJobs.isEmpty ? 0.05 : 0.09))
+                    .fill(Color.green.opacity(0.09))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.green.opacity(runningJobs.isEmpty ? 0.10 : 0.18), lineWidth: 1)
+                    .stroke(Color.green.opacity(0.18), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -769,7 +786,10 @@ struct AgentSemanticActivityStatusLine: View {
 
     private var phase: AgentActivityPhase? {
         if appState.isCompressingAgentContext {
-            return AgentActivityPhase(label: "压缩上下文中", systemImage: "arrow.down.forward.and.arrow.up.backward", tint: .purple)
+            // 灰色而非紫色：压缩是例行的后台维护，不是需要抢注意力的
+            // 状态。彩色 tint 只留给「等待你决定」（橙）——那是唯一
+            // 卡住进度、必须用户动手的阶段；其余进行中状态一律走灰色。
+            return AgentActivityPhase(label: "压缩上下文中", systemImage: "arrow.down.forward.and.arrow.up.backward", tint: .secondary)
         }
         if let waiting = appState.agentToolCalls.last(where: { call in
             call.status == .pendingApproval || call.status == .awaitingConfirm || call.status == .awaitingUserAnswer
@@ -780,7 +800,8 @@ struct AgentSemanticActivityStatusLine: View {
             return phase(for: running)
         }
         if appState.agentRunningTaskCount > 0 {
-            return AgentActivityPhase(label: "任务运行中", systemImage: "play.circle", tint: .green)
+            // 任务在跑是正常推进，不需要用户做任何事——灰色即可。
+            return AgentActivityPhase(label: "任务运行中", systemImage: "play.circle", tint: .secondary)
         }
         if appState.isAgentResponding {
             if let headline = appState.agentCurrentActivityHeadline {

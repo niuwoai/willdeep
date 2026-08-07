@@ -85,14 +85,27 @@ extension AppState {
     /// 不出阶段动词时,模型 reasoning 的最新一行原样作为 live 标题参与
     /// 扫光,"正在进行的这一步"在任何模型下都持续有内容。
     var agentCurrentActivityHeadline: AgentActivityHeadlinePresentation? {
-        guard isAgentResponding else { return nil }
+        guard isAgentResponding else {
+            agentLiveActivityHeadlineCache.reset()
+            return nil
+        }
         if let lastMessage = agentMessages.last,
            lastMessage.role == .assistant,
            let headline = AgentActivityHeadlinePresentation.make(from: lastMessage.content) {
             return headline
         }
-        return agentLiveThinkingPreview.flatMap {
-            AgentActivityHeadlinePresentation.makeLive(fromReasoning: $0)
+        guard let reasoning = agentLiveThinkingPreview,
+              let messageID = agentMessages.last?.id else {
+            return nil
+        }
+        // Streams at ~10 flushes/second and is read by more than one view, so
+        // it goes through the cache: one evaluation per distinct length, and a
+        // settled cadence for a line that is merely getting longer.
+        return agentLiveActivityHeadlineCache.headline(
+            messageID: messageID,
+            sourceLength: reasoning.count
+        ) {
+            AgentActivityHeadlinePresentation.makeLive(fromReasoning: reasoning)
         }
     }
 

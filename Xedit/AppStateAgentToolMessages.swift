@@ -38,6 +38,26 @@ extension AppState {
         )
     }
 
+    /// Record whether a `/subagent` turn actually delegated.
+    ///
+    /// `.required` cannot be enforced in code (see `AgentDelegationPolicy`),
+    /// so instead of silently pretending the directive held, the turn's user
+    /// message keeps an honest verdict that the transcript marker renders.
+    /// `.forbidden` needs no audit — the tool table already guaranteed it.
+    func auditDelegationPolicyForFinishedTurn(in runtime: AgentRuntime) {
+        let policy = runtime.currentTurnDelegationPolicy
+        runtime.currentTurnDelegationPolicy = .automatic
+        guard policy == .required else { return }
+        guard let index = runtime.messages.lastIndex(where: {
+            $0.role == .user && $0.delegationPolicy == .required
+        }) else { return }
+
+        let unhonored = !policy.isHonored(spawnCallCount: runtime.currentTurnSpawnAgentCallCount)
+        guard runtime.messages[index].delegationPolicyUnhonored != unhonored else { return }
+        runtime.messages[index].delegationPolicyUnhonored = unhonored
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+    }
+
     /// Execute one `spawn_agent` tool call: synchronous runs await the
     /// child loop and return its report inline; background runs return
     /// a handle and deliver via `subagentReportNotice` on a later round.
@@ -51,6 +71,10 @@ extension AppState {
         runtimeDescriptor: RuntimeDescriptor?,
         workspaceLocation: WorkspaceLocation?
     ) async {
+        // Counted before any validation: a `/subagent` turn that tried to
+        // delegate and failed still honored the directive.
+        runtime.currentTurnSpawnAgentCallCount += 1
+
         func finishRecord(status: AgentToolCallStatus, summary: String, payload: String, errorMessage: String? = nil) {
             if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                 runtime.toolCalls[index].status = status
@@ -79,6 +103,20 @@ extension AppState {
             if let progress { runtime.toolCalls[index].subagentProgress = progress }
         }
 
+        // Bind the run to both the live card and the persisted assistant
+        // message: the former drives the inspector button this session, the
+        // latter is what survives a reopen.
+        func bindSubagentRun(_ runID: UUID) {
+            if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                runtime.toolCalls[index].subagentRunID = runID
+            }
+            bindSubagentRunToPersistedToolCall(
+                runID: runID,
+                externalID: call.externalID,
+                runtime: runtime
+            )
+        }
+
         let prompt = arguments["prompt"]?.stringValue()?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !prompt.isEmpty else {
@@ -100,14 +138,62 @@ extension AppState {
         }()
         let runInBackground = arguments["run_in_background"]?.boolValue() ?? false
 
-        var childConfiguration = configuration
-        if let modelOverride = arguments["model"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !modelOverride.isEmpty {
-            childConfiguration.model = modelOverride
+        // Which trade to run. Unknown or absent → `deep`, whose bindings and
+        // budgets reproduce the pre-profile behaviour exactly.
+        let requestedProfileID = arguments["profile"]?.stringValue()
+        let profile = AgentSubagentProfileStore.resolvedProfile(id: requestedProfileID)
+        var profileNotices: [String] = []
+        if let requestedProfileID,
+           !requestedProfileID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           !AgentSubagentProfileCatalog.isKnown(id: requestedProfileID) {
+            profileNotices.append(
+                "Note: unknown profile `\(requestedProfileID)` — ran the `deep` trade instead. Valid trades: \(AgentSubagentProfileCatalog.builtIn.map(\.id).joined(separator: ", "))."
+            )
         }
+        // The `model` parameter is retired: cost policy is the user's
+        // configuration now, not something the model re-decides per call.
+        // Ignored rather than rejected so older prompts keep working.
+        if let staleModel = arguments["model"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !staleModel.isEmpty {
+            profileNotices.append(
+                "Note: the `model` parameter is no longer supported and was ignored. Choose a `profile` instead — each trade carries its own model binding."
+            )
+        }
+
+        // Editor trades need an approved, locked target before anything runs.
+        var writeAccess: AgentSubagentWriteAccess?
+        if profile.requiresWriteAccess {
+            guard let rawTarget = arguments["target_file"]?.stringValue(),
+                  let normalizedTarget = AgentSubagentWriteAccess.normalizedTargetPath(rawTarget) else {
+                finishRecord(
+                    status: .failed,
+                    summary: "missing target_file",
+                    payload: "Tool error: `profile=\"editor\"` requires a workspace-relative `target_file`. Absolute paths, `~`, and `..` are rejected.",
+                    errorMessage: "Missing target_file"
+                )
+                return
+            }
+            writeAccess = AgentSubagentWriteAccess(targetRelativePath: normalizedTarget)
+        }
+
+        let childConfiguration = resolvedSubagentConfiguration(
+            for: profile,
+            parentConfiguration: configuration
+        )
         updateSubagent(model: childConfiguration.model, progress: "启动中…")
 
         if runInBackground {
+            // Editor trades are synchronous by construction: the file lock
+            // and the approval are scoped to a turn the user is watching.
+            if profile.requiresWriteAccess {
+                finishRecord(
+                    status: .failed,
+                    summary: "editor cannot run in background",
+                    payload: "Tool error: the `editor` trade cannot run in the background — its file lock and approval are scoped to this turn. Re-spawn without `run_in_background`.",
+                    errorMessage: "Editor trade requires foreground"
+                )
+                return
+            }
             do {
                 let run = try agentSubagentRegistry.startBackground(
                     prompt: prompt,
@@ -117,8 +203,10 @@ extension AppState {
                     runtimeDescriptor: runtimeDescriptor,
                     workspaceLocation: workspaceLocation,
                     parentRuntimeID: runtime.id,
-                    originatingTurnID: runtime.activeTurnID
+                    originatingTurnID: runtime.activeTurnID,
+                    profile: profile
                 )
+                bindSubagentRun(run.id)
                 finishRecord(
                     status: .succeeded,
                     summary: "started \(run.displayHandle)",
@@ -135,25 +223,168 @@ extension AppState {
             return
         }
 
-        do {
-            let outcome = try await AgentSubagentRunner.run(
+        // Synchronous runs bypass the registry, so mint the inspector
+        // identity here — without it this run would finish with a report and
+        // no reviewable record, which is the gap the inspector exists to fix.
+        let runID = UUID()
+        let startedAt = Date()
+        bindSubagentRun(runID)
+
+        // One editor per file per session. Two children patching the same
+        // file would interleave hunks against a moving base.
+        if let writeAccess {
+            guard AgentSubagentEditorLock.shared.acquire(
+                path: writeAccess.targetRelativePath,
+                parentRuntimeID: runtime.id,
+                runID: runID
+            ) else {
+                finishRecord(
+                    status: .failed,
+                    summary: "file locked",
+                    payload: "Tool error: another subagent is already editing `\(writeAccess.targetRelativePath)`. Wait for it to finish, or edit a different file.",
+                    errorMessage: "Target file locked"
+                )
+                return
+            }
+        }
+        defer {
+            if writeAccess != nil {
+                AgentSubagentEditorLock.shared.release(runID: runID)
+            }
+        }
+
+        func persist(
+            status: AgentSubagentRun.Status,
+            outcome: AgentSubagentRunner.Outcome?,
+            report: String,
+            model: String,
+            escalatedFrom: String? = nil
+        ) {
+            AppState.persistSubagentTranscript(
+                AgentSubagentTranscript(
+                    runID: runID,
+                    label: label,
+                    prompt: AgentSubagentTranscript.clamped(
+                        prompt,
+                        to: AgentSubagentTranscript.Limits.promptCharacters
+                    ).text,
+                    model: model,
+                    status: status,
+                    rounds: outcome?.rounds ?? [],
+                    report: AgentSubagentTranscript.clamped(
+                        report,
+                        to: AgentSubagentTranscript.Limits.reportCharacters
+                    ).text,
+                    usageTokens: outcome?.usageTokens ?? 0,
+                    startedAt: startedAt,
+                    finishedAt: Date(),
+                    didTruncate: outcome?.didTruncate ?? false,
+                    profileID: profile.id,
+                    escalatedFromModel: escalatedFrom
+                )
+            )
+        }
+
+        func statsLine(_ outcome: AgentSubagentRunner.Outcome) -> String {
+            "(subagent \(label) · \(profile.id): \(outcome.roundCount) round\(outcome.roundCount == 1 ? "" : "s"), \(outcome.toolInvocationCount) tool call\(outcome.toolInvocationCount == 1 ? "" : "s")\(outcome.usageTokens > 0 ? ", \(outcome.usageTokens) tokens" : ""))"
+        }
+
+        // Editor patches ride the parent's normal patch pipeline, so the
+        // change lands in the worktree card, the artifact ledger and the
+        // undo path exactly like a patch the main agent produced. They apply
+        // immediately: the user already approved "let a subagent edit this
+        // file" at spawn time, and re-asking per hunk would turn one decision
+        // into a dozen.
+        let editorPatchSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = {
+            guard writeAccess != nil else { return nil }
+            let hostMessageID = runtime.toolCalls.first { $0.id == recordID }?.messageID
+            guard let hostMessageID else { return nil }
+            return { [weak self] title, diff, _, workspaceRoot in
+                guard let self else { throw AgentToolError.noWorkspace }
+                return try self.enqueueAgentPatchProposal(
+                    for: runtime,
+                    messageID: hostMessageID,
+                    title: title,
+                    diff: diff,
+                    workspaceRoot: workspaceRoot,
+                    autoApplySource: .subagentEditor,
+                    applyImmediately: true
+                )
+            }
+        }()
+
+        func runChild(
+            configuration: AgentConfiguration,
+            profile: AgentSubagentProfile
+        ) async throws -> AgentSubagentRunner.Outcome {
+            try await AgentSubagentRunner.run(
                 prompt: prompt,
-                configuration: childConfiguration,
+                configuration: configuration,
                 workspaceURL: workspaceURL,
                 runtimeDescriptor: runtimeDescriptor,
                 workspaceLocation: workspaceLocation,
+                profile: profile,
+                writeAccess: writeAccess,
+                patchProposalSink: editorPatchSink,
                 onProgress: { round, toolInvocations in
                     let toolPart = toolInvocations > 0 ? " · \(toolInvocations) 次工具" : ""
-                    updateSubagent(progress: "第 \(round)/\(AgentSubagentRunner.maxRounds) 轮\(toolPart)")
+                    updateSubagent(progress: "第 \(round)/\(profile.maxRounds) 轮\(toolPart)")
                 }
             )
-            let stats = "(subagent \(label): \(outcome.roundCount) round\(outcome.roundCount == 1 ? "" : "s"), \(outcome.toolInvocationCount) tool call\(outcome.toolInvocationCount == 1 ? "" : "s")\(outcome.usageTokens > 0 ? ", \(outcome.usageTokens) tokens" : ""))"
+        }
+
+        do {
+            var outcome = try await runChild(configuration: childConfiguration, profile: profile)
+            var effectiveModel = childConfiguration.model
+            var escalatedFrom: String?
+
+            // A cheap trade that ran out of rounds without a report is the
+            // failure mode profiles introduce, so it gets the fallback the
+            // design promised: one clean re-run on the parent's model. Not a
+            // continuation — a small model's stuck history is noise to a
+            // bigger one.
+            if profile.escalation == .retryWithParentModel,
+               childConfiguration.model != configuration.model,
+               AgentSubagentEscalation.shouldEscalate(outcome: outcome, profile: profile) {
+                updateSubagent(model: configuration.model, progress: "升级重跑中…")
+                let escalatedProfile = AgentSubagentEscalation.escalatedProfile(from: profile)
+                if let retried = try? await runChild(
+                    configuration: configuration,
+                    profile: escalatedProfile
+                ) {
+                    escalatedFrom = childConfiguration.model
+                    effectiveModel = configuration.model
+                    outcome = retried
+                }
+            }
+
+            var stats = statsLine(outcome)
+            if let escalatedFrom {
+                stats += "\n(escalated from \(escalatedFrom) to \(effectiveModel) after the first attempt stalled)"
+            }
+            persist(
+                status: .completed,
+                outcome: outcome,
+                report: outcome.report,
+                model: effectiveModel,
+                escalatedFrom: escalatedFrom
+            )
+            let notices = profileNotices.isEmpty ? "" : "\n\n" + profileNotices.joined(separator: "\n")
             finishRecord(
                 status: .succeeded,
                 summary: stats,
-                payload: "\(outcome.report)\n\n\(stats)"
+                payload: "\(outcome.report)\n\n\(stats)\(notices)"
             )
         } catch is CancellationError {
+            // No outcome to record, but the prompt/model/timing still explain
+            // what was cancelled — better than an inspector button that opens
+            // onto nothing.
+            persist(
+                status: .cancelled,
+                outcome: nil,
+                report: "(subagent cancelled)",
+                model: childConfiguration.model
+            )
             finishRecord(
                 status: .failed,
                 summary: "cancelled",
@@ -161,12 +392,44 @@ extension AppState {
                 errorMessage: "Cancelled"
             )
         } catch {
+            persist(
+                status: .failed,
+                outcome: nil,
+                report: "Subagent failed: \(error.localizedDescription)",
+                model: childConfiguration.model
+            )
             finishRecord(
                 status: .failed,
                 summary: "subagent failed",
                 payload: "Tool error: \(error.localizedDescription)",
                 errorMessage: error.localizedDescription
             )
+        }
+    }
+
+    /// Copy the run id onto the persisted assistant tool call so reopening
+    /// the session still resolves the inspector record. `runtime.toolCalls`
+    /// is render-only state and does not survive a restart.
+    func bindSubagentRunToPersistedToolCall(
+        runID: UUID,
+        externalID: String,
+        runtime: AgentRuntime
+    ) {
+        guard let messageIndex = runtime.messages.lastIndex(where: { message in
+            message.toolCalls.contains { $0.externalID == externalID }
+        }) else { return }
+        guard let callIndex = runtime.messages[messageIndex].toolCalls
+            .firstIndex(where: { $0.externalID == externalID }) else { return }
+        runtime.messages[messageIndex].toolCalls[callIndex].subagentRunID = runID
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+    }
+
+    /// Writes off the main actor: a long child loop's record can run to
+    /// hundreds of KB, and this is autosave-adjacent work the UI must not
+    /// wait on.
+    nonisolated static func persistSubagentTranscript(_ transcript: AgentSubagentTranscript) {
+        Task.detached(priority: .utility) {
+            AgentSubagentTranscriptStore.save(transcript)
         }
     }
 
@@ -188,6 +451,15 @@ extension AppState {
         """
     }
 
+    /// Append a `tool` message to runtime.messages, running it through
+    /// `AgentInjectionDefense` first. Default `source` is `.toolOutput`
+    /// — the conservative case where the payload contains arbitrary
+    /// bytes from the workspace / MCP / shell, any of which could carry
+    /// injection markers. Callers that hand-author the payload string
+    /// (denial notices, host-owned Goal gates) should pass `.systemNotice`
+    /// to skip the neutralizer; the `ask_user` reply path should pass
+    /// `.userAnswer` so the content gets wrapped in `<user_answer>` and
+    /// the model can tell a typed reply apart from a tool result.
     func appendToolMessage(
         for runtime: AgentRuntime,
         toolCallID: String,
