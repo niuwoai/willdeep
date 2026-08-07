@@ -1,7 +1,15 @@
 # Changelog
 
-> 当前文件保留最新版本（1.234.0-rc17 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.234.0-rc18 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.234.0-rc18 - 2026-08-07
+
+### Meta
+
+- 拆分 `XeditTests/XeditTests.swift`：终端捷径录制/持久化与终端工具路由的 24 个用例移入新的 `XeditTests+TerminalShortcuts.swift`，原文件从 3066 行降到 2068 行。此前它越过 `scripts/complexity_guard.rb` 的 3000 行硬上限，使 CI 的 `Ruby guards (quality)` 自 1.228.0-rc7 起一直是红的。
+- 拆分采用同类型 `extension` 而非新建 `@Suite`：用例的 `XeditTests/WillDeepTests/<name>()` 标识不变，`-only-testing` 过滤与套件的 `.serialized` 特性一并沿用。全量 2157 个用例数量与结果均与拆分前一致，`complexity_guard` 现为 `hard=0`。
+- Bugfix 预发布版本从 **1.234.0-rc17** 递增为 **1.234.0-rc18**，内部构建号从 **300** 递增为 **301**，Help 与 Computer Use Helper 构建号从 **216** 递增为 **217**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.234.0-rc17 - 2026-08-07
 
