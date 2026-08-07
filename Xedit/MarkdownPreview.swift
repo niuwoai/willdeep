@@ -390,6 +390,17 @@ struct MarkdownPreviewBlockView: View {
     let block: MarkdownPreviewBlock
 
     var body: some View {
+        content
+            // Rendered prose has to be selectable, otherwise dragging across
+            // the preview highlights nothing and the context menu has no
+            // selection to copy. Code blocks and tables opted in individually;
+            // headings, paragraphs, quotes and lists were left plain, which is
+            // the whole body of a typical document.
+            .textSelection(.enabled)
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch block.kind {
         case .heading(let level):
             Text(inlineText(block.text))
