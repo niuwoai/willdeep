@@ -798,6 +798,9 @@ final class AppState: ObservableObject {
             // every session's group key. Idempotent, so later launches are
             // no-ops once everything has been promoted.
             self.migrateAgentWorkspacesToProjects()
+            // Must follow the migration: repairing reads `agentProjects` to
+            // resolve a leaked `project:<uuid>` back to its folder.
+            self.repairAgentSessionsAnchoredToProjectKeys()
 
             // Empty placeholders are filtered by sidebar visibility instead
             // of being deleted from disk. Automatic deletion previously made

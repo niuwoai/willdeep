@@ -142,6 +142,67 @@ struct AgentProjectTests {
         ).isEmpty)
     }
 
+    // MARK: Repairing sessions anchored to a project key
+
+    /// rc18's sidebar handed "new chat in this group" the group key where a
+    /// path belonged. For a bare folder the key is the path, so it stayed
+    /// invisible until workspaces became projects — then the session's
+    /// workspace root became the literal `/project:<uuid>`.
+    @Test("被写成项目 key 的工作区路径会被还原为真实目录")
+    func corruptedWorkspacePathIsRepairedToTheProjectFolder() {
+        let project = project(name: "tokenhub", folders: ["/Users/rocky/Sites/tokenhub"])
+
+        // The stored form is standardized, hence the leading slash.
+        #expect(
+            AgentWorkspacePathRepairPlan.plan(
+                workspacePath: "/project:\(project.id.uuidString)",
+                projects: [project]
+            ) == .repair("/Users/rocky/Sites/tokenhub")
+        )
+        // The raw key form must be handled too.
+        #expect(
+            AgentWorkspacePathRepairPlan.plan(
+                workspacePath: "project:\(project.id.uuidString)",
+                projects: [project]
+            ) == .repair("/Users/rocky/Sites/tokenhub")
+        )
+    }
+
+    @Test("真实路径与空工作区不被误判为损坏")
+    func healthyWorkspacePathsAreLeftAlone() {
+        let project = project(name: "tokenhub", folders: ["/Users/rocky/Sites/tokenhub"])
+
+        #expect(
+            AgentWorkspacePathRepairPlan.plan(
+                workspacePath: "/Users/rocky/Sites/tokenhub",
+                projects: [project]
+            ) == .notCorrupted
+        )
+        #expect(
+            AgentWorkspacePathRepairPlan.plan(workspacePath: nil, projects: [project])
+                == .notCorrupted
+        )
+        // A folder that merely starts with the word "project" is not a key.
+        #expect(
+            AgentWorkspacePathRepairPlan.plan(
+                workspacePath: "/Users/rocky/projects/app",
+                projects: [project]
+            ) == .notCorrupted
+        )
+    }
+
+    /// Leaving an unresolvable path in place would keep every file, terminal
+    /// and git operation pointed at a directory that does not exist.
+    @Test("项目已删除时清空工作区而不是留下无效路径")
+    func corruptedPathWithoutItsProjectIsCleared() {
+        #expect(
+            AgentWorkspacePathRepairPlan.plan(
+                workspacePath: "/project:\(UUID().uuidString)",
+                projects: []
+            ) == .clear
+        )
+    }
+
     /// The promoted project is named after the folder, not left blank or
     /// showing the raw group key.
     @Test("升级后的项目沿用文件夹名")
