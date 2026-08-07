@@ -443,21 +443,49 @@ private struct AgentSessionsSidebarWindowChromeToggle: NSViewRepresentable {
 
         private func configureButton() {
             guard let button else { return }
-            let title = isAutoHidden
-                ? L10n.Header.sidebarAutoHidden
-                : (isVisible.wrappedValue ? L10n.Header.hideSidebar : L10n.Header.showSidebar)
-            button.isEnabled = !isAutoHidden
+            let title = AgentSidebarToggleButtonState.tooltip(
+                isAutoHidden: isAutoHidden,
+                isVisible: isVisible.wrappedValue
+            )
+            // Stays enabled even while auto-hidden. A disabled NSControl gets
+            // no mouse tracking, so its `toolTip` never appears — the button
+            // read as inert with no hint that the window is simply too narrow.
+            // `toggleSidebar` no-ops in that state and the dimmed alpha carries
+            // the unavailable look.
+            button.isEnabled = AgentSidebarToggleButtonState.isEnabled(isAutoHidden: isAutoHidden)
             button.alphaValue = isAutoHidden ? 0.72 : 1
             button.toolTip = title
             button.setAccessibilityLabel(title)
         }
 
         @objc private func toggleSidebar() {
-            guard !isAutoHidden else { return }
+            // The button stays enabled so its tooltip can explain the narrow
+            // window; refusing the toggle is this method's job.
+            guard AgentSidebarToggleButtonState.acceptsToggle(isAutoHidden: isAutoHidden) else { return }
             isVisible.wrappedValue.toggle()
             configureButton()
         }
     }
+}
+
+/// Titlebar sidebar-toggle button state.
+///
+/// Split out so the "stays clickable while auto-hidden" rule is pinned by a
+/// test: reverting it to `isEnabled = !isAutoHidden` looks harmless but
+/// silently removes the only explanation the user gets. AppKit does not track
+/// the mouse over a disabled control, so its tooltip never shows.
+enum AgentSidebarToggleButtonState {
+    static func tooltip(isAutoHidden: Bool, isVisible: Bool) -> String {
+        if isAutoHidden { return L10n.Header.sidebarAutoHidden }
+        return isVisible ? L10n.Header.hideSidebar : L10n.Header.showSidebar
+    }
+
+    /// Always enabled. The action is responsible for refusing to toggle while
+    /// auto-hidden; disabling the control would suppress the tooltip.
+    static func isEnabled(isAutoHidden: Bool) -> Bool { true }
+
+    /// Whether a click should actually toggle the sidebar.
+    static func acceptsToggle(isAutoHidden: Bool) -> Bool { !isAutoHidden }
 }
 
 enum AgentModeResponsiveLayout {

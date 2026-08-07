@@ -829,14 +829,18 @@ struct AgentSemanticActivityStatusLine: View {
             risk: .read,
             status: .running
         )) {
+        // 以下都是「正常推进」状态：按上面 `phase` 里确立的规则一律走灰色，
+        // 彩色只留给唯一卡住进度、必须用户动手的「等待你决定」。此前这一组
+        // 各自带色（搜索蓝、验证/终端橙、编辑绿、委派 accent），一个跑十几
+        // 分钟的 run_command 就会在 composer 上顶着一张橙色卡片长期抢注意力。
         case .fileExploration:
-            return AgentActivityPhase(label: "搜索中", systemImage: "doc.text.magnifyingglass", tint: .blue)
+            return AgentActivityPhase(label: "搜索中", systemImage: "doc.text.magnifyingglass", tint: .secondary)
         case .runCommand:
-            return AgentActivityPhase(label: "验证中", systemImage: "terminal", tint: .orange)
+            return AgentActivityPhase(label: "验证中", systemImage: "terminal", tint: .secondary)
         case .terminalOperation:
-            return AgentActivityPhase(label: "操作终端", systemImage: "terminal", tint: .orange)
+            return AgentActivityPhase(label: "操作终端", systemImage: "terminal", tint: .secondary)
         case .fileMutation, .applyPatch:
-            return AgentActivityPhase(label: "编辑中", systemImage: "pencil.line", tint: .green)
+            return AgentActivityPhase(label: "编辑中", systemImage: "pencil.line", tint: .secondary)
         case .subagent, .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI:
             let delegatedProgress = call.delegatedProgress.map {
                 L10n.DelegatedTask.liveProgress(
@@ -848,11 +852,15 @@ struct AgentSemanticActivityStatusLine: View {
             let label = AgentToolKind.of(call).delegatedActivityLabel(
                 progress: delegatedProgress ?? call.subagentProgress
             ) ?? "委派中"
+            // 委派保留 accent 色：由另一个 agent 代跑与本地自己在跑是两回事，
+            // 这是有专门测试锁定的既有设计决策（见
+            // AgentToolCallGroupingTests 的 delegatedAgentActivityUsesSystemAccentColor）。
             return AgentActivityPhase(label: label, systemImage: "person.2", tint: .accentColor)
         case .askUser:
+            // 唯一保留彩色的分支：进度真的卡在用户身上。
             return AgentActivityPhase(label: "等待你回答", systemImage: "bubble.left.and.text.bubble.right", tint: .orange)
         case .other:
-            return AgentActivityPhase(label: "处理中", systemImage: "gearshape", tint: .blue)
+            return AgentActivityPhase(label: "处理中", systemImage: "gearshape", tint: .secondary)
         }
     }
 
