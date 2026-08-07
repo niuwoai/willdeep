@@ -29,6 +29,9 @@ struct AgentDispatchTakeoverDrawer: View {
     let goal: AgentDispatchGoal
     let task: AgentDispatchTask
     let profiles: [AgentExecutionProfile]
+    /// 由调度台按可用宽度算好后传进来（见 `AgentDispatchBoardLayout`）。
+    /// 抽屉自己定宽会在窄窗口下把任务图挤没。
+    var width: CGFloat = 420
     let onModelProfile: (String) -> Void
     let onClose: () -> Void
     let onOpenFullConversation: () -> Void
@@ -36,7 +39,7 @@ struct AgentDispatchTakeoverDrawer: View {
     @State private var selectedPanel: AgentSidePanelKind?
     @State private var selectedFile: URL?
 
-    private let drawerWidth: CGFloat = 420
+    private var drawerWidth: CGFloat { width }
 
     private var assignedProfile: AgentExecutionProfile? {
         let assignedID = task.activeProfileID ?? task.primaryProfileID
@@ -225,22 +228,13 @@ struct AgentDispatchTakeoverDrawer: View {
         VStack(alignment: .leading, spacing: 8) {
             takeoverActivityStatus
 
-            ZStack(alignment: .topLeading) {
-                TextEditor(text: inputBinding)
-                    .font(.system(size: 12))
-                    .scrollContentBackground(.hidden)
-                    .padding(5)
-                    .frame(minHeight: 76, maxHeight: 112)
-
-                if runtime.input.isEmpty {
-                    Text(L10n.Dispatch.takeoverInstructionPlaceholder)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 12)
-                        .allowsHitTesting(false)
-                }
-            }
+            SubmitOnReturnTextView(
+                text: inputBinding,
+                placeholder: L10n.Dispatch.takeoverInstructionPlaceholder,
+                fontSize: 12,
+                onSubmit: sendInstruction
+            )
+            .frame(height: 82)
             .background(
                 RoundedRectangle(cornerRadius: 9)
                     .fill(appState.editorSettings.interfaceSkin.palette.panelFill.opacity(0.66))
@@ -264,6 +258,18 @@ struct AgentDispatchTakeoverDrawer: View {
                 .lineLimit(1)
 
                 Spacer()
+
+                if isNodeRunning {
+                    Button(role: .destructive) {
+                        appState.stopDispatchTask(goalID: goal.id, taskID: task.id)
+                    } label: {
+                        Label(L10n.Dispatch.stopTask, systemImage: "stop.fill")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help(L10n.Dispatch.stopTaskHelp)
+                    .accessibilityIdentifier("dispatch-takeover-stop-task")
+                }
 
                 Button {
                     sendInstruction()
@@ -383,7 +389,18 @@ struct AgentDispatchTakeoverDrawer: View {
         return settings.interfaceSkin.palette.panelFill.opacity(opacity)
     }
 
+    /// 节点是否还在跑。`isResponding` 之外还要看 `isAwaitingProviderSlot`：
+    /// 抢不到并发槽的回合同样已经排进队列，操作员要能在它真正开跑前叫停。
+    private var isNodeRunning: Bool {
+        runtime.isResponding
+            || runtime.isAwaitingProviderSlot
+            || task.state == .running
+    }
+
     private func sendInstruction() {
+        guard !runtime.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
         appState.sendDispatchTaskTakeoverInstruction(
             goalID: goal.id,
             taskID: task.id,

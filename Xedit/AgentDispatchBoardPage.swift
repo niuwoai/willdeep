@@ -5,6 +5,34 @@
 
 import SwiftUI
 
+/// 任务图与右侧面板（节点检查器 / 接管抽屉）的分宽规则。
+///
+/// 定宽侧栏在窄窗口下会把任务图整列吃掉，工作区就退化成一个孤零零的聊天
+/// 面板。这里的取舍是：**两列都必须留在屏幕上**——先按理想宽度给面板，
+/// 放不下就压缩到给任务图留够 `minimumGraphWidth`；窄到两者不可兼得时，
+/// 以面板可读下限 `minimumPanelWidth` 为准，任务图挤一点也不整列消失。
+nonisolated enum AgentDispatchBoardLayout {
+    static let preferredTakeoverWidth: CGFloat = 420
+    static let preferredInspectorWidth: CGFloat = 315
+    /// 任务图低于这个宽度就只剩半张卡片，读不出依赖关系了。
+    static let minimumGraphWidth: CGFloat = 210
+    /// 面板低于这个宽度，转写正文与按钮排不下。
+    static let minimumPanelWidth: CGFloat = 240
+
+    static func sidePanelWidth(
+        availableWidth: CGFloat,
+        preferredWidth: CGFloat
+    ) -> CGFloat {
+        // 首帧 GeometryReader 还没量到尺寸（0），此时按理想宽度渲染，
+        // 量到之后再收——反过来会先闪一帧 240 宽的窄面板。
+        guard availableWidth.isFinite, availableWidth > 0 else {
+            return preferredWidth
+        }
+        let fitted = min(preferredWidth, availableWidth - minimumGraphWidth)
+        return min(availableWidth, max(minimumPanelWidth, fitted))
+    }
+}
+
 struct AgentDispatchBoardPage: View {
     @EnvironmentObject private var appState: AppState
 
@@ -196,106 +224,148 @@ private struct AgentDispatchBoardContent: View {
                 onResume: { togglePaused(goal) }
             )
             Divider().opacity(0.55)
-            HStack(spacing: 0) {
-                AgentDispatchGraphView(
-                    goal: goal,
-                    selection: effectiveGraphSelection,
-                    runtimeDescriptors: runtimeDescriptors,
-                    onSelect: selectGraphNode,
-                    onAddTask: {
-                        editorRequest = AgentDispatchEditorRequest(
-                            goalID: goal.id,
-                            taskID: nil
-                        )
-                    },
-                    onEditTask: {
-                        editorRequest = AgentDispatchEditorRequest(
-                            goalID: goal.id,
-                            taskID: $0
-                        )
-                    },
-                    onOpenConversation: {
-                        openTaskTakeover(goalID: goal.id, taskID: $0)
-                    }
-                )
-                Divider().opacity(0.55)
-                if let takeover = takeoverContext(in: goal) {
-                    AgentDispatchTakeoverDrawer(
-                        runtime: takeover.runtime,
+            // 侧栏宽度跟着可用宽度走。定宽 420 的接管抽屉在窄窗口下会把任务图
+            // 整列挤没，只剩一个看起来像普通聊天的面板——那正是这块工作区最
+            // 不该丢的东西。
+            GeometryReader { proxy in
+                HStack(spacing: 0) {
+                    AgentDispatchGraphView(
                         goal: goal,
-                        task: takeover.task,
-                        profiles: workerProfiles,
-                        onModelProfile: { profileID in
-                            appState.updateDispatchTaskProfiles(
-                                primaryProfileID: profileID,
-                                fallbackProfileIDs: (takeover.task.fallbackProfileIDs ?? [])
-                                    .filter { $0 != profileID },
-                                goalID: goal.id,
-                                taskID: takeover.task.id
-                            )
-                        },
-                        onClose: { takeoverSessionID = nil },
-                        onOpenFullConversation: {
-                            takeoverSessionID = nil
-                            appState.openDispatchTaskConversation(
-                                runtimeSessionID: takeover.runtime.id
-                            )
-                        }
-                    )
-                } else if effectiveGraphSelection == .acceptance {
-                    AgentDispatchAcceptanceInspectorView(
-                        goal: goal,
-                        onSelectTask: { selectGraphNode(.task($0)) }
-                    )
-                    .frame(width: 315)
-                } else if let task = coordinator.selectedTask {
-                    AgentDispatchInspectorView(
-                        goal: goal,
-                        task: task,
-                        localExecutors: localExecutors,
+                        selection: effectiveGraphSelection,
                         runtimeDescriptors: runtimeDescriptors,
-                        profiles: workerProfiles,
-                        onExecutorChoice: {
-                            coordinator.updateTaskExecutorChoice(
-                                $0,
-                                goalID: goal.id,
-                                taskID: task.id
-                            )
-                        },
-                        onWorkspaceBindingChoice: {
-                            coordinator.updateTaskWorkspaceBinding(
-                                $0,
-                                goalID: goal.id,
-                                taskID: task.id
-                            )
-                        },
-                        onProfiles: { primaryProfileID, fallbackProfileIDs in
-                            appState.updateDispatchTaskProfiles(
-                                primaryProfileID: primaryProfileID,
-                                fallbackProfileIDs: fallbackProfileIDs,
-                                goalID: goal.id,
-                                taskID: task.id
-                            )
-                        },
-                        onManageProfiles: { isProfileManagerPresented = true },
-                        onLaunch: { launchTask(goalID: goal.id, taskID: task.id) },
-                        onOpenConversation: {
-                            openTaskTakeover(goalID: goal.id, taskID: task.id)
-                        },
-                        onEdit: {
+                        onSelect: selectGraphNode,
+                        onAddTask: {
                             editorRequest = AgentDispatchEditorRequest(
                                 goalID: goal.id,
-                                taskID: task.id
+                                taskID: nil
                             )
+                        },
+                        onEditTask: {
+                            editorRequest = AgentDispatchEditorRequest(
+                                goalID: goal.id,
+                                taskID: $0
+                            )
+                        },
+                        onOpenConversation: {
+                            openTaskTakeover(goalID: goal.id, taskID: $0)
+                        },
+                        onStopTask: {
+                            appState.stopDispatchTask(goalID: goal.id, taskID: $0)
                         }
                     )
-                    .frame(width: 315)
+                    Divider().opacity(0.55)
+                    sidePanel(
+                        goal,
+                        workerProfiles: workerProfiles,
+                        runtimeDescriptors: runtimeDescriptors,
+                        availableWidth: proxy.size.width
+                    )
                 }
+                .frame(
+                    width: proxy.size.width,
+                    height: proxy.size.height,
+                    alignment: .topLeading
+                )
             }
             .frame(minHeight: 310, maxHeight: .infinity)
             Divider().opacity(0.55)
             commandConsole(goal)
         }
+    }
+
+    @ViewBuilder
+    private func sidePanel(
+        _ goal: AgentDispatchGoal,
+        workerProfiles: [AgentExecutionProfile],
+        runtimeDescriptors: [RuntimeDescriptor],
+        availableWidth: CGFloat
+    ) -> some View {
+        if let takeover = takeoverContext(in: goal) {
+            AgentDispatchTakeoverDrawer(
+                runtime: takeover.runtime,
+                goal: goal,
+                task: takeover.task,
+                profiles: workerProfiles,
+                width: AgentDispatchBoardLayout.sidePanelWidth(
+                    availableWidth: availableWidth,
+                    preferredWidth: AgentDispatchBoardLayout.preferredTakeoverWidth
+                ),
+                onModelProfile: { profileID in
+                    appState.updateDispatchTaskProfiles(
+                        primaryProfileID: profileID,
+                        fallbackProfileIDs: (takeover.task.fallbackProfileIDs ?? [])
+                            .filter { $0 != profileID },
+                        goalID: goal.id,
+                        taskID: takeover.task.id
+                    )
+                },
+                onClose: { takeoverSessionID = nil },
+                onOpenFullConversation: {
+                    takeoverSessionID = nil
+                    appState.openDispatchTaskConversation(
+                        runtimeSessionID: takeover.runtime.id
+                    )
+                }
+            )
+        } else if effectiveGraphSelection == .acceptance {
+            AgentDispatchAcceptanceInspectorView(
+                goal: goal,
+                onSelectTask: { selectGraphNode(.task($0)) }
+            )
+            .frame(width: inspectorWidth(availableWidth: availableWidth))
+        } else if let task = coordinator.selectedTask {
+            AgentDispatchInspectorView(
+                goal: goal,
+                task: task,
+                localExecutors: localExecutors,
+                runtimeDescriptors: runtimeDescriptors,
+                profiles: workerProfiles,
+                onExecutorChoice: {
+                    coordinator.updateTaskExecutorChoice(
+                        $0,
+                        goalID: goal.id,
+                        taskID: task.id
+                    )
+                },
+                onWorkspaceBindingChoice: {
+                    coordinator.updateTaskWorkspaceBinding(
+                        $0,
+                        goalID: goal.id,
+                        taskID: task.id
+                    )
+                },
+                onProfiles: { primaryProfileID, fallbackProfileIDs in
+                    appState.updateDispatchTaskProfiles(
+                        primaryProfileID: primaryProfileID,
+                        fallbackProfileIDs: fallbackProfileIDs,
+                        goalID: goal.id,
+                        taskID: task.id
+                    )
+                },
+                onManageProfiles: { isProfileManagerPresented = true },
+                onLaunch: { launchTask(goalID: goal.id, taskID: task.id) },
+                onStop: {
+                    appState.stopDispatchTask(goalID: goal.id, taskID: task.id)
+                },
+                onOpenConversation: {
+                    openTaskTakeover(goalID: goal.id, taskID: task.id)
+                },
+                onEdit: {
+                    editorRequest = AgentDispatchEditorRequest(
+                        goalID: goal.id,
+                        taskID: task.id
+                    )
+                }
+            )
+            .frame(width: inspectorWidth(availableWidth: availableWidth))
+        }
+    }
+
+    private func inspectorWidth(availableWidth: CGFloat) -> CGFloat {
+        AgentDispatchBoardLayout.sidePanelWidth(
+            availableWidth: availableWidth,
+            preferredWidth: AgentDispatchBoardLayout.preferredInspectorWidth
+        )
     }
 
     private var effectiveGraphSelection: AgentDispatchGraphSelection? {

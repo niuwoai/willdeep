@@ -1074,8 +1074,18 @@ extension AppState {
     /// Targeted stop used by the Goal dispatch console. Unlike switching the
     /// selected conversation first, this preserves the user's place in the
     /// console and interrupts only the runtime that owns the selected Goal.
-    func stopAgentResponse(for runtime: AgentRuntime) {
-        if let projectID = runtime.session.dispatchParentProjectID,
+    ///
+    /// `pausingOwningDispatchProject` exists for the board's per-node Stop.
+    /// Stopping from a chat transcript has no idea which node it is halting,
+    /// so it parks the whole project; `stopDispatchTask(goalID:taskID:)`
+    /// knows exactly one node and records the outcome itself, and must not
+    /// take the project's other nodes down with it.
+    func stopAgentResponse(
+        for runtime: AgentRuntime,
+        pausingOwningDispatchProject: Bool = true
+    ) {
+        if pausingOwningDispatchProject,
+           let projectID = runtime.session.dispatchParentProjectID,
            let taskID = runtime.session.dispatchTaskID {
             // Stop means stop for an unattended dispatch node as well. Without
             // persisting this project-level pause, reopening the board would

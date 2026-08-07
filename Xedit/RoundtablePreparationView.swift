@@ -358,7 +358,7 @@ struct RoundtablePreparationView: View {
             }
 
             HStack(alignment: .bottom, spacing: 11) {
-                RoundtableComposerTextView(
+                SubmitOnReturnTextView(
                     text: $refinementDraft,
                     placeholder: L10n.RoundtableSetup.refinePlaceholder,
                     onSubmit: submitRefinement
