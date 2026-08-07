@@ -262,10 +262,25 @@ enum DesktopPetHibernation {
 enum DesktopPetAnimationCadence {
     /// The pet uses deliberately pixelated artwork and does not benefit enough
     /// from display-rate redraws to justify relaying out its hosting window on
-    /// every frame. Keep the background cadence slightly smoother because the
-    /// pet is the primary visible surface while WillDeep is inactive.
+    /// every frame.
+    ///
+    /// This cadence is not local to the pet panel. A CA transaction flush walks
+    /// *every* window that has pending layout, so whichever timeline ticks
+    /// fastest sets the display-cycle beat for the whole app — and the main
+    /// window's view tree is orders of magnitude larger than the pet's. A
+    /// sample of an otherwise idle 1.234.0-rc13 caught `DesktopPetSceneView`
+    /// and `AgentBackgroundTasksPanel` inside the *same* `NSHostingView.layout()`
+    /// stack, with ~20% of a core going to layout recursion and dirty-flag
+    /// propagation that produced no visible change.
+    ///
+    /// The background cadence used to be *higher* than the foreground one (12 vs
+    /// 8) on the theory that the pet is the primary visible surface while
+    /// WillDeep is inactive. That reasoning holds for visibility but inverts the
+    /// cost: being in the background is exactly when the expensive main window
+    /// has nothing to show and the user is least likely to be watching. Both
+    /// cadences are now 8fps, which is still smooth for the ~3s breathing cycle.
     nonisolated static let foregroundFramesPerSecond: Double = 8
-    nonisolated static let backgroundFramesPerSecond: Double = 12
+    nonisolated static let backgroundFramesPerSecond: Double = 8
 
     nonisolated static func framesPerSecond(appIsActive: Bool) -> Double {
         appIsActive ? foregroundFramesPerSecond : backgroundFramesPerSecond
@@ -273,6 +288,18 @@ enum DesktopPetAnimationCadence {
 
     nonisolated static func minimumInterval(appIsActive: Bool) -> TimeInterval {
         1.0 / framesPerSecond(appIsActive: appIsActive)
+    }
+}
+
+/// Decides whether the pet's animation timeline should run at all.
+///
+/// `NSWindow.occlusionState` drops `.visible` when the panel is fully covered,
+/// on an inactive Space, or hidden behind the screen saver / lock screen.
+/// Animating there costs a full app-wide display cycle per frame and paints
+/// nothing anyone can see.
+enum DesktopPetAnimationGate {
+    nonisolated static func shouldAnimate(isEnabled: Bool, isWindowVisible: Bool) -> Bool {
+        isEnabled && isWindowVisible
     }
 }
 
@@ -350,11 +377,15 @@ final class DesktopPetWindowManager: ObservableObject {
     @Published private(set) var isDraggingPet = false
     @Published private(set) var isMessageBubbleCollapsed = false
     @Published private(set) var appIsActive: Bool
+    /// Mirrors the panel's `occlusionState`. Starts `false` because there is no
+    /// window yet; `showIfNeeded()` seeds the real value once the panel exists.
+    @Published private(set) var isWindowVisible = false
 
     private weak var appState: AppState?
     private var window: NSPanel?
     private var pollingTimer: Timer?
     private var appActivityCancellables = Set<AnyCancellable>()
+    private var occlusionCancellable: AnyCancellable?
     private var wasBusy = false
     private var celebrationEndsAt: Date?
     private var jumpEndsAt: Date?
@@ -739,11 +770,39 @@ final class DesktopPetWindowManager: ObservableObject {
         panel.titlebarAppearsTransparent = true
         window = panel
         panel.orderFrontRegardless()
+        observeOcclusion(of: panel)
+    }
+
+    /// Tracks whether the panel is actually on screen so the animation timeline
+    /// can stop when nobody can see it. See `DesktopPetAnimationGate`.
+    private func observeOcclusion(of panel: NSPanel) {
+        occlusionCancellable = NotificationCenter.default
+            .publisher(for: NSWindow.didChangeOcclusionStateNotification, object: panel)
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.updateWindowVisibility()
+                }
+            }
+        updateWindowVisibility()
+    }
+
+    private func updateWindowVisibility() {
+        let visible = window?.occlusionState.contains(.visible) ?? false
+        guard isWindowVisible != visible else { return }
+        isWindowVisible = visible
+        // Coming back on screen: the timeline was parked, so the pose and the
+        // status card are both stale. Refresh once instead of waiting up to
+        // 0.4s for the next poll tick.
+        if visible {
+            refresh()
+        }
     }
 
     private func hide() {
         pollingTimer?.invalidate()
         pollingTimer = nil
+        occlusionCancellable = nil
+        isWindowVisible = false
         window?.orderOut(nil)
         window?.contentView = nil
         window?.close()
@@ -958,7 +1017,11 @@ struct DesktopPetOverlayView: View {
         DesktopPetAnimatedSceneView(
             appearance: manager.appearance,
             mood: displayMood,
-            appIsActive: manager.appIsActive
+            appIsActive: manager.appIsActive,
+            isAnimating: DesktopPetAnimationGate.shouldAnimate(
+                isEnabled: manager.isEnabled,
+                isWindowVisible: manager.isWindowVisible
+            )
         )
         .contentShape(Rectangle())
         .simultaneousGesture(
@@ -987,21 +1050,35 @@ struct DesktopPetAnimatedSceneView: View {
     let appearance: DesktopPetAppearance
     let mood: DesktopPetMood
     let appIsActive: Bool
+    let isAnimating: Bool
+
+    /// Pose held while the timeline is parked. A fixed instant keeps the
+    /// subtree's geometry constant, so an off-screen pet stops driving the
+    /// app-wide display cycle entirely rather than merely ticking slower.
+    private static let parkedInstant = Date(timeIntervalSinceReferenceDate: 0)
 
     var body: some View {
-        TimelineView(.animation(
-            minimumInterval: DesktopPetAnimationCadence.minimumInterval(
-                appIsActive: appIsActive
-            )
-        )) { context in
-            DesktopPetSceneView(
-                appearance: appearance,
-                animation: DesktopPetAnimationValues(
-                    mood: mood,
-                    date: context.date
+        if isAnimating {
+            TimelineView(.animation(
+                minimumInterval: DesktopPetAnimationCadence.minimumInterval(
+                    appIsActive: appIsActive
                 )
-            )
+            )) { context in
+                scene(at: context.date)
+            }
+        } else {
+            scene(at: Self.parkedInstant)
         }
+    }
+
+    private func scene(at date: Date) -> some View {
+        DesktopPetSceneView(
+            appearance: appearance,
+            animation: DesktopPetAnimationValues(
+                mood: mood,
+                date: date
+            )
+        )
     }
 }
 

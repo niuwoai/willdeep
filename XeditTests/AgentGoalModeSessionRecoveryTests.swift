@@ -3,11 +3,15 @@ import Testing
 @testable import WillDeep
 
 /// The reported path, step by step: switch a working conversation to Goal
-/// mode, then click away to another chat. Before the sidebar/board filters
-/// were made complementary, that conversation was reachable from neither
-/// surface — "永远回不来了". These pin the whole route, not just the first
-/// step, because the first step alone (mode switch) already looked fine
+/// mode, then click away to another chat. The conversation was reachable from
+/// neither surface — "永远回不来了". These pin the whole route, not just the
+/// first step, because the first step alone (mode switch) already looked fine
 /// once the session was still selected.
+///
+/// The invariant every case here defends is reachability: no state may fall
+/// between the sidebar and the Goals board. A workspace conversation now keeps
+/// its sidebar seat in every mode, and the board projects goal-bearing ones on
+/// top of that, so the two surfaces overlap instead of partitioning.
 @Suite
 @MainActor
 struct AgentGoalModeSessionRecoveryTests {
@@ -67,7 +71,15 @@ struct AgentGoalModeSessionRecoveryTests {
         #expect(visible.contains { $0.workspaceSidebarGroupKey == workspace })
     }
 
-    @Test("once a goal is stated the board owns it, and the board can select it back")
+    /// This used to assert the opposite — that stating a goal *removed* the
+    /// conversation from the sidebar and handed ownership to the board. That
+    /// stopped being true in cc97ab60, which redefined
+    /// `belongsInWorkspaceSidebar` as `presentationScope == .workspace` so a
+    /// workspace conversation keeps its sidebar seat whether it is ordinary or
+    /// Goal-driven. The board became an additional projection rather than a
+    /// transfer of ownership, which serves this suite's actual concern (never
+    /// unreachable) strictly better: two surfaces beat one.
+    @Test("once a goal is stated the board shows it without taking it out of the sidebar")
     func statedGoalIsReachableThroughTheBoard() {
         let stated = session(
             title: "分析当前项目",
@@ -75,10 +87,10 @@ struct AgentGoalModeSessionRecoveryTests {
             interactionMode: .goal
         )
 
-        // It leaves the sidebar by design...
-        #expect(!stated.belongsInWorkspaceSidebar)
-        // ...but only because the board takes it, and selectDispatchGoal
-        // routes back to goal.sessionID.
+        // It keeps its place in the workspace group...
+        #expect(stated.belongsInWorkspaceSidebar)
+        // ...and the board adopts it as well, with selectDispatchGoal routing
+        // back to goal.sessionID.
         #expect(boardAdopts(stated))
     }
 

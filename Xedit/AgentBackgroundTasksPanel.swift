@@ -50,8 +50,13 @@ nonisolated enum AgentBackgroundTaskPresentation {
         return URL(fileURLWithPath: unquote(tokens[index])).lastPathComponent
     }
 
+    /// Takes `processName` pre-computed by the caller. Deriving it here meant
+    /// splitting and path-parsing every job's command line on every keystroke
+    /// *and* again in each card body; `AgentBackgroundTaskRow` now computes it
+    /// exactly once per job per rebuild.
     static func matches(
         job: AgentBackgroundJob,
+        processName: String,
         activeSessionID: UUID?,
         scope: AgentBackgroundTaskScopeFilter,
         status: AgentBackgroundTaskStatusFilter,
@@ -74,13 +79,22 @@ nonisolated enum AgentBackgroundTaskPresentation {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return true }
         return [
-            processName(command: job.command),
+            processName,
             job.command,
             job.workingDirectoryPath ?? "",
             job.displayHandle,
         ].contains { value in
             value.localizedCaseInsensitiveContains(needle)
         }
+    }
+
+    static func formatDuration(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        if total < 60 { return "\(total)s" }
+        let minutes = total / 60
+        let remainder = total % 60
+        if minutes < 60 { return "\(minutes)m \(remainder)s" }
+        return "\(minutes / 60)h \(minutes % 60)m"
     }
 
     private static func isEnvironmentAssignment(_ token: String) -> Bool {
@@ -98,6 +112,45 @@ nonisolated enum AgentBackgroundTaskPresentation {
             return String(token.dropFirst().dropLast())
         }
         return token
+    }
+}
+
+/// A job plus the display values derived from it.
+///
+/// `processName(command:)` splits the command line and builds a `URL` to take
+/// its last path component. That ran once per job inside `matches`, once more
+/// in each card body, and again in the detail pane's metadata grid — every
+/// time the panel rebuilt. Deriving it once here keeps the work proportional to
+/// the job list rather than to the render count, and makes the row `Equatable`
+/// so `ForEach` can skip untouched cards.
+struct AgentBackgroundTaskRow: Identifiable, Equatable {
+    let job: AgentBackgroundJob
+    let processName: String
+
+    var id: AgentBackgroundJob.ID { job.id }
+
+    init(job: AgentBackgroundJob) {
+        self.job = job
+        self.processName = AgentBackgroundTaskPresentation.processName(command: job.command)
+    }
+
+    /// Splits rows into running and finished in a single pass. The panel used
+    /// to call `filter` twice over the same array on every rebuild.
+    static func partitioned(
+        _ rows: [AgentBackgroundTaskRow]
+    ) -> (running: [AgentBackgroundTaskRow], finished: [AgentBackgroundTaskRow]) {
+        var running: [AgentBackgroundTaskRow] = []
+        var finished: [AgentBackgroundTaskRow] = []
+        running.reserveCapacity(rows.count)
+        finished.reserveCapacity(rows.count)
+        for row in rows {
+            if row.job.isAlive {
+                running.append(row)
+            } else {
+                finished.append(row)
+            }
+        }
+        return (running, finished)
     }
 }
 
@@ -120,14 +173,16 @@ struct AgentBackgroundTasksPanel: View {
     }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            VStack(spacing: 0) {
-                filters
-                Rectangle()
-                    .fill(palette.hairline.opacity(0.7))
-                    .frame(height: 1)
-                content(now: context.date)
-            }
+        // The per-second tick lives in `AgentBackgroundTaskDurationLabel`, not
+        // here. Wrapping the whole body in a `TimelineView` rebuilt the scope
+        // picker, the search field, and every card once a second just to
+        // advance a handful of elapsed-time labels.
+        VStack(spacing: 0) {
+            filters
+            Rectangle()
+                .fill(palette.hairline.opacity(0.7))
+                .frame(height: 1)
+            content
         }
         .frame(width: width)
         .background(palette.panelFill)
@@ -173,27 +228,24 @@ struct AgentBackgroundTasksPanel: View {
     }
 
     @ViewBuilder
-    private func content(now: Date) -> some View {
-        let jobs = filteredJobs
-        if jobs.isEmpty {
+    private var content: some View {
+        let rows = filteredRows
+        if rows.isEmpty {
             emptyState
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    let running = jobs.filter(\.isAlive)
-                    let finished = jobs.filter { !$0.isAlive }
-                    if !running.isEmpty {
+                    let split = AgentBackgroundTaskRow.partitioned(rows)
+                    if !split.running.isEmpty {
                         taskSection(
-                            title: L10n.AgentJobs.runningSection(running.count),
-                            jobs: running,
-                            now: now
+                            title: L10n.AgentJobs.runningSection(split.running.count),
+                            rows: split.running
                         )
                     }
-                    if !finished.isEmpty {
+                    if !split.finished.isEmpty {
                         taskSection(
-                            title: L10n.AgentJobs.recentSection(finished.count),
-                            jobs: finished,
-                            now: now
+                            title: L10n.AgentJobs.recentSection(split.finished.count),
+                            rows: split.finished
                         )
                     }
                 }
@@ -222,18 +274,17 @@ struct AgentBackgroundTasksPanel: View {
 
     private func taskSection(
         title: String,
-        jobs: [AgentBackgroundJob],
-        now: Date
+        rows: [AgentBackgroundTaskRow]
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
             VStack(spacing: 7) {
-                ForEach(jobs) { job in
-                    taskCard(job: job, now: now)
-                    if selectedJobID == job.id {
-                        selectedTaskDetail(job: job, now: now)
+                ForEach(rows) { row in
+                    taskCard(row: row)
+                    if selectedJobID == row.id {
+                        selectedTaskDetail(row: row)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
@@ -241,7 +292,8 @@ struct AgentBackgroundTasksPanel: View {
         }
     }
 
-    private func taskCard(job: AgentBackgroundJob, now: Date) -> some View {
+    private func taskCard(row: AgentBackgroundTaskRow) -> some View {
+        let job = row.job
         let selected = selectedJobID == job.id
         return Button {
             withAnimation(.easeInOut(duration: 0.16)) {
@@ -253,14 +305,17 @@ struct AgentBackgroundTasksPanel: View {
                     Circle()
                         .fill(statusTint(for: job))
                         .frame(width: 8, height: 8)
-                    Text(AgentBackgroundTaskPresentation.processName(command: job.command))
+                    Text(row.processName)
                         .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                     statusBadge(for: job)
                     Spacer(minLength: 4)
-                    Text(Self.formatDuration((job.finishedAt ?? now).timeIntervalSince(job.startedAt)))
-                        .font(.system(size: 10, design: .monospaced).monospacedDigit())
-                        .foregroundStyle(.secondary)
+                    AgentBackgroundTaskDurationLabel(
+                        startedAt: job.startedAt,
+                        finishedAt: job.finishedAt
+                    )
+                    .font(.system(size: 10, design: .monospaced).monospacedDigit())
+                    .foregroundStyle(.secondary)
                     Image(systemName: selected ? "chevron.up" : "chevron.down")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.secondary)
@@ -315,15 +370,16 @@ struct AgentBackgroundTasksPanel: View {
             .clipShape(Capsule())
     }
 
-    private func selectedTaskDetail(job: AgentBackgroundJob, now: Date) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func selectedTaskDetail(row: AgentBackgroundTaskRow) -> some View {
+        let job = row.job
+        return VStack(alignment: .leading, spacing: 12) {
             Rectangle()
                 .fill(palette.hairline)
                 .frame(height: 1)
 
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(AgentBackgroundTaskPresentation.processName(command: job.command))
+                    Text(row.processName)
                         .font(.system(size: 13, weight: .semibold))
                     Text(job.displayHandle)
                         .font(.system(size: 10.5, design: .monospaced))
@@ -347,24 +403,36 @@ struct AgentBackgroundTasksPanel: View {
                 .controlSize(.small)
             }
 
-            metadata(job: job, now: now)
+            metadata(row: row)
             logControls
             logs(job: job)
         }
         .padding(.top, 2)
     }
 
-    private func metadata(job: AgentBackgroundJob, now: Date) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 7) {
-            metadataRow(L10n.AgentJobs.processName, AgentBackgroundTaskPresentation.processName(command: job.command))
+    private func metadata(row: AgentBackgroundTaskRow) -> some View {
+        let job = row.job
+        return Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 7) {
+            metadataRow(L10n.AgentJobs.processName, row.processName)
             metadataRow(L10n.AgentJobs.workingDirectory, job.workingDirectoryPath ?? L10n.AgentJobs.noWorkingDirectory)
             metadataRow(L10n.AgentJobs.command, job.command)
             metadataRow(L10n.AgentJobs.pid, String(job.pid))
             metadataRow(L10n.AgentJobs.startedAt, job.startedAt.formatted(date: .omitted, time: .standard))
-            metadataRow(
-                L10n.AgentJobs.duration,
-                Self.formatDuration((job.finishedAt ?? now).timeIntervalSince(job.startedAt))
-            )
+            // Spelled out rather than routed through `metadataRow` so the
+            // elapsed value can own its own tick; the styling matches what
+            // `metadataRow` would produce for a non-command label.
+            GridRow {
+                Text(L10n.AgentJobs.duration)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                AgentBackgroundTaskDurationLabel(
+                    startedAt: job.startedAt,
+                    finishedAt: job.finishedAt
+                )
+                .font(.system(size: 10.5))
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+            }
         }
         .padding(10)
         .background(
@@ -414,18 +482,19 @@ struct AgentBackgroundTasksPanel: View {
     @ViewBuilder
     private func logs(job: AgentBackgroundJob) -> some View {
         if logLayout == .split {
-            let axis = width >= 520 ? Axis.Set.horizontal : Axis.Set.vertical
-            ScrollView(axis, showsIndicators: false) {
-                if width >= 520 {
-                    HStack(alignment: .top, spacing: 8) {
-                        logConsole(job: job, stream: .stdout)
-                        logConsole(job: job, stream: .stderr)
-                    }
-                } else {
-                    VStack(spacing: 8) {
-                        logConsole(job: job, stream: .stdout)
-                        logConsole(job: job, stream: .stderr)
-                    }
+            // Each console already scrolls on both axes internally, so the
+            // panes must stay bounded by the panel width. An outer horizontal
+            // ScrollView here handed them an unbounded width proposal and each
+            // pane grew to its longest log line, shoving stderr off-panel.
+            if width >= 520 {
+                HStack(alignment: .top, spacing: 8) {
+                    logConsole(job: job, stream: .stdout)
+                    logConsole(job: job, stream: .stderr)
+                }
+            } else {
+                VStack(spacing: 8) {
+                    logConsole(job: job, stream: .stdout)
+                    logConsole(job: job, stream: .stderr)
                 }
             }
         } else {
@@ -452,14 +521,23 @@ struct AgentBackgroundTasksPanel: View {
             followsLatestOutput: followsLatestOutput,
             copyOutput: { copy(output) }
         )
-        .frame(minWidth: width >= 520 && logLayout == .split ? 220 : nil)
+        // `maxWidth: .infinity` rather than a `minWidth` floor: in the split
+        // HStack this makes the two panes share the panel evenly, and a floor
+        // would let them overflow instead of shrinking.
+        .frame(maxWidth: .infinity)
     }
 
-    private var filteredJobs: [AgentBackgroundJob] {
+    /// Builds each row once — `processName` included — then filters and sorts.
+    /// `content` reads this a single time per rebuild and hands the result to
+    /// `partitioned`, so the job list is walked a bounded number of times
+    /// instead of once per `filter` call plus once per card body.
+    private var filteredRows: [AgentBackgroundTaskRow] {
         appState.agentJobRegistry.jobs
-            .filter { job in
+            .map(AgentBackgroundTaskRow.init(job:))
+            .filter { row in
                 AgentBackgroundTaskPresentation.matches(
-                    job: job,
+                    job: row.job,
+                    processName: row.processName,
                     activeSessionID: appState.activeAgentSessionID,
                     scope: scope,
                     status: status,
@@ -467,19 +545,19 @@ struct AgentBackgroundTasksPanel: View {
                 )
             }
             .sorted { lhs, rhs in
-                if lhs.isAlive != rhs.isAlive { return lhs.isAlive }
-                return lhs.startedAt > rhs.startedAt
+                if lhs.job.isAlive != rhs.job.isAlive { return lhs.job.isAlive }
+                return lhs.job.startedAt > rhs.job.startedAt
             }
     }
 
-    private var selectedJob: AgentBackgroundJob? {
-        guard let selectedJobID else { return nil }
-        return filteredJobs.first(where: { $0.id == selectedJobID })
+    private var selectedJobExists: Bool {
+        guard let selectedJobID else { return false }
+        return filteredRows.contains(where: { $0.id == selectedJobID })
     }
 
     private func selectInitialJobIfNeeded() {
-        if selectedJob != nil { return }
-        selectedJobID = filteredJobs.first?.id
+        if selectedJobExists { return }
+        selectedJobID = filteredRows.first?.id
     }
 
     private func sessionTitle(for job: AgentBackgroundJob) -> String {
@@ -524,13 +602,34 @@ struct AgentBackgroundTasksPanel: View {
         NSPasteboard.general.setString(value, forType: .string)
     }
 
-    private static func formatDuration(_ seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds))
-        if total < 60 { return "\(total)s" }
-        let minutes = total / 60
-        let remainder = total % 60
-        if minutes < 60 { return "\(minutes)m \(remainder)s" }
-        return "\(minutes / 60)h \(minutes % 60)m"
+}
+
+/// Elapsed-time text that owns its own per-second tick.
+///
+/// This used to be a plain `Text` fed by a `TimelineView` wrapped around the
+/// entire panel body, which meant one tick rebuilt the scope picker, the search
+/// field, every card, and the expanded detail pane. Scoping the timeline to the
+/// label keeps the invalidated subtree to the text itself.
+///
+/// A finished job's duration never changes, so it renders as a static `Text`
+/// with no timeline at all — a panel showing only completed tasks now sits
+/// completely idle instead of ticking once a second forever.
+struct AgentBackgroundTaskDurationLabel: View {
+    let startedAt: Date
+    let finishedAt: Date?
+
+    var body: some View {
+        if let finishedAt {
+            Text(AgentBackgroundTaskPresentation.formatDuration(
+                finishedAt.timeIntervalSince(startedAt)
+            ))
+        } else {
+            TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                Text(AgentBackgroundTaskPresentation.formatDuration(
+                    context.date.timeIntervalSince(startedAt)
+                ))
+            }
+        }
     }
 }
 

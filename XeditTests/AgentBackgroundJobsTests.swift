@@ -144,27 +144,86 @@ struct AgentBackgroundJobsTests {
             runtimeID: UUID()
         )
 
+        let runningRow = AgentBackgroundTaskRow(job: running)
+        let finishedRow = AgentBackgroundTaskRow(job: finished)
+
         #expect(AgentBackgroundTaskPresentation.matches(
-            job: running,
+            job: runningRow.job,
+            processName: runningRow.processName,
             activeSessionID: activeRuntimeID,
             scope: .currentSession,
             status: .running,
             query: "yarn"
         ))
         #expect(!AgentBackgroundTaskPresentation.matches(
-            job: finished,
+            job: finishedRow.job,
+            processName: finishedRow.processName,
             activeSessionID: activeRuntimeID,
             scope: .currentSession,
             status: .all,
             query: ""
         ))
         #expect(AgentBackgroundTaskPresentation.matches(
-            job: finished,
+            job: finishedRow.job,
+            processName: finishedRow.processName,
             activeSessionID: activeRuntimeID,
             scope: .allSessions,
             status: .finished,
             query: "/tmp/other"
         ))
+    }
+
+    /// The row carries the derived process name so `matches` and every card
+    /// body stop re-splitting the command line on each rebuild.
+    @Test
+    func taskRowDerivesProcessNameOnce() {
+        let job = makeStubJob(command: "env CI=1 /usr/bin/xcodebuild test")
+        let row = AgentBackgroundTaskRow(job: job)
+
+        #expect(row.processName == "xcodebuild")
+        #expect(row.id == job.id)
+        #expect(row.processName == AgentBackgroundTaskPresentation.processName(command: job.command))
+    }
+
+    /// The panel used to run `filter` twice over the same array to split
+    /// running from finished. One pass, same ordering within each bucket.
+    @Test
+    func taskRowPartitionSplitsInOnePassPreservingOrder() {
+        let firstRunning = makeStubJob(command: "yarn test")
+        let done = makeStubJob(command: "go test ./...", status: .completed, finishedAfter: 2)
+        let secondRunning = makeStubJob(command: "swift build")
+
+        let split = AgentBackgroundTaskRow.partitioned(
+            [firstRunning, done, secondRunning].map(AgentBackgroundTaskRow.init(job:))
+        )
+
+        #expect(split.running.map(\.id) == [firstRunning.id, secondRunning.id])
+        #expect(split.finished.map(\.id) == [done.id])
+    }
+
+    /// The composer bar reports work in flight, not history. No live job means
+    /// no bar at all — it must not linger summarizing finished tasks.
+    @Test
+    func composerCardOnlyAppearsWhileSomethingIsRunning() {
+        #expect(!AgentBackgroundTaskComposerCardVisibility.shouldShow(runningJobCount: 0))
+        #expect(AgentBackgroundTaskComposerCardVisibility.shouldShow(runningJobCount: 1))
+        #expect(AgentBackgroundTaskComposerCardVisibility.shouldShow(runningJobCount: 7))
+    }
+
+    /// The summary counts only running jobs. It used to lead with a total that
+    /// folded in finished ones ("7 background tasks · 1 running").
+    @Test
+    func composerSummaryCountsOnlyRunningJobs() {
+        #expect(L10n.AgentJobs.composerRunningSummary(1).contains("1"))
+        #expect(!L10n.AgentJobs.composerRunningSummary(1).contains("7"))
+    }
+
+    @Test
+    func durationFormattingRollsUpSecondsAndMinutes() {
+        #expect(AgentBackgroundTaskPresentation.formatDuration(-5) == "0s")
+        #expect(AgentBackgroundTaskPresentation.formatDuration(42) == "42s")
+        #expect(AgentBackgroundTaskPresentation.formatDuration(90) == "1m 30s")
+        #expect(AgentBackgroundTaskPresentation.formatDuration(3661) == "1h 1m")
     }
 
     /// Empty / whitespace-only commands are rejected at the registry
