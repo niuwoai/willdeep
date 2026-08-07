@@ -2815,8 +2815,11 @@ struct WillDeepTests {
     func testAgentTokenEstimateIncludesTools() {
         // Keep a narrow ceiling above the current complete registry so this
         // catches accidental schema explosions without rejecting intentional
-        // additions to the built-in tool surface.
-        let maximumExpectedToolSchemaTokens = 37_000
+        // additions to the built-in tool surface. Raise it in step with
+        // deliberate registry growth: 35_000 → 37_000 → 38_000, the last bump
+        // covering the tool changes in 4b400fc5, which landed at 37_106 and
+        // left the gate red on 1.228.0-rc7.
+        let maximumExpectedToolSchemaTokens = 38_000
         let messages = [AgentMessage(role: .user, content: "hi")]
         let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)
