@@ -160,6 +160,7 @@ struct AgentDispatchGraphView: View {
     let onAddTask: () -> Void
     let onEditTask: (UUID) -> Void
     let onOpenConversation: (UUID) -> Void
+    let onStopTask: (UUID) -> Void
 
     @State private var zoom: CGFloat = 1
 
@@ -419,6 +420,13 @@ struct AgentDispatchGraphView: View {
                 Label(L10n.Dispatch.editNode, systemImage: "slider.horizontal.3")
             }
             .disabled(task.state == .running || task.state == .reviewing)
+            if task.state == .running {
+                Button(role: .destructive) {
+                    onStopTask(task.id)
+                } label: {
+                    Label(L10n.Dispatch.stopTask, systemImage: "stop.fill")
+                }
+            }
         }
         .accessibilityLabel(L10n.Dispatch.taskNodeAccessibility(index + 1, task.title))
         .accessibilityValue(L10n.Dispatch.state(task.state))

@@ -216,6 +216,9 @@ private struct AgentDispatchBoardContent: View {
                     },
                     onOpenConversation: {
                         openTaskTakeover(goalID: goal.id, taskID: $0)
+                    },
+                    onStopTask: {
+                        appState.stopDispatchTask(goalID: goal.id, taskID: $0)
                     }
                 )
                 Divider().opacity(0.55)
@@ -279,6 +282,9 @@ private struct AgentDispatchBoardContent: View {
                         },
                         onManageProfiles: { isProfileManagerPresented = true },
                         onLaunch: { launchTask(goalID: goal.id, taskID: task.id) },
+                        onStop: {
+                            appState.stopDispatchTask(goalID: goal.id, taskID: task.id)
+                        },
                         onOpenConversation: {
                             openTaskTakeover(goalID: goal.id, taskID: task.id)
                         },

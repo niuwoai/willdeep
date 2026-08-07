@@ -38,34 +38,23 @@ struct AgentDispatchGoalCommandComposer: View {
                 }
             }
             ZStack(alignment: .bottomTrailing) {
-                TextEditor(text: $text)
-                    .font(.system(size: 12))
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 5)
-                    .frame(minHeight: 58, maxHeight: 74)
-                    .background(Color(nsColor: .textBackgroundColor).opacity(0.76))
-                    .clipShape(RoundedRectangle(cornerRadius: 9))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9)
-                            .stroke(Color.secondary.opacity(0.17), lineWidth: 1)
-                    )
-                    .overlay(alignment: .topLeading) {
-                        if text.isEmpty {
-                            Text(
-                                hasWorkspace
-                                    ? L10n.Dispatch.goalCommandPlaceholder
-                                    : L10n.Dispatch.workspaceRequired
-                            )
-                                .font(.system(size: 12))
-                                .foregroundStyle(.tertiary)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 12)
-                                .allowsHitTesting(false)
-                        }
-                    }
-                    .disabled(!hasWorkspace)
-                Button(action: onSend) {
+                SubmitOnReturnTextView(
+                    text: $text,
+                    placeholder: hasWorkspace
+                        ? L10n.Dispatch.goalCommandPlaceholder
+                        : L10n.Dispatch.workspaceRequired,
+                    fontSize: 12,
+                    onSubmit: submit
+                )
+                .frame(height: 66)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.76))
+                .clipShape(RoundedRectangle(cornerRadius: 9))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9)
+                        .stroke(Color.secondary.opacity(0.17), lineWidth: 1)
+                )
+                .disabled(!hasWorkspace)
+                Button(action: submit) {
                     Label(L10n.Dispatch.send, systemImage: "paperplane.fill")
                         .font(.system(size: 11, weight: .semibold))
                 }
@@ -101,6 +90,16 @@ struct AgentDispatchGoalCommandComposer: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.7))
+    }
+
+    /// 回车与「发送」按钮走同一道闸：没有绑定工作区、或输入区为空时，
+    /// 回车只是无事发生，不能绕过按钮上的 `disabled` 把空指令发出去。
+    private func submit() {
+        guard hasWorkspace,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        onSend()
     }
 
     private func quickAction(

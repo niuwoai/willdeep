@@ -16,6 +16,7 @@ struct AgentDispatchInspectorView: View {
     let onProfiles: (String?, [String]) -> Void
     let onManageProfiles: () -> Void
     let onLaunch: () -> Void
+    let onStop: () -> Void
     let onOpenConversation: () -> Void
     let onEdit: () -> Void
 
@@ -349,19 +350,29 @@ struct AgentDispatchInspectorView: View {
                 }
                 .buttonStyle(.bordered)
             }
-            Button(action: onLaunch) {
-                Label(L10n.Dispatch.launchTask, systemImage: "play.fill")
-                    .frame(maxWidth: .infinity)
+            if task.state == .running {
+                Button(role: .destructive, action: onStop) {
+                    Label(L10n.Dispatch.stopTask, systemImage: "stop.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .help(L10n.Dispatch.stopTaskHelp)
+                .accessibilityIdentifier("dispatch-inspector-stop-task")
+            } else {
+                Button(action: onLaunch) {
+                    Label(L10n.Dispatch.launchTask, systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    goal.isPaused
+                        || !goal.isWorkspaceBound
+                        || effectiveTarget == nil
+                        || task.state == .blocked
+                        || !executorDecision.isAvailable
+                )
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(
-                goal.isPaused
-                    || !goal.isWorkspaceBound
-                    || effectiveTarget == nil
-                    || task.state == .blocked
-                    || task.state == .running
-                    || !executorDecision.isAvailable
-            )
         }
     }
 

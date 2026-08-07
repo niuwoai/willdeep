@@ -274,6 +274,11 @@ extension L10n {
             defaultValue: "Available executors"
         )
         static let launchTask = String(localized: "dispatch.launch-task", defaultValue: "Launch Task")
+        static let stopTask = String(localized: "dispatch.stop-task", defaultValue: "Stop Node")
+        static let stopTaskHelp = String(
+            localized: "dispatch.stop-task-help",
+            defaultValue: "Interrupt this node's current turn and mark it stopped. Other nodes keep running; the node can be launched again later."
+        )
         static let planningModel = String(
             localized: "dispatch.planning-model",
             defaultValue: "Planning model"
