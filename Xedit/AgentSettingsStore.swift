@@ -44,7 +44,8 @@ enum AgentSettingsStore {
     private static let defaultModelModePreferenceKey = "com.willdeep.agentSettings.defaultModelModePreference.v1"
     private static let alwaysAllowedCommandsKey = "com.willdeep.agentSettings.alwaysAllowedCommands.v1"
     private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
-    private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
+    private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v2"
+    private static let legacyChatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
     private static let anthropicMaxOutputTokensKey = "com.willdeep.agentSettings.anthropicMaxOutputTokens.v1"
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
     private static let localModelSettingsKey = "com.willdeep.agentSettings.localModelSettings.v1"
@@ -56,7 +57,7 @@ enum AgentSettingsStore {
     /// constants in AgentDesign.
     static let chatBaseFontSizeMin: CGFloat = 11
     static let chatBaseFontSizeMax: CGFloat = 20
-    static let chatBaseFontSizeDefault: CGFloat = 14
+    static let chatBaseFontSizeDefault: CGFloat = 15
     /// JSON-encoded `AgentProviderLibrary` minus the API keys, which
     /// live in Keychain under the entry's UUID.
     private static let providerLibraryKey = "com.willdeep.agentSettings.providerLibrary.v1"
@@ -291,12 +292,18 @@ enum AgentSettingsStore {
     /// on `AgentDesign`'s fixed sizes by design (Q1=A from the rc2
     /// scope conversation).
     static func loadAgentChatBaseFontSize() -> CGFloat {
-        if defaults.object(forKey: chatBaseFontSizeKey) == nil {
-            return chatBaseFontSizeDefault
+        if defaults.object(forKey: chatBaseFontSizeKey) != nil {
+            let stored = defaults.double(forKey: chatBaseFontSizeKey)
+            guard stored > 0 else { return chatBaseFontSizeDefault }
+            return clampChatBaseFontSize(CGFloat(stored))
         }
-        let stored = defaults.double(forKey: chatBaseFontSizeKey)
-        guard stored > 0 else { return chatBaseFontSizeDefault }
-        return clampChatBaseFontSize(CGFloat(stored))
+
+        let legacyStored = defaults.object(forKey: legacyChatBaseFontSizeKey) == nil
+            ? nil
+            : CGFloat(defaults.double(forKey: legacyChatBaseFontSizeKey))
+        let migrated = migratedChatBaseFontSize(fromLegacy: legacyStored)
+        defaults.set(Double(migrated), forKey: chatBaseFontSizeKey)
+        return migrated
     }
 
     static func saveAgentChatBaseFontSize(_ size: CGFloat) {
@@ -331,6 +338,16 @@ enum AgentSettingsStore {
 
     static func clampChatBaseFontSize(_ size: CGFloat) -> CGFloat {
         max(chatBaseFontSizeMin, min(chatBaseFontSizeMax, size))
+    }
+
+    /// Preserve deliberate custom sizes while moving installs that still use
+    /// the old 14 pt default onto the Codex-aligned 15 pt baseline.
+    static func migratedChatBaseFontSize(fromLegacy size: CGFloat?) -> CGFloat {
+        guard let size, size > 0 else { return chatBaseFontSizeDefault }
+        if size == 14 {
+            return chatBaseFontSizeDefault
+        }
+        return clampChatBaseFontSize(size)
     }
 
     static func saveAlwaysAllowedCommands(_ commands: [AgentAlwaysAllowedCommand]) {

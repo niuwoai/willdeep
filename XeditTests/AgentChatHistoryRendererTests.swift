@@ -39,6 +39,16 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func codexTypographyUsesFifteenPointBodyAndFivePointLeading() {
+        #expect(AgentSettingsStore.chatBaseFontSizeDefault == 15)
+        #expect(AgentChatHistoryLayoutMetrics.bodyLineSpacing == 5)
+        #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: nil) == 15)
+        #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: 14) == 15)
+        #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: 13) == 13)
+        #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: 18) == 18)
+    }
+
+    @Test
     func startingNewTurnDoesNotReusePreviousAssistantAsStreamingMessage() {
         let previousUser = AgentMessage(
             role: .user,
@@ -1330,11 +1340,11 @@ struct AgentChatHistoryRendererTests {
             at: doneRange.location,
             effectiveRange: nil
         ) as? NSParagraphStyle)
-        #expect(bodyFont.pointSize == 14)
+        #expect(bodyFont.pointSize == 15)
         #expect(processedFont.pointSize == bodyFont.pointSize)
         #expect(processedColor == NSColor.tertiaryLabelColor)
         #expect(bodyParagraphStyle.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
-        #expect(bodyParagraphStyle.lineSpacing == 3)
+        #expect(bodyParagraphStyle.lineSpacing == 5)
         let dividerLocation = NSMaxRange(processedRange) + 1
         let dividerColor = try #require(rendered.attribute(
             .agentChatHistoryAssistantStatusDividerColor,

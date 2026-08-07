@@ -1189,9 +1189,9 @@ enum AgentChatHistoryBubbleKind: Int {
 
 enum AgentChatHistoryLayoutMetrics {
     /// Shared body leading for live SwiftUI messages and TextKit history.
-    /// Three points matches Codex's compact reading rhythm without making
-    /// wrapped Chinese prose look vertically crowded.
-    static let bodyLineSpacing: CGFloat = 3
+    /// Five points plus the 15 pt body baseline reproduces Codex's roughly
+    /// 24 pt reading rhythm for both Latin text and wrapped Chinese prose.
+    static let bodyLineSpacing: CGFloat = 5
     static let assistantContentHeadIndent: CGFloat = 32
     static let assistantContentTailInset: CGFloat = 18
     /// Measured from the Codex reference at 1x: 9 pt from the status line

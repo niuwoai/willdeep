@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-07 | Current version: v1.235.0-rc2
+> Last updated: 2026-08-07 | Current version: v1.235.0-rc3
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Agent 聊天正文采用 Codex 阅读节奏（1.235.0-rc3）** —— 用户与助手正文默认使用 15 pt 系统字体和 5 pt 额外行距，实时 SwiftUI 消息、流式 Markdown 与 TextKit 历史记录共用同一组排版 token；旧安装若仍停留在历史 14 pt 默认值会一次性迁移到 15 pt，其他主动选择的字号保持不变。
 - **Project 多目录即工具授权边界（1.234.0-rc10）** —— 用户在 Project 编辑器中通过系统文件夹选择器加入的每个本地目录，都会成为该 Project 会话的授权根目录；相对路径仍指向会话主目录，绝对路径可读写其他附加目录。文件工具、命令风险分类和补丁应用共享同一组根目录，补丁卡持久化目标根并按根批量应用，未加入 Project 的路径仍走外部动作审批。
 - **Composer 模式切换不改变会话历史与归属（1.234.0-rc9）** —— 普通/目标模式只决定下一轮如何执行，不再压缩既有过程消息，也不清空当前计划或目标；目标看板作为工作区会话的附加投影视图存在，带目标的会话仍保留在左侧原工作区列表中。
 - **会话内定时任务卡片（1.234.0-rc8）** —— Agent 通过 `schedule_task` 创建的任务会直接作为紧凑卡片保留在当前会话中，展示任务名称、执行频率与“打开”入口；打开后进入对应任务详情。会话侧边栏用时钟标记存在活跃定时任务的会话，任务完成后卡片仍作为历史记录保留但不再提供打开操作。

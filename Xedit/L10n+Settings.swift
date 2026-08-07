@@ -422,7 +422,7 @@ extension L10n {
             static let anthropicMaxOutputTokens = String(localized: "settings.agent-behavior.anthropic-max-output-tokens", defaultValue: "Anthropic reply limit")
             static let anthropicMaxOutputTokensDescription = String(localized: "settings.agent-behavior.anthropic-max-output-tokens-description", defaultValue: "Maximum tokens a single Anthropic reply may produce (max_tokens). Default 32K keeps long documents and large refactor replies from truncating; legacy Claude 3.x models are automatically clamped to their lower API caps.")
             static func agentAppearanceDescription(_ a1: String, _ a2: String) -> String {
-                let template = String(localized: "settings.agent-behavior.appearance-description", defaultValue: "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 14 pt; range %1$@ – %2$@ pt.")
+                let template = String(localized: "settings.agent-behavior.appearance-description", defaultValue: "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 15 pt; range %1$@ – %2$@ pt.")
                 return String(format: template, a1, a2)
             }
         }
