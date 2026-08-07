@@ -440,6 +440,60 @@ struct AgentDispatchTaskTakeoverTests {
         #expect(SubmitOnReturnKeyPolicy.submits(modifiers: [.capsLock], hasMarkedText: false))
     }
 
+    @Test("窄窗口下侧栏收窄让位，任务图不会被整列挤没")
+    func sidePanelWidthAlwaysLeavesRoomForTheGraph() {
+        let takeover = AgentDispatchBoardLayout.preferredTakeoverWidth
+        let inspector = AgentDispatchBoardLayout.preferredInspectorWidth
+        let graphFloor = AgentDispatchBoardLayout.minimumGraphWidth
+        let panelFloor = AgentDispatchBoardLayout.minimumPanelWidth
+
+        // 宽窗口：按理想宽度，行为与改动前一致。
+        #expect(
+            AgentDispatchBoardLayout.sidePanelWidth(
+                availableWidth: 1_280,
+                preferredWidth: takeover
+            ) == takeover
+        )
+        #expect(
+            AgentDispatchBoardLayout.sidePanelWidth(
+                availableWidth: 1_280,
+                preferredWidth: inspector
+            ) == inspector
+        )
+
+        // 中等宽度：抽屉收窄，任务图正好拿到保底宽度。
+        let mediumWidth = AgentDispatchBoardLayout.sidePanelWidth(
+            availableWidth: 560,
+            preferredWidth: takeover
+        )
+        #expect(mediumWidth < takeover)
+        #expect(560 - mediumWidth >= graphFloor)
+
+        // 截图里那种约 420pt 的窄窗口：抽屉不得吃满整宽，且不低于可读下限。
+        let narrowWidth = AgentDispatchBoardLayout.sidePanelWidth(
+            availableWidth: 427,
+            preferredWidth: takeover
+        )
+        #expect(narrowWidth == panelFloor)
+        #expect(narrowWidth < 427)
+        #expect(427 - narrowWidth > 0)
+
+        // 首帧还没量到尺寸时按理想宽度渲染，避免闪一帧窄面板。
+        #expect(
+            AgentDispatchBoardLayout.sidePanelWidth(
+                availableWidth: 0,
+                preferredWidth: takeover
+            ) == takeover
+        )
+        // 极端退化宽度下也不得溢出容器。
+        #expect(
+            AgentDispatchBoardLayout.sidePanelWidth(
+                availableWidth: 180,
+                preferredWidth: takeover
+            ) == 180
+        )
+    }
+
     @Test("调度台抽屉选中任务会话时不离开调度台")
     func takeoverSelectionPreservesDispatchDestination() {
         let appState = AppState()

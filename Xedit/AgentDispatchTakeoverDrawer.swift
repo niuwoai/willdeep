@@ -29,6 +29,9 @@ struct AgentDispatchTakeoverDrawer: View {
     let goal: AgentDispatchGoal
     let task: AgentDispatchTask
     let profiles: [AgentExecutionProfile]
+    /// 由调度台按可用宽度算好后传进来（见 `AgentDispatchBoardLayout`）。
+    /// 抽屉自己定宽会在窄窗口下把任务图挤没。
+    var width: CGFloat = 420
     let onModelProfile: (String) -> Void
     let onClose: () -> Void
     let onOpenFullConversation: () -> Void
@@ -36,7 +39,7 @@ struct AgentDispatchTakeoverDrawer: View {
     @State private var selectedPanel: AgentSidePanelKind?
     @State private var selectedFile: URL?
 
-    private let drawerWidth: CGFloat = 420
+    private var drawerWidth: CGFloat { width }
 
     private var assignedProfile: AgentExecutionProfile? {
         let assignedID = task.activeProfileID ?? task.primaryProfileID
