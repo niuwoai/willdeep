@@ -12,6 +12,10 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentDesign.sidebarSelectionCornerRadius == 10)
         #expect(AgentDesign.sidebarWorkspaceGroupSpacing == 6)
         #expect(AgentDesign.sidebarAutomationFontSize == AgentDesign.sidebarRowFontSize)
+        #expect(AgentScheduledTaskCardLayout.maximumWidth == 460)
+        #expect(AgentScheduledTaskCardLayout.minimumHeight == 64)
+        #expect(AgentScheduledTaskCardLayout.iconTileSize == 36)
+        #expect(AgentScheduledTaskCardLayout.cornerRadius == 12)
         #expect(AgentDesign.sidebarSessionTrailingActionsWidth == 40)
         #expect(AgentDesign.liveActivityTopSpacing == 6)
         #expect(AgentDesign.liveActivityTopSpacing < AgentDesign.messageVerticalSpacing)
@@ -547,6 +551,64 @@ struct AgentSidebarListVisualMetricsTests {
         hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
         try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test("render the Codex-style transcript scheduled-task card for design QA")
+    @MainActor
+    func renderTranscriptScheduledTaskCardForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_SCHEDULED_CARD_QA_OUTPUT"]
+            ?? "/tmp/Xedit-scheduled-task-card-design-qa.png"
+
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        let taskID = UUID()
+        let routine = AgentRoutine(
+            id: taskID,
+            name: "继续发布 WillDeep 1.234.0-rc8",
+            prompt: "继续检查并发布最新版本。",
+            workspaceRootPath: "/tmp/Xedit",
+            schedule: .interval(minutes: 30)
+        )
+        appState.agentRoutines = [routine]
+        let card = AgentScheduledTaskCard(
+            id: taskID,
+            title: routine.name,
+            scheduleSummary: routine.schedule.summary,
+            goal: nil,
+            prompt: routine.prompt
+        )
+
+        let size = NSSize(width: 520, height: 112)
+        let root = AgentScheduledTaskCardView(card: card)
+            .environmentObject(appState)
+            .padding(24)
+            .frame(width: size.width, height: size.height, alignment: .leading)
+            .background(appState.editorSettings.interfaceSkin.windowBackground)
+            .preferredColorScheme(.light)
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test("scheduled-task card opens its detail in the scheduled-tasks destination")
+    @MainActor
+    func scheduledTaskCardNavigationTargetsMatchingRoutine() {
+        let appState = AppState()
+        let taskID = UUID()
+        appState.agentSidePanelKind = .preview
+
+        AgentScheduledTaskCardNavigation.open(cardID: taskID, in: appState)
+
+        #expect(appState.pendingRoutineDetailID == taskID)
+        #expect(appState.agentPrimaryDestination == .scheduledTasks)
+        #expect(appState.agentSidePanelKind == nil)
+        #expect(appState.agentSidePanelRequest == nil)
     }
 
     @Test("render scheduled navigation and page together at the reference viewport")

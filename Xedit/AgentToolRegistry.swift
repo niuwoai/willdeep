@@ -204,7 +204,7 @@ enum AgentToolRegistry {
             description: "Create a BRAND-NEW file. This is the ONLY correct way to make a new file — do NOT use edit_file or apply_patch for creation. Pass the workspace-relative path and the full file content directly; no diff to hand-craft. Content is written literally: GitHub Actions expressions such as `${{ secrets.DEPLOY_TOKEN }}` are supported and are references, not secret values. Never switch to shell/Python merely because content contains `${{ ... }}`. Fails if the path already exists. Goal mode, Smart review, and Workspace Access write validated workspace files immediately; Strict mode presents an inline file card for the user to Apply. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group.",
             risk: .read,
             parameters: [
-                AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the NEW file, e.g. `src/utils/date.ts` or `docs/README.md`. Must not already exist.", required: true),
+                AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the NEW file, or an absolute path inside another folder attached to this Project. Must not already exist.", required: true),
                 AgentToolParameter(name: "content", type: .string, description: "Full contents of the new file, written verbatim. Pass an empty string for an empty file.", required: true),
                 AgentToolParameter(name: "title", type: .string, description: "Optional short title for the file card. Defaults to `创建文件: <path>`.", required: false)
             ]
@@ -224,7 +224,7 @@ enum AgentToolRegistry {
             description: "EDIT an EXISTING file by EXACT STRING REPLACEMENT — the PREFERRED way to edit files. Pass the workspace-relative path, the exact current text to replace (old_string) and its replacement (new_string). Text is matched and written literally: GitHub Actions expressions such as `${{ secrets.DEPLOY_TOKEN }}` are supported and are references, not secret values. Never switch to shell/Python merely because content contains `${{ ... }}`. old_string must match the file content EXACTLY and appear exactly ONCE unless replace_all=true. Goal mode, Smart review, and Workspace Access apply validated workspace edits immediately; Strict mode always asks. For several independent files, emit all create_file/edit_file calls in one assistant response so WillDeep can present one Apply All review group. Keep dependent edits to the same file ordered. To CREATE a new file, use `create_file`.",
             risk: .read,
             parameters: [
-                AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the EXISTING file to edit, e.g. `src/utils/date.ts`.", required: true),
+                AgentToolParameter(name: "path", type: .string, description: "Workspace-relative path of the EXISTING file, or an absolute path inside another folder attached to this Project.", required: true),
                 AgentToolParameter(name: "old_string", type: .string, description: "Exact text currently in the file to replace, copied verbatim from read_file output — same whitespace/indentation, with the line-number prefixes stripped. NEVER build it from grep/search results: those lines are truncated at 200 characters. Must be unique in the file unless replace_all=true.", required: true),
                 AgentToolParameter(name: "new_string", type: .string, description: "Replacement text. Pass an empty string to delete old_string. Must differ from old_string.", required: true),
                 AgentToolParameter(name: "replace_all", type: .boolean, description: "Replace EVERY occurrence of old_string instead of requiring a unique match (e.g. renaming a symbol). Defaults to false.", required: false),
@@ -238,6 +238,7 @@ enum AgentToolRegistry {
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "diff", type: .string, description: "Unified diff for an EXISTING file. Use workspace-relative paths (`--- a/path`, `+++ b/path`) and standard @@ hunks. (New files: use `create_file`, not a `/dev/null` diff here.)", required: true),
+                AgentToolParameter(name: "workspace_root", type: .string, description: "Optional absolute Project folder root for the relative diff paths. Omit to use the session's primary workspace.", required: false),
                 AgentToolParameter(name: "title", type: .string, description: "Optional short title for the patch card. Defaults to Agent Patch.", required: false),
                 AgentToolParameter(name: "apply_immediately", type: .boolean, description: "Set true ONLY when the user explicitly asked to write / save directly without review (e.g. \"直接写\", \"直接落盘\", \"不用审核\", \"just write it\", \"save it directly\"). Smart review and Workspace Access already write immediately. Strict mode ignores this flag because every workspace change requires review. Defaults to false.", required: false)
             ]
@@ -1891,7 +1892,8 @@ enum AgentToolRegistry {
     static func risk(
         for name: String,
         arguments: [String: AgentJSONValue],
-        rootDirectory: URL? = nil
+        rootDirectory: URL? = nil,
+        additionalWorkspaceRoots: [URL] = []
     ) -> AgentToolRisk {
         // `glob` isn't an advertised tool, but some models hallucinate it
         // (they've seen `Glob` elsewhere). Treat it as the read-only
@@ -1919,7 +1921,11 @@ enum AgentToolRegistry {
         }
         guard let descriptor = descriptor(for: name) else { return .danger }
         if descriptor.name == "run_command", let command = arguments["command"]?.stringValue() {
-            let sandboxDecision = AgentSandboxPolicy.commandDecision(command: command, rootDirectory: rootDirectory)
+            let sandboxDecision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: additionalWorkspaceRoots
+            )
             if sandboxDecision.requiresTypedConfirmation {
                 return .danger
             }

@@ -295,17 +295,18 @@ extension AppState {
         // immediately: the user already approved "let a subagent edit this
         // file" at spawn time, and re-asking per hunk would turn one decision
         // into a dozen.
-        let editorPatchSink: (@MainActor (String?, String, Bool) async throws -> AgentPatchProposal)? = {
+        let editorPatchSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = {
             guard writeAccess != nil else { return nil }
             let hostMessageID = runtime.toolCalls.first { $0.id == recordID }?.messageID
             guard let hostMessageID else { return nil }
-            return { [weak self] title, diff, _ in
+            return { [weak self] title, diff, _, workspaceRoot in
                 guard let self else { throw AgentToolError.noWorkspace }
                 return try self.enqueueAgentPatchProposal(
                     for: runtime,
                     messageID: hostMessageID,
                     title: title,
                     diff: diff,
+                    workspaceRoot: workspaceRoot,
                     autoApplySource: .subagentEditor,
                     applyImmediately: true
                 )

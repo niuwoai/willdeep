@@ -1,47 +1,50 @@
-# Design QA：会话级后台任务管理器
+# Design QA：会话内定时任务卡片
 
 ## Source truth
 
-- 主布局与渐进展开：`/Users/rocky/.codex/generated_images/019fcfee-266d-7280-9f83-109a835e6d42/exec-3c659ba6-bebf-4ca8-ba96-cdb3a5a93263.png`
-- stdout/stderr 双栏方向：`/Users/rocky/.codex/generated_images/019fcfee-266d-7280-9f83-109a835e6d42/exec-4cb18b5a-9a9c-49ea-9884-b4c954f7acc3.png`
-- 交互基线：列表/时间线负责扫描，单任务在列表内渐进展开；宽侧栏默认双栏，窄侧栏退化为标签页。
+- 用户提供的 Codex 桌面截图：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-69a7a7a4-52ad-42d3-9d9a-b4b7aaca70db.png`
+- 聚焦参考卡片：`design-qa-evidence/scheduled-task-reference-card-1.234.0-rc8.png`
+- 参考卡片逻辑密度画布：`design-qa-evidence/scheduled-task-reference-card-logical-density-1.234.0-rc8.png`
+- 视觉基线：会话正文内展示中性的圆角任务卡，左侧为时钟图标，中间为任务名和频率，右侧提供明确的“打开”操作；侧边栏继续用时钟标识提示关联会话。
 
 ## Rendered implementation
 
-- 真实 SwiftUI 截图：`build/visual-qa/background-task-manager/implementation.png`
-- 1x 归一化截图：`build/visual-qa/background-task-manager/implementation-1x.png`
-- 同画布全量对照：`build/visual-qa/background-task-manager/comparison-full.png`
-- 视口：626 × 1024 pt；原始实现截图：1252 × 2048 px（2x）；归一化实现截图与参考侧栏：626 × 1024 px（1x）。
-- 状态：当前会话、全部状态、一个运行任务已展开、一个最近失败任务折叠、自动跟随开启、stdout/stderr 双栏。
+- 真实 SwiftUI 卡片截图：`design-qa-evidence/scheduled-task-implementation-card-1.234.0-rc8.png`
+- 同画布上下对照：`design-qa-evidence/scheduled-task-reference-vs-implementation-1.234.0-rc8.png`
+- 实现视口：520 × 112 pt；原始截图为 1040 × 224 px（2x），验收图归一化为 520 × 112 px（1x）。
+- 状态：浅色米纸皮肤、启用中的 30 分钟间隔任务、中文界面、可打开任务详情。
 
 ## Comparison coverage
 
-### Full viewport
+### Full component
 
-`comparison-full.png` 在同一输入中左侧放置 626 × 1024 的主参考侧栏，右侧放置同视口同状态的真实实现。检查范围包括标题、会话与状态筛选、任务分组、运行态卡片、展开详情、日志区和最近完成任务。
+对照图上半部分为 Codex 参考卡，下半部分为生产 SwiftUI 实现。卡片本身就是本次完整目标区域，因此全组件与聚焦区域相同；用户原始整屏截图已先行检查，用于确认卡片在会话栏和侧边栏之间的关系。
 
-### Focused interaction
+### Primary interaction
 
-双栏日志的方向以第二张参考图为准，并在全量对照右侧的展开态中验证：stdout 与 stderr 分属独立有界控制台，具备独立颜色、行数、复制操作与自动跟随。低于 520 pt 时改为纵向双栏或标签页，避免横向挤压。
+“打开”按钮沿用 Xedit 的定时任务详情路径：写入对应任务 ID，切换至定时任务主页面，并清理冲突侧面板。自动化测试验证了完整状态转换。
 
 ## Surface review
 
-- Typography：沿用 WillDeep 原生系统字体与等宽日志字体；层级、字重、行高均可辨识，无截断标题。
-- Layout：筛选区、运行中/最近完成分组和详情均在 626 pt 侧栏内完整显示；无重叠、溢出或不可达控件。
-- Colors：沿用现有皮肤的 panel/control/accent/hairline；运行、失败和 stderr 颜色语义明确，未引入新的品牌色。
-- Images/icons：全部使用现有 SF Symbols，没有伪造图标或占位资产。
-- Copy/i18n：所有面向用户的文本均来自 `L10n.AgentJobs` 和 `Localizable.xcstrings`，中英文资源齐全。
+- Typography：系统字体 13 pt 中等字重标题、12 pt 次级信息与按钮；层级和参考一致，长标题单行截断。
+- Layout：卡片最小高度 64 pt、圆角 12 pt、图标底座 36 pt、最大宽度 460 pt；宽度会适配 Xedit 会话内容区，参考图中的较窄宽度不被硬编码。
+- Colors：使用现有皮肤的 `panelFill`、`hoverFill`、`hairline` 与文本色；米纸色温是对 Xedit 设计系统的有意适配。
+- Images/icons：使用现有 SF Symbols `clock` / `checkmark.circle`，没有自绘或占位图标。
+- Copy/i18n：按钮、完成状态和频率均走本地化资源；中英文资源齐全，任务名称来自数据模型。
 
 ## Findings and iterations
 
-1. 初始实现支持双栏，但宽侧栏首次打开默认落在标签页，偏离已选组合方案。Severity：P2。
-2. 修复：当侧栏宽度不小于 520 pt 时默认选择 stdout/stderr 双栏；窄侧栏仍默认标签页，并保留用户手动切换能力。
-3. 重新渲染同视口对照后，P2 已消除。未发现剩余 P0、P1 或 P2；原生系统控件与 ImageGen 概念稿在色温、按钮外观上的差异属于对既有 WillDeep 设计系统的有意适配。
+1. 首轮实现的背景和描边先于外层高度约束，实际可见卡片略矮。Severity：P2。
+2. 修复：先应用 64 pt 最小高度，再绘制背景与描边；重新截图后卡片 chrome 与目标一致。
+3. 第二轮图标底座对比度偏低。Severity：P3。
+4. 修复：改用皮肤的 hover fill，保持中性但让时钟入口更易扫描。
+5. 最终对照未发现剩余 P0、P1 或 P2；卡片宽度和色温差异均是对 Xedit 现有布局与皮肤的有意适配。
 
 ## Verification
 
-- `AgentBackgroundJobsTests`：38/38 通过，包含真实 SwiftUI 截图夹具。
-- 相关侧栏、Composer、会话模型/Provider 与滚动策略测试：82/82 通过。
-- 本地化资源可编译且 JSON 有效；版本一致性检查通过；`git diff --check` 通过。
+- `AgentSidebarListVisualMetricsTests`：19/19 通过，覆盖布局常量、生产 SwiftUI 截图和“打开”导航状态转换。
+- `Localizable.xcstrings`：JSON 有效且 Xcode string catalog 编译通过。
+- 版本一致性：前端、Go agent、帮助包和浏览器扩展统一为 `1.234.0-rc8`。
+- 已知仓库门禁：既有 `XeditTests/XeditTests.swift` 为 3027 行，导致全局复杂度检查失败；本次改动文件未超过限制。
 
 final result: passed

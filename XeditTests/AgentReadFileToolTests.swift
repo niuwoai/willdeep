@@ -83,6 +83,28 @@ struct AgentReadFileToolTests {
         #expect(!result.payload.contains("truncated"))
     }
 
+    @Test("absolute paths inside another Project folder are readable")
+    func readsAdditionalProjectRoot() async throws {
+        let primary = try makeWorkspace()
+        let secondary = try makeWorkspace()
+        defer {
+            try? FileManager.default.removeItem(at: primary)
+            try? FileManager.default.removeItem(at: secondary)
+        }
+        let target = secondary.appendingPathComponent("backend.txt")
+        try "secondary root\n".write(to: target, atomically: true, encoding: .utf8)
+
+        let result = try await AgentFileTools.readFile(
+            arguments: ["path": .string(target.path)],
+            context: AgentToolContext(
+                rootDirectory: primary,
+                additionalWorkspaceRoots: [secondary]
+            )
+        )
+
+        #expect(result.payload.contains("secondary root"))
+    }
+
     @Test("byte-budget truncation lands on a line boundary and keeps CJK intact")
     func byteBudgetTruncationKeepsCJKIntact() async throws {
         let workspace = try makeWorkspace()

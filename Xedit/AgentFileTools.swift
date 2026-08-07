@@ -132,6 +132,12 @@ nonisolated enum AgentFileTools {
         let rawSearchPath = arguments["path"]?.stringValue()
         let limit = min(max(arguments["max_results"]?.intValue() ?? 60, 1), maxSearchResults)
         let includeGlob = arguments["include"]?.stringValue().flatMap { $0.isEmpty ? nil : $0 }
+        let resolvedSearch: (url: URL, root: URL)
+        if let rawSearchPath, !rawSearchPath.isEmpty {
+            resolvedSearch = try context.resolveWorkspaceURL(rawSearchPath)
+        } else {
+            resolvedSearch = (root, root.standardizedFileURL)
+        }
 
         // The regex is compiled inside the detached closure because
         // NSRegularExpression is not Sendable.
@@ -148,9 +154,9 @@ nonisolated enum AgentFileTools {
                 throw AgentToolError.invalidRegex(error.localizedDescription)
             }
 
-            let searchRoot: URL
+            let searchRoot = resolvedSearch.url
+            let outputRoot = resolvedSearch.root
             if let raw = rawSearchPath, !raw.isEmpty {
-                searchRoot = try resolveWorkspaceURL(raw, root: root)
                 var isDirectory: ObjCBool = false
                 guard FileManager.default.fileExists(atPath: searchRoot.path, isDirectory: &isDirectory) else {
                     throw AgentToolError.notFound(raw)
@@ -158,12 +164,10 @@ nonisolated enum AgentFileTools {
                 guard isDirectory.boolValue else {
                     throw AgentToolError.notRegular(raw)
                 }
-            } else {
-                searchRoot = root
             }
 
             if let matches = AgentRipgrepSearch.search(
-                root: root,
+                root: outputRoot,
                 searchRoot: searchRoot,
                 pattern: .regularExpression(pattern),
                 caseSensitive: caseSensitive,
@@ -213,7 +217,7 @@ nonisolated enum AgentFileTools {
                     continue
                 }
 
-                let relativePath = relativePath(of: url, root: root)
+                let relativePath = relativePath(of: url, root: outputRoot)
                 var lineNumber = 0
                 for line in content.split(separator: "\n", omittingEmptySubsequences: false) {
                     lineNumber += 1
@@ -256,7 +260,7 @@ nonisolated enum AgentFileTools {
         let offset = max(1, arguments["offset"]?.intValue() ?? 1)
         let lineLimit = arguments["limit"]?.intValue().map { max(1, $0) }
 
-        let resolved = try resolveWorkspaceURL(path, root: root)
+        let resolved = try context.resolveWorkspaceURL(path).url
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDirectory) else {
             throw AgentToolError.notFound(path)
@@ -402,7 +406,7 @@ nonisolated enum AgentFileTools {
         if rawPath.isEmpty {
             target = root
         } else {
-            target = try resolveWorkspaceURL(rawPath, root: root)
+            target = try context.resolveWorkspaceURL(rawPath).url
         }
 
         return try await Task.detached(priority: .userInitiated) {
@@ -676,22 +680,6 @@ nonisolated enum AgentFileTools {
             pi += 1; si += 1
         }
         return si == s.count
-    }
-
-    private static func resolveWorkspaceURL(_ path: String, root: URL) throws -> URL {
-        let trimmed = path.trimmingCharacters(in: .whitespaces)
-        let url: URL
-        if (trimmed as NSString).isAbsolutePath {
-            url = URL(fileURLWithPath: trimmed).standardizedFileURL
-        } else {
-            url = root.appendingPathComponent(trimmed).standardizedFileURL
-        }
-        let rootPath = root.standardizedFileURL.path
-        let candidatePath = url.path
-        guard candidatePath == rootPath || candidatePath.hasPrefix(rootPath + "/") else {
-            throw AgentToolError.pathOutsideWorkspace(path)
-        }
-        return url
     }
 
     private static func relativePath(of url: URL, root: URL) -> String {

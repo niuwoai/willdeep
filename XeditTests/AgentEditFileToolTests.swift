@@ -358,7 +358,7 @@ struct AgentEditFileToolTests {
         var queuedProposal: AgentPatchProposal?
         let context = AgentToolContext(
             rootDirectory: workspace,
-            patchProposalSink: { title, diff, _ in
+            patchProposalSink: { title, diff, _, _ in
                 let proposal = AgentPatchProposal(
                     messageID: UUID(),
                     title: title ?? "Agent Patch",
@@ -406,7 +406,7 @@ struct AgentEditFileToolTests {
         var queuedDiff: String?
         let context = AgentToolContext(
             rootDirectory: workspace,
-            patchProposalSink: { title, diff, _ in
+            patchProposalSink: { title, diff, _, _ in
                 queuedDiff = diff
                 return AgentPatchProposal(messageID: UUID(), title: title ?? "Agent Patch", diff: diff)
             },
@@ -441,7 +441,7 @@ struct AgentEditFileToolTests {
 
         let context = AgentToolContext(
             rootDirectory: workspace,
-            patchProposalSink: { _, diff, _ in
+            patchProposalSink: { _, diff, _, _ in
                 AgentPatchProposal(messageID: UUID(), title: "unused", diff: diff)
             }
         )
@@ -459,5 +459,49 @@ struct AgentEditFileToolTests {
         }
         // Nothing queued, nothing written.
         #expect(try String(contentsOf: fileURL, encoding: .utf8) == "dup\nother\ndup\n")
+    }
+
+    @Test("edit_file keeps the selected secondary Project root on its proposal")
+    @MainActor
+    func toolTargetsAdditionalProjectRoot() async throws {
+        let primary = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_edit_primary_\(UUID().uuidString)", isDirectory: true)
+        let secondary = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_edit_secondary_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: primary, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondary, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: primary)
+            try? FileManager.default.removeItem(at: secondary)
+        }
+        let target = secondary.appendingPathComponent("Backend.swift")
+        try "let port = 80\n".write(to: target, atomically: true, encoding: .utf8)
+
+        var proposalRoot: URL?
+        var queuedDiff: String?
+        let context = AgentToolContext(
+            rootDirectory: primary,
+            additionalWorkspaceRoots: [secondary],
+            patchProposalSink: { _, diff, _, root in
+                proposalRoot = root
+                queuedDiff = diff
+                return AgentPatchProposal(messageID: UUID(), title: "Backend", diff: diff)
+            }
+        )
+
+        _ = try await AgentToolRunner.run(
+            name: "edit_file",
+            arguments: [
+                "path": .string(target.path),
+                "old_string": .string("let port = 80"),
+                "new_string": .string("let port = 443")
+            ],
+            context: context
+        )
+
+        #expect(proposalRoot?.standardizedFileURL.path == secondary.standardizedFileURL.path)
+        let diff = try #require(queuedDiff)
+        let change = try #require(try AgentPatchApplier.parse(diff).first)
+        #expect(change.path == "Backend.swift")
     }
 }

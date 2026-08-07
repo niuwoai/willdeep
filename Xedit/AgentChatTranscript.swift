@@ -757,11 +757,7 @@ struct AgentChatTranscript: View {
             }
             return resultPresentationMessage(message, receipts: toolReceipts)
         }
-        guard appState.agentInteractionMode == .goal,
-              !appState.isAgentResponding else {
-            return visible
-        }
-        return AgentGoalTranscriptPresentation.settledMessages(from: visible)
+        return AgentTranscriptModePresentation.modeInvariantMessages(from: visible)
     }
 
     private func scrollToBottom(using proxy: ScrollViewProxy) {
