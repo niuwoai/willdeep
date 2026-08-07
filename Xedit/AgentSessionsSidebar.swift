@@ -1065,6 +1065,16 @@ struct AgentSessionsSidebar: View {
     }
 
     private func localWorkspacePath(for key: String) -> String? {
+        // A project group's key is `project:<uuid>`, not a path. Returning it
+        // verbatim anchored new sessions to that literal string as their
+        // workspace root — it surfaced in the composer pill, and every
+        // file/terminal/git operation would have resolved against a directory
+        // that does not exist. Only a bare folder group's key doubles as its
+        // own path, which is why this was safe before workspaces became
+        // projects.
+        if let project = appState.agentProject(forSidebarGroupKey: key) {
+            return project.primaryFolderPath
+        }
         guard key != AgentSession.noWorkspaceSidebarGroupKey,
               remoteWorkspaceGroup(from: key) == nil else {
             return nil

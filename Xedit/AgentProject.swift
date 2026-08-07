@@ -132,6 +132,49 @@ nonisolated enum AgentProjectResolver {
 // MARK: - Storage
 
 /// Projects live in one small JSON file beside the session directory, so the
+/// What to do with a session whose workspace path is actually a sidebar group
+/// key rather than a folder.
+nonisolated enum AgentWorkspacePathRepair: Equatable {
+    case notCorrupted
+    /// Point the session at this folder instead.
+    case repair(String)
+    /// The project is gone, so there is no folder to recover — drop the
+    /// workspace rather than leave a path that cannot resolve.
+    case clear
+}
+
+/// Repairs sessions anchored to a `project:<uuid>` group key.
+///
+/// 1.234.0-rc18 shipped a sidebar that handed "new chat in this group" the
+/// group key where a path was expected. For a bare folder the key *is* the
+/// path, so this was invisible until workspaces became projects; afterwards
+/// `startNewAgentSession(inWorkspaceAt:)` standardized the key into the
+/// absolute-looking `/project:<uuid>` and stored it as the session's workspace
+/// root. Every file, terminal and git operation would then resolve against a
+/// directory that does not exist.
+///
+/// The sidebar no longer produces these, but rc18 is already published, so
+/// existing sessions have to be healed on load.
+nonisolated enum AgentWorkspacePathRepairPlan {
+    static func plan(
+        workspacePath path: String?,
+        projects: [AgentProject]
+    ) -> AgentWorkspacePathRepair {
+        guard let path, let id = leakedProjectID(in: path) else { return .notCorrupted }
+        guard let project = projects.first(where: { $0.id == id }),
+              let folder = project.primaryFolderPath else {
+            return .clear
+        }
+        return .repair(folder)
+    }
+
+    /// Accepts both the raw key and the standardized `/project:<uuid>` form.
+    static func leakedProjectID(in path: String) -> UUID? {
+        let candidate = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        return AgentSession.projectID(fromSidebarGroupKey: candidate)
+    }
+}
+
 /// Decides which bare workspace folders still need to become projects.
 ///
 /// Split out from `AppState.migrateAgentWorkspacesToProjects()` so the rule is
