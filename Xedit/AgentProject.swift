@@ -132,6 +132,43 @@ nonisolated enum AgentProjectResolver {
 // MARK: - Storage
 
 /// Projects live in one small JSON file beside the session directory, so the
+/// Decides which bare workspace folders still need to become projects.
+///
+/// Split out from `AppState.migrateAgentWorkspacesToProjects()` so the rule is
+/// testable without a live AppState or the projects file on disk.
+nonisolated enum AgentWorkspaceProjectMigration {
+    /// Local workspace folders not yet claimed by any project, in first-seen
+    /// order and de-duplicated.
+    ///
+    /// Skips sessions with no workspace, sessions already in a project, and
+    /// remote workspaces — a `remote:` group has no local folder that a
+    /// project could be built from.
+    static func foldersNeedingProject(
+        sessions: [AgentSession],
+        existing: [AgentProject]
+    ) -> [String] {
+        var result: [String] = []
+        var seen = Set<String>()
+        for session in sessions {
+            let key = session.workspaceSidebarGroupKey
+            guard key != AgentSession.noWorkspaceSidebarGroupKey,
+                  AgentSession.projectID(fromSidebarGroupKey: key) == nil,
+                  WorkspacePresentation.remoteWorkspaceGroup(from: key) == nil,
+                  let path = AgentProject.normalizedPath(key),
+                  !seen.contains(path) else {
+                continue
+            }
+            seen.insert(path)
+            // A parent folder already covered by a project counts as claimed:
+            // adding a second project for the child would split one group in
+            // two, which is the opposite of the point.
+            guard AgentProjectResolver.project(for: path, in: existing) == nil else { continue }
+            result.append(path)
+        }
+        return result
+    }
+}
+
 /// test-sandbox redirect on `AgentSessionStore.directory` carries over.
 /// There are a handful of projects at most; no sharding needed.
 nonisolated enum AgentProjectStore {

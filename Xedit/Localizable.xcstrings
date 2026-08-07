@@ -3135,6 +3135,25 @@
         }
       }
     },
+    "agent-project.add-folder" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Add folder" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "添加文件夹" } } } },
+    "agent-project.cancel" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消" } } } },
+    "agent-project.create" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Make This a Project…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "升级为项目…" } } } },
+    "agent-project.edit" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit Project…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑项目…" } } } },
+    "agent-project.folders-label" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Source folders" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "源文件夹" } } } },
+    "agent-project.last-folder-hint" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "A project keeps at least one folder. Removing the last one removes the project." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "项目至少保留一个文件夹；移除最后一个等同于删除该项目。" } } } },
+    "agent-project.missing-folder" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Folder not found" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文件夹不存在" } } } },
+    "agent-project.name-label" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Project name" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "项目名称" } } } },
+    "agent-project.name-placeholder" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "e.g. TokenHub" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "例如：TokenHub" } } } },
+    "agent-project.remove-cancel" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消" } } } },
+    "agent-project.remove-confirm" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除" } } } },
+    "agent-project.remove-deletes" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This permanently deletes %@ conversation(s) and all their contents. This cannot be undone." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这会永久删除 %@ 个会话及其全部内容，且无法撤销。" } } } },
+    "agent-project.remove-folder" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove this folder" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除此文件夹" } } } },
+    "agent-project.remove-keeps" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ conversation(s) whose folder also belongs to “%@” will be kept and moved there." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "其中 %@ 个会话的文件夹同时属于「%@」，将被保留并移入该项目。" } } } },
+    "agent-project.remove-nothing" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No conversations will be deleted. The folders and their chats stay where they are." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "不会删除任何会话；文件夹及其聊天记录保持原样。" } } } },
+    "agent-project.remove-project" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove Project" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除项目" } } } },
+    "agent-project.remove-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove project “%@”?" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除项目「%@」？" } } } },
+    "agent-project.save" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Save" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存" } } } },
+    "agent-project.sheet-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit Project" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑项目" } } } },
     "agent-patch-error.empty-diff" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -31268,13 +31287,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Open another folder as a new workspace"
+            "value" : "Add a folder as a new project"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择另一个文件夹作为新工作区打开"
+            "value" : "添加一个文件夹作为新项目"
           }
         }
       }

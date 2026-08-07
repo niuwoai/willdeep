@@ -164,6 +164,74 @@ extension AppState {
         }
     }
 
+    /// Guarantee that `path` is covered by a project, creating one named after
+    /// the folder if it is not.
+    ///
+    /// Picking a folder used to produce a bare workspace group, which is why
+    /// "add a workspace" and "add a project" felt like two different things.
+    /// Adding a folder now always yields a project; an existing project that
+    /// already claims the folder (or a parent of it) is reused rather than
+    /// shadowed by a second group for the same tree.
+    @discardableResult
+    func ensureAgentProject(forFolderPath path: String) -> AgentProject? {
+        guard let normalized = AgentProject.normalizedPath(path) else { return nil }
+        if let existing = AgentProjectResolver.project(for: normalized, in: agentProjects) {
+            return existing
+        }
+        return createAgentProject(
+            displayName: WorkspacePresentation.localDisplayName(path: normalized),
+            folderPaths: [normalized]
+        )
+    }
+
+    /// Promote every remaining bare workspace folder to a named project.
+    ///
+    /// Workspaces and projects were parallel grouping concepts: a session bound
+    /// to a plain folder grouped under that path, while a project grouped one
+    /// or more folders under a name. The sidebar therefore listed both kinds of
+    /// row side by side, and "upgrading" a workspace appeared to *add* a group
+    /// rather than convert one. Projects subsume workspaces, so each surviving
+    /// folder becomes a project named after the folder and the folder-keyed
+    /// group disappears on the next `rebindAgentSessionsToProjects()`.
+    ///
+    /// Only local folder groups are promoted. Remote (`remote:…`) and
+    /// workspace-less sessions have no folder to name a project after.
+    ///
+    /// Idempotent — a folder already claimed by a project is skipped — so this
+    /// is safe to run on every launch.
+    @discardableResult
+    func migrateAgentWorkspacesToProjects() -> [AgentProject] {
+        var projects = agentProjects
+        var created: [AgentProject] = []
+
+        // The candidate list is computed once, so this loop is bounded by the
+        // number of sessions. Re-querying until the list emptied would hang
+        // forever on any folder the freshly created project fails to claim.
+        // The per-iteration re-check below covers the reason that recompute
+        // was tempting: two candidates where one is nested under the other.
+        for path in AgentWorkspaceProjectMigration.foldersNeedingProject(
+            sessions: agentSessions,
+            existing: projects
+        ) {
+            guard AgentProjectResolver.project(for: path, in: projects) == nil else { continue }
+            let project = AgentProject(
+                displayName: WorkspacePresentation.localDisplayName(path: path),
+                folderPaths: [path]
+            )
+            projects.append(project)
+            created.append(project)
+        }
+
+        guard !created.isEmpty else { return [] }
+        agentProjects = projects
+        AgentProjectStore.save(agentProjects)
+        rebindAgentSessionsToProjects()
+        for project in created {
+            activateAgentProjectFolderAccess(projectID: project.id)
+        }
+        return created
+    }
+
     /// The project owning a sidebar group key, if that key is a project key.
     func agentProject(forSidebarGroupKey key: String) -> AgentProject? {
         guard let id = AgentSession.projectID(fromSidebarGroupKey: key) else { return nil }

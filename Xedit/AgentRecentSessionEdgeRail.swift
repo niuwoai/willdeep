@@ -50,6 +50,10 @@ struct AgentRecentSessionEdgeRail: View {
             from: appState.agentSessions,
             hiddenWorkspaceKeys: appState.hiddenWorkspaceKeys,
             limit: maxRows,
+            // In-memory list, not the `AgentProject.load()` default: this is a
+            // computed property SwiftUI re-evaluates on every body pass, and
+            // the default would read the projects file each time.
+            projects: appState.agentProjects,
             isMetadataOnly: appState.agentSessionIsMetadataOnly,
             metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
         )
@@ -205,10 +209,17 @@ enum AgentRecentSessionEdgeRailLogic {
     /// so it cannot be looked up from a global here. Defaults treat every
     /// session as fully materialized, which is what in-memory-only
     /// callers (tests, previews) have.
+    ///
+    /// `projects` is passed in rather than loaded per row: resolving a
+    /// `project:` group key needs the project list, and reading it inside the
+    /// row mapping would hit the disk once per visible session. The
+    /// `AgentProjectStore.load()` default is for tests and previews; the real
+    /// caller hands over AppState's in-memory list.
     static func recentItems(
         from sessions: [AgentSession],
         hiddenWorkspaceKeys: Set<String>,
         limit: Int,
+        projects: [AgentProject] = AgentProjectStore.load(),
         isMetadataOnly: (AgentSession.ID) -> Bool = { _ in false },
         metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool = { _ in false }
     ) -> [Item] {
@@ -227,7 +238,10 @@ enum AgentRecentSessionEdgeRailLogic {
             }
             .prefix(max(0, limit))
             .map { session in
-                let workspaceName = workspaceDisplayName(for: session.workspaceSidebarGroupKey)
+                let workspaceName = workspaceDisplayName(
+                    for: session.workspaceSidebarGroupKey,
+                    projects: projects
+                )
                 return Item(
                     session: session,
                     workspaceDisplayName: workspaceName,
@@ -270,23 +284,14 @@ enum AgentRecentSessionEdgeRailLogic {
         return false
     }
 
-    private static func workspaceDisplayName(for key: String) -> String {
-        if key == AgentSession.noWorkspaceSidebarGroupKey { return L10n.Workspace.noWorkspace }
-        if let remote = remoteWorkspaceGroup(from: key) {
-            let runtime = AgentRuntimeStore.descriptor(id: remote.runtimeID)
-            return WorkspacePresentation.remoteDisplayName(runtime: runtime, path: remote.path)
-        }
-        return URL(fileURLWithPath: key).lastPathComponent
-    }
-
-    private static func remoteWorkspaceGroup(from key: String) -> (runtimeID: UUID, path: String)? {
-        let prefix = "remote:"
-        guard key.hasPrefix(prefix) else { return nil }
-        let remainder = String(key.dropFirst(prefix.count))
-        guard let separator = remainder.firstIndex(of: ":") else { return nil }
-        let idPart = String(remainder[..<separator])
-        guard let runtimeID = UUID(uuidString: idPart) else { return nil }
-        let path = String(remainder[remainder.index(after: separator)...])
-        return (runtimeID, path)
+    private static func workspaceDisplayName(
+        for key: String,
+        projects: [AgentProject]
+    ) -> String {
+        WorkspacePresentation.groupDisplayName(
+            for: key,
+            projects: projects,
+            remoteRuntime: { AgentRuntimeStore.descriptor(id: $0) }
+        )
     }
 }
