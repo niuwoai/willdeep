@@ -20,6 +20,10 @@ final class VoiceModelDownloader: ObservableObject {
     /// fastv 用的默认 CDN endpoint。如果以后挂了/换源，改这里就行。
     private static let defaultDownloadURL = URL(string: "https://cdn.wxside.com/upload/202511/1763737361-dTESP.onnx")!
 
+    /// SenseVoice ONNX 的公布体积，只用作服务端未给 Content-Length 时的
+    /// 回退分母，对应下载提示里那句「约 937 MB」。真实体积以响应头为准。
+    static let approximateModelBytes: Int64 = 937 * 1024 * 1024
+
     enum State: Equatable {
         case idle
         case importing
@@ -117,10 +121,21 @@ final class VoiceModelDownloader: ObservableObject {
 
         // 进度观察。downloadTask.progress 是 NSProgress，KVO 它的
         // fractionCompleted。
-        observer = downloadTask.progress.observe(\.fractionCompleted, options: [.new]) { [weak self] progress, _ in
+        // Byte counts come from the task, not from `progress`. A download
+        // task's `fractionCompleted` is driven internally and its
+        // `completedUnitCount` / `totalUnitCount` are not guaranteed to be
+        // populated alongside it — reading them here made the bar advance
+        // while the label sat at "0.0 MB / 0.0 MB". `countOfBytesReceived`
+        // and `countOfBytesExpectedToReceive` are the authoritative pair.
+        observer = downloadTask.progress.observe(\.fractionCompleted, options: [.new]) { [weak self, weak downloadTask] progress, _ in
             guard let self else { return }
-            let received = progress.completedUnitCount
-            let total = progress.totalUnitCount
+            let received = downloadTask?.countOfBytesReceived ?? progress.completedUnitCount
+            // `countOfBytesExpectedToReceive` is NSURLSessionTransferSizeUnknown
+            // (-1) until the response headers land, and stays there when the
+            // server sends no Content-Length. Fall back to the known asset size
+            // so the denominator is never 0 or negative.
+            let reported = downloadTask?.countOfBytesExpectedToReceive ?? 0
+            let total = reported > 0 ? reported : Self.approximateModelBytes
             let fraction = progress.fractionCompleted
             Task { @MainActor in
                 let speed = self.computeSpeed(receivedNow: received)
