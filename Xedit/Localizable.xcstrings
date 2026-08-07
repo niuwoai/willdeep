@@ -16624,13 +16624,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 14 pt; range %1$@ – %2$@ pt."
+            "value" : "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 15 pt; range %1$@ – %2$@ pt."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agent 聊天正文和 Markdown 块（段落、列表、引用、代码块、表格）的基础字号（pt）。工具卡片摘要、底栏、消息头、输入框工具栏会保持固定字号 — 这个旋钮只管「读对话」，不会缩放整个 UI。默认 14 pt；范围 %1$@ – %2$@ pt。"
+            "value" : "Agent 聊天正文和 Markdown 块（段落、列表、引用、代码块、表格）的基础字号（pt）。工具卡片摘要、底栏、消息头、输入框工具栏会保持固定字号 — 这个旋钮只管「读对话」，不会缩放整个 UI。默认 15 pt；范围 %1$@ – %2$@ pt。"
           }
         }
       }
