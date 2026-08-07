@@ -164,6 +164,59 @@ extension AppState {
         }
     }
 
+    /// Heal sessions whose workspace path is a `project:<uuid>` group key.
+    ///
+    /// See `AgentWorkspacePathRepairPlan`: 1.234.0-rc18 let the sidebar pass a
+    /// group key where a folder path was expected, so "new chat in this group"
+    /// anchored the session to `/project:<uuid>`. The sidebar is fixed, but
+    /// rc18 is published, so already-created sessions need repairing on load.
+    @discardableResult
+    func repairAgentSessionsAnchoredToProjectKeys() -> Int {
+        var repaired = 0
+
+        for index in agentSessions.indices {
+            let session = agentSessions[index]
+            let candidate = session.sidebarWorkspaceRootPath
+                ?? session.workspaceLocation?.localPath
+                ?? session.workspaceRootPath
+            let plan = AgentWorkspacePathRepairPlan.plan(
+                workspacePath: candidate,
+                projects: agentProjects
+            )
+            guard plan != .notCorrupted else { continue }
+
+            let folder: String?
+            switch plan {
+            case .repair(let path):
+                folder = path
+            case .clear:
+                folder = nil
+            case .notCorrupted:
+                continue
+            }
+
+            agentSessions[index].workspaceRootPath = folder
+            agentSessions[index].workspaceLocation = folder.map { .local(path: $0) }
+            if let sidebarRoot = agentSessions[index].sidebarWorkspaceRootPath,
+               AgentWorkspacePathRepairPlan.leakedProjectID(in: sidebarRoot) != nil {
+                agentSessions[index].sidebarWorkspaceRootPath = folder
+            }
+            repaired += 1
+
+            if let runtime = agentRuntimes[session.id] {
+                runtime.session = agentSessions[index]
+                persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+            } else {
+                AgentSessionStore.save(agentSessions[index])
+            }
+        }
+
+        if repaired > 0 {
+            objectWillChange.send()
+        }
+        return repaired
+    }
+
     /// Guarantee that `path` is covered by a project, creating one named after
     /// the folder if it is not.
     ///
