@@ -530,6 +530,24 @@ struct AgentInlineStatusDivider: View {
     }
 }
 
+/// Whether the activity sweep should be driving frames.
+///
+/// The sweep is decorative feedback for whoever is watching the turn. It runs
+/// for the whole turn — a `run_command` that takes ten minutes means ten
+/// minutes of animation — and a CA transaction flush lays out every window
+/// with pending work, so each sweep frame costs a pass over the main window's
+/// whole view tree. Parking it while the window is inactive removes that cost
+/// exactly when nobody can see the result.
+nonisolated enum AgentActivitySweepGate {
+    static func shouldAnimate(
+        isActive: Bool,
+        reduceMotion: Bool,
+        windowIsActive: Bool
+    ) -> Bool {
+        isActive && !reduceMotion && windowIsActive
+    }
+}
+
 nonisolated enum AgentActivitySweepMetrics {
     static let sweepDuration: TimeInterval = 1.25
     static let pauseDuration: TimeInterval = 0.65
@@ -557,6 +575,7 @@ nonisolated enum AgentActivitySweepMetrics {
 
 struct AgentActivitySweepLabel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.controlActiveState) private var controlActiveState
     let text: String
     let font: Font
     var isActive: Bool
@@ -570,7 +589,11 @@ struct AgentActivitySweepLabel: View {
             .foregroundStyle(baseColor.opacity(AgentActivitySweepMetrics.baseOpacity))
             .lineLimit(1)
             .overlay {
-                if isActive, !reduceMotion {
+                if AgentActivitySweepGate.shouldAnimate(
+                    isActive: isActive,
+                    reduceMotion: reduceMotion,
+                    windowIsActive: controlActiveState != .inactive
+                ) {
                     if let progressOverride {
                         sweepLayer(progress: progressOverride)
                     } else {

@@ -130,6 +130,57 @@ struct AgentConfirmationVisualTests {
         #expect(!AgentCompactAuthorizationMetrics.usesHorizontalActions(availableWidth: 480))
     }
 
+    /// 扫光是给「正在看」的人的装饰性反馈，而它会持续整个回合——一条跑十
+    /// 分钟的 run_command 就是十分钟的动画。一次 CA transaction flush 会把
+    /// 所有待布局窗口一起过一遍，所以每一帧扫光都要付一次主窗口整棵视图树
+    /// 的代价。窗口不活跃时必须停摆。
+    @Test("窗口不活跃时扫光停摆")
+    func sweepParksWhileWindowIsInactive() {
+        #expect(AgentActivitySweepGate.shouldAnimate(
+            isActive: true,
+            reduceMotion: false,
+            windowIsActive: true
+        ))
+        #expect(!AgentActivitySweepGate.shouldAnimate(
+            isActive: true,
+            reduceMotion: false,
+            windowIsActive: false
+        ))
+        #expect(!AgentActivitySweepGate.shouldAnimate(
+            isActive: false,
+            reduceMotion: false,
+            windowIsActive: true
+        ))
+        #expect(!AgentActivitySweepGate.shouldAnimate(
+            isActive: true,
+            reduceMotion: true,
+            windowIsActive: true
+        ))
+    }
+
+    /// 侧栏切换按钮在窗口过窄时不可点，但必须保持 enabled——AppKit 不会为
+    /// 禁用控件跟踪鼠标，tooltip 也就永远弹不出来，用户只看到一个没有任何
+    /// 解释的灰按钮。拒绝切换是 action 的职责。
+    @Test("侧栏切换按钮保持可悬停以便解释原因")
+    func sidebarToggleStaysHoverableWhileAutoHidden() {
+        #expect(AgentSidebarToggleButtonState.isEnabled(isAutoHidden: true))
+        #expect(AgentSidebarToggleButtonState.isEnabled(isAutoHidden: false))
+        #expect(!AgentSidebarToggleButtonState.acceptsToggle(isAutoHidden: true))
+        #expect(AgentSidebarToggleButtonState.acceptsToggle(isAutoHidden: false))
+        #expect(
+            AgentSidebarToggleButtonState.tooltip(isAutoHidden: true, isVisible: false)
+                == L10n.Header.sidebarAutoHidden
+        )
+        #expect(
+            AgentSidebarToggleButtonState.tooltip(isAutoHidden: false, isVisible: true)
+                == L10n.Header.hideSidebar
+        )
+        #expect(
+            AgentSidebarToggleButtonState.tooltip(isAutoHidden: false, isVisible: false)
+                == L10n.Header.showSidebar
+        )
+    }
+
     @Test("当前动作文字从左向右扫光，计时保持稳定")
     func currentActionSweepStaysSubtle() {
         #expect(AgentActivitySweepMetrics.sweepDuration >= 1.0)
