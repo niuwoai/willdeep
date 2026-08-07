@@ -946,8 +946,11 @@ extension AppState {
                                 case .reasoningDelta(let delta):
                                     streamBuffer.appendReasoningDelta(delta)
                                 case .toolCallsUpdated(let calls):
-                                    streamBuffer.flushPending()
-                                    runtime.messages[index].toolCalls = calls
+                                    // Rides the streaming buffer's overlay/slow
+                                    // tier: argument-fragment growth no longer
+                                    // publishes the whole messages array at
+                                    // ~10 Hz (see updateToolCalls).
+                                    streamBuffer.updateToolCalls(calls)
                                     latestToolCalls = calls
                                 case .sourceReferencesUpdated(let references):
                                     streamBuffer.flushPending()
