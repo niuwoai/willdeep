@@ -40,6 +40,10 @@ final class AgentStreamingContentOverlay: ObservableObject {
         var messageID: AgentMessage.ID
         var content: String
         var reasoningContent: String?
+        /// Live tool-call list while the model streams call argument
+        /// fragments. Nil until the first `toolCallsUpdated` event; the
+        /// canonical message keeps its own list until then.
+        var toolCalls: [AgentMessageToolCall]?
     }
 
     @Published private(set) var current: Snapshot?
@@ -66,6 +70,9 @@ final class AgentStreamingContentOverlay: ObservableObject {
         if let reasoning = snapshot.reasoningContent,
            reasoning.utf8.count >= (live.reasoningContent?.utf8.count ?? 0) {
             live.reasoningContent = reasoning
+        }
+        if let toolCalls = snapshot.toolCalls, toolCalls.count >= live.toolCalls.count {
+            live.toolCalls = toolCalls
         }
         return live
     }
@@ -106,6 +113,49 @@ final class AgentStreamingMessageBuffer {
         pendingReasoning += delta
         scheduleFlush()
         flushIfNeeded()
+    }
+
+    /// Streams the growing tool-call list (the model typing call arguments).
+    /// The client already gates these events to ~10 Hz, but each one used to
+    /// mutate `runtime.messages` directly — a whole-window invalidation at
+    /// full cadence for the entire argument stream (edit_file diffs are
+    /// long). Argument-fragment growth now rides the overlay/slow tier like
+    /// text; only a *new call appearing* (count change) syncs the canonical
+    /// array immediately, so the live activity timeline mounts each call
+    /// promptly while its argument tail updates at 1 Hz.
+    func updateToolCalls(_ calls: [AgentMessageToolCall]) {
+        // Drain pending text first so overlay ordering matches the event
+        // stream (text delta → tool calls), same as the old flushPending().
+        flushTask?.cancel()
+        flushTask = nil
+        applyPendingDeltas()
+
+        guard let runtime else { return }
+        var snapshot: AgentStreamingContentOverlay.Snapshot
+        if let existing = runtime.streamingOverlay.snapshot(for: assistantID) {
+            snapshot = existing
+        } else if let message = runtime.messages.first(where: { $0.id == assistantID }) {
+            snapshot = AgentStreamingContentOverlay.Snapshot(
+                messageID: assistantID,
+                content: message.content,
+                reasoningContent: message.reasoningContent
+            )
+        } else {
+            return
+        }
+        snapshot.toolCalls = calls
+        runtime.streamingOverlay.replace(snapshot)
+        canonicalNeedsSync = true
+
+        let canonicalCallCount = runtime.messages
+            .first(where: { $0.id == assistantID })?.toolCalls.count ?? 0
+        if calls.count != canonicalCallCount {
+            canonicalFlushTask?.cancel()
+            canonicalFlushTask = nil
+            syncCanonicalIfNeeded()
+        } else {
+            syncCanonicalIfDue()
+        }
     }
 
     func flushPending() {
@@ -228,6 +278,9 @@ final class AgentStreamingMessageBuffer {
         updated.content = snapshot.content
         if let reasoning = snapshot.reasoningContent {
             updated.reasoningContent = reasoning
+        }
+        if let toolCalls = snapshot.toolCalls {
+            updated.toolCalls = toolCalls
         }
         runtime.messages[index] = updated
     }

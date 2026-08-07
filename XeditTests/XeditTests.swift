@@ -1447,6 +1447,45 @@ struct WillDeepTests {
     }
 
     @MainActor
+    @Test("streaming buffer batches tool-call argument fragments and publishes new calls immediately")
+    func testAgentStreamingBufferToolCallTierSplit() {
+        let assistant = AgentMessage(role: .assistant, content: "")
+        let runtime = AgentRuntime(session: AgentSession(messages: [assistant]))
+        let buffer = AgentStreamingMessageBuffer(runtime: runtime, assistantID: assistant.id)
+        var publishCount = 0
+        let observation = runtime.objectWillChange.sink { publishCount += 1 }
+
+        // A new call appearing (count change) syncs the canonical array
+        // immediately so the live activity timeline mounts promptly.
+        let call = AgentMessageToolCall(
+            externalID: "call-1",
+            toolName: "edit_file",
+            argumentsJSON: "{\"path"
+        )
+        buffer.updateToolCalls([call])
+        #expect(publishCount == 1)
+        #expect(runtime.messages[0].toolCalls.count == 1)
+
+        // Argument fragments growing on the same call ride the slow tier:
+        // overlay live, canonical (and its whole-window forward) unchanged.
+        var grown = call
+        grown.argumentsJSON = "{\"path\":\"a.swift\",\"old_string\":\"before\""
+        buffer.updateToolCalls([grown])
+        #expect(publishCount == 1)
+        #expect(runtime.messages[0].toolCalls[0].argumentsJSON == call.argumentsJSON)
+        #expect(
+            runtime.streamingOverlay.snapshot(for: assistant.id)?
+                .toolCalls?[0].argumentsJSON == grown.argumentsJSON
+        )
+
+        // flushPending lands the final arguments in the canonical array.
+        buffer.flushPending()
+        #expect(publishCount == 2)
+        #expect(runtime.messages[0].toolCalls[0].argumentsJSON == grown.argumentsJSON)
+        withExtendedLifetime(observation) {}
+    }
+
+    @MainActor
     @Test("streaming overlay applies live text onto the canonical message and ignores stale snapshots")
     func testAgentStreamingOverlayApplying() {
         let overlay = AgentStreamingContentOverlay()

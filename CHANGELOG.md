@@ -1,7 +1,19 @@
 # Changelog
 
-> 当前文件保留最新版本（1.234.0-rc7 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.234.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.234.0-rc11 - 2026-08-07
+
+> 版本号说明：本条目原为 rc8，因并行会话已占用 rc8–rc10（定时任务卡片 / 目标模式修复），改占 rc11；内容即「工具调用参数流并入两档通道」。
+
+### Fixed
+
+- rc7 装机后复采样：主线程 CPU 从 93% 降到 ~40%，但仍偏高——第二个 10Hz 全局发布源是**工具调用参数流**。`toolCallsUpdated` 事件虽有 100ms 发射门（`AgentToolCallStreamEmissionGate`），但每次发射都直写 `runtime.messages[index].toolCalls`，参数越长（edit_file 的 diff 动辄几 KB）整窗失效持续越久。现在并入 rc7 的两档通道：参数片段增长走 overlay/慢档（canonical 1Hz），**新工具调用出现（数量变化）仍立即同步**，live activity timeline 挂载不延迟；`flushPending()` 时序不变，回合收尾/错误路径的 canonical 工具列表完整。
+
+### Tests
+
+- 新增 `testAgentStreamingBufferToolCallTierSplit`：新调用立即发布、同调用参数增长滞后、`flushPending` 落盘最终参数。
 
 ## 1.234.0-rc7 - 2026-08-06
 
