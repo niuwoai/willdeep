@@ -770,8 +770,8 @@ struct AgentSemanticActivityStatusLine: View {
     private var phase: AgentActivityPhase? {
         if appState.isCompressingAgentContext {
             // 灰色而非紫色：压缩是例行的后台维护，不是需要抢注意力的
-            // 状态。彩色 tint 留给等待决定（橙）、任务运行（绿）这类
-            // 真正要用户看一眼的阶段。
+            // 状态。彩色 tint 只留给「等待你决定」（橙）——那是唯一
+            // 卡住进度、必须用户动手的阶段；其余进行中状态一律走灰色。
             return AgentActivityPhase(label: "压缩上下文中", systemImage: "arrow.down.forward.and.arrow.up.backward", tint: .secondary)
         }
         if let waiting = appState.agentToolCalls.last(where: { call in
@@ -783,7 +783,8 @@ struct AgentSemanticActivityStatusLine: View {
             return phase(for: running)
         }
         if appState.agentRunningTaskCount > 0 {
-            return AgentActivityPhase(label: "任务运行中", systemImage: "play.circle", tint: .green)
+            // 任务在跑是正常推进，不需要用户做任何事——灰色即可。
+            return AgentActivityPhase(label: "任务运行中", systemImage: "play.circle", tint: .secondary)
         }
         if appState.isAgentResponding {
             if let headline = appState.agentCurrentActivityHeadline {
