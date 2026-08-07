@@ -459,7 +459,11 @@ struct AgentChatTranscript: View {
                     }
 
                     if let error = appState.agentErrorMessage {
-                        AgentErrorCard(message: error, details: appState.agentErrorDetails)
+                        AgentErrorCard(
+                            message: error,
+                            details: appState.agentErrorDetails,
+                            severity: appState.agentErrorSeverity
+                        )
                             .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
                     }
 

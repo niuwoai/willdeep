@@ -12,6 +12,7 @@ struct AgentErrorCard: View {
     @EnvironmentObject var appState: AppState
     let message: String
     let details: AgentErrorDetails?
+    var severity: AgentBannerSeverity = .error
     @State private var isExpanded = false
     /// Title of the section whose copy button was just clicked — drives the
     /// transient checkmark feedback so the user can tell the copy happened.
@@ -20,13 +21,13 @@ struct AgentErrorCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .top, spacing: 7) {
-                Image(systemName: "exclamationmark.triangle.fill")
+                Image(systemName: iconName)
                     .font(.system(size: 12))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(accentStyle)
                     .padding(.top, 1)
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(textStyle)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 if appState.agentErrorRequiresSomeIMLogin {
@@ -146,12 +147,43 @@ struct AgentErrorCard: View {
         }
         .padding(9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.red.opacity(0.06))
+        .background(accentColor.opacity(severity == .error ? 0.06 : 0.07))
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(Color.red.opacity(0.18), lineWidth: 1)
+                .stroke(accentColor.opacity(severity == .error ? 0.18 : 0.22), lineWidth: 1)
         )
+    }
+
+    // MARK: - Severity styling
+    //
+    // `.notice` deliberately drops red and the warning triangle: those
+    // banners hand control back to the user without anything having failed,
+    // and the alarm treatment made a healthy run look broken.
+
+    private var accentColor: Color {
+        switch severity {
+        case .error: return .red
+        case .notice: return .accentColor
+        }
+    }
+
+    private var accentStyle: AnyShapeStyle {
+        AnyShapeStyle(accentColor)
+    }
+
+    private var textStyle: AnyShapeStyle {
+        switch severity {
+        case .error: return AnyShapeStyle(.red)
+        case .notice: return AnyShapeStyle(.primary)
+        }
+    }
+
+    private var iconName: String {
+        switch severity {
+        case .error: return "exclamationmark.triangle.fill"
+        case .notice: return "info.circle.fill"
+        }
     }
 }
 

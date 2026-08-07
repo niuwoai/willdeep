@@ -21,6 +21,15 @@
 import Foundation
 import Combine
 
+/// Presentation weight of the transcript banner. `error` is the historical
+/// red treatment for genuine failures; `notice` is for banners that merely
+/// hand control back to the user — the run is intact, nothing needs
+/// panicking about.
+nonisolated enum AgentBannerSeverity: Equatable {
+    case error
+    case notice
+}
+
 @MainActor
 final class AgentRuntime: ObservableObject, Identifiable {
     let id: AgentSession.ID
@@ -91,6 +100,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var isCompressingContext: Bool = false
     @Published var errorMessage: String?
     @Published var errorDetails: AgentErrorDetails?
+    /// How loudly the banner should present `errorMessage`. Not every banner
+    /// is a failure: the plan auto-continuation pauses stop a healthy run for
+    /// a bookkeeping reason, and painting those in alarm red reads as "your
+    /// work broke". Always reset alongside `errorMessage`.
+    @Published var errorSeverity: AgentBannerSeverity = .error
     /// True when `errorMessage` is the "some.im not logged in" gate (see
     /// `AppState.someIMLoginRequiredForTurn`). Drives the error card's extra
     /// "去登录 some.im" affordance. Always reset alongside `errorMessage`.

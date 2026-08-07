@@ -1100,6 +1100,7 @@ extension AppState {
             runtime.isAwaitingProviderSlot = false
             runtime.errorMessage = nil
             runtime.errorDetails = nil
+            runtime.errorSeverity = .error
             runtime.errorRequiresSomeIMLogin = false
             _ = appendStoppedTurnEvent(to: runtime, content: L10n.Composer.stopped)
             return
@@ -1138,6 +1139,7 @@ extension AppState {
 
         runtime.errorMessage = nil
         runtime.errorDetails = nil
+        runtime.errorSeverity = .error
         runtime.errorRequiresSomeIMLogin = false
         let immediateStoppedCount = activeWorkflowIDs.count + subagentStopCount
         let eventContent: String

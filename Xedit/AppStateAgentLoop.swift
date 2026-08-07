@@ -139,6 +139,7 @@ extension AppState {
         runtime.isAwaitingProviderSlot = false
         runtime.errorMessage = nil
         runtime.errorDetails = nil
+        runtime.errorSeverity = .error
         runtime.errorRequiresSomeIMLogin = false
         runtime.latestComputerUseActivity = nil
         runtime.isResponding = true
@@ -634,6 +635,13 @@ extension AppState {
         var consecutivePlanRepliesWithoutProgress = 0
         var didAdvancePlanSinceLastContinuationDecision = false
         var isPlanProgressReconciliationActive = false
+        /// Baseline for "did anything actually run since the last plan
+        /// continuation decision". Only `.succeeded` calls count: a
+        /// reconciliation round denies write tools, and those denials must
+        /// not read back as evidence of progress.
+        var succeededToolCallCountAtLastContinuationDecision = runtime.toolCalls
+            .filter { $0.status == .succeeded }
+            .count
         let designToCodeToolCallBaseline = runtime.toolCalls.count
         let latestUserImages = runtime.messages.last(where: { $0.isOperatorInput })?.images ?? []
         let requiresDesignToCodeAcceptance = workspaceURL != nil && AgentDesignToCode.isActive(
@@ -1209,12 +1217,29 @@ extension AppState {
                 }
                 didAdvancePlanSinceLastContinuationDecision = false
 
+                // A missing status block is not the same as a stalled run.
+                // Count the tool calls that actually succeeded since the last
+                // decision, and check for background jobs still running, so a
+                // demonstrably live execution keeps getting nudged for a
+                // status block instead of being hard-paused.
+                let succeededToolCallCount = runtime.toolCalls
+                    .filter { $0.status == .succeeded }
+                    .count
+                let progressEvidence = AgentPlanAutoContinuationPolicy.ProgressEvidence(
+                    didExecuteTools: succeededToolCallCount
+                        > succeededToolCallCountAtLastContinuationDecision,
+                    hasRunningBackgroundJobs: !agentJobRegistry
+                        .aliveJobs(forRuntime: runtime.id).isEmpty
+                )
+                succeededToolCallCountAtLastContinuationDecision = succeededToolCallCount
+
                 switch AgentPlanAutoContinuationPolicy.decision(
                     for: runtime.currentPlan,
                     automaticContinuationCount: planAutomaticContinuationCount,
                     consecutiveNoProgressReplies: consecutivePlanRepliesWithoutProgress,
                     hasQueuedUserMessages: !runtime.queuedMessages.isEmpty,
-                    allowsAutomaticExecution: !runtime.currentTurnPlanningOnly
+                    allowsAutomaticExecution: !runtime.currentTurnPlanningOnly,
+                    evidence: progressEvidence
                 ) {
                 case .continueExecution:
                     planAutomaticContinuationCount += 1
@@ -1234,17 +1259,22 @@ extension AppState {
                         AgentMessage(
                             role: .system,
                             content: AgentPlanAutoContinuationPolicy.progressReconciliationNotice(
-                                finishReason: finishReason
+                                finishReason: finishReason,
+                                hasRunningBackgroundJobs: progressEvidence.hasRunningBackgroundJobs
                             )
                         )
                     )
                     continue
                 case .pauseAfterNoProgress:
+                    // Both pauses hand control back to the user without
+                    // anything having failed — see AgentBannerSeverity.
                     runtime.errorMessage = L10n.PlanContinuation.missingProgressPaused
                     runtime.errorDetails = nil
+                    runtime.errorSeverity = .notice
                 case .pauseAfterLimit:
                     runtime.errorMessage = L10n.PlanContinuation.safetyLimitPaused
                     runtime.errorDetails = nil
+                    runtime.errorSeverity = .notice
                 case .stop:
                     break
                 }

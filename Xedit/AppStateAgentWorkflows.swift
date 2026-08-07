@@ -59,6 +59,7 @@ extension AppState {
                let runtimeID,
                let runtime = runtime(for: runtimeID) {
                 runtime.errorMessage = banner
+                runtime.errorSeverity = .error
             }
             return .notRecognized
         }

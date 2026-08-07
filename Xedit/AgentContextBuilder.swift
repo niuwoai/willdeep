@@ -1015,12 +1015,35 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
     static let maximumConsecutiveNoProgressReplies = 1
     static let maximumProgressReconciliationAttempts = 1
 
+    /// Evidence that the turn is still doing real work even though the last
+    /// replies carried no machine-readable step statuses. Status blocks are
+    /// the only thing the host can parse, but they are not the only thing
+    /// that proves the run is alive: a round that actually executed tools,
+    /// or a shell job still running in the background, both mean "working,
+    /// just not reporting". Without this distinction a run that changed a
+    /// dozen files, or one parked on a long `tail -f`, hard-paused purely
+    /// for a formatting miss.
+    struct ProgressEvidence: Equatable {
+        /// At least one tool call succeeded since the previous continuation
+        /// decision. Denied and failed calls do not count — a reconciliation
+        /// round that blocks write tools must not feed itself.
+        var didExecuteTools: Bool = false
+        /// A background job spawned by this conversation is still alive, so
+        /// the model legitimately has nothing new to report yet.
+        var hasRunningBackgroundJobs: Bool = false
+
+        var hasAny: Bool { didExecuteTools || hasRunningBackgroundJobs }
+
+        static let none = ProgressEvidence()
+    }
+
     static func decision(
         for plan: AgentPlan?,
         automaticContinuationCount: Int,
         consecutiveNoProgressReplies: Int,
         hasQueuedUserMessages: Bool,
-        allowsAutomaticExecution: Bool = true
+        allowsAutomaticExecution: Bool = true,
+        evidence: ProgressEvidence = .none
     ) -> AgentPlanAutoContinuationDecision {
         guard allowsAutomaticExecution,
               !hasQueuedUserMessages,
@@ -1035,7 +1058,11 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
         let reconciliationLimit = maximumConsecutiveNoProgressReplies
             + maximumProgressReconciliationAttempts
         guard consecutiveNoProgressReplies <= reconciliationLimit else {
-            return .pauseAfterNoProgress
+            // Work is visibly happening; the model is just not emitting a
+            // parseable status block. Keep asking for one rather than
+            // stopping a live run — `maximumAutomaticContinuations` is still
+            // the hard backstop, so this cannot spin forever.
+            return evidence.hasAny ? .reconcileProgress : .pauseAfterNoProgress
         }
         if consecutiveNoProgressReplies > maximumConsecutiveNoProgressReplies {
             return .reconcileProgress
@@ -1051,10 +1078,19 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
         """
     }
 
-    static func progressReconciliationNotice(finishReason: String?) -> String {
+    static func progressReconciliationNotice(
+        finishReason: String?,
+        hasRunningBackgroundJobs: Bool = false
+    ) -> String {
         let reason = finishReason.map { " The provider ended the previous reply with finish reason '\($0)'." } ?? ""
+        // Without this, a run parked on a long background job gets told to
+        // report statuses it cannot possibly have settled yet, and answers
+        // with more unparseable prose.
+        let backgroundJobs = hasRunningBackgroundJobs
+            ? " A background job started by this conversation is still running: if you are waiting on it, keep that step `in_progress` and say so in one sentence — do not guess its outcome."
+            : ""
         return """
-        Plan status reconciliation: the last replies did not update WillDeep's machine-readable step statuses.\(reason)
+        Plan status reconciliation: the last replies did not update WillDeep's machine-readable step statuses.\(reason)\(backgroundJobs)
         First compare the active plan with the host-recorded tool results and completion evidence already in the conversation. If that evidence is insufficient, use only the minimum necessary read-only status or inspection tools; write, danger, and user-input tools are blocked during reconciliation. Do not repeat the plan, redo completed work, deploy again, or change external state. Then return exactly one closed `progress` fenced block covering every still non-terminal step: mark verified completed work `done`, genuine blockers `failed`, intentionally omitted work `skipped`, and work that still remains `in_progress` or `pending`. Do not infer completion without evidence. You may add one concise blocker sentence after the block only when needed.
         """
     }

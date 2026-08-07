@@ -769,7 +769,10 @@ struct AgentSemanticActivityStatusLine: View {
 
     private var phase: AgentActivityPhase? {
         if appState.isCompressingAgentContext {
-            return AgentActivityPhase(label: "压缩上下文中", systemImage: "arrow.down.forward.and.arrow.up.backward", tint: .purple)
+            // 灰色而非紫色：压缩是例行的后台维护，不是需要抢注意力的
+            // 状态。彩色 tint 留给等待决定（橙）、任务运行（绿）这类
+            // 真正要用户看一眼的阶段。
+            return AgentActivityPhase(label: "压缩上下文中", systemImage: "arrow.down.forward.and.arrow.up.backward", tint: .secondary)
         }
         if let waiting = appState.agentToolCalls.last(where: { call in
             call.status == .pendingApproval || call.status == .awaitingConfirm || call.status == .awaitingUserAnswer
