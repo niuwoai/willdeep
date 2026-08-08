@@ -30,11 +30,20 @@ struct EditorCoreBehaviorTests {
         timeout: TimeInterval = 1.0,
         until predicate: @MainActor () -> Bool = { false }
     ) async {
-        let deadline = Date().addingTimeInterval(timeout)
+        // FIFO flush, not wall-clock polling: each round enqueues a block
+        // at the BACK of the main queue and waits for it, so every work
+        // item scheduled before it — including ones that were cancelled
+        // and rescheduled behind our previous round — must have run first.
+        // A saturated full-load test run can stall the queue for many
+        // seconds; a sleep-based poll expired before pending items got
+        // CPU, while this stays correct at any load. The timeout remains
+        // as a hang backstop only.
+        let deadline = Date().addingTimeInterval(max(timeout, 10))
         while Date() < deadline {
             if predicate() { return }
-            try? await Task.sleep(nanoseconds: 10_000_000)
-            await Task.yield()
+            await withCheckedContinuation { continuation in
+                DispatchQueue.main.async { continuation.resume() }
+            }
         }
     }
 
