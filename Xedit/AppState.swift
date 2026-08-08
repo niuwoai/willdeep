@@ -440,7 +440,10 @@ final class AppState: ObservableObject {
             // revert this instance's newer edit AND cancel that edit's
             // pending save — which is exactly how the editor toggles kept
             // "forgetting" their state across launches.
-            if !isApplyingExternalEditorSettings {
+            // Only a real change hits the store: re-assigning an equal
+            // value must not broadcast (every live AppState adopts each
+            // broadcast, and that churn cancels their pending UI work).
+            if !isApplyingExternalEditorSettings, oldValue != editorSettings {
                 EditorSettingsStore.save(editorSettings.normalized())
             }
             scheduleEditorSettingsSideEffects()
