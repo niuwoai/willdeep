@@ -1,6 +1,6 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-09（1.236.1-rc1）
+> Last updated: 2026-08-09（1.236.1）
 
 CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态机的特性
 都得人坐到机器前面点。这个文件按版本累积着每次发版后我提醒你
