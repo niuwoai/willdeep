@@ -275,9 +275,17 @@ extension AppState {
             created.append(project)
         }
 
-        guard !created.isEmpty else { return [] }
-        agentProjects = projects
-        AgentProjectStore.save(agentProjects)
+        if !created.isEmpty {
+            agentProjects = projects
+            AgentProjectStore.save(agentProjects)
+        }
+        // Rebind unconditionally, not only when a project was just created:
+        // sessions can be missing their binding even though every folder is
+        // already claimed — they may have loaded after the project was made,
+        // or were persisted by another AppState instance that never saw the
+        // rebind. The early return here left those sessions path-keyed
+        // forever, so the sidebar kept a second group with the project's
+        // name. Rebinding is idempotent and bounded by sessions × projects.
         rebindAgentSessionsToProjects()
         for project in created {
             activateAgentProjectFolderAccess(projectID: project.id)
