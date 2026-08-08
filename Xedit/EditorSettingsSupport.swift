@@ -104,14 +104,17 @@ extension EditorSettingsTab {
     var group: SettingsGroup {
         switch self {
         case .updates: return .general
-        case .editing: return .editing
-        case .typography, .appearance, .background: return .formatAndAppearance
+        // Everything that shapes the editor itself — editing behavior,
+        // typography, appearance, wallpaper — lives under one Editor tab.
+        case .editing, .typography, .appearance, .background: return .editor
         case .workspace: return .workspace
         case .agent, .memory, .rules: return .ai
         case .skills, .mcp, .tools: return .agentTools
         case .localAgents, .remoteRuntimes: return .runtimes
         case .terminal: return .terminal
         case .someIM, .mobileGateway: return .accountAndDevices
+        // `.replicate` stays a distinct case for deep-links, but renders as
+        // a sub-connector inside the unified connectors hub.
         case .replicate, .connectors: return .integrations
         case .voice: return .voice
         case .pet: return .pet
@@ -151,8 +154,7 @@ extension EditorSettingsTab {
 /// groups with more than one pane render a second-level segmented picker.
 enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     case general
-    case editing
-    case formatAndAppearance
+    case editor
     case workspace
     case ai
     case agentTools
@@ -170,15 +172,18 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     var tabs: [EditorSettingsTab] {
         switch self {
         case .general: return [.updates]
-        case .editing: return [.editing]
-        case .formatAndAppearance: return [.appearance, .background, .typography]
+        // One Editor tab for every editor-facing pane: behavior first,
+        // then styling (appearance / wallpaper / typography).
+        case .editor: return [.editing, .appearance, .background, .typography]
         case .workspace: return [.workspace]
         case .pet: return [.pet]
         case .ai: return [.agent, .memory, .rules]
         case .agentTools: return [.skills, .mcp, .tools]
         case .accountAndDevices: return [.someIM, .mobileGateway]
         case .runtimes: return [.localAgents, .remoteRuntimes]
-        case .integrations: return [.replicate, .connectors]
+        // A single connectors hub pane; each integration (飞书 / 钉钉 /
+        // 企业微信 / Replicate / …) is a sub-connector inside it.
+        case .integrations: return [.connectors]
         case .terminal: return [.terminal]
         case .voice: return [.voice]
         }
@@ -187,8 +192,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return L10n.Settings.groupGeneral
-        case .editing: return L10n.Settings.tabEditing
-        case .formatAndAppearance: return L10n.Settings.groupFormatAndAppearance
+        case .editor: return L10n.Settings.groupEditor
         case .workspace: return L10n.Settings.tabWorkspace
         case .pet: return L10n.DesktopPet.settingsTabTitle
         case .ai: return L10n.Settings.groupAI
@@ -204,8 +208,7 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .general: return "gearshape"
-        case .editing: return "pencil.line"
-        case .formatAndAppearance: return "paintbrush"
+        case .editor: return "pencil.line"
         case .workspace: return "folder"
         case .pet: return "pawprint.fill"
         case .ai: return "sparkles"

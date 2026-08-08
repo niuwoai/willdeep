@@ -8,6 +8,31 @@
 import SwiftUI
 import AppKit
 
+/// Pure paging math for the skill list, shared by the settings pane and
+/// its tests. Pages are zero-based; an out-of-range page clamps to the
+/// last valid one so a shrinking filter can never strand the UI on an
+/// empty page.
+nonisolated enum AgentSkillPagination {
+    static let pageSize = 20
+
+    static func pageCount(totalCount: Int, pageSize: Int = pageSize) -> Int {
+        guard totalCount > 0 else { return 1 }
+        return (totalCount + pageSize - 1) / pageSize
+    }
+
+    static func slice<Element>(
+        _ items: [Element],
+        page: Int,
+        pageSize: Int = pageSize
+    ) -> [Element] {
+        guard !items.isEmpty else { return [] }
+        let clampedPage = min(max(0, page), pageCount(totalCount: items.count, pageSize: pageSize) - 1)
+        let start = clampedPage * pageSize
+        let end = min(start + pageSize, items.count)
+        return Array(items[start..<end])
+    }
+}
+
 struct AgentSkillSettingsView: View {
     @State private var settings = AgentSkillSettings.default
     @State private var skills: [AgentSkillEntry] = []
@@ -19,6 +44,10 @@ struct AgentSkillSettingsView: View {
     @State private var needsSkillReload = false
     @State private var statusMessage = L10n.Settings.allChangesSaved
     @State private var expandedSkillIdentifiers: Set<String> = []
+    /// Zero-based page over the filtered skill list. A grouped Form builds
+    /// every row eagerly, so rendering all ~300 discovered skills at once
+    /// is what made this pane slow — only one page of rows exists at a time.
+    @State private var skillPage = 0
 
     private var filteredMarketplaceEntries: [AgentSkillMarketplaceEntry] {
         let query = normalizedSearchQuery
@@ -48,6 +77,16 @@ struct AgentSkillSettingsView: View {
 
     private var enabledSkillCount: Int {
         skills.filter(\.isEnabled).count
+    }
+
+    private var skillPageCount: Int {
+        AgentSkillPagination.pageCount(totalCount: filteredSkills.count)
+    }
+
+    /// The slice of the filtered list actually rendered. Pages cut across
+    /// the source sections; each section shows only its rows on this page.
+    private var pagedSkills: [AgentSkillEntry] {
+        AgentSkillPagination.slice(filteredSkills, page: skillPage)
     }
 
     var body: some View {
@@ -87,7 +126,9 @@ struct AgentSkillSettingsView: View {
                     Spacer()
 
                     Button {
-                        refreshSkills()
+                        // The explicit Refresh button is the one place a
+                        // full directory rescan is wanted.
+                        refreshSkills(forceRefresh: true)
                     } label: {
                         Label(L10n.Settings.Skill.refresh, systemImage: "arrow.clockwise")
                     }
@@ -114,8 +155,14 @@ struct AgentSkillSettingsView: View {
             skillSection(title: L10n.Settings.Skill.builtInSkills, source: .bundled, systemImage: "shippingbox")
             skillSection(title: L10n.Settings.Skill.userSkills, source: .user, systemImage: "person.crop.square")
             skillSection(title: L10n.Settings.Skill.pluginSkills, source: .plugin, systemImage: "puzzlepiece.extension")
+            if skillPageCount > 1 {
+                skillPaginationSection
+            }
         }
         .formStyle(.grouped)
+        .onChange(of: normalizedSearchQuery) { _ in
+            skillPage = 0
+        }
         .safeAreaInset(edge: .bottom) {
             HStack {
                 Text(statusMessage)
@@ -144,7 +191,10 @@ struct AgentSkillSettingsView: View {
             }
         }
         .task {
-            await reloadSkills(forceRefresh: true)
+            // Serve the cached catalog on tab entry — every filesystem
+            // mutation path already invalidates the cache, so the forced
+            // rescan this used to do only made switching to this pane slow.
+            await reloadSkills()
         }
     }
 
@@ -388,20 +438,59 @@ struct AgentSkillSettingsView: View {
         statusMessage = L10n.Settings.Skill.marketplaceCredentialCleared(requirement.label)
     }
 
+    @ViewBuilder
     private func skillSection(title: String, source: AgentSkillSource, systemImage: String) -> some View {
-        let sourceSkills = filteredSkills.filter { $0.source == source }
+        let totalCount = filteredSkills.count(where: { $0.source == source })
+        let pageSkills = pagedSkills.filter { $0.source == source }
+        // A section whose rows all live on other pages disappears instead
+        // of showing a misleading "no skills" placeholder.
+        if totalCount == 0 || !pageSkills.isEmpty {
+            Section {
+                if pageSkills.isEmpty {
+                    Text(L10n.Settings.Skill.noSkills)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(pageSkills) { skill in
+                        skillRow(skill)
+                    }
+                }
+            } header: {
+                Label("\(title)  \(totalCount)", systemImage: systemImage)
+            }
+        }
+    }
+
+    private var skillPaginationSection: some View {
+        // Work from the clamped page: a shrinking filter can leave
+        // `skillPage` past the end, and the buttons must step from where
+        // the user actually is, not from the stale index.
+        let currentPage = min(skillPage, skillPageCount - 1)
         return Section {
-            if sourceSkills.isEmpty {
-                Text(L10n.Settings.Skill.noSkills)
+            HStack {
+                Button {
+                    skillPage = max(0, currentPage - 1)
+                } label: {
+                    Label(L10n.Settings.Skill.previousPage, systemImage: "chevron.left")
+                }
+                .disabled(currentPage <= 0)
+
+                Spacer()
+
+                Text(L10n.Settings.Skill.pageIndicator("\(currentPage + 1)", "\(skillPageCount)"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else {
-                ForEach(sourceSkills) { skill in
-                    skillRow(skill)
+                    .monospacedDigit()
+
+                Spacer()
+
+                Button {
+                    skillPage = min(skillPageCount - 1, currentPage + 1)
+                } label: {
+                    Label(L10n.Settings.Skill.nextPage, systemImage: "chevron.right")
                 }
+                .disabled(currentPage >= skillPageCount - 1)
             }
-        } header: {
-            Label("\(title)  \(sourceSkills.count)", systemImage: systemImage)
         }
     }
 
@@ -440,7 +529,20 @@ struct AgentSkillSettingsView: View {
                     set: { enabled in
                         AgentSkillSettingsStore.setSkillEnabled(identifier: skill.identifier, enabled: enabled)
                         settings = AgentSkillSettingsStore.load()
-                        refreshSkills()
+                        // Flip the flag in place — a toggle only changes
+                        // settings overlay state, so re-walking the skill
+                        // directories here just burned CPU on every click.
+                        skills = skills.map { existing in
+                            guard existing.identifier == skill.identifier else { return existing }
+                            return AgentSkillEntry(
+                                identifier: existing.identifier,
+                                name: existing.name,
+                                description: existing.description,
+                                url: existing.url,
+                                source: existing.source,
+                                isEnabled: enabled
+                            )
+                        }
                         statusMessage = L10n.Settings.allChangesSaved
                     }
                 ))
@@ -458,16 +560,10 @@ struct AgentSkillSettingsView: View {
             }
 
             DisclosureGroup(isExpanded: skillContentExpansionBinding(for: skill.identifier)) {
-                ScrollView {
-                    Text(AgentSkillDirectory.loadBody(for: skill, maxCharacters: 12_000) ?? L10n.Settings.Skill.unableToRead)
-                        .font(.system(size: 11, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                }
-                .frame(minHeight: 120, maxHeight: 240)
-                .background(Color(nsColor: .textBackgroundColor).opacity(0.65))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                // Loads the SKILL.md body asynchronously on first expansion.
+                // The previous inline `loadBody` call did synchronous disk
+                // reads for every row whenever the Form re-rendered.
+                AgentSkillBodyPreview(skill: skill)
             } label: {
                 Button {
                     toggleSkillContentExpansion(for: skill.identifier)
@@ -523,9 +619,9 @@ struct AgentSkillSettingsView: View {
         }
     }
 
-    private func refreshSkills() {
+    private func refreshSkills(forceRefresh: Bool = false) {
         Task {
-            await reloadSkills()
+            await reloadSkills(forceRefresh: forceRefresh)
         }
     }
 
@@ -617,6 +713,35 @@ struct AgentSkillSettingsView: View {
             statusMessage = L10n.Settings.Skill.openedFolder
         } catch {
             statusMessage = error.localizedDescription
+        }
+    }
+}
+
+/// SKILL.md body preview that reads the file only after the row is
+/// actually expanded, off the main actor, and caches the result for the
+/// lifetime of the row.
+private struct AgentSkillBodyPreview: View {
+    let skill: AgentSkillEntry
+    @State private var loadedContent: String?
+
+    var body: some View {
+        ScrollView {
+            Text(loadedContent ?? L10n.Settings.Skill.loadingContent)
+                .font(.system(size: 11, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+        }
+        .frame(minHeight: 120, maxHeight: 240)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.65))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .task(id: skill.identifier) {
+            guard loadedContent == nil else { return }
+            let entry = skill
+            let loaded = await Task.detached(priority: .userInitiated) {
+                AgentSkillDirectory.loadBody(for: entry, maxCharacters: 12_000)
+            }.value
+            loadedContent = loaded ?? L10n.Settings.Skill.unableToRead
         }
     }
 }

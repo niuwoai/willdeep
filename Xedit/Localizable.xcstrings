@@ -18657,6 +18657,23 @@
         }
       }
     },
+    "settings.connectors.replicate-summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image upscale, erase, inpaint, and prediction tasks. Token stays in Keychain."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片放大、擦除、蒙版重绘与预测任务。Token 存于钥匙串。"
+          }
+        }
+      }
+    },
     "settings.connectors.safety-section" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -18670,6 +18687,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安全"
+          }
+        }
+      }
+    },
+    "settings.connectors.status-configured" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configured"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已配置"
+          }
+        }
+      }
+    },
+    "settings.connectors.status-not-configured" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not configured"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未配置"
           }
         }
       }
@@ -26511,6 +26562,23 @@
         }
       }
     },
+    "settings.skill.loading-content" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加载中…"
+          }
+        }
+      }
+    },
     "settings.skill.name-placeholder" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -26558,6 +26626,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建用户技能"
+          }
+        }
+      }
+    },
+    "settings.skill.next-page" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一页"
           }
         }
       }
@@ -26613,6 +26698,23 @@
         }
       }
     },
+    "settings.skill.page-indicator" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page %1$@ of %2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %1$@ / %2$@ 页"
+          }
+        }
+      }
+    },
     "settings.skill.plugin" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -26626,6 +26728,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "插件技能"
+          }
+        }
+      }
+    },
+    "settings.skill.previous-page" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previous"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一页"
           }
         }
       }
