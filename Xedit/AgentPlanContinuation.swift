@@ -11,8 +11,14 @@ nonisolated enum AgentPlanContinuationPolicy {
     /// An active Plan remains the execution contract until progress marks
     /// it done or the operator explicitly requests a revision. A complex
     /// follow-up must not silently replace it.
+    ///
+    /// A user-interrupted plan is no longer the contract: the operator
+    /// pressed Stop, so their next message may start a different task and
+    /// its plan must be allowed to take over. Resuming the old plan (a
+    /// progress report against it) clears the interruption and restores
+    /// the contract.
     static func hasActiveExecutionContract(_ plan: AgentPlan?) -> Bool {
-        guard let plan else { return false }
+        guard let plan, !plan.isInterrupted else { return false }
         return plan.status == .approved || plan.status == .executing
     }
 
@@ -30,8 +36,11 @@ nonisolated enum AgentPlanContinuationPolicy {
             Inspect only what is necessary, return a concrete plan, and do not edit files, run mutating commands, or change external state.
             """
         }
-        guard let currentPlan,
-              currentPlan.status == .approved || currentPlan.status == .executing else {
+        // hasActiveExecutionContract, not a raw status check: after the
+        // user interrupts a plan, their next task must reach the delegated
+        // executor verbatim instead of being rewritten into "execute the
+        // old plan, do not re-plan".
+        guard let currentPlan, hasActiveExecutionContract(currentPlan) else {
             return userText
         }
 
