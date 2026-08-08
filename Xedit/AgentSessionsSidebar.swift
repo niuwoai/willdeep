@@ -113,7 +113,16 @@ enum AgentSidebarSessionPlacement {
                 if lhsPinnedAt != rhsPinnedAt {
                     return lhsPinnedAt > rhsPinnedAt
                 }
-                return lhs.lastActivityAt > rhs.lastActivityAt
+                // Immutable tie-breakers only. The old lastActivityAt tie
+                // shifted whenever a background reply landed, and Swift's
+                // sort is unstable — any comparator that can return
+                // "equal" or reads a mutable date lets rows swap on every
+                // re-sort (which typing in the editor triggers via the
+                // shared AppState).
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.id.uuidString < rhs.id.uuidString
             }
     }
 
@@ -123,12 +132,49 @@ enum AgentSidebarSessionPlacement {
         }
     }
 
+    /// The moment a sidebar group came into existence, driving the frozen
+    /// group ordering: a project group is born when its project was
+    /// created; a bare folder group when its earliest session was. Both
+    /// dates are immutable, so the group order can never reshuffle as
+    /// sessions come and go.
+    static func groupBirthDate(
+        groupKey: String,
+        sessions: [AgentSession],
+        projects: [AgentProject]
+    ) -> Date {
+        if let projectID = AgentSession.projectID(fromSidebarGroupKey: groupKey),
+           let project = projects.first(where: { $0.id == projectID }) {
+            return project.createdAt
+        }
+        return sessions.map(\.createdAt).min() ?? .distantPast
+    }
+
+    /// Group comparator: "no workspace" pinned last, everything else by
+    /// birth date (newest group first), name and key only as deterministic
+    /// tie-breakers.
+    static func groupOrder(
+        lhs: (key: String, birthDate: Date, displayName: String),
+        rhs: (key: String, birthDate: Date, displayName: String)
+    ) -> Bool {
+        let lhsIsNoWorkspace = lhs.key == AgentSession.noWorkspaceSidebarGroupKey
+        let rhsIsNoWorkspace = rhs.key == AgentSession.noWorkspaceSidebarGroupKey
+        if lhsIsNoWorkspace != rhsIsNoWorkspace { return !lhsIsNoWorkspace }
+        if lhs.birthDate != rhs.birthDate { return lhs.birthDate > rhs.birthDate }
+        let nameOrder = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
+        if nameOrder != .orderedSame { return nameOrder == .orderedAscending }
+        return lhs.key < rhs.key
+    }
+
     static func workspaceOrder(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
         switch (lhs.isPinned, rhs.isPinned) {
         case (true, false): return true
         case (false, true): return false
         case (true, true):
-            return (lhs.pinnedAt ?? .distantPast) > (rhs.pinnedAt ?? .distantPast)
+            let lhsPinnedAt = lhs.pinnedAt ?? .distantPast
+            let rhsPinnedAt = rhs.pinnedAt ?? .distantPast
+            if lhsPinnedAt != rhsPinnedAt { return lhsPinnedAt > rhsPinnedAt }
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+            return lhs.id.uuidString < rhs.id.uuidString
         case (false, false):
             // createdAt, deliberately not lastActivityAt: activity-based
             // ordering reshuffled the group every time any background
@@ -138,7 +184,13 @@ enum AgentSidebarSessionPlacement {
             // row position is stable for its whole life; active sessions
             // are surfaced by the status dot and the recent-session edge
             // rail instead of by jumping to the top.
-            return lhs.createdAt > rhs.createdAt
+            //
+            // The id tie-breaker matters because Swift's sort is unstable:
+            // without a total order, rows with equal dates may swap places
+            // on every re-sort — and the sidebar re-sorts whenever the
+            // shared AppState publishes, including editor keystrokes.
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+            return lhs.id.uuidString < rhs.id.uuidString
         }
     }
 }
@@ -903,13 +955,15 @@ struct AgentSessionsSidebar: View {
             session.workspaceSidebarGroupKey
         }
         let remoteDescriptors = remoteRuntimeDescriptorsByID
+        let projects = appState.agentProjects
         // Group order rules — fully static, never depends on session
         // updatedAt or on which folder is currently open. The user
-        // explicitly asked for the workspace list to stop moving around
-        // (even "the active project floats to the top" was too dynamic).
-        //   1. Every named workspace is sorted by its last path component
-        //      via `localizedCaseInsensitiveCompare` — deterministic,
-        //      Finder-like, doesn't depend on full path length.
+        // explicitly asked for the workspace list to stop moving around,
+        // then for creation order instead of the interim alphabetical one:
+        //   1. Groups sort by their birth date, newest first — a project
+        //      group by the project's createdAt, a bare folder group by
+        //      its earliest session. Both immutable, so the order is
+        //      frozen for a group's whole life.
         //   2. "No workspace" is pinned to the bottom — it's a catch-all,
         //      not a real project.
         // Sessions *inside* a group sort by createdAt (newest first) —
@@ -917,10 +971,10 @@ struct AgentSessionsSidebar: View {
         // in the background. See AgentSidebarSessionPlacement.workspaceOrder.
         return groups
             .filter { !appState.hiddenWorkspaceKeys.contains($0.key) }
-            .map { entry in
+            .map { entry -> (group: SidebarWorkspaceGroup, birthDate: Date) in
                 let remoteWorkspace = remoteWorkspaceGroup(from: entry.key)
                 let remoteRuntime = remoteWorkspace.flatMap { remoteDescriptors[$0.runtimeID] }
-                return SidebarWorkspaceGroup(
+                let group = SidebarWorkspaceGroup(
                     id: entry.key,
                     displayName: workspaceDisplayName(entry.key, remoteDescriptors: remoteDescriptors),
                     remoteRuntime: remoteRuntime,
@@ -928,15 +982,20 @@ struct AgentSessionsSidebar: View {
                         .workspaceSessions(from: entry.value)
                         .sorted(by: AgentSidebarSessionPlacement.workspaceOrder)
                 )
+                let birthDate = AgentSidebarSessionPlacement.groupBirthDate(
+                    groupKey: entry.key,
+                    sessions: entry.value,
+                    projects: projects
+                )
+                return (group, birthDate)
             }
             .sorted { lhs, rhs in
-                let lKey = lhs.id
-                let rKey = rhs.id
-                let lIsNoWorkspace = (lKey == AgentSession.noWorkspaceSidebarGroupKey)
-                let rIsNoWorkspace = (rKey == AgentSession.noWorkspaceSidebarGroupKey)
-                if lIsNoWorkspace != rIsNoWorkspace { return !lIsNoWorkspace }
-                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+                AgentSidebarSessionPlacement.groupOrder(
+                    lhs: (lhs.group.id, lhs.birthDate, lhs.group.displayName),
+                    rhs: (rhs.group.id, rhs.birthDate, rhs.group.displayName)
+                )
             }
+            .map(\.group)
     }
 
     private var globalPinnedSessions: [AgentSession] {
