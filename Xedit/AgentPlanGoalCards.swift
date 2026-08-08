@@ -78,7 +78,7 @@ struct AgentPlanCard: View {
                         .font(.system(size: 11, weight: .semibold))
                         .textCase(.uppercase)
                         .foregroundStyle(.secondary)
-                    PlanStatusPill(status: plan.status)
+                    PlanStatusPill(status: plan.status, isInterrupted: plan.isInterrupted)
                     Spacer(minLength: 0)
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 9, weight: .semibold))

@@ -7,8 +7,7 @@ struct SettingsInformationArchitectureTests {
     func taskOrientedGroups() {
         #expect(SettingsGroup.allCases == [
             .general,
-            .editing,
-            .formatAndAppearance,
+            .editor,
             .workspace,
             .ai,
             .agentTools,
@@ -19,13 +18,13 @@ struct SettingsInformationArchitectureTests {
             .voice,
             .pet,
         ])
-        // 编辑行为独立成组;格式与外观组承载皮肤/主题/壁纸/字体排印
-        // (含 Agent 聊天字号)。
-        #expect(SettingsGroup.editing.tabs == [.editing])
-        #expect(SettingsGroup.formatAndAppearance.tabs == [.appearance, .background, .typography])
+        // 编辑器一个组承载全部编辑器向设置:编辑行为、外观、壁纸、字体排印。
+        #expect(SettingsGroup.editor.tabs == [.editing, .appearance, .background, .typography])
         #expect(SettingsGroup.ai.tabs == [.agent, .memory, .rules])
         #expect(SettingsGroup.agentTools.tabs == [.skills, .mcp, .tools])
         #expect(SettingsGroup.accountAndDevices.tabs == [.someIM, .mobileGateway])
+        // 连接器 hub 是集成组唯一的 pane;每个外部集成是 hub 里的子连接器。
+        #expect(SettingsGroup.integrations.tabs == [.connectors])
     }
 
     @Test("every settings pane belongs to exactly one group")
@@ -38,5 +37,44 @@ struct SettingsInformationArchitectureTests {
         #expect(groupedTabs.contains(.background))
         #expect(groupedTabs.contains(.workspace))
         #expect(groupedTabs.contains(.voice))
+    }
+
+    @Test("the replicate deep-link tab still resolves inside the integrations group")
+    @MainActor
+    func replicateDeepLinkResolvesToIntegrations() {
+        // `.replicate` is no longer a standalone pane, but existing
+        // deep-links (image edit panel) must keep landing on the hub.
+        #expect(EditorSettingsTab.replicate.group == .integrations)
+        #expect(EditorSettingsTab.connectors.group == .integrations)
+    }
+}
+
+struct AgentSkillPaginationTests {
+    @Test("page count rounds up and never drops below one")
+    func pageCountBounds() {
+        #expect(AgentSkillPagination.pageCount(totalCount: 0) == 1)
+        #expect(AgentSkillPagination.pageCount(totalCount: 1) == 1)
+        #expect(AgentSkillPagination.pageCount(totalCount: 20) == 1)
+        #expect(AgentSkillPagination.pageCount(totalCount: 21) == 2)
+        #expect(AgentSkillPagination.pageCount(totalCount: 300) == 15)
+    }
+
+    @Test("slices are bounded and clamp out-of-range pages")
+    func sliceBounds() {
+        let items = Array(0..<45)
+        #expect(AgentSkillPagination.slice(items, page: 0) == Array(0..<20))
+        #expect(AgentSkillPagination.slice(items, page: 1) == Array(20..<40))
+        #expect(AgentSkillPagination.slice(items, page: 2) == Array(40..<45))
+        // 过界与负值都收敛到有效页,过滤收缩后 UI 不会停在空页上。
+        #expect(AgentSkillPagination.slice(items, page: 99) == Array(40..<45))
+        #expect(AgentSkillPagination.slice(items, page: -1) == Array(0..<20))
+        #expect(AgentSkillPagination.slice([Int](), page: 0).isEmpty)
+    }
+
+    @Test("custom page sizes keep the same math")
+    func customPageSize() {
+        let items = Array(0..<10)
+        #expect(AgentSkillPagination.pageCount(totalCount: 10, pageSize: 3) == 4)
+        #expect(AgentSkillPagination.slice(items, page: 3, pageSize: 3) == [9])
     }
 }

@@ -2,27 +2,48 @@
 //  CollaborationConnectorSettingsView.swift
 //  WillDeep
 //
-//  Settings tab for collaboration platform connectors.
+//  Unified settings hub for external connectors: every integration —
+//  collaboration platforms (飞书 / 钉钉 / 企业微信 / 微信 Claw) and
+//  standalone services like Replicate — appears as one sub-connector row
+//  with its detail sections below.
 //
 
 import SwiftUI
 import AppKit
 
+/// One selectable entry in the connectors hub: a collaboration platform,
+/// or a standalone integration with its own settings sections.
+enum ConnectorHubSelection: Hashable {
+    case platform(CollaborationConnectorPlatform)
+    case replicate
+}
+
 struct CollaborationConnectorSettingsView: View {
     @State private var settings = CollaborationConnectorSettingsStore.load()
-    @State private var selectedPlatform: CollaborationConnectorPlatform = .feishu
+    @State private var selection: ConnectorHubSelection
     @State private var statusMessage = L10n.Settings.allChangesSaved
     @State private var authorizationRequest: CollaborationConnectorOAuthRequest?
     @State private var larkCLIAuthorizationURL: URL?
     @State private var larkCLIIsWorking = false
     @AppStorage("com.willdeep.connectors.showAdvancedConfiguration") private var showAdvancedConfiguration = false
 
+    /// Deep-links (e.g. the image-edit panel's "configure Replicate")
+    /// land on the hub with the right sub-connector preselected.
+    init(initialSelection: ConnectorHubSelection = .platform(.feishu)) {
+        _selection = State(initialValue: initialSelection)
+    }
+
     private var enabledCount: Int {
         settings.connectors.filter(\.isEnabled).count
     }
 
-    private var selectedConnector: CollaborationConnectorConfig {
-        settings.connector(for: selectedPlatform)
+    private var selectedPlatform: CollaborationConnectorPlatform? {
+        if case .platform(let platform) = selection { return platform }
+        return nil
+    }
+
+    private var selectedConnector: CollaborationConnectorConfig? {
+        selectedPlatform.map { settings.connector(for: $0) }
     }
 
     var body: some View {
@@ -41,13 +62,18 @@ struct CollaborationConnectorSettingsView: View {
                 ForEach(settings.connectors) { connector in
                     connectorRow(connector)
                 }
+                replicateRow
             } header: {
                 Text(L10n.Settings.Connectors.platformsSection)
             }
 
-            connectorDetailSection(selectedConnector)
-            capabilitySection(selectedConnector)
-            safetySection(selectedConnector)
+            if let selectedConnector {
+                connectorDetailSection(selectedConnector)
+                capabilitySection(selectedConnector)
+                safetySection(selectedConnector)
+            } else {
+                ReplicateIntegrationSettingsSections()
+            }
         }
         .formStyle(.grouped)
         .safeAreaInset(edge: .bottom) {
@@ -94,7 +120,7 @@ struct CollaborationConnectorSettingsView: View {
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                selectedPlatform = connector.platform
+                selection = .platform(connector.platform)
             }
 
             Spacer()
@@ -114,7 +140,45 @@ struct CollaborationConnectorSettingsView: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(selectedPlatform == connector.platform ? Color.accentColor.opacity(0.08) : Color.clear)
+                .fill(selection == .platform(connector.platform) ? Color.accentColor.opacity(0.08) : Color.clear)
+        )
+    }
+
+    /// Replicate lives in the same hub as the collaboration platforms —
+    /// same row anatomy, but its "state" is Keychain configuration rather
+    /// than an enable toggle.
+    private var replicateRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "wand.and.stars")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Color.purple)
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Replicate")
+                    .font(.headline)
+                Text(L10n.Settings.Connectors.replicateSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(
+                    ReplicateIntegrationStore.isConfigured
+                        ? L10n.Settings.Connectors.statusConfigured
+                        : L10n.Settings.Connectors.statusNotConfigured
+                )
+                .font(.caption2.monospaced())
+                .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selection = .replicate
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(selection == .replicate ? Color.accentColor.opacity(0.08) : Color.clear)
         )
     }
 

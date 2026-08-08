@@ -139,6 +139,28 @@ extension L10n {
             defaultValue: "Unavailable — falls back to this chat's model"
         )
 
+        // MARK: Profile purposes (display-only)
+        //
+        // `AgentSubagentProfile.purpose` itself is model-facing — it goes
+        // into the `spawn_agent` tool description verbatim and must stay
+        // English. These are the user-facing translations of the same text.
+        static let profileScoutPurpose = String(
+            localized: "agent-delegation.profile-scout-purpose",
+            defaultValue: "Locate things: find files, symbols, call sites, or answer \"where is X / does X exist\". Fastest and cheapest; no shell."
+        )
+        static let profileReaderPurpose = String(
+            localized: "agent-delegation.profile-reader-purpose",
+            defaultValue: "Read and summarize: digest long files, docs, or public web pages and answer questions about their content. No shell."
+        )
+        static let profileDeepPurpose = String(
+            localized: "agent-delegation.profile-deep-purpose",
+            defaultValue: "Complex investigation: reasoning across many files, read-only shell commands, git status. Uses the parent's model — most capable and most expensive."
+        )
+        static let profileEditorPurpose = String(
+            localized: "agent-delegation.profile-editor-purpose",
+            defaultValue: "Edit ONE approved file. Requires a `target_file` argument and the user's approval; cannot touch any other path."
+        )
+
         // MARK: Escalation
 
         static func escalatedFrom(_ a1: String) -> String {

@@ -30,11 +30,20 @@ struct EditorCoreBehaviorTests {
         timeout: TimeInterval = 1.0,
         until predicate: @MainActor () -> Bool = { false }
     ) async {
-        let deadline = Date().addingTimeInterval(timeout)
+        // FIFO flush, not wall-clock polling: each round enqueues a block
+        // at the BACK of the main queue and waits for it, so every work
+        // item scheduled before it — including ones that were cancelled
+        // and rescheduled behind our previous round — must have run first.
+        // A saturated full-load test run can stall the queue for many
+        // seconds; a sleep-based poll expired before pending items got
+        // CPU, while this stays correct at any load. The timeout remains
+        // as a hang backstop only.
+        let deadline = Date().addingTimeInterval(max(timeout, 10))
         while Date() < deadline {
             if predicate() { return }
-            try? await Task.sleep(nanoseconds: 10_000_000)
-            await Task.yield()
+            await withCheckedContinuation { continuation in
+                DispatchQueue.main.async { continuation.resume() }
+            }
         }
     }
 
@@ -278,8 +287,13 @@ struct EditorCoreBehaviorTests {
         #expect(settings.interfaceSkinID == EditorSettings.default.interfaceSkinID)
     }
 
-    @Test("editor settings are persisted before weak AppState side effects")
+    @Test("editor settings are persisted synchronously, never from the async work item")
     func testEditorSettingsPersistenceSurvivesAppStateRelease() throws {
+        // The first fix moved the save ahead of the work item's weak-self
+        // exit; that still lost edits when a notification echo cancelled
+        // the pending item. Persistence now happens synchronously in the
+        // property's didSet, and the scheduler must not save at all —
+        // an async save is droppable at quit and cancellable by design.
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -287,12 +301,15 @@ struct EditorCoreBehaviorTests {
             .appendingPathComponent("Xedit", isDirectory: true)
             .appendingPathComponent("AppState.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
-        let scheduler = try #require(source.range(of: "private func scheduleEditorSettingsSideEffects()"))
-        let trailingSource = source[scheduler.lowerBound...]
-        let save = try #require(trailingSource.range(of: "EditorSettingsStore.save(normalizedSettings)"))
-        let weakSelfExit = try #require(trailingSource.range(of: "guard let self else { return }"))
 
-        #expect(save.lowerBound < weakSelfExit.lowerBound)
+        let didSet = try #require(source.range(of: "@Published var editorSettings: EditorSettings {"))
+        let scheduler = try #require(source.range(of: "private func scheduleEditorSettingsSideEffects()"))
+        let didSetSource = source[didSet.lowerBound..<scheduler.lowerBound]
+        #expect(didSetSource.contains("EditorSettingsStore.save(editorSettings.normalized())"))
+
+        let schedulerTail = source[scheduler.upperBound...]
+        let schedulerEnd = schedulerTail.range(of: "\n    func ")?.lowerBound ?? schedulerTail.endIndex
+        #expect(!schedulerTail[..<schedulerEnd].contains("EditorSettingsStore.save("))
     }
 
     @Test("interface skins are registered with localized names and editor themes")

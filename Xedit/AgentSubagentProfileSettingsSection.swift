@@ -43,7 +43,7 @@ struct AgentSubagentProfileSettingsSection: View {
                 Spacer()
             }
 
-            Text(profile.purpose)
+            Text(profile.localizedPurpose)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

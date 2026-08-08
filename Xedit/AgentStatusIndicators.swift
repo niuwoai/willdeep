@@ -1202,6 +1202,9 @@ private struct DashboardInsightRow: View {
 
 struct PlanStatusPill: View {
     let status: AgentPlan.Status
+    /// User pressed Stop mid-execution: the pill must stop claiming
+    /// "Executing" for a plan that is actually paused.
+    var isInterrupted: Bool = false
 
     var body: some View {
         Text(labelText)
@@ -1214,6 +1217,7 @@ struct PlanStatusPill: View {
     }
 
     private var labelText: String {
+        if isInterrupted { return L10n.PlanStatus.interrupted }
         switch status {
         case .proposed: return L10n.PlanStatus.proposed
         case .approved: return L10n.PlanStatus.approved
@@ -1224,6 +1228,7 @@ struct PlanStatusPill: View {
     }
 
     private var pillColor: Color {
+        if isInterrupted { return .gray }
         switch status {
         case .proposed: return .orange
         case .approved, .executing: return .green

@@ -130,7 +130,15 @@ enum AgentSidebarSessionPlacement {
         case (true, true):
             return (lhs.pinnedAt ?? .distantPast) > (rhs.pinnedAt ?? .distantPast)
         case (false, false):
-            return lhs.lastActivityAt > rhs.lastActivityAt
+            // createdAt, deliberately not lastActivityAt: activity-based
+            // ordering reshuffled the group every time any background
+            // session (scheduled task, dispatch node, still-streaming old
+            // chat) received a reply — the user asked for the list to stop
+            // moving around. Creation order is immutable, so a session's
+            // row position is stable for its whole life; active sessions
+            // are surfaced by the status dot and the recent-session edge
+            // rail instead of by jumping to the top.
+            return lhs.createdAt > rhs.createdAt
         }
     }
 }
@@ -904,9 +912,9 @@ struct AgentSessionsSidebar: View {
         //      Finder-like, doesn't depend on full path length.
         //   2. "No workspace" is pinned to the bottom — it's a catch-all,
         //      not a real project.
-        // Sessions *inside* a group still sort by updatedAt (most recent
-        // first), so within a folder the chat order still reflects
-        // recency — only the folder ordering is frozen.
+        // Sessions *inside* a group sort by createdAt (newest first) —
+        // fixed at birth, so rows never reshuffle while sessions stream
+        // in the background. See AgentSidebarSessionPlacement.workspaceOrder.
         return groups
             .filter { !appState.hiddenWorkspaceKeys.contains($0.key) }
             .map { entry in

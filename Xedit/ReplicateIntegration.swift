@@ -70,12 +70,23 @@ enum ReplicateIntegrationStore {
 }
 
 struct ReplicateIntegrationSettingsView: View {
+    var body: some View {
+        Form {
+            ReplicateIntegrationSettingsSections()
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// Replicate's settings sections without the enclosing Form, so the
+/// connectors hub can embed them next to the collaboration platforms.
+struct ReplicateIntegrationSettingsSections: View {
     @State private var apiToken = ReplicateIntegrationStore.loadSavedAPIToken()
     @State private var workflowSettings = ReplicateIntegrationStore.loadWorkflowSettings()
     @State private var status = ""
 
     var body: some View {
-        Form {
+        Group {
             Section("Replicate") {
                 LabeledContent("API Token") {
                     RevealableSecretField(text: $apiToken, placeholder: "", onCommit: save)
@@ -85,7 +96,7 @@ struct ReplicateIntegrationSettingsView: View {
                     Button(L10n.Settings.buttonSave) {
                         save()
                     }
-                    Button("清除") {
+                    Button(L10n.Settings.Replicate.clearButton) {
                         apiToken = ""
                         save()
                     }
@@ -99,31 +110,36 @@ struct ReplicateIntegrationSettingsView: View {
                 }
 
                 if ReplicateIntegrationStore.isConfiguredByEnvironment {
-                    Label("已通过 REPLICATE_API_TOKEN 环境变量配置", systemImage: "checkmark.circle")
+                    Label(L10n.Settings.Replicate.envConfigured, systemImage: "checkmark.circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Label(ReplicateIntegrationStore.isConfigured ? "Replicate 已配置" : "Replicate 未配置", systemImage: ReplicateIntegrationStore.isConfigured ? "checkmark.circle" : "exclamationmark.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Label(
+                        ReplicateIntegrationStore.isConfigured
+                            ? L10n.Settings.Replicate.configured
+                            : L10n.Settings.Replicate.notConfigured,
+                        systemImage: ReplicateIntegrationStore.isConfigured ? "checkmark.circle" : "exclamationmark.circle"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
 
-                Text("用于 Replicate 图片放大、擦除、蒙版重绘和视频/图片预测任务。Token 存入 Keychain；不会写入聊天、日志或提交内容。")
+                Text(L10n.Settings.Replicate.tokenDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("默认 Workflow Versions") {
-                LabeledContent("图片放大") {
-                    TextField("Replicate version hash", text: $workflowSettings.upscaleVersion)
+            Section(L10n.Settings.Replicate.workflowSection) {
+                LabeledContent(L10n.Settings.Replicate.upscaleLabel) {
+                    TextField(L10n.Settings.Replicate.versionPlaceholder, text: $workflowSettings.upscaleVersion)
                         .textFieldStyle(.roundedBorder)
                 }
-                LabeledContent("图片擦除") {
-                    TextField("Replicate version hash", text: $workflowSettings.eraseVersion)
+                LabeledContent(L10n.Settings.Replicate.eraseLabel) {
+                    TextField(L10n.Settings.Replicate.versionPlaceholder, text: $workflowSettings.eraseVersion)
                         .textFieldStyle(.roundedBorder)
                 }
-                LabeledContent("蒙版重绘") {
-                    TextField("Replicate version hash", text: $workflowSettings.inpaintVersion)
+                LabeledContent(L10n.Settings.Replicate.inpaintLabel) {
+                    TextField(L10n.Settings.Replicate.versionPlaceholder, text: $workflowSettings.inpaintVersion)
                         .textFieldStyle(.roundedBorder)
                 }
                 HStack {
@@ -136,12 +152,11 @@ struct ReplicateIntegrationSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Text("填写常用 Replicate model version hash 后，媒体任务图片缩略图可直接发起放大；图片编辑面板也可复用蒙版重绘默认 version。")
+                Text(L10n.Settings.Replicate.workflowDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
     }
 
     private func save() {

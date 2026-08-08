@@ -235,7 +235,26 @@ enum AgentContextBuilder {
             sections.append(awareness)
         }
 
-        if interactionMode == .normal, let plan = currentPlan,
+        if interactionMode == .normal, let plan = currentPlan, plan.isInterrupted,
+           plan.status == .proposed
+            || plan.status == .approved
+            || plan.status == .executing {
+            let stepsText = plan.steps.enumerated()
+                .map { "\($0.offset + 1). [\($0.element.status.rawValue)] \($0.element.text)" }
+                .joined(separator: "\n")
+            sections.append("""
+            === INTERRUPTED PLAN — USER DECIDES WHAT'S NEXT ===
+            The user pressed Stop while the plan below was executing. It is paused, not deleted; its step statuses are preserved. It is no longer a binding contract.
+
+            Interrupted plan (last known statuses in brackets):
+            \(stepsText)
+
+            Follow the user's latest message:
+            - If it starts a different task, do that task directly. Do not resume the interrupted plan, do not treat its steps as pending work, and do not mention it unless relevant. For a genuinely multi-step new task, emit one complete numbered `plan` fenced block — it replaces the interrupted plan as the visible checklist.
+            - If it asks to continue or resume, pick the interrupted plan back up from its current step statuses and report progress with `progress` fenced blocks as usual.
+            - If it is ambiguous about which of the two they mean, ask one concise question instead of guessing.
+            """)
+        } else if interactionMode == .normal, let plan = currentPlan,
            plan.status == .proposed
             || plan.status == .approved
             || plan.status == .executing {
@@ -1052,6 +1071,10 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
         guard allowsAutomaticExecution,
               !hasQueuedUserMessages,
               let plan,
+              // A user-interrupted plan must not be auto-continued: Stop
+              // means stop until the user (via the model resuming it)
+              // re-engages the plan, which clears the interruption.
+              !plan.isInterrupted,
               plan.status == .approved || plan.status == .executing,
               plan.steps.contains(where: { !terminalStatuses.contains($0.status) }) else {
             return .stop
