@@ -370,26 +370,27 @@ struct AgentStatsDashboard: View {
                     ForEach(Array(cells.enumerated()), id: \.offset) { columnIndex, column in
                         VStack(spacing: cellSpacing) {
                             ForEach(Array(column.enumerated()), id: \.element.id) { rowIndex, cell in
+                                // One tooltip string per cell per pass, via
+                                // the cached formatter. The previous code
+                                // formatted the tooltip twice per cell with
+                                // a freshly allocated DateFormatter each
+                                // time — ~700 formatter allocations for the
+                                // 53-week grid on every body evaluation,
+                                // which showed up as periodic main-thread
+                                // stutter whenever AppState published.
+                                let tooltip = L10n.HeatmapCell.tooltip(
+                                    cellDateLabel(cell.date),
+                                    formatInteger(cell.requestCount),
+                                    formatTokenCount(cell.tokenCount)
+                                )
                                 RoundedRectangle(cornerRadius: 1.5)
                                     .fill(color(
                                         for: displayCounts[columnIndex][rowIndex],
                                         peak: maxCount
                                     ))
                                     .frame(width: cellSize, height: cellSize)
-                                    .help(
-                                        L10n.HeatmapCell.tooltip(
-                                            cellDateLabel(cell.date),
-                                            formatInteger(cell.requestCount),
-                                            formatTokenCount(cell.tokenCount)
-                                        )
-                                    )
-                                    .accessibilityLabel(
-                                        L10n.HeatmapCell.tooltip(
-                                            cellDateLabel(cell.date),
-                                            formatInteger(cell.requestCount),
-                                            formatTokenCount(cell.tokenCount)
-                                        )
-                                    )
+                                    .help(tooltip)
+                                    .accessibilityLabel(tooltip)
                             }
                         }
                     }
@@ -497,9 +498,20 @@ struct AgentStatsDashboard: View {
         }
     }
 
+    private static var cachedMonthFormatter: DateFormatter?
+
     private var monthLabels: some View {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("MMM")
+        // Same caching rationale as `cellDateLabel`: this runs on every
+        // body evaluation of an always-mounted dashboard.
+        let formatter: DateFormatter
+        if let cached = Self.cachedMonthFormatter, cached.locale == Locale.current {
+            formatter = cached
+        } else {
+            formatter = DateFormatter()
+            formatter.locale = .current
+            formatter.setLocalizedDateFormatFromTemplate("MMM")
+            Self.cachedMonthFormatter = formatter
+        }
         let calendar = Calendar.current
         let currentMonth = calendar.date(
             from: calendar.dateComponents([.year, .month], from: Date())
@@ -812,10 +824,20 @@ struct AgentStatsDashboard: View {
         return dashboardAccent.opacity(0.28 + 0.68 * intensity)
     }
 
+    /// Shared, lazily built formatter — DateFormatter construction costs
+    /// milliseconds, and the heatmap calls this for every one of ~371
+    /// cells on every body pass. Rebuilt only if the locale changes.
+    private static var cachedCellDateFormatter: DateFormatter?
+
     private func cellDateLabel(_ date: Date) -> String {
+        if let formatter = Self.cachedCellDateFormatter,
+           formatter.locale == Locale.current {
+            return formatter.string(from: date)
+        }
         let formatter = DateFormatter()
         formatter.locale = .current
         formatter.setLocalizedDateFormatFromTemplate("MMMd")
+        Self.cachedCellDateFormatter = formatter
         return formatter.string(from: date)
     }
 

@@ -77,6 +77,67 @@ struct AgentSidebarSessionPlacementTests {
     }
 }
 
+@Suite("Sidebar group ordering")
+struct AgentSidebarGroupOrderingTests {
+    @Test("project groups are born when the project was created")
+    func projectGroupBirthDate() {
+        let project = AgentProject(
+            displayName: "aipipe",
+            folderPaths: ["/tmp/aipipe"],
+            createdAt: Date(timeIntervalSince1970: 5_000)
+        )
+        let key = AgentSession.projectSidebarGroupKeyPrefix + project.id.uuidString
+        let birth = AgentSidebarSessionPlacement.groupBirthDate(
+            groupKey: key,
+            sessions: [],
+            projects: [project]
+        )
+        #expect(birth == Date(timeIntervalSince1970: 5_000))
+    }
+
+    @Test("bare folder groups are born with their earliest session")
+    func pathGroupBirthDate() {
+        let sessions = [
+            AgentSession(title: "b", createdAt: Date(timeIntervalSince1970: 9_000)),
+            AgentSession(title: "a", createdAt: Date(timeIntervalSince1970: 3_000)),
+        ]
+        let birth = AgentSidebarSessionPlacement.groupBirthDate(
+            groupKey: "/tmp/some-folder",
+            sessions: sessions,
+            projects: []
+        )
+        // 最早会话代表分组诞生时刻 —— 新会话加入不会改变它，顺序才冻得住。
+        #expect(birth == Date(timeIntervalSince1970: 3_000))
+    }
+
+    @Test("groups order by birth date descending with no-workspace pinned last")
+    func groupOrderIsCreationDescending() {
+        let older = (key: "/tmp/older", birthDate: Date(timeIntervalSince1970: 1_000), displayName: "zzz")
+        let newer = (key: "/tmp/newer", birthDate: Date(timeIntervalSince1970: 2_000), displayName: "aaa")
+        let noWorkspace = (
+            key: AgentSession.noWorkspaceSidebarGroupKey,
+            birthDate: Date(timeIntervalSince1970: 9_999),
+            displayName: "no workspace"
+        )
+
+        // 新分组在前，与名字典序无关。
+        #expect(AgentSidebarSessionPlacement.groupOrder(lhs: newer, rhs: older))
+        #expect(!AgentSidebarSessionPlacement.groupOrder(lhs: older, rhs: newer))
+        // 「无工作区」永远垫底，即便它的时间戳最新。
+        #expect(AgentSidebarSessionPlacement.groupOrder(lhs: older, rhs: noWorkspace))
+        #expect(!AgentSidebarSessionPlacement.groupOrder(lhs: noWorkspace, rhs: newer))
+    }
+
+    @Test("equal birth dates fall back to name then key for determinism")
+    func groupOrderTieBreakers() {
+        let sameDate = Date(timeIntervalSince1970: 4_000)
+        let alpha = (key: "/tmp/a", birthDate: sameDate, displayName: "alpha")
+        let beta = (key: "/tmp/b", birthDate: sameDate, displayName: "beta")
+        #expect(AgentSidebarSessionPlacement.groupOrder(lhs: alpha, rhs: beta))
+        #expect(!AgentSidebarSessionPlacement.groupOrder(lhs: beta, rhs: alpha))
+    }
+}
+
 @Suite("New session project binding")
 struct AgentNewSessionProjectBindingTests {
     @MainActor
@@ -101,6 +162,38 @@ struct AgentNewSessionProjectBindingTests {
         #expect(
             session.workspaceSidebarGroupKey
                 == AgentSession.projectSidebarGroupKeyPrefix + project.id.uuidString
+        )
+    }
+
+    @MainActor
+    @Test("launch migration rebinds stray sessions even when every project already exists")
+    func launchMigrationRebindsStraySessions() throws {
+        let appState = AppState()
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-rebind-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let project = try #require(
+            appState.createAgentProject(displayName: "rebind", folderPaths: [folder.path])
+        )
+
+        // A session persisted without its binding (e.g. written by another
+        // AppState instance) — the folder is already claimed, so migration
+        // creates nothing. The rebind must still run and heal it; the old
+        // early-return skipped it and the sidebar kept a duplicate group.
+        let stray = AgentSession(
+            title: "stray",
+            workspaceRootPath: folder.path
+        )
+        appState.agentSessions.append(stray)
+        #expect(appState.agentSessions.first(where: { $0.id == stray.id })?.projectID == nil)
+
+        let created = appState.migrateAgentWorkspacesToProjects()
+
+        #expect(created.isEmpty)
+        #expect(
+            appState.agentSessions.first(where: { $0.id == stray.id })?.projectID == project.id
         )
     }
 
