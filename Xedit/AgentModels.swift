@@ -1311,6 +1311,16 @@ nonisolated struct AgentPlan: Codable, Equatable {
     /// Free-form preamble the agent put before the numbered list. Shown
     /// muted at the top of the plan card.
     var summary: String
+    /// Set when the user pressed Stop while this plan was the active
+    /// execution contract. An interrupted plan stays visible with its step
+    /// statuses, but it stops being the contract: follow-up messages may
+    /// start a different task (and capture a replacement plan), and the
+    /// automatic continuation loop leaves it alone. Cleared when the model
+    /// resumes it by reporting progress, or when a restart is requested
+    /// from the plan card. Older persisted plans decode as nil (= active).
+    var interruptedAt: Date? = nil
+
+    var isInterrupted: Bool { interruptedAt != nil }
 
     init(status: Status = .proposed, steps: [Step] = [], summary: String = "") {
         self.status = status

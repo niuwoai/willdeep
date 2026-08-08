@@ -687,7 +687,11 @@ extension AppState {
 
     func applyAgentPlanProgressFromLatestMessage(for runtime: AgentRuntime, existingPlan: AgentPlan) {
         guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
-        if let next = AgentPlanParser.applyProgress(to: existingPlan, from: last.content) {
+        if var next = AgentPlanParser.applyProgress(to: existingPlan, from: last.content) {
+            // A progress report against an interrupted plan is the model
+            // resuming it (the interrupted-plan prompt only allows progress
+            // blocks on resume) — restore it as the execution contract.
+            next.interruptedAt = nil
             runtime.currentPlan = next
         }
     }
@@ -830,8 +834,10 @@ extension AppState {
             plan.steps[i].status = .pending
         }
         // Plan stays approved/executing — we're not redoing the
-        // approval gate, just rewinding the execution head.
+        // approval gate, just rewinding the execution head. "Run from
+        // here" is also an explicit resume, so it lifts any interruption.
         if plan.status == .done { plan.status = .executing }
+        plan.interruptedAt = nil
         agentCurrentPlan = plan
         persistActiveAgentSession()
 
@@ -1071,6 +1077,21 @@ extension AppState {
         stopAgentResponse(for: runtime)
     }
 
+    /// Stop pressed while an ordinary-mode plan was the active execution
+    /// contract → the plan is paused, not deleted. Marking it interrupted
+    /// releases the contract so the user's next message can start a
+    /// different task instead of being pulled back to the old plan (system
+    /// prompt, capture guard, delegated-task rewrite, and auto-continuation
+    /// all key off this). Goal mode keeps its own recovery machinery.
+    private func markCurrentPlanInterruptedByUser(for runtime: AgentRuntime) {
+        guard runtime.interactionMode == .normal,
+              var plan = runtime.currentPlan,
+              plan.status == .approved || plan.status == .executing,
+              !plan.isInterrupted else { return }
+        plan.interruptedAt = Date()
+        runtime.currentPlan = plan
+    }
+
     /// Targeted stop used by the Goal dispatch console. Unlike switching the
     /// selected conversation first, this preserves the user's place in the
     /// console and interrupts only the runtime that owns the selected Goal.
@@ -1116,6 +1137,7 @@ extension AppState {
             runtime.errorDetails = nil
             runtime.errorSeverity = .error
             runtime.errorRequiresSomeIMLogin = false
+            markCurrentPlanInterruptedByUser(for: runtime)
             _ = appendStoppedTurnEvent(to: runtime, content: L10n.Composer.stopped)
             return
         }
@@ -1133,6 +1155,8 @@ extension AppState {
             cancelWorkflow(reportID: reportID, runtimeID: runtime.id)
         }
         guard runtime.isResponding else { return }
+
+        markCurrentPlanInterruptedByUser(for: runtime)
 
         let subagentStopCount: Int
         let liveJobs: [AgentBackgroundJob]
@@ -1413,9 +1437,15 @@ extension AppState {
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let defaultModelID = defaultAgentModelIDForNewSession(managedRouting: defaultManagedRouting)
         let defaultProvider = agentProviderLibrary.active
+        // Bind the owning project at creation. Without this the fresh
+        // session groups by its raw path and the sidebar shows a second
+        // group with the project's name until the next project CRUD
+        // triggers rebindAgentSessionsToProjects().
+        let sessionRootPath = rootDirectory?.standardizedFileURL.path
         let session = AgentSession(
-            workspaceRootPath: rootDirectory?.standardizedFileURL.path,
-            workspaceLocation: (rootDirectory?.standardizedFileURL.path).map { WorkspaceLocation.local(path: $0) },
+            workspaceRootPath: sessionRootPath,
+            workspaceLocation: sessionRootPath.map { WorkspaceLocation.local(path: $0) },
+            projectID: AgentProjectResolver.project(for: sessionRootPath, in: agentProjects)?.id,
             modelID: defaultModelID,
             providerEntryID: defaultProvider?.id,
             providerID: defaultProvider?.providerID,
@@ -1476,9 +1506,14 @@ extension AppState {
         let defaultManagedRouting = defaultSomeIMManagedRoutingState()
         let defaultModelID = defaultAgentModelIDForNewSession(managedRouting: defaultManagedRouting)
         let defaultProvider = agentProviderLibrary.active
+        // Same at-creation project binding as startNewAgentSession() — the
+        // sidebar "+" on a project group hands over the project's primary
+        // folder path, and the new session must land in that project's
+        // group, not in a freshly-minted path group with the same name.
         let session = AgentSession(
             workspaceRootPath: normalizedPath,
             workspaceLocation: normalizedPath.map { WorkspaceLocation.local(path: $0) },
+            projectID: AgentProjectResolver.project(for: normalizedPath, in: agentProjects)?.id,
             modelID: defaultModelID,
             providerEntryID: defaultProvider?.id,
             providerID: defaultProvider?.providerID,

@@ -231,4 +231,124 @@ struct AgentPlanContinuationTests {
         #expect(decoded == .normal)
         #expect(AgentInteractionMode.allCases == [.normal, .goal])
     }
+
+    // MARK: - User interruption releases the plan contract
+
+    private static func interruptedPlan(status: AgentPlan.Status = .executing) -> AgentPlan {
+        var plan = AgentPlan(status: status, summary: "", stepTexts: ["Inspect", "Implement"])
+        plan.interruptedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        return plan
+    }
+
+    @Test("an interrupted plan is no longer the execution contract")
+    func interruptedPlanReleasesContract() {
+        #expect(!AgentPlanContinuationPolicy.hasActiveExecutionContract(
+            Self.interruptedPlan(status: .approved)
+        ))
+        #expect(!AgentPlanContinuationPolicy.hasActiveExecutionContract(
+            Self.interruptedPlan(status: .executing)
+        ))
+    }
+
+    @Test("interrupted plans decode from legacy payloads as active")
+    func legacyPlanDecodesWithoutInterruption() throws {
+        let legacy = #"{"status":"executing","steps":[],"summary":""}"#
+        let decoded = try JSONDecoder().decode(AgentPlan.self, from: Data(legacy.utf8))
+
+        #expect(!decoded.isInterrupted)
+        #expect(AgentPlanContinuationPolicy.hasActiveExecutionContract(decoded))
+    }
+
+    @Test("delegated task text is not rewritten after an interruption")
+    func interruptedPlanDoesNotHijackDelegatedTask() {
+        let text = "帮我做另一件事"
+        let task = AgentPlanContinuationPolicy.delegatedExecutionTask(
+            userText: text,
+            currentPlan: Self.interruptedPlan()
+        )
+
+        #expect(task == text)
+    }
+
+    @Test("auto continuation stops for an interrupted plan")
+    func interruptedPlanStopsAutoContinuation() {
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: Self.interruptedPlan(),
+            automaticContinuationCount: 0,
+            consecutiveNoProgressReplies: 0,
+            hasQueuedUserMessages: false
+        )
+
+        #expect(decision == .stop)
+    }
+
+    @Test("ordinary prompt swaps the contract block for interrupted guidance")
+    func interruptedPlanPromptAllowsNewTask() {
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: nil,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .normal,
+            currentPlan: Self.interruptedPlan(),
+            globalRules: nil
+        )
+
+        #expect(prompt.contains("=== INTERRUPTED PLAN — USER DECIDES WHAT'S NEXT ==="))
+        #expect(prompt.contains("1. [pending] Inspect"))
+        #expect(!prompt.contains("=== ACTIVE PLAN — CONTINUE, DO NOT RE-PLAN ==="))
+    }
+
+    @MainActor
+    @Test("a replacement plan is captured after an interruption")
+    func replacementPlanIsCapturedAfterInterruption() {
+        let appState = AppState()
+        let runtime = AgentRuntime(session: AgentSession(title: "Interrupted"))
+        runtime.interactionMode = .normal
+        runtime.currentPlan = Self.interruptedPlan()
+        runtime.messages = [
+            AgentMessage(
+                role: .assistant,
+                content: """
+                ```plan
+                1. New task step one
+                2. New task step two
+                ```
+                """
+            )
+        ]
+
+        let outcome = appState.captureAgentPlanFromLatestMessage(for: runtime)
+
+        #expect(outcome == .captured)
+        #expect(runtime.currentPlan?.steps.map(\.text) == ["New task step one", "New task step two"])
+        #expect(runtime.currentPlan?.isInterrupted == false)
+    }
+
+    @MainActor
+    @Test("a progress report resumes an interrupted plan")
+    func progressReportResumesInterruptedPlan() {
+        let appState = AppState()
+        let runtime = AgentRuntime(session: AgentSession(title: "Resumed"))
+        runtime.interactionMode = .normal
+        runtime.currentPlan = Self.interruptedPlan()
+        runtime.messages = [
+            AgentMessage(
+                role: .assistant,
+                content: """
+                Picking the plan back up.
+                ```progress
+                1: done
+                ```
+                """
+            )
+        ]
+
+        let outcome = appState.captureAgentPlanFromLatestMessage(for: runtime)
+
+        #expect(outcome == .noProposal)
+        #expect(runtime.currentPlan?.isInterrupted == false)
+        #expect(runtime.currentPlan?.steps.first?.status == .done)
+    }
 }

@@ -15712,6 +15712,24 @@
         }
       }
     },
+    "plan-status.interrupted" : {
+      "comment" : "plan status pill label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Interrupted"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已中断"
+          }
+        }
+      }
+    },
     "plan-status.proposed" : {
       "comment" : "plan status pill label",
       "extractionState" : "manual",

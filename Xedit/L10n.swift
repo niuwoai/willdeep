@@ -1216,6 +1216,7 @@ nonisolated enum L10n {
         static let approved = String(localized: "plan-status.approved", defaultValue: "Ready")
         static let done = String(localized: "plan-status.done", defaultValue: "Done")
         static let executing = String(localized: "plan-status.executing", defaultValue: "Executing")
+        static let interrupted = String(localized: "plan-status.interrupted", defaultValue: "Interrupted")
         static let proposed = String(localized: "plan-status.proposed", defaultValue: "Planned")
         static let rejected = String(localized: "plan-status.rejected", defaultValue: "Rejected")
     }
