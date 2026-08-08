@@ -113,7 +113,16 @@ enum AgentSidebarSessionPlacement {
                 if lhsPinnedAt != rhsPinnedAt {
                     return lhsPinnedAt > rhsPinnedAt
                 }
-                return lhs.lastActivityAt > rhs.lastActivityAt
+                // Immutable tie-breakers only. The old lastActivityAt tie
+                // shifted whenever a background reply landed, and Swift's
+                // sort is unstable — any comparator that can return
+                // "equal" or reads a mutable date lets rows swap on every
+                // re-sort (which typing in the editor triggers via the
+                // shared AppState).
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.id.uuidString < rhs.id.uuidString
             }
     }
 
@@ -161,7 +170,11 @@ enum AgentSidebarSessionPlacement {
         case (true, false): return true
         case (false, true): return false
         case (true, true):
-            return (lhs.pinnedAt ?? .distantPast) > (rhs.pinnedAt ?? .distantPast)
+            let lhsPinnedAt = lhs.pinnedAt ?? .distantPast
+            let rhsPinnedAt = rhs.pinnedAt ?? .distantPast
+            if lhsPinnedAt != rhsPinnedAt { return lhsPinnedAt > rhsPinnedAt }
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+            return lhs.id.uuidString < rhs.id.uuidString
         case (false, false):
             // createdAt, deliberately not lastActivityAt: activity-based
             // ordering reshuffled the group every time any background
@@ -171,7 +184,13 @@ enum AgentSidebarSessionPlacement {
             // row position is stable for its whole life; active sessions
             // are surfaced by the status dot and the recent-session edge
             // rail instead of by jumping to the top.
-            return lhs.createdAt > rhs.createdAt
+            //
+            // The id tie-breaker matters because Swift's sort is unstable:
+            // without a total order, rows with equal dates may swap places
+            // on every re-sort — and the sidebar re-sorts whenever the
+            // shared AppState publishes, including editor keystrokes.
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+            return lhs.id.uuidString < rhs.id.uuidString
         }
     }
 }

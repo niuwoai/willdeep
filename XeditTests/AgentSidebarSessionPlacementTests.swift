@@ -56,6 +56,28 @@ struct AgentSidebarSessionPlacementTests {
         #expect(ordered.map(\.title) == ["newer-idle", "older-but-active"])
     }
 
+    @Test("equal timestamps still yield one deterministic order")
+    func equalTimestampsAreDeterministic() {
+        // Swift's sort is unstable — a comparator that treats two rows as
+        // equal lets them swap on every re-sort, and the sidebar re-sorts
+        // whenever the shared AppState publishes (editor keystrokes
+        // included). Equal dates must fall through to the immutable id.
+        let sharedDate = Date(timeIntervalSince1970: 7_000)
+        let a = Self.session(title: "a", createdAt: sharedDate)
+        let b = Self.session(title: "b", createdAt: sharedDate)
+
+        let forward = [a, b].sorted(by: AgentSidebarSessionPlacement.workspaceOrder)
+        let backward = [b, a].sorted(by: AgentSidebarSessionPlacement.workspaceOrder)
+
+        #expect(forward.map(\.id) == backward.map(\.id))
+
+        let pinnedA = Self.session(title: "pa", createdAt: sharedDate, pinnedAt: sharedDate)
+        let pinnedB = Self.session(title: "pb", createdAt: sharedDate, pinnedAt: sharedDate)
+        let pinnedForward = AgentSidebarSessionPlacement.globalPinnedSessions(from: [pinnedA, pinnedB])
+        let pinnedBackward = AgentSidebarSessionPlacement.globalPinnedSessions(from: [pinnedB, pinnedA])
+        #expect(pinnedForward.map(\.id) == pinnedBackward.map(\.id))
+    }
+
     @Test("pinned sessions stay above unpinned ones, most recently pinned first")
     func pinnedSessionsLeadTheGroup() {
         let pinnedEarly = Self.session(
