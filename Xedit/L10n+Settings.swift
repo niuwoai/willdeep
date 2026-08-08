@@ -36,7 +36,7 @@ extension L10n {
         static let agentBarMobileGateway = String(localized: "agent.statusbar.mobile-gateway", defaultValue: "Mobile Gateway")
 
         static let groupGeneral = String(localized: "settings.group.general", defaultValue: "General")
-        static let groupFormatAndAppearance = String(localized: "settings.group.format-and-appearance", defaultValue: "Format & Appearance")
+        static let groupEditor = String(localized: "settings.group.editor", defaultValue: "Editor")
         static let groupAI = String(localized: "settings.group.ai", defaultValue: "AI Agents")
         static let groupAgentTools = String(localized: "settings.group.agent-tools", defaultValue: "Agent Tools")
         static let groupAccountAndDevices = String(localized: "settings.group.account-and-devices", defaultValue: "Account & Devices")
@@ -919,6 +919,9 @@ extension L10n {
 
         enum Connectors {
             static let description = String(localized: "settings.connectors.description", defaultValue: "Manage team collaboration platforms that WillDeep can use for notifications, commands, and document publishing.")
+            static let replicateSummary = String(localized: "settings.connectors.replicate-summary", defaultValue: "Image upscale, erase, inpaint, and prediction tasks. Token stays in Keychain.")
+            static let statusConfigured = String(localized: "settings.connectors.status-configured", defaultValue: "Configured")
+            static let statusNotConfigured = String(localized: "settings.connectors.status-not-configured", defaultValue: "Not configured")
             static let platformsSection = String(localized: "settings.connectors.platforms-section", defaultValue: "Platforms")
             static let capabilitiesSection = String(localized: "settings.connectors.capabilities-section", defaultValue: "Capabilities")
             static let safetySection = String(localized: "settings.connectors.safety-section", defaultValue: "Safety")
@@ -1150,6 +1153,13 @@ extension L10n {
             static let noSkills = String(localized: "settings.skill.no-skills", defaultValue: "No skills in this group.")
             static let viewContent = String(localized: "settings.skill.view-content", defaultValue: "View content")
             static let unableToRead = String(localized: "settings.skill.unable-to-read", defaultValue: "Unable to read skill content.")
+            static let loadingContent = String(localized: "settings.skill.loading-content", defaultValue: "Loading…")
+            static let previousPage = String(localized: "settings.skill.previous-page", defaultValue: "Previous")
+            static let nextPage = String(localized: "settings.skill.next-page", defaultValue: "Next")
+            static func pageIndicator(_ page: String, _ total: String) -> String {
+                let template = String(localized: "settings.skill.page-indicator", defaultValue: "Page %1$@ of %2$@")
+                return String(format: template, locale: Locale.current, page, total)
+            }
             static let deleteUserSkill = String(localized: "settings.skill.delete-user-skill", defaultValue: "Delete")
             static let deleteUserSkillHelp = String(localized: "settings.skill.delete-user-skill-help", defaultValue: "Delete this user skill")
             static let deleteUserSkillMessage = String(localized: "settings.skill.delete-user-skill-message", defaultValue: "This removes the user skill folder from disk. Built-in and plugin skills are not affected.")

@@ -70,12 +70,23 @@ enum ReplicateIntegrationStore {
 }
 
 struct ReplicateIntegrationSettingsView: View {
+    var body: some View {
+        Form {
+            ReplicateIntegrationSettingsSections()
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// Replicate's settings sections without the enclosing Form, so the
+/// connectors hub can embed them next to the collaboration platforms.
+struct ReplicateIntegrationSettingsSections: View {
     @State private var apiToken = ReplicateIntegrationStore.loadSavedAPIToken()
     @State private var workflowSettings = ReplicateIntegrationStore.loadWorkflowSettings()
     @State private var status = ""
 
     var body: some View {
-        Form {
+        Group {
             Section("Replicate") {
                 LabeledContent("API Token") {
                     RevealableSecretField(text: $apiToken, placeholder: "", onCommit: save)
@@ -141,7 +152,6 @@ struct ReplicateIntegrationSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
     }
 
     private func save() {

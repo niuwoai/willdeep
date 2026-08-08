@@ -189,7 +189,9 @@ struct EditorSettingsView: View {
         case .workspace: workspaceSettings
         case .agent: agentSettings
         case .someIM: SomeIMIntegrationSettingsView()
-        case .replicate: ReplicateIntegrationSettingsView()
+        // Deep-links to `.replicate` land on the unified connectors hub
+        // with the Replicate sub-connector preselected.
+        case .replicate: CollaborationConnectorSettingsView(initialSelection: .replicate)
         case .localAgents: localAgentSettings
         case .remoteRuntimes: AgentRuntimeSettingsView()
         case .mobileGateway: MobileGatewaySettingsView()
