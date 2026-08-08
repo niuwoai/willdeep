@@ -33,6 +33,9 @@ app_state_source = read_file(repo_root, "Xedit/AppStateAgentRoundtable.swift")
 preparation_source = read_file(repo_root, "Xedit/RoundtablePreparationView.swift")
 selection_source = read_file(repo_root, "Xedit/RoundtableExpertSelectionView.swift")
 streaming_source = read_file(repo_root, "Xedit/RoundtableStreamingSupport.swift")
+# 1.235.0-rc1 起圆桌输入框收敛到与调度台共用的 SubmitOnReturnTextView，
+# Return 提交 / 修饰键换行 / 输入法组字保护都住在这里。
+submit_source = read_file(repo_root, "Xedit/SubmitOnReturnTextView.swift")
 subagents_source = read_file(repo_root, "Xedit/AgentSubagents.swift")
 l10n_source = read_file(repo_root, "Xedit/L10n+RoundtableSetup.swift")
 strings_source = read_file(repo_root, "Xedit/Localizable.xcstrings")
@@ -47,9 +50,9 @@ end
 add_check.call(
   "home composer submits with Return",
   includes_all?(
-    window_source + components_source,
+    window_source + submit_source,
     [
-      "RoundtableComposerTextView(",
+      "SubmitOnReturnTextView(",
       "onSubmit: start",
       "#selector(NSResponder.insertNewline(_:))",
       "onSubmit()"
@@ -61,12 +64,13 @@ add_check.call(
 add_check.call(
   "modified Return keeps multiline editing",
   includes_all?(
-    components_source,
+    submit_source,
     [
-      "modifiers.contains(.shift)",
-      "modifiers.contains(.option)",
-      "modifiers.contains(.control)",
-      "guard !wantsLineBreak else { return false }"
+      "flags.contains(.shift)",
+      "flags.contains(.option)",
+      "flags.contains(.control)",
+      "return !wantsLineBreak",
+      "guard !hasMarkedText else { return false }"
     ]
   ),
   "Shift/Option/Control + Return must remain available for deliberate line breaks."
@@ -167,7 +171,7 @@ add_check.call(
       "clarificationQuestions",
       "clarificationConversation",
       "recommendationCard",
-      "RoundtableComposerTextView(",
+      "SubmitOnReturnTextView(",
       "ForEach(AgentRoundtableExpertRole.allCases)",
       "recommendationReason(for: role)"
     ]
