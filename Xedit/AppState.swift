@@ -432,9 +432,23 @@ final class AppState: ObservableObject {
     @Published private(set) var quickOpenFiles: [URL] = []
     @Published var editorSettings: EditorSettings {
         didSet {
+            // Same contract as `editorTerminalSettings` below: a value
+            // adopted from another AppState's save notification is taken
+            // as-is — never re-saved or re-broadcast. The old echo save
+            // could still hold a stale snapshot in its pending work item,
+            // overwrite the store with it, and its notification would then
+            // revert this instance's newer edit AND cancel that edit's
+            // pending save — which is exactly how the editor toggles kept
+            // "forgetting" their state across launches.
+            if !isApplyingExternalEditorSettings {
+                EditorSettingsStore.save(editorSettings.normalized())
+            }
             scheduleEditorSettingsSideEffects()
         }
     }
+    /// True while adopting an editor-settings change broadcast by another
+    /// AppState, so the didSet above doesn't echo it back out.
+    private var isApplyingExternalEditorSettings = false
     @Published var editorTerminalSettings: EditorTerminalSettings = EditorTerminalSettingsStore.load() {
         didSet {
             // When the sync notification below pushes a change in from another
@@ -629,7 +643,9 @@ final class AppState: ObservableObject {
                 guard let self else { return }
                 let normalizedSettings = settings.normalized()
                 guard self.editorSettings != normalizedSettings else { return }
+                self.isApplyingExternalEditorSettings = true
                 self.editorSettings = normalizedSettings
+                self.isApplyingExternalEditorSettings = false
             }
         self.agentSessions = []
         self.agentUsageSnapshots = []
@@ -1922,13 +1938,13 @@ final class AppState: ObservableObject {
     private func scheduleEditorSettingsSideEffects() {
         editorSettingsSideEffectsWorkItem?.cancel()
 
-        // Capture the value at interaction time. The Settings scene can swap
-        // to another registry AppState (or release a fallback AppState) before
-        // this main-queue work item runs. Persistence must not depend on that
-        // view-owned object still being alive.
+        // Persistence happens synchronously in the property's didSet — a
+        // pending async save could be dropped at quit or cancelled by a
+        // notification echo (see the didSet comment). This work item only
+        // coalesces the per-instance UI side effects across rapid changes
+        // (e.g. a font-size slider drag).
         let normalizedSettings = editorSettings.normalized()
         let workItem = DispatchWorkItem { [weak self] in
-            EditorSettingsStore.save(normalizedSettings)
             guard let self else { return }
             if self.inspectorMode != normalizedSettings.preferredInspectorMode {
                 self.inspectorMode = normalizedSettings.preferredInspectorMode

@@ -917,6 +917,20 @@ extension L10n {
             static let errorCommandRequired = String(localized: "settings.mcp.error-command-required", defaultValue: "Command is required.")
         }
 
+        enum Replicate {
+            static let clearButton = String(localized: "settings.replicate.clear", defaultValue: "Clear")
+            static let envConfigured = String(localized: "settings.replicate.env-configured", defaultValue: "Configured via the REPLICATE_API_TOKEN environment variable")
+            static let configured = String(localized: "settings.replicate.configured", defaultValue: "Replicate is configured")
+            static let notConfigured = String(localized: "settings.replicate.not-configured", defaultValue: "Replicate is not configured")
+            static let tokenDescription = String(localized: "settings.replicate.token-description", defaultValue: "Used for Replicate image upscale, erase, inpaint, and video/image prediction tasks. The token is stored in Keychain and never written to chats, logs, or commits.")
+            static let workflowSection = String(localized: "settings.replicate.workflow-section", defaultValue: "Default Workflow Versions")
+            static let upscaleLabel = String(localized: "settings.replicate.upscale", defaultValue: "Image upscale")
+            static let eraseLabel = String(localized: "settings.replicate.erase", defaultValue: "Image erase")
+            static let inpaintLabel = String(localized: "settings.replicate.inpaint", defaultValue: "Mask inpaint")
+            static let versionPlaceholder = String(localized: "settings.replicate.version-placeholder", defaultValue: "Replicate version hash")
+            static let workflowDescription = String(localized: "settings.replicate.workflow-description", defaultValue: "With common model version hashes filled in, media-task thumbnails can start an upscale directly, and the image edit panel reuses the default inpaint version.")
+        }
+
         enum Connectors {
             static let description = String(localized: "settings.connectors.description", defaultValue: "Manage team collaboration platforms that WillDeep can use for notifications, commands, and document publishing.")
             static let replicateSummary = String(localized: "settings.connectors.replicate-summary", defaultValue: "Image upscale, erase, inpaint, and prediction tasks. Token stays in Keychain.")

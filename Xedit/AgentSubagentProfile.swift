@@ -121,6 +121,18 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         default: return L10n.AgentDelegation.profileDeepName
         }
     }
+
+    /// User-facing description for the settings pane. `purpose` itself is
+    /// model-facing (it ships verbatim in the `spawn_agent` tool
+    /// description) and must stay English; this is its translation.
+    var localizedPurpose: String {
+        switch id {
+        case AgentSubagentProfileCatalog.scoutID: return L10n.AgentDelegation.profileScoutPurpose
+        case AgentSubagentProfileCatalog.readerID: return L10n.AgentDelegation.profileReaderPurpose
+        case AgentSubagentProfileCatalog.editorID: return L10n.AgentDelegation.profileEditorPurpose
+        default: return L10n.AgentDelegation.profileDeepPurpose
+        }
+    }
 }
 
 // MARK: - Catalog
