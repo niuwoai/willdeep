@@ -994,6 +994,27 @@ nonisolated enum AgentSessionStore {
         }
     }
 
+    /// Persist a metadata-level mutation (projectID, workspace paths, …)
+    /// for a session that may only exist as a skeleton in the caller's
+    /// memory. The full transcript is materialized first so the write
+    /// passes `wouldTruncateStoredTranscript` — saving the skeleton
+    /// directly is silently refused by that guard, which is how launch
+    /// rebinding failed to stick: memory showed the session in its
+    /// project group while disk stayed unbound, and the next
+    /// materialization snapped it back to a path group.
+    @discardableResult
+    static func updateStoredSessionMetadata(
+        id: UUID,
+        mutate: (inout AgentSession) -> Void
+    ) -> Bool {
+        guard var stored = load(id: id) else { return false }
+        let before = stored
+        mutate(&stored)
+        guard stored != before else { return true }
+        save(stored)
+        return true
+    }
+
     static func isMetadataOnly(_ id: UUID) -> Bool {
         metadataOnlySessions.contains(id)
     }
