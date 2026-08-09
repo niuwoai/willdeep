@@ -67,6 +67,7 @@ extension L10n {
         static let metricFilesChanged = String(localized: "stats-dashboard.metric.files-changed", defaultValue: "Files changed")
         static let metricLongestStreak = String(localized: "stats-dashboard.metric.longest-streak", defaultValue: "Longest streak")
         static let metricLongestTask = String(localized: "stats-dashboard.metric.longest-task", defaultValue: "Longest task")
+        static let metricLongestTaskHelp = String(localized: "stats-dashboard.metric.longest-task.help", defaultValue: "Time actually spent on the longest conversation. Pauses over 15 minutes are not counted.")
         static let metricPeakTokens = String(localized: "stats-dashboard.metric.peak-tokens", defaultValue: "Peak tokens")
         static let metricTaskTurns = String(localized: "stats-dashboard.metric.task-turns", defaultValue: "Task turns")
         static let metricTotalTokens = String(localized: "stats-dashboard.metric.total-tokens", defaultValue: "Total tokens")

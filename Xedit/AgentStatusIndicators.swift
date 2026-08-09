@@ -307,6 +307,7 @@ struct AgentStatsDashboard: View {
                 value: AgentStatsDashboardFormatting.duration(longestTaskDuration),
                 title: L10n.StatsDashboard.metricLongestTask
             )
+            .help(L10n.StatsDashboard.metricLongestTaskHelp)
             metricDivider
             CodexDashboardMetric(
                 value: L10n.StatsDashboard.dayCount("\(stats.currentStreak)"),

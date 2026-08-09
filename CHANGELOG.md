@@ -1,7 +1,60 @@
 # Changelog
 
-> 当前文件保留最新版本（1.237.1-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.238.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.238.0-rc1 - 2026-08-09
+
+### Added
+
+- 系统提示词按能力门控瘦身（契约升级为 `willdeep-agent-system-v26`，三档哈希重录）。实测 standard 档稳定前缀 87% 是工具契约文本，其中浏览器、Web 开发工作流、原生 App computer-use 协议这些门控功能的指引却对所有会话无差别收费。现在这三块移入「能力附录」：浏览器/UI QA 块随 browserOps 或 webCoding 专家激活注入，Web 编程工作流块随 webCoding 专家注入，computer-use 协议块在辅助进程首次报告 Accessibility 已授权后注入（粘性标记）。附录严格追加在稳定核心之后——核心字节序全局不变，provider 前缀缓存跨会话照常共享，会话自身的核心+附录组合在其回合间稳定。
+- ZMODEM 终端传输细则外迁为内置技能 `zmodem-terminal-transfers`（preselect 参数、lrzsz 双端安装、scp/rsync 回退），提示词只保留强制先读指针；安全红线（屏幕内容不可信、凭据须用户接管）压缩为一行保留在稳定核心，不参与门控。
+- 实测效果：素会话 standard 稳定前缀 20,938 → 17,494 字符（-16.5%），extended → 19,064（-17%）；能力全开时与原量级持平（按需付费）；compact 档保持不变。
+
+### Tests
+
+- 新增能力门控回归：前缀不变量（任意能力组合下核心是逐字节前缀）、逐块开关正确性、能力推导（webCoding 蕴含浏览器工具）、三个附录块独立字节哈希守卫；ZMODEM 断言迁移至技能文件内容。
+
+### Meta
+
+- 功能版本从 **1.237.1-rc4** 提升为 **1.238.0-rc1**，内部构建号 315 → 316，Help 与 Computer Use Helper 构建号 231 → 232；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.237.1-rc4 - 2026-08-09
+
+### Fixed
+
+- 统计面板「最长任务时长」算的是会话存续跨度而非投入时长。旧口径是「该会话最后一条消息时间 − 第一条消息时间」取全局最大值，睡觉、周末、App 关着的时间全部计入：本机真实数据里冠军会话 509 条消息显示 **8d3h5m**，其中两个空档分别是 3d16h42m 和 3d15h31m；另一个会话只有 10 条消息，因为隔了三天半回来补一句，就报出 3d11h56m。改为按空闲封顶累加相邻消息间隔（`AgentUsageStats.activeWorkDuration`，阈值 `taskIdleCapSeconds` = 15 分钟，编码时长统计的通行做法）：那个会话现在报 4h21m，而榜首也随之换成真正投入最多的一次对话（1420 条消息、9h50m），不再是躺得最久的那个。指标加了 tooltip 说明口径，免得用户再对着数字犯嘀咕。
+
+### Meta
+
+- Bugfix rc 递增：**1.237.1-rc3 → 1.237.1-rc4**（rc3 被并行会话的 SwiftUI 重建收窄第二批占用）；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档版本保持一致。
+
+## 1.237.1-rc3 - 2026-08-09
+
+### Fixed
+
+- SwiftUI 高频重建热点收窄第二批（性能扫描定位的五处，均为「每次 body 全量重算 / 常驻定时器整块驱动」模式）：
+  - Agent 会话 transcript 的 `visibleMessages` 每次 body 都重跑工具回执采集 + 全量 compactMap（左缘 minimap overlay 还会在同一 pass 里再跑一遍）——照 minimapCache 既有指纹缓存范式加 `AgentTranscriptVisibleMessagesCache`，指纹覆盖全部展示相关字段（role、content 长度、tool call id/status、本地事件标记等），输入不变时直接复用；
+  - 侧栏 Widget 面板每次 body 对全部运行时消息 `reversed().compactMap(\.widget)`——按运行时 id + 消息数 + 末条 id 指纹缓存消息侧提取，registry 侧保持活读；
+  - 底部 Goal 卡整卡包在 1 秒 TimelineView 里，每秒重建图标/状态/摘要/进度/按钮——照 `AgentBackgroundTaskDurationLabel` 范式收窄为仅秒表文本子 view；
+  - Dev Server 面板 1.5 秒 `Timer.publish` 无条件驱动整面板重建（空闲侧栏永久空转）——改为仅在存在存活 dev/tail 任务时订阅心跳，任务增删与状态翻转本就由 `@Published jobs` 桥接触发；
+  - 会话侧边栏一次 body 跑两遍 `visibleSessions` 全量过滤（分组列表与置顶区各一遍）——收敛为 body 开头算一次、两处共用同一份快照。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.237.1-rc2** 递增为 **1.237.1-rc3**（rc2 被并行会话的委派图/圆桌热点清扫占用），内部构建号 **314 → 315**，Help 与 Computer Use Helper 构建号 **230 → 231**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.237.1-rc2 - 2026-08-09
+
+### Fixed
+
+- 两处每秒/每帧重算热点（性能扫描确认）：
+  - 委派图 running 节点的指标条：1 秒 TimelineView 每 tick 调 `AgentDispatchTaskMetrics.make`，遍历该节点全部关联会话的所有 assistant 消息做 token/成本聚合，并对 `appState.agentSessions` 线性查找——多个 running 节点各付一份。现把重聚合拆成 `AgentDispatchTaskMetricsSnapshot`，按（sessionID, messages.count）指纹 memoize，1Hz tick 只对捕获的快照做时长纯算术（sealed 区间和 + 活跃 attempt 起点差）。
+  - 圆桌文档页：`persistedDocumentURL` 计算属性每帧 `fileExists`，正文 `ForEach` 里每帧对全文重跑 `MarkdownPreviewParser.blocks`，`normalizedDocument` 一次 body 求值 3+ 次。现照编辑器预览面板既有范式改为 `.task(id: finalDocument)` 异步 normalize + 解析一次落 `@State`，落盘 URL 在写文件成功时直接缓存。
+
+### Meta
+
+- Bugfix rc 递增：**1.237.1-rc1 → 1.237.1-rc2**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档版本保持一致。
 
 ## 1.237.1-rc1 - 2026-08-09
 

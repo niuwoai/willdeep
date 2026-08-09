@@ -378,13 +378,7 @@ enum AgentUsageStats {
             session.messages.reduce(0) { $0 + displayTokenCount(for: $1) }
         }.max() ?? 0
 
-        let longestTaskDuration = sessions.compactMap { session -> TimeInterval? in
-            let dates = session.messages.map(\.createdAt)
-            guard let first = dates.min(), let last = dates.max(), last > first else {
-                return nil
-            }
-            return last.timeIntervalSince(first)
-        }.max() ?? 0
+        let longestTaskDuration = sessions.map { activeWorkDuration(for: $0.messages) }.max() ?? 0
 
         let managedRoutingRate: Double
         if sessions.isEmpty {
@@ -416,6 +410,30 @@ enum AgentUsageStats {
             reasoningUsageRate: reasoningUsageRate,
             uniqueToolCount: Set(allMessages.flatMap(\.toolCallNames)).count
         )
+    }
+
+    /// A pause longer than this means the operator walked away, so the
+    /// "longest task" metric stops billing it. Fifteen minutes is the usual
+    /// coding-time-tracker treatment: long enough to cover reading a diff or
+    /// waiting out a slow tool round, short enough that lunch does not count.
+    static let taskIdleCapSeconds: TimeInterval = 15 * 60
+
+    /// Time actually spent on a conversation, as opposed to how long it sat
+    /// on disk. The metric used to report `last.createdAt - first.createdAt`,
+    /// which counts sleep, weekends, and the app being closed — a real
+    /// 509-message session read 8d3h5m, of which two idle gaps were 7d8h.
+    /// Summing gaps capped at `taskIdleCapSeconds` reports 4h21m for that
+    /// same session, which is the number the operator recognizes.
+    static func activeWorkDuration(for messages: [AgentUsageMessageSnapshot]) -> TimeInterval {
+        // Persisted order is chronological, but a metric that silently
+        // returns garbage on an out-of-order restore is not worth the sort
+        // it saves.
+        let dates = messages.map(\.createdAt).sorted()
+        guard dates.count > 1 else { return 0 }
+        return zip(dates, dates.dropFirst()).reduce(0) { total, pair in
+            let gap = max(0, pair.1.timeIntervalSince(pair.0))
+            return total + min(gap, taskIdleCapSeconds)
+        }
     }
 
     /// Token formula behind the "peak task" metric: real usage when the

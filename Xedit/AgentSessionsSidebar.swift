@@ -251,7 +251,17 @@ struct AgentSessionsSidebar: View {
         // computed grouping directly into ForEach made every sidebar
         // invalidation rebuild its filter/group/sort pipeline while SwiftUI
         // was also reconciling the list.
-        let workspaceGroups = groupedSessions
+        //
+        // The visibility filter runs exactly once here — the grouped list
+        // and the pinned section used to each run their own full
+        // `visibleSessions` pass per body evaluation.
+        let visibleSessions = AgentSidebarSessionVisibility.visibleSessions(
+            from: appState.agentSessions,
+            activeID: appState.activeAgentSessionID,
+            isMetadataOnly: appState.agentSessionIsMetadataOnly,
+            metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
+        )
+        let workspaceGroups = groupedSessions(from: visibleSessions)
 
         VStack(spacing: 0) {
             // Keep the traffic-light safe area, but let the real navigation
@@ -275,7 +285,7 @@ struct AgentSessionsSidebar: View {
                             coordinator: appState.agentDispatchCoordinator
                         )
                     } else {
-                        pinnedSessionsSection
+                        pinnedSessionsSection(visibleSessions: visibleSessions)
                         workspacesHeader
                         ForEach(workspaceGroups) { group in
                             workspaceGroup(group)
@@ -461,8 +471,8 @@ struct AgentSessionsSidebar: View {
     }
 
     @ViewBuilder
-    private var pinnedSessionsSection: some View {
-        let sessions = globalPinnedSessions
+    private func pinnedSessionsSection(visibleSessions: [AgentSession]) -> some View {
+        let sessions = AgentSidebarSessionPlacement.globalPinnedSessions(from: visibleSessions)
         if !sessions.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 Text(L10n.Sidebar.pinnedHeader)
@@ -937,20 +947,15 @@ struct AgentSessionsSidebar: View {
         .clipped()
     }
 
-    private var groupedSessions: [SidebarWorkspaceGroup] {
-        // Hide empty "New Chat" rows — sessions that never got a user
-        // message just clutter the sidebar with a wall of identical
-        // placeholders (see screenshot). The active session is always kept
-        // visible even when empty, because it's the one the user is about
-        // to type into; hiding it would make the highlight disappear. If a
-        // workspace has no real chat yet, keep one empty placeholder so an
-        // added project does not vanish the moment the next project is added.
-        let visibleSessions = AgentSidebarSessionVisibility.visibleSessions(
-            from: appState.agentSessions,
-            activeID: appState.activeAgentSessionID,
-            isMetadataOnly: appState.agentSessionIsMetadataOnly,
-            metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
-        )
+    // `visibleSessions` comes pre-filtered from `body` (one visibility pass
+    // shared with the pinned section). The filter hides empty "New Chat"
+    // rows — sessions that never got a user message just clutter the
+    // sidebar with a wall of identical placeholders. The active session is
+    // always kept visible even when empty, because it's the one the user is
+    // about to type into; hiding it would make the highlight disappear. If a
+    // workspace has no real chat yet, one empty placeholder is kept so an
+    // added project does not vanish the moment the next project is added.
+    private func groupedSessions(from visibleSessions: [AgentSession]) -> [SidebarWorkspaceGroup] {
         let groups = Dictionary(grouping: visibleSessions) { session in
             session.workspaceSidebarGroupKey
         }
@@ -996,16 +1001,6 @@ struct AgentSessionsSidebar: View {
                 )
             }
             .map(\.group)
-    }
-
-    private var globalPinnedSessions: [AgentSession] {
-        let visibleSessions = AgentSidebarSessionVisibility.visibleSessions(
-            from: appState.agentSessions,
-            activeID: appState.activeAgentSessionID,
-            isMetadataOnly: appState.agentSessionIsMetadataOnly,
-            metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
-        )
-        return AgentSidebarSessionPlacement.globalPinnedSessions(from: visibleSessions)
     }
 
     private var remoteRuntimeDescriptorsByID: [UUID: RuntimeDescriptor] {
