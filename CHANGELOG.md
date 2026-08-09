@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.238.0 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.238.1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.238.1 - 2026-08-09
+
+### Fixed
+
+- 学习建议把产品自己的系统提示词当成「用户说的话」：用户只发一句 "hello" 也会弹出 2 条记忆建议，内容是 per-turn 隐藏 host 指令里的原句（"The bounded local rename auto-applies without user approval…"、"Prefer reversible repairs and preserve unrelated changes"——分别命中 candidate marker 词 "never" 和 "prefer"）。根因：1.195.0-rc12 的「只挖用户原话」修复选对了消息（isOperatorInput）但选错了字段——`modelContent` 是喂 provider 的拼接体，末尾携带 `modelContext`（host 注入指令）。新增 `AgentMessage.operatorAuthoredContent`（正文 + 用户粘贴附件，不含 host 注入），memory 候选抽取、auditTurn 全链（framework 规则闸、MCP 缺口、skill 候选、explicit directive）与记忆检索 query 一律改读该字段；检索 query 同时补上 isOperatorInput 过滤（此前连 host carrier 消息都会进 query）。
+- 学习建议 chip 计数与 popover 不一致：chip 数「事件数」，popover 逐条展示事件内的 memory drafts，一个事件挂两条记忆就出现「说 1 条点开是 2 条」。新增 `AgentSelfLearning.suggestionItemCount`（memory 事件按待审 drafts 展开、其余各计 1），chip 与任务监控 rail 的「记忆」行统一走该口径。
+- chip 文案撒谎：事件状态是 `.suggested`（待用户确认、未落盘），文案却写「Agent 本轮保存了 N 条建议」，与 popover 内「保存记忆 需用户确认」自相矛盾。改为「Agent 本轮提出 N 条建议，待确认」（en: "%@ learning suggestion(s) this turn"），tooltip 同步注明保存需确认。
+
+### Tests
+
+- 新增回归：`operatorAuthoredContent` 排除 modelContext、保留粘贴附件；"hello" + host 注入指令下 memory 候选为空、auditTurn 为 nil、captureAutomaticMCPCapabilityGap 不产事件、memory store 不被写入；`suggestionItemCount` 展开 drafts 的口径（2 drafts + 1 MCP 事件 = 3，saved 后计 1）。
+
+### Meta
+
+- Bugfix 正式版从 **1.238.0** 递增为 **1.238.1**，内部构建号 **317 → 318**，Help 与 Computer Use Helper 构建号 **233 → 234**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.238.0 - 2026-08-09
 

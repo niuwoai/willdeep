@@ -678,8 +678,10 @@ struct AgentTaskMonitorRail: View {
     private var learningSummary: (memory: Int, skill: Int, mcp: Int, total: Int) {
         // 只统计「本轮」(>= 最近一条 user message) 的学习事件:历史轮次
         // 的事件不该让 rail 误以为有新进展、也不该触发任务监控自动展开。
+        // memory 行按待审 drafts 展开(与 popover 逐条显示一致),其余
+        // 事件各计 1 —— 同 AgentSelfLearning.suggestionItemCount 的口径。
         let events = appState.agentCurrentTurnLearningEvents
-        let memory = events.filter { $0.kind == .memory }.count
+        let memory = AgentSelfLearning.suggestionItemCount(events.filter { $0.kind == .memory })
         let skill = events.filter { $0.kind == .skill }.count
         let mcp = events.filter { $0.kind == .mcpSuggestion }.count
         return (memory, skill, mcp, memory + skill + mcp)

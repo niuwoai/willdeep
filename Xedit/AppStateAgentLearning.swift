@@ -13,11 +13,14 @@ extension AppState {
         openedFileURL: URL?,
         selectedText: String
     ) -> String {
+        // isOperatorInput + operatorAuthoredContent:检索 query 只认用户
+        // 真正说过的话。host carrier 消息和挂在真实消息上的 modelContext
+        // 都是 harness 指令,混进 query 会把 recall 拉向产品自己的提示词。
         let recentUserText = messages
             .reversed()
-            .filter { $0.role == .user }
+            .filter(\.isOperatorInput)
             .prefix(3)
-            .map(\.modelContent)
+            .map(\.operatorAuthoredContent)
             .reversed()
             .joined(separator: "\n\n")
         return [
@@ -118,8 +121,14 @@ extension AppState {
         // 1.195.0-rc12:候选只从用户原话里挖。assistant 文本里
         // "use X / should / 自动"这类词天天出现，之前连回复里的表格行
         // （"数据库自动运维"命中"自动"）都会被拍成记忆建议。
+        // 1.238.1:字段也要选对 —— `modelContent` 是喂 provider 的
+        // 拼接体,末尾带 per-turn 隐藏 host 指令(modelContext),其中
+        // "never ask the user to confirm" / "Prefer reversible repairs"
+        // 这类句子恰好命中 marker 词,导致用户只说 "hello" 也会把产品
+        // 自己的提示词拍成记忆建议。改用 operatorAuthoredContent
+        // (正文 + 用户粘贴附件,不含 host 注入)。
         let candidates = AgentMemoryEngine.candidates(
-            fromUser: latestUser.modelContent,
+            fromUser: latestUser.operatorAuthoredContent,
             rootDirectory: workspaceURL,
             now: Date()
         )

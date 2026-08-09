@@ -1749,9 +1749,9 @@ nonisolated enum L10n {
         static let learningNextStepRetryAfterFix = String(localized: "transcript.learning.next-step.retry-after-fix", defaultValue: "Review the error, fix local skill storage access, then retry if the workflow is still useful.")
         // 1.85.0-rc13:popover 策略下的 footer 图标 / 单行摘要 / reject 按钮文案
         static let postTurnReportTooltip = String(localized: "transcript.post-turn.report-tooltip", defaultValue: "Turn audit report")
-        static let postTurnLearningTooltip = String(localized: "transcript.post-turn.learning-tooltip", defaultValue: "Memory / skill / MCP suggestions saved this turn")
+        static let postTurnLearningTooltip = String(localized: "transcript.post-turn.learning-tooltip", defaultValue: "Memory / skill / MCP suggestions from this turn; saving needs your approval")
         static func postTurnLearningOneLiner(_ a1: String) -> String {
-            let template = String(localized: "transcript.post-turn.learning-summary", defaultValue: "Agent saved %@ item(s) this turn")
+            let template = String(localized: "transcript.post-turn.learning-summary", defaultValue: "%@ learning suggestion(s) this turn")
             return String(format: template, a1)
         }
         static let learningRejectHelp = String(localized: "transcript.learning.reject-help", defaultValue: "Dismiss from review queue")

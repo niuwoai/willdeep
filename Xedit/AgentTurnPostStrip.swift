@@ -146,7 +146,9 @@ struct AgentTurnPostStrip: View {
                 HStack(spacing: 5) {
                     Image(systemName: "brain.head.profile")
                         .font(.system(size: 12, weight: .medium))
-                    Text(L10n.Transcript.postTurnLearningOneLiner(String(learningEvents.count)))
+                    Text(L10n.Transcript.postTurnLearningOneLiner(
+                        String(AgentSelfLearning.suggestionItemCount(learningEvents))
+                    ))
                         .agentChatSupportingFont()
                         .lineLimit(1)
                         .truncationMode(.middle)

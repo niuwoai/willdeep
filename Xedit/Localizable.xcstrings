@@ -34751,13 +34751,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agent saved %@ item(s) this turn"
+            "value" : "%@ learning suggestion(s) this turn"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agent 本轮保存了 %@ 条建议"
+            "value" : "Agent 本轮提出 %@ 条建议，待确认"
           }
         }
       }
@@ -34767,13 +34767,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Memory / skill / MCP suggestions saved this turn"
+            "value" : "Memory / skill / MCP suggestions from this turn; saving needs your approval"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "本轮 Memory / Skill / MCP 建议"
+            "value" : "本轮 Memory / Skill / MCP 建议；保存需你确认"
           }
         }
       }
