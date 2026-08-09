@@ -378,18 +378,53 @@ struct AgentSidePanelWorkspaceRequiredView: View {
 
 // MARK: - Widget panel
 
+/// Memoizes the message-derived widget list across `body` evaluations —
+/// same pattern as `AgentTranscriptMinimapCache`: the panel used to walk
+/// every runtime message (`reversed().compactMap(\.widget)`) on each `body`
+/// pass. Widgets ride in as freshly appended `.widget` messages, so
+/// message count + last id is a sufficient identity for the walk's input.
+///
+/// Reference type parked in `@State` on purpose: recomputing during a
+/// `body` evaluation must NOT invalidate the view.
+final class AgentSidePanelWidgetCache {
+    private var fingerprint: Int?
+    private var cached: [AgentWidget] = []
+
+    func widgets(
+        fingerprint incoming: Int,
+        rebuild: () -> [AgentWidget]
+    ) -> [AgentWidget] {
+        if incoming == fingerprint { return cached }
+        let fresh = rebuild()
+        fingerprint = incoming
+        cached = fresh
+        return fresh
+    }
+}
+
 struct AgentSidePanelWidgetView: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject private var widgetRegistry = AgentWidgetRegistry.shared
     @State private var selectedWidgetID: UUID?
     @State private var expandedHandoffWidgetIDs: Set<UUID> = []
+    @State private var messageWidgetCache = AgentSidePanelWidgetCache()
     var width: CGFloat
 
     private var widgets: [AgentWidget] {
+        let runtime = appState.activeRuntime
+        var hasher = Hasher()
+        hasher.combine(runtime?.id)
+        hasher.combine(runtime?.messages.count ?? 0)
+        hasher.combine(runtime?.messages.last?.id)
+        let messageWidgets = messageWidgetCache.widgets(fingerprint: hasher.finalize()) {
+            runtime?.messages.reversed().compactMap(\.widget) ?? []
+        }
+        // The registry side stays live (it is the @ObservedObject that
+        // triggers this body in the first place); only the full message
+        // walk above is memoized. The merge itself is a handful of items.
         var seen: Set<UUID> = []
         var result: [AgentWidget] = []
-        let messageWidgets = appState.activeRuntime?.messages.reversed().compactMap(\.widget) ?? []
-        for widget in messageWidgets + widgetRegistry.widgets(forRuntime: appState.activeRuntime?.id) {
+        for widget in messageWidgets + widgetRegistry.widgets(forRuntime: runtime?.id) {
             guard !seen.contains(widget.id) else { continue }
             seen.insert(widget.id)
             result.append(widget)

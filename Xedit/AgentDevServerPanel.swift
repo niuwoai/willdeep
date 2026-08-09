@@ -37,8 +37,18 @@ struct AgentDevServerPanel: View {
         .background(palette.panelFill)
         .onAppear(perform: refreshCommands)
         .onReceive(appState.$activeAgentSessionID) { _ in refreshCommands() }
-        .onReceive(timer) { value in
-            refreshTick = value
+        .background {
+            // The 1.5s heartbeat only exists to refresh the live output
+            // tails (the registry's `jobs` array is @Published and bridged
+            // into AppState, so job add/remove/status flips re-render the
+            // panel on their own). With no alive job the tails are frozen —
+            // don't subscribe, so an idle side panel stops rebuilding
+            // itself every 1.5s forever.
+            if devJobs.contains(where: \.isAlive) {
+                Color.clear.onReceive(timer) { value in
+                    refreshTick = value
+                }
+            }
         }
     }
 
