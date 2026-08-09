@@ -21,6 +21,23 @@ struct AgentContextBuilderPromptTests {
         #expect(prompt.contains("unless the user explicitly asks for a table"))
     }
 
+    @Test("markdown restraint rules reach every prompt profile")
+    func testMarkdownRestraintIsProfileIndependent() {
+        // 排版克制属于基础契约,不能只在某个 profile 里生效 —— compact
+        // 会话同样会被花哨加粗和 emoji 淹没。
+        for profile in AgentSystemPromptProfile.allCases {
+            let prompt = AgentContextBuilder.stableSystemPromptPrefix(
+                toolsEnabled: true,
+                promptProfile: profile
+            )
+            #expect(prompt.contains("Markdown restraint"))
+            #expect(prompt.contains("No emoji anywhere"))
+            #expect(prompt.contains("Bold is for genuine warnings"))
+            #expect(prompt.contains("No headings in a short reply"))
+            #expect(prompt.contains("Never use horizontal rules"))
+        }
+    }
+
     @Test("stable prompt requires queue inspection before optional heavy work")
     func testStablePromptRequiresQueueInspectionBeforeOptionalHeavyWork() {
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true, promptProfile: .extended)
@@ -50,7 +67,7 @@ struct AgentContextBuilderPromptTests {
         #expect(!compact.contains("list_mcp_servers"))
     }
 
-    @Test("stable v24 prompt text is guarded by a deterministic hash snapshot")
+    @Test("stable v25 prompt text is guarded by a deterministic hash snapshot")
     func testStablePromptSnapshotHash() {
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
             toolsEnabled: true,
@@ -63,7 +80,7 @@ struct AgentContextBuilderPromptTests {
             promptProfile: .standard
         )
 
-        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v24")
+        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v25")
         #expect(diagnostics.hash == AgentContextBuilder.stablePrefixSnapshotHash)
     }
 
