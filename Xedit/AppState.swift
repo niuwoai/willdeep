@@ -1369,18 +1369,37 @@ final class AppState: ObservableObject {
         return parts.joined(separator: ":")
     }
 
+    /// Memoized per (base, path): the worktree-changes panel calls this up
+    /// to four times per visible row per body evaluation, and the row list
+    /// is non-lazy — that was hundreds of synchronous `stat` calls on every
+    /// render. Entries (including negative ones) live until the next
+    /// worktree-changes refresh via `invalidateAgentChangedFileURLCache()`.
+    private var agentChangedFileURLCache: [String: URL?] = [:]
+
+    func invalidateAgentChangedFileURLCache() {
+        agentChangedFileURLCache.removeAll()
+    }
+
     func agentChangedFileURL(_ relativePath: String) -> URL? {
         let base = agentWorktreeChanges.repositoryRoot ?? rootDirectory
         guard let base else { return nil }
 
-        let url = base.appendingPathComponent(relativePath).standardizedFileURL
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-              !isDirectory.boolValue else {
-            return nil
+        let cacheKey = base.path + "\u{0}" + relativePath
+        if let cached = agentChangedFileURLCache[cacheKey] {
+            return cached
         }
 
-        return url
+        let url = base.appendingPathComponent(relativePath).standardizedFileURL
+        var isDirectory: ObjCBool = false
+        let resolved: URL?
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+           !isDirectory.boolValue {
+            resolved = url
+        } else {
+            resolved = nil
+        }
+        agentChangedFileURLCache[cacheKey] = resolved
+        return resolved
     }
 
     /// Refresh the Quick Open file list: serve the disk cache immediately (if

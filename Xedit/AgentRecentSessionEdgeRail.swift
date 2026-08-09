@@ -62,6 +62,9 @@ struct AgentRecentSessionEdgeRail: View {
     private var recentPanel: some View {
         let skin = appState.editorSettings.interfaceSkin
         let palette = skin.palette
+        // One filter+sort per body — this was evaluated twice (isEmpty and
+        // ForEach) over the full session list.
+        let items = recentItems
 
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
@@ -78,7 +81,7 @@ struct AgentRecentSessionEdgeRail: View {
             .padding(.top, 11)
             .padding(.bottom, 7)
 
-            if recentItems.isEmpty {
+            if items.isEmpty {
                 Text(L10n.Sidebar.recentSessionsRailEmpty)
                     .font(AgentDesign.secondaryFont)
                     .foregroundStyle(.secondary)
@@ -87,7 +90,7 @@ struct AgentRecentSessionEdgeRail: View {
             } else {
                 TimelineView(.periodic(from: .now, by: 60)) { timeline in
                     VStack(spacing: 1) {
-                        ForEach(recentItems) { item in
+                        ForEach(items) { item in
                             recentRow(item, now: timeline.date)
                         }
                     }

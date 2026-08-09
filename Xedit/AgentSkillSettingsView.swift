@@ -63,12 +63,39 @@ struct AgentSkillSettingsView: View {
         }
     }
 
+    /// Multilingual searchable text per skill, built once per catalog load.
+    /// `searchableText` pools every language's metadata strings; recomputing
+    /// it for ~300 skills on every keystroke made search typing sluggish.
+    @State private var searchableTextCache: [String: String] = [:]
+
+    /// Marketplace install-state per entry, refreshed on catalog load and
+    /// after install/uninstall. Computing it inline did disk reads per row
+    /// per render.
+    @State private var marketplaceStatusByID: [String: AgentSkillMarketplaceStatus] = [:]
+
+    private func rebuildMarketplaceStatusCache() {
+        marketplaceStatusByID = Dictionary(
+            uniqueKeysWithValues: marketplaceEntries.map {
+                ($0.id, AgentSkillMarketplaceStore.status(for: $0))
+            }
+        )
+    }
+
     private var filteredSkills: [AgentSkillEntry] {
         let query = normalizedSearchQuery
         guard !query.isEmpty else { return skills }
-        return skills.filter {
-            AgentSkillLocalization.searchableText(for: $0).contains(query)
+        return skills.filter { skill in
+            (searchableTextCache[skill.identifier]
+                ?? AgentSkillLocalization.searchableText(for: skill)).contains(query)
         }
+    }
+
+    private func rebuildSearchableTextCache() {
+        searchableTextCache = Dictionary(
+            uniqueKeysWithValues: skills.map {
+                ($0.identifier, AgentSkillLocalization.searchableText(for: $0))
+            }
+        )
     }
 
     private var normalizedSearchQuery: String {
@@ -199,10 +226,14 @@ struct AgentSkillSettingsView: View {
     }
 
     private var marketplaceSection: some View {
-        Section {
+        // Evaluate the filter once — this body referenced the computed
+        // property three times (count, isEmpty, ForEach), each a full
+        // seven-field lowercased scan of every entry.
+        let entries = filteredMarketplaceEntries
+        return Section {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(L10n.Settings.Skill.marketplaceCount("\(filteredMarketplaceEntries.count)"))
+                    Text(L10n.Settings.Skill.marketplaceCount("\(entries.count)"))
                         .foregroundStyle(.secondary)
                     Spacer()
                     Label(L10n.Settings.Skill.marketplaceStaticSource, systemImage: "shippingbox")
@@ -214,12 +245,12 @@ struct AgentSkillSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if filteredMarketplaceEntries.isEmpty {
+            if entries.isEmpty {
                 Text(L10n.Settings.Skill.marketplaceNoResults)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(filteredMarketplaceEntries) { entry in
+                ForEach(entries) { entry in
                     marketplaceRow(entry)
                 }
             }
@@ -229,7 +260,10 @@ struct AgentSkillSettingsView: View {
     }
 
     private func marketplaceRow(_ entry: AgentSkillMarketplaceEntry) -> some View {
-        let status = AgentSkillMarketplaceStore.status(for: entry)
+        // Served from the cache refreshed on catalog (re)load and after
+        // install/uninstall — `status(for:)` stats and reads the installed
+        // SKILL.md, and this row used to call it on every body evaluation.
+        let status = marketplaceStatusByID[entry.id] ?? AgentSkillMarketplaceStore.status(for: entry)
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 5) {
@@ -647,6 +681,8 @@ struct AgentSkillSettingsView: View {
             settings = AgentSkillSettingsStore.load()
             marketplaceEntries = AgentSkillMarketplaceStore.entries()
             skills = loadedSkills
+            rebuildSearchableTextCache()
+            rebuildMarketplaceStatusCache()
         } while needsSkillReload
 
         isLoadingSkills = false

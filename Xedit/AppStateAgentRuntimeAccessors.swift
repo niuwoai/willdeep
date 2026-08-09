@@ -241,7 +241,12 @@ extension AppState {
     /// Live `git status` snapshot for the active session's workspace.
     var agentWorktreeChanges: AgentWorktreeChangeSummary {
         get { activeRuntime?.worktreeChanges ?? .init() }
-        set { activeRuntime?.worktreeChanges = newValue }
+        set {
+            activeRuntime?.worktreeChanges = newValue
+            // A fresh snapshot can add/remove files on disk; the memoized
+            // per-row existence answers must not outlive it.
+            invalidateAgentChangedFileURLCache()
+        }
     }
 
     /// User-controlled expansion for the changed-file list above composer.
