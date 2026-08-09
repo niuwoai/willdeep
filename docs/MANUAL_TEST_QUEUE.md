@@ -1,6 +1,6 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-09（1.238.0-rc1）
+> Last updated: 2026-08-09（1.238.0）
 
 CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态机的特性
 都得人坐到机器前面点。这个文件按版本累积着每次发版后我提醒你
@@ -14,7 +14,7 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 
 ---
 
-## 1.238.0-rc1 — 系统提示词能力门控瘦身
+## 1.238.0 — 系统提示词能力门控瘦身
 
 - ⏳ 普通会话（无专家、未用过 computer-use）发一条消息，用请求预估/审计面板看系统提示词：不应包含 computer_use 协议、visual_qa、show_widget 等文本；应有一行安全红线与 zmodem 技能指针。
 - ⏳ 激活 webCoding 专家再发消息：提示词末尾应出现「Capability guidance」附录，含浏览器 QA 与 Web 编程两块；停用后附录消失。

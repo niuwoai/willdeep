@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.238.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.238.0 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.238.0 - 2026-08-09
+
+> 正式版，内容与 1.238.0-rc1 一致。本轮要点：
+
+### Added
+
+- 系统提示词按能力门控瘦身（契约升级为 `willdeep-agent-system-v26`）：浏览器/UI QA、Web 编程工作流、原生 App computer-use 协议三块从稳定核心移入「能力附录」，按需注入；核心字节序全局不变，provider 前缀缓存跨会话照常共享。素会话 standard 稳定前缀 20,938 → 17,494 字符（-16.5%），extended → 19,064（-17%），compact 档不变。
+- ZMODEM 终端传输细则外迁为内置技能 `zmodem-terminal-transfers`，提示词只保留强制先读指针与一行安全红线。
+
+### Meta
+
+- 正式版本从 **1.238.0-rc1** 定版为 **1.238.0**，内部构建号 **316 → 317**，Help 与 Computer Use Helper 构建号 **232 → 233**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.238.0-rc1 - 2026-08-09
 
