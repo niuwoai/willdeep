@@ -723,15 +723,14 @@ struct RoundtableDocumentView: View {
         appState.workflowReport(id: reportID, runtimeID: runtimeID)?.roundtable
     }
 
-    private var normalizedDocument: String {
-        AgentRoundtableDocumentNormalizer.normalize(report?.finalDocument ?? "")
-    }
-
-    private var persistedDocumentURL: URL? {
-        guard let path = report?.finalDocumentFilePath, !path.isEmpty else { return nil }
-        let url = URL(fileURLWithPath: path)
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
-    }
+    // Normalization + markdown parsing walk the whole document, and
+    // `persistedDocumentURL` used to hit the filesystem — none of that
+    // belongs in per-frame body evaluation. All three are refreshed once
+    // per `finalDocument` change from the `.task(id:)` below (same
+    // pattern as the editor preview pane) and cached here.
+    @State private var normalizedDocument: String = ""
+    @State private var documentBlocks: [MarkdownPreviewBlock] = []
+    @State private var persistedDocumentURL: URL?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -743,7 +742,7 @@ struct RoundtableDocumentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
                     if !normalizedDocument.isEmpty {
-                        ForEach(Array(MarkdownPreviewParser.blocks(from: normalizedDocument).enumerated()), id: \.offset) { _, block in
+                        ForEach(Array(documentBlocks.enumerated()), id: \.offset) { _, block in
                             MarkdownPreviewBlockView(block: block)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -758,8 +757,33 @@ struct RoundtableDocumentView: View {
             }
         }
         .task(id: report?.finalDocument) {
-            persistDocumentIfNeeded()
+            await refreshDocument()
         }
+    }
+
+    /// `.task(id:)` cancels the in-flight pass when `finalDocument` moves
+    /// again, so bursts of report updates collapse into one parse of the
+    /// latest text.
+    private func refreshDocument() async {
+        let raw = report?.finalDocument ?? ""
+        let parsed = await Task.detached(priority: .userInitiated) { () -> (document: String, blocks: [MarkdownPreviewBlock]) in
+            let normalized = AgentRoundtableDocumentNormalizer.normalize(raw)
+            return (normalized, MarkdownPreviewParser.blocks(from: normalized))
+        }.value
+        guard !Task.isCancelled else { return }
+        normalizedDocument = parsed.document
+        documentBlocks = parsed.blocks
+        refreshPersistedDocumentURL()
+        persistDocumentIfNeeded()
+    }
+
+    private func refreshPersistedDocumentURL() {
+        guard let path = report?.finalDocumentFilePath, !path.isEmpty else {
+            persistedDocumentURL = nil
+            return
+        }
+        let url = URL(fileURLWithPath: path)
+        persistedDocumentURL = FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     private var chrome: some View {
@@ -859,6 +883,9 @@ struct RoundtableDocumentView: View {
                 item.roundtable = detail
             }
             appState.persistWorkflowRuntime(runtimeID: runtimeID)
+            // The write just succeeded — cache directly instead of paying
+            // another `fileExists` round trip.
+            persistedDocumentURL = url
         } catch {
             let description = error.localizedDescription
             NSLog(
@@ -876,6 +903,7 @@ struct RoundtableDocumentView: View {
                 item.roundtable = detail
             }
             appState.persistWorkflowRuntime(runtimeID: runtimeID)
+            persistedDocumentURL = nil
         }
     }
 }

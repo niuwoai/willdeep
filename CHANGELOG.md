@@ -3,6 +3,18 @@
 > 当前文件保留最新版本（1.237.1-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.237.1-rc2 - 2026-08-09
+
+### Fixed
+
+- 两处每秒/每帧重算热点（性能扫描确认）：
+  - 委派图 running 节点的指标条：1 秒 TimelineView 每 tick 调 `AgentDispatchTaskMetrics.make`，遍历该节点全部关联会话的所有 assistant 消息做 token/成本聚合，并对 `appState.agentSessions` 线性查找——多个 running 节点各付一份。现把重聚合拆成 `AgentDispatchTaskMetricsSnapshot`，按（sessionID, messages.count）指纹 memoize，1Hz tick 只对捕获的快照做时长纯算术（sealed 区间和 + 活跃 attempt 起点差）。
+  - 圆桌文档页：`persistedDocumentURL` 计算属性每帧 `fileExists`，正文 `ForEach` 里每帧对全文重跑 `MarkdownPreviewParser.blocks`，`normalizedDocument` 一次 body 求值 3+ 次。现照编辑器预览面板既有范式改为 `.task(id: finalDocument)` 异步 normalize + 解析一次落 `@State`，落盘 URL 在写文件成功时直接缓存。
+
+### Meta
+
+- Bugfix rc 递增：**1.237.1-rc1 → 1.237.1-rc2**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档版本保持一致。
+
 ## 1.237.1-rc1 - 2026-08-09
 
 ### Fixed

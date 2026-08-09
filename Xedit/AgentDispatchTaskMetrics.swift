@@ -43,6 +43,54 @@ struct AgentDispatchTaskMetrics: Equatable {
         sessions requestedSessions: [AgentSession],
         now: Date = Date()
     ) -> AgentDispatchTaskMetrics {
+        AgentDispatchTaskMetricsSnapshot
+            .make(task: task, sessions: requestedSessions)
+            .metrics(now: now)
+    }
+}
+
+/// The expensive half of `AgentDispatchTaskMetrics.make`: token/cost rollups
+/// walk every assistant message of every attempt, so a 1 Hz TimelineView must
+/// not re-run them per tick. The snapshot freezes everything that only changes
+/// with session content and keeps the wall clock out; `metrics(now:)` is pure
+/// arithmetic and is all a timeline tick has to pay for.
+struct AgentDispatchTaskMetricsSnapshot: Equatable {
+    static let empty = AgentDispatchTaskMetricsSnapshot(
+        isEmpty: true,
+        totalTokens: nil,
+        hasEstimatedTokens: false,
+        estimatedCostUSD: nil,
+        hasUnpricedUsage: false,
+        sealedDuration: 0,
+        activeAttemptStart: nil
+    )
+
+    let isEmpty: Bool
+    let totalTokens: Int?
+    let hasEstimatedTokens: Bool
+    let estimatedCostUSD: Double?
+    let hasUnpricedUsage: Bool
+    /// Summed intervals of completed attempts; fixed until sessions change.
+    let sealedDuration: TimeInterval
+    /// `createdAt` of the attempt that is still ticking, nil when none is.
+    let activeAttemptStart: Date?
+
+    func metrics(now: Date) -> AgentDispatchTaskMetrics {
+        guard !isEmpty else { return .empty }
+        let activeDuration = activeAttemptStart.map { max(0, now.timeIntervalSince($0)) } ?? 0
+        return AgentDispatchTaskMetrics(
+            totalTokens: totalTokens,
+            hasEstimatedTokens: hasEstimatedTokens,
+            duration: sealedDuration + activeDuration,
+            estimatedCostUSD: estimatedCostUSD,
+            hasUnpricedUsage: hasUnpricedUsage
+        )
+    }
+
+    static func make(
+        task: AgentDispatchTask,
+        sessions requestedSessions: [AgentSession]
+    ) -> AgentDispatchTaskMetricsSnapshot {
         var seenSessionIDs: Set<UUID> = []
         let sessions = requestedSessions.filter { seenSessionIDs.insert($0.id).inserted }
         guard !sessions.isEmpty else { return .empty }
@@ -73,28 +121,35 @@ struct AgentDispatchTaskMetrics: Equatable {
         // Each retry is a separate runtime interval. Sum those intervals so
         // the total neither resets on retry nor counts idle gaps between
         // attempts. Only the current active attempt keeps ticking.
-        let duration = sessions.reduce(0) { total, session in
+        var sealedDuration: TimeInterval = 0
+        var activeAttemptStart: Date?
+        for session in sessions {
+            let isCurrentActiveAttempt = task.runtimeSessionID == session.id
+                && (task.state == .running || task.state == .reviewing)
+            if isCurrentActiveAttempt {
+                activeAttemptStart = session.createdAt
+                continue
+            }
             let latestMessageEnd = session.messages.map { message in
                 message.createdAt.addingTimeInterval(max(0, message.elapsedSeconds ?? 0))
             }.max()
-            let isCurrentActiveAttempt = task.runtimeSessionID == session.id
-                && (task.state == .running || task.state == .reviewing)
             // `updatedAt` is session metadata time, not execution time. It can
             // advance hours after completion when the app restores, renames,
             // or re-persists a session. Once an attempt has messages, seal its
             // interval at the final message's real end instead of letting
             // later metadata writes inflate every completed graph node.
             let completedAttemptEnd = latestMessageEnd ?? session.updatedAt
-            let endDate = isCurrentActiveAttempt ? now : completedAttemptEnd
-            return total + max(0, endDate.timeIntervalSince(session.createdAt))
+            sealedDuration += max(0, completedAttemptEnd.timeIntervalSince(session.createdAt))
         }
 
-        return AgentDispatchTaskMetrics(
+        return AgentDispatchTaskMetricsSnapshot(
+            isEmpty: false,
             totalTokens: totalTokens,
             hasEstimatedTokens: hasEstimatedTokens,
-            duration: duration,
             estimatedCostUSD: estimatedCostUSD,
-            hasUnpricedUsage: hasUnpricedUsage
+            hasUnpricedUsage: hasUnpricedUsage,
+            sealedDuration: sealedDuration,
+            activeAttemptStart: activeAttemptStart
         )
     }
 }
