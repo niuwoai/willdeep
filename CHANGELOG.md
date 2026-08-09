@@ -1,9 +1,9 @@
 # Changelog
 
-> 当前文件保留最新版本（1.237.1-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.237.1-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.237.1-rc2 - 2026-08-09
+## 1.237.1-rc3 - 2026-08-09
 
 ### Fixed
 
@@ -16,7 +16,7 @@
 
 ### Meta
 
-- Bugfix 预发布版本从 **1.237.1-rc1** 递增为 **1.237.1-rc2**，内部构建号 **314 → 315**，Help 与 Computer Use Helper 构建号 **230 → 231**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+- Bugfix 预发布版本从 **1.237.1-rc2** 递增为 **1.237.1-rc3**（rc2 被并行会话的委派图/圆桌热点清扫占用），内部构建号 **314 → 315**，Help 与 Computer Use Helper 构建号 **230 → 231**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.237.1-rc1 - 2026-08-09
 
