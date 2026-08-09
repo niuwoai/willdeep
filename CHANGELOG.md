@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.236.2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.237.0 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.237.0 - 2026-08-09
+
+### Changed
+
+- Agent 回复的排版收敛为「朴素优先」。此前只有一句「除非用户要求否则不用 emoji」，分量不足，回复里仍充斥装饰性加粗、层层小标题和 emoji 前缀。新增独立的 Markdown 克制契约：全面禁用 emoji（含小节标记、状态勾、条目前缀）；加粗只留给真正的风险提示和密集结果里最关键的那一个值，不得整句加粗、不得加粗条目开头/冒号前的标签/文件名/产品名；短回复不加标题；两三个要点直接用句子而非列表；禁用分隔线、把普通段落塞进引用块以及 ASCII 分隔符。三档 prompt profile（compact / standard / extended）共享这条契约。
+- 系统提示词契约升级为 `willdeep-agent-system-v25`，standard / compact / extended 三档字节级哈希同步重录。
+
+### Tests
+
+- 新增守卫：Markdown 克制条款必须出现在全部三档 profile（避免只在 standard 生效）。
+
+### Meta
+
+- 功能版本从 **1.236.2** 提升为 **1.237.0**，内部构建号 **312 → 314**，Help 与 Computer Use Helper 构建号 **228 → 230**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.236.2 - 2026-08-09
 

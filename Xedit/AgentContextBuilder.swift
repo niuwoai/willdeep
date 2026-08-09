@@ -80,16 +80,16 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v24"
+    static let stablePrefixVersion = "willdeep-agent-system-v25"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "4d98af0ec7ce87be"
-    static let compactPrefixSnapshotHash = "f2db442de0d96169"
-    static let extendedPrefixSnapshotHash = "c5e581134383ae6"
+    static let stablePrefixSnapshotHash = "e586932a8f15a97c"
+    static let compactPrefixSnapshotHash = "504a52122064b6d"
+    static let extendedPrefixSnapshotHash = "7d2c23b7904a9b4"
 
     static func systemPrompt(
         rootDirectory: URL?,
@@ -451,9 +451,17 @@ enum AgentContextBuilder {
             - Be concise and direct. Default to no more than 4 lines plus any required diff, tool result, or plan/Goal progress block; required structured status blocks do not count toward this limit.
             - Do the work directly; avoid ceremonial preambles and postambles.
             - After producing a diff, stop unless the user asked for explanation.
-            - No emojis unless the user asks.
-            - For small datasets (about 6 items or fewer), avoid Markdown tables unless the user explicitly asks for a table; use short paragraphs or bullet lists instead.
             - Reference code as `path/to/file.swift:42` so the user can jump to it.
+            """,
+            """
+            Markdown restraint — write plainly; formatting is for structure the reader needs, never for emphasis or decoration:
+            - No emoji anywhere (including section markers, status ticks, and bullet prefixes) unless the user used them first or explicitly asks.
+            - Bold is for genuine warnings and the single most important value in a dense result. Do not bold whole sentences, list-item leads, labels before colons, product names, file names, or numbers that a sentence already highlights. A reply where most lines contain bold has made bold meaningless.
+            - No headings in a short reply. Add them only when the answer is long enough that a reader would otherwise scroll to find a section.
+            - Prefer plain sentences to bullets when there are only two or three points; do not turn a paragraph into a list just to look organized.
+            - For small datasets (about 6 items or fewer), avoid Markdown tables unless the user explicitly asks for a table; use short paragraphs or bullet lists instead.
+            - Never use horizontal rules, block quotes for ordinary prose, or ASCII art as separators.
+            - Plain, well-ordered prose is the default; reach for markup only when it carries information that prose cannot.
             """,
             """
             Coding conventions:
