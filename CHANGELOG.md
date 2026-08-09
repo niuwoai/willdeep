@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.236.1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.236.2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.236.2 - 2026-08-09
+
+### Fixed
+
+- 项目分组重绑终于能落盘。1.236.1 让启动迁移无条件重绑，但内存里那份多半只是目录骨架（无消息），把它整份存盘会被 `wouldTruncateStoredTranscript` 防截断守卫拒绝——于是内存显示归位、磁盘依旧未绑定，下次会话materialize 又跳回路径分组，重复项目组反复复活。新增 `AgentSessionStore.updateStoredSessionMetadata(id:mutate:)`：先materialize完整会话再改元数据落盘，重绑与 `project:<uuid>` 路径修复都改走这条路，正文一字不丢。
+- some.im 昵称与头像长时间不显示时不再无从查起。credits 走长期 api_key、profile 走 7 天客户会话，后者失效时前者照常刷新，界面就静默退化成显示邮箱；原先 `try?` 把错误整个吞掉，日志里连一行痕迹都没有。现在 profile 拉取失败会打一条明确日志（保留上次已知昵称/头像不被清空），下次卡住可直接定位。
+
+### Tests
+
+- 新增落盘回归：骨架会话重绑后磁盘上的 `projectID` 必须更新且原有正文完整保留（旧实现此用例失败）。
+
+### Meta
+
+- Bugfix 版本从 **1.236.1** 递增为 **1.236.2**，内部构建号 **311 → 312**，Help 与 Computer Use Helper 构建号 **227 → 228**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.236.1 - 2026-08-09
 

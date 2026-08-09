@@ -155,7 +155,13 @@ extension AppState {
                 runtime.session.projectID = resolved
                 persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
             } else {
-                AgentSessionStore.save(agentSessions[index])
+                // The in-memory copy here is usually a metadata skeleton;
+                // saving it verbatim is refused by the store's
+                // anti-truncation guard, so the binding never reached disk
+                // and re-materialized sessions hopped back to path groups.
+                AgentSessionStore.updateStoredSessionMetadata(id: session.id) {
+                    $0.projectID = resolved
+                }
             }
         }
 
@@ -197,8 +203,10 @@ extension AppState {
 
             agentSessions[index].workspaceRootPath = folder
             agentSessions[index].workspaceLocation = folder.map { .local(path: $0) }
-            if let sidebarRoot = agentSessions[index].sidebarWorkspaceRootPath,
-               AgentWorkspacePathRepairPlan.leakedProjectID(in: sidebarRoot) != nil {
+            let repairSidebarRoot = agentSessions[index].sidebarWorkspaceRootPath.map {
+                AgentWorkspacePathRepairPlan.leakedProjectID(in: $0) != nil
+            } ?? false
+            if repairSidebarRoot {
                 agentSessions[index].sidebarWorkspaceRootPath = folder
             }
             repaired += 1
@@ -207,7 +215,16 @@ extension AppState {
                 runtime.session = agentSessions[index]
                 persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
             } else {
-                AgentSessionStore.save(agentSessions[index])
+                // Same skeleton-save trap as rebinding: write the repair
+                // through the store so the full transcript is materialized
+                // and the anti-truncation guard lets it land.
+                AgentSessionStore.updateStoredSessionMetadata(id: session.id) {
+                    $0.workspaceRootPath = folder
+                    $0.workspaceLocation = folder.map { .local(path: $0) }
+                    if repairSidebarRoot {
+                        $0.sidebarWorkspaceRootPath = folder
+                    }
+                }
             }
         }
 
