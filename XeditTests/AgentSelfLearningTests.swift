@@ -1138,6 +1138,122 @@ struct AgentSelfLearningTests {
         #expect(AgentLearningActionPresentation.copyText(for: event).contains(L10n.Transcript.learningRelatedRecall("").trimmingCharacters(in: .whitespaces)))
     }
 
+    // MARK: - 1.238.1: host prompt scaffolding must not leak into learning
+
+    /// 实录回归:用户只说 "hello",但消息挂着 per-turn 隐藏 host 指令
+    /// (modelContext),其中 "never ask the user to confirm it" /
+    /// "Prefer reversible repairs" 恰好命中 candidate marker 词。学习管线
+    /// 若读 `modelContent`(= content + modelContext)就会把产品自己的
+    /// 提示词拍成「记忆建议」——1.238.0 实测 "hello" 一句话弹出 2 条。
+    private static let hostScaffoldingContext = """
+    ## Turn context
+    On each new user input, consider whether this title still describes the current task. \
+    If it is stale or too generic, call suggest_session_title, then call rename_session. \
+    The bounded local rename auto-applies without user approval, so never ask the user to confirm it.
+    Once execution starts, continue as an unattended run. \
+    Prefer reversible repairs and preserve unrelated changes.
+    """
+
+    @Test
+    func operatorAuthoredContentExcludesHiddenHostContext() {
+        let message = AgentMessage(
+            role: .user,
+            content: "hello",
+            textAttachments: [AgentTextAttachment(content: "pasted spec text")],
+            modelContext: Self.hostScaffoldingContext
+        )
+        let authored = message.operatorAuthoredContent
+        // 用户敲的字和粘贴附件都在;host 注入一个字都不许出现。
+        #expect(authored.contains("hello"))
+        #expect(authored.contains("pasted spec text"))
+        #expect(!authored.contains("never ask the user"))
+        #expect(!authored.contains("reversible repairs"))
+        // 无附件时退化为 content 本身。
+        let bare = AgentMessage(role: .user, content: "hello", modelContext: Self.hostScaffoldingContext)
+        #expect(bare.operatorAuthoredContent == "hello")
+        // 对照:modelContent 确实携带注入文本(这是喂 provider 的正确行为,
+        // 只是学习管线不许读它)。
+        #expect(bare.modelContent.contains("never ask the user"))
+    }
+
+    @Test
+    func memoryCandidatesIgnoreHostScaffoldingOnGreeting() {
+        let message = AgentMessage(
+            role: .user,
+            content: "hello",
+            modelContext: Self.hostScaffoldingContext
+        )
+        // 学习管线的输入口径:operatorAuthoredContent。"hello" 挖不出任何候选。
+        let candidates = AgentMemoryEngine.candidates(
+            fromUser: message.operatorAuthoredContent,
+            rootDirectory: nil
+        )
+        #expect(candidates.isEmpty)
+    }
+
+    @Test
+    func auditTurnIgnoresHostScaffoldingOnGreeting() {
+        let user = AgentMessage(
+            role: .user,
+            content: "hello",
+            modelContext: Self.hostScaffoldingContext
+        )
+        let assistant = AgentMessage(
+            role: .assistant,
+            content: "你好!当前没有打开任何文件夹。"
+        )
+        let runtime = AgentRuntime(session: AgentSession(messages: [user, assistant]))
+        // 问候语不含任何持久化意图;host 注入不许把它顶成学习事件。
+        #expect(AgentSelfLearning.auditTurn(for: runtime, workspaceURL: nil) == nil)
+        let state = AgentMemoryState(settings: .default, memories: [])
+        let events = AgentSelfLearning.captureAutomaticMCPCapabilityGap(
+            for: runtime,
+            memoryState: state,
+            workspaceURL: nil
+        )
+        #expect(events.isEmpty)
+        #expect(state.memories.isEmpty)
+    }
+
+    // MARK: - 1.238.1: chip 计数与 popover 逐条显示一致
+
+    @Test
+    func suggestionItemCountExpandsMemoryDrafts() {
+        let draft = AgentMemoryDraft(
+            content: "以后统一用 yarn 跑测试",
+            scopeRaw: AgentMemoryScope.global.rawValue,
+            lifetimeRaw: AgentMemoryLifetime.longTerm.rawValue,
+            rootDirectoryPath: nil
+        )
+        let memoryEvent = AgentLearningEvent(
+            kind: .memory,
+            status: .suggested,
+            title: "Suggested 2 memories",
+            detail: "…",
+            memoryDrafts: [draft, AgentMemoryDraft(
+                content: "默认语言是简体中文",
+                scopeRaw: AgentMemoryScope.global.rawValue,
+                lifetimeRaw: AgentMemoryLifetime.longTerm.rawValue,
+                rootDirectoryPath: nil
+            )]
+        )
+        let mcpEvent = AgentLearningEvent(
+            kind: .mcpSuggestion,
+            status: .suggested,
+            title: "MCP discovery",
+            detail: "…"
+        )
+        // 1 个 memory 事件挂 2 条 draft + 1 个 MCP 事件 = 3 条建议
+        // (与 popover 逐条渲染的数量一致,不再是事件数 2)。
+        #expect(AgentSelfLearning.suggestionItemCount([memoryEvent, mcpEvent]) == 3)
+        // Approve 落盘后 drafts 清空,事件本身仍算 1 条(「已保存」条目)。
+        var saved = memoryEvent
+        saved.status = .saved
+        saved.memoryDrafts = nil
+        #expect(AgentSelfLearning.suggestionItemCount([saved]) == 1)
+        #expect(AgentSelfLearning.suggestionItemCount([]) == 0)
+    }
+
     private func temporarySkillRoot() throws -> URL {
         let container = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep-self-learning-\(UUID().uuidString)")

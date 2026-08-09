@@ -716,6 +716,23 @@ extension AgentMessage {
         role == .user && !isHostInstruction
     }
 
+    /// The text the operator actually authored this turn: visible content
+    /// plus pasted-text attachments, WITHOUT the hidden per-turn host
+    /// context (`modelContext`). Turn-end learning/audit must mine this,
+    /// never `modelContent` — the wire encoding appends harness guidance,
+    /// and mining it stores prompt scaffolding as if the human said it
+    /// (a bare "hello" turn once suggested two "memories" quoting the
+    /// session-title and unattended-run guidance verbatim).
+    nonisolated var operatorAuthoredContent: String {
+        guard !textAttachments.isEmpty else { return content }
+        var blocks: [String] = []
+        if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            blocks.append(content)
+        }
+        blocks.append(contentsOf: textAttachments.map(\.modelBlock))
+        return blocks.joined(separator: "\n\n")
+    }
+
     /// Content as sent to providers. UI renderers use `content` plus
     /// compact attachment chips; wire encoding appends full pasted text and
     /// the persisted hidden host context so the model receives both while the

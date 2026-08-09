@@ -423,10 +423,14 @@ enum AgentSelfLearning {
     ) -> AgentSelfLearningAudit? {
         // isOperatorInput: hidden host carriers are `.user` role; feeding
         // their turn-context reminder into learning would store host prompt
-        // scaffolding as if the human said it.
+        // scaffolding as if the human said it. The same rule applies to the
+        // `modelContext` field riding on the real user message — read
+        // `operatorAuthoredContent`, never `modelContent`, or the per-turn
+        // host guidance leaks into every downstream matcher below.
         guard let latestUser = runtime.messages.last(where: { $0.isOperatorInput }) else {
             return nil
         }
+        let latestUserText = latestUser.operatorAuthoredContent
         let recentAssistantText = runtime.messages
             .reversed()
             .filter { $0.role == .assistant && $0.createdAt >= latestUser.createdAt }
@@ -434,7 +438,7 @@ enum AgentSelfLearning {
             .map(\.modelContent)
             .reversed()
             .joined(separator: "\n\n")
-        let evidenceText = [latestUser.modelContent, recentAssistantText]
+        let evidenceText = [latestUserText, recentAssistantText]
             .joined(separator: "\n\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let relevantAssistantIDs = Set(
@@ -448,17 +452,17 @@ enum AgentSelfLearning {
         // 框架规则类候选只看用户原话：assistant 措辞里"建议/以后/自动"
         // 这类词天天出现，拿混合证据喂关键词匹配会让每个回合都误产
         // 学习事件（1.195.0-rc11 实测），所以强意图闸只对用户文本生效。
-        let memoryContents = automaticSelfLearningMemories(fromUserText: latestUser.modelContent)
+        let memoryContents = automaticSelfLearningMemories(fromUserText: latestUserText)
         let mcpSuggestion = automaticMCPSuggestion(
-            userText: latestUser.modelContent,
+            userText: latestUserText,
             evidenceText: evidenceText
         )
         // Only the operator can authorize automatic skill creation. Assistant
         // narration such as "this could become a skill" is evidence for a
         // review candidate, never an instruction to write one.
-        let explicitSkillDirective = containsExplicitSkillCreationSignal(latestUser.modelContent)
+        let explicitSkillDirective = containsExplicitSkillCreationSignal(latestUserText)
         let skillCandidate = automaticSkillCandidate(
-            userText: latestUser.modelContent,
+            userText: latestUserText,
             assistantText: recentAssistantText,
             calls: calls,
             workspaceURL: workspaceURL,
@@ -469,7 +473,7 @@ enum AgentSelfLearning {
             return nil
         }
         return AgentSelfLearningAudit(
-            latestUserText: latestUser.modelContent,
+            latestUserText: latestUserText,
             evidenceText: evidenceText,
             memoryContents: memoryContents,
             mcpSuggestion: mcpSuggestion,
@@ -1005,6 +1009,16 @@ enum AgentSelfLearning {
         "integration", "mcp", "connector", "tool", "access", "plugin",
         "集成", "连接器", "插件", "工具", "访问"
     ]
+
+    /// 用户视角的「建议条数」：memory 事件按待审 drafts 展开（popover 里
+    /// 逐条显示、Approve 逐条落盘），其余事件各计 1。chip / rail 的数字
+    /// 必须与 popover 内实际可见的条目一致 —— 此前 chip 数事件、popover
+    /// 展 drafts,一个事件挂两条记忆就出现「说 1 条点开是 2 条」。
+    nonisolated static func suggestionItemCount(_ events: [AgentLearningEvent]) -> Int {
+        events.reduce(0) { total, event in
+            total + max(1, event.pendingMemoryDrafts.count)
+        }
+    }
 
     /// 会话内去重：同一条建议（同 kind + 同标题 + 同内容）在一个会话里
     /// 只出现一次。此前每个回合末的自动扫描都可能重复产出同一条 MCP
