@@ -803,6 +803,14 @@ extension AppState {
             // "what's on screen right now".
             let promptProfile = AgentSystemPromptProfile.automatic(for: configuration)
             let activeExperts = runtime.activeExperts
+            // Accessibility is granted to the ComputerUseHelper process, so
+            // the sticky bridge marker (set the first time the helper
+            // reports the grant) is the truthful cheap signal; before that,
+            // the protocol text would be dead weight on every request.
+            let promptCapabilities = AgentPromptCapabilities(
+                activeExperts: activeExperts,
+                computerUseGranted: AgentComputerUseBridge.accessibilityEverGranted
+            )
             var assembledPrompt = AgentContextBuilder.systemPrompt(
                 rootDirectory: workspaceURL,
                 openedFileURL: openedFileURL,
@@ -820,7 +828,8 @@ extension AppState {
                 currentSessionTitleIsLocked: runtime.session.titleIsUserSet,
                 workspaceSessions: workspaceSessionSnapshots(for: runtime),
                 activeExperts: activeExperts,
-                promptProfile: promptProfile
+                promptProfile: promptProfile,
+                capabilities: promptCapabilities
             )
             let projectWorkspaceRoots = agentWorkspaceRoots(for: runtime.session)
             if projectWorkspaceRoots.count > 1 {

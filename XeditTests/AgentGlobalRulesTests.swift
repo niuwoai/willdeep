@@ -186,13 +186,21 @@ struct AgentGlobalRulesTests {
         #expect(prompt.contains("bounded automatic follow-up snapshot"))
         #expect(prompt.contains("never call the terminal unstable"))
         #expect(prompt.contains("avoid creating or overwriting files with heredoc"))
-        #expect(prompt.contains("WillDeep's visible side-panel terminal supports rz/sz ZMODEM transfers"))
-        #expect(prompt.contains("zmodem_upload_paths"))
-        #expect(prompt.contains("zmodem_download_directory"))
-        #expect(prompt.contains("command -v rz sz"))
-        #expect(prompt.contains("install lrzsz"))
         #expect(prompt.contains("small auditable heredoc or patch-style shell fallback is acceptable"))
-        #expect(prompt.contains("remote host cannot install lrzsz"))
+        // ZMODEM 细则外迁到 bundled skill,提示词只留强制指针 —— 细节改
+        // 在 SKILL.md 里断言,提示词契约只保证模型会先去读它。
+        #expect(prompt.contains("read_skill \"zmodem-terminal-transfers\""))
+        #expect(prompt.contains("Do not improvise the flow from memory"))
+        let skillURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("BundledSkills/zmodem-terminal-transfers/SKILL.md")
+        let skill = (try? String(contentsOf: skillURL, encoding: .utf8)) ?? ""
+        #expect(skill.contains("zmodem_upload_paths"))
+        #expect(skill.contains("zmodem_download_directory"))
+        #expect(skill.contains("command -v rz sz"))
+        #expect(skill.contains("install lrzsz"))
+        #expect(skill.contains("scp/rsync"))
     }
 
     @Test

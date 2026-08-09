@@ -156,7 +156,13 @@ extension AppState {
             approvalMode: agentApprovalMode,
             currentPlan: agentCurrentPlan,
             currentGoal: agentCurrentGoal,
-            promptProfile: promptProfile
+            promptProfile: promptProfile,
+            // Mirror the real request assembly so the estimate matches what
+            // the loop will actually send.
+            capabilities: AgentPromptCapabilities(
+                activeExperts: agentActiveExperts,
+                computerUseGranted: AgentComputerUseBridge.accessibilityEverGranted
+            )
         )
         let settings = AgentMemorySettingsStore.loadSettings()
         let memoryResults = AgentMemoryEngine.retrieve(

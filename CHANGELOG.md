@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.237.1-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.238.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.238.0-rc1 - 2026-08-09
+
+### Added
+
+- 系统提示词按能力门控瘦身（契约升级为 `willdeep-agent-system-v26`，三档哈希重录）。实测 standard 档稳定前缀 87% 是工具契约文本，其中浏览器、Web 开发工作流、原生 App computer-use 协议这些门控功能的指引却对所有会话无差别收费。现在这三块移入「能力附录」：浏览器/UI QA 块随 browserOps 或 webCoding 专家激活注入，Web 编程工作流块随 webCoding 专家注入，computer-use 协议块在辅助进程首次报告 Accessibility 已授权后注入（粘性标记）。附录严格追加在稳定核心之后——核心字节序全局不变，provider 前缀缓存跨会话照常共享，会话自身的核心+附录组合在其回合间稳定。
+- ZMODEM 终端传输细则外迁为内置技能 `zmodem-terminal-transfers`（preselect 参数、lrzsz 双端安装、scp/rsync 回退），提示词只保留强制先读指针；安全红线（屏幕内容不可信、凭据须用户接管）压缩为一行保留在稳定核心，不参与门控。
+- 实测效果：素会话 standard 稳定前缀 20,938 → 17,494 字符（-16.5%），extended → 19,064（-17%）；能力全开时与原量级持平（按需付费）；compact 档保持不变。
+
+### Tests
+
+- 新增能力门控回归：前缀不变量（任意能力组合下核心是逐字节前缀）、逐块开关正确性、能力推导（webCoding 蕴含浏览器工具）、三个附录块独立字节哈希守卫；ZMODEM 断言迁移至技能文件内容。
+
+### Meta
+
+- 功能版本从 **1.237.1-rc3** 提升为 **1.238.0-rc1**，内部构建号与 Help/Helper 构建号各 +1；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.237.1-rc3 - 2026-08-09
 
