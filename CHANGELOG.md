@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.237.1-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.237.1-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.237.1-rc3 - 2026-08-09
+
+### Fixed
+
+- SwiftUI 高频重建热点收窄第二批（性能扫描定位的五处，均为「每次 body 全量重算 / 常驻定时器整块驱动」模式）：
+  - Agent 会话 transcript 的 `visibleMessages` 每次 body 都重跑工具回执采集 + 全量 compactMap（左缘 minimap overlay 还会在同一 pass 里再跑一遍）——照 minimapCache 既有指纹缓存范式加 `AgentTranscriptVisibleMessagesCache`，指纹覆盖全部展示相关字段（role、content 长度、tool call id/status、本地事件标记等），输入不变时直接复用；
+  - 侧栏 Widget 面板每次 body 对全部运行时消息 `reversed().compactMap(\.widget)`——按运行时 id + 消息数 + 末条 id 指纹缓存消息侧提取，registry 侧保持活读；
+  - 底部 Goal 卡整卡包在 1 秒 TimelineView 里，每秒重建图标/状态/摘要/进度/按钮——照 `AgentBackgroundTaskDurationLabel` 范式收窄为仅秒表文本子 view；
+  - Dev Server 面板 1.5 秒 `Timer.publish` 无条件驱动整面板重建（空闲侧栏永久空转）——改为仅在存在存活 dev/tail 任务时订阅心跳，任务增删与状态翻转本就由 `@Published jobs` 桥接触发；
+  - 会话侧边栏一次 body 跑两遍 `visibleSessions` 全量过滤（分组列表与置顶区各一遍）——收敛为 body 开头算一次、两处共用同一份快照。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.237.1-rc2** 递增为 **1.237.1-rc3**（rc2 被并行会话的委派图/圆桌热点清扫占用），内部构建号 **314 → 315**，Help 与 Computer Use Helper 构建号 **230 → 231**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.237.1-rc2 - 2026-08-09
 

@@ -188,6 +188,32 @@ nonisolated enum AgentStreamingMessageSelection {
     }
 }
 
+/// Memoizes the filtered transcript (`visibleMessages`) across `body`
+/// evaluations — same pattern and reasoning as `AgentTranscriptMinimapCache`:
+/// the receipt harvest + full `compactMap` used to rerun on every `body`
+/// pass (and the minimap overlay ran it a second time per pass).
+///
+/// Deliberately a reference type parked in `@State`: recomputing during a
+/// `body` evaluation must NOT invalidate the view, or the cache would feed
+/// the very re-render loop it exists to damp.
+final class AgentTranscriptVisibleMessagesCache {
+    private var fingerprint: Int?
+    private var cached: [AgentMessage] = []
+
+    /// Returns the memoized messages when `fingerprint` is unchanged,
+    /// otherwise runs `rebuild` and stores its result.
+    func messages(
+        fingerprint incoming: Int,
+        rebuild: () -> [AgentMessage]
+    ) -> [AgentMessage] {
+        if incoming == fingerprint { return cached }
+        let fresh = rebuild()
+        fingerprint = incoming
+        cached = fresh
+        return fresh
+    }
+}
+
 struct AgentChatTranscript: View {
     @EnvironmentObject var appState: AppState
     var showsEmptyState = true
@@ -202,6 +228,7 @@ struct AgentChatTranscript: View {
     @State private var minimapScrollToken = 0
     @State private var minimapScrollUserMessageID: UUID?
     @State private var minimapCache = AgentTranscriptMinimapCache()
+    @State private var visibleMessagesCache = AgentTranscriptVisibleMessagesCache()
     @State private var isOlderHistoryPreviewExpanded = false
     @State private var isConversationSearchPresented = false
     @State private var conversationSearchQuery = ""
@@ -736,6 +763,43 @@ struct AgentChatTranscript: View {
     }
 
     private var visibleMessages: [AgentMessage] {
+        visibleMessagesCache.messages(fingerprint: visibleMessagesFingerprint) {
+            rebuildVisibleMessages()
+        }
+    }
+
+    /// Identity-only digest of everything `rebuildVisibleMessages` reads —
+    /// the `minimapInputFingerprint` trick applied one level down. Every
+    /// field the filter/projection chain consults is represented:
+    /// role/id/isHostInstruction gate the filters, `content.count` +
+    /// `images.count` + `toolCalls.count` drive the placeholder checks,
+    /// `toolCallID`/`toolCallStatus` feed the receipt harvest, and each
+    /// tool call's id+status decides `isWorkingToolCall`. `content.count`
+    /// rather than the bytes for the same reason as the minimap: hashing
+    /// multi-KB content per streaming token would just move the cost.
+    private var visibleMessagesFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(appState.agentInteractionMode)
+        hasher.combine(appState.isAgentResponding)
+        for call in appState.agentToolCalls {
+            hasher.combine(call.id)
+            hasher.combine(call.status)
+        }
+        for message in appState.agentMessages {
+            hasher.combine(message.id)
+            hasher.combine(message.role.rawValue)
+            hasher.combine(message.content.count)
+            hasher.combine(message.images.count)
+            hasher.combine(message.toolCalls.count)
+            hasher.combine(message.toolCallID)
+            hasher.combine(message.toolCallStatus)
+            hasher.combine(message.isHostInstruction)
+            hasher.combine(message.isLocalTranscriptEvent)
+        }
+        return hasher.finalize()
+    }
+
+    private func rebuildVisibleMessages() -> [AgentMessage] {
         // The `.tool` result messages get filtered out of the transcript
         // below, but they carry the persisted `toolCallStatus` (成/败/拒)
         // for each call. Harvest them first, keyed by the tool_call id, so

@@ -373,83 +373,77 @@ private struct AgentComposerGoalCard: View {
     @State private var showingEditor = false
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.0)) { context in
-            HStack(spacing: 8) {
-                Image(systemName: "target")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
+        HStack(spacing: 8) {
+            Image(systemName: "target")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
 
-                Text(statusPrefix)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+            Text(statusPrefix)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
 
-                Text(summaryText)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                if let startedAt = appState.agentTurnStartedAt, appState.isAgentResponding {
-                    Text("· \(Self.formatElapsed(context.date.timeIntervalSince(startedAt)))")
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
-
-                if !goal.checklist.isEmpty {
-                    Text(progressText)
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                }
-
-                Button {
-                    showingEditor = true
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 18, height: 18)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
+            Text(summaryText)
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
-                .help(L10n.GoalCard.editButtonHelp)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            if let startedAt = appState.agentTurnStartedAt, appState.isAgentResponding {
+                AgentComposerGoalElapsedLabel(startedAt: startedAt)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 3)
-            .frame(height: 24)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.08))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.accentColor.opacity(0.26), lineWidth: 1)
-            )
-            .contentShape(Rectangle())
-            .help(helpText)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityLabel)
-            .onTapGesture {
+
+            Spacer(minLength: 0)
+
+            if !goal.checklist.isEmpty {
+                Text(progressText)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+            }
+
+            Button {
                 showingEditor = true
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
             }
-            .sheet(isPresented: $showingEditor) {
-                AgentGoalEditorSheet(
-                    initialStatement: goal.statement,
-                    initialItems: goal.checklist.map(\.text),
-                    onSave: { statement, items in
-                        appState.setAgentGoal(statement: statement, items: items)
-                        showingEditor = false
-                    },
-                    onCancel: { showingEditor = false }
-                )
-            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .foregroundStyle(.secondary)
+            .help(L10n.GoalCard.editButtonHelp)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 3)
+        .frame(height: 24)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.accentColor.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.accentColor.opacity(0.26), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .help(helpText)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .onTapGesture {
+            showingEditor = true
+        }
+        .sheet(isPresented: $showingEditor) {
+            AgentGoalEditorSheet(
+                initialStatement: goal.statement,
+                initialItems: goal.checklist.map(\.text),
+                onSave: { statement, items in
+                    appState.setAgentGoal(statement: statement, items: items)
+                    showingEditor = false
+                },
+                onCancel: { showingEditor = false }
+            )
         }
     }
 
@@ -476,6 +470,25 @@ private struct AgentComposerGoalCard: View {
 
     private var statusPrefix: String {
         appState.isAgentResponding ? L10n.GoalStatusBar.runningPrefix : L10n.GoalStatusBar.pinnedPrefix
+    }
+}
+
+/// Elapsed-time text that owns its own per-second tick — the
+/// `AgentBackgroundTaskDurationLabel` pattern. The goal card used to wrap
+/// its entire body in a 1s `TimelineView`, so every tick rebuilt the icon,
+/// status, summary, progress badge and edit button; scoping the timeline
+/// here keeps the per-second invalidation to this label alone.
+private struct AgentComposerGoalElapsedLabel: View {
+    let startedAt: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: startedAt, by: 1)) { context in
+            Text("· \(Self.formatElapsed(context.date.timeIntervalSince(startedAt)))")
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+        }
     }
 
     private static func formatElapsed(_ seconds: TimeInterval) -> String {
