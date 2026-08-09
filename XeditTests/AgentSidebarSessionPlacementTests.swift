@@ -220,6 +220,42 @@ struct AgentNewSessionProjectBindingTests {
     }
 
     @MainActor
+    @Test("rebinding a skeleton session reaches disk instead of being refused")
+    func rebindPersistsThroughTruncationGuard() throws {
+        let appState = AppState()
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-persist-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        // A real session with a transcript, saved unbound — this is what a
+        // pre-1.235.0-rc4 install has on disk.
+        var stored = AgentSession(title: "history", workspaceRootPath: folder.path)
+        stored.messages = [AgentMessage(role: .user, content: "hello")]
+        AgentSessionStore.save(stored)
+
+        let project = try #require(
+            appState.createAgentProject(displayName: "persist", folderPaths: [folder.path])
+        )
+
+        // Memory holds only the metadata skeleton (no messages), exactly as
+        // the launch catalog produces. Saving that skeleton verbatim is
+        // refused by the anti-truncation guard, so the rebind used to update
+        // memory only and the session snapped back on next materialization.
+        appState.agentSessions.append(
+            AgentSession(id: stored.id, title: "history", workspaceRootPath: folder.path)
+        )
+        appState.rebindAgentSessionsToProjects()
+
+        #expect(appState.agentSessions.first(where: { $0.id == stored.id })?.projectID == project.id)
+
+        let reloaded = try #require(AgentSessionStore.load(id: stored.id))
+        #expect(reloaded.projectID == project.id)
+        // The transcript must survive the metadata write.
+        #expect(reloaded.messages.count == 1)
+    }
+
+    @MainActor
     @Test("a new chat outside every project keeps a path group")
     func newSessionOutsideProjectsStaysPathKeyed() throws {
         let appState = AppState()

@@ -1265,11 +1265,22 @@ enum SomeIMClient {
         let data = try await send(request, session: session)
         let decoded = try JSONDecoder().decode(AccountBalanceData.self, from: data)
         let previous = SomeIMIntegrationStore.loadAccount()
-        let profile = try? await fetchCustomerProfile(
-            settings: settings,
-            sessionToken: SomeIMIntegrationStore.loadSessionToken(),
-            session: session
-        )
+        // Credits come from the long-lived api_key and keep working even when
+        // the 7-day customer session is dead, so a failure here degrades the
+        // footer to the raw email with no other symptom. `try?` alone made
+        // that state undiagnosable — log it (redacted) so a stuck nickname or
+        // avatar can be traced instead of guessed at.
+        var profile: (account: AccountData, tenantID: String?)?
+        do {
+            profile = try await fetchCustomerProfile(
+                settings: settings,
+                sessionToken: SomeIMIntegrationStore.loadSessionToken(),
+                session: session
+            )
+        } catch {
+            profile = nil
+            print("SomeIMClient: customer profile refresh failed (nickname/avatar keep the last known value): \(error.localizedDescription)")
+        }
         let balance = decoded.balance.trimmingCharacters(in: .whitespacesAndNewlines)
         let account = SomeIMAccount(
             email: profile?.account.email?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? previous?.email ?? "",
