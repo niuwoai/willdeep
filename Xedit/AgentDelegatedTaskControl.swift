@@ -330,6 +330,8 @@ nonisolated enum AgentDelegatedTaskControl {
         4. Before reporting completion, review the actual diff against every acceptance criterion.
         5. A later fresh read-only reviewer and WillDeep will independently verify the work. Do not mark an unverified criterion as passed.
         6. Keep commits, pushes, releases, deployments, external messages, production access, and external database writes outside this task unless the contract explicitly permits them.
+
+        Report style: plain prose. No emoji, no decorative bold, no headings in short reports — your visible output lands in the same transcript as the host agent and follows the same restraint rules.
         """
     }
 

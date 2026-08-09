@@ -432,10 +432,14 @@ struct AgentLearningReviewSettingsSection: View {
         }
     }
 
-    private func formatDate(_ date: Date) -> String {
+    private static let rowDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    private func formatDate(_ date: Date) -> String {
+        Self.rowDateFormatter.string(from: date)
     }
 }
 

@@ -862,14 +862,11 @@ struct PreviewPane: View {
     let language: Language?
     let onClose: () -> Void
 
-    private var blocks: [MarkdownPreviewBlock] {
-        switch language {
-        case .html:
-            return HTMLPreviewParser.blocks(from: text)
-        default:
-            return MarkdownPreviewParser.blocks(from: text)
-        }
-    }
+    /// Parsed off the render path (same pattern as AgentSidePanel's
+    /// preview): `text` is the live editor buffer, so an inline computed
+    /// property re-parsed the whole document on every keystroke — with the
+    /// preview pane open, typing lag scaled with document length.
+    @State private var parsedBlocks: [MarkdownPreviewBlock] = []
 
     static func supports(_ language: Language?) -> Bool {
         language == .markdown || language == .html
@@ -898,7 +895,7 @@ struct PreviewPane: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                    ForEach(Array(parsedBlocks.enumerated()), id: \.offset) { _, block in
                         MarkdownPreviewBlockView(block: block)
                     }
                 }
@@ -910,6 +907,31 @@ struct PreviewPane: View {
         .overlay(alignment: .leading) {
             Divider()
         }
+        // `.task(id:)` cancels the in-flight parse when the next keystroke
+        // arrives, so bursts of typing collapse into one parse of the
+        // latest text instead of one per keystroke.
+        .task(id: parseInput) {
+            let input = parseInput
+            let parsed = await Task.detached(priority: .userInitiated) { () -> [MarkdownPreviewBlock] in
+                switch input.language {
+                case .html:
+                    return HTMLPreviewParser.blocks(from: input.text)
+                default:
+                    return MarkdownPreviewParser.blocks(from: input.text)
+                }
+            }.value
+            guard !Task.isCancelled else { return }
+            parsedBlocks = parsed
+        }
+    }
+
+    private struct ParseInput: Equatable, Sendable {
+        var text: String
+        var language: Language?
+    }
+
+    private var parseInput: ParseInput {
+        ParseInput(text: text, language: language)
     }
 }
 

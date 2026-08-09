@@ -1,7 +1,27 @@
 # Changelog
 
-> 当前文件保留最新版本（1.237.0 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.237.1-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.237.1-rc1 - 2026-08-09
+
+### Fixed
+
+- 全仓热路径性能清扫（sample + 静态扫描定位）：
+  - 改动文件面板每行最多 4 次同步 `stat`、列表非懒加载，一次渲染数百次系统调用——`agentChangedFileURL` 结果按（仓库根, 相对路径）memoize，worktree 快照刷新时整体失效；
+  - 任务监督栏「产物」区每次 body 对全部 artifact 逐个 `fileExists`，流式回复期间约 10Hz 重跑——改 `.task(id: 指纹)` 异步探测 + 缓存；
+  - 技能市场每行每渲染 stat+整读已装 SKILL.md 判定安装态——改目录加载/装卸后重建的状态缓存；同一 body 对过滤结果求值三次收敛为一次；技能搜索逐键对约 300 个技能重建多语言检索文本——按 identifier 缓存；
+  - 编辑器 Markdown/HTML 预览逐键全文重解析（打字延迟随文档长度线性放大）——照 AgentSidePanel 既有范式改 `.task(id:)` 异步解析，键击风暴合并为一次；
+  - 监督栏状态行的 1 秒 TimelineView 从整行收窄到仅秒表文本（等待审批的长挂起期不再每秒重建整行）；最近会话边栏轨一次 body 双份全量过滤收敛为一次；两个设置页 `formatDate` 每行新建 DateFormatter 改 static 缓存。
+- ACP 执行器丢尾竞态：进程退出通知可能先于 stdout 排空到达，旧实现在退出回调里抢读一次就强制收流，满载下把已写完的最终响应判成 `processExited`（全量测试中偶现的 symlink 守卫用例假红即此）。改为以 stdout EOF 为唯一正常终局（EOF 分支顺带摘除 handler 防空转），进程退出仅保留 2 秒宽限兜底应对泄漏子进程持有写端的病态场景。压测同用例连续 8 轮全绿（修前满载偶挂）。
+
+### Changed
+
+- 委托外部 CLI 的任务契约补充报告排版约束（无 emoji、无装饰加粗、短报告不加标题），与 1.237.0 的宿主 Markdown 克制契约对齐——外部执行器的可见产出落在同一 transcript。
+
+### Meta
+
+- Bugfix 版本从 **1.237.0** 递增为 **1.237.1-rc1**，内部构建号 **313 → 314**，Help 与 Computer Use Helper 构建号 **229 → 230**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.237.0 - 2026-08-09
 
