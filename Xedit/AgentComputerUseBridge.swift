@@ -39,6 +39,21 @@ actor AgentComputerUseBridge {
     private var validatedGeneration: UUID?
     private var pending: [String: PendingRequest] = [:]
 
+    /// Sticky "computer-use has worked at least once" marker. Accessibility
+    /// is granted to the helper process, so the main app cannot probe TCC
+    /// directly and cheaply; the system prompt's capability gating reads
+    /// this flag instead. Once true it stays true — revocation merely means
+    /// the appended guidance goes unused until the user re-grants.
+    private static let accessibilityEverGrantedKey = "com.willdeep.computerUse.accessibilityEverGranted"
+
+    nonisolated static var accessibilityEverGranted: Bool {
+        UserDefaults.standard.bool(forKey: accessibilityEverGrantedKey)
+    }
+
+    nonisolated static func recordAccessibilityGranted() {
+        UserDefaults.standard.set(true, forKey: accessibilityEverGrantedKey)
+    }
+
     /// Invoke one Computer Use helper action.
     ///
     /// `controlLeaseID` is required by protocol v6 for control-session
@@ -61,6 +76,9 @@ actor AgentComputerUseBridge {
                 generation: currentGeneration
             )
             try validateProtocolVersion(in: result, generation: currentGeneration)
+            if (result["accessibility_granted"] as? Bool) == true {
+                Self.recordAccessibilityGranted()
+            }
             return result
         }
 

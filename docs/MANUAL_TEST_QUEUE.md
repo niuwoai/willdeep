@@ -1,6 +1,6 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-09（1.237.1-rc3）
+> Last updated: 2026-08-09（1.238.0-rc1）
 
 CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态机的特性
 都得人坐到机器前面点。这个文件按版本累积着每次发版后我提醒你
@@ -13,6 +13,14 @@ CI 只能保编译/单测过。一系列改 UI、改窗口、改 SwiftUI 状态�
 - ❌ = 已测、有 bug（请在行后写 issue link 或一句描述）
 
 ---
+
+## 1.238.0-rc1 — 系统提示词能力门控瘦身
+
+- ⏳ 普通会话（无专家、未用过 computer-use）发一条消息，用请求预估/审计面板看系统提示词：不应包含 computer_use 协议、visual_qa、show_widget 等文本；应有一行安全红线与 zmodem 技能指针。
+- ⏳ 激活 webCoding 专家再发消息：提示词末尾应出现「Capability guidance」附录，含浏览器 QA 与 Web 编程两块；停用后附录消失。
+- ⏳ 用一次 computer-use（授权 Accessibility）后：后续所有会话的提示词应带 computer-use 协议块（粘性标记）。
+- ⏳ 让 Agent 在 SSH 终端里做一次 rz/sz 传输：它应先 read_skill "zmodem-terminal-transfers" 再操作，流程与旧版一致（preselect 参数、lrzsz 检查、回退链）。
+- ⏳ 同一会话连续多轮对话，观察 provider 缓存命中率（审计的 cachedPromptTokens）：不应比 1.237.x 下降。
 
 ## 1.237.1-rc3 — SwiftUI 高频重建热点收窄第二批
 
