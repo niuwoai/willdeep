@@ -499,6 +499,54 @@ extension WillDeepTests {
         #expect(model.uniqueToolCount == 2)
     }
 
+    @Test("longest task duration bills active work, not the session's shelf life")
+    func testLongestTaskDurationCapsIdleGaps() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let cap = AgentUsageStats.taskIdleCapSeconds
+
+        // Reproduces the shape that made the dashboard read 8d3h5m: a busy
+        // conversation interrupted by two multi-day pauses.
+        let interrupted = makeSession(modelID: "gpt-4.1", messages: [
+            userMessage("start", at: start),
+            assistantMessage("ok", usage: 10, at: start.addingTimeInterval(60)),
+            userMessage("resumed three days later", at: start.addingTimeInterval(3 * 86_400)),
+            assistantMessage("ok", usage: 10, at: start.addingTimeInterval(3 * 86_400 + 120)),
+            userMessage("and again", at: start.addingTimeInterval(8 * 86_400)),
+            assistantMessage("ok", usage: 10, at: start.addingTimeInterval(8 * 86_400 + 30))
+        ])
+        let snapshots = [interrupted].map { AgentUsageSessionSnapshot(session: $0) }
+        let model = AgentUsageStats.dashboardModel(for: snapshots, heatmapWeekCount: 2, now: start)
+
+        // 60 + 120 + 30 seconds of real work, plus the two pauses billed at
+        // the cap instead of at three and five days.
+        #expect(abs(model.longestTaskDuration - (210 + 2 * cap)) < 0.001)
+        #expect(model.longestTaskDuration < 86_400)
+    }
+
+    @Test("a gap shorter than the idle cap is billed in full")
+    func testLongestTaskDurationKeepsShortGaps() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let session = makeSession(modelID: "gpt-4.1", messages: [
+            userMessage("hi", at: start),
+            assistantMessage("thinking", usage: 10, at: start.addingTimeInterval(300)),
+            userMessage("more", at: start.addingTimeInterval(600))
+        ])
+        let snapshots = [session].map { AgentUsageSessionSnapshot(session: $0) }
+        let model = AgentUsageStats.dashboardModel(for: snapshots, heatmapWeekCount: 2, now: start)
+
+        #expect(abs(model.longestTaskDuration - 600) < 0.001)
+    }
+
+    @Test("a single-message session has no measurable duration")
+    func testLongestTaskDurationIgnoresSoloMessages() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let session = makeSession(modelID: "gpt-4.1", messages: [userMessage("solo", at: start)])
+        let snapshots = [session].map { AgentUsageSessionSnapshot(session: $0) }
+        let model = AgentUsageStats.dashboardModel(for: snapshots, heatmapWeekCount: 2, now: start)
+
+        #expect(model.longestTaskDuration == 0)
+    }
+
     @Test("dashboardModel on empty snapshots yields zeroed metrics")
     func testDashboardModelEmptyInput() {
         let model = AgentUsageStats.dashboardModel(for: [], heatmapWeekCount: 2)
