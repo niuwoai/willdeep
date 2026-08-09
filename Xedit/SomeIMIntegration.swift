@@ -1146,6 +1146,10 @@ enum SomeIMClient {
         // Browser login can come back without any account block at all; even
         // when present it carries no nickname/avatar. Keep the profile the
         // app already has instead of overwriting it with blanks.
+        //
+        // 资料补拉刻意**不**放在这里：这是个轮询状态检查，塞进第二个网络
+        // 请求会让它每轮都可能打 /customer/me，也逼所有状态解析测试去桩
+        // 一个无关端点。补拉在登录完成点做，见 `hydrateLoginProfile`。
         let account = accountData.account(
             fallbackEmail: "",
             fallbackModel: decoded.default_model?.nonEmpty ?? SomeIMIntegrationSettings.defaultTextModel
@@ -1296,6 +1300,104 @@ enum SomeIMClient {
             creditsUpdatedAtMicros: decoded.balance_updated_at_unix_micros.flatMap(Int64.init)
         )
         return SomeIMIntegrationStore.saveRefreshedAccount(account)
+    }
+
+    /// 登录时补拉资料的时间预算。登录已经等过验证码校验和会话建立，这里
+    /// 再多花的时间是用户直接感知的，所以给得紧；超时不算失败，只是退回
+    /// 「稍后刷新时再出现」。
+    static let loginProfileHydrationBudget: Double = 2.5
+
+    /// 给一个 async 操作套时间预算：先出结果的赢，超时返回 nil 并取消对方。
+    /// 只用于「拿到更好、拿不到也能继续」的锦上添花请求。
+    static func withBudget<T: Sendable>(
+        seconds: Double,
+        operation: @escaping @Sendable () async -> T?
+    ) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask { await operation() }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+
+    /// 登录完成后补齐昵称/头像并落盘，返回可直接展示的账号。
+    ///
+    /// 登录响应本身可能不含 nickname/avatar：服务端在这条路径上只 SELECT
+    /// email（新版 some.im 随登录下发资料，线上旧版不会），于是账号先以邮箱
+    /// 兜底渲染，几秒后 `fetchAccountBalance` 里的 `/customer/me` 才把头像
+    /// 补上 —— 用户看到的就是「登录完先秃一截，头像慢慢冒出来」。
+    ///
+    /// 在登录**完成点**调用，而不是塞进 `checkBrowserLoginStatus`：后者是
+    /// 轮询状态检查，多一个网络请求会让每轮轮询都可能打 `/customer/me`。
+    @discardableResult
+    static func hydrateLoginProfile(
+        for account: SomeIMAccount,
+        settings: SomeIMIntegrationSettings = SomeIMIntegrationStore.loadSettings(),
+        sessionToken: String? = SomeIMIntegrationStore.loadSessionToken(),
+        session: URLSession = AgentNetworkSupport.defaultSession()
+    ) async -> SomeIMAccount {
+        let hydrated = await hydratingLoginProfile(
+            account,
+            settings: settings.normalized,
+            sessionToken: sessionToken,
+            session: session
+        )
+        guard hydrated != account else { return account }
+        SomeIMIntegrationStore.saveAccount(hydrated)
+        return hydrated
+    }
+
+    /// 纯函数版本（不落盘），便于单测直接验证合并与预算行为。
+    ///
+    /// 服务端已经把资料带回来时直接返回，不多打一次请求；补拉失败也只是
+    /// 退回原来的「稍后刷新时再出现」，绝不让登录本身失败。
+    static func hydratingLoginProfile(
+        _ account: SomeIMAccount,
+        settings: SomeIMIntegrationSettings,
+        sessionToken: String?,
+        session: URLSession
+    ) async -> SomeIMAccount {
+        guard account.nickname?.nonEmpty == nil, account.avatarURL?.nonEmpty == nil else {
+            return account
+        }
+        guard let token = sessionToken?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty else {
+            return account
+        }
+        // 硬预算：拿不到就按老路子等下一次余额刷新补，绝不让登录界面卡在
+        // 资料请求上。`/customer/me` 本身 12s 超时，失败时还会再试一次
+        // token 续期 —— 不封顶的话「登录慢半秒」会退化成「登录卡 20 秒」，
+        // 比原来的问题更糟。
+        guard let profile = await withBudget(seconds: loginProfileHydrationBudget, operation: {
+            try? await fetchCustomerProfile(
+                settings: settings,
+                sessionToken: token,
+                session: session
+            )
+        }) else {
+            return account
+        }
+        let nickname = profile.account.nickname?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+        let avatarURL = profile.account.avatar_url?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+        guard nickname != nil || avatarURL != nil else { return account }
+        var merged = account
+        merged.nickname = nickname
+        merged.avatarURL = avatarURL
+        // 邮箱以登录响应为准；`/customer/me` 只在登录没给出邮箱时补位，
+        // 避免资料接口的空值把刚登录的身份洗掉。
+        if merged.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let profileEmail = profile.account.email?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty {
+            merged.email = profileEmail
+        }
+        if merged.tenantID?.nonEmpty == nil {
+            merged.tenantID = profile.tenantID?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+        }
+        merged.profileUpdatedAt = Date()
+        return merged
     }
 
     /// Fetch nickname/avatar, renewing the session token once if it has

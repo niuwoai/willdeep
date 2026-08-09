@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.238.1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.238.2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.238.2 - 2026-08-09
+
+### Fixed
+
+- 登录成功当下就显示昵称和头像，不再"先秃几秒再慢慢冒出来"。登录响应本身不带 `nickname` / `avatar_url`（线上 some.im 在这条路径只 `SELECT email`），资料要等下一次 `fetchAccountBalance` 顺带打 `/customer/me` 才补上。现在登录保存账号前直接补拉一次资料，并给 **2.5 秒硬预算**——`/customer/me` 自身 12s 超时、失败还会再叠一次 token 续期，不封顶的话「登录慢半秒」会退化成「登录卡二十秒」；超时静默退回旧行为（稍后刷新时补上），登录本身绝不受影响。服务端将来随登录下发资料后，这次补拉会被短路跳过，不会多发一次请求。
+- SenseVoice 语音模型迁到自有 CDN：下载源从借用的第三方 endpoint（`cdn.wxside.com`）换成 `https://img.niuwoai.com/models/sensevoice-small/model.onnx`，与 App DMG 同一个发布桶，生命周期自己可控。迁移时校验过完整性（源站 ETag ↔ 本地 MD5 ↔ 上传后回读 SHA256 三方一致，937,615,562 字节）。
+- 语音模型下载进度条走不到头：回退分母 `approximateModelBytes` 写成 `937 * 1024 * 1024`（982,614,016），把十进制 937 MB 当 MiB 算，比真实体积大 4.8%；服务端不给 Content-Length 时进度永远差一截。改为实测精确值 937,615,562。
+
+### Tests
+
+- 新增登录资料补拉回归：预算存在且显著小于 `/customer/me` 的 12s 超时、超时按预算返回不阻塞、预算内结果照常拿到、操作失败返回 nil、登录响应已带资料时跳过补拉、会话 token 缺失/空白时安全跳过且不清空已有资料。
+
+### Meta
+
+- Bugfix 正式版从 **1.238.1** 递增为 **1.238.2**，内部构建号 **318 → 319**，Help 与 Computer Use Helper 构建号 **234 → 235**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.238.1 - 2026-08-09
 

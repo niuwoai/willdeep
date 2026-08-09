@@ -10,7 +10,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.238.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.238.2-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *它不只是坐在编辑器旁边回答问题。它会看现场、做事情、留下证据，也知道什么时候该停下来问你。*
@@ -245,7 +245,7 @@ WillDeep 采用 [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) 模式
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.238.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.238.2-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 *It does not merely answer questions beside an editor. It inspects the work, takes action, leaves evidence, and knows when to stop and ask.*
