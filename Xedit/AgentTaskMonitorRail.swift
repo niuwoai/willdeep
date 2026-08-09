@@ -16,6 +16,13 @@ struct AgentTaskMonitorRail: View {
     @EnvironmentObject var appState: AppState
     var width: CGFloat = 320
 
+    /// Disk-probed artifact rows, refreshed off the main thread whenever the
+    /// artifact ledger changes. The old computed property ran a
+    /// `FileManager.fileExists` per artifact on every body evaluation — and
+    /// this rail re-evaluates on every AppState publish, which is ~10Hz
+    /// while a response streams.
+    @State private var cachedArtifacts: [AgentRailArtifact] = []
+
     var body: some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         ScrollView {
@@ -32,6 +39,13 @@ struct AgentTaskMonitorRail: View {
         }
         .frame(width: width)
         .background(palette.panelFill)
+        .task(id: artifactsFingerprint) {
+            let inputs = artifactProbeInputs
+            let resolved = await Task.detached(priority: .utility) {
+                Self.probeArtifacts(inputs)
+            }.value
+            cachedArtifacts = resolved
+        }
     }
 
     private var monitorSection: some View {
@@ -557,11 +571,46 @@ struct AgentTaskMonitorRail: View {
     }
 
     private var sessionArtifacts: [AgentRailArtifact] {
-        guard let runtime = appState.activeRuntime else { return [] }
+        cachedArtifacts
+    }
+
+    /// Snapshot of everything the disk probe needs, taken on the main actor.
+    struct ArtifactProbeInputs: Sendable {
+        var workspacePath: String?
+        var relativePaths: [String]
+        var absolutePaths: [String]
+    }
+
+    private var artifactProbeInputs: ArtifactProbeInputs {
+        guard let runtime = appState.activeRuntime else {
+            return ArtifactProbeInputs(workspacePath: nil, relativePaths: [], absolutePaths: [])
+        }
+        let mediaTasks = appState.agentMediaTaskRegistry.tasks
+            .filter { $0.runtimeID == runtime.id }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        return ArtifactProbeInputs(
+            workspacePath: (try? runtime.localWorkspaceURLForOptimisticUse())?.path,
+            relativePaths: runtime.agentArtifactPaths.sorted(),
+            absolutePaths: mediaTasks.flatMap(\.artifacts).map(\.filePath)
+        )
+    }
+
+    /// Cheap change signal for `.task(id:)` — the artifact ledger and media
+    /// task registry are both host-maintained, so a new file always shows up
+    /// here as a new path.
+    private var artifactsFingerprint: String {
+        let inputs = artifactProbeInputs
+        return (inputs.workspacePath ?? "-")
+            + "#" + inputs.relativePaths.joined(separator: "|")
+            + "#" + inputs.absolutePaths.joined(separator: "|")
+    }
+
+    nonisolated static func probeArtifacts(_ inputs: ArtifactProbeInputs) -> [AgentRailArtifact] {
         var artifactsByPath: [String: AgentRailArtifact] = [:]
 
-        if let workspaceURL = try? runtime.localWorkspaceURLForOptimisticUse() {
-            for relativePath in runtime.agentArtifactPaths.sorted() {
+        if let workspacePath = inputs.workspacePath {
+            let workspaceURL = URL(fileURLWithPath: workspacePath)
+            for relativePath in inputs.relativePaths {
                 let url = workspaceURL.appendingPathComponent(relativePath).standardizedFileURL
                 var isDirectory: ObjCBool = false
                 guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
@@ -575,16 +624,13 @@ struct AgentTaskMonitorRail: View {
             }
         }
 
-        let mediaTasks = appState.agentMediaTaskRegistry.tasks
-            .filter { $0.runtimeID == runtime.id }
-            .sorted { $0.updatedAt > $1.updatedAt }
-        for artifact in mediaTasks.flatMap(\.artifacts) {
-            let url = URL(fileURLWithPath: artifact.filePath).standardizedFileURL
+        for absolutePath in inputs.absolutePaths {
+            let url = URL(fileURLWithPath: absolutePath).standardizedFileURL
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { continue }
             artifactsByPath[url.path] = AgentRailArtifact(
                 url: url,
-                displayPath: artifact.filePath,
+                displayPath: absolutePath,
                 isDirectory: isDirectory.boolValue
             )
         }
@@ -667,8 +713,11 @@ struct AgentSemanticActivityStatusLine: View {
            ) {
             backgroundTaskComposerCard
         } else if let phase {
-            TimelineView(.periodic(from: .now, by: 1.0)) { context in
-                HStack(spacing: 7) {
+            // The 1Hz timeline wraps ONLY the elapsed text: wrapping the
+            // whole status row rebuilt icon, sweep label, and background
+            // every second — including long "waiting for approval" stretches
+            // where nothing but the clock changes.
+            HStack(spacing: 7) {
                     Image(systemName: phase.systemImage)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(phase.tint)
@@ -680,15 +729,17 @@ struct AgentSemanticActivityStatusLine: View {
                     )
                     if let startedAt = appState.agentTurnStartedAt, appState.isAgentResponding {
                         Spacer(minLength: 4)
-                        Text(Self.formatElapsed(context.date.timeIntervalSince(startedAt)))
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(phase.tint.opacity(0.82))
-                            .monospacedDigit()
-                            .transaction { transaction in
-                                if !AgentActivitySweepMetrics.animatesElapsedTime {
-                                    transaction.animation = nil
+                        TimelineView(.periodic(from: .now, by: 1.0)) { context in
+                            Text(Self.formatElapsed(context.date.timeIntervalSince(startedAt)))
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(phase.tint.opacity(0.82))
+                                .monospacedDigit()
+                                .transaction { transaction in
+                                    if !AgentActivitySweepMetrics.animatesElapsedTime {
+                                        transaction.animation = nil
+                                    }
                                 }
-                            }
+                        }
                     }
                 }
                 .padding(.horizontal, style == .composer ? 12 : 0)
@@ -706,7 +757,6 @@ struct AgentSemanticActivityStatusLine: View {
                             .stroke(phase.tint.opacity(0.16), lineWidth: 1)
                     }
                 }
-            }
         }
     }
 

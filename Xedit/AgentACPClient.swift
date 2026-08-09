@@ -204,18 +204,43 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
         )
         outputPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            data.isEmpty ? lines.finish() : lines.append(data)
+            if data.isEmpty {
+                // EOF. Detach first so the dispatch source cannot spin on
+                // an exhausted handle, then close the stream — every byte
+                // the process wrote has been consumed at this point.
+                handle.readabilityHandler = nil
+                lines.finish()
+            } else {
+                lines.append(data)
+            }
         }
         errorPipe.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            if !data.isEmpty { errors.append(data) }
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+            } else {
+                errors.append(data)
+            }
         }
         process.terminationHandler = { _ in
-            outputPipe.fileHandleForReading.readabilityHandler = nil
-            errorPipe.fileHandleForReading.readabilityHandler = nil
-            lines.append(outputPipe.fileHandleForReading.availableData)
-            errors.append(errorPipe.fileHandleForReading.availableData)
-            lines.finish()
+            // Process exit is NOT "output drained": under load the reader
+            // lags the termination notification, and the previous eager
+            // drain-once-then-finish here dropped the final buffered lines —
+            // observed as `.processExited(0, "while waiting for
+            // session/prompt")` from a server that had already written its
+            // response and exited cleanly. EOF on the pipe (handled above)
+            // is the only signal that guarantees completeness, and it always
+            // follows a real exit. Keep a grace-window fallback solely for a
+            // leaked child that inherited the write end, where EOF would
+            // never arrive.
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) {
+                guard !lines.finished else { return }
+                outputPipe.fileHandleForReading.readabilityHandler = nil
+                errorPipe.fileHandleForReading.readabilityHandler = nil
+                lines.append(outputPipe.fileHandleForReading.availableData)
+                errors.append(errorPipe.fileHandleForReading.availableData)
+                lines.finish()
+            }
         }
 
         do {
@@ -1303,6 +1328,12 @@ private nonisolated final class AgentACPLineStream: @unchecked Sendable {
     private var continuation: AsyncStream<String>.Continuation?
     private var buffer = Data()
     private var isFinished = false
+
+    /// True once `finish()` ran. The termination grace-window fallback
+    /// checks this so it only force-drains when EOF genuinely never came.
+    var finished: Bool {
+        lock.withLock { isFinished }
+    }
 
     init() {
         var captured: AsyncStream<String>.Continuation?
