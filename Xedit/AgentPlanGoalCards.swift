@@ -5,13 +5,12 @@
 //  Pinned-above-transcript cards for Plan and Goal modes, split out of
 //  AgentModeView.swift in rc42.
 //
-//   - `AgentPlanCard`: orange-tinted card listing every plan step
+//   - `AgentPlanCard`: neutral card listing every plan step
 //     with a status glyph the user can cycle (pending → in-progress →
 //     done → skipped → pending). Plans execute without a separate approval
 //     mode; the card remains editable progress UI.
-//     `AgentPlanRevisionRow` sits at the bottom — collapsed Replan
-//     button that expands into a one-line note field for mid-execution
-//     guidance.
+//     A low-frequency Replan action lives in the header menu and expands a
+//     one-line note field only when requested.
 //   - `AgentPlanStepRow`: per-step row. Context menu for edit / insert
 //     above / insert below / restart-from-here / remove, all driven
 //     through the shared `AgentPlanStepSimpleSheet` (single-field
@@ -49,6 +48,10 @@ nonisolated enum AgentPlanCardExpansionPolicy {
         guard let currentMessageID else { return false }
         return currentMessageID != previousMessageID
     }
+
+    static func showsStatus(_ status: AgentPlan.Status, isInterrupted: Bool) -> Bool {
+        isInterrupted || status != .approved
+    }
 }
 
 // MARK: - Plan card
@@ -62,34 +65,57 @@ struct AgentPlanCard: View {
     /// card matches the artifact / media / dev-server cards stacked beside it.
     /// The transcript-inline and side-panel mounts keep the orange surface.
     var floating: Bool = false
+    @State private var isRevisionExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isExpanded.toggle()
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "list.number")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                        Text(L10n.PlanCard.header)
+                            .font(.system(size: 11, weight: .semibold))
+                            .textCase(.uppercase)
+                            .foregroundStyle(.secondary)
+                        if AgentPlanCardExpansionPolicy.showsStatus(plan.status, isInterrupted: plan.isInterrupted) {
+                            PlanStatusPill(status: plan.status, isInterrupted: plan.isInterrupted)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
                 }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "list.number")
+                .buttonStyle(.plain)
+                .help(isExpanded ? L10n.PlanCard.collapseHelp : L10n.PlanCard.expandHelp)
+                .accessibilityLabel(L10n.PlanCard.header)
+                .accessibilityValue(isExpanded ? L10n.PlanCard.expanded : L10n.PlanCard.collapsed)
+
+                Menu {
+                    Button(L10n.PlanRevision.replanButton) {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            isExpanded = true
+                            isRevisionExpanded = true
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.orange)
-                    Text(L10n.PlanCard.header)
-                        .font(.system(size: 11, weight: .semibold))
-                        .textCase(.uppercase)
                         .foregroundStyle(.secondary)
-                    PlanStatusPill(status: plan.status, isInterrupted: plan.isInterrupted)
-                    Spacer(minLength: 0)
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 18)
                 }
-                .contentShape(Rectangle())
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help(L10n.PlanRevision.replanTooltip)
             }
-            .buttonStyle(.plain)
-            .help(isExpanded ? L10n.PlanCard.collapseHelp : L10n.PlanCard.expandHelp)
-            .accessibilityLabel(L10n.PlanCard.header)
-            .accessibilityValue(isExpanded ? L10n.PlanCard.expanded : L10n.PlanCard.collapsed)
 
             if isExpanded {
                 if !plan.summary.isEmpty {
@@ -115,14 +141,15 @@ struct AgentPlanCard: View {
                     || plan.status == .approved
                     || plan.status == .executing {
                     Button(L10n.PlanCard.markCompleteButton) { appState.completeAgentPlan() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.plain)
                         .controlSize(.small)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
                 }
 
-                // Always offer a way to revise mid-execution — useful when
-                // the agent's plan diverged from what the user actually
-                // wanted, or when a constraint emerges partway through.
-                AgentPlanRevisionRow()
+                if isRevisionExpanded {
+                    AgentPlanRevisionRow(isExpanded: $isRevisionExpanded)
+                }
             }
         }
         .padding(12)
@@ -138,7 +165,7 @@ struct AgentPlanCard: View {
                 .fill(.regularMaterial)
         } else {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.orange.opacity(0.08))
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.72))
         }
     }
 
@@ -149,18 +176,15 @@ struct AgentPlanCard: View {
                 .stroke(Color(nsColor: .separatorColor).opacity(0.58), lineWidth: 1)
         } else {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.orange.opacity(0.35), lineWidth: 1)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.58), lineWidth: 1)
         }
     }
 }
 
-/// "Replan" action collapsed by default; expands into a one-line note
-/// field + Send button so the user can either re-ask cold ("revise the
-/// plan") or pass guidance ("use sed instead of patches"). Sits at the
-/// bottom of every plan card.
+/// One-line revision editor revealed from the plan card's header menu.
 struct AgentPlanRevisionRow: View {
     @EnvironmentObject var appState: AppState
-    @State private var expanded = false
+    @Binding var isExpanded: Bool
     @State private var note = ""
     @FocusState private var noteFocused: Bool
 
@@ -169,62 +193,41 @@ struct AgentPlanRevisionRow: View {
             Divider()
                 .opacity(0.4)
             HStack(spacing: 6) {
-                if expanded {
-                    TextField(L10n.PlanRevision.placeholder, text: $note)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 11))
-                        .focused($noteFocused)
-                        .onSubmit { send() }
-                    Button(L10n.PlanRevision.sendButton) { send() }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .disabled(appState.isAgentResponding && appState.agentQueuedMessages.count > 8)
-                    Button {
-                        expanded = false
-                        note = ""
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help(L10n.PlanRevision.cancelButtonHelp)
-                } else {
-                    Button {
-                        expanded = true
-                        // Defer focus so the TextField has mounted first.
-                        DispatchQueue.main.async { noteFocused = true }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 10, weight: .semibold))
-                            Text(L10n.PlanRevision.replanButton)
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .foregroundStyle(Color.orange)
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(Color.orange.opacity(0.45), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.PlanRevision.replanTooltip)
-                    Spacer(minLength: 0)
-                    if appState.isAgentResponding {
-                        Text(L10n.PlanRevision.queueNotice)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                    }
+                TextField(L10n.PlanRevision.placeholder, text: $note)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11))
+                    .focused($noteFocused)
+                    .onSubmit { send() }
+                Button(L10n.PlanRevision.sendButton) { send() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(appState.isAgentResponding && appState.agentQueuedMessages.count > 8)
+                Button {
+                    isExpanded = false
+                    note = ""
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(L10n.PlanRevision.cancelButtonHelp)
+                Spacer(minLength: 0)
+                if appState.isAgentResponding {
+                    Text(L10n.PlanRevision.queueNotice)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
                 }
             }
+        }
+        .onAppear {
+            DispatchQueue.main.async { noteFocused = true }
         }
     }
 
     private func send() {
         appState.requestPlanRevision(note: note)
-        expanded = false
+        isExpanded = false
         note = ""
     }
 }
