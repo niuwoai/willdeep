@@ -10,6 +10,28 @@ import Testing
 @Suite
 struct AgentTranscriptScrollPolicyTests {
     @Test
+    func sidePanelWidthChangeIsRecognizedAsViewportReflow() {
+        #expect(
+            AgentTranscriptViewportPolicy.widthChanged(
+                from: 820,
+                to: 500
+            )
+        )
+        #expect(
+            !AgentTranscriptViewportPolicy.widthChanged(
+                from: 500,
+                to: 500.25
+            )
+        )
+        #expect(
+            !AgentTranscriptViewportPolicy.widthChanged(
+                from: nil,
+                to: 500
+            )
+        )
+    }
+
+    @Test
     func horizontalReflowKeepsRelativeReadingPosition() {
         let progress = AgentTranscriptViewportPolicy.relativeProgress(
             documentHeight: 2_400,

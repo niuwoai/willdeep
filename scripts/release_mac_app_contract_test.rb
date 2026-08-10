@@ -107,7 +107,7 @@ check.call("appcast 发布说明优先使用面向用户的摘要") do
     skip_upload: true,
     skip_update_metadata: true,
     release_version: "1.220.0-rc13",
-    bundle_version: 245,
+    bundle_version: 246,
     build_root: File.join(Dir.tmpdir, "willdeep-release-contract")
   )
   notes = release.send(:release_notes_for_current_version)
