@@ -134,10 +134,11 @@ struct AgentSidebarGroupOrderingTests {
 
     @Test("groups order by birth date descending with no-workspace pinned last")
     func groupOrderIsCreationDescending() {
-        let older = (key: "/tmp/older", birthDate: Date(timeIntervalSince1970: 1_000), displayName: "zzz")
-        let newer = (key: "/tmp/newer", birthDate: Date(timeIntervalSince1970: 2_000), displayName: "aaa")
+        let older = (key: "/tmp/older", isPinned: false, birthDate: Date(timeIntervalSince1970: 1_000), displayName: "zzz")
+        let newer = (key: "/tmp/newer", isPinned: false, birthDate: Date(timeIntervalSince1970: 2_000), displayName: "aaa")
         let noWorkspace = (
             key: AgentSession.noWorkspaceSidebarGroupKey,
+            isPinned: false,
             birthDate: Date(timeIntervalSince1970: 9_999),
             displayName: "no workspace"
         )
@@ -150,11 +151,22 @@ struct AgentSidebarGroupOrderingTests {
         #expect(!AgentSidebarSessionPlacement.groupOrder(lhs: noWorkspace, rhs: newer))
     }
 
+    @Test("pinned projects lead and remain creation ordered within the pinned tier")
+    func pinnedGroupsLeadInCreationOrder() {
+        let unpinnedNewest = (key: "/tmp/newest", isPinned: false, birthDate: Date(timeIntervalSince1970: 9_000), displayName: "newest")
+        let pinnedOlder = (key: "/tmp/pinned-old", isPinned: true, birthDate: Date(timeIntervalSince1970: 2_000), displayName: "old")
+        let pinnedNewer = (key: "/tmp/pinned-new", isPinned: true, birthDate: Date(timeIntervalSince1970: 3_000), displayName: "new")
+
+        #expect(AgentSidebarSessionPlacement.groupOrder(lhs: pinnedOlder, rhs: unpinnedNewest))
+        #expect(AgentSidebarSessionPlacement.groupOrder(lhs: pinnedNewer, rhs: pinnedOlder))
+        #expect(!AgentSidebarSessionPlacement.groupOrder(lhs: pinnedOlder, rhs: pinnedNewer))
+    }
+
     @Test("equal birth dates fall back to name then key for determinism")
     func groupOrderTieBreakers() {
         let sameDate = Date(timeIntervalSince1970: 4_000)
-        let alpha = (key: "/tmp/a", birthDate: sameDate, displayName: "alpha")
-        let beta = (key: "/tmp/b", birthDate: sameDate, displayName: "beta")
+        let alpha = (key: "/tmp/a", isPinned: false, birthDate: sameDate, displayName: "alpha")
+        let beta = (key: "/tmp/b", isPinned: false, birthDate: sameDate, displayName: "beta")
         #expect(AgentSidebarSessionPlacement.groupOrder(lhs: alpha, rhs: beta))
         #expect(!AgentSidebarSessionPlacement.groupOrder(lhs: beta, rhs: alpha))
     }

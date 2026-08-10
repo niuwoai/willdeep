@@ -15,6 +15,14 @@ extension L10n {
             localized: "agent-project.edit",
             defaultValue: "Edit Project…"
         )
+        static let pinProject = String(
+            localized: "agent-project.pin",
+            defaultValue: "Pin Project"
+        )
+        static let unpinProject = String(
+            localized: "agent-project.unpin",
+            defaultValue: "Unpin Project"
+        )
         static let createProject = String(
             localized: "agent-project.create",
             defaultValue: "Make This a Project…"

@@ -149,16 +149,17 @@ enum AgentSidebarSessionPlacement {
         return sessions.map(\.createdAt).min() ?? .distantPast
     }
 
-    /// Group comparator: "no workspace" pinned last, everything else by
-    /// birth date (newest group first), name and key only as deterministic
-    /// tie-breakers.
+    /// Group comparator: "no workspace" stays last; pinned projects come
+    /// first; each priority tier uses birth date (newest first), then name and
+    /// key only as deterministic tie-breakers.
     static func groupOrder(
-        lhs: (key: String, birthDate: Date, displayName: String),
-        rhs: (key: String, birthDate: Date, displayName: String)
+        lhs: (key: String, isPinned: Bool, birthDate: Date, displayName: String),
+        rhs: (key: String, isPinned: Bool, birthDate: Date, displayName: String)
     ) -> Bool {
         let lhsIsNoWorkspace = lhs.key == AgentSession.noWorkspaceSidebarGroupKey
         let rhsIsNoWorkspace = rhs.key == AgentSession.noWorkspaceSidebarGroupKey
         if lhsIsNoWorkspace != rhsIsNoWorkspace { return !lhsIsNoWorkspace }
+        if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
         if lhs.birthDate != rhs.birthDate { return lhs.birthDate > rhs.birthDate }
         let nameOrder = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
         if nameOrder != .orderedSame { return nameOrder == .orderedAscending }
@@ -537,6 +538,12 @@ struct AgentSessionsSidebar: View {
                             .foregroundStyle(palette.primaryText.opacity(AgentDesign.sidebarPrimaryTextOpacity))
                             .lineLimit(1)
                             .truncationMode(.middle)
+                        if appState.agentProject(forSidebarGroupKey: workspace)?.isPinned == true {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .rotationEffect(.degrees(45))
+                        }
                         if remoteWorkspace != nil {
                             Text(WorkspacePresentation.remoteBadge(for: remoteRuntime))
                                 .font(.system(size: 8, weight: .bold))
@@ -579,6 +586,11 @@ struct AgentSessionsSidebar: View {
                     // Already a project → edit it. A plain folder group can be
                     // promoted into one, which is how projects get created.
                     if let project = appState.agentProject(forSidebarGroupKey: workspace) {
+                        Button(project.isPinned
+                            ? L10n.AgentProjectStrings.unpinProject
+                            : L10n.AgentProjectStrings.pinProject) {
+                            appState.toggleAgentProjectPinned(id: project.id)
+                        }
                         Button(L10n.AgentProjectStrings.editProject) {
                             editingProject = AgentProjectEditorTarget(project: project, seedFolderPath: nil)
                         }
@@ -976,7 +988,7 @@ struct AgentSessionsSidebar: View {
         // in the background. See AgentSidebarSessionPlacement.workspaceOrder.
         return groups
             .filter { !appState.hiddenWorkspaceKeys.contains($0.key) }
-            .map { entry -> (group: SidebarWorkspaceGroup, birthDate: Date) in
+            .map { entry -> (group: SidebarWorkspaceGroup, isPinned: Bool, birthDate: Date) in
                 let remoteWorkspace = remoteWorkspaceGroup(from: entry.key)
                 let remoteRuntime = remoteWorkspace.flatMap { remoteDescriptors[$0.runtimeID] }
                 let group = SidebarWorkspaceGroup(
@@ -992,12 +1004,15 @@ struct AgentSessionsSidebar: View {
                     sessions: entry.value,
                     projects: projects
                 )
-                return (group, birthDate)
+                let isPinned = AgentSession.projectID(fromSidebarGroupKey: entry.key)
+                    .flatMap { projectID in projects.first(where: { $0.id == projectID }) }?
+                    .isPinned ?? false
+                return (group, isPinned, birthDate)
             }
             .sorted { lhs, rhs in
                 AgentSidebarSessionPlacement.groupOrder(
-                    lhs: (lhs.group.id, lhs.birthDate, lhs.group.displayName),
-                    rhs: (rhs.group.id, rhs.birthDate, rhs.group.displayName)
+                    lhs: (lhs.group.id, lhs.isPinned, lhs.birthDate, lhs.group.displayName),
+                    rhs: (rhs.group.id, rhs.isPinned, rhs.birthDate, rhs.group.displayName)
                 )
             }
             .map(\.group)
