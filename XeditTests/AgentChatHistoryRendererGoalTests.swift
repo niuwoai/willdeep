@@ -531,7 +531,7 @@ struct AgentChatHistoryRendererGoalTests {
 
         let message = AgentMessage(
             role: .assistant,
-            content: "我已经核对了工具活动摘要。下面按操作类型分行展示，便于快速扫读当前回合做过什么。",
+            content: "我已经核对了工具活动摘要。下面把操作类型合并为一行，便于快速扫读当前回合做过什么。",
             toolCalls: calls
         )
         let view = AgentChatHistoryNSTextView()
@@ -543,9 +543,9 @@ struct AgentChatHistoryRendererGoalTests {
             .underlineStyle: 0,
             .cursor: NSCursor.arrow,
         ]
-        view.frame = NSRect(x: 0, y: 0, width: 684, height: 319)
+        view.frame = NSRect(x: 0, y: 0, width: 540, height: 319)
         view.textContainer?.size = NSSize(
-            width: 648,
+            width: 504,
             height: CGFloat.greatestFiniteMagnitude
         )
         view.applyMessages([message], isDark: false, baseFontSize: 14)
@@ -561,7 +561,29 @@ struct AgentChatHistoryRendererGoalTests {
         for row in expectedRows {
             #expect(view.string.contains(row))
         }
-        #expect(!view.string.contains("已读取5个文件 · 已浏览4个目录"))
+        let renderedText = view.string as NSString
+        let firstRange = renderedText.range(of: expectedRows[0])
+        let lastRange = renderedText.range(of: expectedRows[expectedRows.count - 1])
+        let summaryLine = renderedText.substring(with: NSRange(
+            location: firstRange.location,
+            length: NSMaxRange(lastRange) - firstRange.location
+        ))
+        #expect(summaryLine.components(separatedBy: " · ").count == expectedRows.count)
+        #expect(!summaryLine.contains("\n"))
+        let summaryCharacterRange = NSRange(
+            location: firstRange.location,
+            length: NSMaxRange(lastRange) - firstRange.location
+        )
+        let summaryGlyphRange = try #require(view.layoutManager?.glyphRange(
+            forCharacterRange: summaryCharacterRange,
+            actualCharacterRange: nil
+        ))
+        var summaryLineFragmentCount = 0
+        view.layoutManager?.enumerateLineFragments(forGlyphRange: summaryGlyphRange) {
+            _, _, _, _, _ in
+            summaryLineFragmentCount += 1
+        }
+        #expect(summaryLineFragmentCount == 1)
 
         let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: bitmap)

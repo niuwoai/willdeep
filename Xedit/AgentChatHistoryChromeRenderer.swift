@@ -379,11 +379,13 @@ extension AgentChatHistoryRenderer {
         for (index, item) in displayItems.enumerated() {
             if index > 0 {
                 result.append(NSAttributedString(
-                    string: "\n",
-                    attributes: [.font: monoFont]
+                    string: " · ",
+                    attributes: [
+                        .font: NSFont.systemFont(ofSize: monoFont.pointSize, weight: .regular),
+                        .foregroundColor: secondaryColor,
+                    ]
                 ))
             }
-            let rowStart = result.length
             result.append(symbolAttachmentString(
                 named: item.systemImage,
                 fallback: "•",
@@ -415,14 +417,14 @@ extension AgentChatHistoryRenderer {
                     ]
                 ))
             }
-            result.addAttributes(
-                [
-                    .link: "agent-chat-history-tool-group",
-                    .agentChatHistoryToolGroupID: group.id,
-                ],
-                range: NSRange(location: rowStart, length: result.length - rowStart)
-            )
         }
+        result.addAttributes(
+            [
+                .link: "agent-chat-history-tool-group",
+                .agentChatHistoryToolGroupID: group.id,
+            ],
+            range: NSRange(location: start, length: result.length - start)
+        )
         result.addAttribute(
             .paragraphStyle,
             value: toolGroupHeaderParagraphStyle(),
@@ -890,6 +892,7 @@ extension AgentChatHistoryRenderer {
         style.lineSpacing = 1
         style.paragraphSpacingBefore = 1
         style.paragraphSpacing = 2
+        style.lineBreakMode = .byTruncatingTail
         // Keep the compact activity summary on the same content column as
         // the assistant prose above it. A bespoke 22 pt inset used to place
         // this label 10 pt left of the 32 pt assistant body edge.

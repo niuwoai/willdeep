@@ -1100,17 +1100,29 @@ struct AgentChatHistoryRendererTests {
             isDark: false,
             baseFontSize: baseFontSize
         )
-        #expect(collapsed.string.contains("已读取1个文件\n"))
+        #expect(collapsed.string.contains("已读取1个文件"))
         #expect(collapsed.string.contains("已运行1条命令"))
-        #expect(!collapsed.string.contains("已读取1个文件 · 已运行1条命令"))
         #expect(!collapsed.string.contains("tool  read_file"))
         let summaryRange = (collapsed.string as NSString).range(of: "已读取1个文件")
+        let commandRange = (collapsed.string as NSString).range(of: "已运行1条命令")
+        let summaryLine = (collapsed.string as NSString).substring(with: NSRange(
+            location: summaryRange.location,
+            length: NSMaxRange(commandRange) - summaryRange.location
+        ))
+        #expect(summaryLine.contains(" · "))
+        #expect(!summaryLine.contains("\n"))
         let summaryFont = try #require(collapsed.attribute(
             .font,
             at: summaryRange.location,
             effectiveRange: nil
         ) as? NSFont)
         #expect(summaryFont.pointSize == NSFont.systemFontSize)
+        let summaryStyle = try #require(collapsed.attribute(
+            .paragraphStyle,
+            at: summaryRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(summaryStyle.lineBreakMode == .byTruncatingTail)
 
         let groupID = "\(firstID.uuidString):\(secondID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
@@ -1119,7 +1131,7 @@ struct AgentChatHistoryRendererTests {
             expandedToolGroupIDs: [groupID],
             baseFontSize: baseFontSize
         )
-        #expect(expanded.string.contains("已读取1个文件\n"))
+        #expect(expanded.string.contains("已读取1个文件"))
         #expect(expanded.string.contains("已运行1条命令"))
         #expect(!expanded.string.contains("▾"))
         #expect(expanded.string.contains("tool  run_command  command: ls /Users/rocky/Sites/Teamify && git status --short"))
@@ -1160,7 +1172,15 @@ struct AgentChatHistoryRendererTests {
         let collapsed = AgentChatHistoryRenderer.render(messages: messages, isDark: false)
         #expect(collapsed.string.components(separatedBy: "已读取1个文件").count - 1 == 1)
         #expect(collapsed.string.components(separatedBy: "已运行1条命令").count - 1 == 1)
-        #expect(!collapsed.string.contains("已读取1个文件 · 已运行1条命令"))
+        let collapsedText = collapsed.string as NSString
+        let readRange = collapsedText.range(of: "已读取1个文件")
+        let commandRange = collapsedText.range(of: "已运行1条命令")
+        let summaryLine = collapsedText.substring(with: NSRange(
+            location: readRange.location,
+            length: NSMaxRange(commandRange) - readRange.location
+        ))
+        #expect(summaryLine.contains(" · "))
+        #expect(!summaryLine.contains("\n"))
 
         let groupID = "inline:\(proseID.uuidString):\(followupID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
