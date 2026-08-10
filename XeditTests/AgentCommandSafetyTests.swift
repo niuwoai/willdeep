@@ -273,6 +273,96 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "git status 2>/dev/null") == .alwaysSafe)
     }
 
+    @Test("Smart review receives bounded read-only command substitutions")
+    func smartReviewReceivesBoundedReadOnlyCommandSubstitution() throws {
+        let command = #"OUT=$(find performance-results -maxdepth 1 -type d -name 'deadlock-repro-rc12-20260810T233450' | tail -1); echo '--- files ---'; find "$OUT" -maxdepth 2 -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' | sort | tail -15; echo '--- deadlocks metric ---'; mysql -h127.0.0.1 -P3306 -NBe "SELECT NAME, COUNT FROM information_schema.innodb_metrics WHERE NAME='lock_deadlocks';"; echo '--- app ---'; grep -n -E 'Error 1213|Deadlock found|settlement_credit' "$OUT/gateway.log" | tail -20 || true"#
+
+        let resolution = try #require(SafeCommand.resolveProvablySafeShellExpansions(in: command))
+        #expect(resolution.requiresJudgment)
+        #expect(!resolution.command.contains("$("))
+        #expect(SafeCommand.classify(command: command) == .needsJudgment)
+        let judgePayload = AgentInjectionDefense.judgeUserPayload(command: command)
+        #expect(judgePayload.contains("segment_count=11"))
+        #expect(judgePayload.contains(command))
+
+        let decision = AgentSandboxPolicy.commandDecision(
+            command: command,
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-command-substitution-workspace")
+        )
+        #expect(decision.mode == .escalated)
+        #expect(decision.requiresUserApproval)
+        #expect(!decision.requiresTypedConfirmation)
+        #expect(AppState.canSendToSafetyJudge(toolName: "run_command", sandboxDecision: decision))
+    }
+
+    @Test("Dangerous or unknown command substitutions stay behind typed confirmation")
+    func dangerousCommandSubstitutionsStayHumanGated() {
+        let commands = [
+            "OUT=$(rm -rf /tmp/cache); printf '%s\\n' \"$OUT\"",
+            "OUT=$(custom-side-effect-tool); printf '%s\\n' \"$OUT\"",
+            "OUT=`find performance-results -type d`; printf '%s\\n' \"$OUT\"",
+        ]
+
+        for command in commands {
+            #expect(SafeCommand.classify(command: command) == .alwaysDangerous)
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-command-substitution-workspace")
+            )
+            #expect(decision.mode == .escalated)
+            #expect(decision.requiresUserApproval)
+            #expect(decision.requiresTypedConfirmation)
+            #expect(!AppState.canSendToSafetyJudge(toolName: "run_command", sandboxDecision: decision))
+        }
+
+        let boundednessFailures = [
+            "SECRET=$(cat ~/.ssh/id_rsa); printf '%s\\n' \"$SECRET\"",
+            "OUT=$(mkdir generated-output); printf '%s\\n' \"$OUT\"",
+            "API_KEY=$(find performance-results -type d | tail -1); printf '%s\\n' \"$API_KEY\"",
+        ]
+        for command in boundednessFailures {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-command-substitution-workspace")
+            )
+            #expect(decision.mode == .escalated)
+            #expect(decision.requiresUserApproval)
+            #expect(decision.requiresTypedConfirmation)
+            #expect(!AppState.canSendToSafetyJudge(toolName: "run_command", sandboxDecision: decision))
+        }
+    }
+
+    @Test("MySQL inline read queries use AI review while mutations and credentials stay human-gated")
+    func mysqlInlineQuerySafetyBoundaries() {
+        let readOnly = "mysql -h127.0.0.1 -P3306 -NBe \"SELECT NAME, COUNT FROM information_schema.innodb_metrics WHERE NAME='lock_deadlocks';\""
+        #expect(SafeCommand.classify(command: readOnly) == .needsJudgment)
+
+        let readDecision = AgentSandboxPolicy.commandDecision(
+            command: readOnly,
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-mysql-review-workspace")
+        )
+        #expect(readDecision.mode == .escalated)
+        #expect(readDecision.requiresUserApproval)
+        #expect(!readDecision.requiresTypedConfirmation)
+        #expect(AppState.canSendToSafetyJudge(toolName: "run_command", sandboxDecision: readDecision))
+
+        let humanGated = [
+            "mysql -h127.0.0.1 -P3306 -e \"DELETE FROM jobs WHERE id = 1\"",
+            "mysql -h127.0.0.1 -P3306 -e \"SELECT 1; DROP TABLE jobs\"",
+            "mysql -h127.0.0.1 -P3306 -psecret -e \"SELECT 1\"",
+            "mysql -hselect.example -P3306",
+            "mysql -h127.0.0.1 -P3306",
+        ]
+        for command in humanGated {
+            #expect(SafeCommand.classify(command: command) == .alwaysDangerous)
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-mysql-review-workspace")
+            )
+            #expect(decision.requiresTypedConfirmation)
+        }
+    }
+
     @Test("SafeCommand: shell 控制流 + whois 等只读网络命令自动放行")
     func testSafeCommandShellControlFlow() {
         // 用户实测案例：纯只读 whois 循环此前落到 LLM judge 又被拒，
