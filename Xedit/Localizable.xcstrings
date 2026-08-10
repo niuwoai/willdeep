@@ -32251,6 +32251,57 @@
         }
       }
     },
+    "tool-card.authorization.background-task.generic-question" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop this background task?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终止这项后台任务？"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.background-task.question" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop background task %@?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终止后台任务 %@？"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.background-task.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Background Task"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后台任务"
+          }
+        }
+      }
+    },
     "tool-card.authorization.browser.chrome-question" : {
       "extractionState" : "manual",
       "localizations" : {

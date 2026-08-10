@@ -63,7 +63,7 @@ struct AgentConfirmationVisualTests {
 
         #expect(wideSize.height <= mediumSize.height)
         #expect(mediumSize.height <= narrowSize.height)
-        #expect(mediumSize.height < 400)
+        #expect(mediumSize.height < 440)
         #expect(wideSize.width == 1_040)
         #expect(mediumSize.width == 520)
         #expect(narrowSize.width == 400)
@@ -75,7 +75,10 @@ struct AgentConfirmationVisualTests {
                 == AgentConfirmationReviewMetrics.horizontalMinimumWidth
                     - (AgentConfirmationReviewMetrics.contentPadding * 2)
         )
-        #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 3)
+        #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 5)
+        #expect(AgentConfirmationReviewMetrics.commandScrollAxes.contains(.vertical))
+        #expect(!AgentConfirmationReviewMetrics.commandScrollAxes.contains(.horizontal))
+        #expect(AgentConfirmationReviewMetrics.commandViewportHeight == 112)
         #expect(AgentApprovalActionMetrics.minimumButtonHeight == 36)
         #expect(AgentConfirmationReviewMetrics.actionButtonHeight == 28)
         #expect(AgentConfirmationReviewMetrics.actionButtonMaxWidth == 124)
@@ -118,11 +121,24 @@ struct AgentConfirmationVisualTests {
                 "browser-authorization-codex-style.png"
             )
         )
+        let backgroundTaskSize = try render(
+            call: surfaceAuthorizationCall(
+                toolName: "kill_job",
+                arguments: ["job_id": .string("job_540157")]
+            ),
+            appState: appState,
+            width: 714,
+            outputURL: outputDirectory.appendingPathComponent(
+                "background-task-termination-authorization-compact.png"
+            )
+        )
 
         #expect(computerUseSize.width == 714)
         #expect(browserSize.width == 714)
+        #expect(backgroundTaskSize.width == 714)
         #expect(computerUseSize.height < 180)
         #expect(browserSize.height < 180)
+        #expect(backgroundTaskSize.height < 180)
         #expect(AgentCompactAuthorizationMetrics.minimumButtonWidth == 76)
         #expect(AgentCompactAuthorizationMetrics.primaryButtonMinimumWidth == 112)
         #expect(AgentCompactAuthorizationMetrics.minimumButtonHeight == 36)
@@ -234,12 +250,15 @@ struct AgentConfirmationVisualTests {
         )
     }
 
-    private func surfaceAuthorizationCall(toolName: String) -> AgentToolCall {
+    private func surfaceAuthorizationCall(
+        toolName: String,
+        arguments: [String: AgentJSONValue] = ["ref": .string("snapshot:e1")]
+    ) -> AgentToolCall {
         AgentToolCall(
             messageID: UUID(),
             externalID: "surface-authorization-design-qa",
             toolName: toolName,
-            arguments: ["ref": .string("snapshot:e1")],
+            arguments: arguments,
             risk: .write,
             status: .pendingApproval
         )
