@@ -3160,6 +3160,7 @@
     "agent-project.missing-folder" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Folder not found" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "文件夹不存在" } } } },
     "agent-project.name-label" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Project name" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "项目名称" } } } },
     "agent-project.name-placeholder" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "e.g. TokenHub" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "例如：TokenHub" } } } },
+    "agent-project.pin" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Pin Project" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "置顶项目" } } } },
     "agent-project.remove-cancel" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消" } } } },
     "agent-project.remove-confirm" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除" } } } },
     "agent-project.remove-deletes" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This permanently deletes %@ conversation(s) and all their contents. This cannot be undone." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这会永久删除 %@ 个会话及其全部内容，且无法撤销。" } } } },
@@ -3170,6 +3171,7 @@
     "agent-project.remove-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove project “%@”?" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除项目「%@」？" } } } },
     "agent-project.save" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Save" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存" } } } },
     "agent-project.sheet-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit Project" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑项目" } } } },
+    "agent-project.unpin" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Unpin Project" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消置顶" } } } },
     "agent-patch-error.empty-diff" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12092,6 +12094,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "定义目标"
+          }
+        }
+      }
+    },
+    "goal-roadmap.phase-position" : {
+      "comment" : "compact current/total Goal roadmap phase label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phase %1$@/%2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "阶段 %1$@/%2$@"
           }
         }
       }

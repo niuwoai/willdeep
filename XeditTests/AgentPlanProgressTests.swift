@@ -353,6 +353,9 @@ struct AgentPlanProgressTests {
         #expect(AgentPlanCardExpansionPolicy.initiallyExpanded(for: .approved))
         #expect(!AgentPlanCardExpansionPolicy.initiallyExpanded(for: .executing))
         #expect(!AgentPlanCardExpansionPolicy.initiallyExpanded(for: .done))
+        #expect(!AgentPlanCardExpansionPolicy.showsStatus(.approved, isInterrupted: false))
+        #expect(AgentPlanCardExpansionPolicy.showsStatus(.executing, isInterrupted: false))
+        #expect(AgentPlanCardExpansionPolicy.showsStatus(.approved, isInterrupted: true))
     }
 
     @Test("plan card collapses only when a new assistant round appears")

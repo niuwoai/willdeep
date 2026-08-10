@@ -169,7 +169,7 @@ enum AgentChatHistoryRenderer {
         // Tool outcome receipts are a render-time projection, not part of
         // toolCalls above. Without them in the key, a call resolving
         // running → succeeded/failed keeps the stale (badge-less) cached
-        // render, so the ✓/✗ verdict never appears.
+        // render, so the outcome receipt never appears.
         if let receipts = m.settledToolReceipts {
             for (callID, status) in receipts.sorted(by: { $0.key < $1.key }) {
                 hasher.combine(callID)
@@ -681,7 +681,7 @@ enum AgentChatHistoryRenderer {
             // *alongside* its own prose). Rendered through the same
             // collapsible header as the standalone tool-call group so
             // the bubble defaults to a one-line activity summary such
-            // as "已读取 2 个文件 · 已运行 1 条命令"; clicking flips
+            // as "已读取2个文件 · 已运行1条命令"; clicking flips
             // the chevron and reveals the full per-call summary below.
             // Some providers place the first tool calls on the prose message
             // and then emit subsequent calls as tool-call-only assistant
@@ -811,7 +811,7 @@ enum AgentChatHistoryRenderer {
         let calls: [AgentMessageToolCall]
         /// Terminal receipts (externalID → 成/败/拒) harvested from the
         /// sibling `.tool` result messages upstream. Empty for legacy
-        /// sessions or in-flight groups; drives the ✓/✗ outcome badge.
+        /// sessions or in-flight groups; drives the compact outcome suffix.
         let receipts: [String: AgentToolCallStatus]
 
         init(
@@ -849,16 +849,17 @@ enum AgentChatHistoryRenderer {
         }
 
         /// One-line exceptional outcome for the whole group. Successful work
-        /// already reads naturally as “修改了 1 个文件”等动作摘要，追加“完成”
+        /// already reads naturally as “修改了1个文件”等动作摘要，追加“完成”
         /// both repeats the same fact and appears inconsistently in legacy
-        /// turns that do not carry receipts. Failures and denials remain.
+        /// turns that do not carry receipts. Failures and denials remain as
+        /// parenthesized counts without an alarm-like cross glyph.
         var outcomeBadge: String? {
             guard !receipts.isEmpty else { return nil }
             let statuses = receipts.values
             let failed = statuses.filter { $0 == .failed }.count
             let denied = statuses.filter { $0 == .denied }.count
-            if failed > 0 { return "✗ \(failed) 失败" }
-            if denied > 0 { return "✗ \(denied) 已拒绝" }
+            if failed > 0 { return "(\(failed)条失败)" }
+            if denied > 0 { return "(\(denied)条已拒绝)" }
             return nil
         }
     }

@@ -14,6 +14,7 @@ import Foundation
 nonisolated enum AgentGoalLaunchRecoveryAction: Equatable {
     case none
     case restartPlanning
+    case resumePhasePlanning
     case resumeExecution
     case discardStaleCheckpoint
 }
@@ -49,6 +50,11 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
         if let plan = session.currentPlan, plan.status == .proposed {
             // Explicit Plan approval never survives as implied permission.
             return hasCheckpoint ? .discardStaleCheckpoint : .none
+        }
+
+        if session.currentPlan == nil,
+           session.goalRoadmap?.activePhase?.status == .planning {
+            return .resumePhasePlanning
         }
 
         let planningCanRestart: Bool
@@ -130,6 +136,25 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
         """
     }
 
+    static func phasePlanningContinuationNotice(roadmap: AgentGoalRoadmap) -> String? {
+        guard let phase = roadmap.activePhase else { return nil }
+        let phaseID = AgentContextBuilder.escapedUntrustedContext(phase.id)
+        let phaseTitle = AgentContextBuilder.escapedUntrustedContext(phase.title)
+        let acceptance = phase.acceptanceCriteria.map {
+            "- \(AgentContextBuilder.escapedUntrustedContext($0))"
+        }.joined(separator: "\n")
+        return """
+        WillDeep launch recovery: resume planning the active Goal phase only.
+        <active_goal_phase id="\(phaseID)" position="\(roadmap.phasePositionText)">
+        \(phaseTitle)
+        </active_goal_phase>
+        <phase_acceptance>
+        \(acceptance)
+        </phase_acceptance>
+        Emit exactly one numbered fenced `plan` block with at most \(AgentGoalRoadmap.maximumStepsPerPhase) steps. Do not replace the roadmap, repeat completed phases, or call tools in this planning reply.
+        """
+    }
+
     private static func isGoalComplete(_ goal: AgentGoal) -> Bool {
         !goal.checklist.isEmpty && goal.checklist.allSatisfy(\.done)
     }
@@ -169,6 +194,7 @@ extension AppState {
             liveSession.currentPlan = runtime.currentPlan
             liveSession.currentGoal = runtime.currentGoal
             liveSession.goalPlanningState = runtime.goalPlanningState
+            liveSession.goalRoadmap = runtime.goalRoadmap
             liveSession.goalTurnRecoveryCheckpoint = runtime.goalTurnRecoveryCheckpoint
             let liveAction = AgentGoalLaunchRecoveryPolicy.reconciledAction(
                 catalogAction: catalogAction,
@@ -192,6 +218,21 @@ extension AppState {
                 ) {
                     resumedSessionIDs.append(runtime.id)
                 }
+            case .resumePhasePlanning:
+                guard !runtime.isResponding,
+                      !runtime.isAwaitingProviderSlot,
+                      let roadmap = runtime.goalRoadmap,
+                      let notice = AgentGoalLaunchRecoveryPolicy
+                        .phasePlanningContinuationNotice(roadmap: roadmap) else {
+                    continue
+                }
+                dispatchAgentMessage(
+                    for: runtime,
+                    text: notice,
+                    images: [],
+                    source: .hostInstruction
+                )
+                resumedSessionIDs.append(runtime.id)
             case .resumeExecution:
                 guard !runtime.isResponding,
                       !runtime.isAwaitingProviderSlot,

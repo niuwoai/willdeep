@@ -172,6 +172,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Host-owned evidence ledger for Goal Teams planning. Optional and
     /// tolerantly decoded so sessions written before this feature remain valid.
     var goalPlanningState: AgentGoalPlanningState?
+    /// Coarse execution phases for a long-running Goal. Only the active phase
+    /// owns `currentPlan`; future phases stay intentionally high-level so the
+    /// initial proposal cannot explode into dozens of stale micro-steps.
+    var goalRoadmap: AgentGoalRoadmap?
     /// Non-nil only while an approved Goal-backed Plan turn is expected to be
     /// alive. Surviving app termination makes the session eligible for one
     /// launch recovery; explicit Stop and normal turn completion clear it.
@@ -252,6 +256,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
         goalPlanningState: AgentGoalPlanningState? = nil,
+        goalRoadmap: AgentGoalRoadmap? = nil,
         goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint? = nil,
         learningEvents: [AgentLearningEvent] = [],
         latestTurnRecall: AgentTurnRecallSnapshot? = nil,
@@ -297,6 +302,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.currentPlan = currentPlan
         self.currentGoal = currentGoal
         self.goalPlanningState = goalPlanningState
+        self.goalRoadmap = goalRoadmap
         self.goalTurnRecoveryCheckpoint = goalTurnRecoveryCheckpoint
         self.learningEvents = learningEvents
         self.latestTurnRecall = latestTurnRecall
@@ -398,7 +404,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
         case providerEntryID, providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
-        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
+        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
     }
 
@@ -463,6 +469,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
                 arbitration: .init(status: .interrupted, errorMessage: "malformed persisted planning state")
             )
         }
+        self.goalRoadmap = try? c.decodeIfPresent(AgentGoalRoadmap.self, forKey: .goalRoadmap)
         self.goalTurnRecoveryCheckpoint = try c.decodeIfPresent(
             AgentGoalTurnRecoveryCheckpoint.self,
             forKey: .goalTurnRecoveryCheckpoint
@@ -1065,6 +1072,75 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
     }
 }
 
+/// Coarse roadmap for a long-running Goal. The roadmap is deliberately much
+/// smaller than the work itself: each phase receives a fresh bounded Plan when
+/// it becomes active, allowing one Goal to advance across multiple turns
+/// without presenting a 19-step wall on day one.
+nonisolated struct AgentGoalRoadmap: Codable, Equatable {
+    static let maximumPhaseCount = 6
+    static let maximumStepsPerPhase = 6
+    static let maximumAcceptanceCriteriaPerPhase = 6
+    static let maximumPhaseTitleCharacters = 160
+    static let maximumAcceptanceCriterionCharacters = 300
+
+    enum PhaseStatus: String, Codable, Equatable {
+        case pending
+        case planning
+        case executing
+        case completed
+        case blocked
+
+        init(from decoder: Decoder) throws {
+            let raw = (try? decoder.singleValueContainer().decode(String.self)) ?? ""
+            self = PhaseStatus(rawValue: raw) ?? .blocked
+        }
+    }
+
+    struct Phase: Codable, Equatable, Identifiable {
+        var id: String
+        var title: String
+        var acceptanceCriteria: [String]
+        var status: PhaseStatus
+        var completedAt: Date?
+
+        init(
+            id: String,
+            title: String,
+            acceptanceCriteria: [String],
+            status: PhaseStatus = .pending,
+            completedAt: Date? = nil
+        ) {
+            self.id = id
+            self.title = title
+            self.acceptanceCriteria = acceptanceCriteria
+            self.status = status
+            self.completedAt = completedAt
+        }
+    }
+
+    var phases: [Phase]
+    var activePhaseIndex: Int
+
+    init(phases: [Phase], activePhaseIndex: Int = 0) {
+        self.phases = phases
+        self.activePhaseIndex = activePhaseIndex
+    }
+
+    var activePhase: Phase? {
+        guard phases.indices.contains(activePhaseIndex) else { return nil }
+        return phases[activePhaseIndex]
+    }
+
+    var isComplete: Bool {
+        !phases.isEmpty && phases.allSatisfy { $0.status == .completed }
+    }
+
+    var phasePositionText: String {
+        guard !phases.isEmpty else { return "0/0" }
+        return "\(min(activePhaseIndex + 1, phases.count))/\(phases.count)"
+    }
+}
+
 /// Persisted, host-owned ledger for Goal Teams planning. The raw-value enums
 /// intentionally use tolerant decoding: future/unknown values narrow the
 /// session to a blocked/interrupted state instead of failing the whole chat.
@@ -1207,7 +1283,8 @@ nonisolated struct AgentGoalPlanningState: Codable, Equatable {
 
     func normalizedForRestore(
         currentPlan: AgentPlan?,
-        currentGoal: AgentGoal? = nil
+        currentGoal: AgentGoal? = nil,
+        goalRoadmap: AgentGoalRoadmap? = nil
     ) -> AgentGoalPlanningState {
         var copy = self
         var interrupted = false
@@ -1262,13 +1339,18 @@ nonisolated struct AgentGoalPlanningState: Codable, Equatable {
             // so a completed or empty Goal cannot retain write permission.
             let canResumeInterruptedFinalization = currentPlan?.status == .done
                 && hasIncompleteGoalChecklist
+            let canResumePhasePlanning = currentPlan == nil
+                && goalRoadmap?.activePhase?.status == .planning
             if currentPlan?.status != .approved
                 && currentPlan?.status != .executing
-                && !canResumeInterruptedFinalization {
+                && !canResumeInterruptedFinalization
+                && !canResumePhasePlanning {
                 copy.phase = .blocked
             }
         case .completed:
-            if currentPlan?.status != .done { copy.phase = .blocked }
+            if currentPlan?.status != .done && goalRoadmap?.isComplete != true {
+                copy.phase = .blocked
+            }
         case .collecting, .arbitrating, .blocked:
             break
         }

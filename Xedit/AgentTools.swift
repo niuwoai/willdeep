@@ -186,7 +186,7 @@ enum AgentProcessSupport {
 
     /// Protect the delayed SIGKILL from PID reuse: a short-lived child may
     /// exit after TERM and macOS may recycle its pid before the grace period.
-    private nonisolated struct ProcessIdentity: Sendable {
+    nonisolated struct ProcessIdentity: Sendable {
         let pid: pid_t
         let startSeconds: UInt64
         let startMicroseconds: UInt64
@@ -222,6 +222,25 @@ enum AgentProcessSupport {
 
     /// libproc reports PID counts (not byte counts); recurse before appending
     /// each child so signals travel deepest-first.
+    nonisolated static func descendantProcessIdentities(of rootPID: pid_t) -> [ProcessIdentity] {
+        descendantPIDs(of: rootPID).compactMap(ProcessIdentity.init(pid:))
+    }
+
+    nonisolated static func terminateProcessIdentities(
+        _ identities: [ProcessIdentity],
+        gracePeriod: TimeInterval = 2
+    ) {
+        let live = identities.filter(\.stillMatchesCurrentProcess)
+        for identity in live {
+            _ = Darwin.kill(identity.pid, SIGTERM)
+        }
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + gracePeriod) {
+            for identity in live where identity.stillMatchesCurrentProcess {
+                _ = Darwin.kill(identity.pid, SIGKILL)
+            }
+        }
+    }
+
     private nonisolated static func descendantPIDs(of rootPID: pid_t) -> [pid_t] {
         var visited: Set<pid_t> = [rootPID]
         var result: [pid_t] = []
@@ -1047,6 +1066,25 @@ enum AgentToolRunner {
         // completion event at the top of a later turn.
         let wantsBackground = effectiveArguments["run_in_background"]?.boolValue() ?? false
         if wantsBackground, let registry = context.jobRegistry, let runtimeID = context.runtimeID {
+            let inferredActivity = AgentRunCommandExecutionPolicy.inferredActivityKind(for: command)
+            let requestedLifetime: AgentBackgroundJobLifetime?
+            if let rawLifetime = effectiveArguments["lifetime"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(), !rawLifetime.isEmpty {
+                guard let parsed = AgentBackgroundJobLifetime(rawValue: rawLifetime) else {
+                    throw AgentToolError.invalidArgument("lifetime must be turn, phase, goal, or persistent")
+                }
+                requestedLifetime = parsed
+            } else {
+                requestedLifetime = nil
+            }
+            var jobLifetime = requestedLifetime
+                ?? (inferredActivity == .server
+                    ? (context.goalPhaseID == nil ? .persistent : .phase)
+                    : .turn)
+            if jobLifetime == .phase, context.goalPhaseID == nil {
+                jobLifetime = context.isGoalMode ? .goal : .turn
+            }
             let bgTimeout: Double? = effectiveArguments["timeout_seconds"]?.intValue().map { Double(min(max($0, 1), 3600 * 6)) }
             let job: AgentBackgroundJob
             do {
@@ -1061,6 +1099,8 @@ enum AgentToolRunner {
                         environment: context.localCommandEnvironment,
                         displayCommand: AgentSecretStore.redact(command, secretValues: context.secretRedactionValues),
                         secretRedactionValues: context.secretRedactionValues,
+                        lifetime: jobLifetime,
+                        goalPhaseID: jobLifetime == .phase ? context.goalPhaseID : nil,
                         automaticSandboxRetryApprovalSource: context.isUnattendedDispatchTask
                             ? .dispatchTask
                             : nil
@@ -1077,11 +1117,12 @@ enum AgentToolRunner {
             let selectionLine = selectedBackgroundAutomatically
                 ? "\nBackground mode: selected automatically for this test/build/server command."
                 : ""
+            let lifetimeLine = "\nLifetime: \(job.lifetime.rawValue)"
             let payload = """
             Started background job \(job.displayHandle).
             Command: \(AgentSecretStore.redact(command, secretValues: context.secretRedactionValues))
             PID: \(job.pid)
-            cwd: \(cwd)\(timeoutLine)\(selectionLine)
+            cwd: \(cwd)\(timeoutLine)\(selectionLine)\(lifetimeLine)
 
             The job is running. You will receive a `<background-task-notification>` system message at the start of a later turn when it finishes (or fails). Until then, call `get_job_output` to inspect partial output, `list_jobs` to see all alive jobs, or `kill_job` to stop it.
             """

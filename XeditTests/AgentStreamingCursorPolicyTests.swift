@@ -9,6 +9,15 @@ import Testing
 
 @Suite
 struct AgentStreamingCursorPolicyTests {
+    @Test("streaming refresh cadence backs off as rendered content grows")
+    func streamingRefreshCadenceBacksOff() {
+        #expect(AgentStreamingRefreshPolicy.intervalNanoseconds(forContentLength: 0) == 200_000_000)
+        #expect(AgentStreamingRefreshPolicy.intervalNanoseconds(forContentLength: 3_999) == 200_000_000)
+        #expect(AgentStreamingRefreshPolicy.intervalNanoseconds(forContentLength: 4_000) == 333_000_000)
+        #expect(AgentStreamingRefreshPolicy.intervalNanoseconds(forContentLength: 15_999) == 333_000_000)
+        #expect(AgentStreamingRefreshPolicy.intervalNanoseconds(forContentLength: 16_000) == 500_000_000)
+    }
+
     @Test("streaming cursor remains visible while output is newer than 500ms")
     func recentOutputShowsCursor() {
         let lastOutputAt = Date(timeIntervalSinceReferenceDate: 10)

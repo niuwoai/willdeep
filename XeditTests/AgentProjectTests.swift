@@ -26,6 +26,28 @@ struct AgentProjectTests {
         )
     }
 
+    @Test("旧项目数据缺少置顶字段时按未置顶读取")
+    func legacyProjectDecodesAsUnpinned() throws {
+        let id = UUID()
+        let data = try #require(
+            """
+            {
+              "id": "\(id.uuidString)",
+              "displayName": "Legacy",
+              "folderPaths": ["/tmp/legacy"],
+              "repositoryIdentities": [],
+              "createdAt": 1000,
+              "updatedAt": 1000
+            }
+            """.data(using: .utf8)
+        )
+
+        let decoded = try JSONDecoder().decode(AgentProject.self, from: data)
+
+        #expect(!decoded.isPinned)
+        #expect(decoded.pinnedAt == nil)
+    }
+
     /// Projects replace workspaces outright, so every bare folder group has to
     /// become a project — otherwise the sidebar keeps listing both kinds of row.
     @Test("裸文件夹分组会被挑出来升级为项目")

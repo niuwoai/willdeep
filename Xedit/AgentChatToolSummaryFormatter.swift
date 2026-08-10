@@ -310,88 +310,88 @@ enum AgentCollapsedToolActivitySummary {
         appendCount(
             createdFiles.count,
             systemImage: "doc.badge.plus",
-            singular: "生成了 1 个文件",
-            plural: "生成了 %d 个文件",
+            singular: "生成了1个文件",
+            plural: "生成了%d个文件",
             to: &items
         )
         appendCount(
             editedFiles.count,
             systemImage: "pencil",
-            singular: "修改了 1 个文件",
-            plural: "修改了 %d 个文件",
+            singular: "修改了1个文件",
+            plural: "修改了%d个文件",
             to: &items
         )
         appendCount(
             readImages.count,
             systemImage: "photo.on.rectangle",
-            singular: "读取了 1 张图片",
-            plural: "读取了 %d 张图片",
+            singular: "读取了1张图片",
+            plural: "读取了%d张图片",
             to: &items
         )
         appendCount(
             readFiles.count,
             systemImage: "book.pages",
-            singular: "已读取 1 个文件",
-            plural: "已读取 %d 个文件",
+            singular: "已读取1个文件",
+            plural: "已读取%d个文件",
             to: &items
         )
         appendCount(
             listedDirectories.count,
             systemImage: "folder",
-            singular: "已浏览 1 个目录",
-            plural: "已浏览 %d 个目录",
+            singular: "已浏览1个目录",
+            plural: "已浏览%d个目录",
             to: &items
         )
         if searchCount > 0 {
             items.append(Item(
                 systemImage: "magnifyingglass",
-                text: searchCount == 1 ? "已搜索代码" : "已搜索代码 \(searchCount) 次"
+                text: searchCount == 1 ? "已搜索代码" : "已搜索代码\(searchCount)次"
             ))
         }
         if gitStatusCount > 0 {
             items.append(Item(
                 systemImage: "arrow.triangle.branch",
-                text: gitStatusCount == 1 ? "已查看 Git 状态" : "已查看 Git 状态 \(gitStatusCount) 次"
+                text: gitStatusCount == 1 ? "已查看 Git 状态" : "已查看 Git 状态\(gitStatusCount)次"
             ))
         }
         appendCount(
             commandCount,
             systemImage: "terminal",
-            singular: "已运行 1 条命令",
-            plural: "已运行 %d 条命令",
+            singular: "已运行1条命令",
+            plural: "已运行%d条命令",
             to: &items
         )
         appendCount(
             terminalOperationCount,
             systemImage: "terminal",
-            singular: "已执行 1 次终端操作",
-            plural: "已执行 %d 次终端操作",
+            singular: "已执行1次终端操作",
+            plural: "已执行%d次终端操作",
             to: &items
         )
         appendCount(
             generatedImageCount,
             systemImage: "photo.badge.plus",
-            singular: "生成了 1 张图片",
-            plural: "生成了 %d 张图片",
+            singular: "生成了1张图片",
+            plural: "生成了%d张图片",
             to: &items
         )
         appendCount(
             editedImageCount,
             systemImage: "slider.horizontal.3",
-            singular: "处理了 1 张图片",
-            plural: "处理了 %d 张图片",
+            singular: "处理了1张图片",
+            plural: "处理了%d张图片",
             to: &items
         )
         appendCount(
             screenshotCount,
             systemImage: "camera",
-            singular: "截取了 1 张图片",
-            plural: "截取了 %d 张图片",
+            singular: "截取了1张图片",
+            plural: "截取了%d张图片",
             to: &items
         )
 
         if fallbackCallCount > 0 {
-            let fallback = "执行了 \(fallbackCallCount) 次工具调用"
+            let fallback = "执行了\(fallbackCallCount)次工具调用"
             items.append(Item(
                 systemImage: "wrench.and.screwdriver",
                 text: items.isEmpty ? fallback : "另\(fallback)"

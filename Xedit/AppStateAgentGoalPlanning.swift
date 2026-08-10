@@ -81,6 +81,7 @@ nonisolated enum AgentGoalPlanProposalValidator {
         content: String,
         plan: AgentPlan,
         generationID: UUID? = nil,
+        requiresRoadmap: Bool = false,
         requiresDispatchGraph: Bool = false,
         availableProfileIDs: Set<String>? = nil
     ) -> Bool {
@@ -88,6 +89,7 @@ nonisolated enum AgentGoalPlanProposalValidator {
             content: content,
             plan: plan,
             generationID: generationID,
+            requiresRoadmap: requiresRoadmap,
             requiresDispatchGraph: requiresDispatchGraph,
             availableProfileIDs: availableProfileIDs
         ).isEmpty
@@ -102,12 +104,21 @@ nonisolated enum AgentGoalPlanProposalValidator {
         content: String,
         plan: AgentPlan,
         generationID: UUID? = nil,
+        requiresRoadmap: Bool = false,
         requiresDispatchGraph: Bool = false,
         availableProfileIDs: Set<String>? = nil
     ) -> [String] {
         var failures: [String] = []
         if plan.steps.isEmpty {
             failures.append("the fenced ```plan block has no steps")
+        }
+        if plan.steps.count > AgentGoalRoadmap.maximumStepsPerPhase {
+            failures.append(
+                "the active-phase plan exceeds the maximum of \(AgentGoalRoadmap.maximumStepsPerPhase) steps; move later work into future roadmap phases"
+            )
+        }
+        if requiresRoadmap {
+            failures += AgentGoalRoadmapParser.validationFailures(in: content)
         }
         if !validatesTeamsTable(in: content) {
             failures.append(
@@ -202,6 +213,18 @@ nonisolated enum AgentGoalPlanProposalValidator {
     }
 }
 
+nonisolated enum AgentGoalPhasePlanValidator {
+    static func validationFailures(plan: AgentPlan) -> [String] {
+        if plan.steps.isEmpty {
+            return ["the fenced ```plan block has no steps"]
+        }
+        if plan.steps.count > AgentGoalRoadmap.maximumStepsPerPhase {
+            return ["the phase plan exceeds the maximum of \(AgentGoalRoadmap.maximumStepsPerPhase) steps"]
+        }
+        return []
+    }
+}
+
 /// What `captureAgentPlanFromLatestMessage` did with the latest assistant
 /// reply in Goal mode. The loop uses `.proposalRejectedNeedsRetry` to grant
 /// the model an immediate correction round instead of ending the turn with
@@ -293,6 +316,7 @@ extension AppState {
             }
         )
         runtime.currentPlan = nil
+        runtime.goalRoadmap = nil
         runtime.goalPlanningState = state
         persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
 
@@ -408,6 +432,7 @@ extension AppState {
             )
         }
         runtime.currentPlan = nil
+        runtime.goalRoadmap = nil
         runtime.goalPlanningState = AgentGoalPlanningState(
             generationID: generationID,
             goalFingerprint: AgentGoalPlanningState.fingerprint(for: goal),
@@ -442,9 +467,13 @@ extension AppState {
         | Member | Skill/Subagent | Goal Slice | Claimed Tasks | Locked Scope | Deliverable | Done Criteria | Docs/Tasklist Updates | Test Owner | Validator |
         Every cell must be non-empty. Member uses role-specificTask and Validator differs from Member.
 
-        Emit exactly one numbered fenced `plan` block covering implementation, tests, documentation, versioning, and acceptance. Every step names a task ID, member, owner, or deliverable.
+        Emit exactly one fenced `goal-roadmap` JSON block before the plan:
+        {"phases":[{"id":"PHASE-1","title":"coarse phase","acceptance":["observable criterion"]}]}
+        Use 1–\(AgentGoalRoadmap.maximumPhaseCount) coarse phases. Future phases stay high-level.
 
-        Emit exactly one fenced `dispatch-graph` JSON block:
+        Emit exactly one numbered fenced `plan` block for PHASE-1 only, with at most \(AgentGoalRoadmap.maximumStepsPerPhase) steps. Across those steps cover implementation, tests, documentation, versioning, and acceptance, or explicitly mark a category N/A. Every step names a task ID, member, owner, or deliverable.
+
+        Emit exactly one fenced `dispatch-graph` JSON block for PHASE-1 only, with at most \(AgentGoalDispatchPlanParser.maximumNodeCount) execution nodes:
         {"nodes":[{"id":"TASK-1","title":"specific deliverable","depends_on":[],"profile":"profile-id","fallback_profiles":["fallback-profile-id"],"acceptance":["observable evidence"]}]}
 
         Choose the smallest useful DAG. Parallelize independent work, but never emit every node as an independent root for a multi-part project. The UI acceptance gate is synthetic and cannot merge code, integrate deliverables, test, or repair work. A graph with 3+ nodes must have exactly one executable terminal test/regression/verification node and at least three execution layers. Every parallel implementation wave must feed a distinct merge/integration execution node whose depends_on explicitly lists the upstream coding nodes; the terminal verification node must then depend on that merge/integration node. For software projects, model the usual foundation/shared-contract → parallel implementation → distinct code merge/integration → independent test/regression flow. Never flatten independent work into a serial chain. Give nontrivial nodes at least one fallback profile when another suitable profile is available. Choose profile IDs only from:
@@ -595,6 +624,102 @@ extension AppState {
         }
     }
 
+    /// Close the active Goal phase and start a fresh bounded planning round
+    /// for the next one. Returns true when the completion was consumed by a
+    /// phase transition; final-phase completion falls through to the ordinary
+    /// Goal acceptance loop.
+    @discardableResult
+    func advanceAgentGoalRoadmapIfNeeded(for runtime: AgentRuntime) -> Bool {
+        guard runtime.interactionMode == .goal,
+              runtime.currentPlan?.status == .done,
+              var roadmap = runtime.goalRoadmap,
+              roadmap.phases.indices.contains(roadmap.activePhaseIndex) else {
+            return false
+        }
+
+        let completedIndex = roadmap.activePhaseIndex
+        guard roadmap.phases[completedIndex].status != .completed else { return false }
+        _ = agentJobRegistry.killAllAlive(
+            forRuntime: runtime.id,
+            phaseID: roadmap.phases[completedIndex].id
+        )
+        roadmap.phases[completedIndex].status = .completed
+        roadmap.phases[completedIndex].completedAt = Date()
+
+        let nextIndex = completedIndex + 1
+        guard roadmap.phases.indices.contains(nextIndex) else {
+            runtime.goalRoadmap = roadmap
+            persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+            return false
+        }
+
+        roadmap.activePhaseIndex = nextIndex
+        roadmap.phases[nextIndex].status = .planning
+        runtime.goalRoadmap = roadmap
+        runtime.currentPlan = nil
+        runtime.goalTurnRecoveryCheckpoint = nil
+        runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+
+        let phase = roadmap.phases[nextIndex]
+        let phaseID = AgentContextBuilder.escapedUntrustedContext(phase.id)
+        let phaseTitle = AgentContextBuilder.escapedUntrustedContext(phase.title)
+        let acceptance = phase.acceptanceCriteria.map {
+            "- \(AgentContextBuilder.escapedUntrustedContext($0))"
+        }.joined(separator: "\n")
+        let phaseDispatchContract: String
+        if runtime.session.presentationScope == .dispatchBoard {
+            let selectedWorkerIDs = Set(runtime.currentGoal?.selectedWorkerProfileIDs
+                ?? [AgentExecutionProfile.recommendedWorkerID])
+            let profiles = AgentExecutionProfileStore().availableProfiles(
+                workspacePath: runtime.workspaceLocation?.path ?? runtime.workspaceRootPath
+            ).filter { selectedWorkerIDs.contains($0.id) }
+            let catalog = profiles.map {
+                "- \($0.id) | \($0.name) | executor=\($0.executor.rawValue) | model=\($0.modelID ?? "default")"
+            }.joined(separator: "\n")
+            phaseDispatchContract = """
+
+            Also emit one fenced `dispatch-graph` JSON block for this phase only, with at most \(AgentGoalDispatchPlanParser.maximumNodeCount) execution nodes:
+            {"nodes":[{"id":"TASK-1","title":"specific deliverable","depends_on":[],"profile":"profile-id","fallback_profiles":["fallback-profile-id"],"acceptance":["observable evidence"]}]}
+            Choose profile IDs only from:
+            <execution_profiles>
+            \(catalog)
+            </execution_profiles>
+            """
+        } else {
+            phaseDispatchContract = ""
+        }
+        let prompt = """
+        The previous Goal phase is complete. Plan the next roadmap phase only.
+
+        <active_goal_phase id="\(phaseID)" position="\(roadmap.phasePositionText)">
+        \(phaseTitle)
+        </active_goal_phase>
+        <phase_acceptance>
+        \(acceptance)
+        </phase_acceptance>
+
+        Emit exactly one numbered fenced `plan` block with at most \(AgentGoalRoadmap.maximumStepsPerPhase) concrete steps for this phase. Do not repeat completed phases, replace the Goal roadmap, emit a Teams table, or call tools in this planning reply. The host will continue execution immediately after accepting the phase plan.\(phaseDispatchContract)
+        """
+        guard !runtime.queuedMessages.contains(where: {
+            $0.source == .hostInstruction
+                && $0.text.contains("<active_goal_phase id=\"\(phase.id)\"")
+        }) else { return true }
+        if runtime.isResponding {
+            runtime.queuedMessages.append(
+                AgentQueuedMessage(text: prompt, images: [], source: .hostInstruction)
+            )
+        } else {
+            dispatchAgentMessage(
+                for: runtime,
+                text: prompt,
+                images: [],
+                source: .hostInstruction
+            )
+        }
+        return true
+    }
+
     /// Returns true for every coordinator-owned run, including stale runs, so
     /// AppState can suppress the generic per-run parent wake contract.
     @discardableResult
@@ -708,6 +833,7 @@ extension AppState {
     }
 
     static let goalProposalCorrectionPrefix = "[goal-proposal-validation]"
+    static let goalPhasePlanCorrectionPrefix = "[goal-phase-plan-validation]"
 
     /// Feed validation failures back to the model (at most twice per
     /// proposal cycle), then give up visibly: phase → blocked plus a user
@@ -735,7 +861,41 @@ extension AppState {
         runtime.messages.append(AgentMessage(
             role: .system,
             content: """
-            \(Self.goalProposalCorrectionPrefix) Your team proposal was parsed but FAILED validation, so it was NOT accepted. Fix every issue below, then resend the COMPLETE proposal in one reply — the fenced ```plan block, the fenced ```dispatch-graph JSON block when requested, the full teams table, and the hidden generation marker comment all together:
+            \(Self.goalProposalCorrectionPrefix) Your team proposal was parsed but FAILED validation, so it was NOT accepted. Fix every issue below, then resend the COMPLETE proposal in one reply — the fenced ```goal-roadmap JSON block, fenced ```plan block, the fenced ```dispatch-graph JSON block when requested, the full teams table, and the hidden generation marker comment all together:
+            - \(failures.joined(separator: "\n- "))
+            """
+        ))
+        persistAgentSession(runtime: runtime)
+        return .proposalRejectedNeedsRetry
+    }
+
+    func requestAgentGoalPhasePlanCorrection(
+        for runtime: AgentRuntime,
+        failures: [String],
+        requiresDispatchGraph: Bool = false
+    ) -> AgentGoalProposalCaptureOutcome {
+        let phaseID = runtime.goalRoadmap?.activePhase?.id ?? "unknown"
+        let priorCorrections = runtime.messages.filter {
+            $0.role == .system
+                && $0.content.hasPrefix("\(Self.goalPhasePlanCorrectionPrefix)[\(phaseID)]")
+        }.count
+        guard priorCorrections < 2 else {
+            if var roadmap = runtime.goalRoadmap,
+               roadmap.phases.indices.contains(roadmap.activePhaseIndex) {
+                roadmap.phases[roadmap.activePhaseIndex].status = .blocked
+                runtime.goalRoadmap = roadmap
+            }
+            runtime.errorMessage = "当前 Goal 阶段的计划连续未通过校验，已暂停。"
+            runtime.errorDetails = AgentErrorDetails(sections: [
+                .init(title: "校验失败原因", text: failures.joined(separator: "\n"))
+            ])
+            persistAgentSession(runtime: runtime)
+            return .proposalRejectedGaveUp
+        }
+        runtime.messages.append(AgentMessage(
+            role: .system,
+            content: """
+            \(Self.goalPhasePlanCorrectionPrefix)[\(phaseID)] The active phase plan was rejected. Emit one complete fenced ```plan block for this phase only, with no more than \(AgentGoalRoadmap.maximumStepsPerPhase) numbered steps\(requiresDispatchGraph ? ", plus one complete fenced ```dispatch-graph JSON block for this phase only" : ""):
             - \(failures.joined(separator: "\n- "))
             """
         ))
@@ -823,7 +983,7 @@ extension AppState {
         let dispatchGraphContract = runtime.session.presentationScope == .dispatchBoard
             ? """
 
-            Also emit exactly one fenced `dispatch-graph` JSON block after the numbered plan. This is the executable DAG and is separate from the Goal acceptance checklist. Use this exact shape:
+            Also emit exactly one fenced `dispatch-graph` JSON block after the numbered plan for PHASE-1 only. This is the executable DAG and is separate from the Goal acceptance checklist. Use at most \(AgentGoalDispatchPlanParser.maximumNodeCount) execution nodes in this exact shape:
             {"nodes":[{"id":"TASK-1","title":"specific deliverable","depends_on":[],"profile":"profile-id","fallback_profiles":["fallback-profile-id"],"acceptance":["observable evidence"]}]}
 
             Choose the smallest useful DAG from the actual task. Parallelize independent work, but never emit every node as an independent root for a multi-part project. The UI acceptance gate is synthetic and cannot merge code, integrate deliverables, test, or repair work. A graph with 3+ nodes must have exactly one executable terminal test/regression/verification node and at least three execution layers. Every parallel implementation wave must feed a distinct merge/integration execution node whose depends_on explicitly lists the upstream coding nodes; the terminal verification node must then depend on that merge/integration node. For software projects, model the usual foundation/shared-contract → parallel implementation → distinct code merge/integration → independent test/regression flow. Do not flatten the graph into a serial chain and do not invent parallelism when the work is truly sequential. Give nontrivial nodes at least one fallback profile when another suitable profile is available. Pick each node's primary profile and ordered fallbacks from this catalog only:
@@ -845,7 +1005,11 @@ extension AppState {
 
             Immediately before the Teams table, emit this exact invisible binding marker once: <!-- goal-planning-generation:\(state.generationID.uuidString) -->
 
-            Then include exactly one numbered fenced `plan` block. It must cover implementation, tests, documentation, version handling, and acceptance, or explicitly mark a category N/A with a reason. Every step must name a task ID, member, or deliverable.\(dispatchGraphContract)
+            Then include exactly one fenced `goal-roadmap` JSON block using this shape:
+            {"phases":[{"id":"PHASE-1","title":"coarse phase","acceptance":["observable criterion"]}]}
+            Use 1–\(AgentGoalRoadmap.maximumPhaseCount) coarse phases. Do not pre-expand future phases into task lists.
+
+            Then include exactly one numbered fenced `plan` block for PHASE-1 only, with at most \(AgentGoalRoadmap.maximumStepsPerPhase) steps. It must cover implementation, tests, documentation, version handling, and acceptance, or explicitly mark a category N/A with a reason. Every step must name a task ID, member, or deliverable.\(dispatchGraphContract)
 
             Do not ask for plan approval and do not emit another plan on later rounds. End this synthesis reply without tools; the host validates the proposal and immediately continues execution.
             """,

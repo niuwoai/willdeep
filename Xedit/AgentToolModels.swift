@@ -174,6 +174,10 @@ struct AgentToolContext {
     /// work records it separately from `runtimeID` so a user Stop targets only
     /// work created by the latest turn.
     let turnID: UUID?
+    /// Active Goal phase. Nil outside a phased Goal or while its roadmap is
+    /// still being planned. Dev servers inherit this ownership automatically.
+    let goalPhaseID: String?
+    let isGoalMode: Bool
     /// User-visible title of the conversation that owns a native Computer Use
     /// lease. Kept separate from runtimeID so the global control indicator can
     /// identify a background task without reaching back into AppState.
@@ -266,6 +270,8 @@ struct AgentToolContext {
         runtimeDescriptor: RuntimeDescriptor? = nil,
         runtimeID: UUID? = nil,
         turnID: UUID? = nil,
+        goalPhaseID: String? = nil,
+        isGoalMode: Bool = false,
         computerUseSessionTitle: String? = nil,
         jobRegistry: AgentJobRegistry? = nil,
         mediaTaskRegistry: AgentMediaTaskRegistry? = nil,
@@ -296,6 +302,8 @@ struct AgentToolContext {
         self.runtimeDescriptor = runtimeDescriptor
         self.runtimeID = runtimeID
         self.turnID = turnID
+        self.goalPhaseID = goalPhaseID
+        self.isGoalMode = isGoalMode
         self.computerUseSessionTitle = computerUseSessionTitle
         self.jobRegistry = jobRegistry
         self.mediaTaskRegistry = mediaTaskRegistry
@@ -351,6 +359,8 @@ struct AgentToolContext {
             runtimeDescriptor: runtimeDescriptor,
             runtimeID: runtimeID,
             turnID: turnID,
+            goalPhaseID: goalPhaseID,
+            isGoalMode: isGoalMode,
             computerUseSessionTitle: computerUseSessionTitle,
             jobRegistry: jobRegistry,
             mediaTaskRegistry: mediaTaskRegistry,
@@ -383,6 +393,8 @@ struct AgentToolContext {
             runtimeDescriptor: runtimeDescriptor,
             runtimeID: runtimeID,
             turnID: turnID,
+            goalPhaseID: goalPhaseID,
+            isGoalMode: isGoalMode,
             computerUseSessionTitle: computerUseSessionTitle,
             jobRegistry: jobRegistry,
             mediaTaskRegistry: mediaTaskRegistry,

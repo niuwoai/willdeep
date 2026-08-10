@@ -197,6 +197,8 @@ nonisolated struct AgentGoalDispatchPlan: Codable, Equatable {
 }
 
 nonisolated enum AgentGoalDispatchPlanParser {
+    static let maximumNodeCount = 9
+
     private struct Payload: Decodable {
         struct Node: Decodable {
             let id: String
@@ -295,6 +297,9 @@ nonisolated enum AgentGoalDispatchPlanParser {
         var failures: [String] = []
         guard !payload.nodes.isEmpty else {
             return ["dispatch-graph.nodes must contain at least one execution node"]
+        }
+        if payload.nodes.count > maximumNodeCount {
+            failures.append("dispatch-graph exceeds the maximum of \(maximumNodeCount) execution nodes")
         }
         let keys = payload.nodes.map {
             $0.id.trimmingCharacters(in: .whitespacesAndNewlines)

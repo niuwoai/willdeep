@@ -3,7 +3,7 @@
 //  WillDeep
 //
 //  Codex-style collapsing of consecutive same-kind tool calls into a
-//  single transcript row ("已运行 3 条命令" / "已读取 2 个文件"). The
+//  single transcript row ("已运行3条命令" / "已读取2个文件"). The
 //  Agent-mode transcript renders one card per group instead of one
 //  card per tool call so a busy turn doesn't drown the chat.
 //
@@ -458,29 +458,29 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
     func groupTitle(_ count: Int) -> String {
         switch self {
         case .runCommand:
-            return "已运行 \(count) 条命令"
+            return "已运行\(count)条命令"
         case .terminalOperation:
-            return "已执行 \(count) 次终端操作"
+            return "已执行\(count)次终端操作"
         case .fileExploration:
-            return "已探索 \(count) 个文件"
+            return "已探索\(count)个文件"
         case .subagent:
-            return "已派出 \(count) 个子 agent"
+            return "已派出\(count)个子 agent"
         case .claudeCode:
-            return "已委派 \(count) 个 Claude Code 任务"
+            return "已委派\(count)个 Claude Code 任务"
         case .codexCLI:
-            return "已委派 \(count) 个 Codex CLI 任务"
+            return "已委派\(count)个 Codex CLI 任务"
         case .hermesCLI:
-            return "已委派 \(count) 个 Hermes 任务"
+            return "已委派\(count)个 Hermes 任务"
         case .cursorAgent:
-            return "已委派 \(count) 个 Cursor Agent 任务"
+            return "已委派\(count)个 Cursor Agent 任务"
         case .clineCLI:
-            return "已委派 \(count) 个 Cline 任务"
+            return "已委派\(count)个 Cline 任务"
         case .fileMutation:
-            return "已写入 \(count) 个文件"
+            return "已写入\(count)个文件"
         case .applyPatch:
             return "已提交 Patch"
         case .other(let name):
-            return "已调用 \(count) 次 \(name)"
+            return "已调用\(count)次\(name)"
         case .askUser:
             return "向你提问"
         }
@@ -491,9 +491,9 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
         case .fileExploration:
             return AgentToolActivitySummary(calls: calls).explorationText ?? groupTitle(calls.count)
         case .runCommand:
-            return "已运行 \(calls.count) 条命令"
+            return "已运行\(calls.count)条命令"
         case .terminalOperation:
-            return "已执行 \(calls.count) 次终端操作"
+            return "已执行\(calls.count)次终端操作"
         default:
             return groupTitle(calls.count)
         }
@@ -770,16 +770,16 @@ nonisolated struct AgentToolActivitySummary: Equatable {
     var explorationText: String? {
         var parts: [String] = []
         if readFileCount > 0 {
-            parts.append("已读取 \(readFileCount) 个文件")
+            parts.append("已读取\(readFileCount)个文件")
         }
         if listedDirectoryCount > 0 {
-            parts.append("已浏览 \(listedDirectoryCount) 个目录")
+            parts.append("已浏览\(listedDirectoryCount)个目录")
         }
         if searchCount > 0 {
-            parts.append(searchCount == 1 ? "已搜索代码" : "已搜索代码 \(searchCount) 次")
+            parts.append(searchCount == 1 ? "已搜索代码" : "已搜索代码\(searchCount)次")
         }
         if gitStatusCount > 0 {
-            parts.append(gitStatusCount == 1 ? "已查看 Git 状态" : "已查看 Git 状态 \(gitStatusCount) 次")
+            parts.append(gitStatusCount == 1 ? "已查看 Git 状态" : "已查看 Git 状态\(gitStatusCount)次")
         }
         guard !parts.isEmpty else { return nil }
         return parts.joined(separator: " · ")
@@ -787,12 +787,12 @@ nonisolated struct AgentToolActivitySummary: Equatable {
 
     var commandText: String? {
         guard commandCount > 0 else { return nil }
-        return "已运行 \(commandCount) 条命令"
+        return "已运行\(commandCount)条命令"
     }
 
     var terminalText: String? {
         guard terminalOperationCount > 0 else { return nil }
-        return "已执行 \(terminalOperationCount) 次终端操作"
+        return "已执行\(terminalOperationCount)次终端操作"
     }
 
     var activityText: String? {

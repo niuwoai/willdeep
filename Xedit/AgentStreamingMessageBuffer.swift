@@ -12,14 +12,15 @@
 //  Settings panes' `body` getters re-running — a whole-window invalidation
 //  10×/second for the entire turn.
 //
-//   - Fast tier (~10 Hz): deltas land in `AgentStreamingContentOverlay`,
+//   - Fast tier (adaptive 5 → 2 Hz): deltas land in
+//     `AgentStreamingContentOverlay`,
 //     a dedicated publisher observed ONLY by the transcript's streaming
 //     bubble subtree. Token-by-token liveness keeps its cadence without
 //     touching the rest of the window.
 //   - Slow tier (1 Hz): the canonical `messages` array syncs from the
 //     overlay, so everything reading `appState.agentMessages` (persistence,
 //     minimap fingerprint, thinking headline, context gauge) stays fresh
-//     within a second at 1/10th the invalidation cost. The first visible
+//     within a second at a fraction of the invalidation cost. The first visible
 //     content / reasoning of a message still syncs immediately so the
 //     bubble and the thinking preview appear without a perceptible delay.
 //
@@ -30,6 +31,24 @@
 
 import Combine
 import Foundation
+
+enum AgentStreamingRefreshPolicy {
+    static let shortContentLimit = 4_000
+    static let mediumContentLimit = 16_000
+    static let shortIntervalNanoseconds: UInt64 = 200_000_000
+    static let mediumIntervalNanoseconds: UInt64 = 333_000_000
+    static let longIntervalNanoseconds: UInt64 = 500_000_000
+
+    static func intervalNanoseconds(forContentLength contentLength: Int) -> UInt64 {
+        if contentLength < shortContentLimit {
+            return shortIntervalNanoseconds
+        }
+        if contentLength < mediumContentLimit {
+            return mediumIntervalNanoseconds
+        }
+        return longIntervalNanoseconds
+    }
+}
 
 /// Live text of the currently-streaming assistant message, published on its
 /// own channel so per-flush invalidation stays inside the streaming bubble
@@ -80,8 +99,9 @@ final class AgentStreamingContentOverlay: ObservableObject {
 
 @MainActor
 final class AgentStreamingMessageBuffer {
-    /// Fast tier: overlay (streaming bubble) refresh cadence.
-    private static let flushIntervalNanoseconds: UInt64 = 100_000_000
+    /// Fast tier: overlay (streaming bubble) refresh cadence. Markdown and
+    /// text layout rebuild the complete growing message on every publish, so
+    /// the cadence backs off as the message gets longer.
     /// Slow tier: canonical `messages` publish cadence. Every canonical
     /// publish is a whole-window SwiftUI invalidation via the AppState
     /// forward, so this deliberately lags the bubble.
@@ -95,15 +115,20 @@ final class AgentStreamingMessageBuffer {
     private var flushTask: Task<Void, Never>?
     private var canonicalFlushTask: Task<Void, Never>?
     private var canonicalNeedsSync = false
+    private var streamedCharacterCount: Int
 
     init(runtime: AgentRuntime, assistantID: AgentMessage.ID) {
         self.runtime = runtime
         self.assistantID = assistantID
+        let message = runtime.messages.first(where: { $0.id == assistantID })
+        streamedCharacterCount = message?.content.count ?? 0
+        streamedCharacterCount += message?.reasoningContent?.count ?? 0
     }
 
     func appendTextDelta(_ delta: String) {
         guard !delta.isEmpty else { return }
         pendingContent += delta
+        streamedCharacterCount += delta.count
         scheduleFlush()
         flushIfNeeded()
     }
@@ -111,6 +136,7 @@ final class AgentStreamingMessageBuffer {
     func appendReasoningDelta(_ delta: String) {
         guard !delta.isEmpty else { return }
         pendingReasoning += delta
+        streamedCharacterCount += delta.count
         scheduleFlush()
         flushIfNeeded()
     }
@@ -169,9 +195,12 @@ final class AgentStreamingMessageBuffer {
 
     private func scheduleFlush() {
         guard flushTask == nil else { return }
+        let delay = AgentStreamingRefreshPolicy.intervalNanoseconds(
+            forContentLength: streamedCharacterCount
+        )
         flushTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(nanoseconds: Self.flushIntervalNanoseconds)
+                try await Task.sleep(nanoseconds: delay)
             } catch {
                 // Cancelled by flushPending(), which already drained.
                 return

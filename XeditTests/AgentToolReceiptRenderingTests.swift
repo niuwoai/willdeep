@@ -3,7 +3,7 @@
 //  WillDeepTests
 //
 //  Covers exceptional outcome receipts. Successful work keeps its concrete
-//  action summary (for example “已运行 1 条命令”) without an inconsistent
+//  action summary (for example “已运行1条命令”) without an inconsistent
 //  “完成” suffix; failures and denials remain explicit.
 //
 
@@ -40,25 +40,25 @@ struct AgentToolReceiptRenderingTests {
         // A failure is the thing the user most needs to see, so it beats
         // co-occurring successes in the single-line verdict.
         let group = inlineGroup(["a": .succeeded, "b": .failed])
-        #expect(group.outcomeBadge == "✗ 1 失败")
+        #expect(group.outcomeBadge == "(1条失败)")
     }
 
     @Test
     func failureCountIsReported() {
         let group = inlineGroup(["a": .failed, "b": .failed, "c": .succeeded])
-        #expect(group.outcomeBadge == "✗ 2 失败")
+        #expect(group.outcomeBadge == "(2条失败)")
     }
 
     @Test
     func denialShownWhenNoFailures() {
         let group = inlineGroup(["a": .denied, "b": .succeeded])
-        #expect(group.outcomeBadge == "✗ 1 已拒绝")
+        #expect(group.outcomeBadge == "(1条已拒绝)")
     }
 
     @Test
     func failureTakesPriorityOverDenial() {
         let group = inlineGroup(["a": .failed, "b": .denied])
-        #expect(group.outcomeBadge == "✗ 1 失败")
+        #expect(group.outcomeBadge == "(1条失败)")
     }
 
     @Test
@@ -88,7 +88,7 @@ struct AgentToolReceiptRenderingTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [intent], isDark: false)
         #expect(rendered.string.contains("让我运行下一个生成器"))
-        #expect(rendered.string.contains("已运行 1 条命令"))
+        #expect(rendered.string.contains("已运行1条命令"))
         #expect(!rendered.string.contains("✓ 完成"))
     }
 
@@ -109,12 +109,13 @@ struct AgentToolReceiptRenderingTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [intent], isDark: false)
         #expect(rendered.string.contains("让我进行最后一次全面验证"))
-        #expect(rendered.string.contains("✗ 1 失败"))
+        #expect(rendered.string.contains("已运行1条命令(1条失败)"))
+        #expect(!rendered.string.contains("✗"))
 
         // Routine command failures (Agent will retry) must not paint the
         // receipt badge in alarm red — keep the same secondary tone as the
         // rest of the activity line.
-        let badgeLocation = (rendered.string as NSString).range(of: "✗ 1 失败").location
+        let badgeLocation = (rendered.string as NSString).range(of: "(1条失败)").location
         #expect(badgeLocation != NSNotFound)
         let badgeColor = try #require(rendered.attribute(
             .foregroundColor,
@@ -146,7 +147,7 @@ struct AgentToolReceiptRenderingTests {
         resolved.settledToolReceipts = ["call_c": .failed]
         let second = AgentChatHistoryRenderer.render(messages: [resolved], isDark: false)
 
-        #expect(!first.string.contains("✗ 1 失败"))
-        #expect(second.string.contains("✗ 1 失败"))
+        #expect(!first.string.contains("(1条失败)"))
+        #expect(second.string.contains("已运行1条命令(1条失败)"))
     }
 }
