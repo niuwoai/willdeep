@@ -1356,8 +1356,9 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSParagraphStyle)
         #expect(bodyFont.pointSize == 15)
-        #expect(processedFont.pointSize == bodyFont.pointSize)
-        #expect(processedColor == NSColor.tertiaryLabelColor)
+        #expect(processedFont.pointSize == NSFont.systemFontSize)
+        #expect(processedFont.fontDescriptor.symbolicTraits.contains(.bold) == false)
+        #expect(processedColor == NSColor.secondaryLabelColor)
         #expect(bodyParagraphStyle.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
         #expect(bodyParagraphStyle.lineSpacing == 5)
         let dividerLocation = NSMaxRange(processedRange) + 1
