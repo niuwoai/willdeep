@@ -59,6 +59,31 @@ struct AgentGoalLaunchRecoveryTests {
         #expect(AgentGoalLaunchRecoveryPolicy.action(for: session) == .none)
     }
 
+    @Test("active Goal phase planning resumes after launch")
+    func activePhasePlanningResumes() throws {
+        var session = makeSession(planStatus: nil)
+        session.goalPlanningState = makePlanningState(
+            goal: try #require(session.currentGoal),
+            phase: .executing
+        )
+        session.goalRoadmap = AgentGoalRoadmap(phases: [
+            .init(
+                id: "PHASE-2",
+                title: "发布收口",
+                acceptanceCriteria: ["版本一致"],
+                status: .planning
+            ),
+        ])
+
+        #expect(AgentGoalLaunchRecoveryPolicy.action(for: session) == .resumePhasePlanning)
+        let roadmap = try #require(session.goalRoadmap)
+        let notice = try #require(
+            AgentGoalLaunchRecoveryPolicy.phasePlanningContinuationNotice(roadmap: roadmap)
+        )
+        #expect(notice.contains("PHASE-2"))
+        #expect(notice.contains("at most 6"))
+    }
+
     @Test("archived and completed Goals never auto-resume")
     func archivedAndCompletedGoalsDoNotResume() {
         var archived = makeSession(

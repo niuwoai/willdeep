@@ -1,7 +1,34 @@
 # Changelog
 
-> 当前文件保留最新版本（1.239.0 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.240.0 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.240.0 - 2026-08-10
+
+### Added
+
+- Goal 模式新增持久化 Roadmap：一个 Goal 最多拆成 6 个粗粒度 phase，每个 phase 激活时再独立生成最多 6 步的 Plan；完成当前 phase 后自动进入下一阶段规划，允许跨多个模型轮次持续推进，界面显示“阶段 X/Y”。
+- 后台命令新增 turn、phase、goal、persistent 生命周期。Goal 内自动识别的 dev server 默认绑定当前 phase，只有用户明确要求跨任务保留时才使用 persistent。
+
+### Changed
+
+- Goal 初始提案与调度图增加硬性规模门禁，拒绝超过 6 步的当前阶段 Plan、超过 6 个 phase 的 Roadmap，以及超过 9 个节点的调度图，避免把长期目标一次展开成难以观察的十几步清单。
+- Goal 续跑、恢复与持久化改为理解 phase 边界；长期 phase/persistent 服务不再被误判为当前 Plan 的有效进展信号。
+
+### Fixed
+
+- phase 完成时由宿主静默终止该阶段后台任务及其已跟踪的完整子进程树，避免 E2E/浏览器验收结束后遗留 dev server、watcher 或浏览器子进程长期占用 CPU 与内存。
+- 用户在 Goal 空闲时手动完成当前 phase 后，下一 phase 现在会立即启动规划；正在响应时仍使用宿主指令队列串行衔接，避免空闲队列无消费者而卡住。
+- 过期 Goal 规划代次在进入新 Roadmap/Plan 验证前直接丢弃，避免旧 synthesis 碰撞新规划代次后触发无意义的修正轮次。
+
+### Tests
+
+- 新增 Roadmap 解析、安全边界、持久化、6 步上限、phase 自动推进与 phase 计划恢复测试。
+- 新增后台任务生命周期隔离测试，覆盖只清理完成 phase、保留其他 phase/persistent 任务、静默清理不唤醒 Goal，以及 phase 服务不冒充 Plan 进展。
+
+### Meta
+
+- Goal 分阶段执行属于新增功能，正式版本从 **1.239.0** 提升为 **1.240.0**，内部构建号 **322 → 323**，Help 与 Computer Use Helper 构建号 **238 → 239**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.239.0 - 2026-08-10
 

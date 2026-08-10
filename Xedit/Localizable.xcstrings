@@ -12098,6 +12098,24 @@
         }
       }
     },
+    "goal-roadmap.phase-position" : {
+      "comment" : "compact current/total Goal roadmap phase label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phase %1$@/%2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "阶段 %1$@/%2$@"
+          }
+        }
+      }
+    },
     "goal-status-bar.progress-help" : {
       "comment" : "tooltip showing goal checklist progress",
       "extractionState" : "manual",

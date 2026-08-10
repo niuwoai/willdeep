@@ -111,21 +111,21 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v26"
+    static let stablePrefixVersion = "willdeep-agent-system-v27"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "fcae130049c41376"
-    static let compactPrefixSnapshotHash = "26f5fc9649ac9270"
-    static let extendedPrefixSnapshotHash = "9ab9f5ca2a6f3f4c"
+    static let stablePrefixSnapshotHash = "baef951b6823a0b7"
+    static let compactPrefixSnapshotHash = "e32c0c7dfa377137"
+    static let extendedPrefixSnapshotHash = "f08c0cc0b96ecd1"
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
         "9f59cf6a76a09f84",
-        "aebe3c9c9f4c804c",
+        "194138f1960f9dfa",
         "596d1256f025a84e",
     ]
 
@@ -142,6 +142,7 @@ enum AgentContextBuilder {
         currentPlan: AgentPlan? = nil,
         currentGoal: AgentGoal? = nil,
         goalPlanningState: AgentGoalPlanningState? = nil,
+        goalRoadmap: AgentGoalRoadmap? = nil,
         currentSessionTitle: String? = nil,
         currentSessionTitleIsLocked: Bool = false,
         workspaceSessions: [AgentWorkspaceSessionSnapshot] = [],
@@ -356,6 +357,23 @@ enum AgentContextBuilder {
             """)
         } else if interactionMode == .goal, let goal = currentGoal, !goal.isEmpty {
             var goalBlock = "=== GOAL MODE — ACTIVE ===\n"
+            if let goalRoadmap, let activePhase = goalRoadmap.activePhase {
+                let phaseID = escapedUntrustedContext(activePhase.id)
+                let phaseTitle = escapedUntrustedContext(activePhase.title)
+                goalBlock += "Roadmap phase \(goalRoadmap.phasePositionText): \(phaseID) — \(phaseTitle) [\(activePhase.status.rawValue)]\n"
+                goalBlock += "Active phase acceptance:\n"
+                for criterion in activePhase.acceptanceCriteria {
+                    goalBlock += "  - \(escapedUntrustedContext(criterion))\n"
+                }
+                let remainingPhases = goalRoadmap.phases.dropFirst(goalRoadmap.activePhaseIndex + 1)
+                if !remainingPhases.isEmpty {
+                    goalBlock += "Later phases (do not execute or expand yet):\n"
+                    for phase in remainingPhases {
+                        let remainingID = escapedUntrustedContext(phase.id)
+                        goalBlock += "  - \(remainingID): \(escapedUntrustedContext(phase.title))\n"
+                    }
+                }
+            }
             goalBlock += """
             Treat each provider/tool loop as one user-facing Goal round. While work is active, use tools and concise status updates as needed. When the round settles, the final visible prose must be a compact delivery summary: lead with the outcome, then list only verified results, material changes, validation evidence, and any genuine remaining blocker or next action. Do not repeat command transcripts, failed attempts, raw tool output, or step-by-step construction notes in that final summary; those remain available in WillDeep's activity and audit surfaces.
 
@@ -382,7 +400,7 @@ enum AgentContextBuilder {
                 goalBlock += "The Goal and its Plan are complete. Do not create another Plan or restart Goal Teams unless the user explicitly changes or extends the Goal.\n"
             } else {
                 goalBlock += "Goal Teams planning is host-coordinated and write-tier tools are locked. Do not implement and do not manually spawn planning members. The host starts exactly three independent read-only members, waits until all are terminal, then runs read-only evidence arbitration when at least two reports are valid. Only after arbitration succeeds may the parent emit a proposal.\n"
-                goalBlock += "A valid proposal must include the exact ten-column Teams table (Member, Skill/Subagent, Goal Slice, Claimed Tasks, Locked Scope, Deliverable, Done Criteria, Docs/Tasklist Updates, Test Owner, Validator) plus one complete numbered fenced `plan` covering implementation, tests, documentation, version handling, and acceptance (or explicit reasoned N/A). The host validates it and execution continues automatically without a plan-approval pause.\n"
+                goalBlock += "A valid proposal must include the exact ten-column Teams table (Member, Skill/Subagent, Goal Slice, Claimed Tasks, Locked Scope, Deliverable, Done Criteria, Docs/Tasklist Updates, Test Owner, Validator), one coarse fenced `goal-roadmap`, and one numbered fenced `plan` for only the first phase with no more than \(AgentGoalRoadmap.maximumStepsPerPhase) steps. The host validates it and execution continues automatically without a plan-approval pause.\n"
                 if goalPlanningState?.phase == .blocked {
                     goalBlock += "Independent planning is blocked. Explain the visible evidence gap; do not synthesize a proposed Plan or offer execution approval.\n"
                 }
@@ -591,7 +609,7 @@ enum AgentContextBuilder {
             - Image generation workflow: generate_image saves generated image files under the current workspace root by default; pass workspace-relative `output_directory` only when a subdirectory is useful. The chat UI renders generated images below your Markdown reply and exposes a quote action that inserts `<generated-image-reference ... />` into the next user message.
             - Treat `<generated-image-reference ... />` in user content as a workspace-local generated image reference, not a user-uploaded image. If the user asks to modify/refine that referenced image, call `edit_generated_image` with `reference_marker` (or the marker's `path` as `image_path`) and the user's edit prompt. The edit tool uses `gpt-image-2` by default; do not ask the user to re-upload the image.
             - Verify generated artifacts before your final answer when a practical verification command or file inspection exists. Only ask the user to run a command when you are blocked by missing credentials, an unavailable local program, denied approval, unsupported platform access, or a command that genuinely needs the user's interactive control.
-            - For long-running shell work (dev servers, watchers, big test suites, full builds — anything you'd expect to take ≥30s), pass `run_in_background: true` and a concise user-facing `label` to `run_command`. The host also promotes recognized test/build/dev-server commands automatically when `run_in_background` is omitted; explicit false still forces foreground execution. The call returns immediately with a job handle like `job_ab12cd`, and the host injects a `<background-task-notification>...</background-task-notification>` system message at the start of a later turn when the job finishes.
+            - For long-running shell work (dev servers, watchers, big test suites, full builds — anything you'd expect to take ≥30s), pass `run_in_background: true` and a concise user-facing `label` to `run_command`. The host also promotes recognized test/build/dev-server commands automatically when `run_in_background` is omitted; explicit false still forces foreground execution. In a phased Goal, recognized dev servers default to phase lifetime and the host stops their complete process trees when the phase finishes; request `lifetime: persistent` only when the user explicitly needs the service after the task. The call returns immediately with a job handle like `job_ab12cd`, and the host injects a `<background-task-notification>...</background-task-notification>` system message at the start of a later turn when the job finishes.
             - After starting a background job, briefly state what is running and immediately continue independent, non-conflicting work in the same turn—for example CHANGELOG, release notes, API docs, or metadata that the active job does not consume. Never edit source code, build configuration, dependency locks, generated inputs, or version files that can affect an active test/build. If any such input changes, mark that job's result stale and rerun the relevant verification after the edits. Do not busy-poll: use `get_job_output` only when partial output is needed, otherwise rely on the completion notice. When the notice arrives, inspect the result, diagnose failures, rerun when stale or repaired, and only then claim the task is complete.
             - Front-load user communication. Before the first write or expensive action, identify predictable user-owned scope decisions, credentials/private takeover, external commitments, and destructive or irreversible choices. Ask one concise question early when one of those is genuinely required; include the related choices together rather than interrupting later at each step. Once execution or an active Plan has begun, do not call ask_user for ordinary Git/worktree conflicts, dependency failures, build/test errors, path discovery, transient provider/tool errors, or implementation preferences that inspection and safe reversible defaults can resolve. Diagnose, repair, retry, and continue. Re-contact the user only when missing authority, secrets/private control, irreversibility, or a material product decision makes autonomous progress unsafe. Do NOT call ask_user for things you can determine by reading files yourself. If the answer is one of a small known set, pass `options` so the user can click; set `multi_select` to true only when more than one option can legitimately apply at once.
             - For learning/configuration actions, store only compact rules or workflows: add_memory for explicit future preferences ("always", "never", "以后", "必须", "默认"), create/update/delete user skills only when the user asks or a genuinely reusable workflow is being maintained, and search_mcp_servers plus suggest_mcp_server/configure_mcp_server for repeat external-system gaps. Do not store secrets or one-off facts.
@@ -645,7 +663,7 @@ enum AgentContextBuilder {
 
     static let webCodingCapabilityBlock = """
     Web programming workflow:
-    - Accept user-provided screenshots and local HTML/CSS/image files as source material; use `show_widget(html_path:)` for static HTML/SVG previews, start Vite/Next/React/Vue/frontend/backend dev servers with `run_command(run_in_background: true)`, track them in the Dev Server side panel, inspect/tail output with `get_job_output`, stop them with `kill_job`, and use browser screenshot/read tools for final visual QA when available.
+    - Accept user-provided screenshots and local HTML/CSS/image files as source material; use `show_widget(html_path:)` for static HTML/SVG previews, start Vite/Next/React/Vue/frontend/backend dev servers with `run_command(run_in_background: true)`, track them in the Dev Server side panel, inspect/tail output with `get_job_output`, stop them with `kill_job` after final visual QA, and use browser screenshot/read tools for final visual QA when available. Goal-phase servers are also force-cleaned by the host at phase completion.
     """
 
     static let computerUseCapabilityBlock = """
@@ -904,11 +922,13 @@ enum AgentContextBuilder {
         return "\(text[..<index])\n\n[truncated]"
     }
 
-    private static func escapedUntrustedContext(_ text: String) -> String {
+    static func escapedUntrustedContext(_ text: String) -> String {
         text
             .replacingOccurrences(of: "</untrusted-current-selection>", with: "&lt;/untrusted-current-selection&gt;")
             .replacingOccurrences(of: "</untrusted-current-file>", with: "&lt;/untrusted-current-file&gt;")
             .replacingOccurrences(of: "</system-reminder>", with: "&lt;/system-reminder&gt;")
+            .replacingOccurrences(of: "</active_goal_phase>", with: "&lt;/active_goal_phase&gt;")
+            .replacingOccurrences(of: "</phase_acceptance>", with: "&lt;/phase_acceptance&gt;")
     }
 
     private static func stableHash(_ text: String) -> String {
@@ -927,7 +947,7 @@ enum AgentContextBuilder {
 /// ```plan fenced block. Lines starting with `N.` or `N)` count as steps;
 /// everything inside the block before the first numbered line becomes
 /// `summary`. Returns nil when no such block is present.
-enum AgentPlanParser {
+nonisolated enum AgentPlanParser {
     static func extract(from content: String) -> AgentPlan? {
         guard let body = fencedBody(in: content, tag: "plan") else { return nil }
         var stepTexts: [String] = []
@@ -1011,7 +1031,7 @@ enum AgentPlanParser {
     /// Returns only a fully closed fenced block. Plan/progress rendering keeps
     /// accepting an in-flight block through `fencedBody`, but lifecycle
     /// transitions such as Goal completion must never trust truncated output.
-    fileprivate static func closedFencedBody(in content: String, tag: String) -> String? {
+    static func closedFencedBody(in content: String, tag: String) -> String? {
         let lines = content.components(separatedBy: .newlines)
         let wanted = tag.lowercased()
         var inBlock = false
@@ -1120,6 +1140,102 @@ enum AgentPlanParser {
         default:
             return nil
         }
+    }
+}
+
+/// Parses the coarse Goal roadmap. The model describes future phases only at
+/// acceptance-criterion granularity; a separate bounded Plan is produced when
+/// each phase starts.
+nonisolated enum AgentGoalRoadmapParser {
+    private struct Payload: Decodable {
+        struct Phase: Decodable {
+            var id: String
+            var title: String
+            var acceptance: [String]
+        }
+
+        var phases: [Phase]
+    }
+
+    static func extract(from content: String) -> AgentGoalRoadmap? {
+        guard let body = AgentPlanParser.closedFencedBody(in: content, tag: "goal-roadmap"),
+              let data = body.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(Payload.self, from: data),
+              validationFailures(for: payload).isEmpty else {
+            return nil
+        }
+        let phases = payload.phases.enumerated().map { index, phase in
+            AgentGoalRoadmap.Phase(
+                id: phase.id.trimmingCharacters(in: .whitespacesAndNewlines),
+                title: phase.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                acceptanceCriteria: phase.acceptance.map {
+                    $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                },
+                status: index == 0 ? .executing : .pending
+            )
+        }
+        return AgentGoalRoadmap(phases: phases)
+    }
+
+    static func validationFailures(in content: String) -> [String] {
+        guard let body = AgentPlanParser.closedFencedBody(in: content, tag: "goal-roadmap") else {
+            return ["the reply must include one closed fenced ```goal-roadmap JSON block"]
+        }
+        guard let data = body.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+            return ["the fenced ```goal-roadmap block must be valid JSON with shape {\"phases\":[{\"id\":\"PHASE-1\",\"title\":\"...\",\"acceptance\":[\"...\"]}]}"]
+        }
+        return validationFailures(for: payload)
+    }
+
+    private static func validationFailures(for payload: Payload) -> [String] {
+        var failures: [String] = []
+        if payload.phases.isEmpty {
+            failures.append("the Goal roadmap must contain at least one phase")
+        }
+        if payload.phases.count > AgentGoalRoadmap.maximumPhaseCount {
+            failures.append("the Goal roadmap exceeds the maximum of \(AgentGoalRoadmap.maximumPhaseCount) phases")
+        }
+        let normalizedIDs = payload.phases.map {
+            $0.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        if Set(normalizedIDs).count != normalizedIDs.count {
+            failures.append("Goal roadmap phase IDs must be unique")
+        }
+        for phase in payload.phases {
+            let id = phase.id.trimmingCharacters(in: .whitespacesAndNewlines)
+            let title = phase.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if id.isEmpty || title.isEmpty {
+                failures.append("every Goal roadmap phase needs a non-empty id and title")
+                break
+            }
+            if id.range(of: #"^[A-Za-z0-9_-]{1,64}$"#, options: .regularExpression) == nil {
+                failures.append("Goal roadmap phase IDs may contain only letters, numbers, hyphens, and underscores (maximum 64 characters)")
+                break
+            }
+            if title.count > AgentGoalRoadmap.maximumPhaseTitleCharacters {
+                failures.append("Goal roadmap phase titles must not exceed \(AgentGoalRoadmap.maximumPhaseTitleCharacters) characters")
+                break
+            }
+            if phase.acceptance.count > AgentGoalRoadmap.maximumAcceptanceCriteriaPerPhase {
+                failures.append("each Goal roadmap phase may contain at most \(AgentGoalRoadmap.maximumAcceptanceCriteriaPerPhase) acceptance criteria")
+                break
+            }
+            if phase.acceptance.isEmpty || phase.acceptance.allSatisfy({
+                $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }) {
+                failures.append("every Goal roadmap phase needs at least one observable acceptance criterion")
+                break
+            }
+            if phase.acceptance.contains(where: {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || $0.count > AgentGoalRoadmap.maximumAcceptanceCriterionCharacters
+            }) {
+                failures.append("Goal roadmap acceptance criteria must be non-empty and no longer than \(AgentGoalRoadmap.maximumAcceptanceCriterionCharacters) characters")
+                break
+            }
+        }
+        return failures
     }
 }
 

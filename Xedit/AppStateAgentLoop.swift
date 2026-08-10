@@ -824,6 +824,7 @@ extension AppState {
                 currentPlan: runtime.currentPlan,
                 currentGoal: runtime.currentGoal,
                 goalPlanningState: runtime.goalPlanningState,
+                goalRoadmap: runtime.goalRoadmap,
                 currentSessionTitle: runtime.session.title,
                 currentSessionTitleIsLocked: runtime.session.titleIsUserSet,
                 workspaceSessions: workspaceSessionSnapshots(for: runtime),
@@ -1228,11 +1229,15 @@ extension AppState {
                         )
                     } ?? false
                 let assistantReplyContainsGoalCheck = hasValidClosedGoalCheck
+                var didAdvanceGoalChecklist = false
                 if assistantReplyContainsGoalCheck {
-                    let didAdvanceGoalChecklist = captureAgentGoalEvaluationFromLatestMessage(
+                    didAdvanceGoalChecklist = captureAgentGoalEvaluationFromLatestMessage(
                         for: runtime,
                         finishReason: finishReason
                     )
+                }
+                let didAdvanceGoalPhase = advanceAgentGoalRoadmapIfNeeded(for: runtime)
+                if assistantReplyContainsGoalCheck, !didAdvanceGoalPhase {
                     // Advance only from this round's explicit Goal
                     // evaluation. A stale checklist plus an interrupted
                     // response must resume finalization, not erase the
@@ -1241,7 +1246,8 @@ extension AppState {
                         for: runtime,
                         didAdvanceChecklist: didAdvanceGoalChecklist
                     )
-                } else if runtime.interactionMode == .goal,
+                } else if !didAdvanceGoalPhase,
+                          runtime.interactionMode == .goal,
                           runtime.currentPlan?.status == .done,
                           runtime.currentGoal?.checklist.contains(where: { !$0.done }) == true {
                     // Missing Goal evidence must continue the same acceptance
@@ -1272,8 +1278,8 @@ extension AppState {
                 let progressEvidence = AgentPlanAutoContinuationPolicy.ProgressEvidence(
                     didExecuteTools: succeededToolCallCount
                         > succeededToolCallCountAtLastContinuationDecision,
-                    hasRunningBackgroundJobs: !agentJobRegistry
-                        .aliveJobs(forRuntime: runtime.id).isEmpty
+                    hasRunningBackgroundJobs: agentJobRegistry
+                        .hasProgressRelevantAliveJobs(forRuntime: runtime.id)
                 )
                 succeededToolCallCountAtLastContinuationDecision = succeededToolCallCount
 
@@ -1663,6 +1669,8 @@ extension AppState {
                     runtimeDescriptor: remoteRuntimeDescriptor,
                     runtimeID: runtime.id,
                     turnID: runtime.activeTurnID,
+                    goalPhaseID: runtime.goalRoadmap?.activePhase?.id,
+                    isGoalMode: runtime.interactionMode == .goal,
                     computerUseSessionTitle: runtime.session.title,
                     jobRegistry: agentJobRegistry,
                     mediaTaskRegistry: agentMediaTaskRegistry,

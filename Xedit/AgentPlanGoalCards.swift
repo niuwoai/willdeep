@@ -83,6 +83,15 @@ struct AgentPlanCard: View {
                             .font(.system(size: 11, weight: .semibold))
                             .textCase(.uppercase)
                             .foregroundStyle(.secondary)
+                        if let roadmap = appState.agentGoalRoadmap,
+                           !roadmap.phases.isEmpty {
+                            Text(L10n.GoalRoadmap.phase(
+                                roadmap.activePhaseIndex + 1,
+                                roadmap.phases.count
+                            ))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                        }
                         if AgentPlanCardExpansionPolicy.showsStatus(plan.status, isInterrupted: plan.isInterrupted) {
                             PlanStatusPill(status: plan.status, isInterrupted: plan.isInterrupted)
                         }
