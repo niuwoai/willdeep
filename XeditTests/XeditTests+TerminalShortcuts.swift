@@ -665,6 +665,54 @@ extension WillDeepTests {
     }
 
     @MainActor
+    @Test("closing the active SSH tab blocks implicit fallback to a local shell")
+    func testClosingActiveSSHTabBlocksImplicitLocalFallback() throws {
+        let controller = AgentInteractiveTerminalController()
+        let settings = EditorTerminalSettings.default
+        let sessionID = UUID()
+        let local = controller.openLocalTab(
+            originAgentSessionID: sessionID,
+            workingDirectory: FileManager.default.temporaryDirectory.path,
+            settings: settings,
+            skin: nil
+        )
+        let ssh = controller.openSSHTab(
+            runtime: RuntimeDescriptor(
+                displayName: "Test SSH",
+                host: "127.0.0.1",
+                username: "nobody",
+                defaultWorkspacePath: "/tmp"
+            ),
+            originAgentSessionID: sessionID,
+            settings: settings,
+            skin: nil
+        )
+        defer { controller.closeTab(id: local.id) }
+
+        #expect(controller.activeTabID == ssh.id)
+        controller.closeTab(id: ssh.id)
+        #expect(controller.activeTabID == local.id)
+
+        do {
+            _ = try controller.sendApprovedCommand(
+                "echo should-not-run-locally",
+                sessionID: sessionID
+            )
+            Issue.record("expected a closed SSH route to block implicit local fallback")
+        } catch let error as AgentToolError {
+            let message = error.errorDescription ?? ""
+            #expect(message.contains("previously active SSH terminal"))
+            #expect(message.contains("did not fall back to a local shell"))
+            #expect(message.contains("Nothing was executed"))
+        }
+        #expect(controller.tabs.count == 1)
+        #expect(local.recentCommands.isEmpty)
+
+        _ = try controller.selectTab(id: local.id)
+        #expect(try controller.rawSnapshot(sessionID: sessionID).tabID == local.id)
+    }
+
+    @MainActor
     @Test("terminal command returns an automatic follow-up snapshot instead of dispatch-only output")
     func testTerminalCommandReturnsAutomaticFollowUpSnapshot() async throws {
         let controller = AgentInteractiveTerminalController()

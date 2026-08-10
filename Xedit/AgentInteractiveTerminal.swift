@@ -1284,6 +1284,10 @@ final class AgentInteractiveTerminalController: ObservableObject {
     private var inputStateTimer: Timer?
     private var localShellCounter = 0
     private var tabChangePublishScheduled = false
+    /// Closing the visible SSH tab must not silently retarget a later,
+    /// unqualified agent command to a local shell. Keep a short-lived routing
+    /// tombstone until the user or agent explicitly chooses another tab.
+    private var closedRemoteRoute: (title: String, target: String)?
 
     init() {
         startIdleReaper()
@@ -1344,8 +1348,12 @@ final class AgentInteractiveTerminalController: ObservableObject {
         originAgentSessionID: UUID?,
         workingDirectory: String?,
         settings: EditorTerminalSettings,
-        skin: TerminalSkinColors?
+        skin: TerminalSkinColors?,
+        clearsClosedRemoteRoute: Bool = true
     ) -> AgentTerminalTab {
+        if clearsClosedRemoteRoute {
+            closedRemoteRoute = nil
+        }
         localShellCounter += 1
         let tab = AgentTerminalTab(
             kind: .localShell,
@@ -1382,6 +1390,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         settings: EditorTerminalSettings,
         skin: TerminalSkinColors?
     ) -> AgentTerminalTab {
+        closedRemoteRoute = nil
         let normalized = runtime.normalized
         let tab = AgentTerminalTab(
             kind: .ssh(runtimeID: normalized.id, displayName: normalized.displayName, target: normalized.sshTarget),
@@ -1412,6 +1421,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
     func activateTab(id: UUID) {
         guard tab(id: id) != nil else { return }
+        closedRemoteRoute = nil
         activeTabID = id
     }
 
@@ -1437,7 +1447,11 @@ final class AgentInteractiveTerminalController: ObservableObject {
         // from the conversation and make a later tool call appear to "jump"
         // to another tab.
         guard !tabs[index].isAutomationBusy else { return }
-        tabs[index].terminate()
+        let closingTab = tabs[index]
+        if activeTabID == id, closingTab.kind.isSSH {
+            closedRemoteRoute = (closingTab.title, closingTab.runtimeTarget)
+        }
+        closingTab.terminate()
         tabSubscriptions[id]?.cancel()
         tabSubscriptions[id] = nil
         tabs.remove(at: index)
@@ -1840,7 +1854,8 @@ final class AgentInteractiveTerminalController: ObservableObject {
             originAgentSessionID: originAgentSessionID,
             workingDirectory: workingDirectory,
             settings: settings,
-            skin: skin
+            skin: skin,
+            clearsClosedRemoteRoute: false
         )
     }
 
@@ -2034,7 +2049,17 @@ final class AgentInteractiveTerminalController: ObservableObject {
                         + "terminal_snapshot again, then retry without a stale terminal_tab_id."
                 )
             }
+            closedRemoteRoute = nil
             return exact
+        }
+        if opensLocalTabIfNeeded, let closedRemoteRoute {
+            throw AgentToolError.invalidArgument(
+                "The previously active SSH terminal \"\(closedRemoteRoute.title)\" "
+                    + "(\(closedRemoteRoute.target)) was closed. Nothing was executed, and "
+                    + "WillDeep did not fall back to a local shell. Open or explicitly select "
+                    + "the intended terminal tab, call terminal_snapshot to verify its host, "
+                    + "then retry."
+            )
         }
         if let active = activeTab, isImplicitlyRoutable(active) {
             if opensLocalTabIfNeeded, !active.isRunning {
@@ -2059,7 +2084,8 @@ final class AgentInteractiveTerminalController: ObservableObject {
             originAgentSessionID: config.originAgentSessionID,
             workingDirectory: config.workingDirectory,
             settings: config.settings,
-            skin: config.skin
+            skin: config.skin,
+            clearsClosedRemoteRoute: false
         )
     }
 
@@ -2075,6 +2101,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         guard let selected = tab(id: id) else {
             throw AgentToolError.invalidArgument("Unknown Agent Terminal tab id: \(id.uuidString).")
         }
+        closedRemoteRoute = nil
         activeTabID = selected.id
         return selected
     }
