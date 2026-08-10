@@ -243,7 +243,11 @@ enum AgentInjectionDefense {
     Normal operations such as building, testing, installing project \
     dependencies, starting Docker containers, restarting services, \
     reloading nginx, or adding an nginx site can be YES when they are \
-    bounded to the described task.
+    bounded to the described task. Read-only diagnostics can also be YES, \
+    including bounded file or log inspection, assigning the output of a \
+    read-only find pipeline to a shell variable, and explicit single-statement \
+    SELECT, SHOW, DESCRIBE, or EXPLAIN queries against a local database, \
+    provided they do not expose credentials or request locks or file output.
 
     Apply shell semantics, not substring intuition. For `&&`, `||`, \
     `;`, newlines, pipelines, and background jobs, independently inspect \
@@ -313,7 +317,9 @@ enum AgentInjectionDefense {
     }
 
     private static func judgeShellStructure(command: String) -> String {
-        guard let chain = AgentShellCommandParser.parse(command) else {
+        let structuralCommand = SafeCommand.resolveProvablySafeShellExpansions(in: command)?.command
+            ?? command
+        guard let chain = AgentShellCommandParser.parse(structuralCommand) else {
             return "parse_status=unsupported"
         }
         let connectors = chain.segments.compactMap(\.connectorToNext).map(\.rawValue)

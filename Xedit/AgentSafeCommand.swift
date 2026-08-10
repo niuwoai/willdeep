@@ -20,8 +20,20 @@ nonisolated enum CommandSafety: Equatable, Sendable {
     case needsJudgment
 }
 
+nonisolated struct SafeShellExpansionResolution: Equatable, Sendable {
+    let command: String
+    let requiresJudgment: Bool
+    let substitutions: [String]
+}
+
 nonisolated enum SafeCommand {
     // MARK: - Public API
+
+    static let safeCommandSubstitutionPlaceholder = "__willdeep_safe_command_substitution__"
+    private static let maximumCommandSubstitutionDepth = 6
+    private static let databaseCombinedExecuteFlags: Set<Character> = [
+        "A", "B", "N", "f", "n", "r", "s", "t", "v", "w"
+    ]
 
     /// Classify a shell command line. The shell line is split on `|`,
     /// `&&`, `||`, `;` first; each segment is judged independently and
@@ -30,13 +42,27 @@ nonisolated enum SafeCommand {
     /// all-safe → safe). Empty input is dangerous (we don't auto-run
     /// nothing).
     static func classify(command: String) -> CommandSafety {
+        classify(command: command, commandSubstitutionDepth: 0)
+    }
+
+    private static func classify(
+        command: String,
+        commandSubstitutionDepth: Int
+    ) -> CommandSafety {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .alwaysDangerous }
-        let policyCommand = commandByReplacingSafeShellExpansions(trimmed)
+        guard let expansionResolution = resolveProvablySafeShellExpansions(
+            in: trimmed,
+            commandSubstitutionDepth: commandSubstitutionDepth
+        ) else {
+            return .alwaysDangerous
+        }
+        let policyCommand = expansionResolution.command
 
         // Shell metacharacters inside quotes are inert data (`printf '>'`,
-        // `printf 'rm'`). Executable substitutions remain gated, including
-        // those inside double quotes.
+        // `printf 'rm'`). Every executable substitution should already have
+        // been recursively inspected and replaced above; retaining this check
+        // is a fail-closed guard for syntax the bounded rewriter does not know.
         if AgentShellCommandParser.containsExecutableSubstitution(policyCommand) {
             return .alwaysDangerous
         }
@@ -71,7 +97,8 @@ nonisolated enum SafeCommand {
             return .needsJudgment
         }
 
-        var hasJudgmentSegment = chain.requiresBackgroundJudgment
+        var hasJudgmentSegment = expansionResolution.requiresJudgment
+            || chain.requiresBackgroundJudgment
         for segment in chain.segments {
             switch classifySegment(segment.text) {
             case .alwaysDangerous:
@@ -83,6 +110,173 @@ nonisolated enum SafeCommand {
             }
         }
         return hasJudgmentSegment ? .needsJudgment : .alwaysSafe
+    }
+
+    /// Replace command substitutions only after their payload has itself been
+    /// certified `.alwaysSafe`. Non-trivial substitutions still force the
+    /// complete original command through the AI judge; the replacement exists
+    /// solely so the host parser can inspect the outer shell chain without
+    /// mistaking an inner `|` or `;` for an outer connector. `$(pwd)` keeps its
+    /// historical deterministic fast path because it returns only the current
+    /// directory and is used heavily by build-cache environment assignments.
+    ///
+    /// Unknown payloads, destructive payloads, backticks, process substitution,
+    /// arithmetic expansion, unsupported nesting, and malformed quotes return
+    /// `nil`, preserving the typed human-confirmation boundary.
+    static func resolveProvablySafeShellExpansions(
+        in command: String
+    ) -> SafeShellExpansionResolution? {
+        resolveProvablySafeShellExpansions(in: command, commandSubstitutionDepth: 0)
+    }
+
+    private static func resolveProvablySafeShellExpansions(
+        in command: String,
+        commandSubstitutionDepth: Int
+    ) -> SafeShellExpansionResolution? {
+        guard commandSubstitutionDepth <= maximumCommandSubstitutionDepth else {
+            return nil
+        }
+
+        var output = ""
+        output.reserveCapacity(command.count)
+        var requiresJudgment = false
+        var substitutions: [String] = []
+        var activeQuote: Character?
+        var escaped = false
+        var cursor = command.startIndex
+
+        while cursor < command.endIndex {
+            let character = command[cursor]
+            let next = command.index(after: cursor)
+
+            if escaped {
+                output.append(character)
+                escaped = false
+                cursor = next
+                continue
+            }
+            if character == "\\", activeQuote != "'" {
+                output.append(character)
+                escaped = true
+                cursor = next
+                continue
+            }
+            if character == "'", activeQuote != "\"" {
+                activeQuote = activeQuote == "'" ? nil : "'"
+                output.append(character)
+                cursor = next
+                continue
+            }
+            if character == "\"", activeQuote != "'" {
+                activeQuote = activeQuote == "\"" ? nil : "\""
+                output.append(character)
+                cursor = next
+                continue
+            }
+
+            if activeQuote != "'" {
+                if character == "`" {
+                    return nil
+                }
+                if next < command.endIndex,
+                   (character == "<" || character == ">"),
+                   command[next] == "(" {
+                    return nil
+                }
+                if character == "$", next < command.endIndex, command[next] == "(" {
+                    let afterOpeningParenthesis = command.index(after: next)
+                    guard afterOpeningParenthesis >= command.endIndex
+                            || command[afterOpeningParenthesis] != "(",
+                          let closingParenthesis = commandSubstitutionClosingParenthesis(
+                              in: command,
+                              openingParenthesis: next
+                          ) else {
+                        return nil
+                    }
+                    let innerCommand = String(command[afterOpeningParenthesis..<closingParenthesis])
+                    let innerTrimmed = innerCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard classify(
+                        command: innerCommand,
+                        commandSubstitutionDepth: commandSubstitutionDepth + 1
+                    ) == .alwaysSafe else {
+                        return nil
+                    }
+
+                    if innerTrimmed == "pwd" {
+                        output.append(".")
+                    } else {
+                        output.append(safeCommandSubstitutionPlaceholder)
+                        requiresJudgment = true
+                        substitutions.append(innerCommand)
+                    }
+                    cursor = command.index(after: closingParenthesis)
+                    continue
+                }
+            }
+
+            output.append(character)
+            cursor = next
+        }
+
+        guard activeQuote == nil, !escaped else { return nil }
+        return SafeShellExpansionResolution(
+            command: output,
+            requiresJudgment: requiresJudgment,
+            substitutions: substitutions
+        )
+    }
+
+    private static func commandSubstitutionClosingParenthesis(
+        in command: String,
+        openingParenthesis: String.Index
+    ) -> String.Index? {
+        var depth = 1
+        var activeQuote: Character?
+        var escaped = false
+        var cursor = command.index(after: openingParenthesis)
+
+        while cursor < command.endIndex {
+            let character = command[cursor]
+            let next = command.index(after: cursor)
+            if escaped {
+                escaped = false
+                cursor = next
+                continue
+            }
+            if character == "\\", activeQuote != "'" {
+                escaped = true
+                cursor = next
+                continue
+            }
+            if character == "'", activeQuote != "\"" {
+                activeQuote = activeQuote == "'" ? nil : "'"
+                cursor = next
+                continue
+            }
+            if character == "\"", activeQuote != "'" {
+                activeQuote = activeQuote == "\"" ? nil : "\""
+                cursor = next
+                continue
+            }
+            if activeQuote == nil {
+                if character == "(" {
+                    depth += 1
+                } else if character == ")" {
+                    depth -= 1
+                    if depth == 0 { return cursor }
+                }
+            } else if activeQuote == "\"",
+                      character == "$",
+                      next < command.endIndex,
+                      command[next] == "(" {
+                // Nested substitutions inside double quotes require a full
+                // shell grammar to match safely. Keep them behind the human
+                // confirmation boundary instead of guessing at the close.
+                return nil
+            }
+            cursor = next
+        }
+        return nil
     }
 
     // MARK: - Allowlists
@@ -161,6 +355,7 @@ nonisolated enum SafeCommand {
     /// `git`, `find`, `xargs`, etc.: dispatched to a per-tool checker.
     static let conditionalFirstTokens: Set<String> = [
         "git", "find", "xargs", "ssh", "scp", "rsync", "kubectl",
+        "mysql", "mariadb",
         "curl", "wget",
         "npm", "yarn", "pnpm", "cargo", "swift", "make", "python", "python3",
         "node", "ruby", "go", "rake",
@@ -319,6 +514,8 @@ nonisolated enum SafeCommand {
             return classifyNginx(tokens: tokens)
         case "kubectl":
             return classifyKubectl(tokens: tokens)
+        case "mysql", "mariadb":
+            return classifyDatabaseClient(firstToken: firstToken, tokens: tokens)
         case "curl", "wget":
             return classifyNetworkFetcher(firstToken: firstToken, tokens: tokens)
         case "sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh":
@@ -858,6 +1055,133 @@ nonisolated enum SafeCommand {
         }
     }
 
+    /// Database CLIs are external-state tools even when pointed at localhost,
+    /// so a recognized read-only query is intentionally `.needsJudgment`
+    /// rather than statically allowed. This lets Smart review inspect the
+    /// literal query while keeping mutations, credential-bearing invocations,
+    /// multiple statements, and an unbounded interactive client behind typed
+    /// human confirmation.
+    static func classifyDatabaseClient(
+        firstToken: String,
+        tokens: [String]
+    ) -> CommandSafety {
+        guard firstToken == "mysql" || firstToken == "mariadb" else {
+            return .needsJudgment
+        }
+        guard !databaseClientUsesExplicitCredentials(tokens) else {
+            return .alwaysDangerous
+        }
+        guard let sql = databaseClientInlineSQL(tokens),
+              databaseSQLIsReadOnly(sql) else {
+            return .alwaysDangerous
+        }
+        return .needsJudgment
+    }
+
+    private static func databaseClientUsesExplicitCredentials(_ tokens: [String]) -> Bool {
+        tokens.dropFirst().contains { argument in
+            if argument == "-p" || (argument.hasPrefix("-p") && argument.count > 2) {
+                return true
+            }
+            let lowered = argument.lowercased()
+            let sensitiveLongOptions = [
+                "--password", "--defaults-file", "--defaults-extra-file",
+                "--login-path"
+            ]
+            return sensitiveLongOptions.contains(lowered)
+                || sensitiveLongOptions.contains(where: { lowered.hasPrefix($0 + "=") })
+        }
+    }
+
+    private static func databaseClientInlineSQL(_ tokens: [String]) -> String? {
+        var index = 1
+        while index < tokens.count {
+            let argument = tokens[index]
+            let lowered = argument.lowercased()
+            if lowered == "-e" || lowered == "--execute" {
+                let sqlIndex = index + 1
+                return sqlIndex < tokens.count ? tokens[sqlIndex] : nil
+            }
+            if lowered.hasPrefix("--execute=") {
+                return String(argument.dropFirst("--execute=".count))
+            }
+            let shortOptions = argument.dropFirst()
+            if argument.hasPrefix("-"), !argument.hasPrefix("--"),
+               let executeFlag = shortOptions.firstIndex(of: "e"),
+               shortOptions[..<executeFlag].allSatisfy(databaseCombinedExecuteFlags.contains) {
+                let attachedSQLStart = argument.index(after: executeFlag)
+                if attachedSQLStart < argument.endIndex {
+                    return String(argument[attachedSQLStart...])
+                }
+                let sqlIndex = index + 1
+                return sqlIndex < tokens.count ? tokens[sqlIndex] : nil
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    private static func databaseSQLIsReadOnly(_ sql: String) -> Bool {
+        let trimmed = sql.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !databaseSQLContainsMultipleStatements(trimmed) else {
+            return false
+        }
+        let lowered = trimmed.lowercased()
+        let readOnlyPrefixes = [
+            "select", "show", "describe", "desc", "explain", "with"
+        ]
+        guard readOnlyPrefixes.contains(where: {
+            lowered == $0 || lowered.hasPrefix($0 + " ") || lowered.hasPrefix($0 + "\n")
+        }) else {
+            return false
+        }
+
+        let mutationPattern = #"\b(insert|update|delete|replace|create|alter|drop|truncate|rename|grant|revoke|set|call|do|load|lock|unlock|kill|shutdown|flush|reset|purge|analyze|optimize|repair)\b"#
+        if lowered.range(of: mutationPattern, options: .regularExpression) != nil {
+            return false
+        }
+        let dangerousReadPatterns = [
+            #"\binto\s+(out|dump)file\b"#,
+            #"\bload_file\s*\("#,
+            #"\bfor\s+update\b"#,
+            #"\block\s+in\s+share\s+mode\b"#
+        ]
+        return !dangerousReadPatterns.contains(where: {
+            lowered.range(of: $0, options: .regularExpression) != nil
+        })
+    }
+
+    private static func databaseSQLContainsMultipleStatements(_ sql: String) -> Bool {
+        var activeQuote: Character?
+        var escaped = false
+        var cursor = sql.startIndex
+        while cursor < sql.endIndex {
+            let character = sql[cursor]
+            let next = sql.index(after: cursor)
+            if escaped {
+                escaped = false
+                cursor = next
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                cursor = next
+                continue
+            }
+            if ["'", "\"", "`"].contains(character) {
+                activeQuote = activeQuote == character ? nil : (activeQuote == nil ? character : activeQuote)
+                cursor = next
+                continue
+            }
+            if character == ";", activeQuote == nil {
+                let remainder = sql[next...].trimmingCharacters(in: .whitespacesAndNewlines)
+                if !remainder.isEmpty { return true }
+            }
+            cursor = next
+        }
+        return activeQuote != nil || escaped
+    }
+
     /// Network fetchers never receive a static allow: even a GET can follow a
     /// redirect into a private service or disclose data through its URL. A
     /// plain read therefore goes to the short-lived AI judge, while request
@@ -1033,10 +1357,6 @@ nonisolated enum SafeCommand {
             return false
         }
         return name.allSatisfy { $0 == "_" || $0.isLetter || $0.isNumber }
-    }
-
-    private static func commandByReplacingSafeShellExpansions(_ command: String) -> String {
-        command.replacingOccurrences(of: "$(pwd)", with: ".")
     }
 
     /// Strip `2>&1`, `2>/dev/null`, and `1>/dev/null` from the line and
