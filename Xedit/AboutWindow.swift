@@ -58,11 +58,21 @@ private struct AboutView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(alignment: .center, spacing: 18) {
-                    Image("DesktopPetPenguin")
+                    Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
                         .interpolation(.high)
                         .scaledToFit()
-                        .frame(width: 128, height: 128)
+                        .frame(width: 96, height: 96)
+                        .accessibilityLabel(L10n.About.appName)
+
+                    DesktopPetAnimatedSceneView(
+                        appearance: .bearGirl,
+                        mood: .idle,
+                        appIsActive: NSApp.isActive,
+                        isAnimating: true
+                    )
+                    .frame(width: 128, height: 128)
+                    .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -165,18 +175,18 @@ private enum AboutRecommendedApp: String, CaseIterable, Identifiable {
         }
     }
 
-    var systemImage: String {
+    var iconAssetName: String {
         switch self {
-        case .qTerm: return "terminal.fill"
-        case .gitWise: return "point.3.connected.trianglepath.dotted"
-        case .timeBill: return "clock.badge.checkmark.fill"
-        case .xomo: return "paintbrush.pointed.fill"
-        case .bearCleaner: return "sparkles.rectangle.stack.fill"
-        case .qPic: return "photo.stack.fill"
-        case .qMarkView: return "doc.richtext.fill"
-        case .qEcho: return "waveform.badge.mic"
-        case .qMailMate: return "envelope.fill"
-        case .qNote: return "note.text"
+        case .qTerm: return "AboutAppQTermIcon"
+        case .gitWise: return "AboutAppGitWiseIcon"
+        case .timeBill: return "AboutAppTimeBillIcon"
+        case .xomo: return "AboutAppXomoIcon"
+        case .bearCleaner: return "AboutAppBearCleanerIcon"
+        case .qPic: return "AboutAppQPicIcon"
+        case .qMarkView: return "AboutAppQMarkViewIcon"
+        case .qEcho: return "AboutAppQEchoIcon"
+        case .qMailMate: return "AboutAppQMailMateIcon"
+        case .qNote: return "AboutAppQNoteIcon"
         }
     }
 
@@ -217,11 +227,10 @@ private struct AboutRecommendedAppCard: View {
     var body: some View {
         Link(destination: app.productURL) {
             HStack(spacing: 10) {
-                Image(systemName: app.systemImage)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.white)
+                Image(app.iconAssetName)
+                    .resizable()
+                    .interpolation(.high)
                     .frame(width: 42, height: 42)
-                    .background(app.accent.gradient)
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {

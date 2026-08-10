@@ -347,6 +347,34 @@ struct AgentPlanProgressTests {
         #expect(AgentPlanStepLayoutMetrics.indexColumnWidth >= ceil(doubleDigitWidth))
     }
 
+    @Test("full plan Markdown keeps every step and its live status")
+    func fullPlanMarkdownKeepsEveryStepAndStatus() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [
+                AgentPlan.Step(text: "Inspect **all** call sites", status: .done),
+                AgentPlan.Step(text: "Implement the long description without truncating it", status: .inProgress),
+                AgentPlan.Step(text: "Run focused tests", status: .failed),
+            ],
+            summary: "Keep the compact card readable."
+        )
+
+        let markdown = AgentPlanMarkdownFormatter.markdown(from: plan)
+        let blocks = MarkdownPreviewParser.blocks(from: markdown)
+        let listBlockCount = blocks.reduce(into: 0) { count, block in
+            if case .unorderedList = block.kind {
+                count += 1
+            }
+        }
+
+        #expect(markdown.contains("# \(L10n.PlanCard.header)"))
+        #expect(markdown.contains("- ✓ **1.** Inspect **all** call sites"))
+        #expect(markdown.contains("- ◉ **2.** Implement the long description without truncating it"))
+        #expect(markdown.contains("- ! **3.** Run focused tests"))
+        #expect(listBlockCount == plan.steps.count)
+        #expect(blocks.contains { $0.text.contains("without truncating it") })
+    }
+
     @Test("plan card opens for newly planned work and collapses during execution")
     func planCardInitialExpansionFollowsExecutionState() {
         #expect(AgentPlanCardExpansionPolicy.initiallyExpanded(for: .proposed))

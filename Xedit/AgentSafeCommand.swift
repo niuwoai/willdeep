@@ -164,6 +164,7 @@ nonisolated enum SafeCommand {
         "curl", "wget",
         "npm", "yarn", "pnpm", "cargo", "swift", "make", "python", "python3",
         "node", "ruby", "go", "rake",
+        "vite", "nginx",
         "sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh",
         "env", "/usr/bin/env", "command",
         // list/inspect only — extract/write forms stay needsJudgment
@@ -312,6 +313,10 @@ nonisolated enum SafeCommand {
             return classifyFind(tokens: tokens)
         case "go":
             return classifyGo(tokens: tokens)
+        case "vite":
+            return .alwaysSafe
+        case "nginx":
+            return classifyNginx(tokens: tokens)
         case "kubectl":
             return classifyKubectl(tokens: tokens)
         case "curl", "wget":
@@ -776,6 +781,14 @@ nonisolated enum SafeCommand {
             }
         }
         return .alwaysSafe
+    }
+
+    /// Reloading an already-running, unprivileged local nginx process is a
+    /// routine development action. Configuration changes, stop/quit signals,
+    /// custom prefixes and every other nginx form still need review.
+    private static func classifyNginx(tokens: [String]) -> CommandSafety {
+        let lowered = tokens.map { $0.lowercased() }
+        return lowered == ["nginx", "-s", "reload"] ? .alwaysSafe : .needsJudgment
     }
 
     /// Kubernetes inspection commands are among the most frequent visible-

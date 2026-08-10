@@ -212,8 +212,12 @@ nonisolated enum AgentConfirmationReviewMetrics {
     /// intrinsic width so flexible Spacers cannot make it falsely claim that
     /// it fits in a narrowed chat column.
     static let horizontalContentMinimumWidth = horizontalMinimumWidth - (contentPadding * 2)
-    static let commandViewportHeight: CGFloat = 72
-    static let commandVisibleLineCount = 3
+    /// Command reviews wrap at the available width and expose at most five
+    /// readable lines before vertical scrolling takes over. Horizontal
+    /// scrolling makes long shell pipelines needlessly hard to audit.
+    static let commandViewportHeight: CGFloat = 112
+    static let commandVisibleLineCount = 5
+    static let commandScrollAxes: Axis.Set = .vertical
     static let actionButtonHeight: CGFloat = 28
     static let actionButtonMaxWidth: CGFloat = 124
     static let actionButtonSpacing: CGFloat = 12
@@ -251,7 +255,21 @@ nonisolated struct AgentCompactAuthorizationDescriptor: Equatable {
 }
 
 nonisolated enum AgentCompactAuthorizationCopy {
-    static func descriptor(toolName: String) -> AgentCompactAuthorizationDescriptor? {
+    static func descriptor(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> AgentCompactAuthorizationDescriptor? {
+        if toolName == "kill_job" {
+            let jobHandle = arguments["job_id"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return AgentCompactAuthorizationDescriptor(
+                iconName: "stop.circle",
+                title: L10n.ToolCard.backgroundTaskAuthorizationTitle,
+                question: jobHandle.flatMap { $0.isEmpty ? nil : $0 }
+                    .map(L10n.ToolCard.backgroundTaskAuthorizationQuestion)
+                    ?? L10n.ToolCard.backgroundTaskAuthorizationGenericQuestion
+            )
+        }
         if toolName.hasPrefix("computer_use_") {
             return AgentCompactAuthorizationDescriptor(
                 iconName: "cursorarrow.motionlines",
@@ -274,6 +292,20 @@ nonisolated enum AgentCompactAuthorizationCopy {
             )
         }
         return nil
+    }
+}
+
+nonisolated enum AgentApprovalPresentationPolicy {
+    static func usesCompactAuthorization(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        risk: AgentToolRisk
+    ) -> Bool {
+        risk == .write
+            && AgentCompactAuthorizationCopy.descriptor(
+                toolName: toolName,
+                arguments: arguments
+            ) != nil
     }
 }
 
@@ -1168,7 +1200,10 @@ struct AgentToolCallCard: View {
     }
 
     private var compactAuthorizationDescriptor: AgentCompactAuthorizationDescriptor? {
-        AgentCompactAuthorizationCopy.descriptor(toolName: call.toolName)
+        AgentCompactAuthorizationCopy.descriptor(
+            toolName: call.toolName,
+            arguments: call.arguments
+        )
     }
 
     private var compactSurfaceAuthorizationNoticeBody: some View {
@@ -1398,14 +1433,18 @@ struct AgentToolCallCard: View {
                     .cursor(.arrow)
                 }
 
-                ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                ScrollView(
+                    AgentConfirmationReviewMetrics.commandScrollAxes,
+                    showsIndicators: true
+                ) {
                     Text(detail.body)
                         .font(.system(size: 12, design: .monospaced))
                         .lineSpacing(3)
                         .foregroundStyle(palette.primaryText)
                         .textSelection(.enabled)
-                        .fixedSize(horizontal: true, vertical: true)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(
                     minWidth: 0,
@@ -1715,7 +1754,10 @@ struct AgentToolCallCard: View {
                     .cursor(.arrow)
                 }
 
-                ScrollView(.vertical, showsIndicators: true) {
+                ScrollView(
+                    AgentConfirmationReviewMetrics.commandScrollAxes,
+                    showsIndicators: true
+                ) {
                     Text(detail.body)
                         .font(.system(size: 12, design: .monospaced))
                         .lineSpacing(3)
@@ -2545,7 +2587,11 @@ struct AgentToolCallCard: View {
     }
 
     private var isCompactSurfaceAuthorizationNotice: Bool {
-        call.risk == .write && compactAuthorizationDescriptor != nil
+        AgentApprovalPresentationPolicy.usesCompactAuthorization(
+            toolName: call.toolName,
+            arguments: call.arguments,
+            risk: call.risk
+        )
     }
 
     private var authorizationCornerRadius: CGFloat {

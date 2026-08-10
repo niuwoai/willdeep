@@ -1206,6 +1206,8 @@ nonisolated enum L10n {
         static let expanded = String(localized: "plan-card.expanded", defaultValue: "Expanded")
         static let header = String(localized: "plan-card.header", defaultValue: "Plan")
         static let markCompleteButton = String(localized: "plan-card.mark-complete-button", defaultValue: "Mark plan complete")
+        static let openDetails = String(localized: "plan-card.open-details", defaultValue: "View full plan")
+        static let openDetailsHelp = String(localized: "plan-card.open-details-help", defaultValue: "Show the full plan in the sidebar")
     }
 
     enum PlanContinuation {
@@ -1414,6 +1416,12 @@ nonisolated enum L10n {
         static let approvalControlLeaseBadge = String(localized: "tool-card.approval.control-lease.badge", defaultValue: "CONTROL")
         static let approvalControlLeaseTooltip = String(localized: "tool-card.approval.control-lease.tooltip", defaultValue: "Auto-approved by the current runtime-, turn-, and target-bound Computer Use controlling lease.")
         static let alwaysAllow = String(localized: "tool-card.always-allow", defaultValue: "Always Allow")
+        static let backgroundTaskAuthorizationTitle = String(localized: "tool-card.authorization.background-task.title", defaultValue: "Background Task")
+        static let backgroundTaskAuthorizationGenericQuestion = String(localized: "tool-card.authorization.background-task.generic-question", defaultValue: "Stop this background task?")
+        static func backgroundTaskAuthorizationQuestion(_ a1: String) -> String {
+            let template = String(localized: "tool-card.authorization.background-task.question", defaultValue: "Stop background task %@?")
+            return String(format: template, a1)
+        }
         static let browserAuthorizationTitle = String(localized: "tool-card.authorization.browser.title", defaultValue: "Browser")
         static let browserChromeAuthorizationQuestion = String(localized: "tool-card.authorization.browser.chrome-question", defaultValue: "Allow WillDeep to control Chrome?")
         static let browserEmbeddedAuthorizationQuestion = String(localized: "tool-card.authorization.browser.embedded-question", defaultValue: "Allow WillDeep to control Browser?")

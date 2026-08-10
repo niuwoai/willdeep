@@ -656,8 +656,23 @@ struct AgentChatHistoryRendererTests {
         #expect(chipRect.minX >= precedingRect.maxX)
         #expect(chipRect.minX < slashRect.minX)
         #expect(chipRect.maxX > slashRect.maxX)
-        #expect(slashRect.minY - chipRect.minY <= AgentChatHistoryLayoutMetrics.inlineCodeChipBottomPadding + 1)
-        #expect(chipRect.maxY - slashRect.maxY >= AgentChatHistoryLayoutMetrics.inlineCodeChipTopPadding)
+        #expect(
+            slashRect.minY - chipRect.minY
+                <= AgentChatHistoryLayoutMetrics.inlineCodeChipVisualTopPadding + 1
+        )
+        #expect(
+            chipRect.maxY - slashRect.maxY
+                >= AgentChatHistoryLayoutMetrics.inlineCodeChipVisualBottomPadding
+        )
+    }
+
+    @Test
+    func inlineCodeChipUsesCompactVisualBottomPadding() {
+        #expect(AgentChatHistoryLayoutMetrics.inlineCodeChipVisualBottomPadding == 0.5)
+        #expect(
+            AgentChatHistoryLayoutMetrics.inlineCodeChipVisualBottomPadding
+                == AgentChatHistoryLayoutMetrics.inlineCodeChipVisualTopPadding
+        )
     }
 
     @Test
@@ -1341,8 +1356,9 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSParagraphStyle)
         #expect(bodyFont.pointSize == 15)
-        #expect(processedFont.pointSize == bodyFont.pointSize)
-        #expect(processedColor == NSColor.tertiaryLabelColor)
+        #expect(processedFont.pointSize == NSFont.systemFontSize)
+        #expect(processedFont.fontDescriptor.symbolicTraits.contains(.bold) == false)
+        #expect(processedColor == NSColor.secondaryLabelColor)
         #expect(bodyParagraphStyle.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
         #expect(bodyParagraphStyle.lineSpacing == 5)
         let dividerLocation = NSMaxRange(processedRange) + 1

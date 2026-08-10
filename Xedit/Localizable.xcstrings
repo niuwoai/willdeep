@@ -15548,6 +15548,42 @@
         }
       }
     },
+    "plan-card.open-details" : {
+      "comment" : "menu action for opening the complete plan in the sidebar",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View full plan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看完整计划"
+          }
+        }
+      }
+    },
+    "plan-card.open-details-help" : {
+      "comment" : "tooltip for opening the complete plan in the sidebar",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show the full plan in the sidebar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在侧边栏显示完整计划"
+          }
+        }
+      }
+    },
     "plan-continuation.missing-progress-paused" : {
       "comment" : "error shown when plan status reconciliation still produces no structured step updates",
       "extractionState" : "manual",
@@ -32211,6 +32247,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "由当前运行时、回合与目标强绑定的电脑控制短期租约自动批准。"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.background-task.generic-question" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop this background task?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终止这项后台任务？"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.background-task.question" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop background task %@?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终止后台任务 %@？"
+          }
+        }
+      }
+    },
+    "tool-card.authorization.background-task.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Background Task"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后台任务"
           }
         }
       }

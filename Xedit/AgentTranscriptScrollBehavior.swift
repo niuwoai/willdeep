@@ -23,6 +23,15 @@ nonisolated enum AgentTranscriptScrollPolicy {
 /// chat width, so a fixed vertical offset no longer points at the same part of
 /// the conversation.
 nonisolated enum AgentTranscriptViewportPolicy {
+    static func widthChanged(
+        from previousWidth: CGFloat?,
+        to currentWidth: CGFloat,
+        tolerance: CGFloat = 0.5
+    ) -> Bool {
+        guard let previousWidth else { return false }
+        return abs(previousWidth - currentWidth) > tolerance
+    }
+
     static func relativeProgress(
         documentHeight: CGFloat,
         viewportHeight: CGFloat,
@@ -109,6 +118,7 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
         var onChange: ((Bool) -> Void)?
         private var notificationTokens: [NSObjectProtocol] = []
         private var lastDocumentSize: CGSize?
+        private var lastViewportSize: CGSize?
         private var viewportAnchor: ViewportAnchor?
         private var viewportCaptureGeneration = 0
         private var viewportRestoreGeneration = 0
@@ -166,6 +176,7 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
             }
             publish(isNearBottom(in: candidate))
             lastDocumentSize = candidateDocument?.bounds.size
+            lastViewportSize = clipView.bounds.size
             captureViewportAnchor(in: candidate)
         }
 
@@ -182,6 +193,27 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
 
         private func handleViewportChange() {
             guard let scrollView else { return }
+            let currentViewportSize = scrollView.contentView.bounds.size
+            let viewportWidthChanged = AgentTranscriptViewportPolicy.widthChanged(
+                from: lastViewportSize?.width,
+                to: currentViewportSize.width,
+                tolerance: Self.geometryTolerance
+            )
+            lastViewportSize = currentViewportSize
+
+            // Opening/closing Files, Terminal, Preview, Plan, etc. first
+            // resizes the chat viewport and only afterwards reflows the
+            // document. That bounds notification is layout, not operator
+            // scrolling. If it is allowed to run through the normal path,
+            // the transient top/zero offset can overwrite viewportAnchor;
+            // the following document resize then faithfully "restores" the
+            // transcript to the top. Preserve the pre-resize anchor instead.
+            if viewportWidthChanged,
+               !isFollowingBottom,
+               let viewportAnchor {
+                scheduleViewportRestore(viewportAnchor, in: scrollView)
+                return
+            }
             publish(isNearBottom(in: scrollView))
             scheduleViewportAnchorCapture(in: scrollView)
         }
@@ -359,6 +391,7 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
             viewportRestoreGeneration += 1
             isViewportRestorePending = false
             lastDocumentSize = nil
+            lastViewportSize = nil
             viewportAnchor = nil
         }
     }

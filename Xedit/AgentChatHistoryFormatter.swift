@@ -348,9 +348,15 @@ enum AgentChatHistoryRenderer {
         let monoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
         let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        let assistantStatusFont = bodyFont
+        // Match the live/settled tool activity rows (for example
+        // “已读取文件”) so the assistant status does not look washed out next
+        // to the activity timeline.
+        let assistantStatusFont = NSFont.systemFont(
+            ofSize: NSFont.systemFontSize,
+            weight: .regular
+        )
         let bodyColor = NSColor.labelColor
-        let assistantStatusColor = NSColor.tertiaryLabelColor
+        let assistantStatusColor = NSColor.secondaryLabelColor
         let assistantStatusDividerColor = AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(
             isDark: isDark
         )

@@ -840,6 +840,38 @@ extension WillDeepTests {
 
 @Suite
 struct AgentAuthorizationNoticeTests {
+    @Test("background task termination uses compact confirmation without weakening risk")
+    func backgroundTaskTerminationUsesCompactConfirmation() throws {
+        let arguments: [String: AgentJSONValue] = [
+            "job_id": .string("job_540157"),
+        ]
+        let descriptor = try #require(
+            AgentCompactAuthorizationCopy.descriptor(
+                toolName: "kill_job",
+                arguments: arguments
+            )
+        )
+
+        #expect(descriptor.iconName == "stop.circle")
+        #expect(descriptor.title == L10n.ToolCard.backgroundTaskAuthorizationTitle)
+        #expect(descriptor.question.contains("job_540157"))
+        #expect(AgentApprovalPresentationPolicy.usesCompactAuthorization(
+            toolName: "kill_job",
+            arguments: arguments,
+            risk: .write
+        ))
+        #expect(!AgentApprovalPresentationPolicy.usesCompactAuthorization(
+            toolName: "kill_job",
+            arguments: arguments,
+            risk: .danger
+        ))
+        #expect(!AgentApprovalPresentationPolicy.usesCompactAuthorization(
+            toolName: "run_command",
+            arguments: ["command": .string("yarn test")],
+            risk: .write
+        ))
+    }
+
     @Test("authorization notice copy adapts to command, terminal, and web access")
     func descriptorsAdaptToToolContext() {
         let command = AgentApprovalNoticeCopy.descriptor(
