@@ -1,6 +1,6 @@
 # Agent Harness Improvement Priorities
 
-> Last updated: 2026-08-10 | Current version: v1.240.0-rc1
+> Last updated: 2026-08-10 | Current version: v1.241.0-rc2
 
 这份文档用于回答一个核心问题：一个 harness 级 Agent 要继续变强，哪些问题必须优先解决。
 
@@ -23,7 +23,7 @@
 
 ## P0：执行自主性
 
-1.240.0-rc1 起，长 Goal 先生成最多 6 个粗粒度 phase，只为当前 phase 生成最多 6 步的可执行 Plan；当前 phase 完成后宿主持久化进度、清空旧 Plan，并自动发起下一 phase 的独立规划轮次。Goal 不再在首轮展开十几乃至几十个步骤，也不会因为一个长期 dev server 仍存活就把它误当成计划进展。后台命令新增 turn / phase / goal / persistent 生命周期，Goal 内识别出的 dev server 默认绑定当前 phase；phase 收口时宿主静默终止该 phase 的完整进程树，只有用户明确要求跨任务保留时才使用 persistent。
+1.241.0-rc2 起，长 Goal 先生成最多 6 个粗粒度 phase，只为当前 phase 生成最多 6 步的可执行 Plan；当前 phase 完成后宿主持久化进度、清空旧 Plan，并自动发起下一 phase 的独立规划轮次。Goal 不再在首轮展开十几乃至几十个步骤，也不会因为一个长期 dev server 仍存活就把它误当成计划进展。后台命令新增 turn / phase / goal / persistent 生命周期，Goal 内识别出的 dev server 默认绑定当前 phase；phase 收口时宿主静默终止该 phase 的完整进程树，只有用户明确要求跨任务保留时才使用 persistent。
 
 1.216.0-rc1 起，普通会话会感知同一工作区其他未完成 Goal 的目标、进度、运行状态与调度归属；调度台则按逻辑项目强制单运行实例，重复创建复用已有项目，暂停或完成后释放名额，恢复与启动执行时重新校验冲突。
 
