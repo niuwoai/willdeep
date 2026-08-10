@@ -337,9 +337,7 @@ struct AgentChatTranscript: View {
                                 onOpenAttachmentCitation: appState.openAgentAttachmentCitation,
                                 progressPlan: appState.agentCurrentPlan,
                                 onShowPlan: {
-                                    // Plan card floats in the activity overlay now;
-                                    // bump the token so the overlay expands it.
-                                    appState.agentPlanOverlayExpandRequestToken += 1
+                                    appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .plan)
                                 },
                                 searchQuery: conversationSearchQuery,
                                 activeSearchMatchIndex: conversationSearchActiveIndex,
@@ -405,9 +403,7 @@ struct AgentChatTranscript: View {
                                 onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput,
                                 progressPlan: appState.agentCurrentPlan,
                                 onShowPlan: {
-                                    // Plan card floats in the activity overlay now;
-                                    // bump the token so the overlay expands it.
-                                    appState.agentPlanOverlayExpandRequestToken += 1
+                                    appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .plan)
                                 },
                                 onOpenFullMessage: { message in
                                     let sessionTitle = appState.agentSessions

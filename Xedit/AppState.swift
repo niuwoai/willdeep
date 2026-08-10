@@ -178,11 +178,6 @@ final class AppState: ObservableObject {
     /// The center-column destination in Agent mode. Scheduled tasks use a
     /// dedicated page instead of expanding an unbounded list in the sidebar.
     @Published var agentPrimaryDestination: AgentPrimaryDestination = .conversation
-    /// One-shot request to expand the floating plan card in the conversation
-    /// activity overlay. The transcript footer's "查看计划" affordance bumps
-    /// this token; `AgentConversationActivityOverlay` observes it and sets its
-    /// plan card to expanded. Pure UI transient — never persisted.
-    @Published var agentPlanOverlayExpandRequestToken: Int = 0
     /// One-shot request to collapse the floating plan card. The transcript
     /// bumps this when a new assistant round begins so the plan folds away
     /// while the agent works, matching the old inline-card behaviour. Pure UI
