@@ -13,6 +13,7 @@ import AppKit
 struct AgentChatHeader: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject private var desktopPet = DesktopPetWindowManager.shared
+    @ObservedObject private var detachedPanels = AgentDetachedPanelRegistry.shared
     @Binding var sidePanel: AgentSidePanelKind?
     @Binding var sessionsSidebarVisible: Bool
     @Binding var isSessionSearchPresented: Bool
@@ -111,7 +112,10 @@ struct AgentChatHeader: View {
     }
 
     private func sidePanelShortcutButton(for item: AgentSidePanelKind) -> some View {
-        let isSelected = sidePanel == item
+        // A detached panel is still an active tool surface. Keep its shortcut
+        // highlighted just like the desktop-pet button remains highlighted
+        // while its independent window is enabled.
+        let isSelected = sidePanel == item || detachedPanels.isDetached(item)
         let palette = appState.editorSettings.interfaceSkin.palette
         return AgentSidePanelShortcutControl(
             systemImage: item.systemImage,

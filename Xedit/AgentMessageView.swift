@@ -243,8 +243,8 @@ struct AgentModeMessageView: View {
                             for: assistantTurnPresentation?.summaryMessage ?? message,
                             isStreaming: isStreamingThisMessage
                         ))
-                            .font(.system(size: baseFontSize))
-                            .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                            .font(.system(size: NSFont.systemFontSize, weight: .regular))
+                            .foregroundStyle(Color(nsColor: .secondaryLabelColor))
 
                         Rectangle()
                             .fill(Color(nsColor: AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(

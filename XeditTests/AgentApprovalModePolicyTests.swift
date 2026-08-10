@@ -105,6 +105,22 @@ struct AgentApprovalModePolicyTests {
         )
         #expect(smartBuild == .staticAllowlist)
 
+        let routineCommands = [
+            ("vite --host 127.0.0.1", "direct Vite development server"),
+            ("nginx -s reload", "exact nginx reload signal"),
+            ("rm -rf node_modules .vite .cache/go-build", "bounded rebuildable-directory cleanup"),
+        ]
+        for (command, label) in routineCommands {
+            let source = await appState.autoApprovalSource(
+                toolName: "run_command",
+                arguments: ["command": .string(command)],
+                risk: .write,
+                rootDirectory: workspace,
+                approvalMode: .smart
+            )
+            #expect(source == .staticAllowlist, Comment(rawValue: label))
+        }
+
         let smartTerminalInspection = await appState.autoApprovalSource(
             toolName: "terminal_send_command",
             arguments: ["command": .string("git status --short --branch")],
@@ -140,6 +156,15 @@ struct AgentApprovalModePolicyTests {
             approvalMode: .requestEveryTime
         )
         #expect(strictBuild == nil)
+
+        let strictCleanup = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("rm -rf node_modules")],
+            risk: .write,
+            rootDirectory: workspace,
+            approvalMode: .requestEveryTime
+        )
+        #expect(strictCleanup == nil)
 
         let strictTerminalInspection = await appState.autoApprovalSource(
             toolName: "terminal_send_command",
