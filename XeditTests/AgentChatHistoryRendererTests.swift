@@ -676,6 +676,80 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func inlineCodeChipExcludesParagraphLineSpacingFromItsBottomEdge() throws {
+        let bodyFont = NSFont.systemFont(ofSize: 15)
+        let codeFont = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = AgentChatHistoryLayoutMetrics.bodyLineSpacing
+        let text = NSMutableAttributedString(
+            string: "Use tenants here\nNext line",
+            attributes: [
+                .font: bodyFont,
+                .paragraphStyle: paragraphStyle,
+            ]
+        )
+        let codeRange = (text.string as NSString).range(of: "tenants")
+        text.addAttributes([
+            .font: codeFont,
+            .baselineOffset: NSNumber(value: Double(MarkdownInline.inlineCodeBaselineOffset)),
+        ], range: codeRange)
+
+        let storage = NSTextStorage(attributedString: text)
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(size: NSSize(width: 600, height: 100))
+        textContainer.lineFragmentPadding = 0
+        storage.addLayoutManager(layoutManager)
+        layoutManager.addTextContainer(textContainer)
+        layoutManager.ensureLayout(for: textContainer)
+
+        let codeGlyphRange = layoutManager.glyphRange(
+            forCharacterRange: codeRange,
+            actualCharacterRange: nil
+        )
+        let glyphRect = layoutManager.boundingRect(
+            forGlyphRange: codeGlyphRange,
+            in: textContainer
+        )
+        let contentHeight = AgentChatHistoryLayoutMetrics.inlineCodeChipContentHeight(
+            fragmentHeight: glyphRect.height,
+            naturalLineHeight: layoutManager.defaultLineHeight(for: codeFont),
+            paragraphLineSpacing: paragraphStyle.lineSpacing
+        )
+        let chipRect = AgentChatHistoryLayoutMetrics.inlineCodeChipRect(
+            for: glyphRect,
+            at: .zero,
+            contentHeight: contentHeight
+        )
+
+        #expect(glyphRect.height == 23)
+        #expect(contentHeight == glyphRect.height - paragraphStyle.lineSpacing)
+        #expect(
+            chipRect.maxY
+                == glyphRect.maxY
+                    - paragraphStyle.lineSpacing
+                    + AgentChatHistoryLayoutMetrics.inlineCodeChipVisualBottomPadding
+        )
+        #expect(
+            chipRect.height
+                == contentHeight
+                    + AgentChatHistoryLayoutMetrics.inlineCodeChipVisualTopPadding
+                    + AgentChatHistoryLayoutMetrics.inlineCodeChipVisualBottomPadding
+        )
+    }
+
+    @Test
+    func inlineCodeChipKeepsFinalLineWithoutSyntheticLineSpacing() {
+        let fragmentHeight: CGFloat = 18
+        let contentHeight = AgentChatHistoryLayoutMetrics.inlineCodeChipContentHeight(
+            fragmentHeight: fragmentHeight,
+            naturalLineHeight: 17,
+            paragraphLineSpacing: AgentChatHistoryLayoutMetrics.bodyLineSpacing
+        )
+
+        #expect(contentHeight == fragmentHeight)
+    }
+
+    @Test
     func rendersUserImageInsteadOfGeneratedImageDescriptionInHistory() {
         let content = AppState.contentByAppendingImageDescription(
             to: "识别一下这张图",
