@@ -150,7 +150,50 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "pnpm run typecheck") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "pnpm install") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "pnpm add pptxgenjs") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "vite --host 127.0.0.1") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "nginx -s reload") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "nginx -s stop") == .needsJudgment)
         #expect(SafeCommand.classify(command: "npm publish") == .needsJudgment)
+    }
+
+    @Test("run_command only auto-approves bounded cleanup of rebuildable workspace directories")
+    func testRebuildableWorkspaceCleanupPolicy() {
+        let workspace = URL(fileURLWithPath: "/tmp/willdeep-cleanup-workspace").standardizedFileURL
+        let safeCommands = [
+            "rm -rf node_modules",
+            "cd web && rm -rf node_modules .vite dist",
+            "rm -r .build",
+            "rm -rf .cache/go-build .cache/go-mod",
+        ]
+
+        for command in safeCommands {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: workspace
+            )
+            #expect(decision.mode == .workspaceWrite)
+            #expect(decision.requiresTypedConfirmation == false)
+            #expect(AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+                command: command,
+                rootDirectory: workspace
+            ))
+        }
+
+        let unsafeCommands = [
+            "rm -rf .",
+            "rm -rf ..",
+            "rm -rf src",
+            "rm -rf node_modules/*",
+            "rm -rf /tmp/node_modules",
+            "rm -rf ~/.cache/go-build",
+            "rm -rf node_modules src",
+        ]
+        for command in unsafeCommands {
+            #expect(!AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+                command: command,
+                rootDirectory: workspace
+            ))
+        }
     }
 
     @Test("SafeCommand: shell wrappers with harmless sentinel commands auto-approve")

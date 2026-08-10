@@ -263,7 +263,8 @@ enum AgentSandboxPolicy {
 
     nonisolated private static let workspaceWriteHeads: Set<String> = [
         "apply_patch", "git", "make", "xcodebuild", "swift", "go",
-        "cargo", "npm", "pnpm", "yarn", "ruby", "node", "python", "python3"
+        "cargo", "npm", "pnpm", "yarn", "ruby", "node", "python", "python3",
+        "vite", "nginx"
     ]
 
     /// Heads whose SafeCommand `.alwaysSafe` verdict still WRITES inside the
@@ -280,6 +281,7 @@ enum AgentSandboxPolicy {
     nonisolated private static let lowRiskWriteHeads: Set<String> = [
         "apply_patch", "make", "xcodebuild", "swift", "go", "cargo",
         "npm", "pnpm", "yarn", "ruby", "node", "python", "python3", "rake",
+        "vite", "nginx",
         "mkdir", "touch", "mktemp"
     ]
 
@@ -630,7 +632,15 @@ enum AgentSandboxPolicy {
                 continue
             }
 
-            if destructiveHeads.contains(head) {
+            if isRebuildableWorkspaceCleanup(
+                tokens: tokens,
+                workingDirectory: workingDirectory,
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: additionalWorkspaceRoots
+            ) {
+                needsWorkspaceWrite = true
+                reasons.append("Removing a rebuildable generated directory inside the workspace is a bounded cleanup operation.")
+            } else if destructiveHeads.contains(head) {
                 needsEscalation = true
                 needsConfirmation = true
                 reasons.append("Destructive or privilege-changing command `\(head)` requires typed confirmation.")
@@ -774,9 +784,20 @@ enum AgentSandboxPolicy {
             }
 
             if forcefulGitMutation(tokens) ||
-                destructiveHeads.contains(head) ||
                 credentialHeads.contains(head) {
                 return false
+            }
+
+            if destructiveHeads.contains(head) {
+                guard isRebuildableWorkspaceCleanup(
+                    tokens: tokens,
+                    workingDirectory: workingDirectory,
+                    rootDirectory: root,
+                    additionalWorkspaceRoots: []
+                ) else {
+                    return false
+                }
+                continue
             }
 
             if networkHeads.contains(head) {
@@ -830,6 +851,94 @@ enum AgentSandboxPolicy {
         }
 
         return true
+    }
+
+    /// Allows only recursive/force removal of well-known generated folders
+    /// whose resolved targets stay inside an authorized workspace. This is
+    /// deliberately narrower than a generic `rm` allowlist: no globs, no
+    /// workspace root, no parent traversal outside the root, and no arbitrary
+    /// directory merely named by the caller as disposable.
+    nonisolated private static func isRebuildableWorkspaceCleanup(
+        tokens: [String],
+        workingDirectory: URL?,
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL]
+    ) -> Bool {
+        guard tokens.first?.lowercased() == "rm" else { return false }
+
+        var sawRecursive = false
+        var targets: [String] = []
+        for token in tokens.dropFirst() {
+            if token == "--" { continue }
+            if token.hasPrefix("-") {
+                let flags = token.dropFirst()
+                guard !flags.isEmpty,
+                      flags.allSatisfy({ $0 == "r" || $0 == "R" || $0 == "f" }) else {
+                    return false
+                }
+                if flags.contains("r") || flags.contains("R") {
+                    sawRecursive = true
+                }
+                continue
+            }
+            targets.append(token)
+        }
+
+        guard sawRecursive, !targets.isEmpty else { return false }
+        let rebuildableNames: Set<String> = [
+            "node_modules", ".vite", ".parcel-cache", ".turbo", ".next",
+            ".build", "dist", "deriveddata", "target"
+        ]
+        let rebuildableGoCacheSuffixes: Set<String> = [
+            ".cache/go-build", ".cache/go-mod", ".gocache", ".gomodcache"
+        ]
+
+        return targets.allSatisfy { target in
+            guard !target.contains("*") && !target.contains("?") && !target.contains("[") && !target.contains("$") && !target.contains("`"),
+                  !referencesSensitivePath(target),
+                  let resolved = resolveCleanupTarget(
+                    target,
+                    workingDirectory: workingDirectory,
+                    rootDirectory: rootDirectory
+                  ),
+                  isInsideWorkspace(
+                    resolved,
+                    rootDirectory: rootDirectory,
+                    additionalWorkspaceRoots: additionalWorkspaceRoots
+                  ) else {
+                return false
+            }
+
+            let standardized = resolved.standardizedFileURL
+            let authorizedRoots = ([rootDirectory].compactMap { $0 } + additionalWorkspaceRoots)
+                .map(\.standardizedFileURL)
+            guard !authorizedRoots.contains(standardized) else { return false }
+
+            let normalizedPath = standardized.path.lowercased()
+            let name = standardized.lastPathComponent.lowercased()
+            return rebuildableNames.contains(name)
+                || rebuildableGoCacheSuffixes.contains(where: { normalizedPath.hasSuffix("/\($0)") })
+        }
+    }
+
+    /// Cleanup targets are commonly bare relative directory names such as
+    /// `node_modules`; the general path detector intentionally ignores those
+    /// because arbitrary command arguments are not necessarily paths.
+    nonisolated private static func resolveCleanupTarget(
+        _ raw: String,
+        workingDirectory: URL?,
+        rootDirectory: URL?
+    ) -> URL? {
+        let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        if cleaned.hasPrefix("/") || cleaned.hasPrefix("~") {
+            return resolvePath(
+                cleaned,
+                workingDirectory: workingDirectory,
+                rootDirectory: rootDirectory
+            )
+        }
+        let base = workingDirectory ?? rootDirectory?.standardizedFileURL
+        return base?.appendingPathComponent(cleaned).standardizedFileURL
     }
 
     /// Returns whether a shell command reaches beyond the local workspace via
