@@ -93,12 +93,12 @@ enum DesktopPetAutonomy {
 }
 
 enum DesktopPetAppearance: String, CaseIterable, Identifiable {
+    case bearGirl
     case robotFox
     case penguin
     case fluffyBear
     case kungFuPanda
     case spaceSage
-    case bearGirl
     case starRaccoon
     case seaSinger
     case apeCommander

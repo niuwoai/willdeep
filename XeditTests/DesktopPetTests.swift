@@ -22,6 +22,7 @@ struct DesktopPetTests {
 
     @Test
     func petAppearancesHaveStableAssetNames() {
+        #expect(DesktopPetAppearance.allCases.first == .bearGirl)
         #expect(DesktopPetAppearance.robotFox.assetName == "DesktopPet")
         #expect(DesktopPetAppearance.penguin.assetName == "DesktopPetPenguin")
         #expect(DesktopPetAppearance.bearGirl.assetName == "DesktopPetBearGirl")
