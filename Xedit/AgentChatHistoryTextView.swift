@@ -1251,16 +1251,45 @@ enum AgentChatHistoryLayoutMetrics {
         assistantContentTailInset + richBlockTextInset - richBlockBackgroundPadding
     }
 
-    static func inlineCodeChipRect(for glyphRect: NSRect, at origin: NSPoint) -> NSRect {
+    static func inlineCodeChipContentHeight(
+        fragmentHeight: CGFloat,
+        naturalLineHeight: CGFloat,
+        paragraphLineSpacing: CGFloat
+    ) -> CGFloat {
+        guard fragmentHeight > 0,
+              naturalLineHeight > 0,
+              paragraphLineSpacing > 0 else {
+            return max(0, fragmentHeight)
+        }
+        let heightWithoutLineSpacing = fragmentHeight - paragraphLineSpacing
+        guard heightWithoutLineSpacing >= naturalLineHeight else {
+            // TextKit omits lineSpacing from the final line fragment. Do not
+            // shrink that already-compact fragment a second time.
+            return fragmentHeight
+        }
+        return heightWithoutLineSpacing
+    }
+
+    static func inlineCodeChipRect(
+        for glyphRect: NSRect,
+        at origin: NSPoint,
+        contentHeight: CGFloat? = nil
+    ) -> NSRect {
         let positionedRect = glyphRect.offsetBy(dx: origin.x, dy: origin.y)
+        let resolvedContentHeight = min(
+            positionedRect.height,
+            max(0, contentHeight ?? positionedRect.height)
+        )
+        let minX = floor(positionedRect.minX - inlineCodeChipHorizontalPadding)
+        let maxX = ceil(positionedRect.maxX + inlineCodeChipHorizontalPadding)
         return NSRect(
-            x: positionedRect.minX - inlineCodeChipHorizontalPadding,
+            x: minX,
             y: positionedRect.minY - inlineCodeChipVisualTopPadding,
-            width: positionedRect.width + inlineCodeChipHorizontalPadding * 2,
-            height: positionedRect.height
+            width: maxX - minX,
+            height: resolvedContentHeight
                 + inlineCodeChipVisualTopPadding
                 + inlineCodeChipVisualBottomPadding
-        ).integral
+        )
     }
 
     static func assistantStatusDividerColor(isDark: Bool) -> NSColor {
@@ -1659,13 +1688,39 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
         clippedTo glyphsToShow: NSRange,
         at origin: NSPoint
     ) {
+        guard let textStorage else { return }
         enumerateLineFragments(forGlyphRange: fullGlyphRange) { _, _, textContainer, lineGlyphRange, _ in
             let lineRange = NSIntersectionRange(lineGlyphRange, fullGlyphRange)
             let visibleRange = NSIntersectionRange(lineRange, glyphsToShow)
             guard visibleRange.length > 0 else { return }
             var rect = self.boundingRect(forGlyphRange: visibleRange, in: textContainer)
             guard !rect.isNull, !rect.isEmpty else { return }
-            rect = AgentChatHistoryLayoutMetrics.inlineCodeChipRect(for: rect, at: origin)
+            let visibleCharacterRange = self.characterRange(
+                forGlyphRange: visibleRange,
+                actualGlyphRange: nil
+            )
+            let codeFont = textStorage.attribute(
+                .font,
+                at: visibleCharacterRange.location,
+                effectiveRange: nil
+            ) as? NSFont
+            let paragraphStyle = textStorage.attribute(
+                .paragraphStyle,
+                at: visibleCharacterRange.location,
+                effectiveRange: nil
+            ) as? NSParagraphStyle
+            let contentHeight = codeFont.map {
+                AgentChatHistoryLayoutMetrics.inlineCodeChipContentHeight(
+                    fragmentHeight: rect.height,
+                    naturalLineHeight: self.defaultLineHeight(for: $0),
+                    paragraphLineSpacing: paragraphStyle?.lineSpacing ?? 0
+                )
+            }
+            rect = AgentChatHistoryLayoutMetrics.inlineCodeChipRect(
+                for: rect,
+                at: origin,
+                contentHeight: contentHeight
+            )
             let radius = min(6, rect.height / 2)
             color.setFill()
             NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
