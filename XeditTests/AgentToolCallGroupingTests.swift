@@ -194,11 +194,11 @@ struct AgentToolCallGroupingPresentationTests {
         let items = AgentCollapsedToolActivitySummary.items(for: calls)
 
         #expect(items.map(\.text) == [
-            "已读取 2 个文件",
-            "已浏览 1 个目录",
+            "已读取2个文件",
+            "已浏览1个目录",
             "已搜索代码",
             "已查看 Git 状态",
-            "已运行 1 条命令",
+            "已运行1条命令",
         ])
         #expect(items.map(\.systemImage) == [
             "book.pages",
@@ -240,7 +240,7 @@ extension WillDeepTests {
         #expect(segments.count == 1)
         #expect(segments[0].kind == .runCommand)
         #expect(segments[0].count == 3)
-        #expect(segments[0].kind.groupTitle(3) == "已运行 3 条命令")
+        #expect(segments[0].kind.groupTitle(3) == "已运行3条命令")
     }
 
     @Test("provider status headlines become localized activity phases")
@@ -366,7 +366,7 @@ extension WillDeepTests {
         #expect(segments.count == 1)
         #expect(segments[0].kind == .terminalOperation)
         #expect(segments[0].count == 3)
-        #expect(segments[0].title == "已执行 3 次终端操作")
+        #expect(segments[0].title == "已执行3次终端操作")
     }
 
     @Test("successful terminal operations hide the duplicate live detail card")
@@ -413,7 +413,7 @@ extension WillDeepTests {
         #expect(segments[1].count == 2)
         #expect(segments[2].kind == .runCommand)
         #expect(segments[2].count == 1)
-        #expect(segments[1].title == "已读取 1 个文件 · 已搜索代码")
+        #expect(segments[1].title == "已读取1个文件 · 已搜索代码")
     }
 
     @Test("live presentation coalesces commands split by other tool kinds")
@@ -534,8 +534,8 @@ extension WillDeepTests {
         #expect(summary.searchCount == 1)
         #expect(summary.gitStatusCount == 1)
         #expect(summary.commandCount == 1)
-        #expect(summary.explorationText == "已读取 1 个文件 · 已浏览 1 个目录 · 已搜索代码 · 已查看 Git 状态")
-        #expect(summary.commandText == "已运行 1 条命令")
+        #expect(summary.explorationText == "已读取1个文件 · 已浏览1个目录 · 已搜索代码 · 已查看 Git 状态")
+        #expect(summary.commandText == "已运行1条命令")
     }
 
     @Test("collapsed live tool summary hides arguments and describes file creation")
@@ -548,7 +548,7 @@ extension WillDeepTests {
 
         let summary = AgentCollapsedToolActivitySummary.text(for: calls)
 
-        #expect(summary == "生成了 3 个文件")
+        #expect(summary == "生成了3个文件")
         #expect(summary?.contains("private/") == false)
         #expect(summary?.contains("create_file") == false)
     }
@@ -565,7 +565,7 @@ extension WillDeepTests {
         #expect(segments.count == 1)
         #expect(segments[0].kind == .fileMutation)
         #expect(segments[0].calls.count == 2)
-        #expect(AgentCollapsedToolActivitySummary.text(for: segments[0].calls) == "生成了 2 个文件")
+        #expect(AgentCollapsedToolActivitySummary.text(for: segments[0].calls) == "生成了2个文件")
     }
 
     @Test("interactive patch proposals remain separate")

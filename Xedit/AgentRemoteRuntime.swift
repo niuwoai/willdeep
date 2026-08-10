@@ -223,6 +223,25 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
 
         let wantsBackground = arguments["run_in_background"]?.boolValue() ?? false
         if wantsBackground, let registry = context.jobRegistry, let runtimeID = context.runtimeID {
+            let inferredActivity = AgentRunCommandExecutionPolicy.inferredActivityKind(for: command)
+            let requestedLifetime: AgentBackgroundJobLifetime?
+            if let rawLifetime = arguments["lifetime"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(), !rawLifetime.isEmpty {
+                guard let parsed = AgentBackgroundJobLifetime(rawValue: rawLifetime) else {
+                    throw AgentToolError.invalidArgument("lifetime must be turn, phase, goal, or persistent")
+                }
+                requestedLifetime = parsed
+            } else {
+                requestedLifetime = nil
+            }
+            var jobLifetime = requestedLifetime
+                ?? (inferredActivity == .server
+                    ? (context.goalPhaseID == nil ? .persistent : .phase)
+                    : .turn)
+            if jobLifetime == .phase, context.goalPhaseID == nil {
+                jobLifetime = context.isGoalMode ? .goal : .turn
+            }
             let bgTimeout: Double? = arguments["timeout_seconds"]?.intValue().map { Double(min(max($0, 1), 3600 * 6)) }
             let sshCommand = sshShellCommand(remoteCommand: remoteCommand)
             let job = try await MainActor.run {
@@ -233,7 +252,9 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
                     turnID: context.turnID,
                     timeoutSeconds: bgTimeout,
                     runtimeDisplayName: descriptor.displayName,
-                    runtimeIDForDisplay: descriptor.id
+                    runtimeIDForDisplay: descriptor.id,
+                    lifetime: jobLifetime,
+                    goalPhaseID: jobLifetime == .phase ? context.goalPhaseID : nil
                 )
             }
             let timeoutLine = bgTimeout.map { "\nTimeout: \(Int($0))s" } ?? ""

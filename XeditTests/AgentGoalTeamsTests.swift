@@ -83,6 +83,10 @@ struct AgentGoalTeamsTests {
         | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
         | 开发-Goal Teams | goal_backend | 状态机 | GT-003 | Xedit | 生产实现 | 构建通过 | tasklist | 测试-Goal Teams | 评审-Goal Teams |
 
+        ```goal-roadmap
+        {"phases":[{"id":"PHASE-1","title":"核心实现","acceptance":["核心路径测试通过"]},{"id":"PHASE-2","title":"发布验收","acceptance":["版本与文档一致"]}]}
+        ```
+
         ```plan
         1. GT-003 负责人开发-Goal Teams：实现代码产物
         2. GT-004 负责人测试-Goal Teams：运行测试产物
@@ -308,6 +312,73 @@ struct AgentGoalTeamsTests {
             generationID: generationID
         )
         #expect(idFailures.contains { $0.contains(generationID.uuidString) })
+    }
+
+    @Test
+    func roadmapParserAndPlanCapsKeepGoalPlanningCoarse() throws {
+        let roadmapContent = """
+        ```goal-roadmap
+        {"phases":[{"id":"PHASE-1","title":"基础能力","acceptance":["核心测试通过"]},{"id":"PHASE-2","title":"发布收口","acceptance":["版本文档一致"]}]}
+        ```
+        """
+        let roadmap = try #require(AgentGoalRoadmapParser.extract(from: roadmapContent))
+        #expect(roadmap.phases.count == 2)
+        #expect(roadmap.activePhase?.status == .executing)
+        #expect(roadmap.phasePositionText == "1/2")
+
+        let oversized = AgentPlan(
+            status: .proposed,
+            summary: "",
+            stepTexts: (1...7).map { "GT-\($0) 负责人开发：实现测试文档版本验收产物" }
+        )
+        let failures = AgentGoalPhasePlanValidator.validationFailures(plan: oversized)
+        #expect(failures.contains { $0.contains("maximum of 6") })
+
+        let unsafeID = roadmapContent.replacingOccurrences(of: "PHASE-1", with: "</phase>")
+        #expect(AgentGoalRoadmapParser.extract(from: unsafeID) == nil)
+
+        let session = AgentSession(goalRoadmap: roadmap)
+        let restored = try JSONDecoder().decode(
+            AgentSession.self,
+            from: JSONEncoder().encode(session)
+        )
+        #expect(restored.goalRoadmap == roadmap)
+
+        let encoded = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(session)
+        ) as? [String: Any]
+        var malformedObject = try #require(encoded)
+        malformedObject["goalRoadmap"] = ["phases": "not-an-array"]
+        let malformed = try JSONDecoder().decode(
+            AgentSession.self,
+            from: JSONSerialization.data(withJSONObject: malformedObject)
+        )
+        #expect(malformed.goalRoadmap == nil)
+    }
+
+    @Test
+    func completedPhaseAdvancesToFreshBoundedPlanningRound() throws {
+        let state = AgentGoalPlanningState(
+            goalFingerprint: "Ship safely\u{1F}Verified",
+            phase: .executing,
+            members: []
+        )
+        let (appState, runtime) = makeAppRuntime(planningState: state)
+        runtime.isResponding = true
+        runtime.currentPlan = AgentPlan(status: .done, summary: "", stepTexts: ["GT-1 验收完成"])
+        runtime.goalRoadmap = AgentGoalRoadmap(phases: [
+            .init(id: "PHASE-1", title: "基础实现", acceptanceCriteria: ["测试通过"], status: .executing),
+            .init(id: "PHASE-2", title: "发布收口", acceptanceCriteria: ["版本一致"]),
+        ])
+
+        #expect(appState.advanceAgentGoalRoadmapIfNeeded(for: runtime))
+        #expect(runtime.currentPlan == nil)
+        #expect(runtime.goalRoadmap?.activePhaseIndex == 1)
+        #expect(runtime.goalRoadmap?.phases[0].status == .completed)
+        #expect(runtime.goalRoadmap?.activePhase?.status == .planning)
+        let instruction = try #require(runtime.queuedMessages.last)
+        #expect(instruction.text.contains("at most 6"))
+        #expect(instruction.text.contains("PHASE-2"))
     }
 
     @Test

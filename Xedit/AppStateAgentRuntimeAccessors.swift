@@ -195,6 +195,12 @@ extension AppState {
         set { activeRuntime?.currentGoal = newValue }
     }
 
+    /// Coarse multi-turn phase roadmap for the active Goal.
+    var agentGoalRoadmap: AgentGoalRoadmap? {
+        get { activeRuntime?.goalRoadmap }
+        set { activeRuntime?.goalRoadmap = newValue }
+    }
+
     /// Recent automatic learning outcomes captured for the active session.
     var agentLearningEvents: [AgentLearningEvent] {
         get { activeRuntime?.learningEvents ?? [] }

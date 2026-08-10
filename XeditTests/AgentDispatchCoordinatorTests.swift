@@ -682,6 +682,24 @@ struct AgentDispatchCoordinatorTests {
         ) == nil)
     }
 
+    @Test("任务图拒绝超过九个执行节点")
+    func aiDispatchGraphRejectsOversizedNodeSet() {
+        let nodes = (1...10).map { index in
+            "{\"id\":\"TASK-\(index)\",\"title\":\"任务 \(index)\",\"depends_on\":[],\"profile\":\"worker\",\"fallback_profiles\":[],\"acceptance\":[\"完成\"]}"
+        }.joined(separator: ",")
+        let content = """
+        ```dispatch-graph
+        {"nodes":[\(nodes)]}
+        ```
+        """
+
+        let failures = AgentGoalDispatchPlanParser.validationFailures(
+            content: content,
+            availableProfileIDs: ["worker"]
+        )
+        #expect(failures.contains { $0.contains("maximum of 9") })
+    }
+
     @Test("重复任务 ID 安全返回校验失败而不是构造依赖图崩溃")
     func aiDispatchGraphRejectsDuplicateIDsSafely() {
         let content = """

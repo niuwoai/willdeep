@@ -264,6 +264,7 @@ nonisolated enum AgentSessionStore {
         let currentPlan: AgentPlan?
         let currentGoal: AgentGoal?
         let goalPlanningState: AgentGoalPlanningState?
+        let goalRoadmap: AgentGoalRoadmap?
         let goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint?
         let learningEvents: [AgentLearningEvent]
         let latestTurnRecall: AgentTurnRecallSnapshot?
@@ -277,7 +278,7 @@ nonisolated enum AgentSessionStore {
             case providerID, providerDisplayName
             case createdAt, updatedAt, messages
             case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts
-            case currentPlan, currentGoal, goalPlanningState, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall
+            case currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall
             case pinnedAt, archivedAt, titleIsUserSet
         }
 
@@ -304,6 +305,7 @@ nonisolated enum AgentSessionStore {
             currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
             currentGoal = try c.decodeIfPresent(AgentGoal.self, forKey: .currentGoal)
             goalPlanningState = try? c.decodeIfPresent(AgentGoalPlanningState.self, forKey: .goalPlanningState)
+            goalRoadmap = try? c.decodeIfPresent(AgentGoalRoadmap.self, forKey: .goalRoadmap)
             goalTurnRecoveryCheckpoint = try c.decodeIfPresent(
                 AgentGoalTurnRecoveryCheckpoint.self,
                 forKey: .goalTurnRecoveryCheckpoint
@@ -353,6 +355,7 @@ nonisolated enum AgentSessionStore {
                 currentPlan: currentPlan,
                 currentGoal: currentGoal,
                 goalPlanningState: goalPlanningState,
+                goalRoadmap: goalRoadmap,
                 goalTurnRecoveryCheckpoint: goalTurnRecoveryCheckpoint,
                 learningEvents: learningEvents,
                 latestTurnRecall: latestTurnRecall,

@@ -865,6 +865,16 @@ nonisolated enum L10n {
         static let untitled = String(localized: "goal-status-bar.untitled", defaultValue: "Untitled goal")
     }
 
+    enum GoalRoadmap {
+        static func phase(_ current: Int, _ total: Int) -> String {
+            let template = String(
+                localized: "goal-roadmap.phase-position",
+                defaultValue: "Phase %1$@/%2$@"
+            )
+            return String(format: template, "\(current)", "\(total)")
+        }
+    }
+
     enum GoalEditorSheet {
         static let cancel = String(localized: "goal-editor-sheet.cancel", defaultValue: "Cancel")
         static let checklistLabel = String(localized: "goal-editor-sheet.checklist-label", defaultValue: "Acceptance checklist one per line")

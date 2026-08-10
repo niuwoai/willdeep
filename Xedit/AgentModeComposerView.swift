@@ -461,7 +461,10 @@ private struct AgentComposerGoalCard: View {
 
     private var progressText: String {
         let done = goal.checklist.filter(\.done).count
-        return "\(done)/\(goal.checklist.count)"
+        let checklist = "\(done)/\(goal.checklist.count)"
+        guard let roadmap = appState.agentGoalRoadmap,
+              !roadmap.phases.isEmpty else { return checklist }
+        return "\(L10n.GoalRoadmap.phase(roadmap.activePhaseIndex + 1, roadmap.phases.count)) · \(checklist)"
     }
 
     private var accessibilityLabel: String {

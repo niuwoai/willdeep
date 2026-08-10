@@ -27,6 +27,9 @@ nonisolated struct AgentProject: Codable, Equatable, Identifiable, Sendable {
     /// Local repository fingerprints, reusing the dispatch resolver's notion
     /// of identity so a folder moved in Finder can still be recognized.
     var repositoryIdentities: [String]
+    /// Presentation priority in the sidebar. Optional storage keeps projects
+    /// written by older versions backward-compatible when the key is absent.
+    var pinnedAt: Date?
     var createdAt: Date
     var updatedAt: Date
 
@@ -35,6 +38,7 @@ nonisolated struct AgentProject: Codable, Equatable, Identifiable, Sendable {
         displayName: String,
         folderPaths: [String],
         repositoryIdentities: [String] = [],
+        pinnedAt: Date? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -42,12 +46,17 @@ nonisolated struct AgentProject: Codable, Equatable, Identifiable, Sendable {
         self.displayName = displayName
         self.folderPaths = folderPaths.compactMap(AgentProject.normalizedPath)
         self.repositoryIdentities = repositoryIdentities
+        self.pinnedAt = pinnedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
     var primaryFolderPath: String? {
         folderPaths.first
+    }
+
+    var isPinned: Bool {
+        pinnedAt != nil
     }
 
     /// The name to show. An empty name would render as a blank sidebar

@@ -476,15 +476,6 @@ struct AgentToolCallGroup: View {
                 }
             } label: {
                 HStack(spacing: 7) {
-                    if !status.isEmpty {
-                        Text(status)
-                            .font(AgentDesign.chatSupportingFont(
-                                baseFontSize: appState.agentChatBaseFontSize
-                            ))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
                     if let previewSummary {
                         Text(previewSummary)
                             .font(AgentDesign.chatSupportingFont(
@@ -496,6 +487,15 @@ struct AgentToolCallGroup: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         Spacer(minLength: 0)
+                    }
+                    if !status.isEmpty {
+                        Text(status)
+                            .font(AgentDesign.chatSupportingFont(
+                                baseFontSize: appState.agentChatBaseFontSize
+                            ))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                     Image(systemName: detailsVisible ? "chevron.up" : "chevron.down")
                         .font(.system(size: 9, weight: .semibold))
@@ -574,11 +574,11 @@ struct AgentToolCallGroup: View {
         let failed = calls.filter { $0.status == .failed }.count
         let denied = calls.filter { $0.status == .denied }.count
         var parts: [String] = []
-        if waiting > 0 { parts.append("\(waiting) 待处理") }
-        if queued > 0 { parts.append("\(queued) 排队等待确认") }
-        if running > 0 { parts.append("\(running) 运行中") }
-        if failed > 0 { parts.append("✗ \(failed) 失败") }
-        if denied > 0 { parts.append("✗ \(denied) 已拒绝") }
+        if waiting > 0 { parts.append("(\(waiting)条待处理)") }
+        if queued > 0 { parts.append("(\(queued)条排队等待确认)") }
+        if running > 0 { parts.append("(\(running)条运行中)") }
+        if failed > 0 { parts.append("(\(failed)条失败)") }
+        if denied > 0 { parts.append("(\(denied)条已拒绝)") }
         return parts.joined(separator: " · ")
     }
 

@@ -117,6 +117,7 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "command", type: .string, description: "Shell command line. Runs through /bin/sh -c.", required: true),
                 AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Hard timeout in seconds. Foreground default 60s (max 600). Background default unlimited (max 21600 = 6h).", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, do not block on the command. When false, force foreground execution. When omitted, recognized test/build/dev-server commands run in the background automatically; other commands remain foreground.", required: false),
+                AgentToolParameter(name: "lifetime", type: .string, description: "Optional background ownership: turn, phase, goal, or persistent. In Goal mode, recognized dev servers default to phase and are stopped automatically when that phase finishes. Use persistent only when the user explicitly needs the service after the task.", required: false),
                 AgentToolParameter(name: "label", type: .string, description: "Optional concise user-facing action phrase for the live chat row, such as `运行前端测试` or `编译 macOS Release`. Never include secrets.", required: false)
             ]
         ),

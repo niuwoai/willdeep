@@ -516,14 +516,18 @@ struct OnboardingView: View {
                         }
                     }
                     if result.state == .connected, let account = result.account {
+                        // 登录响应不带昵称/头像时当场补一次，别让用户先看到
+                        // 光邮箱、几秒后头像才冒出来。有 2.5 秒预算，拿不到
+                        // 就沿用原账号，后续余额刷新照旧会补上。
+                        let displayAccount = await SomeIMClient.hydrateLoginProfile(for: account)
                         await MainActor.run {
-                            someIMAccount = account
+                            someIMAccount = displayAccount
                             someIMAPIKey = SomeIMIntegrationStore.loadAPIKey()
                             someIMSettings = SomeIMIntegrationStore.loadSettings()
                             commitSomeIM()
                             someIMBrowserLoginRequest = nil
                             isWatchingSomeIMBrowserLogin = false
-                            someIMStatus = L10n.Settings.SomeIM.accountSummary(account.displayName, account.displayCredits)
+                            someIMStatus = L10n.Settings.SomeIM.accountSummary(displayAccount.displayName, displayAccount.displayCredits)
                         }
                         return
                     }

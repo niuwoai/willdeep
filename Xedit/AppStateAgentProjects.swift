@@ -76,6 +76,15 @@ extension AppState {
         return true
     }
 
+    /// Pinning changes sidebar priority only. It deliberately leaves
+    /// `createdAt` and `updatedAt` untouched so project ordering remains
+    /// stable and repository ownership tie-breaking does not change.
+    func toggleAgentProjectPinned(id: UUID) {
+        guard let index = agentProjects.firstIndex(where: { $0.id == id }) else { return }
+        agentProjects[index].pinnedAt = agentProjects[index].isPinned ? nil : Date()
+        AgentProjectStore.save(agentProjects)
+    }
+
     // MARK: Removal
 
     /// What removing this project would do to its conversations. Computed

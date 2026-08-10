@@ -128,6 +128,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var currentPlan: AgentPlan?
     @Published var currentGoal: AgentGoal?
     @Published var goalPlanningState: AgentGoalPlanningState?
+    @Published var goalRoadmap: AgentGoalRoadmap?
     @Published var goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint?
     /// Runtime-only guard for mid-turn manual goal edits. If the user edits
     /// the goal while an old request is already in flight, that older reply's
@@ -350,10 +351,12 @@ final class AgentRuntime: ObservableObject, Identifiable {
         }
         self.currentPlan = restoredPlan
         self.currentGoal = session.currentGoal
+        self.goalRoadmap = session.goalRoadmap
         self.goalTurnRecoveryCheckpoint = session.goalTurnRecoveryCheckpoint
         let restoredGoalPlanningState = session.goalPlanningState?.normalizedForRestore(
             currentPlan: restoredPlan,
-            currentGoal: session.currentGoal
+            currentGoal: session.currentGoal,
+            goalRoadmap: session.goalRoadmap
         )
         self.goalPlanningState = restoredGoalPlanningState
         if restoredGoalPlanningState?.phase == .blocked,
@@ -517,6 +520,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.currentPlan = currentPlan
         session.currentGoal = currentGoal
         session.goalPlanningState = goalPlanningState
+        session.goalRoadmap = goalRoadmap
         session.goalTurnRecoveryCheckpoint = goalTurnRecoveryCheckpoint
         session.learningEvents = learningEvents
         session.latestTurnRecall = latestTurnRecall

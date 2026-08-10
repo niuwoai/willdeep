@@ -391,7 +391,7 @@ extension AgentChatHistoryRenderer {
                 color: secondaryColor
             ))
             result.append(NSAttributedString(
-                string: "  \(item.text)",
+                string: " \(item.text)",
                 attributes: [
                     // `monoFont` is created from the configured chat body size.
                     // Reuse its point size so the activity timeline follows
@@ -400,7 +400,7 @@ extension AgentChatHistoryRenderer {
                     .foregroundColor: secondaryColor,
                 ]
             ))
-            // Exceptional outcome receipt (✗ N 失败 / 已拒绝) rides at the
+            // Exceptional outcome receipt ((N条失败) / (N条已拒绝)) rides at the
             // tail of the last activity row. Success needs no extra “完成”:
             // the action summary itself already says what was accomplished.
             // Keep the badge in the same secondary tone as the activity line:
@@ -408,7 +408,7 @@ extension AgentChatHistoryRenderer {
             // red alarm would overstate the severity.
             if index == displayItems.count - 1, let badge = group.outcomeBadge {
                 result.append(NSAttributedString(
-                    string: "  · \(badge)",
+                    string: badge,
                     attributes: [
                         .font: NSFont.systemFont(ofSize: monoFont.pointSize, weight: .regular),
                         .foregroundColor: secondaryColor,
@@ -887,9 +887,9 @@ extension AgentChatHistoryRenderer {
     private static func toolGroupHeaderParagraphStyle() -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
-        style.lineSpacing = 3
-        style.paragraphSpacingBefore = 2
-        style.paragraphSpacing = 4
+        style.lineSpacing = 1
+        style.paragraphSpacingBefore = 1
+        style.paragraphSpacing = 2
         // Keep the compact activity summary on the same content column as
         // the assistant prose above it. A bespoke 22 pt inset used to place
         // this label 10 pt left of the 32 pt assistant body edge.

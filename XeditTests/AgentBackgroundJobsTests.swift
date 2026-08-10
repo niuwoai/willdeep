@@ -45,6 +45,10 @@ struct AgentBackgroundJobsTests {
         #expect(AgentBackgroundJob.Status.killed.rawValue == "killed")
         #expect(AgentBackgroundJob.Status.timedOut.rawValue == "timedOut")
         #expect(AgentBackgroundJob.Status.launchFailed.rawValue == "launchFailed")
+        #expect(AgentBackgroundJobLifetime.turn.rawValue == "turn")
+        #expect(AgentBackgroundJobLifetime.phase.rawValue == "phase")
+        #expect(AgentBackgroundJobLifetime.goal.rawValue == "goal")
+        #expect(AgentBackgroundJobLifetime.persistent.rawValue == "persistent")
     }
 
     /// `displayHandle` is the user- and model-facing short id. The
@@ -544,6 +548,48 @@ struct AgentBackgroundJobsTests {
         let finished = await waitUntilFinished(registry: registry, id: job.id)
         #expect(finished)
         #expect(registry.job(id: job.id)?.status == .killed)
+    }
+
+    @Test
+    func phaseCleanupStopsOnlyTheCompletedPhaseWithoutWakingGoalLoop() async throws {
+        let registry = AgentJobRegistry()
+        let runtimeID = UUID()
+        let command = "trap 'exit 143' TERM; while true; do sleep 1; done"
+        let phaseOne = try registry.start(
+            command: command,
+            workingDirectory: nil,
+            runtimeID: runtimeID,
+            timeoutSeconds: nil,
+            lifetime: .phase,
+            goalPhaseID: "PHASE-1"
+        )
+        let phaseTwo = try registry.start(
+            command: command,
+            workingDirectory: nil,
+            runtimeID: runtimeID,
+            timeoutSeconds: nil,
+            lifetime: .phase,
+            goalPhaseID: "PHASE-2"
+        )
+        let persistent = try registry.start(
+            command: command,
+            workingDirectory: nil,
+            runtimeID: runtimeID,
+            timeoutSeconds: nil,
+            lifetime: .persistent
+        )
+
+        #expect(registry.hasProgressRelevantAliveJobs(forRuntime: runtimeID) == false)
+        #expect(registry.killAllAlive(forRuntime: runtimeID, phaseID: "PHASE-1") == 1)
+        #expect(await waitUntilFinished(registry: registry, id: phaseOne.id))
+        #expect(registry.job(id: phaseOne.id)?.status == .killed)
+        #expect(registry.job(id: phaseTwo.id)?.isAlive == true)
+        #expect(registry.job(id: persistent.id)?.isAlive == true)
+        #expect(registry.consumePendingCompletions(forRuntime: runtimeID).isEmpty)
+
+        registry.killAllAlive(forRuntime: runtimeID)
+        #expect(await waitUntilFinished(registry: registry, id: phaseTwo.id))
+        #expect(await waitUntilFinished(registry: registry, id: persistent.id))
     }
 
     /// `kill` on an already-finished job is a no-op and returns

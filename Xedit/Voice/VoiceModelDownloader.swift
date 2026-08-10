@@ -6,8 +6,9 @@
 //  model.onnx 到 VoiceModelLocation。tokens.json / am.mvn / config.yaml
 //  这三个辅助文件已经打包进 Bundle 的 Voice/BundledAssets/，不需下载。
 //
-//  CDN URL 借用 fastv 的 publish endpoint。如果用户机器装过 fastv，
-//  ImportFromFastv() 直接 symlink 现有副本（0 下载，秒完成）。
+//  模型托管在自有 OSS（img.niuwoai.com）上，与 App DMG 同一个发布桶。
+//  如果用户机器装过 fastv，ImportFromFastv() 直接 symlink 现有副本
+//  （0 下载，秒完成）。
 //
 
 import Foundation
@@ -17,12 +18,16 @@ import Combine
 final class VoiceModelDownloader: ObservableObject {
     static let shared = VoiceModelDownloader()
 
-    /// fastv 用的默认 CDN endpoint。如果以后挂了/换源，改这里就行。
-    private static let defaultDownloadURL = URL(string: "https://cdn.wxside.com/upload/202511/1763737361-dTESP.onnx")!
+    /// 自有 OSS 上的 SenseVoice 模型。1.238.2 起从借用的第三方
+    /// endpoint（cdn.wxside.com）迁到 img.niuwoai.com —— 与 App DMG
+    /// 同一个发布桶，生命周期自己说了算。换源改这里就行。
+    private static let defaultDownloadURL = URL(string: "https://img.niuwoai.com/models/sensevoice-small/model.onnx")!
 
-    /// SenseVoice ONNX 的公布体积，只用作服务端未给 Content-Length 时的
-    /// 回退分母，对应下载提示里那句「约 937 MB」。真实体积以响应头为准。
-    static let approximateModelBytes: Int64 = 937 * 1024 * 1024
+    /// SenseVoice ONNX 的实测体积（迁移时校验过 MD5 的那一份），只用作
+    /// 服务端未给 Content-Length 时的回退分母。真实体积以响应头为准。
+    /// 注意这是十进制 937.6 MB，不是 937 MiB —— 旧值写成 937 * 1024 * 1024
+    /// （982,614,016）会把分母抬高约 4.8%，进度条永远差一截到不了头。
+    static let approximateModelBytes: Int64 = 937_615_562
 
     enum State: Equatable {
         case idle

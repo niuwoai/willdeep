@@ -357,7 +357,7 @@ struct AgentChatHistoryRendererGoalTests {
         )
         view.layoutSubtreeIfNeeded()
 
-        #expect(occurrences(of: "已运行 26 条命令", in: view.string) == 1)
+        #expect(occurrences(of: "已运行26条命令", in: view.string) == 1)
         #expect(occurrences(of: "模型已从", in: view.string) == 1)
 
         let implementationURL = outputDirectory.appendingPathComponent(
@@ -454,7 +454,7 @@ struct AgentChatHistoryRendererGoalTests {
 
         let bodyRange = (view.string as NSString).range(of: "明白，让我先看下侧边栏终端当前状态。")
         let summaryRange = (view.string as NSString).range(
-            of: "\u{FFFC}  已执行 4 次终端操作"
+            of: "\u{FFFC} 已执行4次终端操作"
         )
         let bodyGlyphRange = try #require(view.layoutManager?.glyphRange(
             forCharacterRange: bodyRange,
@@ -552,16 +552,16 @@ struct AgentChatHistoryRendererGoalTests {
         view.layoutSubtreeIfNeeded()
 
         let expectedRows = [
-            "已读取 5 个文件",
-            "已浏览 4 个目录",
-            "已搜索代码 4 次",
+            "已读取5个文件",
+            "已浏览4个目录",
+            "已搜索代码4次",
             "已查看 Git 状态",
-            "已运行 3 条命令",
+            "已运行3条命令",
         ]
         for row in expectedRows {
             #expect(view.string.contains(row))
         }
-        #expect(!view.string.contains("已读取 5 个文件 · 已浏览 4 个目录"))
+        #expect(!view.string.contains("已读取5个文件 · 已浏览4个目录"))
 
         let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: bitmap)

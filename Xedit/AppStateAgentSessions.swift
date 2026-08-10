@@ -563,7 +563,9 @@ extension AppState {
         activeRuntime?.goalTurnRecoveryCheckpoint = nil
         persistActiveAgentSession()
         if let runtime = activeRuntime {
-            prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
+            if !advanceAgentGoalRoadmapIfNeeded(for: runtime) {
+                prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
+            }
         }
     }
 
@@ -618,6 +620,12 @@ extension AppState {
         guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else {
             return .noProposal
         }
+        if runtime.interactionMode == .goal,
+           runtime.goalPlanningState?.phase == .readyForProposal,
+           let generationID = runtime.goalPlanningState?.generationID,
+           !last.content.contains("<!-- goal-planning-generation:\(generationID.uuidString) -->") {
+            return .noProposal
+        }
         if let parsed = AgentPlanParser.extract(from: last.content) {
             if runtime.interactionMode == .normal {
                 if let existing = runtime.currentPlan,
@@ -633,6 +641,49 @@ extension AppState {
                 ) ?? executable
                 return .captured
             }
+            if runtime.goalPlanningState?.phase == .executing,
+               runtime.currentPlan == nil,
+               runtime.goalRoadmap?.activePhase?.status == .planning {
+                let requiresDispatchGraph = runtime.session.presentationScope == .dispatchBoard
+                let availableProfiles = requiresDispatchGraph
+                    ? Set(runtime.currentGoal?.selectedWorkerProfileIDs
+                        ?? [AgentExecutionProfile.recommendedWorkerID])
+                    : nil
+                var failures = AgentGoalPhasePlanValidator.validationFailures(plan: parsed)
+                if requiresDispatchGraph {
+                    failures += AgentGoalDispatchPlanParser.validationFailures(
+                        content: last.content,
+                        availableProfileIDs: availableProfiles
+                    )
+                }
+                guard failures.isEmpty else {
+                    return requestAgentGoalPhasePlanCorrection(
+                        for: runtime,
+                        failures: failures,
+                        requiresDispatchGraph: requiresDispatchGraph
+                    )
+                }
+                var executable = parsed
+                executable.status = .approved
+                runtime.currentPlan = executable
+                if requiresDispatchGraph,
+                   let dispatchPlan = AgentGoalDispatchPlanParser.extract(
+                       from: last.content,
+                       availableProfileIDs: availableProfiles,
+                       namespace: runtime.id.uuidString
+                   ),
+                   var goal = runtime.currentGoal {
+                    goal.dispatchPlan = dispatchPlan
+                    runtime.currentGoal = goal
+                }
+                if var roadmap = runtime.goalRoadmap,
+                   roadmap.phases.indices.contains(roadmap.activePhaseIndex) {
+                    roadmap.phases[roadmap.activePhaseIndex].status = .executing
+                    runtime.goalRoadmap = roadmap
+                }
+                runtime.goalTurnRecoveryCheckpoint = AgentGoalTurnRecoveryCheckpoint()
+                return .captured
+            }
             if runtime.goalPlanningState?.phase == .readyForProposal {
                 let requiresDispatchGraph = runtime.session.presentationScope == .dispatchBoard
                 let availableProfiles = requiresDispatchGraph
@@ -643,13 +694,21 @@ extension AppState {
                     content: last.content,
                     plan: parsed,
                     generationID: runtime.goalPlanningState?.generationID,
+                    requiresRoadmap: true,
                     requiresDispatchGraph: requiresDispatchGraph,
                     availableProfileIDs: availableProfiles
                 )
                 if failures.isEmpty {
+                    guard let roadmap = AgentGoalRoadmapParser.extract(from: last.content) else {
+                        return requestAgentGoalProposalCorrection(
+                            for: runtime,
+                            failures: ["the Goal roadmap could not be parsed after validation"]
+                        )
+                    }
                     var executable = parsed
                     executable.status = .approved
                     runtime.currentPlan = executable
+                    runtime.goalRoadmap = roadmap
                     if requiresDispatchGraph,
                        let dispatchPlan = AgentGoalDispatchPlanParser.extract(
                            from: last.content,
@@ -714,6 +773,7 @@ extension AppState {
         runtime.currentGoal = parsed
         runtime.currentPlan = nil
         runtime.goalPlanningState = nil
+        runtime.goalRoadmap = nil
         persistAgentSession(runtime: runtime)
         return true
     }
@@ -768,6 +828,11 @@ extension AppState {
         }
         agentCurrentPlan = plan
         persistActiveAgentSession()
+        if plan.status == .done, let runtime = activeRuntime {
+            if !advanceAgentGoalRoadmapIfNeeded(for: runtime) {
+                prepareNextAgentGoalPlanningCycleIfNeeded(for: runtime)
+            }
+        }
     }
 
     /// Edit a step's text in place — handy when the agent's wording
@@ -888,6 +953,7 @@ extension AppState {
             runtime.currentGoal = nil
             runtime.currentPlan = nil
             runtime.goalPlanningState = nil
+            runtime.goalRoadmap = nil
             runtime.goalTurnRecoveryCheckpoint = nil
             if previousGoal != nil {
                 runtime.currentGoalEditedAt = Date()
@@ -952,6 +1018,7 @@ extension AppState {
             runtime.currentGoalEditedAt = Date()
             runtime.currentPlan = nil
             runtime.goalPlanningState = nil
+            runtime.goalRoadmap = nil
             runtime.goalTurnRecoveryCheckpoint = nil
         }
         persistActiveAgentSession()

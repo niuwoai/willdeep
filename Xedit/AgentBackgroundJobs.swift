@@ -34,6 +34,16 @@ nonisolated enum AgentJobOutputStream: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Host-enforced ownership for background commands. Goal dev servers are
+/// phase-scoped by default, so finishing QA cannot leave an old server (or its
+/// browser children) consuming resources indefinitely.
+nonisolated enum AgentBackgroundJobLifetime: String, CaseIterable, Equatable {
+    case turn
+    case phase
+    case goal
+    case persistent
+}
+
 /// A single background `run_command` invocation tracked by the
 /// `AgentJobRegistry`. Identifiable + Equatable so SwiftUI lists can
 /// diff it cheaply. The full output buffer lives on a private actor
@@ -72,6 +82,8 @@ struct AgentBackgroundJob: Identifiable, Equatable {
     var executorSessionID: String? = nil
     var latestExecutorEvent: AgentExecutorEvent? = nil
     var executorUsage: AgentExecutorUsage? = nil
+    var lifetime: AgentBackgroundJobLifetime = .turn
+    var goalPhaseID: String? = nil
 
     nonisolated var isAlive: Bool { status == .running }
     nonisolated var needsAttention: Bool {
@@ -105,6 +117,8 @@ private struct AgentBackgroundSandboxRetrySpecification {
     let secretRedactionValues: [String]
     let sandboxMode: AgentSandboxMode
     let approvalSource: AgentToolApprovalSource
+    let lifetime: AgentBackgroundJobLifetime
+    let goalPhaseID: String?
 }
 
 /// Per-app registry of background jobs. One instance lives on
@@ -195,6 +209,8 @@ final class AgentJobRegistry: ObservableObject {
         remotePID: Int32? = nil,
         displayCommand: String? = nil,
         secretRedactionValues: [String] = [],
+        lifetime: AgentBackgroundJobLifetime = .turn,
+        goalPhaseID: String? = nil,
         automaticSandboxRetryApprovalSource: AgentToolApprovalSource? = nil
     ) throws -> AgentBackgroundJob {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -225,7 +241,9 @@ final class AgentJobRegistry: ObservableObject {
                 displayCommand: visibleCommand,
                 secretRedactionValues: secretRedactionValues,
                 sandboxMode: sandboxMode,
-                approvalSource: automaticSandboxRetryApprovalSource
+                approvalSource: automaticSandboxRetryApprovalSource,
+                lifetime: lifetime,
+                goalPhaseID: goalPhaseID
             )
         }
 
@@ -284,7 +302,9 @@ final class AgentJobRegistry: ObservableObject {
                 status: .launchFailed,
                 exitCode: -1,
                 finishedAt: Date(),
-                outputByteCount: 0
+                outputByteCount: 0,
+                lifetime: lifetime,
+                goalPhaseID: goalPhaseID
             )
             insertOrUpdate(job)
             collector.appendString(error.localizedDescription, stream: .stderr)
@@ -309,11 +329,14 @@ final class AgentJobRegistry: ObservableObject {
             status: .running,
             exitCode: nil,
             finishedAt: nil,
-            outputByteCount: 0
+            outputByteCount: 0,
+            lifetime: lifetime,
+            goalPhaseID: goalPhaseID
         )
         let processBox = AgentJobProcess(process: process, collector: collector)
         processes[id] = processBox
         insertOrUpdate(initial)
+        processBox.startTrackingDescendants(on: Self.lifecycleQueue)
 
         // Optional hard timeout — same shape as the foreground
         // runCommand, but we don't throw on timeout; we mark the
@@ -342,6 +365,7 @@ final class AgentJobRegistry: ObservableObject {
             stderrPipe.fileHandleForReading.readabilityHandler = nil
             if let processBox {
                 processBox.timeoutWork?.cancel()
+                processBox.stopTrackingAndTerminateDescendants()
                 processBox.collector.append(
                     stdoutPipe.fileHandleForReading.availableData,
                     stream: .stdout
@@ -762,6 +786,12 @@ final class AgentJobRegistry: ObservableObject {
         jobs.filter { $0.runtimeID == runtimeID && $0.isAlive }
     }
 
+    func hasProgressRelevantAliveJobs(forRuntime runtimeID: UUID) -> Bool {
+        aliveJobs(forRuntime: runtimeID).contains {
+            $0.lifetime == .turn || $0.lifetime == .goal
+        }
+    }
+
     /// Alive shell jobs created by one exact Agent turn. Older jobs in the
     /// same conversation — especially dev servers and watchers — are excluded.
     func aliveJobs(forRuntime runtimeID: UUID, originatingTurnID turnID: UUID) -> [AgentBackgroundJob] {
@@ -897,6 +927,20 @@ final class AgentJobRegistry: ObservableObject {
         for job in aliveJobs(forRuntime: runtimeID) {
             _ = kill(id: job.id)
         }
+    }
+
+    /// Lifecycle cleanup is intentionally quiet: the phase-transition turn
+    /// already explains why the server ended, so no completion event should
+    /// wake another model round merely to announce SIGTERM.
+    @discardableResult
+    func killAllAlive(forRuntime runtimeID: UUID, phaseID: String) -> Int {
+        let targets = aliveJobs(forRuntime: runtimeID).filter {
+            $0.lifetime == .phase && $0.goalPhaseID == phaseID
+        }
+        for job in targets {
+            _ = killForStoppedTurn(id: job.id)
+        }
+        return targets.count
     }
 
     // MARK: - Completion event drain (agent loop hook)
@@ -1043,6 +1087,8 @@ final class AgentJobRegistry: ObservableObject {
                remotePID: specification.remotePID,
                displayCommand: specification.displayCommand,
                secretRedactionValues: specification.secretRedactionValues,
+               lifetime: specification.lifetime,
+               goalPhaseID: specification.goalPhaseID,
                automaticSandboxRetryApprovalSource: nil
            ) {
             processes[id]?.collector.appendString(
@@ -1147,6 +1193,8 @@ private nonisolated final class AgentJobProcess: @unchecked Sendable {
     private let stateLock = NSLock()
     private var _didTimeOut = false
     private var _didExplicitKill = false
+    private var descendantTimer: DispatchSourceTimer?
+    private var trackedDescendants: [pid_t: AgentProcessSupport.ProcessIdentity] = [:]
 
     init(
         process: Process,
@@ -1176,6 +1224,42 @@ private nonisolated final class AgentJobProcess: @unchecked Sendable {
     var didExplicitKill: Bool {
         stateLock.lock(); defer { stateLock.unlock() }
         return _didExplicitKill
+    }
+
+    func startTrackingDescendants(on queue: DispatchQueue) {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(
+            deadline: .now(),
+            repeating: .milliseconds(250),
+            leeway: .milliseconds(50)
+        )
+        timer.setEventHandler { [weak self] in
+            guard let self, self.process.processIdentifier > 0 else { return }
+            let identities = AgentProcessSupport.descendantProcessIdentities(
+                of: self.process.processIdentifier
+            )
+            self.stateLock.lock()
+            for identity in identities {
+                self.trackedDescendants[identity.pid] = identity
+            }
+            self.stateLock.unlock()
+        }
+        stateLock.lock()
+        descendantTimer = timer
+        stateLock.unlock()
+        timer.resume()
+    }
+
+    func stopTrackingAndTerminateDescendants() {
+        stateLock.lock()
+        let timer = descendantTimer
+        descendantTimer = nil
+        let identities = Array(trackedDescendants.values)
+        trackedDescendants.removeAll()
+        stateLock.unlock()
+        timer?.setEventHandler {}
+        timer?.cancel()
+        AgentProcessSupport.terminateProcessIdentities(identities)
     }
 }
 
