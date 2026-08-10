@@ -1206,6 +1206,8 @@ nonisolated enum L10n {
         static let expanded = String(localized: "plan-card.expanded", defaultValue: "Expanded")
         static let header = String(localized: "plan-card.header", defaultValue: "Plan")
         static let markCompleteButton = String(localized: "plan-card.mark-complete-button", defaultValue: "Mark plan complete")
+        static let openDetails = String(localized: "plan-card.open-details", defaultValue: "View full plan")
+        static let openDetailsHelp = String(localized: "plan-card.open-details-help", defaultValue: "Show the full plan in the sidebar")
     }
 
     enum PlanContinuation {

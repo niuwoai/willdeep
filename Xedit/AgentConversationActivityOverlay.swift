@@ -42,7 +42,12 @@ struct AgentConversationActivityOverlay: View {
             VStack(alignment: .trailing, spacing: 6) {
                 // Plan card sits on top as the task's visible progress.
                 if let plan {
-                    AgentPlanCard(plan: plan, isExpanded: $isPlanExpanded, floating: true)
+                    AgentPlanCard(
+                        plan: plan,
+                        isExpanded: $isPlanExpanded,
+                        floating: true,
+                        onOpenDetails: openPlanDetails
+                    )
                         .frame(
                             width: isPlanExpanded
                                 ? AgentConversationActivityDesign.planExpandedWidth
@@ -88,6 +93,10 @@ struct AgentConversationActivityOverlay: View {
             .transition(.move(edge: .trailing).combined(with: .opacity))
             .animation(.easeOut(duration: 0.18), value: snapshot.identityDigest)
         }
+    }
+
+    private func openPlanDetails() {
+        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .plan)
     }
 }
 

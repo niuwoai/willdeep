@@ -15548,6 +15548,42 @@
         }
       }
     },
+    "plan-card.open-details" : {
+      "comment" : "menu action for opening the complete plan in the sidebar",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View full plan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看完整计划"
+          }
+        }
+      }
+    },
+    "plan-card.open-details-help" : {
+      "comment" : "tooltip for opening the complete plan in the sidebar",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show the full plan in the sidebar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在侧边栏显示完整计划"
+          }
+        }
+      }
+    },
     "plan-continuation.missing-progress-paused" : {
       "comment" : "error shown when plan status reconciliation still produces no structured step updates",
       "extractionState" : "manual",

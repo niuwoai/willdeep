@@ -1587,23 +1587,29 @@ struct AgentSidePanelFilesView: View {
 
 // MARK: - Plan panel
 //
-// Surfaces the current `AgentPlan` of the active runtime. Reuses the
-// transcript-level `AgentPlanCard` so the side-panel view is in sync
-// with whatever shows up inline once the plan is approved. The menu
-// entry that opens this panel is hidden in `AgentChatHeader` when no
-// plan exists, so the `nil` branch here is only a safety net for the
-// case where the plan disappears while the panel is already open.
+// Surfaces the current `AgentPlan` of the active runtime as a wrapping,
+// selectable Markdown document. The floating card is intentionally compact;
+// this panel is where every step can be read without truncation.
 
 struct AgentSidePanelPlanView: View {
     @EnvironmentObject var appState: AppState
-    @State private var isPlanExpanded = true
 
     var body: some View {
         Group {
             if let plan = appState.agentCurrentPlan {
                 ScrollView {
-                    AgentPlanCard(plan: plan, isExpanded: $isPlanExpanded)
-                        .padding(12)
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(
+                            Array(MarkdownPreviewParser.blocks(
+                                from: AgentPlanMarkdownFormatter.markdown(from: plan)
+                            ).enumerated()),
+                            id: \.offset
+                        ) { _, block in
+                            MarkdownPreviewBlockView(block: block)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
                 }
             } else {
                 placeholderNoPlan

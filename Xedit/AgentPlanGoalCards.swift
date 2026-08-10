@@ -54,6 +54,40 @@ nonisolated enum AgentPlanCardExpansionPolicy {
     }
 }
 
+/// Produces the full-fidelity document shown in the Plan side panel. The
+/// floating card intentionally keeps every step to one line; this Markdown
+/// representation is the escape hatch where long step descriptions can wrap
+/// naturally and remain selectable.
+nonisolated enum AgentPlanMarkdownFormatter {
+    static func markdown(from plan: AgentPlan) -> String {
+        var sections = ["# \(L10n.PlanCard.header)"]
+
+        let summary = plan.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !summary.isEmpty {
+            sections.append(summary)
+        }
+
+        let steps = plan.steps.enumerated().map { index, step in
+            "- \(statusGlyph(for: step.status)) **\(index + 1).** \(step.text)"
+        }
+        if !steps.isEmpty {
+            sections.append(steps.joined(separator: "\n"))
+        }
+
+        return sections.joined(separator: "\n\n")
+    }
+
+    private static func statusGlyph(for status: AgentPlan.StepStatus) -> String {
+        switch status {
+        case .pending: return "○"
+        case .inProgress: return "◉"
+        case .done: return "✓"
+        case .skipped: return "–"
+        case .failed: return "!"
+        }
+    }
+}
+
 // MARK: - Plan card
 
 struct AgentPlanCard: View {
@@ -65,6 +99,9 @@ struct AgentPlanCard: View {
     /// card matches the artifact / media / dev-server cards stacked beside it.
     /// The transcript-inline and side-panel mounts keep the orange surface.
     var floating: Bool = false
+    /// Opens the complete, wrapping Markdown representation in the side panel.
+    /// Nil for mounts that do not have a side-panel host.
+    var onOpenDetails: (() -> Void)? = nil
     @State private var isRevisionExpanded = false
 
     var body: some View {
@@ -108,6 +145,11 @@ struct AgentPlanCard: View {
                 .accessibilityValue(isExpanded ? L10n.PlanCard.expanded : L10n.PlanCard.collapsed)
 
                 Menu {
+                    if let onOpenDetails {
+                        Button(L10n.PlanCard.openDetails) {
+                            onOpenDetails()
+                        }
+                    }
                     Button(L10n.PlanRevision.replanButton) {
                         withAnimation(.easeInOut(duration: 0.18)) {
                             isExpanded = true
@@ -128,9 +170,12 @@ struct AgentPlanCard: View {
 
             if isExpanded {
                 if !plan.summary.isEmpty {
-                    Text(plan.summary)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                    planDetailsButton {
+                        Text(plan.summary)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -139,6 +184,7 @@ struct AgentPlanCard: View {
                             index: index + 1,
                             step: step,
                             interactive: plan.status != .rejected,
+                            onOpenDetails: onOpenDetails,
                             onCycle: { next in
                                 appState.setAgentPlanStepStatus(id: step.id, status: next)
                             }
@@ -165,6 +211,20 @@ struct AgentPlanCard: View {
         .background(planCardBackground)
         .overlay(planCardBorder)
         .shadow(color: floating ? Color.black.opacity(0.055) : .clear, radius: floating ? 7 : 0, x: 0, y: floating ? 2 : 0)
+    }
+
+    @ViewBuilder
+    private func planDetailsButton<Label: View>(
+        @ViewBuilder label: () -> Label
+    ) -> some View {
+        if let onOpenDetails {
+            Button(action: onOpenDetails, label: label)
+                .buttonStyle(.plain)
+                .help(L10n.PlanCard.openDetailsHelp)
+                .cursor(.pointingHand)
+        } else {
+            label()
+        }
     }
 
     @ViewBuilder
@@ -279,6 +339,7 @@ struct AgentPlanStepRow: View {
     let index: Int
     let step: AgentPlan.Step
     let interactive: Bool
+    var onOpenDetails: (() -> Void)? = nil
     let onCycle: (AgentPlan.StepStatus) -> Void
 
     @State private var sheet: ActiveSheet?
@@ -320,12 +381,16 @@ struct AgentPlanStepRow: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .frame(width: AgentPlanStepLayoutMetrics.indexColumnWidth, alignment: .trailing)
-            TruncatedTooltipText(
-                attributed: MarkdownInline.attributedString(from: step.text),
-                color: textColor,
-                strikethrough: step.status == .done || step.status == .skipped,
-                tooltip: step.text
-            )
+            if let onOpenDetails {
+                Button(action: onOpenDetails) {
+                    stepText
+                }
+                .buttonStyle(.plain)
+                .help(L10n.PlanCard.openDetailsHelp)
+                .cursor(.pointingHand)
+            } else {
+                stepText
+            }
         }
         .contentShape(Rectangle())
         .contextMenu {
@@ -393,6 +458,15 @@ struct AgentPlanStepRow: View {
                 )
             }
         }
+    }
+
+    private var stepText: some View {
+        TruncatedTooltipText(
+            attributed: MarkdownInline.attributedString(from: step.text),
+            color: textColor,
+            strikethrough: step.status == .done || step.status == .skipped,
+            tooltip: step.text
+        )
     }
 
     private var glyph: String {

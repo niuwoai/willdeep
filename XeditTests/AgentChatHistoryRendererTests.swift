@@ -656,8 +656,23 @@ struct AgentChatHistoryRendererTests {
         #expect(chipRect.minX >= precedingRect.maxX)
         #expect(chipRect.minX < slashRect.minX)
         #expect(chipRect.maxX > slashRect.maxX)
-        #expect(slashRect.minY - chipRect.minY <= AgentChatHistoryLayoutMetrics.inlineCodeChipBottomPadding + 1)
-        #expect(chipRect.maxY - slashRect.maxY >= AgentChatHistoryLayoutMetrics.inlineCodeChipTopPadding)
+        #expect(
+            slashRect.minY - chipRect.minY
+                <= AgentChatHistoryLayoutMetrics.inlineCodeChipVisualTopPadding + 1
+        )
+        #expect(
+            chipRect.maxY - slashRect.maxY
+                >= AgentChatHistoryLayoutMetrics.inlineCodeChipVisualBottomPadding
+        )
+    }
+
+    @Test
+    func inlineCodeChipUsesCompactVisualBottomPadding() {
+        #expect(AgentChatHistoryLayoutMetrics.inlineCodeChipVisualBottomPadding == 0.5)
+        #expect(
+            AgentChatHistoryLayoutMetrics.inlineCodeChipVisualBottomPadding
+                == AgentChatHistoryLayoutMetrics.inlineCodeChipVisualTopPadding
+        )
     }
 
     @Test

@@ -1234,8 +1234,10 @@ enum AgentChatHistoryLayoutMetrics {
     /// Keep the horizontal expansion below that space's advance so a
     /// one-glyph chip such as `/` cannot paint over the preceding text.
     static let inlineCodeChipHorizontalPadding: CGFloat = 2
-    static let inlineCodeChipTopPadding: CGFloat = 1.5
-    static let inlineCodeChipBottomPadding: CGFloat = 0.5
+    /// NSTextView draws in a flipped coordinate system, so name these by
+    /// their on-screen edges instead of AppKit's geometric minY/maxY edges.
+    static let inlineCodeChipVisualTopPadding: CGFloat = 0.5
+    static let inlineCodeChipVisualBottomPadding: CGFloat = 0.5
     /// Code/table text is inset from the assistant paragraph. Their rounded
     /// background extends another 10 points around that text, so the right
     /// edge always covers the line-break boundary instead of ending early.
@@ -1253,9 +1255,11 @@ enum AgentChatHistoryLayoutMetrics {
         let positionedRect = glyphRect.offsetBy(dx: origin.x, dy: origin.y)
         return NSRect(
             x: positionedRect.minX - inlineCodeChipHorizontalPadding,
-            y: positionedRect.minY - inlineCodeChipBottomPadding,
+            y: positionedRect.minY - inlineCodeChipVisualTopPadding,
             width: positionedRect.width + inlineCodeChipHorizontalPadding * 2,
-            height: positionedRect.height + inlineCodeChipTopPadding + inlineCodeChipBottomPadding
+            height: positionedRect.height
+                + inlineCodeChipVisualTopPadding
+                + inlineCodeChipVisualBottomPadding
         ).integral
     }
 
