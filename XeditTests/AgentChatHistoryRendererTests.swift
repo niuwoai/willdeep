@@ -870,7 +870,7 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
 
-        #expect(rendered.string.contains("已运行 1 条命令"))
+        #expect(rendered.string.contains("已运行1条命令"))
         #expect(!rendered.string.contains("▸"))
         #expect(!rendered.string.contains("run_command  command: git status --short"))
         #expect(!rendered.string.contains("Tool calls"))
@@ -897,7 +897,7 @@ struct AgentChatHistoryRendererTests {
         let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
 
         #expect(!message.hasRenderableTextContent)
-        #expect(rendered.string.contains("已运行 1 条命令"))
+        #expect(rendered.string.contains("已运行1条命令"))
         #expect(!rendered.string.contains(AgentChatMessageMetrics.assistantStatus(
             for: message,
             isStreaming: false
@@ -921,7 +921,7 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
 
-        #expect(rendered.string.contains("生成了 3 个文件"))
+        #expect(rendered.string.contains("生成了3个文件"))
         #expect(!rendered.string.contains("第16集.md"))
         #expect(!rendered.string.contains("create_file"))
         #expect(!rendered.string.contains("内部标题"))
@@ -943,7 +943,7 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
 
-        #expect(rendered.string.contains("读取了 1 张图片"))
+        #expect(rendered.string.contains("读取了1张图片"))
         #expect(!rendered.string.contains("reference.png"))
     }
 
@@ -968,7 +968,7 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
 
-        #expect(rendered.string.contains("执行了 2 次工具调用"))
+        #expect(rendered.string.contains("执行了2次工具调用"))
         #expect(!rendered.string.contains("private_custom_tool"))
         #expect(!rendered.string.contains("not-for-collapsed-row"))
         #expect(!rendered.string.contains("workspace/internal.txt"))
@@ -1011,11 +1011,11 @@ struct AgentChatHistoryRendererTests {
             isDark: false,
             baseFontSize: baseFontSize
         )
-        #expect(collapsed.string.contains("已读取 1 个文件\n"))
-        #expect(collapsed.string.contains("已运行 1 条命令"))
-        #expect(!collapsed.string.contains("已读取 1 个文件 · 已运行 1 条命令"))
+        #expect(collapsed.string.contains("已读取1个文件\n"))
+        #expect(collapsed.string.contains("已运行1条命令"))
+        #expect(!collapsed.string.contains("已读取1个文件 · 已运行1条命令"))
         #expect(!collapsed.string.contains("tool  read_file"))
-        let summaryRange = (collapsed.string as NSString).range(of: "已读取 1 个文件")
+        let summaryRange = (collapsed.string as NSString).range(of: "已读取1个文件")
         let summaryFont = try #require(collapsed.attribute(
             .font,
             at: summaryRange.location,
@@ -1030,8 +1030,8 @@ struct AgentChatHistoryRendererTests {
             expandedToolGroupIDs: [groupID],
             baseFontSize: baseFontSize
         )
-        #expect(expanded.string.contains("已读取 1 个文件\n"))
-        #expect(expanded.string.contains("已运行 1 条命令"))
+        #expect(expanded.string.contains("已读取1个文件\n"))
+        #expect(expanded.string.contains("已运行1条命令"))
         #expect(!expanded.string.contains("▾"))
         #expect(expanded.string.contains("tool  run_command  command: ls /Users/rocky/Sites/Teamify && git status --short"))
         #expect(expanded.string.contains("tool  read_file  path: /Users/rocky/Sites/Teamify/README.md"))
@@ -1069,9 +1069,9 @@ struct AgentChatHistoryRendererTests {
         ]
 
         let collapsed = AgentChatHistoryRenderer.render(messages: messages, isDark: false)
-        #expect(collapsed.string.components(separatedBy: "已读取 1 个文件").count - 1 == 1)
-        #expect(collapsed.string.components(separatedBy: "已运行 1 条命令").count - 1 == 1)
-        #expect(!collapsed.string.contains("已读取 1 个文件 · 已运行 1 条命令"))
+        #expect(collapsed.string.components(separatedBy: "已读取1个文件").count - 1 == 1)
+        #expect(collapsed.string.components(separatedBy: "已运行1条命令").count - 1 == 1)
+        #expect(!collapsed.string.contains("已读取1个文件 · 已运行1条命令"))
 
         let groupID = "inline:\(proseID.uuidString):\(followupID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
@@ -1224,12 +1224,12 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [message], isDark: false)
 
-        #expect(rendered.string.contains("已执行 2 次终端操作"))
+        #expect(rendered.string.contains("已执行2次终端操作"))
         #expect(!rendered.string.contains("已调用 terminal send command"))
         #expect(!rendered.string.contains("已调用 terminal snapshot"))
 
         let bodyRange = (rendered.string as NSString).range(of: "Redis 关键调不在尾行。")
-        let summaryRange = (rendered.string as NSString).range(of: "已执行 2 次终端操作")
+        let summaryRange = (rendered.string as NSString).range(of: "已执行2次终端操作")
         let bodyStyle = try #require(rendered.attribute(
             .paragraphStyle,
             at: bodyRange.location,
@@ -1270,7 +1270,7 @@ struct AgentChatHistoryRendererTests {
 
         let rendered = AgentChatHistoryRenderer.render(messages: [older, latest], isDark: false)
 
-        #expect(rendered.string.contains("已读取 1 个文件"))
+        #expect(rendered.string.contains("已读取1个文件"))
         #expect(!rendered.string.contains("终端操作"))
         #expect(!rendered.string.contains("terminal_send_command"))
     }

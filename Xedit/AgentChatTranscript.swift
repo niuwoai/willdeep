@@ -803,7 +803,7 @@ struct AgentChatTranscript: View {
         // The `.tool` result messages get filtered out of the transcript
         // below, but they carry the persisted `toolCallStatus` (成/败/拒)
         // for each call. Harvest them first, keyed by the tool_call id, so
-        // a settled intent line ("我要做 X") can render a "✓ 成 / ✗ 败"
+        // a settled intent line ("我要做 X") can render an outcome receipt
         // receipt next to the action it triggered.
         let toolReceipts = toolReceiptsByCallID(in: appState.agentMessages)
         let visible = appState.agentMessages.compactMap { message in
@@ -898,7 +898,7 @@ struct AgentChatTranscript: View {
         }
         // Previously this cleared `toolCalls` entirely, so a settled intent
         // line lost every trace of the action it triggered. Keep the calls
-        // and attach their terminal receipts (✓/✗) instead — the history
+        // and attach their terminal outcome receipts instead — the history
         // renderer projects these into a per-group outcome badge. Only
         // calls with a known terminal status contribute a receipt; if none
         // resolved (e.g. legacy sessions without `.tool` status), the map

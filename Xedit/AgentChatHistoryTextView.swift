@@ -523,7 +523,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
             }
             // Keep the streaming-hot-path fingerprint in sync with the
             // renderer cache key: a resolved tool receipt must invalidate
-            // this early-exit, otherwise the ✓/✗ badge is skipped.
+            // this early-exit, otherwise the outcome receipt is skipped.
             if let receipts = m.settledToolReceipts {
                 for (callID, status) in receipts.sorted(by: { $0.key < $1.key }) {
                     hasher.combine(callID)
