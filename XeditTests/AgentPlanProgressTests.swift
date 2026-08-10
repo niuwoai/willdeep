@@ -15,6 +15,21 @@ import SwiftUI
 
 @Suite
 struct AgentPlanProgressTests {
+    @Test("查看完整计划直接打开计划侧边栏")
+    func viewFullPlanOpensPlanSidePanelDirectly() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let transcriptSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentChatTranscript.swift"),
+            encoding: .utf8
+        )
+
+        let directOpen = "appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .plan)"
+        #expect(transcriptSource.components(separatedBy: directOpen).count - 1 == 2)
+        #expect(!transcriptSource.contains("agentPlanOverlayExpandRequestToken"))
+    }
+
     /// Initial extract turns numbered lines into Steps with .pending status.
     @Test
     func extractProducesPendingSteps() {
