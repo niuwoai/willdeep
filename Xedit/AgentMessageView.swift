@@ -447,6 +447,7 @@ private struct AgentAssistantStreamingBody: View {
     let showsCursor: Bool
     let rendersMarkdown: Bool
     @State private var showsStreamingCursor = true
+    @State private var lastStreamingOutputAt = Date()
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -470,29 +471,25 @@ private struct AgentAssistantStreamingBody: View {
                 AgentStreamingCursor()
             }
         }
-        // Use the content itself instead of its length as the task identity:
-        // long-message previews keep a fixed character count while their tail
-        // still changes as new output arrives.
-        .task(id: content) {
-            guard showsCursor else { return }
-            let lastOutputAt = Date()
+        .onChange(of: content) { _ in
+            lastStreamingOutputAt = Date()
             showsStreamingCursor = true
-
-            do {
-                try await Task.sleep(
-                    nanoseconds: AgentStreamingCursorPolicy.inactivityTimeoutNanoseconds
+        }
+        .task {
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(
+                        nanoseconds: AgentStreamingCursorPolicy.inactivityTimeoutNanoseconds
+                    )
+                } catch {
+                    return
+                }
+                guard showsCursor else { continue }
+                showsStreamingCursor = AgentStreamingCursorPolicy.shouldShow(
+                    lastOutputAt: lastStreamingOutputAt,
+                    now: Date()
                 )
-            } catch {
-                return
             }
-
-            guard !AgentStreamingCursorPolicy.shouldShow(
-                lastOutputAt: lastOutputAt,
-                now: Date()
-            ) else {
-                return
-            }
-            showsStreamingCursor = false
         }
     }
 }
