@@ -15,9 +15,8 @@ struct AgentConversationActivityOverlay: View {
     @EnvironmentObject private var appState: AppState
     @State private var dismissedCardKeys: Set<String> = []
     /// Floating plan card fold state — replaces the old transcript-inline
-    /// `isCurrentPlanExpanded`. Collapsed by default; only auto-expands while
-    /// the plan is newly ready or when the footer's
-    /// "查看计划" affordance requests it via `agentPlanOverlayExpandRequestToken`.
+    /// `isCurrentPlanExpanded`. Collapsed by default and auto-expands while
+    /// the plan is newly ready.
     @State private var isPlanExpanded = false
 
     private var snapshot: AgentConversationActivitySnapshot {
@@ -62,9 +61,6 @@ struct AgentConversationActivityOverlay: View {
                             if AgentPlanCardExpansionPolicy.initiallyExpanded(for: newStatus) {
                                 isPlanExpanded = true
                             }
-                        }
-                        .onCompatibleChange(of: appState.agentPlanOverlayExpandRequestToken) { _, _ in
-                            withAnimation(.easeInOut(duration: 0.18)) { isPlanExpanded = true }
                         }
                         .onCompatibleChange(of: appState.agentPlanOverlayCollapseRequestToken) { _, _ in
                             withAnimation(.easeInOut(duration: 0.18)) { isPlanExpanded = false }
