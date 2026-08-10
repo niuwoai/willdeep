@@ -286,7 +286,8 @@ enum AgentSandboxPolicy {
     ]
 
     nonisolated private static let networkHeads: Set<String> = [
-        "curl", "wget", "ssh", "scp", "rsync", "gh", "brew"
+        "curl", "wget", "ssh", "scp", "rsync", "gh", "brew",
+        "mysql", "mariadb"
     ]
 
     nonisolated private static let credentialHeads: Set<String> = [
@@ -506,17 +507,35 @@ enum AgentSandboxPolicy {
             )
         }
 
-        let policyCommand = commandByReplacingSafeShellExpansions(
-            commandWithHeredocBodiesRemoved(trimmed)
-        )
-        if containsUnsafeShellExpansion(policyCommand) {
+        guard let expansionResolution = SafeCommand.resolveProvablySafeShellExpansions(
+            in: commandWithHeredocBodiesRemoved(trimmed)
+        ) else {
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
                 requiresTypedConfirmation: true,
-                reason: "Shell expansion can escape the sandbox.",
+                reason: "Shell expansion is destructive, unknown, or cannot be bounded safely.",
                 prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
             )
+        }
+        let policyCommand = expansionResolution.command
+        for substitution in expansionResolution.substitutions {
+            let substitutionDecision = commandDecision(
+                command: substitution,
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: additionalWorkspaceRoots
+            )
+            guard substitutionDecision.mode == .readOnly,
+                  !substitutionDecision.requiresUserApproval,
+                  !substitutionDecision.requiresTypedConfirmation else {
+                return AgentSandboxDecision(
+                    mode: .escalated,
+                    requiresUserApproval: true,
+                    requiresTypedConfirmation: true,
+                    reason: "Command substitution is not a bounded read-only workspace operation.",
+                    prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
+                )
+            }
         }
         let hasRedirection = containsRedirection(policyCommand)
 
@@ -533,9 +552,11 @@ enum AgentSandboxPolicy {
 
         var needsWorkspaceWrite = false
         var needsWorkspaceNetwork = false
-        var needsEscalation = false
+        var needsEscalation = expansionResolution.requiresJudgment
         var needsConfirmation = false
-        var reasons: [String] = []
+        var reasons: [String] = expansionResolution.requiresJudgment
+            ? ["A bounded read-only command substitution requires intelligent review of the complete command."]
+            : []
         var workingDirectory = rootDirectory?.standardizedFileURL
 
         if chain.requiresBackgroundJudgment {
@@ -544,8 +565,50 @@ enum AgentSandboxPolicy {
         }
 
         for (segmentIndex, segment) in chain.segments.enumerated() {
-            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text),
-                  let invocation = shellInvocation(from: rawTokens) else {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text) else {
+                needsEscalation = true
+                needsConfirmation = true
+                reasons.append("Unable to parse command segment \(segmentIndex + 1) safely.")
+                continue
+            }
+            if rawTokens.allSatisfy(isEnvironmentAssignment),
+               rawTokens.contains(where: assignmentContainsSafeCommandSubstitution) {
+                let assignmentValues = rawTokens.map(environmentAssignmentValue)
+                if rawTokens.contains(where: environmentAssignmentKeyLooksSensitive) {
+                    needsEscalation = true
+                    needsConfirmation = true
+                    reasons.append("Environment assignment uses a credential-like variable name.")
+                }
+                if assignmentValues.contains(where: referencesSensitivePath) {
+                    needsEscalation = true
+                    needsConfirmation = true
+                    reasons.append("Environment assignment references a sensitive path or credential-like value.")
+                }
+                if assignmentValues.contains(where: referencesSandboxRemappedHome) {
+                    needsEscalation = true
+                    reasons.append("Home-relative paths require access to the user's real home outside the workspace sandbox.")
+                }
+                if assignmentValues.contains(where: { token in
+                    guard looksLikePath(token),
+                          let resolved = resolvePath(
+                              token,
+                              workingDirectory: workingDirectory,
+                              rootDirectory: rootDirectory
+                          ) else {
+                        return false
+                    }
+                    return !isInsideWorkspace(
+                        resolved,
+                        rootDirectory: rootDirectory,
+                        additionalWorkspaceRoots: additionalWorkspaceRoots
+                    )
+                }) {
+                    needsEscalation = true
+                    reasons.append("Environment assignment references a path outside the workspace and must preserve the real target before launch.")
+                }
+                continue
+            }
+            guard let invocation = shellInvocation(from: rawTokens) else {
                 needsEscalation = true
                 needsConfirmation = true
                 reasons.append("Unable to parse command segment \(segmentIndex + 1) safely.")
@@ -758,11 +821,11 @@ enum AgentSandboxPolicy {
         }
 
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        let policyCommand = commandByReplacingSafeShellExpansions(
-            commandWithHeredocBodiesRemoved(trimmed)
-        )
-        guard !containsUnsafeShellExpansion(policyCommand),
-              let chain = AgentShellCommandParser.parse(policyCommand),
+        guard let expansionResolution = SafeCommand.resolveProvablySafeShellExpansions(
+            in: commandWithHeredocBodiesRemoved(trimmed)
+        ),
+              !expansionResolution.requiresJudgment,
+              let chain = AgentShellCommandParser.parse(expansionResolution.command),
               !chain.segments.isEmpty else {
             return false
         }
@@ -952,20 +1015,24 @@ enum AgentSandboxPolicy {
             return true
         }
 
-        let policyCommand = commandByReplacingSafeShellExpansions(
-            commandWithHeredocBodiesRemoved(trimmed)
-        )
-        guard !containsUnsafeShellExpansion(policyCommand),
-              let chain = AgentShellCommandParser.parse(policyCommand),
+        guard let expansionResolution = SafeCommand.resolveProvablySafeShellExpansions(
+            in: commandWithHeredocBodiesRemoved(trimmed)
+        ),
+              !expansionResolution.requiresJudgment,
+              let chain = AgentShellCommandParser.parse(expansionResolution.command),
               !chain.segments.isEmpty else {
             return true
         }
 
         for segment in chain.segments {
-            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text),
-                  let invocation = shellInvocation(from: rawTokens) else {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text) else {
                 return true
             }
+            if rawTokens.allSatisfy(isEnvironmentAssignment),
+               rawTokens.contains(where: assignmentContainsSafeCommandSubstitution) {
+                continue
+            }
+            guard let invocation = shellInvocation(from: rawTokens) else { return true }
             let tokens = invocation.commandTokens
             if networkHeads.contains(invocation.head)
                 || credentialHeads.contains(invocation.head)
@@ -1127,8 +1194,10 @@ enum AgentSandboxPolicy {
             break
         }
 
-        guard SafeCommand.classify(command: command) == .alwaysSafe else { return false }
-        guard let chain = AgentShellCommandParser.parse(command),
+        guard SafeCommand.classify(command: command) == .alwaysSafe,
+              let expansionResolution = SafeCommand.resolveProvablySafeShellExpansions(in: command),
+              !expansionResolution.requiresJudgment,
+              let chain = AgentShellCommandParser.parse(expansionResolution.command),
               !chain.segments.isEmpty,
               !chain.requiresBackgroundJudgment else {
             return false
@@ -1346,12 +1415,10 @@ enum AgentSandboxPolicy {
         return keyLooksSensitive(String(assignment[..<equalsIndex]))
     }
 
-    nonisolated private static func commandByReplacingSafeShellExpansions(_ command: String) -> String {
-        command.replacingOccurrences(of: "$(pwd)", with: ".")
-    }
-
-    nonisolated private static func containsUnsafeShellExpansion(_ command: String) -> Bool {
-        AgentShellCommandParser.containsExecutableSubstitution(command)
+    nonisolated private static func assignmentContainsSafeCommandSubstitution(
+        _ assignment: String
+    ) -> Bool {
+        assignment.contains(SafeCommand.safeCommandSubstitutionPlaceholder)
     }
 
     nonisolated private static func commandWithHeredocBodiesRemoved(_ command: String) -> String {
@@ -1442,6 +1509,8 @@ enum AgentSandboxPolicy {
             return .needsJudgment
         case "ssh":
             return classifySSHRemoteCommand(tokens)
+        case "mysql", "mariadb":
+            return SafeCommand.classifyDatabaseClient(firstToken: head, tokens: tokens)
         default:
             return .needsJudgment
         }
