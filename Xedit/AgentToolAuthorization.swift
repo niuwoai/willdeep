@@ -538,6 +538,10 @@ enum AgentSandboxPolicy {
             }
         }
         let hasRedirection = containsRedirection(policyCommand)
+        let redactedJudgeCommand = AgentInjectionDefense.redactedCommandForSafetyJudge(trimmed)
+        let permitsRedactedCredentialJudge = redactedJudgeCommand != trimmed
+            && SafeCommand.classify(command: trimmed) == .needsJudgment
+            && SafeCommand.containsNetworkFetcherInvocation(policyCommand)
 
         guard let chain = AgentShellCommandParser.parse(policyCommand),
               !chain.segments.isEmpty else {
@@ -608,6 +612,30 @@ enum AgentSandboxPolicy {
                 }
                 continue
             }
+            if rawTokens.allSatisfy(isEnvironmentAssignment) {
+                let assignmentValues = rawTokens.map(environmentAssignmentValue)
+                if rawTokens.contains(where: environmentAssignmentKeyLooksSensitive) {
+                    needsEscalation = true
+                    if !permitsRedactedCredentialJudge {
+                        needsConfirmation = true
+                    }
+                    reasons.append(
+                        permitsRedactedCredentialJudge
+                            ? "Credential assignment will be redacted locally before intelligent review."
+                            : "Environment assignment uses a credential-like variable name."
+                    )
+                }
+                if assignmentValues.contains(where: referencesSensitivePath) {
+                    needsEscalation = true
+                    needsConfirmation = true
+                    reasons.append("Environment assignment references a sensitive path or credential-like value.")
+                }
+                if assignmentValues.contains(where: referencesSandboxRemappedHome) {
+                    needsEscalation = true
+                    reasons.append("Home-relative paths require access to the user's real home outside the workspace sandbox.")
+                }
+                continue
+            }
             guard let invocation = shellInvocation(from: rawTokens) else {
                 needsEscalation = true
                 needsConfirmation = true
@@ -632,8 +660,14 @@ enum AgentSandboxPolicy {
 
             if invocation.environmentAssignments.contains(where: environmentAssignmentKeyLooksSensitive) {
                 needsEscalation = true
-                needsConfirmation = true
-                reasons.append("Environment assignment uses a credential-like variable name.")
+                if !permitsRedactedCredentialJudge {
+                    needsConfirmation = true
+                }
+                reasons.append(
+                    permitsRedactedCredentialJudge
+                        ? "Credential assignment will be redacted locally before intelligent review."
+                        : "Environment assignment uses a credential-like variable name."
+                )
             }
 
             if assignmentValues.contains(where: referencesSensitivePath) {
@@ -670,7 +704,14 @@ enum AgentSandboxPolicy {
 
             if head == "cd" {
                 if let next = tokens.dropFirst().first {
-                    if let resolved = resolvePath(next, workingDirectory: workingDirectory, rootDirectory: rootDirectory),
+                    let resolved = resolvePath(
+                        next,
+                        workingDirectory: workingDirectory,
+                        rootDirectory: rootDirectory
+                    ) ?? (isSafeRelativeDirectoryHop(next)
+                        ? resolveRelativeDirectoryHop(next, workingDirectory: workingDirectory)
+                        : nil)
+                    if let resolved,
                        isInsideWorkspace(
                            resolved,
                            rootDirectory: rootDirectory,
@@ -874,7 +915,14 @@ enum AgentSandboxPolicy {
 
             if head == "cd" {
                 if let next = tokens.dropFirst().first {
-                    guard let resolved = resolvePath(next, workingDirectory: workingDirectory, rootDirectory: root),
+                    let resolved = resolvePath(
+                        next,
+                        workingDirectory: workingDirectory,
+                        rootDirectory: root
+                    ) ?? (isSafeRelativeDirectoryHop(next)
+                        ? resolveRelativeDirectoryHop(next, workingDirectory: workingDirectory)
+                        : nil)
+                    guard let resolved,
                           isInsideWorkspace(resolved, rootDirectory: root) else {
                         return false
                     }
@@ -1313,11 +1361,11 @@ enum AgentSandboxPolicy {
     nonisolated static let sandboxDenialDetailArgumentKey = "_sandbox_denial_detail"
 
     nonisolated static func scrub(_ text: String) -> String {
-        var result = text
+        var result = AgentInjectionDefense.redactedCommandForSafetyJudge(text)
         let patterns = [
             #"(?i)(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*['"]?[^'"\s]{8,}"#,
             #"gh[pousr]_[A-Za-z0-9_]{20,}"#,
-            #"sk-[A-Za-z0-9_-]{20,}"#,
+            #"sk[-_][A-Za-z0-9_-]{12,}"#,
             #"xox[baprs]-[A-Za-z0-9-]{20,}"#
         ]
         for pattern in patterns {

@@ -61,13 +61,10 @@ struct AgentModelCatalogItem: Identifiable, Equatable {
 enum AgentModelPickerCatalog {
     static func items(
         entries: [AgentProviderEntry],
-        fetchedByProvider: [UUID: [String]],
-        fallbackKnownModels: [String],
-        activeProviderID: UUID?
+        fetchedByProvider: [UUID: [String]]
     ) -> [AgentModelCatalogItem] {
         entries.flatMap { entry in
-            let fallback = entry.id == activeProviderID ? fallbackKnownModels : []
-            return models(for: entry, fetchedModels: fetchedByProvider[entry.id] ?? [], fallbackModels: fallback)
+            models(for: entry, fetchedModels: fetchedByProvider[entry.id] ?? [])
                 .map { model in
                     AgentModelCatalogItem(
                         providerEntryID: entry.id,
@@ -82,14 +79,12 @@ enum AgentModelPickerCatalog {
 
     static func models(
         for entry: AgentProviderEntry,
-        fetchedModels: [String],
-        fallbackModels: [String]
+        fetchedModels: [String]
     ) -> [String] {
         deduplicated(
             entry.allFlashModels
                 + entry.allProModels
                 + fetchedModels
-                + fallbackModels.filter { modelIsCompatible($0, with: entry) }
         )
     }
 
@@ -119,14 +114,6 @@ enum AgentModelPickerCatalog {
 
     private static func contains(_ model: String, in models: [String]) -> Bool {
         models.contains { $0.caseInsensitiveCompare(model) == .orderedSame }
-    }
-
-    private static func modelIsCompatible(_ model: String, with entry: AgentProviderEntry) -> Bool {
-        guard let preset = AgentProviderPreset.preset(id: entry.providerID),
-              preset.id != AgentProviderPreset.customID else {
-            return true
-        }
-        return preset.recognizesModelID(model)
     }
 
     private static func deduplicated(_ models: [String]) -> [String] {
