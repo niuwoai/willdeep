@@ -701,8 +701,9 @@ extension AppState {
         let configuration = configurationForSafetyJudge()
         var effectiveConfiguration = configuration
         var fallbackDetail = ""
+        let judgeCommand = AgentInjectionDefense.redactedCommandForSafetyJudge(command)
         var result = await AgentClient(configuration: configuration).judgeCommandSafety(
-            command: command,
+            command: judgeCommand,
             historyContext: safetyJudgeHistoryContext()
         )
         if case .unavailable(let primaryReason) = result,
@@ -711,7 +712,7 @@ extension AppState {
             effectiveConfiguration = fallback
             fallbackDetail = "managed fallback after \(primaryReason)"
             result = await AgentClient(configuration: fallback).judgeCommandSafety(
-                command: command,
+                command: judgeCommand,
                 historyContext: safetyJudgeHistoryContext()
             )
         }

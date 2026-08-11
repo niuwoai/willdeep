@@ -440,6 +440,24 @@ nonisolated enum SafeCommand {
         AgentShellCommandParser.parse(command)?.segments.map(\.text) ?? []
     }
 
+    /// Whether the command contains a curl/wget invocation whose credential
+    /// values can be removed locally before AI review. This is deliberately
+    /// structural rather than a substring check: quoted prose mentioning
+    /// "curl" must not relax credential handling for an unrelated command.
+    static func containsNetworkFetcherInvocation(_ command: String) -> Bool {
+        guard let chain = AgentShellCommandParser.parse(command) else { return false }
+        for segment in chain.segments {
+            var tokens = commandTokensSkippingEnvironmentAssignments(tokenize(segment.text))
+            while let first = tokens.first?.lowercased(), prefixControlKeywords.contains(first) {
+                tokens.removeFirst()
+            }
+            if let head = tokens.first?.lowercased(), head == "curl" || head == "wget" {
+                return true
+            }
+        }
+        return false
+    }
+
     private static func classifySegment(_ segment: String) -> CommandSafety {
         let lowercased = segment.lowercased()
         for needle in dangerousSubstrings where lowercased.contains(needle) {
@@ -1202,18 +1220,19 @@ nonisolated enum SafeCommand {
         }
 
         if firstToken == "curl" {
+            // Auth headers, request bodies, and explicit HTTP methods are
+            // reviewed by the AI judge after local credential redaction. File
+            // upload/output, client-key material, config loading, and routing
+            // overrides still require a human because their local-file or
+            // network blast radius cannot be reconstructed from redacted text.
             let dangerousLongFlags: Set<String> = [
-                "--data", "--data-raw", "--data-binary", "--data-ascii",
-                "--data-urlencode", "--form", "--form-string", "--json",
-                "--upload-file", "--header", "--user",
-                "--cookie", "--cookie-jar", "--config",
-                "--netrc", "--netrc-file", "--proxy-user", "--oauth2-bearer",
-                "--aws-sigv4", "--cert", "--key", "--pass", "--output",
+                "--upload-file", "--cookie-jar", "--config",
+                "--netrc", "--netrc-file", "--cert", "--key", "--pass", "--output",
                 "--remote-name", "--remote-header-name", "--dump-header",
                 "--resolve", "--connect-to", "--unix-socket", "--proxy",
                 "--location-trusted"
             ]
-            let dangerousShortFlags = Set("dFTHubcKoOx")
+            let dangerousShortFlags = Set("KkOoRx")
             if arguments.contains(where: { argument in
                 let lower = argument.lowercased()
                 if argument.hasPrefix("--") {
@@ -1223,10 +1242,6 @@ nonisolated enum SafeCommand {
                 guard argument.hasPrefix("-"), argument.count > 1 else { return false }
                 return argument.dropFirst().contains(where: dangerousShortFlags.contains)
             }) {
-                return .alwaysDangerous
-            }
-            if let method = explicitHTTPMethod(in: arguments),
-               method != "GET", method != "HEAD" {
                 return .alwaysDangerous
             }
             return .needsJudgment

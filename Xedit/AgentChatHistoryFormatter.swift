@@ -69,9 +69,9 @@ enum AgentChatHistoryRenderer {
         /// 首段设 before、末段设 spacing，见 applyCodeBlockVerticalMargins。
         static let codeBlockBefore: CGFloat = 10
         static let codeBlockAfter: CGFloat = 10
-        /// Inline 工具调用摘要需要和上一段 assistant 正文明显分开；
-        /// 这是 transcript 里“说完话，开始动手”的视觉边界。
-        static let inlineToolGroupBefore: CGFloat = 22
+        /// Inline 工具摘要本身已经有图标和次级文字，不需要再插入一整
+        /// 行空白。保留 6pt 作为正文到单行活动摘要的轻量分隔。
+        static let inlineToolGroupBefore: CGFloat = 6
         static let toolLine: CGFloat = 1.5
     }
 
@@ -380,6 +380,10 @@ enum AgentChatHistoryRenderer {
                     .map(\.id)
             )
         )
+        let settledTurnToolAggregation = assistantTurnToolCallAggregation(
+            messages: messages,
+            latestAssistantTerminalSummaryMessageID: latestAssistantTerminalSummaryMessageID
+        )
         let activeUserMessageID = isAssistantTurnActive
             ? assistantTurnContextMessages.reversed().first(where: { $0.role == .user })?.id
             : nil
@@ -412,6 +416,12 @@ enum AgentChatHistoryRenderer {
             }
 
             if isToolCallOnly(message) {
+                // This call is already represented by the single aggregate
+                // attached to the final prose message of its assistant turn.
+                if settledTurnToolAggregation.absorbedToolOnlyMessageIDs.contains(message.id) {
+                    index += 1
+                    continue
+                }
                 var groupMessages: [AgentMessage] = []
                 while index < messages.count, isToolCallOnly(messages[index]) {
                     groupMessages.append(messages[index])
@@ -443,9 +453,24 @@ enum AgentChatHistoryRenderer {
                 continue
             }
 
+            let turnPresentation = assistantTurnPresentations[message.id]
             if result.length > 0 {
                 let separatorStart = result.length
-                result.append(NSAttributedString(string: "\n\n"))
+                let previousMessage = index > 0 ? messages[index - 1] : nil
+                let previousTurnPresentation = previousMessage.flatMap {
+                    assistantTurnPresentations[$0.id]
+                }
+                let continuesSameAssistantTurn = message.role == .assistant
+                    && previousMessage?.role == .assistant
+                    && turnPresentation?.firstVisibleAssistantMessageID
+                        == previousTurnPresentation?.firstVisibleAssistantMessageID
+                // Providers often split one assistant turn into many short
+                // progress messages around tool calls. They form one visual
+                // activity timeline, so use a normal line break instead of
+                // reserving a blank paragraph between every status update.
+                result.append(NSAttributedString(
+                    string: continuesSameAssistantTurn ? "\n" : "\n\n"
+                ))
                 if message.role == .user {
                     let style = NSMutableParagraphStyle()
                     style.paragraphSpacing = AgentChatHistoryLayoutMetrics.userTurnTopSpacing
@@ -463,7 +488,6 @@ enum AgentChatHistoryRenderer {
             let isToolCallOnly = message.role == .assistant
                 && !message.hasRenderableTextContent
                 && !message.toolCalls.isEmpty
-            let turnPresentation = assistantTurnPresentations[message.id]
             let isActiveAssistantTurn = message.role == .assistant
                 && isAssistantTurnActive
                 && turnPresentation?.userMessageID == activeUserMessageID
@@ -683,41 +707,19 @@ enum AgentChatHistoryRenderer {
                 hasMessageBubbleContent = true
             }
 
-            // Tool call summary (when the assistant emitted tool calls
-            // *alongside* its own prose). Rendered through the same
-            // collapsible header as the standalone tool-call group so
-            // the bubble defaults to a one-line activity summary such
-            // as "已读取2个文件 · 已运行1条命令"; clicking flips
-            // the chevron and reveals the full per-call summary below.
-            // Some providers place the first tool calls on the prose message
-            // and then emit subsequent calls as tool-call-only assistant
-            // messages. Treat that wire-format split as one visual activity
-            // layer. Otherwise users see two consecutive collapsed rows for
-            // what is semantically one execution batch.
-            var absorbedToolOnlyMessages: [AgentMessage] = []
-            if !message.toolCalls.isEmpty {
-                var lookahead = index + 1
-                while lookahead < messages.count, Self.isToolCallOnly(messages[lookahead]) {
-                    absorbedToolOnlyMessages.append(messages[lookahead])
-                    lookahead += 1
-                }
-            }
-            let inlineToolMessages = [message] + absorbedToolOnlyMessages
-            let inlineToolCalls = visibleToolCalls(
-                inlineToolMessages.flatMap(\.toolCalls),
-                keepTerminalCalls: inlineToolMessages.contains {
-                    $0.id == latestAssistantTerminalSummaryMessageID
-                }
-            )
-            if !inlineToolCalls.isEmpty {
+            // A provider may emit many prose→tool→prose cycles during one
+            // assistant turn. While running, SwiftUI owns one activity row at
+            // the bottom. Once the turn settles, keep that same visual model:
+            // attach one aggregate to the final prose message instead of
+            // backfilling one tool row between every earlier progress line.
+            let inlineGroup = message.role == .assistant
+                ? settledTurnToolAggregation.groupsByAnchorMessageID[message.id]
+                : nil
+            let inlineToolCalls = inlineGroup?.calls ?? []
+            if let inlineGroup, !inlineToolCalls.isEmpty {
                 if hasMessageBubbleContent {
                     // Transparent spacer paragraph between the assistant
-                    // body bubble and the tool summary bubble. Beyond
-                    // resolving the bubble-baseline overlap, this gap
-                    // is also the user-visible "the assistant's prose
-                    // ended, a tool call starts here" separator — 22pt
-                    // gives the two bubbles real breathing room without
-                    // making the conversation feel disjointed.
+                    // body bubble and the compact one-line tool summary.
                     let spacerStyle = NSMutableParagraphStyle()
                     spacerStyle.alignment = .left
                     spacerStyle.paragraphSpacing = 0
@@ -731,17 +733,6 @@ enum AgentChatHistoryRenderer {
                         ]
                     ))
                 }
-                let inlineReceipts = inlineToolMessages.reduce(
-                    into: [String: AgentToolCallStatus]()
-                ) { acc, msg in
-                    guard let receipts = msg.settledToolReceipts else { return }
-                    acc.merge(receipts) { _, new in new }
-                }
-                let inlineGroup = ToolCallHistoryGroup(
-                    inlineMessageIDs: inlineToolMessages.map(\.id),
-                    calls: inlineToolCalls,
-                    receipts: inlineReceipts
-                )
                 appendToolCallGroup(
                     inlineGroup,
                     isExpanded: expandedToolGroupIDs.contains(inlineGroup.id),
@@ -751,7 +742,7 @@ enum AgentChatHistoryRenderer {
                 )
             }
 
-            let footerMessage = absorbedToolOnlyMessages.last ?? message
+            let footerMessage = message
             let isAssistantTurnFooter = message.role != .assistant
                 || turnPresentation == nil
                 || turnPresentation?.isLastVisibleMessage(footerMessage) == true
@@ -806,7 +797,7 @@ enum AgentChatHistoryRenderer {
                 }
             }
 
-            index += 1 + absorbedToolOnlyMessages.count
+            index += 1
         }
 
         return result
@@ -917,6 +908,69 @@ enum AgentChatHistoryRenderer {
     ) -> [AgentMessageToolCall] {
         guard !keepTerminalCalls else { return calls }
         return calls.filter { !AgentTerminalToolNames.isVisibleTerminalOperation($0.toolName) }
+    }
+
+    private struct AssistantTurnToolCallAggregation {
+        var groupsByAnchorMessageID: [AgentMessage.ID: ToolCallHistoryGroup] = [:]
+        var absorbedToolOnlyMessageIDs: Set<AgentMessage.ID> = []
+    }
+
+    /// Collapse every prose/tool cycle between two user messages into one
+    /// settled activity group anchored after that turn's final prose message.
+    /// This mirrors the live activity timeline and prevents tools from
+    /// jumping back into the middle of the transcript when execution stops.
+    private static func assistantTurnToolCallAggregation(
+        messages: [AgentMessage],
+        latestAssistantTerminalSummaryMessageID: AgentMessage.ID?
+    ) -> AssistantTurnToolCallAggregation {
+        var result = AssistantTurnToolCallAggregation()
+
+        func appendTurn(_ turn: ArraySlice<AgentMessage>) {
+            let assistantMessages = turn.filter { $0.role == .assistant }
+            guard let anchor = assistantMessages.last(where: {
+                $0.hasRenderableTextContent || !$0.images.isEmpty
+            }) else {
+                return
+            }
+            let toolMessages = assistantMessages.filter { !$0.toolCalls.isEmpty }
+            guard !toolMessages.isEmpty else { return }
+
+            let calls = toolMessages.flatMap { toolMessage in
+                visibleToolCalls(
+                    toolMessage.toolCalls,
+                    keepTerminalCalls: toolMessage.id == latestAssistantTerminalSummaryMessageID
+                )
+            }
+            guard !calls.isEmpty else { return }
+
+            let receipts = toolMessages.reduce(
+                into: [String: AgentToolCallStatus]()
+            ) { acc, toolMessage in
+                guard let settled = toolMessage.settledToolReceipts else { return }
+                acc.merge(settled) { _, new in new }
+            }
+            let messageIDs = toolMessages.map(\.id)
+            result.groupsByAnchorMessageID[anchor.id] = ToolCallHistoryGroup(
+                inlineMessageIDs: messageIDs,
+                calls: calls,
+                receipts: receipts
+            )
+            result.absorbedToolOnlyMessageIDs.formUnion(
+                toolMessages.lazy.filter(isToolCallOnly).map(\.id)
+            )
+        }
+
+        var turnStart = messages.startIndex
+        for index in messages.indices where messages[index].role == .user {
+            if turnStart < index {
+                appendTurn(messages[turnStart..<index])
+            }
+            turnStart = messages.index(after: index)
+        }
+        if turnStart < messages.endIndex {
+            appendTurn(messages[turnStart..<messages.endIndex])
+        }
+        return result
     }
 
     private static func appendPlainBody(

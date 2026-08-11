@@ -249,6 +249,15 @@ enum AgentInjectionDefense {
     SELECT, SHOW, DESCRIBE, or EXPLAIN queries against a local database, \
     provided they do not expose credentials or request locks or file output.
 
+    Credential values in HTTP commands are replaced locally with \
+    `[REDACTED]` before you receive them. Treat that placeholder as evidence \
+    that authentication is present, not as a reason by itself to deny. \
+    Authenticated curl GET/HEAD requests and bounded API test requests using \
+    POST or request bodies can be YES when the endpoint, payload, and loop \
+    bounds are consistent with ordinary testing or diagnostics. Judge the \
+    operation's effect: destructive administration, credential export, broad \
+    data exfiltration, or an unbounded request loop must still be NO.
+
     Apply shell semantics, not substring intuition. For `&&`, `||`, \
     `;`, newlines, pipelines, and background jobs, independently inspect \
     every segment that could execute; one unsafe or unknown segment makes \
@@ -314,6 +323,36 @@ enum AgentInjectionDefense {
         \(safeCommand)
         </command>
         """
+    }
+
+    /// Removes credential values before a shell command leaves the device for
+    /// the one-shot safety judge. Keep the surrounding HTTP shape intact so
+    /// the judge can still reason about method, endpoint, loop bounds, and
+    /// request bodies without receiving the user's actual secret.
+    static func redactedCommandForSafetyJudge(_ command: String) -> String {
+        var result = command
+        let rules: [(pattern: String, replacement: String)] = [
+            // API_KEY=..., token: ..., JSON `"api_key":"..."`, and header
+            // values such as `Authorization: Bearer ...`.
+            (#"(?i)\b(api[_-]?key|access[_-]?token|auth[_-]?token|token|secret|password|authorization)\b(\s*[:=]\s*)([\"']?)(?:bearer\s+|basic\s+)?[^\"'\s;,}]+\3"#, "$1$2$3[REDACTED]$3"),
+            // Common provider token prefixes, including both sk- and sk_.
+            (#"\bsk[-_][A-Za-z0-9_-]{12,}\b"#, "[REDACTED]"),
+            (#"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"#, "[REDACTED]"),
+            (#"\bxox[baprs]-[A-Za-z0-9-]{20,}\b"#, "[REDACTED]"),
+            // curl credential options whose values do not necessarily carry
+            // a credential-shaped key name.
+            (#"(?i)(--oauth2-bearer|--proxy-user|--user|-u|--cookie|-b)(\s+|=)[\"']?[^\"'\s;]+"#, "$1$2[REDACTED]"),
+        ]
+        for rule in rules {
+            guard let regex = try? NSRegularExpression(pattern: rule.pattern) else { continue }
+            let range = NSRange(result.startIndex..<result.endIndex, in: result)
+            result = regex.stringByReplacingMatches(
+                in: result,
+                range: range,
+                withTemplate: rule.replacement
+            )
+        }
+        return result
     }
 
     private static func judgeShellStructure(command: String) -> String {
@@ -446,7 +485,11 @@ enum AgentInjectionDefense {
     }
 
     private static func sanitizeHistorySample(_ raw: String, maxLength: Int = 120) -> String {
-        let singleLine = raw
+        // Re-scrub on every judge-context build instead of trusting that an
+        // older on-disk audit entry was written by today's redaction rules.
+        // This prevents legacy samples from reintroducing credentials after
+        // the current command itself has already been sanitized.
+        let singleLine = redactedCommandForSafetyJudge(raw)
             .replacingOccurrences(of: "\r", with: " ")
             .replacingOccurrences(of: "\n", with: " ")
         let neutralized = neutralizeInjectionMarkers(in: singleLine)
