@@ -15,12 +15,10 @@
 //     above / insert below / restart-from-here / remove, all driven
 //     through the shared `AgentPlanStepSimpleSheet` (single-field
 //     modal with one confirm button).
-//   - `AgentGoalCard`: accent-tinted card showing the active goal
-//     statement plus its checklist. Pencil glyph in the header opens
-//     `AgentGoalEditorSheet` for re-editing.
-//   - `AgentGoalEditorSheet`: statement field + newline-separated
-//     checklist text editor + Save/Cancel; reused from the mode
-//     picker's Goal entry and the Goal card's edit affordance.
+//   - `AgentGoalCard`: accent-tinted card showing only the user-authored
+//     objective. AI-owned acceptance criteria stay out of editing UI.
+//   - `AgentGoalEditorSheet`: objective field + Save/Cancel; reused from
+//     the mode picker's Goal entry and the Goal card's edit affordance.
 //
 //  Previously a mix of `private struct` (revision row / step row /
 //  simple sheet) and `struct` (card + editor sheet) inside the main
@@ -112,32 +110,7 @@ struct AgentPlanCard: View {
                         isExpanded.toggle()
                     }
                 } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "list.number")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                        Text(L10n.PlanCard.header)
-                            .font(.system(size: 11, weight: .semibold))
-                            .textCase(.uppercase)
-                            .foregroundStyle(.secondary)
-                        if let roadmap = appState.agentGoalRoadmap,
-                           !roadmap.phases.isEmpty {
-                            Text(L10n.GoalRoadmap.phase(
-                                roadmap.activePhaseIndex + 1,
-                                roadmap.phases.count
-                            ))
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.tertiary)
-                        }
-                        if AgentPlanCardExpansionPolicy.showsStatus(plan.status, isInterrupted: plan.isInterrupted) {
-                            PlanStatusPill(status: plan.status, isInterrupted: plan.isInterrupted)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .contentShape(Rectangle())
+                    planHeaderLabel
                 }
                 .buttonStyle(.plain)
                 .help(isExpanded ? L10n.PlanCard.collapseHelp : L10n.PlanCard.expandHelp)
@@ -211,6 +184,81 @@ struct AgentPlanCard: View {
         .background(planCardBackground)
         .overlay(planCardBorder)
         .shadow(color: floating ? Color.black.opacity(0.055) : .clear, radius: floating ? 7 : 0, x: 0, y: floating ? 2 : 0)
+    }
+
+    /// The floating card is intentionally narrow. Fit the complete header as
+    /// one unit so SwiftUI cannot preserve the secondary phase label by
+    /// compressing either the title or status pill into multiple lines.
+    @ViewBuilder
+    private var planHeaderLabel: some View {
+        if let phaseText, showsStatus {
+            ViewThatFits(in: .horizontal) {
+                planHeaderContent(phaseText: phaseText, showsStatus: true)
+                planHeaderContent(phaseText: nil, showsStatus: true)
+            }
+        } else if let phaseText {
+            planHeaderContent(phaseText: phaseText, showsStatus: false)
+        } else {
+            planHeaderContent(phaseText: nil, showsStatus: showsStatus)
+        }
+    }
+
+    private func planHeaderContent(
+        phaseText: String?,
+        showsStatus: Bool
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "list.number")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+            Text(L10n.PlanCard.header)
+                .font(.system(size: 11, weight: .semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            if let phaseText {
+                phaseLabel(phaseText)
+            }
+            if showsStatus {
+                statusPill
+            }
+            Spacer(minLength: 0)
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize()
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var phaseText: String? {
+        guard let roadmap = appState.agentGoalRoadmap,
+              !roadmap.phases.isEmpty else { return nil }
+        return L10n.GoalRoadmap.phase(
+            roadmap.activePhaseIndex + 1,
+            roadmap.phases.count
+        )
+    }
+
+    private var showsStatus: Bool {
+        AgentPlanCardExpansionPolicy.showsStatus(
+            plan.status,
+            isInterrupted: plan.isInterrupted
+        )
+    }
+
+    private func phaseLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var statusPill: some View {
+        PlanStatusPill(status: plan.status, isInterrupted: plan.isInterrupted)
     }
 
     @ViewBuilder
@@ -733,27 +781,6 @@ struct AgentGoalCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if !goal.checklist.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(goal.checklist) { item in
-                            HStack(alignment: .top, spacing: 8) {
-                                Button {
-                                    appState.toggleAgentGoalItem(item.id)
-                                } label: {
-                                    Image(systemName: item.done ? "checkmark.square.fill" : "square")
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(item.done ? Color.accentColor : Color.secondary)
-                                }
-                                .buttonStyle(.plain)
-                                Text(item.text)
-                                    .font(.system(size: 12))
-                                    .strikethrough(item.done, color: .secondary)
-                                    .foregroundStyle(item.done ? .secondary : .primary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-                }
             }
         }
         .padding(12)
@@ -768,9 +795,8 @@ struct AgentGoalCard: View {
         .sheet(isPresented: $showingEditor) {
             AgentGoalEditorSheet(
                 initialStatement: goal.statement,
-                initialItems: goal.checklist.map(\.text),
-                onSave: { statement, items in
-                    appState.setAgentGoal(statement: statement, items: items)
+                onSave: { statement in
+                    appState.setAgentGoalStatement(statement)
                     showingEditor = false
                 },
                 onCancel: { showingEditor = false }
@@ -783,13 +809,15 @@ struct AgentGoalCard: View {
 
 struct AgentGoalEditorSheet: View {
     @State private var statement: String
-    @State private var itemsText: String
-    let onSave: (String, [String]) -> Void
+    let onSave: (String) -> Void
     let onCancel: () -> Void
 
-    init(initialStatement: String = "", initialItems: [String] = [], onSave: @escaping (String, [String]) -> Void, onCancel: @escaping () -> Void) {
+    init(
+        initialStatement: String = "",
+        onSave: @escaping (String) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
         _statement = State(initialValue: initialStatement)
-        _itemsText = State(initialValue: initialItems.joined(separator: "\n"))
         self.onSave = onSave
         self.onCancel = onCancel
     }
@@ -808,29 +836,16 @@ struct AgentGoalEditorSheet: View {
                     .textFieldStyle(.roundedBorder)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L10n.GoalEditorSheet.checklistLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextEditor(text: $itemsText)
-                    .font(.system(size: 12))
-                    .frame(minHeight: 120)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
-                    )
-            }
-
             HStack {
                 Spacer()
                 Button(L10n.GoalEditorSheet.cancel) { onCancel() }
                     .keyboardShortcut(.cancelAction)
                 Button(L10n.GoalEditorSheet.save) {
-                    let items = itemsText.components(separatedBy: .newlines)
-                    onSave(statement, items)
+                    onSave(statement)
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
+                .disabled(statement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(20)

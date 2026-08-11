@@ -1292,6 +1292,11 @@ extension AppState {
                         .hasProgressRelevantAliveJobs(forRuntime: runtime.id)
                 )
                 succeededToolCallCountAtLastContinuationDecision = succeededToolCallCount
+                let requiresGoalCompletion = runtime.interactionMode == .goal
+                    && runtime.currentGoal.map {
+                        $0.checklist.isEmpty
+                            || $0.checklist.contains(where: { !$0.done })
+                    } == true
 
                 switch AgentPlanAutoContinuationPolicy.decision(
                     for: runtime.currentPlan,
@@ -1299,6 +1304,7 @@ extension AppState {
                     consecutiveNoProgressReplies: consecutivePlanRepliesWithoutProgress,
                     hasQueuedUserMessages: !runtime.queuedMessages.isEmpty,
                     allowsAutomaticExecution: !runtime.currentTurnPlanningOnly,
+                    requiresGoalCompletion: requiresGoalCompletion,
                     evidence: progressEvidence
                 ) {
                 case .continueExecution:

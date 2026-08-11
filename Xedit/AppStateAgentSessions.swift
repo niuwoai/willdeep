@@ -9,7 +9,7 @@
 //    - Provider library: apply/select/upsert/remove + sync helpers
 //    - Visible plan progress: complete/restart/edit/insert/remove +
 //      capture from latest message + step status
-//    - Goal mode: setAgentGoal / toggleAgentGoalItem +
+//    - Goal mode: setAgentGoal / AI-owned acceptance reconciliation +
 //      captureAgentGoalEvaluationFromLatestMessage
 //    - reviewAgentWorktreeChanges / showAgentWorktreeDiff
 //    - stopAgentResponse / clearAgentQueue / addAgentImage /
@@ -699,6 +699,14 @@ extension AppState {
                     availableProfileIDs: availableProfiles
                 )
                 if failures.isEmpty {
+                    guard let acceptanceCriteria = AgentGoalAcceptanceCriteriaParser.extract(
+                        from: last.content
+                    ) else {
+                        return requestAgentGoalProposalCorrection(
+                            for: runtime,
+                            failures: ["the Goal acceptance contract could not be parsed after validation"]
+                        )
+                    }
                     guard let roadmap = AgentGoalRoadmapParser.extract(from: last.content) else {
                         return requestAgentGoalProposalCorrection(
                             for: runtime,
@@ -709,6 +717,12 @@ extension AppState {
                     executable.status = .approved
                     runtime.currentPlan = executable
                     runtime.goalRoadmap = roadmap
+                    if let goal = runtime.currentGoal {
+                        runtime.currentGoal = AgentGoalAcceptanceCriteriaParser.reconcile(
+                            goal,
+                            with: acceptanceCriteria
+                        )
+                    }
                     if requiresDispatchGraph,
                        let dispatchPlan = AgentGoalDispatchPlanParser.extract(
                            from: last.content,
@@ -928,10 +942,16 @@ extension AppState {
         dispatchAgentMessage(for: runtime, text: prompt, images: [])
     }
 
-    /// Replace the goal definition for Goal mode. Empty values clear it.
-    /// Preserves existing checklist `done` state when an item's text
-    /// hasn't changed — so the user can tweak the goal statement or add
-    /// new items without losing what's already ticked.
+    /// Update only the user-authored objective. Acceptance criteria stay
+    /// host-owned and are reconciled by the next Goal Teams proposal.
+    func setAgentGoalStatement(_ statement: String) {
+        let existingItems = activeRuntime?.currentGoal?.checklist.map(\.text) ?? []
+        setAgentGoal(statement: statement, items: existingItems)
+    }
+
+    /// Replace the internal Goal definition. Empty values clear it.
+    /// Preserves existing checklist `done` state when an AI-authored
+    /// acceptance criterion remains unchanged across planning rounds.
     func setAgentGoal(
         statement: String,
         items: [String],
@@ -1069,16 +1089,6 @@ extension AppState {
             }
         }
         return lines.joined(separator: "\n")
-    }
-
-    /// Toggle a single checklist item by id. The flipped state shows up
-    /// in the next system prompt, so the agent sees progress.
-    func toggleAgentGoalItem(_ id: UUID) {
-        guard var goal = agentCurrentGoal else { return }
-        guard let idx = goal.checklist.firstIndex(where: { $0.id == id }) else { return }
-        goal.checklist[idx].done.toggle()
-        agentCurrentGoal = goal
-        persistActiveAgentSession()
     }
 
     func reviewAgentWorktreeChanges() {

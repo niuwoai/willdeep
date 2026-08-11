@@ -1406,6 +1406,8 @@ struct PlanStatusPill: View {
         Text(labelText)
             .font(.system(size: 10, weight: .semibold))
             .textCase(.uppercase)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .foregroundStyle(Color.white)

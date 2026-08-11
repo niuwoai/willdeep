@@ -12140,6 +12140,24 @@
         }
       }
     },
+    "goal-status-bar.pause-execution" : {
+      "comment" : "tooltip for pausing the active pinned Goal",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pause goal execution"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂停目标执行"
+          }
+        }
+      }
+    },
     "goal-status-bar.pinned-prefix" : {
       "comment" : "compact composer label shown when a goal is pinned but the agent is idle",
       "extractionState" : "manual",
@@ -12154,6 +12172,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已吸附目标"
+          }
+        }
+      }
+    },
+    "goal-status-bar.resume-execution" : {
+      "comment" : "tooltip for resuming an idle pinned Goal",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume goal execution"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续目标执行"
           }
         }
       }

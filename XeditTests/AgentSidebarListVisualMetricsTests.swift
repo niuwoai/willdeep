@@ -57,24 +57,16 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentStatsDashboardFormatting.duration((9 * 24 * 60 + 10 * 60 + 3) * 60) == "9d10h3m")
     }
 
-    @Test("idle session rows return unused action width to the title")
+    @Test("idle pinned session rows return the full trailing lane to the title")
     func idleSessionRowsUseAvailableSidebarWidth() {
         #expect(
             AgentSidebarSessionTrailingLayout.reservedActionsWidth(
-                isHovered: false,
-                isPinned: false
+                isHovered: false
             ) == 0
         )
         #expect(
             AgentSidebarSessionTrailingLayout.reservedActionsWidth(
-                isHovered: false,
-                isPinned: true
-            ) < AgentDesign.sidebarSessionTrailingActionsWidth
-        )
-        #expect(
-            AgentSidebarSessionTrailingLayout.reservedActionsWidth(
-                isHovered: true,
-                isPinned: false
+                isHovered: true
             ) == AgentDesign.sidebarSessionTrailingActionsWidth
         )
     }
