@@ -3,6 +3,14 @@
 > 当前文件保留最新版本（1.247.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.247.0-rc3 - 2026-08-12
+
+### Fixed
+
+- 审阅文件卡片不再把主线程钉死：卡片宽度改为在卡片本体上测量，不再测量它内部那个由行宽撑开的横向滚动视图。旧写法让"测量 → 行宽 → 内容尺寸 → 再测量"形成闭环，采样显示主线程 100% 卡在 SwiftUI 的 `LazySubviewPlacements.placeSubviews` 里空转、整分钟不回到 runloop。写回宽度另加 0.5pt 量化门禁，亚像素抖动不再重新触发布局。
+- 工作区改动签名不再为了两个数字读遍扩展属性：`FileManager.attributesOfItem` 换成 `lstat(2)`。前者会对每个改动文件额外发起 `listxattr` 加逐个 `getxattr`，在改动较多的工作区里这些系统调用是刷新开销的大头。语义保持不跟随符号链接。
+- 刷新 Git worktree 列表时仓库根目录只解析一次：`listGitWorktrees` 与仓库身份查询过去各自解析一遍，等于每次刷新对同一目录多 spawn 一个 `git rev-parse --show-toplevel` 子进程。
+
 ## 1.247.0-rc2 - 2026-08-12
 
 ### Fixed

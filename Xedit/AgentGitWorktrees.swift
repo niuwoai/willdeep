@@ -226,6 +226,10 @@ extension AppState {
 
     nonisolated static func listGitWorktrees(for directoryURL: URL) -> [AgentGitWorktree] {
         guard let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else { return [] }
+        return listGitWorktrees(repositoryRoot: repositoryRoot)
+    }
+
+    nonisolated static func listGitWorktrees(repositoryRoot: URL) -> [AgentGitWorktree] {
         let output = runGit(arguments: ["worktree", "list", "--porcelain"], in: repositoryRoot)
         return parseGitWorktreeListPorcelain(output)
     }
@@ -618,12 +622,19 @@ extension AppState {
         agentGitWorktreeRefreshPath = targetPath
         agentGitWorktreeRefreshTask = Task { [weak self] in
             let context = await Task.detached(priority: .utility) {
-                (
-                    worktrees: Self.listGitWorktrees(for: targetDirectory),
+                // Resolve the repository root once. Both lookups below used to
+                // find it for themselves, which spawned `git rev-parse
+                // --show-toplevel` twice against the same directory on every
+                // single refresh.
+                guard let repositoryRoot = Self.findGitRepositoryRoot(startingAt: targetDirectory) else {
+                    return (worktrees: [AgentGitWorktree](), status: GitRepositoryStatus())
+                }
+                return (
+                    worktrees: Self.listGitWorktrees(repositoryRoot: repositoryRoot),
                     // The workspace picker only consumes repository identity
                     // and branch here. Do not launch a second full `git status`
                     // beside the editor's own refresh.
-                    status: Self.loadAgentGitRepositoryIdentity(for: targetDirectory)
+                    status: Self.loadAgentGitRepositoryIdentity(repositoryRoot: repositoryRoot)
                 )
             }.value
 
@@ -651,6 +662,12 @@ extension AppState {
         guard let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else {
             return GitRepositoryStatus()
         }
+        return loadAgentGitRepositoryIdentity(repositoryRoot: repositoryRoot)
+    }
+
+    nonisolated private static func loadAgentGitRepositoryIdentity(
+        repositoryRoot: URL
+    ) -> GitRepositoryStatus {
         let branch = runGit(arguments: ["branch", "--show-current"], in: repositoryRoot)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return GitRepositoryStatus(
