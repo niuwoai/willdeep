@@ -74,6 +74,19 @@ struct AgentTranscriptScrollPolicyTests {
     }
 
     @Test
+    func continuousSidebarDragKeepsThePreDragAnchorUntilLayoutSettles() {
+        var state = AgentTranscriptViewportReflowState<CGFloat>()
+
+        #expect(state.preserve(0.42) == 0.42)
+        #expect(state.isActive)
+        // A transient TextKit layout frame can report the top of the
+        // transcript. It must not replace the anchor from before the drag.
+        #expect(state.preserve(0) == 0.42)
+        #expect(state.finish() == 0.42)
+        #expect(!state.isActive)
+    }
+
+    @Test
     func taskUpdateKeepsHistoryPositionWhenOperatorScrolledUp() {
         let assistant = AgentMessage(role: .assistant, content: "Task update")
 

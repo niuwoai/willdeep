@@ -9,6 +9,10 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
+enum AgentMemorySettingsMetrics {
+    static let textEditorContentPadding: CGFloat = 8
+}
+
 struct AgentMemorySettingsView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var memoryState = AgentMemoryState(settings: .default, memories: [])
@@ -263,23 +267,18 @@ struct AgentMemorySettingsView: View {
             }
 
             Section(L10n.Settings.Memory.addMemorySection) {
-                TextEditor(text: $newMemoryContent)
-                    .frame(minHeight: 90)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                    )
+                memoryTextEditor(text: $newMemoryContent, minHeight: 90)
 
                 HStack {
                     Picker(L10n.Settings.Memory.lifetimeLabel, selection: $newMemoryLifetime) {
                         ForEach(AgentMemoryLifetime.allCases) { lifetime in
-                            Text(lifetime.displayName).tag(lifetime)
+                            Text(L10n.Settings.Memory.lifetimeName(lifetime)).tag(lifetime)
                         }
                     }
 
                     Picker(L10n.Settings.Memory.scopeLabel, selection: $newMemoryScope) {
                         ForEach(AgentMemoryScope.allCases) { scope in
-                            Text(scope.displayName)
+                            Text(L10n.Settings.Memory.scopeName(scope))
                                 .tag(scope)
                                 .disabled(scope == .project && appState.rootDirectory == nil)
                         }
@@ -453,24 +452,19 @@ struct AgentMemorySettingsView: View {
     private func memoryRow(_ memory: AgentMemoryRecord) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if editingMemoryID == memory.id {
-                TextEditor(text: $editingMemoryContent)
-                    .frame(minHeight: 76)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                    )
+                memoryTextEditor(text: $editingMemoryContent, minHeight: 76)
 
                 HStack {
                     Picker(L10n.Settings.Memory.lifetimeLabel, selection: $editingMemoryLifetime) {
                         ForEach(AgentMemoryLifetime.allCases) { lifetime in
-                            Text(lifetime.displayName).tag(lifetime)
+                            Text(L10n.Settings.Memory.lifetimeName(lifetime)).tag(lifetime)
                         }
                     }
                     .frame(width: 180)
 
                     Picker(L10n.Settings.Memory.scopeLabel, selection: $editingMemoryScope) {
                         ForEach(AgentMemoryScope.allCases) { scope in
-                            Text(scope.displayName)
+                            Text(L10n.Settings.Memory.scopeName(scope))
                                 .tag(scope)
                                 .disabled(scope == .project && appState.rootDirectory == nil && memory.projectFingerprint == nil)
                         }
@@ -502,9 +496,9 @@ struct AgentMemorySettingsView: View {
                         Text(memory.content)
                             .fixedSize(horizontal: false, vertical: true)
                         HStack(spacing: 8) {
-                            tag(memory.source.displayName)
-                            tag(memory.lifetime.displayName)
-                            tag(memory.scope.displayName)
+                            tag(L10n.Settings.Memory.sourceName(memory.source))
+                            tag(L10n.Settings.Memory.lifetimeName(memory.lifetime))
+                            tag(L10n.Settings.Memory.scopeName(memory.scope))
                             if memory.scope == .project, let name = memory.projectDisplayName {
                                 tag(name)
                             }
@@ -604,6 +598,19 @@ struct AgentMemorySettingsView: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
         )
+    }
+
+    private func memoryTextEditor(text: Binding<String>, minHeight: CGFloat) -> some View {
+        TextEditor(text: text)
+            .scrollContentBackground(.hidden)
+            .frame(minHeight: minHeight)
+            .padding(AgentMemorySettingsMetrics.textEditorContentPadding)
+            .background(Color(nsColor: .textBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+            )
     }
 
     private func tag(_ text: String) -> some View {

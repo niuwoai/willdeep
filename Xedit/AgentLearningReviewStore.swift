@@ -45,6 +45,9 @@ nonisolated struct AgentLearningReviewItem: Identifiable, Codable, Equatable, Se
 nonisolated enum AgentLearningReviewStore {
     private static let itemsKey = "com.willdeep.agentLearningReview.items.v1"
     private static let maxItems = 200
+    static let pendingRetentionDays = 15
+    private static let secondsPerDay: TimeInterval = 24 * 60 * 60
+    static let pendingRetentionInterval = TimeInterval(pendingRetentionDays) * secondsPerDay
 
     nonisolated(unsafe) private static var testDefaultsOverride: UserDefaults?
 
@@ -56,22 +59,30 @@ nonisolated enum AgentLearningReviewStore {
         testDefaultsOverride ?? .standard
     }
 
-    static func load() -> [AgentLearningReviewItem] {
+    static func load(now: Date = Date()) -> [AgentLearningReviewItem] {
         guard let data = defaults.data(forKey: itemsKey),
               let items = try? JSONDecoder().decode([AgentLearningReviewItem].self, from: data) else {
             return []
         }
-        return clean(items)
+        let cleanedItems = clean(items, now: now)
+        if cleanedItems != items {
+            persist(cleanedItems)
+        }
+        return cleanedItems
     }
 
-    static func loadAsync() async -> [AgentLearningReviewItem] {
+    static func loadAsync(now: Date = Date()) async -> [AgentLearningReviewItem] {
         await Task.detached(priority: .userInitiated) {
-            load()
+            load(now: now)
         }.value
     }
 
-    static func save(_ items: [AgentLearningReviewItem]) {
-        guard let data = try? JSONEncoder().encode(clean(items)) else { return }
+    static func save(_ items: [AgentLearningReviewItem], now: Date = Date()) {
+        persist(clean(items, now: now))
+    }
+
+    private static func persist(_ items: [AgentLearningReviewItem]) {
+        guard let data = try? JSONEncoder().encode(items) else { return }
         defaults.set(data, forKey: itemsKey)
     }
 
@@ -132,11 +143,15 @@ nonisolated enum AgentLearningReviewStore {
         save(load().filter { $0.decision == .pending })
     }
 
-    private static func clean(_ items: [AgentLearningReviewItem]) -> [AgentLearningReviewItem] {
+    private static func clean(_ items: [AgentLearningReviewItem], now: Date) -> [AgentLearningReviewItem] {
         var seenIDs = Set<UUID>()
         var seenFingerprints = Set<String>()
         return items
             .filter { !$0.event.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .filter { item in
+                item.decision != .pending
+                    || now.timeIntervalSince(item.createdAt) < pendingRetentionInterval
+            }
             .filter { item in
                 seenIDs.insert(item.id).inserted && seenFingerprints.insert(fingerprint(item)).inserted
             }

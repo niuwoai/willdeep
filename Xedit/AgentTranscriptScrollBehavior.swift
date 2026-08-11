@@ -52,6 +52,36 @@ nonisolated enum AgentTranscriptViewportPolicy {
     }
 }
 
+/// Keeps the first stable reading anchor for the whole horizontal-reflow
+/// transaction. A drag emits many viewport/document geometry notifications;
+/// later notifications may briefly report a zero offset while TextKit is
+/// rebuilding its layout. Those transient values must never replace the
+/// anchor captured before the drag started.
+nonisolated struct AgentTranscriptViewportReflowState<Anchor> {
+    private(set) var preservedAnchor: Anchor?
+
+    var isActive: Bool {
+        preservedAnchor != nil
+    }
+
+    mutating func preserve(_ anchor: Anchor) -> Anchor {
+        if let preservedAnchor {
+            return preservedAnchor
+        }
+        preservedAnchor = anchor
+        return anchor
+    }
+
+    mutating func finish() -> Anchor? {
+        defer { preservedAnchor = nil }
+        return preservedAnchor
+    }
+
+    mutating func cancel() {
+        preservedAnchor = nil
+    }
+}
+
 /// Observes the AppKit scroll view underneath a SwiftUI `ScrollView`.
 ///
 /// Tracking user intent instead of recomputing "at bottom" after each layout
@@ -106,6 +136,7 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
     final class Coordinator {
         private static let bottomTolerance: CGFloat = 56
         private static let geometryTolerance: CGFloat = 0.5
+        private static let reflowSettleDelay: TimeInterval = 0.08
 
         private struct ViewportAnchor {
             let relativeProgress: CGFloat
@@ -120,8 +151,10 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
         private var lastDocumentSize: CGSize?
         private var lastViewportSize: CGSize?
         private var viewportAnchor: ViewportAnchor?
+        private var viewportReflowState = AgentTranscriptViewportReflowState<ViewportAnchor>()
         private var viewportCaptureGeneration = 0
         private var viewportRestoreGeneration = 0
+        private var viewportReflowSettleGeneration = 0
         private var isViewportRestorePending = false
 
         deinit {
@@ -211,7 +244,10 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
             if viewportWidthChanged,
                !isFollowingBottom,
                let viewportAnchor {
-                scheduleViewportRestore(viewportAnchor, in: scrollView)
+                scheduleViewportReflowRestore(viewportAnchor, in: scrollView)
+                return
+            }
+            if viewportReflowState.isActive {
                 return
             }
             publish(isNearBottom(in: scrollView))
@@ -236,7 +272,18 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
                 abs($0.width - currentSize.width) > Self.geometryTolerance
             } ?? false
             if widthChanged, let viewportAnchor {
-                scheduleViewportRestore(viewportAnchor, in: scrollView)
+                scheduleViewportReflowRestore(viewportAnchor, in: scrollView)
+            } else if let preservedAnchor = viewportReflowState.preservedAnchor {
+                // Text wrapping can publish the new width and height in
+                // separate notifications. Re-apply the original anchor after
+                // every geometry step. Height-only changes do not extend the
+                // settle window: a streaming reply may keep growing for many
+                // seconds and must not leave the resize transaction open.
+                scheduleViewportReflowRestore(
+                    preservedAnchor,
+                    in: scrollView,
+                    extendsSettlement: false
+                )
             } else if !isViewportRestorePending, isNearBottom(in: scrollView) {
                 publish(true)
             }
@@ -275,10 +322,12 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
             )
         }
 
-        private func scheduleViewportRestore(
+        private func scheduleViewportReflowRestore(
             _ anchor: ViewportAnchor,
-            in scrollView: NSScrollView
+            in scrollView: NSScrollView,
+            extendsSettlement: Bool = true
         ) {
+            let preservedAnchor = viewportReflowState.preserve(anchor)
             isViewportRestorePending = true
             viewportCaptureGeneration += 1
             viewportRestoreGeneration += 1
@@ -289,7 +338,28 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
                       generation == self.viewportRestoreGeneration else {
                     return
                 }
-                self.restoreViewport(anchor, in: scrollView)
+                self.restoreViewport(preservedAnchor, in: scrollView)
+            }
+            if extendsSettlement {
+                scheduleViewportReflowSettlement(in: scrollView)
+            }
+        }
+
+        /// A side-panel drag produces a burst of width and TextKit height
+        /// changes. Finalize only after that burst has gone quiet, otherwise
+        /// one intermediate frame can capture the temporary top position and
+        /// make the next drag tick restore to zero.
+        private func scheduleViewportReflowSettlement(in scrollView: NSScrollView) {
+            viewportReflowSettleGeneration += 1
+            let generation = viewportReflowSettleGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.reflowSettleDelay) { [weak self, weak scrollView] in
+                guard let self,
+                      let scrollView,
+                      generation == self.viewportReflowSettleGeneration,
+                      let preservedAnchor = self.viewportReflowState.finish() else {
+                    return
+                }
+                self.restoreViewport(preservedAnchor, in: scrollView)
                 self.isViewportRestorePending = false
                 self.publish(self.isNearBottom(in: scrollView))
                 self.captureViewportAnchor(in: scrollView)
@@ -298,6 +368,8 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
 
         private func cancelPendingViewportRestore() {
             viewportRestoreGeneration += 1
+            viewportReflowSettleGeneration += 1
+            viewportReflowState.cancel()
             isViewportRestorePending = false
         }
 
@@ -389,6 +461,8 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
             notificationTokens.removeAll()
             viewportCaptureGeneration += 1
             viewportRestoreGeneration += 1
+            viewportReflowSettleGeneration += 1
+            viewportReflowState.cancel()
             isViewportRestorePending = false
             lastDocumentSize = nil
             lastViewportSize = nil
