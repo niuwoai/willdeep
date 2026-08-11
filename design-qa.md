@@ -1,38 +1,50 @@
-# Design QA：用量日历（第 4 版）
+# Design QA：编辑器移除重复背景设置
 
-## Source truth
+## Comparison target
 
-- 用户选定的第 4 版视觉稿：`artifacts/design-qa/usage-calendar-1.246.0-rc1/reference.png`（1536 × 1024）。
-- 同区域标准化参考图：`artifacts/design-qa/usage-calendar-1.246.0-rc1/reference-calendar.png`（1400 × 1300）。
-- 参考状态：2026 年 8 月，周日至周六排列；8 月 11 日为今日；日期格展示 Token、花费和会话数。
-- 目标：从“Token 活动”进入月历，可查看真实逐日数据、切换月份，并返回概览；视觉只使用黑、白、灰层级。
+- Source visual truth：`artifacts/design-qa/editor-background-removal-1.247.0-rc4/reference-before.png`（900 × 557）。它记录用户指出的旧状态：编辑器分段导航仍有“背景”，并重复展示已经归属“Agent 外观”的工作区壁纸。
+- Desired change：保留编辑器的编辑、格式、字体、工作区四项，彻底移除“背景”分段及其页面；Agent 外观继续作为壁纸与 Agent 背景效果的唯一入口。
+- Rendered implementation：`artifacts/design-qa/editor-background-removal-1.247.0-rc4/implementation.png`（900 × 608）。这是 `1.247.0-rc4` Debug App 重启后，通过 macOS Computer Use 打开“设置 → 编辑器”得到的真实窗口截图。
+- Focused comparison：`artifacts/design-qa/editor-background-removal-1.247.0-rc4/reference-vs-implementation.png`（900 × 368），上方为旧状态，下方为修复后实机标签区。
+- Viewport：实现窗口 900 × 608 px；参考原图 734 × 486 px，等比归一为 900 × 557 px。聚焦标签区均归一到 900 px 宽，不进行额外设备密度换算。
+- State：macOS 浅色模式，设置窗口，侧栏选中“编辑器”，编辑分段处于选中状态。
 
-## Rendered implementation
+## Findings and comparison history
 
-- 生产 SwiftUI 实现：`artifacts/design-qa/usage-calendar-1.246.0-rc1/implementation.png`（1400 × 1300，2x，逻辑视口 700 × 650）。
-- 同视口对照：`artifacts/design-qa/usage-calendar-1.246.0-rc1/reference-vs-implementation.png`（左侧参考，右侧实现）。
-- 渲染数据固定为 2026 年 8 月，今日固定为 8 月 11 日；实现侧使用真实聚合路径生成 24.61M Token、$22.64、42 个会话的测试快照。
+- 第一轮发现 `[P1]`：编辑器仍提供“背景”分段和完整壁纸页，与新设立的“Agent 外观”职责重复。用户可能在两个入口修改同一组持久化值，无法判断背景究竟属于编辑器还是 Agent。
+- 修复：从 `EditorSettingsTab` 删除 `.background`，从编辑器分段列表和页面路由移除该项，并删除只服务于旧入口的重复 `backgroundSettings` / `backgroundSections` 视图。共享壁纸选择与持久化逻辑继续由 Agent 外观使用。
+- 第二轮实机证据：Computer Use 读取到编辑器仅有“编辑 / 格式 / 字体 / 工作区”四个单选分段；无“背景”控件、空白占位或失效路由。未发现新的 P0、P1、P2 问题。
 
-## Functional findings
+## Required fidelity surfaces
 
-1. “Token 活动”整块区域可点击进入用量日历，保留每日／每周／累计子按钮的原有行为。
-2. 月历固定按周日至周六排列，补齐月初、月末的相邻月份日期，覆盖四至六周月份。
-3. 每日 Token 优先使用 Provider 上报值，缺失时沿用现有估算逻辑；会话数按当天不同会话去重。
-4. 花费沿用模型用量页的定价逻辑；当天存在无法定价的助手用量时显示未知，不用不完整金额冒充准确结果。
-5. 左右箭头切换上一个月／下一个月；左上“概览”返回原统计概览，三处均为真实 SwiftUI 控件并带无障碍标识。
+- Fonts and typography：标题、分段标签、表单标题和开关文字仍使用原有系统字体、字号与字重；移除标签后没有截断或异常换行。
+- Spacing and layout rhythm：四个标签自动居中收拢，分隔线、左右内边距和表单纵向节奏保持一致；没有为已删除标签残留空位。
+- Colors and visual tokens：沿用现有浅色设置页的系统蓝选中态、灰色分段底和中性表单表面；本次不改变设置页主题色。
+- Image quality and asset fidelity：编辑器页不再加载壁纸缩略图；当前页面只使用系统控件和 SF Symbols，没有新增或替换图像资产。
+- Copy and content：编辑、格式、字体、工作区四项保留；“背景”及其编辑器页面文案不再对用户可见。“Agent 外观”侧栏入口保持可见。
 
-## Visual findings
+## Interaction and verification
 
-1. 月份、汇总、星期标题和日期格层级与第 4 版一致；月份切换采用细边框按钮，日期内容居中。
-2. 今日使用近黑底和白字，其余内容只使用主文字、次文字、细边框和透明灰底，不引入强调色。
-3. 日期格高度、圆角、列间距和六周网格密度已按同画布对照调整；相邻月份只显示弱化日期。
-4. 中性系统皮肤同视口对照未发现文字裁切、控件重叠、错误周序或难以辨认的 P0、P1、P2 问题。
+- Computer Use 执行了 Debug App 重启、打开设置窗口和点击“编辑器”，随后读取真实无障碍树并捕获窗口截图。
+- 无障碍树明确暴露四个单选按钮：编辑、格式、字体、工作区；未发现“背景”单选按钮。
+- 定向 XCTest：`SettingsInformationArchitectureTests` 3/3 通过。
+- 版本一致性检查通过：`1.247.0-rc4`；内部构建号 357，Help 与 Computer Use Helper 构建号 273。
+- 原生 macOS App 不使用浏览器运行时，浏览器控制台检查不适用。
 
-## Verification
+## Open questions
 
-- 用量日历定向测试：3/3 通过。
-- 覆盖逐日 Token／花费／会话聚合、2026 年 8 月周日开头的 42 格网格，以及生产 SwiftUI 页面渲染。
-- String Catalog 同时提供英文和简体中文资源；版本已同步为 `1.246.0-rc1`。
-- 版本一致性、Go Agent 测试、String Catalog JSON 和 `git diff --check` 作为最终交付检查执行。
+- 无。编辑器的格式、字体、工作区和编辑行为不在本次删除范围内。
+
+## Implementation checklist
+
+- [x] 删除编辑器“背景”分段。
+- [x] 删除旧背景页面路由与重复视图。
+- [x] 保留 Agent 外观中的背景配置。
+- [x] 更新信息架构测试、版本与产品文档。
+- [x] 重启 Debug App 并完成真实窗口检查。
+
+## Follow-up polish
+
+- 无阻塞性 P3 项。
 
 final result: passed

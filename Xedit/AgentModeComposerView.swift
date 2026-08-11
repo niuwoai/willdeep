@@ -183,7 +183,7 @@ private struct AgentComposerWorkspaceGoalCard: View {
         HStack(spacing: 8) {
             Image(systemName: session.isDispatchProject ? "point.3.connected.trianglepath.dotted" : "target")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
 
             Text(
                 L10n.AgentWorkspaceGoalAwareness.summary(
@@ -294,7 +294,7 @@ private struct AgentComposerWorkspaceCollisionCard: View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 12))
-                .foregroundStyle(.orange)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
 
             Text(L10n.AgentWorkspaceCollision.warning(appState.agentWorkspaceCollision.otherActiveSessionCount))
                 .font(.system(size: 12, weight: .medium))
@@ -376,7 +376,7 @@ struct AgentComposerGoalCard: View {
         HStack(spacing: 8) {
             Image(systemName: "target")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
 
             Text(statusPrefix)
                 .font(.system(size: 12, weight: .semibold))
@@ -416,7 +416,7 @@ struct AgentComposerGoalCard: View {
                 }
                 .buttonStyle(.plain)
                 .focusable(false)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
                 .help(executionControlHelp)
                 .accessibilityLabel(executionControlHelp)
                 .accessibilityIdentifier(appState.isAgentGoalExecutionActive
@@ -981,6 +981,12 @@ private struct ComposerCard: View {
             RoundedRectangle(cornerRadius: AgentDesign.inputCornerRadius)
                 .stroke(AgentComposerChrome.border, lineWidth: 1)
         )
+        .symbolRenderingMode(.monochrome)
+        // Menu and borderless Button controls can ignore a symbol's local
+        // foregroundStyle and fall back to the macOS accent tint. Override
+        // the tint at the Composer boundary so every control icon remains
+        // grayscale in its real rendered state, not only in static source.
+        .tint(AgentComposerChrome.iconPrimary)
         .onAppear {
             // 窗口新开时 AppKit 会把默认 first responder 给到窗口里第一个
             // 可聚焦控件（侧边栏「新聊天」按钮），同步在 onAppear 里设
@@ -1453,7 +1459,7 @@ private struct ConsultationButton: View {
                 .frame(width: 24, height: 24)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(canStart ? Color.accentColor : Color.secondary)
+        .foregroundStyle(canStart ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconDisabled)
         .help(L10n.Consultation.buttonHelp)
         .disabled(!canStart)
     }
@@ -1518,9 +1524,9 @@ private struct AgentSecretInsertSheet: View {
                                     HStack(spacing: 9) {
                                         Image(systemName: "key.fill")
                                             .font(.system(size: 11, weight: .semibold))
-                                            .foregroundStyle(Color.accentColor)
+                                            .foregroundStyle(AgentComposerChrome.iconPrimary)
                                             .frame(width: 22, height: 22)
-                                            .background(Color.accentColor.opacity(0.12))
+                                            .background(AgentComposerChrome.selectedControlFill)
                                             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(savedSecretLabel(secret))
@@ -1534,7 +1540,7 @@ private struct AgentSecretInsertSheet: View {
                                         }
                                         Spacer(minLength: 8)
                                         Image(systemName: "plus.circle.fill")
-                                            .foregroundStyle(Color.accentColor)
+                                            .foregroundStyle(AgentComposerChrome.iconPrimary)
                                     }
                                     .padding(.horizontal, 9)
                                     .padding(.vertical, 7)
@@ -1690,7 +1696,7 @@ private struct AgentTerminalProtectedInputSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "lock.shield")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(AgentComposerChrome.iconPrimary)
                 Text(L10n.AgentTerminal.shortcutPasswordCardTitle(promptSet.title))
                     .font(.headline)
             }

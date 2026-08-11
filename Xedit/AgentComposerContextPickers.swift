@@ -14,6 +14,10 @@ enum AgentComposerChrome {
     static let strongBorder = Color.primary.opacity(0.23)
     static let actionFill = Color.primary.opacity(0.82)
     static let actionForeground = Color(nsColor: .textBackgroundColor)
+    static let iconPrimary = Color.primary.opacity(0.82)
+    static let iconSecondary = Color.secondary
+    static let iconMuted = Color.secondary.opacity(0.58)
+    static let iconDisabled = Color.secondary.opacity(0.34)
 }
 
 // MARK: - Composer run context

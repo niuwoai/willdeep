@@ -76,7 +76,6 @@ enum EditorSettingsTab: Hashable {
     case editing
     case typography
     case appearance
-    case background
     case workspace
     case agentAppearance
     case agent
@@ -106,9 +105,10 @@ extension EditorSettingsTab {
     var group: SettingsGroup {
         switch self {
         case .updates: return .general
-        // Everything that shapes the editor itself — editing behavior,
-        // typography, appearance, wallpaper — lives under one Editor tab.
-        case .editing, .typography, .appearance, .background, .workspace: return .editor
+        // Everything that shapes the editor itself lives under one Editor
+        // tab. Workspace wallpaper is Agent-owned and therefore no longer
+        // appears as a duplicate Editor pane.
+        case .editing, .typography, .appearance, .workspace: return .editor
         case .agentAppearance: return .agentAppearance
         case .agent, .subagents, .memory, .rules: return .ai
         case .skills, .mcp, .tools: return .agentTools
@@ -131,7 +131,6 @@ extension EditorSettingsTab {
         case .editing: return L10n.Settings.tabEditing
         case .typography: return L10n.Settings.tabTypography
         case .appearance: return L10n.Settings.tabAppearance
-        case .background: return L10n.Settings.tabBackground
         case .workspace: return L10n.Settings.tabWorkspace
         case .agentAppearance: return L10n.Settings.tabAgentAppearance
         case .agent: return L10n.Settings.tabAgent
@@ -176,9 +175,8 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     var tabs: [EditorSettingsTab] {
         switch self {
         case .general: return [.updates]
-        // One Editor tab for every editor-facing pane: behavior first,
-        // then styling (appearance / wallpaper / typography).
-        case .editor: return [.editing, .appearance, .background, .typography, .workspace]
+        // Wallpaper is configured exclusively under Agent Appearance.
+        case .editor: return [.editing, .appearance, .typography, .workspace]
         case .agentAppearance: return [.agentAppearance]
         case .pet: return [.pet]
         case .ai: return [.agent, .subagents, .memory, .rules]
