@@ -20168,13 +20168,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Memory saves, skill candidates, and MCP suggestions discovered at turn end stay here until reviewed."
+            "value" : "Memory saves, skill candidates, and MCP suggestions discovered at turn end stay here until reviewed. Unhandled items expire after 15 days."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在回合结束时发现的记忆保存、skill 候选和 MCP 建议会保留在这里，直到被审阅。"
+            "value" : "在回合结束时发现的记忆保存、skill 候选和 MCP 建议会保留在这里，未处理内容将在 15 天后自动过期。"
           }
         }
       }
@@ -21998,6 +21998,40 @@
         }
       }
     },
+    "settings.memory.lifetime-long-term" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Long-term"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "长期"
+          }
+        }
+      }
+    },
+    "settings.memory.lifetime-transient" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transient"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "临时"
+          }
+        }
+      }
+    },
     "settings.memory.maintenance-counts" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -22508,6 +22542,40 @@
         }
       }
     },
+    "settings.memory.scope-global" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Global"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全局"
+          }
+        }
+      }
+    },
+    "settings.memory.scope-project" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Project"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "项目"
+          }
+        }
+      }
+    },
     "settings.memory.search-placeholder" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -22623,6 +22691,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "相似度阈值"
+          }
+        }
+      }
+    },
+    "settings.memory.source-automatic" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动"
+          }
+        }
+      }
+    },
+    "settings.memory.source-manual" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manual"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手动"
           }
         }
       }

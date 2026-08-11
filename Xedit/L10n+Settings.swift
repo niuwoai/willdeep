@@ -199,7 +199,7 @@ extension L10n {
         enum LearningReview {
             static let section = String(localized: "settings.learning-review.section", defaultValue: "Learning Review")
             static let title = String(localized: "settings.learning-review.title", defaultValue: "Review automatic learning")
-            static let description = String(localized: "settings.learning-review.description", defaultValue: "Memory saves, skill candidates, and MCP suggestions discovered at turn end stay here until reviewed.")
+            static let description = String(localized: "settings.learning-review.description", defaultValue: "Memory saves, skill candidates, and MCP suggestions discovered at turn end stay here until reviewed. Unhandled items expire after 15 days.")
             static let empty = String(localized: "settings.learning-review.empty", defaultValue: "No pending learning items.")
             static let copy = String(localized: "settings.learning-review.copy", defaultValue: "Copy details")
             static let copied = String(localized: "settings.learning-review.copied", defaultValue: "Copied")
@@ -1253,9 +1253,37 @@ extension L10n {
             static let manualLabel = String(localized: "settings.memory.manual", defaultValue: "Manual")
             static let addMemorySection = String(localized: "settings.memory.add-memory-section", defaultValue: "Add Memory")
             static let lifetimeLabel = String(localized: "settings.memory.lifetime", defaultValue: "Lifetime")
+            static let lifetimeTransient = String(localized: "settings.memory.lifetime-transient", defaultValue: "Transient")
+            static let lifetimeLongTerm = String(localized: "settings.memory.lifetime-long-term", defaultValue: "Long-term")
             static let scopeLabel = String(localized: "settings.memory.scope", defaultValue: "Scope")
+            static let scopeGlobal = String(localized: "settings.memory.scope-global", defaultValue: "Global")
+            static let scopeProject = String(localized: "settings.memory.scope-project", defaultValue: "Project")
+            static let sourceAutomatic = String(localized: "settings.memory.source-automatic", defaultValue: "Auto")
+            static let sourceManual = String(localized: "settings.memory.source-manual", defaultValue: "Manual")
             static let projectScopeRequiresWorkspace = String(localized: "settings.memory.project-scope-requires-workspace", defaultValue: "Open a workspace before saving a project-scoped memory.")
             static let addMemoryButton = String(localized: "settings.memory.add-memory", defaultValue: "Add memory")
+
+            static func lifetimeName(_ lifetime: AgentMemoryLifetime) -> String {
+                switch lifetime {
+                case .transient: lifetimeTransient
+                case .longTerm: lifetimeLongTerm
+                }
+            }
+
+            static func scopeName(_ scope: AgentMemoryScope) -> String {
+                switch scope {
+                case .global: scopeGlobal
+                case .project: scopeProject
+                }
+            }
+
+            static func sourceName(_ source: AgentMemorySource) -> String {
+                switch source {
+                case .automatic: sourceAutomatic
+                case .manual: sourceManual
+                }
+            }
+
             static let searchSection = String(localized: "settings.memory.search-section", defaultValue: "Search Memories")
             static let searchPlaceholder = String(localized: "settings.memory.search-placeholder", defaultValue: "Search by text...")
             static let includeArchivedToggle = String(localized: "settings.memory.include-archived", defaultValue: "Include archived")
