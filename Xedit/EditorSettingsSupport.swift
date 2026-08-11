@@ -79,6 +79,7 @@ enum EditorSettingsTab: Hashable {
     case background
     case workspace
     case agent
+    case subagents
     case someIM
     case replicate
     case localAgents
@@ -106,9 +107,8 @@ extension EditorSettingsTab {
         case .updates: return .general
         // Everything that shapes the editor itself — editing behavior,
         // typography, appearance, wallpaper — lives under one Editor tab.
-        case .editing, .typography, .appearance, .background: return .editor
-        case .workspace: return .workspace
-        case .agent, .memory, .rules: return .ai
+        case .editing, .typography, .appearance, .background, .workspace: return .editor
+        case .agent, .subagents, .memory, .rules: return .ai
         case .skills, .mcp, .tools: return .agentTools
         case .localAgents, .remoteRuntimes: return .runtimes
         case .terminal: return .terminal
@@ -132,6 +132,7 @@ extension EditorSettingsTab {
         case .background: return L10n.Settings.tabBackground
         case .workspace: return L10n.Settings.tabWorkspace
         case .agent: return L10n.Settings.tabAgent
+        case .subagents: return L10n.Settings.tabSubagents
         case .someIM: return L10n.Settings.tabSomeIM
         case .replicate: return L10n.Settings.tabReplicate
         case .localAgents: return L10n.Settings.tabLocalAgents
@@ -153,17 +154,16 @@ extension EditorSettingsTab {
 /// Top-level Settings groupings. Each becomes one tab in the Settings window;
 /// groups with more than one pane render a second-level segmented picker.
 enum SettingsGroup: Hashable, CaseIterable, Identifiable {
-    case general
-    case editor
-    case workspace
+    case accountAndDevices
     case ai
     case agentTools
-    case accountAndDevices
     case runtimes
     case integrations
     case terminal
     case voice
     case pet
+    case editor
+    case general
 
     var id: Self { self }
 
@@ -174,10 +174,9 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
         case .general: return [.updates]
         // One Editor tab for every editor-facing pane: behavior first,
         // then styling (appearance / wallpaper / typography).
-        case .editor: return [.editing, .appearance, .background, .typography]
-        case .workspace: return [.workspace]
+        case .editor: return [.editing, .appearance, .background, .typography, .workspace]
         case .pet: return [.pet]
-        case .ai: return [.agent, .memory, .rules]
+        case .ai: return [.agent, .subagents, .memory, .rules]
         case .agentTools: return [.skills, .mcp, .tools]
         case .accountAndDevices: return [.someIM, .mobileGateway]
         case .runtimes: return [.localAgents, .remoteRuntimes]
@@ -191,9 +190,8 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .general: return L10n.Settings.groupGeneral
+        case .general: return L10n.Settings.tabUpdates
         case .editor: return L10n.Settings.groupEditor
-        case .workspace: return L10n.Settings.tabWorkspace
         case .pet: return L10n.DesktopPet.settingsTabTitle
         case .ai: return L10n.Settings.groupAI
         case .agentTools: return L10n.Settings.groupAgentTools
@@ -207,9 +205,8 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .general: return "gearshape"
+        case .general: return "arrow.triangle.2.circlepath"
         case .editor: return "pencil.line"
-        case .workspace: return "folder"
         case .pet: return "pawprint.fill"
         case .ai: return "sparkles"
         case .agentTools: return "wrench.and.screwdriver"

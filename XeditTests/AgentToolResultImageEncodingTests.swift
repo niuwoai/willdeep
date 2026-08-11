@@ -88,6 +88,7 @@ struct AgentToolResultImageEncodingTests {
         ).normalized
         let someIMFlashAliases = [
             "someim-judge",
+            SomeIMManagedModel.securityGuard,
             "someim-auto-flash",
             "someim-code-low",
             "someim-coding-plan",
@@ -113,6 +114,10 @@ struct AgentToolResultImageEncodingTests {
             ).normalized
             #expect(configuration.inferenceProviderKind == .openAIResponses)
             #expect(configuration.usesWillDeepGatewayResponsesState)
+            #expect(
+                configuration.usesServerManagedSafetyJudge
+                    == (model == SomeIMManagedModel.securityGuard)
+            )
 
             let customConfiguration = AgentConfiguration(
                 providerID: AgentProviderPreset.customID,
@@ -188,6 +193,54 @@ struct AgentToolResultImageEncodingTests {
         #expect(body["stream"] as? Bool == false)
         #expect(body["store"] as? Bool == false)
         #expect(body["messages"] == nil)
+    }
+
+    @Test
+    @MainActor
+    func someIMSecurityGuardSendsOnlyUserMessage() async throws {
+        let recorder = WillDeepResponsesFallbackRecorder()
+        let session = managedJudgeTestSession()
+        defer {
+            ManagedJudgeURLProtocol.handler = nil
+            session.invalidateAndCancel()
+        }
+        ManagedJudgeURLProtocol.handler = { request in
+            _ = recorder.record(request)
+            let url = try #require(request.url)
+            return try willDeepResponsesHTTPResult(
+                url: url,
+                statusCode: 200,
+                body: #"{"id":"resp_guard","output":[{"type":"message","content":[{"type":"output_text","text":"<verdict>YES</verdict>"}]}]}"#
+            )
+        }
+
+        let configuration = AgentConfiguration(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://some.im/v1",
+            model: SomeIMManagedModel.securityGuard,
+            apiKey: "test"
+        )
+        let result = await AgentClient(
+            configuration: configuration,
+            session: session
+        ).judgeCommandSafety(
+            command: "yarn test",
+            historyContext: "THIS HISTORY MUST NOT BE SENT"
+        )
+
+        #expect(result == .allow)
+        let request = try #require(recorder.requests.first)
+        #expect(request.path == "/v1/responses")
+        let bodyData = try #require(request.body.data(using: .utf8))
+        let body = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        #expect(body["model"] as? String == SomeIMManagedModel.securityGuard)
+        #expect(body["instructions"] == nil)
+        #expect(body["messages"] == nil)
+        #expect(request.body.contains("yarn test"))
+        #expect(!request.body.contains("THIS HISTORY MUST NOT BE SENT"))
+        let input = try #require(body["input"] as? [[String: Any]])
+        #expect(input.count == 1)
+        #expect(input[0]["role"] as? String == "user")
     }
 
     @Test

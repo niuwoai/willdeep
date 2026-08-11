@@ -499,17 +499,26 @@ struct AtPickerMenu: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                            AtPickerRow(entry: entry, isSelected: index == selection)
-                                .contentShape(Rectangle())
-                                .onTapGesture { onPick(index) }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                                AtPickerRow(entry: entry, isSelected: index == selection)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { onPick(index) }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .id(entry.id)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: ComposerPaletteLayout.maximumListHeight)
+                    .onCompatibleChange(of: selection) { _, newSelection in
+                        guard entries.indices.contains(newSelection) else { return }
+                        withAnimation(.easeOut(duration: 0.12)) {
+                            proxy.scrollTo(entries[newSelection].id, anchor: .center)
                         }
                     }
                 }
-                .frame(maxHeight: ComposerPaletteLayout.maximumListHeight)
             }
         }
         .padding(.bottom, 6)
@@ -556,7 +565,7 @@ private struct AtPickerRow: View {
 }
 
 nonisolated enum SkillPickerLayout {
-    static let minimumVisibleRowCount = 3
+    static let minimumVisibleRowCount = 5
     static let rowHeight: CGFloat = 38
 
     static func minimumListHeight(entryCount: Int) -> CGFloat {
@@ -611,20 +620,29 @@ struct SkillPickerMenu: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                            SkillPickerRow(entry: entry, isSelected: index == selection)
-                                .contentShape(Rectangle())
-                                .onTapGesture { onPick(index) }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                                SkillPickerRow(entry: entry, isSelected: index == selection)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { onPick(index) }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .id(entry.id)
+                            }
+                        }
+                    }
+                    .frame(
+                        minHeight: SkillPickerLayout.minimumListHeight(entryCount: entries.count),
+                        maxHeight: ComposerPaletteLayout.maximumListHeight
+                    )
+                    .onCompatibleChange(of: selection) { _, newSelection in
+                        guard entries.indices.contains(newSelection) else { return }
+                        withAnimation(.easeOut(duration: 0.12)) {
+                            proxy.scrollTo(entries[newSelection].id, anchor: .center)
                         }
                     }
                 }
-                .frame(
-                    minHeight: SkillPickerLayout.minimumListHeight(entryCount: entries.count),
-                    maxHeight: ComposerPaletteLayout.maximumListHeight
-                )
             }
         }
         .padding(.bottom, 6)

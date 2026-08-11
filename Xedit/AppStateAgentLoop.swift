@@ -778,7 +778,10 @@ extension AppState {
             let assistantMessage = AgentMessage(
                 role: .assistant,
                 content: "",
-                origin: .nativeModel
+                origin: .nativeModel,
+                requestModelID: turnConfiguration.model,
+                requestProviderID: turnConfiguration.providerID,
+                requestProviderDisplayName: runtime.session.providerDisplayName
             )
             runtime.messages.append(assistantMessage)
             let assistantID = assistantMessage.id
@@ -1061,6 +1064,13 @@ extension AppState {
                 }
                 runtime.messages[index].elapsedSeconds = Date().timeIntervalSince(turnStartedAt)
                 runtime.messages[index].managedRoute = managedRouteDecision
+                runtime.messages[index].requestModelID = managedRouteDecision?.selectedModel
+                    ?? turnConfiguration.model
+                runtime.messages[index].requestProviderID = turnConfiguration.providerID
+                runtime.messages[index].requestProviderDisplayName = AgentProviderPreset.normalizedDisplayName(
+                    providerID: turnConfiguration.providerID,
+                    storedDisplayName: runtime.session.providerDisplayName
+                )
             }
 
             // A tool-using model round can already contain the progress for

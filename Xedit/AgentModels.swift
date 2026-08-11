@@ -709,6 +709,11 @@ nonisolated enum SomeIMManagedModel {
     /// `allowlist`.
     static let judge = "someim-judge"
 
+    /// Dedicated safety classifier whose policy is injected by the some.im
+    /// gateway. The client sends only the per-command user payload so the
+    /// long, stable policy remains server-managed and cache-friendly.
+    static let securityGuard = "someim-security-guard"
+
     /// Every main-call model a judge decision is allowed to resolve to. A
     /// `target_model` outside this set is rejected and the local
     /// (domain, tier) mapping is used instead.
@@ -1823,6 +1828,7 @@ struct AgentConfiguration: Codable, Equatable {
     private static let someIMDeepSeekV4FlashModelIDs: Set<String> = [
         "deepseek-v4-flash",
         SomeIMManagedModel.judge,
+        SomeIMManagedModel.securityGuard,
         SomeIMManagedModel.autoFlash,
         SomeIMManagedModel.codeLow,
         "someim-coding-plan",
@@ -1842,6 +1848,16 @@ struct AgentConfiguration: Codable, Equatable {
 
     var usesDeepSeekV4FlashResponsesBehavior: Bool {
         isDeepSeekV4FlashResponsesModel
+    }
+
+    /// The some.im safety alias owns its fixed system policy on the gateway.
+    /// Keeping this check provider-scoped prevents a custom provider that
+    /// happens to expose the same model id from silently losing its system
+    /// prompt.
+    var usesServerManagedSafetyJudge: Bool {
+        providerID == AgentProviderPreset.someIMID
+            && model.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(SomeIMManagedModel.securityGuard) == .orderedSame
     }
 
     var usesWillDeepGatewayResponsesState: Bool {

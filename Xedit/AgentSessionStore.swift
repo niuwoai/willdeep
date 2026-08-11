@@ -467,6 +467,10 @@ nonisolated enum AgentSessionStore {
         let reasoningTokens: Int?
         let origin: AgentMessageOrigin?
         let originLabel: String?
+        let requestModelID: String?
+        let requestProviderID: String?
+        let requestProviderDisplayName: String?
+        let managedRoute: AgentManagedRouteDecision?
         let requestStablePrefixCharacters: Int?
         let createdAt: Date?
 
@@ -475,7 +479,8 @@ nonisolated enum AgentSessionStore {
             case toolCallID, toolCallStatus, toolErrorMessage
             case usageTokens, promptTokens, completionTokens
             case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
-            case origin, originLabel, requestStablePrefixCharacters
+            case origin, originLabel, requestModelID, requestProviderID, requestProviderDisplayName
+            case managedRoute, requestStablePrefixCharacters
             case createdAt
         }
 
@@ -498,6 +503,13 @@ nonisolated enum AgentSessionStore {
             reasoningTokens = try c.decodeIfPresent(Int.self, forKey: .reasoningTokens)
             origin = try c.decodeIfPresent(AgentMessageOrigin.self, forKey: .origin)
             originLabel = try c.decodeIfPresent(String.self, forKey: .originLabel)
+            requestModelID = try c.decodeIfPresent(String.self, forKey: .requestModelID)
+            requestProviderID = try c.decodeIfPresent(String.self, forKey: .requestProviderID)
+            requestProviderDisplayName = try c.decodeIfPresent(
+                String.self,
+                forKey: .requestProviderDisplayName
+            )
+            managedRoute = try c.decodeIfPresent(AgentManagedRouteDecision.self, forKey: .managedRoute)
             requestStablePrefixCharacters = try c.decodeIfPresent(Int.self, forKey: .requestStablePrefixCharacters)
             createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
         }
@@ -527,6 +539,12 @@ nonisolated enum AgentSessionStore {
                 toolCallArgumentCharacterCount: toolCalls.reduce(0) { $0 + $1.argumentsJSON.count },
                 toolCallNames: toolCalls.map(\.toolName),
                 toolCallExternalIDs: toolCalls.map(\.externalID),
+                subagentProfileIDs: toolCalls.compactMap {
+                    AgentUsageMessageSnapshot.subagentProfileID(
+                        toolName: $0.toolName,
+                        argumentsJSON: $0.argumentsJSON
+                    )
+                },
                 toolCallID: toolCallID,
                 toolCallStatus: toolCallStatus,
                 toolErrorMessage: toolErrorMessage,
@@ -538,6 +556,9 @@ nonisolated enum AgentSessionStore {
                 reasoningTokens: reasoningTokens,
                 origin: origin,
                 originLabel: originLabel,
+                requestModelID: requestModelID ?? managedRoute?.selectedModel,
+                requestProviderID: requestProviderID,
+                requestProviderDisplayName: requestProviderDisplayName,
                 requestStablePrefixCharacters: requestStablePrefixCharacters,
                 createdAt: createdAt
             )
@@ -557,10 +578,12 @@ nonisolated enum AgentSessionStore {
         let sidebarWorkspaceRootPath: String?
         let agentEditedPaths: [String]
         let agentArtifactPaths: [String]
+        let managedRouting: AgentManagedRoutingState?
 
         enum CodingKeys: String, CodingKey {
             case id, modelID, providerID, providerDisplayName, createdAt, updatedAt, messages
             case workspaceLocation, workspaceRootPath, sidebarWorkspaceRootPath, agentEditedPaths, agentArtifactPaths
+            case managedRouting
         }
 
         init(from decoder: Decoder) throws {
@@ -577,6 +600,7 @@ nonisolated enum AgentSessionStore {
             sidebarWorkspaceRootPath = try c.decodeIfPresent(String.self, forKey: .sidebarWorkspaceRootPath)
             agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []
             agentArtifactPaths = try c.decodeIfPresent([String].self, forKey: .agentArtifactPaths) ?? []
+            managedRouting = try c.decodeIfPresent(AgentManagedRoutingState.self, forKey: .managedRouting)
         }
 
         var snapshot: AgentUsageSessionSnapshot {
@@ -591,7 +615,8 @@ nonisolated enum AgentSessionStore {
                 workspaceIdentifier: workspaceIdentifier,
                 editedFileCount: agentEditedPaths.count,
                 artifactCount: agentArtifactPaths.count,
-                artifactPaths: agentArtifactPaths
+                artifactPaths: agentArtifactPaths,
+                isManagedRouting: managedRouting != nil
             )
         }
 
@@ -969,12 +994,19 @@ nonisolated enum AgentSessionStore {
         for url in entries where url.pathExtension == "json" {
             guard let data = try? Data(contentsOf: url) else { continue }
             do {
-                snapshots.append(try decoder.decode(UsageSessionIndex.self, from: data).snapshot)
+                snapshots.append(try decodeUsageSnapshot(from: data))
             } catch {
                 print("AgentSessionStore: skipping unreadable usage snapshot at \(url.lastPathComponent): \(error)")
             }
         }
         return snapshots.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    /// Shared decode seam for the lazy dashboard scan and its regression
+    /// tests. Keeping this on the production path prevents the lightweight
+    /// usage schema from silently dropping newly added session metadata.
+    static func decodeUsageSnapshot(from data: Data) throws -> AgentUsageSessionSnapshot {
+        try decoder.decode(UsageSessionIndex.self, from: data).snapshot
     }
 
     static func load(id: UUID) -> AgentSession? {

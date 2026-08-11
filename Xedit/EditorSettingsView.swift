@@ -37,7 +37,7 @@ struct EditorSettingsView: View {
     @State private var agentProModelBuffer: String = ""
     @State private var agentRoutingModeBuffer: AgentModelRoutingMode = .auto
     @State private var agentAPIKeyBuffer: String = ""
-    @State private var imageProviderIDBuffer: String = ""
+    @State private var imageProviderIDBuffer: String = AgentProviderPreset.someIMID
     @State private var imageBaseURLBuffer: String = ""
     @State private var imageModelBuffer: String = ""
     @State private var imageAPIKeyBuffer: String = ""
@@ -188,6 +188,7 @@ struct EditorSettingsView: View {
         case .background: backgroundSettings
         case .workspace: workspaceSettings
         case .agent: agentSettings
+        case .subagents: subagentSettings
         case .someIM: SomeIMIntegrationSettingsView()
         // Deep-links to `.replicate` land on the unified connectors hub
         // with the Replicate sub-connector preselected.
@@ -223,10 +224,6 @@ struct EditorSettingsView: View {
                         fetchAgentModels(forEntry: entry)
                     }
                 )
-            }
-
-            Section(L10n.AgentDelegation.profilesSectionTitle) {
-                AgentSubagentProfileSettingsSection()
             }
 
             Section(L10n.Settings.sectionImageUnderstanding) {
@@ -417,6 +414,15 @@ struct EditorSettingsView: View {
                 loadAgentBuffersFromAppState()
             }
         }
+    }
+
+    private var subagentSettings: some View {
+        Form {
+            Section(L10n.AgentDelegation.profilesSectionTitle) {
+                AgentSubagentProfileSettingsSection()
+            }
+        }
+        .formStyle(.grouped)
     }
 
     /// Save button now only covers the Image Understanding fields and

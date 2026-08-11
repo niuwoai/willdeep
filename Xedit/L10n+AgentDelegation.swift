@@ -120,7 +120,7 @@ extension L10n {
         )
         static let profilesSectionFooter = String(
             localized: "agent-delegation.profiles-section-footer",
-            defaultValue: "Each trade runs on its own model with a narrowed tool set. Tool sets are fixed; only the model binding is configurable."
+            defaultValue: "Each trade runs with its own provider and model. Tool sets are fixed; provider and model bindings save automatically."
         )
         static let profileInheritsParent = String(
             localized: "agent-delegation.profile-inherits-parent",
@@ -134,6 +134,33 @@ extension L10n {
             localized: "agent-delegation.profile-model-label",
             defaultValue: "Model"
         )
+        static let profileProviderLabel = String(
+            localized: "agent-delegation.profile-provider-label",
+            defaultValue: "Provider"
+        )
+        static let profileModelPlaceholder = String(
+            localized: "agent-delegation.profile-model-placeholder",
+            defaultValue: "Type a model ID"
+        )
+        static let profilePickFetchedModel = String(
+            localized: "agent-delegation.profile-pick-fetched-model",
+            defaultValue: "Choose a configured or fetched model"
+        )
+        static let profileNoProviders = String(
+            localized: "agent-delegation.profile-no-providers",
+            defaultValue: "No providers configured"
+        )
+        static let profileNoModelsReturned = String(
+            localized: "agent-delegation.profile-no-models-returned",
+            defaultValue: "No models returned by /v1/models."
+        )
+        static func profileFetchedModels(_ count: Int, _ provider: String) -> String {
+            let template = String(
+                localized: "agent-delegation.profile-fetched-models",
+                defaultValue: "Fetched %1$d models from %2$@."
+            )
+            return String(format: template, count, provider)
+        }
         static let profileUnavailableFallback = String(
             localized: "agent-delegation.profile-unavailable-fallback",
             defaultValue: "Unavailable — falls back to this chat's model"
@@ -154,7 +181,7 @@ extension L10n {
         )
         static let profileDeepPurpose = String(
             localized: "agent-delegation.profile-deep-purpose",
-            defaultValue: "Complex investigation: reasoning across many files, read-only shell commands, git status. Uses the parent's model — most capable and most expensive."
+            defaultValue: "Complex investigation: reasoning across many files, read-only shell commands, and git status."
         )
         static let profileEditorPurpose = String(
             localized: "agent-delegation.profile-editor-purpose",

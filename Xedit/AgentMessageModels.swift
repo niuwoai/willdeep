@@ -523,6 +523,13 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// into WillDeep's provider-side cache rate.
     var origin: AgentMessageOrigin?
     var originLabel: String?
+    /// Exact client-side routing snapshot for the request that produced this
+    /// assistant message. Session-level model/provider fields describe the
+    /// latest selection and cannot faithfully attribute a conversation that
+    /// switched models between turns. Optional for persisted legacy messages.
+    var requestModelID: String?
+    var requestProviderID: String?
+    var requestProviderDisplayName: String?
     /// Compact cache diagnostics captured for the request that produced
     /// this assistant message. The hash is a stable FNV-1a hex string
     /// for the request prefix; stablePrefixCharacters is the length of
@@ -592,6 +599,9 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         transcriptEvent: AgentTranscriptEvent? = nil,
         origin: AgentMessageOrigin? = nil,
         originLabel: String? = nil,
+        requestModelID: String? = nil,
+        requestProviderID: String? = nil,
+        requestProviderDisplayName: String? = nil,
         requestPrefixHash: String? = nil,
         requestStablePrefixCharacters: Int? = nil,
         managedRoute: AgentManagedRouteDecision? = nil,
@@ -625,6 +635,9 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         self.transcriptEvent = transcriptEvent
         self.origin = origin
         self.originLabel = originLabel
+        self.requestModelID = requestModelID
+        self.requestProviderID = requestProviderID
+        self.requestProviderDisplayName = requestProviderDisplayName
         self.requestPrefixHash = requestPrefixHash
         self.requestStablePrefixCharacters = requestStablePrefixCharacters
         self.managedRoute = managedRoute
@@ -644,7 +657,8 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         case usageTokens, promptTokens, completionTokens
         case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens, sourceReferences
         case elapsedSeconds, source, transcriptEvent
-        case origin, originLabel, requestPrefixHash, requestStablePrefixCharacters
+        case origin, originLabel, requestModelID, requestProviderID, requestProviderDisplayName
+        case requestPrefixHash, requestStablePrefixCharacters
         case managedRoute, workflowReport
         case scheduledTask
         case delegationPolicy, delegationPolicyUnhonored
@@ -676,6 +690,12 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         transcriptEvent = try container.decodeIfPresent(AgentTranscriptEvent.self, forKey: .transcriptEvent)
         origin = try container.decodeIfPresent(AgentMessageOrigin.self, forKey: .origin)
         originLabel = try container.decodeIfPresent(String.self, forKey: .originLabel)
+        requestModelID = try container.decodeIfPresent(String.self, forKey: .requestModelID)
+        requestProviderID = try container.decodeIfPresent(String.self, forKey: .requestProviderID)
+        requestProviderDisplayName = try container.decodeIfPresent(
+            String.self,
+            forKey: .requestProviderDisplayName
+        )
         requestPrefixHash = try container.decodeIfPresent(String.self, forKey: .requestPrefixHash)
         requestStablePrefixCharacters = try container.decodeIfPresent(Int.self, forKey: .requestStablePrefixCharacters)
         managedRoute = try container.decodeIfPresent(AgentManagedRouteDecision.self, forKey: .managedRoute)

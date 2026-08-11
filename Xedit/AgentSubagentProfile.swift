@@ -35,13 +35,18 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case retryWithParentModel
     }
 
-    /// Which model/provider a trade runs on. All-nil means "inherit the
-    /// parent session", which is what keeps `deep` byte-identical to the
-    /// pre-profile behaviour.
+    /// Which model/provider a trade runs on. All-nil remains the explicit
+    /// "inherit the parent session" representation for migrated/custom
+    /// bindings, while built-in trades prefer the automatic provider route.
     struct ModelBinding: Codable, Equatable, Sendable {
+        /// Exact saved provider entry. Provider preset IDs are not unique —
+        /// users can keep several OpenAI-compatible endpoints — so new
+        /// settings bind to the library entry UUID. Optional to keep stored
+        /// v1 bindings source-compatible.
+        var preferredProviderEntryID: UUID? = nil
         /// Preferred provider preset (e.g. `some-im`). Resolution picks a
-        /// usable library entry for it at spawn time; if none is usable the
-        /// whole binding falls back to the parent session.
+        /// usable library entry for it at spawn time. This remains as a
+        /// migration fallback for bindings saved before entry UUIDs existed.
         var preferredProviderID: String?
         var model: String?
         /// Context window of `model`, used for payload budgeting and for
@@ -156,6 +161,16 @@ nonisolated enum AgentSubagentProfileCatalog {
         contextWindowTokens: 128_000
     )
 
+    /// Deep used to inherit the parent session. Subagents now default to a
+    /// provider of their own as requested by Settings: some.im when present,
+    /// otherwise the active provider. A nil model adopts that provider's
+    /// configured primary model.
+    private static let automaticProviderBinding = AgentSubagentProfile.ModelBinding(
+        preferredProviderID: AgentProviderPreset.someIMID,
+        model: nil,
+        contextWindowTokens: nil
+    )
+
     static let scout = AgentSubagentProfile(
         id: scoutID,
         purpose: "Locate things: find files, symbols, call sites, or answer \"where is X / does X exist\". Fastest and cheapest; no shell.",
@@ -186,14 +201,14 @@ nonisolated enum AgentSubagentProfileCatalog {
         escalation: .retryWithParentModel
     )
 
-    /// The pre-profile behaviour, preserved verbatim: parent model, full
-    /// read-only tool set, 12 rounds. Any spawn that does not name a
-    /// profile lands here, so old prompts and replayed sessions are
-    /// unaffected by this feature.
+    /// The full read-only investigation trade. Any spawn that does not name a
+    /// profile lands here, so old prompts and replayed sessions keep the same
+    /// tool and round budgets while adopting the configurable provider/model
+    /// routing shared by every subagent trade.
     static let deep = AgentSubagentProfile(
         id: deepID,
-        purpose: "Complex investigation: reasoning across many files, read-only shell commands, git status. Uses the parent's model — most capable and most expensive.",
-        modelBinding: .inheritsParent,
+        purpose: "Complex investigation: reasoning across many files, read-only shell commands, and git status.",
+        modelBinding: automaticProviderBinding,
         toolNames: AgentSubagentRunner.allowedToolNames,
         capabilityPromptSection: """
         Your trade is INVESTIGATION. Follow the evidence across files, verify claims before \
@@ -234,6 +249,52 @@ nonisolated enum AgentSubagentProfileCatalog {
     static func isKnown(id rawID: String) -> Bool {
         let trimmed = rawID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return builtIn.contains { $0.id == trimmed }
+    }
+
+    /// Default provider for all subagent trades: some.im wins whenever a
+    /// corresponding library entry exists; otherwise use the provider marked
+    /// active in Settings (and finally the first entry for damaged legacy
+    /// libraries with no active id).
+    static func defaultProviderEntry(in library: AgentProviderLibrary) -> AgentProviderEntry? {
+        library.entries.first { $0.providerID == AgentProviderPreset.someIMID }
+            ?? library.active
+            ?? library.entries.first
+    }
+
+    /// Resolve a persisted binding to one concrete provider library entry.
+    /// UUID is authoritative. Provider ID keeps v1 settings working. The
+    /// built-in some.im preference is an automatic default, so when some.im
+    /// is absent it intentionally falls through to the active provider.
+    static func providerEntry(
+        for binding: AgentSubagentProfile.ModelBinding,
+        in library: AgentProviderLibrary
+    ) -> AgentProviderEntry? {
+        if let entryID = binding.preferredProviderEntryID,
+           let exact = library.entries.first(where: { $0.id == entryID }) {
+            return exact
+        }
+        if let providerID = binding.preferredProviderID,
+           let matching = library.entries.first(where: { $0.providerID == providerID }) {
+            return matching
+        }
+        if binding.preferredProviderID == AgentProviderPreset.someIMID {
+            return defaultProviderEntry(in: library)
+        }
+        return nil
+    }
+
+    /// The built-in `glm-5` choice is specific to some.im. If automatic
+    /// routing had to fall back to another provider, use that entry's primary
+    /// model instead of sending an invalid cross-provider model id.
+    static func bindingModelApplies(
+        _ binding: AgentSubagentProfile.ModelBinding,
+        to entry: AgentProviderEntry
+    ) -> Bool {
+        if let entryID = binding.preferredProviderEntryID {
+            return entryID == entry.id
+        }
+        guard let providerID = binding.preferredProviderID else { return true }
+        return providerID == entry.providerID
     }
 
     /// Schema-facing catalog line for the `spawn_agent` tool description.

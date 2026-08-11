@@ -17,12 +17,13 @@ struct AgentKnowledgeFolderIndexerTests {
         #expect(AgentKnowledgeFolderIndexPolicy.startsAutomatically(in: .goal))
     }
 
-    @Test("Skill picker reserves three complete rows when available")
+    @Test("Skill picker reserves five complete rows when available")
     func skillPickerMinimumHeight() {
         #expect(SkillPickerLayout.minimumListHeight(entryCount: 0) == 0)
         #expect(SkillPickerLayout.minimumListHeight(entryCount: 1) == SkillPickerLayout.rowHeight)
         #expect(SkillPickerLayout.minimumListHeight(entryCount: 3) == SkillPickerLayout.rowHeight * 3)
-        #expect(SkillPickerLayout.minimumListHeight(entryCount: 20) == SkillPickerLayout.rowHeight * 3)
+        #expect(SkillPickerLayout.minimumListHeight(entryCount: 5) == SkillPickerLayout.rowHeight * 5)
+        #expect(SkillPickerLayout.minimumListHeight(entryCount: 20) == SkillPickerLayout.rowHeight * 5)
         #expect(ComposerPaletteLayout.maximumListHeight == 440)
     }
 

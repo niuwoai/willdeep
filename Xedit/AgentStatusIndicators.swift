@@ -87,11 +87,13 @@ struct AgentStatsDashboard: View {
     enum DashboardTab: String, CaseIterable, Identifiable {
         case overview = "Overview"
         case models = "Models"
+        case workers = "Workers"
         var id: String { rawValue }
         var title: String {
             switch self {
             case .overview: return L10n.StatsDashboard.tabsOverview
             case .models: return L10n.StatsDashboard.tabsModels
+            case .workers: return L10n.StatsDashboard.tabsWorkers
             }
         }
     }
@@ -135,7 +137,8 @@ struct AgentStatsDashboard: View {
 
     private var dashboardContent: some View {
         Group {
-            if selectedTab == .overview {
+            switch selectedTab {
+            case .overview:
                 VStack(alignment: .leading, spacing: 0) {
                     profileHeader
                         .padding(.bottom, 43)
@@ -145,17 +148,31 @@ struct AgentStatsDashboard: View {
                         .padding(.bottom, 40)
                     detailSections
                 }
-            } else {
+            case .models:
                 VStack(alignment: .leading, spacing: 14) {
                     modelDetailHeader
                     modelSummaryBand
                     modelUsageList
+                }
+            case .workers:
+                VStack(alignment: .leading, spacing: 14) {
+                    workerDetailHeader
+                    workerSummaryBand
+                    workerUsageList
                 }
             }
         }
     }
 
     private var modelDetailHeader: some View {
+        detailHeader(title: L10n.StatsDashboard.tabsModels)
+    }
+
+    private var workerDetailHeader: some View {
+        detailHeader(title: L10n.StatsDashboard.tabsWorkers)
+    }
+
+    private func detailHeader(title: String) -> some View {
         HStack {
             Button {
                 selectedTab = .overview
@@ -168,7 +185,7 @@ struct AgentStatsDashboard: View {
             }
             .buttonStyle(.plain)
             Spacer(minLength: 0)
-            Text(L10n.StatsDashboard.tabsModels)
+            Text(title)
                 .font(supportingFont(
                     visualMinimum: AgentStatsDashboardTypography.sectionTitle,
                     weight: .semibold
@@ -192,6 +209,10 @@ struct AgentStatsDashboard: View {
 
     private var capabilityRows: [AgentCapabilityUsageRow] {
         dashboardModel.capabilityUsage
+    }
+
+    private var subagentUsageRows: [AgentSubagentUsageRow] {
+        dashboardModel.subagentUsage
     }
 
     private var profileHeader: some View {
@@ -429,13 +450,25 @@ struct AgentStatsDashboard: View {
                     weight: .semibold
                 ))
             DashboardInsightRow(
-                title: L10n.StatsDashboard.insightQuickMode,
+                title: L10n.StatsDashboard.insightManagedRouting,
                 value: formatPercentage(managedRoutingRate)
             )
             DashboardInsightRow(
-                title: L10n.StatsDashboard.insightReasoningStrength,
-                value: reasoningStrengthLabel
+                title: L10n.StatsDashboard.insightReasoningUsage,
+                value: formatPercentage(reasoningUsageRate)
             )
+            Button {
+                selectedTab = .workers
+            } label: {
+                DashboardInsightRow(
+                    title: L10n.StatsDashboard.insightFavoriteWorker,
+                    value: favoriteWorkerLabel,
+                    showsDisclosure: true
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(L10n.StatsDashboard.workersDisclosureHelp)
             DashboardInsightRow(
                 title: L10n.StatsDashboard.insightExploredSkills,
                 value: formatInteger(uniqueToolCount)
@@ -552,18 +585,12 @@ struct AgentStatsDashboard: View {
         dashboardModel.reasoningUsageRate
     }
 
-    private var reasoningStrengthLabel: String {
-        let level: String
-        if reasoningUsageRate >= 0.67 {
-            level = L10n.StatsDashboard.reasoningHigh
-        } else if reasoningUsageRate >= 0.34 {
-            level = L10n.StatsDashboard.reasoningMedium
-        } else {
-            level = L10n.StatsDashboard.reasoningLow
-        }
-        return L10n.StatsDashboard.reasoningValue(
-            level,
-            formatPercentage(reasoningUsageRate)
+    private var favoriteWorkerLabel: String {
+        guard let row = subagentUsageRows.first else { return "—" }
+        let profile = AgentSubagentProfileCatalog.profile(id: row.profileID)
+        return L10n.StatsDashboard.favoriteWorkerValue(
+            profile.localizedDisplayName,
+            formatInteger(row.invocationCount)
         )
     }
 
@@ -580,6 +607,146 @@ struct AgentStatsDashboard: View {
             Color(red: 0.30, green: 0.33, blue: 0.37),
         ]
         return colors[index % colors.count]
+    }
+
+    private var workerSummaryBand: some View {
+        let totalCalls = subagentUsageRows.reduce(0) { $0 + $1.invocationCount }
+        return HStack(spacing: 0) {
+            CodexDashboardMetric(
+                value: formatInteger(totalCalls),
+                title: L10n.StatsDashboard.workersTotalCalls
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatInteger(subagentUsageRows.count),
+                title: L10n.StatsDashboard.workersProfilesUsed
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatInteger(dashboardModel.subagentSessionCount),
+                title: L10n.StatsDashboard.workersChats
+            )
+        }
+        .frame(height: AgentStatsDashboardLayout.metricStripHeight)
+        .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
+                .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+        )
+    }
+
+    private var workerUsageList: some View {
+        let rowsByProfile = Dictionary(
+            uniqueKeysWithValues: subagentUsageRows.map { ($0.profileID, $0) }
+        )
+        let profiles = AgentSubagentProfileCatalog.builtIn.sorted { lhs, rhs in
+            let lhsCount = rowsByProfile[lhs.id]?.invocationCount ?? 0
+            let rhsCount = rowsByProfile[rhs.id]?.invocationCount ?? 0
+            if lhsCount != rhsCount { return lhsCount > rhsCount }
+            return lhs.id < rhs.id
+        }
+        let totalCalls = subagentUsageRows.reduce(0) { $0 + $1.invocationCount }
+        let peakCalls = max(1, subagentUsageRows.map(\.invocationCount).max() ?? 0)
+
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(L10n.StatsDashboard.workersTitle)
+                .font(supportingFont(
+                    visualMinimum: AgentStatsDashboardTypography.sectionTitle,
+                    weight: .semibold
+                ))
+            Text(L10n.StatsDashboard.workersSubtitle)
+                .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 0) {
+                ForEach(Array(profiles.enumerated()), id: \.element.id) { index, profile in
+                    workerUsageRow(
+                        profile: profile,
+                        usage: rowsByProfile[profile.id],
+                        totalCalls: totalCalls,
+                        peakCalls: peakCalls
+                    )
+                    if index < profiles.count - 1 {
+                        Divider()
+                            .padding(.leading, 48)
+                    }
+                }
+            }
+            .background(dashboardSummaryFill.opacity(0.55))
+            .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
+                    .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+            )
+        }
+    }
+
+    private func workerUsageRow(
+        profile: AgentSubagentProfile,
+        usage: AgentSubagentUsageRow?,
+        totalCalls: Int,
+        peakCalls: Int
+    ) -> some View {
+        let invocationCount = usage?.invocationCount ?? 0
+        let sessionCount = usage?.sessionCount ?? 0
+        let share = totalCalls > 0 ? Double(invocationCount) / Double(totalCalls) : 0
+
+        return HStack(spacing: 12) {
+            Image(systemName: workerSymbol(profile.id))
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(dashboardAccent)
+                .frame(width: 32, height: 32)
+                .background(dashboardAccent.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(profile.localizedDisplayName)
+                        .font(supportingFont(
+                            visualMinimum: AgentStatsDashboardTypography.body,
+                            weight: .semibold
+                        ))
+                    Text(profile.id)
+                        .font(supportingFont(
+                            visualMinimum: AgentStatsDashboardTypography.metricLabel,
+                            design: .monospaced
+                        ))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Text(L10n.StatsDashboard.workerUsageSummary(
+                        formatInteger(invocationCount),
+                        formatInteger(sessionCount),
+                        formatPercentage(share)
+                    ))
+                        .font(supportingFont(
+                            visualMinimum: AgentStatsDashboardTypography.metricLabel,
+                            weight: .medium,
+                            design: .monospaced
+                        ))
+                        .foregroundStyle(invocationCount > 0 ? Color.primary : Color.secondary)
+                }
+
+                ProgressView(value: Double(invocationCount), total: Double(peakCalls))
+                    .progressViewStyle(.linear)
+                    .tint(dashboardAccent)
+
+                Text(profile.localizedPurpose)
+                    .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.metricLabel))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    private func workerSymbol(_ profileID: String) -> String {
+        switch profileID {
+        case AgentSubagentProfileCatalog.scoutID: return "scope"
+        case AgentSubagentProfileCatalog.readerID: return "doc.text.magnifyingglass"
+        case AgentSubagentProfileCatalog.editorID: return "pencil.line"
+        default: return "brain.head.profile"
+        }
     }
 
     private var modelUsageList: some View {
@@ -1197,6 +1364,7 @@ private struct DashboardInsightRow: View {
     @EnvironmentObject var appState: AppState
     let title: String
     let value: String
+    var showsDisclosure = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -1217,6 +1385,11 @@ private struct DashboardInsightRow: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 }

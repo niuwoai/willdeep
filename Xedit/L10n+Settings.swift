@@ -19,6 +19,7 @@ extension L10n {
         static let tabBackground = String(localized: "settings.tab.background", defaultValue: "Background")
         static let tabWorkspace = String(localized: "settings.tab.workspace", defaultValue: "Workspace")
         static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "AI Providers")
+        static let tabSubagents = String(localized: "settings.tab.subagents", defaultValue: "Subagents")
         static let tabSomeIM = String(localized: "settings.tab.some-im", defaultValue: "some.im")
         static let tabReplicate = String(localized: "settings.tab.replicate", defaultValue: "Replicate")
         static let tabMemory = String(localized: "settings.tab.memory", defaultValue: "Memory")
