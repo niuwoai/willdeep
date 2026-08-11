@@ -796,13 +796,24 @@ private struct AgentActivityTimelineSummaryRow: View {
                 .font(.system(size: 12, weight: .regular))
                 .frame(width: 15)
             Text(L10n.AgentActivity.earlierOperations(count))
-                .font(AgentDesign.chatSupportingFont(
-                    baseFontSize: appState.agentChatBaseFontSize
-                ))
+                .font(agentMetadataFont)
+                .lineSpacing(agentMetadataLineSpacing)
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+    }
+
+    private var agentMetadataFont: Font {
+        (AgentChatFontChoice.byID(appState.agentChatFontID) ?? .system)
+            .swiftUIFont(size: appState.agentChatBaseFontSize)
+    }
+
+    private var agentMetadataLineSpacing: CGFloat {
+        AgentChatTypography.lineSpacing(
+            fontSize: appState.agentChatBaseFontSize,
+            lineHeightMultiple: appState.agentChatLineHeightMultiple
+        )
     }
 }
 
@@ -818,18 +829,15 @@ private struct AgentToolActivityTimelineRow: View {
                 .foregroundStyle(iconColor)
                 .frame(width: 15)
             Text(presentation.title)
-                .font(AgentDesign.chatSupportingFont(
-                    baseFontSize: appState.agentChatBaseFontSize,
-                    weight: .medium
-                ))
+                .font(agentMetadataFont)
+                .lineSpacing(agentMetadataLineSpacing)
                 .foregroundStyle(titleColor)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
             if let detail = presentation.detail {
                 Text(detail)
-                    .font(AgentDesign.chatSupportingFont(
-                        baseFontSize: appState.agentChatBaseFontSize
-                    ))
+                    .font(agentMetadataFont)
+                    .lineSpacing(agentMetadataLineSpacing)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -842,7 +850,10 @@ private struct AgentToolActivityTimelineRow: View {
             }
             Spacer(minLength: 0)
         }
-        .frame(minHeight: 20)
+        .frame(minHeight: AgentChatTypography.lineHeight(
+            fontSize: appState.agentChatBaseFontSize,
+            lineHeightMultiple: appState.agentChatLineHeightMultiple
+        ))
         .help(errorDetail ?? presentation.title)
         .accessibilityElement(children: .combine)
     }
@@ -875,6 +886,18 @@ private struct AgentToolActivityTimelineRow: View {
         case .succeeded, .denied:
             return Color(nsColor: .secondaryLabelColor)
         }
+    }
+
+    private var agentMetadataFont: Font {
+        (AgentChatFontChoice.byID(appState.agentChatFontID) ?? .system)
+            .swiftUIFont(size: appState.agentChatBaseFontSize)
+    }
+
+    private var agentMetadataLineSpacing: CGFloat {
+        AgentChatTypography.lineSpacing(
+            fontSize: appState.agentChatBaseFontSize,
+            lineHeightMultiple: appState.agentChatLineHeightMultiple
+        )
     }
 }
 

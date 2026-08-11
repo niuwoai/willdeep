@@ -15,11 +15,14 @@ struct SettingsInformationArchitectureTests {
             .voice,
             .pet,
             .editor,
+            .agentAppearance,
             .general,
         ])
         // 编辑器组同时承载工作区设置，并在侧栏中排倒数第二。
-        #expect(SettingsGroup.editor.tabs == [.editing, .appearance, .background, .typography, .workspace])
-        #expect(SettingsGroup.allCases.suffix(2) == [.editor, .general])
+        #expect(SettingsGroup.editor.tabs == [.editing, .appearance, .typography, .workspace])
+        #expect(SettingsGroup.agentAppearance.tabs == [.agentAppearance])
+        #expect(EditorSettingsTab.agentAppearance.group == .agentAppearance)
+        #expect(SettingsGroup.allCases.suffix(3) == [.editor, .agentAppearance, .general])
         #expect(SettingsGroup.ai.tabs == [.agent, .subagents, .memory, .rules])
         #expect(SettingsGroup.agentTools.tabs == [.skills, .mcp, .tools])
         #expect(SettingsGroup.accountAndDevices.tabs == [.someIM, .mobileGateway])
@@ -34,8 +37,8 @@ struct SettingsInformationArchitectureTests {
         #expect(Set(groupedTabs).count == groupedTabs.count)
         #expect(groupedTabs.contains(.updates))
         #expect(groupedTabs.contains(.editing))
-        #expect(groupedTabs.contains(.background))
         #expect(groupedTabs.contains(.workspace))
+        #expect(groupedTabs.contains(.agentAppearance))
         #expect(groupedTabs.contains(.subagents))
         #expect(groupedTabs.contains(.voice))
     }

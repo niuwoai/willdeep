@@ -39,13 +39,32 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
-    func codexTypographyUsesFifteenPointBodyAndFivePointLeading() {
+    func agentTypographyUsesReadableDefaultsAndClampsLineHeight() {
         #expect(AgentSettingsStore.chatBaseFontSizeDefault == 15)
-        #expect(AgentChatHistoryLayoutMetrics.bodyLineSpacing == 5)
+        #expect(AgentSettingsStore.chatFontIDDefault == "system")
+        #expect(AgentSettingsStore.chatLineHeightMultipleDefault == 1.5)
+        #expect(AgentChatTypography.lineSpacing(fontSize: 15, lineHeightMultiple: 1.5) == 7.5)
+        #expect(AgentChatTypography.lineHeight(fontSize: 15, lineHeightMultiple: 1.5) == 22.5)
+        #expect(AgentSettingsStore.clampChatLineHeightMultiple(0.5) == 1.2)
+        #expect(AgentSettingsStore.clampChatLineHeightMultiple(3) == 2)
         #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: nil) == 15)
         #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: 14) == 15)
         #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: 13) == 13)
         #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: 18) == 18)
+    }
+
+    @Test
+    func agentTypographyResolvesFontsAndLineSpacing() {
+        let systemFont = AgentChatFontChoice.system.nsFont(size: 15)
+        let monospacedFont = AgentChatFontChoice.monospaced.nsFont(size: 15)
+        #expect(systemFont.fontDescriptor.symbolicTraits.contains(.monoSpace) == false)
+        #expect(monospacedFont.fontDescriptor.symbolicTraits.contains(.monoSpace))
+
+        let style = AgentChatHistoryRenderer.bodyParagraphStyle(
+            for: .assistant,
+            lineSpacing: AgentChatTypography.lineSpacing(fontSize: 15, lineHeightMultiple: 1.8)
+        )
+        #expect(style.lineSpacing == 12)
     }
 
     @Test
@@ -207,12 +226,20 @@ struct AgentChatHistoryRendererTests {
 
         for text in ["第一段。", "第二段。", "第三段。"] {
             let range = (rendered.string as NSString).range(of: text)
+            let font = try #require(rendered.attribute(
+                .font,
+                at: range.location,
+                effectiveRange: nil
+            ) as? NSFont)
             let style = try #require(rendered.attribute(
                 .paragraphStyle,
                 at: range.location,
                 effectiveRange: nil
             ) as? NSParagraphStyle)
-            #expect(style.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
+            #expect(style.lineSpacing == AgentChatTypography.lineSpacing(
+                fontSize: font.pointSize,
+                lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
+            ))
             #expect(style.paragraphSpacing == 0)
         }
     }
@@ -288,7 +315,10 @@ struct AgentChatHistoryRendererTests {
         #expect(beforeFont.pointSize == 14)
         #expect(afterFont.pointSize == beforeFont.pointSize)
         #expect(afterStyle.lineSpacing == beforeStyle.lineSpacing)
-        #expect(afterStyle.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
+        #expect(afterStyle.lineSpacing == AgentChatTypography.lineSpacing(
+            fontSize: afterFont.pointSize,
+            lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
+        ))
     }
 
     @Test
@@ -363,7 +393,10 @@ struct AgentChatHistoryRendererTests {
         #expect(lastRowStyle.paragraphSpacing == AgentChatHistoryRenderer.MarkdownSpacing.tableParagraph)
         #expect(afterFont.pointSize == beforeFont.pointSize)
         #expect(afterStyle.lineSpacing == beforeStyle.lineSpacing)
-        #expect(afterStyle.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
+        #expect(afterStyle.lineSpacing == AgentChatTypography.lineSpacing(
+            fontSize: afterFont.pointSize,
+            lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
+        ))
         #expect(afterStyle.paragraphSpacingBefore == beforeStyle.paragraphSpacingBefore)
         #expect(afterStyle.paragraphSpacing == beforeStyle.paragraphSpacing)
     }
@@ -618,18 +651,22 @@ struct AgentChatHistoryRendererTests {
         ) as? NSFont)
         #expect(codeFont.pointSize == baseFontSize - 1)
 
-        let bodyStyle = AgentChatHistoryRenderer.bodyParagraphStyle(for: .assistant, layoutWidth: 420)
-        let plainLine = NSAttributedString(
-            string: "清楚了，Ingress 用 hub-beta.tsingfly.com 做 tokenhub 的路由。",
-            attributes: [
-                .font: NSFont.systemFont(ofSize: baseFontSize),
-                .paragraphStyle: bodyStyle,
-            ]
+        let plainRendered = AgentChatHistoryRenderer.render(
+            messages: [
+                AgentMessage(
+                    role: .assistant,
+                    content: "清楚了，Ingress 用 hub-beta.tsingfly.com 做 tokenhub 的路由。"
+                ),
+            ],
+            isDark: false,
+            baseFontSize: baseFontSize,
+            layoutWidth: 420
         )
+        let plainRange = (plainRendered.string as NSString).range(of: "hub-beta.tsingfly.com")
         let plainLineHeight = try #require(lineFragmentHeights(
-            in: plainLine,
+            in: plainRendered,
             width: 420,
-            intersecting: NSRange(location: 0, length: plainLine.length)
+            intersecting: plainRange
         ).max())
         let codeLineHeight = try #require(lineFragmentHeights(
             in: rendered,
@@ -1148,13 +1185,17 @@ struct AgentChatHistoryRendererTests {
             at: summaryRange.location,
             effectiveRange: nil
         ) as? NSFont)
-        #expect(summaryFont.pointSize == NSFont.systemFontSize)
+        #expect(summaryFont.pointSize == baseFontSize)
         let summaryStyle = try #require(collapsed.attribute(
             .paragraphStyle,
             at: summaryRange.location,
             effectiveRange: nil
         ) as? NSParagraphStyle)
         #expect(summaryStyle.lineBreakMode == .byTruncatingTail)
+        #expect(summaryStyle.lineSpacing == AgentChatTypography.lineSpacing(
+            fontSize: baseFontSize,
+            lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
+        ))
 
         let groupID = "\(firstID.uuidString):\(secondID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
@@ -1171,7 +1212,7 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
-    func mergesInlineAndFollowingToolOnlyCallsIntoOneActivityLayer() {
+    func mergesInlineAndFollowingToolOnlyCallsIntoOneActivityLayer() throws {
         let proseID = UUID()
         let followupID = UUID()
         let messages = [
@@ -1213,6 +1254,45 @@ struct AgentChatHistoryRendererTests {
         ))
         #expect(summaryLine.contains(" · "))
         #expect(!summaryLine.contains("\n"))
+        #expect(collapsed.string.contains("我先检查工程状态。\n\n"))
+
+        let bodyRange = collapsedText.range(of: "我先检查工程状态。")
+        let bodyFont = try #require(collapsed.attribute(
+            .font,
+            at: bodyRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        let toolFont = try #require(collapsed.attribute(
+            .font,
+            at: readRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        let toolStyle = try #require(collapsed.attribute(
+            .paragraphStyle,
+            at: readRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let copyRange = try #require(firstAttributeRange(
+            .agentChatHistoryMessageCopyText,
+            value: "我先检查工程状态。",
+            in: collapsed
+        ))
+        let footerStyle = try #require(collapsed.attribute(
+            .paragraphStyle,
+            at: copyRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(toolFont.pointSize == bodyFont.pointSize)
+        #expect(toolFont.fontName == bodyFont.fontName)
+        #expect(toolStyle.lineSpacing == footerStyle.lineSpacing)
+        #expect(toolStyle.lineSpacing == AgentChatTypography.lineSpacing(
+            fontSize: bodyFont.pointSize,
+            lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
+        ))
+        #expect(collapsedText.substring(with: NSRange(
+            location: NSMaxRange(commandRange),
+            length: copyRange.location - NSMaxRange(commandRange)
+        )) == "\n")
 
         let groupID = "inline:\(proseID.uuidString):\(followupID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
@@ -1528,11 +1608,18 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSParagraphStyle)
         #expect(bodyFont.pointSize == 15)
-        #expect(processedFont.pointSize == NSFont.systemFontSize)
+        // The status line follows the user's body size rather than the AppKit
+        // system size. This assertion used to pin it to `NSFont.systemFontSize`,
+        // which contradicted `assistantStatusDividerRenderingMatchesReferenceMetrics`
+        // — that goal test had been failing for exactly as long as this one
+        // passed. Raising the body size must carry the status line with it.
+        #expect(processedFont.pointSize == bodyFont.pointSize)
         #expect(processedFont.fontDescriptor.symbolicTraits.contains(.bold) == false)
         #expect(processedColor == NSColor.secondaryLabelColor)
-        #expect(bodyParagraphStyle.lineSpacing == AgentChatHistoryLayoutMetrics.bodyLineSpacing)
-        #expect(bodyParagraphStyle.lineSpacing == 5)
+        #expect(bodyParagraphStyle.lineSpacing == AgentChatTypography.lineSpacing(
+            fontSize: bodyFont.pointSize,
+            lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
+        ))
         let dividerLocation = NSMaxRange(processedRange) + 1
         let dividerColor = try #require(rendered.attribute(
             .agentChatHistoryAssistantStatusDividerColor,
@@ -1577,7 +1664,8 @@ struct AgentChatHistoryRendererTests {
             at: tokenRange.location,
             effectiveRange: nil
         ) as? NSFont)
-        #expect(tokenFont.pointSize == AgentDesign.chatSupportingFontSizeDefault)
+        #expect(tokenFont.pointSize == bodyFont.pointSize)
+        #expect(tokenFont.fontName == bodyFont.fontName)
 
         let retryRange = (rendered.string as NSString).range(of: "↻")
         let retryFont = try #require(rendered.attribute(

@@ -225,19 +225,19 @@ struct AgentComposerTaskProgressControl: View {
         if snapshot.isComplete {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.green)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
         } else if snapshot.isBlocked {
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.orange)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
         } else {
             ZStack {
                 Circle()
-                    .stroke(palette.accent.opacity(0.24), lineWidth: 2)
+                    .stroke(AgentComposerChrome.iconMuted.opacity(0.55), lineWidth: 2)
                 Circle()
                     .trim(from: 0, to: snapshot.progressFraction)
                     .stroke(
-                        palette.accent.opacity(0.88),
+                        AgentComposerChrome.iconPrimary,
                         style: StrokeStyle(lineWidth: 2, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
@@ -384,15 +384,15 @@ struct AgentComposerTaskProgressPanel: View {
     ) -> Color {
         switch status {
         case .pending:
-            return palette.secondaryText.opacity(0.62)
+            return AgentComposerChrome.iconMuted
         case .active:
-            return palette.accent.opacity(0.82)
+            return AgentComposerChrome.iconPrimary
         case .done:
-            return .green
+            return AgentComposerChrome.iconPrimary
         case .skipped:
-            return palette.secondaryText.opacity(0.72)
+            return AgentComposerChrome.iconSecondary
         case .failed:
-            return .orange
+            return AgentComposerChrome.iconPrimary
         }
     }
 

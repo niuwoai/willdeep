@@ -299,7 +299,7 @@ struct AgentComposerSkillStrip: View {
                     HStack(spacing: 4) {
                         Image(systemName: "wand.and.stars")
                             .font(.system(size: 10))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(AgentComposerChrome.iconPrimary)
                         Text("$\(skill.identifier)")
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
                             .lineLimit(1)
@@ -363,7 +363,7 @@ struct AgentComposerAttachmentStrip: View {
         HStack(spacing: 4) {
             Image(systemName: symbol)
                 .font(.system(size: 10))
-                .foregroundStyle(Color.purple)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
             Text(label)
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .lineLimit(1)

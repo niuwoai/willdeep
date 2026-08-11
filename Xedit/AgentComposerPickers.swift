@@ -245,6 +245,7 @@ struct WorkspacePickerPill: View {
                                 .foregroundStyle(WorkspacePresentation.remoteTint(for: runtime))
                             if activeRemoteRuntime?.id == runtime.id {
                                 Image(systemName: "checkmark")
+                                    .foregroundStyle(AgentComposerChrome.iconPrimary)
                             }
                         }
                     }
@@ -325,9 +326,8 @@ struct WorkspacePickerPill: View {
     }
 
     private var workspaceIconTint: Color {
-        if let remote = activeRemoteWorkspace {
-            return WorkspacePresentation.remoteTint(for: remote.runtime)
-        }
+        // Workspace identity remains visible through its symbol and label;
+        // Composer chrome does not inherit runtime/provider brand colors.
         return Color.secondary
     }
 
@@ -468,7 +468,7 @@ struct AgentExpertActivationList: View {
                 HStack(alignment: .top, spacing: 7) {
                     Image(systemName: "info.circle.fill")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(AgentComposerChrome.iconPrimary)
                     Text(L10n.Expert.lockedNotice)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
@@ -504,7 +504,7 @@ struct AgentExpertActivationList: View {
         return HStack(alignment: .center, spacing: 10) {
             Image(systemName: expert.symbol)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
+                .foregroundStyle(isActive ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
                 .frame(width: 18)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -719,7 +719,7 @@ struct ModelPickerPill: View {
                 HStack(spacing: 5) {
                     Image(systemName: Self.modelSymbol)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(isManagedRoutingActive ? Color.teal : Color.secondary)
+                        .foregroundStyle(isManagedRoutingActive ? Color.primary : Color.secondary)
                     Text(pillLabel)
                         .font(AgentDesign.chatSupportingFont(
                             baseFontSize: appState.agentChatBaseFontSize
@@ -733,10 +733,10 @@ struct ModelPickerPill: View {
                                 visualMinimum: 8,
                                 weight: .bold
                             ))
-                            .foregroundStyle(.teal)
+                            .foregroundStyle(.primary)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(.teal.opacity(0.12))
+                            .background(AgentComposerChrome.selectedControlFill)
                             .clipShape(Capsule())
                     }
                     Image(systemName: "chevron.down")
@@ -764,11 +764,16 @@ struct ModelPickerPill: View {
             }
         }
         .foregroundStyle(.secondary)
-        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+        .background(AgentComposerChrome.controlFill)
         .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius, style: .continuous)
-                .stroke(canUpgradeManagedTier ? Color.teal.opacity(0.24) : Color.clear, lineWidth: 1)
+                .stroke(
+                    canUpgradeManagedTier
+                        ? AgentComposerChrome.selectedBorder
+                        : AgentComposerChrome.border,
+                    lineWidth: 1
+                )
         }
         .fixedSize()
         .popover(isPresented: $isModelPanelPresented, arrowEdge: .bottom) {
@@ -1017,9 +1022,9 @@ struct ModelPickerPill: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: managedSelectionIcon)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(managedSelectionTint)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
                 .frame(width: 36, height: 36)
-                .background(managedSelectionTint.opacity(0.11))
+                .background(AgentComposerChrome.selectedControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
             VStack(alignment: .leading, spacing: 5) {
@@ -1089,9 +1094,9 @@ struct ModelPickerPill: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.teal)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
                 .frame(width: 26, height: 26)
-                .background(.teal.opacity(0.10))
+                .background(AgentComposerChrome.selectedControlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -1247,7 +1252,7 @@ struct ModelPickerPill: View {
         HStack(spacing: 10) {
             Image(systemName: providerIcon(entry))
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.teal)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(entry.displayName)
@@ -1288,7 +1293,7 @@ struct ModelPickerPill: View {
             }
             .buttonStyle(.plain)
             .focusable(false)
-            .foregroundStyle(.teal)
+            .foregroundStyle(AgentComposerChrome.iconPrimary)
         }
     }
 
@@ -1380,7 +1385,7 @@ struct ModelPickerPill: View {
             HStack(alignment: .center, spacing: 9) {
                 Image(systemName: modelIcon(item))
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(isCatalogItemCurrent(item) ? Color.teal : Color.secondary)
+                    .foregroundStyle(isCatalogItemCurrent(item) ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
@@ -1406,7 +1411,7 @@ struct ModelPickerPill: View {
                 if isCatalogItemCurrent(item) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.teal)
+                        .foregroundStyle(AgentComposerChrome.iconPrimary)
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 8, weight: .semibold))
@@ -1484,9 +1489,9 @@ struct ModelPickerPill: View {
                 HStack(spacing: 10) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AgentComposerChrome.actionForeground)
                         .frame(width: 28, height: 28)
-                        .background(LinearGradient(colors: [.teal, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .background(AgentComposerChrome.actionFill)
                         .clipShape(RoundedRectangle(cornerRadius: 7))
                     VStack(alignment: .leading, spacing: 3) {
                         Text("启用省心托管")
@@ -1498,7 +1503,7 @@ struct ModelPickerPill: View {
                     Spacer()
                     if menuSnapshot.managedActive {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.teal)
+                            .foregroundStyle(AgentComposerChrome.iconPrimary)
                     }
                 }
                 .padding(10)
@@ -1609,7 +1614,7 @@ struct ModelPickerPill: View {
             HStack(spacing: 9) {
                 Image(systemName: systemImage)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(checked ? Color.teal : Color.secondary)
+                    .foregroundStyle(checked ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
                     .frame(width: 18)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -1626,7 +1631,7 @@ struct ModelPickerPill: View {
                 if checked {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.teal)
+                        .foregroundStyle(AgentComposerChrome.iconPrimary)
                 }
             }
             .padding(.horizontal, 10)
@@ -1649,7 +1654,7 @@ struct ModelPickerPill: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(checked ? Color.teal : Color.secondary)
+                .foregroundStyle(checked ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
                 .frame(width: 34, height: 34)
                 .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -1756,9 +1761,9 @@ struct ModelPickerPill: View {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "wand.and.stars")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AgentComposerChrome.actionForeground)
                         .frame(width: 38, height: 38)
-                        .background(LinearGradient(colors: [.teal, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .background(AgentComposerChrome.actionFill)
                         .clipShape(RoundedRectangle(cornerRadius: 9))
                     VStack(alignment: .leading, spacing: 5) {
                         HStack(spacing: 8) {
@@ -1780,7 +1785,7 @@ struct ModelPickerPill: View {
                     Spacer()
                     if menuSnapshot.managedActive {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.teal)
+                            .foregroundStyle(AgentComposerChrome.iconPrimary)
                     }
                 }
                 .padding(12)
@@ -1822,7 +1827,7 @@ struct ModelPickerPill: View {
 
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: statusIcon)
-                        .foregroundStyle(statusTint)
+                        .foregroundStyle(hasActivePlan ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
                         .frame(width: 22)
                     VStack(alignment: .leading, spacing: 4) {
                         if hasActivePlan {
@@ -2113,7 +2118,7 @@ struct ModelPickerPill: View {
                 Text(managedTierLabel(tier))
             }
             .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(menuSnapshot.managedActive && menuSnapshot.managedFloor == tier ? Color.teal : Color.secondary)
+            .foregroundStyle(menuSnapshot.managedActive && menuSnapshot.managedFloor == tier ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
@@ -2146,7 +2151,7 @@ struct ModelPickerPill: View {
             HStack(spacing: 6) {
                 Image(systemName: systemImage)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.teal)
+                    .foregroundStyle(AgentComposerChrome.iconPrimary)
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
@@ -2169,7 +2174,7 @@ struct ModelPickerPill: View {
             HStack(alignment: .center, spacing: 10) {
                 Image(systemName: systemImage)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(checked ? Color.teal : Color.secondary)
+                    .foregroundStyle(checked ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
                     .frame(width: 24, height: 24)
                     .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -2198,7 +2203,7 @@ struct ModelPickerPill: View {
                 Spacer(minLength: 8)
                 if checked {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.teal)
+                        .foregroundStyle(AgentComposerChrome.iconPrimary)
                 }
             }
             .padding(10)

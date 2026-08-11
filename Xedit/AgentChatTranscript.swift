@@ -322,6 +322,8 @@ struct AgentChatTranscript: View {
                                 assistantTurnContextMessages: appState.agentMessages,
                                 isAssistantTurnActive: appState.isAgentResponding,
                                 baseFontSize: appState.agentChatBaseFontSize,
+                                fontID: appState.agentChatFontID,
+                                lineHeightMultiple: appState.agentChatLineHeightMultiple,
                                 onRetryLastTurn: appState.retryLastAgentTurn,
                                 latestTurnReportToolCount: appState.agentLatestTurnReport?.toolSummary.total,
                                 onShowTurnReport: { showTurnReportPopover = true },
@@ -434,10 +436,12 @@ struct AgentChatTranscript: View {
                                 // rhythm instead.
                                 .padding(
                                     .top,
-                                    AgentDesign.liveActivityTopSpacing
+                                    AgentChatTypography.lineHeight(
+                                        fontSize: appState.agentChatBaseFontSize,
+                                        lineHeightMultiple: appState.agentChatLineHeightMultiple
+                                    )
                                         - AgentDesign.messageVerticalSpacing
                                 )
-                                .padding(.bottom, 6)
                                 .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
                                 .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)
                                 .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)

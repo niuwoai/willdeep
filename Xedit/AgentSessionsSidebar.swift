@@ -197,15 +197,11 @@ enum AgentSidebarSessionPlacement {
 }
 
 enum AgentSidebarSessionTrailingLayout {
-    /// A pinned row only needs enough idle width for its compact pin glyph.
-    /// The full action lane is restored when the pointer enters the row.
-    private static let pinnedIndicatorWidth: CGFloat = 16
-
-    static func reservedActionsWidth(isHovered: Bool, isPinned: Bool) -> CGFloat {
-        if isHovered {
-            return AgentDesign.sidebarSessionTrailingActionsWidth
-        }
-        return isPinned ? pinnedIndicatorWidth : 0
+    /// Idle rows reserve no trailing action width. The pinned section already
+    /// communicates pin state, so a persistent row icon would add noise and
+    /// shorten every title. Hovering restores the complete action lane.
+    static func reservedActionsWidth(isHovered: Bool) -> CGFloat {
+        isHovered ? AgentDesign.sidebarSessionTrailingActionsWidth : 0
     }
 }
 
@@ -741,7 +737,7 @@ struct AgentSessionsSidebar: View {
                 // the active/running/waiting session.
                 //
                 // The active dot stays LAST — to the right of every other
-                // row icon (mode badge, pin.fill, …) — so "this session is
+                // row icon (for example a mode badge) — so "this session is
                 // live" always reads as the final marker on the row. It and
                 // the hover-revealed pin/archive actions are mutually
                 // exclusive (dot hides on hover, actions appear), so their
@@ -905,12 +901,9 @@ struct AgentSessionsSidebar: View {
         appState.renameAgentSession(id: session.id, to: input.stringValue)
     }
 
-    /// Trailing icon cluster on each session row — pin & archive
-    /// buttons that fade in on hover, plus a persistent `pin.fill`
-    /// badge when the row is pinned so users can see the state at a
-    /// glance even without hovering. Idle unpinned rows release this lane
-    /// back to the title; hovering restores the full controls, while a
-    /// pinned row reserves only the compact pin glyph.
+    /// Trailing pin and archive controls appear only on hover. The pinned
+    /// section already communicates state, so idle rows stay visually quiet
+    /// and return the entire trailing lane to the title.
     @ViewBuilder
     private func sessionRowTrailingActions(session: AgentSession, isHovered: Bool) -> some View {
         HStack(spacing: 4) {
@@ -941,18 +934,9 @@ struct AgentSessionsSidebar: View {
         .opacity(isHovered ? 1 : 0)
         .allowsHitTesting(isHovered)
         .accessibilityHidden(!isHovered)
-        .overlay(alignment: .trailing) {
-            if session.isPinned && !isHovered {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(45))
-            }
-        }
         .frame(
             width: AgentSidebarSessionTrailingLayout.reservedActionsWidth(
-                isHovered: isHovered,
-                isPinned: session.isPinned
+                isHovered: isHovered
             ),
             alignment: .trailing
         )

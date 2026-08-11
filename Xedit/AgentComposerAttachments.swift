@@ -87,30 +87,28 @@ private struct AgentRuntimeSendStopButton: View {
                 }
             } label: {
                 ZStack {
-                    // Stopping state used to be a fully-saturated red
-                    // circle — visually shouted "danger" out of all
-                    // proportion to "click to interrupt streaming". Now
-                    // it's a soft red-tinted disc with a red stroke and a
-                    // red-foreground glyph: still unmistakably the stop
-                    // action, but no longer alarm-bell red.
+                    // Keep both send and stop in the Composer's monochrome
+                    // hierarchy. Shape changes still make the interrupt
+                    // action unmistakable without introducing a lone red
+                    // control into otherwise neutral chrome.
                     if showsStop {
                         Circle()
-                            .fill(Color.red.opacity(0.12))
+                            .fill(AgentComposerChrome.selectedControlFill)
                             .frame(width: 26, height: 26)
                             .overlay(
                                 Circle()
-                                    .stroke(Color.red.opacity(0.55), lineWidth: 1.2)
+                                    .stroke(AgentComposerChrome.strongBorder, lineWidth: 1.2)
                             )
                         Image(systemName: "square.fill")
                             .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(Color.red.opacity(0.85))
+                            .foregroundStyle(Color.primary.opacity(0.82))
                     } else {
                         Circle()
-                            .fill(canSend ? Color.accentColor : Color.secondary.opacity(0.3))
+                            .fill(canSend ? AgentComposerChrome.actionFill : Color.secondary.opacity(0.24))
                             .frame(width: 26, height: 26)
                         Image(systemName: "arrow.up")
                             .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AgentComposerChrome.actionForeground)
                     }
                 }
             }
@@ -162,7 +160,7 @@ private struct AgentRuntimeUnavailableSendButton: View {
             .overlay {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AgentComposerChrome.actionForeground)
             }
             .accessibilityHidden(true)
     }
@@ -244,10 +242,10 @@ struct QueueBadge: View {
                 Text("\(appState.agentQueuedMessages.count) queued")
                     .agentChatSupportingFont()
             }
-            .foregroundStyle(.orange)
+            .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .background(Color.orange.opacity(0.12))
+            .background(AgentComposerChrome.controlFill)
             .clipShape(Capsule())
         }
         .menuStyle(.borderlessButton)

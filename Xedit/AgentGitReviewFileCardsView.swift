@@ -10,8 +10,34 @@ import SwiftUI
 nonisolated enum AgentGitReviewFileCardsMetrics {
     static let visibleLineBatchSize = 100
 
+    /// Used before the card has been measured, so the first frame still paints
+    /// a usable row width instead of collapsing to the longest line.
+    static let fallbackRowWidth: CGFloat = 480
+
     static func nextVisibleLineCount(current: Int, total: Int) -> Int {
         min(total, current + visibleLineBatchSize)
+    }
+
+    /// Rows must never be narrower than the visible card: the added/deleted
+    /// tint is painted on the row container, so a row that only spans its own
+    /// text leaves the highlight visibly short of the right edge.
+    static func rowWidth(viewportWidth: CGFloat) -> CGFloat {
+        guard viewportWidth.isFinite, viewportWidth > 0 else { return fallbackRowWidth }
+        return viewportWidth
+    }
+
+    /// Sub-point width jitter must never reach `rowWidth`. The measured width
+    /// feeds the row frames, the row frames feed the stack's content size, and
+    /// a content size that nudges the measurement back by a fraction of a
+    /// point turns SwiftUI's layout pass into a loop that never settles —
+    /// observed as a permanently pegged main thread inside
+    /// `LazySubviewPlacements.placeSubviews`. Quantizing the adopted value
+    /// makes the sequence converge in at most one step.
+    static let viewportWidthEpsilon: CGFloat = 0.5
+
+    static func shouldAdoptViewportWidth(current: CGFloat, measured: CGFloat) -> Bool {
+        guard measured.isFinite, measured > 0 else { return false }
+        return abs(measured - current) >= viewportWidthEpsilon
     }
 }
 
@@ -83,6 +109,11 @@ private struct AgentGitReviewFileCard: View {
     let visibleLineCount: Int
     let showMore: () -> Void
     let openFile: () -> Void
+    @State private var viewportWidth: CGFloat = 0
+
+    private var rowWidth: CGFloat {
+        AgentGitReviewFileCardsMetrics.rowWidth(viewportWidth: viewportWidth)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -90,6 +121,22 @@ private struct AgentGitReviewFileCard: View {
             if !isCollapsed {
                 Divider().opacity(0.42)
                 diffRows
+            }
+        }
+        // Measured on the card, never on the horizontal ScrollView inside it.
+        // The card's width comes from the enclosing list, so it cannot be
+        // pushed around by the row widths this measurement produces; measuring
+        // the ScrollView instead closes that loop and hangs the layout pass.
+        .background {
+            GeometryReader { proxy in
+                Color.clear.task(id: proxy.size.width) {
+                    let measured = proxy.size.width
+                    guard AgentGitReviewFileCardsMetrics.shouldAdoptViewportWidth(
+                        current: viewportWidth,
+                        measured: measured
+                    ) else { return }
+                    viewportWidth = measured
+                }
             }
         }
         .background(palette.previewBase)
@@ -155,21 +202,26 @@ private struct AgentGitReviewFileCard: View {
         ScrollView(.horizontal, showsIndicators: false) {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(file.rows.prefix(visibleLineCount).enumerated()), id: \.offset) { _, row in
-                    AgentGitReviewDiffRowView(row: row, palette: palette)
+                    AgentGitReviewDiffRowView(row: row, palette: palette, minimumWidth: rowWidth)
                 }
                 if remainingLineCount > 0 {
                     Button(action: showMore) {
                         Text(L10n.AgentGitReview.showMoreLines(String(remainingLineCount)))
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
-                            .frame(minWidth: 480, minHeight: 30, alignment: .center)
+                            .frame(
+                                minWidth: rowWidth,
+                                maxWidth: .infinity,
+                                minHeight: 30,
+                                alignment: .center
+                            )
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .focusable(false)
                 }
             }
-            .frame(minWidth: 480, alignment: .leading)
+            .frame(minWidth: rowWidth, alignment: .leading)
         }
     }
 
@@ -190,6 +242,10 @@ private struct AgentGitReviewFileCard: View {
 private struct AgentGitReviewDiffRowView: View {
     let row: AgentGitReviewDiffRow
     let palette: EditorInterfaceSkinPalette
+    /// Visible card width. `maxWidth: .infinity` then stretches every row out
+    /// to the widest line in the stack, so the tint spans the full scrollable
+    /// content instead of stopping at each line's own text.
+    let minimumWidth: CGFloat
 
     var body: some View {
         switch row {
@@ -219,7 +275,7 @@ private struct AgentGitReviewDiffRowView: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 28)
-        .frame(minWidth: 480, alignment: .leading)
+        .frame(minWidth: minimumWidth, maxWidth: .infinity, alignment: .leading)
         .background(palette.controlFill.opacity(0.46))
     }
 
@@ -243,7 +299,7 @@ private struct AgentGitReviewDiffRowView: View {
         }
         .font(.system(size: 12, design: .monospaced))
         .frame(height: 19)
-        .frame(minWidth: 480, alignment: .leading)
+        .frame(minWidth: minimumWidth, maxWidth: .infinity, alignment: .leading)
         .background(background(for: kind))
     }
 

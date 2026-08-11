@@ -277,10 +277,15 @@ enum DesktopPetAnimationCadence {
     /// 8) on the theory that the pet is the primary visible surface while
     /// WillDeep is inactive. That reasoning holds for visibility but inverts the
     /// cost: being in the background is exactly when the expensive main window
-    /// has nothing to show and the user is least likely to be watching. Both
-    /// cadences are now 8fps, which is still smooth for the ~3s breathing cycle.
-    nonisolated static let foregroundFramesPerSecond: Double = 8
-    nonisolated static let backgroundFramesPerSecond: Double = 8
+    /// has nothing to show and the user is least likely to be watching.
+    ///
+    /// Both cadences are now 4fps. A sample of an idle 1.247.0-rc4 still found
+    /// the whole of the app's residual main-thread time inside the CA flush this
+    /// timeline drives. The animated poses are periodic over a ~3s breathing
+    /// cycle and the artwork is pixelated, so halving the beat halves that cost
+    /// without changing the shape of the motion.
+    nonisolated static let foregroundFramesPerSecond: Double = 4
+    nonisolated static let backgroundFramesPerSecond: Double = 4
 
     nonisolated static func framesPerSecond(appIsActive: Bool) -> Double {
         appIsActive ? foregroundFramesPerSecond : backgroundFramesPerSecond
@@ -298,8 +303,46 @@ enum DesktopPetAnimationCadence {
 /// Animating there costs a full app-wide display cycle per frame and paints
 /// nothing anyone can see.
 enum DesktopPetAnimationGate {
-    nonisolated static func shouldAnimate(isEnabled: Bool, isWindowVisible: Bool) -> Bool {
-        isEnabled && isWindowVisible
+    /// `.idle` is the resting mood the pet holds for the vast majority of a
+    /// session, and its motion — a slow breath plus an 8s ambient flourish —
+    /// is precisely the motion nobody is waiting on. Parking it trades that
+    /// idle wiggle for the app-wide display cycle it would otherwise drive on
+    /// every frame.
+    ///
+    /// Nothing that carries information is parked: every mood that reports
+    /// state (`.walking`, `.typing`, `.attention`, `.celebrating`, `.ready`)
+    /// still animates, and so does the periodic automatic `.jumping`, which
+    /// overrides `.idle` while it runs. The pet therefore comes back to life
+    /// on its own rather than looking frozen.
+    nonisolated static func requiresTimeline(mood: DesktopPetMood) -> Bool {
+        mood != .idle
+    }
+
+    nonisolated static func shouldAnimate(
+        isEnabled: Bool,
+        isWindowVisible: Bool,
+        mood: DesktopPetMood
+    ) -> Bool {
+        isEnabled && isWindowVisible && requiresTimeline(mood: mood)
+    }
+}
+
+/// Throttles the pet's per-tick scan of every session's messages.
+///
+/// `refresh()` runs on a 0.4s timer because busy/typing state must feel
+/// immediate. The message previews it also computes do not: they walk every
+/// runtime *and* every stored session and split message bodies, which is the
+/// single most expensive thing on that timer. Recomputing them a fifth as
+/// often keeps the cards fresh enough to read while removing four out of five
+/// full scans.
+enum DesktopPetOutputPreviewCadence {
+    nonisolated static let refreshInterval: TimeInterval = 2
+
+    nonisolated static func shouldRecompute(lastComputedAt: Date?, now: Date) -> Bool {
+        guard let lastComputedAt else { return true }
+        // A clock that moved backwards must not strand the cache forever.
+        guard now >= lastComputedAt else { return true }
+        return now.timeIntervalSince(lastComputedAt) >= refreshInterval
     }
 }
 
@@ -392,6 +435,8 @@ final class DesktopPetWindowManager: ObservableObject {
     private var nextAutomaticJumpAt: Date?
     private var hibernationEndsAt: Date?
     private var dragAnchor: DesktopPetDragAnchor?
+    private var cachedOutputPreviews: [DesktopPetMessagePreview] = []
+    private var outputPreviewsComputedAt: Date?
 
     private init() {
         // 默认开启桌面宠物:首次启动即陪伴,用户可随时在右键菜单 /
@@ -614,7 +659,7 @@ final class DesktopPetWindowManager: ObservableObject {
         let isRunningTool = runtimes.contains { runtime in
             runtime.toolCalls.contains { $0.status == .running }
         }
-        let outputPreviews = appIsActive ? [] : Self.outputPreviews(from: appState, now: now)
+        let outputPreviews = outputPreviews(from: appState, now: now)
         let shouldShowMessageCards = DesktopPetMessageCardVisibility.shouldShowMessageCards(
             appIsActive: appIsActive,
             outputSessionCount: outputPreviews.count
@@ -693,6 +738,31 @@ final class DesktopPetWindowManager: ObservableObject {
     private func scheduleNextAutomaticJump(after date: Date) {
         let delay = DesktopPetAutonomy.jumpDelay(unitInterval: Double.random(in: 0...1))
         nextAutomaticJumpAt = date.addingTimeInterval(delay)
+    }
+
+    /// Message previews on a slower beat than the rest of `refresh()`.
+    ///
+    /// The cache is keyed on nothing but time: `outputPreview` already gates on
+    /// message freshness, so a preview that is up to `refreshInterval` stale
+    /// still describes the same message. Going active clears it outright —
+    /// previews are suppressed while the app is frontmost, and the next
+    /// background tick must scan rather than serve an hours-old snapshot.
+    private func outputPreviews(from appState: AppState, now: Date) -> [DesktopPetMessagePreview] {
+        guard !appIsActive else {
+            cachedOutputPreviews = []
+            outputPreviewsComputedAt = nil
+            return []
+        }
+        guard DesktopPetOutputPreviewCadence.shouldRecompute(
+            lastComputedAt: outputPreviewsComputedAt,
+            now: now
+        ) else {
+            return cachedOutputPreviews
+        }
+        let previews = Self.outputPreviews(from: appState, now: now)
+        cachedOutputPreviews = previews
+        outputPreviewsComputedAt = now
+        return previews
     }
 
     private static let maximumVisibleOutputPreviews = 3
@@ -1020,7 +1090,8 @@ struct DesktopPetOverlayView: View {
             appIsActive: manager.appIsActive,
             isAnimating: DesktopPetAnimationGate.shouldAnimate(
                 isEnabled: manager.isEnabled,
-                isWindowVisible: manager.isWindowVisible
+                isWindowVisible: manager.isWindowVisible,
+                mood: displayMood
             )
         )
         .contentShape(Rectangle())

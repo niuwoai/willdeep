@@ -108,6 +108,8 @@ struct AgentModeView: View {
                 }
         }
         .environment(\.agentChatSupportingBaseFontSize, appState.agentChatBaseFontSize)
+        .environment(\.agentChatFontID, appState.agentChatFontID)
+        .environment(\.agentChatLineHeightMultiple, appState.agentChatLineHeightMultiple)
     }
 
     @ViewBuilder
@@ -737,10 +739,29 @@ private struct AgentChatSupportingBaseFontSizeKey: EnvironmentKey {
     static let defaultValue = AgentSettingsStore.chatBaseFontSizeDefault
 }
 
+private struct AgentChatFontIDKey: EnvironmentKey {
+    static let defaultValue = AgentSettingsStore.chatFontIDDefault
+}
+
+private struct AgentChatLineHeightMultipleKey: EnvironmentKey {
+    static let defaultValue = AgentSettingsStore.chatLineHeightMultipleDefault
+}
+
 extension EnvironmentValues {
     var agentChatSupportingBaseFontSize: CGFloat {
         get { self[AgentChatSupportingBaseFontSizeKey.self] }
         set { self[AgentChatSupportingBaseFontSizeKey.self] = newValue }
+    }
+
+
+    var agentChatFontID: String {
+        get { self[AgentChatFontIDKey.self] }
+        set { self[AgentChatFontIDKey.self] = newValue }
+    }
+
+    var agentChatLineHeightMultiple: CGFloat {
+        get { self[AgentChatLineHeightMultipleKey.self] }
+        set { self[AgentChatLineHeightMultipleKey.self] = newValue }
     }
 }
 

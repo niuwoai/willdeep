@@ -78,22 +78,30 @@ struct AgentStatsDashboard: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedTab: DashboardTab
     @State private var activityMode: ActivityMode = .daily
+    @State private var displayedMonth: Date
     @State private var account = SomeIMIntegrationStore.loadAuthenticatedAccount()
+    private let now: Date
 
-    init(initialTab: DashboardTab = .overview) {
+    init(initialTab: DashboardTab = .overview, now: Date = Date()) {
         _selectedTab = State(initialValue: initialTab)
+        _displayedMonth = State(
+            initialValue: Calendar.current.dateInterval(of: .month, for: now)?.start ?? now
+        )
+        self.now = now
     }
 
     enum DashboardTab: String, CaseIterable, Identifiable {
         case overview = "Overview"
         case models = "Models"
         case workers = "Workers"
+        case calendar = "Calendar"
         var id: String { rawValue }
         var title: String {
             switch self {
             case .overview: return L10n.StatsDashboard.tabsOverview
             case .models: return L10n.StatsDashboard.tabsModels
             case .workers: return L10n.StatsDashboard.tabsWorkers
+            case .calendar: return L10n.StatsDashboard.usageCalendarTitle
             }
         }
     }
@@ -160,6 +168,8 @@ struct AgentStatsDashboard: View {
                     workerSummaryBand
                     workerUsageList
                 }
+            case .calendar:
+                usageCalendar
             }
         }
     }
@@ -424,6 +434,241 @@ struct AgentStatsDashboard: View {
 
             monthLabels
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedTab = .calendar
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(L10n.StatsDashboard.usageCalendarOpenHelp)
+        .accessibilityIdentifier("stats-token-activity")
+        .accessibilityAction {
+            selectedTab = .calendar
+        }
+    }
+
+    private var usageCalendar: some View {
+        let usage = AgentUsageStats.dailyUsage(
+            for: appState.agentUsageSnapshots,
+            in: displayedMonth
+        )
+        return VStack(alignment: .leading, spacing: 14) {
+            detailHeader(title: L10n.StatsDashboard.usageCalendarTitle)
+            usageCalendarMonthToolbar(usage: usage)
+            usageCalendarWeekdayHeader
+            usageCalendarGrid(usage: usage)
+        }
+        .accessibilityIdentifier("stats-usage-calendar")
+    }
+
+    private func usageCalendarMonthToolbar(usage: [AgentDailyUsage]) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                changeDisplayedMonth(by: -1)
+            } label: {
+                Image(systemName: "chevron.left")
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.StatsDashboard.usageCalendarPreviousMonth)
+            .accessibilityIdentifier("stats-usage-calendar-previous-month")
+
+            Text(displayedMonth.formatted(.dateTime.year().month(.wide)))
+                .font(supportingFont(
+                    visualMinimum: AgentStatsDashboardTypography.profileName,
+                    weight: .semibold
+                ))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            Button {
+                changeDisplayedMonth(by: 1)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.StatsDashboard.usageCalendarNextMonth)
+            .accessibilityIdentifier("stats-usage-calendar-next-month")
+
+            Spacer(minLength: 12)
+
+            Text(monthlyUsageSummary(usage))
+                .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+    }
+
+    private var usageCalendarWeekdayHeader: some View {
+        LazyVGrid(columns: usageCalendarColumns, spacing: 0) {
+            ForEach(Array(L10n.StatsDashboard.usageCalendarWeekdays.enumerated()), id: \.offset) { _, title in
+                Text(title)
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.metricLabel,
+                        weight: .medium
+                    ))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func usageCalendarGrid(usage: [AgentDailyUsage]) -> some View {
+        let usageByDay = Dictionary(uniqueKeysWithValues: usage.map {
+            (Calendar.current.startOfDay(for: $0.date), $0)
+        })
+        return LazyVGrid(columns: usageCalendarColumns, spacing: 8) {
+            ForEach(AgentUsageStats.calendarGridDates(for: displayedMonth), id: \.self) { date in
+                usageCalendarDayCell(
+                    date: date,
+                    usage: usageByDay[Calendar.current.startOfDay(for: date)]
+                )
+            }
+        }
+    }
+
+    private func usageCalendarDayCell(date: Date, usage: AgentDailyUsage?) -> some View {
+        let isDisplayedMonth = Calendar.current.isDate(date, equalTo: displayedMonth, toGranularity: .month)
+        let isToday = isDisplayedMonth && Calendar.current.isDate(date, inSameDayAs: now)
+        let dayNumber = Calendar.current.component(.day, from: date)
+        return VStack(alignment: .center, spacing: 0) {
+            Text("\(dayNumber)")
+                .font(supportingFont(
+                    visualMinimum: AgentStatsDashboardTypography.body,
+                    weight: isToday ? .semibold : .regular
+                ))
+                .foregroundStyle(dayCellForeground(isToday: isToday, isDisplayedMonth: isDisplayedMonth))
+
+            if isDisplayedMonth {
+                Spacer(minLength: 4)
+                Text(formatCalendarTokens(usage?.tokenCount ?? 0))
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.metricValue,
+                        weight: .medium,
+                        design: .rounded
+                    ))
+                    .foregroundStyle(dayCellForeground(isToday: isToday, isDisplayedMonth: true))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                Text(calendarDayFooter(usage))
+                    .font(supportingFont(visualMinimum: 10))
+                    .foregroundStyle(isToday ? Color.white.opacity(0.84) : Color.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+            } else {
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, minHeight: 78, alignment: .top)
+        .background(dayCellBackground(isToday: isToday, isDisplayedMonth: isDisplayedMonth))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay {
+            if isDisplayedMonth && !isToday {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var usageCalendarColumns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(minimum: 48), spacing: 8),
+            count: 7
+        )
+    }
+
+    private func changeDisplayedMonth(by offset: Int) {
+        guard let month = Calendar.current.date(
+            byAdding: .month,
+            value: offset,
+            to: displayedMonth
+        ) else {
+            return
+        }
+        displayedMonth = Calendar.current.dateInterval(of: .month, for: month)?.start ?? month
+    }
+
+    private func monthlyUsageSummary(_ usage: [AgentDailyUsage]) -> String {
+        let totalTokens = usage.reduce(0) { $0 + $1.tokenCount }
+        let cost: String
+        if usage.contains(where: { $0.estimatedCostUSD == nil }) {
+            cost = L10n.ModelUsage.costUnknown
+        } else {
+            cost = formatCalendarCost(usage.compactMap(\.estimatedCostUSD).reduce(0, +))
+        }
+        return L10n.StatsDashboard.usageCalendarMonthSummary(
+            formatCalendarTokens(totalTokens),
+            cost,
+            formatInteger(monthlySessionCount)
+        )
+    }
+
+    private var monthlySessionCount: Int {
+        guard let interval = Calendar.current.dateInterval(of: .month, for: displayedMonth) else {
+            return 0
+        }
+        return appState.agentUsageSnapshots.count { session in
+            session.messages.contains { interval.contains($0.createdAt) }
+        }
+    }
+
+    private func calendarDayFooter(_ usage: AgentDailyUsage?) -> String {
+        let cost = usage?.estimatedCostUSD.map(formatCalendarCost) ?? L10n.ModelUsage.costUnknown
+        return L10n.StatsDashboard.usageCalendarDaySummary(
+            cost,
+            formatInteger(usage?.sessionCount ?? 0)
+        )
+    }
+
+    private func formatCalendarTokens(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.2fM", Double(count) / 1_000_000)
+                .replacingOccurrences(of: ".00M", with: "M")
+                .replacingOccurrences(of: "0M", with: "M")
+        }
+        if count >= 1_000 {
+            return String(format: "%.1fk", Double(count) / 1_000)
+                .replacingOccurrences(of: ".0k", with: "k")
+        }
+        return formatInteger(count)
+    }
+
+    private func formatCalendarCost(_ cost: Double) -> String {
+        cost < 0.01 && cost > 0
+            ? String(format: "$%.4f", cost)
+            : String(format: "$%.2f", cost)
+    }
+
+    private func dayCellForeground(isToday: Bool, isDisplayedMonth: Bool) -> Color {
+        if isToday { return .white }
+        return isDisplayedMonth ? .primary : Color.secondary.opacity(0.45)
+    }
+
+    private func dayCellBackground(isToday: Bool, isDisplayedMonth: Bool) -> Color {
+        if isToday {
+            return Color(red: 0.10, green: 0.10, blue: 0.10)
+        }
+        if isDisplayedMonth {
+            return colorScheme == .dark
+                ? Color.white.opacity(0.025)
+                : Color.black.opacity(0.012)
+        }
+        return .clear
     }
 
     private var heatmapHeight: CGFloat {
@@ -1406,6 +1651,8 @@ struct PlanStatusPill: View {
         Text(labelText)
             .font(.system(size: 10, weight: .semibold))
             .textCase(.uppercase)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .foregroundStyle(Color.white)

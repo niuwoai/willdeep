@@ -499,8 +499,8 @@ enum AgentSubagentRunner {
     }
 
     /// 1.85.0-rc18:虚拟工具名 —— 当 caller 传了 `outputSchema` 时,这条
-    /// 工具会被追加到 sub-agent 可见的工具表里;系统提示同步要求模型
-    /// 在答完后必须调它,把 JSON 字符串塞进 `data` 字段。我们这边的
+    /// 工具会被追加到 sub-agent 可见的工具表里;系统提示同步优先要求模型
+    /// 在答完后调它,把 JSON 字符串塞进 `data` 字段。我们这边的
     /// `executeToolCall(...)` 检测到这个 toolName 时不真的「执行」,而是
     /// 把 args["data"] 拎出来送进 `AgentStructuredSchema.validate(...)`
     /// 校验,通过即结束 loop,失败就把 issues 回 tool result 让模型重试。
@@ -578,8 +578,9 @@ enum AgentSubagentRunner {
             - You have READ-ONLY access: search/grep/read/list tools, read-only shell commands, and `web_search` for public web lookups. Write operations are denied — do not attempt them; report what should be changed instead.
             - You cannot ask the user anything. Make reasonable assumptions and note them.
             - Work autonomously until you have the answer. Then STOP calling the read-only tools.
-            - **Structured output required**: deliver the final answer by calling the `\(structuredOutputToolName)` tool exactly once. Its `data` argument MUST be a JSON STRING that parses into a value satisfying the schema below. Do NOT write the JSON in your normal reply text — the parent only reads the tool call.
-            - If your first attempt fails validation, the tool result will explain the issues; correct the JSON and call `\(structuredOutputToolName)` again. Do not give up — only correctly-validated output reaches the parent.
+            - **Structured output required**: prefer delivering the final answer by calling the `\(structuredOutputToolName)` tool. Its `data` argument MUST be a JSON STRING that parses into a value satisfying the schema below.
+            - If the provider cannot call `\(structuredOutputToolName)`, emit only the matching raw JSON value in the normal reply, optionally inside one `json` code fence. The host applies the same schema validation to this compatibility path.
+            - If an attempt fails validation, use the returned correction and try again. Do not give up — only correctly validated output reaches the parent.
             """)
             lines.append("""
             JSON Schema your `data` must satisfy:
@@ -836,15 +837,33 @@ enum AgentSubagentRunner {
                 }
             }
 
-            // 没有任何工具调用 → free-text 模式正常退出;schema 模式下
-            // 此时说明模型答完但忘了调 structured_output,直接报 schema
-            // 不可用让 caller 决定要不要重试 / 降级。
-            guard !toolCalls.isEmpty else {
+            // 没有任何工具调用 → free-text 模式正常退出。schema 模式先
+            // 接受通过同一 schema 校验的纯 JSON / JSON fence；这兼容不
+            // 支持自定义 tool call 的 OpenAI-compatible provider。无效
+            // 文本会收到纠正回合，而不是第一轮就把整个 Goal Team 判死。
+            if toolCalls.isEmpty {
                 let report = content.trimmingCharacters(in: .whitespacesAndNewlines)
-                if outputSchema != nil {
-                    throw WorkflowError.structuredOutputUnavailable(
-                        reason: "Subagent ended without calling `\(structuredOutputToolName)`. Last text was: \(report.prefix(200))"
-                    )
+                if let outputSchema {
+                    if let fallback = validatedStructuredOutputFallback(
+                        in: report,
+                        schema: outputSchema
+                    ) {
+                        return Outcome(
+                            report: fallback,
+                            usageTokens: totalTokens,
+                            roundCount: round,
+                            toolInvocationCount: toolInvocations,
+                            rounds: sealingRound(),
+                            didTruncate: didTruncateRecord
+                        )
+                    }
+                    transcript.append(AgentMessage(
+                        role: .user,
+                        content: "Your previous reply did not produce schema-valid JSON. Call `\(structuredOutputToolName)` now, or return only one raw JSON value matching the declared schema. Do not add explanation."
+                    ))
+                    recordedRound.finishedAt = Date()
+                    recordedRounds.append(recordedRound)
+                    continue
                 }
                 return Outcome(
                     report: report.isEmpty ? "(subagent finished without producing a report)" : report,
@@ -908,6 +927,43 @@ enum AgentSubagentRunner {
             rounds: recordedRounds,
             didTruncate: didTruncateRecord
         )
+    }
+
+    /// Provider compatibility path for structured output. Some compatible
+    /// gateways expose tools in the request but still return the requested
+    /// payload as ordinary text. Accept only an exact JSON value or one JSON
+    /// code fence, and always run the identical schema validator.
+    static func validatedStructuredOutputFallback(
+        in content: String,
+        schema: AgentStructuredSchema
+    ) -> String? {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        var candidates = [trimmed]
+        let fencePattern = #"```(?:json)?\s*([\s\S]*?)```"#
+        if let expression = try? NSRegularExpression(
+            pattern: fencePattern,
+            options: [.caseInsensitive]
+        ) {
+            let range = NSRange(trimmed.startIndex..<trimmed.endIndex, in: trimmed)
+            for match in expression.matches(in: trimmed, range: range) {
+                guard match.numberOfRanges > 1,
+                      let matchRange = Range(match.range(at: 1), in: trimmed) else { continue }
+                candidates.append(
+                    String(trimmed[matchRange])
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+            }
+        }
+
+        for candidate in candidates {
+            guard let data = candidate.data(using: .utf8),
+                  let value = try? AgentJSONValue.decode(from: data),
+                  schema.validate(value).isEmpty else { continue }
+            return candidate
+        }
+        return nil
     }
 
     /// rc18:把 `structured_output(data: ...)` 调用里那个 data 字符串拎出

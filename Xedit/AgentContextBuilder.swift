@@ -111,16 +111,16 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v27"
+    static let stablePrefixVersion = "willdeep-agent-system-v28"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "baef951b6823a0b7"
-    static let compactPrefixSnapshotHash = "e32c0c7dfa377137"
-    static let extendedPrefixSnapshotHash = "f08c0cc0b96ecd1"
+    static let stablePrefixSnapshotHash = "80f67a30d2ac24aa"
+    static let compactPrefixSnapshotHash = "2378e227888976a7"
+    static let extendedPrefixSnapshotHash = "5521f80f572fd488"
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
@@ -518,6 +518,7 @@ enum AgentContextBuilder {
             """
             Markdown restraint — write plainly; formatting is for structure the reader needs, never for emphasis or decoration:
             - No emoji anywhere (including section markers, status ticks, and bullet prefixes) unless the user used them first or explicitly asks.
+            - Never use check marks, crosses, celebration symbols, or other emoji as completion/status markers inside prose. Report completion with an ordinary sentence instead.
             - Bold is for genuine warnings and the single most important value in a dense result. Do not bold whole sentences, list-item leads, labels before colons, product names, file names, or numbers that a sentence already highlights. A reply where most lines contain bold has made bold meaningless.
             - No headings in a short reply. Add them only when the answer is long enough that a reader would otherwise scroll to find a section.
             - Prefer plain sentences to bullets when there are only two or three points; do not turn a paragraph into a list just to look organized.
@@ -1239,6 +1240,88 @@ nonisolated enum AgentGoalRoadmapParser {
     }
 }
 
+/// Parses the AI-owned, goal-level acceptance contract emitted with a Goal
+/// Teams proposal. This contract is intentionally separate from the roadmap:
+/// roadmap criteria close individual phases, while these criteria decide when
+/// the overall Goal is actually complete.
+nonisolated enum AgentGoalAcceptanceCriteriaParser {
+    static let maximumCriteriaCount = 10
+
+    private struct Payload: Decodable {
+        var criteria: [String]
+    }
+
+    static func extract(from content: String) -> [String]? {
+        guard let body = AgentPlanParser.closedFencedBody(
+            in: content,
+            tag: "goal-acceptance"
+        ), let data = body.data(using: .utf8),
+           let payload = try? JSONDecoder().decode(Payload.self, from: data),
+           validationFailures(for: payload).isEmpty else {
+            return nil
+        }
+        return normalized(payload.criteria)
+    }
+
+    static func validationFailures(in content: String) -> [String] {
+        guard let body = AgentPlanParser.closedFencedBody(
+            in: content,
+            tag: "goal-acceptance"
+        ) else {
+            return ["the reply must include one closed fenced ```goal-acceptance JSON block"]
+        }
+        guard let data = body.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+            return ["the fenced ```goal-acceptance block must be valid JSON with shape {\"criteria\":[\"observable outcome\"]}"]
+        }
+        return validationFailures(for: payload)
+    }
+
+    static func reconcile(_ goal: AgentGoal, with criteria: [String]) -> AgentGoal {
+        let priorByText = Dictionary(
+            goal.checklist.map { ($0.text, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var updated = goal
+        updated.checklist = normalized(criteria).map { criterion in
+            priorByText[criterion] ?? AgentGoal.Item(text: criterion)
+        }
+        return updated
+    }
+
+    private static func validationFailures(for payload: Payload) -> [String] {
+        let criteria = normalized(payload.criteria)
+        var failures: [String] = []
+        if criteria.isEmpty {
+            failures.append("goal-acceptance.criteria must contain at least one observable outcome")
+        }
+        if payload.criteria.count > maximumCriteriaCount {
+            failures.append("goal-acceptance.criteria exceeds the maximum of \(maximumCriteriaCount) items")
+        }
+        if criteria.count != payload.criteria.count {
+            failures.append("goal-acceptance.criteria must be non-empty and unique")
+        }
+        if criteria.contains(where: {
+            $0.count > AgentGoalRoadmap.maximumAcceptanceCriterionCharacters
+        }) {
+            failures.append(
+                "goal-acceptance criteria must not exceed \(AgentGoalRoadmap.maximumAcceptanceCriterionCharacters) characters"
+            )
+        }
+        return failures
+    }
+
+    private static func normalized(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        return values.compactMap { value in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.lowercased()
+            guard !trimmed.isEmpty, seen.insert(key).inserted else { return nil }
+            return trimmed
+        }
+    }
+}
+
 nonisolated enum AgentPlanAutoContinuationDecision: Equatable {
     case stop
     case continueExecution
@@ -1249,6 +1332,7 @@ nonisolated enum AgentPlanAutoContinuationDecision: Equatable {
 
 nonisolated enum AgentPlanAutoContinuationPolicy {
     static let maximumAutomaticContinuations = 8
+    static let maximumGoalAutomaticContinuations = 24
     static let maximumConsecutiveNoProgressReplies = 1
     static let maximumProgressReconciliationAttempts = 1
 
@@ -1280,6 +1364,7 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
         consecutiveNoProgressReplies: Int,
         hasQueuedUserMessages: Bool,
         allowsAutomaticExecution: Bool = true,
+        requiresGoalCompletion: Bool = false,
         evidence: ProgressEvidence = .none
     ) -> AgentPlanAutoContinuationDecision {
         guard allowsAutomaticExecution,
@@ -1293,7 +1378,10 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
               plan.steps.contains(where: { !terminalStatuses.contains($0.status) }) else {
             return .stop
         }
-        guard automaticContinuationCount < maximumAutomaticContinuations else {
+        let continuationLimit = requiresGoalCompletion
+            ? maximumGoalAutomaticContinuations
+            : maximumAutomaticContinuations
+        guard automaticContinuationCount < continuationLimit else {
             return .pauseAfterLimit
         }
         let reconciliationLimit = maximumConsecutiveNoProgressReplies
@@ -1303,6 +1391,13 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
             // parseable status block. Keep asking for one rather than
             // stopping a live run — `maximumAutomaticContinuations` is still
             // the hard backstop, so this cannot spin forever.
+            if requiresGoalCompletion {
+                // Goal mode is an outcome contract, not a formatting test.
+                // Once the bounded reconciliation attempt has failed, return
+                // to full execution so the agent can finish the unchecked
+                // acceptance work instead of parking an incomplete Goal.
+                return .continueExecution
+            }
             return evidence.hasAny ? .reconcileProgress : .pauseAfterNoProgress
         }
         if consecutiveNoProgressReplies > maximumConsecutiveNoProgressReplies {

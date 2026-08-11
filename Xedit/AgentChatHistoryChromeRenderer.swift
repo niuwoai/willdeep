@@ -199,11 +199,12 @@ extension AgentChatHistoryRenderer {
 
     static func bodyParagraphStyle(
         for role: AgentRole,
-        layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth
+        layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
+        lineSpacing: CGFloat = MarkdownSpacing.bodyLine
     ) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
-        style.lineSpacing = MarkdownSpacing.bodyLine
+        style.lineSpacing = lineSpacing
         style.paragraphSpacing = role == .user ? MarkdownSpacing.userParagraph : MarkdownSpacing.assistantParagraph
         switch role {
         case .user:
@@ -221,11 +222,12 @@ extension AgentChatHistoryRenderer {
 
     static func footerParagraphStyle(
         for role: AgentRole,
-        layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth
+        layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
+        lineSpacing: CGFloat = MarkdownSpacing.bodyLine
     ) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = role == .user ? .right : .left
-        style.lineSpacing = 1
+        style.lineSpacing = lineSpacing
         style.paragraphSpacing = role == .user
             ? AgentChatHistoryLayoutMetrics.userFooterBottomSpacing
             : 0
@@ -362,7 +364,9 @@ extension AgentChatHistoryRenderer {
         _ group: ToolCallHistoryGroup,
         isExpanded: Bool,
         to result: NSMutableAttributedString,
+        bodyFont: NSFont,
         monoFont: NSFont,
+        lineSpacing: CGFloat,
         secondaryColor: NSColor
     ) {
         let start = result.length
@@ -381,7 +385,7 @@ extension AgentChatHistoryRenderer {
                 result.append(NSAttributedString(
                     string: " · ",
                     attributes: [
-                        .font: NSFont.systemFont(ofSize: monoFont.pointSize, weight: .regular),
+                        .font: bodyFont,
                         .foregroundColor: secondaryColor,
                     ]
                 ))
@@ -389,16 +393,13 @@ extension AgentChatHistoryRenderer {
             result.append(symbolAttachmentString(
                 named: item.systemImage,
                 fallback: "•",
-                pointSize: max(11, monoFont.pointSize - 1),
+                pointSize: max(11, bodyFont.pointSize - 1),
                 color: secondaryColor
             ))
             result.append(NSAttributedString(
                 string: " \(item.text)",
                 attributes: [
-                    // `monoFont` is created from the configured chat body size.
-                    // Reuse its point size so the activity timeline follows
-                    // the user's chat font preference.
-                    .font: NSFont.systemFont(ofSize: monoFont.pointSize, weight: .regular),
+                    .font: bodyFont,
                     .foregroundColor: secondaryColor,
                 ]
             ))
@@ -412,7 +413,7 @@ extension AgentChatHistoryRenderer {
                 result.append(NSAttributedString(
                     string: badge,
                     attributes: [
-                        .font: NSFont.systemFont(ofSize: monoFont.pointSize, weight: .regular),
+                        .font: bodyFont,
                         .foregroundColor: secondaryColor,
                     ]
                 ))
@@ -427,7 +428,7 @@ extension AgentChatHistoryRenderer {
         )
         result.addAttribute(
             .paragraphStyle,
-            value: toolGroupHeaderParagraphStyle(),
+            value: toolGroupHeaderParagraphStyle(lineSpacing: lineSpacing),
             range: NSRange(location: start, length: result.length - start)
         )
 
@@ -445,7 +446,7 @@ extension AgentChatHistoryRenderer {
             kind: .toolSummary,
             to: result,
             range: NSRange(location: start, length: result.length - start),
-            paragraphStyle: toolSummaryParagraphStyle(),
+            paragraphStyle: toolSummaryParagraphStyle(lineSpacing: lineSpacing),
             foregroundColor: nil
         )
     }
@@ -578,8 +579,11 @@ extension AgentChatHistoryRenderer {
         turnReportToolCount: Int? = nil,
         layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
         baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
+        bodyFont: NSFont? = nil,
+        lineSpacing: CGFloat = MarkdownSpacing.bodyLine,
         to result: NSMutableAttributedString
     ) {
+        let metadataFont = bodyFont ?? NSFont.systemFont(ofSize: baseFontSize)
         let start = result.length
         // Keep the complete footer in the attributed string so its height is
         // reserved at rest. User metadata and actions are made transparent
@@ -588,42 +592,46 @@ extension AgentChatHistoryRenderer {
         if message.role == .user {
             result.append(AgentChatHistoryFooterChrome.label(
                 formatTimestamp(message.createdAt),
-                baseFontSize: baseFontSize
+                baseFontSize: baseFontSize,
+                font: metadataFont
             ))
-            result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize))
+            result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
         }
         result.append(AgentChatHistoryFooterChrome.copyButton(
             copied: false,
             message: message.copyableContent,
             isVisible: isVisible,
-            baseFontSize: baseFontSize
+            baseFontSize: baseFontSize,
+            font: metadataFont
         ))
 
         if message.role == .assistant {
             if let summary = AgentChatMessageMetrics.tokenSummary(for: message) {
-                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize))
-                result.append(AgentChatHistoryFooterChrome.label(summary, baseFontSize: baseFontSize))
+                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
+                result.append(AgentChatHistoryFooterChrome.label(summary, baseFontSize: baseFontSize, font: metadataFont))
             }
             if let route = message.managedRoute {
-                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize))
+                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
                 result.append(AgentChatHistoryFooterChrome.label(
                     route.footerChipText,
-                    baseFontSize: baseFontSize
+                    baseFontSize: baseFontSize,
+                    font: metadataFont
                 ))
             }
             // 1.103.0-rc11: turn-report 图标(原 AgentTurnPostStrip 左侧)
             // 折进 footer,跟 copy/tokens/retry 同一行;只挂在最后一条
             // assistant 上,无工具调用的轮(toolCount==0)与历史轮都不显示。
             if isLatestAssistant, let count = turnReportToolCount, count > 0 {
-                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize))
+                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
                 result.append(AgentChatHistoryFooterChrome.reportButton(
                     count: count,
-                    baseFontSize: baseFontSize
+                    baseFontSize: baseFontSize,
+                    font: metadataFont
                 ))
             }
             if isLatestAssistant {
-                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize))
-                result.append(AgentChatHistoryFooterChrome.retryButton(baseFontSize: baseFontSize))
+                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
+                result.append(AgentChatHistoryFooterChrome.retryButton(baseFontSize: baseFontSize, font: metadataFont))
             }
         }
 
@@ -637,7 +645,11 @@ extension AgentChatHistoryRenderer {
 
         result.addAttribute(
             .paragraphStyle,
-            value: footerParagraphStyle(for: message.role, layoutWidth: layoutWidth),
+            value: footerParagraphStyle(
+                for: message.role,
+                layoutWidth: layoutWidth,
+                lineSpacing: lineSpacing
+            ),
             range: NSRange(location: start, length: result.length - start)
         )
     }
@@ -875,10 +887,10 @@ extension AgentChatHistoryRenderer {
         return style
     }
 
-    private static func toolSummaryParagraphStyle() -> NSParagraphStyle {
+    private static func toolSummaryParagraphStyle(lineSpacing: CGFloat) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
-        style.lineSpacing = MarkdownSpacing.toolLine
+        style.lineSpacing = lineSpacing
         style.paragraphSpacing = 3
         style.headIndent = 28
         style.firstLineHeadIndent = 28
@@ -886,12 +898,12 @@ extension AgentChatHistoryRenderer {
         return style
     }
 
-    private static func toolGroupHeaderParagraphStyle() -> NSParagraphStyle {
+    private static func toolGroupHeaderParagraphStyle(lineSpacing: CGFloat) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
-        style.lineSpacing = 1
-        style.paragraphSpacingBefore = 1
-        style.paragraphSpacing = 2
+        style.lineSpacing = lineSpacing
+        style.paragraphSpacingBefore = 0
+        style.paragraphSpacing = 0
         style.lineBreakMode = .byTruncatingTail
         // Keep the compact activity summary on the same content column as
         // the assistant prose above it. A bespoke 22 pt inset used to place

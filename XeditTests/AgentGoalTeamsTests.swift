@@ -83,6 +83,10 @@ struct AgentGoalTeamsTests {
         | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
         | 开发-Goal Teams | goal_backend | 状态机 | GT-003 | Xedit | 生产实现 | 构建通过 | tasklist | 测试-Goal Teams | 评审-Goal Teams |
 
+        ```goal-acceptance
+        {"criteria":["Verified","新目标行为通过独立回归"]}
+        ```
+
         ```goal-roadmap
         {"phases":[{"id":"PHASE-1","title":"核心实现","acceptance":["核心路径测试通过"]},{"id":"PHASE-2","title":"发布验收","acceptance":["版本与文档一致"]}]}
         ```
@@ -356,6 +360,41 @@ struct AgentGoalTeamsTests {
         #expect(malformed.goalRoadmap == nil)
     }
 
+    @Test("AI 验收契约按目标规划更新并保留仍适用条目的完成状态")
+    func goalAcceptanceParserReconcilesAIManagedCriteria() throws {
+        let content = """
+        ```goal-acceptance
+        {"criteria":["保留的验收","新增的验收"]}
+        ```
+        """
+        let criteria = try #require(
+            AgentGoalAcceptanceCriteriaParser.extract(from: content)
+        )
+        let existing = AgentGoal(
+            statement: "更新后的目标",
+            checklist: [
+                .init(text: "保留的验收", done: true),
+                .init(text: "不再适用的验收", done: true),
+            ]
+        )
+
+        let reconciled = AgentGoalAcceptanceCriteriaParser.reconcile(
+            existing,
+            with: criteria
+        )
+
+        #expect(reconciled.checklist.map(\.text) == ["保留的验收", "新增的验收"])
+        #expect(reconciled.checklist[0].done)
+        #expect(!reconciled.checklist[1].done)
+        #expect(AgentGoalAcceptanceCriteriaParser.validationFailures(
+            in: """
+            ```goal-acceptance
+            {"criteria":["重复","重复"]}
+            ```
+            """
+        ).contains { $0.contains("unique") })
+    }
+
     @Test
     func completedPhaseAdvancesToFreshBoundedPlanningRound() throws {
         let state = AgentGoalPlanningState(
@@ -532,8 +571,8 @@ struct AgentGoalTeamsTests {
         #expect(runtime.currentPlan == nil)
     }
 
-    @Test("零或一份有效报告保持 blocked，不调用仲裁且不可 proposed", arguments: [0, 1])
-    func zeroOrOneValidReportBlocksPlanning(validCount: Int) async {
+    @Test("零或一份有效报告由仲裁器补证并继续生成提案", arguments: [0, 1])
+    func zeroOrOneValidReportUsesCompensatingArbitration(validCount: Int) async {
         let (appState, runtime) = makeAppRuntime()
         var memberCalls = 0
         var arbitrationCalls = 0
@@ -548,19 +587,19 @@ struct AgentGoalTeamsTests {
         }
 
         #expect(appState.startAgentGoalPlanningIfNeeded(for: runtime))
-        await waitUntil("\(validCount)/3 报告进入 blocked") {
-            runtime.goalPlanningState?.phase == .blocked
+        await waitUntil("\(validCount)/3 报告完成补证仲裁") {
+            runtime.goalPlanningState?.phase == .readyForProposal
         }
-        #expect(arbitrationCalls == 0)
+        #expect(arbitrationCalls == 1)
         #expect(runtime.currentPlan == nil)
         #expect(runtime.isPlanGateActive)
-        #expect(runtime.goalPlanningState?.arbitration.errorMessage?.contains("fewer than two") == true)
+        #expect(runtime.goalPlanningState?.arbitration.status == .completed)
         #expect(runtime.queuedMessages.count == 1)
-        #expect(runtime.queuedMessages[0].text.contains("planning is blocked"))
+        #expect(runtime.queuedMessages[0].text.contains("planning and arbitration are complete"))
     }
 
-    @Test("仲裁空输出可见且不能进入 proposed")
-    func arbitrationFailureIsVisibleAndNonProposed() async {
+    @Test("仲裁仅因结构化输出失败时使用保守结果继续生成提案")
+    func arbitrationFormatFailureUsesConservativeFallback() async throws {
         let (appState, runtime) = makeAppRuntime()
         appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _ in
             let report = prompt.contains("评审-分歧证据仲裁") ? "" : validMemberReport()
@@ -568,14 +607,20 @@ struct AgentGoalTeamsTests {
         }
 
         #expect(appState.startAgentGoalPlanningIfNeeded(for: runtime))
-        await waitUntil("仲裁失败进入 blocked") {
-            runtime.goalPlanningState?.phase == .blocked
+        await waitUntil("仲裁格式失败后进入提案合成") {
+            runtime.goalPlanningState?.phase == .readyForProposal
         }
         #expect(runtime.goalPlanningState?.members.allSatisfy { $0.report != nil } == true)
-        #expect(runtime.goalPlanningState?.arbitration.status == .failed)
-        #expect(runtime.goalPlanningState?.arbitration.errorMessage?.isEmpty == false)
+        #expect(runtime.goalPlanningState?.arbitration.status == .completed)
+        let report = try #require(runtime.goalPlanningState?.arbitration.report)
+        let payload = try JSONDecoder().decode(
+            AgentGoalPlanningArbitrationPayload.self,
+            from: Data(report.utf8)
+        )
+        #expect(payload.evidenceGaps.contains { $0.contains("结构化输出失败") })
+        #expect(payload.stopConditions.contains { $0.contains("必要用户决策") })
         #expect(runtime.currentPlan == nil)
-        #expect(runtime.queuedMessages.last?.text.contains("arbitration_failure") == true)
+        #expect(runtime.queuedMessages.last?.text.contains("planning and arbitration are complete") == true)
     }
 
     @Test("仲裁失败重试只重跑仲裁并保留首轮证据")
@@ -585,8 +630,8 @@ struct AgentGoalTeamsTests {
         appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _ in
             if prompt.contains("评审-分歧证据仲裁") {
                 let shouldSucceed = await probe.recordArbitrationCall()
-                let report = shouldSucceed ? validArbitrationReport() : ""
-                return .init(report: report, usageTokens: 1, roundCount: 1, toolInvocationCount: 0)
+                guard shouldSucceed else { throw URLError(.timedOut) }
+                return .init(report: validArbitrationReport(), usageTokens: 1, roundCount: 1, toolInvocationCount: 0)
             }
             await probe.recordMemberCall()
             return .init(report: validMemberReport(prompt), usageTokens: 1, roundCount: 1, toolInvocationCount: 0)
@@ -751,6 +796,10 @@ struct AgentGoalTeamsTests {
         #expect(outcome == .captured)
         #expect(runtime.currentPlan?.status == .approved)
         #expect(runtime.goalPlanningState?.phase == .executing)
+        #expect(runtime.currentGoal?.checklist.map(\.text) == [
+            "Verified",
+            "新目标行为通过独立回归",
+        ])
         #expect(!runtime.isPlanGateActive)
     }
 

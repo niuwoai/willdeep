@@ -89,25 +89,56 @@ extension EditorSettingsView {
                 }
             }
 
-            // Agent 聊天字号原本埋在「AI → Agent」提供商设置深处，属于
-            // 字体/格式类偏好，移到字体排印页与编辑器/工作区文本并列。
+        }
+        .formStyle(.grouped)
+    }
+
+    var agentAppearanceSettings: some View {
+        Form {
+            agentBackgroundSelectionSection
+            agentWallpaperSettingsSection
+
             Section(L10n.Settings.sectionAgentChatText) {
-                HStack {
-                    Text(L10n.Settings.chatBaseFontSize)
-                    Spacer()
-                    Text("\(Int(appState.agentChatBaseFontSize.rounded())) pt")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                Picker(L10n.Settings.labelFont, selection: $appState.agentChatFontID) {
+                    ForEach(AgentChatFontChoice.allCases) { font in
+                        Text(font.displayName).tag(font.id)
+                    }
                 }
-                Slider(
-                    value: Binding(
-                        get: { Double(appState.agentChatBaseFontSize) },
-                        set: { appState.agentChatBaseFontSize = CGFloat($0.rounded()) }
-                    ),
-                    in: Double(AgentSettingsStore.chatBaseFontSizeMin)
-                        ... Double(AgentSettingsStore.chatBaseFontSizeMax),
-                    step: 1
-                )
+
+                LabeledContent(L10n.Settings.labelTextSize) {
+                    HStack {
+                        Slider(
+                            value: Binding(
+                                get: { Double(appState.agentChatBaseFontSize) },
+                                set: { appState.agentChatBaseFontSize = CGFloat($0.rounded()) }
+                            ),
+                            in: Double(AgentSettingsStore.chatBaseFontSizeMin)
+                                ... Double(AgentSettingsStore.chatBaseFontSizeMax),
+                            step: 1
+                        )
+                        Text("\(Int(appState.agentChatBaseFontSize.rounded())) pt")
+                            .monospacedDigit()
+                            .frame(width: 48, alignment: .trailing)
+                    }
+                }
+
+                LabeledContent(L10n.Settings.labelLineHeight) {
+                    HStack {
+                        Slider(
+                            value: Binding(
+                                get: { Double(appState.agentChatLineHeightMultiple) },
+                                set: { appState.agentChatLineHeightMultiple = CGFloat($0) }
+                            ),
+                            in: Double(AgentSettingsStore.chatLineHeightMultipleMin)
+                                ... Double(AgentSettingsStore.chatLineHeightMultipleMax),
+                            step: 0.05
+                        )
+                        Text(String(format: "%.2fx", appState.agentChatLineHeightMultiple))
+                            .monospacedDigit()
+                            .frame(width: 56, alignment: .trailing)
+                    }
+                }
+
                 Text(L10n.Settings.AgentBehavior.agentAppearanceDescription("\(Int(AgentSettingsStore.chatBaseFontSizeMin))", "\(Int(AgentSettingsStore.chatBaseFontSizeMax))"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -190,19 +221,9 @@ extension EditorSettingsView {
         }
     }
 
-    var backgroundSettings: some View {
-        Form {
-            backgroundSections
-        }
-        .formStyle(.grouped)
-    }
-
     @ViewBuilder
-    var backgroundSections: some View {
+    var agentBackgroundSelectionSection: some View {
         Section {
-            Text(L10n.Settings.backgroundChoices)
-                .font(.subheadline.weight(.semibold))
-
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 132, maximum: 180), spacing: 10)],
                 alignment: .leading,
@@ -229,39 +250,16 @@ extension EditorSettingsView {
                     Text(backgroundImageLabel)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .foregroundStyle(appState.editorSettings.windowBackgroundImagePath == nil ? .secondary : .primary)
                     Spacer(minLength: 8)
-                    if isInstallingWorkspaceWallpaper {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                    Button(L10n.Settings.buttonChoose) {
-                        chooseBackgroundImage()
-                    }
-                    .disabled(isInstallingWorkspaceWallpaper)
-                    Button(L10n.Settings.buttonClear) {
-                        clearBackgroundImage()
-                    }
-                    .disabled(
-                        appState.editorSettings.windowBackgroundImagePath == nil
-                            || isInstallingWorkspaceWallpaper
-                    )
+                    Button(L10n.Settings.buttonChoose) { chooseBackgroundImage() }
+                    Button(L10n.Settings.buttonClear) { clearBackgroundImage() }
+                        .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
                 }
             }
 
             Picker(L10n.Settings.labelImageMode, selection: setting(\.windowBackgroundImageMode)) {
                 ForEach(EditorBackgroundImageMode.allCases) { mode in
                     Text(mode.displayName).tag(mode)
-                }
-            }
-            .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
-
-            LabeledContent(L10n.Settings.labelImageSize) {
-                HStack {
-                    Slider(value: setting(\.windowBackgroundImageScale), in: 0.25...3, step: 0.05)
-                    Text("\(Int(appState.editorSettings.windowBackgroundImageScale * 100))%")
-                        .monospacedDigit()
-                        .frame(width: 48, alignment: .trailing)
                 }
             }
             .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
@@ -275,21 +273,9 @@ extension EditorSettingsView {
                 }
             }
             .disabled(appState.editorSettings.windowBackgroundImagePath == nil)
-
-            Text(L10n.Settings.workspaceWallpaperHelp)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            if !workspaceWallpaperErrorMessage.isEmpty {
-                Text(workspaceWallpaperErrorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
         } header: {
-            Text(L10n.Settings.sectionWorkspaceWallpaper)
+            Text(L10n.Settings.backgroundChoices)
         }
-
-        agentWallpaperSettingsSection
     }
 
     @ViewBuilder

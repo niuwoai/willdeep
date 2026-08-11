@@ -46,6 +46,8 @@ enum AgentSettingsStore {
     private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
     private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v2"
     private static let legacyChatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
+    private static let chatFontIDKey = "com.willdeep.agentSettings.chatFontID.v1"
+    private static let chatLineHeightMultipleKey = "com.willdeep.agentSettings.chatLineHeightMultiple.v1"
     private static let anthropicMaxOutputTokensKey = "com.willdeep.agentSettings.anthropicMaxOutputTokens.v1"
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
     private static let localModelSettingsKey = "com.willdeep.agentSettings.localModelSettings.v1"
@@ -58,6 +60,10 @@ enum AgentSettingsStore {
     static let chatBaseFontSizeMin: CGFloat = 11
     static let chatBaseFontSizeMax: CGFloat = 20
     static let chatBaseFontSizeDefault: CGFloat = 15
+    static let chatFontIDDefault = "system"
+    static let chatLineHeightMultipleMin: CGFloat = 1.2
+    static let chatLineHeightMultipleMax: CGFloat = 2.0
+    static let chatLineHeightMultipleDefault: CGFloat = 1.5
     /// JSON-encoded `AgentProviderLibrary` minus the API keys, which
     /// live in Keychain under the entry's UUID.
     private static let providerLibraryKey = "com.willdeep.agentSettings.providerLibrary.v1"
@@ -311,6 +317,26 @@ enum AgentSettingsStore {
         defaults.set(Double(clamped), forKey: chatBaseFontSizeKey)
     }
 
+    static func loadAgentChatFontID() -> String {
+        let stored = defaults.string(forKey: chatFontIDKey) ?? chatFontIDDefault
+        return AgentChatFontChoice.byID(stored) == nil ? chatFontIDDefault : stored
+    }
+
+    static func saveAgentChatFontID(_ id: String) {
+        defaults.set(AgentChatFontChoice.byID(id) == nil ? chatFontIDDefault : id, forKey: chatFontIDKey)
+    }
+
+    static func loadAgentChatLineHeightMultiple() -> CGFloat {
+        guard defaults.object(forKey: chatLineHeightMultipleKey) != nil else {
+            return chatLineHeightMultipleDefault
+        }
+        return clampChatLineHeightMultiple(CGFloat(defaults.double(forKey: chatLineHeightMultipleKey)))
+    }
+
+    static func saveAgentChatLineHeightMultiple(_ multiple: CGFloat) {
+        defaults.set(Double(clampChatLineHeightMultiple(multiple)), forKey: chatLineHeightMultipleKey)
+    }
+
     /// Upper bound for a single Anthropic reply (`max_tokens` is mandatory
     /// on that API). Default 32K so long-form replies stop truncating with
     /// finish_reason=length; legacy Claude 3.x models are clamped lower at
@@ -338,6 +364,10 @@ enum AgentSettingsStore {
 
     static func clampChatBaseFontSize(_ size: CGFloat) -> CGFloat {
         max(chatBaseFontSizeMin, min(chatBaseFontSizeMax, size))
+    }
+
+    static func clampChatLineHeightMultiple(_ multiple: CGFloat) -> CGFloat {
+        max(chatLineHeightMultipleMin, min(chatLineHeightMultipleMax, multiple))
     }
 
     /// Preserve deliberate custom sizes while moving installs that still use

@@ -67,24 +67,21 @@ struct AgentExecutionPickerPill: View {
     }
 
     private var pillForeground: Color {
-        selectedAgent == .willDeep ? Color.secondary : Color.white
+        selectedAgent == .willDeep ? Color.secondary : Color.primary
     }
 
     private var pillBackground: Color {
         switch selectedAgent {
-        case .willDeep: return Color.secondary.opacity(0.10)
-        case .claudeCode: return Color.purple
-        case .codexCLI: return Color.accentColor
-        case .hermesCLI: return Color.indigo
-        case .cursorAgent: return Color.green
-        case .clineCLI: return Color.orange
+        case .willDeep: return AgentComposerChrome.controlFill
+        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI:
+            return AgentComposerChrome.selectedControlFill
         }
     }
 
     private var pillBorder: Color {
         selectedAgent == .willDeep
-            ? Color.secondary.opacity(0.25)
-            : Color.clear
+            ? AgentComposerChrome.border
+            : AgentComposerChrome.selectedBorder
     }
 
     private func syncSelectedAgent() {
@@ -139,18 +136,20 @@ struct AgentModePickerPill: View {
     }
 
     private var pillForeground: Color {
-        appState.agentInteractionMode == .normal ? Color.secondary : Color.white
+        appState.agentInteractionMode == .normal ? Color.secondary : Color.primary
     }
 
     private var pillBackground: Color {
         switch appState.agentInteractionMode {
-        case .normal: return Color.secondary.opacity(0.10)
-        case .goal: return Color.accentColor
+        case .normal: return AgentComposerChrome.controlFill
+        case .goal: return AgentComposerChrome.strongControlFill
         }
     }
 
     private var pillBorder: Color {
-        appState.agentInteractionMode == .normal ? Color.secondary.opacity(0.25) : Color.clear
+        appState.agentInteractionMode == .normal
+            ? AgentComposerChrome.border
+            : AgentComposerChrome.strongBorder
     }
 }
 
@@ -177,7 +176,7 @@ struct ComposerOverflowPill: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+            .background(AgentComposerChrome.controlFill)
             .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
         }
         .buttonStyle(.plain)

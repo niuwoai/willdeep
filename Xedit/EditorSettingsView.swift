@@ -185,8 +185,8 @@ struct EditorSettingsView: View {
         case .editing: editingSettings
         case .typography: typographySettings
         case .appearance: appearanceSettings
-        case .background: backgroundSettings
         case .workspace: workspaceSettings
+        case .agentAppearance: agentAppearanceSettings
         case .agent: agentSettings
         case .subagents: subagentSettings
         case .someIM: SomeIMIntegrationSettingsView()

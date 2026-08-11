@@ -48,4 +48,45 @@ struct AgentInteractionTargetMetricsTests {
                 > AgentSidePanelResizeMetrics.lineWidth
         )
     }
+
+    @Test("composer icons use only monochrome semantic colors")
+    func composerIconsStayMonochrome() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let relativePaths = [
+            "Xedit/AgentModeComposerView.swift",
+            "Xedit/AgentComposerAttachments.swift",
+            "Xedit/AgentComposerContextPickers.swift",
+            "Xedit/AgentComposerFileAttachmentViews.swift",
+            "Xedit/AgentComposerPaletteViews.swift",
+            "Xedit/AgentComposerPickers.swift",
+            "Xedit/AgentComposerSecondaryPickers.swift",
+            "Xedit/AgentComposerTaskProgress.swift",
+            "Xedit/Voice/MicPushToTalkButton.swift",
+        ]
+        let source = try relativePaths.map { relativePath in
+            try String(
+                contentsOf: repositoryRoot.appendingPathComponent(relativePath),
+                encoding: .utf8
+            )
+        }.joined(separator: "\n")
+
+        let chromaticNames = "accentColor|blue|green|orange|red|purple|teal|cyan|indigo|mint|yellow"
+        let imagePattern = #"Image\(systemName:[\s\S]{0,220}?\.foregroundStyle\((?:Color\.)?(?:\#(chromaticNames))\)"#
+        let labelPattern = #"Label\([\s\S]{0,220}?systemImage:[\s\S]{0,220}?\.foregroundStyle\((?:Color\.)?(?:\#(chromaticNames))\)"#
+        let fullRange = NSRange(source.startIndex..<source.endIndex, in: source)
+
+        for pattern in [imagePattern, labelPattern] {
+            let regex = try NSRegularExpression(pattern: pattern)
+            #expect(regex.firstMatch(in: source, range: fullRange) == nil)
+        }
+
+        #expect(source.contains(".symbolRenderingMode(.monochrome)"))
+        #expect(source.contains(".tint(AgentComposerChrome.iconPrimary)"))
+        #expect(source.contains("static let iconPrimary = Color.primary.opacity(0.82)"))
+        #expect(source.contains("static let iconSecondary = Color.secondary"))
+        #expect(source.contains("static let actionForeground = Color(nsColor: .textBackgroundColor)"))
+        #expect(!source.contains("LinearGradient(colors: [.teal, .blue]"))
+    }
 }

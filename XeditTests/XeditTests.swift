@@ -178,10 +178,18 @@ struct WillDeepTests {
         appState.setAgentGoal(statement: "Ship the thing", items: ["Build", "Verify"])
         #expect(appState.shouldShowGoalRunningStatusBar == false)
         #expect(appState.shouldShowComposerGoalCard == true)
+        #expect(appState.isAgentGoalExecutionActive == false)
 
         appState.isAgentResponding = true
         #expect(appState.shouldShowGoalRunningStatusBar == true)
         #expect(appState.shouldShowComposerGoalCard == true)
+        #expect(appState.isAgentGoalExecutionActive == true)
+
+        appState.isAgentResponding = false
+        appState.activeRuntime?.isAwaitingProviderSlot = true
+        #expect(appState.shouldShowGoalRunningStatusBar == true)
+        #expect(appState.isAgentGoalExecutionActive == true)
+        appState.activeRuntime?.isAwaitingProviderSlot = false
 
         appState.agentInteractionMode = .normal
         #expect(appState.shouldShowGoalRunningStatusBar == false)
@@ -191,6 +199,26 @@ struct WillDeepTests {
         appState.setAgentGoal(statement: "", items: [])
         #expect(appState.shouldShowGoalRunningStatusBar == false)
         #expect(appState.shouldShowComposerGoalCard == false)
+    }
+
+    @MainActor
+    @Test("editing a pinned goal changes only the statement before AI acceptance reconciliation")
+    func testPinnedGoalEditorPreservesInternalAcceptance() {
+        let appState = AppState()
+        appState.startNewAgentSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
+        appState.agentInteractionMode = .goal
+        appState.setAgentGoal(statement: "Old target", items: ["AI-owned acceptance"])
+        appState.agentCurrentGoal?.checklist[0].done = true
+
+        appState.setAgentGoalStatement("New target")
+
+        #expect(appState.agentCurrentGoal?.statement == "New target")
+        #expect(appState.agentCurrentGoal?.checklist.map(\.text) == ["AI-owned acceptance"])
+        #expect(appState.agentCurrentGoal?.checklist.first?.done == true)
+        #expect(appState.activeRuntime?.goalPlanningState != nil)
+        appState.agentSubagentRegistry.cancelAll(forParentRuntime: appState.activeRuntime!.id)
     }
 
     @MainActor
