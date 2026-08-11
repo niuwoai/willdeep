@@ -15,6 +15,137 @@ import SwiftUI
 
 @Suite
 struct AgentPlanProgressTests {
+    @MainActor
+    @Test("窄计划卡中的状态徽标保持单行")
+    func compactPlanStatusRemainsSingleLine() throws {
+        // Reproduce the compressed width seen in the floating plan card. The
+        // pill may overflow this artificial slot horizontally, but it must not
+        // turn a two-character label into a two-line vertical badge.
+        let fixture = PlanStatusPill(status: .executing)
+            .frame(width: 24)
+            .fixedSize(horizontal: false, vertical: true)
+            .preferredColorScheme(.light)
+
+        let hostingView = NSHostingView(rootView: fixture)
+        hostingView.appearance = NSAppearance(named: .aqua)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 24, height: 1)
+        hostingView.layoutSubtreeIfNeeded()
+        let height = ceil(hostingView.fittingSize.height)
+
+        #expect(height <= 20)
+    }
+
+    @MainActor
+    @Test("渲染折叠计划与产物卡用于设计验收")
+    func rendersCompactActivityOverlayForDesignQA() throws {
+        let appState = AppState()
+        let session = appState.startNewAgentSession()
+        let runtime = try #require(appState.agentRuntimes[session.id])
+        runtime.currentPlan = AgentPlan(
+            status: .executing,
+            steps: [.init(text: "修复窄卡片布局", status: .inProgress)]
+        )
+        runtime.goalRoadmap = AgentGoalRoadmap(
+            phases: [
+                .init(id: "PHASE-1", title: "定位", acceptanceCriteria: [], status: .completed),
+                .init(id: "PHASE-2", title: "修复", acceptanceCriteria: [], status: .executing),
+                .init(id: "PHASE-3", title: "验收", acceptanceCriteria: []),
+            ],
+            activePhaseIndex: 1
+        )
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        runtime.agentArtifactPaths = [
+            repositoryRoot.appendingPathComponent("CHANGELOG.md").path
+        ]
+
+        let fixture = ZStack(alignment: .topTrailing) {
+            Color(nsColor: .windowBackgroundColor)
+            AgentConversationActivityOverlay()
+                .environmentObject(appState)
+                .padding(.top, 8)
+                .padding(.trailing, 8)
+        }
+        .frame(width: 306, height: 142)
+        .preferredColorScheme(.light)
+
+        let outputURL = URL(fileURLWithPath: "/tmp/Xedit-plan-activity-overlay-rc4.png")
+        try renderPNG(fixture, size: NSSize(width: 306, height: 142), to: outputURL)
+        #expect(FileManager.default.fileExists(atPath: outputURL.path))
+    }
+
+    @MainActor
+    @Test("渲染带播放按钮的吸附目标条用于设计验收")
+    func rendersPinnedGoalExecutionControlForDesignQA() throws {
+        let appState = AppState()
+        let session = appState.startNewAgentSession()
+        let runtime = try #require(appState.agentRuntimes[session.id])
+        runtime.interactionMode = .goal
+        runtime.currentGoal = AgentGoal(
+            statement: "记录请求流量分级 trace；调整 retention 删除批处理缓解 MGR 3100",
+            checklist: [
+                .init(text: "完成请求流量分级", done: true),
+                .init(text: "验证 retention 批处理", done: false),
+            ]
+        )
+        runtime.goalRoadmap = AgentGoalRoadmap(
+            phases: [
+                .init(id: "PHASE-1", title: "定位", acceptanceCriteria: [], status: .completed),
+                .init(id: "PHASE-2", title: "实现", acceptanceCriteria: [], status: .executing),
+                .init(id: "PHASE-3", title: "验收", acceptanceCriteria: []),
+            ],
+            activePhaseIndex: 1
+        )
+        let goal = try #require(runtime.currentGoal)
+
+        let fixture = ZStack {
+            Color(nsColor: .windowBackgroundColor)
+            AgentComposerGoalCard(goal: goal)
+                .environmentObject(appState)
+                .padding(.horizontal, 2)
+        }
+        .frame(width: 1_040, height: 32)
+        .preferredColorScheme(.light)
+
+        let outputURL = URL(fileURLWithPath: "/tmp/Xedit-pinned-goal-control-rc4.png")
+        try renderPNG(fixture, size: NSSize(width: 1_040, height: 32), to: outputURL)
+        #expect(FileManager.default.fileExists(atPath: outputURL.path))
+
+        runtime.isResponding = true
+        let activeFixture = ZStack {
+            Color(nsColor: .windowBackgroundColor)
+            AgentComposerGoalCard(goal: goal)
+                .environmentObject(appState)
+                .padding(.horizontal, 2)
+        }
+        .frame(width: 1_040, height: 32)
+        .preferredColorScheme(.light)
+        let activeOutputURL = URL(
+            fileURLWithPath: "/tmp/Xedit-pinned-goal-control-active-rc4.png"
+        )
+        try renderPNG(
+            activeFixture,
+            size: NSSize(width: 1_040, height: 32),
+            to: activeOutputURL
+        )
+        #expect(FileManager.default.fileExists(atPath: activeOutputURL.path))
+    }
+
+    @MainActor
+    private func renderPNG<V: View>(_ view: V, size: NSSize, to outputURL: URL) throws {
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.appearance = NSAppearance(named: .aqua)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+        let bitmap = try #require(
+            hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+        )
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: outputURL, options: .atomic)
+    }
+
     @Test("查看完整计划直接打开计划侧边栏")
     func viewFullPlanOpensPlanSidePanelDirectly() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
@@ -565,6 +696,69 @@ struct AgentPlanProgressTests {
         )
 
         #expect(decision == .reconcileProgress)
+    }
+
+    @Test("an incomplete Goal keeps executing after status reconciliation is missed")
+    func incompleteGoalDoesNotPauseForMissingPlanStatus() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "Finish the Goal", status: .inProgress)],
+            summary: ""
+        )
+
+        let decision = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: 3,
+            consecutiveNoProgressReplies: 3,
+            hasQueuedUserMessages: false,
+            requiresGoalCompletion: true
+        )
+
+        #expect(decision == .continueExecution)
+    }
+
+    @Test("Goal execution receives a larger bounded continuation budget")
+    func incompleteGoalUsesGoalContinuationLimit() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "Finish the Goal", status: .inProgress)],
+            summary: ""
+        )
+
+        let continues = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: AgentPlanAutoContinuationPolicy.maximumAutomaticContinuations,
+            consecutiveNoProgressReplies: 3,
+            hasQueuedUserMessages: false,
+            requiresGoalCompletion: true
+        )
+        let eventuallyPauses = AgentPlanAutoContinuationPolicy.decision(
+            for: plan,
+            automaticContinuationCount: AgentPlanAutoContinuationPolicy.maximumGoalAutomaticContinuations,
+            consecutiveNoProgressReplies: 3,
+            hasQueuedUserMessages: false,
+            requiresGoalCompletion: true
+        )
+
+        #expect(continues == .continueExecution)
+        #expect(eventuallyPauses == .pauseAfterLimit)
+    }
+
+    @MainActor
+    @Test("吸附目标控制在运行与空闲之间切换播放图标")
+    func pinnedGoalExecutionControlUsesPlayPauseSymbols() {
+        #expect(AgentGoalExecutionControlPolicy.systemImage(isActive: false) == "play.fill")
+        #expect(AgentGoalExecutionControlPolicy.systemImage(isActive: true) == "pause.fill")
+        let prompt = AgentGoalExecutionControlPolicy.resumePrompt(
+            remainingAcceptance: ["实现剩余目标"]
+        )
+        #expect(prompt.contains("Do not restart Goal Teams"))
+        #expect(prompt.contains("实现剩余目标"))
+        #expect(prompt.contains("`progress`"))
+        #expect(prompt.contains("`goal-check`"))
+        #expect(AgentGoalExecutionControlPolicy.resumePrompt(
+            remainingAcceptance: []
+        ).contains("establish its acceptance checklist"))
     }
 
     @Test("a live background job keeps reconciling and says so in the notice")

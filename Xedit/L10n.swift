@@ -856,11 +856,13 @@ nonisolated enum L10n {
     }
 
     enum GoalStatusBar {
+        static let pauseExecution = String(localized: "goal-status-bar.pause-execution", defaultValue: "Pause goal execution")
         static let pinnedPrefix = String(localized: "goal-status-bar.pinned-prefix", defaultValue: "Goal pinned")
         static func progressHelp(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "goal-status-bar.progress-help", defaultValue: "%@/%@ checklist items done")
             return String(format: template, a1, a2)
         }
+        static let resumeExecution = String(localized: "goal-status-bar.resume-execution", defaultValue: "Resume goal execution")
         static let runningPrefix = String(localized: "goal-status-bar.running-prefix", defaultValue: "Goal in progress")
         static let untitled = String(localized: "goal-status-bar.untitled", defaultValue: "Untitled goal")
     }

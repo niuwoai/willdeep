@@ -194,9 +194,14 @@ extension AppState {
         )
     }
 
+    var isAgentGoalExecutionActive: Bool {
+        activeRuntime?.isResponding == true
+            || activeRuntime?.isAwaitingProviderSlot == true
+    }
+
     var shouldShowGoalRunningStatusBar: Bool {
         agentInteractionMode == .goal
-            && isAgentResponding
+            && isAgentGoalExecutionActive
             && agentCurrentGoal?.isEmpty == false
     }
 

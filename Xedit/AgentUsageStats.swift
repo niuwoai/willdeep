@@ -62,6 +62,17 @@ struct AgentHeatmapCell: Identifiable, Equatable {
     let tokenCount: Int
 }
 
+/// One calendar day's usage, shared by the monthly usage calendar and tests.
+/// A nil cost means at least one assistant turn used a model without a known
+/// public price; callers must not present a misleading partial total.
+nonisolated struct AgentDailyUsage: Identifiable, Equatable {
+    var id: Date { date }
+    let date: Date
+    let tokenCount: Int
+    let estimatedCostUSD: Double?
+    let sessionCount: Int
+}
+
 struct AgentModelUsageRow: Identifiable, Equatable {
     var id: String { "\(providerID)|\(modelID)" }
     let providerID: String
@@ -637,6 +648,92 @@ enum AgentUsageStats {
         return columns
     }
 
+    /// Build every day in the requested local calendar month, including zero
+    /// usage days so the presentation layer can render a stable month grid.
+    static func dailyUsage(
+        for sessions: [AgentUsageSessionSnapshot],
+        in month: Date,
+        calendar sourceCalendar: Calendar = .current
+    ) -> [AgentDailyUsage] {
+        var calendar = sourceCalendar
+        calendar.firstWeekday = 1
+        guard let monthInterval = calendar.dateInterval(of: .month, for: month),
+              let dayRange = calendar.range(of: .day, in: .month, for: month) else {
+            return []
+        }
+
+        var tokenCountByDay: [Date: Int] = [:]
+        var sessionIDsByDay: [Date: Set<UUID>] = [:]
+        var costByDay: [Date: Double] = [:]
+        var daysWithUnpricedUsage = Set<Date>()
+
+        for session in sessions {
+            for message in session.messages where monthInterval.contains(message.createdAt) {
+                let day = calendar.startOfDay(for: message.createdAt)
+                let tokens = message.usageTokens.flatMap { $0 > 0 ? $0 : nil }
+                    ?? estimateTokens(for: message)
+                tokenCountByDay[day, default: 0] += tokens
+                sessionIDsByDay[day, default: []].insert(session.id)
+
+                guard message.role == .assistant else { continue }
+                if let cost = estimatedCostUSD(for: message, session: session) {
+                    costByDay[day, default: 0] += cost
+                } else {
+                    daysWithUnpricedUsage.insert(day)
+                }
+            }
+        }
+
+        return dayRange.compactMap { dayNumber in
+            guard let date = calendar.date(
+                byAdding: .day,
+                value: dayNumber - 1,
+                to: monthInterval.start
+            ) else {
+                return nil
+            }
+            let day = calendar.startOfDay(for: date)
+            return AgentDailyUsage(
+                date: day,
+                tokenCount: tokenCountByDay[day] ?? 0,
+                estimatedCostUSD: daysWithUnpricedUsage.contains(day)
+                    ? nil
+                    : (costByDay[day] ?? 0),
+                sessionCount: sessionIDsByDay[day]?.count ?? 0
+            )
+        }
+    }
+
+    /// Sunday-first dates needed to render a conventional monthly calendar.
+    /// Leading and trailing dates are included until the final week is full.
+    static func calendarGridDates(
+        for month: Date,
+        calendar sourceCalendar: Calendar = .current
+    ) -> [Date] {
+        var calendar = sourceCalendar
+        calendar.firstWeekday = 1
+        guard let monthInterval = calendar.dateInterval(of: .month, for: month),
+              let dayRange = calendar.range(of: .day, in: .month, for: month) else {
+            return []
+        }
+
+        let firstDay = calendar.startOfDay(for: monthInterval.start)
+        let leadingDayCount = calendar.component(.weekday, from: firstDay) - 1
+        let occupiedCellCount = leadingDayCount + dayRange.count
+        let totalCellCount = ((occupiedCellCount + 6) / 7) * 7
+        guard let gridStart = calendar.date(
+            byAdding: .day,
+            value: -leadingDayCount,
+            to: firstDay
+        ) else {
+            return []
+        }
+
+        return (0..<totalCellCount).compactMap {
+            calendar.date(byAdding: .day, value: $0, to: gridStart)
+        }
+    }
+
     /// Number of "War and Peace"s the user has burned through, for the
     /// fun-fact line in the dashboard footer. War and Peace ≈ 587k words ≈ 783k
     /// tokens at our chars/4 heuristic. We just call it 780k for round numbers.
@@ -997,15 +1094,50 @@ enum AgentUsageStats {
 
     private static func estimatedCostUSD(for row: AgentModelUsageRow) -> Double? {
         guard !row.isDelegatedExternal else { return nil }
-        guard let price = AgentModelPricing.price(providerID: row.providerID, modelID: row.modelID) else {
+        return estimatedCostUSD(
+            providerID: row.providerID,
+            modelID: row.modelID,
+            promptTokens: row.promptTokens,
+            completionTokens: row.completionTokens,
+            cachedPromptTokens: row.cachedPromptTokens,
+            cacheWritePromptTokens: row.cacheWritePromptTokens
+        )
+    }
+
+    private static func estimatedCostUSD(
+        for message: AgentUsageMessageSnapshot,
+        session: AgentUsageSessionSnapshot
+    ) -> Double? {
+        let identity = usageIdentity(for: message, session: session)
+        guard !identity.isDelegatedExternal else { return nil }
+        let usage = usageBreakdown(for: message)
+        return estimatedCostUSD(
+            providerID: identity.provider.id,
+            modelID: identity.modelID,
+            promptTokens: usage.prompt,
+            completionTokens: usage.completion,
+            cachedPromptTokens: usage.cachedPrompt,
+            cacheWritePromptTokens: usage.cacheWritePrompt
+        )
+    }
+
+    private static func estimatedCostUSD(
+        providerID: String,
+        modelID: String,
+        promptTokens: Int,
+        completionTokens: Int,
+        cachedPromptTokens: Int,
+        cacheWritePromptTokens: Int
+    ) -> Double? {
+        guard let price = AgentModelPricing.price(providerID: providerID, modelID: modelID) else {
             return nil
         }
-        let cached = min(row.cachedPromptTokens, row.promptTokens)
-        let uncachedPrompt = max(0, row.promptTokens - cached)
+        let cached = min(cachedPromptTokens, promptTokens)
+        let uncachedPrompt = max(0, promptTokens - cached)
         let inputCost = Double(uncachedPrompt) * price.inputPerMillion / 1_000_000.0
         let cachedCost = Double(cached) * (price.cachedInputPerMillion ?? price.inputPerMillion) / 1_000_000.0
-        let cacheWriteCost = Double(row.cacheWritePromptTokens) * (price.cacheWritePerMillion ?? price.inputPerMillion) / 1_000_000.0
-        let outputCost = Double(row.completionTokens) * price.outputPerMillion / 1_000_000.0
+        let cacheWriteCost = Double(cacheWritePromptTokens) * (price.cacheWritePerMillion ?? price.inputPerMillion) / 1_000_000.0
+        let outputCost = Double(completionTokens) * price.outputPerMillion / 1_000_000.0
         return inputCost + cachedCost + cacheWriteCost + outputCost
     }
 

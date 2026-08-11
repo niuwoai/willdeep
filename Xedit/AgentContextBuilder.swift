@@ -1240,6 +1240,88 @@ nonisolated enum AgentGoalRoadmapParser {
     }
 }
 
+/// Parses the AI-owned, goal-level acceptance contract emitted with a Goal
+/// Teams proposal. This contract is intentionally separate from the roadmap:
+/// roadmap criteria close individual phases, while these criteria decide when
+/// the overall Goal is actually complete.
+nonisolated enum AgentGoalAcceptanceCriteriaParser {
+    static let maximumCriteriaCount = 10
+
+    private struct Payload: Decodable {
+        var criteria: [String]
+    }
+
+    static func extract(from content: String) -> [String]? {
+        guard let body = AgentPlanParser.closedFencedBody(
+            in: content,
+            tag: "goal-acceptance"
+        ), let data = body.data(using: .utf8),
+           let payload = try? JSONDecoder().decode(Payload.self, from: data),
+           validationFailures(for: payload).isEmpty else {
+            return nil
+        }
+        return normalized(payload.criteria)
+    }
+
+    static func validationFailures(in content: String) -> [String] {
+        guard let body = AgentPlanParser.closedFencedBody(
+            in: content,
+            tag: "goal-acceptance"
+        ) else {
+            return ["the reply must include one closed fenced ```goal-acceptance JSON block"]
+        }
+        guard let data = body.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+            return ["the fenced ```goal-acceptance block must be valid JSON with shape {\"criteria\":[\"observable outcome\"]}"]
+        }
+        return validationFailures(for: payload)
+    }
+
+    static func reconcile(_ goal: AgentGoal, with criteria: [String]) -> AgentGoal {
+        let priorByText = Dictionary(
+            goal.checklist.map { ($0.text, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var updated = goal
+        updated.checklist = normalized(criteria).map { criterion in
+            priorByText[criterion] ?? AgentGoal.Item(text: criterion)
+        }
+        return updated
+    }
+
+    private static func validationFailures(for payload: Payload) -> [String] {
+        let criteria = normalized(payload.criteria)
+        var failures: [String] = []
+        if criteria.isEmpty {
+            failures.append("goal-acceptance.criteria must contain at least one observable outcome")
+        }
+        if payload.criteria.count > maximumCriteriaCount {
+            failures.append("goal-acceptance.criteria exceeds the maximum of \(maximumCriteriaCount) items")
+        }
+        if criteria.count != payload.criteria.count {
+            failures.append("goal-acceptance.criteria must be non-empty and unique")
+        }
+        if criteria.contains(where: {
+            $0.count > AgentGoalRoadmap.maximumAcceptanceCriterionCharacters
+        }) {
+            failures.append(
+                "goal-acceptance criteria must not exceed \(AgentGoalRoadmap.maximumAcceptanceCriterionCharacters) characters"
+            )
+        }
+        return failures
+    }
+
+    private static func normalized(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        return values.compactMap { value in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = trimmed.lowercased()
+            guard !trimmed.isEmpty, seen.insert(key).inserted else { return nil }
+            return trimmed
+        }
+    }
+}
+
 nonisolated enum AgentPlanAutoContinuationDecision: Equatable {
     case stop
     case continueExecution
@@ -1250,6 +1332,7 @@ nonisolated enum AgentPlanAutoContinuationDecision: Equatable {
 
 nonisolated enum AgentPlanAutoContinuationPolicy {
     static let maximumAutomaticContinuations = 8
+    static let maximumGoalAutomaticContinuations = 24
     static let maximumConsecutiveNoProgressReplies = 1
     static let maximumProgressReconciliationAttempts = 1
 
@@ -1281,6 +1364,7 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
         consecutiveNoProgressReplies: Int,
         hasQueuedUserMessages: Bool,
         allowsAutomaticExecution: Bool = true,
+        requiresGoalCompletion: Bool = false,
         evidence: ProgressEvidence = .none
     ) -> AgentPlanAutoContinuationDecision {
         guard allowsAutomaticExecution,
@@ -1294,7 +1378,10 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
               plan.steps.contains(where: { !terminalStatuses.contains($0.status) }) else {
             return .stop
         }
-        guard automaticContinuationCount < maximumAutomaticContinuations else {
+        let continuationLimit = requiresGoalCompletion
+            ? maximumGoalAutomaticContinuations
+            : maximumAutomaticContinuations
+        guard automaticContinuationCount < continuationLimit else {
             return .pauseAfterLimit
         }
         let reconciliationLimit = maximumConsecutiveNoProgressReplies
@@ -1304,6 +1391,13 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
             // parseable status block. Keep asking for one rather than
             // stopping a live run — `maximumAutomaticContinuations` is still
             // the hard backstop, so this cannot spin forever.
+            if requiresGoalCompletion {
+                // Goal mode is an outcome contract, not a formatting test.
+                // Once the bounded reconciliation attempt has failed, return
+                // to full execution so the agent can finish the unchecked
+                // acceptance work instead of parking an incomplete Goal.
+                return .continueExecution
+            }
             return evidence.hasAny ? .reconcileProgress : .pauseAfterNoProgress
         }
         if consecutiveNoProgressReplies > maximumConsecutiveNoProgressReplies {

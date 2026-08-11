@@ -325,9 +325,8 @@ struct WorkspacePickerPill: View {
     }
 
     private var workspaceIconTint: Color {
-        if let remote = activeRemoteWorkspace {
-            return WorkspacePresentation.remoteTint(for: remote.runtime)
-        }
+        // Workspace identity remains visible through its symbol and label;
+        // Composer chrome does not inherit runtime/provider brand colors.
         return Color.secondary
     }
 
@@ -719,7 +718,7 @@ struct ModelPickerPill: View {
                 HStack(spacing: 5) {
                     Image(systemName: Self.modelSymbol)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(isManagedRoutingActive ? Color.teal : Color.secondary)
+                        .foregroundStyle(isManagedRoutingActive ? Color.primary : Color.secondary)
                     Text(pillLabel)
                         .font(AgentDesign.chatSupportingFont(
                             baseFontSize: appState.agentChatBaseFontSize
@@ -733,10 +732,10 @@ struct ModelPickerPill: View {
                                 visualMinimum: 8,
                                 weight: .bold
                             ))
-                            .foregroundStyle(.teal)
+                            .foregroundStyle(.primary)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(.teal.opacity(0.12))
+                            .background(AgentComposerChrome.selectedControlFill)
                             .clipShape(Capsule())
                     }
                     Image(systemName: "chevron.down")
@@ -764,11 +763,16 @@ struct ModelPickerPill: View {
             }
         }
         .foregroundStyle(.secondary)
-        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+        .background(AgentComposerChrome.controlFill)
         .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius, style: .continuous)
-                .stroke(canUpgradeManagedTier ? Color.teal.opacity(0.24) : Color.clear, lineWidth: 1)
+                .stroke(
+                    canUpgradeManagedTier
+                        ? AgentComposerChrome.selectedBorder
+                        : AgentComposerChrome.border,
+                    lineWidth: 1
+                )
         }
         .fixedSize()
         .popover(isPresented: $isModelPanelPresented, arrowEdge: .bottom) {

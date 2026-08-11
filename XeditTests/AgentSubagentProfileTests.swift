@@ -127,6 +127,37 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentRunner.clampedToolPayload("small", limit: 8_000) == "small")
     }
 
+    @Test("结构化输出兼容纯 JSON 与 JSON 代码块")
+    func structuredOutputFallbackAcceptsValidatedJSONText() throws {
+        let schema = AgentStructuredSchema(
+            type: .object,
+            properties: ["result": .init(type: .string)],
+            required: ["result"],
+            additionalProperties: false
+        )
+        let raw = #"{"result":"ok"}"#
+        let fenced = """
+        兼容模式：
+        ```json
+        {"result":"ok"}
+        ```
+        """
+
+        #expect(AgentSubagentRunner.validatedStructuredOutputFallback(in: raw, schema: schema) == raw)
+        let fencedResult = try #require(
+            AgentSubagentRunner.validatedStructuredOutputFallback(in: fenced, schema: schema)
+        )
+        #expect(fencedResult == raw)
+        #expect(AgentSubagentRunner.validatedStructuredOutputFallback(
+            in: #"{"result":"ok","extra":true}"#,
+            schema: schema
+        ) == nil)
+        #expect(AgentSubagentRunner.validatedStructuredOutputFallback(
+            in: "只有解释，没有 JSON",
+            schema: schema
+        ) == nil)
+    }
+
     // MARK: Prompt composition
 
     @Test("narrow trades add their capability section to the prompt")
@@ -140,6 +171,18 @@ struct AgentSubagentProfileTests {
         // The invariants stay regardless of trade.
         #expect(scoutPrompt.contains("READ-ONLY"))
         #expect(scoutPrompt.contains("cannot ask the user"))
+    }
+
+    @Test("结构化提示为不支持工具调用的 Provider 提供 JSON 兼容路径")
+    func structuredPromptCarriesProviderCompatibilityPath() {
+        let prompt = AgentSubagentRunner.systemPrompt(
+            workspaceURL: nil,
+            outputSchema: AgentStructuredSchema(type: .string)
+        )
+
+        #expect(prompt.contains("provider cannot call"))
+        #expect(prompt.contains("raw JSON value"))
+        #expect(prompt.contains("same schema validation"))
     }
 
     @Test("the editor prompt names its one writable file and drops the read-only claim")

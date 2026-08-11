@@ -13,11 +13,11 @@
 //   - 键盘端(Fn)继续 push-to-talk —— 那本来就是键盘自然手势,且
 //     FnPushToTalkMonitor 自己有 isStarting/pendingStop 防竞态。
 //
-//  视觉态:
-//   - idle           mic.fill        accent
-//   - recording      stop.fill       红色(pulsing 可后续加)
-//   - transcribing   waveform        蓝色
-//   - failed         exclamationmark 橙色 → 点击进入失败处理(权限弹 alert 或 reset)
+//  视觉态全部使用 Composer 黑白灰层级，通过图标与灰度深浅区分：
+//   - idle           mic.fill
+//   - recording      stop.fill
+//   - transcribing   waveform
+//   - failed         exclamationmark → 点击进入失败处理(权限弹 alert 或 reset)
 //
 
 import SwiftUI
@@ -34,7 +34,7 @@ struct MicPushToTalkButton: View {
                     .frame(width: 22, height: 22)
                 Image(systemName: symbol)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AgentComposerChrome.actionForeground)
             }
             .opacity(isAvailable ? 1.0 : 0.45)
         }
@@ -87,10 +87,10 @@ struct MicPushToTalkButton: View {
 
     private var backgroundColor: Color {
         switch recorder.state {
-        case .idle: return Color.accentColor
-        case .recording: return .red
-        case .transcribing: return .blue
-        case .failed: return .orange
+        case .idle: return AgentComposerChrome.actionFill
+        case .recording: return Color.primary.opacity(0.90)
+        case .transcribing: return Color.primary.opacity(0.64)
+        case .failed: return Color.secondary.opacity(0.72)
         }
     }
 

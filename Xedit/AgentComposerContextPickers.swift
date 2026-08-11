@@ -1,4 +1,20 @@
+import AppKit
 import SwiftUI
+
+// Composer chrome deliberately stays monochrome, matching Codex's quiet
+// black/white/gray hierarchy. State is communicated by weight and opacity
+// instead of borrowing the app accent color.
+enum AgentComposerChrome {
+    static let cardFill = Color(nsColor: .textBackgroundColor)
+    static let controlFill = Color.primary.opacity(0.045)
+    static let selectedControlFill = Color.primary.opacity(0.085)
+    static let strongControlFill = Color.primary.opacity(0.13)
+    static let border = Color.primary.opacity(0.10)
+    static let selectedBorder = Color.primary.opacity(0.17)
+    static let strongBorder = Color.primary.opacity(0.23)
+    static let actionFill = Color.primary.opacity(0.82)
+    static let actionForeground = Color(nsColor: .textBackgroundColor)
+}
 
 // MARK: - Composer run context
 
@@ -38,7 +54,7 @@ struct AgentComposerRunContextBar: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+        .background(AgentComposerChrome.controlFill)
         .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
         .help(L10n.ComposerWorkspace.currentBranch)
         .fixedSize()
@@ -83,7 +99,7 @@ struct AgentRunLocationPickerPill: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
+            .background(AgentComposerChrome.controlFill)
             .clipShape(RoundedRectangle(cornerRadius: AgentDesign.pillCornerRadius))
         }
         .menuStyle(.borderlessButton)
@@ -165,22 +181,22 @@ struct AgentApprovalModePickerPill: View {
     }
 
     private var pillForeground: Color {
-        appState.agentApprovalMode == .workspaceAccess ? Color.white : Color.secondary
+        appState.agentApprovalMode == .requestEveryTime ? Color.secondary : Color.primary
     }
 
     private var pillBackground: Color {
         switch appState.agentApprovalMode {
-        case .requestEveryTime: return Color.secondary.opacity(0.10)
-        case .smart: return Color.accentColor.opacity(0.14)
-        case .workspaceAccess: return Color.accentColor
+        case .requestEveryTime: return AgentComposerChrome.controlFill
+        case .smart: return AgentComposerChrome.selectedControlFill
+        case .workspaceAccess: return AgentComposerChrome.strongControlFill
         }
     }
 
     private var pillBorder: Color {
         switch appState.agentApprovalMode {
-        case .requestEveryTime: return Color.secondary.opacity(0.25)
-        case .smart: return Color.accentColor.opacity(0.35)
-        case .workspaceAccess: return Color.clear
+        case .requestEveryTime: return AgentComposerChrome.border
+        case .smart: return AgentComposerChrome.selectedBorder
+        case .workspaceAccess: return AgentComposerChrome.strongBorder
         }
     }
 }

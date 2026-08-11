@@ -367,7 +367,7 @@ private struct AgentComposerWorktreeSummaryBar: View {
     }
 }
 
-private struct AgentComposerGoalCard: View {
+struct AgentComposerGoalCard: View {
     let goal: AgentGoal
     @EnvironmentObject var appState: AppState
     @State private var showingEditor = false
@@ -395,12 +395,33 @@ private struct AgentComposerGoalCard: View {
 
             Spacer(minLength: 0)
 
-            if !goal.checklist.isEmpty {
-                Text(progressText)
+            if let phaseText {
+                Text(phaseText)
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .lineLimit(1)
+            }
+
+            if hasRemainingAcceptance {
+                Button {
+                    appState.togglePinnedAgentGoalExecution()
+                } label: {
+                    Image(systemName: AgentGoalExecutionControlPolicy.systemImage(
+                        isActive: appState.isAgentGoalExecutionActive
+                    ))
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .foregroundStyle(Color.accentColor)
+                .help(executionControlHelp)
+                .accessibilityLabel(executionControlHelp)
+                .accessibilityIdentifier(appState.isAgentGoalExecutionActive
+                    ? "goal-execution-pause"
+                    : "goal-execution-resume")
             }
 
             Button {
@@ -429,17 +450,13 @@ private struct AgentComposerGoalCard: View {
         )
         .contentShape(Rectangle())
         .help(helpText)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)
-        .onTapGesture {
-            showingEditor = true
-        }
         .sheet(isPresented: $showingEditor) {
             AgentGoalEditorSheet(
                 initialStatement: goal.statement,
-                initialItems: goal.checklist.map(\.text),
-                onSave: { statement, items in
-                    appState.setAgentGoal(statement: statement, items: items)
+                onSave: { statement in
+                    appState.setAgentGoalStatement(statement)
                     showingEditor = false
                 },
                 onCancel: { showingEditor = false }
@@ -450,29 +467,40 @@ private struct AgentComposerGoalCard: View {
     private var summaryText: String {
         let statement = goal.statement.trimmingCharacters(in: .whitespacesAndNewlines)
         if !statement.isEmpty { return statement }
-        return goal.checklist.first?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? L10n.GoalStatusBar.untitled
+        return L10n.GoalStatusBar.untitled
     }
 
     private var helpText: String {
-        guard !goal.checklist.isEmpty else { return summaryText }
-        let done = goal.checklist.filter(\.done).count
-        return L10n.GoalStatusBar.progressHelp("\(done)", "\(goal.checklist.count)")
+        summaryText
     }
 
-    private var progressText: String {
-        let done = goal.checklist.filter(\.done).count
-        let checklist = "\(done)/\(goal.checklist.count)"
+    private var phaseText: String? {
         guard let roadmap = appState.agentGoalRoadmap,
-              !roadmap.phases.isEmpty else { return checklist }
-        return "\(L10n.GoalRoadmap.phase(roadmap.activePhaseIndex + 1, roadmap.phases.count)) · \(checklist)"
+              !roadmap.phases.isEmpty else { return nil }
+        return L10n.GoalRoadmap.phase(
+            roadmap.activePhaseIndex + 1,
+            roadmap.phases.count
+        )
     }
 
     private var accessibilityLabel: String {
         "\(statusPrefix) \(summaryText)"
     }
 
+    private var hasRemainingAcceptance: Bool {
+        goal.checklist.isEmpty || goal.checklist.contains(where: { !$0.done })
+    }
+
+    private var executionControlHelp: String {
+        appState.isAgentGoalExecutionActive
+            ? L10n.GoalStatusBar.pauseExecution
+            : L10n.GoalStatusBar.resumeExecution
+    }
+
     private var statusPrefix: String {
-        appState.isAgentResponding ? L10n.GoalStatusBar.runningPrefix : L10n.GoalStatusBar.pinnedPrefix
+        appState.isAgentGoalExecutionActive
+            ? L10n.GoalStatusBar.runningPrefix
+            : L10n.GoalStatusBar.pinnedPrefix
     }
 }
 
@@ -688,7 +716,6 @@ private struct ComposerCard: View {
     }
 
     var body: some View {
-        let palette = appState.editorSettings.interfaceSkin.palette
         let pendingFileIDs = Set(appState.agentPendingFiles.map(\.id))
         let retainedSessionDocuments = appState.agentSessionDocuments.filter { !pendingFileIDs.contains($0.id) }
         let hasDocumentContext = !appState.agentPendingFiles.isEmpty
@@ -698,7 +725,7 @@ private struct ComposerCard: View {
             if let attachmentNotice {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.secondary)
                     Text(attachmentNotice)
                         .font(.system(size: 11, weight: .medium))
                         .fixedSize(horizontal: false, vertical: true)
@@ -713,7 +740,7 @@ private struct ComposerCard: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(Color.orange.opacity(0.10))
+                .background(AgentComposerChrome.controlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
 
@@ -731,10 +758,10 @@ private struct ComposerCard: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "wand.and.stars")
-                                .foregroundStyle(palette.accent)
+                                .foregroundStyle(.primary)
                             Text(L10n.Composer.designToCodeAction)
                                 .fontWeight(.medium)
-                                .foregroundStyle(palette.accent)
+                                .foregroundStyle(.primary)
                             Text("·")
                                 .foregroundStyle(.tertiary)
                             Text(L10n.Composer.designToCodeActionDetail)
@@ -948,11 +975,11 @@ private struct ComposerCard: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(palette.controlFill)
+        .background(AgentComposerChrome.cardFill)
         .clipShape(RoundedRectangle(cornerRadius: AgentDesign.inputCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: AgentDesign.inputCornerRadius)
-                .stroke(palette.hairline, lineWidth: 1)
+                .stroke(AgentComposerChrome.border, lineWidth: 1)
         )
         .onAppear {
             // 窗口新开时 AppKit 会把默认 first responder 给到窗口里第一个
