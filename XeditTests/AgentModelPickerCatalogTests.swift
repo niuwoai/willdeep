@@ -31,9 +31,7 @@ struct AgentModelPickerCatalogTests {
     func keepsSameModelAsSeparateRowsAcrossProviders() {
         let items = AgentModelPickerCatalog.items(
             entries: [someIM, custom],
-            fetchedByProvider: [someIM.id: ["glm-5.2"]],
-            fallbackKnownModels: [],
-            activeProviderID: someIM.id
+            fetchedByProvider: [someIM.id: ["glm-5.2"]]
         )
         let results = AgentModelPickerCatalog.search(items, query: "glm-5.2")
         #expect(results.map(\.providerName) == ["some.im", "Custom Relay", "Custom Relay"])
@@ -44,8 +42,7 @@ struct AgentModelPickerCatalogTests {
     func deduplicatesModelsInsideOneProviderCaseInsensitively() {
         let models = AgentModelPickerCatalog.models(
             for: someIM,
-            fetchedModels: ["GLM-5.2", "glm-5.2", " deepseek-v4-flash "],
-            fallbackModels: []
+            fetchedModels: ["GLM-5.2", "glm-5.2", " deepseek-v4-flash "]
         )
         #expect(models == ["deepseek-v4-flash", "deepseek-v4-pro", "GLM-5.2"])
     }
@@ -54,9 +51,7 @@ struct AgentModelPickerCatalogTests {
     func globalSearchMatchesProviderName() {
         let items = AgentModelPickerCatalog.items(
             entries: [someIM, custom],
-            fetchedByProvider: [:],
-            fallbackKnownModels: [],
-            activeProviderID: someIM.id
+            fetchedByProvider: [:]
         )
         let results = AgentModelPickerCatalog.search(items, query: "custom relay")
         #expect(!results.isEmpty)
@@ -67,12 +62,30 @@ struct AgentModelPickerCatalogTests {
     func tierFilterUsesConfiguredFlashAndProModels() {
         let items = AgentModelPickerCatalog.items(
             entries: [someIM],
-            fetchedByProvider: [:],
-            fallbackKnownModels: [],
-            activeProviderID: someIM.id
+            fetchedByProvider: [:]
         )
         #expect(AgentModelPickerCatalog.filtered(items, by: .flash).map(\.modelID) == ["deepseek-v4-flash"])
         #expect(AgentModelPickerCatalog.filtered(items, by: .pro).map(\.modelID) == ["deepseek-v4-pro"])
+    }
+
+    @Test
+    func providerCountContainsOnlyConfiguredAndProviderFetchedModels() {
+        let fetched = (1...10).map { "wd/model-\($0)" }
+        let entry = AgentProviderEntry(
+            providerID: AgentProviderPreset.customID,
+            displayName: "wd",
+            baseURL: "https://example.invalid/v1",
+            flashPrimary: fetched[0],
+            proPrimary: fetched[0]
+        )
+
+        let items = AgentModelPickerCatalog.items(
+            entries: [entry],
+            fetchedByProvider: [entry.id: fetched]
+        )
+
+        #expect(items.count == 10)
+        #expect(items.map(\.modelID) == fetched)
     }
 
     @Test

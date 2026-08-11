@@ -2219,23 +2219,10 @@ struct ModelPickerPill: View {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var effectiveFetchedModelsByProvider: [UUID: [String]] {
-        var catalogs = fetchedModelsByProvider
-        for recommendation in Self.codingRecommendations {
-            guard let entry = selectableProviderEntries.first(where: {
-                $0.providerID == recommendation.providerID
-            }) else { continue }
-            catalogs[entry.id, default: []].append(recommendation.model)
-        }
-        return catalogs
-    }
-
     private var allCatalogItems: [AgentModelCatalogItem] {
         AgentModelPickerCatalog.items(
             entries: selectableProviderEntries,
-            fetchedByProvider: effectiveFetchedModelsByProvider,
-            fallbackKnownModels: combinedCatalogModels,
-            activeProviderID: menuSnapshot.activeProviderID
+            fetchedByProvider: fetchedModelsByProvider
         )
     }
 

@@ -42,7 +42,13 @@ enum AgentMarkdownNormalizer {
     }
 
     private static func computeNormalized(_ source: String) -> String {
-        let lines = source.components(separatedBy: .newlines)
+        // Providers commonly frame short messages as `\n\ntext\n\n`. Those
+        // transport-level outer blank lines used to stack with transcript and
+        // Markdown paragraph spacing, producing conspicuous empty bands.
+        // Preserve all whitespace inside the body while trimming only its
+        // outer edge at the rendering boundary.
+        let displaySource = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lines = displaySource.components(separatedBy: .newlines)
         var output: [String] = []
         var index = 0
         var isInFence = false

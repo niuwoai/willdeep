@@ -397,6 +397,38 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func chatMarkdownTrimsProviderOuterBlankLinesButPreservesInnerParagraphs() {
+        let normalized = AgentMarkdownNormalizer.normalizedForChatRendering(
+            "\n\n我先获取模型列表。\n\n然后逐个测试。\n\n"
+        )
+
+        #expect(normalized == "我先获取模型列表。\n\n然后逐个测试。")
+        #expect(!normalized.hasPrefix("\n"))
+        #expect(!normalized.hasSuffix("\n"))
+    }
+
+    @Test
+    func sameTurnAssistantProgressMessagesUseOneLineSeparator() {
+        let user = AgentMessage(role: .user, content: "测试模型")
+        let first = AgentMessage(
+            role: .assistant,
+            content: "\n\n我先获取模型列表。\n\n"
+        )
+        let second = AgentMessage(
+            role: .assistant,
+            content: "\n\n共有 9 个模型，现在逐个测试。\n\n"
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [user, first, second],
+            isDark: false
+        ).string
+
+        #expect(rendered.contains("我先获取模型列表。\n共有 9 个模型，现在逐个测试。"))
+        #expect(!rendered.contains("我先获取模型列表。\n\n共有 9 个模型，现在逐个测试。"))
+    }
+
+    @Test
     func liveThinkingStreamingRendererParsesCommonMarkdownWhenEnabled() {
         let rendered = AgentAssistantStreamingTextRenderer.render(
             """
@@ -1382,6 +1414,52 @@ struct AgentChatHistoryRendererTests {
         #expect(rendered.string.contains("已读取1个文件"))
         #expect(!rendered.string.contains("终端操作"))
         #expect(!rendered.string.contains("terminal_send_command"))
+    }
+
+    @Test
+    func settledTurnKeepsOneToolSummaryAfterFinalAssistantProgress() throws {
+        let user = AgentMessage(role: .user, content: "逐个测试模型")
+        var first = AgentMessage(
+            role: .assistant,
+            content: "我先获取模型列表。",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: "command-1",
+                    toolName: "run_command",
+                    argumentsJSON: #"{"command":"curl https://example.com/v1/models"}"#
+                )
+            ]
+        )
+        first.settledToolReceipts = ["command-1": .failed]
+        var second = AgentMessage(
+            role: .assistant,
+            content: "共有 9 个模型，现在逐个测试。",
+            toolCalls: [
+                AgentMessageToolCall(
+                    externalID: "command-2",
+                    toolName: "run_command",
+                    argumentsJSON: #"{"command":"curl https://example.com/v1/chat/completions"}"#
+                )
+            ]
+        )
+        second.settledToolReceipts = ["command-2": .succeeded]
+        let final = AgentMessage(
+            role: .assistant,
+            content: "JSON 解析有问题，查看原始内容。"
+        )
+
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [user, first, second, final],
+            isDark: false
+        ).string
+
+        #expect(rendered.components(separatedBy: "已运行2条命令").count - 1 == 1)
+        #expect(rendered.contains("1条失败"))
+        let finalRange = try #require(rendered.range(of: final.content))
+        let toolRange = try #require(rendered.range(of: "已运行2条命令"))
+        #expect(finalRange.upperBound < toolRange.lowerBound)
+        #expect(!rendered.contains("我先获取模型列表。\n已运行1条命令"))
+        #expect(!rendered.contains("共有 9 个模型，现在逐个测试。\n已运行1条命令"))
     }
 
     @Test

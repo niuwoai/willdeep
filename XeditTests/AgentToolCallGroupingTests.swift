@@ -812,9 +812,9 @@ extension WillDeepTests {
 
     @Test("command confirmation stays calm, scrollable, and honest about shortcuts")
     func testCommandConfirmationReviewMetrics() {
-        #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 3)
-        #expect(AgentConfirmationReviewMetrics.commandViewportHeight >= 68)
-        #expect(AgentConfirmationReviewMetrics.commandViewportHeight <= 76)
+        #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 5)
+        #expect(AgentConfirmationReviewMetrics.commandViewportHeight >= 104)
+        #expect(AgentConfirmationReviewMetrics.commandViewportHeight <= 120)
         #expect(AgentConfirmationReviewMetrics.actionButtonHeight >= 26)
         #expect(AgentConfirmationReviewMetrics.actionButtonHeight <= 30)
         #expect(AgentConfirmationReviewMetrics.actionButtonMaxWidth >= 112)

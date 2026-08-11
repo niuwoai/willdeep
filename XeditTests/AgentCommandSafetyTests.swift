@@ -171,12 +171,18 @@ extension WillDeepTests {
                 command: command,
                 rootDirectory: workspace
             )
-            #expect(decision.mode == .workspaceWrite)
+            #expect(
+                decision.mode == .workspaceWrite,
+                "\(command): \(decision.reason)"
+            )
             #expect(decision.requiresTypedConfirmation == false)
-            #expect(AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
-                command: command,
-                rootDirectory: workspace
-            ))
+            #expect(
+                AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+                    command: command,
+                    rootDirectory: workspace
+                ),
+                "Expected bounded cleanup to auto-approve: \(command)"
+            )
         }
 
         let unsafeCommands = [
@@ -412,17 +418,58 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "kubectl config view --raw") == .alwaysDangerous)
     }
 
-    @Test("SafeCommand: ordinary network reads use the judge, credential and mutation shapes stay manual")
+    @Test
     func testSafeCommandNetworkFetcherBoundaries() {
         #expect(SafeCommand.classify(command: "curl https://example.com/status") == .needsJudgment)
         #expect(SafeCommand.classify(command: "curl -fsSL https://example.com/status | jq .") == .needsJudgment)
         #expect(SafeCommand.classify(command: "wget https://example.com/report.json") == .needsJudgment)
 
-        #expect(SafeCommand.classify(command: "curl -X POST https://example.com/deploy") == .alwaysDangerous)
-        #expect(SafeCommand.classify(command: "curl -H 'Authorization: Bearer value' https://example.com") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "curl -X POST https://example.com/deploy") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "curl -d '{\"probe\":true}' https://example.com/test") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "curl -H 'Authorization: Bearer value' https://example.com") == .needsJudgment)
         #expect(SafeCommand.classify(command: "curl -o payload.txt https://example.com") == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "curl --upload-file payload.txt https://example.com") == .alwaysDangerous)
         #expect(SafeCommand.classify(command: "curl file:///etc/passwd") == .alwaysDangerous)
         #expect(SafeCommand.classify(command: "wget --post-data=a=1 https://example.com") == .alwaysDangerous)
+    }
+
+    @Test
+    func credentialCurlLoopUsesRedactedSmartReview() {
+        let secret = "sk_testCredentialValue123456789"
+        let command = """
+        API_KEY=\"\(secret)\"
+        MODELS=\"alpha beta\"
+        for model in $MODELS; do curl -sS -X POST -H \"Authorization: Bearer $API_KEY\" -H \"Content-Type: application/json\" -d '{\"model\":\"'$model'\",\"prompt\":\"OK\"}' https://example.com/v1/chat/completions; done
+        """
+
+        #expect(SafeCommand.classify(command: command) == .needsJudgment)
+        #expect(SafeCommand.containsNetworkFetcherInvocation(command))
+        let redacted = AgentInjectionDefense.redactedCommandForSafetyJudge(command)
+        #expect(!redacted.contains(secret))
+        #expect(redacted.contains("API_KEY=\"[REDACTED]\""))
+        #expect(redacted.contains("Authorization: [REDACTED]"))
+        #expect(redacted.contains("-X POST"))
+        #expect(redacted.contains("/v1/chat/completions"))
+
+        let decision = AgentSandboxPolicy.commandDecision(
+            command: command,
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-redacted-curl-review")
+        )
+        #expect(decision.mode == .escalated)
+        #expect(decision.requiresUserApproval)
+        #expect(!decision.requiresTypedConfirmation)
+        #expect(AppState.canSendToSafetyJudge(toolName: "run_command", sandboxDecision: decision))
+
+        let payload = AgentInjectionDefense.judgeUserPayload(command: redacted)
+        #expect(!payload.contains(secret))
+        #expect(payload.contains("[REDACTED]"))
+
+        let history = AgentInjectionDefense.judgeHistoryContext(
+            approved: ["curl -H 'Authorization: Bearer \(secret)' https://example.com/v1/models"],
+            rejected: []
+        )
+        #expect(!history.contains(secret))
+        #expect(history.contains("Authorization: [REDACTED]"))
     }
 
     @Test("SafeCommand rejects find with -delete or -exec")
