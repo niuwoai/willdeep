@@ -716,7 +716,6 @@ private struct ComposerCard: View {
     }
 
     var body: some View {
-        let palette = appState.editorSettings.interfaceSkin.palette
         let pendingFileIDs = Set(appState.agentPendingFiles.map(\.id))
         let retainedSessionDocuments = appState.agentSessionDocuments.filter { !pendingFileIDs.contains($0.id) }
         let hasDocumentContext = !appState.agentPendingFiles.isEmpty
@@ -726,7 +725,7 @@ private struct ComposerCard: View {
             if let attachmentNotice {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.secondary)
                     Text(attachmentNotice)
                         .font(.system(size: 11, weight: .medium))
                         .fixedSize(horizontal: false, vertical: true)
@@ -741,7 +740,7 @@ private struct ComposerCard: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(Color.orange.opacity(0.10))
+                .background(AgentComposerChrome.controlFill)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
 
@@ -759,10 +758,10 @@ private struct ComposerCard: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "wand.and.stars")
-                                .foregroundStyle(palette.accent)
+                                .foregroundStyle(.primary)
                             Text(L10n.Composer.designToCodeAction)
                                 .fontWeight(.medium)
-                                .foregroundStyle(palette.accent)
+                                .foregroundStyle(.primary)
                             Text("·")
                                 .foregroundStyle(.tertiary)
                             Text(L10n.Composer.designToCodeActionDetail)
@@ -976,11 +975,11 @@ private struct ComposerCard: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(palette.controlFill)
+        .background(AgentComposerChrome.cardFill)
         .clipShape(RoundedRectangle(cornerRadius: AgentDesign.inputCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: AgentDesign.inputCornerRadius)
-                .stroke(palette.hairline, lineWidth: 1)
+                .stroke(AgentComposerChrome.border, lineWidth: 1)
         )
         .onAppear {
             // 窗口新开时 AppKit 会把默认 first responder 给到窗口里第一个
