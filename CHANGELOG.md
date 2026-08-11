@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc9 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc10 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc10 - 2026-08-12
+
+### Fixed
+
+- CI 的 `short-drama` 守卫组恢复通过。`short_drama_media_contract` 用源码字符串比对断言侧边栏组件历史的取数方式，而 2026-08-09 的重构（`420dad70`）已把 `widgetRegistry.widgets(forRuntime: appState.activeRuntime?.id)` 换成等价的局部变量写法 `runtime?.id`，断言文本没有跟着更新，从那天起该守卫一直为红（此前几次发布的 Actions 均被取消，没有暴露）。断言改为匹配现有写法，行为未变。
+
+### Meta
+
+- CI 守卫断言跟上既有重构，预发布版本从 **1.247.0-rc9** 提升为 **1.247.0-rc10**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc9 - 2026-08-12
 

@@ -1858,7 +1858,7 @@ plan_import_contract = {
     widget_registry_source.include?("func remember(_ widget: AgentWidget, forRuntime runtimeID: UUID)") &&
     side_panel_source.include?("@State private var selectedWidgetID: UUID?") &&
     side_panel_source.include?("private var widgets: [AgentWidget]") &&
-    side_panel_source.include?("widgetRegistry.widgets(forRuntime: appState.activeRuntime?.id)") &&
+    side_panel_source.include?("widgetRegistry.widgets(forRuntime: runtime?.id)") &&
     side_panel_source.include?("最近网页组件") &&
     side_panel_source.include?("selectedWidgetID = widget.id") &&
     side_panel_source.include?("AgentWidgetCardView(widget: widget)") &&
