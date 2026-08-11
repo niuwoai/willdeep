@@ -15,6 +15,35 @@ extension L10n {
         static let activityDaily = String(localized: "stats-dashboard.activity.daily", defaultValue: "Daily")
         static let activityTitle = String(localized: "stats-dashboard.activity.title", defaultValue: "Token activity")
         static let activityWeekly = String(localized: "stats-dashboard.activity.weekly", defaultValue: "Weekly")
+        static let usageCalendarTitle = String(localized: "stats-dashboard.usage-calendar.title", defaultValue: "Usage calendar")
+        static let usageCalendarOpenHelp = String(localized: "stats-dashboard.usage-calendar.open-help", defaultValue: "Open monthly usage calendar")
+        static let usageCalendarPreviousMonth = String(localized: "stats-dashboard.usage-calendar.previous-month", defaultValue: "Previous month")
+        static let usageCalendarNextMonth = String(localized: "stats-dashboard.usage-calendar.next-month", defaultValue: "Next month")
+        static let usageCalendarWeekdays = [
+            String(localized: "stats-dashboard.usage-calendar.weekday.sunday", defaultValue: "Sun"),
+            String(localized: "stats-dashboard.usage-calendar.weekday.monday", defaultValue: "Mon"),
+            String(localized: "stats-dashboard.usage-calendar.weekday.tuesday", defaultValue: "Tue"),
+            String(localized: "stats-dashboard.usage-calendar.weekday.wednesday", defaultValue: "Wed"),
+            String(localized: "stats-dashboard.usage-calendar.weekday.thursday", defaultValue: "Thu"),
+            String(localized: "stats-dashboard.usage-calendar.weekday.friday", defaultValue: "Fri"),
+            String(localized: "stats-dashboard.usage-calendar.weekday.saturday", defaultValue: "Sat")
+        ]
+
+        static func usageCalendarMonthSummary(_ tokens: String, _ cost: String, _ chats: String) -> String {
+            let template = String(
+                localized: "stats-dashboard.usage-calendar.month-summary",
+                defaultValue: "%1$@ Token · %2$@ · %3$@ chats"
+            )
+            return String(format: template, tokens, cost, chats)
+        }
+
+        static func usageCalendarDaySummary(_ cost: String, _ chats: String) -> String {
+            let template = String(
+                localized: "stats-dashboard.usage-calendar.day-summary",
+                defaultValue: "%1$@ · %2$@ chats"
+            )
+            return String(format: template, cost, chats)
+        }
         static let capabilitiesEmpty = String(localized: "stats-dashboard.capabilities.empty", defaultValue: "Use a tool in a chat and your most-used capabilities will appear here.")
         static let capabilitiesTitle = String(localized: "stats-dashboard.capabilities.title", defaultValue: "Most-used capabilities")
         static let capabilityAutomation = String(localized: "stats-dashboard.capability.automation", defaultValue: "Automation")

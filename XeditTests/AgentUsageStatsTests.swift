@@ -506,6 +506,56 @@ extension WillDeepTests {
         #expect(earlierCell?.tokenCount == 55)
     }
 
+    @Test("monthly usage calendar aggregates tokens, priced cost, and distinct chats per day")
+    func monthlyUsageCalendarAggregatesDailyFacts() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let month = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 1)))
+        let august11 = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 11, hour: 10)))
+
+        let metered = AgentMessage(
+            role: .assistant,
+            content: "ok",
+            usageTokens: 2_000_000,
+            promptTokens: 1_000_000,
+            completionTokens: 1_000_000,
+            createdAt: august11
+        )
+        let sessions = [
+            makeSession(modelID: "gpt-4.1", providerID: "openai", messages: [
+                userMessage("first", at: august11),
+                metered
+            ]),
+            makeSession(modelID: "gpt-4.1", providerID: "openai", messages: [
+                userMessage("second", at: august11)
+            ])
+        ].map { AgentUsageSessionSnapshot(session: $0) }
+
+        let usage = AgentUsageStats.dailyUsage(for: sessions, in: month, calendar: calendar)
+        let day = try #require(usage.first { calendar.component(.day, from: $0.date) == 11 })
+
+        #expect(usage.count == 31)
+        #expect(day.tokenCount == 2_000_002)
+        #expect(day.sessionCount == 2)
+        #expect(abs(try #require(day.estimatedCostUSD) - 10) < 0.000_001)
+    }
+
+    @Test("August 2026 usage calendar is a Sunday-first six-week grid")
+    func usageCalendarGridUsesConventionalWeekOrder() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let month = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 11)))
+
+        let dates = AgentUsageStats.calendarGridDates(for: month, calendar: calendar)
+
+        #expect(dates.count == 42)
+        #expect(calendar.component(.weekday, from: try #require(dates.first)) == 1)
+        #expect(calendar.component(.month, from: dates[6]) == 8)
+        #expect(calendar.component(.day, from: dates[6]) == 1)
+        #expect(calendar.component(.month, from: try #require(dates.last)) == 9)
+        #expect(calendar.component(.day, from: try #require(dates.last)) == 5)
+    }
+
     @Test("AgentUsageStats falls back to built-in public prices for custom GPT models")
     func testUsageStatsPublicPriceFallbackForGPTModels() {
         let session = makeSession(

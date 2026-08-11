@@ -31999,6 +31999,19 @@
       }
     },
     "stats-dashboard.activity.weekly" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Weekly" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "每周" } } } },
+    "stats-dashboard.usage-calendar.day-summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ · %2$@ chats" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ · %2$@ 个会话" } } } },
+    "stats-dashboard.usage-calendar.month-summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ Token · %2$@ · %3$@ chats" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ Token · %2$@ · %3$@ 个会话" } } } },
+    "stats-dashboard.usage-calendar.next-month" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Next month" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下一个月" } } } },
+    "stats-dashboard.usage-calendar.open-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open monthly usage calendar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开月度用量日历" } } } },
+    "stats-dashboard.usage-calendar.previous-month" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Previous month" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上一个月" } } } },
+    "stats-dashboard.usage-calendar.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Usage calendar" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用量日历" } } } },
+    "stats-dashboard.usage-calendar.weekday.friday" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Fri" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "周五" } } } },
+    "stats-dashboard.usage-calendar.weekday.monday" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Mon" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "周一" } } } },
+    "stats-dashboard.usage-calendar.weekday.saturday" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sat" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "周六" } } } },
+    "stats-dashboard.usage-calendar.weekday.sunday" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sun" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "周日" } } } },
+    "stats-dashboard.usage-calendar.weekday.thursday" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Thu" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "周四" } } } },
+    "stats-dashboard.usage-calendar.weekday.tuesday" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tue" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "周二" } } } },
+    "stats-dashboard.usage-calendar.weekday.wednesday" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Wed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "周三" } } } },
     "stats-dashboard.capabilities.call-count" : {
       "extractionState" : "manual",
       "localizations" : {

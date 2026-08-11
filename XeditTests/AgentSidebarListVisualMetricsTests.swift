@@ -424,6 +424,45 @@ struct AgentSidebarListVisualMetricsTests {
         try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
     }
 
+    @Test("render the production monthly usage calendar for design QA")
+    @MainActor
+    func renderMonthlyUsageCalendarForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_USAGE_CALENDAR_QA_OUTPUT"]
+            ?? "/tmp/Xedit-usage-calendar-1.246.0-rc1.png"
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 8 * 60 * 60))
+        let now = try #require(calendar.date(from: DateComponents(
+            year: 2026,
+            month: 8,
+            day: 11,
+            hour: 12
+        )))
+
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.system.id
+        let appState = AppState(editorSettings: settings)
+        appState.agentChatBaseFontSize = 14
+        appState.hasLoadedAgentUsageSnapshots = true
+        appState.agentUsageSnapshots = usageCalendarSnapshots(now: now, calendar: calendar)
+
+        let size = NSSize(width: 700, height: 650)
+        let root = AgentStatsDashboard(initialTab: .calendar, now: now)
+            .environmentObject(appState)
+            .padding(24)
+            .frame(width: size.width, height: size.height, alignment: .top)
+            .background(appState.editorSettings.interfaceSkin.windowBackground)
+            .preferredColorScheme(.light)
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
     @Test("render the production live activity timeline for design QA")
     @MainActor
     func renderLiveActivityTimelineForDesignQA() throws {
@@ -708,5 +747,51 @@ struct AgentSidebarListVisualMetricsTests {
                 artifactCount: index % 3
             )
         }
+    }
+
+    private func usageCalendarSnapshots(
+        now: Date,
+        calendar: Calendar
+    ) -> [AgentUsageSessionSnapshot] {
+        var snapshots: [AgentUsageSessionSnapshot] = []
+        for day in 1...11 {
+            let chatsForDay = day <= 9 ? 4 : 3
+            for chatIndex in 0..<chatsForDay {
+                let createdAt = calendar.date(
+                    from: DateComponents(
+                        year: 2026,
+                        month: 8,
+                        day: day,
+                        hour: 9 + chatIndex
+                    )
+                ) ?? now
+                let promptTokens = 350_000 + day * 2_000
+                let completionTokens = 220_000 + chatIndex * 3_000
+                snapshots.append(AgentUsageSessionSnapshot(
+                    id: UUID(),
+                    modelID: "gpt-5-mini",
+                    providerID: "openai",
+                    providerDisplayName: "OpenAI",
+                    createdAt: createdAt,
+                    updatedAt: createdAt.addingTimeInterval(900),
+                    messages: [
+                        AgentUsageMessageSnapshot(
+                            role: .user,
+                            contentCharacterCount: 120,
+                            createdAt: createdAt
+                        ),
+                        AgentUsageMessageSnapshot(
+                            role: .assistant,
+                            contentCharacterCount: 480,
+                            usageTokens: promptTokens + completionTokens,
+                            promptTokens: promptTokens,
+                            completionTokens: completionTokens,
+                            createdAt: createdAt.addingTimeInterval(600)
+                        ),
+                    ]
+                ))
+            }
+        }
+        return snapshots
     }
 }
