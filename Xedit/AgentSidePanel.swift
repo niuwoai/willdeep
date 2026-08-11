@@ -1651,6 +1651,14 @@ struct AgentSidePanelPreviewView: View {
     @State private var previewBlocks: [MarkdownPreviewBlock] = []
     @State private var loadError: String?
 
+    private var previewTypography: MarkdownPreviewTypography {
+        .agentAppearance(
+            fontID: appState.agentChatFontID,
+            baseFontSize: appState.agentChatBaseFontSize,
+            lineHeightMultiple: appState.agentChatLineHeightMultiple
+        )
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             toolbar
@@ -1704,7 +1712,10 @@ struct AgentSidePanelPreviewView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(Array(previewBlocks.enumerated()), id: \.offset) { _, block in
-                        MarkdownPreviewBlockView(block: block)
+                        MarkdownPreviewBlockView(
+                            block: block,
+                            typography: previewTypography
+                        )
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

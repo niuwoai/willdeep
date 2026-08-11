@@ -386,8 +386,84 @@ enum HTMLPreviewParser {
     }
 }
 
+struct MarkdownPreviewTypography: Equatable {
+    private static let headingReferenceFontSize: CGFloat = 15
+    private static let headingSizeByLevel: [Int: CGFloat] = [
+        1: 26,
+        2: 21,
+        3: 18,
+        4: 15
+    ]
+
+    let fontID: String
+    let baseFontSize: CGFloat
+    let headingBaseFontSize: CGFloat
+    let tableFontSize: CGFloat
+    let lineHeightMultiple: CGFloat
+
+    static let editorDefault = MarkdownPreviewTypography(
+        fontID: AgentSettingsStore.chatFontIDDefault,
+        baseFontSize: NSFont.systemFontSize,
+        headingBaseFontSize: Self.headingReferenceFontSize,
+        tableFontSize: 12,
+        lineHeightMultiple: (NSFont.systemFontSize + 3) / NSFont.systemFontSize
+    )
+
+    static func agentAppearance(
+        fontID: String,
+        baseFontSize: CGFloat,
+        lineHeightMultiple: CGFloat
+    ) -> MarkdownPreviewTypography {
+        MarkdownPreviewTypography(
+            fontID: AgentChatFontChoice.byID(fontID)?.id ?? AgentSettingsStore.chatFontIDDefault,
+            baseFontSize: AgentSettingsStore.clampChatBaseFontSize(baseFontSize),
+            headingBaseFontSize: AgentSettingsStore.clampChatBaseFontSize(baseFontSize),
+            tableFontSize: AgentSettingsStore.clampChatBaseFontSize(baseFontSize),
+            lineHeightMultiple: AgentSettingsStore.clampChatLineHeightMultiple(lineHeightMultiple)
+        )
+    }
+
+    var fontChoice: AgentChatFontChoice {
+        AgentChatFontChoice.byID(fontID) ?? .system
+    }
+
+    var bodyLineSpacing: CGFloat {
+        AgentChatTypography.lineSpacing(
+            fontSize: baseFontSize,
+            lineHeightMultiple: lineHeightMultiple
+        )
+    }
+
+    func bodyFont(weight: NSFont.Weight = .regular) -> Font {
+        fontChoice.swiftUIFont(size: baseFontSize, weight: weight)
+    }
+
+    func tableFont(weight: NSFont.Weight = .regular) -> Font {
+        fontChoice.swiftUIFont(size: tableFontSize, weight: weight)
+    }
+
+    func headingSize(level: Int) -> CGFloat {
+        let referenceSize = Self.headingSizeByLevel[level]
+            ?? Self.headingSizeByLevel[4]
+            ?? Self.headingReferenceFontSize
+        return referenceSize * headingBaseFontSize / Self.headingReferenceFontSize
+    }
+
+    func headingFont(level: Int) -> Font {
+        fontChoice.swiftUIFont(size: headingSize(level: level), weight: .semibold)
+    }
+
+    func headingLineSpacing(level: Int) -> CGFloat {
+        AgentChatTypography.lineSpacing(
+            fontSize: headingSize(level: level),
+            lineHeightMultiple: lineHeightMultiple
+        )
+    }
+}
+
 struct MarkdownPreviewBlockView: View {
     let block: MarkdownPreviewBlock
+    var typography: MarkdownPreviewTypography = .editorDefault
 
     var body: some View {
         content
@@ -404,20 +480,22 @@ struct MarkdownPreviewBlockView: View {
         switch block.kind {
         case .heading(let level):
             Text(inlineText(block.text))
-                .font(.system(size: headingSize(level), weight: .semibold))
+                .font(typography.headingFont(level: level))
+                .lineSpacing(typography.headingLineSpacing(level: level))
                 .foregroundColor(.primary)
                 .padding(.top, level <= 2 ? 8 : 2)
         case .paragraph:
             Text(inlineText(block.text))
-                .font(.body)
-                .lineSpacing(3)
+                .font(typography.bodyFont())
+                .lineSpacing(typography.bodyLineSpacing)
         case .quote:
             HStack(alignment: .top, spacing: 10) {
                 Rectangle()
                     .fill(Color.accentColor.opacity(0.45))
                     .frame(width: 3)
                 Text(inlineText(block.text))
-                    .font(.body)
+                    .font(typography.bodyFont())
+                    .lineSpacing(typography.bodyLineSpacing)
                     .foregroundColor(.secondary)
             }
             .padding(.vertical, 4)
@@ -427,7 +505,8 @@ struct MarkdownPreviewBlockView: View {
                     .foregroundColor(.secondary)
                 Text(inlineText(block.text))
             }
-            .font(.body)
+            .font(typography.bodyFont())
+            .lineSpacing(typography.bodyLineSpacing)
             .padding(.leading, listIndentPadding(block.indent))
         case .orderedList:
             HStack(alignment: .top, spacing: 8) {
@@ -435,32 +514,29 @@ struct MarkdownPreviewBlockView: View {
                     .foregroundColor(.secondary)
                 Text(inlineText(block.text))
             }
-            .font(.body)
+            .font(typography.bodyFont())
+            .lineSpacing(typography.bodyLineSpacing)
             .padding(.leading, listIndentPadding(block.indent))
         case .code:
-            MarkdownCodeBlockView(text: block.text, languageHint: block.info)
+            MarkdownCodeBlockView(
+                text: block.text,
+                languageHint: block.info,
+                typography: typography
+            )
         case .divider:
             Divider()
                 .padding(.vertical, 8)
         case .table:
             MarkdownTableBlockView(
                 headers: block.tableHeaders ?? [],
-                rows: block.tableRows ?? []
+                rows: block.tableRows ?? [],
+                typography: typography
             )
         }
     }
 
-    private func headingSize(_ level: Int) -> CGFloat {
-        switch level {
-        case 1: return 26
-        case 2: return 21
-        case 3: return 18
-        default: return 15
-        }
-    }
-
     private func inlineText(_ text: String) -> AttributedString {
-        MarkdownInline.attributedString(from: text)
+        MarkdownInline.attributedString(from: text, inlineCodeFontSize: typography.baseFontSize)
     }
 
     /// Bullet glyph cycles by nesting level so the eye can pick out
@@ -493,7 +569,10 @@ enum MarkdownInline {
     /// with the proportional system font, so lift code glyphs slightly.
     static let inlineCodeBaselineOffset: CGFloat = 1
 
-    static func attributedString(from raw: String) -> AttributedString {
+    static func attributedString(
+        from raw: String,
+        inlineCodeFontSize: CGFloat? = nil
+    ) -> AttributedString {
         guard var attributed = try? AttributedString(markdown: raw) else {
             var fallback = AttributedString(raw)
             MarkdownInlineSemanticEnhancer.insertHexColorSwatches(into: &fallback)
@@ -505,7 +584,11 @@ enum MarkdownInline {
         for run in attributed.runs {
             guard let intent = run.inlinePresentationIntent,
                   intent.contains(.code) else { continue }
-            attributed[run.range].font = .system(.body, design: .monospaced)
+            if let inlineCodeFontSize {
+                attributed[run.range].font = .system(size: inlineCodeFontSize, design: .monospaced)
+            } else {
+                attributed[run.range].font = .system(.body, design: .monospaced)
+            }
             attributed[run.range].baselineOffset = inlineCodeBaselineOffset
             attributed[run.range].backgroundColor = Color.primary.opacity(0.08)
             attributed[run.range].foregroundColor = Color(nsColor: .labelColor)
@@ -582,6 +665,7 @@ enum MarkdownInlineSemanticEnhancer {
 struct MarkdownTableBlockView: View {
     let headers: [String]
     let rows: [[String]]
+    var typography: MarkdownPreviewTypography = .editorDefault
 
     private var columnCount: Int {
         max(headers.count, rows.map(\.count).max() ?? 0)
@@ -635,8 +719,15 @@ struct MarkdownTableBlockView: View {
 
     @ViewBuilder
     private func cell(text: String, isHeader: Bool) -> some View {
-        Text(MarkdownInline.attributedString(from: text))
-            .font(.system(size: 12, weight: isHeader ? .semibold : .regular))
+        Text(MarkdownInline.attributedString(
+            from: text,
+            inlineCodeFontSize: typography.tableFontSize
+        ))
+            .font(typography.tableFont(weight: isHeader ? .semibold : .regular))
+            .lineSpacing(AgentChatTypography.lineSpacing(
+                fontSize: typography.tableFontSize,
+                lineHeightMultiple: typography.lineHeightMultiple
+            ))
             .foregroundStyle(isHeader ? .primary : .primary)
             .textSelection(.enabled)
             .padding(.horizontal, 10)
@@ -662,6 +753,7 @@ struct MarkdownTableBlockView: View {
 struct MarkdownCodeBlockView: View {
     let text: String
     let languageHint: String?
+    var typography: MarkdownPreviewTypography = .editorDefault
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -722,13 +814,18 @@ struct MarkdownCodeBlockView: View {
             // SwiftUI's AttributedString for native rendering with
             // selectable text. This runs synchronously per body pass,
             // which is fine because chat code blocks are small.
-            let monoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+            let monoFont = NSFont.monospacedSystemFont(
+                ofSize: typography.baseFontSize,
+                weight: .regular
+            )
             let ns = SyntaxHighlighter.highlightSync(text, language: lang, theme: theme, font: monoFont)
             Text(AttributedString(ns))
+                .lineSpacing(typography.bodyLineSpacing)
                 .textSelection(.enabled)
         } else {
             Text(text)
-                .font(.system(.body, design: .monospaced))
+                .font(.system(size: typography.baseFontSize, design: .monospaced))
+                .lineSpacing(typography.bodyLineSpacing)
                 .foregroundStyle(.primary)
                 .textSelection(.enabled)
         }

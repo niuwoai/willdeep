@@ -109,7 +109,7 @@ private struct AgentDocumentSendPreviewSheet: View {
                     systemImage: "hand.raised.fill"
                 )
                 .font(.caption)
-                .foregroundStyle(.orange)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
             }
             ScrollView {
                 Text(preview.text)
@@ -175,7 +175,7 @@ private struct AgentKnowledgeFolderChip: View {
             Button(action: onToggleEnabled) {
                 Image(systemName: folder.isEnabled ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(folder.isEnabled ? Color.accentColor : .secondary)
+                    .foregroundStyle(folder.isEnabled ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
             }
             .buttonStyle(.plain)
             .focusable(false)
@@ -225,9 +225,9 @@ private struct AgentKnowledgeFolderChip: View {
         case .indexing:
             ProgressView().controlSize(.mini).frame(width: 10, height: 10)
         case .ready:
-            Image(systemName: "folder.fill").font(.system(size: 10)).foregroundStyle(.teal)
+            Image(systemName: "folder.fill").font(.system(size: 10)).foregroundStyle(AgentComposerChrome.iconPrimary)
         case .failed:
-            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(.red)
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10)).foregroundStyle(AgentComposerChrome.iconPrimary)
         }
     }
 
@@ -261,7 +261,7 @@ private struct AgentKnowledgeFolderChip: View {
                     ForEach(folder.documents) { document in
                         HStack(spacing: 6) {
                             Image(systemName: document.parseStatus == .ready ? "doc.text" : "exclamationmark.triangle")
-                                .foregroundStyle(document.parseStatus == .ready ? Color.secondary : .orange)
+                                .foregroundStyle(document.parseStatus == .ready ? AgentComposerChrome.iconSecondary : AgentComposerChrome.iconPrimary)
                             Text(document.relativePath)
                                 .font(.system(size: 11, design: .monospaced))
                                 .lineLimit(1)
@@ -355,7 +355,7 @@ private struct AgentSessionDocumentChip: View {
             Button(action: onToggleEnabled) {
                 Image(systemName: file.isEnabled ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(file.isEnabled ? Color.accentColor : .secondary)
+                    .foregroundStyle(file.isEnabled ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
             }
             .buttonStyle(.plain)
             .focusable(false)
@@ -472,9 +472,9 @@ struct AgentComposerFileAttachmentChip: View {
 
     private var statusColor: Color {
         switch file.parseStatus {
-        case .parsing: return .orange
-        case .ready: return .purple
-        case .failed: return .red
+        case .parsing: return AgentComposerChrome.iconMuted
+        case .ready: return AgentComposerChrome.iconSecondary
+        case .failed: return AgentComposerChrome.iconPrimary
         }
     }
 }
@@ -499,11 +499,11 @@ struct AgentAttachmentPreviewPopover: View {
                 HStack(spacing: 8) {
                     if analysis.didUseOCR {
                         Label(L10n.Composer.attachmentOCRUsed, systemImage: "text.viewfinder")
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(AgentComposerChrome.iconSecondary)
                     }
                     if analysis.containsPotentialPromptInjection {
                         Label(L10n.Composer.attachmentInjectionWarning, systemImage: "shield.lefthalf.filled.badge.checkmark")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AgentComposerChrome.iconPrimary)
                     }
                 }
                 .font(.caption)
@@ -540,7 +540,7 @@ struct AgentAttachmentPreviewPopover: View {
                     systemImage: "exclamationmark.triangle"
                 )
                 .font(.callout)
-                .foregroundStyle(.red)
+                .foregroundStyle(AgentComposerChrome.iconPrimary)
             } else {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -561,7 +561,7 @@ struct AgentAttachmentPreviewPopover: View {
         } label: {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: isIncluded ? "checkmark.square.fill" : "square")
-                    .foregroundStyle(isIncluded ? Color.accentColor : .secondary)
+                    .foregroundStyle(isIncluded ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 5) {
                         Text(displayTitle(for: section))
@@ -569,7 +569,7 @@ struct AgentAttachmentPreviewPopover: View {
                         if section.wasRecognizedByOCR {
                             Image(systemName: "text.viewfinder")
                                 .font(.system(size: 10))
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(AgentComposerChrome.iconPrimary)
                         }
                     }
                     Text(section.preview)

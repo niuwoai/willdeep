@@ -19,7 +19,7 @@ struct SettingsInformationArchitectureTests {
             .general,
         ])
         // 编辑器组同时承载工作区设置，并在侧栏中排倒数第二。
-        #expect(SettingsGroup.editor.tabs == [.editing, .appearance, .background, .typography, .workspace])
+        #expect(SettingsGroup.editor.tabs == [.editing, .appearance, .typography, .workspace])
         #expect(SettingsGroup.agentAppearance.tabs == [.agentAppearance])
         #expect(EditorSettingsTab.agentAppearance.group == .agentAppearance)
         #expect(SettingsGroup.allCases.suffix(3) == [.editor, .agentAppearance, .general])
@@ -37,7 +37,6 @@ struct SettingsInformationArchitectureTests {
         #expect(Set(groupedTabs).count == groupedTabs.count)
         #expect(groupedTabs.contains(.updates))
         #expect(groupedTabs.contains(.editing))
-        #expect(groupedTabs.contains(.background))
         #expect(groupedTabs.contains(.workspace))
         #expect(groupedTabs.contains(.agentAppearance))
         #expect(groupedTabs.contains(.subagents))
