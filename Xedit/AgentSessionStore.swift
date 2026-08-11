@@ -467,6 +467,10 @@ nonisolated enum AgentSessionStore {
         let reasoningTokens: Int?
         let origin: AgentMessageOrigin?
         let originLabel: String?
+        let requestModelID: String?
+        let requestProviderID: String?
+        let requestProviderDisplayName: String?
+        let managedRoute: AgentManagedRouteDecision?
         let requestStablePrefixCharacters: Int?
         let createdAt: Date?
 
@@ -475,7 +479,8 @@ nonisolated enum AgentSessionStore {
             case toolCallID, toolCallStatus, toolErrorMessage
             case usageTokens, promptTokens, completionTokens
             case cachedPromptTokens, cacheWritePromptTokens, reasoningTokens
-            case origin, originLabel, requestStablePrefixCharacters
+            case origin, originLabel, requestModelID, requestProviderID, requestProviderDisplayName
+            case managedRoute, requestStablePrefixCharacters
             case createdAt
         }
 
@@ -498,6 +503,13 @@ nonisolated enum AgentSessionStore {
             reasoningTokens = try c.decodeIfPresent(Int.self, forKey: .reasoningTokens)
             origin = try c.decodeIfPresent(AgentMessageOrigin.self, forKey: .origin)
             originLabel = try c.decodeIfPresent(String.self, forKey: .originLabel)
+            requestModelID = try c.decodeIfPresent(String.self, forKey: .requestModelID)
+            requestProviderID = try c.decodeIfPresent(String.self, forKey: .requestProviderID)
+            requestProviderDisplayName = try c.decodeIfPresent(
+                String.self,
+                forKey: .requestProviderDisplayName
+            )
+            managedRoute = try c.decodeIfPresent(AgentManagedRouteDecision.self, forKey: .managedRoute)
             requestStablePrefixCharacters = try c.decodeIfPresent(Int.self, forKey: .requestStablePrefixCharacters)
             createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
         }
@@ -544,6 +556,9 @@ nonisolated enum AgentSessionStore {
                 reasoningTokens: reasoningTokens,
                 origin: origin,
                 originLabel: originLabel,
+                requestModelID: requestModelID ?? managedRoute?.selectedModel,
+                requestProviderID: requestProviderID,
+                requestProviderDisplayName: requestProviderDisplayName,
                 requestStablePrefixCharacters: requestStablePrefixCharacters,
                 createdAt: createdAt
             )

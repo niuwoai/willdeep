@@ -290,6 +290,9 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
     var reasoningTokens: Int?
     var origin: AgentMessageOrigin?
     var originLabel: String?
+    var requestModelID: String?
+    var requestProviderID: String?
+    var requestProviderDisplayName: String?
     var requestStablePrefixCharacters: Int?
     var createdAt: Date
 
@@ -313,6 +316,9 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
         reasoningTokens: Int? = nil,
         origin: AgentMessageOrigin? = nil,
         originLabel: String? = nil,
+        requestModelID: String? = nil,
+        requestProviderID: String? = nil,
+        requestProviderDisplayName: String? = nil,
         requestStablePrefixCharacters: Int? = nil,
         createdAt: Date
     ) {
@@ -335,6 +341,9 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
         self.reasoningTokens = reasoningTokens
         self.origin = origin
         self.originLabel = originLabel
+        self.requestModelID = requestModelID
+        self.requestProviderID = requestProviderID
+        self.requestProviderDisplayName = requestProviderDisplayName
         self.requestStablePrefixCharacters = requestStablePrefixCharacters
         self.createdAt = createdAt
     }
@@ -365,6 +374,9 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
             reasoningTokens: message.reasoningTokens,
             origin: message.origin,
             originLabel: message.originLabel,
+            requestModelID: message.requestModelID ?? message.managedRoute?.selectedModel,
+            requestProviderID: message.requestProviderID,
+            requestProviderDisplayName: message.requestProviderDisplayName,
             requestStablePrefixCharacters: message.requestStablePrefixCharacters,
             createdAt: message.createdAt
         )
@@ -881,9 +893,20 @@ enum AgentUsageStats {
     }
 
     private static func providerSnapshot(
-        for session: AgentUsageSessionSnapshot,
+        message: AgentUsageMessageSnapshot? = nil,
+        session: AgentUsageSessionSnapshot,
         modelID: String
     ) -> (id: String, name: String) {
+        if let providerID = message?.requestProviderID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !providerID.isEmpty {
+            return (
+                providerID,
+                AgentProviderPreset.normalizedDisplayName(
+                    providerID: providerID,
+                    storedDisplayName: message?.requestProviderDisplayName
+                ) ?? providerID
+            )
+        }
         if let providerID = session.providerID?.trimmingCharacters(in: .whitespacesAndNewlines),
            !providerID.isEmpty {
             return (
@@ -908,13 +931,21 @@ enum AgentUsageStats {
             let model = label?.isEmpty == false ? label! : "External CLI"
             return (("delegated-external", "Delegated CLI"), model, true)
         }
-        // 省心托管:从用户视角"省心托管"本身就是一个模型,聚成一行,而不是
-        // 掉进 unknown-model。只认托管标记,老会话的空 modelID 仍归 unknown。
+        if let requestModelID = message.requestModelID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !requestModelID.isEmpty {
+            return (
+                providerSnapshot(message: message, session: session, modelID: requestModelID),
+                requestModelID,
+                false
+            )
+        }
+        // Managed messages persisted before per-turn route attribution keep
+        // the legacy aggregate label instead of falling into unknown-model.
         if session.isManagedRouting {
-            return (providerSnapshot(for: session, modelID: Self.managedRoutingModelID), Self.managedRoutingModelID, false)
+            return (providerSnapshot(session: session, modelID: Self.managedRoutingModelID), Self.managedRoutingModelID, false)
         }
         let modelID = normalizedModelID(session.modelID)
-        return (providerSnapshot(for: session, modelID: modelID), modelID, false)
+        return (providerSnapshot(session: session, modelID: modelID), modelID, false)
     }
 
     private static func inferProviderID(from modelID: String) -> String {

@@ -1,6 +1,12 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-11（1.242.0）
+> Last updated: 2026-08-11（1.243.0-rc1）
+
+## 1.243.0-rc1 — 模型用量逐轮归因
+
+- ⏳ 新建 some.im 会话并完成一轮回复后打开用量统计，确认模型行显示客户端实际选择的模型 ID，不再出现 `unknown-model`。
+- ⏳ 在同一会话中切换 Provider 或模型并分别完成回复，确认用量统计拆成对应的多行，Provider、消息数和 Token 数各自归属正确。
+- ⏳ 重启 App 后再次查看上述统计，确认逐轮 Provider 与模型仍从会话历史恢复，不因轻量索引加载退回 `unknown-model`。
 
 ## 1.242.0 — 子 Agent 独立 Provider / 模型配置
 

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-11 | Current version: v1.243.0
+> Last updated: 2026-08-11 | Current version: v1.243.0-rc1
 
 ## Positioning
 
@@ -12,6 +12,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **逐轮 Provider／模型用量归因（1.243.0-rc1）** —— 客户端在每次模型请求产生的助手消息上记录实际 Provider 与模型，用量页优先按逐轮快照聚合，因此同一会话切换模型也能准确拆分；升级前省心托管消息会从已有路由决定恢复具体模型，只有确实缺失任何路由信息的旧记录才保留诚实的兼容标签。
+- **Composer 触发菜单键盘跟随（1.243.0-rc1）** —— `/` 命令、`@` 引用和 `$` 技能菜单使用上下方向键切换时，选中项会自动滚动到视口中间；技能菜单至少展示 5 个完整项目，减少长列表中反复贴边和频繁滚动。
 - **some.im 服务端智能审核（1.243.0）** —— 登录 some.im 后，智能审核固定调用 `someim-security-guard`，客户端仅发送经过本地高风险预检和凭据脱敏的 user message，长安全策略由 some.im 网关注入并保持缓存友好；未登录时沿用当前会话的 Provider 与模型及客户端本地策略。审核返回 NO、输出无效或服务不可用时继续进入人工复核，绝不因故障默认放行。
 - **任务优先的设置导航（1.243.0）** —— 设置侧栏优先展示“账户与设备、AI Agents、Agent 工具”，将工作区配置并入编辑器组；低频的编辑器组与更新页固定放在末尾两项，减少 Agent 配置路径的扫描成本。
 - **子 Agent 独立 Provider 与模型路由（1.243.0）** —— “AI Agents”设置新增独立“子 Agent”子页，Scout、Reader、Deep、Editor 可分别选择具体 Provider 条目和模型；候选模型可从对应 Provider 的 `/v1/models` 拉取，也可自由输入。未手动配置时优先 some.im，不存在 some.im 时跟随当前默认 Provider；同一预设的多个自定义网关以 Provider UUID 精确区分。
