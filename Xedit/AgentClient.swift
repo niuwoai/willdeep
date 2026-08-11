@@ -155,8 +155,10 @@ struct AgentClient {
 
     /// Ask the configured provider whether a command is safe to auto-run.
     /// `historyContext` is an optional, caller-cached block of the
-    /// operator's prior hand decisions appended to the judge system prompt;
-    /// keep it stable across calls so the request prefix stays cache-hot.
+    /// operator's prior hand decisions appended to the local judge system
+    /// prompt. The some.im security guard ignores this parameter because its
+    /// fixed policy is injected by the gateway and the client sends only the
+    /// per-command user message.
     func judgeCommandSafety(
         command: String,
         historyContext: String = ""

@@ -408,7 +408,9 @@ struct OpenAIResponsesAdapter {
     // MARK: - judgeCommandSafety
 
     /// Non-streaming, low-token classifier. Returns `true` only on a
-    /// clean `YES`. Failure path = "ask the user".
+    /// clean `YES`. Failure path = "ask the user". The dedicated some.im
+    /// security model receives no client-side instructions; its fixed policy
+    /// is injected by the gateway.
     func judgeCommandSafety(
         command: String,
         historyContext: String = ""
@@ -427,12 +429,10 @@ struct OpenAIResponsesAdapter {
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let systemPrompt = AgentInjectionDefense.judgeSystemPromptText(historyContext: historyContext)
         let userPayload = AgentInjectionDefense.judgeUserPayload(command: command)
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": configuration.model,
-            "instructions": systemPrompt,
             "input": [
                 [
                     "type": "message",
@@ -447,6 +447,11 @@ struct OpenAIResponsesAdapter {
             "stream": false,
             "store": false
         ]
+        if !configuration.usesServerManagedSafetyJudge {
+            body["instructions"] = AgentInjectionDefense.judgeSystemPromptText(
+                historyContext: historyContext
+            )
+        }
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
             return .unavailable("encode failed")
         }

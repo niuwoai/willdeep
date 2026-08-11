@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **some.im 服务端智能审核（1.243.0）** —— 登录 some.im 后，智能审核固定调用 `someim-security-guard`，客户端仅发送经过本地高风险预检和凭据脱敏的 user message，长安全策略由 some.im 网关注入并保持缓存友好；未登录时沿用当前会话的 Provider 与模型及客户端本地策略。审核返回 NO、输出无效或服务不可用时继续进入人工复核，绝不因故障默认放行。
 - **任务优先的设置导航（1.243.0）** —— 设置侧栏优先展示“账户与设备、AI Agents、Agent 工具”，将工作区配置并入编辑器组；低频的编辑器组与更新页固定放在末尾两项，减少 Agent 配置路径的扫描成本。
 - **子 Agent 独立 Provider 与模型路由（1.243.0）** —— “AI Agents”设置新增独立“子 Agent”子页，Scout、Reader、Deep、Editor 可分别选择具体 Provider 条目和模型；候选模型可从对应 Provider 的 `/v1/models` 拉取，也可自由输入。未手动配置时优先 some.im，不存在 some.im 时跟随当前默认 Provider；同一预设的多个自定义网关以 Provider UUID 精确区分。
 - **用量洞察口径修复与 Worker 明细（1.242.0）** —— 新会话统计从轻量会话索引恢复省心托管状态，冷启动后不再把历史托管会话误算为 0%；原“最常用的推理强度”明确改为“含推理输出的回复占比”。活动洞察新增可点击的“最常用 Worker”，按历史 `spawn_agent` 调用统计 Scout、Reader、Deep、Editor，并可进入独立页查看调用次数、涉及会话数和占比。
