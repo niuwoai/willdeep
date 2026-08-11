@@ -28,9 +28,11 @@ extension AppState {
         let binding = profile.modelBinding
         guard !binding.inheritsEverything else { return parentConfiguration }
 
-        // Model-only override (no provider change): keep the parent's
-        // transport and just swap the model id.
-        guard let preferredProviderID = binding.preferredProviderID else {
+        // Model-only override (no provider selection): keep the parent's
+        // transport and just swap the model id. New Settings bindings carry
+        // an exact provider entry UUID; legacy bindings may carry only the
+        // preset id.
+        guard binding.preferredProviderEntryID != nil || binding.preferredProviderID != nil else {
             guard let model = binding.model?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !model.isEmpty else { return parentConfiguration }
             var configuration = parentConfiguration
@@ -39,10 +41,10 @@ extension AppState {
         }
 
         let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-        guard let entry = agentProviderLibrary.entries.first(where: {
-            $0.providerID == preferredProviderID
-                && $0.isUsableForChatSelection(isSomeIMAuthenticated: authenticated)
-        }) else {
+        guard let entry = AgentSubagentProfileCatalog.providerEntry(
+            for: binding,
+            in: agentProviderLibrary
+        ), entry.isUsableForChatSelection(isSomeIMAuthenticated: authenticated) else {
             return parentConfiguration
         }
 
@@ -54,7 +56,8 @@ extension AppState {
         var configuration = materialized.makeConfiguration(
             imageDescription: parentConfiguration.imageDescription
         )
-        if let model = binding.model?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if AgentSubagentProfileCatalog.bindingModelApplies(binding, to: entry),
+           let model = binding.model?.trimmingCharacters(in: .whitespacesAndNewlines),
            !model.isEmpty {
             configuration.model = model
         }
@@ -72,11 +75,13 @@ extension AppState {
     func subagentProfileBindingIsAvailable(_ profile: AgentSubagentProfile) -> Bool {
         let binding = profile.modelBinding
         if binding.inheritsEverything { return true }
-        guard let preferredProviderID = binding.preferredProviderID else { return true }
-        let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-        return agentProviderLibrary.entries.contains {
-            $0.providerID == preferredProviderID
-                && $0.isUsableForChatSelection(isSomeIMAuthenticated: authenticated)
+        guard binding.preferredProviderEntryID != nil || binding.preferredProviderID != nil else {
+            return true
         }
+        let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+        return AgentSubagentProfileCatalog.providerEntry(
+            for: binding,
+            in: agentProviderLibrary
+        )?.isUsableForChatSelection(isSomeIMAuthenticated: authenticated) == true
     }
 }

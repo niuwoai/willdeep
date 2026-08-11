@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-11 | Current version: v1.242.0
+> Last updated: 2026-08-11 | Current version: v1.243.0
 
 ## Positioning
 
@@ -12,7 +12,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
-- **子 Agent 独立 Provider 与模型路由（1.242.0）** —— “AI Agents”设置新增独立“子 Agent”子页，Scout、Reader、Deep、Editor 可分别选择具体 Provider 条目和模型；候选模型可从对应 Provider 的 `/v1/models` 拉取，也可自由输入。未手动配置时优先 some.im，不存在 some.im 时跟随当前默认 Provider；同一预设的多个自定义网关以 Provider UUID 精确区分。
+- **任务优先的设置导航（1.243.0）** —— 设置侧栏优先展示“账户与设备、AI Agents、Agent 工具”，将工作区配置并入编辑器组；低频的编辑器组与更新页固定放在末尾两项，减少 Agent 配置路径的扫描成本。
+- **子 Agent 独立 Provider 与模型路由（1.243.0）** —— “AI Agents”设置新增独立“子 Agent”子页，Scout、Reader、Deep、Editor 可分别选择具体 Provider 条目和模型；候选模型可从对应 Provider 的 `/v1/models` 拉取，也可自由输入。未手动配置时优先 some.im，不存在 some.im 时跟随当前默认 Provider；同一预设的多个自定义网关以 Provider UUID 精确区分。
 - **用量洞察口径修复与 Worker 明细（1.242.0）** —— 新会话统计从轻量会话索引恢复省心托管状态，冷启动后不再把历史托管会话误算为 0%；原“最常用的推理强度”明确改为“含推理输出的回复占比”。活动洞察新增可点击的“最常用 Worker”，按历史 `spawn_agent` 调用统计 Scout、Reader、Deep、Editor，并可进入独立页查看调用次数、涉及会话数和占比。
 - **供应商模型目录隔离（1.241.0-rc14）** —— Agent 模型选择器按供应商条目保存本次 `/models` 获取结果，供应商计数与列表只合并该条目的 Flash/Pro 配置和实际返回模型；跨供应商累计的最近获取模型不再灌入当前自定义供应商，编程推荐也只留在独立推荐区。
 - **curl 凭据脱敏智能审核与紧凑消息间距（1.241.0-rc13）** —— curl 的认证 Header、API Key 环境变量、POST 与请求体先在本地替换真实凭据，再将保留方法、URL、循环边界和载荷结构的命令交给 Flash AI 判定；文件上传、证书/私钥读取及本地输出等形态仍要求人工确认。聊天渲染同时裁掉模型输出首尾的传输空行，避免与消息/段落间距叠加成大块留白。

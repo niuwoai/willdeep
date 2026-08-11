@@ -6,21 +6,21 @@ struct SettingsInformationArchitectureTests {
     @MainActor
     func taskOrientedGroups() {
         #expect(SettingsGroup.allCases == [
-            .general,
-            .editor,
-            .workspace,
+            .accountAndDevices,
             .ai,
             .agentTools,
-            .accountAndDevices,
             .runtimes,
             .integrations,
             .terminal,
             .voice,
             .pet,
+            .editor,
+            .general,
         ])
-        // 编辑器一个组承载全部编辑器向设置:编辑行为、外观、壁纸、字体排印。
-        #expect(SettingsGroup.editor.tabs == [.editing, .appearance, .background, .typography])
-        #expect(SettingsGroup.ai.tabs == [.agent, .memory, .rules])
+        // 编辑器组同时承载工作区设置，并在侧栏中排倒数第二。
+        #expect(SettingsGroup.editor.tabs == [.editing, .appearance, .background, .typography, .workspace])
+        #expect(SettingsGroup.allCases.suffix(2) == [.editor, .general])
+        #expect(SettingsGroup.ai.tabs == [.agent, .subagents, .memory, .rules])
         #expect(SettingsGroup.agentTools.tabs == [.skills, .mcp, .tools])
         #expect(SettingsGroup.accountAndDevices.tabs == [.someIM, .mobileGateway])
         // 连接器 hub 是集成组唯一的 pane;每个外部集成是 hub 里的子连接器。
@@ -36,6 +36,7 @@ struct SettingsInformationArchitectureTests {
         #expect(groupedTabs.contains(.editing))
         #expect(groupedTabs.contains(.background))
         #expect(groupedTabs.contains(.workspace))
+        #expect(groupedTabs.contains(.subagents))
         #expect(groupedTabs.contains(.voice))
     }
 

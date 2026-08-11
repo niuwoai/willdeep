@@ -25,13 +25,14 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentProfileCatalog.profile(id: " Reader ").id == "reader")
     }
 
-    @Test("deep reproduces the pre-profile subagent exactly")
-    func deepMatchesLegacyBehaviour() {
+    @Test("deep preserves the full investigation budget and uses automatic provider routing")
+    func deepUsesAutomaticProviderRouting() {
         let deep = AgentSubagentProfileCatalog.deep
 
         #expect(deep.effectiveToolNames() == AgentSubagentRunner.allowedToolNames)
         #expect(deep.maxRounds == AgentSubagentRunner.maxRounds)
-        #expect(deep.modelBinding.inheritsEverything)
+        #expect(deep.modelBinding.preferredProviderID == AgentProviderPreset.someIMID)
+        #expect(deep.modelBinding.model == nil)
         #expect(deep.escalation == .none)
     }
 
@@ -174,6 +175,89 @@ struct AgentSubagentProfileTests {
         // Tool sets and budgets are code, not configuration.
         #expect(scout.toolNames == AgentSubagentProfileCatalog.scout.toolNames)
         #expect(scout.maxRounds == AgentSubagentProfileCatalog.scout.maxRounds)
+    }
+
+    @Test("subagent provider defaults to some.im even when another provider is active")
+    func defaultProviderPrefersSomeIM() throws {
+        let deepSeek = AgentProviderEntry(
+            providerID: AgentProviderPreset.deepSeekID,
+            displayName: "DeepSeek",
+            baseURL: "https://api.deepseek.com",
+            flashPrimary: "deepseek-chat",
+            proPrimary: "deepseek-reasoner"
+        )
+        let someIM = AgentProviderEntry(
+            providerID: AgentProviderPreset.someIMID,
+            displayName: "some.im",
+            baseURL: "https://api.some.im/v1",
+            flashPrimary: "glm-5",
+            proPrimary: "glm-5"
+        )
+        let library = AgentProviderLibrary(entries: [deepSeek, someIM], activeID: deepSeek.id)
+
+        let selected = try #require(AgentSubagentProfileCatalog.defaultProviderEntry(in: library))
+
+        #expect(selected.id == someIM.id)
+    }
+
+    @Test("subagent provider falls back to the active provider when some.im is absent")
+    func defaultProviderFallsBackToActive() throws {
+        let first = AgentProviderEntry(
+            providerID: AgentProviderPreset.openAIID,
+            displayName: "OpenAI",
+            baseURL: "https://api.openai.com/v1",
+            flashPrimary: "gpt-5-mini",
+            proPrimary: "gpt-5"
+        )
+        let active = AgentProviderEntry(
+            providerID: AgentProviderPreset.deepSeekID,
+            displayName: "DeepSeek",
+            baseURL: "https://api.deepseek.com",
+            flashPrimary: "deepseek-chat",
+            proPrimary: "deepseek-reasoner"
+        )
+        let library = AgentProviderLibrary(entries: [first, active], activeID: active.id)
+
+        let selected = try #require(AgentSubagentProfileCatalog.providerEntry(
+            for: AgentSubagentProfileCatalog.scout.modelBinding,
+            in: library
+        ))
+
+        #expect(selected.id == active.id)
+        #expect(!AgentSubagentProfileCatalog.bindingModelApplies(
+            AgentSubagentProfileCatalog.scout.modelBinding,
+            to: selected
+        ))
+    }
+
+    @Test("an exact provider entry binding wins over duplicate provider presets")
+    func exactProviderEntryBindingWins() throws {
+        let first = AgentProviderEntry(
+            providerID: AgentProviderPreset.customID,
+            displayName: "Gateway A",
+            baseURL: "https://a.example/v1",
+            flashPrimary: "model-a",
+            proPrimary: "model-a"
+        )
+        let second = AgentProviderEntry(
+            providerID: AgentProviderPreset.customID,
+            displayName: "Gateway B",
+            baseURL: "https://b.example/v1",
+            flashPrimary: "model-b",
+            proPrimary: "model-b"
+        )
+        let library = AgentProviderLibrary(entries: [first, second], activeID: first.id)
+        let binding = AgentSubagentProfile.ModelBinding(
+            preferredProviderEntryID: second.id,
+            preferredProviderID: AgentProviderPreset.customID,
+            model: "handwritten-model",
+            contextWindowTokens: nil
+        )
+
+        let selected = try #require(AgentSubagentProfileCatalog.providerEntry(for: binding, in: library))
+
+        #expect(selected.id == second.id)
+        #expect(AgentSubagentProfileCatalog.bindingModelApplies(binding, to: selected))
     }
 
     @Test("every built-in trade appears in the schema catalog line")

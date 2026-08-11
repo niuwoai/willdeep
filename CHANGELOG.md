@@ -1,7 +1,28 @@
 # Changelog
 
-> 当前文件保留最新版本（1.242.0 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.243.0 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.243.0 - 2026-08-11
+
+### Added
+
+- “AI Agents”新增独立“子 Agent”子页，Scout、Reader、Deep、Editor 可分别绑定具体 Provider 配置实例和模型。
+- 子 Agent 模型既可从所选 Provider 的 `/v1/models` 拉取候选，也可自由输入；默认优先 some.im，不存在 some.im 时回退到默认 Provider。
+- 设置侧栏改为“账户与设备 → AI Agents → Agent 工具”优先；“工作区”并入倒数第二的“编辑器”组，“通用”更名为末尾的“更新”。
+
+### Fixed
+
+- 修复 AI Agents 首次渲染时 Provider Picker 短暂使用空选择的问题，避免 SwiftUI 报告无匹配 tag 的无效配置。
+
+### Tests
+
+- 新增子 Agent Provider 路由与设置信息架构回归，覆盖 some.im 优先、默认 Provider 回退、Provider UUID 精确绑定和设置标签顺序。
+- 完成真实 SwiftUI 设置窗口视觉验收，并保存参考图与实现图的同画布对照证据。
+
+### Meta
+
+- 子 Agent 独立 Provider/模型路由与设置导航重组属于新增功能，正式版本从 **1.242.0** 提升为 **1.243.0**，内部构建号 **341 → 342**，Help 与 Computer Use Helper 构建号 **257 → 258**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.242.0 - 2026-08-11
 

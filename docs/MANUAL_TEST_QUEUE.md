@@ -4,6 +4,8 @@
 
 ## 1.242.0 — 子 Agent 独立 Provider / 模型配置
 
+- ⏳ 打开设置，确认侧栏前三项依次为“账户与设备 / AI Agents / Agent 工具”，倒数第二为“编辑器”，最后为“更新”，且不再单列“工作区”。
+- ⏳ 打开“编辑器”，确认二级 Tab 中仍可进入“工作区”，既有检查器选项可正常修改。
 - ⏳ 打开“设置 → AI Agents”，确认二级 Tab 包含“AI 服务商 / 子 Agent / 记忆 / 规则”，且 AI 服务商页不再重复显示子 Agent 工种。
 - ⏳ 在“子 Agent”页分别切换 Scout、Reader、Deep、Editor 的 Provider，重开设置后确认每个工种保持各自选择。
 - ⏳ Provider 库存在 some.im 时，未配置工种默认选择 some.im；删除 some.im 后，未配置工种改用当前星标 Provider。
