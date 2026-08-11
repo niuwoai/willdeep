@@ -108,6 +108,8 @@ struct AgentModeView: View {
                 }
         }
         .environment(\.agentChatSupportingBaseFontSize, appState.agentChatBaseFontSize)
+        .environment(\.agentChatFontID, appState.agentChatFontID)
+        .environment(\.agentChatLineHeightMultiple, appState.agentChatLineHeightMultiple)
     }
 
     @ViewBuilder
@@ -645,7 +647,6 @@ enum AgentDesign {
     /// Live tool activity belongs to the assistant prose immediately above
     /// it, so it uses normal line rhythm instead of the full inter-message
     /// gap reserved for separate chat turns.
-    static let liveActivityTopSpacing: CGFloat = 6
     static let composerHeight: CGFloat = 124
     static let headerHeight: CGFloat = 44
     static let statusBarHeight: CGFloat = 26
@@ -737,10 +738,29 @@ private struct AgentChatSupportingBaseFontSizeKey: EnvironmentKey {
     static let defaultValue = AgentSettingsStore.chatBaseFontSizeDefault
 }
 
+private struct AgentChatFontIDKey: EnvironmentKey {
+    static let defaultValue = AgentSettingsStore.chatFontIDDefault
+}
+
+private struct AgentChatLineHeightMultipleKey: EnvironmentKey {
+    static let defaultValue = AgentSettingsStore.chatLineHeightMultipleDefault
+}
+
 extension EnvironmentValues {
     var agentChatSupportingBaseFontSize: CGFloat {
         get { self[AgentChatSupportingBaseFontSizeKey.self] }
         set { self[AgentChatSupportingBaseFontSizeKey.self] = newValue }
+    }
+
+
+    var agentChatFontID: String {
+        get { self[AgentChatFontIDKey.self] }
+        set { self[AgentChatFontIDKey.self] = newValue }
+    }
+
+    var agentChatLineHeightMultiple: CGFloat {
+        get { self[AgentChatLineHeightMultipleKey.self] }
+        set { self[AgentChatLineHeightMultipleKey.self] = newValue }
     }
 }
 

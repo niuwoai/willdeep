@@ -18,6 +18,7 @@ extension L10n {
         static let tabAppearance = String(localized: "settings.tab.appearance", defaultValue: "Format")
         static let tabBackground = String(localized: "settings.tab.background", defaultValue: "Background")
         static let tabWorkspace = String(localized: "settings.tab.workspace", defaultValue: "Workspace")
+        static let tabAgentAppearance = String(localized: "settings.tab.agent-appearance", defaultValue: "Agent Appearance")
         static let tabAgent = String(localized: "settings.tab.agent", defaultValue: "AI Providers")
         static let tabSubagents = String(localized: "settings.tab.subagents", defaultValue: "Subagents")
         static let tabSomeIM = String(localized: "settings.tab.some-im", defaultValue: "some.im")
@@ -38,6 +39,7 @@ extension L10n {
 
         static let groupGeneral = String(localized: "settings.group.general", defaultValue: "General")
         static let groupEditor = String(localized: "settings.group.editor", defaultValue: "Editor")
+        static let groupAgentAppearance = String(localized: "settings.group.agent-appearance", defaultValue: "Agent Appearance")
         static let groupAI = String(localized: "settings.group.ai", defaultValue: "AI Agents")
         static let groupAgentTools = String(localized: "settings.group.agent-tools", defaultValue: "Agent Tools")
         static let groupAccountAndDevices = String(localized: "settings.group.account-and-devices", defaultValue: "Account & Devices")
@@ -91,6 +93,10 @@ extension L10n {
 
         static let perProviderConcurrency = String(localized: "settings.per-provider-concurrency", defaultValue: "Per-provider concurrency")
         static let chatBaseFontSize = String(localized: "settings.chat-base-font-size", defaultValue: "Chat base font size")
+        static let agentFontSystem = String(localized: "settings.agent-font.system", defaultValue: "System")
+        static let agentFontRounded = String(localized: "settings.agent-font.rounded", defaultValue: "System Rounded")
+        static let agentFontSerif = String(localized: "settings.agent-font.serif", defaultValue: "System Serif")
+        static let agentFontMonospaced = String(localized: "settings.agent-font.monospaced", defaultValue: "System Monospaced")
         static let noAlwaysAllowed = String(localized: "settings.no-always-allowed", defaultValue: "No commands are always allowed.")
 
         // MARK: Generic appearance/editor labels reused across tabs.

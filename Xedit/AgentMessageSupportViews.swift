@@ -413,6 +413,8 @@ struct AgentMessageFooter: View {
     var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
 
     @State private var didJustCopy = false
+    @Environment(\.agentChatFontID) private var agentChatFontID
+    @Environment(\.agentChatLineHeightMultiple) private var agentChatLineHeightMultiple
 
     var body: some View {
         HStack(spacing: 10) {
@@ -420,7 +422,8 @@ struct AgentMessageFooter: View {
 
             if message.role == .user && showsUserTimestamp {
                 Text(formatTimestamp(message.createdAt))
-                    .font(supportingFont(weight: .regular))
+                    .font(metadataFont)
+                    .lineSpacing(metadataLineSpacing)
                     .foregroundStyle(.secondary)
             }
 
@@ -437,7 +440,8 @@ struct AgentMessageFooter: View {
 
             if message.role == .assistant, let tokenSummary = AgentChatMessageMetrics.tokenSummary(for: message) {
                 Text(tokenSummary)
-                    .font(footerTextFont)
+                    .font(metadataFont)
+                    .lineSpacing(metadataLineSpacing)
                     .foregroundStyle(.secondary)
             }
 
@@ -459,14 +463,18 @@ struct AgentMessageFooter: View {
     }
 
     private var footerTextFont: Font {
-        supportingFont(weight: .medium)
+        metadataFont
     }
 
-    private func supportingFont(weight: Font.Weight) -> Font {
-        AgentDesign.chatSupportingFont(
-            baseFontSize: baseFontSize,
-            visualMinimum: 11,
-            weight: weight
+    private var metadataFont: Font {
+        let choice = AgentChatFontChoice.byID(agentChatFontID) ?? .system
+        return choice.swiftUIFont(size: baseFontSize)
+    }
+
+    private var metadataLineSpacing: CGFloat {
+        AgentChatTypography.lineSpacing(
+            fontSize: baseFontSize,
+            lineHeightMultiple: agentChatLineHeightMultiple
         )
     }
 
@@ -476,6 +484,7 @@ struct AgentMessageFooter: View {
                 .font(footerIconFont)
             Text(text)
                 .font(footerTextFont)
+                .lineSpacing(metadataLineSpacing)
         }
         .foregroundStyle(.secondary)
     }

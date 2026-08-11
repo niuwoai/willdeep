@@ -17020,6 +17020,34 @@
         }
       }
     },
+    "settings.agent-font.monospaced" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "System Monospaced" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统等宽" } }
+      }
+    },
+    "settings.agent-font.rounded" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "System Rounded" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统圆体" } }
+      }
+    },
+    "settings.agent-font.serif" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "System Serif" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统衬线体" } }
+      }
+    },
+    "settings.agent-font.system" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "System" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统字体" } }
+      }
+    },
     "settings.chat-base-font-size" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -19262,6 +19290,13 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Format & Appearance" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "格式与外观" } }
+      }
+    },
+    "settings.group.agent-appearance" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent Appearance" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 外观" } }
       }
     },
     "settings.group.general" : {
@@ -28468,6 +28503,13 @@
             "value" : "some.im"
           }
         }
+      }
+    },
+    "settings.tab.agent-appearance" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent Appearance" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 外观" } }
       }
     },
     "settings.tab.terminal" : {

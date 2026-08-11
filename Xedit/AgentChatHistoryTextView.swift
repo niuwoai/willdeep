@@ -39,6 +39,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     /// from `AppState.agentChatBaseFontSize`. Tool summaries and
     /// chrome stay on fixed sizes inside the renderer.
     let baseFontSize: CGFloat
+    var fontID = AgentSettingsStore.chatFontIDDefault
+    var lineHeightMultiple = AgentSettingsStore.chatLineHeightMultipleDefault
     let onRetryLastTurn: () -> Void
     /// 1.103.0-rc11: 本轮 turn-report 的工具调用次数(>0 才会在最近一条
     /// assistant 的 footer 里渲染 doc.text + 数字图标);nil/0 表示没有
@@ -80,6 +82,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             assistantTurnContextMessages: assistantTurnContextMessages,
             isAssistantTurnActive: isAssistantTurnActive,
             baseFontSize: baseFontSize,
+            fontID: fontID,
+            lineHeightMultiple: lineHeightMultiple,
             progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount
         )
@@ -106,6 +110,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             assistantTurnContextMessages: assistantTurnContextMessages,
             isAssistantTurnActive: isAssistantTurnActive,
             baseFontSize: baseFontSize,
+            fontID: fontID,
+            lineHeightMultiple: lineHeightMultiple,
             progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount
         )
@@ -162,6 +168,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var currentIsAssistantTurnActive = false
     private var currentIsDark = false
     private var currentBaseFontSize: CGFloat = NSFont.systemFontSize
+    private var currentFontID = AgentSettingsStore.chatFontIDDefault
+    private var currentLineHeightMultiple = AgentSettingsStore.chatLineHeightMultipleDefault
     private var currentProgressPlan: AgentPlan?
     private var currentLatestTurnReportToolCount: Int? = nil
     private var currentLayoutWidth = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth
@@ -425,6 +433,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         assistantTurnContextMessages: [AgentMessage]? = nil,
         isAssistantTurnActive: Bool = false,
         baseFontSize: CGFloat = NSFont.systemFontSize,
+        fontID: String = AgentSettingsStore.chatFontIDDefault,
+        lineHeightMultiple: CGFloat = AgentSettingsStore.chatLineHeightMultipleDefault,
         progressPlan: AgentPlan? = nil,
         latestTurnReportToolCount: Int? = nil
     ) {
@@ -435,6 +445,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             isAssistantTurnActive: isAssistantTurnActive,
             isDark: isDark,
             baseFontSize: baseFontSize,
+            fontID: fontID,
+            lineHeightMultiple: lineHeightMultiple,
             progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount
         )
@@ -448,6 +460,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         currentIsAssistantTurnActive = isAssistantTurnActive
         currentIsDark = isDark
         currentBaseFontSize = baseFontSize
+        currentFontID = fontID
+        currentLineHeightMultiple = lineHeightMultiple
         currentProgressPlan = progressPlan
         currentLatestTurnReportToolCount = latestTurnReportToolCount
         renderCurrentMessages()
@@ -466,12 +480,16 @@ final class AgentChatHistoryNSTextView: NSTextView {
         isAssistantTurnActive: Bool,
         isDark: Bool,
         baseFontSize: CGFloat,
+        fontID: String,
+        lineHeightMultiple: CGFloat,
         progressPlan: AgentPlan?,
         latestTurnReportToolCount: Int?
     ) -> Int {
         var hasher = Hasher()
         hasher.combine(isDark)
         hasher.combine(baseFontSize)
+        hasher.combine(fontID)
+        hasher.combine(lineHeightMultiple)
         hasher.combine(messages.count)
         hasher.combine(isAssistantTurnActive)
         hasher.combine(latestTurnReportToolCount ?? -1)
@@ -561,6 +579,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             expandedProgressBlockIDs: expandedProgressBlockIDs,
             hoveredUserMessageID: hoveredUserMessageID,
             baseFontSize: currentBaseFontSize,
+            fontID: currentFontID,
+            lineHeightMultiple: currentLineHeightMultiple,
             layoutWidth: currentLayoutWidth,
             progressPlan: currentProgressPlan,
             latestTurnReportToolCount: currentLatestTurnReportToolCount
@@ -570,6 +590,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         hasher.combine(attr.length)
         hasher.combine(currentIsDark)
         hasher.combine(currentBaseFontSize)
+        hasher.combine(currentFontID)
+        hasher.combine(currentLineHeightMultiple)
         hasher.combine(currentLayoutWidth)
         hasher.combine(expandedToolGroupIDs.sorted())
         hasher.combine(expandedProgressBlockIDs.sorted())

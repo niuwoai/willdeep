@@ -32,6 +32,7 @@ struct AgentContextBuilderPromptTests {
             )
             #expect(prompt.contains("Markdown restraint"))
             #expect(prompt.contains("No emoji anywhere"))
+            #expect(prompt.contains("Never use check marks, crosses, celebration symbols"))
             #expect(prompt.contains("Bold is for genuine warnings"))
             #expect(prompt.contains("No headings in a short reply"))
             #expect(prompt.contains("Never use horizontal rules"))
@@ -67,7 +68,7 @@ struct AgentContextBuilderPromptTests {
         #expect(!compact.contains("list_mcp_servers"))
     }
 
-    @Test("stable v27 prompt text is guarded by a deterministic hash snapshot")
+    @Test("stable v28 prompt text is guarded by a deterministic hash snapshot")
     func testStablePromptSnapshotHash() {
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
             toolsEnabled: true,
@@ -80,7 +81,7 @@ struct AgentContextBuilderPromptTests {
             promptProfile: .standard
         )
 
-        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v27")
+        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v28")
         #expect(diagnostics.hash == AgentContextBuilder.stablePrefixSnapshotHash)
     }
 

@@ -253,6 +253,27 @@ final class AppState: ObservableObject {
             AgentSettingsStore.saveAgentChatBaseFontSize(clamped)
         }
     }
+    @Published var agentChatFontID: String = AgentSettingsStore.loadAgentChatFontID() {
+        didSet {
+            let normalized = AgentChatFontChoice.byID(agentChatFontID)?.id
+                ?? AgentSettingsStore.chatFontIDDefault
+            if normalized != agentChatFontID {
+                agentChatFontID = normalized
+                return
+            }
+            AgentSettingsStore.saveAgentChatFontID(normalized)
+        }
+    }
+    @Published var agentChatLineHeightMultiple: CGFloat = AgentSettingsStore.loadAgentChatLineHeightMultiple() {
+        didSet {
+            let clamped = AgentSettingsStore.clampChatLineHeightMultiple(agentChatLineHeightMultiple)
+            if clamped != agentChatLineHeightMultiple {
+                agentChatLineHeightMultiple = clamped
+                return
+            }
+            AgentSettingsStore.saveAgentChatLineHeightMultiple(clamped)
+        }
+    }
     /// Persisted Agent-mode chat sessions, newest-updated first.
     @Published var agentSessions: [AgentSession] = []
     /// User-managed projects: a name plus several source folders. Purely a

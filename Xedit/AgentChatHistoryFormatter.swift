@@ -69,9 +69,6 @@ enum AgentChatHistoryRenderer {
         /// 首段设 before、末段设 spacing，见 applyCodeBlockVerticalMargins。
         static let codeBlockBefore: CGFloat = 10
         static let codeBlockAfter: CGFloat = 10
-        /// Inline 工具摘要本身已经有图标和次级文字，不需要再插入一整
-        /// 行空白。保留 6pt 作为正文到单行活动摘要的轻量分隔。
-        static let inlineToolGroupBefore: CGFloat = 6
         static let toolLine: CGFloat = 1.5
     }
 
@@ -100,6 +97,8 @@ enum AgentChatHistoryRenderer {
         let countAndHash: Int
         let isDark: Bool
         let baseFontSize: CGFloat
+        let fontID: String
+        let lineHeightMultiple: CGFloat
         let layoutWidth: CGFloat
     }
 
@@ -232,6 +231,8 @@ enum AgentChatHistoryRenderer {
         expandedProgressBlockIDs: Set<String> = [],
         hoveredUserMessageID: UUID? = nil,
         baseFontSize: CGFloat = NSFont.systemFontSize,
+        fontID: String = AgentSettingsStore.chatFontIDDefault,
+        lineHeightMultiple: CGFloat = AgentSettingsStore.chatLineHeightMultipleDefault,
         layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
         progressPlan: AgentPlan? = nil,
         latestTurnReportToolCount: Int? = nil
@@ -266,6 +267,8 @@ enum AgentChatHistoryRenderer {
             countAndHash: hasher.finalize(),
             isDark: isDark,
             baseFontSize: clampedSize,
+            fontID: fontID,
+            lineHeightMultiple: lineHeightMultiple,
             layoutWidth: resolvedLayoutWidth
         )
         // Critical section #1: lookup. Lock has to cover the read
@@ -289,6 +292,8 @@ enum AgentChatHistoryRenderer {
             expandedProgressBlockIDs: expandedProgressBlockIDs,
             hoveredUserMessageID: hoveredUserMessageID,
             baseFontSize: clampedSize,
+            fontID: fontID,
+            lineHeightMultiple: lineHeightMultiple,
             layoutWidth: resolvedLayoutWidth,
             progressPlan: progressPlan,
             latestTurnReportToolCount: latestTurnReportToolCount
@@ -320,6 +325,8 @@ enum AgentChatHistoryRenderer {
         expandedProgressBlockIDs: Set<String>,
         hoveredUserMessageID: UUID?,
         baseFontSize: CGFloat,
+        fontID: String,
+        lineHeightMultiple: CGFloat,
         layoutWidth: CGFloat,
         progressPlan: AgentPlan?,
         latestTurnReportToolCount: Int?
@@ -344,7 +351,11 @@ enum AgentChatHistoryRenderer {
         // Message prose follows the user's body-size setting. Tool summaries
         // and section labels keep their compact AppKit scale so metadata does
         // not visually compete with the conversation itself.
-        let bodyFont = NSFont.systemFont(ofSize: baseFontSize)
+        let bodyFont = (AgentChatFontChoice.byID(fontID) ?? .system).nsFont(size: baseFontSize)
+        let bodyLineSpacing = AgentChatTypography.lineSpacing(
+            fontSize: baseFontSize,
+            lineHeightMultiple: AgentSettingsStore.clampChatLineHeightMultiple(lineHeightMultiple)
+        )
         let monoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
         let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
@@ -441,13 +452,25 @@ enum AgentChatHistoryRenderer {
                     continue
                 }
                 if result.length > 0 {
-                    result.append(NSAttributedString(string: "\n\n"))
+                    result.append(NSAttributedString(
+                        string: "\n\n",
+                        attributes: [
+                            .font: bodyFont,
+                            .paragraphStyle: bodyParagraphStyle(
+                                for: .assistant,
+                                layoutWidth: layoutWidth,
+                                lineSpacing: bodyLineSpacing
+                            ),
+                        ]
+                    ))
                 }
                 appendToolCallGroup(
                     group,
                     isExpanded: expandedToolGroupIDs.contains(group.id),
                     to: result,
+                    bodyFont: bodyFont,
                     monoFont: chromeMonoFont,
+                    lineSpacing: bodyLineSpacing,
                     secondaryColor: secondaryColor
                 )
                 continue
@@ -560,7 +583,7 @@ enum AgentChatHistoryRenderer {
                     attributes: [
                         .font: NSFont.systemFont(ofSize: max(9, baseFontSize - 3)),
                         .foregroundColor: secondaryColor,
-                        .paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth),
+                        .paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth, lineSpacing: bodyLineSpacing),
                         .agentChatHistoryUserMessageID: message.id.uuidString,
                     ]
                 ))
@@ -610,7 +633,7 @@ enum AgentChatHistoryRenderer {
                     kind: bubbleKind(for: message.role),
                     to: result,
                     range: attachmentRange,
-                    paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth),
+                    paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth, lineSpacing: bodyLineSpacing),
                     userMessageID: message.id,
                     foregroundColor: nil
                 )
@@ -678,7 +701,7 @@ enum AgentChatHistoryRenderer {
                     kind: bubbleKind(for: message.role),
                     to: result,
                     range: bodyRange,
-                    paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth),
+                    paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth, lineSpacing: bodyLineSpacing),
                     userMessageID: message.role == .user ? message.id : nil,
                     foregroundColor: nil
                 )
@@ -701,7 +724,7 @@ enum AgentChatHistoryRenderer {
                     kind: bubbleKind(for: message.role),
                     to: result,
                     range: imageRange,
-                    paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth),
+                    paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth, lineSpacing: bodyLineSpacing),
                     foregroundColor: nil
                 )
                 hasMessageBubbleContent = true
@@ -718,18 +741,18 @@ enum AgentChatHistoryRenderer {
             let inlineToolCalls = inlineGroup?.calls ?? []
             if let inlineGroup, !inlineToolCalls.isEmpty {
                 if hasMessageBubbleContent {
-                    // Transparent spacer paragraph between the assistant
-                    // body bubble and the compact one-line tool summary.
-                    let spacerStyle = NSMutableParagraphStyle()
-                    spacerStyle.alignment = .left
-                    spacerStyle.paragraphSpacing = 0
-                    spacerStyle.lineSpacing = 0
+                    // One full empty body row separates the answer from the
+                    // metadata group. The tool summary and footer below it
+                    // remain adjacent and share the configured typography.
                     result.append(NSAttributedString(
-                        string: "\n",
+                        string: "\n\n",
                         attributes: [
-                            .font: NSFont.systemFont(ofSize: MarkdownSpacing.inlineToolGroupBefore),
-                            .foregroundColor: NSColor.clear,
-                            .paragraphStyle: spacerStyle,
+                            .font: bodyFont,
+                            .paragraphStyle: bodyParagraphStyle(
+                                for: message.role,
+                                layoutWidth: layoutWidth,
+                                lineSpacing: bodyLineSpacing
+                            ),
                         ]
                     ))
                 }
@@ -737,7 +760,9 @@ enum AgentChatHistoryRenderer {
                     inlineGroup,
                     isExpanded: expandedToolGroupIDs.contains(inlineGroup.id),
                     to: result,
+                    bodyFont: bodyFont,
                     monoFont: chromeMonoFont,
+                    lineSpacing: bodyLineSpacing,
                     secondaryColor: secondaryColor
                 )
             }
@@ -749,9 +774,24 @@ enum AgentChatHistoryRenderer {
             if isAssistantTurnFooter,
                !isActiveAssistantTurn,
                activityHeadline == nil,
-               shouldShowFooter(for: message, body: body) {
+                shouldShowFooter(for: message, body: body) {
                 let messageBodyEnd = result.length
-                result.append(NSAttributedString(string: "\n", attributes: [.font: bodyFont]))
+                let footerSeparator = message.role == .assistant
+                    && hasMessageBubbleContent
+                    && inlineToolCalls.isEmpty
+                    ? "\n\n"
+                    : "\n"
+                result.append(NSAttributedString(
+                    string: footerSeparator,
+                    attributes: [
+                        .font: bodyFont,
+                        .paragraphStyle: bodyParagraphStyle(
+                            for: message.role,
+                            layoutWidth: layoutWidth,
+                            lineSpacing: bodyLineSpacing
+                        ),
+                    ]
+                ))
                 let footerStart = result.length
                 appendMessageFooter(
                     for: turnPresentation?.summaryMessage ?? message,
@@ -760,6 +800,8 @@ enum AgentChatHistoryRenderer {
                     turnReportToolCount: latestTurnReportToolCount,
                     layoutWidth: layoutWidth,
                     baseFontSize: baseFontSize,
+                    bodyFont: bodyFont,
+                    lineSpacing: bodyLineSpacing,
                     to: result
                 )
                 if hasMessageBubbleContent && inlineToolCalls.isEmpty {
@@ -774,14 +816,18 @@ enum AgentChatHistoryRenderer {
                         kind: bubbleKind(for: message.role),
                         to: result,
                         range: messageRange,
-                        paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth),
+                        paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth, lineSpacing: bodyLineSpacing),
                         userMessageID: message.role == .user ? message.id : nil,
                         foregroundColor: nil
                     )
                     let footerRange = NSRange(location: footerStart, length: result.length - footerStart)
                     result.addAttribute(
                         .paragraphStyle,
-                        value: footerParagraphStyle(for: message.role, layoutWidth: layoutWidth),
+                        value: footerParagraphStyle(
+                            for: message.role,
+                            layoutWidth: layoutWidth,
+                            lineSpacing: bodyLineSpacing
+                        ),
                         range: footerRange
                     )
                 }

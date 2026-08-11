@@ -82,6 +82,19 @@ struct AgentModeMessageView: View {
     var suppressesActivityHeadline = false
     @State private var isHoveringUserMessage = false
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.agentChatFontID) private var agentChatFontID
+    @Environment(\.agentChatLineHeightMultiple) private var agentChatLineHeightMultiple
+
+    private var agentChatFont: AgentChatFontChoice {
+        AgentChatFontChoice.byID(agentChatFontID) ?? .system
+    }
+
+    private var agentChatLineSpacing: CGFloat {
+        AgentChatTypography.lineSpacing(
+            fontSize: baseFontSize,
+            lineHeightMultiple: agentChatLineHeightMultiple
+        )
+    }
 
     var body: some View {
         switch message.role {
@@ -180,9 +193,9 @@ struct AgentModeMessageView: View {
                         // takes the whole chat pane down on scroll.
                         // Real text restored.
                         Text(AgentLongTokenBreaker.inject(into: split.visible))
-                            .font(.system(size: baseFontSize))
+                            .font(agentChatFont.swiftUIFont(size: baseFontSize))
                             .foregroundStyle(.primary)
-                            .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
+                            .lineSpacing(agentChatLineSpacing)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -284,7 +297,6 @@ struct AgentModeMessageView: View {
                             )
                         }
                     }
-                    .padding(.bottom, 8)
                     // Don't show the footer while the stream is still
                     // running — elapsedSeconds isn't stamped until
                     // `.finishedTurn`, so the row would briefly read
@@ -298,7 +310,13 @@ struct AgentModeMessageView: View {
                             alignment: .leading,
                             baseFontSize: baseFontSize
                         )
-                            .padding(.top, 8)
+                            .padding(
+                                .top,
+                                AgentChatTypography.lineHeight(
+                                    fontSize: baseFontSize,
+                                    lineHeightMultiple: agentChatLineHeightMultiple
+                                )
+                            )
                     }
                 }
                 .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
@@ -402,6 +420,15 @@ struct AgentAssistantMarkdownBody: View {
     var progressPlan: AgentPlan? = nil
     var onShowPlan: () -> Void = {}
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.agentChatFontID) private var agentChatFontID
+    @Environment(\.agentChatLineHeightMultiple) private var agentChatLineHeightMultiple
+
+    private var agentChatLineSpacing: CGFloat {
+        AgentChatTypography.lineSpacing(
+            fontSize: baseFontSize,
+            lineHeightMultiple: agentChatLineHeightMultiple
+        )
+    }
 
     var body: some View {
         let extraction = AgentTurnProgressPresentation.extract(from: content, plan: progressPlan)
@@ -422,10 +449,11 @@ struct AgentAssistantMarkdownBody: View {
                     Text(AgentAssistantMarkdownRenderer.render(
                         extraction.visibleContent,
                         isDark: colorScheme == .dark,
-                        baseFontSize: baseFontSize
+                        baseFontSize: baseFontSize,
+                        fontID: agentChatFontID
                     ))
                         .textSelection(.enabled)
-                        .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
+                        .lineSpacing(agentChatLineSpacing)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -449,6 +477,15 @@ private struct AgentAssistantStreamingBody: View {
     @State private var showsStreamingCursor = true
     @State private var lastStreamingOutputAt = Date()
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.agentChatFontID) private var agentChatFontID
+    @Environment(\.agentChatLineHeightMultiple) private var agentChatLineHeightMultiple
+
+    private var agentChatLineSpacing: CGFloat {
+        AgentChatTypography.lineSpacing(
+            fontSize: baseFontSize,
+            lineHeightMultiple: agentChatLineHeightMultiple
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -463,9 +500,10 @@ private struct AgentAssistantStreamingBody: View {
                 content,
                 rendersMarkdown: rendersMarkdown,
                 isDark: colorScheme == .dark,
-                baseFontSize: baseFontSize
+                baseFontSize: baseFontSize,
+                fontID: agentChatFontID
             ))
-                .lineSpacing(AgentChatHistoryLayoutMetrics.bodyLineSpacing)
+                .lineSpacing(agentChatLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
             if showsCursor && showsStreamingCursor {
                 AgentStreamingCursor()
@@ -499,20 +537,22 @@ enum AgentAssistantStreamingTextRenderer {
         _ content: String,
         rendersMarkdown: Bool,
         isDark: Bool,
-        baseFontSize: CGFloat
+        baseFontSize: CGFloat,
+        fontID: String = AgentSettingsStore.chatFontIDDefault
     ) -> AttributedString {
         if rendersMarkdown {
             return AgentAssistantMarkdownRenderer.render(
                 content,
                 isDark: isDark,
-                baseFontSize: baseFontSize
+                baseFontSize: baseFontSize,
+                fontID: fontID
             )
         }
 
         let normalized = AgentMarkdownNormalizer.normalizedForChatRendering(content)
         let safe = AgentLongTokenBreaker.inject(into: normalized)
         var plain = AttributedString(safe)
-        plain.font = .system(size: baseFontSize)
+        plain.font = (AgentChatFontChoice.byID(fontID) ?? .system).swiftUIFont(size: baseFontSize)
         plain.foregroundColor = .primary
         return plain
     }
@@ -542,6 +582,7 @@ enum AgentAssistantMarkdownRenderer {
         let contentHash: Int
         let isDark: Bool
         let baseFontSize: CGFloat
+        let fontID: String
     }
 
     private static var cache: [RenderCacheKey: AttributedString] = [:]
@@ -552,19 +593,21 @@ enum AgentAssistantMarkdownRenderer {
     static func render(
         _ content: String,
         isDark: Bool,
-        baseFontSize: CGFloat = NSFont.systemFontSize
+        baseFontSize: CGFloat = NSFont.systemFontSize,
+        fontID: String = AgentSettingsStore.chatFontIDDefault
     ) -> AttributedString {
         let key = RenderCacheKey(
             contentHash: content.hashValue,
             isDark: isDark,
-            baseFontSize: baseFontSize
+            baseFontSize: baseFontSize,
+            fontID: fontID
         )
         cacheLock.lock()
         let hit = cache[key]
         cacheLock.unlock()
         if let hit { return hit }
 
-        let result = build(from: content, isDark: isDark, baseFontSize: baseFontSize)
+        let result = build(from: content, isDark: isDark, baseFontSize: baseFontSize, fontID: fontID)
 
         cacheLock.lock()
         cache[key] = result
@@ -577,7 +620,13 @@ enum AgentAssistantMarkdownRenderer {
         return result
     }
 
-    private static func build(from content: String, isDark: Bool, baseFontSize: CGFloat) -> AttributedString {
+    private static func build(
+        from content: String,
+        isDark: Bool,
+        baseFontSize: CGFloat,
+        fontID: String
+    ) -> AttributedString {
+        let bodyFont = (AgentChatFontChoice.byID(fontID) ?? .system).swiftUIFont(size: baseFontSize)
         // Pre-process: inject zero-width breakpoints into unbreakable
         // runs of >30 chars. Otherwise a message containing e.g. a
         // pnpm-store listing (150-char hash paths, no spaces) freezes
@@ -615,14 +664,14 @@ enum AgentAssistantMarkdownRenderer {
 
             case .paragraph:
                 appendSeparator()
-                var paragraph = inlineRendered(block.text, baseFontSize: baseFontSize)
+                var paragraph = inlineRendered(block.text, baseFontSize: baseFontSize, bodyFont: bodyFont)
                 paragraph.foregroundColor = .primary
                 result += paragraph
 
             case .quote:
                 appendSeparator()
                 var quote = AttributedString("❝ " + block.text)
-                quote.font = .system(size: baseFontSize)
+                quote.font = bodyFont
                 quote.foregroundColor = .secondary
                 result += quote
 
@@ -632,7 +681,7 @@ enum AgentAssistantMarkdownRenderer {
                 let indent = String(repeating: "  ", count: block.indent)
                 var prefix = AttributedString("\(indent)\(bullet) ")
                 prefix.foregroundColor = .secondary
-                var body = inlineRendered(block.text, baseFontSize: baseFontSize)
+                var body = inlineRendered(block.text, baseFontSize: baseFontSize, bodyFont: bodyFont)
                 body.foregroundColor = .primary
                 result += prefix + body
 
@@ -641,7 +690,7 @@ enum AgentAssistantMarkdownRenderer {
                 let indent = String(repeating: "  ", count: block.indent)
                 var prefix = AttributedString("\(indent)1. ")
                 prefix.foregroundColor = .secondary
-                var body = inlineRendered(block.text, baseFontSize: baseFontSize)
+                var body = inlineRendered(block.text, baseFontSize: baseFontSize, bodyFont: bodyFont)
                 body.foregroundColor = .primary
                 result += prefix + body
 
@@ -773,7 +822,11 @@ enum AgentAssistantMarkdownRenderer {
     /// same parser as the editor preview so styling stays consistent
     /// across the app. The base font size flows through so chat-mode
     /// can scale message body text per user preference.
-    private static func inlineRendered(_ raw: String, baseFontSize: CGFloat) -> AttributedString {
+    private static func inlineRendered(
+        _ raw: String,
+        baseFontSize: CGFloat,
+        bodyFont: Font
+    ) -> AttributedString {
         var rendered = MarkdownInline.attributedString(from: raw)
         let runs = rendered.runs
         for run in runs {
@@ -781,7 +834,7 @@ enum AgentAssistantMarkdownRenderer {
             // carry one (MarkdownInline assigns explicit fonts to
             // bold / italic / inline-code spans — leave those alone).
             if rendered[run.range].font == nil {
-                rendered[run.range].font = .system(size: baseFontSize)
+                rendered[run.range].font = bodyFont
             }
         }
         return rendered

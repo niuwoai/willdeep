@@ -111,16 +111,16 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v27"
+    static let stablePrefixVersion = "willdeep-agent-system-v28"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "baef951b6823a0b7"
-    static let compactPrefixSnapshotHash = "e32c0c7dfa377137"
-    static let extendedPrefixSnapshotHash = "f08c0cc0b96ecd1"
+    static let stablePrefixSnapshotHash = "80f67a30d2ac24aa"
+    static let compactPrefixSnapshotHash = "2378e227888976a7"
+    static let extendedPrefixSnapshotHash = "5521f80f572fd488"
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
@@ -518,6 +518,7 @@ enum AgentContextBuilder {
             """
             Markdown restraint — write plainly; formatting is for structure the reader needs, never for emphasis or decoration:
             - No emoji anywhere (including section markers, status ticks, and bullet prefixes) unless the user used them first or explicitly asks.
+            - Never use check marks, crosses, celebration symbols, or other emoji as completion/status markers inside prose. Report completion with an ordinary sentence instead.
             - Bold is for genuine warnings and the single most important value in a dense result. Do not bold whole sentences, list-item leads, labels before colons, product names, file names, or numbers that a sentence already highlights. A reply where most lines contain bold has made bold meaningless.
             - No headings in a short reply. Add them only when the answer is long enough that a reader would otherwise scroll to find a section.
             - Prefer plain sentences to bullets when there are only two or three points; do not turn a paragraph into a list just to look organized.

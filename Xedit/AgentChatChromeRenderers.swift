@@ -67,9 +67,10 @@ enum AgentChatHistoryFooterChrome {
     /// `isLatestAssistant && toolCount > 0` 时插入,否则不显示。
     static func reportButton(
         count: Int,
-        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
+        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
+        font: NSFont? = nil
     ) -> NSAttributedString {
-        let font = footerFont(baseFontSize: baseFontSize)
+        let font = font ?? footerFont(baseFontSize: baseFontSize)
         let result = NSMutableAttributedString(attributedString: reportSymbolString(
             pointSize: font.pointSize,
             color: NSColor.secondaryLabelColor
@@ -91,9 +92,10 @@ enum AgentChatHistoryFooterChrome {
         message: String,
         isVisible: Bool = true,
         paragraphStyle: NSParagraphStyle? = nil,
-        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
+        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
+        font: NSFont? = nil
     ) -> NSAttributedString {
-        let font = footerFont(baseFontSize: baseFontSize)
+        let font = font ?? footerFont(baseFontSize: baseFontSize)
         let idleColor = isVisible ? NSColor.secondaryLabelColor : NSColor.clear
         var attributes = copyLinkAttributes(color: copied ? NSColor.systemGreen : idleColor)
         attributes[.agentChatHistoryMessageCopyText] = message
@@ -114,21 +116,26 @@ enum AgentChatHistoryFooterChrome {
     }
 
     static func retryButton(
-        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
+        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
+        font: NSFont? = nil
     ) -> NSAttributedString {
-        var attributes = retryLinkAttributes(color: NSColor.secondaryLabelColor)
+        var attributes = retryLinkAttributes(
+            color: NSColor.secondaryLabelColor,
+            font: font ?? footerFont(baseFontSize: baseFontSize)
+        )
         attributes[.link] = retryLinkValue
         attributes[.agentChatHistoryRetryLastTurn] = NSNumber(value: true)
         return NSAttributedString(string: retryLabel, attributes: attributes)
     }
 
     static func separator(
-        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
+        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
+        font: NSFont? = nil
     ) -> NSAttributedString {
         NSAttributedString(
             string: "  ",
             attributes: [
-                .font: footerFont(baseFontSize: baseFontSize),
+                .font: font ?? footerFont(baseFontSize: baseFontSize),
                 .foregroundColor: NSColor.secondaryLabelColor,
             ]
         )
@@ -136,12 +143,13 @@ enum AgentChatHistoryFooterChrome {
 
     static func label(
         _ text: String,
-        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
+        baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
+        font: NSFont? = nil
     ) -> NSAttributedString {
         NSAttributedString(
             string: text,
             attributes: [
-                .font: footerFont(baseFontSize: baseFontSize),
+                .font: font ?? footerFont(baseFontSize: baseFontSize),
                 .foregroundColor: NSColor.secondaryLabelColor,
             ]
         )
@@ -193,9 +201,9 @@ enum AgentChatHistoryFooterChrome {
         ]
     }
 
-    private static func retryLinkAttributes(color: NSColor) -> [NSAttributedString.Key: Any] {
+    private static func retryLinkAttributes(color: NSColor, font: NSFont = retryIconFont) -> [NSAttributedString.Key: Any] {
         [
-            .font: retryIconFont,
+            .font: font,
             .foregroundColor: color,
             .underlineStyle: 0,
         ]
