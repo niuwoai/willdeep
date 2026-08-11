@@ -404,42 +404,160 @@ struct AgentSidePanelDiffPerformanceTests {
         let hostingView = NSHostingView(rootView: root)
         hostingView.frame = NSRect(x: 0, y: 0, width: cardWidth, height: 260)
         hostingView.layoutSubtreeIfNeeded()
-        // The card measures its viewport asynchronously, so let SwiftUI settle
-        // before sampling pixels.
-        try await Task.sleep(nanoseconds: 300_000_000)
-        hostingView.layoutSubtreeIfNeeded()
 
-        let bitmap = try #require(
-            hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+        // The card measures its viewport asynchronously, so the two columns are
+        // polled until the tint has reached the right edge instead of betting a
+        // fixed delay on machine load.
+        let sample = try await Self.settledDiffColumns(
+            of: hostingView,
+            rightInsetInPoints: 40
         )
-        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
-
-        // Sample a column near the right edge, well beyond both the diff text
-        // and the previous 480pt row width.
-        let sampleX = Int(cardWidth) - 40
-        let column = (0..<Int(hostingView.bounds.height)).compactMap {
-            bitmap.colorAt(x: sampleX, y: $0)?.usingColorSpace(.sRGB)
-        }
-        // Untinted card rows dominate the column, so they define the baseline
-        // that the added/deleted tints are measured against.
-        let baseline = try #require(
-            Dictionary(grouping: column) { color in
-                [color.redComponent, color.greenComponent, color.blueComponent]
-                    .map { Int($0 * 255) }
-            }
-            .max { $0.value.count < $1.value.count }?
-            .value.first
-        )
-
-        let tints = column.map { Tint($0, baseline: baseline) }
-        let additionRows = tints.filter { $0 == .addition }.count
-        let deletionRows = tints.filter { $0 == .deletion }.count
 
         // The fixture has one deleted and two added lines, all of equal height,
-        // so the tinted bands near the right edge must keep that 1:2 ratio.
-        #expect(deletionRows > 0)
-        #expect(additionRows > 0)
-        #expect(abs(additionRows - 2 * deletionRows) <= 4)
+        // so the tinted bands mid-card must keep that 1:2 ratio.
+        #expect(sample.middle.deletionRows.count > 0)
+        #expect(sample.middle.additionRows.count > 0)
+        #expect(
+            abs(sample.middle.additionRows.count - 2 * sample.middle.deletionRows.count)
+                <= sample.tolerance
+        )
+
+        // ...and every row tinted mid-card must still be tinted near the right
+        // edge. Comparing the two columns row by row is what pins the fix: the
+        // old fixed 480pt row width painted the middle and left the right edge
+        // bare. Extra tinted rows near the edge (the "+2 −1" stats badge draws
+        // red glyphs there) are not a regression, so only the mid-card rows are
+        // required to survive.
+        #expect(sample.additionRowsMissingAtEdge.count <= sample.tolerance)
+        #expect(sample.deletionRowsMissingAtEdge.count <= sample.tolerance)
+    }
+
+    /// Two sampled pixel columns of a rendered card: one mid-card, where the
+    /// diff rows are certainly painted, and one near the right edge.
+    private struct DiffColumnSample {
+        /// Pixel-row indices carrying each tint, keyed by column.
+        struct Column {
+            var additionRows: Set<Int>
+            var deletionRows: Set<Int>
+        }
+
+        var middle: Column
+        var edge: Column
+        /// Backing scale of the sampled bitmap; a Retina bitmap has two pixel
+        /// rows per point, so row-count slack has to scale with it.
+        var scale: Int
+
+        var tolerance: Int { 4 * scale }
+        var additionRowsMissingAtEdge: Set<Int> {
+            middle.additionRows.subtracting(edge.additionRows)
+        }
+        var deletionRowsMissingAtEdge: Set<Int> {
+            middle.deletionRows.subtracting(edge.deletionRows)
+        }
+
+        /// The state the card is expected to settle into: mid-card rows are
+        /// painted and their tint survives all the way to the right edge.
+        var tintReachesEdge: Bool {
+            !middle.additionRows.isEmpty
+                && !middle.deletionRows.isEmpty
+                && additionRowsMissingAtEdge.count <= tolerance
+                && deletionRowsMissingAtEdge.count <= tolerance
+        }
+    }
+
+    /// Renders `hostingView` repeatedly and returns the sampled columns once
+    /// the card has settled into its final layout.
+    ///
+    /// A fixed `Task.sleep` before `cacheDisplay(in:to:)` is a bet on machine
+    /// load: the card measures its viewport asynchronously, so under a busy box
+    /// the sample lands on a frame whose rows are still the fallback width and
+    /// the test fails on a picture that was merely late. Polling for the
+    /// settled state turns that false failure into "slower" — a genuine
+    /// regression still fails, just at the timeout rather than immediately.
+    @MainActor
+    private static func settledDiffColumns<Root: View>(
+        of hostingView: NSHostingView<Root>,
+        rightInsetInPoints: CGFloat,
+        timeout: Duration = .seconds(20),
+        pollInterval: Duration = .milliseconds(40)
+    ) async throws -> DiffColumnSample {
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
+        var latest: DiffColumnSample?
+
+        while true {
+            hostingView.layoutSubtreeIfNeeded()
+            let bitmap = try #require(
+                hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+            )
+            hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+
+            // `colorAt(x:y:)` indexes pixels, not points: on a Retina backing
+            // the bitmap is twice the view's bounds, so point coordinates would
+            // silently sample the left half of the top half of the card.
+            let scale = max(1, bitmap.pixelsWide / max(1, Int(hostingView.bounds.width)))
+            let pixelsPerPoint = CGFloat(bitmap.pixelsWide) / hostingView.bounds.width
+            let edgeX = Int((hostingView.bounds.width - rightInsetInPoints) * pixelsPerPoint)
+            let sample = DiffColumnSample(
+                middle: Self.column(of: bitmap, x: bitmap.pixelsWide / 2),
+                edge: Self.column(of: bitmap, x: min(edgeX, bitmap.pixelsWide - 1)),
+                scale: scale
+            )
+            latest = sample
+            if sample.tintReachesEdge {
+                return sample
+            }
+
+            if clock.now >= deadline {
+                Issue.record(
+                    """
+                    Card never settled into a fully tinted layout within \
+                    \(timeout): mid-card rows added=\(sample.middle.additionRows.count) \
+                    deleted=\(sample.middle.deletionRows.count), missing at the \
+                    right edge added=\(sample.additionRowsMissingAtEdge.count) \
+                    deleted=\(sample.deletionRowsMissingAtEdge.count).
+                    """
+                )
+                return sample
+            }
+            try await Task.sleep(for: pollInterval)
+        }
+    }
+
+    /// Classifies one pixel column of `bitmap` into addition/deletion rows.
+    ///
+    /// Untinted card rows dominate the column, so they define the baseline that
+    /// the added/deleted tints are measured against.
+    private static func column(
+        of bitmap: NSBitmapImageRep,
+        x: Int
+    ) -> DiffColumnSample.Column {
+        let colors = (0..<bitmap.pixelsHigh).compactMap {
+            bitmap.colorAt(x: x, y: $0)?.usingColorSpace(.sRGB)
+        }
+        guard
+            let baseline = Dictionary(grouping: colors, by: Self.quantized(_:))
+                .max(by: { $0.value.count < $1.value.count })?
+                .value.first
+        else {
+            return DiffColumnSample.Column(additionRows: [], deletionRows: [])
+        }
+
+        var additions: Set<Int> = []
+        var deletions: Set<Int> = []
+        for (row, color) in colors.enumerated() {
+            switch Tint(color, baseline: baseline) {
+            case .addition: additions.insert(row)
+            case .deletion: deletions.insert(row)
+            case .none: break
+            }
+        }
+        return DiffColumnSample.Column(additionRows: additions, deletionRows: deletions)
+    }
+
+    private static func quantized(_ color: NSColor) -> [Int] {
+        [color.redComponent, color.greenComponent, color.blueComponent]
+            .map { Int($0 * 255) }
     }
 
     private enum Tint: Equatable {
