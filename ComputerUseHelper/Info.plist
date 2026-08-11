@@ -13,9 +13,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.241.0-rc14</string>
+	<string>1.242.0</string>
 	<key>CFBundleVersion</key>
-	<string>256</string>
+	<string>257</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSScreenCaptureUsageDescription</key>

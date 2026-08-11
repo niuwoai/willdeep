@@ -145,6 +145,18 @@ struct AgentCapabilityUsageRow: Identifiable, Equatable {
     var id: AgentUsageCapability { capability }
 }
 
+/// Historical `spawn_agent` usage grouped by the selected worker profile.
+/// One invocation is one parent-model tool call, including calls that later
+/// failed validation or execution; `sessionCount` shows how broadly the
+/// worker was used without inflating repeated fan-out in one conversation.
+nonisolated struct AgentSubagentUsageRow: Identifiable, Equatable {
+    let profileID: String
+    let invocationCount: Int
+    let sessionCount: Int
+
+    var id: String { profileID }
+}
+
 /// A distinct artifact referenced by chats that were active in the current
 /// calendar week. Artifact ledgers are session-scoped, so the label remains
 /// honest: this is work surfaced from this week's active chats, not a guess
@@ -263,6 +275,10 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
     var toolCallArgumentCharacterCount: Int
     var toolCallNames: [String]
     var toolCallExternalIDs: [String]
+    /// Normalized profile ids for `spawn_agent` calls on this message.
+    /// Missing/unknown profile arguments resolve to `deep`, matching the
+    /// runtime's backwards-compatible execution rule.
+    var subagentProfileIDs: [String]
     var toolCallID: String?
     var toolCallStatus: AgentToolCallStatus?
     var toolErrorMessage: String?
@@ -285,6 +301,7 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
         toolCallArgumentCharacterCount: Int = 0,
         toolCallNames: [String] = [],
         toolCallExternalIDs: [String] = [],
+        subagentProfileIDs: [String] = [],
         toolCallID: String? = nil,
         toolCallStatus: AgentToolCallStatus? = nil,
         toolErrorMessage: String? = nil,
@@ -306,6 +323,7 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
         self.toolCallArgumentCharacterCount = toolCallArgumentCharacterCount
         self.toolCallNames = toolCallNames
         self.toolCallExternalIDs = toolCallExternalIDs
+        self.subagentProfileIDs = subagentProfileIDs
         self.toolCallID = toolCallID
         self.toolCallStatus = toolCallStatus
         self.toolErrorMessage = toolErrorMessage
@@ -330,6 +348,12 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
             toolCallArgumentCharacterCount: message.toolCalls.reduce(0) { $0 + $1.argumentsJSON.count },
             toolCallNames: message.toolCalls.map(\.toolName),
             toolCallExternalIDs: message.toolCalls.map(\.externalID),
+            subagentProfileIDs: message.toolCalls.compactMap {
+                Self.subagentProfileID(
+                    toolName: $0.toolName,
+                    argumentsJSON: $0.argumentsJSON
+                )
+            },
             toolCallID: message.toolCallID,
             toolCallStatus: message.toolCallStatus,
             toolErrorMessage: message.toolErrorMessage,
@@ -345,6 +369,18 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
             createdAt: message.createdAt
         )
     }
+
+    static func subagentProfileID(toolName: String, argumentsJSON: String) -> String? {
+        guard toolName == "spawn_agent" else { return nil }
+        let rawProfile: String?
+        if let data = argumentsJSON.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            rawProfile = object["profile"] as? String
+        } else {
+            rawProfile = nil
+        }
+        return AgentSubagentProfileCatalog.profile(id: rawProfile).id
+    }
 }
 
 /// Every aggregate the stats dashboard renders, bundled so the whole
@@ -356,6 +392,8 @@ nonisolated struct AgentUsageDashboardModel: Equatable {
     let overview: AgentUsageOverview
     let modelUsage: [AgentModelUsageRow]
     let capabilityUsage: [AgentCapabilityUsageRow]
+    let subagentUsage: [AgentSubagentUsageRow]
+    let subagentSessionCount: Int
     let heatmapCells: [[AgentHeatmapCell]]
     let peakTaskTokenCount: Int
     let longestTaskDuration: TimeInterval
@@ -403,6 +441,10 @@ enum AgentUsageStats {
             overview: overview(for: sessions, now: now),
             modelUsage: modelUsage(for: sessions),
             capabilityUsage: capabilityUsage(for: sessions),
+            subagentUsage: subagentUsage(for: sessions),
+            subagentSessionCount: sessions.count { session in
+                session.messages.contains { !$0.subagentProfileIDs.isEmpty }
+            },
             heatmapCells: heatmap(for: sessions, weekCount: heatmapWeekCount, now: now),
             peakTaskTokenCount: peakTaskTokenCount,
             longestTaskDuration: longestTaskDuration,
@@ -673,6 +715,38 @@ enum AgentUsageStats {
                 if $0.callCount != $1.callCount { return $0.callCount > $1.callCount }
                 return $0.capability.rawValue < $1.capability.rawValue
             }
+    }
+
+    static func subagentUsage(for sessions: [AgentSession]) -> [AgentSubagentUsageRow] {
+        subagentUsage(for: sessions.map { AgentUsageSessionSnapshot(session: $0) })
+    }
+
+    static func subagentUsage(
+        for sessions: [AgentUsageSessionSnapshot]
+    ) -> [AgentSubagentUsageRow] {
+        var invocationCounts: [String: Int] = [:]
+        var sessionIDs: [String: Set<UUID>] = [:]
+
+        for session in sessions {
+            for profileID in session.messages.flatMap(\.subagentProfileIDs) {
+                invocationCounts[profileID, default: 0] += 1
+                sessionIDs[profileID, default: []].insert(session.id)
+            }
+        }
+
+        return invocationCounts.map { profileID, invocationCount in
+            AgentSubagentUsageRow(
+                profileID: profileID,
+                invocationCount: invocationCount,
+                sessionCount: sessionIDs[profileID]?.count ?? 0
+            )
+        }
+        .sorted {
+            if $0.invocationCount != $1.invocationCount {
+                return $0.invocationCount > $1.invocationCount
+            }
+            return $0.profileID < $1.profileID
+        }
     }
 
     static func weeklyDeliverables(

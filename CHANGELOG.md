@@ -1,7 +1,31 @@
 # Changelog
 
-> 当前文件保留最新版本（1.241.0-rc14 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.242.0 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.242.0 - 2026-08-11
+
+### Added
+
+- 新会话活动洞察新增可点击的“最常用 Worker”，并提供 Scout、Reader、Deep、Editor 的调用次数、涉及会话数和调用占比明细。
+- Worker 统计复用历史 `spawn_agent` 工具参数；未显式指定 profile 的兼容调用按运行时规则归入 Deep，无需等待新版本重新积累数据。
+- “AI Agents”新增独立“子 Agent”子页，Scout、Reader、Deep、Editor 不再混在 AI 服务商配置页中；每个工种均可单独绑定具体 Provider 条目与模型。
+- 子 Agent 模型支持从对应 Provider 的 `/v1/models` 拉取候选，也保留自由输入模型 ID；Provider 默认优先 some.im，不存在 some.im 时使用当前默认 Provider。
+
+### Fixed
+
+- 轻量会话索引现在保留省心托管状态，重启或冷加载历史后不再把托管会话占比错误显示为 0%。
+- 原“快速模式”更名为“省心托管会话占比”；原“最常用的推理强度”更名为“含推理输出的回复占比”，使标题与真实统计口径一致。
+
+### Tests
+
+- 新增轻量会话快照回归，覆盖省心托管状态及显式、默认 Worker profile 的恢复。
+- 新增跨会话 Worker 聚合回归，覆盖大小写规范化、默认 Deep 和未知 profile 的兼容行为。
+- 新增子 Agent Provider 路由回归，覆盖 some.im 优先、默认 Provider 回退、重复预设下的 Provider UUID 精确绑定，以及 AI Agents 子页信息架构。
+
+### Meta
+
+- Worker 用量明细与子 Agent 独立 Provider/模型配置属于新增功能，正式版本从 **1.241.0-rc14** 提升为 **1.242.0**，内部构建号 **340 → 341**，Help 与 Computer Use Helper 构建号 **256 → 257**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.241.0-rc14 - 2026-08-11
 

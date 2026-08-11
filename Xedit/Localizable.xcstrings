@@ -31897,8 +31897,9 @@
     "stats-dashboard.insight.active-days" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Active days" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "活跃天数" } } } },
     "stats-dashboard.insight.explored-skills" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Skills explored" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已探索的技能" } } } },
     "stats-dashboard.insight.peak-hour" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Peak time" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高峰时段" } } } },
-    "stats-dashboard.insight.quick-mode" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Managed routing" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "快速模式" } } } },
-    "stats-dashboard.insight.reasoning-strength" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Most-used reasoning strength" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最常用的推理强度" } } } },
+    "stats-dashboard.insight.quick-mode" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Managed-routing chats" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "省心托管会话占比" } } } },
+    "stats-dashboard.insight.reasoning-strength" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Replies with reasoning output" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "含推理输出的回复占比" } } } },
+    "stats-dashboard.insight.favorite-worker" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Most-used worker" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最常用 Worker" } } } },
     "stats-dashboard.insight.sessions" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Chats" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会话" } } } },
     "stats-dashboard.insight.skill-uses" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Total skill uses" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用的技能总数" } } } },
     "stats-dashboard.insight.tasks-total" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Total tasks" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务总数" } } } },
@@ -31916,6 +31917,15 @@
     "stats-dashboard.metric.total-tokens" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Total tokens" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "累计 Token 数" } } } },
     "stats-dashboard.metric.tool-calls" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tool calls" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工具调用" } } } },
     "stats-dashboard.models-disclosure.help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "View model usage details" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看模型用量明细" } } } },
+    "stats-dashboard.workers-disclosure.help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "View worker usage details" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看 Worker 调用明细" } } } },
+    "stats-dashboard.workers.favorite-value" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ · %2$@ calls" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ · %2$@ 次" } } } },
+    "stats-dashboard.workers.usage-summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ calls · %2$@ chats · %3$@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$@ 次调用 · %2$@ 个会话 · %3$@" } } } },
+    "stats-dashboard.workers.empty" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No worker calls recorded yet." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "尚未记录 Worker 调用。" } } } },
+    "stats-dashboard.workers.profiles-used" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Workers used" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用过的 Worker" } } } },
+    "stats-dashboard.workers.subtitle" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Historical spawn_agent calls grouped by worker profile" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "按 Worker 类型汇总历史 spawn_agent 调用" } } } },
+    "stats-dashboard.workers.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Worker usage" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Worker 调用统计" } } } },
+    "stats-dashboard.workers.total-calls" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Worker calls" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Worker 调用" } } } },
+    "stats-dashboard.workers.chats" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Chats with workers" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用 Worker 的会话" } } } },
     "stats-dashboard.plugins.empty" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Your most-used tools will appear here after a few tasks." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "完成几项任务后，这里会显示最常用的工具。" } } } },
     "stats-dashboard.plugins.run-count" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ runs" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 次运行" } } } },
     "stats-dashboard.plugins.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Most-used plugins" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最常用的插件" } } } },
@@ -32031,6 +32041,14 @@
             "value" : "概览"
           }
         }
+      }
+    },
+    "stats-dashboard.tabs.workers" : {
+      "comment" : "dashboard tab label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Workers" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Worker" } }
       }
     },
     "Summarize older messages to free context budget" : {

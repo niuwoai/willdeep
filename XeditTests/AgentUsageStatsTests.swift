@@ -219,6 +219,83 @@ extension WillDeepTests {
         #expect(unknownRow?.providerName == "some.im")
     }
 
+    @Test("lightweight usage decode preserves managed routing and worker profiles")
+    func testUsageSnapshotDecodePreservesManagedRoutingAndWorkers() throws {
+        let now = Date()
+        let calls = [
+            AgentMessageToolCall(
+                externalID: "scout",
+                toolName: "spawn_agent",
+                argumentsJSON: #"{"profile":"scout","prompt":"locate it"}"#
+            ),
+            AgentMessageToolCall(
+                externalID: "default",
+                toolName: "spawn_agent",
+                argumentsJSON: #"{"prompt":"investigate it"}"#
+            )
+        ]
+        var session = makeSession(
+            modelID: nil,
+            providerID: AgentProviderPreset.someIMID,
+            messages: [
+                AgentMessage(role: .assistant, content: "working", toolCalls: calls, createdAt: now)
+            ]
+        )
+        session.managedRouting = AgentManagedRoutingState()
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let snapshot = try AgentSessionStore.decodeUsageSnapshot(
+            from: encoder.encode(session)
+        )
+
+        #expect(snapshot.isManagedRouting)
+        #expect(snapshot.messages.first?.subagentProfileIDs == ["scout", "deep"])
+    }
+
+    @Test("AgentUsageStats groups worker calls and distinct chats by normalized profile")
+    func testUsageStatsGroupsSubagentWorkers() {
+        func spawn(_ id: String, profile: String?) -> AgentMessageToolCall {
+            let arguments: String
+            if let profile {
+                arguments = #"{"profile":"\#(profile)","prompt":"work"}"#
+            } else {
+                arguments = #"{"prompt":"work"}"#
+            }
+            return AgentMessageToolCall(
+                externalID: id,
+                toolName: "spawn_agent",
+                argumentsJSON: arguments
+            )
+        }
+
+        let first = makeSession(modelID: "gpt-5", messages: [
+            AgentMessage(role: .assistant, content: "", toolCalls: [
+                spawn("s1", profile: "scout"),
+                spawn("s2", profile: "SCOUT"),
+                spawn("d1", profile: nil),
+                spawn("unknown", profile: "retired-worker")
+            ])
+        ])
+        let second = makeSession(modelID: "gpt-5", messages: [
+            AgentMessage(role: .assistant, content: "", toolCalls: [
+                spawn("s3", profile: "scout"),
+                spawn("r1", profile: "reader")
+            ])
+        ])
+
+        let snapshots = [first, second].map(AgentUsageSessionSnapshot.init(session:))
+        let rows = AgentUsageStats.subagentUsage(for: snapshots)
+        let model = AgentUsageStats.dashboardModel(for: snapshots)
+
+        #expect(rows.first { $0.profileID == "scout" }?.invocationCount == 3)
+        #expect(rows.first { $0.profileID == "scout" }?.sessionCount == 2)
+        #expect(rows.first { $0.profileID == "deep" }?.invocationCount == 2)
+        #expect(rows.first { $0.profileID == "deep" }?.sessionCount == 1)
+        #expect(rows.first { $0.profileID == "reader" }?.invocationCount == 1)
+        #expect(model.subagentSessionCount == 2)
+    }
+
     @Test("AgentUsageStats current streak counts contiguous days ending today")
     func testUsageStatsCurrentStreak() {
         let calendar = Calendar.current
@@ -555,6 +632,8 @@ extension WillDeepTests {
         #expect(model.longestTaskDuration == 0)
         #expect(model.managedRoutingRate == 0)
         #expect(model.reasoningUsageRate == 0)
+        #expect(model.subagentUsage.isEmpty)
+        #expect(model.subagentSessionCount == 0)
         #expect(model.uniqueToolCount == 0)
     }
 
