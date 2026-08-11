@@ -313,6 +313,16 @@ enum AgentSandboxPolicy {
         "token", "tokens", "secret", "secrets", "credential", "credentials"
     ]
 
+    nonisolated private static let pipedTextFilterHeads: Set<String> = [
+        "grep", "egrep", "fgrep", "rg"
+    ]
+
+    nonisolated private static let pipedTextFilterFlagsWithoutValues: Set<String> = [
+        "-i", "--ignore-case", "-v", "--invert-match", "-w", "--word-regexp",
+        "-x", "--line-regexp", "-F", "--fixed-strings", "-E", "--extended-regexp",
+        "-n", "--line-number", "-q", "--quiet", "-s", "--no-messages"
+    ]
+
     nonisolated private static let sandboxExecPath = "/usr/bin/sandbox-exec"
 
     nonisolated static func decision(
@@ -800,7 +810,12 @@ enum AgentSandboxPolicy {
                 }
             }
 
-            if tokens.dropFirst().contains(where: referencesSensitivePath) {
+            if tokens.dropFirst().contains(where: referencesSensitivePath),
+               !isPipedTextFilterUsingOnlyPattern(
+                   head: head,
+                   tokens: tokens,
+                   runsInPipeline: segment.runsInPipeline
+               ) {
                 needsEscalation = true
                 needsConfirmation = true
                 reasons.append("Command references a sensitive path or credential-like value.")
@@ -1694,6 +1709,35 @@ enum AgentSandboxPolicy {
         return sensitiveCredentialMarkers.contains { marker in
             containsIdentifierBoundedMarker(marker, in: lower)
         }
+    }
+
+    /// A credential noun used as the sole pattern of a piped text filter is
+    /// not itself a credential read. For example, `kubectl get ns | grep -i
+    /// token` only filters the already-visible namespace list. Any additional
+    /// positional argument could be a file, so those shapes remain gated.
+    nonisolated private static func isPipedTextFilterUsingOnlyPattern(
+        head: String,
+        tokens: [String],
+        runsInPipeline: Bool
+    ) -> Bool {
+        guard runsInPipeline,
+              pipedTextFilterHeads.contains(head),
+              tokens.count >= 2 else {
+            return false
+        }
+
+        var positionalArguments: [String] = []
+        for token in tokens.dropFirst() {
+            if token.hasPrefix("-") {
+                guard pipedTextFilterFlagsWithoutValues.contains(token) else {
+                    return false
+                }
+                continue
+            }
+            positionalArguments.append(token)
+        }
+
+        return positionalArguments.count == 1
     }
 
     nonisolated private static func sensitiveOptionNameLooksSensitive(_ lower: String) -> Bool {

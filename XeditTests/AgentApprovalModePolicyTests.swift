@@ -139,6 +139,27 @@ struct AgentApprovalModePolicyTests {
         )
         #expect(smartKubernetesInspection == .staticAllowlist)
 
+        let smartFilteredKubernetesInspection = await appState.autoApprovalSource(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string(
+                "kubectl config current-context; kubectl get ns | grep -i token; "
+                    + "kubectl get deploy -A 2>/dev/null | grep -i tokenhub"
+            )],
+            risk: .write,
+            rootDirectory: workspace,
+            approvalMode: .smart
+        )
+        #expect(smartFilteredKubernetesInspection == .staticAllowlist)
+
+        let sensitiveFilterRead = await appState.autoApprovalSource(
+            toolName: "terminal_send_command",
+            arguments: ["command": .string("kubectl get ns | grep token .env")],
+            risk: .write,
+            rootDirectory: workspace,
+            approvalMode: .smart
+        )
+        #expect(sensitiveFilterRead == nil)
+
         let smartDelegatedAgent = await appState.autoApprovalSource(
             toolName: "codex_cli",
             arguments: ["prompt": .string("update the workspace")],

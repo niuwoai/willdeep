@@ -860,6 +860,57 @@ struct AgentSelfLearningTests {
     }
 
     @Test
+    func learningReviewStoreExpiresOnlyUnhandledItemsAfterFifteenDays() throws {
+        let suiteName = "com.willdeep.tests.learningReview.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        AgentLearningReviewStore._setTestDefaultsOverride(defaults)
+        defer {
+            AgentLearningReviewStore._setTestDefaultsOverride(nil)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let createdAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let pendingEvent = AgentLearningEvent(
+            kind: .memory,
+            status: .saved,
+            title: "Pending automatic learning memory",
+            detail: "Keep this only during the review window.",
+            createdAt: createdAt
+        )
+        let reviewedEvent = AgentLearningEvent(
+            kind: .skill,
+            status: .suggested,
+            title: "Reviewed skill candidate",
+            detail: "Reviewed records are not pending expiration.",
+            createdAt: createdAt
+        )
+        let reviewedItem = AgentLearningReviewItem(
+            event: reviewedEvent,
+            decision: .reviewed,
+            createdAt: createdAt,
+            updatedAt: createdAt,
+            reviewedAt: createdAt
+        )
+
+        AgentLearningReviewStore.save(
+            [AgentLearningReviewItem(event: pendingEvent), reviewedItem],
+            now: createdAt
+        )
+
+        let justBeforeExpiration = createdAt.addingTimeInterval(
+            AgentLearningReviewStore.pendingRetentionInterval - 1
+        )
+        #expect(AgentLearningReviewStore.load(now: justBeforeExpiration).count == 2)
+
+        let expirationDate = createdAt.addingTimeInterval(
+            AgentLearningReviewStore.pendingRetentionInterval
+        )
+        let remainingItems = AgentLearningReviewStore.load(now: expirationDate)
+        #expect(remainingItems.map(\.id) == [reviewedItem.id])
+        #expect(AgentLearningReviewStore.load(now: expirationDate) == remainingItems)
+    }
+
+    @Test
     func learningReviewStoreUpdatesSkillDraftContent() throws {
         let suiteName = "com.willdeep.tests.learningReview.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

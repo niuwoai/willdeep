@@ -398,6 +398,9 @@ extension WillDeepTests {
 
     @Test("SafeCommand: kubectl inspection and terminal clear auto-approve")
     func testSafeCommandKubectlInspection() {
+        let filteredInspection = "kubectl config current-context; kubectl get ns | grep -i token; "
+            + "kubectl get deploy -A 2>/dev/null | grep -i tokenhub"
+
         #expect(SafeCommand.classify(command: "clear") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "kubectl get pods -A") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "kubectl -n tokenhub describe deploy api") == .alwaysSafe)
@@ -406,6 +409,21 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "kubectl auth can-i get pods") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "kubectl rollout status deploy/api") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "NS=tokenhub; kubectl -n $NS get job perf-30m; date -u +%H:%M:%S") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: filteredInspection) == .alwaysSafe)
+
+        let filteredInspectionDecision = AgentSandboxPolicy.commandDecision(
+            command: filteredInspection,
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-kubectl-filter-workspace")
+        )
+        #expect(filteredInspectionDecision.mode == .readOnly)
+        #expect(!filteredInspectionDecision.requiresUserApproval)
+        #expect(!filteredInspectionDecision.requiresTypedConfirmation)
+
+        let sensitiveFileRead = AgentSandboxPolicy.commandDecision(
+            command: "kubectl get ns | grep token .env",
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-kubectl-filter-workspace")
+        )
+        #expect(sensitiveFileRead.requiresTypedConfirmation)
 
         #expect(SafeCommand.classify(command: "kubectl apply -f deploy.yaml") == .needsJudgment)
         #expect(SafeCommand.classify(command: "kubectl diff -k overlays/prod") == .needsJudgment)
