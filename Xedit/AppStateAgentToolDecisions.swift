@@ -707,7 +707,7 @@ extension AppState {
             historyContext: safetyJudgeHistoryContext()
         )
         if case .unavailable(let primaryReason) = result,
-           let fallback = someIMManagedJudgeConfiguration(),
+           let fallback = someIMSecurityGuardConfiguration(),
            fallback != configuration {
             effectiveConfiguration = fallback
             fallbackDetail = "managed fallback after \(primaryReason)"
@@ -850,15 +850,16 @@ extension AppState {
         }
     }
 
-    /// Configuration used for the auto-approval safety judge. Always
-    /// resolves to the active library entry's Flash model regardless of
-    /// what tier the current turn is using.
+    /// Configuration used for the auto-approval safety judge. A signed-in
+    /// some.im account always uses the dedicated server-policy model. Without
+    /// some.im authentication the current conversation's resolved model is
+    /// reused, including its provider and protocol.
     func configurationForSafetyJudge() -> AgentConfiguration {
-        var configuration = agentConfiguration.normalized.resolved(for: .interactive)
-        let flash = configuration.flashModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !flash.isEmpty {
-            configuration.model = flash
+        if let managed = someIMSecurityGuardConfiguration() {
+            return managed
         }
+
+        var configuration = agentConfiguration.normalized.resolved(for: .interactive)
         // The judge reads the live `agentConfiguration`, whose apiKey can
         // briefly lag the provider library: the key is materialized from
         // Keychain lazily and `applyActiveProviderLibraryEntry()` can
@@ -878,18 +879,6 @@ extension AppState {
             if !hydrated.isEmpty {
                 configuration.apiKey = hydrated
             }
-        }
-        // Last-resort safety net: if the direct provider's key is still
-        // missing but the user is signed into some.im, run the judge on the
-        // some.im managed flash model instead of bouncing to a manual prompt.
-        // some.im's credential lives in the shared-session Keychain (a
-        // different slot than any per-entry key), so it stays available
-        // exactly in the window where the direct key is empty. Users who
-        // never signed into some.im are unaffected — `nil` keeps the direct
-        // config, which then reports `missing api key` as before.
-        if configuration.requiresAPIKey, configuration.apiKey.isEmpty,
-           let managed = someIMManagedJudgeConfiguration() {
-            return managed
         }
         return configuration.normalized
     }
@@ -928,16 +917,15 @@ extension AppState {
         return ""
     }
 
-    /// A some.im managed judge configuration, or `nil` when the user is not
+    /// A some.im security-guard configuration, or `nil` when the user is not
     /// signed into some.im. Built from the some.im library entry when one
     /// exists (so base URL / models track the user's setup) and always carries
     /// the shared-session key — which lives in a different Keychain slot than
-    /// any per-entry secret, and is therefore present exactly when a direct
-    /// provider key momentarily is not. Used as the judge's last-resort
-    /// provider so a missing direct key becomes a some.im flash verdict
-    /// instead of a manual prompt. Returns `nil` under XCTest (the login gate
-    /// is false there), so it never fires in unit tests.
-    private func someIMManagedJudgeConfiguration() -> AgentConfiguration? {
+    /// any per-entry secret. Used as the judge's primary provider whenever
+    /// some.im authentication exists. Under XCTest
+    /// it activates only when a test explicitly installs a shared-session
+    /// override, so a developer's real login never affects test behavior.
+    private func someIMSecurityGuardConfiguration() -> AgentConfiguration? {
         guard SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults() else {
             return nil
         }
@@ -949,10 +937,10 @@ extension AppState {
             $0.providerID == AgentProviderPreset.someIMID
         }) {
             var config = entry.makeConfiguration(
-                flashOverride: SomeIMManagedModel.autoFlash,
+                flashOverride: SomeIMManagedModel.securityGuard,
                 routingMode: .flash
             )
-            config.model = SomeIMManagedModel.autoFlash
+            config.model = SomeIMManagedModel.securityGuard
             config.apiKey = key
             return config.normalized
         }
@@ -960,8 +948,8 @@ extension AppState {
         return AgentConfiguration(
             providerID: AgentProviderPreset.someIMID,
             baseURL: SomeIMIntegrationSettings.defaultBaseURL,
-            model: SomeIMManagedModel.autoFlash,
-            flashModel: SomeIMManagedModel.autoFlash,
+            model: SomeIMManagedModel.securityGuard,
+            flashModel: SomeIMManagedModel.securityGuard,
             proModel: SomeIMManagedModel.autoPro,
             routingMode: .flash,
             apiKey: key

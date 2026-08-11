@@ -272,7 +272,10 @@ private struct AgentProviderEntryEditor: View {
     let onFetch: () -> Void
     let onChange: (AgentProviderEntry) -> Void
 
-    @State private var providerID: String = ""
+    // Keep the Picker selection valid during its first render. The concrete
+    // entry is loaded onAppear, but SwiftUI evaluates the Picker before that
+    // callback and treats an empty, untagged selection as invalid.
+    @State private var providerID: String = AgentProviderPreset.someIMID
     @State private var displayName: String = ""
     @State private var baseURL: String = ""
     @State private var apiKey: String = ""

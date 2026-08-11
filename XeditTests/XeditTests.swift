@@ -9,6 +9,7 @@ import Testing
 import Foundation
 import CoreGraphics
 import Combine
+import SomeIMSharedSession
 @testable import WillDeep
 
 @Suite(.serialized)
@@ -1158,6 +1159,61 @@ struct WillDeepTests {
 
         let judge = appState.configurationForSafetyJudge()
         #expect(judge.apiKey == "sk-live-deepseek")
+    }
+
+    @Test("signed-out safety judge reuses the conversation model")
+    @MainActor
+    func testSignedOutSafetyJudgeReusesConversationModel() async {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true, session: nil)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        appState.agentConfiguration = AgentConfiguration(
+            providerID: AgentProviderPreset.openAIID,
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-5.6-sol",
+            flashModel: "gpt-5.4-mini",
+            proModel: "gpt-5.6-sol",
+            routingMode: .pro,
+            apiKey: "sk-test-openai"
+        )
+
+        let judge = appState.configurationForSafetyJudge()
+        #expect(judge.providerID == AgentProviderPreset.openAIID)
+        #expect(judge.model == "gpt-5.6-sol")
+        #expect(!judge.usesServerManagedSafetyJudge)
+    }
+
+    @Test("signed-in safety judge uses the some.im security guard")
+    @MainActor
+    func testSignedInSafetyJudgeUsesSomeIMSecurityGuard() async {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        SomeIMIntegrationStore._setTestSharedSessionOverride(
+            enabled: true,
+            session: SomeIMSharedSession(
+                apiKey: "sk-test-someim",
+                baseURL: SomeIMIntegrationSettings.defaultBaseURL
+            )
+        )
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        appState.agentConfiguration = AgentConfiguration(
+            providerID: AgentProviderPreset.openAIID,
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-5.6-sol",
+            apiKey: "sk-test-openai"
+        )
+
+        let judge = appState.configurationForSafetyJudge()
+        #expect(judge.providerID == AgentProviderPreset.someIMID)
+        #expect(judge.model == SomeIMManagedModel.securityGuard)
+        #expect(judge.apiKey == "sk-test-someim")
+        #expect(judge.inferenceProviderKind == .openAIResponses)
+        #expect(judge.usesServerManagedSafetyJudge)
     }
 
     @Test("safety judge never donates a different provider's key")

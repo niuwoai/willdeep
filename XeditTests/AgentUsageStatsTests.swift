@@ -173,19 +173,21 @@ extension WillDeepTests {
         #expect(failures.first?.errorSummary == "Command exited with status 1")
     }
 
-    @Test("AgentUsageStats labels managed-routing sessions 省心托管, leaves legacy nils as unknown-model")
+    @Test("AgentUsageStats prefers the client-routed model and keeps honest legacy fallbacks")
     func testUsageStatsManagedRoutingModelLabel() {
         let now = Date()
-        func assistant(_ tokens: Int) -> AgentUsageMessageSnapshot {
+        func assistant(_ tokens: Int, requestModelID: String? = nil) -> AgentUsageMessageSnapshot {
             AgentUsageMessageSnapshot(
                 role: .assistant,
                 contentCharacterCount: 40,
                 usageTokens: tokens,
+                requestModelID: requestModelID,
                 createdAt: now
             )
         }
-        // Managed session: modelID is nil (cleared at persist because routing
-        // is per-turn) but isManagedRouting is true → one "省心托管" row.
+        // Modern managed message: the client already persisted the exact
+        // per-turn route, so analytics must show that model instead of an
+        // anonymous or pseudo-model bucket.
         let managed = AgentUsageSessionSnapshot(
             id: UUID(),
             modelID: nil,
@@ -193,7 +195,20 @@ extension WillDeepTests {
             providerDisplayName: "some.im",
             createdAt: now,
             updatedAt: now,
-            messages: [assistant(100)],
+            messages: [assistant(100, requestModelID: "someim-code-low")],
+            isManagedRouting: true
+        )
+        // A managed message written before per-turn attribution existed keeps
+        // the explicit legacy aggregate label; inventing a concrete model
+        // would be worse than admitting that old data lacks it.
+        let legacyManaged = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: nil,
+            providerID: "some-im",
+            providerDisplayName: "some.im",
+            createdAt: now,
+            updatedAt: now,
+            messages: [assistant(75)],
             isManagedRouting: true
         )
         // Legacy session: modelID also nil, but NOT managed → must stay
@@ -208,15 +223,171 @@ extension WillDeepTests {
             messages: [assistant(50)],
             isManagedRouting: false
         )
-        let rows = AgentUsageStats.modelUsage(for: [managed, legacy])
+        let rows = AgentUsageStats.modelUsage(for: [managed, legacyManaged, legacy])
+        let routedRow = rows.first { $0.modelID == "someim-code-low" }
         let managedRow = rows.first { $0.modelID == "省心托管" }
         let unknownRow = rows.first { $0.modelID == "unknown-model" }
+        #expect(routedRow?.messageCount == 1)
+        #expect(routedRow?.providerName == "some.im")
         #expect(managedRow != nil)
         #expect(managedRow?.messageCount == 1)
         #expect(managedRow?.providerName == "some.im")
         #expect(unknownRow != nil)
         #expect(unknownRow?.messageCount == 1)
         #expect(unknownRow?.providerName == "some.im")
+    }
+
+    @Test("lightweight usage decode preserves managed routing and worker profiles")
+    func testUsageSnapshotDecodePreservesManagedRoutingAndWorkers() throws {
+        let now = Date()
+        let calls = [
+            AgentMessageToolCall(
+                externalID: "scout",
+                toolName: "spawn_agent",
+                argumentsJSON: #"{"profile":"scout","prompt":"locate it"}"#
+            ),
+            AgentMessageToolCall(
+                externalID: "default",
+                toolName: "spawn_agent",
+                argumentsJSON: #"{"prompt":"investigate it"}"#
+            )
+        ]
+        var session = makeSession(
+            modelID: nil,
+            providerID: AgentProviderPreset.someIMID,
+            messages: [
+                AgentMessage(role: .assistant, content: "working", toolCalls: calls, createdAt: now)
+            ]
+        )
+        session.managedRouting = AgentManagedRoutingState()
+        session.messages[0].managedRoute = AgentManagedRouteDecision(
+            selectedModel: "someim-code-low",
+            tier: .low,
+            domain: .coding,
+            complexity: .low,
+            didFallback: false
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let snapshot = try AgentSessionStore.decodeUsageSnapshot(
+            from: encoder.encode(session)
+        )
+
+        #expect(snapshot.isManagedRouting)
+        #expect(snapshot.messages.first?.subagentProfileIDs == ["scout", "deep"])
+        #expect(snapshot.messages.first?.requestModelID == "someim-code-low")
+    }
+
+    @Test("lightweight usage decode preserves the exact request provider and model")
+    func testUsageSnapshotDecodePreservesRequestRoutingSnapshot() throws {
+        let now = Date()
+        let session = makeSession(
+            modelID: "gpt-5.6-sol",
+            providerID: AgentProviderPreset.openAIID,
+            messages: [
+                AgentMessage(
+                    role: .assistant,
+                    content: "done",
+                    requestModelID: "glm-5",
+                    requestProviderID: AgentProviderPreset.someIMID,
+                    requestProviderDisplayName: "some.im",
+                    createdAt: now
+                )
+            ]
+        )
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let snapshot = try AgentSessionStore.decodeUsageSnapshot(
+            from: encoder.encode(session)
+        )
+
+        #expect(snapshot.messages.first?.requestModelID == "glm-5")
+        #expect(snapshot.messages.first?.requestProviderID == AgentProviderPreset.someIMID)
+        #expect(snapshot.messages.first?.requestProviderDisplayName == "some.im")
+    }
+
+    @Test("AgentUsageStats splits one session by each client-selected provider and model")
+    func testUsageStatsUsesPerTurnRoutingSnapshots() {
+        let now = Date()
+        let session = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: "gpt-5.6-sol",
+            providerID: AgentProviderPreset.openAIID,
+            providerDisplayName: "OpenAI",
+            createdAt: now,
+            updatedAt: now,
+            messages: [
+                AgentUsageMessageSnapshot(
+                    role: .assistant,
+                    contentCharacterCount: 20,
+                    usageTokens: 100,
+                    requestModelID: "glm-5",
+                    requestProviderID: AgentProviderPreset.someIMID,
+                    requestProviderDisplayName: "some.im",
+                    createdAt: now
+                ),
+                AgentUsageMessageSnapshot(
+                    role: .assistant,
+                    contentCharacterCount: 20,
+                    usageTokens: 200,
+                    requestModelID: "gpt-5.6-sol",
+                    requestProviderID: AgentProviderPreset.openAIID,
+                    requestProviderDisplayName: "OpenAI",
+                    createdAt: now
+                )
+            ]
+        )
+
+        let rows = AgentUsageStats.modelUsage(for: [session])
+        #expect(rows.first { $0.modelID == "glm-5" }?.providerID == AgentProviderPreset.someIMID)
+        #expect(rows.first { $0.modelID == "glm-5" }?.totalTokens == 100)
+        #expect(rows.first { $0.modelID == "gpt-5.6-sol" }?.providerID == AgentProviderPreset.openAIID)
+        #expect(rows.first { $0.modelID == "gpt-5.6-sol" }?.totalTokens == 200)
+    }
+
+    @Test("AgentUsageStats groups worker calls and distinct chats by normalized profile")
+    func testUsageStatsGroupsSubagentWorkers() {
+        func spawn(_ id: String, profile: String?) -> AgentMessageToolCall {
+            let arguments: String
+            if let profile {
+                arguments = #"{"profile":"\#(profile)","prompt":"work"}"#
+            } else {
+                arguments = #"{"prompt":"work"}"#
+            }
+            return AgentMessageToolCall(
+                externalID: id,
+                toolName: "spawn_agent",
+                argumentsJSON: arguments
+            )
+        }
+
+        let first = makeSession(modelID: "gpt-5", messages: [
+            AgentMessage(role: .assistant, content: "", toolCalls: [
+                spawn("s1", profile: "scout"),
+                spawn("s2", profile: "SCOUT"),
+                spawn("d1", profile: nil),
+                spawn("unknown", profile: "retired-worker")
+            ])
+        ])
+        let second = makeSession(modelID: "gpt-5", messages: [
+            AgentMessage(role: .assistant, content: "", toolCalls: [
+                spawn("s3", profile: "scout"),
+                spawn("r1", profile: "reader")
+            ])
+        ])
+
+        let snapshots = [first, second].map(AgentUsageSessionSnapshot.init(session:))
+        let rows = AgentUsageStats.subagentUsage(for: snapshots)
+        let model = AgentUsageStats.dashboardModel(for: snapshots)
+
+        #expect(rows.first { $0.profileID == "scout" }?.invocationCount == 3)
+        #expect(rows.first { $0.profileID == "scout" }?.sessionCount == 2)
+        #expect(rows.first { $0.profileID == "deep" }?.invocationCount == 2)
+        #expect(rows.first { $0.profileID == "deep" }?.sessionCount == 1)
+        #expect(rows.first { $0.profileID == "reader" }?.invocationCount == 1)
+        #expect(model.subagentSessionCount == 2)
     }
 
     @Test("AgentUsageStats current streak counts contiguous days ending today")
@@ -555,6 +726,8 @@ extension WillDeepTests {
         #expect(model.longestTaskDuration == 0)
         #expect(model.managedRoutingRate == 0)
         #expect(model.reasoningUsageRate == 0)
+        #expect(model.subagentUsage.isEmpty)
+        #expect(model.subagentSessionCount == 0)
         #expect(model.uniqueToolCount == 0)
     }
 

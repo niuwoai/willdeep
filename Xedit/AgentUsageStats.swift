@@ -145,6 +145,18 @@ struct AgentCapabilityUsageRow: Identifiable, Equatable {
     var id: AgentUsageCapability { capability }
 }
 
+/// Historical `spawn_agent` usage grouped by the selected worker profile.
+/// One invocation is one parent-model tool call, including calls that later
+/// failed validation or execution; `sessionCount` shows how broadly the
+/// worker was used without inflating repeated fan-out in one conversation.
+nonisolated struct AgentSubagentUsageRow: Identifiable, Equatable {
+    let profileID: String
+    let invocationCount: Int
+    let sessionCount: Int
+
+    var id: String { profileID }
+}
+
 /// A distinct artifact referenced by chats that were active in the current
 /// calendar week. Artifact ledgers are session-scoped, so the label remains
 /// honest: this is work surfaced from this week's active chats, not a guess
@@ -263,6 +275,10 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
     var toolCallArgumentCharacterCount: Int
     var toolCallNames: [String]
     var toolCallExternalIDs: [String]
+    /// Normalized profile ids for `spawn_agent` calls on this message.
+    /// Missing/unknown profile arguments resolve to `deep`, matching the
+    /// runtime's backwards-compatible execution rule.
+    var subagentProfileIDs: [String]
     var toolCallID: String?
     var toolCallStatus: AgentToolCallStatus?
     var toolErrorMessage: String?
@@ -274,6 +290,9 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
     var reasoningTokens: Int?
     var origin: AgentMessageOrigin?
     var originLabel: String?
+    var requestModelID: String?
+    var requestProviderID: String?
+    var requestProviderDisplayName: String?
     var requestStablePrefixCharacters: Int?
     var createdAt: Date
 
@@ -285,6 +304,7 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
         toolCallArgumentCharacterCount: Int = 0,
         toolCallNames: [String] = [],
         toolCallExternalIDs: [String] = [],
+        subagentProfileIDs: [String] = [],
         toolCallID: String? = nil,
         toolCallStatus: AgentToolCallStatus? = nil,
         toolErrorMessage: String? = nil,
@@ -296,6 +316,9 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
         reasoningTokens: Int? = nil,
         origin: AgentMessageOrigin? = nil,
         originLabel: String? = nil,
+        requestModelID: String? = nil,
+        requestProviderID: String? = nil,
+        requestProviderDisplayName: String? = nil,
         requestStablePrefixCharacters: Int? = nil,
         createdAt: Date
     ) {
@@ -306,6 +329,7 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
         self.toolCallArgumentCharacterCount = toolCallArgumentCharacterCount
         self.toolCallNames = toolCallNames
         self.toolCallExternalIDs = toolCallExternalIDs
+        self.subagentProfileIDs = subagentProfileIDs
         self.toolCallID = toolCallID
         self.toolCallStatus = toolCallStatus
         self.toolErrorMessage = toolErrorMessage
@@ -317,6 +341,9 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
         self.reasoningTokens = reasoningTokens
         self.origin = origin
         self.originLabel = originLabel
+        self.requestModelID = requestModelID
+        self.requestProviderID = requestProviderID
+        self.requestProviderDisplayName = requestProviderDisplayName
         self.requestStablePrefixCharacters = requestStablePrefixCharacters
         self.createdAt = createdAt
     }
@@ -330,6 +357,12 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
             toolCallArgumentCharacterCount: message.toolCalls.reduce(0) { $0 + $1.argumentsJSON.count },
             toolCallNames: message.toolCalls.map(\.toolName),
             toolCallExternalIDs: message.toolCalls.map(\.externalID),
+            subagentProfileIDs: message.toolCalls.compactMap {
+                Self.subagentProfileID(
+                    toolName: $0.toolName,
+                    argumentsJSON: $0.argumentsJSON
+                )
+            },
             toolCallID: message.toolCallID,
             toolCallStatus: message.toolCallStatus,
             toolErrorMessage: message.toolErrorMessage,
@@ -341,9 +374,24 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable {
             reasoningTokens: message.reasoningTokens,
             origin: message.origin,
             originLabel: message.originLabel,
+            requestModelID: message.requestModelID ?? message.managedRoute?.selectedModel,
+            requestProviderID: message.requestProviderID,
+            requestProviderDisplayName: message.requestProviderDisplayName,
             requestStablePrefixCharacters: message.requestStablePrefixCharacters,
             createdAt: message.createdAt
         )
+    }
+
+    static func subagentProfileID(toolName: String, argumentsJSON: String) -> String? {
+        guard toolName == "spawn_agent" else { return nil }
+        let rawProfile: String?
+        if let data = argumentsJSON.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            rawProfile = object["profile"] as? String
+        } else {
+            rawProfile = nil
+        }
+        return AgentSubagentProfileCatalog.profile(id: rawProfile).id
     }
 }
 
@@ -356,6 +404,8 @@ nonisolated struct AgentUsageDashboardModel: Equatable {
     let overview: AgentUsageOverview
     let modelUsage: [AgentModelUsageRow]
     let capabilityUsage: [AgentCapabilityUsageRow]
+    let subagentUsage: [AgentSubagentUsageRow]
+    let subagentSessionCount: Int
     let heatmapCells: [[AgentHeatmapCell]]
     let peakTaskTokenCount: Int
     let longestTaskDuration: TimeInterval
@@ -403,6 +453,10 @@ enum AgentUsageStats {
             overview: overview(for: sessions, now: now),
             modelUsage: modelUsage(for: sessions),
             capabilityUsage: capabilityUsage(for: sessions),
+            subagentUsage: subagentUsage(for: sessions),
+            subagentSessionCount: sessions.count { session in
+                session.messages.contains { !$0.subagentProfileIDs.isEmpty }
+            },
             heatmapCells: heatmap(for: sessions, weekCount: heatmapWeekCount, now: now),
             peakTaskTokenCount: peakTaskTokenCount,
             longestTaskDuration: longestTaskDuration,
@@ -675,6 +729,38 @@ enum AgentUsageStats {
             }
     }
 
+    static func subagentUsage(for sessions: [AgentSession]) -> [AgentSubagentUsageRow] {
+        subagentUsage(for: sessions.map { AgentUsageSessionSnapshot(session: $0) })
+    }
+
+    static func subagentUsage(
+        for sessions: [AgentUsageSessionSnapshot]
+    ) -> [AgentSubagentUsageRow] {
+        var invocationCounts: [String: Int] = [:]
+        var sessionIDs: [String: Set<UUID>] = [:]
+
+        for session in sessions {
+            for profileID in session.messages.flatMap(\.subagentProfileIDs) {
+                invocationCounts[profileID, default: 0] += 1
+                sessionIDs[profileID, default: []].insert(session.id)
+            }
+        }
+
+        return invocationCounts.map { profileID, invocationCount in
+            AgentSubagentUsageRow(
+                profileID: profileID,
+                invocationCount: invocationCount,
+                sessionCount: sessionIDs[profileID]?.count ?? 0
+            )
+        }
+        .sorted {
+            if $0.invocationCount != $1.invocationCount {
+                return $0.invocationCount > $1.invocationCount
+            }
+            return $0.profileID < $1.profileID
+        }
+    }
+
     static func weeklyDeliverables(
         for sessions: [AgentUsageSessionSnapshot],
         now: Date = Date(),
@@ -807,9 +893,20 @@ enum AgentUsageStats {
     }
 
     private static func providerSnapshot(
-        for session: AgentUsageSessionSnapshot,
+        message: AgentUsageMessageSnapshot? = nil,
+        session: AgentUsageSessionSnapshot,
         modelID: String
     ) -> (id: String, name: String) {
+        if let providerID = message?.requestProviderID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !providerID.isEmpty {
+            return (
+                providerID,
+                AgentProviderPreset.normalizedDisplayName(
+                    providerID: providerID,
+                    storedDisplayName: message?.requestProviderDisplayName
+                ) ?? providerID
+            )
+        }
         if let providerID = session.providerID?.trimmingCharacters(in: .whitespacesAndNewlines),
            !providerID.isEmpty {
             return (
@@ -834,13 +931,21 @@ enum AgentUsageStats {
             let model = label?.isEmpty == false ? label! : "External CLI"
             return (("delegated-external", "Delegated CLI"), model, true)
         }
-        // 省心托管:从用户视角"省心托管"本身就是一个模型,聚成一行,而不是
-        // 掉进 unknown-model。只认托管标记,老会话的空 modelID 仍归 unknown。
+        if let requestModelID = message.requestModelID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !requestModelID.isEmpty {
+            return (
+                providerSnapshot(message: message, session: session, modelID: requestModelID),
+                requestModelID,
+                false
+            )
+        }
+        // Managed messages persisted before per-turn route attribution keep
+        // the legacy aggregate label instead of falling into unknown-model.
         if session.isManagedRouting {
-            return (providerSnapshot(for: session, modelID: Self.managedRoutingModelID), Self.managedRoutingModelID, false)
+            return (providerSnapshot(session: session, modelID: Self.managedRoutingModelID), Self.managedRoutingModelID, false)
         }
         let modelID = normalizedModelID(session.modelID)
-        return (providerSnapshot(for: session, modelID: modelID), modelID, false)
+        return (providerSnapshot(session: session, modelID: modelID), modelID, false)
     }
 
     private static func inferProviderID(from modelID: String) -> String {

@@ -55,8 +55,9 @@ extension L10n {
         static let insightActiveDays = String(localized: "stats-dashboard.insight.active-days", defaultValue: "Active days")
         static let insightExploredSkills = String(localized: "stats-dashboard.insight.explored-skills", defaultValue: "Skills explored")
         static let insightPeakHour = String(localized: "stats-dashboard.insight.peak-hour", defaultValue: "Peak time")
-        static let insightQuickMode = String(localized: "stats-dashboard.insight.quick-mode", defaultValue: "Managed routing")
-        static let insightReasoningStrength = String(localized: "stats-dashboard.insight.reasoning-strength", defaultValue: "Most-used reasoning strength")
+        static let insightManagedRouting = String(localized: "stats-dashboard.insight.quick-mode", defaultValue: "Managed-routing chats")
+        static let insightReasoningUsage = String(localized: "stats-dashboard.insight.reasoning-strength", defaultValue: "Replies with reasoning output")
+        static let insightFavoriteWorker = String(localized: "stats-dashboard.insight.favorite-worker", defaultValue: "Most-used worker")
         static let insightSessions = String(localized: "stats-dashboard.insight.sessions", defaultValue: "Chats")
         static let insightSkillUses = String(localized: "stats-dashboard.insight.skill-uses", defaultValue: "Total skill uses")
         static let insightTasksTotal = String(localized: "stats-dashboard.insight.tasks-total", defaultValue: "Total tasks")
@@ -73,6 +74,24 @@ extension L10n {
         static let metricTotalTokens = String(localized: "stats-dashboard.metric.total-tokens", defaultValue: "Total tokens")
         static let metricToolCalls = String(localized: "stats-dashboard.metric.tool-calls", defaultValue: "Tool calls")
         static let modelsDisclosureHelp = String(localized: "stats-dashboard.models-disclosure.help", defaultValue: "View model usage details")
+        static let workersDisclosureHelp = String(localized: "stats-dashboard.workers-disclosure.help", defaultValue: "View worker usage details")
+
+        static func favoriteWorkerValue(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "stats-dashboard.workers.favorite-value", defaultValue: "%1$@ · %2$@ calls")
+            return String(format: template, a1, a2)
+        }
+
+        static func workerUsageSummary(_ a1: String, _ a2: String, _ a3: String) -> String {
+            let template = String(localized: "stats-dashboard.workers.usage-summary", defaultValue: "%1$@ calls · %2$@ chats · %3$@")
+            return String(format: template, a1, a2, a3)
+        }
+
+        static let workersEmpty = String(localized: "stats-dashboard.workers.empty", defaultValue: "No worker calls recorded yet.")
+        static let workersProfilesUsed = String(localized: "stats-dashboard.workers.profiles-used", defaultValue: "Workers used")
+        static let workersSubtitle = String(localized: "stats-dashboard.workers.subtitle", defaultValue: "Historical spawn_agent calls grouped by worker profile")
+        static let workersTitle = String(localized: "stats-dashboard.workers.title", defaultValue: "Worker usage")
+        static let workersTotalCalls = String(localized: "stats-dashboard.workers.total-calls", defaultValue: "Worker calls")
+        static let workersChats = String(localized: "stats-dashboard.workers.chats", defaultValue: "Chats with workers")
 
         static func pluginRunCount(_ a1: String) -> String {
             let template = String(localized: "stats-dashboard.plugins.run-count", defaultValue: "%@ runs")
@@ -103,6 +122,7 @@ extension L10n {
         static let rangeAll = String(localized: "stats-dashboard.range.all", defaultValue: "All")
         static let tabsModels = String(localized: "stats-dashboard.tabs.models", defaultValue: "Models")
         static let tabsOverview = String(localized: "stats-dashboard.tabs.overview", defaultValue: "Overview")
+        static let tabsWorkers = String(localized: "stats-dashboard.tabs.workers", defaultValue: "Workers")
         static let weeklyDeliverablesEmpty = String(localized: "stats-dashboard.deliverables.empty", defaultValue: "No artifacts from chats active this week")
         static let weeklyDeliverablesSubtitle = String(localized: "stats-dashboard.deliverables.subtitle", defaultValue: "Artifacts from chats updated this week")
         static let weeklyDeliverablesTitle = String(localized: "stats-dashboard.deliverables.title", defaultValue: "This week’s deliverables")
