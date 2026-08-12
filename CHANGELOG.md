@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc14 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc16 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc16 - 2026-08-12
+
+### Fixed
+
+- Agent 工具调用新增统一的审批前 Schema 预检：缺少必填参数或必填参数类型不匹配时，调用直接标记失败并把明确错误反馈给 Agent 重提，不再进入风险分类、智能审核或人工审批。此次现场中的空 `{}` `terminal_send_command` 因此不会再弹出仅含 `_approval_reason: Missing terminal command argument.` 与 `_sandbox: escalated` 的伪命令卡片。
+- 预检覆盖全部已登记工具，同时保留 `glob` 等兼容别名；合法命令和可选参数行为不变。
+
+### Tests
+
+- 新增工具参数预检回归测试，覆盖终端命令缺失、必填字段类型错误、合法命令及未登记兼容工具放行。
+
+### Meta
+
+- 审批参数修复，预发布版本从 **1.247.0-rc15** 提升为 **1.247.0-rc16**，内部构建号 **359 → 360**，Help 与 Computer Use Helper 构建号 **275 → 276**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc14 - 2026-08-12
 
