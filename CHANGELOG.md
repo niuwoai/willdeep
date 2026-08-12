@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc11 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc14 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc14 - 2026-08-12
+
+### Fixed
+
+- 侧边栏会话列表在冷启动加载完成前不再显示"您开始的会话将显示在这里。"的空态文案。会话目录在后台线程从磁盘读取（`AgentSessionStore.loadAllWithMetadata()`），头几百毫秒列表必然为空，旧逻辑只看 `agentSessions.isEmpty` 就渲染空态，用户会误以为会话丢了。现在空态三分：目录未加载完且列表为空 → 显示"正在加载会话…"加载占位（小号 ProgressView + 说明文字，高度钉在正常行高 31pt，首批会话落地时无布局跳动）；目录加载完且确实没有会话 → 维持既有空态文案；列表非空 → 现状不变。分支选择抽成纯函数 `AgentSidebarCatalogPlaceholder.state(hasLoadedCatalog:isSessionListEmpty:)`，由已有的 `@Published hasLoadedAgentSessionCatalog` 驱动视图刷新。
+
+### Tests
+
+- `AgentSidebarListVisualMetricsTests` 新增占位三分支用例，覆盖加载中/真空态/列表非空四种输入组合。
+
+### Meta
+
+- 侧边栏加载态修复，预发布版本从 **1.247.0-rc11** 提升为 **1.247.0-rc14**（rc12/rc13 由并行分支占用）；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc11 - 2026-08-12
 
