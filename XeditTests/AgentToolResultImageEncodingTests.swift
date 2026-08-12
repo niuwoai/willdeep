@@ -219,7 +219,9 @@ struct AgentToolResultImageEncodingTests {
             session: stub.session
         ).judgeCommandSafety(
             command: "yarn test",
-            historyContext: "THIS HISTORY MUST NOT BE SENT"
+            historyContext: "THIS HISTORY MUST NOT BE SENT",
+            toolName: "run_command",
+            taskContext: "Run the project's test suite"
         )
 
         #expect(result == .allow)
@@ -231,6 +233,8 @@ struct AgentToolResultImageEncodingTests {
         #expect(body["instructions"] == nil)
         #expect(body["messages"] == nil)
         #expect(request.body.contains("yarn test"))
+        #expect(request.body.contains("run_command"))
+        #expect(request.body.contains("Run the project's test suite"))
         #expect(!request.body.contains("THIS HISTORY MUST NOT BE SENT"))
         let input = try #require(body["input"] as? [[String: Any]])
         #expect(input.count == 1)

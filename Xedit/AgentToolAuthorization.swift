@@ -24,6 +24,7 @@ struct AgentAlwaysAllowedCommand: Codable, Equatable, Identifiable {
 
 enum AgentSandboxMode: String, Codable, Equatable {
     case readOnly
+    case readOnlyNetwork
     case workspaceWrite
     case workspaceWriteNetwork
     case escalated
@@ -566,6 +567,7 @@ enum AgentSandboxPolicy {
 
         var needsWorkspaceWrite = false
         var needsWorkspaceNetwork = false
+        var needsReadOnlyNetwork = false
         var needsEscalation = expansionResolution.requiresJudgment
         var needsConfirmation = false
         var reasons: [String] = expansionResolution.requiresJudgment
@@ -761,6 +763,7 @@ enum AgentSandboxPolicy {
             } else if networkHeads.contains(head) {
                 switch classifyNetworkReadOnly(head: head, tokens: tokens) {
                 case .alwaysSafe:
+                    needsReadOnlyNetwork = true
                     break
                 case .alwaysDangerous:
                     needsEscalation = true
@@ -853,6 +856,16 @@ enum AgentSandboxPolicy {
                 requiresUserApproval: true,
                 requiresTypedConfirmation: false,
                 reason: reasons.uniqued().joined(separator: " "),
+                prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
+            )
+        }
+
+        if needsReadOnlyNetwork {
+            return AgentSandboxDecision(
+                mode: .readOnlyNetwork,
+                requiresUserApproval: false,
+                requiresTypedConfirmation: false,
+                reason: "Command uses a statically verified read-only network operation with filesystem writes denied.",
                 prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
             )
         }
@@ -1253,7 +1266,7 @@ enum AgentSandboxPolicy {
             return true
         case .workspaceWrite, .workspaceWriteNetwork:
             return false
-        case .readOnly:
+        case .readOnly, .readOnlyNetwork:
             break
         }
 
@@ -1362,6 +1375,8 @@ enum AgentSandboxPolicy {
             return nil
         case .readOnly:
             restrictions = "reads allowed everywhere; writes denied except the temp dir; network denied"
+        case .readOnlyNetwork:
+            restrictions = "reads allowed everywhere; writes denied except the temp dir; network allowed"
         case .workspaceWrite:
             restrictions = "writes allowed only inside the workspace and temp dir; network denied"
         case .workspaceWriteNetwork:
@@ -1414,7 +1429,9 @@ enum AgentSandboxPolicy {
             }
         }
         let writeRule = "(allow file-write* \(writeAllows.joined(separator: " ")))"
-        let networkRule = mode == .workspaceWriteNetwork ? "(allow network*)" : "(deny network*)"
+        let networkRule = mode == .readOnlyNetwork || mode == .workspaceWriteNetwork
+            ? "(allow network*)"
+            : "(deny network*)"
         return """
         (version 1)
         (deny default)

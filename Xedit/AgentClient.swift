@@ -161,25 +161,47 @@ struct AgentClient {
     /// per-command user message.
     func judgeCommandSafety(
         command: String,
-        historyContext: String = ""
+        historyContext: String = "",
+        toolName: String = "run_command",
+        taskContext: String = ""
     ) async -> AgentSafetyJudgeResult {
         switch configuration.inferenceProviderKind {
         case .openAIChat:
             return await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
-                .judgeCommandSafety(command: command, historyContext: historyContext)
+                .judgeCommandSafety(
+                    command: command,
+                    historyContext: historyContext,
+                    toolName: toolName,
+                    taskContext: taskContext
+                )
         case .anthropicMessages:
             return await AnthropicMessagesAdapter(configuration: configuration, session: session)
-                .judgeCommandSafety(command: command, historyContext: historyContext)
+                .judgeCommandSafety(
+                    command: command,
+                    historyContext: historyContext,
+                    toolName: toolName,
+                    taskContext: taskContext
+                )
         case .geminiGenerateContent:
             return await GeminiAdapter(configuration: configuration, session: session)
-                .judgeCommandSafety(command: command, historyContext: historyContext)
+                .judgeCommandSafety(
+                    command: command,
+                    historyContext: historyContext,
+                    toolName: toolName,
+                    taskContext: taskContext
+                )
         case .openAIResponses:
             return await OpenAIResponsesAdapter(
                 configuration: configuration,
                 session: session,
                 someIMContext: someIMContext
             )
-                .judgeCommandSafety(command: command, historyContext: historyContext)
+                .judgeCommandSafety(
+                    command: command,
+                    historyContext: historyContext,
+                    toolName: toolName,
+                    taskContext: taskContext
+                )
         }
     }
 
