@@ -1,7 +1,33 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc17 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc18 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc18 - 2026-08-12
+
+### Performance
+
+- 统计面板的 usage 扫描新增 `usage-v1` 侧车缓存：此前统计面板首次出现时，后台要把 `agent-sessions/` 下每一份完整会话 JSON（本机实测 587 个文件 / 67MB，最大单文件 7.2MB）逐个全量解码，只为数出每条消息的字符数与 token 统计；现在每个会话保存时由内存对象直接写出一份小索引文件（schemaVersion + 源文件签名 + usage 快照），冷启动扫描只验签名读小文件。签名（mtime+size）或 schemaVersion 对不上、以及被外部进程改写过的会话，自动回退整份 JSON 全量解码并自愈回写侧车；删除会话时侧车一并清理。对外契约不变，`loadUsageSnapshots()` 返回内容与逐份全量解码完全一致。升级后第一次扫描仍是一次性全量重建 + 回写（在既有后台任务里完成，不阻塞界面）。
+- 终端字体 ID 解析不再枚举整个字体库。设置 `load()` → `normalized()` 跑在首帧之前，旧的 `all.first { $0.id == id }` 会强制求值 `NSFontManager.availableFontFamilies`（几百个字体族的机器上冷启动 0.3–0.9s），首窗白屏正卡在这里。现在内置字体从固定表解析，`nf:` 开头的 Nerd Font ID 只用 `NSFont(name:)` 探测自己那一族，nil 即未安装、调用方回退默认字体，行为与此前一致；全量枚举只留给设置里的字体选择器。
+
+### Fixed
+
+- Agent 工具调用在风险分类和人工审批之前统一校验 Schema 必填参数及类型。缺少 `command` 的 `terminal_send_command` 等畸形调用会直接失败并反馈 Agent 重新提交，不再生成没有真实操作内容、只显示 `_approval_reason` / `_sandbox` 内部元数据的误导审批卡。
+
+### Docs
+
+- 补入用量日历第 4 版设计验收记录 `artifacts/design-qa/usage-calendar-1.246.0-rc1/design-qa.md`（配套参考图与实现截图此前已在库中）。文末附 Superseded 注记：其中"当天存在无法定价的用量时显示未知"一条已被 1.247.0-rc14 的"按 $0 计入"取代。
+
+### Tests
+
+- 新增 `AgentUsageSidecarTests`：保存后侧车内容与整份 JSON 全量解码逐字段相等；签名匹配时冷扫描走快路径（以"内容故意不同的诱饵侧车"证明未做全量解码）；会话被外部改写与 schemaVersion 不匹配两种失效均触发重建并回写；删除会话时侧车一并删除。
+- 新增 `EditorTerminalFontResolutionTests`，含"短路解析与全量枚举表逐项一致"的等价性用例。
+- 新增 `AgentToolArgumentValidationTests` 覆盖必填参数与类型校验。
+
+### Meta
+
+- 四个并行分支合入 develop，预发布版本从 **1.247.0-rc17** 提升为 **1.247.0-rc18**，内部构建号 **361 → 362**，Help 与 Computer Use Helper 构建号 **277 → 278**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+- 各分支自带的版本位点（rc13 / rc15 / rc16）在合并时统一取 develop 侧，条目文本归位到本条 rc18。
 
 ## 1.247.0-rc17 - 2026-08-12
 
