@@ -1534,6 +1534,9 @@ extension AppState {
                         arguments: argsDict,
                         risk: risk,
                         rootDirectory: workspaceURL,
+                        additionalWorkspaceRoots: Array(
+                            self.agentWorkspaceRoots(for: runtime.session).dropFirst()
+                        ),
                         interactionMode: runtime.interactionMode,
                         approvalMode: runtime.approvalMode,
                         conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
