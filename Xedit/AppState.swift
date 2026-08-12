@@ -230,10 +230,10 @@ final class AppState: ObservableObject {
     var cachedJudgeHistoryBuiltAt: Date?
     /// App-lifetime cache of safety-judge YES verdicts, keyed by
     /// `AgentToolAuthorization.judgeVerdictCacheKey` (tool + exact normalized
-    /// command) with a grant timestamp. Repeating the same command avoids a
-    /// flash-model round trip, but changed arguments always receive a fresh
-    /// verdict. Denials are never cached, and danger-tier commands never
-    /// reach the judge at all.
+    /// command + compact redacted task context) with a grant timestamp.
+    /// Repeating the same reviewed action avoids a flash-model round trip,
+    /// but changed arguments or task intent receive a fresh verdict. Denials
+    /// are never cached, and danger-tier commands never reach the judge.
     var cachedJudgeAllowedVerdicts: [String: Date] = [:]
     /// User-tunable base font size (in points) for the Agent chat
     /// transcript body — applies to user/assistant message prose and

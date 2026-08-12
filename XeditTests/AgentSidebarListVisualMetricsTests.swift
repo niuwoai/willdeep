@@ -73,6 +73,37 @@ struct AgentSidebarListVisualMetricsTests {
         )
     }
 
+    @Test("sidebar placeholder is three-way: loading before the catalog lands, empty after, none with rows")
+    func catalogPlaceholderSplitsLoadingFromEmpty() {
+        // 冷启动：目录还没读完且列表为空 → 加载占位，不是"暂无会话"。
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: false,
+                isSessionListEmpty: true
+            ) == .loading
+        )
+        // 目录读完且确实没有会话 → 维持既有空态文案。
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: true,
+                isSessionListEmpty: true
+            ) == .empty
+        )
+        // 列表非空时无论目录是否加载完都不显示占位。
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: false,
+                isSessionListEmpty: false
+            ) == AgentSidebarCatalogPlaceholder.none
+        )
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: true,
+                isSessionListEmpty: false
+            ) == AgentSidebarCatalogPlaceholder.none
+        )
+    }
+
     @Test("Token activity tooltip includes the hovered day, request count, and Token usage")
     func tokenActivityTooltipCarriesDailyUsage() {
         let tooltip = L10n.HeatmapCell.tooltip("7月10日", "42", "10.3亿")

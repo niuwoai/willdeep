@@ -1105,14 +1105,14 @@ struct AgentToolsCoreTests {
             command: "ssh deploy@example.com cat /var/log/nginx/access.log",
             rootDirectory: root
         )
-        #expect(remoteCatDecision.mode == .readOnly)
+        #expect(remoteCatDecision.mode == .readOnlyNetwork)
         #expect(remoteCatDecision.requiresUserApproval == false)
 
         let remotePingDecision = AgentSandboxPolicy.commandDecision(
             command: #"ssh -p 2222 deploy@example.com "ping -c 1 8.8.8.8""#,
             rootDirectory: root
         )
-        #expect(remotePingDecision.mode == .readOnly)
+        #expect(remotePingDecision.mode == .readOnlyNetwork)
         #expect(remotePingDecision.requiresUserApproval == false)
 
         let remoteSecretDecision = AgentSandboxPolicy.commandDecision(
@@ -1205,8 +1205,8 @@ struct AgentToolsCoreTests {
             arguments: ["command": .string("systemctl status nginx --no-pager")],
             rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-workspace")
         )
-        #expect(commandDecision.mode == .workspaceWrite)
-        #expect(commandDecision.requiresUserApproval == true)
+        #expect(commandDecision.mode == .readOnly)
+        #expect(commandDecision.requiresUserApproval == false)
         #expect(commandDecision.requiresTypedConfirmation == false)
 
         let snapshotDecision = AgentSandboxPolicy.decision(
@@ -1848,9 +1848,14 @@ struct AgentToolsCoreTests {
         // 不端到端跑 sandbox-exec 子进程（CI 虚拟化 runner 上行为不可靠）。
         // readOnly + alwaysSafe 已跳过 seatbelt，这里只覆盖仍会套 profile 的模式。
         guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else { return }
-        for mode in [AgentSandboxMode.workspaceWrite, .workspaceWriteNetwork] {
+        let commandsByMode: [(AgentSandboxMode, String)] = [
+            (.readOnlyNetwork, "ssh deploy@example.com true"),
+            (.workspaceWrite, "git status"),
+            (.workspaceWriteNetwork, "git status"),
+        ]
+        for (mode, command) in commandsByMode {
             let launch = AgentSandboxPolicy.shellLaunch(
-                command: "git status",
+                command: command,
                 mode: mode,
                 rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-workspace")
             )
@@ -1965,6 +1970,19 @@ struct AgentToolsCoreTests {
         #expect(
             AgentToolAuthorization.judgeVerdictCacheKey(toolName: "run_command", command: "git commit -m 'a'")
                 != AgentToolAuthorization.judgeVerdictCacheKey(toolName: "terminal_send_command", command: "git commit -m 'a'")
+        )
+        // A model YES that depended on the current task's bounded intent must
+        // not be reused when the same command appears under a different goal.
+        #expect(
+            AgentToolAuthorization.judgeVerdictCacheKey(
+                toolName: "run_command",
+                command: "ssh host journalctl -u app",
+                taskContext: "inspect app logs"
+            ) != AgentToolAuthorization.judgeVerdictCacheKey(
+                toolName: "run_command",
+                command: "ssh host journalctl -u app",
+                taskContext: "unrelated task"
+            )
         )
     }
 

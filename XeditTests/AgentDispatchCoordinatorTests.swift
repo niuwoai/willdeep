@@ -1789,6 +1789,6 @@ private struct DefaultsSandbox {
     let defaults: UserDefaults
 
     func cleanup() {
-        defaults.removePersistentDomain(forName: suiteName)
+        TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
     }
 }

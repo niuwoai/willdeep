@@ -1,6 +1,6 @@
 # WillDeep Mobile Gateway Requirements
 
-> Last updated: 2026-08-12 | Target version: v1.247.0-rc6
+> Last updated: 2026-08-12 | Target version: v1.247.0-rc17
 
 ## Summary
 
@@ -18,6 +18,8 @@ Since v1.129.0-rc24 the gateway has two selectable transports (Settings → Mobi
 The Go gateway does **not** itself dial the relay; in the pre-rc24 design it only advertised the relay coordinates inside the pairing payload. The relay bus is, and always was, the Swift desktop peer connecting directly. That is why relay mode can run with no Go process at all.
 
 The HTTP API, pairing, device, and WebSocket sections below describe the **local network gateway** transport. In relay mode those HTTP endpoints do not exist; the QR payload's `relay_*` fields are the entire pairing contract.
+
+Relay-mode payloads therefore carry **no** `base_url` / `pairing_token` / `expires_at`. Those describe a local gateway that does not exist in relay mode; filling them with copies of the relay URL and token bought nothing and cost ~100 bytes of QR payload, which is one to two extra QR versions. Clients derive them instead: `base_url` ← `relay_base_url`, `pairing_token` ← `relay_token`, `expires_at` ← a far-future constant (rotate room + token to revoke). The compact QR form — `?r=<room>&t=<token>` plus optional `u` (relay base URL), `d` (desktop name), `v` (protocol version) — has always worked this way; the JSON form now matches it. Producers: macOS Xedit ≥ 1.247.0-rc12, WillDeep CLI ≥ 0.21.0-rc65. Consumer: Android ≥ 1.25.0-rc5.
 
 ## Product Goals
 
@@ -118,8 +120,8 @@ The gateway does not execute the command. It forwards the command to the desktop
 
 All Mobile Gateway HTTP responses must include:
 
-- `X-App-Version: 1.247.0-rc6`
-- `X-Server-Version: 1.247.0-rc6`
+- `X-App-Version: 1.247.0-rc17`
+- `X-Server-Version: 1.247.0-rc17`
 
 ### `GET /mobile/health`
 
@@ -131,7 +133,7 @@ Response data:
 {
   "version": {
     "name": "willdeep-agent",
-    "version": "1.247.0-rc6",
+    "version": "1.247.0-rc17",
     "go_version": "go1.23.x",
     "os": "darwin",
     "arch": "arm64"

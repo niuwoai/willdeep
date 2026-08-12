@@ -359,13 +359,13 @@ enum AgentChatHistoryRenderer {
         let monoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
         let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        // Match the live/settled tool activity rows (for example
-        // “已读取文件”) so the assistant status does not look washed out next
-        // to the activity timeline.
-        let assistantStatusFont = NSFont.systemFont(
-            ofSize: NSFont.systemFontSize,
-            weight: .regular
-        )
+        // Follows the user's body typography rather than the compact AppKit
+        // scale used by section labels. The status line ("已处理 · 1m 7s") sits
+        // directly beneath the prose of the turn it closes, with only a hairline
+        // divider between them, so a size or family of its own reads as a
+        // different document rather than as metadata. This is the same rule the
+        // token / managed-route statistics follow.
+        let assistantStatusFont = bodyFont
         let bodyColor = NSColor.labelColor
         let assistantStatusColor = NSColor.secondaryLabelColor
         let assistantStatusDividerColor = AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(

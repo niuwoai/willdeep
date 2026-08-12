@@ -164,7 +164,9 @@ struct AnthropicMessagesAdapter {
     /// only message in this single round trip.
     func judgeCommandSafety(
         command: String,
-        historyContext: String = ""
+        historyContext: String = "",
+        toolName: String = "run_command",
+        taskContext: String = ""
     ) async -> AgentSafetyJudgeResult {
         guard !configuration.apiKey.isEmpty else {
             return .unavailable("missing api key")
@@ -181,7 +183,11 @@ struct AnthropicMessagesAdapter {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let systemPrompt = AgentInjectionDefense.judgeSystemPromptText(historyContext: historyContext)
-        let userPayload = AgentInjectionDefense.judgeUserPayload(command: command)
+        let userPayload = AgentInjectionDefense.judgeUserPayload(
+            command: command,
+            toolName: toolName,
+            taskContext: taskContext
+        )
 
         // System block carries the fixed rules + the caller's stable history
         // block, so mark it `cache_control: ephemeral` — the identical prefix

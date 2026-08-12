@@ -505,7 +505,11 @@ extension AppState {
                     tool: tool,
                     argumentsJSON: arguments["arguments_json"]?.stringValue() ?? "{}"
                 )
-                return await safetyJudgeApproval(toolName: toolName, command: pseudoCommand)
+                return await safetyJudgeApproval(
+                    toolName: toolName,
+                    command: pseudoCommand,
+                    taskContext: latestUserMessage
+                )
             }
         }
 
@@ -532,7 +536,8 @@ extension AppState {
                 // terminal. SafeCommand also certifies bounded workspace
                 // builders/creators, but this terminal may currently point
                 // at a remote host or directory, so those still need review.
-                if sandboxDecision.mode == .readOnly {
+                if sandboxDecision.mode == .readOnly
+                    || sandboxDecision.mode == .readOnlyNetwork {
                     return .staticAllowlist
                 }
             case .alwaysDangerous:
@@ -540,7 +545,11 @@ extension AppState {
             case .needsJudgment:
                 break
             }
-            return await safetyJudgeApproval(toolName: toolName, command: command)
+            return await safetyJudgeApproval(
+                toolName: toolName,
+                command: command,
+                taskContext: latestUserMessage
+            )
         }
 
         if toolName == "terminal_send_control" {
@@ -551,7 +560,11 @@ extension AppState {
                 return nil
             }
             let pseudo = AgentToolAuthorization.terminalControlJudgePseudoCommand(control: control)
-            return await safetyJudgeApproval(toolName: toolName, command: pseudo)
+            return await safetyJudgeApproval(
+                toolName: toolName,
+                command: pseudo,
+                taskContext: latestUserMessage
+            )
         }
 
         guard toolName == "run_command" else { return nil }
@@ -583,7 +596,11 @@ extension AppState {
             break
         }
 
-        return await safetyJudgeApproval(toolName: toolName, command: command)
+        return await safetyJudgeApproval(
+            toolName: toolName,
+            command: command,
+            taskContext: latestUserMessage
+        )
     }
 
     nonisolated static func canAutoApproveComputerUse(
@@ -675,8 +692,10 @@ extension AppState {
     /// terminal) routes through.
     func safetyJudgeApproval(
         toolName: String,
-        command: String
+        command: String,
+        taskContext: String = ""
     ) async -> AgentToolApprovalSource? {
+        let judgeTaskContext = AgentInjectionDefense.redactedTaskContextForSafetyJudge(taskContext)
         // A recent YES for this tool + exact normalized command skips the network
         // round trip entirely. Only allows are cached (a deny still falls
         // through to the user each time), and the static danger gates run
@@ -684,7 +703,8 @@ extension AppState {
         // command can never ride an earlier verdict.
         let cacheKey = AgentToolAuthorization.judgeVerdictCacheKey(
             toolName: toolName,
-            command: command
+            command: command,
+            taskContext: judgeTaskContext
         )
         if let grantedAt = cachedJudgeAllowedVerdicts[cacheKey],
            Date().timeIntervalSince(grantedAt) < Self.safetyJudgeVerdictCacheTTL {
@@ -693,7 +713,7 @@ extension AppState {
                 command: command,
                 model: "verdict-cache",
                 verdict: "allow",
-                detail: "cached exact command: \(cacheKey)"
+                detail: "cached exact tool action and task context"
             )
             return .llmJudge
         }
@@ -704,7 +724,9 @@ extension AppState {
         let judgeCommand = AgentInjectionDefense.redactedCommandForSafetyJudge(command)
         var result = await AgentClient(configuration: configuration).judgeCommandSafety(
             command: judgeCommand,
-            historyContext: safetyJudgeHistoryContext()
+            historyContext: safetyJudgeHistoryContext(),
+            toolName: toolName,
+            taskContext: judgeTaskContext
         )
         if case .unavailable(let primaryReason) = result,
            let fallback = someIMSecurityGuardConfiguration(),
@@ -713,7 +735,9 @@ extension AppState {
             fallbackDetail = "managed fallback after \(primaryReason)"
             result = await AgentClient(configuration: fallback).judgeCommandSafety(
                 command: judgeCommand,
-                historyContext: safetyJudgeHistoryContext()
+                historyContext: safetyJudgeHistoryContext(),
+                toolName: toolName,
+                taskContext: judgeTaskContext
             )
         }
         let verdict: String
@@ -834,7 +858,7 @@ extension AppState {
             return .workspaceWriteNetwork
         }
         if risk == .read {
-            return .readOnly
+            return sandboxDecision.mode == .readOnlyNetwork ? .readOnlyNetwork : .readOnly
         }
         switch approvalSource {
         // Editor subagents patch one approved file inside the workspace and

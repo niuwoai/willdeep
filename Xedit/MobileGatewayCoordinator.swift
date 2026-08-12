@@ -12,9 +12,15 @@ import Darwin
 import Foundation
 
 struct MobileGatewayPairingPayload: Codable, Equatable {
-    var baseURL: String
+    /// LAN gateway coordinates: where the phone connects directly, and the
+    /// token it authenticates with. Absent in relay mode — there is no local
+    /// gateway to reach, and the relay fields below already carry the shared
+    /// secret. They used to be filled with copies of the relay values, which
+    /// bought nothing and cost ~100 bytes of QR payload (a duplicated token
+    /// alone pushes the code up a version or two).
+    var baseURL: String?
     var fallbackBaseURLs: [String]
-    var pairingToken: String
+    var pairingToken: String?
     var protocolVersion: String
     var desktopName: String
     var expiresAt: Date
@@ -35,9 +41,9 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
     }
 
     init(
-        baseURL: String,
+        baseURL: String? = nil,
         fallbackBaseURLs: [String] = [],
-        pairingToken: String,
+        pairingToken: String? = nil,
         protocolVersion: String,
         desktopName: String,
         expiresAt: Date,
@@ -58,9 +64,9 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        baseURL = try container.decode(String.self, forKey: .baseURL)
+        baseURL = try container.decodeIfPresent(String.self, forKey: .baseURL)
         fallbackBaseURLs = try container.decodeIfPresent([String].self, forKey: .fallbackBaseURLs) ?? []
-        pairingToken = try container.decode(String.self, forKey: .pairingToken)
+        pairingToken = try container.decodeIfPresent(String.self, forKey: .pairingToken)
         protocolVersion = try container.decode(String.self, forKey: .protocolVersion)
         desktopName = try container.decode(String.self, forKey: .desktopName)
         expiresAt = try container.decode(Date.self, forKey: .expiresAt)
@@ -110,7 +116,7 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
         }
 
         let base = Self.trimmedURL(baseURL)
-        let token = pairingToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = pairingToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard let base, !token.isEmpty else { return nil }
         var items = [
             URLQueryItem(name: "b", value: base),
@@ -140,7 +146,7 @@ struct MobileGatewayPairingPayload: Codable, Equatable {
     }
 
     func addingFallbackBaseURLs(_ urls: [URL]) -> MobileGatewayPairingPayload {
-        let primary = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let primary = baseURL?.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
         var seen = Set([primary])
         let existing = fallbackBaseURLs.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
         let discovered = urls.map { $0.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
@@ -849,11 +855,10 @@ final class MobileGatewayCoordinator: ObservableObject {
     }
 
     /// Build the QR pairing payload for relay mode without a Go gateway. The
-    /// phone joins the relay room using `relay_token`; the LAN `base_url` /
-    /// `pairing_token` fields are filled with relay-equivalents so clients
-    /// that key off them still authenticate against the same shared secret
-    /// that `relay_token` already carries (the Go gateway advertises the same
-    /// relay fields today, so this is wire-compatible with existing phones).
+    /// phone joins the relay room using `relay_token`; there is no LAN gateway,
+    /// so `base_url` / `pairing_token` stay nil and never reach the QR code.
+    /// Phones derive them from `relay_base_url` / `relay_token` (the compact
+    /// `r`/`t` QR params have always worked that way, so this is wire-compatible).
     /// `expiresAt` is far out because the relay token is long-lived — rotate
     /// it (new room + token) to de-authorize devices instead.
     static func relayPairingPayload(
@@ -864,9 +869,9 @@ final class MobileGatewayCoordinator: ObservableObject {
         let relayBaseURL = settings.relayBaseURL.trimmingCharacters(in: CharacterSet(charactersIn: " /"))
         let relayRoom = settings.relayRoom.trimmingCharacters(in: CharacterSet(charactersIn: " /"))
         return MobileGatewayPairingPayload(
-            baseURL: relayBaseURL,
+            baseURL: nil,
             fallbackBaseURLs: [],
-            pairingToken: relayToken,
+            pairingToken: nil,
             protocolVersion: Self.protocolVersion,
             desktopName: settings.desktopName,
             expiresAt: now.addingTimeInterval(60 * 60 * 24 * 365 * 10),

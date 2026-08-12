@@ -1,9 +1,9 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc6 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc17 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.247.0-rc6 - 2026-08-12
+## 1.247.0-rc17 - 2026-08-12
 
 ### Fixed
 
@@ -12,11 +12,148 @@
 
 ### Tests
 
-- 扩充 Agent 聊天排版回归，覆盖正文到工具摘要、正文到统计总结的 0.7 倍字号留白，以及工具活动组内部紧凑间距。
+- 扩充 Agent 聊天排版回归，覆盖正文到工具摘要、正文到统计总结的 0.7 倍字号留白，以及工具活动组内部紧凑间距；两套定向测试共 78 项通过。
 
 ### Meta
 
-- Agent 元信息间距修复使预发布版本从 **1.247.0-rc5** 递增为 **1.247.0-rc6**，内部构建号 **358 → 359**，Help 与 Computer Use Helper 构建号 **274 → 275**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+- Agent 元信息间距修复合入最新 develop，预发布版本从 **1.247.0-rc16** 递增为 **1.247.0-rc17**，内部构建号 **360 → 361**，Help 与 Computer Use Helper 构建号 **276 → 277**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc16 - 2026-08-12
+
+### Fixed
+
+- 侧边栏会话列表在冷启动加载完成前不再显示"您开始的会话将显示在这里。"的空态文案。会话目录在后台线程从磁盘读取（`AgentSessionStore.loadAllWithMetadata()`），头几百毫秒列表必然为空，旧逻辑只看 `agentSessions.isEmpty` 就渲染空态，用户会误以为会话丢了。现在空态三分：目录未加载完且列表为空 → 显示"正在加载会话…"加载占位（小号 ProgressView + 说明文字，高度钉在正常行高 31pt，首批会话落地时无布局跳动）；目录加载完且确实没有会话 → 维持既有空态文案；列表非空 → 现状不变。分支选择抽成纯函数 `AgentSidebarCatalogPlaceholder.state(hasLoadedCatalog:isSessionListEmpty:)`，由已有的 `@Published hasLoadedAgentSessionCatalog` 驱动视图刷新。
+- 中继模式的配对载荷不再复制局域网字段。`MobileGatewayCoordinator.relayPairingPayload` 此前把中继地址和中继 token 各复制一份填进 `base_url` / `pairing_token`，中继模式下压根没有本地网关可连，这两份副本换不来任何能力，却白占约 100 字节二维码容量（重复 token 单独就能把码推高一到两个版本）。现在两字段改为可选、传 `nil`，JSON 编码时直接省略；手机端本就从 `relay_base_url` / `relay_token` 取值（紧凑二维码参数 `r`/`t` 一直如此），紧凑分支不受影响，对 Android ≥ 1.25.0-rc5 线上兼容。
+- 设置面板"配对地址"一行改取 `baseURL ?? relayBaseURL`，中继模式显示手机实际加入的中继端点；两者皆空时整行隐藏，不再留一行空白。
+
+### Tests
+
+- `AgentSidebarListVisualMetricsTests` 新增占位三分支用例，覆盖加载中/真空态/列表非空的输入组合。
+- `MobileGatewayCoordinatorTests.relayPairingPayloadCarriesRelayCoordinates` 改为断言 `baseURL` / `pairingToken` 为 `nil`，并新增断言配对 JSON 不含 `"base_url"` / `"pairing_token"`。
+
+### Meta
+
+- 侧边栏加载态与中继配对载荷瘦身合入 develop，预发布版本从 **1.247.0-rc15** 提升为 **1.247.0-rc16**，内部构建号 **359 → 360**，Help 与 Computer Use Helper 构建号 **275 → 276**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+- 两个分支各自携带的版本位点（rc14 / rc12）在合并时统一取 develop 侧，条目文本归位到本条 rc16。
+
+## 1.247.0-rc15 - 2026-08-12
+
+### Fixed
+
+- “已安排”中的只读远程巡检会先验证 SSH 传输参数，再递归检查远端载荷；有时间边界的 `journalctl` 读取、`systemctl show/status/is-active` 查询和 grep/sort/head 等只读分析链可在 Smart 审核下直接执行，不再频繁停在无人值守的人工审批卡。
+- 普通 Smart 会话的可见终端与后台周期任务共用 `readOnlyNetwork` 边界；交互式 SSH、隧道或代理、远端重定向写入、服务重启及日志维护仍进入 `someim-security-guard` 或人工复核。
+- `someim-security-guard` 请求新增精确工具类型和从当前用户诉求截取、凭据脱敏、限长的任务意图。任务意图只帮助判断动作相关性，不构成授权、不能覆盖命令事实或扩大沙箱权限。
+- 智能审核 YES 缓存收紧为“工具 + 精确命令 + 脱敏任务上下文”，避免依赖一次任务意图的结论跨目标复用；明确 NO、无效输出和服务不可用继续失败关闭。
+
+### Tests
+
+- 新增只读 SSH 日志、服务状态、复合过滤链、交互式 SSH、代理参数、远端写入、服务重启及日志维护的分类回归覆盖。
+- 新增任务上下文 XML 隔离、凭据脱敏、长度上限、伪造 verdict 防护、上下文缓存键及 some.im 服务端托管请求体测试。
+
+### Meta
+
+- 周期任务、普通会话与 Auto-review 审核边界补齐，预发布版本从 **1.247.0-rc14** 提升为 **1.247.0-rc15**，内部构建号 **358 → 359**，Help 与 Computer Use Helper 构建号 **274 → 275**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc14 - 2026-08-12
+
+### Fixed
+
+- 用量统计价格表补齐缺口：some.im 托管系列（`someim-auto-*` / `someim-code-*` / `someim-coding-plan-*`，含经 `custom` 中转的场景）按 `deepseek-v4-flash` 价目（$0.14 / $0.28 每百万 token）估算；`kimi-k3` 按 Moonshot 官方牌价 $3 输入 / $0.30 缓存命中 / $15 输出补入。此前这批模型全部落入"未定价"。
+- 修复 `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` 被子串匹配误算成 gpt-5 价目（$1.25/$10）的问题：新增 gpt-5.6 三档专属价格行（sol $5/$30、terra $2/$12、luna $0.20/$1.20，缓存输入 10%），并置于 `gpt-5` 家族行之前。
+- 用量日历"未定价"不再一票否决：某天存在无法计价的消息（无价格行、外部 CLI 委托等）时按 $0 计入而非把整天金额置为"未定价"，月汇总同步恢复显示真实金额。
+
+### Meta
+
+- 定价与统计修复，预发布版本从 **1.247.0-rc13** 提升为 **1.247.0-rc14**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc13 - 2026-08-12
+
+### Fixed
+
+- 其余测试一次性 UserDefaults suite 全部纳入 rc12 引入的卫生机制。开发机上 `~/Library/Preferences` 里仍有约 4800 个未登记前缀的壳在泄漏：`willdeep-runtime-store-*` 数千个、`com.willdeep.tests.learningReview.*` 约 580 个，外加 `willdeep-mobile-gateway-*`、`test.workspace.identity.*`、`CollaborationConnectorSettingsTests.*` 等。8 个测试文件（AgentSelfLearningTests、AgentRemoteRuntimeTests、MobileGatewayCoordinatorTests、SomeIMManagedRoutingTests、CollaborationConnectorSettingsTests、AgentSidebarWorkspaceStateStoreTests、AgentMCPServerDirectoryTests、AgentDispatchCoordinatorTests）的收尾统一改走 `TestDefaultsHygiene.cleanup`，其中 MobileGatewayCoordinatorTests 的 6 处和 AgentWorkspaceIdentityStoreTests 此前完全没有收尾。
+- `TestDefaultsHygiene.disposableSuitePrefixes` 登记全部 16 个一次性前缀（含 `willdeep-runtime-store-` 这类 UUID 直接用连字符相接、不带结尾点的前缀，按实际字面量登记，不误伤 `com.willdeep.app` / `WillDeep` 等真实配置域）；`cleanup` 现在兜底触发进程级 sweep，`-only-testing` 只跑单个套件时也能扫掉上一轮残留，存量壳会在登记后的第一轮测试被自动清空。
+
+### Meta
+
+- 测试卫生修复，预发布版本从 **1.247.0-rc12** 提升为 **1.247.0-rc13**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc12 - 2026-08-12
+
+### Fixed
+
+- 单元测试不再往 `~/Library/Preferences` 里无限撒一次性 UserDefaults 壳文件（开发机上已累积 2182 个 `com.willdeep.agent.test.defaults.*.plist` 和 202 个 `com.willdeep.mcp.test.*.plist`）。两处根因实测确认：其一，MCP 信任测试的 defer 只调 `removePersistentDomain`，而该调用只清空域内容，磁盘上必留一个 ~42 字节空壳，每跑一次漏一个；其二，`KeychainSandbox` 虽然在 deinit 里删了壳文件（1.228.0-rc8 起），但删除动作与 cfprefsd 的异步落盘存在竞态，每轮全量测试仍漏出个位数的壳。
+- 新增 `XeditTests/TestDefaultsHygiene.swift` 双层防御：每个 suite 用完即走完整收尾（`removePersistentDomain` + `removeSuite(named:)` + 删壳文件），并在每个测试进程首次建 suite 时扫掉上一轮被 cfprefsd 复活的壳——磁盘残留从此收敛在一轮的量以内。`KeychainSandbox` 与 MCP 信任测试均改走该工具；一次性 suite 前缀集中登记，避免误伤 `com.willdeep.app` 等真实配置域。
+
+### Meta
+
+- 测试卫生修复，预发布版本从 **1.247.0-rc11** 提升为 **1.247.0-rc12**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc11 - 2026-08-12
+
+### Fixed
+
+- 快速测试入口失败时不再把上一次的绿色报告留在原地冒充本次结论。`scripts/run_tests_fast.rb` 此前只在成功路径写 `build/fast-tests/report.{json,md}`，一旦测试失败或构建阶段就挂掉，脚本直接退出，磁盘上仍是上一轮的 `"ok": true`——而 `TESTING.md` 恰恰让调用方以该文件为准，一个陈旧的绿勾足以让跑崩的构建冒充跑通的构建。现在失败路径会先把报告置为红，再交给 `xcresult_report.rb` 补齐真实失败详情（bundle 不可读时回落原始日志），并以运行器自身的退出码为最终裁决，避免"构建未进入测试阶段、xcresult 计数看着干净"被误报为通过。
+- 失败报告因此带上了可直接读的失败用例名、断言和行号，不必再去 grep 原始 xcodebuild 日志。
+
+### Tests
+
+- 手工验证三种路径：用例失败（`source=xcresult`，26 passed/1 failed 且 `failures` 含用例名与断言行）、编译失败（`source=xcodebuild-log`，计数归零并注明为近似值）、正常通过（`ok=true`）。
+
+### Meta
+
+- 测试报告可信度修复，预发布版本从 **1.247.0-rc10** 提升为 **1.247.0-rc11**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc10 - 2026-08-12
+
+### Fixed
+
+- CI 的 `short-drama` 守卫组恢复通过。`short_drama_media_contract` 用源码字符串比对断言侧边栏组件历史的取数方式，而 2026-08-09 的重构（`420dad70`）已把 `widgetRegistry.widgets(forRuntime: appState.activeRuntime?.id)` 换成等价的局部变量写法 `runtime?.id`，断言文本没有跟着更新，从那天起该守卫一直为红（此前几次发布的 Actions 均被取消，没有暴露）。断言改为匹配现有写法，行为未变。
+
+### Meta
+
+- CI 守卫断言跟上既有重构，预发布版本从 **1.247.0-rc9** 提升为 **1.247.0-rc10**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc9 - 2026-08-12
+
+### Fixed
+
+- 审阅卡片渲染用例（`AgentSidePanelDiffPerformanceTests` 的"差异行底色铺到卡片右边缘"）不再随机翻车。旧写法先 `Task.sleep` 硬等 300ms 让 SwiftUI 收敛再抓位图，机器忙时布局尚未完成就采样，采到未着色的画面；现在改为反复 `layoutSubtreeIfNeeded` + 采样，直到画面进入目标状态为止，上限 20 秒，超时才失败并打印诊断（负载高只是变慢，不再假失败）。
+- 同一用例的采样坐标修掉一个真实的取样错误：`NSBitmapImageRep.colorAt(x:y:)` 取的是像素坐标，而用例按点坐标取样，在 Retina 位图（1800×520）上实际只扫了卡片左半边的上半截。现在按位图与视图的实际缩放比换算，并改为"卡片中部有底色的行，在右边缘必须同样有底色"的逐行比对——右边缘那颗"+2 −1"统计角标的红色字形不再被误判成删除行。
+
+### Fixed
+
+- Agent 回复末尾的「已处理 · 用时」状态行改为跟随正文字体与字号，此前固定使用 13pt 系统字体，调大正文字号后这一行会明显偏小，与上一版「统计跟随正文排版」的约定不一致。
+
+### Changed
+
+- 桌面宠物动画节拍由 8fps 降为 4fps（前后台一致）。对空闲 App 的采样显示，主线程残余的 CPU 时间几乎全部落在这条时间线驱动的 CA transaction flush 上；宠物姿势以约 3 秒为周期且像素画风，减半节拍不改变动作观感。
+- 桌面宠物处于 `idle` 心情时不再挂载时间线，改为停在固定姿势；`walking`／`typing`／`ready`／`attention`／`celebrating` 以及周期性自动跳跃仍照常播放，宠物会自行恢复动作而不是看上去卡住。
+- 桌面宠物的消息预览由每 0.4 秒重算改为每 2 秒重算并复用缓存。该计算需要遍历全部运行时与历史会话并切分消息正文，是 0.4 秒定时器上最贵的一步，而它本身并不需要即时刷新；忙碌、输入中等状态仍按原节拍响应。
+
+### Tests
+
+- 覆盖 4fps 节拍上限、`idle` 停表与其余心情继续动画的门禁，以及消息预览的重算节流（含时钟回拨不会让缓存永久失效）。
+- 修正消息页脚渲染回归测试中与目标测试互相矛盾的字号断言：一处要求状态行等于正文字号、另一处要求等于系统字号，二者不可能同时成立，前者长期为红。现统一为跟随正文。
+- 修复网络桩测试之间的并发互扰：三个 `URLProtocol` 桩此前各用一个全局 `static handler`，同一 Suite 内并发执行的用例会互相顶掉对方的桩（`someIMRouteJudge…` 因此收到安全裁判的响应且录制器为空）。改为按 stub 会话令牌路由处理器，令牌随会话默认请求头下发，用例之间不再可见彼此的桩。
+
+### Meta
+
+- 桌面宠物空转开销优化，预发布版本从 **1.247.0-rc7** 提升为 **1.247.0-rc8**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc7 - 2026-08-12
+
+### Fixed
+
+- 审阅文件卡片不再把主线程钉死：卡片宽度改为在卡片本体上测量，不再测量它内部那个由行宽撑开的横向滚动视图。旧写法让"测量 → 行宽 → 内容尺寸 → 再测量"形成闭环，采样显示主线程 100% 卡在 SwiftUI 的 `LazySubviewPlacements.placeSubviews` 里空转、整分钟不回到 runloop。写回宽度另加 0.5pt 量化门禁，亚像素抖动不再重新触发布局。
+- 工作区改动签名不再为了两个数字读遍扩展属性：`FileManager.attributesOfItem` 换成 `lstat(2)`。前者会对每个改动文件额外发起 `listxattr` 加逐个 `getxattr`，在改动较多的工作区里这些系统调用是刷新开销的大头。语义保持不跟随符号链接。
+- 刷新 Git worktree 列表时仓库根目录只解析一次：`listGitWorktrees` 与仓库身份查询过去各自解析一遍，等于每次刷新对同一目录多 spawn 一个 `git rev-parse --show-toplevel` 子进程。
+
+## 1.247.0-rc6 - 2026-08-12
+
+### Fixed
+
+- 审阅侧边栏的差异行底色不再"画一半"：文件卡片里的新增绿底、删除红底会铺满整行（横向可滚动内容也一样），不再停在文字末尾或固定的 480pt 处。
+- 单文件详情差异（TextKit 渲染）改为按整行绘制底色，取代只给字形上色的字符属性，行尾之后不再出现空白断口。
 
 ## 1.247.0-rc5 - 2026-08-12
 

@@ -10,16 +10,20 @@ import XCTest
 
 final class CollaborationConnectorSettingsTests: XCTestCase {
     private var defaults: UserDefaults!
+    private var suiteName: String!
 
     override func setUp() {
         super.setUp()
-        defaults = UserDefaults(suiteName: "CollaborationConnectorSettingsTests.\(UUID().uuidString)")
+        suiteName = "CollaborationConnectorSettingsTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
         CollaborationConnectorSettingsStore.reset(defaults: defaults)
     }
 
     override func tearDown() {
         CollaborationConnectorSettingsStore.reset(defaults: defaults)
+        TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
         defaults = nil
+        suiteName = nil
         super.tearDown()
     }
 

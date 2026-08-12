@@ -731,6 +731,61 @@ private struct AgentSidePanelColoredDiffView: View {
     }
 }
 
+/// `.backgroundColor` only tints the glyphs a line actually contains, so an
+/// added or deleted line stops painting where its text ends and the highlight
+/// looks half-drawn. Paint the tint per line fragment across the whole content
+/// width instead, and keep the character attribute purely as the marker.
+final class AgentSidePanelDiffBackingTextView: NSTextView {
+    override func draw(_ dirtyRect: NSRect) {
+        drawLineBackgrounds(in: dirtyRect)
+        super.draw(dirtyRect)
+    }
+
+    private func drawLineBackgrounds(in dirtyRect: NSRect) {
+        guard let layoutManager,
+              let textContainer,
+              let textStorage,
+              textStorage.length > 0 else { return }
+
+        let origin = textContainerOrigin
+        let containerRect = dirtyRect.offsetBy(dx: -origin.x, dy: -origin.y)
+        let glyphRange = layoutManager.glyphRange(forBoundingRect: containerRect, in: textContainer)
+        guard glyphRange.length > 0 else { return }
+
+        let characterRange = layoutManager.characterRange(
+            forGlyphRange: glyphRange,
+            actualGlyphRange: nil
+        )
+        let bandWidth = max(bounds.width, dirtyRect.maxX)
+
+        textStorage.enumerateAttribute(
+            .agentDiffLineBackground,
+            in: characterRange,
+            options: []
+        ) { value, range, _ in
+            guard let color = value as? NSColor else { return }
+            let runGlyphs = layoutManager.glyphRange(
+                forCharacterRange: range,
+                actualCharacterRange: nil
+            )
+            guard runGlyphs.length > 0 else { return }
+            color.setFill()
+            layoutManager.enumerateLineFragments(forGlyphRange: runGlyphs) { rect, _, _, _, _ in
+                var band = rect.offsetBy(dx: origin.x, dy: origin.y)
+                band.origin.x = 0
+                band.size.width = bandWidth
+                band.fill()
+            }
+        }
+    }
+}
+
+extension NSAttributedString.Key {
+    nonisolated static let agentDiffLineBackground = NSAttributedString.Key(
+        "agentDiffLineBackground"
+    )
+}
+
 /// TextKit-backed diff surface. `allowsNonContiguousLayout` is the key:
 /// TextKit lays out the visible viewport instead of asking SwiftUI to measure
 /// every glyph before the side panel can paint its first frame.
@@ -747,16 +802,17 @@ struct AgentSidePanelDiffTextView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
+        let scrollView = NSScrollView()
+        let textView = AgentSidePanelDiffBackingTextView(
+            frame: NSRect(x: 0, y: 0, width: 480, height: 320)
+        )
+        scrollView.documentView = textView
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
         scrollView.autohidesScrollers = true
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
 
-        guard let textView = scrollView.documentView as? NSTextView else {
-            return scrollView
-        }
         textView.isEditable = false
         textView.isSelectable = true
         textView.isRichText = true
@@ -944,21 +1000,32 @@ enum AgentDiffColorizer {
                     context: context
                 ),
             ]
+            // Row tint is drawn per line fragment by the backing text view, so
+            // this attribute marks the line rather than painting the glyphs.
             switch kind {
             case .fileHeader:
-                attributes[.backgroundColor] = NSColor(palette.controlFill)
+                attributes[.agentDiffLineBackground] = NSColor(palette.controlFill)
             case .addition:
-                attributes[.backgroundColor] = addition.withAlphaComponent(0.12)
+                attributes[.agentDiffLineBackground] = addition.withAlphaComponent(0.12)
             case .deletion:
-                attributes[.backgroundColor] = deletion.withAlphaComponent(0.12)
+                attributes[.agentDiffLineBackground] = deletion.withAlphaComponent(0.12)
             case .hunk, .meta, .context:
                 break
             }
             result.append(NSAttributedString(string: line, attributes: attributes))
             if index < lines.count - 1 {
+                var newlineAttributes: [NSAttributedString.Key: Any] = [
+                    .font: font,
+                    .foregroundColor: context,
+                ]
+                // Empty added/deleted lines carry no glyphs of their own; the
+                // trailing newline is what gives them a line fragment to tint.
+                if let tint = attributes[.agentDiffLineBackground] {
+                    newlineAttributes[.agentDiffLineBackground] = tint
+                }
                 result.append(NSAttributedString(
                     string: "\n",
-                    attributes: [.font: font, .foregroundColor: context]
+                    attributes: newlineAttributes
                 ))
             }
         }

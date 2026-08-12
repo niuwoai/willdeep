@@ -355,6 +355,7 @@ nonisolated enum SafeCommand {
     /// `git`, `find`, `xargs`, etc.: dispatched to a per-tool checker.
     static let conditionalFirstTokens: Set<String> = [
         "git", "find", "xargs", "ssh", "scp", "rsync", "kubectl",
+        "journalctl", "systemctl",
         "mysql", "mariadb",
         "curl", "wget",
         "npm", "yarn", "pnpm", "cargo", "swift", "make", "python", "python3",
@@ -522,6 +523,12 @@ nonisolated enum SafeCommand {
         switch firstToken {
         case "git":
             return classifyGit(tokens: tokens)
+        case "ssh":
+            return classifySSH(tokens: tokens)
+        case "journalctl":
+            return classifyJournalctl(tokens: tokens)
+        case "systemctl":
+            return classifySystemctl(tokens: tokens)
         case "find":
             return classifyFind(tokens: tokens)
         case "go":
@@ -555,6 +562,110 @@ nonisolated enum SafeCommand {
         default:
             return .needsJudgment
         }
+    }
+
+    /// An SSH transport is not automatically safe merely because its remote
+    /// payload is read-only. Tunnels, multiplexing commands, forwarding, an
+    /// alternate config/identity file, and an interactive shell all keep the
+    /// AI/human review boundary. A plain host target (optionally with a port or
+    /// login name) may inherit the recursively proven safety of the remote
+    /// command. This is the common shape used by unattended log inspections.
+    private static func classifySSH(tokens: [String]) -> CommandSafety {
+        guard let hostIndex = AgentCommandAuthorization.sshHostIndex(tokens),
+              hostIndex + 1 < tokens.count else {
+            return .needsJudgment
+        }
+
+        var index = 1
+        while index < hostIndex {
+            let option = tokens[index]
+            switch option {
+            case "--":
+                index += 1
+            case "-p", "-l":
+                guard index + 1 < hostIndex else { return .needsJudgment }
+                index += 2
+            case "-4", "-6", "-a", "-C", "-n", "-q", "-T", "-v", "-vv", "-vvv", "-x":
+                index += 1
+            default:
+                if (option.hasPrefix("-p") || option.hasPrefix("-l")), option.count > 2 {
+                    index += 1
+                } else {
+                    return .needsJudgment
+                }
+            }
+        }
+
+        guard let remoteCommand = AgentCommandAuthorization.sshRemoteCommand(from: tokens) else {
+            return .needsJudgment
+        }
+        return classify(command: remoteCommand)
+    }
+
+    /// `journalctl` is an inspector unless one of its maintenance verbs is
+    /// present. Keep vacuuming, rotation, catalog/key updates and namespace
+    /// file removal behind review even when nested inside SSH.
+    private static func classifyJournalctl(tokens: [String]) -> CommandSafety {
+        let mutatingOptions = [
+            "--rotate", "--sync", "--flush", "--relinquish-var",
+            "--smart-relinquish-var", "--update-catalog", "--setup-keys",
+            "--vacuum-size", "--vacuum-time", "--vacuum-files",
+            "--vacuum-size=", "--vacuum-time=", "--vacuum-files=",
+            "--namespace=", "--root="
+        ]
+        let arguments = tokens.dropFirst().map { $0.lowercased() }
+        return arguments.contains { argument in
+            mutatingOptions.contains { option in
+                option.hasSuffix("=") ? argument.hasPrefix(option) : argument == option
+            }
+        } ? .needsJudgment : .alwaysSafe
+    }
+
+    /// Only observational systemctl verbs are deterministic reads. Service
+    /// lifecycle, enablement, masking, property writes and daemon reloads stay
+    /// available to the safety judge but never inherit this static allowlist.
+    private static func classifySystemctl(tokens: [String]) -> CommandSafety {
+        let readOnlyVerbs: Set<String> = [
+            "status", "show",
+            "is-active", "is-enabled", "is-failed", "is-system-running",
+            "list-units", "list-unit-files", "list-dependencies",
+            "list-sockets", "list-timers", "list-jobs", "get-default"
+        ]
+        let valuelessOptions: Set<String> = [
+            "--system", "--user", "--no-pager", "--no-legend", "--plain",
+            "--full", "--all", "--failed", "--quiet", "-q", "--reverse",
+            "--recursive"
+        ]
+        let optionsWithValue: Set<String> = [
+            "--type", "--state", "--property", "-p", "--lines", "-n",
+            "--output", "-o"
+        ]
+        let attachedValuePrefixes = [
+            "--type=", "--state=", "--property=", "--lines=", "--output="
+        ]
+
+        var index = 1
+        while index < tokens.count {
+            let token = tokens[index]
+            if valuelessOptions.contains(token) {
+                index += 1
+                continue
+            }
+            if optionsWithValue.contains(token) {
+                guard index + 1 < tokens.count else { return .needsJudgment }
+                index += 2
+                continue
+            }
+            if attachedValuePrefixes.contains(where: token.hasPrefix) {
+                index += 1
+                continue
+            }
+            if token.hasPrefix("-") {
+                return .needsJudgment
+            }
+            return readOnlyVerbs.contains(token.lowercased()) ? .alwaysSafe : .needsJudgment
+        }
+        return .needsJudgment
     }
 
     /// `defaults read …` is inspection; write/delete/import stay gated.

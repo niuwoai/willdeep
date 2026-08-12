@@ -845,6 +845,26 @@ extension AppState {
         return entries + "\n" + rawDiff
     }
 
+    /// Size and modification time for a change-signature entry.
+    ///
+    /// Deliberately `stat(2)` rather than `FileManager.attributesOfItem`: the
+    /// latter builds a full attribute dictionary and additionally reads every
+    /// extended attribute of the file (`listxattr` + one `getxattr` per key).
+    /// Sampling a busy workspace showed that xattr traffic dominating the
+    /// refresh, for two numbers a single `stat` already returns.
+    nonisolated static func fileSignatureMetadata(
+        atPath path: String
+    ) -> (size: Int64, modified: TimeInterval)? {
+        // `lstat`, not `stat`: `attributesOfItem` reports the symlink itself,
+        // and a signature that silently followed links would miss the case
+        // where only the link target changed.
+        var info = stat()
+        guard path.withCString({ lstat($0, &info) }) == 0 else { return nil }
+        let modified = TimeInterval(info.st_mtimespec.tv_sec)
+            + TimeInterval(info.st_mtimespec.tv_nsec) / 1_000_000_000
+        return (size: Int64(info.st_size), modified: modified)
+    }
+
     nonisolated static func agentWorktreeFileSignatures(status: GitRepositoryStatus) -> [String: String] {
         guard let repositoryRoot = status.repositoryRoot else { return [:] }
         let numstatOutput = runGit(arguments: ["diff", "--numstat", "HEAD", "--"], in: repositoryRoot)
@@ -854,14 +874,9 @@ extension AppState {
             let kind = item.value
             let stats = lineStats[path]
             let fileURL = repositoryRoot.appendingPathComponent(path)
-            let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
-            let size: String
-            if let sizeValue = attributes?[.size] as? NSNumber {
-                size = String(sizeValue.int64Value)
-            } else {
-                size = "missing"
-            }
-            let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
+            let metadata = fileSignatureMetadata(atPath: fileURL.path)
+            let size = metadata.map { String($0.size) } ?? "missing"
+            let modified = metadata?.modified ?? -1
             let added = stats?.added.map(String.init) ?? "?"
             let deleted = stats?.deleted.map(String.init) ?? "?"
             result[path] = [

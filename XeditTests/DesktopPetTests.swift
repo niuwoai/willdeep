@@ -204,15 +204,15 @@ struct DesktopPetTests {
 
     @Test
     func animationCadenceCapsForegroundAndBackgroundRedraws() {
-        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: true) == 8)
-        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: false) == 8)
+        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: true) == 4)
+        #expect(DesktopPetAnimationCadence.framesPerSecond(appIsActive: false) == 4)
         #expect(
             DesktopPetAnimationCadence.minimumInterval(appIsActive: true)
-                >= 1.0 / 8.0
+                >= 1.0 / 4.0
         )
         #expect(
             DesktopPetAnimationCadence.minimumInterval(appIsActive: false)
-                >= 1.0 / 8.0
+                >= 1.0 / 4.0
         )
     }
 
@@ -231,10 +231,77 @@ struct DesktopPetTests {
 
     @Test
     func animationParksWhenPanelIsOffScreenOrDisabled() {
-        #expect(DesktopPetAnimationGate.shouldAnimate(isEnabled: true, isWindowVisible: true))
-        #expect(!DesktopPetAnimationGate.shouldAnimate(isEnabled: true, isWindowVisible: false))
-        #expect(!DesktopPetAnimationGate.shouldAnimate(isEnabled: false, isWindowVisible: true))
-        #expect(!DesktopPetAnimationGate.shouldAnimate(isEnabled: false, isWindowVisible: false))
+        #expect(DesktopPetAnimationGate.shouldAnimate(
+            isEnabled: true,
+            isWindowVisible: true,
+            mood: .walking
+        ))
+        #expect(!DesktopPetAnimationGate.shouldAnimate(
+            isEnabled: true,
+            isWindowVisible: false,
+            mood: .walking
+        ))
+        #expect(!DesktopPetAnimationGate.shouldAnimate(
+            isEnabled: false,
+            isWindowVisible: true,
+            mood: .walking
+        ))
+        #expect(!DesktopPetAnimationGate.shouldAnimate(
+            isEnabled: false,
+            isWindowVisible: false,
+            mood: .walking
+        ))
+    }
+
+    /// Resting is the mood the pet holds almost all the time, and its breathing
+    /// drives an app-wide CA flush per frame for motion nobody is waiting on.
+    /// Everything that actually reports state must keep animating — including
+    /// the automatic jump, which is what brings a parked pet back to life.
+    @Test
+    func idleMoodParksTheTimelineWhileSignallingMoodsKeepAnimating() {
+        #expect(!DesktopPetAnimationGate.requiresTimeline(mood: .idle))
+        #expect(!DesktopPetAnimationGate.shouldAnimate(
+            isEnabled: true,
+            isWindowVisible: true,
+            mood: .idle
+        ))
+
+        for mood: DesktopPetMood in [.walking, .typing, .jumping, .ready, .attention, .celebrating] {
+            #expect(DesktopPetAnimationGate.requiresTimeline(mood: mood))
+            #expect(DesktopPetAnimationGate.shouldAnimate(
+                isEnabled: true,
+                isWindowVisible: true,
+                mood: mood
+            ))
+        }
+    }
+
+    /// Previews walk every runtime and every stored session and split message
+    /// bodies; that is the most expensive thing on the 0.4s refresh timer and
+    /// the part that least needs to be immediate.
+    @Test
+    func outputPreviewsRecomputeOnASlowerBeatThanTheRefreshTimer() {
+        let start = Date(timeIntervalSinceReferenceDate: 1_000)
+
+        #expect(DesktopPetOutputPreviewCadence.shouldRecompute(lastComputedAt: nil, now: start))
+        #expect(!DesktopPetOutputPreviewCadence.shouldRecompute(
+            lastComputedAt: start,
+            now: start.addingTimeInterval(0.4)
+        ))
+        #expect(!DesktopPetOutputPreviewCadence.shouldRecompute(
+            lastComputedAt: start,
+            now: start.addingTimeInterval(1.9)
+        ))
+        #expect(DesktopPetOutputPreviewCadence.shouldRecompute(
+            lastComputedAt: start,
+            now: start.addingTimeInterval(2)
+        ))
+        // A backwards clock jump must not strand the cache forever.
+        #expect(DesktopPetOutputPreviewCadence.shouldRecompute(
+            lastComputedAt: start,
+            now: start.addingTimeInterval(-60)
+        ))
+        #expect(DesktopPetOutputPreviewCadence.refreshInterval > 0.4)
     }
 
     @Test @MainActor

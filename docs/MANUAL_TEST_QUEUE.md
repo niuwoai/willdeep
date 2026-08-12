@@ -1,6 +1,24 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-11（1.243.0-rc1）
+> Last updated: 2026-08-12（1.247.0-rc13）
+
+## 1.247.0-rc13 — 其余测试一次性 suite 前缀纳入卫生机制
+
+- ⏳ 跑一轮任一受影响套件（如 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/MobileGatewayCoordinatorTests`），跑完统计 `ls ~/Library/Preferences/willdeep-runtime-store-*.plist ~/Library/Preferences/com.willdeep.tests.learningReview.*.plist ~/Library/Preferences/willdeep-mobile-gateway-*.plist ~/Library/Preferences/test.workspace.identity.*.plist ~/Library/Preferences/CollaborationConnectorSettingsTests.*.plist 2>/dev/null | wc -l`，确认存量约 4800 个壳已被首轮 sweep 清空，残留收敛在一轮用例的量以内。
+- ⏳ 再跑第二轮同一套件，确认残留没有累加，且文件时间戳全部来自第二轮。
+
+## 1.247.0-rc12 — 测试 UserDefaults 壳文件收敛
+
+- ⏳ 在本机跑一轮全量单测，跑完统计 `ls ~/Library/Preferences/com.willdeep.agent.test.defaults.*.plist ~/Library/Preferences/com.willdeep.mcp.test.*.plist | wc -l`，确认残留不超过一轮用例的量（约 20 个 42 字节空壳；cfprefsd 会按自己的节奏 flush 出壳，进程内删不干净，属预期）。
+- ⏳ 再跑第二轮全量单测，确认残留没有累加：总数仍约 20 个，且文件时间戳全部来自第二轮（上一轮的壳已被进程启动时的 sweep 扫掉）。
+
+## 1.247.0-rc4 — 桌面宠物空转开销
+
+- ⏳ 让 App 空闲（无回复、无输入）并保持宠物可见，确认宠物停在固定姿势不再呼吸，且不影响窗口交互。
+- ⏳ 继续空闲等待，确认周期性自动跳跃仍会发生，跳跃期间动作流畅，跳完回到静止。
+- ⏳ 让 Agent 开始回复并在输入框打字，确认宠物依次进入工作／输入心情且动画正常播放（4fps 下仍连贯）。
+- ⏳ 切到别的 App 使 WillDeep 处于后台并让 Agent 产出新回复，确认消息预览卡片仍会出现，最长约 2 秒延迟即可刷新。
+- ⏳ 用活动监视器观察空闲状态下 WillDeep 的 CPU 占用，确认低于优化前水平。
 
 ## 1.243.0-rc1 — 模型用量逐轮归因
 

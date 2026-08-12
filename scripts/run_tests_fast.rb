@@ -238,10 +238,69 @@ guard_command.concat(
   ]
 )
 
+def write_report(xcresult, report_md, report_json, log, root)
+  system(
+    "ruby",
+    File.join(root, "scripts", "xcresult_report.rb"),
+    xcresult,
+    report_md,
+    report_json,
+    "--log", log,
+    chdir: root
+  )
+end
+
+# The report must never survive a failed run untouched. `report.json` is what
+# TESTING.md tells callers to trust, and it used to be written only on the
+# success path — so a run that failed (or died in the build phase) left the
+# previous run's `"ok": true` sitting on disk, ready to be mistaken for this
+# run's verdict. A stale green is worse than no report at all.
+def invalidate_report(report_md, report_json, reason)
+  FileUtils.mkdir_p(File.dirname(report_json))
+  File.write(report_json, "#{JSON.pretty_generate({
+    ok: false,
+    status: "failed",
+    source: "none",
+    reasons: [reason],
+    stats: { "total" => 0, "passed" => 0, "failed" => 0, "skipped" => 0 },
+    failures: []
+  })}\n")
+  File.write(report_md, "# Fast test report\n\n- Status: FAILED\n- #{reason}\n")
+end
+
+# The runner's own verdict outranks the reporter's. A build that never reached
+# the test phase can leave an xcresult whose counts look clean; reporting that
+# as a pass would recreate the exact hazard this function exists to remove.
+def force_failed_verdict(report_json, reason)
+  return unless File.file?(report_json)
+
+  report = JSON.parse(File.read(report_json, encoding: "UTF-8"))
+  return if report["ok"] == false && report["status"] != "passed"
+
+  report["ok"] = false
+  report["status"] = "failed"
+  report["reasons"] = Array(report["reasons"]) + [reason]
+  File.write(report_json, "#{JSON.pretty_generate(report)}\n")
+rescue JSON::ParserError
+  invalidate_report(report_json.sub(/\.json\z/, ".md"), report_json, reason)
+end
+
 puts "▶ #{xcode_action} #{xcode_arguments.join(" ")}"
 success = system(*guard_command, chdir: ROOT)
 exit_status = $CHILD_STATUS&.exitstatus || 1
-exit(exit_status) unless success
+unless success
+  reason = "Test run failed: #{File.basename($PROGRAM_NAME)} exited #{exit_status}."
+  # Mark it failed first, so an abort anywhere below still leaves a red report
+  # rather than the previous run's green one.
+  invalidate_report(REPORT_MD, REPORT_JSON, reason)
+  # Then let the reporter fill in the real failure detail. It already falls back
+  # to the raw log when the bundle is unreadable, and reports `unknown` when
+  # even that fails, so this can only improve on the placeholder.
+  write_report(XCRESULT, REPORT_MD, REPORT_JSON, LOG, ROOT)
+  force_failed_verdict(REPORT_JSON, reason)
+  puts File.read(REPORT_MD, encoding: "UTF-8") if File.file?(REPORT_MD)
+  exit(exit_status)
+end
 
 unless without_building
   write_json_atomically(
@@ -260,16 +319,9 @@ end
 # (falling back to the raw log when the bundle is broken), so treat its verdict
 # as authoritative and echo the report — callers routinely pipe us through
 # `tail`, where a swallowed exit code would leave nothing but the report text.
-report_success = system(
-  "ruby",
-  File.join(ROOT, "scripts", "xcresult_report.rb"),
-  XCRESULT,
-  REPORT_MD,
-  REPORT_JSON,
-  "--log", LOG,
-  chdir: ROOT
-)
+report_success = write_report(XCRESULT, REPORT_MD, REPORT_JSON, LOG, ROOT)
 unless report_success
+  force_failed_verdict(REPORT_JSON, "The test report could not confirm a pass.")
   puts File.read(REPORT_MD, encoding: "UTF-8") if File.file?(REPORT_MD)
   abort "❌ xcodebuild exited 0, but the test report could not confirm a pass — see #{REPORT_MD}."
 end

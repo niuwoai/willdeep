@@ -315,14 +315,17 @@ struct SomeIMRouteOrchestrationTests {
 @Suite(.serialized)
 struct AgentWorkspaceIdentityStoreTests {
 
-    private func freshStore() {
-        let suite = UserDefaults(suiteName: "test.workspace.identity.\(UUID().uuidString)")!
+    private func freshStore() -> (suite: UserDefaults, name: String) {
+        let name = "test.workspace.identity.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: name)!
         AgentWorkspaceIdentityStore.defaults = suite
+        return (suite, name)
     }
 
     @Test
     func stableForSameKeyDistinctForDifferent() {
-        freshStore()
+        let sandbox = freshStore()
+        defer { TestDefaultsHygiene.cleanup(suite: sandbox.suite, named: sandbox.name) }
         let a1 = AgentWorkspaceIdentityStore.workspaceID(forWorkspaceKey: "/Users/x/proj-a")
         let a2 = AgentWorkspaceIdentityStore.workspaceID(forWorkspaceKey: "/Users/x/proj-a")
         let b = AgentWorkspaceIdentityStore.workspaceID(forWorkspaceKey: "/Users/x/proj-b")
@@ -336,7 +339,8 @@ struct AgentWorkspaceIdentityStoreTests {
 
     @Test
     func nilForNoWorkspace() {
-        freshStore()
+        let sandbox = freshStore()
+        defer { TestDefaultsHygiene.cleanup(suite: sandbox.suite, named: sandbox.name) }
         #expect(AgentWorkspaceIdentityStore.workspaceID(forWorkspaceKey: "") == nil)
         #expect(AgentWorkspaceIdentityStore.workspaceID(forWorkspaceKey: AgentSession.noWorkspaceSidebarGroupKey) == nil)
     }

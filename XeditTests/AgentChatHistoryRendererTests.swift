@@ -1670,7 +1670,12 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSParagraphStyle)
         #expect(bodyFont.pointSize == 15)
-        #expect(processedFont.pointSize == NSFont.systemFontSize)
+        // The status line follows the user's body size rather than the AppKit
+        // system size. This assertion used to pin it to `NSFont.systemFontSize`,
+        // which contradicted `assistantStatusDividerRenderingMatchesReferenceMetrics`
+        // — that goal test had been failing for exactly as long as this one
+        // passed. Raising the body size must carry the status line with it.
+        #expect(processedFont.pointSize == bodyFont.pointSize)
         #expect(processedFont.fontDescriptor.symbolicTraits.contains(.bold) == false)
         #expect(processedColor == NSColor.secondaryLabelColor)
         #expect(bodyParagraphStyle.lineSpacing == AgentChatTypography.lineSpacing(

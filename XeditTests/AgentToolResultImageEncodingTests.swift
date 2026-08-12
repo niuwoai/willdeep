@@ -145,12 +145,9 @@ struct AgentToolResultImageEncodingTests {
     @MainActor
     func someIMRouteJudgeUsesResponsesRequestShape() async throws {
         let recorder = WillDeepResponsesFallbackRecorder()
-        let session = managedJudgeTestSession()
-        defer {
-            ManagedJudgeURLProtocol.handler = nil
-            session.invalidateAndCancel()
-        }
-        ManagedJudgeURLProtocol.handler = { request in
+        let stub = managedJudgeTestSession()
+        defer { stub.tearDown() }
+        stub.install { request in
             _ = recorder.record(request)
             let url = try #require(request.url)
             return try willDeepResponsesHTTPResult(
@@ -168,7 +165,7 @@ struct AgentToolResultImageEncodingTests {
         )
         let response = await AgentClient(
             configuration: configuration,
-            session: session,
+            session: stub.session,
             someIMContext: SomeIMRequestContext(
                 sessionID: "managed-session",
                 workspaceID: "managed-workspace"
@@ -199,12 +196,9 @@ struct AgentToolResultImageEncodingTests {
     @MainActor
     func someIMSecurityGuardSendsOnlyUserMessage() async throws {
         let recorder = WillDeepResponsesFallbackRecorder()
-        let session = managedJudgeTestSession()
-        defer {
-            ManagedJudgeURLProtocol.handler = nil
-            session.invalidateAndCancel()
-        }
-        ManagedJudgeURLProtocol.handler = { request in
+        let stub = managedJudgeTestSession()
+        defer { stub.tearDown() }
+        stub.install { request in
             _ = recorder.record(request)
             let url = try #require(request.url)
             return try willDeepResponsesHTTPResult(
@@ -222,10 +216,12 @@ struct AgentToolResultImageEncodingTests {
         )
         let result = await AgentClient(
             configuration: configuration,
-            session: session
+            session: stub.session
         ).judgeCommandSafety(
             command: "yarn test",
-            historyContext: "THIS HISTORY MUST NOT BE SENT"
+            historyContext: "THIS HISTORY MUST NOT BE SENT",
+            toolName: "run_command",
+            taskContext: "Run the project's test suite"
         )
 
         #expect(result == .allow)
@@ -237,6 +233,8 @@ struct AgentToolResultImageEncodingTests {
         #expect(body["instructions"] == nil)
         #expect(body["messages"] == nil)
         #expect(request.body.contains("yarn test"))
+        #expect(request.body.contains("run_command"))
+        #expect(request.body.contains("Run the project's test suite"))
         #expect(!request.body.contains("THIS HISTORY MUST NOT BE SENT"))
         let input = try #require(body["input"] as? [[String: Any]])
         #expect(input.count == 1)
@@ -536,13 +534,10 @@ struct AgentToolResultImageEncodingTests {
         let webSearch = try #require(AgentToolRegistry.descriptor(for: "web_search"))
         let requestRecorder = WillDeepResponsesFallbackRecorder()
         let eventRecorder = HostedSearchEventRecorder()
-        let session = hostedSearchTestSession()
-        defer {
-            HostedSearchURLProtocol.handler = nil
-            session.invalidateAndCancel()
-        }
+        let stub = hostedSearchTestSession()
+        defer { stub.tearDown() }
 
-        HostedSearchURLProtocol.handler = { request in
+        stub.install { request in
             let attempt = requestRecorder.record(request)
             let url = try #require(request.url)
             if attempt == 1 {
@@ -576,7 +571,7 @@ struct AgentToolResultImageEncodingTests {
 
         let adapter = OpenAIResponsesAdapter(
             configuration: configuration,
-            session: session,
+            session: stub.session,
             someIMContext: SomeIMRequestContext(sessionID: "hosted-search")
         )
         try await adapter.streamChat(
@@ -611,15 +606,14 @@ struct AgentToolResultImageEncodingTests {
             model: "deepseek-v4-flash",
             apiKey: "test"
         )
-        defer { WillDeepResponsesFallbackURLProtocol.handler = nil }
-
         // A request-time 503 is safe to replay immediately because no output
         // has reached the user. Retry once with full history and no state opt-in.
         do {
             let recorder = WillDeepResponsesFallbackRecorder()
-            let session = willDeepResponsesTestSession()
+            let stub = willDeepResponsesTestSession()
+            defer { stub.tearDown() }
             let continuationState = OpenAIResponsesContinuationState()
-            WillDeepResponsesFallbackURLProtocol.handler = { request in
+            stub.install { request in
                 let attempt = recorder.record(request)
                 let url = try #require(request.url)
                 if attempt == 1 {
@@ -638,14 +632,13 @@ struct AgentToolResultImageEncodingTests {
 
             let adapter = OpenAIResponsesAdapter(
                 configuration: configuration,
-                session: session,
+                session: stub.session,
                 continuationState: continuationState,
                 someIMContext: SomeIMRequestContext(sessionID: "session-503")
             )
             try await adapter.streamChat(
                 messages: [AgentMessage(role: .user, content: "Keep all history")]
             ) { _ in }
-            session.invalidateAndCancel()
 
             let requests = recorder.requests
             #expect(requests.count == 2)
@@ -673,9 +666,10 @@ struct AgentToolResultImageEncodingTests {
         ]
         for recoveryError in cursorRecoveryErrors {
             let recorder = WillDeepResponsesFallbackRecorder()
-            let session = willDeepResponsesTestSession()
+            let stub = willDeepResponsesTestSession()
+            defer { stub.tearDown() }
             let continuationState = OpenAIResponsesContinuationState()
-            WillDeepResponsesFallbackURLProtocol.handler = { request in
+            stub.install { request in
                 let attempt = recorder.record(request)
                 let url = try #require(request.url)
                 if attempt == 2 {
@@ -693,7 +687,7 @@ struct AgentToolResultImageEncodingTests {
             }
             let adapter = OpenAIResponsesAdapter(
                 configuration: configuration,
-                session: session,
+                session: stub.session,
                 continuationState: continuationState,
                 someIMContext: SomeIMRequestContext(
                     sessionID: "session-\(recoveryError.statusCode)"
@@ -706,7 +700,6 @@ struct AgentToolResultImageEncodingTests {
                 AgentMessage(role: .user, content: "Follow-up")
             ]
             try await adapter.streamChat(messages: appendedMessages) { _ in }
-            session.invalidateAndCancel()
 
             let requests = recorder.requests
             #expect(requests.count == 3)
@@ -727,9 +720,10 @@ struct AgentToolResultImageEncodingTests {
         // its cursor so the next user turn starts from complete local history.
         do {
             let recorder = WillDeepResponsesFallbackRecorder()
-            let session = willDeepResponsesTestSession()
+            let stub = willDeepResponsesTestSession()
+            defer { stub.tearDown() }
             let continuationState = OpenAIResponsesContinuationState()
-            WillDeepResponsesFallbackURLProtocol.handler = { request in
+            stub.install { request in
                 _ = recorder.record(request)
                 let url = try #require(request.url)
                 return try willDeepResponsesSSE(
@@ -741,14 +735,13 @@ struct AgentToolResultImageEncodingTests {
             }
             let adapter = OpenAIResponsesAdapter(
                 configuration: configuration,
-                session: session,
+                session: stub.session,
                 continuationState: continuationState,
                 someIMContext: SomeIMRequestContext(sessionID: "session-stream-loss")
             )
             try await adapter.streamChat(
                 messages: [AgentMessage(role: .user, content: "Do not duplicate this")]
             ) { _ in }
-            session.invalidateAndCancel()
 
             #expect(recorder.requests.count == 1)
             #expect(continuationState.persistedSnapshot == nil)
@@ -1014,15 +1007,63 @@ private actor HostedSearchEventRecorder {
     }
 }
 
-private final class WillDeepResponsesFallbackURLProtocol: URLProtocol {
-    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+/// Routes stubbed responses to the one test that installed them.
+///
+/// These stubs used to key off a single `static var handler` per protocol
+/// class. Swift Testing runs a suite's tests concurrently, so two tests that
+/// each installed a handler raced on that one slot: whichever assigned last
+/// served *both* tests' requests, and whichever `defer` ran first tore the stub
+/// out from under the other. That is how `someIMRouteJudgeUsesResponsesRequestShape`
+/// came to receive the security guard's `<verdict>YES</verdict>` while its own
+/// recorder stayed empty.
+///
+/// Handlers now live in a locked table keyed by a token that each stub session
+/// carries in its own default headers, so concurrent tests cannot see — or
+/// clear — each other's stubs.
+private final class StubURLProtocol: URLProtocol {
+    typealias Handler = (URLRequest) throws -> (HTTPURLResponse, Data)
+
+    static let tokenHeader = "X-WillDeep-Stub-Token"
+
+    private static let lock = NSLock()
+    private static var handlers: [String: Handler] = [:]
+    private static var issuedTokens = 0
+
+    static func makeToken() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        issuedTokens += 1
+        return "stub-\(issuedTokens)"
+    }
+
+    static func install(_ handler: @escaping Handler, for token: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        handlers[token] = handler
+    }
+
+    static func remove(for token: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        handlers[token] = nil
+    }
+
+    private static func handler(for request: URLRequest) -> Handler? {
+        guard let token = request.value(forHTTPHeaderField: tokenHeader) else { return nil }
+        lock.lock()
+        defer { lock.unlock() }
+        return handlers[token]
+    }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
 
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        guard let handler = Self.handler else {
+        // A missing token means the session was not built by `StubSession`, or
+        // its handler was already removed. Failing loudly beats silently
+        // serving another test's stub.
+        guard let handler = Self.handler(for: request) else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
         }
@@ -1039,72 +1080,40 @@ private final class WillDeepResponsesFallbackURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
-private final class HostedSearchURLProtocol: URLProtocol {
-    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+/// A stubbed `URLSession` plus the token its handlers are registered under.
+private final class StubSession {
+    let session: URLSession
+    private let token: String
 
-    override class func canInit(with request: URLRequest) -> Bool { true }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        guard let handler = Self.handler else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
-            return
-        }
-        do {
-            let (response, data) = try handler(request)
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
-        } catch {
-            client?.urlProtocol(self, didFailWithError: error)
-        }
+    init() {
+        let token = StubURLProtocol.makeToken()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+        configuration.httpAdditionalHeaders = [StubURLProtocol.tokenHeader: token]
+        self.token = token
+        session = URLSession(configuration: configuration)
     }
 
-    override func stopLoading() {}
-}
-
-private final class ManagedJudgeURLProtocol: URLProtocol {
-    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
-
-    override class func canInit(with request: URLRequest) -> Bool { true }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        guard let handler = Self.handler else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
-            return
-        }
-        do {
-            let (response, data) = try handler(request)
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
-        } catch {
-            client?.urlProtocol(self, didFailWithError: error)
-        }
+    func install(_ handler: @escaping StubURLProtocol.Handler) {
+        StubURLProtocol.install(handler, for: token)
     }
 
-    override func stopLoading() {}
+    func tearDown() {
+        StubURLProtocol.remove(for: token)
+        session.invalidateAndCancel()
+    }
 }
 
-private func willDeepResponsesTestSession() -> URLSession {
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.protocolClasses = [WillDeepResponsesFallbackURLProtocol.self]
-    return URLSession(configuration: configuration)
+private func willDeepResponsesTestSession() -> StubSession {
+    StubSession()
 }
 
-private func hostedSearchTestSession() -> URLSession {
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.protocolClasses = [HostedSearchURLProtocol.self]
-    return URLSession(configuration: configuration)
+private func hostedSearchTestSession() -> StubSession {
+    StubSession()
 }
 
-private func managedJudgeTestSession() -> URLSession {
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.protocolClasses = [ManagedJudgeURLProtocol.self]
-    return URLSession(configuration: configuration)
+private func managedJudgeTestSession() -> StubSession {
+    StubSession()
 }
 
 private func willDeepResponsesHTTPResult(

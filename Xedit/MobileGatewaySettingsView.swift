@@ -135,8 +135,12 @@ struct MobileGatewaySettingsView: View {
                     }
 
                     if let payload = coordinator.pairingPayload {
-                        LabeledContent(L10n.Settings.MobileGateway.pairingBaseURLLabel) {
-                            MobileGatewayCopyableValue(text: payload.baseURL)
+                        // Relay mode has no LAN gateway address; show the relay
+                        // endpoint the phone actually joins instead of a blank row.
+                        if let pairingAddress = payload.baseURL ?? payload.relayBaseURL {
+                            LabeledContent(L10n.Settings.MobileGateway.pairingBaseURLLabel) {
+                                MobileGatewayCopyableValue(text: pairingAddress)
+                            }
                         }
                         if !payload.fallbackBaseURLs.isEmpty {
                             LabeledContent(L10n.Settings.MobileGateway.fallbackBaseURLsLabel) {

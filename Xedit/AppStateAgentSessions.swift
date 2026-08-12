@@ -2139,13 +2139,27 @@ extension AppState {
         AgentRoutineStore.save(agentRoutines[index])
         agentRoutineScheduler.routinesChanged(agentRoutines)
 
+        // Scheduled runs have no operator watching their terminal. Give the
+        // model a durable least-side-effect execution contract so diagnostic
+        // routines naturally choose the statically approvable path (for
+        // example, stream journalctl output over SSH instead of creating
+        // remote /tmp files). Explicitly requested mutations still go through
+        // the normal approval boundary.
+        let unattendedGuidance = """
+        [周期任务 · 无人值守执行边界]
+        本次运行来自后台周期任务。优先使用只读工具和只读命令完成分析；远程日志巡检应直接读取并流式筛选 journalctl/systemctl 输出，不要为了分析创建远端临时文件，也不要重启服务、修改配置、改变权限或删除数据。只有原任务明确要求产生外部副作用时才可提出相应操作；无法在安全边界内完成时，请在结果中说明具体阻塞原因，不要等待无人值守的交互确认。
+        """
+
         // Goal-bearing tasks self-complete: tell this run to evaluate the goal
         // and, if met, call complete_scheduled_task with its own id so the task
-        // (and its card) disappears. Plain routines just run the prompt.
+        // (and its card) disappears. Plain routines receive the same unattended
+        // execution boundary after their saved prompt.
         let dispatchText: String
         if let goal = routine.goal?.trimmingCharacters(in: .whitespacesAndNewlines), !goal.isEmpty {
             dispatchText = """
             \(prompt)
+
+            \(unattendedGuidance)
 
             [定时任务 · 自完成判定] 本次运行来自定时任务「\(routine.name)」(task_id: \(routine.id.uuidString))。
             目标:\(goal)
@@ -2154,7 +2168,11 @@ extension AppState {
             - 未达成 → 正常简短汇报当前进展即可,不要调用 complete_scheduled_task。
             """
         } else {
-            dispatchText = prompt
+            dispatchText = """
+            \(prompt)
+
+            \(unattendedGuidance)
+            """
         }
 
         // dispatchAgentMessage handles the per-provider concurrency
