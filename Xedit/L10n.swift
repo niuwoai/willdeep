@@ -1298,6 +1298,7 @@ nonisolated enum L10n {
         }
         static let chatsHeader = String(localized: "sidebar.chats-header", defaultValue: "Chats")
         static let emptyState = String(localized: "sidebar.empty-state", defaultValue: "Sessions you start will appear here.")
+        static let loadingState = String(localized: "sidebar.loading-state", defaultValue: "Loading sessions…")
         static let newChatAction = String(localized: "sidebar.new-chat-action", defaultValue: "New Chat")
         static let pinnedHeader = String(localized: "sidebar.pinned-header", defaultValue: "Pinned")
         static let defaultSessionTitle = String(localized: "sidebar.default-session-title", defaultValue: "New Chat")

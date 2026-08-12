@@ -30980,6 +30980,24 @@
         }
       }
     },
+    "sidebar.loading-state" : {
+      "comment" : "loading placeholder shown while the session catalog is still loading from disk",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading sessions…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载会话…"
+          }
+        }
+      }
+    },
     "sidebar.new-chat-action" : {
       "comment" : "button label in primary actions row",
       "extractionState" : "manual",
