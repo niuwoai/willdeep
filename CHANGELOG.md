@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc18 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc19 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc19 - 2026-08-12
+
+### Fixed
+
+- 命令跑完只是返回非零时，工具活动行不再染成告警橙。`run_command` 只要退出码非 0 就 `throw`，UI 拿到 `.failed` 就无条件上橙色——于是 `corepack --version` 在没装 corepack 的机器上退出 127、`grep` 无匹配退出 1 这类**探测型命令的正常答案**，看上去和"工具炸了"一模一样，而 Agent 读到结果后其实照常往下走。现在 `AgentToolCall` 新增 `commandExitCode`，只记录进程真正跑完并返回的正退出码；活动行、分组边框与完整卡片的图标、状态文字和边框据此改用中性灰。进程根本没起来（`runCommand` 用 `-1` 哨兵值）、超时、参数非法、批处理失败等真需要注意的故障，仍然保持橙色。标题文案不变，改的只是配色。
+
+### Tests
+
+- `AgentToolCallGroupingPresentationTests` 新增两个用例：`completedCommandExitCode` 只认跑完的正退出码（127 / 1 认，`-1` 哨兵、0、超时、缺参数、HTTP 失败都不认）；活动行据此标记普通失败，且成功态不受影响、标题仍以"失败"结尾。
+
+### Meta
+
+- 工具活动行配色修复，预发布版本从 **1.247.0-rc18** 提升为 **1.247.0-rc19**，内部构建号 **362 → 363**，Help 与 Computer Use Helper 构建号 **278 → 279**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc18 - 2026-08-12
 
