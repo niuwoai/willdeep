@@ -556,11 +556,14 @@ struct QueuedMessagesList: View {
             }
         }
         .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
-        .background(Color.orange.opacity(0.045))
+        // Waiting is not a warning. The queue is a normal, reversible state,
+        // so the card sits in the same quiet gray as the rest of the chrome
+        // instead of borrowing the amber that elsewhere means "look at this".
+        .background(AgentComposerChrome.controlFill)
         .clipShape(RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: AgentDesign.cardCornerRadius)
-                .stroke(Color.orange.opacity(0.22), lineWidth: 1)
+                .stroke(AgentComposerChrome.border, lineWidth: 1)
         )
     }
 }
@@ -593,20 +596,20 @@ private struct QueuedMessageRow: View {
                 .help(L10n.QueuedMessage.dragHelp)
             Image(systemName: "exclamationmark.circle")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(AgentComposerChrome.iconMuted)
                 .frame(width: 16)
             HStack(alignment: .center, spacing: 6) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .center, spacing: 5) {
                         Image(systemName: "hourglass")
                             .font(.system(size: 10))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(AgentComposerChrome.iconMuted)
                         Text(L10n.QueuedMessage.label)
                             .font(AgentDesign.chatSupportingFont(
                                 baseFontSize: baseFontSize,
                                 weight: .semibold
                             ))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(.secondary)
                             .textCase(.uppercase)
                     }
                     Text(previewText)
@@ -616,6 +619,10 @@ private struct QueuedMessageRow: View {
                         .truncationMode(.tail)
                 }
                 Spacer(minLength: 8)
+                // Send-now is the one action worth a permanent target: it is
+                // what the row exists for. Edit and delete are occasional and
+                // one of them is destructive, so they move behind the overflow
+                // menu where a stray click cannot reach them.
                 HStack(spacing: 2) {
                     iconButton(
                         systemName: "paperplane.fill",
@@ -623,19 +630,22 @@ private struct QueuedMessageRow: View {
                         help: L10n.QueuedMessage.sendNowButtonHelp,
                         action: onSendNow
                     )
-                    iconButton(
-                        systemName: "trash",
-                        accessibilityLabel: L10n.QueuedMessage.deleteButton,
-                        help: L10n.QueuedMessage.deleteButtonHelp,
-                        role: .destructive,
-                        action: onRemove
-                    )
-                    iconButton(
-                        systemName: "pencil",
-                        accessibilityLabel: L10n.QueuedMessage.editButton,
-                        help: L10n.QueuedMessage.editButtonHelp,
-                        action: onEdit
-                    )
+                    Menu {
+                        Button(L10n.QueuedMessage.editButton, action: onEdit)
+                        Button(L10n.QueuedMessage.deleteButton, role: .destructive, action: onRemove)
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .agentQuietMenuChrome()
+                    .fixedSize()
+                    .focusable(false)
+                    .accessibilityLabel(L10n.QueuedMessage.actionsButton)
+                    .help(L10n.QueuedMessage.actionsButtonHelp)
                 }
             }
         }
@@ -659,17 +669,16 @@ private struct QueuedMessageRow: View {
         systemName: String,
         accessibilityLabel: String,
         help: String,
-        role: ButtonRole? = nil,
         action: @escaping () -> Void
     ) -> some View {
-        Button(role: role, action: action) {
+        Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 12, weight: .semibold))
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(role == .destructive ? Color.red.opacity(0.85) : Color.secondary)
+        .foregroundStyle(Color.secondary)
         .accessibilityLabel(accessibilityLabel)
         .help(help)
     }
