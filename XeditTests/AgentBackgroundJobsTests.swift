@@ -423,6 +423,70 @@ struct AgentBackgroundJobsTests {
         #expect(registry.consumePendingCompletions(forRuntime: runtimeID).isEmpty)
     }
 
+    /// 多文件夹项目：后台任务的 seatbelt 必须把项目的其余文件夹也当可写根。
+    /// 此前 `AgentJobRegistry.start` 根本没有这个参数，前台命令能写的
+    /// 第二个文件夹，后台 `npm install` 直接 EPERM。
+    ///
+    /// 两个目录都放在 /tmp 下——profile 的固定放行清单里有
+    /// `FileManager.temporaryDirectory`（$TMPDIR），放那儿的"第二个根"
+    /// 不加参数也能写，测了等于没测。
+    @Test
+    func backgroundJobWritesIntoAdditionalProjectRoot() async throws {
+        let fm = FileManager.default
+        let primary = URL(fileURLWithPath: "/tmp/willdeep-bg-primary-\(UUID().uuidString.prefix(6))")
+        let secondary = URL(fileURLWithPath: "/tmp/willdeep-bg-secondary-\(UUID().uuidString.prefix(6))")
+        try fm.createDirectory(at: primary, withIntermediateDirectories: true)
+        try fm.createDirectory(at: secondary, withIntermediateDirectories: true)
+        defer {
+            try? fm.removeItem(at: primary)
+            try? fm.removeItem(at: secondary)
+        }
+        let target = secondary.appendingPathComponent("generated.txt")
+
+        let registry = AgentJobRegistry()
+        let job = try registry.start(
+            command: "touch '\(target.path)'",
+            workingDirectory: primary,
+            additionalWorkspaceRoots: [secondary],
+            runtimeID: UUID(),
+            timeoutSeconds: nil,
+            sandboxMode: .workspaceWrite
+        )
+
+        #expect(await waitUntilFinished(registry: registry, id: job.id))
+        #expect(registry.job(id: job.id)?.status == .completed)
+        #expect(fm.fileExists(atPath: target.path))
+    }
+
+    /// 负向对照：不带 additionalWorkspaceRoots 时同一条写入必须被沙箱拦下。
+    /// 没有这条，上面的正向用例在"seatbelt 悄悄失效"时照样全绿。
+    @Test
+    func backgroundJobStillBlocksWritesOutsideItsRoots() async throws {
+        let fm = FileManager.default
+        let primary = URL(fileURLWithPath: "/tmp/willdeep-bg-primary-\(UUID().uuidString.prefix(6))")
+        let secondary = URL(fileURLWithPath: "/tmp/willdeep-bg-secondary-\(UUID().uuidString.prefix(6))")
+        try fm.createDirectory(at: primary, withIntermediateDirectories: true)
+        try fm.createDirectory(at: secondary, withIntermediateDirectories: true)
+        defer {
+            try? fm.removeItem(at: primary)
+            try? fm.removeItem(at: secondary)
+        }
+        let target = secondary.appendingPathComponent("blocked.txt")
+
+        let registry = AgentJobRegistry()
+        let job = try registry.start(
+            command: "touch '\(target.path)'",
+            workingDirectory: primary,
+            runtimeID: UUID(),
+            timeoutSeconds: nil,
+            sandboxMode: .workspaceWrite
+        )
+
+        #expect(await waitUntilFinished(registry: registry, id: job.id))
+        #expect(registry.job(id: job.id)?.status == .failed)
+        #expect(!fm.fileExists(atPath: target.path))
+    }
+
     @Test
     func backgroundCommandUsesInjectedEnvironment() async throws {
         let registry = AgentJobRegistry()

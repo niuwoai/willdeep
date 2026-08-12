@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc22 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc23 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc23 - 2026-08-12
+
+### Fixed
+
+- 多文件夹项目的后台任务不再把第二个文件夹当沙箱外来客。seatbelt profile 和路径守卫早已支持多个可写根，前台 `run_command` 也一直把项目全部文件夹传下去；唯独后台链路 `AgentJobRegistry.start` 没有"额外可写根"这个参数——前台能写的目录，转成后台任务（`npm install`、vite 建缓存）立刻 EPERM。现在 `start` / `startExecutor`、沙箱 EPERM 自动重试规格、Dev Server 面板与悬浮卡重启、本地委派执行器（Claude Code / Codex CLI 的 `AgentExecutorProcessSpecification`）全部带上项目全部文件夹。
+- seatbelt 可写根改为同时放行 realpath。sandbox-exec 匹配的是内核解析后的真实路径：经符号链接拼出的根（`/tmp/x` 真身是 `/private/tmp/x`；`$TMPDIR` 的 `/var/folders/…` 真身在 `/private/var/…`）此前从未真正命中过自己的 subpath 规则——临时目录的固定放行实际一直是坏的，只是被各工具对 `$TMPDIR` 写失败的静默降级掩盖。现在每个可写根（含临时目录）同时输出标准化路径与 realpath 两条规则。
+
+### Tests
+
+- `AgentBackgroundJobsTests` 新增两用例：带 `additionalWorkspaceRoots` 的后台任务能写入第二个项目根（两个根都造在 `/tmp` 下——profile 固定放行 `$TMPDIR`，造在那儿测了等于没测）；负向对照确认不带参数时同一条写入仍被拦，防止 seatbelt 悄悄失效时正向用例假绿。正向用例最初就红了——正是它揪出了上面 `/tmp` realpath 这条更深的 bug。
+
+### Meta
+
+- 后台任务多可写根与 seatbelt realpath 修复，预发布版本从 **1.247.0-rc22** 提升为 **1.247.0-rc23**，内部构建号 **366 → 367**，Help 与 Computer Use Helper 构建号 **282 → 283**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc22 - 2026-08-12
 

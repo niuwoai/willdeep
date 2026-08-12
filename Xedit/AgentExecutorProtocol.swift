@@ -102,6 +102,10 @@ nonisolated struct AgentExecutorProcessSpecification {
     let executableURL: URL
     let arguments: [String]
     let workingDirectory: URL?
+    /// Extra writable seatbelt roots — the other folders of a multi-folder
+    /// project, so a delegated executor working in a secondary folder is not
+    /// EPERM-blocked the way background jobs used to be.
+    var additionalWorkspaceRoots: [URL] = []
     let environment: [String: String]
     let standardInput: Data
     let sandboxMode: AgentSandboxMode
@@ -118,6 +122,7 @@ nonisolated enum AgentExecutorProcessFactory {
         sessionID: String? = nil,
         imagePaths: [String],
         workingDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = [],
         environment: [String: String],
         sandboxMode: AgentSandboxMode
     ) -> AgentExecutorProcessSpecification {
@@ -150,6 +155,7 @@ nonisolated enum AgentExecutorProcessFactory {
             executableURL: URL(fileURLWithPath: executable),
             arguments: arguments,
             workingDirectory: workingDirectory,
+            additionalWorkspaceRoots: additionalWorkspaceRoots,
             environment: environment,
             standardInput: Data((prompt + "\n").utf8),
             sandboxMode: sandboxMode,
@@ -167,6 +173,7 @@ nonisolated enum AgentExecutorProcessFactory {
         workspacePath: String?,
         imagePaths: [String],
         workingDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = [],
         environment: [String: String],
         sandboxMode: AgentSandboxMode
     ) -> AgentExecutorProcessSpecification {
@@ -203,6 +210,7 @@ nonisolated enum AgentExecutorProcessFactory {
             executableURL: URL(fileURLWithPath: executable),
             arguments: arguments,
             workingDirectory: workingDirectory,
+            additionalWorkspaceRoots: additionalWorkspaceRoots,
             environment: environment,
             standardInput: Data((prompt + "\n").utf8),
             sandboxMode: sandboxMode,

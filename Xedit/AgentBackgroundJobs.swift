@@ -106,6 +106,7 @@ struct AgentBackgroundJob: Identifiable, Equatable {
 private struct AgentBackgroundSandboxRetrySpecification {
     let command: String
     let workingDirectory: URL?
+    let additionalWorkspaceRoots: [URL]
     let runtimeID: UUID
     let turnID: UUID?
     let timeoutSeconds: Double?
@@ -199,6 +200,12 @@ final class AgentJobRegistry: ObservableObject {
     func start(
         command: String,
         workingDirectory: URL?,
+        /// Extra writable roots for the seatbelt profile — the other folders
+        /// of a multi-folder project. The foreground command path has carried
+        /// these since projects grew multiple folders; background jobs
+        /// dropped them, so an `npm install` that succeeded interactively
+        /// hit EPERM the moment it ran as a job in a secondary folder.
+        additionalWorkspaceRoots: [URL] = [],
         runtimeID: UUID,
         turnID: UUID? = nil,
         timeoutSeconds: Double?,
@@ -231,6 +238,7 @@ final class AgentJobRegistry: ObservableObject {
             sandboxRetrySpecifications[id] = AgentBackgroundSandboxRetrySpecification(
                 command: trimmed,
                 workingDirectory: workingDirectory,
+                additionalWorkspaceRoots: additionalWorkspaceRoots,
                 runtimeID: runtimeID,
                 turnID: turnID,
                 timeoutSeconds: timeoutSeconds,
@@ -251,7 +259,8 @@ final class AgentJobRegistry: ObservableObject {
         let launch = AgentSandboxPolicy.shellLaunch(
             command: trimmed,
             mode: sandboxMode,
-            rootDirectory: workingDirectory
+            rootDirectory: workingDirectory,
+            additionalWorkspaceRoots: additionalWorkspaceRoots
         )
         process.executableURL = launch.executableURL
         process.arguments = launch.arguments
@@ -418,7 +427,8 @@ final class AgentJobRegistry: ObservableObject {
             executableURL: specification.executableURL,
             arguments: specification.arguments,
             mode: specification.sandboxMode,
-            rootDirectory: specification.workingDirectory
+            rootDirectory: specification.workingDirectory,
+            additionalWorkspaceRoots: specification.additionalWorkspaceRoots
         )
         process.executableURL = launch.executableURL
         process.arguments = launch.arguments
@@ -1077,6 +1087,7 @@ final class AgentJobRegistry: ObservableObject {
            let retry = try? start(
                command: specification.command,
                workingDirectory: specification.workingDirectory,
+               additionalWorkspaceRoots: specification.additionalWorkspaceRoots,
                runtimeID: specification.runtimeID,
                turnID: specification.turnID,
                timeoutSeconds: specification.timeoutSeconds,
