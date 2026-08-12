@@ -195,7 +195,14 @@ struct AgentFailedToolCallReviewRow: Identifiable, Equatable {
     var id: String { "\(toolName)|\(occurredAt.timeIntervalSinceReferenceDate)|\(errorSummary)" }
 }
 
-nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable {
+/// Codable so `AgentSessionStore` can persist the snapshot into the
+/// `usage-v1` sidecar. Synthesized keys are part of the sidecar contract:
+/// adding a non-optional field without bumping the sidecar schema version
+/// makes old sidecars fail decoding (safe: they rebuild); an optional
+/// field decodes as nil from old sidecars and stays stale until the source
+/// signature changes — bump `UsageCatalogEntry.currentSchemaVersion` when
+/// the dashboard must see the new field immediately.
+nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
     let id: UUID
     var modelID: String?
     var providerID: String?
@@ -278,7 +285,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable {
     }
 }
 
-nonisolated struct AgentUsageMessageSnapshot: Equatable {
+nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
     var role: AgentRole
     var contentCharacterCount: Int
     var reasoningCharacterCount: Int
