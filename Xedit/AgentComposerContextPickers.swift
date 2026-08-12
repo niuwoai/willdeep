@@ -20,6 +20,22 @@ enum AgentComposerChrome {
     static let iconDisabled = Color.secondary.opacity(0.34)
 }
 
+extension View {
+    /// Keep an overflow "…" menu in the quiet gray hierarchy.
+    ///
+    /// `Menu` with `.borderlessButton` ignores the label's own
+    /// `foregroundStyle` and falls back to the macOS accent tint, so every
+    /// one of these ended up system blue no matter what the label asked for
+    /// — the label styling was not wrong, it was simply not consulted.
+    /// `.tint` is the level AppKit actually reads. Applied at each call site
+    /// rather than to a shared container so a deliberately accented control
+    /// nearby is not swept up with it.
+    func agentQuietMenuChrome(_ color: Color = AgentComposerChrome.iconSecondary) -> some View {
+        symbolRenderingMode(.monochrome)
+            .tint(color)
+    }
+}
+
 // MARK: - Composer run context
 
 struct AgentComposerRunContextBar: View {

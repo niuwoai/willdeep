@@ -165,6 +165,7 @@ struct AgentChatHeader: View {
                 .frame(width: 24, height: 22)
         }
         .menuStyle(.borderlessButton)
+        .agentQuietMenuChrome()
         .fixedSize()
         .help(L10n.Dispatch.moreTaskTools)
     }
