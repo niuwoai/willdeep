@@ -540,6 +540,41 @@ extension WillDeepTests {
         #expect(abs(try #require(day.estimatedCostUSD) - 10) < 0.000_001)
     }
 
+    @Test("monthly usage calendar treats unpriced usage as free instead of vetoing the day")
+    func monthlyUsageCalendarCountsUnpricedUsageAsFree() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let month = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 1)))
+        let august11 = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 11, hour: 10)))
+
+        let priced = AgentMessage(
+            role: .assistant,
+            content: "ok",
+            usageTokens: 2_000_000,
+            promptTokens: 1_000_000,
+            completionTokens: 1_000_000,
+            createdAt: august11
+        )
+        let unpriced = AgentMessage(
+            role: .assistant,
+            content: "ok",
+            usageTokens: 2_000_000,
+            promptTokens: 1_000_000,
+            completionTokens: 1_000_000,
+            createdAt: august11
+        )
+        let sessions = [
+            makeSession(modelID: "gpt-4.1", providerID: "openai", messages: [priced]),
+            makeSession(modelID: "totally-unknown-model", providerID: "mystery", messages: [unpriced])
+        ].map { AgentUsageSessionSnapshot(session: $0) }
+
+        let usage = AgentUsageStats.dailyUsage(for: sessions, in: month, calendar: calendar)
+        let day = try #require(usage.first { calendar.component(.day, from: $0.date) == 11 })
+
+        // gpt-4.1 contributes $10; the unknown model contributes $0, not nil.
+        #expect(abs(try #require(day.estimatedCostUSD) - 10) < 0.000_001)
+    }
+
     @Test("August 2026 usage calendar is a Sunday-first six-week grid")
     func usageCalendarGridUsesConventionalWeekOrder() throws {
         var calendar = Calendar(identifier: .gregorian)
@@ -621,6 +656,66 @@ extension WillDeepTests {
 
         #expect(row?.modelID == "kimi-k2.6")
         #expect(abs((row?.estimatedCostUSD ?? 0) - expected) < 0.000_001)
+    }
+
+    @Test("AgentUsageStats prices kimi-k3 at the Moonshot list rate")
+    func testUsageStatsPricesKimiK3() {
+        let session = makeSession(
+            modelID: "kimi-k3",
+            providerID: "some-im",
+            messages: [
+                meteredAssistantMessage(prompt: 1_000_000, completion: 1_000_000, cachedPrompt: 500_000)
+            ]
+        )
+
+        let row = AgentUsageStats.modelUsage(for: [session]).first
+
+        // 0.5M uncached × $3 + 0.5M cached × $0.30 + 1M output × $15
+        #expect(row?.modelID == "kimi-k3")
+        #expect(abs((row?.estimatedCostUSD ?? 0) - 16.65) < 0.000_001)
+    }
+
+    @Test("AgentUsageStats prices gpt-5.6 tiers instead of falling into the gpt-5 row")
+    func testUsageStatsPricesGPT56Tiers() {
+        let session = makeSession(
+            modelID: "gpt-5.6-terra",
+            providerID: "some-im",
+            messages: [
+                meteredAssistantMessage(prompt: 1_000_000, completion: 1_000_000)
+            ]
+        )
+
+        let row = AgentUsageStats.modelUsage(for: [session]).first
+
+        // Terra: $2 input + $12 output — not the gpt-5 family $1.25/$10.
+        #expect(row?.modelID == "gpt-5.6-terra")
+        #expect(abs((row?.estimatedCostUSD ?? 0) - 14.0) < 0.000_001)
+    }
+
+    @Test("AgentUsageStats prices someim managed models like deepseek-v4-flash")
+    func testUsageStatsPricesSomeIMManagedModels() {
+        let native = makeSession(
+            modelID: "someim-auto-pro",
+            providerID: "some-im",
+            messages: [
+                meteredAssistantMessage(prompt: 1_000_000, completion: 1_000_000)
+            ]
+        )
+        let relayed = makeSession(
+            modelID: "someim-coding-plan-high",
+            providerID: "custom",
+            messages: [
+                meteredAssistantMessage(prompt: 1_000_000, completion: 1_000_000)
+            ]
+        )
+
+        let rows = AgentUsageStats.modelUsage(for: [native, relayed])
+        let expected = 0.14 + 0.28
+
+        #expect(rows.count == 2)
+        for row in rows {
+            #expect(abs((row.estimatedCostUSD ?? 0) - expected) < 0.000_001)
+        }
     }
 
     @Test("AgentUsageStats falls back to built-in public prices for Moonshot V1 models")
