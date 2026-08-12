@@ -22,7 +22,9 @@ struct MobileGatewayCoordinatorTests {
 
     @Test
     func legacySettingsWithoutTransportModeDefaultToRelay() throws {
-        let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-mode-\(UUID().uuidString)"))
+        let suiteName = "willdeep-mobile-gateway-mode-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName) }
         // Installs predating the transportMode field must migrate to relay.
         let legacyPayload: [String: Any] = ["host": "0.0.0.0", "port": 8877]
         let data = try JSONSerialization.data(withJSONObject: legacyPayload)
@@ -49,7 +51,9 @@ struct MobileGatewayCoordinatorTests {
     /// `lanGateway` 不能再让运行时进入局域网模式。
     @Test
     func storedLanGatewaySettingsLoadBackAsRelay() throws {
-        let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-forcerelay-\(UUID().uuidString)"))
+        let suiteName = "willdeep-mobile-gateway-forcerelay-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName) }
         let payload: [String: Any] = ["transportMode": "lanGateway", "host": "0.0.0.0", "port": 8877]
         let data = try JSONSerialization.data(withJSONObject: payload)
         defaults.set(data, forKey: "com.willdeep.mobileGateway.settings.v1")
@@ -121,7 +125,9 @@ struct MobileGatewayCoordinatorTests {
 
     @Test
     func regenerateRelayRoomProducesFreshRoom() throws {
-        let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-room-\(UUID().uuidString)"))
+        let suiteName = "willdeep-mobile-gateway-room-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName) }
         let first = MobileGatewaySettingsStore.regenerateRelayRoom(defaults: defaults)
         let second = MobileGatewaySettingsStore.regenerateRelayRoom(defaults: defaults)
         #expect(first.starts(with: "willdeep-"))
@@ -151,7 +157,9 @@ struct MobileGatewayCoordinatorTests {
 
     @Test
     func settingsLoadToleratesLegacyMissingFields() throws {
-        let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-legacy-\(UUID().uuidString)"))
+        let suiteName = "willdeep-mobile-gateway-legacy-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName) }
         // rc10 起结构里已经没有 `isEnabled` 字段,但旧持久化 JSON 里残留
         // 该 key 时必须被 Codable 安全忽略,不能抛错。
         let legacyPayload: [String: Any] = [
@@ -176,7 +184,9 @@ struct MobileGatewayCoordinatorTests {
 
     @Test
     func settingsLoadFallsBackWhenStoredDataIsNotJSONSettings() throws {
-        let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-corrupt-\(UUID().uuidString)"))
+        let suiteName = "willdeep-mobile-gateway-corrupt-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName) }
         defaults.set(Data([0x62, 0x70, 0x6c, 0x69, 0x73, 0x74]), forKey: "com.willdeep.mobileGateway.settings.v1")
 
         let settings = MobileGatewaySettingsStore.load(defaults: defaults)
@@ -189,7 +199,9 @@ struct MobileGatewayCoordinatorTests {
 
     @Test
     func settingsLoadReplacesLegacyDefaultRelayRoomWithInstallRoom() throws {
-        let defaults = try #require(UserDefaults(suiteName: "willdeep-mobile-gateway-relay-room-\(UUID().uuidString)"))
+        let suiteName = "willdeep-mobile-gateway-relay-room-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName) }
         var settings = MobileGatewaySettings.default
         settings.relayRoom = MobileGatewaySettings.legacyDefaultRelayRoom
         MobileGatewaySettingsStore.save(settings, defaults: defaults)

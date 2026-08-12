@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc12 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc13 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc13 - 2026-08-12
+
+### Fixed
+
+- 其余测试一次性 UserDefaults suite 全部纳入 rc12 引入的卫生机制。开发机上 `~/Library/Preferences` 里仍有约 4800 个未登记前缀的壳在泄漏：`willdeep-runtime-store-*` 数千个、`com.willdeep.tests.learningReview.*` 约 580 个，外加 `willdeep-mobile-gateway-*`、`test.workspace.identity.*`、`CollaborationConnectorSettingsTests.*` 等。8 个测试文件（AgentSelfLearningTests、AgentRemoteRuntimeTests、MobileGatewayCoordinatorTests、SomeIMManagedRoutingTests、CollaborationConnectorSettingsTests、AgentSidebarWorkspaceStateStoreTests、AgentMCPServerDirectoryTests、AgentDispatchCoordinatorTests）的收尾统一改走 `TestDefaultsHygiene.cleanup`，其中 MobileGatewayCoordinatorTests 的 6 处和 AgentWorkspaceIdentityStoreTests 此前完全没有收尾。
+- `TestDefaultsHygiene.disposableSuitePrefixes` 登记全部 16 个一次性前缀（含 `willdeep-runtime-store-` 这类 UUID 直接用连字符相接、不带结尾点的前缀，按实际字面量登记，不误伤 `com.willdeep.app` / `WillDeep` 等真实配置域）；`cleanup` 现在兜底触发进程级 sweep，`-only-testing` 只跑单个套件时也能扫掉上一轮残留，存量壳会在登记后的第一轮测试被自动清空。
+
+### Meta
+
+- 测试卫生修复，预发布版本从 **1.247.0-rc12** 提升为 **1.247.0-rc13**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc12 - 2026-08-12
 

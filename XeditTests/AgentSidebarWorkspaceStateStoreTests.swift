@@ -8,7 +8,7 @@ struct AgentSidebarWorkspaceStateStoreTests {
         let suiteName = "willdeep-agent-sidebar-state-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer {
-            defaults.removePersistentDomain(forName: suiteName)
+            TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
         }
 
         AgentSidebarWorkspaceStateStore.save(

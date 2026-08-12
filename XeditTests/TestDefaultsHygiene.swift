@@ -15,11 +15,27 @@ import Foundation
 /// 磁盘上的残留从此收敛在一轮的量以内，不再无限累积。
 enum TestDefaultsHygiene {
     /// 本仓库测试所有一次性 suite 的命名前缀。新增一次性 suite 命名时
-    /// 在此登记，前缀必须带 UUID 段之前的完整字面量 + 结尾的点，避免
-    /// 误伤 `com.willdeep.app` 等真实配置域。
+    /// 在此登记，前缀必须是 UUID 段之前的完整字面量，含结尾分隔符——
+    /// 点或连字符，按实际命名字面量写（如 `willdeep-runtime-store-` 的
+    /// UUID 直接用连字符相接），避免误伤 `com.willdeep.app`、`WillDeep`
+    /// 等真实配置域。
     private nonisolated static let disposableSuitePrefixes = [
+        "CollaborationConnectorSettingsTests.",
         "com.willdeep.agent.test.defaults.",
         "com.willdeep.mcp.test.",
+        "com.willdeep.tests.learningReview.",
+        "test.workspace.identity.",
+        "willdeep-agent-sidebar-state-",
+        "willdeep-dispatch-",
+        "willdeep-mcp-config-tool-",
+        "willdeep-mcp-credentials-",
+        "willdeep-mobile-gateway-corrupt-",
+        "willdeep-mobile-gateway-forcerelay-",
+        "willdeep-mobile-gateway-legacy-",
+        "willdeep-mobile-gateway-mode-",
+        "willdeep-mobile-gateway-relay-room-",
+        "willdeep-mobile-gateway-room-",
+        "willdeep-runtime-store-",
     ]
 
     /// once 语义：进程内首次访问时扫一遍 ~/Library/Preferences，删掉
@@ -48,6 +64,9 @@ enum TestDefaultsHygiene {
     /// 不追求进程内删干净，真正的收敛靠下一轮进程启动时的 sweep：磁盘
     /// 残留至多一轮的量，不再累积。
     nonisolated static func cleanup(suite: UserDefaults, named suiteName: String) {
+        // 兜底触发 sweep：`-only-testing` 只跑单个套件时，创建点不一定
+        // 经过已埋 sweep 的路径，这里保证每个测试进程至少扫一次。
+        _ = sweepStaleSuiteFiles
         suite.removePersistentDomain(forName: suiteName)
         suite.removeSuite(named: suiteName)
         removeSuiteFile(named: suiteName)

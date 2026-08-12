@@ -1,6 +1,11 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-12（1.247.0-rc12）
+> Last updated: 2026-08-12（1.247.0-rc13）
+
+## 1.247.0-rc13 — 其余测试一次性 suite 前缀纳入卫生机制
+
+- ⏳ 跑一轮任一受影响套件（如 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/MobileGatewayCoordinatorTests`），跑完统计 `ls ~/Library/Preferences/willdeep-runtime-store-*.plist ~/Library/Preferences/com.willdeep.tests.learningReview.*.plist ~/Library/Preferences/willdeep-mobile-gateway-*.plist ~/Library/Preferences/test.workspace.identity.*.plist ~/Library/Preferences/CollaborationConnectorSettingsTests.*.plist 2>/dev/null | wc -l`，确认存量约 4800 个壳已被首轮 sweep 清空，残留收敛在一轮用例的量以内。
+- ⏳ 再跑第二轮同一套件，确认残留没有累加，且文件时间戳全部来自第二轮。
 
 ## 1.247.0-rc12 — 测试 UserDefaults 壳文件收敛
 
