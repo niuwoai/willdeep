@@ -120,6 +120,15 @@ struct AgentWorkspaceSessionSnapshot: Equatable {
     let dispatchTaskID: UUID?
     let isDispatchProject: Bool
     let isDispatchPaused: Bool
+
+    /// The session belongs to the dispatch console — either a project created
+    /// there or one of its task sessions. The console is a separate surface
+    /// with its own lifecycle, so ordinary chat must not offer to walk the
+    /// user into it; a goal that was never created there must not be filed
+    /// under it either.
+    var isDispatchOwned: Bool {
+        presentationScope == .dispatchBoard || dispatchParentProjectID != nil
+    }
 }
 
 struct AgentSessionTitleSuggestionSnapshot: Equatable {

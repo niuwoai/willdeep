@@ -34,8 +34,11 @@ struct AgentGoalModeSessionRecoveryTests {
     }
 
     /// Mirrors `AgentDispatchCoordinator.synchronizedGoals`' adoption test.
+    /// Keep in step with it: the console only owns what was started inside it.
     private func boardAdopts(_ session: AgentSession) -> Bool {
-        session.hasBoardGoal && session.dispatchParentProjectID == nil
+        session.presentationScope == .dispatchBoard
+            && session.hasBoardGoal
+            && session.dispatchParentProjectID == nil
     }
 
     @Test("a Goal-mode conversation stays in the sidebar after switching away")
@@ -79,19 +82,21 @@ struct AgentGoalModeSessionRecoveryTests {
     /// Goal-driven. The board became an additional projection rather than a
     /// transfer of ownership, which serves this suite's actual concern (never
     /// unreachable) strictly better: two surfaces beat one.
-    @Test("once a goal is stated the board shows it without taking it out of the sidebar")
-    func statedGoalIsReachableThroughTheBoard() {
+    @Test("定下目标后会话仍在侧边栏，且不会被调度台收编")
+    func statedGoalStaysReachableInTheSidebar() {
         let stated = session(
             title: "分析当前项目",
             goal: AgentGoal(statement: "把充电站点击跳转修好"),
             interactionMode: .goal
         )
 
-        // It keeps its place in the workspace group...
+        // 侧边栏这一条路径本身就够它可达 —— 这正是本套件真正在意的事。
         #expect(stated.belongsInWorkspaceSidebar)
-        // ...and the board adopts it as well, with selectDispatchGoal routing
-        // back to goal.sessionID.
-        #expect(boardAdopts(stated))
+        // 调度台不再收编它：从 composer 切目标模式从未选择进入调度台，
+        // 凭"有 Goal"就把它列成调度台项目，会让看板里堆满用户没建过的
+        // 项目，再反过来引导用户离开当前会话。
+        #expect(stated.presentationScope == .workspace)
+        #expect(!boardAdopts(stated))
     }
 
     @Test("no state falls between the two surfaces")
