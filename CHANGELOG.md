@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc11 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc12 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc12 - 2026-08-12
+
+### Fixed
+
+- 单元测试不再往 `~/Library/Preferences` 里无限撒一次性 UserDefaults 壳文件（开发机上已累积 2182 个 `com.willdeep.agent.test.defaults.*.plist` 和 202 个 `com.willdeep.mcp.test.*.plist`）。两处根因实测确认：其一，MCP 信任测试的 defer 只调 `removePersistentDomain`，而该调用只清空域内容，磁盘上必留一个 ~42 字节空壳，每跑一次漏一个；其二，`KeychainSandbox` 虽然在 deinit 里删了壳文件（1.228.0-rc8 起），但删除动作与 cfprefsd 的异步落盘存在竞态，每轮全量测试仍漏出个位数的壳。
+- 新增 `XeditTests/TestDefaultsHygiene.swift` 双层防御：每个 suite 用完即走完整收尾（`removePersistentDomain` + `removeSuite(named:)` + 删壳文件），并在每个测试进程首次建 suite 时扫掉上一轮被 cfprefsd 复活的壳——磁盘残留从此收敛在一轮的量以内。`KeychainSandbox` 与 MCP 信任测试均改走该工具；一次性 suite 前缀集中登记，避免误伤 `com.willdeep.app` 等真实配置域。
+
+### Meta
+
+- 测试卫生修复，预发布版本从 **1.247.0-rc11** 提升为 **1.247.0-rc12**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc11 - 2026-08-12
 
