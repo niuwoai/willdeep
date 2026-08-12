@@ -1,9 +1,39 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc8 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.247.0-rc8 - 2026-08-12
+## 1.247.0-rc11 - 2026-08-12
+
+### Fixed
+
+- 快速测试入口失败时不再把上一次的绿色报告留在原地冒充本次结论。`scripts/run_tests_fast.rb` 此前只在成功路径写 `build/fast-tests/report.{json,md}`，一旦测试失败或构建阶段就挂掉，脚本直接退出，磁盘上仍是上一轮的 `"ok": true`——而 `TESTING.md` 恰恰让调用方以该文件为准，一个陈旧的绿勾足以让跑崩的构建冒充跑通的构建。现在失败路径会先把报告置为红，再交给 `xcresult_report.rb` 补齐真实失败详情（bundle 不可读时回落原始日志），并以运行器自身的退出码为最终裁决，避免"构建未进入测试阶段、xcresult 计数看着干净"被误报为通过。
+- 失败报告因此带上了可直接读的失败用例名、断言和行号，不必再去 grep 原始 xcodebuild 日志。
+
+### Tests
+
+- 手工验证三种路径：用例失败（`source=xcresult`，26 passed/1 failed 且 `failures` 含用例名与断言行）、编译失败（`source=xcodebuild-log`，计数归零并注明为近似值）、正常通过（`ok=true`）。
+
+### Meta
+
+- 测试报告可信度修复，预发布版本从 **1.247.0-rc10** 提升为 **1.247.0-rc11**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc10 - 2026-08-12
+
+### Fixed
+
+- CI 的 `short-drama` 守卫组恢复通过。`short_drama_media_contract` 用源码字符串比对断言侧边栏组件历史的取数方式，而 2026-08-09 的重构（`420dad70`）已把 `widgetRegistry.widgets(forRuntime: appState.activeRuntime?.id)` 换成等价的局部变量写法 `runtime?.id`，断言文本没有跟着更新，从那天起该守卫一直为红（此前几次发布的 Actions 均被取消，没有暴露）。断言改为匹配现有写法，行为未变。
+
+### Meta
+
+- CI 守卫断言跟上既有重构，预发布版本从 **1.247.0-rc9** 提升为 **1.247.0-rc10**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc9 - 2026-08-12
+
+### Fixed
+
+- 审阅卡片渲染用例（`AgentSidePanelDiffPerformanceTests` 的"差异行底色铺到卡片右边缘"）不再随机翻车。旧写法先 `Task.sleep` 硬等 300ms 让 SwiftUI 收敛再抓位图，机器忙时布局尚未完成就采样，采到未着色的画面；现在改为反复 `layoutSubtreeIfNeeded` + 采样，直到画面进入目标状态为止，上限 20 秒，超时才失败并打印诊断（负载高只是变慢，不再假失败）。
+- 同一用例的采样坐标修掉一个真实的取样错误：`NSBitmapImageRep.colorAt(x:y:)` 取的是像素坐标，而用例按点坐标取样，在 Retina 位图（1800×520）上实际只扫了卡片左半边的上半截。现在按位图与视图的实际缩放比换算，并改为"卡片中部有底色的行，在右边缘必须同样有底色"的逐行比对——右边缘那颗"+2 −1"统计角标的红色字形不再被误判成删除行。
 
 ### Fixed
 
