@@ -84,6 +84,14 @@ final class AgentDispatchCoordinator: ObservableObject {
             existingGoals.flatMap { $0.tasks.compactMap(\.runtimeSessionID) }
         )
         let sourceSessions = sessions.filter { session in
+            // Only sessions that were actually started in the dispatch console
+            // become projects there. Having a goal is not enough: ordinary
+            // chats reach Goal mode straight from the composer without ever
+            // opting into the console, and filing them there filled the board
+            // with projects the user never created — then offered to navigate
+            // into it. The console is a separate system; it owns what was
+            // created inside it.
+            guard session.presentationScope == .dispatchBoard else { return false }
             // Goal-board projection does not remove the source conversation
             // from its workspace sidebar; it is an additional task view.
             guard session.hasBoardGoal else { return false }

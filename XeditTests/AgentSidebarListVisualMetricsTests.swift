@@ -17,8 +17,10 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentScheduledTaskCardLayout.iconTileSize == 36)
         #expect(AgentScheduledTaskCardLayout.cornerRadius == 12)
         #expect(AgentDesign.sidebarSessionTrailingActionsWidth == 40)
-        #expect(AgentDesign.liveActivityTopSpacing == 6)
-        #expect(AgentDesign.liveActivityTopSpacing < AgentDesign.messageVerticalSpacing)
+        #expect(AgentDesign.assistantMetadataTopSpacingScale == 0.7)
+        #expect(AgentDesign.assistantMetadataTopSpacing(baseFontSize: 15) == 10.5)
+        #expect(AgentDesign.liveActivityRowSpacing == 2)
+        #expect(AgentDesign.assistantMetadataTopSpacing(baseFontSize: 15) < AgentDesign.messageVerticalSpacing)
         #expect(AgentDesign.reviewPanelPreferredWidth == 520)
         #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 14, visualMinimum: 9) == 13)
         #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 18, visualMinimum: 15) == 15)
@@ -68,6 +70,37 @@ struct AgentSidebarListVisualMetricsTests {
             AgentSidebarSessionTrailingLayout.reservedActionsWidth(
                 isHovered: true
             ) == AgentDesign.sidebarSessionTrailingActionsWidth
+        )
+    }
+
+    @Test("sidebar placeholder is three-way: loading before the catalog lands, empty after, none with rows")
+    func catalogPlaceholderSplitsLoadingFromEmpty() {
+        // 冷启动：目录还没读完且列表为空 → 加载占位，不是"暂无会话"。
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: false,
+                isSessionListEmpty: true
+            ) == .loading
+        )
+        // 目录读完且确实没有会话 → 维持既有空态文案。
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: true,
+                isSessionListEmpty: true
+            ) == .empty
+        )
+        // 列表非空时无论目录是否加载完都不显示占位。
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: false,
+                isSessionListEmpty: false
+            ) == AgentSidebarCatalogPlaceholder.none
+        )
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: true,
+                isSessionListEmpty: false
+            ) == AgentSidebarCatalogPlaceholder.none
         )
     }
 
@@ -513,7 +546,12 @@ struct AgentSidebarListVisualMetricsTests {
         ]
 
         let size = NSSize(width: 760, height: 360)
-        let root = VStack(alignment: .leading, spacing: AgentDesign.liveActivityTopSpacing) {
+        let root = VStack(
+            alignment: .leading,
+            spacing: AgentDesign.assistantMetadataTopSpacing(
+                baseFontSize: appState.agentChatBaseFontSize
+            )
+        ) {
             Text("我已经确认状态展示的问题来自过度聚合，以及模型原始阶段文案直接混进正文。现在正在收敛渲染层级并补回归测试。")
                 .font(.system(size: appState.agentChatBaseFontSize))
                 .lineSpacing(3)

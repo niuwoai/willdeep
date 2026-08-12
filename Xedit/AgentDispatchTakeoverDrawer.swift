@@ -355,6 +355,7 @@ struct AgentDispatchTakeoverDrawer: View {
                     .frame(width: 24)
             }
             .menuStyle(.borderlessButton)
+            .agentQuietMenuChrome()
             .help(L10n.Dispatch.moreTaskTools)
         }
         .padding(.horizontal, 10)

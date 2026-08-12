@@ -352,7 +352,7 @@ struct AgentDevServerPanel: View {
         sandboxMode: AgentSandboxMode,
         displayCommand: String
     ) {
-        guard let runtimeID = appState.activeRuntime?.id else {
+        guard let runtime = appState.activeRuntime else {
             lastError = "没有可用的 Agent 会话，无法启动后台任务。"
             return
         }
@@ -360,7 +360,10 @@ struct AgentDevServerPanel: View {
             _ = try appState.agentJobRegistry.start(
                 command: command,
                 workingDirectory: workingDirectory,
-                runtimeID: runtimeID,
+                // All project folders stay writable — a dev server started
+                // from a secondary folder builds its caches there.
+                additionalWorkspaceRoots: appState.agentWorkspaceRoots(for: runtime.session),
+                runtimeID: runtime.id,
                 timeoutSeconds: nil,
                 sandboxMode: sandboxMode,
                 displayCommand: displayCommand

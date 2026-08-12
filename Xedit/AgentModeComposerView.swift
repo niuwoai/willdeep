@@ -105,6 +105,12 @@ struct AgentChatComposer: View {
             appState.refreshAgentGitWorktrees()
             appState.refreshAgentWorkspaceCollision()
         }
+        // 用户可能在 App 外面（自己的终端、别的 Git 客户端）切了分支，路径没变，
+        // 我们也收不到任何工具回调。重新获得焦点时补一次身份刷新，胶囊不至于
+        // 长期挂着旧分支。
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            appState.refreshAgentGitWorktrees()
+        }
         .sheet(item: $appState.agentWorktreeDiffPreview) { preview in
             AgentWorktreeDiffPreviewSheet(preview: preview)
         }
@@ -139,15 +145,18 @@ struct AgentChatComposer: View {
         }
         return appState.workspaceSessionSnapshots(for: runtime)
             .filter {
-                !$0.isActive
+                // Dispatch console projects and their task sessions are
+                // deliberately excluded: the console is a separate system,
+                // and "Open" on one of its sessions navigates away into it.
+                // An unfinished goal over there is not a reason to pull the
+                // user out of the conversation they are in.
+                !$0.isDispatchOwned
+                    && !$0.isActive
                     && !$0.isArchived
                     && $0.goalStatement?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                     && !$0.goalIsComplete
             }
             .sorted {
-                if $0.isDispatchProject != $1.isDispatchProject {
-                    return $0.isDispatchProject && !$1.isDispatchProject
-                }
                 if $0.isResponding != $1.isResponding {
                     return $0.isResponding && !$1.isResponding
                 }

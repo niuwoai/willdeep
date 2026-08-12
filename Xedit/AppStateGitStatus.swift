@@ -664,6 +664,10 @@ extension AppState {
                 if self.agentWorktreeChanges != snapshot.changes {
                     self.agentWorktreeChanges = snapshot.changes
                 }
+                self.applyAgentWorkspaceGitIdentity(
+                    from: snapshot.status,
+                    workspacePath: targetDirectory.path
+                )
             }
         }
     }
@@ -714,6 +718,12 @@ extension AppState {
                 if runtime.worktreeChanges != snapshot.changes {
                     runtime.worktreeChanges = snapshot.changes
                 }
+                // 这份快照已经带着当前分支名，顺手同步给 composer 的分支胶囊，
+                // 免得它停留在切分支之前的名字。
+                self.applyAgentWorkspaceGitIdentity(
+                    from: snapshot.status,
+                    workspacePath: targetDirectory.path
+                )
                 if self.rootDirectory?.standardizedFileURL.path == targetDirectory.path {
                     if self.gitStatus != snapshot.status {
                         self.gitStatus = snapshot.status
@@ -779,6 +789,13 @@ extension AppState {
         if shouldPersistSession {
             persistAgentSession(runtime: runtime)
         }
+
+        // run_command 里的 `git switch` / `git checkout` 是分支变化最常见的来源，
+        // 而它不改变 workspace 路径。用这次已有的快照补录身份，胶囊才跟得上。
+        applyAgentWorkspaceGitIdentity(
+            from: snapshot.status,
+            workspacePath: targetDirectory.path
+        )
 
         if rootDirectory?.standardizedFileURL.path == targetDirectory.path {
             if gitStatus != snapshot.status {

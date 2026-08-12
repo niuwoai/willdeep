@@ -589,6 +589,7 @@ struct AgentDispatchCoordinatorTests {
         let session = AgentSession(
             title: "模型组合",
             workspaceRootPath: "/tmp/project",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(
                 statement: "组合模型交付",
                 checklist: [AgentGoal.Item(text: "执行")]
@@ -725,6 +726,7 @@ struct AgentDispatchCoordinatorTests {
         let session = AgentSession(
             title: "真实 DAG",
             workspaceRootPath: "/tmp/Graph",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(
                 statement: "并行实现并汇聚",
                 checklist: [AgentGoal.Item(text: "集成测试通过")],
@@ -918,6 +920,7 @@ struct AgentDispatchCoordinatorTests {
                 AgentSession(
                     title: "Graph",
                     workspaceRootPath: "/tmp/Graph",
+                    presentationScope: .dispatchBoard,
                     currentGoal: AgentGoal(
                         statement: "构建任务图",
                         checklist: [
@@ -977,6 +980,7 @@ struct AgentDispatchCoordinatorTests {
             AgentSession(
                 title: "Graph",
                 workspaceRootPath: "/tmp/Graph",
+                presentationScope: .dispatchBoard,
                 currentGoal: AgentGoal(
                     statement: "构建任务图",
                     checklist: [
@@ -1036,6 +1040,7 @@ struct AgentDispatchCoordinatorTests {
                 AgentSession(
                     title: "Graph",
                     workspaceRootPath: "/tmp/Graph",
+                    presentationScope: .dispatchBoard,
                     currentGoal: AgentGoal(
                         statement: "并行任务",
                         checklist: [
@@ -1095,6 +1100,7 @@ struct AgentDispatchCoordinatorTests {
         let session = AgentSession(
             title: "Orchestrator MVP",
             workspaceRootPath: "/tmp/Orchestrator",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(
                 statement: "交付可交互调度台",
                 checklist: [
@@ -1262,12 +1268,14 @@ struct AgentDispatchCoordinatorTests {
         let first = AgentSession(
             title: "First",
             workspaceRootPath: "/tmp/first",
+            presentationScope: .dispatchBoard,
             updatedAt: Date(timeIntervalSince1970: 10),
             currentGoal: AgentGoal(statement: "第一项", checklist: [])
         )
         let second = AgentSession(
             title: "Second",
             workspaceRootPath: "/tmp/second",
+            presentationScope: .dispatchBoard,
             updatedAt: Date(timeIntervalSince1970: 20),
             currentGoal: AgentGoal(statement: "第二项", checklist: [])
         )
@@ -1363,6 +1371,7 @@ struct AgentDispatchCoordinatorTests {
         let remoteRuntimeID = UUID()
         let session = AgentSession(
             workspaceRootPath: "/tmp/Project",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(statement: "跨环境交付", checklist: [.init(text: "实现")])
         )
         coordinator.synchronize(with: [session])
@@ -1396,6 +1405,7 @@ struct AgentDispatchCoordinatorTests {
         let session = AgentSession(
             id: sessionID,
             workspaceRootPath: "/tmp/Project",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(statement: "旧目标", checklist: [.init(text: "实现")])
         )
         let unbound = AgentDispatchGoal(
@@ -1432,6 +1442,7 @@ struct AgentDispatchCoordinatorTests {
         let session = AgentSession(
             id: sessionID,
             workspaceRootPath: "/tmp/Project",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(statement: "迁移", checklist: [.init(text: "实现")])
         )
         let legacy = AgentDispatchGoal(
@@ -1543,7 +1554,7 @@ struct AgentDispatchCoordinatorTests {
 
         let appState = AppState()
         appState.agentDispatchCoordinator.resetForTests()
-        _ = appState.startNewAgentSession(inWorkspaceAt: first.path)
+        _ = appState.startDispatchGoalSession(inWorkspaceAt: first.path)
         appState.setAgentInteractionMode(.goal)
         appState.setAgentGoal(statement: "固定项目", items: ["实现"])
         appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
@@ -1573,7 +1584,7 @@ struct AgentDispatchCoordinatorTests {
 
         let appState = AppState()
         appState.agentDispatchCoordinator.resetForTests()
-        _ = appState.startNewAgentSession(
+        _ = appState.startDispatchGoalSession(
             inWorkspaceAt: FileManager.default.temporaryDirectory.path
         )
         appState.setAgentInteractionMode(.goal)
@@ -1722,6 +1733,7 @@ struct AgentDispatchCoordinatorTests {
         let older = AgentSession(
             title: "Older",
             workspaceRootPath: workspace,
+            presentationScope: .dispatchBoard,
             updatedAt: Date(timeIntervalSince1970: 10),
             currentGoal: AgentGoal(
                 statement: "旧项目",
@@ -1731,6 +1743,7 @@ struct AgentDispatchCoordinatorTests {
         let newer = AgentSession(
             title: "Newer",
             workspaceRootPath: workspace,
+            presentationScope: .dispatchBoard,
             updatedAt: Date(timeIntervalSince1970: 20),
             currentGoal: AgentGoal(
                 statement: "新项目",
@@ -1895,6 +1908,6 @@ private struct DefaultsSandbox {
     let defaults: UserDefaults
 
     func cleanup() {
-        defaults.removePersistentDomain(forName: suiteName)
+        TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
     }
 }

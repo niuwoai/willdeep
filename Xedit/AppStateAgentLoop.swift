@@ -1414,6 +1414,32 @@ extension AppState {
                     }
                 }
 
+                if let validationError = AgentToolRegistry.argumentValidationError(
+                    for: call.toolName,
+                    arguments: argsDict
+                ) {
+                    let record = AgentToolCall(
+                        messageID: assistantID,
+                        externalID: call.externalID,
+                        toolName: call.toolName,
+                        arguments: argsDict,
+                        risk: .read,
+                        status: .failed,
+                        approvalSource: nil
+                    )
+                    var failed = record
+                    failed.errorMessage = validationError
+                    runtime.toolCalls.append(failed)
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: "\(validationError) Re-emit the tool call with arguments matching its schema. No action was executed and no user approval is needed.",
+                        outcomeStatus: .failed,
+                        errorMessage: validationError
+                    )
+                    continue
+                }
+
                 // Goal mode must stay autonomous. Workspace rebinding is not
                 // advertised there; this is the final guard for stale
                 // provider schemas or hallucinated calls. Session rename is
@@ -1508,6 +1534,9 @@ extension AppState {
                         arguments: argsDict,
                         risk: risk,
                         rootDirectory: workspaceURL,
+                        additionalWorkspaceRoots: Array(
+                            self.agentWorkspaceRoots(for: runtime.session).dropFirst()
+                        ),
                         interactionMode: runtime.interactionMode,
                         approvalMode: runtime.approvalMode,
                         conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
@@ -2368,6 +2397,7 @@ extension AppState {
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .failed
                         runtime.toolCalls[index].errorMessage = errorMessage
+                        runtime.toolCalls[index].commandExitCode = (error as? AgentToolError)?.completedCommandExitCode
                     }
                     AgentSandboxAuditLog.append(
                         toolName: call.toolName,

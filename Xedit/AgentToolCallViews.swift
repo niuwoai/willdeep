@@ -620,7 +620,9 @@ struct AgentToolCallGroup: View {
 
     private var groupBorderColor: Color {
         if containsInteractiveCall { return appState.editorSettings.interfaceSkin.palette.accent.opacity(0.28) }
-        if calls.contains(where: { $0.status == .failed }) { return Color.orange.opacity(0.28) }
+        if calls.contains(where: { $0.status == .failed && $0.commandExitCode == nil }) {
+            return Color.orange.opacity(0.28)
+        }
         return Color.primary.opacity(0.04)
     }
 }
@@ -636,7 +638,7 @@ struct AgentLiveActivityTimeline: View {
     var body: some View {
         let presentation = AgentLiveActivityTimelinePresentation(calls: calls)
         let detailCallIDs = Set(presentation.detailCalls(isExpanded: isExpanded).map(\.id))
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: AgentDesign.liveActivityRowSpacing) {
             if isExpanded, presentation.hiddenOperationCount > 0 {
                 AgentActivityTimelineSummaryRow(count: presentation.hiddenOperationCount)
             }
@@ -866,7 +868,12 @@ private struct AgentToolActivityTimelineRow: View {
         case .running, .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
             return appState.editorSettings.interfaceSkin.palette.accent
         case .failed:
-            return .orange
+            // A command that ran and exited non-zero is an answer, not an
+            // alarm — the Agent reads it and moves on. Orange stays for
+            // failures that actually need attention.
+            return presentation.isCompletedCommandFailure
+                ? Color(nsColor: .secondaryLabelColor)
+                : .orange
         case .succeeded, .denied:
             return Color(nsColor: .secondaryLabelColor)
         }
@@ -880,7 +887,9 @@ private struct AgentToolActivityTimelineRow: View {
         case .running:
             return .primary
         case .failed:
-            return .orange
+            return presentation.isCompletedCommandFailure
+                ? Color(nsColor: .secondaryLabelColor)
+                : .orange
         case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
             return appState.editorSettings.interfaceSkin.palette.accent
         case .succeeded, .denied:
@@ -2575,7 +2584,7 @@ struct AgentToolCallCard: View {
         case .awaitingUserAnswer: return askUserAccentColor
         case .running: return .secondary
         case .succeeded: return .secondary
-        case .failed: return .orange
+        case .failed: return call.commandExitCode == nil ? .orange : .secondary
         case .denied: return .secondary
         }
     }
@@ -2588,7 +2597,7 @@ struct AgentToolCallCard: View {
         case .pendingApproval: return appState.editorSettings.interfaceSkin.palette.accent
         case .awaitingConfirm: return appState.editorSettings.interfaceSkin.palette.secondaryAccent
         case .awaitingUserAnswer: return askUserAccentColor
-        case .failed: return .orange
+        case .failed: return call.commandExitCode == nil ? .orange : .secondary
         case .running, .succeeded, .denied: return .secondary
         }
     }
@@ -2727,7 +2736,10 @@ struct AgentToolCallCard: View {
         switch call.status {
         case .pendingApproval, .awaitingConfirm: return appState.editorSettings.interfaceSkin.palette.hairline
         case .awaitingUserAnswer: return askUserAccentColor.opacity(0.4)
-        case .failed: return Color.orange.opacity(0.4)
+        case .failed:
+            return call.commandExitCode == nil
+                ? Color.orange.opacity(0.4)
+                : Color.secondary.opacity(0.3)
         case .denied: return Color.secondary.opacity(0.3)
         default: return Color.clear
         }

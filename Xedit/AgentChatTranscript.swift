@@ -432,13 +432,12 @@ struct AgentChatTranscript: View {
                                 // The parent transcript reserves 20 pt between
                                 // separate messages. This activity belongs to
                                 // the prose immediately above, so cancel that
-                                // turn gap and restore a normal 6 pt line
-                                // rhythm instead.
+                                // turn gap and leave 0.7× the configured body
+                                // font size before the metadata group.
                                 .padding(
                                     .top,
-                                    AgentChatTypography.lineHeight(
-                                        fontSize: appState.agentChatBaseFontSize,
-                                        lineHeightMultiple: appState.agentChatLineHeightMultiple
+                                    AgentDesign.assistantMetadataTopSpacing(
+                                        baseFontSize: appState.agentChatBaseFontSize
                                     )
                                         - AgentDesign.messageVerticalSpacing
                                 )

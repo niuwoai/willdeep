@@ -158,11 +158,16 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
     let systemImage: String
     let status: AgentToolCallStatus
     let isQueuedForApproval: Bool
+    /// The call failed only in the sense that a command ran and returned
+    /// non-zero. The Agent reads that as an answer and keeps going, so the
+    /// row stays in the neutral palette instead of the alarming one.
+    let isCompletedCommandFailure: Bool
 
     init(call: AgentToolCall) {
         id = call.id
         status = call.status
         isQueuedForApproval = AgentSerialToolApprovalQueue.contains(call)
+        isCompletedCommandFailure = call.status == .failed && call.commandExitCode != nil
         systemImage = Self.systemImage(for: call)
         title = Self.statusTitle(for: call)
         detail = Self.detail(for: call)

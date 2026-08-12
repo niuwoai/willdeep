@@ -453,6 +453,7 @@ private struct AgentArtifactActivityCard: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .agentQuietMenuChrome()
             .focusable(false)
             .help("选择产物")
             .cursor(.arrow)
@@ -649,6 +650,7 @@ private struct AgentDevServerActivityCard: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .agentQuietMenuChrome()
             .focusable(false)
             .help("预览或管理工作区 Dev Server")
             .cursor(.arrow)
@@ -718,6 +720,9 @@ private struct AgentDevServerActivityCard: View {
         _ = try? appState.agentJobRegistry.start(
             command: job.command,
             workingDirectory: workingDirectory,
+            additionalWorkspaceRoots: appState.activeRuntime.map {
+                appState.agentWorkspaceRoots(for: $0.session)
+            } ?? [],
             runtimeID: runtimeID,
             timeoutSeconds: nil,
             sandboxMode: .workspaceWriteNetwork,

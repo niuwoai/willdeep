@@ -35,9 +35,9 @@
 - Profile Store 测试验证内置 Profile 的 Provider/模型覆盖可持久化，且 Provider 模型目录不会串到其他 Provider。
 - 会话侧栏尺寸契约测试验证最小宽度为 230 pt，并复用右侧面板的 12 pt 命中区与 1 pt 分隔线。
 - 拖拽实现沿用现有 transcript scroll observer，并在拖拽期间冻结聊天列宽度，避免逐帧重排造成正文位置跳顶。
-- 定向 XCTest 55/55 通过；追加原生 Profile 渲染验收后，`AgentDispatchCoordinatorTests` 52/52 通过。
+- 合并最新 `develop` 后的定向 XCTest 56/56 通过，包含原生 Profile 渲染验收与左侧拖拽尺寸契约。
 - Go 回归 `go test ./...` 通过。
-- 版本一致性检查通过：`1.248.0-rc1`；主应用构建号 359，Help 与 Computer Use Helper 构建号 275。
+- 版本一致性检查通过：`1.248.0-rc1`；主应用构建号 369，Help 与 Computer Use Helper 构建号 285。
 - 任务相关源码的复杂度守卫通过：本次变更文件均低于 3000 行；`git diff --check` 通过。仓库全量扫描仍报告一个未触及的既有文件 `ComputerUseHelper/main.swift` 为 3023 行，不属于本次改动范围。
 
 ## Open questions

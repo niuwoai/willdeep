@@ -24,6 +24,7 @@ struct AgentAlwaysAllowedCommand: Codable, Equatable, Identifiable {
 
 enum AgentSandboxMode: String, Codable, Equatable {
     case readOnly
+    case readOnlyNetwork
     case workspaceWrite
     case workspaceWriteNetwork
     case escalated
@@ -566,6 +567,7 @@ enum AgentSandboxPolicy {
 
         var needsWorkspaceWrite = false
         var needsWorkspaceNetwork = false
+        var needsReadOnlyNetwork = false
         var needsEscalation = expansionResolution.requiresJudgment
         var needsConfirmation = false
         var reasons: [String] = expansionResolution.requiresJudgment
@@ -761,6 +763,7 @@ enum AgentSandboxPolicy {
             } else if networkHeads.contains(head) {
                 switch classifyNetworkReadOnly(head: head, tokens: tokens) {
                 case .alwaysSafe:
+                    needsReadOnlyNetwork = true
                     break
                 case .alwaysDangerous:
                     needsEscalation = true
@@ -857,6 +860,16 @@ enum AgentSandboxPolicy {
             )
         }
 
+        if needsReadOnlyNetwork {
+            return AgentSandboxDecision(
+                mode: .readOnlyNetwork,
+                requiresUserApproval: false,
+                requiresTypedConfirmation: false,
+                reason: "Command uses a statically verified read-only network operation with filesystem writes denied.",
+                prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
+            )
+        }
+
         return AgentSandboxDecision(
             mode: .readOnly,
             requiresUserApproval: false,
@@ -866,10 +879,18 @@ enum AgentSandboxPolicy {
         )
     }
 
-    nonisolated static func canAutoApproveWorkspaceWriteCommand(command: String, rootDirectory: URL?) -> Bool {
+    nonisolated static func canAutoApproveWorkspaceWriteCommand(
+        command: String,
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = []
+    ) -> Bool {
         guard let rootDirectory else { return false }
 
-        let decision = commandDecision(command: command, rootDirectory: rootDirectory)
+        let decision = commandDecision(
+            command: command,
+            rootDirectory: rootDirectory,
+            additionalWorkspaceRoots: additionalWorkspaceRoots
+        )
         guard (decision.mode == .workspaceWrite || decision.mode == .workspaceWriteNetwork),
               decision.requiresUserApproval,
               !decision.requiresTypedConfirmation else {
@@ -912,7 +933,7 @@ enum AgentSandboxPolicy {
                     tokens: tokens,
                     workingDirectory: workingDirectory,
                     rootDirectory: root,
-                    additionalWorkspaceRoots: []
+                    additionalWorkspaceRoots: additionalWorkspaceRoots
                 ) else {
                     return false
                 }
@@ -938,7 +959,11 @@ enum AgentSandboxPolicy {
                         ? resolveRelativeDirectoryHop(next, workingDirectory: workingDirectory)
                         : nil)
                     guard let resolved,
-                          isInsideWorkspace(resolved, rootDirectory: root) else {
+                          isInsideWorkspace(
+                            resolved,
+                            rootDirectory: root,
+                            additionalWorkspaceRoots: additionalWorkspaceRoots
+                          ) else {
                         return false
                     }
                     if !segment.runsInPipeline {
@@ -970,7 +995,11 @@ enum AgentSandboxPolicy {
                       let resolved = resolvePath(token, workingDirectory: workingDirectory, rootDirectory: root) else {
                     continue
                 }
-                if !isInsideWorkspace(resolved, rootDirectory: root) {
+                if !isInsideWorkspace(
+                    resolved,
+                    rootDirectory: root,
+                    additionalWorkspaceRoots: additionalWorkspaceRoots
+                ) {
                     return false
                 }
             }
@@ -1224,7 +1253,8 @@ enum AgentSandboxPolicy {
         executableURL: URL,
         arguments: [String],
         mode: AgentSandboxMode,
-        rootDirectory: URL?
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = []
     ) -> AgentSandboxLaunch {
         if mode == .escalated
             || !FileManager.default.isExecutableFile(atPath: sandboxExecPath) {
@@ -1237,7 +1267,11 @@ enum AgentSandboxPolicy {
             executableURL: URL(fileURLWithPath: sandboxExecPath),
             arguments: [
                 "-p",
-                seatbeltProfile(mode: mode, rootDirectory: rootDirectory),
+                seatbeltProfile(
+                    mode: mode,
+                    rootDirectory: rootDirectory,
+                    additionalWorkspaceRoots: additionalWorkspaceRoots
+                ),
                 executableURL.path,
             ] + arguments
         )
@@ -1253,7 +1287,7 @@ enum AgentSandboxPolicy {
             return true
         case .workspaceWrite, .workspaceWriteNetwork:
             return false
-        case .readOnly:
+        case .readOnly, .readOnlyNetwork:
             break
         }
 
@@ -1362,6 +1396,8 @@ enum AgentSandboxPolicy {
             return nil
         case .readOnly:
             restrictions = "reads allowed everywhere; writes denied except the temp dir; network denied"
+        case .readOnlyNetwork:
+            restrictions = "reads allowed everywhere; writes denied except the temp dir; network allowed"
         case .workspaceWrite:
             restrictions = "writes allowed only inside the workspace and temp dir; network denied"
         case .workspaceWriteNetwork:
@@ -1401,20 +1437,35 @@ enum AgentSandboxPolicy {
         // 探测输出），交互探测会打开 /dev/tty；(deny default) 下不放行会导致命令恒 EPERM。
         var writeAllows: [String] = [
             "(literal \"/dev/null\")",
-            "(literal \"/dev/tty\")",
-            "(subpath \(profileString(FileManager.default.temporaryDirectory.standardizedFileURL.path)))"
+            "(literal \"/dev/tty\")"
         ]
+        var seen = Set<String>()
+        // Seatbelt matches the kernel-resolved vnode path, so a root spelled
+        // through a symlink never matches its own subpath rule: `/tmp/x` and
+        // `$TMPDIR` (`/var/folders/…`) resolve to `/private/…` and were
+        // silently unwritable. Emit the realpath alongside the standardized
+        // spelling for every allowed root, temporary directory included.
+        func allowSubpath(_ url: URL) {
+            let standardized = url.standardizedFileURL.path
+            var paths = [standardized]
+            if let resolvedPointer = realpath(standardized, nil) {
+                paths.append(String(cString: resolvedPointer))
+                free(resolvedPointer)
+            }
+            for path in paths where seen.insert(path).inserted {
+                writeAllows.append("(subpath \(profileString(path)))")
+            }
+        }
+        allowSubpath(FileManager.default.temporaryDirectory)
         if mode == .workspaceWrite || mode == .workspaceWriteNetwork {
-            let roots = [rootDirectory].compactMap { $0 } + additionalWorkspaceRoots
-            var seen = Set<String>()
-            for rootURL in roots {
-                let root = rootURL.standardizedFileURL.path
-                guard seen.insert(root).inserted else { continue }
-                writeAllows.append("(subpath \(profileString(root)))")
+            for rootURL in [rootDirectory].compactMap({ $0 }) + additionalWorkspaceRoots {
+                allowSubpath(rootURL)
             }
         }
         let writeRule = "(allow file-write* \(writeAllows.joined(separator: " ")))"
-        let networkRule = mode == .workspaceWriteNetwork ? "(allow network*)" : "(deny network*)"
+        let networkRule = mode == .readOnlyNetwork || mode == .workspaceWriteNetwork
+            ? "(allow network*)"
+            : "(deny network*)"
         return """
         (version 1)
         (deny default)

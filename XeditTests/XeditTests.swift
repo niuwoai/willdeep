@@ -987,6 +987,8 @@ struct WillDeepTests {
     @Test("MCP fully-trusted servers auto-approve every call")
     @MainActor
     func testMCPFullyTrustedServerAutoApproval() async {
+        // 顺手扫掉上一轮测试遗留的壳 plist（进程内只跑一次）。
+        _ = TestDefaultsHygiene.sweepStaleSuiteFiles
         let suiteName = "com.willdeep.mcp.test.\(UUID().uuidString)"
         guard let sandbox = UserDefaults(suiteName: suiteName) else {
             Issue.record("cannot allocate sandbox defaults suite")
@@ -995,8 +997,11 @@ struct WillDeepTests {
         sandbox.removePersistentDomain(forName: suiteName)
         AgentMCPSettingsStore._setTestDefaultsOverride(sandbox)
         defer {
-            sandbox.removePersistentDomain(forName: suiteName)
             AgentMCPSettingsStore._setTestDefaultsOverride(nil)
+            // 只 removePersistentDomain 会留 ~42 字节壳 plist，这个测试
+            // 曾因此在 ~/Library/Preferences 攒下 202 个壳；完整收尾见
+            // TestDefaultsHygiene。
+            TestDefaultsHygiene.cleanup(suite: sandbox, named: suiteName)
         }
 
         let serverName = "willdeep-test-own-mcp"

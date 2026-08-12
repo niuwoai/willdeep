@@ -741,20 +741,15 @@ enum AgentChatHistoryRenderer {
             let inlineToolCalls = inlineGroup?.calls ?? []
             if let inlineGroup, !inlineToolCalls.isEmpty {
                 if hasMessageBubbleContent {
-                    // One full empty body row separates the answer from the
-                    // metadata group. The tool summary and footer below it
-                    // remain adjacent and share the configured typography.
-                    result.append(NSAttributedString(
-                        string: "\n\n",
-                        attributes: [
-                            .font: bodyFont,
-                            .paragraphStyle: bodyParagraphStyle(
-                                for: message.role,
-                                layoutWidth: layoutWidth,
-                                lineSpacing: bodyLineSpacing
-                            ),
-                        ]
-                    ))
+                    // Keep the answer and metadata distinct, but use 0.7×
+                    // the configured body font size instead of a complete
+                    // blank body row. Tool summary and footer remain adjacent.
+                    _ = appendAssistantMetadataGroupSeparator(
+                        to: result,
+                        bodyFont: bodyFont,
+                        layoutWidth: layoutWidth,
+                        lineSpacing: bodyLineSpacing
+                    )
                 }
                 appendToolCallGroup(
                     inlineGroup,
@@ -776,22 +771,30 @@ enum AgentChatHistoryRenderer {
                activityHeadline == nil,
                 shouldShowFooter(for: message, body: body) {
                 let messageBodyEnd = result.length
-                let footerSeparator = message.role == .assistant
-                    && hasMessageBubbleContent
-                    && inlineToolCalls.isEmpty
-                    ? "\n\n"
-                    : "\n"
-                result.append(NSAttributedString(
-                    string: footerSeparator,
-                    attributes: [
-                        .font: bodyFont,
-                        .paragraphStyle: bodyParagraphStyle(
-                            for: message.role,
-                            layoutWidth: layoutWidth,
-                            lineSpacing: bodyLineSpacing
-                        ),
-                    ]
-                ))
+                let assistantMetadataSpacerRange: NSRange?
+                if message.role == .assistant,
+                   hasMessageBubbleContent,
+                   inlineToolCalls.isEmpty {
+                    assistantMetadataSpacerRange = appendAssistantMetadataGroupSeparator(
+                        to: result,
+                        bodyFont: bodyFont,
+                        layoutWidth: layoutWidth,
+                        lineSpacing: bodyLineSpacing
+                    )
+                } else {
+                    assistantMetadataSpacerRange = nil
+                    result.append(NSAttributedString(
+                        string: "\n",
+                        attributes: [
+                            .font: bodyFont,
+                            .paragraphStyle: bodyParagraphStyle(
+                                for: message.role,
+                                layoutWidth: layoutWidth,
+                                lineSpacing: bodyLineSpacing
+                            ),
+                        ]
+                    ))
+                }
                 let footerStart = result.length
                 appendMessageFooter(
                     for: turnPresentation?.summaryMessage ?? message,
@@ -820,6 +823,15 @@ enum AgentChatHistoryRenderer {
                         userMessageID: message.role == .user ? message.id : nil,
                         foregroundColor: nil
                     )
+                    if let assistantMetadataSpacerRange {
+                        applyAssistantMetadataSpacerStyle(
+                            to: result,
+                            range: assistantMetadataSpacerRange,
+                            bodyFont: bodyFont,
+                            layoutWidth: layoutWidth,
+                            lineSpacing: bodyLineSpacing
+                        )
+                    }
                     let footerRange = NSRange(location: footerStart, length: result.length - footerStart)
                     result.addAttribute(
                         .paragraphStyle,
@@ -847,6 +859,69 @@ enum AgentChatHistoryRenderer {
         }
 
         return result
+    }
+
+    private static func appendAssistantMetadataGroupSeparator(
+        to result: NSMutableAttributedString,
+        bodyFont: NSFont,
+        layoutWidth: CGFloat,
+        lineSpacing: CGFloat
+    ) -> NSRange {
+        let bodyStyle = bodyParagraphStyle(
+            for: .assistant,
+            layoutWidth: layoutWidth,
+            lineSpacing: lineSpacing
+        )
+        result.append(NSAttributedString(
+            string: "\n",
+            attributes: [
+                .font: bodyFont,
+                .paragraphStyle: bodyStyle,
+            ]
+        ))
+
+        let spacerRange = NSRange(location: result.length, length: 1)
+        result.append(NSAttributedString(string: "\n"))
+        applyAssistantMetadataSpacerStyle(
+            to: result,
+            range: spacerRange,
+            bodyFont: bodyFont,
+            layoutWidth: layoutWidth,
+            lineSpacing: lineSpacing
+        )
+        return spacerRange
+    }
+
+    private static func applyAssistantMetadataSpacerStyle(
+        to result: NSMutableAttributedString,
+        range: NSRange,
+        bodyFont: NSFont,
+        layoutWidth: CGFloat,
+        lineSpacing: CGFloat
+    ) {
+        let spacerHeight = AgentDesign.assistantMetadataTopSpacing(
+            baseFontSize: bodyFont.pointSize
+        )
+        let spacerStyle = bodyParagraphStyle(
+            for: .assistant,
+            layoutWidth: layoutWidth,
+            lineSpacing: lineSpacing
+        ).mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        spacerStyle.minimumLineHeight = spacerHeight
+        spacerStyle.maximumLineHeight = spacerHeight
+        spacerStyle.lineSpacing = 0
+        spacerStyle.paragraphSpacing = 0
+        let spacerFont = NSFont(
+            descriptor: bodyFont.fontDescriptor,
+            size: max(1, spacerHeight)
+        ) ?? NSFont.systemFont(ofSize: max(1, spacerHeight))
+        result.addAttributes(
+            [
+                .font: spacerFont,
+                .paragraphStyle: spacerStyle,
+            ],
+            range: range
+        )
     }
 
     struct ToolCallHistoryGroup {

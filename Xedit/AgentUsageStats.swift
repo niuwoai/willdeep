@@ -195,7 +195,14 @@ struct AgentFailedToolCallReviewRow: Identifiable, Equatable {
     var id: String { "\(toolName)|\(occurredAt.timeIntervalSinceReferenceDate)|\(errorSummary)" }
 }
 
-nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable {
+/// Codable so `AgentSessionStore` can persist the snapshot into the
+/// `usage-v1` sidecar. Synthesized keys are part of the sidecar contract:
+/// adding a non-optional field without bumping the sidecar schema version
+/// makes old sidecars fail decoding (safe: they rebuild); an optional
+/// field decodes as nil from old sidecars and stays stale until the source
+/// signature changes — bump `UsageCatalogEntry.currentSchemaVersion` when
+/// the dashboard must see the new field immediately.
+nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
     let id: UUID
     var modelID: String?
     var providerID: String?
@@ -278,7 +285,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable {
     }
 }
 
-nonisolated struct AgentUsageMessageSnapshot: Equatable {
+nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
     var role: AgentRole
     var contentCharacterCount: Int
     var reasoningCharacterCount: Int
@@ -665,7 +672,6 @@ enum AgentUsageStats {
         var tokenCountByDay: [Date: Int] = [:]
         var sessionIDsByDay: [Date: Set<UUID>] = [:]
         var costByDay: [Date: Double] = [:]
-        var daysWithUnpricedUsage = Set<Date>()
 
         for session in sessions {
             for message in session.messages where monthInterval.contains(message.createdAt) {
@@ -676,10 +682,10 @@ enum AgentUsageStats {
                 sessionIDsByDay[day, default: []].insert(session.id)
 
                 guard message.role == .assistant else { continue }
+                // Unpriced messages (no price row / delegated CLI) count as
+                // free instead of vetoing the whole day's cost.
                 if let cost = estimatedCostUSD(for: message, session: session) {
                     costByDay[day, default: 0] += cost
-                } else {
-                    daysWithUnpricedUsage.insert(day)
                 }
             }
         }
@@ -696,9 +702,7 @@ enum AgentUsageStats {
             return AgentDailyUsage(
                 date: day,
                 tokenCount: tokenCountByDay[day] ?? 0,
-                estimatedCostUSD: daysWithUnpricedUsage.contains(day)
-                    ? nil
-                    : (costByDay[day] ?? 0),
+                estimatedCostUSD: costByDay[day] ?? 0,
                 sessionCount: sessionIDsByDay[day]?.count ?? 0
             )
         }
@@ -1241,6 +1245,11 @@ private enum AgentModelPricing {
             candidates.append("zhipu")
             candidates.append("bigmodel")
         }
+        // someim-* models also show up under provider "custom" when routed
+        // through an OpenAI-compatible relay; anchor them back to some-im.
+        if model.contains("someim") {
+            candidates.append("some-im")
+        }
         if model.hasPrefix("gpt-") || model.contains("/gpt-") || model.hasPrefix("o1") || model.hasPrefix("o3") || model.hasPrefix("o4") {
             candidates.append(AgentProviderPreset.openAIID)
             candidates.append("openai-responses")
@@ -1276,6 +1285,13 @@ private enum AgentModelPricing {
     // by the provider's public API pricing page. Keep model-specific rows
     // before broader family rows so substring matching stays deterministic.
     private static let prices: [AgentModelPrice] = [
+        // gpt-5.6 tiers must precede the broad "gpt-5" family row, otherwise
+        // the substring match silently bills them at gpt-5 rates. Cached input
+        // is 10% of the standard rate (OpenAI pricing page, 2026-08).
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.6-sol"], inputPerMillion: 5.0, cachedInputPerMillion: 0.5, cacheWritePerMillion: nil, outputPerMillion: 30.0),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.6-terra"], inputPerMillion: 2.0, cachedInputPerMillion: 0.2, cacheWritePerMillion: nil, outputPerMillion: 12.0),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.6-luna"], inputPerMillion: 0.20, cachedInputPerMillion: 0.02, cacheWritePerMillion: nil, outputPerMillion: 1.20),
+        AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.6"], inputPerMillion: 5.0, cachedInputPerMillion: 0.5, cacheWritePerMillion: nil, outputPerMillion: 30.0),
         AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.5-pro"], inputPerMillion: 30.0, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 180.0),
         AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.5"], inputPerMillion: 5.0, cachedInputPerMillion: 0.5, cacheWritePerMillion: nil, outputPerMillion: 30.0),
         AgentModelPrice(providerIDs: ["openai", "openai-responses"], modelHints: ["gpt-5.4-mini"], inputPerMillion: 0.75, cachedInputPerMillion: 0.075, cacheWritePerMillion: nil, outputPerMillion: 4.5),
@@ -1308,6 +1324,10 @@ private enum AgentModelPricing {
         AgentModelPrice(providerIDs: ["deepseek"], modelHints: ["deepseek-v4-pro"], inputPerMillion: 0.435, cachedInputPerMillion: 0.003625, cacheWritePerMillion: nil, outputPerMillion: 0.87),
         AgentModelPrice(providerIDs: ["deepseek"], modelHints: ["deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"], inputPerMillion: 0.14, cachedInputPerMillion: 0.0028, cacheWritePerMillion: nil, outputPerMillion: 0.28),
 
+        // some.im 托管系列（someim-auto / someim-code / someim-coding-plan 等）
+        // 无公开牌价，按 deepseek-v4-flash 的价目估算。
+        AgentModelPrice(providerIDs: ["some-im"], modelHints: ["someim-"], inputPerMillion: 0.14, cachedInputPerMillion: 0.0028, cacheWritePerMillion: nil, outputPerMillion: 0.28),
+
         // qwen3.7-max/plus — official 阿里云百炼 (DashScope) list price 原价,
         // 元/百万 token, from the console pricing card (2026-06). cny() → USD.
         // Max is a flat rate; Plus is tiered by input length — we store the
@@ -1322,6 +1342,9 @@ private enum AgentModelPricing {
         AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwen-long"], inputPerMillion: 0.042, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.083),
         AgentModelPrice(providerIDs: ["dashscope"], modelHints: ["qwq"], inputPerMillion: 0.22, cachedInputPerMillion: nil, cacheWritePerMillion: nil, outputPerMillion: 0.88),
 
+        // kimi-k3 — Moonshot official API list price (USD/M, 2026-07); cache
+        // hit bills at $0.30/M, flat across the full context window.
+        AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["kimi-k3"], inputPerMillion: 3.0, cachedInputPerMillion: 0.30, cacheWritePerMillion: nil, outputPerMillion: 15.0),
         AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["kimi-k2.7-code-highspeed"], inputPerMillion: cny(13.0), cachedInputPerMillion: cny(2.6), cacheWritePerMillion: nil, outputPerMillion: cny(54.0)),
         AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["kimi-k2.7-code"], inputPerMillion: cny(6.5), cachedInputPerMillion: cny(1.3), cacheWritePerMillion: nil, outputPerMillion: cny(27.0)),
         AgentModelPrice(providerIDs: ["kimi", "moonshot"], modelHints: ["kimi-k2.6"], inputPerMillion: cny(6.5), cachedInputPerMillion: cny(1.1), cacheWritePerMillion: nil, outputPerMillion: cny(27.0)),

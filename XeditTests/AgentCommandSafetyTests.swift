@@ -202,6 +202,66 @@ extension WillDeepTests {
         }
     }
 
+    @Test("run_command auto-approves rebuildable cleanup inside a project's additional folders")
+    func testRebuildableWorkspaceCleanupPolicyWithAdditionalRoots() {
+        let workspace = URL(fileURLWithPath: "/tmp/willdeep-cleanup-workspace").standardizedFileURL
+        let secondary = URL(fileURLWithPath: "/tmp/willdeep-cleanup-secondary").standardizedFileURL
+
+        struct Case {
+            let command: String
+            let expected: Bool
+            let note: String
+        }
+        let cases = [
+            Case(
+                command: "cd \(secondary.path) && rm -rf node_modules",
+                expected: true,
+                note: "relative cleanup after cd into the second project folder"
+            ),
+            Case(
+                command: "rm -rf \(secondary.path)/node_modules",
+                expected: true,
+                note: "absolute cleanup target inside the second project folder"
+            ),
+            Case(
+                command: "cd \(secondary.path)/web && rm -rf node_modules dist",
+                expected: true,
+                note: "nested subdirectory of the second project folder"
+            ),
+            Case(
+                command: "rm -rf /tmp/willdeep-cleanup-elsewhere/node_modules",
+                expected: false,
+                note: "path outside every authorized root stays manual"
+            ),
+            Case(
+                command: "rm -rf \(secondary.path)",
+                expected: false,
+                note: "the authorized root itself is never a cleanup target"
+            ),
+            Case(
+                command: "cd \(secondary.path) && rm -rf src",
+                expected: false,
+                note: "non-rebuildable directory stays manual even inside the second root"
+            ),
+        ]
+
+        for testCase in cases {
+            let approved = AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+                command: testCase.command,
+                rootDirectory: workspace,
+                additionalWorkspaceRoots: [secondary]
+            )
+            #expect(approved == testCase.expected, "\(testCase.note): \(testCase.command)")
+        }
+
+        // Without the additional root the same second-folder cleanup must
+        // still fall back to a manual approval card.
+        #expect(!AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+            command: "cd \(secondary.path) && rm -rf node_modules",
+            rootDirectory: workspace
+        ))
+    }
+
     @Test("SafeCommand: shell wrappers with harmless sentinel commands auto-approve")
     func testSafeCommandShellWrapperSentinel() {
         #expect(SafeCommand.classify(command: #"/bin/sh -lc "echo DOCKER_DONE""#) == .alwaysSafe)
@@ -875,6 +935,7 @@ extension WillDeepTests {
         #expect(curlPostRisk == .write)
         #expect(curlOutputRisk == .write)
         #expect(curlMetadataRisk == .write)
+
     }
 
     @Test("run_command uses home directory when no workspace is bound")
@@ -947,6 +1008,88 @@ extension WillDeepTests {
         #expect(path.contains("/usr/bin"))
     }
 
+}
+
+@Suite
+@MainActor
+struct AgentScheduledReadOnlySSHTests {
+    @Test("plain SSH inherits only a recursively proven read-only remote command")
+    func classifiesRemoteLogInspectionWithoutBlessingMutations() {
+        #expect(SafeCommand.classify(
+            command: #"ssh root@h1.niuwoai.com 'journalctl -u niuwo --since "24 hours ago" --no-pager'"#
+        ) == .alwaysSafe)
+        #expect(SafeCommand.classify(
+            command: #"ssh -p 2222 root@h1.niuwoai.com 'systemctl show niuwo -p ActiveEnterTimestamp -p RestartCount; systemctl status sslcat --no-pager'"#
+        ) == .alwaysSafe)
+        #expect(SafeCommand.classify(
+            command: #"ssh root@h1.niuwoai.com 'journalctl -u niuwo --since "24 hours ago" --no-pager | grep -Ei "error|failed|panic" | head -20'"#
+        ) == .alwaysSafe)
+
+        #expect(SafeCommand.classify(
+            command: "ssh root@h1.niuwoai.com 'systemctl restart niuwo'"
+        ) == .needsJudgment)
+        #expect(SafeCommand.classify(
+            command: "ssh root@h1.niuwoai.com 'systemctl cat niuwo'"
+        ) == .needsJudgment)
+        #expect(SafeCommand.classify(
+            command: "ssh root@h1.niuwoai.com 'journalctl --rotate'"
+        ) == .needsJudgment)
+        #expect(SafeCommand.classify(
+            command: "ssh root@h1.niuwoai.com 'journalctl -u niuwo > /tmp/niuwo.log'"
+        ) == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "ssh root@h1.niuwoai.com") == .needsJudgment)
+        #expect(SafeCommand.classify(
+            command: #"ssh -o ProxyCommand=helper root@h1.niuwoai.com 'journalctl -u niuwo'"#
+        ) == .needsJudgment)
+    }
+
+    @Test("read-only SSH selects an unattended network sandbox")
+    func selectsReadOnlyNetworkWithoutApproval() {
+        let workspace = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let decision = AgentSandboxPolicy.commandDecision(
+            command: #"ssh root@h1.niuwoai.com 'journalctl -u niuwo --since "24 hours ago" --no-pager'"#,
+            rootDirectory: workspace
+        )
+
+        #expect(decision.mode == .readOnlyNetwork)
+        #expect(!decision.requiresUserApproval)
+        #expect(!decision.requiresTypedConfirmation)
+    }
+
+    @Test("read-only network sandbox permits SSH but denies workspace writes")
+    func keepsNetworkedInspectionFilesystemReadOnly() {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else { return }
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let launch = AgentSandboxPolicy.shellLaunch(
+            command: #"ssh root@h1.niuwoai.com 'journalctl -u niuwo --no-pager'"#,
+            mode: .readOnlyNetwork,
+            rootDirectory: root
+        )
+        let profile = launch.arguments.first { $0.contains("allow network") } ?? ""
+
+        #expect(profile.contains("(allow network*)"))
+        #expect(!profile.contains("(subpath \"\(root.path)\")"))
+        #expect(profile.contains("(literal \"/dev/null\")"))
+    }
+
+    @Test("ordinary Smart conversations statically approve visible-terminal SSH inspection")
+    func ordinaryConversationReusesReadOnlyNetworkPolicy() async {
+        let appState = AppState()
+        let approval = await appState.autoApprovalSource(
+            toolName: "terminal_send_command",
+            arguments: [
+                "command": .string(
+                    #"ssh root@h1.niuwoai.com 'journalctl -u niuwo --since "24 hours ago" --no-pager'"#
+                )
+            ],
+            risk: .write,
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-workspace"),
+            interactionMode: .normal,
+            approvalMode: .smart
+        )
+
+        #expect(approval == .staticAllowlist)
+    }
 }
 
 @Suite

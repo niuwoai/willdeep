@@ -340,6 +340,7 @@ private struct AgentSidePanelTerminalContentView: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .agentQuietMenuChrome(interfacePalette.secondaryText)
             .focusable(false)
             .help(L10n.AgentTerminal.shortcutActions)
         }

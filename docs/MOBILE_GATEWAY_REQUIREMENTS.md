@@ -19,6 +19,8 @@ The Go gateway does **not** itself dial the relay; in the pre-rc24 design it onl
 
 The HTTP API, pairing, device, and WebSocket sections below describe the **local network gateway** transport. In relay mode those HTTP endpoints do not exist; the QR payload's `relay_*` fields are the entire pairing contract.
 
+Relay-mode payloads therefore carry **no** `base_url` / `pairing_token` / `expires_at`. Those describe a local gateway that does not exist in relay mode; filling them with copies of the relay URL and token bought nothing and cost ~100 bytes of QR payload, which is one to two extra QR versions. Clients derive them instead: `base_url` ← `relay_base_url`, `pairing_token` ← `relay_token`, `expires_at` ← a far-future constant (rotate room + token to revoke). The compact QR form — `?r=<room>&t=<token>` plus optional `u` (relay base URL), `d` (desktop name), `v` (protocol version) — has always worked this way; the JSON form now matches it. Producers: macOS Xedit ≥ 1.247.0-rc12, WillDeep CLI ≥ 0.21.0-rc65. Consumer: Android ≥ 1.25.0-rc5.
+
 ## Product Goals
 
 - Allow the Mac to expose an opt-in gateway for paired mobile devices, with LAN fallback and default public relay support.

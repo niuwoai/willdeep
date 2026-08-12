@@ -196,6 +196,29 @@ enum AgentSidebarSessionPlacement {
     }
 }
 
+/// Which placeholder the sidebar renders below the workspace groups when
+/// there are no session rows. Pure branch selection, kept out of the view
+/// body so the three-way split (loading / truly empty / has rows) stays
+/// unit-testable.
+enum AgentSidebarCatalogPlaceholder: Equatable {
+    /// The on-disk session catalog is still loading. The list being empty
+    /// says nothing yet — show a quiet loading row instead of claiming
+    /// "no sessions" during the first few hundred milliseconds.
+    case loading
+    /// The catalog finished loading and there really are no sessions.
+    case empty
+    /// The list has rows; no placeholder is needed.
+    case none
+
+    static func state(
+        hasLoadedCatalog: Bool,
+        isSessionListEmpty: Bool
+    ) -> AgentSidebarCatalogPlaceholder {
+        guard isSessionListEmpty else { return .none }
+        return hasLoadedCatalog ? .empty : .loading
+    }
+}
+
 enum AgentSidebarSessionTrailingLayout {
     /// Idle rows reserve no trailing action width. The pinned section already
     /// communicates pin state, so a persistent row icon would add noise and
@@ -287,12 +310,33 @@ struct AgentSessionsSidebar: View {
                         ForEach(workspaceGroups) { group in
                             workspaceGroup(group)
                         }
-                        if appState.agentSessions.isEmpty {
+                        switch AgentSidebarCatalogPlaceholder.state(
+                            hasLoadedCatalog: appState.hasLoadedAgentSessionCatalog,
+                            isSessionListEmpty: appState.agentSessions.isEmpty
+                        ) {
+                        case .loading:
+                            // 冷启动头几百毫秒磁盘目录还没读完，此时列表
+                            // 必然为空——显示加载占位而不是"暂无会话"，
+                            // 否则用户会以为数据丢了。高度钉在正常行高，
+                            // 首行会话落地时不发生布局跳动。
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text(L10n.Sidebar.loadingState)
+                                    .font(AgentDesign.secondaryFont)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(height: AgentDesign.sidebarRowHeight)
+                            .padding(.horizontal, 14)
+                            .padding(.top, 16)
+                        case .empty:
                             Text(L10n.Sidebar.emptyState)
                                 .font(AgentDesign.secondaryFont)
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 14)
                                 .padding(.top, 16)
+                        case .none:
+                            EmptyView()
                         }
                     }
                 }

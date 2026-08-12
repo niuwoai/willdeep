@@ -35,6 +35,35 @@ struct AgentPlanProgressTests {
         #expect(height <= 20)
     }
 
+    @Test("计划步骤图标用分层灰，不靠红绿区分完成与否")
+    func planStepGlyphsUseLayeredGray() {
+        // 红绿正是红绿色盲分不开的那条轴，完成与否不能只靠它。
+        #expect(AgentPlanStepRow.glyphColor(for: .done) == AgentComposerChrome.iconSecondary)
+        #expect(AgentPlanStepRow.glyphColor(for: .done) != .green)
+        // 未开始比已完成更淡，形成层次；跳过同样退到最淡一档。
+        #expect(AgentPlanStepRow.glyphColor(for: .pending) == AgentComposerChrome.iconMuted)
+        #expect(AgentPlanStepRow.glyphColor(for: .skipped) == AgentComposerChrome.iconMuted)
+        #expect(AgentPlanStepRow.glyphColor(for: .pending) != AgentPlanStepRow.glyphColor(for: .done))
+        // 仍要你注意的两个状态保留颜色。
+        #expect(AgentPlanStepRow.glyphColor(for: .inProgress) == .orange)
+        #expect(AgentPlanStepRow.glyphColor(for: .failed) == .red)
+    }
+
+    @Test("已完成徽章走安静灰，待办与失败保留颜色")
+    func donePlanPillStaysQuiet() {
+        let doneFill = PlanStatusPill.fillColor(status: .done, isInterrupted: false)
+        #expect(doneFill != .blue)
+        #expect(doneFill != .green)
+        // 灰底上白字会糊掉，文字随之换成次级墨色。
+        #expect(PlanStatusPill.textColor(status: .done, isInterrupted: false) == .secondary)
+        #expect(PlanStatusPill.fillColor(status: .executing, isInterrupted: false) == .green)
+        #expect(PlanStatusPill.fillColor(status: .rejected, isInterrupted: false) == .red)
+        #expect(PlanStatusPill.textColor(status: .rejected, isInterrupted: false) == .white)
+        // 中断优先于状态，且同样是安静灰。
+        #expect(PlanStatusPill.fillColor(status: .executing, isInterrupted: true) == doneFill)
+        #expect(PlanStatusPill.textColor(status: .executing, isInterrupted: true) == .secondary)
+    }
+
     @MainActor
     @Test("渲染折叠计划与产物卡用于设计验收")
     func rendersCompactActivityOverlayForDesignQA() throws {
