@@ -879,10 +879,18 @@ enum AgentSandboxPolicy {
         )
     }
 
-    nonisolated static func canAutoApproveWorkspaceWriteCommand(command: String, rootDirectory: URL?) -> Bool {
+    nonisolated static func canAutoApproveWorkspaceWriteCommand(
+        command: String,
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = []
+    ) -> Bool {
         guard let rootDirectory else { return false }
 
-        let decision = commandDecision(command: command, rootDirectory: rootDirectory)
+        let decision = commandDecision(
+            command: command,
+            rootDirectory: rootDirectory,
+            additionalWorkspaceRoots: additionalWorkspaceRoots
+        )
         guard (decision.mode == .workspaceWrite || decision.mode == .workspaceWriteNetwork),
               decision.requiresUserApproval,
               !decision.requiresTypedConfirmation else {
@@ -925,7 +933,7 @@ enum AgentSandboxPolicy {
                     tokens: tokens,
                     workingDirectory: workingDirectory,
                     rootDirectory: root,
-                    additionalWorkspaceRoots: []
+                    additionalWorkspaceRoots: additionalWorkspaceRoots
                 ) else {
                     return false
                 }
@@ -951,7 +959,11 @@ enum AgentSandboxPolicy {
                         ? resolveRelativeDirectoryHop(next, workingDirectory: workingDirectory)
                         : nil)
                     guard let resolved,
-                          isInsideWorkspace(resolved, rootDirectory: root) else {
+                          isInsideWorkspace(
+                            resolved,
+                            rootDirectory: root,
+                            additionalWorkspaceRoots: additionalWorkspaceRoots
+                          ) else {
                         return false
                     }
                     if !segment.runsInPipeline {
@@ -983,7 +995,11 @@ enum AgentSandboxPolicy {
                       let resolved = resolvePath(token, workingDirectory: workingDirectory, rootDirectory: root) else {
                     continue
                 }
-                if !isInsideWorkspace(resolved, rootDirectory: root) {
+                if !isInsideWorkspace(
+                    resolved,
+                    rootDirectory: root,
+                    additionalWorkspaceRoots: additionalWorkspaceRoots
+                ) {
                     return false
                 }
             }

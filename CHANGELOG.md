@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc23 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc24 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc24 - 2026-08-12
+
+### Fixed
+
+- 多文件夹项目的"可重建产物清理"自动放行补上最后一条单根链路。rc23 修完后台沙箱后，静态判定 `AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand` 仍只认主工作区：内部调用 `isRebuildableWorkspaceCleanup` 时硬编码传空的 `additionalWorkspaceRoots`，`cd` 目标与路径 token 的工作区判定也只看单根。后果是在项目第二个文件夹里跑 `rm -rf node_modules` 这类本该秒过的清理，多余地弹人工确认卡。现在该函数及其内部的 `commandDecision`、`isRebuildableWorkspaceCleanup`、全部 `isInsideWorkspace` 判定都接受并透传 `additionalWorkspaceRoots`；`autoApprovalSource` 同步加参，三个生产调用方（Agent 主循环、委派执行器审批、pending 审批重评估）统一传入 `agentWorkspaceRoots(for:).dropFirst()`。
+
+### Tests
+
+- `AgentCommandSafetyTests` 新增表驱动用例：第二个项目根下的相对/绝对/嵌套子目录 `node_modules` 清理均可自动放行；项目外路径、根目录本身、非可重建目录仍拒绝；负向对照确认不带 `additionalWorkspaceRoots` 时同一命令仍走人工审批。
+
+### Meta
+
+- 多文件夹清理自动放行修复，预发布版本从 **1.247.0-rc23** 提升为 **1.247.0-rc24**，内部构建号 **367 → 368**，Help 与 Computer Use Helper 构建号 **283 → 284**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc23 - 2026-08-12
 
