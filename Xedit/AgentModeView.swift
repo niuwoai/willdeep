@@ -17,10 +17,19 @@ nonisolated enum AgentSidePanelResizeMetrics {
     static let lineWidth: CGFloat = 1
 }
 
+nonisolated enum AgentSessionsSidebarResizeMetrics {
+    static let minimumWidth: Double = 230
+    static let maximumWidth: Double = 520
+    static let hitTargetWidth: CGFloat = AgentSidePanelResizeMetrics.hitTargetWidth
+    static let lineWidth: CGFloat = AgentSidePanelResizeMetrics.lineWidth
+}
+
 struct AgentModeView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject private var computerUseCoordinator = AgentComputerUseCoordinator.shared
-    @State private var sidebarWidth: CGFloat = 230
+    @AppStorage("agentSessionsSidebarWidth") private var storedSidebarWidth: Double =
+        AgentSessionsSidebarResizeMetrics.minimumWidth
+    @State private var liveSidebarWidth: Double?
     /// Whether the leftmost session list is shown. Toggled from the chat
     /// header (rc24) so a user who lives in one long conversation can
     /// reclaim the 230pt for the transcript. Persisted across relaunch.
@@ -28,8 +37,7 @@ struct AgentModeView: View {
     /// Drives the title-only session search overlay (rc24).
     @State private var isSessionSearchPresented = false
     /// User-resizable width of the right side panel. Persisted so the
-    /// choice survives relaunch. The leftmost sessions sidebar stays
-    /// fixed; only the chat ↔ side-panel boundary is draggable.
+    /// choice survives relaunch.
     @AppStorage("agentSidePanelWidth") private var sidePanelWidth: Double = 320
     @State private var liveSidePanelWidth: Double?
     private let sidePanelWidthRange: ClosedRange<Double> = 240...760
@@ -47,7 +55,21 @@ struct AgentModeView: View {
     /// 挡不住这些),中间列也只是继续裁切,不会再发生列间相互遮盖。
     /// 右面板打开时把它的宽度计进窗口下限,否则 `sidebar + panel` 早
     /// 就超过旧的固定 720 窗口宽。
-    private var chatColumnComfortWidth: CGFloat { sidebarWidth * 1.4 }
+    private var committedSidebarWidth: Double {
+        min(
+            max(storedSidebarWidth, AgentSessionsSidebarResizeMetrics.minimumWidth),
+            AgentSessionsSidebarResizeMetrics.maximumWidth
+        )
+    }
+    private var currentSidebarWidth: Double {
+        min(
+            max(liveSidebarWidth ?? committedSidebarWidth, AgentSessionsSidebarResizeMetrics.minimumWidth),
+            AgentSessionsSidebarResizeMetrics.maximumWidth
+        )
+    }
+    private var chatColumnComfortWidth: CGFloat {
+        CGFloat(AgentSessionsSidebarResizeMetrics.minimumWidth * 1.4)
+    }
     private var currentSidePanelWidth: Double {
         min(max(liveSidePanelWidth ?? sidePanelWidth, sidePanelWidthRange.lowerBound), sidePanelWidthRange.upperBound)
     }
@@ -59,7 +81,9 @@ struct AgentModeView: View {
     static let absoluteMinContentHeight: CGFloat = 480
 
     private func contentMinWidth(isSidebarVisible: Bool) -> CGFloat {
-        let content = (isSidebarVisible ? sidebarWidth : 0)
+        let content = (isSidebarVisible
+            ? CGFloat(committedSidebarWidth) + AgentSessionsSidebarResizeMetrics.hitTargetWidth
+            : 0)
             + chatColumnComfortWidth
             // 面板宽度现在会随窗口宽度自适应封顶(见 panelWidthCap),
             // 窗口下限只需保证「最窄面板」放得下,不再跟着持久化宽度
@@ -72,7 +96,9 @@ struct AgentModeView: View {
 
     /// 侧栏(含 1pt 分隔线)当前占用的宽度。
     private func sidebarOccupiedWidth(isSidebarVisible: Bool) -> CGFloat {
-        isSidebarVisible ? sidebarWidth + 1 : 0
+        isSidebarVisible
+            ? CGFloat(currentSidebarWidth) + AgentSessionsSidebarResizeMetrics.hitTargetWidth
+            : 0
     }
 
     /// 窗口宽度给面板的封顶:面板再宽也必须给「会话侧栏 + chat 舒适
@@ -116,7 +142,6 @@ struct AgentModeView: View {
     private func mainContent(totalWidth: CGFloat, isSidebarAutoHidden: Bool) -> some View {
         let skin = appState.editorSettings.interfaceSkin
         let effectiveSidebarVisible = sessionsSidebarVisible && !isSidebarAutoHidden
-        let occupiedSidebarWidth = sidebarOccupiedWidth(isSidebarVisible: effectiveSidebarVisible)
         let minimumContentWidth = contentMinWidth(isSidebarVisible: effectiveSidebarVisible)
         let cap = panelWidthCap(totalWidth: totalWidth, isSidebarVisible: effectiveSidebarVisible)
         // 「已提交」宽度在整个拖拽过程中保持不变(AppStorage 只在松手
@@ -126,27 +151,31 @@ struct AgentModeView: View {
         let committedPanelWidth = min(max(sidePanelWidth, sidePanelWidthRange.lowerBound), cap)
         let panelWidth = min(currentSidePanelWidth, cap)
         let isResizingPanel = liveSidePanelWidth != nil
+        let isResizingSidebar = liveSidebarWidth != nil
         let hasWallpaper = appState.editorSettings.hasConfiguredAgentWallpaper
-        let frozenChatWidth = max(
-            totalWidth
-                - occupiedSidebarWidth
-                - AgentSidePanelResizeMetrics.hitTargetWidth
-                - CGFloat(committedPanelWidth),
-            0
-        )
         let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks
             || appState.agentPrimaryDestination == .dispatchBoard {
             nil
         } else {
             appState.agentSidePanelKind
         }
+        let frozenChatWidth = max(
+            totalWidth
+                - (effectiveSidebarVisible
+                    ? CGFloat(committedSidebarWidth) + AgentSessionsSidebarResizeMetrics.hitTargetWidth
+                    : 0)
+                - (activeSidePanel != nil
+                    ? AgentSidePanelResizeMetrics.hitTargetWidth + CGFloat(committedPanelWidth)
+                    : 0),
+            0
+        )
         HStack(spacing: 0) {
             if effectiveSidebarVisible {
                 AgentSessionsSidebar()
-                    .frame(width: sidebarWidth)
+                    .frame(width: CGFloat(currentSidebarWidth))
                     // `.frame(width:)` 是 SwiftUI 的「建议」宽度,父 HStack
                     // 在窗口宽度不够时仍会把它继续压缩。`.fixedSize(...)`
-                    // 把宽度锁死为 sidebarWidth(230),收窄窗口只会从 chat
+                    // 把宽度锁死为当前用户宽度,收窄窗口只会从 chat
                     // 区域吃掉空间,不会再动 sidebar —— rc12 用户反馈:
                     // 「最左栏还是会被缩小,要不就固定个宽度」。
                     .fixedSize(horizontal: true, vertical: false)
@@ -157,7 +186,26 @@ struct AgentModeView: View {
                     )
                     .transition(.move(edge: .leading).combined(with: .opacity))
 
-                Divider()
+                AgentSessionsSidebarResizeHandle(
+                    width: Binding(
+                        get: { currentSidebarWidth },
+                        set: { liveSidebarWidth = $0 }
+                    ),
+                    range: ClosedRange(
+                        uncheckedBounds: (
+                            AgentSessionsSidebarResizeMetrics.minimumWidth,
+                            AgentSessionsSidebarResizeMetrics.maximumWidth
+                        )
+                    ),
+                    onCommit: { committedWidth in
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            storedSidebarWidth = committedWidth
+                            liveSidebarWidth = nil
+                        }
+                    }
+                )
             }
 
             VStack(spacing: 0) {
@@ -184,7 +232,7 @@ struct AgentModeView: View {
             // 「闪」),多出的部分被下面的 `.clipped()` 裁掉;左缘
             // (`.leading`)钉死不动,松手后一次性按新宽度重排。
             .frame(
-                width: activeSidePanel != nil && isResizingPanel ? frozenChatWidth : nil,
+                width: isResizingPanel || isResizingSidebar ? frozenChatWidth : nil,
                 alignment: .leading
             )
             // `minWidth: 0` 是关键:frame 只写 `maxWidth: .infinity` 时,
@@ -225,8 +273,12 @@ struct AgentModeView: View {
                     // chat 列挤没的宽度。
                     range: sidePanelWidthRange.lowerBound...cap,
                     onCommit: { committedWidth in
-                        liveSidePanelWidth = nil
-                        sidePanelWidth = committedWidth
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            sidePanelWidth = committedWidth
+                            liveSidePanelWidth = nil
+                        }
                     }
                 )
                 AgentSidePanelHost(
@@ -621,6 +673,70 @@ private struct AgentSidePanelResizeHandle: View {
                         onCommit(committedWidth)
                     }
             )
+    }
+}
+
+/// Draggable boundary between the session list and the chat. It deliberately
+/// mirrors the right-panel handle's hover/drag feedback while reversing the
+/// translation direction because the resized surface lives on the left.
+private struct AgentSessionsSidebarResizeHandle: View {
+    @Binding var width: Double
+    let range: ClosedRange<Double>
+    let onCommit: (Double) -> Void
+
+    @State private var dragStartWidth: Double?
+    @State private var isHovering = false
+    @State private var isDragging = false
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(
+                    isHovering || isDragging
+                        ? Color.accentColor.opacity(0.7)
+                        : Color(nsColor: .separatorColor).opacity(0.7)
+                )
+                .frame(width: AgentSessionsSidebarResizeMetrics.lineWidth)
+        }
+        .frame(width: AgentSessionsSidebarResizeMetrics.hitTargetWidth)
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .background(
+            isHovering || isDragging
+                ? Color.accentColor.opacity(0.08)
+                : Color.clear
+        )
+        .onHover { hovering in
+            isHovering = hovering
+            guard !isDragging else { return }
+            if hovering {
+                NSCursor.resizeLeftRight.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if !isDragging { isDragging = true }
+                    NSCursor.resizeLeftRight.set()
+                    let base = dragStartWidth ?? width
+                    if dragStartWidth == nil { dragStartWidth = base }
+                    let proposed = base + Double(value.translation.width)
+                    let snapped = min(max(proposed, range.lowerBound), range.upperBound).rounded()
+                    guard snapped != width else { return }
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { width = snapped }
+                }
+                .onEnded { _ in
+                    let committedWidth = width
+                    dragStartWidth = nil
+                    isDragging = false
+                    if !isHovering { NSCursor.pop() }
+                    onCommit(committedWidth)
+                }
+        )
     }
 }
 

@@ -3,7 +3,9 @@
 //  WillDeepTests
 //
 
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import WillDeep
 
@@ -289,7 +291,7 @@ struct AgentDispatchCoordinatorTests {
         )
     }
 
-    @Test("规划 Profile 独立于 Worker 池并同时固定 some.im Provider 与 Kimi 模型")
+    @Test("规划 Profile 独立于 Worker 池并同时固定 some.im Provider 与 GPT-5.6 Sol 模型")
     func planningProfileIsIndependentFromWorkerPool() throws {
         let planner = try #require(
             AgentExecutionProfile.builtIns.first {
@@ -311,7 +313,7 @@ struct AgentDispatchCoordinatorTests {
         #expect(selectedWorkerProfileIDs == [AgentExecutionProfile.recommendedWorkerID])
         #expect(catalog.map(\.id) == [AgentExecutionProfile.recommendedPlannerID])
         #expect(planner.providerID == AgentProviderPreset.someIMID)
-        #expect(planner.modelID == "kimi-k3")
+        #expect(planner.modelID == AgentDispatchModelRouting.recommendedPlanningModel)
     }
 
     @Test("调度项目捕获计划后交给子任务运行时而不是父会话续跑")
@@ -394,8 +396,10 @@ struct AgentDispatchCoordinatorTests {
         )
     }
 
-    @Test("内建 Worker 覆盖推荐模型且默认执行模型为 DeepSeek Flash")
+    @Test("内建 Profile 默认以 GPT-5.6 Sol 规划并保留推荐 Worker")
     func builtInWorkersIncludeRecommendedCodingModels() {
+        #expect(AgentDispatchModelRouting.recommendedPlanningModel == "gpt-5.6-sol")
+        #expect(AgentExecutionProfile.recommendedPlannerID.contains("gpt-5.6-sol"))
         #expect(AgentDispatchModelRouting.recommendedExecutionModel == "deepseek-v4-flash")
         #expect(AgentExecutionProfile.recommendedWorkerID.contains("deepseek-v4-flash"))
         let models = Set(AgentExecutionProfile.builtIns.compactMap(\.modelID))
@@ -405,6 +409,108 @@ struct AgentDispatchCoordinatorTests {
             "gpt-5.6-luna",
             "gpt-5.6-terra",
         ]))
+    }
+
+    @Test("内建 Profile 覆盖可持久化且不会复制成 Managed Profile")
+    func builtInProfileOverridesPersistByStableID() throws {
+        let suiteName = "AgentExecutionProfileStoreTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = AgentExecutionProfileStore(defaults: defaults)
+        var profiles = store.availableProfiles(workspacePath: nil)
+        let index = try #require(
+            profiles.firstIndex { $0.id == AgentExecutionProfile.recommendedPlannerID }
+        )
+        profiles[index].providerID = "openai"
+        profiles[index].modelID = "gpt-5.6-sol"
+
+        store.saveManaged(profiles)
+
+        let reloaded = store.availableProfiles(workspacePath: nil)
+        let planner = try #require(
+            reloaded.first { $0.id == AgentExecutionProfile.recommendedPlannerID }
+        )
+        #expect(planner.origin == .builtIn)
+        #expect(planner.providerID == "openai")
+        #expect(planner.modelID == "gpt-5.6-sol")
+        #expect(reloaded.filter { $0.id == planner.id }.count == 1)
+    }
+
+    @Test("Profile 模型目录按 Provider 隔离并包含内建模型")
+    func executionProfileModelsFollowSelectedProvider() {
+        let someIM = AgentProviderEntry(
+            providerID: "some-im",
+            displayName: "some.im",
+            baseURL: "https://example.invalid",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "gpt-5.6-terra"
+        )
+        let openAI = AgentProviderEntry(
+            providerID: "openai",
+            displayName: "OpenAI",
+            baseURL: "https://example.invalid",
+            flashPrimary: "gpt-5-mini",
+            proPrimary: "gpt-5.4"
+        )
+
+        let someIMModels = AgentExecutionProfileModelCatalog.models(for: someIM)
+        let openAIModels = AgentExecutionProfileModelCatalog.models(for: openAI)
+
+        #expect(someIMModels.contains("gpt-5.6-sol"))
+        #expect(someIMModels.contains("deepseek-v4-flash"))
+        #expect(!openAIModels.contains("deepseek-v4-flash"))
+        #expect(openAIModels == ["gpt-5-mini", "gpt-5.4"])
+    }
+
+    @Test("render editable built-in Profile manager for design QA")
+    @MainActor
+    func renderExecutionProfileManagerForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_PROFILE_MANAGER_QA_OUTPUT"]
+            ?? "/tmp/Xedit-profile-manager-design-qa.png"
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        appState.agentProviderLibrary = AgentProviderLibrary(
+            entries: [
+                AgentProviderEntry(
+                    providerID: AgentProviderPreset.someIMID,
+                    displayName: "some.im",
+                    baseURL: "https://some.im",
+                    flashPrimary: "deepseek-v4-flash",
+                    proPrimary: "gpt-5.6-sol",
+                    proAlternates: ["gpt-5.6-luna", "gpt-5.6-terra"]
+                ),
+                AgentProviderEntry(
+                    providerID: AgentProviderPreset.openAIID,
+                    displayName: "OpenAI",
+                    baseURL: "https://api.openai.com/v1",
+                    flashPrimary: "gpt-5-mini",
+                    proPrimary: "gpt-5.4"
+                ),
+            ],
+            activeID: nil
+        )
+        let size = NSSize(width: 760, height: 520)
+        let root = AgentExecutionProfileManagerView(
+            workspacePath: nil,
+            onChanged: {},
+            onClose: {}
+        )
+        .environmentObject(appState)
+        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .preferredColorScheme(.light)
+        .frame(width: size.width, height: size.height)
+
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
     }
 
     @Test("任务执行会话不会再次投影成侧栏项目")

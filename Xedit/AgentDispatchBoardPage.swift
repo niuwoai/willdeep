@@ -482,6 +482,7 @@ private struct AgentDispatchBoardContent: View {
                 Label(L10n.Dispatch.chooseWorkspaceAndStart, systemImage: "folder.badge.plus")
             }
             .buttonStyle(.borderedProminent)
+            .tint(.black)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)
@@ -859,6 +860,7 @@ private struct AgentDispatchTaskEditorSheet: View {
                     onSave(trimmedTitle, Array(dependencyIDs), criteria)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.black)
                 .keyboardShortcut(.defaultAction)
                 .disabled(trimmedTitle.isEmpty)
             }

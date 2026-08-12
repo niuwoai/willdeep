@@ -277,6 +277,7 @@ struct AgentDispatchTakeoverDrawer: View {
                     Label(L10n.Dispatch.sendTakeoverInstruction, systemImage: "paperplane.fill")
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.black)
                 .controlSize(.small)
                 .disabled(runtime.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

@@ -64,6 +64,7 @@ struct AgentDispatchGoalHeader: View {
                     .font(.system(size: 12, weight: .medium))
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.black)
                 .disabled(!canLaunchFromHeader)
             }
             HStack(spacing: 8) {

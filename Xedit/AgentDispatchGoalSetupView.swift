@@ -353,6 +353,7 @@ struct AgentDispatchGoalSetupView: View {
                     .font(.system(size: 12, weight: .semibold))
             }
             .buttonStyle(.borderedProminent)
+            .tint(.black)
             .disabled(!canCreate)
             .keyboardShortcut(.defaultAction)
             .accessibilityIdentifier("dispatch.goal-setup.create")

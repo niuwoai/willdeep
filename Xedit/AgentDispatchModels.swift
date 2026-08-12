@@ -73,7 +73,7 @@ nonisolated enum AgentDispatchTargetChoice: Codable, Equatable, Hashable {
 /// sessions. Model IDs are provider-agnostic so relay providers such as
 /// some.im can combine model families without changing the project shape.
 nonisolated struct AgentDispatchModelRouting: Codable, Equatable {
-    static let recommendedPlanningModel = "kimi-k3"
+    static let recommendedPlanningModel = "gpt-5.6-sol"
     static let recommendedExecutionModel = "deepseek-v4-flash"
 
     var planningModelID: String?

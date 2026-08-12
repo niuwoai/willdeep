@@ -1,47 +1,57 @@
-# Design QA：编辑器移除重复背景设置
+# Design QA：Profile、主按钮与会话侧栏
 
 ## Comparison target
 
-- Source visual truth：`artifacts/design-qa/editor-background-removal-1.247.0-rc4/reference-before.png`（900 × 557）。它记录用户指出的旧状态：编辑器分段导航仍有“背景”，并重复展示已经归属“Agent 外观”的工作区壁纸。
-- Desired change：保留编辑器的编辑、格式、字体、工作区四项，彻底移除“背景”分段及其页面；Agent 外观继续作为壁纸与 Agent 背景效果的唯一入口。
-- Rendered implementation：`artifacts/design-qa/editor-background-removal-1.247.0-rc4/implementation.png`（900 × 608）。这是 `1.247.0-rc4` Debug App 重启后，通过 macOS Computer Use 打开“设置 → 编辑器”得到的真实窗口截图。
-- Focused comparison：`artifacts/design-qa/editor-background-removal-1.247.0-rc4/reference-vs-implementation.png`（900 × 368），上方为旧状态，下方为修复后实机标签区。
-- Viewport：实现窗口 900 × 608 px；参考原图 734 × 486 px，等比归一为 900 × 557 px。聚焦标签区均归一到 900 px 宽，不进行额外设备密度换算。
-- State：macOS 浅色模式，设置窗口，侧栏选中“编辑器”，编辑分段处于选中状态。
+- Source visual truth：用户提供的三张现状截图。
+  - Profile 管理：`/Users/rocky/.codex/attachments/2638ac68-b1d5-45f3-9857-248441b76217/image-1.png`（1507 × 1060）。
+  - Goal 任务页：`/Users/rocky/.codex/attachments/2638ac68-b1d5-45f3-9857-248441b76217/image-2.png`（2400 × 1587）。
+  - 会话侧栏：`/Users/rocky/.codex/attachments/2638ac68-b1d5-45f3-9857-248441b76217/image-3.png`（465 × 1520）。
+- Desired changes：Profile 先选 Provider 再选模型；内置 Profile 也可修改；默认规划模型改为 GPT-5.6 Sol；主操作按钮统一黑底白字；左侧会话列表可从当前 230 pt 起向右拖宽，并复用右侧栏的拖拽反馈，拖拽不得让聊天正文滚动到顶部。
+- Rendered implementation：`/private/tmp/Xedit-profile-manager-design-qa.png`（1520 × 1040，原生 SwiftUI 以 2× 比例渲染，对应 760 × 520 pt）。
+- Combined comparison：`/private/tmp/Xedit-profile-manager-comparison.png`。左侧为用户截图中的旧 Profile，右侧为本次原生渲染结果。
+- State：macOS 浅色模式；Profile 管理器选中内置 `GPT-5.6 Sol Worker`；Provider 为 `some.im`；模型为 `gpt-5.6-sol`。
 
 ## Findings and comparison history
 
-- 第一轮发现 `[P1]`：编辑器仍提供“背景”分段和完整壁纸页，与新设立的“Agent 外观”职责重复。用户可能在两个入口修改同一组持久化值，无法判断背景究竟属于编辑器还是 Agent。
-- 修复：从 `EditorSettingsTab` 删除 `.background`，从编辑器分段列表和页面路由移除该项，并删除只服务于旧入口的重复 `backgroundSettings` / `backgroundSections` 视图。共享壁纸选择与持久化逻辑继续由 Agent 外观使用。
-- 第二轮实机证据：Computer Use 读取到编辑器仅有“编辑 / 格式 / 字体 / 工作区”四个单选分段；无“背景”控件、空白占位或失效路由。未发现新的 P0、P1、P2 问题。
+- 第一轮发现 `[P1]`：内置 Profile 的表单整体禁用，模型只能以文本字段出现，用户无法按 Provider → Model 的顺序选择；默认规划模型仍为价格较高的 Kimi K3。
+- 修复：允许内置 Profile 覆盖 Provider 与模型；Provider 列表来自现有 Provider Library，模型列表按选中的 Provider 隔离并去重；默认规划 Profile 改为 GPT-5.6 Sol，同时保留 Kimi K3 供手动选择。
+- 第一轮发现 `[P2]`：Profile 的“好”以及 Goal 流程内的启动执行、添加节点、启动任务等主按钮继续使用系统蓝强调色，与用户要求的黑底白字不符。
+- 修复：Goal Dispatch 范围内所有非破坏性的 `borderedProminent` 主操作统一使用黑色 tint；停止任务等破坏性按钮继续保留红色语义。
+- 第一轮发现 `[P1]`：左侧会话列表固定为 230 pt，没有可发现的拖拽边界；直接按实时宽度重排聊天列会使长会话阅读锚点不稳定。
+- 修复：新增 230...520 pt 的可拖拽宽度，230 pt 同时作为不可突破的最小宽度；命中宽度、1 pt 分隔线、悬停与拖拽时的强调色反馈均与右侧面板一致。拖拽期间聊天列锁定在已提交宽度，松手后关闭动画并只重排一次，由既有 transcript scroll observer 保持阅读锚点。
+- 第二轮原生渲染显示：内置 Profile 现已按 Provider、模型的顺序显示选择器，默认选中 GPT-5.6 Sol；“好”为黑底白字。代码与交互契约检查未发现新的 P0、P1、P2 问题。
 
 ## Required fidelity surfaces
 
-- Fonts and typography：标题、分段标签、表单标题和开关文字仍使用原有系统字体、字号与字重；移除标签后没有截断或异常换行。
-- Spacing and layout rhythm：四个标签自动居中收拢，分隔线、左右内边距和表单纵向节奏保持一致；没有为已删除标签残留空位。
-- Colors and visual tokens：沿用现有浅色设置页的系统蓝选中态、灰色分段底和中性表单表面；本次不改变设置页主题色。
-- Image quality and asset fidelity：编辑器页不再加载壁纸缩略图；当前页面只使用系统控件和 SF Symbols，没有新增或替换图像资产。
-- Copy and content：编辑、格式、字体、工作区四项保留；“背景”及其编辑器页面文案不再对用户可见。“Agent 外观”侧栏入口保持可见。
+- Fonts and typography：保留原生 macOS Form、Picker、列表与系统字体层级，不引入自定义字体或新的字号体系。
+- Spacing and layout rhythm：Profile 详情仍使用原分组表单节奏，仅把两项字段调整为 Provider 在前、模型在后；会话侧栏只增加与右侧栏等宽的边界命中区。
+- Colors and visual tokens：非破坏性主按钮使用黑色强调和白色前景；拖拽边界继续使用现有 accent color；危险操作保留红色。
+- Image quality and asset fidelity：本次没有新增位图或图标资产；继续使用现有 SF Symbols 与原生控件。
+- Copy and content：复用现有 i18n 文案键，不新增硬编码用户可见文本；“好”等既有本地化文案保持不变，仅调整视觉语义。
 
 ## Interaction and verification
 
-- Computer Use 执行了 Debug App 重启、打开设置窗口和点击“编辑器”，随后读取真实无障碍树并捕获窗口截图。
-- 无障碍树明确暴露四个单选按钮：编辑、格式、字体、工作区；未发现“背景”单选按钮。
-- 定向 XCTest：`SettingsInformationArchitectureTests` 3/3 通过。
-- 版本一致性检查通过：`1.247.0-rc4`；内部构建号 357，Help 与 Computer Use Helper 构建号 273。
-- 原生 macOS App 不使用浏览器运行时，浏览器控制台检查不适用。
+- Profile 原生渲染测试验证内置 GPT-5.6 Sol Profile、Provider 选择器、模型选择器与黑色确认按钮能共同渲染。
+- Profile Store 测试验证内置 Profile 的 Provider/模型覆盖可持久化，且 Provider 模型目录不会串到其他 Provider。
+- 会话侧栏尺寸契约测试验证最小宽度为 230 pt，并复用右侧面板的 12 pt 命中区与 1 pt 分隔线。
+- 拖拽实现沿用现有 transcript scroll observer，并在拖拽期间冻结聊天列宽度，避免逐帧重排造成正文位置跳顶。
+- 定向 XCTest 55/55 通过；追加原生 Profile 渲染验收后，`AgentDispatchCoordinatorTests` 52/52 通过。
+- Go 回归 `go test ./...` 通过。
+- 版本一致性检查通过：`1.248.0-rc1`；主应用构建号 359，Help 与 Computer Use Helper 构建号 275。
+- 任务相关源码的复杂度守卫通过：本次变更文件均低于 3000 行；`git diff --check` 通过。仓库全量扫描仍报告一个未触及的既有文件 `ComputerUseHelper/main.swift` 为 3023 行，不属于本次改动范围。
 
 ## Open questions
 
-- 无。编辑器的格式、字体、工作区和编辑行为不在本次删除范围内。
+- 无。Provider 和模型选项直接使用当前 Provider Library 数据，不额外引入远端目录或新依赖。
 
 ## Implementation checklist
 
-- [x] 删除编辑器“背景”分段。
-- [x] 删除旧背景页面路由与重复视图。
-- [x] 保留 Agent 外观中的背景配置。
-- [x] 更新信息架构测试、版本与产品文档。
-- [x] 重启 Debug App 并完成真实窗口检查。
+- [x] 默认规划模型改为 GPT-5.6 Sol。
+- [x] 内置 Profile 支持先选 Provider、再选对应模型，并持久化覆盖。
+- [x] Goal Dispatch 主按钮统一黑底白字，破坏性操作保留红色。
+- [x] 左侧会话列表支持 230...520 pt 拖拽，并复用右侧栏反馈。
+- [x] 拖拽过程冻结聊天列，松手后无动画重排，保护正文阅读位置。
+- [x] 更新测试、版本号、CHANGELOG 与产品说明。
 
 ## Follow-up polish
 

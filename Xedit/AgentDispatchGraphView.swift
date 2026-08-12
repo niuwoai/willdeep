@@ -241,6 +241,7 @@ struct AgentDispatchGraphView: View {
                 Label(L10n.Dispatch.addNode, systemImage: "plus")
             }
             .buttonStyle(.borderedProminent)
+            .tint(.black)
             .controlSize(.small)
             .disabled(!goal.isWorkspaceBound)
         }
@@ -373,6 +374,7 @@ struct AgentDispatchGraphView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.black)
                 .controlSize(.mini)
             }
         }

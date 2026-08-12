@@ -365,6 +365,7 @@ struct AgentDispatchInspectorView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.black)
                 .disabled(
                     goal.isPaused
                         || !goal.isWorkspaceBound

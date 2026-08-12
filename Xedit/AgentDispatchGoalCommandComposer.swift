@@ -59,6 +59,7 @@ struct AgentDispatchGoalCommandComposer: View {
                         .font(.system(size: 11, weight: .semibold))
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.black)
                 .controlSize(.small)
                 .disabled(
                     !hasWorkspace

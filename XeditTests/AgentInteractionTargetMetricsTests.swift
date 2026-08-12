@@ -49,6 +49,14 @@ struct AgentInteractionTargetMetricsTests {
         )
     }
 
+    @Test("session-sidebar divider keeps the current width as its minimum")
+    func sessionSidebarDividerMetrics() {
+        #expect(AgentSessionsSidebarResizeMetrics.minimumWidth == 230)
+        #expect(AgentSessionsSidebarResizeMetrics.maximumWidth > AgentSessionsSidebarResizeMetrics.minimumWidth)
+        #expect(AgentSessionsSidebarResizeMetrics.hitTargetWidth == AgentSidePanelResizeMetrics.hitTargetWidth)
+        #expect(AgentSessionsSidebarResizeMetrics.lineWidth == AgentSidePanelResizeMetrics.lineWidth)
+    }
+
     @Test("composer icons use only monochrome semantic colors")
     func composerIconsStayMonochrome() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)

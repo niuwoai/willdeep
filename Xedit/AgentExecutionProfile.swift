@@ -15,7 +15,7 @@ nonisolated enum AgentExecutionProfileOrigin: String, Codable, Equatable {
 }
 
 nonisolated struct AgentExecutionProfile: Codable, Equatable, Identifiable {
-    static let recommendedPlannerID = "builtin:willdeep:kimi-k3"
+    static let recommendedPlannerID = "builtin:willdeep:gpt-5.6-sol"
     static let recommendedWorkerID = "builtin:willdeep:deepseek-v4-flash"
     private static let someIMProviderID = "some-im"
 
@@ -81,9 +81,17 @@ nonisolated struct AgentExecutionProfile: Codable, Equatable, Identifiable {
     static let builtIns = [
         AgentExecutionProfile(
             id: recommendedPlannerID,
-            name: "Kimi K3 Planner",
+            name: "GPT-5.6 Sol Worker",
             executor: .willDeep,
             modelID: AgentDispatchModelRouting.recommendedPlanningModel,
+            providerID: someIMProviderID,
+            origin: .builtIn
+        ),
+        AgentExecutionProfile(
+            id: "builtin:willdeep:kimi-k3",
+            name: "Kimi K3 Planner",
+            executor: .willDeep,
+            modelID: "kimi-k3",
             providerID: someIMProviderID,
             origin: .builtIn
         ),
@@ -92,14 +100,6 @@ nonisolated struct AgentExecutionProfile: Codable, Equatable, Identifiable {
             name: "DeepSeek V4 Flash Worker",
             executor: .willDeep,
             modelID: AgentDispatchModelRouting.recommendedExecutionModel,
-            providerID: someIMProviderID,
-            origin: .builtIn
-        ),
-        AgentExecutionProfile(
-            id: "builtin:willdeep:gpt-5.6-sol",
-            name: "GPT-5.6 Sol Worker",
-            executor: .willDeep,
-            modelID: "gpt-5.6-sol",
             providerID: someIMProviderID,
             origin: .builtIn
         ),
@@ -154,8 +154,24 @@ struct AgentExecutionProfileStore {
     }
 
     func saveManaged(_ profiles: [AgentExecutionProfile]) {
-        let managed = profiles.filter { $0.origin == .managed }
-        guard let data = try? JSONEncoder().encode(managed) else { return }
+        // Built-in profiles are editable overlays: keeping their stable IDs
+        // means existing dispatch projects continue to resolve them after a
+        // provider/model change. Discovered CLI profiles remain read-only and
+        // are rebuilt from disk on every load.
+        let defaultBuiltInsByID = Dictionary(
+            uniqueKeysWithValues: AgentExecutionProfile.builtIns.map { ($0.id, $0) }
+        )
+        let editable = profiles.filter { profile in
+            switch profile.origin {
+            case .managed:
+                return true
+            case .builtIn:
+                return defaultBuiltInsByID[profile.id] != profile
+            case .discovered:
+                return false
+            }
+        }
+        guard let data = try? JSONEncoder().encode(editable) else { return }
         defaults.set(data, forKey: Self.defaultsKey)
     }
 
@@ -171,14 +187,40 @@ struct AgentExecutionProfileStore {
                 origin: .discovered
             )
         }
+        let saved = loadManaged()
+        let builtInIDs = Set(AgentExecutionProfile.builtIns.map(\.id))
+        let savedByID = saved.reduce(into: [String: AgentExecutionProfile]()) {
+            $0[$1.id] = $1
+        }
+        let builtIns = AgentExecutionProfile.builtIns.map { savedByID[$0.id] ?? $0 }
+        let managed = saved.filter { !builtInIDs.contains($0.id) }
         var seen: Set<String> = []
-        return (AgentExecutionProfile.builtIns + loadManaged() + discovered)
+        return (builtIns + managed + discovered)
             .filter { !$0.name.isEmpty && seen.insert($0.id).inserted }
     }
 
     func profile(id: String?, workspacePath: String?) -> AgentExecutionProfile? {
         guard let id else { return nil }
         return availableProfiles(workspacePath: workspacePath).first { $0.id == id }
+    }
+}
+
+enum AgentExecutionProfileModelCatalog {
+    static func models(
+        for entry: AgentProviderEntry,
+        builtIns: [AgentExecutionProfile] = AgentExecutionProfile.builtIns
+    ) -> [String] {
+        let candidates = entry.allFlashModels
+            + entry.allProModels
+            + builtIns.compactMap { profile in
+                profile.providerID == entry.providerID ? profile.modelID : nil
+            }
+        var seen = Set<String>()
+        return candidates.compactMap { raw in
+            let model = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !model.isEmpty, seen.insert(model.lowercased()).inserted else { return nil }
+            return model
+        }
     }
 }
 

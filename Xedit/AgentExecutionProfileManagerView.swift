@@ -6,6 +6,8 @@
 import SwiftUI
 
 struct AgentExecutionProfileManagerView: View {
+    @EnvironmentObject private var appState: AppState
+
     let workspacePath: String?
     let onChanged: () -> Void
     let onClose: () -> Void
@@ -16,6 +18,10 @@ struct AgentExecutionProfileManagerView: View {
     @State private var availableExecutors = AgentDispatchExecutorResolver.localAvailableExecutors()
 
     private let store = AgentExecutionProfileStore()
+
+    private var providerEntries: [AgentProviderEntry] {
+        appState.agentProviderLibrary.entries
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -117,6 +123,7 @@ struct AgentExecutionProfileManagerView: View {
                         L10n.Dispatch.profileName,
                         text: binding(\.name, fallback: "")
                     )
+                    .disabled(draft.origin != .managed)
                     Picker(
                         L10n.Dispatch.executor,
                         selection: binding(\.executor, fallback: .willDeep)
@@ -125,14 +132,37 @@ struct AgentExecutionProfileManagerView: View {
                             Text($0.displayName).tag($0)
                         }
                     }
-                    TextField(
-                        L10n.Dispatch.modelID,
-                        text: optionalBinding(\.modelID)
-                    )
-                    TextField(
-                        L10n.Dispatch.providerID,
-                        text: optionalBinding(\.providerID)
-                    )
+                    .disabled(draft.origin != .managed)
+                    if draft.executor == .willDeep {
+                        Picker(
+                            L10n.Dispatch.providerID,
+                            selection: providerBinding
+                        ) {
+                            ForEach(providerEntries) { entry in
+                                Text(entry.displayName).tag(entry.id)
+                            }
+                        }
+                        .disabled(providerEntries.isEmpty)
+
+                        Picker(
+                            L10n.Dispatch.modelID,
+                            selection: modelBinding
+                        ) {
+                            ForEach(selectedProviderModels, id: \.self) { model in
+                                Text(model).tag(model)
+                            }
+                        }
+                        .disabled(selectedProviderModels.isEmpty)
+                    } else {
+                        TextField(
+                            L10n.Dispatch.modelID,
+                            text: optionalBinding(\.modelID)
+                        )
+                        TextField(
+                            L10n.Dispatch.providerID,
+                            text: optionalBinding(\.providerID)
+                        )
+                    }
                     TextField(
                         L10n.Dispatch.nativeProfile,
                         text: optionalBinding(\.nativeProfileName)
@@ -146,7 +176,7 @@ struct AgentExecutionProfileManagerView: View {
                 }
             }
             .formStyle(.grouped)
-            .disabled(draft.origin != .managed)
+            .disabled(draft.origin == .discovered)
         } else {
             VStack(spacing: 10) {
                 Image(systemName: "person.crop.circle.badge.gearshape")
@@ -183,6 +213,8 @@ struct AgentExecutionProfileManagerView: View {
                 saveDraft()
                 onClose()
             }
+            .buttonStyle(.borderedProminent)
+            .tint(.black)
             .keyboardShortcut(.defaultAction)
         }
         .padding(14)
@@ -196,7 +228,7 @@ struct AgentExecutionProfileManagerView: View {
     }
 
     private func saveDraft() {
-        guard let draft, draft.origin == .managed else { return }
+        guard let draft, draft.origin != .discovered else { return }
         if let index = profiles.firstIndex(where: { $0.id == draft.id }) {
             profiles[index] = draft
         }
@@ -206,6 +238,50 @@ struct AgentExecutionProfileManagerView: View {
     private func persist() {
         store.saveManaged(profiles)
         onChanged()
+    }
+
+    private var selectedProviderEntry: AgentProviderEntry? {
+        guard let draft else { return nil }
+        return providerEntries.first { entry in
+            entry.providerID == draft.providerID
+                && AgentExecutionProfileModelCatalog.models(for: entry).contains {
+                    $0.caseInsensitiveCompare(draft.modelID ?? "") == .orderedSame
+                }
+        }
+            ?? providerEntries.first { $0.providerID == draft.providerID }
+            ?? providerEntries.first
+    }
+
+    private var selectedProviderModels: [String] {
+        guard let entry = selectedProviderEntry else { return [] }
+        return AgentExecutionProfileModelCatalog.models(for: entry)
+    }
+
+    private var providerBinding: Binding<UUID> {
+        Binding(
+            get: { selectedProviderEntry?.id ?? providerEntries.first?.id ?? UUID() },
+            set: { entryID in
+                guard var updated = draft,
+                      let entry = providerEntries.first(where: { $0.id == entryID }) else { return }
+                let models = AgentExecutionProfileModelCatalog.models(for: entry)
+                updated.providerID = entry.providerID
+                updated.modelID = models.first
+                draft = updated
+                appState.materializeProviderLibraryEntryAPIKey(id: entry.id)
+            }
+        )
+    }
+
+    private var modelBinding: Binding<String> {
+        Binding(
+            get: { draft?.modelID ?? selectedProviderModels.first ?? "" },
+            set: { model in
+                guard var updated = draft else { return }
+                updated.modelID = model
+                updated.providerID = selectedProviderEntry?.providerID
+                draft = updated
+            }
+        )
     }
 
     private func originLabel(_ origin: AgentExecutionProfileOrigin) -> String {

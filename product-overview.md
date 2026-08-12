@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-12 | Current version: v1.247.0-rc11
+> Last updated: 2026-08-13 | Current version: v1.248.0-rc1
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **调度 Profile 联动选模与会话侧栏拖拽（1.248.0-rc1）** —— Profile 管理支持先选 Provider、再从该 Provider 的模型目录选模，内建 Profile 也可覆盖并按稳定 ID 持久化；新调度项目的默认规划模型由 Kimi K3 调整为 GPT-5.6 Sol，Kimi K3 仍作为可选内建项保留。调度台主操作按钮统一为黑底白字，破坏性停止操作继续使用红色。左侧会话列表现在可以在 230–520 pt 之间拖拽并记住宽度，交互反馈与右侧终端/预览分隔条一致；拖拽期间冻结聊天排版，松手后由阅读锚点恢复机制保留当前阅读位置。
 - **Agent 侧边栏 Markdown 排版同步（1.247.0-rc5）** —— 右侧“预览”面板将 Agent 外观中的字体、字号和行高应用到 Markdown 正文、标题、列表、引用、表格及代码块；设置调整后与主聊天区同步更新，同时保留编辑器独立预览的既有默认排版。
 - **Agent 外观独占工作区背景（1.247.0-rc4）** —— 工作区壁纸及 Agent 背景效果统一由“Agent 外观”管理；编辑器设置移除重复的“背景”标签，仅保留编辑、格式、字体和工作区四个页面，避免同一壁纸在两个入口重复配置。
 - **Composer 图标黑白灰体系（1.247.0-rc3）** —— Composer 在卡片边界统一覆盖 macOS 控件强调色，顶部运行上下文、底部操作栏、附件与技能标签、任务进度及模型选择面板中的图标只使用黑、白、灰语义色；选中、警告、完成和失败状态改由图标形状、描边与明暗层级表达，不再被 `Menu`、无边框按钮、Provider 品牌色或彩色状态色染成蓝色等强调色。
