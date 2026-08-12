@@ -1,7 +1,24 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc20 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc21 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc21 - 2026-08-12
+
+### Fixed
+
+- 调度台只收编在调度台里创建的项目。`AgentDispatchCoordinator.synchronizedGoals` 此前的收编条件只有"有 Goal 且不是子任务"，完全不看 `presentationScope`——而从 composer 切到目标模式**并不会**改变 `presentationScope`。于是任何普通聊天只要定下 Goal，就自动在调度台里多出一个用户从未创建过的项目。现在要求 `presentationScope == .dispatchBoard`，即真正从调度台入口开的会话；普通会话的 Goal 仍留在侧边栏，不再被投影过去。
+- composer 顶部的「此工作区已有未完成的 Goal」提示条不再指向调度台自有的会话。那条提示的"打开"对调度台项目及其子任务会直接切走到调度台，等于因为别处存在一个 Goal 就把用户拽离当前对话；调度台是相对独立的系统，不该这样倒灌。提示条现在只呈现同工作区里的普通会话 Goal，随之去掉了"调度台项目优先"的排序位。新增 `AgentWorkspaceSessionSnapshot.isDispatchOwned` 统一判定（调度台项目或其子任务）。
+- 系统提示词里的 `WORKSPACE GOAL AWARENESS` 保持原样：让 Agent 知道同工作区还有未完成的调度台项目，是为了避免重复开工，并不会把用户导向任何界面。
+
+### Tests
+
+- `AgentSidebarGoalVisibilityTests` 与 `AgentGoalModeSessionRecoveryTests` 里各有一份 `synchronizedGoals` 的"镜像判定"，此前不含 scope；两份镜像与其断言一并更新，否则它们会继续替旧契约站台、让改动看起来无害。现在分别断言：普通会话定下 Goal 后留在侧边栏且**不**被调度台收编；只有 `.dispatchBoard` 会话才被收编。
+- 新增 `isDispatchOwned` 用例，覆盖调度台项目、调度台子任务（含 scope 被写成 workspace 的子任务）与普通会话三种形态。
+
+### Meta
+
+- 调度台归属边界修复，预发布版本从 **1.247.0-rc20** 提升为 **1.247.0-rc21**，内部构建号 **364 → 365**，Help 与 Computer Use Helper 构建号 **280 → 281**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc20 - 2026-08-12
 

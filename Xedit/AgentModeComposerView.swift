@@ -139,15 +139,18 @@ struct AgentChatComposer: View {
         }
         return appState.workspaceSessionSnapshots(for: runtime)
             .filter {
-                !$0.isActive
+                // Dispatch console projects and their task sessions are
+                // deliberately excluded: the console is a separate system,
+                // and "Open" on one of its sessions navigates away into it.
+                // An unfinished goal over there is not a reason to pull the
+                // user out of the conversation they are in.
+                !$0.isDispatchOwned
+                    && !$0.isActive
                     && !$0.isArchived
                     && $0.goalStatement?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                     && !$0.goalIsComplete
             }
             .sorted {
-                if $0.isDispatchProject != $1.isDispatchProject {
-                    return $0.isDispatchProject && !$1.isDispatchProject
-                }
                 if $0.isResponding != $1.isResponding {
                     return $0.isResponding && !$1.isResponding
                 }
