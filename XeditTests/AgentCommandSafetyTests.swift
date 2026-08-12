@@ -202,6 +202,66 @@ extension WillDeepTests {
         }
     }
 
+    @Test("run_command auto-approves rebuildable cleanup inside a project's additional folders")
+    func testRebuildableWorkspaceCleanupPolicyWithAdditionalRoots() {
+        let workspace = URL(fileURLWithPath: "/tmp/willdeep-cleanup-workspace").standardizedFileURL
+        let secondary = URL(fileURLWithPath: "/tmp/willdeep-cleanup-secondary").standardizedFileURL
+
+        struct Case {
+            let command: String
+            let expected: Bool
+            let note: String
+        }
+        let cases = [
+            Case(
+                command: "cd \(secondary.path) && rm -rf node_modules",
+                expected: true,
+                note: "relative cleanup after cd into the second project folder"
+            ),
+            Case(
+                command: "rm -rf \(secondary.path)/node_modules",
+                expected: true,
+                note: "absolute cleanup target inside the second project folder"
+            ),
+            Case(
+                command: "cd \(secondary.path)/web && rm -rf node_modules dist",
+                expected: true,
+                note: "nested subdirectory of the second project folder"
+            ),
+            Case(
+                command: "rm -rf /tmp/willdeep-cleanup-elsewhere/node_modules",
+                expected: false,
+                note: "path outside every authorized root stays manual"
+            ),
+            Case(
+                command: "rm -rf \(secondary.path)",
+                expected: false,
+                note: "the authorized root itself is never a cleanup target"
+            ),
+            Case(
+                command: "cd \(secondary.path) && rm -rf src",
+                expected: false,
+                note: "non-rebuildable directory stays manual even inside the second root"
+            ),
+        ]
+
+        for testCase in cases {
+            let approved = AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+                command: testCase.command,
+                rootDirectory: workspace,
+                additionalWorkspaceRoots: [secondary]
+            )
+            #expect(approved == testCase.expected, "\(testCase.note): \(testCase.command)")
+        }
+
+        // Without the additional root the same second-folder cleanup must
+        // still fall back to a manual approval card.
+        #expect(!AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+            command: "cd \(secondary.path) && rm -rf node_modules",
+            rootDirectory: workspace
+        ))
+    }
+
     @Test("SafeCommand: shell wrappers with harmless sentinel commands auto-approve")
     func testSafeCommandShellWrapperSentinel() {
         #expect(SafeCommand.classify(command: #"/bin/sh -lc "echo DOCKER_DONE""#) == .alwaysSafe)

@@ -82,6 +82,9 @@ extension AppState {
                 arguments: arguments,
                 risk: risk,
                 rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: Array(
+                    agentWorkspaceRoots(for: runtime.session).dropFirst()
+                ),
                 interactionMode: runtime.interactionMode,
                 approvalMode: runtime.approvalMode,
                 conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
@@ -302,6 +305,7 @@ extension AppState {
         arguments: [String: AgentJSONValue],
         risk: AgentToolRisk,
         rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL] = [],
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
         conversationAllowedToolSignatures: Set<String> = [],
@@ -325,7 +329,8 @@ extension AppState {
         let sandboxDecision = AgentSandboxPolicy.decision(
             toolName: toolName,
             arguments: arguments,
-            rootDirectory: rootDirectory
+            rootDirectory: rootDirectory,
+            additionalWorkspaceRoots: additionalWorkspaceRoots
         )
 
         // Computer Use never participates in the generic Goal, conversation,
@@ -581,7 +586,8 @@ extension AppState {
             // External effects continue through the classifier/judge below.
             if AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
                 command: command,
-                rootDirectory: rootDirectory
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: additionalWorkspaceRoots
             ) {
                 return .staticAllowlist
             }
@@ -1114,6 +1120,9 @@ extension AppState {
                     arguments: call.arguments,
                     risk: call.risk,
                     rootDirectory: rootDirectory,
+                    additionalWorkspaceRoots: Array(
+                        self.agentWorkspaceRoots(for: runtime.session).dropFirst()
+                    ),
                     interactionMode: runtime.interactionMode,
                     approvalMode: runtime.approvalMode,
                     conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
