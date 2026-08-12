@@ -644,10 +644,17 @@ enum AgentDesign {
     /// A readable baseline for side-by-side Git review. Small windows still
     /// clamp this value through `panelWidthCap`.
     static let reviewPanelPreferredWidth: Double = 520
-    /// Live tool activity belongs to the assistant prose immediately above
-    /// it, so it uses normal line rhythm instead of the full inter-message
-    /// gap reserved for separate chat turns.
-    static let liveActivityTopSpacing: CGFloat = 6
+    /// Tool activity and the message statistics form one metadata group below
+    /// the assistant prose. Keep that group visibly separate without spending
+    /// a complete blank body row on it.
+    static let assistantMetadataTopSpacingScale: CGFloat = 0.7
+    /// Rows inside the same live activity group should read as a compact list,
+    /// not as separate chat messages.
+    static let liveActivityRowSpacing: CGFloat = 2
+
+    static func assistantMetadataTopSpacing(baseFontSize: CGFloat) -> CGFloat {
+        max(0, baseFontSize * assistantMetadataTopSpacingScale)
+    }
     static let composerHeight: CGFloat = 124
     static let headerHeight: CGFloat = 44
     static let statusBarHeight: CGFloat = 26

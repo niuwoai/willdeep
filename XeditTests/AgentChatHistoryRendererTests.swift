@@ -1289,10 +1289,34 @@ struct AgentChatHistoryRendererTests {
             fontSize: bodyFont.pointSize,
             lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
         ))
-        #expect(collapsedText.substring(with: NSRange(
+        let metadataSeparatorRange = NSRange(
             location: NSMaxRange(commandRange),
             length: copyRange.location - NSMaxRange(commandRange)
-        )) == "\n")
+        )
+        #expect(collapsedText.substring(with: metadataSeparatorRange) == "\n")
+
+        let bodyEnd = NSMaxRange(bodyRange)
+        let bodyToToolRange = NSRange(
+            location: bodyEnd,
+            length: readRange.location - bodyEnd
+        )
+        #expect(collapsedText.substring(with: bodyToToolRange).hasPrefix("\n\n"))
+        let metadataSpacerFont = try #require(collapsed.attribute(
+            .font,
+            at: bodyEnd + 1,
+            effectiveRange: nil
+        ) as? NSFont)
+        let metadataSpacerStyle = try #require(collapsed.attribute(
+            .paragraphStyle,
+            at: bodyEnd + 1,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let expectedMetadataSpacing = AgentDesign.assistantMetadataTopSpacing(
+            baseFontSize: bodyFont.pointSize
+        )
+        #expect(abs(metadataSpacerFont.pointSize - expectedMetadataSpacing) < 0.001)
+        #expect(abs(metadataSpacerStyle.minimumLineHeight - expectedMetadataSpacing) < 0.001)
+        #expect(abs(metadataSpacerStyle.maximumLineHeight - expectedMetadataSpacing) < 0.001)
 
         let groupID = "inline:\(proseID.uuidString):\(followupID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
@@ -1302,6 +1326,44 @@ struct AgentChatHistoryRendererTests {
         )
         #expect(expanded.string.contains("tool  run_command  command: git status --short"))
         #expect(expanded.string.contains("tool  read_file  path: README.md"))
+    }
+
+    @Test("assistant statistics keep a 0.7 body-font gap from prose")
+    func assistantStatisticsUseCompactMetadataGap() throws {
+        let baseFontSize: CGFloat = 18
+        let message = AgentMessage(
+            role: .assistant,
+            content: "正文已经完成。",
+            promptTokens: 553_500,
+            completionTokens: 745
+        )
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [message],
+            isDark: false,
+            baseFontSize: baseFontSize
+        )
+        let text = rendered.string as NSString
+        let bodyRange = text.range(of: "正文已经完成。")
+        let summary = try #require(AgentChatMessageMetrics.tokenSummary(for: message))
+        let summaryRange = text.range(of: summary)
+        #expect(bodyRange.location != NSNotFound)
+        #expect(summaryRange.location != NSNotFound)
+        #expect(text.substring(with: NSRange(
+            location: NSMaxRange(bodyRange),
+            length: summaryRange.location - NSMaxRange(bodyRange)
+        )).hasPrefix("\n\n"))
+
+        let spacerIndex = NSMaxRange(bodyRange) + 1
+        let spacerStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: spacerIndex,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let expectedSpacing = AgentDesign.assistantMetadataTopSpacing(
+            baseFontSize: baseFontSize
+        )
+        #expect(abs(spacerStyle.minimumLineHeight - expectedSpacing) < 0.001)
+        #expect(abs(spacerStyle.maximumLineHeight - expectedSpacing) < 0.001)
     }
 
     /// Short args fit fully in the inline preview → no "完整参数 X B"

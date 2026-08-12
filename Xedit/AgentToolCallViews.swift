@@ -636,7 +636,7 @@ struct AgentLiveActivityTimeline: View {
     var body: some View {
         let presentation = AgentLiveActivityTimelinePresentation(calls: calls)
         let detailCallIDs = Set(presentation.detailCalls(isExpanded: isExpanded).map(\.id))
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: AgentDesign.liveActivityRowSpacing) {
             if isExpanded, presentation.hiddenOperationCount > 0 {
                 AgentActivityTimelineSummaryRow(count: presentation.hiddenOperationCount)
             }
