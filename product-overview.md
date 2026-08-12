@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-12 | Current version: v1.247.0-rc14
+> Last updated: 2026-08-12 | Current version: v1.247.0-rc15
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **普通会话与周期任务共享上下文感知 Auto-review（1.247.0-rc15）** —— Smart 审核会递归验证 SSH 的远端载荷；明确的 `journalctl` 日志读取、`systemctl show/status/is-active` 状态查询及只读文本分析链，可在后台周期任务、普通 `run_command` 和可见终端中静态放行。越界候选交给独立审核模型时携带精确工具、精确命令和脱敏限长的当前任务意图；任务意图不是授权，YES 不扩大沙箱权限，缓存也不会跨任务上下文复用。交互式远端 Shell、端口转发、远端写入、服务重启和日志清理仍保留模型或人工审核。
 - **Agent 侧边栏 Markdown 排版同步（1.247.0-rc5）** —— 右侧“预览”面板将 Agent 外观中的字体、字号和行高应用到 Markdown 正文、标题、列表、引用、表格及代码块；设置调整后与主聊天区同步更新，同时保留编辑器独立预览的既有默认排版。
 - **Agent 外观独占工作区背景（1.247.0-rc4）** —— 工作区壁纸及 Agent 背景效果统一由“Agent 外观”管理；编辑器设置移除重复的“背景”标签，仅保留编辑、格式、字体和工作区四个页面，避免同一壁纸在两个入口重复配置。
 - **Composer 图标黑白灰体系（1.247.0-rc3）** —— Composer 在卡片边界统一覆盖 macOS 控件强调色，顶部运行上下文、底部操作栏、附件与技能标签、任务进度及模型选择面板中的图标只使用黑、白、灰语义色；选中、警告、完成和失败状态改由图标形状、描边与明暗层级表达，不再被 `Menu`、无边框按钮、Provider 品牌色或彩色状态色染成蓝色等强调色。

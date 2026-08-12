@@ -172,7 +172,9 @@ struct OpenAIChatAdapter {
     /// "fall back to user approval".
     func judgeCommandSafety(
         command: String,
-        historyContext: String = ""
+        historyContext: String = "",
+        toolName: String = "run_command",
+        taskContext: String = ""
     ) async -> AgentSafetyJudgeResult {
         guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
             return .unavailable("missing api key")
@@ -189,7 +191,11 @@ struct OpenAIChatAdapter {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let systemPrompt = AgentInjectionDefense.judgeSystemPromptText(historyContext: historyContext)
-        let userPayload = AgentInjectionDefense.judgeUserPayload(command: command)
+        let userPayload = AgentInjectionDefense.judgeUserPayload(
+            command: command,
+            toolName: toolName,
+            taskContext: taskContext
+        )
 
         let body: [String: Any] = [
             "model": configuration.model,
