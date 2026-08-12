@@ -105,6 +105,12 @@ struct AgentChatComposer: View {
             appState.refreshAgentGitWorktrees()
             appState.refreshAgentWorkspaceCollision()
         }
+        // 用户可能在 App 外面（自己的终端、别的 Git 客户端）切了分支，路径没变，
+        // 我们也收不到任何工具回调。重新获得焦点时补一次身份刷新，胶囊不至于
+        // 长期挂着旧分支。
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            appState.refreshAgentGitWorktrees()
+        }
         .sheet(item: $appState.agentWorktreeDiffPreview) { preview in
             AgentWorktreeDiffPreviewSheet(preview: preview)
         }

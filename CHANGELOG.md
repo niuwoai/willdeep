@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc23 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc24 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc24 - 2026-08-12
+
+### Fixed
+
+- Composer 上方的分支胶囊跟上工作区的分支切换。这枚胶囊读 `agentWorkspaceGitStatus`，而它此前只在切会话、切根目录、建删 worktree 时刷新——全是**路径变了**的场合；分支恰恰可以在同一个路径里被换掉（Agent 在 `run_command` 里跑 `git switch`、内置终端、用户自己的终端），于是切完分支后胶囊会一直挂着旧分支名，成了一条会骗人的运行上下文。现在编辑器 git 刷新、Agent 工具收尾（`refreshGitStatusAfterAgentTool`）、活动 worktree 变更刷新三条既有链路都把自己那份已经算好的仓库身份（root + 分支）补录给胶囊，不额外开 git 进程；补录只在快照路径等于当前活动 workspace 时生效，后台会话的快照不会串改前台显示。App 重新获得焦点时另补一次刷新，兜住在 WillDeep 外面切分支的情况。
+
+### Tests
+
+- `AgentComposerBranchPillTests` 新增两用例：同一 workspace 的新分支名能被采纳且身份视图不被灌入逐文件状态；另一个 workspace 的快照不得改写当前胶囊。
 
 ## 1.247.0-rc23 - 2026-08-12
 

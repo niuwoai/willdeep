@@ -1,6 +1,13 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-12（1.247.0-rc13）
+> Last updated: 2026-08-12（1.247.0-rc24）
+
+## 1.247.0-rc24 — Composer 分支胶囊跟随分支切换
+
+- ⏳ 在 Agent 会话里让 Agent 用 `run_command` 跑 `git switch -c tmp/branch-pill-check`，确认 composer 上方分支胶囊在这一轮工具收尾后就显示新分支名，不用切会话。
+- ⏳ 在 WillDeep 的内置终端里 `git switch -` 切回原分支，确认胶囊同样跟上（切走再切回 App 时最迟应刷新）。
+- ⏳ 在 WillDeep **外面**用自己的终端切分支，然后点回 WillDeep 窗口，确认胶囊在重新获得焦点后刷新。
+- ⏳ 开两个会话分别指向不同 worktree，在后台那个会话所在目录切分支，确认前台会话的胶囊**不**被改写。
 
 ## 1.247.0-rc13 — 其余测试一次性 suite 前缀纳入卫生机制
 
