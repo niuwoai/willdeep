@@ -80,17 +80,21 @@ struct MobileGatewayCoordinatorTests {
         #expect(payload.relayBaseURL == "https://j.niuwoai.com")
         #expect(payload.relayRoom == "willdeep-abc")
         #expect(payload.relayToken == "relay-secret")
-        // Wire-compat fields for clients that key off base_url / pairing_token.
-        #expect(payload.baseURL == "https://j.niuwoai.com")
-        #expect(payload.pairingToken == "relay-secret")
+        // No LAN gateway in relay mode: these stay nil so the QR payload does
+        // not carry a second copy of the relay URL and token.
+        #expect(payload.baseURL == nil)
+        #expect(payload.pairingToken == nil)
         #expect(payload.protocolVersion == "mobile-gateway.v1")
         #expect(payload.fallbackBaseURLs.isEmpty)
         // Long-lived: no meaningful countdown (rotate to revoke).
         #expect(payload.expiresAt > now.addingTimeInterval(60 * 60 * 24 * 365))
-        // Round-trips through the QR JSON encoder without losing relay fields.
+        // Round-trips through the QR JSON encoder without losing relay fields,
+        // and without re-encoding them a second time as base_url / pairing_token.
         let json = payload.qrJSONString
         #expect(json.contains("relay_room"))
         #expect(json.contains("relay_token"))
+        #expect(!json.contains("\"base_url\""))
+        #expect(!json.contains("\"pairing_token\""))
     }
 
     @Test

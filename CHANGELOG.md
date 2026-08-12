@@ -3,6 +3,22 @@
 > 当前文件保留最新版本（1.247.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.247.0-rc12 - 2026-08-12
+
+### Changed
+
+- 中继模式的配对载荷不再伪造局域网字段。此前 `relayPairingPayload` 把中继地址和中继 token 各复制一份填进 `base_url` / `pairing_token`，理由是"照顾按这两个字段取值的客户端"——但中继模式下压根没有本地网关可连，手机走的是 `relay_*` 那套；这份副本除了让配对载荷凭空多出约 100 字节（二维码要多烧一到两个版本的模块）之外没有任何作用。现在两个字段在中继模式下为 `nil`，`MobileGatewayPairingPayload.baseURL` / `pairingToken` 改为可选，JSON 编码时直接省略。
+- 手机端（Android 1.25.0-rc5 起）在缺少这两个字段时按 `relay_base_url` / `relay_token` 补全；紧凑二维码参数（`r`/`t`）本来就是这么工作的，因此对已发布的手机端保持线上兼容。
+- 设置面板的"配对地址"在中继模式下显示中继地址，不再因为字段为空而留一行空白。
+
+### Tests
+
+- `relayPairingPayloadCarriesRelayCoordinates` 改为断言 `baseURL` / `pairingToken` 为 `nil`，并新增断言：配对 JSON 里不再出现 `"base_url"` 与 `"pairing_token"`。
+
+### Meta
+
+- 配对载荷瘦身，预发布版本从 **1.247.0-rc11** 提升为 **1.247.0-rc12**。
+
 ## 1.247.0-rc11 - 2026-08-12
 
 ### Fixed
