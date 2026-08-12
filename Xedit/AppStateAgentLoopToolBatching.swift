@@ -191,6 +191,7 @@ extension AppState {
                 if let recordIndex = runtime.toolCalls.firstIndex(where: { $0.id == entry.recordID }) {
                     runtime.toolCalls[recordIndex].status = .failed
                     runtime.toolCalls[recordIndex].errorMessage = errorMessage
+                    runtime.toolCalls[recordIndex].commandExitCode = (error as? AgentToolError)?.completedCommandExitCode
                 }
                 AgentSandboxAuditLog.append(
                     toolName: entry.toolName,

@@ -553,6 +553,17 @@ enum AgentToolError: LocalizedError {
         }
     }
 
+    /// Exit status when the command actually ran and returned non-zero, i.e.
+    /// the process started, did its job, and reported an ordinary negative
+    /// answer (`corepack --version` → 127 on a machine without corepack,
+    /// `grep` → 1 for "no match"). nil for everything else, including the
+    /// `-1` sentinel `runCommand` throws when the process could not be
+    /// launched at all — that one is a genuine malfunction.
+    var completedCommandExitCode: Int32? {
+        guard case .commandFailed(let code, _) = self, code > 0 else { return nil }
+        return code
+    }
+
     func redacted(secretValues: [String]) -> AgentToolError {
         guard !secretValues.isEmpty else { return self }
         switch self {
@@ -643,6 +654,14 @@ struct AgentToolCall: Identifiable, Equatable {
     var status: AgentToolCallStatus
     var result: AgentToolResult?
     var errorMessage: String?
+    /// Exit status of a command that actually ran to completion and returned
+    /// non-zero. Only set for `AgentToolError.commandFailed` with a real
+    /// (positive) status — a probe like `corepack --version` on a machine
+    /// without corepack exits 127, which is an ordinary answer, not a
+    /// malfunction. Stays nil when the process never ran (launch failure,
+    /// which uses -1), timed out, or when the failure is anything else, so
+    /// the UI can keep alarming colors for failures that need attention.
+    var commandExitCode: Int32?
     /// Set when a write-tier tool call was auto-approved. Used by the UI
     /// to surface a small "Auto-approved" note so the user can audit
     /// what slipped through.
@@ -675,6 +694,7 @@ struct AgentToolCall: Identifiable, Equatable {
         status: AgentToolCallStatus,
         result: AgentToolResult? = nil,
         errorMessage: String? = nil,
+        commandExitCode: Int32? = nil,
         approvalSource: AgentToolApprovalSource? = nil,
         subagentModel: String? = nil,
         subagentProgress: String? = nil,
@@ -690,6 +710,7 @@ struct AgentToolCall: Identifiable, Equatable {
         self.status = status
         self.result = result
         self.errorMessage = errorMessage
+        self.commandExitCode = commandExitCode
         self.approvalSource = approvalSource
         self.subagentModel = subagentModel
         self.subagentProgress = subagentProgress
