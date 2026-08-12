@@ -1,7 +1,25 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc15 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc16 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc16 - 2026-08-12
+
+### Fixed
+
+- 侧边栏会话列表在冷启动加载完成前不再显示"您开始的会话将显示在这里。"的空态文案。会话目录在后台线程从磁盘读取（`AgentSessionStore.loadAllWithMetadata()`），头几百毫秒列表必然为空，旧逻辑只看 `agentSessions.isEmpty` 就渲染空态，用户会误以为会话丢了。现在空态三分：目录未加载完且列表为空 → 显示"正在加载会话…"加载占位（小号 ProgressView + 说明文字，高度钉在正常行高 31pt，首批会话落地时无布局跳动）；目录加载完且确实没有会话 → 维持既有空态文案；列表非空 → 现状不变。分支选择抽成纯函数 `AgentSidebarCatalogPlaceholder.state(hasLoadedCatalog:isSessionListEmpty:)`，由已有的 `@Published hasLoadedAgentSessionCatalog` 驱动视图刷新。
+- 中继模式的配对载荷不再复制局域网字段。`MobileGatewayCoordinator.relayPairingPayload` 此前把中继地址和中继 token 各复制一份填进 `base_url` / `pairing_token`，中继模式下压根没有本地网关可连，这两份副本换不来任何能力，却白占约 100 字节二维码容量（重复 token 单独就能把码推高一到两个版本）。现在两字段改为可选、传 `nil`，JSON 编码时直接省略；手机端本就从 `relay_base_url` / `relay_token` 取值（紧凑二维码参数 `r`/`t` 一直如此），紧凑分支不受影响，对 Android ≥ 1.25.0-rc5 线上兼容。
+- 设置面板"配对地址"一行改取 `baseURL ?? relayBaseURL`，中继模式显示手机实际加入的中继端点；两者皆空时整行隐藏，不再留一行空白。
+
+### Tests
+
+- `AgentSidebarListVisualMetricsTests` 新增占位三分支用例，覆盖加载中/真空态/列表非空的输入组合。
+- `MobileGatewayCoordinatorTests.relayPairingPayloadCarriesRelayCoordinates` 改为断言 `baseURL` / `pairingToken` 为 `nil`，并新增断言配对 JSON 不含 `"base_url"` / `"pairing_token"`。
+
+### Meta
+
+- 侧边栏加载态与中继配对载荷瘦身合入 develop，预发布版本从 **1.247.0-rc15** 提升为 **1.247.0-rc16**，内部构建号 **359 → 360**，Help 与 Computer Use Helper 构建号 **275 → 276**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+- 两个分支各自携带的版本位点（rc14 / rc12）在合并时统一取 develop 侧，条目文本归位到本条 rc16。
 
 ## 1.247.0-rc15 - 2026-08-12
 
