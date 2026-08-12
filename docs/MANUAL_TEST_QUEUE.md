@@ -1,6 +1,11 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-12（1.247.0-rc4）
+> Last updated: 2026-08-12（1.247.0-rc12）
+
+## 1.247.0-rc12 — 测试 UserDefaults 壳文件收敛
+
+- ⏳ 在本机跑一轮全量单测，跑完统计 `ls ~/Library/Preferences/com.willdeep.agent.test.defaults.*.plist ~/Library/Preferences/com.willdeep.mcp.test.*.plist | wc -l`，确认残留不超过一轮用例的量（约 20 个 42 字节空壳；cfprefsd 会按自己的节奏 flush 出壳，进程内删不干净，属预期）。
+- ⏳ 再跑第二轮全量单测，确认残留没有累加：总数仍约 20 个，且文件时间戳全部来自第二轮（上一轮的壳已被进程启动时的 sweep 扫掉）。
 
 ## 1.247.0-rc4 — 桌面宠物空转开销
 
