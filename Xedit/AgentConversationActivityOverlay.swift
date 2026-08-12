@@ -720,6 +720,9 @@ private struct AgentDevServerActivityCard: View {
         _ = try? appState.agentJobRegistry.start(
             command: job.command,
             workingDirectory: workingDirectory,
+            additionalWorkspaceRoots: appState.activeRuntime.map {
+                appState.agentWorkspaceRoots(for: $0.session)
+            } ?? [],
             runtimeID: runtimeID,
             timeoutSeconds: nil,
             sandboxMode: .workspaceWriteNetwork,
