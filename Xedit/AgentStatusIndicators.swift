@@ -1655,7 +1655,7 @@ struct PlanStatusPill: View {
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .foregroundStyle(Color.white)
+            .foregroundStyle(pillTextColor)
             .background(Capsule(style: .continuous).fill(pillColor))
     }
 
@@ -1670,14 +1670,38 @@ struct PlanStatusPill: View {
         }
     }
 
-    private var pillColor: Color {
-        if isInterrupted { return .gray }
+    /// "Done" is the expected end of a plan, not news — it gets a quiet gray
+    /// chip that recedes once you have read it. The states that still want
+    /// something from you (awaiting approval, rejected) keep their hue, and
+    /// executing keeps its own so a running plan stays findable at a glance.
+    static func fillColor(status: AgentPlan.Status, isInterrupted: Bool) -> Color {
+        if isInterrupted { return quietFill }
         switch status {
         case .proposed: return .orange
         case .approved, .executing: return .green
-        case .done: return .blue
+        case .done: return quietFill
         case .rejected: return .red
         }
+    }
+
+    static func textColor(status: AgentPlan.Status, isInterrupted: Bool) -> Color {
+        if isInterrupted { return .secondary }
+        switch status {
+        case .done: return .secondary
+        case .proposed, .approved, .executing, .rejected: return Color.white
+        }
+    }
+
+    private static let quietFill = Color.primary.opacity(0.08)
+
+    private var pillColor: Color {
+        Self.fillColor(status: status, isInterrupted: isInterrupted)
+    }
+
+    /// White reads as a label only on a saturated chip; on the quiet gray
+    /// fill it would wash out, so those states take secondary ink instead.
+    private var pillTextColor: Color {
+        Self.textColor(status: status, isInterrupted: isInterrupted)
     }
 }
 

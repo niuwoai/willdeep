@@ -137,6 +137,7 @@ struct AgentPlanCard: View {
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
+                .agentQuietMenuChrome()
                 .fixedSize()
                 .help(L10n.PlanRevision.replanTooltip)
             }
@@ -527,14 +528,25 @@ struct AgentPlanStepRow: View {
         }
     }
 
-    private var glyphColor: Color {
-        switch step.status {
-        case .pending: return .secondary
+    /// Layered gray instead of a green/red pair: red-green is exactly the
+    /// axis a red-green colorblind reader cannot separate, and "done" is the
+    /// normal outcome of a plan — it does not need to shout. The glyph shape
+    /// already carries the state (filled check / outline circle / dash), so
+    /// gray only has to place each row in the hierarchy: settled work sits
+    /// at `.secondary`, work not started yet recedes further, and only the
+    /// two states that actually want your eye keep a hue.
+    static func glyphColor(for status: AgentPlan.StepStatus) -> Color {
+        switch status {
+        case .pending: return AgentComposerChrome.iconMuted
         case .inProgress: return .orange
-        case .done: return .green
-        case .skipped: return .secondary
+        case .done: return AgentComposerChrome.iconSecondary
+        case .skipped: return AgentComposerChrome.iconMuted
         case .failed: return .red
         }
+    }
+
+    private var glyphColor: Color {
+        Self.glyphColor(for: step.status)
     }
 
     private var textColor: Color {

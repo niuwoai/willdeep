@@ -1068,6 +1068,7 @@ struct AgentMediaTasksPanel: View {
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
+                .agentQuietMenuChrome()
                 .focusable(false)
                 .help("媒体任务批量操作")
             }
