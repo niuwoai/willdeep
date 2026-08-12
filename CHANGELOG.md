@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc10 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc11 - 2026-08-12
+
+### Fixed
+
+- 快速测试入口失败时不再把上一次的绿色报告留在原地冒充本次结论。`scripts/run_tests_fast.rb` 此前只在成功路径写 `build/fast-tests/report.{json,md}`，一旦测试失败或构建阶段就挂掉，脚本直接退出，磁盘上仍是上一轮的 `"ok": true`——而 `TESTING.md` 恰恰让调用方以该文件为准，一个陈旧的绿勾足以让跑崩的构建冒充跑通的构建。现在失败路径会先把报告置为红，再交给 `xcresult_report.rb` 补齐真实失败详情（bundle 不可读时回落原始日志），并以运行器自身的退出码为最终裁决，避免"构建未进入测试阶段、xcresult 计数看着干净"被误报为通过。
+- 失败报告因此带上了可直接读的失败用例名、断言和行号，不必再去 grep 原始 xcodebuild 日志。
+
+### Tests
+
+- 手工验证三种路径：用例失败（`source=xcresult`，26 passed/1 failed 且 `failures` 含用例名与断言行）、编译失败（`source=xcodebuild-log`，计数归零并注明为近似值）、正常通过（`ok=true`）。
+
+### Meta
+
+- 测试报告可信度修复，预发布版本从 **1.247.0-rc10** 提升为 **1.247.0-rc11**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc10 - 2026-08-12
 
