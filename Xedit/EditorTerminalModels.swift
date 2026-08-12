@@ -188,6 +188,15 @@ struct EditorTerminalFont: Identifiable, Equatable {
     static let monaco = EditorTerminalFont(id: "monaco", displayName: "Monaco", postScriptName: "Monaco")
     static let sfMono = EditorTerminalFont(id: "sf-mono", displayName: "SF Mono", postScriptName: "SFMono-Regular")
 
+    /// The fonts we always offer, resolvable without touching the installed
+    /// font library. Kept as an explicit table so `byID` can short-circuit
+    /// here instead of forcing the Nerd Font enumeration below.
+    private static let builtIns: [EditorTerminalFont] = [.systemMono, .sfMono, .menlo, .monaco]
+
+    /// ID prefix for Nerd Fonts discovered by family-name scan (as opposed to
+    /// the known candidates above, which keep their stable short ids).
+    private static let discoveredNerdFontIDPrefix = "nf:"
+
     /// Common Nerd Fonts (Powerline/icon glyphs). Themes like
     /// powerlevel10k / starship render their separators and icons from a
     /// Nerd Font's private-use area; the plain monospace fonts above
@@ -223,14 +232,19 @@ struct EditorTerminalFont: Identifiable, Equatable {
         // boxes": whatever variant the user installed now gets offered.
         for family in NSFontManager.shared.availableFontFamilies
         where family.localizedCaseInsensitiveContains("Nerd Font") && !seenFamilies.contains(family) {
-            result.append(EditorTerminalFont(id: "nf:" + family, displayName: family, postScriptName: family))
+            result.append(EditorTerminalFont(id: discoveredNerdFontIDPrefix + family, displayName: family, postScriptName: family))
             seenFamilies.insert(family)
         }
         return result
     }
 
+    /// The full picker list for Settings. Forces the Nerd Font enumeration
+    /// (`NSFontManager.availableFontFamilies`, 0.3–0.9s cold on a machine with
+    /// a few hundred families), so it must stay OFF the startup path — only
+    /// the Settings font picker should evaluate it, and `byID` deliberately
+    /// resolves without it.
     static var all: [EditorTerminalFont] {
-        [.systemMono, .sfMono, .menlo, .monaco] + installedNerdFonts()
+        builtIns + installedNerdFonts()
     }
 
     /// Default font id for a fresh terminal: Monaco (ships with macOS,
@@ -242,8 +256,27 @@ struct EditorTerminalFont: Identifiable, Equatable {
         monaco.id
     }
 
+    /// Resolve a stored font id WITHOUT enumerating the installed font
+    /// library. This runs on the pre-first-frame startup path (settings
+    /// `load()` → `normalized()`), where the old `all.first { … }` lookup
+    /// forced `NSFontManager.availableFontFamilies` and cost 0.3–0.9s of
+    /// white screen. Built-ins resolve from a fixed table; Nerd Font ids
+    /// probe just their own family with `NSFont(name:)` — nil means not
+    /// installed, so callers fall back to the default exactly as before.
     static func byID(_ id: String) -> EditorTerminalFont? {
-        all.first { $0.id == id }
+        if let builtIn = builtIns.first(where: { $0.id == id }) {
+            return builtIn
+        }
+        if let candidate = nerdFontCandidates.first(where: { $0.id == id }) {
+            guard NSFont(name: candidate.family, size: 12) != nil else { return nil }
+            return EditorTerminalFont(id: candidate.id, displayName: candidate.display, postScriptName: candidate.family)
+        }
+        if id.hasPrefix(discoveredNerdFontIDPrefix) {
+            let family = String(id.dropFirst(discoveredNerdFontIDPrefix.count))
+            guard NSFont(name: family, size: 12) != nil else { return nil }
+            return EditorTerminalFont(id: id, displayName: family, postScriptName: family)
+        }
+        return nil
     }
 
     /// An installed Nerd Font to use as the cascade fallback, preferring

@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc11 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.247.0-rc13 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.247.0-rc13 - 2026-08-12
+
+### Changed
+
+- 启动不再全量枚举字体库。`AppState` 初始化在 App 首帧之前同步执行 `EditorTerminalSettingsStore.load()`，其 `normalized()` 校验字体 ID 时走 `EditorTerminalFont.byID` → `all` → `installedNerdFontCache`，触发 `NSFontManager.shared.availableFontFamilies` 全量枚举——本机 271 个 font family 实测冷启动耗时 0.31~0.92 秒，是启动白屏的最大单点。现在 `byID` 改为短路解析：内建字体（System Mono / SF Mono / Menlo / Monaco）查固定表；Nerd Font 类 ID（已知候选短 ID 与 `nf:` 前缀的家族名）只用 `NSFont(name:)` 探测那一个家族，不再碰全字体库。
+- 回退语义保持不变：存的字体 ID 指向未安装字体时 `NSFont(name:)` 返回 nil，`normalized()` 照旧回退默认字体（Monaco）。
+- 设置页字体列表（`EditorTerminalFont.all`）保留原有全量枚举，但只在真正打开设置页 Picker 时惰性求值（`static let` 缓存，首次求值后复用）。代价转移：首次打开设置页字体列表或首次创建终端（`nerdFallbackFont` 选 Nerd Font 级联回退）时才支付这次枚举，不再由每次启动支付。
+
+### Tests
+
+- 新增 `EditorTerminalFontResolutionTests`：内建 ID 从固定表解析、默认 ID 永远可解析、未安装 Nerd Font 的 `nf:` ID 返回 nil、`normalized()` 对未安装字体回退默认/对合法内建选择保持不动，以及短路解析与全量枚举表逐项一致（防止设置页选中的字体重启后解析不出来）。无计时断言。
+
+### Meta
+
+- 启动性能优化，预发布版本从 **1.247.0-rc11** 提升为 **1.247.0-rc13**（跳过 rc12，本分支未使用）；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc11 - 2026-08-12
 
