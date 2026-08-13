@@ -471,6 +471,8 @@ nonisolated enum L10n {
         }
         static let newSecretsTitle = String(localized: "composer.secret.new-title", defaultValue: "Add or update a secret")
         static let savedSecretInsertHelp = String(localized: "composer.secret.saved-insert-help", defaultValue: "Insert this protected secret at the cursor")
+        static let savedSecretCopyHelp = String(localized: "composer.secret.saved-copy-help", defaultValue: "Authenticate and copy this secret")
+        static let savedSecretCopyReason = String(localized: "composer.secret.saved-copy-reason", defaultValue: "Authenticate to copy this saved secret from Keychain.")
         static let savedSecretsEmpty = String(localized: "composer.secret.saved-empty", defaultValue: "No reusable secrets have been saved yet.")
         static let savedSecretsTitle = String(localized: "composer.secret.saved-title", defaultValue: "Saved secrets")
         static let secretAliasRule = String(localized: "composer.secret.alias-rule", defaultValue: "Aliases become lowercase kebab-case placeholders. Saving the same alias updates its local value.")

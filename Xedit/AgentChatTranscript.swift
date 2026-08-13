@@ -235,6 +235,10 @@ struct AgentChatTranscript: View {
     @State private var conversationSearchMatchCount = 0
     @State private var conversationSearchActiveIndex = 0
     @State private var isFollowingTranscriptBottom = true
+    /// Conversation history is disclosed in bounded pages. This keeps both
+    /// TextKit and the user-turn minimap proportional to what the operator has
+    /// actually reached instead of rebuilding an entire long transcript.
+    @State private var renderedMessageLimit = Self.renderedMessageCap
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -558,7 +562,8 @@ struct AgentChatTranscript: View {
                 .agentChatReadableColumn(verticalPadding: 20)
                 .background {
                     AgentTranscriptScrollObserver(
-                        isFollowingBottom: $isFollowingTranscriptBottom
+                        isFollowingBottom: $isFollowingTranscriptBottom,
+                        onReachTop: loadEarlierHistoryPage
                     )
                     .frame(width: 0, height: 0)
                 }
@@ -682,6 +687,7 @@ struct AgentChatTranscript: View {
         }
         .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
             closeConversationSearch()
+            renderedMessageLimit = Self.renderedMessageCap
         }
     }
 
@@ -689,10 +695,16 @@ struct AgentChatTranscript: View {
     /// in the currently-rendered window, with its reply + edited files folded in.
     private var userInputMinimapTurns: [AgentTranscriptTurnSummary] {
         minimapCache.turns(fingerprint: minimapInputFingerprint) {
-            let all = visibleMessages
-            let rendered = isConversationSearchActive ? all : renderedMessages(from: all)
-            return AgentTranscriptTurnSummary.build(from: rendered, toolCalls: appState.agentToolCalls)
+            AgentTranscriptTurnSummary.build(
+                from: minimapSourceMessages,
+                toolCalls: appState.agentToolCalls
+            )
         }
+    }
+
+    private var minimapSourceMessages: [AgentMessage] {
+        let all = visibleMessages
+        return isConversationSearchActive ? all : renderedMessages(from: all)
     }
 
     /// Identity-only digest of everything `userInputMinimapTurns` reads, so a
@@ -713,7 +725,7 @@ struct AgentChatTranscript: View {
         hasher.combine(isConversationSearchActive)
         hasher.combine(appState.agentToolCalls.count)
         hasher.combine(appState.agentToolCalls.last?.id)
-        for message in appState.agentMessages {
+        for message in minimapSourceMessages {
             hasher.combine(message.id)
             hasher.combine(message.role.rawValue)
             hasher.combine(message.content.count)
@@ -1041,13 +1053,24 @@ struct AgentChatTranscript: View {
     /// full visible list. If the list already fits, returns it
     /// untouched.
     private func renderedMessages(from all: [AgentMessage]) -> [AgentMessage] {
-        guard all.count > Self.renderedMessageCap else { return all }
-        return Array(all.suffix(Self.renderedMessageCap))
+        guard all.count > renderedMessageLimit else { return all }
+        return Array(all.suffix(renderedMessageLimit))
     }
 
     private func olderMessages(from all: [AgentMessage]) -> [AgentMessage] {
-        guard all.count > Self.renderedMessageCap else { return [] }
-        return Array(all.prefix(all.count - Self.renderedMessageCap))
+        guard all.count > renderedMessageLimit else { return [] }
+        return Array(all.prefix(all.count - renderedMessageLimit))
+    }
+
+    /// Called only when the viewport crosses into the top edge. Returning true
+    /// lets the AppKit observer preserve the current reading anchor while the
+    /// newly prepended TextKit page changes document height.
+    private func loadEarlierHistoryPage() -> Bool {
+        guard !isConversationSearchActive else { return false }
+        let available = visibleMessages.count
+        guard renderedMessageLimit < available else { return false }
+        renderedMessageLimit = min(renderedMessageLimit + Self.renderedMessageCap, available)
+        return true
     }
 
     /// Hosts the live streaming bubble. Observes the runtime's streaming

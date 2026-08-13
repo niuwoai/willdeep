@@ -1,7 +1,7 @@
 # 长程自主执行设计（long-horizon.v1）
 
 > Last updated: 2026-08-13 | 状态：设计草案（§7 默认假设待确认，确认前不进入编码）
-> 适用范围：Xedit（WillDeep macOS App，本仓库，1.250.0-rc4）与 willdeep-rs（CLI/Runtime，`~/Sites/willdeep-rs`，0.22.0-rc5）
+> 适用范围：Xedit（WillDeep macOS App，本仓库，1.250.0-rc5）与 willdeep-rs（CLI/Runtime，`~/Sites/willdeep-rs`，0.22.0-rc5）
 > 本文件是双端共享的 canonical 规范；willdeep-rs 侧的引用与落地映射见其 `docs/LONG_HORIZON_AUTONOMY.md`。
 > 与 `docs/GOAL_TEAMS_ROLES_DESIGN.md`（goal-teams.v1）是**互补关系**：那份解决「谁来做、做完谁验收」，本份解决「怎么一直做下去、按什么清单做」。两份可并行推进，无相互阻塞（§6.3）。
 
@@ -19,7 +19,7 @@
 
 两端现状（2026-08-13 探查结论，代码锚点见 §6）：
 
-| 构件 | Xedit 1.250.0-rc4 | willdeep-rs 0.22.0-rc5 |
+| 构件 | Xedit 1.250.0-rc5 | willdeep-rs 0.22.0-rc5 |
 |---|---|---|
 | 目标为一等实体 | **有**：`AgentGoal` / `AgentGoalRoadmap` 全套 Codable 随会话落盘 | **无**：`Session.goal` 是 `Option<String>`，Web 端仅前端 state，刷新即丢 |
 | 每轮注入态势 | **半个**：goal / roadmap / plan 每轮从 runtime 重拼进 system prompt，但**不含耗时与预算余量** | **半个**：仅 `<goal>` 字符串前缀，无进度、无预算 |
@@ -167,7 +167,7 @@ Xedit 目前有三个互不相通的「清单」，长程运行中会让用户�
 
 ## 6. 两端落地映射与实施里程碑
 
-### 6.1 Xedit（代码锚点为 2026-08-13 / 1.250.0-rc4 现状）
+### 6.1 Xedit（代码锚点为 2026-08-14 / 1.250.0-rc5 现状）
 
 | 步骤 | 内容 | 关键位点 |
 |---|---|---|

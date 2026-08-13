@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-13 | Current version: v1.250.0-rc4
+> Last updated: 2026-08-14 | Current version: v1.250.0-rc5
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **长会话渐进展示、终端自动显露与密钥落盘保护（1.250.0-rc5）** —— 对话正文与左侧用户输入定位条只处理当前 240 条消息窗口，滚动到顶部后按页加载更早历史并保持阅读位置；右侧浏览器、终端等面板不再自动藏掉用户已打开的会话列表。播放终端捷径时零标签会自动建立本地 Shell，AI 工具新建终端标签后会主动打开终端面板并选中该标签。会话 JSON 在写入边界再次脱敏常见 Key/Token/私钥；用户自己保存的钥匙串密钥可在 Touch ID 或系统密码认证后直接复制。
 - **调度历史、语言测试与对话收口（1.250.0-rc4）** —— “已安排的任务”页面全部文字统一采用 Agent 外观正文字体与字号，底部持久化展示近期运行时间并可跳回对应对话；“帐户与设备”支持跟随系统或指定简体中文、English、日本語（重启生效）。窗口菜单不再注册专家圆桌独立窗口或 Agent 专项入口；对话搜索支持 Escape 收起，已完成计划不再悬浮，也不能重新规划。
 - **Composer 活动卡统一灰阶与 Editor 菜单收口（1.250.0-rc3）** —— 计划、产物与 Dev Server 卡片共用安静的黑白灰视觉层级；产物不再使用系统蓝，运行中的 Dev Server 也不再使用绿色。Agent-only App 同时移除“显示 Editor / 切换到 Editor 模式”菜单及其快捷键，不再暴露已删除的 Editor Scene。
 - **侧边栏 Markdown 表格统一列宽（1.250.0-rc2）** —— 预览表格根据表头与全部数据行统一计算列宽，同一列的边界不再逐行漂移；单列宽度限制在 80–320 pt，DSN、命令和长说明会在单元格内换行，列数较多时仍可横向滚动。

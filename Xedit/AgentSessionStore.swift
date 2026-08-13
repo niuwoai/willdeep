@@ -186,7 +186,7 @@ nonisolated enum AgentSessionStore {
                     pendingWrites.finish(id)
                     return
                 }
-                let data = try encoder.encode(payload.externalizingAttachmentContent())
+                let data = try persistenceData(for: payload)
                 try coordinatedWrite(data, to: url)
                 writeCatalogEntryBestEffort(for: payload, sourceURL: url)
                 writeUsageCatalogEntryBestEffort(for: payload, sourceURL: url)
@@ -1230,7 +1230,7 @@ nonisolated enum AgentSessionStore {
                     print("AgentSessionStore: refused to overwrite session \(session.id) with an empty transcript")
                     return false
                 }
-                let data = try encoder.encode(session.externalizingAttachmentContent())
+                let data = try persistenceData(for: session)
                 try coordinatedWrite(data, to: url)
                 writeCatalogEntryBestEffort(for: session, sourceURL: url)
                 writeUsageCatalogEntryBestEffort(for: session, sourceURL: url)
@@ -1331,6 +1331,16 @@ nonisolated enum AgentSessionStore {
             return
         }
         if let writeError { throw writeError }
+    }
+
+    /// Final persistence boundary. Tool-level redaction remains useful for UI
+    /// and model payloads, but this pass guarantees a credential-shaped value
+    /// cannot survive in the generated conversation JSON even if an upstream
+    /// caller accidentally put plaintext into a message or tool argument.
+    static func persistenceData(for session: AgentSession) throws -> Data {
+        let encoded = try encoder.encode(session.externalizingAttachmentContent())
+        guard let json = String(data: encoded, encoding: .utf8) else { return encoded }
+        return Data(AgentSensitiveContentRedactor.redactCredentials(json).utf8)
     }
 
     /// Writes an imported file only when the destination is still absent.

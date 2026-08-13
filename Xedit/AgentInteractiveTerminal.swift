@@ -1514,7 +1514,33 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
     func playShortcut(_ shortcut: TerminalShortcut) {
         guard !isRecording else { return }
-        activeTab?.playShortcut(shortcut)
+        guard let target = shortcutPlaybackTab() else { return }
+        target.playShortcut(shortcut)
+    }
+
+    /// Pick a safe local tab for a saved shortcut, creating one when the
+    /// terminal is empty. Playback used to be a silent no-op when every tab
+    /// was closed, while recording already had this fallback.
+    private func shortcutPlaybackTab() -> AgentTerminalTab? {
+        if let active = activeTab,
+           active.isRunning,
+           !active.kind.isDelegatedShell,
+           !active.isAutomationBusy {
+            return active
+        }
+        if let local = tabs.last(where: {
+            $0.kind == .localShell && $0.isRunning && !$0.isAutomationBusy
+        }) {
+            activeTabID = local.id
+            return local
+        }
+        guard let config = defaultLocalTabProvider?(nil) else { return nil }
+        return openLocalTab(
+            originAgentSessionID: config.originAgentSessionID,
+            workingDirectory: config.workingDirectory,
+            settings: config.settings,
+            skin: config.skin
+        )
     }
 
     func cancelActiveShortcutPlayback() {

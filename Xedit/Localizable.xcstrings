@@ -9637,6 +9637,42 @@
         }
       }
     },
+    "composer.secret.saved-copy-help" : {
+      "comment" : "Tooltip for copying a saved protected secret after system authentication",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authenticate and copy this secret"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "认证后复制这个密钥"
+          }
+        }
+      }
+    },
+    "composer.secret.saved-copy-reason" : {
+      "comment" : "macOS authentication reason shown before copying a saved secret",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authenticate to copy this saved secret from Keychain."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请认证以从钥匙串复制这个已保存的密钥。"
+          }
+        }
+      }
+    },
     "composer.secret.saved-insert-help" : {
       "comment" : "Tooltip for inserting a saved protected secret",
       "extractionState" : "manual",
