@@ -1,7 +1,25 @@
 # Changelog
 
-> 当前文件保留最新版本（1.249.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.251.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.251.0-rc1 - 2026-08-14
+
+### Added
+
+- 长 Goal 的续推改为预算驱动：新增 `AgentGoalContinuationBudget`（wall-clock 上限 + 续推次数兜底 + 已用额度），随 Goal 持久化，重启不会把跑了几小时的一段预算刷回满格。
+- 预算耗尽时改为有序软停：宿主要求模型输出 STATE / DONE / REMAINING / BLOCKERS / NEXT 交接快照后才停，横幅降为 notice，点播放键即可续期开启新的执行段。
+
+### Changed
+
+- 「连续两轮验收清单没有进展」不再硬暂停 Goal。无进展轮次改为驱动退避阶梯：1-2 轮给引导，3-4 轮要求用 git / 文件系统做只读对账纠正无证据的勾选，5 轮以上要求指明正在等待的外部条件或换一条路。等待长构建、长测试这类正常状态不再被判成卡死。
+- 暂停横幅文案从硬编码中文迁到本地化目录（`goal-planning.budget-exhausted`，含 en / zh-Hans）。
+- Goal 续推提示的入队去重改为按提示自身首行比对，避免已排队的续推提示把交接请求一起吃掉。
+
+### Tests
+
+- 新增 `AgentGoalContinuationBudgetTests`（11 例）：阶梯升级、wall-clock 与次数两种软停、交接后不再追问、续期保留限额清空已用额度、预算随 Goal 编解码往返、旧会话缺字段仍可解码。
+- `AgentGoalTeamsTests` 原「连续两轮无进展会暂停」用例改写为「预算未尽继续推进」，并新增预算耗尽交接与恢复续期两例。
 
 ## 1.250.0-rc5 - 2026-08-14
 

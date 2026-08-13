@@ -904,8 +904,8 @@ struct AgentGoalTeamsTests {
         #expect(emptyRuntime.isPlanGateActive)
     }
 
-    @Test("Goal 连续两轮验收无进展会暂停，不会重新规划")
-    func repeatedNoProgressPausesWithoutReplanning() {
+    @Test("Goal 连续无进展不再硬暂停，预算未尽就继续推进")
+    func repeatedNoProgressKeepsExecutingWhileBudgetRemains() {
         let goal = AgentGoal(statement: "Ship safely", checklist: [.init(text: "Verified")])
         let donePlan = AgentPlan(status: .done, summary: "", stepTexts: ["GT-003 done"])
         let state = AgentGoalPlanningState(
@@ -931,11 +931,84 @@ struct AgentGoalTeamsTests {
             for: runtime,
             didAdvanceChecklist: false
         )
+        // 第二轮无进展曾经是硬暂停点；现在只要预算没用尽就继续，
+        // 且不再挂红色报错条。续推提示已在队列里，去重不会重复入队。
         #expect(runtime.consecutiveGoalRoundsWithoutChecklistProgress == 2)
-        #expect(runtime.errorMessage?.contains("连续两轮验收清单没有进展") == true)
+        #expect(runtime.errorMessage == nil)
         #expect(runtime.queuedMessages.count == 1)
         #expect(runtime.currentPlan?.status == .done)
         #expect(runtime.goalPlanningState?.phase == .executing)
+        #expect(runtime.currentGoal?.continuationBudget?.continuationsUsed == 2)
+        #expect(runtime.currentGoal?.continuationBudget?.wrapUpDispatched == false)
+    }
+
+    @Test("Goal 预算耗尽时有序收尾：要求交接快照而不是报错停住")
+    func exhaustedBudgetRequestsHandoverInsteadOfFailing() {
+        var goal = AgentGoal(statement: "Ship safely", checklist: [.init(text: "Verified")])
+        goal.continuationBudget = AgentGoalContinuationBudget(
+            wallClockLimit: nil,
+            maximumContinuations: 1
+        )
+        let donePlan = AgentPlan(status: .done, summary: "", stepTexts: ["GT-003 done"])
+        let state = AgentGoalPlanningState(
+            goalFingerprint: AgentGoalPlanningState.fingerprint(for: goal),
+            phase: .executing,
+            members: []
+        )
+        let (appState, runtime) = makeAppRuntime(
+            goal: goal,
+            plan: donePlan,
+            planningState: state
+        )
+
+        appState.prepareNextAgentGoalPlanningCycleIfNeeded(
+            for: runtime,
+            didAdvanceChecklist: false
+        )
+        #expect(runtime.errorMessage == nil)
+        #expect(runtime.queuedMessages.count == 1)
+
+        appState.prepareNextAgentGoalPlanningCycleIfNeeded(
+            for: runtime,
+            didAdvanceChecklist: false
+        )
+        // 预算用尽 → 软停：交接提示单独入队（前缀不同，不会被续推提示去重吃掉），
+        // 横幅是 notice 而不是红色 error。
+        #expect(runtime.queuedMessages.count == 2)
+        #expect(runtime.queuedMessages.last?.text.contains("BLOCKERS") == true)
+        #expect(runtime.queuedMessages.last?.text.contains("handover snapshot") == true)
+        #expect(runtime.errorMessage == L10n.GoalPlanning.budgetExhausted)
+        #expect(runtime.errorSeverity == .notice)
+        #expect(runtime.currentGoal?.continuationBudget?.wrapUpDispatched == true)
+
+        // 交接已交付后不再反复追问。
+        appState.prepareNextAgentGoalPlanningCycleIfNeeded(
+            for: runtime,
+            didAdvanceChecklist: false
+        )
+        #expect(runtime.queuedMessages.count == 2)
+    }
+
+    @Test("恢复执行会续期预算，软停过的 Goal 不会立刻再停")
+    func resumingGrantsAFreshBudgetSegment() {
+        var goal = AgentGoal(statement: "Ship safely", checklist: [.init(text: "Verified")])
+        goal.continuationBudget = AgentGoalContinuationBudget(
+            wallClockLimit: nil,
+            maximumContinuations: 1,
+            segmentStartedAt: Date(timeIntervalSince1970: 0),
+            continuationsUsed: 5,
+            wrapUpDispatched: true
+        )
+        let (appState, runtime) = makeAppRuntime(goal: goal, isResponding: false)
+
+        appState.resumePinnedAgentGoalExecution()
+
+        let budget = runtime.currentGoal?.continuationBudget
+        #expect(budget?.continuationsUsed == 0)
+        #expect(budget?.wrapUpDispatched == false)
+        #expect(budget?.segmentStartedAt == nil)
+        #expect(budget?.maximumContinuations == 1)
+        #expect(runtime.errorMessage == nil)
     }
 
     @Test("额度中断后保留已完成 Plan，续跑只做 Goal 验收")

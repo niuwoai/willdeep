@@ -1440,6 +1440,9 @@ nonisolated struct AgentGoal: Codable, Equatable {
     var planningAttemptedProfileIDs: [String]? = nil
     /// Project Worker pool selected before dispatch planning begins.
     var selectedWorkerProfileIDs: [String]? = nil
+    /// Budget and spend for the current execution segment. Persisted so a
+    /// relaunch cannot hand a long-running Goal a fresh full budget.
+    var continuationBudget: AgentGoalContinuationBudget? = nil
 
     struct Item: Codable, Equatable, Identifiable {
         var id: UUID
@@ -1460,7 +1463,8 @@ nonisolated struct AgentGoal: Codable, Equatable {
         planningProfileID: String? = nil,
         planningFallbackProfileIDs: [String]? = nil,
         planningAttemptedProfileIDs: [String]? = nil,
-        selectedWorkerProfileIDs: [String]? = nil
+        selectedWorkerProfileIDs: [String]? = nil,
+        continuationBudget: AgentGoalContinuationBudget? = nil
     ) {
         self.statement = statement
         self.checklist = checklist
@@ -1469,6 +1473,7 @@ nonisolated struct AgentGoal: Codable, Equatable {
         self.planningFallbackProfileIDs = planningFallbackProfileIDs
         self.planningAttemptedProfileIDs = planningAttemptedProfileIDs
         self.selectedWorkerProfileIDs = selectedWorkerProfileIDs
+        self.continuationBudget = continuationBudget
     }
 
     var isEmpty: Bool { statement.isEmpty && checklist.isEmpty }

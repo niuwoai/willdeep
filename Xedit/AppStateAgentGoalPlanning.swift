@@ -297,6 +297,13 @@ extension AppState {
         runtime.errorSeverity = .error
         runtime.errorRequiresSomeIMLogin = false
         runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
+        // Resuming opens a new execution segment: keep the configured limits
+        // but hand back a full budget, otherwise a Goal that soft-stopped once
+        // would stop again on its very next round.
+        if var resumedGoal = runtime.currentGoal {
+            resumedGoal.continuationBudget = (resumedGoal.continuationBudget ?? .standard).restarted
+            runtime.currentGoal = resumedGoal
+        }
         if var plan = runtime.currentPlan, plan.isInterrupted {
             plan.interruptedAt = nil
             runtime.currentPlan = plan
@@ -631,8 +638,10 @@ extension AppState {
     }
 
     /// Continue checking the same Goal without throwing away the plan and
-    /// restarting Goal Teams. One no-change round is tolerated; the second
-    /// pauses for user guidance instead of spinning indefinitely.
+    /// restarting Goal Teams. Rounds without progress escalate how hard the
+    /// host pushes back rather than ending the Goal; execution stops only when
+    /// the segment budget is spent, and then it stops by asking for a handover
+    /// snapshot instead of giving up.
     func prepareNextAgentGoalPlanningCycleIfNeeded(
         for runtime: AgentRuntime,
         didAdvanceChecklist: Bool = true
@@ -659,27 +668,54 @@ extension AppState {
             state.phase = .executing
             runtime.goalPlanningState = state
         }
-        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
-        guard runtime.consecutiveGoalRoundsWithoutChecklistProgress < 2 else {
-            runtime.errorMessage = "Goal 已暂停：连续两轮验收清单没有进展。请补充信息、调整目标，或明确要求继续。"
-            runtime.errorDetails = nil
-            return
-        }
 
-        let remaining = goal.checklist
+        // Rounds without progress no longer end the Goal. They escalate how
+        // hard the host pushes back; only a spent budget stops execution, and
+        // it stops by asking for a handover rather than by giving up.
+        let evaluation = AgentGoalContinuationPolicy.evaluate(
+            budget: goal.continuationBudget ?? .standard,
+            now: Date(),
+            consecutiveRoundsWithoutProgress: runtime.consecutiveGoalRoundsWithoutChecklistProgress
+        )
+        var budgetedGoal = goal
+        budgetedGoal.continuationBudget = evaluation.budget
+        runtime.currentGoal = budgetedGoal
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+
+        let remainingAcceptance = goal.checklist
             .filter { !$0.done }
             .map(\.text)
-            .joined(separator: "\n- ")
-        let prompt = """
-        Goal acceptance is still incomplete. Continue the same Goal without creating or replacing a plan and without restarting Goal Teams. Do not repeat completed implementation. Focus only on the unchecked acceptance items below, using the existing evidence and plan history:
-        - \(remaining)
+        let remaining = remainingAcceptance.joined(separator: "\n- ")
 
-        End with one `goal-check` block. If progress is impossible without user input or an external state change, explain the concrete blocker and do not pretend an item is complete.
-        """
+        let prompt: String
+        switch evaluation.outcome {
+        case .halt:
+            // The handover was already requested and delivered; stay stopped.
+            return
+        case .wrapUp:
+            runtime.errorMessage = L10n.GoalPlanning.budgetExhausted
+            runtime.errorDetails = nil
+            runtime.errorSeverity = .notice
+            prompt = AgentGoalContinuationPolicy.wrapUpPrompt(
+                remainingAcceptance: remainingAcceptance
+            )
+        case .continueExecution(let rung):
+            let escalation = AgentGoalContinuationPolicy.escalation(for: rung)
+                .map { "\n\n\($0)" } ?? ""
+            prompt = """
+            Goal acceptance is still incomplete. Continue the same Goal without creating or replacing a plan and without restarting Goal Teams. Do not repeat completed implementation. Focus only on the unchecked acceptance items below, using the existing evidence and plan history:
+            - \(remaining)
+
+            End with one `goal-check` block. If progress is impossible without user input or an external state change, explain the concrete blocker and do not pretend an item is complete.\(escalation)
+            """
+        }
         if runtime.isResponding {
+            // Dedup against this prompt's own opening line: a queued
+            // continuation must not swallow the handover request, which is a
+            // different instruction with a different prefix.
+            let dedupPrefix = String(prompt.prefix(while: { !$0.isNewline }))
             guard !runtime.queuedMessages.contains(where: {
-                $0.source == .hostInstruction
-                    && $0.text.hasPrefix("Goal acceptance is still incomplete.")
+                $0.source == .hostInstruction && $0.text.hasPrefix(dedupPrefix)
             }) else { return }
             runtime.queuedMessages.append(
                 AgentQueuedMessage(text: prompt, images: [], source: .hostInstruction)
