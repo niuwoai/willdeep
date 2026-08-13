@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.248.0-rc6 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.248.0-rc7 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.248.0-rc7 - 2026-08-13
+
+### Fixed
+
+- 终端捷径再次进入“编辑”前，会先从正式 `shortcuts.json` 刷新当前 Controller，再生成单条临时编辑文件。Editor 窗口保存并关闭后，即使 Agent 回落到仍持有旧快照的 headless `AppState`，也不会再用旧内存内容覆盖临时文件，让已保存的编辑重新打开后恢复原样。
+
+### Tests
+
+- 新增双 Controller 回归：模拟保留的 Agent/headless Controller 与 Editor Controller 从同一旧快照启动，Editor 保存新内容后由旧 Controller 再次打开；断言临时文件和旧 Controller 均刷新为正式存储的新版本。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc6** 递增为 **1.248.0-rc7**，内部构建号 **374 → 375**，Help 与 Computer Use Helper 构建号 **290 → 291**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.248.0-rc6 - 2026-08-13
 

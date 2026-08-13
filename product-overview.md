@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-13 | Current version: v1.248.0-rc6
+> Last updated: 2026-08-13 | Current version: v1.248.0-rc7
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **终端捷径编辑以正式存储为准（1.248.0-rc7）** —— 每次进入单条终端捷径编辑前，当前 Controller 都会先从正式 `shortcuts.json` 刷新，再生成临时 JSON。Editor 保存并关闭后，即使 Agent 回落到旧的 headless `AppState`，旧内存快照也不能覆盖已保存内容；重新打开会稳定显示最后一次成功保存的版本。
 - **调度项目先定义、后绑定工作区（1.248.0-rc6）** —— “新建调度项目”直接进入定义页，头部工作区按钮负责绑定或更换目录；绑定前整份项目配置只读，绑定后才可填写目标、调用 AI 生成验收清单并创建项目，取消会清理临时草稿。新项目默认由 some.im `deepseek-v4-pro` 规划、由单个 `deepseek-v4-flash` Worker Profile 执行；同一 Profile 可按 Provider 并发上限服务多个独立节点，补选多个 Worker 用于扩展路由和故障转移。AI 草稿与验收清单复用 Agent 外观中的正文字体、字号与行高。
 - **会话标题多展示约两个汉字（1.248.0-rc5）** —— 工作区会话行保留左侧 32 pt 子级缩进，继续与工作区标题的文本列对齐；右侧内容留白从 32 pt 收紧为 4 pt，为单行标题释放 28 pt。悬停图钉/归档区仍固定为 40 pt，空闲行仍完全归还操作区宽度，因此标题增宽不会牺牲操作命中区或运行状态标记。
 - **Planner 一主一备配置弹窗（1.248.0-rc4）** —— 调度台顶部 Planner 入口改为锚定按钮的原生 macOS Popover，主模型与备选模型各自单选，并显示 Profile 名称、Provider 与模型 ID；两者不能重复，旧的多级回退记录仅采用第一个有效备选。选择先保留为弹窗草稿，取消不会改变项目，点击“完成”后才由创建、更新、会话同步和持久化共用的归一化策略提交。
