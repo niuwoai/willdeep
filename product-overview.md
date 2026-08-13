@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-13 | Current version: v1.250.0-rc1
+> Last updated: 2026-08-13 | Current version: v1.250.0-rc3
 
 ## Positioning
 
@@ -12,6 +12,8 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Composer 活动卡统一灰阶与 Editor 菜单收口（1.250.0-rc3）** —— 计划、产物与 Dev Server 卡片共用安静的黑白灰视觉层级；产物不再使用系统蓝，运行中的 Dev Server 也不再使用绿色。Agent-only App 同时移除“显示 Editor / 切换到 Editor 模式”菜单及其快捷键，不再暴露已删除的 Editor Scene。
+- **侧边栏 Markdown 表格统一列宽（1.250.0-rc2）** —— 预览表格根据表头与全部数据行统一计算列宽，同一列的边界不再逐行漂移；单列宽度限制在 80–320 pt，DSN、命令和长说明会在单元格内换行，列数较多时仍可横向滚动。
 - **DeepSeek V4 Pro 接入 Responses 与网关状态续接（1.250.0-rc1）** —— `deepseek-v4-pro` 与 Flash 使用同一条 Responses 链路：直连 DeepSeek 时发送无服务端存储的请求，经 some.im 时启用 24 小时网关状态，有效游标下只上传新增 user/tool input，由 some.im 服务端按租户/API Key/会话/模型隔离地拼装完整历史。高档托管别名 `someim-coding-plan-high`、`someim-code-high`、`someim-auto-pro` 一并复用；premium 档解析到非 DeepSeek 后端，继续走 Chat Completions。
 - **Agent 与本地 Editor 正式拆分（1.249.0-rc1）** —— WillDeep 删除通用 Editor scene、文本/源码文件类型注册和 Editor 设置入口；Agent 文件面板与终端快捷 JSON 统一交给 macOS 默认外部编辑器。独立的 Qeditor 使用自己的 Bundle ID、沙盒容器、设置与 Sparkle feed，不迁移 WillDeep 数据。
 - **Coding Plan 主按钮对比度修复（1.248.0-rc8）** —— 模型选择面板的“了解并购买”按钮将文字与外链图标显式绑定到 Composer 主操作反差色，并将背景绑定到统一主操作填充色；浅色界面的黑色按钮恢复白色内容，深色界面也会自动保持反差。

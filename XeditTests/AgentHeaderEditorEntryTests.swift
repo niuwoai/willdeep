@@ -24,6 +24,9 @@ struct AgentHeaderEditorEntryTests {
         #expect(appSource.contains("AgentOnlyCommands()"))
         #expect(!appSource.contains("WindowGroup(id: EditorWindowID.value)"))
         #expect(!appSource.contains("WindowGroup(for: URL.self)"))
+        #expect(!appSource.contains("viewShowEditor"))
+        #expect(!appSource.contains("showEditorAction"))
+        #expect(!appSource.contains("Switch to Editor Mode"))
     }
 
     @Test("Terminal shortcut JSON and ordinary files use the system default app")

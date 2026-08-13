@@ -3,6 +3,36 @@
 > 当前文件保留最新版本（1.249.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.250.0-rc3 - 2026-08-13
+
+### Fixed
+
+- Composer 右侧活动区的“产物”与 “Dev Server”卡片移除蓝色、绿色图标，统一采用与计划卡一致的灰阶图标语义；运行与选中状态继续通过文字、明暗层级和卡片边框表达。
+- 清理 Agent-only App 中残留的“显示 Editor / 切换到 Editor 模式”菜单入口及三组快捷键承接；WillDeep 菜单不再提供已移除 Editor Scene 的幽灵入口。
+
+### Tests
+
+- 新增活动卡视觉契约测试，防止产物图标回退为系统强调色、Dev Server 图标回退为绿色。
+- 扩展 Agent-only 窗口契约测试，确保 Editor 菜单动作与文案不会重新进入 App 菜单树。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.250.0-rc2** 递增为 **1.250.0-rc3**，内部构建号 **379 → 380**，Help 与 Computer Use Helper 构建号 **295 → 296**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.250.0-rc2 - 2026-08-13
+
+### Fixed
+
+- 侧边栏 Markdown 预览表格改为整表共享列宽，表头与各数据行的列边界保持一致；单列最大宽度限制为 320 pt，超长 DSN、命令和说明在单元格内换行，不再无限撑出预览区域。
+
+### Tests
+
+- 新增表格布局回归测试，覆盖跨行共享列宽、长单元格宽度上限，以及内联 Markdown 标记不参与可见宽度计算。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.250.0-rc1** 递增为 **1.250.0-rc2**，内部构建号 **378 → 379**，Help 与 Computer Use Helper 构建号 **294 → 295**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
 ## 1.250.0-rc1 - 2026-08-13
 
 ### Added

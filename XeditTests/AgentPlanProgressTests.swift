@@ -64,6 +64,14 @@ struct AgentPlanProgressTests {
         #expect(PlanStatusPill.textColor(status: .executing, isInterrupted: true) == .secondary)
     }
 
+    @Test("产物与 Dev Server 活动卡统一使用 Composer 灰阶图标")
+    func activityCardsUseMonochromeIcons() {
+        #expect(AgentActivityCardChrome.artifactIcon == AgentComposerChrome.iconSecondary)
+        #expect(AgentActivityCardChrome.artifactIcon != .accentColor)
+        #expect(AgentActivityCardChrome.devServerIcon == AgentComposerChrome.iconSecondary)
+        #expect(AgentActivityCardChrome.devServerIcon != .green)
+    }
+
     @MainActor
     @Test("渲染折叠计划与产物卡用于设计验收")
     func rendersCompactActivityOverlayForDesignQA() throws {

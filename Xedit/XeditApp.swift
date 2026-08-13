@@ -294,29 +294,6 @@ private struct WillDeepCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(appState?.canShowPreview != true)
 
-                // 打开(或聚焦)独立的 Editor 窗口。抽成闭包复用，让多个
-                // 快捷键都能触发同一个动作。默认可见快捷键为 ⇧⌘E；另外内置
-                // ⌥⌘E、⌃⌘E 两个备用组合键(挂在下面隐藏承接按钮上)。
-                let showEditorAction = {
-                    if appState?.showEditor() != true {
-                        openWindow(id: EditorWindowID.value)
-                    }
-                }
-
-                Button(L10n.Menu.viewShowEditor, action: showEditorAction)
-                    .keyboardShortcut("e", modifiers: [.command, .shift])
-
-                // 备用进入 editor 的组合键。用零尺寸隐藏按钮承接额外快捷键，
-                // 因为 SwiftUI 单个 Button 只能绑定一个 .keyboardShortcut。
-                Button("", action: showEditorAction)
-                    .keyboardShortcut("e", modifiers: [.command, .option])
-                    .frame(width: 0, height: 0)
-                    .hidden()
-                Button("", action: showEditorAction)
-                    .keyboardShortcut("e", modifiers: [.command, .control])
-                    .frame(width: 0, height: 0)
-                    .hidden()
-
                 Button(L10n.Menu.viewToggleTerminal) {
                     appState?.toggleEditorTerminal(appState?.openedFileURL ?? appState?.rootDirectory)
                 }

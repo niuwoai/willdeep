@@ -13039,24 +13039,6 @@
         }
       }
     },
-    "menu.view.show-editor" : {
-      "comment" : "Button label in View menu",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show Editor"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示 Editor"
-          }
-        }
-      }
-    },
     "menu.view.switch-to-agent-mode" : {
       "comment" : "Button label (conditional) in View menu",
       "extractionState" : "manual",
@@ -13071,24 +13053,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换到助手模式"
-          }
-        }
-      }
-    },
-    "menu.view.switch-to-editor-mode" : {
-      "comment" : "Button label (conditional) in View menu",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Switch to Editor Mode"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "切换到编辑器模式"
           }
         }
       }

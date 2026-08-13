@@ -152,4 +152,49 @@ struct MarkdownTableParserTests {
         #expect(blocks[0].tableHeaders == ["col1", "col2"])
         #expect(blocks[0].tableRows == [["a", "b"]])
     }
+
+    @Test
+    func tableLayoutUsesOneWidthPerColumnAcrossAllRows() {
+        let widths = MarkdownTableColumnLayout.widths(
+            headers: ["组件", "是否依赖", "说明"],
+            rows: [
+                ["MySQL", "强烈建议（生产必需）", "未配置 DSN 时，部分 API 不可用。"],
+                ["Redis", "否", "当前代码中未发现 Redis 客户端。"]
+            ],
+            fontSize: 15
+        )
+
+        #expect(widths.count == 3)
+        #expect(widths[1] > widths[0])
+        #expect(widths[2] > widths[0])
+        #expect(widths.allSatisfy { $0 >= MarkdownTableColumnLayout.minimumWidth })
+    }
+
+    @Test
+    func tableLayoutCapsLongCellsSoTheyWrapInsideThePreview() {
+        let longDSN = String(repeating: "user:pass@tcp(host:3306)/database?parseTime=true", count: 20)
+        let widths = MarkdownTableColumnLayout.widths(
+            headers: ["变量", "说明"],
+            rows: [["MYSQL_DSN", longDSN]],
+            fontSize: 15
+        )
+
+        #expect(widths[1] == MarkdownTableColumnLayout.maximumWidth)
+    }
+
+    @Test
+    func tableLayoutMeasuresVisibleInlineMarkdownOnly() {
+        let plain = MarkdownTableColumnLayout.widths(
+            headers: ["值"],
+            rows: [["important"]],
+            fontSize: 15
+        )
+        let styled = MarkdownTableColumnLayout.widths(
+            headers: ["值"],
+            rows: [["**important**"]],
+            fontSize: 15
+        )
+
+        #expect(styled == plain)
+    }
 }
