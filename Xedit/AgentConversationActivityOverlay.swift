@@ -25,7 +25,11 @@ struct AgentConversationActivityOverlay: View {
 
     /// The current plan is task progress, independent of conversation mode.
     private var visiblePlan: AgentPlan? {
-        return appState.agentCurrentPlan
+        guard let plan = appState.agentCurrentPlan,
+              AgentPlanCardExpansionPolicy.shouldDisplay(plan) else {
+            return nil
+        }
+        return plan
     }
 
     var body: some View {

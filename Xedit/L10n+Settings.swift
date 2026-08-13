@@ -1397,5 +1397,15 @@ extension L10n {
                 return String(format: template, a1)
             }
         }
+
+        enum Language {
+            static let title = String(localized: "settings.language.title", defaultValue: "Language")
+            static let pickerLabel = String(localized: "settings.language.picker-label", defaultValue: "App language")
+            static let system = String(localized: "settings.language.system", defaultValue: "Follow system")
+            static let simplifiedChinese = String(localized: "settings.language.zh-hans", defaultValue: "简体中文")
+            static let english = String(localized: "settings.language.english", defaultValue: "English")
+            static let japanese = String(localized: "settings.language.japanese", defaultValue: "日本語")
+            static let restartNote = String(localized: "settings.language.restart-note", defaultValue: "Quit and reopen WillDeep to apply the language change.")
+        }
     }
 }

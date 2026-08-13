@@ -567,6 +567,13 @@ struct AgentPlanProgressTests {
         #expect(!AgentPlanCardExpansionPolicy.showsStatus(.approved, isInterrupted: false))
         #expect(AgentPlanCardExpansionPolicy.showsStatus(.executing, isInterrupted: false))
         #expect(AgentPlanCardExpansionPolicy.showsStatus(.approved, isInterrupted: true))
+
+        let active = AgentPlan(status: .executing, summary: "", stepTexts: ["Work"])
+        let done = AgentPlan(status: .done, summary: "", stepTexts: ["Work"])
+        #expect(AgentPlanCardExpansionPolicy.shouldDisplay(active))
+        #expect(AgentPlanCardExpansionPolicy.allowsRevision(active))
+        #expect(!AgentPlanCardExpansionPolicy.shouldDisplay(done))
+        #expect(!AgentPlanCardExpansionPolicy.allowsRevision(done))
     }
 
     @Test("plan card collapses only when a new assistant round appears")

@@ -1,6 +1,6 @@
 # Agent Harness Improvement Priorities
 
-> Last updated: 2026-08-13 | Current version: v1.250.0-rc3
+> Last updated: 2026-08-13 | Current version: v1.250.0-rc4
 
 这份文档用于回答一个核心问题：一个 harness 级 Agent 要继续变强，哪些问题必须优先解决。
 
@@ -37,7 +37,7 @@
 
 当前状态：依赖安装、构建、测试、后台任务和远端 runtime 已经能通过工具链执行；TLS/临时网络错误有重试；沙箱和审批链路能区分 read/write/danger。1.195.0-rc1 起，Claude Code、Codex CLI、Cursor Agent 与 Cline CLI 的 Composer 委托及 Goal 模式原生调用统一受任务契约约束，执行器先提交证据并由全新只读上下文复核，WillDeep 再独立检查变更边界与安全验证命令；失败最多返工三轮，未通过不交付，完整阶段与证据持久化并显示在监督栏。1.221.0-rc2 起，本机 Claude/Codex 和远端 daemon 的 Claude/Codex 使用 argv + stdin 与结构化 JSONL，Codex app-server 与 Claude ACP 的命令、文件和权限请求能回到宿主审批；显式 Claude Agent、Codex Profile、可见终端、SSH、Cursor/Cline/Hermes 保留兼容路径。1.222.0-rc1 起，调度项目可维护多 Worker 池，预发现外部 Profile，按空闲 Worker 并行分配任务；本机 Git 节点隔离 worktree，执行器不可用或失败时沿未尝试回退链切换，WillDeep Worker 同时固定 Provider 与模型。1.222.0-rc2 起，多节点调度图通过宿主语义门禁强制形成可执行阶段；并行写代码节点必须汇入独立合并/集成节点，再由独立测试/回归节点验证，虚拟验收关卡不再被当作执行节点。1.222.0-rc3 起，验收清单不再投影成可执行根节点，Worker 只有在 AI 任务图完成捕获和校验后才可启动。1.223.0-rc1 起，目标定义页可由 AI 先诊断收敛性并生成可编辑验收清单；普通聊天、Goal 计划和调度节点会在执行前集中识别用户必须决定的事项，进入执行后自行恢复普通 Git/worktree、依赖、构建和测试问题，仅在真实授权边界或不可逆选择处暂停。1.224.0-rc1 起，调度子任务由宿主强制进入无人值守审批策略，Claude Code 使用非交互跳过确认参数但保留外层 worktree 沙箱；普通会话继续沿用原审批链路。
 
-仍然不好：Claude Code 当前没有可供 Swift 宿主使用的 fail-closed stdio 权限回调，只能由 CLI 权限模式与 WillDeep 外层 sandbox 共同约束；SSH、Cursor/Cline 也还没有统一事件与审批反向委托。真实任务里遇到工具缺失、依赖安装失败、远端环境不完整、证书/代理波动时，也仍容易退化成“让用户本地执行”。
+仍然不好：Claude Code 当前没有可供 Swift 宿主使用的 fail-closed stdio 权限回调，只能由 CLI 权限模式与 WillDeep 外层 sandbox 共同约束；SSH、Cursor/Cline 也还没有统一事件与审批反向委托。真实任务里遇到工具缺失、依赖安装失败、远端环境不完整、证书/代理波动时，也仍容易退化成“让用户本地执行”。长程维度还有四个结构性缺口：续推策略是「连续 2 轮验收无进展就硬暂停」而非退避（惩罚了「在等长 CI」这种正常状态，且恢复只有 UI 按钮、无自动路径）；没有 wall-clock / token / 成本任何预算维度，因而无法做有序软停；规划接口是文本围栏块而非工具，现有对账逻辑大半在补格式失配的洞；多天运行缺睡眠抑制、roadmap 续接（6 phase × 6 步封顶）与撞满 256 轮后的续推路径。详见 `docs/LONG_HORIZON_AUTONOMY.md`（long-horizon.v1 草案，与 goal-teams.v1 互补）。
 
 下一步顺序：
 
@@ -45,6 +45,7 @@
 2. 把“缺少依赖/命令不存在/权限不足/证书问题”的错误分类做成统一恢复策略。
 3. 对 artifact 类任务建立生成后验证规范，例如 PPT/PDF/截图必须由 harness 自己渲染或检查。
 4. 对远端 runtime 增加一次性环境准备建议和可复制诊断报告。
+5. 落地 `LONG_HORIZON_AUTONOMY.md` 的续推契约（XA1）：把硬暂停降级为退避阶梯，补预算维度与有序软停。**无前置依赖，可与 1-4 并行先行**——它是「能不能连续跑一整天」的直接开关，且改动面小、可独立验收。
 
 ## P0：智能审核质量
 

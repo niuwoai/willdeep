@@ -343,6 +343,9 @@ final class AppState: ObservableObject {
     /// first. Surfaces in the Agent-mode sidebar's Routines section and
     /// drives the AgentRoutineScheduler that wakes them up on schedule.
     @Published var agentRoutines: [AgentRoutine] = []
+    /// Durable newest-first history of scheduled runs. Each entry keeps the
+    /// resulting conversation id so the Scheduled page can reopen that run.
+    @Published var agentRoutineRuns: [AgentRoutineRunRecord] = []
     let agentRoutineScheduler = AgentRoutineScheduler()
 
     /// Goal-first dispatch console state. The coordinator owns durable task
@@ -668,6 +671,27 @@ final class AppState: ObservableObject {
         self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
         syncLocalModelComposerProvider(settings: AgentSettingsStore.loadLocalModelSettings())
         self.agentRoutines = AgentRoutineStore.loadAll()
+        let storedRuns = AgentRoutineRunStore.loadAll()
+        if storedRuns.isEmpty {
+            self.agentRoutineRuns = AgentRoutineRunHistory.recent(
+                agentRoutines.compactMap { routine in
+                    guard let startedAt = routine.lastRunAt,
+                          let sessionID = routine.lastSessionID else { return nil }
+                    return AgentRoutineRunRecord(
+                        routineID: routine.id,
+                        routineName: routine.name,
+                        sessionID: sessionID,
+                        startedAt: startedAt
+                    )
+                },
+                limit: AgentRoutineRunHistory.maximumStoredRuns
+            )
+            if !agentRoutineRuns.isEmpty {
+                AgentRoutineRunStore.save(agentRoutineRuns)
+            }
+        } else {
+            self.agentRoutineRuns = storedRuns
+        }
         agentRoutineScheduler.start(initialRoutines: agentRoutines) { [weak self] routineID in
             self?.fireRoutine(id: routineID) != nil
         }

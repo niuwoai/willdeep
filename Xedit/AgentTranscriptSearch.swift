@@ -110,9 +110,10 @@ nonisolated enum AgentTranscriptSearch {
 
 struct AgentConversationSearchKeyboardShortcutView: NSViewRepresentable {
     let onFind: () -> Void
+    let onEscape: () -> Bool
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onFind: onFind)
+        Coordinator(onFind: onFind, onEscape: onEscape)
     }
 
     func makeNSView(context: Context) -> NSView {
@@ -123,16 +124,19 @@ struct AgentConversationSearchKeyboardShortcutView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSView, context: Context) {
         context.coordinator.onFind = onFind
+        context.coordinator.onEscape = onEscape
         context.coordinator.view = nsView
     }
 
     final class Coordinator {
         var onFind: () -> Void
+        var onEscape: () -> Bool
         weak var view: NSView?
         private var monitor: Any?
 
-        init(onFind: @escaping () -> Void) {
+        init(onFind: @escaping () -> Void, onEscape: @escaping () -> Bool) {
             self.onFind = onFind
+            self.onEscape = onEscape
         }
 
         deinit {
@@ -146,19 +150,33 @@ struct AgentConversationSearchKeyboardShortcutView: NSViewRepresentable {
             guard monitor == nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self else { return event }
-                guard self.shouldHandle(event) else { return event }
-                self.onFind()
-                return nil
+                switch self.action(for: event) {
+                case .find:
+                    self.onFind()
+                    return nil
+                case .escape:
+                    return self.onEscape() ? nil : event
+                case nil:
+                    return event
+                }
             }
         }
 
-        private func shouldHandle(_ event: NSEvent) -> Bool {
+        private enum Action { case find, escape }
+
+        private func action(for event: NSEvent) -> Action? {
             guard let view, let window = view.window, event.window === window else {
-                return false
+                return nil
             }
             let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            guard modifiers == .command else { return false }
-            return event.charactersIgnoringModifiers?.lowercased() == "f"
+            if modifiers == .command,
+               event.charactersIgnoringModifiers?.lowercased() == "f" {
+                return .find
+            }
+            if modifiers.isEmpty, event.keyCode == 53 {
+                return .escape
+            }
+            return nil
         }
     }
 }

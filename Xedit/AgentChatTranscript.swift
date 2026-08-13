@@ -667,7 +667,16 @@ struct AgentChatTranscript: View {
                 }
             }
         }
-        .background(AgentConversationSearchKeyboardShortcutView(onFind: presentConversationSearch))
+        .background(
+            AgentConversationSearchKeyboardShortcutView(
+                onFind: presentConversationSearch,
+                onEscape: {
+                    guard isConversationSearchPresented else { return false }
+                    closeConversationSearch()
+                    return true
+                }
+            )
+        )
         .onCompatibleChange(of: conversationSearchQuery) { _, _ in
             conversationSearchActiveIndex = 0
         }

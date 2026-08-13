@@ -26,14 +26,6 @@ struct WillDeepApp: App {
             AgentOnlyCommands()
         }
 
-        // 专家圆桌:独立单例窗口。照 Agent 窗口,不 attach
-        // EditorAppStateRegistry(避免污染 registry.current);从
-        // registry.current 取当前 AppState。
-        Window(L10n.Roundtable.windowTitle, id: RoundtableWindowID.value) {
-            RoundtableWindowRootView()
-        }
-        .defaultSize(width: 980, height: 720)
-
         // 侧边栏面板分离出的独立窗口:payload 即面板 kind,同 kind 去重
         // (openWindow(value:) 对相同值聚焦既有窗口)。内容与侧栏面板
         // 完全同源,详见 AgentDetachedPanelWindow.swift。
@@ -94,10 +86,6 @@ enum AgentWindowID {
 /// AppState. There is deliberately no SwiftUI scene registered for this id.
 enum EditorWindowID {
     static let value = "removed-editor-window"
-}
-
-enum RoundtableWindowID {
-    static let value = "roundtable-window"
 }
 
 private struct AgentOnlyCommands: Commands {
@@ -321,18 +309,6 @@ private struct WillDeepCommands: Commands {
                 }
                 .keyboardShortcut("a", modifiers: [.command, .option])
 
-                // 1.80.0-rc1：不再 toggle editor↔agent，而是打开
-                // (或聚焦) 独立的 Agent 窗口。SwiftUI `openWindow(id:)`
-                // 对单例 Window scene 来说是幂等的 —— 已经存在就抬起，
-                // 不存在就创建。
-                Button(L10n.AgentWindow.openMenuItem) {
-                    openWindow(id: AgentWindowID.value)
-                }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
-                // Already in the Agent window → opening it is a no-op (the
-                // singleton just refocuses itself), so disable the item to
-                // make that obvious.
-                .disabled(agentWindowActive == true)
             }
 
             CommandGroup(before: .windowArrangement) {

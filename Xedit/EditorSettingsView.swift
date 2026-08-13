@@ -62,6 +62,7 @@ struct EditorSettingsView: View {
     @State private var discoveredLocalAgents: [LocalAgentCLI.Discovery] = LocalAgentCLI.discoverAll()
 
     @State private var anthropicMaxOutputTokens: Double = Double(AgentSettingsStore.loadAnthropicMaxOutputTokens())
+    @State private var appLanguagePreference = AppLocale.preference
 
     var body: some View {
         HStack(spacing: 0) {
@@ -160,8 +161,39 @@ struct EditorSettingsView: View {
             settingsPage(for: resolvedTab(in: group))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .settingsFocusDisabled()
+            if group == .accountAndDevices {
+                Divider()
+                languageSettings
+            }
         }
         .settingsFocusDisabled()
+    }
+
+    private var languageSettings: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.Settings.Language.title)
+                .font(.headline)
+            HStack {
+                Text(L10n.Settings.Language.pickerLabel)
+                Spacer(minLength: 20)
+                Picker("", selection: $appLanguagePreference) {
+                    Text(L10n.Settings.Language.system).tag(AppLanguagePreference.system)
+                    Text(L10n.Settings.Language.simplifiedChinese).tag(AppLanguagePreference.simplifiedChinese)
+                    Text(L10n.Settings.Language.english).tag(AppLanguagePreference.english)
+                    Text(L10n.Settings.Language.japanese).tag(AppLanguagePreference.japanese)
+                }
+                .labelsHidden()
+                .frame(width: 190)
+                .onChange(of: appLanguagePreference) { preference in
+                    AppLocale.setPreference(preference)
+                }
+            }
+            Text(L10n.Settings.Language.restartNote)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 4)
+        .padding(.bottom, 2)
     }
 
     /// Second-level segmented-picker binding, scoped to one group.

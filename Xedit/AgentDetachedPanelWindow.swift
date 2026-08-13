@@ -47,7 +47,7 @@ final class AgentDetachedPanelRegistry: ObservableObject {
 }
 
 /// WindowGroup(for: AgentSidePanelKind.self) 的根视图。照
-/// AgentWindowRootView / RoundtableWindowRootView 的既有约定：不自建
+/// AgentWindowRootView 的既有约定：不自建
 /// AppState，从 EditorAppStateRegistry.shared.current 取当前的注入，
 /// AppState 切换时整棵重建（`.id(ObjectIdentifier(appState))`）。
 struct AgentDetachedPanelRootView: View {

@@ -35,6 +35,14 @@ enum AgentPlanStepLayoutMetrics {
 }
 
 nonisolated enum AgentPlanCardExpansionPolicy {
+    static func shouldDisplay(_ plan: AgentPlan) -> Bool {
+        plan.status != .done
+    }
+
+    static func allowsRevision(_ plan: AgentPlan) -> Bool {
+        plan.status != .done
+    }
+
     static func initiallyExpanded(for status: AgentPlan.Status) -> Bool {
         status == .proposed || status == .approved
     }
@@ -123,10 +131,12 @@ struct AgentPlanCard: View {
                             onOpenDetails()
                         }
                     }
-                    Button(L10n.PlanRevision.replanButton) {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            isExpanded = true
-                            isRevisionExpanded = true
+                    if AgentPlanCardExpansionPolicy.allowsRevision(plan) {
+                        Button(L10n.PlanRevision.replanButton) {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                isExpanded = true
+                                isRevisionExpanded = true
+                            }
                         }
                     }
                 } label: {

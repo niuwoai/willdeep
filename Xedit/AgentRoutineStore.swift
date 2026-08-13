@@ -9,6 +9,41 @@
 
 import Foundation
 
+nonisolated struct AgentRoutineRunRecord: Codable, Equatable, Identifiable, Sendable {
+    let id: UUID
+    let routineID: UUID
+    let routineName: String
+    let sessionID: UUID
+    let startedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        routineID: UUID,
+        routineName: String,
+        sessionID: UUID,
+        startedAt: Date = Date()
+    ) {
+        self.id = id
+        self.routineID = routineID
+        self.routineName = routineName
+        self.sessionID = sessionID
+        self.startedAt = startedAt
+    }
+}
+
+enum AgentRoutineRunHistory {
+    static let maximumStoredRuns = 100
+    static let defaultVisibleRuns = 12
+
+    static func recent(
+        _ records: [AgentRoutineRunRecord],
+        limit: Int = defaultVisibleRuns
+    ) -> [AgentRoutineRunRecord] {
+        guard limit > 0 else { return [] }
+        return Array(records.sorted { $0.startedAt > $1.startedAt }.prefix(limit))
+    }
+}
+
 enum AgentRoutineStore {
     /// Disk location for routine JSON files. Created lazily.
     static var directory: URL {
@@ -93,6 +128,52 @@ enum AgentRoutineStore {
         var isDir: ObjCBool = false
         if !FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir) {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+    }
+}
+
+enum AgentRoutineRunStore {
+    private static var fileURL: URL {
+        AgentRoutineStore.directory
+            .appendingPathComponent("run-history", isDirectory: true)
+            .appendingPathComponent("recent-runs.json")
+    }
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return encoder
+    }()
+
+    private static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
+    static func loadAll() -> [AgentRoutineRunRecord] {
+        guard let data = try? Data(contentsOf: fileURL),
+              let records = try? decoder.decode([AgentRoutineRunRecord].self, from: data) else {
+            return []
+        }
+        return AgentRoutineRunHistory.recent(records, limit: AgentRoutineRunHistory.maximumStoredRuns)
+    }
+
+    @discardableResult
+    static func save(_ records: [AgentRoutineRunRecord]) -> Bool {
+        do {
+            let retained = AgentRoutineRunHistory.recent(
+                records,
+                limit: AgentRoutineRunHistory.maximumStoredRuns
+            )
+            let directory = fileURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try encoder.encode(retained).write(to: fileURL, options: .atomic)
+            return true
+        } catch {
+            print("AgentRoutineRunStore: failed to save run history: \(error)")
+            return false
         }
     }
 }
