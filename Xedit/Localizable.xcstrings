@@ -11956,6 +11956,7 @@
       }
     },
     "goal-planning.arbitration" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Evidence arbitration" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "证据仲裁" } } } },
+    "goal-planning.budget-exhausted" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Goal paused: this execution segment ran out of budget. WillDeep asked for a handover snapshot. Press play to grant a new segment and continue." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Goal 已暂停：本段执行预算已用尽，WillDeep 已要求输出交接快照。点播放键可续期并继续。" } } } },
     "goal-planning.header" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Goal Teams planning" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Goal Teams 规划" } } } },
     "goal-planning.phase.arbitrating" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Arbitrating" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仲裁中" } } } },
     "goal-planning.phase.awaiting-approval" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Awaiting approval" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等待批准" } } } },
