@@ -73,7 +73,7 @@ nonisolated enum AgentDispatchTargetChoice: Codable, Equatable, Hashable {
 /// sessions. Model IDs are provider-agnostic so relay providers such as
 /// some.im can combine model families without changing the project shape.
 nonisolated struct AgentDispatchModelRouting: Codable, Equatable {
-    static let recommendedPlanningModel = "gpt-5.6-sol"
+    static let recommendedPlanningModel = "deepseek-v4-pro"
     static let recommendedExecutionModel = "deepseek-v4-flash"
 
     var planningModelID: String?
@@ -95,6 +95,30 @@ nonisolated struct AgentDispatchModelRouting: Codable, Equatable {
     nonisolated private static func normalized(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+nonisolated enum AgentDispatchParallelismPolicy {
+    /// Worker profiles are reusable routing choices. The provider gate owns
+    /// actual turn capacity, so a single selected profile may serve several
+    /// child runtimes at once.
+    static func taskLimit(providerConcurrencyLimit: Int) -> Int {
+        max(1, providerConcurrencyLimit)
+    }
+}
+
+nonisolated enum AgentDispatchPlannerSelection {
+    static func normalizedFallbackProfileIDs(
+        primaryProfileID: String,
+        fallbackProfileIDs: [String]
+    ) -> [String] {
+        for rawProfileID in fallbackProfileIDs {
+            let profileID = rawProfileID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !profileID.isEmpty, profileID != primaryProfileID {
+                return [profileID]
+            }
+        }
+        return []
     }
 }
 
@@ -284,6 +308,11 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
     var resolvedTarget: AgentDispatchTargetChoice?
     var runtimeSessionID: UUID?
     var runtimeSessionIDs: [UUID]? = nil
+    /// Host-owned acceptance recovery ledger. Optional for backward-compatible
+    /// decoding of tasks persisted before the node Harness became resumable.
+    /// A durable count prevents reopening the board from resetting the retry
+    /// budget and creating an unbounded, expensive recovery loop.
+    var acceptanceRecoveryAttempts: Int? = nil
     /// Optional checkout override. The referenced binding must belong to the
     /// Goal's logical project; otherwise launch validation rejects it.
     var workspaceBindingID: String?
@@ -308,6 +337,7 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
         resolvedTarget: AgentDispatchTargetChoice? = nil,
         runtimeSessionID: UUID? = nil,
         runtimeSessionIDs: [UUID]? = nil,
+        acceptanceRecoveryAttempts: Int? = nil,
         workspaceBindingID: String? = nil,
         branchName: String = "",
         acceptanceCriteria: [String] = [],
@@ -329,6 +359,7 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
         self.resolvedTarget = resolvedTarget
         self.runtimeSessionID = runtimeSessionID
         self.runtimeSessionIDs = runtimeSessionIDs
+        self.acceptanceRecoveryAttempts = acceptanceRecoveryAttempts
         self.workspaceBindingID = workspaceBindingID
         self.branchName = branchName
         self.acceptanceCriteria = acceptanceCriteria
@@ -460,7 +491,10 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
     }
 
     var effectivePlanningFallbackProfileIDs: [String] {
-        planningFallbackProfileIDs ?? []
+        AgentDispatchPlannerSelection.normalizedFallbackProfileIDs(
+            primaryProfileID: effectivePlanningProfileID,
+            fallbackProfileIDs: planningFallbackProfileIDs ?? []
+        )
     }
 
     var effectiveWorkerProfileIDs: [String] {

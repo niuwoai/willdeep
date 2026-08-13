@@ -17,6 +17,7 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentScheduledTaskCardLayout.iconTileSize == 36)
         #expect(AgentScheduledTaskCardLayout.cornerRadius == 12)
         #expect(AgentDesign.sidebarSessionTrailingActionsWidth == 40)
+        #expect(AgentDesign.sidebarSessionTrailingContentInset == 4)
         #expect(AgentDesign.assistantMetadataTopSpacingScale == 0.7)
         #expect(AgentDesign.assistantMetadataTopSpacing(baseFontSize: 15) == 10.5)
         #expect(AgentDesign.liveActivityRowSpacing == 2)
@@ -175,6 +176,11 @@ struct AgentSidebarListVisualMetricsTests {
                 + AgentDesign.sidebarPinnedSessionContentHorizontalInset
                 == 12
         )
+        #expect(
+            AgentDesign.sidebarSessionContentHorizontalInset
+                - AgentDesign.sidebarSessionTrailingContentInset
+                == AgentDesign.sidebarRowFontSize * 2
+        )
     }
 
     @Test("legacy plan progress no longer renders a sidebar mode badge")
@@ -284,41 +290,31 @@ struct AgentSidebarListVisualMetricsTests {
             ),
         ]
         let now = Date(timeIntervalSince1970: 1_784_070_000)
-        var plannedSession = makeSession(
-            title: "调整图层面板展开方式",
-            workspace: "/tmp/83d",
-            updatedAt: now.addingTimeInterval(-900),
-            pinnedAt: now.addingTimeInterval(-120)
+        let pinned = makeSession(
+            title: "优化 Mock 上游与 Loadgen 高 RPS 场景",
+            workspace: "/tmp/muchtoken",
+            updatedAt: now.addingTimeInterval(-60),
+            pinnedAt: now.addingTimeInterval(-30)
         )
-        plannedSession.currentPlan = AgentPlan(
-            status: .executing,
-            steps: [
-                .init(text: "检查侧栏与聊天字号", status: .done),
-                .init(text: "统一状态提示字号", status: .done),
-                .init(text: "完成设计验收", status: .inProgress),
-            ]
-        )
-        plannedSession.interactionMode = .goal
-        plannedSession.currentGoal = AgentGoal(
-            statement: "完成侧边栏视觉收敛",
-            checklist: [
-                .init(text: "只保留一行低对比度进度", done: false),
-            ]
+        let active = makeSession(
+            title: "请免密登陆 ssh root@h1.new83d.com",
+            workspace: "/tmp/muchtoken",
+            updatedAt: now.addingTimeInterval(-120)
         )
         appState.agentSessions = [
-            plannedSession,
-            makeSession(title: "更新版本号", workspace: "/tmp/83d", updatedAt: now.addingTimeInterval(-800)),
-            makeSession(title: "83d-go 里，帮我检查接口", workspace: "/tmp/83d", updatedAt: now.addingTimeInterval(-700)),
-            makeSession(
-                title: "完善版本控制文档",
-                workspace: "/tmp/agentrules",
-                updatedAt: now.addingTimeInterval(-600),
-                pinnedAt: now.addingTimeInterval(-60)
-            ),
-            makeSession(title: "我们 wdtq,在同一个项目", workspace: "/tmp/aistaff", updatedAt: now.addingTimeInterval(-500)),
-            makeSession(title: "hello,列一下我们当前功能", workspace: "/tmp/metaserver", updatedAt: now.addingTimeInterval(-400)),
+            pinned,
+            makeSession(title: "请免密登陆 ssh root@h1.new83d.com", workspace: "/tmp/muchtoken", updatedAt: now.addingTimeInterval(-90)),
+            makeSession(title: "请免密登陆 ssh root@h1.new83d.com", workspace: "/tmp/muchtoken", updatedAt: now.addingTimeInterval(-100)),
+            makeSession(title: "在线上部署最新版", workspace: "/tmp/muchtoken", updatedAt: now.addingTimeInterval(-110)),
+            active,
+            makeSession(title: "请免密登陆 ssh root@h1.new83d.com", workspace: "/tmp/muchtoken", updatedAt: now.addingTimeInterval(-130)),
+            makeSession(title: "前端开发包这个目录里的功能", workspace: "/tmp/tokenhub", updatedAt: now.addingTimeInterval(-200)),
+            makeSession(title: "帮我在终端的 k8s 中操作", workspace: "/tmp/tokenhub", updatedAt: now.addingTimeInterval(-210)),
+            makeSession(title: "确认 capability 接口", workspace: "/tmp/tokenhub", updatedAt: now.addingTimeInterval(-220)),
+            makeSession(title: "https://hub.tsingfly.com/v1/models", workspace: "/tmp/tokenhub", updatedAt: now.addingTimeInterval(-230)),
+            makeSession(title: "婉拒表白", workspace: "/tmp/tokenhub", updatedAt: now.addingTimeInterval(-240)),
         ]
-        appState.activeAgentSessionID = nil
+        appState.activeAgentSessionID = active.id
         appState.hiddenWorkspaceKeys = []
 
         let size = NSSize(width: 228, height: 606)

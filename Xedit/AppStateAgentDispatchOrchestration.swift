@@ -82,15 +82,108 @@ extension AppState {
     }
 
     func startDispatchGoalInLocalWorkspace() {
+        _ = startDispatchGoalDraft()
+    }
+
+    /// Opens the project definition screen immediately. Workspace selection
+    /// belongs to that screen so users can understand the complete setup flow
+    /// before macOS interrupts them with a folder panel.
+    @discardableResult
+    func startDispatchGoalDraft() -> AgentSession {
+        agentDispatchCoordinator.synchronize(with: agentSessions)
+        if let existingDraft = agentSessions.first(where: { session in
+            !session.isArchived
+                && session.presentationScope == .dispatchBoard
+                && session.dispatchParentProjectID == nil
+                && session.currentGoal == nil
+                && session.workspaceLocation == nil
+                && (session.workspaceRootPath?.isEmpty ?? true)
+        }) {
+            _ = selectAgentSession(id: existingDraft.id)
+            agentPrimaryDestination = .dispatchBoard
+            return existingDraft
+        }
+
+        let session = startNewAgentSession(inWorkspaceAt: nil)
+        guard let runtime = runtime(for: session.id) else {
+            agentPrimaryDestination = .dispatchBoard
+            return session
+        }
+        runtime.session.presentationScope = .dispatchBoard
+        // Goal mode normally requires a workspace. A dispatch draft is the one
+        // intentional exception: it is configuration-only and cannot create a
+        // goal, plan, or task until the setup screen binds a directory.
+        runtime.interactionMode = .goal
+        applyDispatchModel(
+            AgentDispatchModelRouting.costOptimized.planningModelID,
+            to: runtime
+        )
+        agentPrimaryDestination = .dispatchBoard
+        persistAgentSession(runtime: runtime)
+        return runtime.session
+    }
+
+    func chooseLocalWorkspaceForDispatchDraft(
+        completion: @escaping (String?) -> Void
+    ) {
         let panel = Self.folderOpenPanel()
         panel.title = L10n.Dispatch.chooseWorkspace
         panel.message = L10n.Dispatch.chooseWorkspaceMessage
         panel.prompt = L10n.Dispatch.chooseWorkspaceAction
         Self.presentFolderOpenPanel(panel) { [weak self] response in
-            guard response == .OK, let url = panel.url, let self else { return }
-            self.startDispatchGoalSession(
-                inWorkspaceAt: url.standardizedFileURL.path
+            guard response == .OK, let url = panel.url, let self else {
+                completion(nil)
+                return
+            }
+            completion(
+                self.bindDispatchGoalDraftWorkspace(
+                    to: url.standardizedFileURL.path
+                )
             )
+        }
+    }
+
+    func bindDispatchGoalDraftWorkspace(to workspacePath: String) -> String? {
+        guard isPreparingDispatchGoal, let runtime = activeRuntime else {
+            return L10n.Dispatch.launchFailed
+        }
+        let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
+        guard Self.isExistingDirectory(url) else {
+            return L10n.Dispatch.workspaceMissing
+        }
+        let location = WorkspaceLocation.local(path: url.path)
+        agentDispatchCoordinator.synchronize(with: agentSessions)
+        if let conflict = agentDispatchCoordinator.activeGoal(
+            for: location,
+            excluding: runtime.id
+        ) {
+            return L10n.Dispatch.projectAlreadyRunning(
+                conflict.statement.isEmpty ? conflict.title : conflict.statement
+            )
+        }
+
+        _ = activateSecurityScope(for: url)
+        registerRecentFolder(url)
+        runtime.rebindWorkspace(to: url.path)
+        runtime.worktreeChanges = .init()
+        runtime.agentArtifactPaths = []
+        runtime.errorMessage = nil
+        persistAgentSession(runtime: runtime)
+        unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
+        refreshAgentGitWorktrees()
+        refreshAgentWorkspaceCollision()
+        return nil
+    }
+
+    func cancelDispatchGoalDraft() {
+        guard isPreparingDispatchGoal, let draftID = activeRuntime?.id else { return }
+        deleteAgentSession(id: draftID)
+        agentDispatchCoordinator.synchronize(with: agentSessions)
+        if let goalID = agentDispatchCoordinator.selectedGoalID
+            ?? agentDispatchCoordinator.goals.first?.id {
+            selectDispatchGoal(goalID)
+        } else {
+            agentPrimaryDestination = .dispatchBoard
         }
     }
 
@@ -197,9 +290,14 @@ extension AppState {
         fallbackProfileIDs: [String],
         goalID: UUID
     ) {
+        let normalizedFallbackProfileIDs = AgentDispatchPlannerSelection
+            .normalizedFallbackProfileIDs(
+                primaryProfileID: primaryProfileID,
+                fallbackProfileIDs: fallbackProfileIDs
+            )
         agentDispatchCoordinator.updatePlanningProfiles(
             primaryProfileID: primaryProfileID,
-            fallbackProfileIDs: fallbackProfileIDs,
+            fallbackProfileIDs: normalizedFallbackProfileIDs,
             goalID: goalID
         )
         guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
@@ -208,7 +306,7 @@ extension AppState {
         }
         var sourceGoal = runtime.currentGoal ?? AgentGoal()
         sourceGoal.planningProfileID = primaryProfileID
-        sourceGoal.planningFallbackProfileIDs = fallbackProfileIDs
+        sourceGoal.planningFallbackProfileIDs = normalizedFallbackProfileIDs
         sourceGoal.planningAttemptedProfileIDs = nil
         runtime.currentGoal = sourceGoal
         if let profile = dispatchExecutionProfiles(for: goal).first(where: {
@@ -620,8 +718,6 @@ extension AppState {
             target: target,
             runtimeSessionID: runtime.id
         )
-        dispatchAutomaticRecoveryAttemptsByTaskID[taskID] = 0
-
         let delegatedProfile = profile?.delegatedProfile
             ?? selectedDispatchCLIProfile(goal: goal, executor: decision.executor)
         dispatchAgentMessageUsingSelectedExecutor(
@@ -654,7 +750,13 @@ extension AppState {
         guard goal.hasExecutablePlan else {
             return [.blocked(message: L10n.Dispatch.planNotReady)]
         }
-        let capacity = max(1, goal.effectiveWorkerProfileIDs.count)
+        // Profiles choose models and fallback order; they are not worker
+        // process slots. One selected Flash profile may serve several child
+        // runtimes concurrently, bounded by the user's provider concurrency
+        // limit and the existing provider queue.
+        let capacity = AgentDispatchParallelismPolicy.taskLimit(
+            providerConcurrencyLimit: perProviderConcurrencyLimit
+        )
         let availableSlots = max(0, capacity - goal.activeTaskCount)
         guard availableSlots > 0 else { return [] }
         let readyTaskIDs = goal.tasks
@@ -666,10 +768,12 @@ extension AppState {
         }
     }
 
-    /// Reattaches task completion monitoring after the app or dispatch board
-    /// is reopened. Reattachment is deliberately observational: opening the
-    /// board must never launch queued work or replay an interrupted side
-    /// effect. The operator can resume queued/reviewing work explicitly.
+    /// Reattaches the host-owned node Harness when the dispatch board is
+    /// reopened. Starting a dispatch project authorizes it to converge: an
+    /// idle `running`/`reviewing` node must resume acceptance recovery, reach a
+    /// concrete failure, or complete and unlock its downstream work. Merely
+    /// observing an idle reviewing node recreates the permanent graph stall
+    /// this lifecycle hook exists to prevent.
     func resumeDispatchGoal(goalID: UUID) {
         guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
               !goal.isPaused else {
@@ -678,13 +782,22 @@ extension AppState {
         for task in goal.tasks where task.state == .running || task.state == .reviewing {
             guard let runtimeSessionID = task.runtimeSessionID,
                   let taskRuntime = runtime(for: runtimeSessionID) else {
+                agentDispatchCoordinator.updateTaskState(
+                    goalID: goalID,
+                    taskID: task.id,
+                    state: .failed
+                )
+                _ = launchUntriedDispatchFallbackIfAvailable(
+                    goalID: goalID,
+                    taskID: task.id
+                )
                 continue
             }
             monitorDispatchTaskRuntime(
                 taskRuntime,
                 goalID: goalID,
                 taskID: task.id,
-                allowsAutomaticRecovery: false
+                allowsAutomaticRecovery: true
             )
         }
     }
@@ -708,7 +821,6 @@ extension AppState {
             return false
         }
         dispatchMonitoredRuntimeIDsByTaskID[taskID] = nil
-        dispatchAutomaticRecoveryAttemptsByTaskID[taskID] = nil
         if let runtimeSessionID = task.runtimeSessionID,
            let taskRuntime = runtime(for: runtimeSessionID) {
             stopAgentResponse(
@@ -774,7 +886,11 @@ extension AppState {
             || (!wasResponding && (runtime.isResponding || runtime.isAwaitingProviderSlot))
         guard didSubmitTurn else { return false }
 
-        dispatchAutomaticRecoveryAttemptsByTaskID[taskID] = 0
+        agentDispatchCoordinator.recordTaskAcceptanceRecoveryAttempts(
+            goalID: goalID,
+            taskID: taskID,
+            attempts: 0
+        )
         agentDispatchCoordinator.updateTaskState(
             goalID: goalID,
             taskID: taskID,
@@ -909,9 +1025,11 @@ extension AppState {
                 let hasCompletedAcceptance = runtime.currentGoal.map {
                     !$0.checklist.isEmpty && $0.checklist.allSatisfy(\.done)
                 } ?? false
-                let attempts = self.dispatchAutomaticRecoveryAttemptsByTaskID[taskID] ?? 0
-                let goalIsPaused = self.agentDispatchCoordinator.goals
-                    .first(where: { $0.id == goalID })?.isPaused ?? true
+                let refreshedGoal = self.agentDispatchCoordinator.goals
+                    .first(where: { $0.id == goalID })
+                let refreshedTask = refreshedGoal?.tasks.first(where: { $0.id == taskID })
+                let attempts = refreshedTask?.acceptanceRecoveryAttempts ?? 0
+                let goalIsPaused = refreshedGoal?.isPaused ?? true
                 if allowsAutomaticRecovery && AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
                     hasCompletedAcceptance: hasCompletedAcceptance,
                     hasRuntimeError: runtime.errorMessage != nil,
@@ -919,14 +1037,18 @@ extension AppState {
                     attempts: attempts
                 ) {
                     let nextAttempt = attempts + 1
-                    self.dispatchAutomaticRecoveryAttemptsByTaskID[taskID] = nextAttempt
+                    self.agentDispatchCoordinator.recordTaskAcceptanceRecoveryAttempts(
+                        goalID: goalID,
+                        taskID: taskID,
+                        attempts: nextAttempt
+                    )
                     let remaining = runtime.currentGoal?.checklist
                         .filter { !$0.done }
                         .map(\.text) ?? []
                     self.agentDispatchCoordinator.updateTaskState(
                         goalID: goalID,
                         taskID: taskID,
-                        state: .running
+                        state: .reviewing
                     )
                     self.dispatchAgentMessage(
                         for: runtime,
@@ -946,35 +1068,58 @@ extension AppState {
                 } else if hasCompletedAcceptance {
                     state = .merged
                 } else {
-                    state = .reviewing
+                    // `reviewing` is an active Harness phase, never an idle
+                    // terminal state. Exhausting its bounded repair budget is
+                    // an explicit failure, which can trigger a fresh fallback
+                    // profile and can never masquerade as ongoing work.
+                    state = .failed
+                    runtime.errorMessage = L10n.Dispatch.acceptanceRecoveryExhausted
+                    self.persistAgentSession(
+                        runtime: runtime,
+                        touchUpdatedAt: false,
+                        moveToFront: false
+                    )
                 }
                 self.agentDispatchCoordinator.updateTaskState(
                     goalID: goalID,
                     taskID: taskID,
                     state: state
                 )
-                self.dispatchAutomaticRecoveryAttemptsByTaskID[taskID] = nil
-                if allowsAutomaticRecovery,
-                   state == .failed,
-                   let refreshedGoal = self.agentDispatchCoordinator.goals.first(where: {
-                       $0.id == goalID
-                   }),
-                   let refreshedTask = refreshedGoal.tasks.first(where: {
-                       $0.id == taskID
-                   }),
-                   refreshedTask.executorChoice == .automatic,
-                   AgentDispatchProfileResolver.hasUntriedFallback(
-                       fallbackProfileIDs: refreshedTask.fallbackProfileIDs ?? [],
-                       selectedWorkerProfileIDs: refreshedGoal.effectiveWorkerProfileIDs,
-                       attemptedProfileIDs: refreshedTask.attemptedProfileIDs ?? []
-                   ) {
-                    _ = self.launchDispatchTask(goalID: goalID, taskID: taskID)
+                if allowsAutomaticRecovery, state == .failed {
+                    _ = self.launchUntriedDispatchFallbackIfAvailable(
+                        goalID: goalID,
+                        taskID: taskID
+                    )
                 } else if allowsAutomaticRecovery, state == .merged {
                     _ = self.launchReadyDispatchTasks(goalID: goalID)
                 }
                 return
             }
         }
+    }
+
+    /// Starts a fresh runtime only when the scheduler owns executor selection
+    /// and a genuinely untried profile remains. This keeps recovery bounded
+    /// across relaunches while still letting another Worker finish the node.
+    @discardableResult
+    private func launchUntriedDispatchFallbackIfAvailable(
+        goalID: UUID,
+        taskID: UUID
+    ) -> Bool {
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              let task = goal.tasks.first(where: { $0.id == taskID }),
+              task.executorChoice == .automatic,
+              AgentDispatchProfileResolver.hasUntriedFallback(
+                  fallbackProfileIDs: task.fallbackProfileIDs ?? [],
+                  selectedWorkerProfileIDs: goal.effectiveWorkerProfileIDs,
+                  attemptedProfileIDs: task.attemptedProfileIDs ?? []
+              ) else {
+            return false
+        }
+        if case .started = launchDispatchTask(goalID: goalID, taskID: taskID) {
+            return true
+        }
+        return false
     }
 
     private func applyDispatchModel(_ modelID: String?, to runtime: AgentRuntime) {

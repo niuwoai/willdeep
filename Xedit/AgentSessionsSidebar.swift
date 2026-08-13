@@ -526,7 +526,7 @@ struct AgentSessionsSidebar: View {
                 ForEach(sessions) { session in
                     sessionRow(
                         session,
-                        contentHorizontalInset: AgentDesign.sidebarPinnedSessionContentHorizontalInset
+                        contentLeadingInset: AgentDesign.sidebarPinnedSessionContentHorizontalInset
                     )
                 }
             }
@@ -726,7 +726,8 @@ struct AgentSessionsSidebar: View {
     @ViewBuilder
     private func sessionRow(
         _ session: AgentSession,
-        contentHorizontalInset: CGFloat = AgentDesign.sidebarSessionContentHorizontalInset
+        contentLeadingInset: CGFloat = AgentDesign.sidebarSessionContentHorizontalInset,
+        contentTrailingInset: CGFloat = AgentDesign.sidebarSessionTrailingContentInset
     ) -> some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         let isActive = appState.activeAgentSessionID == session.id
@@ -794,7 +795,8 @@ struct AgentSessionsSidebar: View {
                 )
                 .opacity(isHovered ? 0 : 1)
             }
-            .padding(.horizontal, contentHorizontalInset)
+            .padding(.leading, contentLeadingInset)
+            .padding(.trailing, contentTrailingInset)
             .frame(height: AgentDesign.sidebarRowHeight)
             .contentShape(Rectangle())
             .background(

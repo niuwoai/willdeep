@@ -1,57 +1,51 @@
-# Design QA：Profile、主按钮与会话侧栏
+# Design QA：调度项目工作区后置选择
 
 ## Comparison target
 
-- Source visual truth：用户提供的三张现状截图。
-  - Profile 管理：`/Users/rocky/.codex/attachments/2638ac68-b1d5-45f3-9857-248441b76217/image-1.png`（1507 × 1060）。
-  - Goal 任务页：`/Users/rocky/.codex/attachments/2638ac68-b1d5-45f3-9857-248441b76217/image-2.png`（2400 × 1587）。
-  - 会话侧栏：`/Users/rocky/.codex/attachments/2638ac68-b1d5-45f3-9857-248441b76217/image-3.png`（465 × 1520）。
-- Desired changes：Profile 先选 Provider 再选模型；内置 Profile 也可修改；默认规划模型改为 GPT-5.6 Sol；主操作按钮统一黑底白字；左侧会话列表可从当前 230 pt 起向右拖宽，并复用右侧栏的拖拽反馈，拖拽不得让聊天正文滚动到顶部。
-- Rendered implementation：`/private/tmp/Xedit-profile-manager-design-qa.png`（1520 × 1040，原生 SwiftUI 以 2× 比例渲染，对应 760 × 520 pt）。
-- Combined comparison：`/private/tmp/Xedit-profile-manager-comparison.png`。左侧为用户截图中的旧 Profile，右侧为本次原生渲染结果。
-- State：macOS 浅色模式；Profile 管理器选中内置 `GPT-5.6 Sol Worker`；Provider 为 `some.im`；模型为 `gpt-5.6-sol`。
+- Source visual truth：用户提供的既有“定义这个项目”页面，`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-dc9de11c-0893-4502-bf38-e27206e89a10.png`（2194 × 1480 px）。
+- Intended change：保留原页面的信息结构，改为先进入页面、再从页头选择工作目录；目录绑定前锁定项目定义区，绑定后允许填写与创建。
+- Rendered implementation：`/tmp/Xedit-dispatch-goal-setup-design-qa.png`（2200 × 1400 px；生产 SwiftUI 组件，1100 × 700 pt，2× density）。
+- Source/final comparison：`/private/tmp/Xedit-dispatch-setup-comparison.png`（2200 × 700 px）。左侧为用户截图，右侧为最终无工作区初始态。
+- State：Rice Paper 浅色皮肤；Agent 正文 16 pt、1.6 倍行高；无工作区；默认 DeepSeek V4 Pro Planner；默认仅选择 DeepSeek V4 Flash Worker。
 
-## Findings and comparison history
+## Findings
 
-- 第一轮发现 `[P1]`：内置 Profile 的表单整体禁用，模型只能以文本字段出现，用户无法按 Provider → Model 的顺序选择；默认规划模型仍为价格较高的 Kimi K3。
-- 修复：允许内置 Profile 覆盖 Provider 与模型；Provider 列表来自现有 Provider Library，模型列表按选中的 Provider 隔离并去重；默认规划 Profile 改为 GPT-5.6 Sol，同时保留 Kimi K3 供手动选择。
-- 第一轮发现 `[P2]`：Profile 的“好”以及 Goal 流程内的启动执行、添加节点、启动任务等主按钮继续使用系统蓝强调色，与用户要求的黑底白字不符。
-- 修复：Goal Dispatch 范围内所有非破坏性的 `borderedProminent` 主操作统一使用黑色 tint；停止任务等破坏性按钮继续保留红色语义。
-- 第一轮发现 `[P1]`：左侧会话列表固定为 230 pt，没有可发现的拖拽边界；直接按实时宽度重排聊天列会使长会话阅读锚点不稳定。
-- 修复：新增 230...520 pt 的可拖拽宽度，230 pt 同时作为不可突破的最小宽度；命中宽度、1 pt 分隔线、悬停与拖拽时的强调色反馈均与右侧面板一致。拖拽期间聊天列锁定在已提交宽度，松手后关闭动画并只重排一次，由既有 transcript scroll observer 保持阅读锚点。
-- 第二轮原生渲染显示：内置 Profile 现已按 Provider、模型的顺序显示选择器，默认选中 GPT-5.6 Sol；“好”为黑底白字。代码与交互契约检查未发现新的 P0、P1、P2 问题。
+- 页头右侧新增“选择项目工作区”按钮，初始入口清楚且不挤压标题；绑定后同一位置切换为“更改工作目录”。
+- 无工作区时，工作区卡片保持可读并以橙色提示“请先选择工作区”；目标陈述、AI 检查、验收清单、Planner、执行环境和 Worker 统一降级并禁用，避免形成可以输入却无法创建的半成品状态。
+- 主操作区保留右下角位置，新增 secondary“取消”按钮；“创建项目”在目录及必填内容未就绪时保持禁用。
+- Planner 默认值明确显示为 DeepSeek V4 Pro Planner，Worker 默认仅勾选 DeepSeek V4 Flash Worker；信息层级、卡片节奏与原页面一致。
+- 最终原生渲染和组合对照未发现新的 P0、P1、P2 问题。
 
 ## Required fidelity surfaces
 
-- Fonts and typography：保留原生 macOS Form、Picker、列表与系统字体层级，不引入自定义字体或新的字号体系。
-- Spacing and layout rhythm：Profile 详情仍使用原分组表单节奏，仅把两项字段调整为 Provider 在前、模型在后；会话侧栏只增加与右侧栏等宽的边界命中区。
-- Colors and visual tokens：非破坏性主按钮使用黑色强调和白色前景；拖拽边界继续使用现有 accent color；危险操作保留红色。
-- Image quality and asset fidelity：本次没有新增位图或图标资产；继续使用现有 SF Symbols 与原生控件。
-- Copy and content：复用现有 i18n 文案键，不新增硬编码用户可见文本；“好”等既有本地化文案保持不变，仅调整视觉语义。
+- Fonts and typography：目标陈述、验收清单、AI 建议目标及诊断正文统一读取 Agent 窗口正文字体、字号和行高；标题与卡片标签继续沿用现有系统字体层级。
+- Spacing and layout rhythm：继续使用左侧定义区、右侧配置卡片和底部操作条的原有布局；新增页头按钮与底部取消按钮均沿用现有 macOS 控件间距。
+- Colors and visual tokens：沿用 Rice Paper 背景、现有卡片描边、禁用透明度和橙色警示色；未引入新的硬编码颜色。
+- Image quality and asset fidelity：不新增位图资产；工作区、Planner、环境与 Worker 图标继续使用现有 SF Symbols。
+- Copy and content：新增文案均进入中英文本地化资源；没有在 SwiftUI 视图中硬编码用户可见文本。
 
 ## Interaction and verification
 
-- Profile 原生渲染测试验证内置 GPT-5.6 Sol Profile、Provider 选择器、模型选择器与黑色确认按钮能共同渲染。
-- Profile Store 测试验证内置 Profile 的 Provider/模型覆盖可持久化，且 Provider 模型目录不会串到其他 Provider。
-- 会话侧栏尺寸契约测试验证最小宽度为 230 pt，并复用右侧面板的 12 pt 命中区与 1 pt 分隔线。
-- 拖拽实现沿用现有 transcript scroll observer，并在拖拽期间冻结聊天列宽度，避免逐帧重排造成正文位置跳顶。
-- 合并最新 `develop` 后的定向 XCTest 56/56 通过，包含原生 Profile 渲染验收与左侧拖拽尺寸契约。
-- Go 回归 `go test ./...` 通过。
-- 版本一致性检查通过：`1.248.0-rc1`；主应用构建号 369，Help 与 Computer Use Helper 构建号 285。
-- 任务相关源码的复杂度守卫通过：本次变更文件均低于 3000 行；`git diff --check` 通过。仓库全量扫描仍报告一个未触及的既有文件 `ComputerUseHelper/main.swift` 为 3023 行，不属于本次改动范围。
+- “新建调度项目”直接创建可持久化的无工作区草稿并打开定义页，不再提前弹出目录选择器。
+- 选择目录后校验目录存在性及运行中项目冲突，成功后原地绑定、解锁页面并聚焦目标输入；失败时保留草稿与当前页面。
+- 取消会删除尚未创建的临时草稿并留在调度台，不产生 Goal 或聊天消息。
+- 一个 DeepSeek V4 Flash Worker Profile 可按 Provider 并发上限同时执行多个就绪节点；额外 Worker Profile 仅扩展模型池与故障转移顺序。
+- `AgentDispatchCoordinatorTests` 62/62 通过，覆盖草稿创建、目录绑定、取消、默认路由、单 Profile 多节点并行和本页生产组件渲染。
+- `git diff --check`、版本一致性、复杂度与本地化资源校验作为最终交付门禁执行。
 
 ## Open questions
 
-- 无。Provider 和模型选项直接使用当前 Provider Library 数据，不额外引入远端目录或新依赖。
+- 无。并行度继续由 Provider 并发设置统一控制，无需让用户为了并行重复添加同一个 Worker Profile。
 
 ## Implementation checklist
 
-- [x] 默认规划模型改为 GPT-5.6 Sol。
-- [x] 内置 Profile 支持先选 Provider、再选对应模型，并持久化覆盖。
-- [x] Goal Dispatch 主按钮统一黑底白字，破坏性操作保留红色。
-- [x] 左侧会话列表支持 230...520 pt 拖拽，并复用右侧栏反馈。
-- [x] 拖拽过程冻结聊天列，松手后无动画重排，保护正文阅读位置。
-- [x] 更新测试、版本号、CHANGELOG 与产品说明。
+- [x] 新建项目直接进入定义页，并在页头提供目录选择/更改入口。
+- [x] 目录绑定前禁用填写和配置，绑定后原地解锁。
+- [x] 默认 DeepSeek V4 Pro Planner 与单个 DeepSeek V4 Flash Worker。
+- [x] 支持同一 Worker Profile 多节点并行和用户补选 Worker。
+- [x] AI 草稿与验收正文继承 Agent 正文字体、字号和行高。
+- [x] 主按钮旁增加 secondary“取消”按钮。
+- [x] 同步版本号、CHANGELOG、产品概览、自动化测试与视觉 QA。
 
 ## Follow-up polish
 

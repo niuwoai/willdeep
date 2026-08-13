@@ -9,6 +9,7 @@ struct AgentDispatchGoalHeader: View {
     let goal: AgentDispatchGoal
     let runtimeDescriptors: [RuntimeDescriptor]
     let profiles: [AgentExecutionProfile]
+    let parallelTaskLimit: Int
     let onTargetChoice: (AgentDispatchTargetChoice) -> Void
     let onPlanningProfiles: (String, [String]) -> Void
     let onWorkerProfiles: ([String]) -> Void
@@ -17,6 +18,8 @@ struct AgentDispatchGoalHeader: View {
     let onBindRemoteWorkspace: (RuntimeDescriptor) -> Void
     let onLaunch: () -> Void
     let onResume: () -> Void
+
+    @State private var isPlannerPickerPresented = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -128,65 +131,39 @@ struct AgentDispatchGoalHeader: View {
     }
 
     private var routingMenu: some View {
-        Menu {
-            Section(L10n.Dispatch.planningProfile) {
-                ForEach(profiles) { profile in
-                    Button {
-                        onPlanningProfiles(
-                            profile.id,
-                            goal.effectivePlanningFallbackProfileIDs.filter {
-                                $0 != profile.id
-                            }
-                        )
-                    } label: {
-                        Label(
-                            profile.name,
-                            systemImage: profile.id == goal.effectivePlanningProfileID
-                                ? "checkmark"
-                                : profile.executor.symbol
-                        )
-                    }
-                }
-            }
-            Menu(L10n.Dispatch.planningFallbacks) {
-                ForEach(profiles.filter {
-                    $0.id != goal.effectivePlanningProfileID
-                }) { profile in
-                    Button {
-                        var fallbacks = goal.effectivePlanningFallbackProfileIDs
-                        if let index = fallbacks.firstIndex(of: profile.id) {
-                            fallbacks.remove(at: index)
-                        } else {
-                            fallbacks.append(profile.id)
-                        }
-                        onPlanningProfiles(
-                            goal.effectivePlanningProfileID,
-                            fallbacks
-                        )
-                    } label: {
-                        Label(
-                            profile.name,
-                            systemImage: goal.effectivePlanningFallbackProfileIDs
-                                .contains(profile.id)
-                                ? "checkmark"
-                                : profile.executor.symbol
-                        )
-                    }
-                }
-            }
-            Divider()
-            Button(action: onManageProfiles) {
-                Label(L10n.Dispatch.manageProfiles, systemImage: "gearshape")
-            }
+        Button {
+            isPlannerPickerPresented = true
         } label: {
             policyPill(
                 symbol: "brain.head.profile",
                 text: routingSummary
             )
         }
-        .menuStyle(.borderlessButton)
+        .buttonStyle(.plain)
         .fixedSize()
         .help(L10n.Dispatch.modelRoutingHelp)
+        .popover(
+            isPresented: $isPlannerPickerPresented,
+            attachmentAnchor: .rect(.bounds),
+            arrowEdge: .top
+        ) {
+            AgentDispatchPlannerPicker(
+                profiles: profiles,
+                primaryProfileID: goal.effectivePlanningProfileID,
+                fallbackProfileIDs: goal.effectivePlanningFallbackProfileIDs,
+                onManageProfiles: {
+                    isPlannerPickerPresented = false
+                    DispatchQueue.main.async {
+                        onManageProfiles()
+                    }
+                },
+                onCancel: { isPlannerPickerPresented = false },
+                onApply: { primaryProfileID, fallbackProfileID in
+                    onPlanningProfiles(primaryProfileID, [fallbackProfileID])
+                    isPlannerPickerPresented = false
+                }
+            )
+        }
     }
 
     private var routingSummary: String {
@@ -254,7 +231,9 @@ struct AgentDispatchGoalHeader: View {
             return true
         }
         return goal.hasExecutablePlan
-            && goal.activeTaskCount < max(1, goal.effectiveWorkerProfileIDs.count)
+            && goal.activeTaskCount < AgentDispatchParallelismPolicy.taskLimit(
+                providerConcurrencyLimit: parallelTaskLimit
+            )
             && goal.hasReadyTask
     }
 

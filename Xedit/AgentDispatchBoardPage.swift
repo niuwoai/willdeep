@@ -157,7 +157,18 @@ private struct AgentDispatchBoardContent: View {
             workspaceName: appState.activeRuntime?.session.workspaceName
                 ?? L10n.Workspace.noWorkspace,
             profiles: executionProfiles,
+            onChooseWorkspace: {
+                appState.chooseLocalWorkspaceForDispatchDraft { error in
+                    if let error {
+                        alertTarget = .message(
+                            title: L10n.Dispatch.workspaceBindingFailed,
+                            message: error
+                        )
+                    }
+                }
+            },
             onManageProfiles: { isProfileManagerPresented = true },
+            onCancel: { appState.cancelDispatchGoalDraft() },
             onAssess: { statement, planningProfileID, fallbackProfileIDs in
                 try await appState.assessDispatchGoal(
                     statement: statement,
@@ -185,6 +196,7 @@ private struct AgentDispatchBoardContent: View {
                 goal: goal,
                 runtimeDescriptors: runtimeDescriptors,
                 profiles: executionProfiles,
+                parallelTaskLimit: appState.perProviderConcurrencyLimit,
                 onTargetChoice: { coordinator.updateGoalTargetChoice($0, goalID: goal.id) },
                 onPlanningProfiles: { primaryProfileID, fallbackProfileIDs in
                     appState.updateDispatchPlanningProfiles(

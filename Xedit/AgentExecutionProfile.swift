@@ -15,7 +15,7 @@ nonisolated enum AgentExecutionProfileOrigin: String, Codable, Equatable {
 }
 
 nonisolated struct AgentExecutionProfile: Codable, Equatable, Identifiable {
-    static let recommendedPlannerID = "builtin:willdeep:gpt-5.6-sol"
+    static let recommendedPlannerID = "builtin:willdeep:deepseek-v4-pro"
     static let recommendedWorkerID = "builtin:willdeep:deepseek-v4-flash"
     private static let someIMProviderID = "some-im"
 
@@ -81,9 +81,17 @@ nonisolated struct AgentExecutionProfile: Codable, Equatable, Identifiable {
     static let builtIns = [
         AgentExecutionProfile(
             id: recommendedPlannerID,
-            name: "GPT-5.6 Sol Worker",
+            name: "DeepSeek V4 Pro Planner",
             executor: .willDeep,
             modelID: AgentDispatchModelRouting.recommendedPlanningModel,
+            providerID: someIMProviderID,
+            origin: .builtIn
+        ),
+        AgentExecutionProfile(
+            id: "builtin:willdeep:gpt-5.6-sol",
+            name: "GPT-5.6 Sol Worker",
+            executor: .willDeep,
+            modelID: "gpt-5.6-sol",
             providerID: someIMProviderID,
             origin: .builtIn
         ),
@@ -208,19 +216,46 @@ struct AgentExecutionProfileStore {
 enum AgentExecutionProfileModelCatalog {
     static func models(
         for entry: AgentProviderEntry,
+        discoveredModels: [String] = [],
         builtIns: [AgentExecutionProfile] = AgentExecutionProfile.builtIns
     ) -> [String] {
+        let providerLLMModels = discoveredModels.filter { model in
+            isEligibleExecutionModel(model)
+        }
         let candidates = entry.allFlashModels
             + entry.allProModels
             + builtIns.compactMap { profile in
                 profile.providerID == entry.providerID ? profile.modelID : nil
             }
+            + providerLLMModels
         var seen = Set<String>()
         return candidates.compactMap { raw in
             let model = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !model.isEmpty, seen.insert(model.lowercased()).inserted else { return nil }
             return model
         }
+    }
+
+    /// Provider model endpoints sometimes mix chat LLMs with image, video,
+    /// embedding, reranking, speech, and moderation products. Execution
+    /// Profiles can use any conversational model, so keep unknown/new model
+    /// families by default and reject only identifiers that are unambiguously
+    /// non-LLM. This makes new MiniMax, Opus, and DeepSeek variants appear
+    /// without maintaining a brittle allowlist.
+    static func isEligibleExecutionModel(_ rawModelID: String) -> Bool {
+        let model = rawModelID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !model.isEmpty else { return false }
+        let nonLLMMarkers = [
+            "embedding", "embed-", "rerank", "re-rank", "moderation",
+            "gpt-image", "image-generation", "text-to-image", "flux-",
+            "seedance", "text-to-video", "video-generation", "kling-",
+            "hailuo", "sora-", "veo-", "wan2.",
+            "tts-", "text-to-speech", "speech-", "whisper-", "transcription",
+            "music-generation",
+        ]
+        return !nonLLMMarkers.contains { model.contains($0) }
     }
 }
 

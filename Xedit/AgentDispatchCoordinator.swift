@@ -299,9 +299,11 @@ final class AgentDispatchCoordinator: ObservableObject {
     ) {
         updateGoal(id: goalID) { goal in
             goal.planningProfileID = primaryProfileID
-            goal.planningFallbackProfileIDs = Self.uniqueStrings(
-                fallbackProfileIDs.filter { $0 != primaryProfileID }
-            )
+            goal.planningFallbackProfileIDs = AgentDispatchPlannerSelection
+                .normalizedFallbackProfileIDs(
+                    primaryProfileID: primaryProfileID,
+                    fallbackProfileIDs: fallbackProfileIDs
+                )
             goal.updatedAt = Date()
         }
     }
@@ -590,6 +592,18 @@ final class AgentDispatchCoordinator: ObservableObject {
                 runtimeSessionIDs.append(runtimeSessionID)
             }
             task.runtimeSessionIDs = runtimeSessionIDs
+            task.acceptanceRecoveryAttempts = 0
+            task.updatedAt = Date()
+        }
+    }
+
+    func recordTaskAcceptanceRecoveryAttempts(
+        goalID: UUID,
+        taskID: UUID,
+        attempts: Int
+    ) {
+        updateTask(goalID: goalID, taskID: taskID) { task in
+            task.acceptanceRecoveryAttempts = max(0, attempts)
             task.updatedAt = Date()
         }
     }
@@ -819,8 +833,15 @@ final class AgentDispatchCoordinator: ObservableObject {
             planningProfileID: sourceGoal.planningProfileID
                 ?? existing?.planningProfileID
                 ?? AgentExecutionProfile.recommendedPlannerID,
-            planningFallbackProfileIDs: sourceGoal.planningFallbackProfileIDs
-                ?? existing?.planningFallbackProfileIDs,
+            planningFallbackProfileIDs: AgentDispatchPlannerSelection
+                .normalizedFallbackProfileIDs(
+                    primaryProfileID: sourceGoal.planningProfileID
+                        ?? existing?.planningProfileID
+                        ?? AgentExecutionProfile.recommendedPlannerID,
+                    fallbackProfileIDs: sourceGoal.planningFallbackProfileIDs
+                        ?? existing?.planningFallbackProfileIDs
+                        ?? []
+                ),
             selectedWorkerProfileIDs: sourceGoal.selectedWorkerProfileIDs
                 ?? existing?.selectedWorkerProfileIDs
                 ?? [AgentExecutionProfile.recommendedWorkerID],

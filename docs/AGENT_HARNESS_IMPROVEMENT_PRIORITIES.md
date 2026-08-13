@@ -1,6 +1,6 @@
 # Agent Harness Improvement Priorities
 
-> Last updated: 2026-08-13 | Current version: v1.248.0-rc1
+> Last updated: 2026-08-13 | Current version: v1.248.0-rc6
 
 这份文档用于回答一个核心问题：一个 harness 级 Agent 要继续变强，哪些问题必须优先解决。
 
@@ -22,6 +22,12 @@
 4. `AgentModels.swift`：后续如新增模型域，优先落入独立文件，不再回塞主模型文件。
 
 ## P0：执行自主性
+
+1.248.0-rc4 起，Planner 入口使用独立的一主一备配置弹窗：主模型和备选模型各自只能选择一个 Profile，备选不得与主模型重复；选择过程先保留为本地草稿，只有点击“完成”才提交。创建 Goal、顶部 Planner 快捷入口、项目持久化与旧数据读取统一经过同一归一化策略，旧记录里的多级回退链只采用第一个有效备选，避免 UI 看似单选、运行时却暗藏多模型链路。
+
+1.248.0-rc3 起，Worker Profile 不再依赖内建模型白名单：管理器会刷新选中 Provider 的模型目录，将对话式 LLM 纳入建议，并保留模型 ID 自由输入作为发现失败时的兜底。MiniMax、Opus、DeepSeek V4 Pro 等新模型家族无需等待客户端发版逐项登记；图像、视频、Embedding、Rerank 与语音等明确非 LLM 能力不会被误配为节点执行模型。
+
+1.248.0-rc2 起，调度节点的“验收中”成为宿主 Harness 的活跃阶段，而不是空闲终态。验收未完成会在持久化的有限预算内自动返工；App 或调度台重开后继续挂载，预算耗尽、运行会话丢失或执行器失败会明确失败，并在自动执行模式下尝试尚未使用的回退 Profile。只有全部验收完成才合并并解锁下游，用户显式暂停仍会终止自动恢复。
 
 1.241.0-rc2 起，长 Goal 先生成最多 6 个粗粒度 phase，只为当前 phase 生成最多 6 步的可执行 Plan；当前 phase 完成后宿主持久化进度、清空旧 Plan，并自动发起下一 phase 的独立规划轮次。Goal 不再在首轮展开十几乃至几十个步骤，也不会因为一个长期 dev server 仍存活就把它误当成计划进展。后台命令新增 turn / phase / goal / persistent 生命周期，Goal 内识别出的 dev server 默认绑定当前 phase；phase 收口时宿主静默终止该 phase 的完整进程树，只有用户明确要求跨任务保留时才使用 persistent。
 
