@@ -16,38 +16,14 @@ struct WillDeepApp: App {
     var body: some Scene {
         let defaultSize = Self.defaultWindowSize
 
-        // Agent is the default launch surface. Keep this scene first so a
-        // plain app launch creates the Agent window directly; explicit file
-        // or folder opens still land in the URL-backed editor WindowGroup
-        // below.
+        // WillDeep is Agent-only. General-purpose file editing lives in the
+        // standalone Qeditor app; this process no longer owns Editor scenes.
         Window(L10n.AgentWindow.title, id: AgentWindowID.value) {
             AgentWindowRootView()
         }
         .defaultSize(width: defaultSize.width, height: defaultSize.height)
         .commands {
-            WillDeepCommands()
-        }
-
-        WindowGroup(id: EditorWindowID.value) {
-            WindowRootView()
-        }
-        .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: defaultSize.width, height: defaultSize.height)
-        .commands {
-            WillDeepCommands()
-        }
-        WindowGroup(for: URL.self) { $url in
-            WindowRootView(initialExternalURL: url)
-        }
-        // Without an explicit external-event owner SwiftUI falls through to
-        // the first unqualified scene (Agent) and never creates this Editor
-        // WindowGroup. `*` is SwiftUI's documented match-all condition for
-        // URLs and document-open events claimed by this app.
-        .handlesExternalEvents(matching: ["*"])
-        .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: defaultSize.width, height: defaultSize.height)
-        .commands {
-            WillDeepCommands()
+            AgentOnlyCommands()
         }
 
         // 专家圆桌:独立单例窗口。照 Agent 窗口,不 attach
@@ -114,12 +90,39 @@ enum AgentWindowID {
     static let value = "agent-window"
 }
 
+/// Kept only while internal preview/editor support is being untangled from
+/// AppState. There is deliberately no SwiftUI scene registered for this id.
 enum EditorWindowID {
-    static let value = "editor-window"
+    static let value = "removed-editor-window"
 }
 
 enum RoundtableWindowID {
     static let value = "roundtable-window"
+}
+
+private struct AgentOnlyCommands: Commands {
+    var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button(L10n.About.menuItem) {
+                Task { @MainActor in
+                    AboutWindowOpener.open()
+                }
+            }
+
+            Button(L10n.AppUpdate.checkForUpdates) {
+                AppUpdateController.shared.checkForUpdates()
+            }
+        }
+
+        CommandGroup(replacing: .newItem) {
+            Button(L10n.Sidebar.newChatAction) {
+                guard let appState = EditorAppStateRegistry.shared.current else { return }
+                appState.startNewAgentSession()
+                appState.agentComposerFocusRevision += 1
+            }
+            .keyboardShortcut("n", modifiers: .command)
+        }
+    }
 }
 
 /// Agent 窗口在前台时发的标记。⌘N 是 app 全局命令，靠这个分流：
@@ -563,7 +566,7 @@ enum InitialLaunchPolicy {
     static let plainLaunchWindowID = AgentWindowID.value
 
     static func shouldOpenEditor(forInitialExternalURL url: URL?) -> Bool {
-        url != nil
+        false
     }
 }
 

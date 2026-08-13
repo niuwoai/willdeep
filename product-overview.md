@@ -1,10 +1,10 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-13 | Current version: v1.248.0-rc8
+> Last updated: 2026-08-13 | Current version: v1.249.0-rc1
 
 ## Positioning
 
-WillDeep is a native macOS agent workspace organized around tasks, workspaces, sessions, and verifiable deliverables. Its primary experience is an agent that can inspect local or remote projects, use tools, operate terminals and browsers, coordinate plans and goals, and continue until work is ready to review. The built-in lightweight editor remains a maintained capability for file inspection, focused edits, diff review, and collaboration with the agent; it is no longer the product's defining surface.
+WillDeep is a native macOS agent workspace organized around tasks, workspaces, sessions, and verifiable deliverables. It can inspect local or remote projects, use tools, operate terminals and browsers, coordinate plans and goals, and continue until work is ready to review. General-purpose file editing now belongs to the standalone Qeditor app; WillDeep itself is Agent-only.
 
 Official product domain: [willdeep.com](https://willdeep.com).
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Agent 与本地 Editor 正式拆分（1.249.0-rc1）** —— WillDeep 删除通用 Editor scene、文本/源码文件类型注册和 Editor 设置入口；Agent 文件面板与终端快捷 JSON 统一交给 macOS 默认外部编辑器。独立的 Qeditor 使用自己的 Bundle ID、沙盒容器、设置与 Sparkle feed，不迁移 WillDeep 数据。
 - **Coding Plan 主按钮对比度修复（1.248.0-rc8）** —— 模型选择面板的“了解并购买”按钮将文字与外链图标显式绑定到 Composer 主操作反差色，并将背景绑定到统一主操作填充色；浅色界面的黑色按钮恢复白色内容，深色界面也会自动保持反差。
 - **终端捷径编辑以正式存储为准（1.248.0-rc7）** —— 每次进入单条终端捷径编辑前，当前 Controller 都会先从正式 `shortcuts.json` 刷新，再生成临时 JSON。Editor 保存并关闭后，即使 Agent 回落到旧的 headless `AppState`，旧内存快照也不能覆盖已保存内容；重新打开会稳定显示最后一次成功保存的版本。
 - **调度项目先定义、后绑定工作区（1.248.0-rc6）** —— “新建调度项目”直接进入定义页，头部工作区按钮负责绑定或更换目录；绑定前整份项目配置只读，绑定后才可填写目标、调用 AI 生成验收清单并创建项目，取消会清理临时草稿。新项目默认由 some.im `deepseek-v4-pro` 规划、由单个 `deepseek-v4-flash` Worker Profile 执行；同一 Profile 可按 Provider 并发上限服务多个独立节点，补选多个 Worker 用于扩展路由和故障转移。AI 草稿与验收清单复用 Agent 外观中的正文字体、字号与行高。

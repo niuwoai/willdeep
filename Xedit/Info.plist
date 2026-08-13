@@ -14,35 +14,6 @@
 	<true/>
 	<key>CFBundleDisplayName</key>
 	<string>WillDeep</string>
-	<key>CFBundleDocumentTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeName</key>
-			<string>Text Documents</string>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>LSHandlerRank</key>
-			<string>Alternate</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>public.text</string>
-				<string>public.plain-text</string>
-				<string>public.source-code</string>
-			</array>
-		</dict>
-		<dict>
-			<key>CFBundleTypeName</key>
-			<string>Folders</string>
-			<key>CFBundleTypeRole</key>
-			<string>Viewer</string>
-			<key>LSHandlerRank</key>
-			<string>Alternate</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>public.folder</string>
-			</array>
-		</dict>
-	</array>
 	<key>CFBundleHelpBookFolder</key>
 	<string>WillDeep.help</string>
 	<key>CFBundleHelpBookName</key>
