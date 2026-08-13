@@ -13,9 +13,9 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.249.0-rc1</string>
+	<string>1.250.0-rc1</string>
 	<key>CFBundleVersion</key>
-	<string>293</string>
+	<string>294</string>
 	<key>HPDBookAccessPath</key>
 	<string>index.html</string>
 	<key>HPDBookTitle</key>
