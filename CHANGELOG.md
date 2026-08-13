@@ -1,7 +1,55 @@
 # Changelog
 
-> 当前文件保留最新版本（1.248.0-rc7 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.249.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.250.0-rc1 - 2026-08-13
+
+### Added
+
+- DeepSeek V4 Pro 与 Flash 同等使用 Responses 协议：`deepseek-v4-pro` 直连 DeepSeek 时走无服务端存储的 Responses 请求，经 some.im 时启用网关 24 小时状态续接，有效游标下只发送新增 user/tool input，由 some.im 服务端拼装历史。
+- some.im 高档托管别名 `someim-coding-plan-high`、`someim-code-high`、`someim-auto-pro` 一并复用该 Responses 链路；premium 档解析到非 DeepSeek 后端，继续走 Chat Completions。
+
+### Changed
+
+- `isDeepSeekV4FlashResponsesModel` / `usesDeepSeekV4FlashResponsesBehavior` 更名为 `isDeepSeekV4ResponsesModel` / `usesDeepSeekV4ResponsesBehavior`，白名单拆分为「DeepSeek 直连精确名」与「some.im 别名」两组，语义不再绑死 Flash 单档。
+
+### Tests
+
+- 协议选择契约测试扩展到 Pro：直连与网关 Pro 均断言 Responses 与对应状态属性，高档托管别名断言启用网关状态，premium 别名断言保持 Chat。
+
+### Meta
+
+- 功能新增版本从 **1.249.0-rc1** 升级为 **1.250.0-rc1**，内部构建号 **377 → 378**，Help 与 Computer Use Helper 构建号同步递增。
+
+## 1.249.0-rc1 - 2026-08-13
+
+### Changed
+
+- WillDeep 收敛为 Agent-only 应用，删除通用 Editor scene、文本/源码文档类型注册和 Editor 设置入口。
+- Agent 文件面板和终端快捷录制 JSON 改由 macOS 默认外部编辑器打开；用户可将独立 Qeditor 设为 JSON 或源码文件默认应用。
+
+### Tests
+
+- 更新 Agent 入口、启动策略与设置分组契约，锁定 WillDeep 不再注册或创建 Editor scene。
+
+### Meta
+
+- 功能拆分版本从 **1.248.0-rc8** 升级为 **1.249.0-rc1**，内部构建号 **376 → 377**，Help 与 Computer Use Helper 构建号 **292 → 293**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc8 - 2026-08-13
+
+### Fixed
+
+- 模型选择面板的 Coding Plan“了解并购买”主按钮显式使用 Composer 反差前景色，黑色按钮背景上的文字与外链图标恢复为白色；按钮背景同时绑定统一的主操作填充色，避免皮肤强调色造成前景与背景同色。
+
+### Tests
+
+- 扩展 Composer 单色视觉契约，锁定 Coding Plan 购买按钮必须采用主操作反差前景色，防止黑底黑字回归。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc7** 递增为 **1.248.0-rc8**，内部构建号 **375 → 376**，Help 与 Computer Use Helper 构建号 **291 → 292**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.248.0-rc7 - 2026-08-13
 

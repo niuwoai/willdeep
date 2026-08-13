@@ -8,8 +8,8 @@ import Testing
 
 @Suite("Agent header editor entry policy")
 struct AgentHeaderEditorEntryTests {
-    @Test("Agent header exposes side panels directly and keeps Editor in the app menu")
-    func headerEntriesStayFlatAndEditorLivesOnlyInTheAppMenu() throws {
+    @Test("Agent header stays flat and the app owns no Editor scene")
+    func headerEntriesStayFlatAndEditorIsUnavailable() throws {
         let headerSource = try Self.source(in: "Xedit", named: "AgentChatHeader.swift")
         let appSource = try Self.source(in: "Xedit", named: "XeditApp.swift")
 
@@ -21,10 +21,21 @@ struct AgentHeaderEditorEntryTests {
         #expect(headerSource.contains("ForEach(visibleKinds)"))
         #expect(headerSource.contains("@ObservedObject private var detachedPanels = AgentDetachedPanelRegistry.shared"))
         #expect(headerSource.contains("sidePanel == item || detachedPanels.isDetached(item)"))
-        // rc10 起菜单项写法为 Button(L10n.Menu.viewShowEditor, action: showEditorAction),
-        // 不再闭合在同一个括号里;只锚定「Editor 入口在应用菜单」这一语义。
-        #expect(appSource.contains("Button(L10n.Menu.viewShowEditor"))
-        #expect(appSource.contains("appState?.showEditor()"))
+        #expect(appSource.contains("AgentOnlyCommands()"))
+        #expect(!appSource.contains("WindowGroup(id: EditorWindowID.value)"))
+        #expect(!appSource.contains("WindowGroup(for: URL.self)"))
+    }
+
+    @Test("Terminal shortcut JSON and ordinary files use the system default app")
+    func filesOpenExternally() throws {
+        let terminalSource = try Self.source(in: "Xedit", named: "AgentSidePanelTerminalView.swift")
+        let filePanelSource = try Self.source(in: "Xedit", named: "AgentSidePanel.swift")
+        let infoPlist = try Self.source(in: "Xedit", named: "Info.plist")
+
+        #expect(terminalSource.contains("NSWorkspace.shared.open(url)"))
+        #expect(!terminalSource.contains("appState.openEditorFile"))
+        #expect(filePanelSource.contains("NSWorkspace.shared.open(url)"))
+        #expect(!infoPlist.contains("CFBundleDocumentTypes"))
     }
 
     private static func source(in directory: String, named fileName: String) throws -> String {

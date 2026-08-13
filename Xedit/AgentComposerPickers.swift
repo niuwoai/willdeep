@@ -1924,8 +1924,10 @@ struct ModelPickerPill: View {
                                 L10n.AgentModelPicker.buyCodingPlan,
                                 systemImage: "arrow.up.right.square"
                             )
+                            .foregroundStyle(AgentComposerChrome.actionForeground)
                         }
                         .buttonStyle(.borderedProminent)
+                        .tint(AgentComposerChrome.actionFill)
                         .controlSize(.small)
                         .focusable(false)
                     }

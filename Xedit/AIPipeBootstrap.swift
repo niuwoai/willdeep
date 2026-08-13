@@ -46,21 +46,15 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        // SwiftUI may deliver a custom URL only to the scene it selected for
-        // activation. Because Agent is our default scene, relying solely on a
-        // view-level `onOpenURL` can lose `willdeep some-file.txt` before an
-        // Editor scene exists. Capture editor requests at the AppKit boundary;
-        // the live Agent/Editor scene drains them through the shared router.
-        MainActor.assumeIsolated {
-            WillDeepExternalOpenRouter.shared.enqueue(urls)
+        for url in urls {
+            guard let fileURL = WillDeepExternalURLParser.fileURL(fromOpenURL: url) else { continue }
+            NSWorkspace.shared.open(fileURL)
         }
     }
 
     func application(_ sender: NSApplication, openFiles filenames: [String]) {
-        MainActor.assumeIsolated {
-            WillDeepExternalOpenRouter.shared.enqueue(
-                filenames.map { URL(fileURLWithPath: $0) }
-            )
+        for filename in filenames {
+            NSWorkspace.shared.open(URL(fileURLWithPath: filename))
         }
         sender.reply(toOpenOrPrint: .success)
     }

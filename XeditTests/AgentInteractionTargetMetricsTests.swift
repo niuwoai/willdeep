@@ -96,5 +96,9 @@ struct AgentInteractionTargetMetricsTests {
         #expect(source.contains("static let iconSecondary = Color.secondary"))
         #expect(source.contains("static let actionForeground = Color(nsColor: .textBackgroundColor)"))
         #expect(!source.contains("LinearGradient(colors: [.teal, .blue]"))
+
+        let purchaseButtonPattern = #"Label\(\s*L10n\.AgentModelPicker\.buyCodingPlan,\s*systemImage: "arrow\.up\.right\.square"\s*\)\s*\.foregroundStyle\(AgentComposerChrome\.actionForeground\)"#
+        let purchaseButtonRegex = try NSRegularExpression(pattern: purchaseButtonPattern)
+        #expect(purchaseButtonRegex.firstMatch(in: source, range: fullRange) != nil)
     }
 }

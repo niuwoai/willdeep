@@ -46,23 +46,23 @@ extension WillDeepTests {
         #expect(decoded == fileURL.standardizedFileURL)
     }
 
-    @Test("plain launch opens Agent directly while explicit URLs open Editor")
+    @Test("plain and explicit launches keep WillDeep on the Agent scene")
     func testPlainLaunchOpensAgentDirectly() {
         #expect(InitialLaunchPolicy.plainLaunchWindowID == AgentWindowID.value)
         #expect(!InitialLaunchPolicy.shouldOpenEditor(forInitialExternalURL: nil))
-        #expect(InitialLaunchPolicy.shouldOpenEditor(
+        #expect(!InitialLaunchPolicy.shouldOpenEditor(
             forInitialExternalURL: URL(fileURLWithPath: "/tmp/willdeep-explicit-open.md")
         ))
     }
 
-    @Test("cold external URL launch is routed away from the Agent-only scene")
-    func testColdExternalURLLaunchRequiresEditor() {
+    @Test("cold external URL launch does not recreate the removed Editor scene")
+    func testColdExternalURLLaunchStaysAgentOnly() {
         var components = URLComponents()
         components.scheme = "willdeep"
         components.host = "open"
         components.queryItems = [URLQueryItem(name: "path", value: "/tmp/from-cli.txt")]
 
-        #expect(InitialLaunchPolicy.shouldOpenEditor(forInitialExternalURL: components.url))
+        #expect(!InitialLaunchPolicy.shouldOpenEditor(forInitialExternalURL: components.url))
     }
 
     @Test("AppKit queues a cold CLI URL until an Editor-capable scene appears")
