@@ -1522,8 +1522,19 @@ final class AgentInteractiveTerminalController: ObservableObject {
     }
 
     func prepareShortcutFileForEditing(id: UUID) -> URL? {
-        guard let shortcut = shortcuts.first(where: { $0.id == id }) else { return nil }
         do {
+            // AppState instances each own an independent terminal controller.
+            // Saving an edit in an Editor window can therefore update the
+            // shared store while a retained/headless Agent AppState still has
+            // the pre-edit snapshot in memory. Always refresh from the
+            // canonical store before regenerating the per-item edit file, or
+            // that stale controller would overwrite the edit file with old
+            // content the next time the user chooses Edit.
+            let persistedShortcuts = try TerminalShortcutStore.loadEditableShortcuts()
+            guard let shortcut = persistedShortcuts.first(where: { $0.id == id }) else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            shortcuts = persistedShortcuts
             return try TerminalShortcutStore.prepareEditableFile(for: shortcut)
         } catch {
             print("AgentInteractiveTerminalController: failed to prepare shortcut edit file: \(error)")
