@@ -132,6 +132,10 @@ extension L10n {
             localized: "dispatch.choose-workspace-message",
             defaultValue: "A project must belong to a workspace before it can run."
         )
+        static let changeWorkspace = String(
+            localized: "dispatch.change-workspace",
+            defaultValue: "Change Workspace"
+        )
         static let chooseWorkspaceAndStart = String(
             localized: "dispatch.choose-workspace-and-start",
             defaultValue: "Choose Workspace and Start"
@@ -191,6 +195,10 @@ extension L10n {
         static let cancel = String(
             localized: "dispatch.cancel",
             defaultValue: "Cancel"
+        )
+        static let done = String(
+            localized: "dispatch.done",
+            defaultValue: "Done"
         )
         static let addTask = String(localized: "dispatch.add-task", defaultValue: "Add Task")
         static let createProject = String(
@@ -325,6 +333,34 @@ extension L10n {
             localized: "dispatch.planning-profile",
             defaultValue: "Planning Profile"
         )
+        static let plannerPickerTitle = String(
+            localized: "dispatch.planner-picker-title",
+            defaultValue: "Choose Planner"
+        )
+        static let plannerPickerMessage = String(
+            localized: "dispatch.planner-picker-message",
+            defaultValue: "The Planner breaks down the goal and creates the task graph. It uses one primary model and one fallback model."
+        )
+        static let plannerPrimaryModel = String(
+            localized: "dispatch.planner-primary-model",
+            defaultValue: "Primary model"
+        )
+        static let plannerPrimaryModelHelp = String(
+            localized: "dispatch.planner-primary-model-help",
+            defaultValue: "Used first"
+        )
+        static let plannerFallbackModel = String(
+            localized: "dispatch.planner-fallback-model",
+            defaultValue: "Fallback model"
+        )
+        static let plannerFallbackModelHelp = String(
+            localized: "dispatch.planner-fallback-model-help",
+            defaultValue: "Switches automatically when the primary model is unavailable"
+        )
+        static let plannerModelUnavailable = String(
+            localized: "dispatch.planner-model-unavailable",
+            defaultValue: "No model available"
+        )
         static let planningFallbacks = String(
             localized: "dispatch.planning-fallbacks",
             defaultValue: "Planning Fallbacks"
@@ -347,7 +383,7 @@ extension L10n {
         )
         static let workerPoolHelp = String(
             localized: "dispatch.worker-pool-help",
-            defaultValue: "Selected Workers run ready nodes in parallel and provide the automatic failover order."
+            defaultValue: "One Worker profile can run multiple ready nodes in parallel. Add profiles to extend the model pool and failover order."
         )
         static let workerUnavailable = String(
             localized: "dispatch.worker-unavailable",
@@ -627,6 +663,10 @@ extension L10n {
         static let launchFailed = String(
             localized: "dispatch.launch-failed",
             defaultValue: "Unable to launch task"
+        )
+        static let acceptanceRecoveryExhausted = String(
+            localized: "dispatch.acceptance-recovery-exhausted",
+            defaultValue: "The node Harness could not satisfy every acceptance criterion within its bounded recovery budget. The node has failed explicitly instead of remaining stuck in review."
         )
         static let noExecutorOnTarget = String(
             localized: "dispatch.no-executor-target",

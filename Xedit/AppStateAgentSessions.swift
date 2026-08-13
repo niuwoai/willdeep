@@ -1011,6 +1011,16 @@ extension AppState {
                 priorItemsByText[item.text] = item
             }
         }
+        let resolvedPlanningProfileID = planningProfileID
+            ?? previousGoal?.planningProfileID
+            ?? AgentExecutionProfile.recommendedPlannerID
+        let resolvedPlanningFallbackProfileIDs = AgentDispatchPlannerSelection
+            .normalizedFallbackProfileIDs(
+                primaryProfileID: resolvedPlanningProfileID,
+                fallbackProfileIDs: planningProfileID == nil
+                    ? previousGoal?.planningFallbackProfileIDs ?? []
+                    : planningFallbackProfileIDs
+            )
         let updatedGoal = AgentGoal(
             statement: trimmedStatement,
             checklist: trimmedItems.map { text in
@@ -1019,12 +1029,8 @@ extension AppState {
                 }
                 return AgentGoal.Item(text: text)
             },
-            planningProfileID: planningProfileID
-                ?? previousGoal?.planningProfileID
-                ?? AgentExecutionProfile.recommendedPlannerID,
-            planningFallbackProfileIDs: planningProfileID == nil
-                ? previousGoal?.planningFallbackProfileIDs
-                : planningFallbackProfileIDs,
+            planningProfileID: resolvedPlanningProfileID,
+            planningFallbackProfileIDs: resolvedPlanningFallbackProfileIDs,
             planningAttemptedProfileIDs: previousGoal?.planningAttemptedProfileIDs,
             selectedWorkerProfileIDs: selectedWorkerProfileIDs
                 ?? previousGoal?.selectedWorkerProfileIDs

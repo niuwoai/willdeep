@@ -1,7 +1,88 @@
 # Changelog
 
-> 当前文件保留最新版本（1.248.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.248.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.248.0-rc6 - 2026-08-13
+
+### Changed
+
+- 新建调度项目不再先弹出目录选择器，而是直接进入完整的“定义这个项目”页面。页面头部新增“选择项目工作区/更改工作目录”按钮；未选择目录时目标陈述、AI 检查、验收清单、Planner、执行环境与 Worker 配置保持禁用，绑定成功后整体解锁并自动聚焦目标输入。
+- 新调度项目默认使用 some.im 的 DeepSeek V4 Pro Planner，并默认只选择一个 DeepSeek V4 Flash Worker。一个 Worker Profile 可以按 Provider 并发上限同时执行多个就绪节点；用户补选多个 Worker 用于扩展模型池与故障转移顺序，不再被误解释为并行槽数量。
+- AI 建议的目标草稿、诊断内容与自动填充的验收清单，统一采用“Agent 外观”中设置的正文字体、字号和行高。页脚在主操作“创建项目”旁新增 secondary“取消”按钮，取消会删除尚未创建的临时草稿并留在调度台。
+
+### Fixed
+
+- 新建流程现在拥有可持久化的无工作区草稿态；目录不存在或与运行中的调度项目冲突时会保留当前页面并明确报错，不会生成半成品项目或偷偷切回聊天。
+
+### Tests
+
+- `AgentDispatchCoordinatorTests` 62 项全部通过，新增无工作区草稿创建、目录绑定、取消清理、DeepSeek V4 Pro/Flash 默认路由与单 Profile 多节点并行容量回归；创建页使用生产 SwiftUI 组件完成原图组合对照与视觉 QA。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc5** 递增为 **1.248.0-rc6**，内部构建号 **373 → 374**，Help 与 Computer Use Helper 构建号 **289 → 290**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc5 - 2026-08-13
+
+### Fixed
+
+- 工作区会话行不再在右侧重复保留与左侧相同的 32 pt 深缩进。左侧仍维持 32 pt，以继续和工作区标题的 40 pt 文本列对齐；右侧收紧为 4 pt，为长会话标题释放 28 pt，按 14 pt 行字体约等于两个汉字宽度。
+- 悬停时的图钉与归档操作区继续固定为 40 pt，非悬停行仍不预留操作宽度；标题增宽不会挤压按钮、状态点或改变选中背景范围。
+
+### Tests
+
+- `AgentSidebarListVisualMetricsTests` 21 项全部通过，新增“左右缩进差值等于两个行字体宽度”的布局契约，并使用与用户截图一致的长标题数据重新生成原生侧栏验收图。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc4** 递增为 **1.248.0-rc5**，内部构建号 **372 → 373**，Help 与 Computer Use Helper 构建号 **288 → 289**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc4 - 2026-08-13
+
+### Changed
+
+- 调度台顶部 Planner 入口采用用户选定的图 1 方案，改为锚定入口的原生 macOS Popover；主模型与备选模型纵向排列，并通过方向连接符明确一主一备关系。弹窗内可直接进入 Profile 管理，取消不会落盘，只有“完成”才提交本轮选择。
+- Planner 从多级回退链收敛为一个主模型与一个备选模型。Goal 创建页、顶部快捷入口、项目更新、会话同步和旧记录读取统一执行同一归一化策略：备选不能与主模型重复，旧数据仅保留第一个有效备选。
+- Planner 弹窗文案补齐中英文 i18n，并使用现有 Profile 的 Provider、模型 ID 与 SF Symbol 展示，不新增硬编码可见文案或位图资产。
+
+### Tests
+
+- `AgentDispatchCoordinatorTests` 58 项全部通过；新增 Planner 单备选策略回归与原生 SwiftUI 聚焦渲染验收，并对照用户选定的图 1 完成视觉 QA。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc3** 递增为 **1.248.0-rc4**，内部构建号 **371 → 372**，Help 与 Computer Use Helper 构建号 **287 → 288**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc3 - 2026-08-13
+
+### Fixed
+
+- Worker Profile 的模型目录不再局限于 Provider 预设的 Flash / Pro 与内建 Profile 模型。管理器会刷新当前 Provider 的模型目录并纳入其对话式 LLM，包括名称含 MiniMax、Opus、DeepSeek V4 Pro 等模型；图像、视频、Embedding、Rerank、语音等明确的非 LLM 模型仍会过滤。
+- 模型 ID 改为“可自由输入 + Provider 建议菜单”的组合；远端模型目录暂时不可用时仍可手动填写，不会因为发现失败把 Profile 配置卡死。
+
+### Tests
+
+- `AgentDispatchCoordinatorTests` 56 项全部通过，新增 Provider LLM 家族纳入与非 LLM 排除回归，并覆盖既有 Profile 原生渲染、目录隔离和调度 Harness 行为。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc2** 递增为 **1.248.0-rc3**，内部构建号 **370 → 371**，Help 与 Computer Use Helper 构建号 **286 → 287**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc2 - 2026-08-13
+
+### Fixed
+
+- 调度节点不再在模型回合停止后永久停留于“验收中”。宿主现在把验收视为节点 Harness 的活跃阶段：未完成时在有限预算内自动发起返工，次数随节点持久化；重新进入调度台后会重新挂载完成监听，预算耗尽或运行会话丢失则明确失败，并在自动执行模式下尝试尚未使用的回退 Worker Profile。
+- 只有验收清单全部完成的节点才会合并并解锁下游；显式暂停仍会停止自动恢复，避免用户停止后出现隐藏执行。
+
+### Tests
+
+- 调度协调器新增验收恢复账本持久化与新运行重置、冷恢复预算耗尽、冷恢复运行会话丢失和重开后完成收口回归；`AgentDispatchCoordinatorTests` 55 项、节点接管与运行时查找补充回归 18 项全部通过。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc1** 递增为 **1.248.0-rc2**，内部构建号 **369 → 370**，Help 与 Computer Use Helper 构建号 **285 → 286**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.248.0-rc1 - 2026-08-13
 

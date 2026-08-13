@@ -785,6 +785,11 @@ enum AgentDesign {
     static let sidebarWorkspaceIconToTitleSpacing: CGFloat = 8
     static let sidebarSelectionHorizontalInset: CGFloat = 8
     static let sidebarSessionContentHorizontalInset: CGFloat = 32
+    // Workspace children keep their 40 pt text-column alignment on the left,
+    // but do not need the same deep indent on the trailing edge. Four points
+    // preserves breathing room while returning 28 pt — roughly two CJK
+    // characters at the 14 pt row font — to long conversation titles.
+    static let sidebarSessionTrailingContentInset: CGFloat = 4
     static let sidebarSessionTrailingActionsWidth: CGFloat = 40
     // Global pins are top-level navigation, so their title column starts at
     // 12 pt like Codex instead of inheriting the 40 pt workspace-child inset.
