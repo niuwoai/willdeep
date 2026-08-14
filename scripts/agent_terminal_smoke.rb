@@ -35,10 +35,13 @@ policy = read_source(repo_root, "Xedit/AgentToolAuthorization.swift")
 side_panel = read_source(repo_root, "Xedit/AgentSidePanel.swift")
 terminal_view = read_source(repo_root, "Xedit/AgentSidePanelTerminalView.swift")
 runtime_settings = read_source(repo_root, "Xedit/AgentRuntimeSettingsView.swift")
-l10n = [
-  read_source(repo_root, "Xedit/L10n.swift"),
-  read_source(repo_root, "Xedit/L10n+AgentTerminal.swift")
-].join("\n")
+# The L10n layer is split across many files (and gets re-split whenever one
+# crosses the 3000-line limit), so glob the whole layer instead of pinning the
+# handful of files that happened to hold these keys when the check was written.
+l10n = Dir.glob(File.join(repo_root, "Xedit", "L10n*.swift"))
+          .sort
+          .map { |path| File.read(path, encoding: "UTF-8") }
+          .join("\n")
 
 checks = [
   check("terminal backed by SwiftTerm", "Agent terminal uses SwiftTerm LocalProcessTerminalView") {

@@ -1,7 +1,13 @@
 # Changelog
 
-> 当前文件保留最新版本（1.258.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.258.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.258.0-rc5 - 2026-08-14
+
+### Fixed
+
+- **`scripts/agent_terminal_smoke.rb` 的「visible strings use L10n」不再是假红。** 这条守卫断言 `settings.remote-runtimes.terminal-section` 出现在 L10n 源码里，但它只拼了 `L10n.swift` 和 `L10n+AgentTerminal.swift` 两个文件；`999c5378` 那次「拆回 3000 行以内」把 Settings 段搬去了 `L10n+Settings.swift`，key 和界面用法都完好无损（`AgentRuntimeSettingsView` 照旧走 `L10n.Settings.RemoteRuntimes.terminalSection`，catalog 里条目也在），红的只是断言没跟上文件边界。现在改成 glob `Xedit/L10n*.swift` 整层再拼接——和 rc4 给 `short_drama_media_contract_test.rb` 做的处理同一路数，往后再拆 L10n 也不会把这条守卫带红。13 条检查全绿。
 
 ## 1.258.0-rc4 - 2026-08-14
 
