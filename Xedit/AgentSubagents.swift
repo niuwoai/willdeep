@@ -537,8 +537,19 @@ enum AgentSubagentRunner {
     ) -> String {
         var lines: [String] = []
         lines.append("You are a focused subagent spawned by a coding agent to complete one task.")
-        if profile.id != AgentSubagentProfileCatalog.deepID {
-            lines.append(profile.capabilityPromptSection)
+        // `deep`'s own section only restates the generic opening, so it is
+        // skipped — but a user-authored soul section on `deep` is not generic
+        // and must still be sent.
+        let capabilitySection = profile.capabilityPromptSection
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let isRedundantDeepSection = profile.id == AgentSubagentProfileCatalog.deepID
+            && capabilitySection == AgentSubagentProfileCatalog.deep.capabilityPromptSection
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !capabilitySection.isEmpty, !isRedundantDeepSection {
+            lines.append(capabilitySection)
+        }
+        if let skills = skillPromptSection(for: profile) {
+            lines.append(skills)
         }
         if let writeAccess {
             lines.append("""
@@ -588,6 +599,42 @@ enum AgentSubagentRunner {
             """)
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// Total characters of skill text a trade may preload. A child loop's
+    /// whole point is a narrow context, so the soul's skill packs are capped
+    /// well below one tool result rather than allowed to fill the window.
+    static let skillPreloadCharacterLimit = 12_000
+
+    /// Inlines the trade's configured skill packs into its system prompt.
+    ///
+    /// Preloading rather than exposing a `read_skill` tool: a trade with a
+    /// declared craft should not spend a round (and a tool schema slot)
+    /// fetching it. Unknown or disabled identifiers are skipped silently —
+    /// a skill uninstalled after configuration must not break the spawn.
+    static func skillPromptSection(for profile: AgentSubagentProfile) -> String? {
+        guard !profile.skillIdentifiers.isEmpty else { return nil }
+        let available = AgentSkillDirectory.list(includeDisabled: false)
+        var sections: [String] = []
+        var budget = skillPreloadCharacterLimit
+        for identifier in profile.skillIdentifiers {
+            guard budget > 0 else { break }
+            guard let record = available.first(where: {
+                $0.identifier == identifier || $0.name == identifier
+            }) else { continue }
+            guard let data = try? Data(contentsOf: record.url),
+                  let text = String(data: data, encoding: .utf8) else { continue }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let body = trimmed.count > budget ? String(trimmed.prefix(budget)) + "\n...[skill truncated]" : trimmed
+            budget -= min(budget, trimmed.count)
+            sections.append("### Skill: \(record.identifier)\n\(body)")
+        }
+        guard !sections.isEmpty else { return nil }
+        return """
+        Skills loaded for this trade — apply them as standing instructions for this task:
+
+        \(sections.joined(separator: "\n\n"))
+        """
     }
 
     /// rc18:基于 caller 是否要 structured output,返回供模型选择的工具

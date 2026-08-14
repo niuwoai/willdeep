@@ -148,62 +148,60 @@ nonisolated struct AgentExecutionProfile: Codable, Equatable, Identifiable {
     }
 }
 
+/// Dispatch-facing façade over `AgentProfileStore` (agent-profile.v2).
+/// Dispatch profiles and subagent trades are one list now; this type keeps
+/// the dispatch call sites and their `AgentExecutionProfile` shape intact.
 struct AgentExecutionProfileStore {
-    private static let defaultsKey = "com.willdeep.agentDispatch.executionProfiles.v1"
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
 
+    private var profileStore: AgentProfileStore { AgentProfileStore(defaults: defaults) }
+
+    /// Profiles the user actually owns or edited — built-in overlays and
+    /// user-created entries, no on-disk CLI discoveries.
     func loadManaged() -> [AgentExecutionProfile] {
-        guard let data = defaults.data(forKey: Self.defaultsKey) else { return [] }
-        return (try? JSONDecoder().decode([AgentExecutionProfile].self, from: data)) ?? []
+        profileStore
+            .profiles(usage: .dispatch)
+            .compactMap { $0.asExecutionProfile() }
     }
 
     func saveManaged(_ profiles: [AgentExecutionProfile]) {
-        // Built-in profiles are editable overlays: keeping their stable IDs
-        // means existing dispatch projects continue to resolve them after a
-        // provider/model change. Discovered CLI profiles remain read-only and
-        // are rebuilt from disk on every load.
-        let defaultBuiltInsByID = Dictionary(
-            uniqueKeysWithValues: AgentExecutionProfile.builtIns.map { ($0.id, $0) }
+        let store = profileStore
+        let existingByID = Dictionary(
+            uniqueKeysWithValues: store.profiles().map { ($0.id, $0) }
         )
-        let editable = profiles.filter { profile in
-            switch profile.origin {
-            case .managed:
-                return true
-            case .builtIn:
-                return defaultBuiltInsByID[profile.id] != profile
-            case .discovered:
-                return false
+        // Subagent-only profiles are invisible to the dispatch editor; carry
+        // them through untouched instead of letting a dispatch save drop them.
+        var result = existingByID.values.filter { !$0.usages.contains(.dispatch) }
+
+        for execution in profiles where execution.origin != .discovered {
+            var merged = AgentProfile.from(execution: execution)
+            if let existing = existingByID[execution.id] {
+                // The dispatch editor cannot see the soul, capability or the
+                // subagent usage flag; preserve them across its saves.
+                merged.soul = existing.soul
+                merged.capability = existing.capability
+                merged.usages = existing.usages.union([.dispatch])
+                if existing.runtime.modelBinding.preferredProviderID == execution.providerID {
+                    merged.runtime.modelBinding.preferredProviderEntryID =
+                        existing.runtime.modelBinding.preferredProviderEntryID
+                    merged.runtime.modelBinding.contextWindowTokens =
+                        existing.runtime.modelBinding.contextWindowTokens
+                }
             }
+            result.append(merged)
         }
-        guard let data = try? JSONEncoder().encode(editable) else { return }
-        defaults.set(data, forKey: Self.defaultsKey)
+        store.save(profiles: result)
     }
 
     func availableProfiles(workspacePath: String?) -> [AgentExecutionProfile] {
-        let discovered = LocalAgentCLIProfile.discover(workspacePath: workspacePath).map {
-            AgentExecutionProfile(
-                id: $0.id,
-                name: $0.displayName,
-                executor: $0.executor,
-                modelID: $0.modelID,
-                providerID: $0.providerID,
-                nativeProfileName: $0.nativeProfileName,
-                origin: .discovered
-            )
-        }
-        let saved = loadManaged()
-        let builtInIDs = Set(AgentExecutionProfile.builtIns.map(\.id))
-        let savedByID = saved.reduce(into: [String: AgentExecutionProfile]()) {
-            $0[$1.id] = $1
-        }
-        let builtIns = AgentExecutionProfile.builtIns.map { savedByID[$0.id] ?? $0 }
-        let managed = saved.filter { !builtInIDs.contains($0.id) }
         var seen: Set<String> = []
-        return (builtIns + managed + discovered)
+        return profileStore
+            .profiles(usage: .dispatch, workspacePath: workspacePath, includeDiscovered: true)
+            .compactMap { $0.asExecutionProfile() }
             .filter { !$0.name.isEmpty && seen.insert($0.id).inserted }
     }
 

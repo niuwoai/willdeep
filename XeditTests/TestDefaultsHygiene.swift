@@ -35,6 +35,7 @@ enum TestDefaultsHygiene {
         "willdeep-mobile-gateway-mode-",
         "willdeep-mobile-gateway-relay-room-",
         "willdeep-mobile-gateway-room-",
+        "willdeep-profiles-",
         "willdeep-runtime-store-",
     ]
 

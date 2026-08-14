@@ -135,7 +135,7 @@ extension EditorSettingsTab {
         case .workspace: return L10n.Settings.tabWorkspace
         case .agentAppearance: return L10n.Settings.tabAgentAppearance
         case .agent: return L10n.Settings.tabAgent
-        case .subagents: return L10n.Settings.tabSubagents
+        case .subagents: return L10n.AgentProfiles.tabTitle
         case .someIM: return L10n.Settings.tabSomeIM
         case .replicate: return L10n.Settings.tabReplicate
         case .localAgents: return L10n.Settings.tabLocalAgents
