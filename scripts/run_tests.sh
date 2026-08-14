@@ -47,6 +47,13 @@ REPORT_JSON="${OUT_DIR}/report.json"
 
 mkdir -p "${OUT_DIR}" "${DERIVED_DATA}" "${SOURCE_PACKAGES_DIR}" "${PACKAGE_CACHE_DIR}"
 
+# Drop the previous run's verdict before doing anything else. Everything between
+# here and the reporter can abort under `set -e` (a contract guard failing, the
+# build blowing up), and a leftover `"ok": true` from an earlier run would then
+# sit on disk looking exactly like this run's result. No report beats a stale
+# green one.
+rm -f "${REPORT_JSON}" "${REPORT_MD}"
+
 ruby "${ROOT_DIR}/scripts/complexity_guard.rb" "${OUT_DIR}/complexity_report.md" "${OUT_DIR}/complexity_report.json"
 ruby "${ROOT_DIR}/scripts/version_consistency.rb" "${OUT_DIR}/version_report.md" "${OUT_DIR}/version_report.json"
 ruby "${ROOT_DIR}/scripts/computer_use_helper_contract_test.rb" "${OUT_DIR}/computer_use_helper_contract_report.md" "${OUT_DIR}/computer_use_helper_contract_report.json"
@@ -116,7 +123,7 @@ echo "▶ generating report → ${REPORT_MD}, ${REPORT_JSON}"
 # could not parse the xcresult must never leave us exiting 0.
 REPORT_EXIT=0
 ruby "${ROOT_DIR}/scripts/xcresult_report.rb" "${XCRESULT}" "${REPORT_MD}" "${REPORT_JSON}" \
-  --log "${LOG}" || REPORT_EXIT=$?
+  --log "${LOG}" --test-exit "${TEST_EXIT}" || REPORT_EXIT=$?
 
 echo "▶ report.md head:"
 head -40 "${REPORT_MD}" || true

@@ -238,16 +238,17 @@ guard_command.concat(
   ]
 )
 
-def write_report(xcresult, report_md, report_json, log, root)
-  system(
+def write_report(xcresult, report_md, report_json, log, root, test_exit: nil)
+  command = [
     "ruby",
     File.join(root, "scripts", "xcresult_report.rb"),
     xcresult,
     report_md,
     report_json,
-    "--log", log,
-    chdir: root
-  )
+    "--log", log
+  ]
+  command.concat(["--test-exit", test_exit.to_s]) unless test_exit.nil?
+  system(*command, chdir: root)
 end
 
 # The report must never survive a failed run untouched. `report.json` is what
@@ -296,7 +297,7 @@ unless success
   # Then let the reporter fill in the real failure detail. It already falls back
   # to the raw log when the bundle is unreadable, and reports `unknown` when
   # even that fails, so this can only improve on the placeholder.
-  write_report(XCRESULT, REPORT_MD, REPORT_JSON, LOG, ROOT)
+  write_report(XCRESULT, REPORT_MD, REPORT_JSON, LOG, ROOT, test_exit: exit_status)
   force_failed_verdict(REPORT_JSON, reason)
   puts File.read(REPORT_MD, encoding: "UTF-8") if File.file?(REPORT_MD)
   exit(exit_status)
@@ -319,7 +320,7 @@ end
 # (falling back to the raw log when the bundle is broken), so treat its verdict
 # as authoritative and echo the report — callers routinely pipe us through
 # `tail`, where a swallowed exit code would leave nothing but the report text.
-report_success = write_report(XCRESULT, REPORT_MD, REPORT_JSON, LOG, ROOT)
+report_success = write_report(XCRESULT, REPORT_MD, REPORT_JSON, LOG, ROOT, test_exit: 0)
 unless report_success
   force_failed_verdict(REPORT_JSON, "The test report could not confirm a pass.")
   puts File.read(REPORT_MD, encoding: "UTF-8") if File.file?(REPORT_MD)

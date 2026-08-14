@@ -168,7 +168,9 @@ jobs:
 
       - name: Generate Markdown and JSON report
         if: always()
-        run: ruby scripts/xcresult_report.rb build/ci/XeditTests.xcresult build/ci/report.md build/ci/report.json --log build/ci/xcodebuild-test.log
+        # --test-exit keeps the report honest when the bundle disagrees with the
+        # run: a step that failed can never come back as "status": "passed".
+        run: ruby scripts/xcresult_report.rb build/ci/XeditTests.xcresult build/ci/report.md build/ci/report.json --log build/ci/xcodebuild-test.log --test-exit ${{ steps.tests.outcome == 'success' && '0' || '1' }}
 
       - name: Append report to job summary
         if: always()
