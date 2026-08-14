@@ -1,7 +1,37 @@
 # Changelog
 
-> 当前文件保留最新版本（1.256.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.257.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.257.0-rc1 - 2026-08-14
+
+### Added
+
+- **执行期角色注册表（goal-teams §2）落地。** 角色回答「在这个 Goal 里负责什么、向谁交付」，工种回答「能用什么工具、什么预算」；角色绑定 agent-profile.v2 的档案，**只能收窄，永远不能放宽**。内置 developer / tester / reviewer 三角色，各带工具策略、锁定范围、完成判据与验收人，落 `<workspace>/.codex/goal-teams/roles.json`；文件损坏或缺失回退内置表——手改坏一个 JSON 不该让 Goal 跑不起来。
+- **两个新内置工种 tester / reviewer。** tester 有只读 shell（跑测试与门禁本就是只读级命令）但没有写工具——验收的人不能同时是实现的人；reviewer 连 shell 都不给，只有 read/list/grep/search/git_status，因为评审是去读现场，给了命令它就会「顺手跑一下」开发刚跑过的东西。
+- **`spawn_agent` 新增 `role` 参数。** 命名角色后按其工具策略收窄工种，并把该角色的跨里程碑记忆文件（如 `qa-notes.md`）注入子代理提示词——「上一版哪个测试 flaky」这类知识放文件不放会话，全新的子上下文才带得走。未知角色降级为普通工种并出提示，不让 spawn 失败。
+- **版本锚定里程碑账本 + Doc Capsule 归档（goal-teams §3/§5）。** 一个里程碑 = 一个 rc 版本；周期门禁默认每 40 版一次，跑完即重新计数。Capsule（`goal-teams.capsule.v1`）落 `.codex/goal-teams/versions/<版本>/capsules/`，INDEX.md 带 schema 头且同版本不重复登记。
+
+### Changed
+
+- **调度台自带的档案编辑器退役。** 档案已经是一套存储，编辑器却还有两个（设置统一页 + 调度台 sheet），同一份记录两个编辑口正是这次合并要消灭的漂移源。调度台「管理档案」改为跳设置里的统一页；`AgentExecutionProfileManagerView` 删除，设计 QA 截图用例改渲染统一页。打开设置走 `EditorSettingsNavigation` 而非 `@Environment(\.openSettings)`——后者要 macOS 14，本 App 仍发 13.7。
+- goal-teams 归档目录按 2026-08-14 确认定为 `<workspace>/.codex/goal-teams/`（原设计默认 `.willdeep/`），历史归档与新归档同目录，不做双目录兼容；`docs/GOAL_TEAMS_ROLES_DESIGN.md` §4.1/§7 同步，§7 六条默认假设标记为已确认。
+
+### Fixed
+
+- **交叉验收从提示词约定变成执行路径拦截。** `canSignOff` 只认角色自己声明的验收人，任何角色都不能自证；reviewer 的验收人是人类 Goal Lead，所以没有任何角色签得了它。里程碑签收复用同一条规则——开发签不了自己的里程碑。
+- **周期门禁不许夹带功能改动**：`gate: .periodic` 的 scope 必须是固定那句，写别的会被账本直接拒绝；版本号复用同样拒绝。门禁版一旦能顺手带个「小修改」，它就不再是门禁。
+- **只读角色报告改过文件即自相矛盾**，`selfReportIsConsistent` 直接判否递给验收人，而不是让人在散文里找破绽。
+- 修掉 1.256.0-rc1 引入的一个真 bug：`spawn_agent` 的未知工种提示用内置目录 `isKnown` 判定，用户自建的档案会被误报成 unknown（照跑不误但提示是错的）。改为对解析后的工种列表判定。
+
+### Tests
+
+- 新增 `AgentGoalTeamRoleTests`（8 例）：内置角色表自校验、自证被拒、只有指定验收人能签、未知绑定档案被报告、readOnly 摘掉 shell、readPlusTest 保留 shell 但无写口、策略变不出档案没有的写口、角色表在 `.codex/goal-teams/roles.json` 往返与损坏回退。
+- 新增 `AgentGoalMilestoneTests`（9 例）：版本号唯一、周期门禁不得夹带范围、门禁节奏与重置、间隔不退化为 0、里程碑签收走交叉验收、Capsule 自相矛盾检测、Capsule 落盘路径与跨端 JSON 键名、INDEX 幂等、角色记忆召回。
+
+### Meta
+
+- 角色与里程碑属功能新增，版本从 **1.256.0-rc2** 提升为 **1.257.0-rc1**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.256.0-rc2 - 2026-08-14
 
