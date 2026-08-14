@@ -114,6 +114,15 @@ extension L10n {
             defaultValue: "Editor"
         )
 
+        static let profileTesterName = String(
+            localized: "agent-delegation.profile-tester-name",
+            defaultValue: "Tester"
+        )
+        static let profileReviewerName = String(
+            localized: "agent-delegation.profile-reviewer-name",
+            defaultValue: "Reviewer"
+        )
+
         static let profilesSectionTitle = String(
             localized: "agent-delegation.profiles-section-title",
             defaultValue: "Subagent trades"
@@ -186,6 +195,14 @@ extension L10n {
         static let profileEditorPurpose = String(
             localized: "agent-delegation.profile-editor-purpose",
             defaultValue: "Edit ONE approved file. Requires a `target_file` argument and the user's approval; cannot touch any other path."
+        )
+        static let profileTesterPurpose = String(
+            localized: "agent-delegation.profile-tester-purpose",
+            defaultValue: "Runs tests and gates, reports evidence, never edits code."
+        )
+        static let profileReviewerPurpose = String(
+            localized: "agent-delegation.profile-reviewer-purpose",
+            defaultValue: "Independent read-only review of a change's scope, version consistency and git hygiene."
         )
 
         // MARK: Escalation

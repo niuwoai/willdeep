@@ -128,6 +128,8 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.scoutID: return L10n.AgentDelegation.profileScoutName
         case AgentSubagentProfileCatalog.readerID: return L10n.AgentDelegation.profileReaderName
         case AgentSubagentProfileCatalog.editorID: return L10n.AgentDelegation.profileEditorName
+        case AgentSubagentProfileCatalog.testerID: return L10n.AgentDelegation.profileTesterName
+        case AgentSubagentProfileCatalog.reviewerID: return L10n.AgentDelegation.profileReviewerName
         default: return L10n.AgentDelegation.profileDeepName
         }
     }
@@ -140,6 +142,8 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.scoutID: return L10n.AgentDelegation.profileScoutPurpose
         case AgentSubagentProfileCatalog.readerID: return L10n.AgentDelegation.profileReaderPurpose
         case AgentSubagentProfileCatalog.editorID: return L10n.AgentDelegation.profileEditorPurpose
+        case AgentSubagentProfileCatalog.testerID: return L10n.AgentDelegation.profileTesterPurpose
+        case AgentSubagentProfileCatalog.reviewerID: return L10n.AgentDelegation.profileReviewerPurpose
         default: return L10n.AgentDelegation.profileDeepPurpose
         }
     }
@@ -152,6 +156,8 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let readerID = "reader"
     static let deepID = "deep"
     static let editorID = "editor"
+    static let testerID = "tester"
+    static let reviewerID = "reviewer"
 
     /// Tools the editor trade adds on top of the read-only set, and only
     /// while its per-file approval is held.
@@ -241,7 +247,47 @@ nonisolated enum AgentSubagentProfileCatalog {
         requiresWriteAccess: true
     )
 
-    static let builtIn: [AgentSubagentProfile] = [scout, reader, deep, editor]
+    /// Runs the gates and reports evidence. Deliberately has the read-only
+    /// shell (tests, linters and reports are read-tier commands) but no write
+    /// tool: whoever verifies may not also implement — a tester that can patch
+    /// the code it just failed is not a tester
+    /// (docs/GOAL_TEAMS_ROLES_DESIGN.md §2.2).
+    static let tester = AgentSubagentProfile(
+        id: testerID,
+        purpose: "Run tests and gates, then report evidence: which commands ran, what passed or failed, with the failing output quoted. Never edits code.",
+        modelBinding: automaticProviderBinding,
+        toolNames: AgentSubagentRunner.allowedToolNames,
+        capabilityPromptSection: """
+        Your trade is VERIFICATION. Run the relevant tests or gates and report what actually \
+        happened: the exact commands, their exit status, and the failing output quoted verbatim. \
+        Never repair what you find — a failure you fixed yourself is a failure nobody verified. \
+        If a gate cannot be run, say so and say why instead of inferring the result.
+        """,
+        maxRounds: AgentSubagentRunner.maxRounds,
+        toolPayloadCharacterLimit: 16_000,
+        escalation: .none
+    )
+
+    /// Independent review of a change's boundary. No shell at all: a reviewer
+    /// exists to read what is there, and giving it commands invites it to
+    /// "just check" by re-running what the developer already ran.
+    static let reviewer = AgentSubagentProfile(
+        id: reviewerID,
+        purpose: "Independent read-only review of a change: scope creep, version/CHANGELOG consistency, git hygiene. No shell, no edits.",
+        modelBinding: automaticProviderBinding,
+        toolNames: ["read_file", "list_directory", "grep_files", "search_files", "git_status"],
+        capabilityPromptSection: """
+        Your trade is REVIEW. Judge the change in front of you: does it stay inside its declared \
+        scope, are version and CHANGELOG consistent with the code, is anything half-landed. State \
+        an explicit verdict and the evidence for it (paths, line numbers). You did not write this \
+        change and you do not fix it — report what is wrong and let its author repair it.
+        """,
+        maxRounds: 10,
+        toolPayloadCharacterLimit: 16_000,
+        escalation: .none
+    )
+
+    static let builtIn: [AgentSubagentProfile] = [scout, reader, deep, editor, tester, reviewer]
 
     /// Resolve a spawn's `profile` argument. Unknown or missing → `deep`,
     /// which is the behaviour every pre-profile caller already expects.

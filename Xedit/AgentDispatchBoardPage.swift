@@ -54,7 +54,6 @@ private struct AgentDispatchBoardContent: View {
     @State private var editorRequest: AgentDispatchEditorRequest?
     @State private var isCommandConsoleExpanded = false
     @State private var executionProfiles: [AgentExecutionProfile] = []
-    @State private var isProfileManagerPresented = false
     @State private var takeoverSessionID: UUID?
 
     private enum AlertTarget: Identifiable {
@@ -147,14 +146,6 @@ private struct AgentDispatchBoardContent: View {
                 )
             }
         }
-        .sheet(isPresented: $isProfileManagerPresented) {
-            AgentExecutionProfileManagerView(
-                workspacePath: coordinator.selectedGoal?
-                    .logicalProject?.primaryWorkspacePath,
-                onChanged: reloadExecutionProfiles,
-                onClose: { isProfileManagerPresented = false }
-            )
-        }
     }
 
     private var goalSetupContent: some View {
@@ -173,7 +164,7 @@ private struct AgentDispatchBoardContent: View {
                     }
                 }
             },
-            onManageProfiles: { isProfileManagerPresented = true },
+            onManageProfiles: { openProfileSettings() },
             onCancel: { appState.cancelDispatchGoalDraft() },
             onAssess: { statement, planningProfileID, fallbackProfileIDs in
                 try await appState.assessDispatchGoal(
@@ -214,7 +205,7 @@ private struct AgentDispatchBoardContent: View {
                 onWorkerProfiles: {
                     appState.updateDispatchWorkerProfiles($0, goalID: goal.id)
                 },
-                onManageProfiles: { isProfileManagerPresented = true },
+                onManageProfiles: { openProfileSettings() },
                 onChooseLocalWorkspace: {
                     appState.chooseLocalWorkspaceForDispatchGoal(goalID: goal.id) { error in
                         if let error {
@@ -360,7 +351,7 @@ private struct AgentDispatchBoardContent: View {
                         taskID: task.id
                     )
                 },
-                onManageProfiles: { isProfileManagerPresented = true },
+                onManageProfiles: { openProfileSettings() },
                 onLaunch: { launchTask(goalID: goal.id, taskID: task.id) },
                 onStop: {
                     appState.stopDispatchTask(goalID: goal.id, taskID: task.id)
@@ -709,6 +700,20 @@ private struct AgentDispatchBoardContent: View {
         }
         .prefix(24)
         .map { $0 }
+    }
+
+    /// Profiles are edited in one place now — Settings → AI → Agent profiles.
+    /// The dispatch board used to carry its own editor over the same records
+    /// (agent-profile.v2); two editors over one dataset is exactly the drift
+    /// this merge removed.
+    ///
+    /// `@Environment(\.openSettings)` is macOS 14+ and this app still ships
+    /// 13.7, so the 13-compatible opener in `EditorSettingsNavigation`
+    /// (showSettingsWindow: plus a fallback window controller) is used.
+    private func openProfileSettings() {
+        EditorSettingsNavigation.shared.selectedTab = .subagents
+        EditorSettingsNavigation.shared.openWindow(appState: appState)
+        reloadExecutionProfiles()
     }
 
     private func reloadExecutionProfiles() {

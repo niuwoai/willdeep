@@ -1,6 +1,78 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "agent-delegation.profile-tester-name" : {
+      "comment" : "Display name of the tester subagent trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tester"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "测试"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-reviewer-name" : {
+      "comment" : "Display name of the reviewer subagent trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reviewer"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "评审"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-tester-purpose" : {
+      "comment" : "User-facing description of the tester trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runs tests and gates, reports evidence, never edits code."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跑测试与门禁、产出证据，从不改代码。"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-reviewer-purpose" : {
+      "comment" : "User-facing description of the reviewer trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Independent read-only review of a change's scope, version consistency and git hygiene."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只读地独立复核改动范围、版本一致性与 git 完整性。"
+          }
+        }
+      }
+    },
     "agent-profiles.tab-title" : {
       "comment" : "Settings tab title for unified agent profiles",
       "extractionState" : "manual",

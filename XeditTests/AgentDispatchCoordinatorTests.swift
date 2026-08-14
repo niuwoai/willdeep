@@ -774,9 +774,9 @@ struct AgentDispatchCoordinatorTests {
         try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
     }
 
-    @Test("render editable built-in Profile manager for design QA")
+    @Test("render the unified agent profile settings pane for design QA")
     @MainActor
-    func renderExecutionProfileManagerForDesignQA() throws {
+    func renderAgentProfileSettingsForDesignQA() throws {
         let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_PROFILE_MANAGER_QA_OUTPUT"]
             ?? "/tmp/Xedit-profile-manager-design-qa.png"
         var settings = EditorSettings.default
@@ -803,11 +803,10 @@ struct AgentDispatchCoordinatorTests {
             activeID: nil
         )
         let size = NSSize(width: 760, height: 520)
-        let root = AgentExecutionProfileManagerView(
-            workspacePath: nil,
-            onChanged: {},
-            onClose: {}
-        )
+        // The dispatch board's own profile editor was retired: profiles live
+        // in one store (agent-profile.v2) and are edited in one place,
+        // Settings → AI → Agent profiles.
+        let root = AgentProfileSettingsView()
         .environmentObject(appState)
         .tint(appState.editorSettings.interfaceSkin.palette.accent)
         .preferredColorScheme(.light)
