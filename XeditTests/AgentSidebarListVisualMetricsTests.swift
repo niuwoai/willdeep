@@ -5,6 +5,75 @@ import Testing
 @testable import WillDeep
 
 struct AgentSidebarListVisualMetricsTests {
+    @Test("scheduled run history is newest first and capped for the page")
+    func scheduledRunHistoryIsNewestFirst() {
+        let routineID = UUID()
+        let now = Date()
+        let records = (0..<15).map { offset in
+            AgentRoutineRunRecord(
+                routineID: routineID,
+                routineName: "Routine \(offset)",
+                sessionID: UUID(),
+                startedAt: now.addingTimeInterval(TimeInterval(-offset))
+            )
+        }.reversed()
+
+        let recent = AgentRoutineRunHistory.recent(Array(records))
+        #expect(recent.count == AgentRoutineRunHistory.defaultVisibleRuns)
+        #expect(recent.first?.routineName == "Routine 0")
+        #expect(recent.last?.routineName == "Routine 11")
+    }
+
+    @Test("sidebar and composer text scale with the chat body size")
+    func chromeFontsFollowChatBaseFontSize() {
+        let base = AgentSettingsStore.chatBaseFontSizeDefault
+
+        // At the default body size nothing moves — the established look is
+        // the baseline, not a special case.
+        #expect(
+            AgentDesign.scaledChromeFontSize(AgentDesign.sidebarRowFontSize, baseFontSize: base)
+                == AgentDesign.sidebarRowFontSize
+        )
+        #expect(
+            AgentDesign.scaledComposerInputFontSize(baseFontSize: base)
+                == AgentDesign.composerInputFontSize
+        )
+
+        // Raising the body carries both surfaces by the same absolute step,
+        // preserving the 1 pt / 2 pt hierarchy below the transcript.
+        let raised = base + 5
+        #expect(
+            AgentDesign.scaledChromeFontSize(AgentDesign.sidebarRowFontSize, baseFontSize: raised)
+                == AgentDesign.sidebarRowFontSize + 5
+        )
+        #expect(
+            AgentDesign.scaledComposerInputFontSize(baseFontSize: raised)
+                == AgentDesign.composerInputFontSize + 5
+        )
+
+        // Out-of-range requests are clamped like the body size itself, so no
+        // caller can drive the chrome past the settings range.
+        #expect(
+            AgentDesign.scaledComposerInputFontSize(baseFontSize: 999)
+                == AgentDesign.scaledComposerInputFontSize(
+                    baseFontSize: AgentSettingsStore.chatBaseFontSizeMax
+                )
+        )
+
+        // The smallest body size must not push chrome below the legibility
+        // floor.
+        let smallest = AgentDesign.scaledComposerInputFontSize(
+            baseFontSize: AgentSettingsStore.chatBaseFontSizeMin
+        )
+        #expect(smallest >= AgentDesign.chromeFontSizeFloor)
+        #expect(
+            AgentDesign.scaledChromeFontSize(
+                AgentDesign.sidebarRowFontSize,
+                baseFontSize: AgentSettingsStore.chatBaseFontSizeMin
+            ) >= AgentDesign.chromeFontSizeFloor
+        )
+    }
+
     @Test("conversation sidebar follows the Codex typography and vertical rhythm")
     func codexReferenceMetricsStaySynchronized() {
         #expect(AgentDesign.sidebarRowFontSize == 14)
@@ -17,12 +86,20 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentScheduledTaskCardLayout.iconTileSize == 36)
         #expect(AgentScheduledTaskCardLayout.cornerRadius == 12)
         #expect(AgentDesign.sidebarSessionTrailingActionsWidth == 40)
-        #expect(AgentDesign.liveActivityTopSpacing == 6)
-        #expect(AgentDesign.liveActivityTopSpacing < AgentDesign.messageVerticalSpacing)
+        #expect(AgentDesign.sidebarSessionTrailingContentInset == 4)
+        #expect(AgentDesign.assistantMetadataTopSpacingScale == 0.7)
+        #expect(AgentDesign.assistantMetadataTopSpacing(baseFontSize: 15) == 10.5)
+        #expect(AgentDesign.liveActivityRowSpacing == 2)
+        #expect(AgentDesign.assistantMetadataTopSpacing(baseFontSize: 15) < AgentDesign.messageVerticalSpacing)
         #expect(AgentDesign.reviewPanelPreferredWidth == 520)
-        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 14, visualMinimum: 9) == 13)
-        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 18, visualMinimum: 15) == 15)
-        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 11) == 11)
+        // Supporting text tracks the body size on a constant 2 pt offset
+        // rather than being capped at its 13 pt default. Raising the body to
+        // 18 now yields 16 (it used to stall at 13 and rely on the caller's
+        // visualMinimum), and the floor still holds at the smallest body.
+        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 15) == 13)
+        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 14, visualMinimum: 9) == 12)
+        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 18, visualMinimum: 15) == 16)
+        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 11) == AgentDesign.chromeFontSizeFloor)
         #expect(AgentModelUsageTableLayout.horizontalInset == 8)
         #expect(AgentModelUsageTableLayout.columnSpacing == 8)
         #expect(AgentModelUsageTableLayout.tokensWidth == 120)
@@ -68,6 +145,37 @@ struct AgentSidebarListVisualMetricsTests {
             AgentSidebarSessionTrailingLayout.reservedActionsWidth(
                 isHovered: true
             ) == AgentDesign.sidebarSessionTrailingActionsWidth
+        )
+    }
+
+    @Test("sidebar placeholder is three-way: loading before the catalog lands, empty after, none with rows")
+    func catalogPlaceholderSplitsLoadingFromEmpty() {
+        // 冷启动：目录还没读完且列表为空 → 加载占位，不是"暂无会话"。
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: false,
+                isSessionListEmpty: true
+            ) == .loading
+        )
+        // 目录读完且确实没有会话 → 维持既有空态文案。
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: true,
+                isSessionListEmpty: true
+            ) == .empty
+        )
+        // 列表非空时无论目录是否加载完都不显示占位。
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: false,
+                isSessionListEmpty: false
+            ) == AgentSidebarCatalogPlaceholder.none
+        )
+        #expect(
+            AgentSidebarCatalogPlaceholder.state(
+                hasLoadedCatalog: true,
+                isSessionListEmpty: false
+            ) == AgentSidebarCatalogPlaceholder.none
         )
     }
 
@@ -141,6 +249,11 @@ struct AgentSidebarListVisualMetricsTests {
             AgentDesign.sidebarSelectionHorizontalInset
                 + AgentDesign.sidebarPinnedSessionContentHorizontalInset
                 == 12
+        )
+        #expect(
+            AgentDesign.sidebarSessionContentHorizontalInset
+                - AgentDesign.sidebarSessionTrailingContentInset
+                == AgentDesign.sidebarRowFontSize * 2
         )
     }
 
@@ -251,41 +364,31 @@ struct AgentSidebarListVisualMetricsTests {
             ),
         ]
         let now = Date(timeIntervalSince1970: 1_784_070_000)
-        var plannedSession = makeSession(
-            title: "调整图层面板展开方式",
-            workspace: "/tmp/83d",
-            updatedAt: now.addingTimeInterval(-900),
-            pinnedAt: now.addingTimeInterval(-120)
+        let pinned = makeSession(
+            title: "优化 Mock 上游与 Loadgen 高 RPS 场景",
+            workspace: "/tmp/muchtoken",
+            updatedAt: now.addingTimeInterval(-60),
+            pinnedAt: now.addingTimeInterval(-30)
         )
-        plannedSession.currentPlan = AgentPlan(
-            status: .executing,
-            steps: [
-                .init(text: "检查侧栏与聊天字号", status: .done),
-                .init(text: "统一状态提示字号", status: .done),
-                .init(text: "完成设计验收", status: .inProgress),
-            ]
-        )
-        plannedSession.interactionMode = .goal
-        plannedSession.currentGoal = AgentGoal(
-            statement: "完成侧边栏视觉收敛",
-            checklist: [
-                .init(text: "只保留一行低对比度进度", done: false),
-            ]
+        let active = makeSession(
+            title: "请免密登陆 ssh root@h1.new83d.com",
+            workspace: "/tmp/muchtoken",
+            updatedAt: now.addingTimeInterval(-120)
         )
         appState.agentSessions = [
-            plannedSession,
-            makeSession(title: "更新版本号", workspace: "/tmp/83d", updatedAt: now.addingTimeInterval(-800)),
-            makeSession(title: "83d-go 里，帮我检查接口", workspace: "/tmp/83d", updatedAt: now.addingTimeInterval(-700)),
-            makeSession(
-                title: "完善版本控制文档",
-                workspace: "/tmp/agentrules",
-                updatedAt: now.addingTimeInterval(-600),
-                pinnedAt: now.addingTimeInterval(-60)
-            ),
-            makeSession(title: "我们 wdtq,在同一个项目", workspace: "/tmp/aistaff", updatedAt: now.addingTimeInterval(-500)),
-            makeSession(title: "hello,列一下我们当前功能", workspace: "/tmp/metaserver", updatedAt: now.addingTimeInterval(-400)),
+            pinned,
+            makeSession(title: "请免密登陆 ssh root@h1.new83d.com", workspace: "/tmp/muchtoken", updatedAt: now.addingTimeInterval(-90)),
+            makeSession(title: "请免密登陆 ssh root@h1.new83d.com", workspace: "/tmp/muchtoken", updatedAt: now.addingTimeInterval(-100)),
+            makeSession(title: "在线上部署最新版", workspace: "/tmp/muchtoken", updatedAt: now.addingTimeInterval(-110)),
+            active,
+            makeSession(title: "请免密登陆 ssh root@h1.new83d.com", workspace: "/tmp/muchtoken", updatedAt: now.addingTimeInterval(-130)),
+            makeSession(title: "前端开发包这个目录里的功能", workspace: "/tmp/tokenhub", updatedAt: now.addingTimeInterval(-200)),
+            makeSession(title: "帮我在终端的 k8s 中操作", workspace: "/tmp/tokenhub", updatedAt: now.addingTimeInterval(-210)),
+            makeSession(title: "确认 capability 接口", workspace: "/tmp/tokenhub", updatedAt: now.addingTimeInterval(-220)),
+            makeSession(title: "https://hub.tsingfly.com/v1/models", workspace: "/tmp/tokenhub", updatedAt: now.addingTimeInterval(-230)),
+            makeSession(title: "婉拒表白", workspace: "/tmp/tokenhub", updatedAt: now.addingTimeInterval(-240)),
         ]
-        appState.activeAgentSessionID = nil
+        appState.activeAgentSessionID = active.id
         appState.hiddenWorkspaceKeys = []
 
         let size = NSSize(width: 228, height: 606)
@@ -513,7 +616,12 @@ struct AgentSidebarListVisualMetricsTests {
         ]
 
         let size = NSSize(width: 760, height: 360)
-        let root = VStack(alignment: .leading, spacing: AgentDesign.liveActivityTopSpacing) {
+        let root = VStack(
+            alignment: .leading,
+            spacing: AgentDesign.assistantMetadataTopSpacing(
+                baseFontSize: appState.agentChatBaseFontSize
+            )
+        ) {
             Text("我已经确认状态展示的问题来自过度聚合，以及模型原始阶段文案直接混进正文。现在正在收敛渲染层级并补回归测试。")
                 .font(.system(size: appState.agentChatBaseFontSize))
                 .lineSpacing(3)

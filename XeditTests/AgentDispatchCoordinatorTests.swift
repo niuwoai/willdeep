@@ -3,7 +3,9 @@
 //  WillDeepTests
 //
 
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import WillDeep
 
@@ -63,6 +65,150 @@ struct AgentDispatchCoordinatorTests {
         #expect(prompt.contains("foreground"))
         #expect(prompt.contains("loopback test port"))
         #expect(prompt.contains("macOS privacy permission"))
+    }
+
+    @Test("节点验收恢复次数持久化且新运行会重置预算")
+    func acceptanceRecoveryLedgerIsDurableAndResetsForNewRuntime() throws {
+        let original = AgentDispatchTask(
+            title: "持久化验收 Harness",
+            acceptanceRecoveryAttempts: 2,
+            acceptanceCriteria: ["测试通过"]
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let restored = try JSONDecoder().decode(AgentDispatchTask.self, from: data)
+
+        #expect(restored.acceptanceRecoveryAttempts == 2)
+
+        let coordinator = AgentDispatchCoordinator()
+        coordinator.resetForTests()
+        let session = AgentSession(
+            title: "调度",
+            workspaceRootPath: FileManager.default.temporaryDirectory.path,
+            presentationScope: .dispatchBoard,
+            currentGoal: AgentGoal(statement: "完成任务", checklist: [.init(text: "完成")])
+        )
+        coordinator.synchronize(with: [session])
+        let task = try #require(coordinator.appendTask(title: "节点", goalID: session.id))
+        coordinator.recordTaskAcceptanceRecoveryAttempts(
+            goalID: session.id,
+            taskID: task.id,
+            attempts: 2
+        )
+
+        coordinator.markTaskStarted(
+            goalID: session.id,
+            taskID: task.id,
+            executor: .willDeep,
+            target: .local,
+            runtimeSessionID: UUID()
+        )
+
+        #expect(coordinator.selectedGoal?.tasks.first?.acceptanceRecoveryAttempts == 0)
+    }
+
+    @Test("冷恢复时耗尽预算的验收节点明确失败而非永久停在验收中")
+    func restoredReviewingTaskFailsClosedAfterRecoveryBudget() async throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-review-budget-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let project = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
+        appState.setAgentGoal(statement: "验收必须收口", items: ["完成节点"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+        let task = try #require(appState.agentDispatchCoordinator.appendTask(
+            title: "不可停滞节点",
+            goalID: project.id
+        ))
+        appState.agentDispatchCoordinator.updateTaskExecutorChoice(
+            .willDeep,
+            goalID: project.id,
+            taskID: task.id
+        )
+        let child = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        let childRuntime = try #require(appState.runtime(for: child.id))
+        childRuntime.session.presentationScope = .dispatchBoard
+        childRuntime.session.dispatchParentProjectID = project.id
+        childRuntime.session.dispatchTaskID = task.id
+        childRuntime.currentGoal = AgentGoal(
+            statement: task.title,
+            checklist: [AgentGoal.Item(text: "仍未通过", done: false)]
+        )
+        appState.persistAgentSession(runtime: childRuntime)
+        appState.agentDispatchCoordinator.markTaskStarted(
+            goalID: project.id,
+            taskID: task.id,
+            executor: .willDeep,
+            target: .local,
+            runtimeSessionID: child.id
+        )
+        appState.agentDispatchCoordinator.recordTaskAcceptanceRecoveryAttempts(
+            goalID: project.id,
+            taskID: task.id,
+            attempts: AgentDispatchUnattendedRecoveryPolicy.maximumAttempts
+        )
+        appState.agentDispatchCoordinator.updateTaskState(
+            goalID: project.id,
+            taskID: task.id,
+            state: .reviewing
+        )
+
+        appState.resumeDispatchGoal(goalID: project.id)
+        try await Task.sleep(for: .milliseconds(100))
+
+        let restoredTask = try #require(
+            appState.agentDispatchCoordinator.goals
+                .first(where: { $0.id == project.id })?.tasks
+                .first(where: { $0.id == task.id })
+        )
+        #expect(restoredTask.state == .failed)
+        #expect(restoredTask.acceptanceRecoveryAttempts == 2)
+        #expect(childRuntime.errorMessage == L10n.Dispatch.acceptanceRecoveryExhausted)
+        #expect(appState.dispatchMonitoredRuntimeIDsByTaskID[task.id] == nil)
+    }
+
+    @Test("冷恢复缺失运行会话时节点明确失败")
+    func restoredTaskWithMissingRuntimeFailsExplicitly() throws {
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let project = appState.startDispatchGoalSession(
+            inWorkspaceAt: FileManager.default.temporaryDirectory.path
+        )
+        appState.setAgentGoal(statement: "运行会话必须存在", items: ["完成节点"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+        let task = try #require(appState.agentDispatchCoordinator.appendTask(
+            title: "丢失运行时节点",
+            goalID: project.id
+        ))
+        appState.agentDispatchCoordinator.updateTaskExecutorChoice(
+            .willDeep,
+            goalID: project.id,
+            taskID: task.id
+        )
+        appState.agentDispatchCoordinator.markTaskStarted(
+            goalID: project.id,
+            taskID: task.id,
+            executor: .willDeep,
+            target: .local,
+            runtimeSessionID: UUID()
+        )
+        appState.agentDispatchCoordinator.updateTaskState(
+            goalID: project.id,
+            taskID: task.id,
+            state: .reviewing
+        )
+
+        appState.resumeDispatchGoal(goalID: project.id)
+
+        let restoredTask = try #require(
+            appState.agentDispatchCoordinator.goals
+                .first(where: { $0.id == project.id })?.tasks
+                .first(where: { $0.id == task.id })
+        )
+        #expect(restoredTask.state == .failed)
     }
 
     @Test("人工干预新一轮会恢复节点并重新挂载完成监听")
@@ -289,7 +435,7 @@ struct AgentDispatchCoordinatorTests {
         )
     }
 
-    @Test("规划 Profile 独立于 Worker 池并同时固定 some.im Provider 与 Kimi 模型")
+    @Test("规划 Profile 独立于 Worker 池并默认固定 some.im Provider 与 DeepSeek V4 Pro 模型")
     func planningProfileIsIndependentFromWorkerPool() throws {
         let planner = try #require(
             AgentExecutionProfile.builtIns.first {
@@ -311,7 +457,7 @@ struct AgentDispatchCoordinatorTests {
         #expect(selectedWorkerProfileIDs == [AgentExecutionProfile.recommendedWorkerID])
         #expect(catalog.map(\.id) == [AgentExecutionProfile.recommendedPlannerID])
         #expect(planner.providerID == AgentProviderPreset.someIMID)
-        #expect(planner.modelID == "kimi-k3")
+        #expect(planner.modelID == AgentDispatchModelRouting.recommendedPlanningModel)
     }
 
     @Test("调度项目捕获计划后交给子任务运行时而不是父会话续跑")
@@ -394,17 +540,289 @@ struct AgentDispatchCoordinatorTests {
         )
     }
 
-    @Test("内建 Worker 覆盖推荐模型且默认执行模型为 DeepSeek Flash")
+    @Test("内建 Profile 默认以 DeepSeek V4 Pro 规划并保留 Flash Worker")
     func builtInWorkersIncludeRecommendedCodingModels() {
+        #expect(AgentDispatchModelRouting.recommendedPlanningModel == "deepseek-v4-pro")
+        #expect(AgentExecutionProfile.recommendedPlannerID.contains("deepseek-v4-pro"))
         #expect(AgentDispatchModelRouting.recommendedExecutionModel == "deepseek-v4-flash")
         #expect(AgentExecutionProfile.recommendedWorkerID.contains("deepseek-v4-flash"))
         let models = Set(AgentExecutionProfile.builtIns.compactMap(\.modelID))
         #expect(models.isSuperset(of: [
+            "deepseek-v4-pro",
             "deepseek-v4-flash",
             "gpt-5.6-sol",
             "gpt-5.6-luna",
             "gpt-5.6-terra",
         ]))
+    }
+
+    @Test("单个 Worker Profile 仍可占满 Provider 并发额度")
+    func oneWorkerProfileCanRunSeveralParallelNodes() {
+        #expect(AgentDispatchParallelismPolicy.taskLimit(providerConcurrencyLimit: 4) == 4)
+        #expect(AgentDispatchParallelismPolicy.taskLimit(providerConcurrencyLimit: 0) == 1)
+    }
+
+    @Test("内建 Profile 覆盖可持久化且不会复制成 Managed Profile")
+    func builtInProfileOverridesPersistByStableID() throws {
+        let suiteName = "AgentExecutionProfileStoreTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = AgentExecutionProfileStore(defaults: defaults)
+        var profiles = store.availableProfiles(workspacePath: nil)
+        let index = try #require(
+            profiles.firstIndex { $0.id == AgentExecutionProfile.recommendedPlannerID }
+        )
+        profiles[index].providerID = "openai"
+        profiles[index].modelID = "gpt-5.6-sol"
+
+        store.saveManaged(profiles)
+
+        let reloaded = store.availableProfiles(workspacePath: nil)
+        let planner = try #require(
+            reloaded.first { $0.id == AgentExecutionProfile.recommendedPlannerID }
+        )
+        #expect(planner.origin == .builtIn)
+        #expect(planner.providerID == "openai")
+        #expect(planner.modelID == "gpt-5.6-sol")
+        #expect(reloaded.filter { $0.id == planner.id }.count == 1)
+    }
+
+    @Test("Profile 模型目录按 Provider 隔离并包含内建模型")
+    func executionProfileModelsFollowSelectedProvider() {
+        let someIM = AgentProviderEntry(
+            providerID: "some-im",
+            displayName: "some.im",
+            baseURL: "https://example.invalid",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "gpt-5.6-terra"
+        )
+        let openAI = AgentProviderEntry(
+            providerID: "openai",
+            displayName: "OpenAI",
+            baseURL: "https://example.invalid",
+            flashPrimary: "gpt-5-mini",
+            proPrimary: "gpt-5.4"
+        )
+
+        let someIMModels = AgentExecutionProfileModelCatalog.models(for: someIM)
+        let openAIModels = AgentExecutionProfileModelCatalog.models(for: openAI)
+
+        #expect(someIMModels.contains("gpt-5.6-sol"))
+        #expect(someIMModels.contains("deepseek-v4-flash"))
+        #expect(!openAIModels.contains("deepseek-v4-flash"))
+        #expect(openAIModels == ["gpt-5-mini", "gpt-5.4"])
+    }
+
+    @Test("Profile 模型目录接纳 Provider 的全部 LLM 并排除生成类模型")
+    func executionProfileModelsIncludeProviderLLMFamilies() {
+        let someIM = AgentProviderEntry(
+            providerID: AgentProviderPreset.someIMID,
+            displayName: "some.im",
+            baseURL: "https://example.invalid",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "gpt-5.6-sol"
+        )
+        let discovered = [
+            "MiniMax-M2.5",
+            "claude-opus-4.8",
+            "deepseek-v4-pro",
+            "gpt-image-2",
+            "seedance-2.0",
+            "text-embedding-3-large",
+            "rerank-v3",
+            "MiniMax-Speech-02",
+        ]
+
+        let models = AgentExecutionProfileModelCatalog.models(
+            for: someIM,
+            discoveredModels: discovered
+        )
+
+        #expect(models.contains("MiniMax-M2.5"))
+        #expect(models.contains("claude-opus-4.8"))
+        #expect(models.contains("deepseek-v4-pro"))
+        #expect(!models.contains("gpt-image-2"))
+        #expect(!models.contains("seedance-2.0"))
+        #expect(!models.contains("text-embedding-3-large"))
+        #expect(!models.contains("rerank-v3"))
+        #expect(!models.contains("MiniMax-Speech-02"))
+    }
+
+    @Test("Planner 只保留一个与主模型不同的备选模型")
+    func plannerSelectionKeepsExactlyOneFallback() {
+        let normalized = AgentDispatchPlannerSelection.normalizedFallbackProfileIDs(
+            primaryProfileID: "planner-primary",
+            fallbackProfileIDs: [
+                "planner-primary",
+                "planner-fallback-a",
+                "planner-fallback-b",
+                "planner-fallback-a",
+            ]
+        )
+        #expect(normalized == ["planner-fallback-a"])
+
+        let legacyGoal = AgentDispatchGoal(
+            id: UUID(),
+            sessionID: UUID(),
+            title: "Legacy",
+            statement: "Legacy planner selection",
+            tasks: [],
+            executorChoice: .automatic,
+            targetChoice: .automatic,
+            planningProfileID: "planner-primary",
+            planningFallbackProfileIDs: [
+                "planner-primary",
+                "planner-fallback-a",
+                "planner-fallback-b",
+            ],
+            isPaused: false,
+            commands: [],
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        #expect(legacyGoal.effectivePlanningFallbackProfileIDs == ["planner-fallback-a"])
+    }
+
+    @Test("render focused one-primary-one-fallback Planner picker for design QA")
+    @MainActor
+    func renderPlannerPickerForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_PLANNER_PICKER_QA_OUTPUT"]
+            ?? "/tmp/Xedit-planner-picker-design-qa.png"
+        let primary = try #require(
+            AgentExecutionProfile.builtIns.first {
+                $0.id == AgentExecutionProfile.recommendedPlannerID
+            }
+        )
+        let fallback = AgentExecutionProfile(
+            id: "managed:willdeep:deepseek-v4-pro",
+            name: "DeepSeek V4 Pro",
+            executor: .willDeep,
+            modelID: "deepseek-v4-pro",
+            providerID: AgentProviderPreset.someIMID
+        )
+        let profiles = [primary, fallback]
+            + AgentExecutionProfile.builtIns.filter { $0.id != primary.id }
+        let width: CGFloat = 500
+        let root = AgentDispatchPlannerPicker(
+            profiles: profiles,
+            primaryProfileID: primary.id,
+            fallbackProfileIDs: [fallback.id],
+            onManageProfiles: {},
+            onCancel: {},
+            onApply: { _, _ in }
+        )
+        .preferredColorScheme(.light)
+        .frame(width: width)
+        .background(Color(nsColor: .windowBackgroundColor))
+
+        let hostingView = NSHostingView(rootView: root)
+        let size = NSSize(width: width, height: hostingView.fittingSize.height)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test("render workspace-first dispatch setup for design QA")
+    @MainActor
+    func renderDispatchGoalSetupForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_DISPATCH_SETUP_QA_OUTPUT"]
+            ?? "/tmp/Xedit-dispatch-goal-setup-design-qa.png"
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        appState.agentChatBaseFontSize = 16
+        appState.agentChatLineHeightMultiple = 1.6
+
+        let root = AgentDispatchGoalSetupView(
+            workspaceLocation: nil,
+            workspaceName: L10n.Workspace.noWorkspace,
+            profiles: AgentExecutionProfile.builtIns,
+            onChooseWorkspace: {},
+            onManageProfiles: {},
+            onCancel: {},
+            onAssess: { _, _, _ in
+                AgentDispatchGoalAssessment(
+                    verdict: .ready,
+                    summary: "",
+                    acceptanceCriteria: [],
+                    missingInformation: [],
+                    suggestedGoalStatement: ""
+                )
+            },
+            onCreate: { _, _, _, _, _ in }
+        )
+        .environmentObject(appState)
+        .preferredColorScheme(.light)
+        .frame(width: 1100, height: 700)
+        .background(Color(nsColor: .windowBackgroundColor))
+
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 1100, height: 700)
+        hostingView.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test("render editable built-in Profile manager for design QA")
+    @MainActor
+    func renderExecutionProfileManagerForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_PROFILE_MANAGER_QA_OUTPUT"]
+            ?? "/tmp/Xedit-profile-manager-design-qa.png"
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        appState.agentProviderLibrary = AgentProviderLibrary(
+            entries: [
+                AgentProviderEntry(
+                    providerID: AgentProviderPreset.someIMID,
+                    displayName: "some.im",
+                    baseURL: "https://some.im",
+                    flashPrimary: "deepseek-v4-flash",
+                    proPrimary: "gpt-5.6-sol",
+                    proAlternates: ["gpt-5.6-luna", "gpt-5.6-terra"]
+                ),
+                AgentProviderEntry(
+                    providerID: AgentProviderPreset.openAIID,
+                    displayName: "OpenAI",
+                    baseURL: "https://api.openai.com/v1",
+                    flashPrimary: "gpt-5-mini",
+                    proPrimary: "gpt-5.4"
+                ),
+            ],
+            activeID: nil
+        )
+        let size = NSSize(width: 760, height: 520)
+        let root = AgentExecutionProfileManagerView(
+            workspacePath: nil,
+            onChanged: {},
+            onClose: {}
+        )
+        .environmentObject(appState)
+        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .preferredColorScheme(.light)
+        .frame(width: size.width, height: size.height)
+
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
     }
 
     @Test("任务执行会话不会再次投影成侧栏项目")
@@ -483,6 +901,7 @@ struct AgentDispatchCoordinatorTests {
         let session = AgentSession(
             title: "模型组合",
             workspaceRootPath: "/tmp/project",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(
                 statement: "组合模型交付",
                 checklist: [AgentGoal.Item(text: "执行")]
@@ -619,6 +1038,7 @@ struct AgentDispatchCoordinatorTests {
         let session = AgentSession(
             title: "真实 DAG",
             workspaceRootPath: "/tmp/Graph",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(
                 statement: "并行实现并汇聚",
                 checklist: [AgentGoal.Item(text: "集成测试通过")],
@@ -812,6 +1232,7 @@ struct AgentDispatchCoordinatorTests {
                 AgentSession(
                     title: "Graph",
                     workspaceRootPath: "/tmp/Graph",
+                    presentationScope: .dispatchBoard,
                     currentGoal: AgentGoal(
                         statement: "构建任务图",
                         checklist: [
@@ -871,6 +1292,7 @@ struct AgentDispatchCoordinatorTests {
             AgentSession(
                 title: "Graph",
                 workspaceRootPath: "/tmp/Graph",
+                presentationScope: .dispatchBoard,
                 currentGoal: AgentGoal(
                     statement: "构建任务图",
                     checklist: [
@@ -930,6 +1352,7 @@ struct AgentDispatchCoordinatorTests {
                 AgentSession(
                     title: "Graph",
                     workspaceRootPath: "/tmp/Graph",
+                    presentationScope: .dispatchBoard,
                     currentGoal: AgentGoal(
                         statement: "并行任务",
                         checklist: [
@@ -989,6 +1412,7 @@ struct AgentDispatchCoordinatorTests {
         let session = AgentSession(
             title: "Orchestrator MVP",
             workspaceRootPath: "/tmp/Orchestrator",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(
                 statement: "交付可交互调度台",
                 checklist: [
@@ -1156,12 +1580,14 @@ struct AgentDispatchCoordinatorTests {
         let first = AgentSession(
             title: "First",
             workspaceRootPath: "/tmp/first",
+            presentationScope: .dispatchBoard,
             updatedAt: Date(timeIntervalSince1970: 10),
             currentGoal: AgentGoal(statement: "第一项", checklist: [])
         )
         let second = AgentSession(
             title: "Second",
             workspaceRootPath: "/tmp/second",
+            presentationScope: .dispatchBoard,
             updatedAt: Date(timeIntervalSince1970: 20),
             currentGoal: AgentGoal(statement: "第二项", checklist: [])
         )
@@ -1257,6 +1683,7 @@ struct AgentDispatchCoordinatorTests {
         let remoteRuntimeID = UUID()
         let session = AgentSession(
             workspaceRootPath: "/tmp/Project",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(statement: "跨环境交付", checklist: [.init(text: "实现")])
         )
         coordinator.synchronize(with: [session])
@@ -1290,6 +1717,7 @@ struct AgentDispatchCoordinatorTests {
         let session = AgentSession(
             id: sessionID,
             workspaceRootPath: "/tmp/Project",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(statement: "旧目标", checklist: [.init(text: "实现")])
         )
         let unbound = AgentDispatchGoal(
@@ -1326,6 +1754,7 @@ struct AgentDispatchCoordinatorTests {
         let session = AgentSession(
             id: sessionID,
             workspaceRootPath: "/tmp/Project",
+            presentationScope: .dispatchBoard,
             currentGoal: AgentGoal(statement: "迁移", checklist: [.init(text: "实现")])
         )
         let legacy = AgentDispatchGoal(
@@ -1437,7 +1866,7 @@ struct AgentDispatchCoordinatorTests {
 
         let appState = AppState()
         appState.agentDispatchCoordinator.resetForTests()
-        _ = appState.startNewAgentSession(inWorkspaceAt: first.path)
+        _ = appState.startDispatchGoalSession(inWorkspaceAt: first.path)
         appState.setAgentInteractionMode(.goal)
         appState.setAgentGoal(statement: "固定项目", items: ["实现"])
         appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
@@ -1467,7 +1896,7 @@ struct AgentDispatchCoordinatorTests {
 
         let appState = AppState()
         appState.agentDispatchCoordinator.resetForTests()
-        _ = appState.startNewAgentSession(
+        _ = appState.startDispatchGoalSession(
             inWorkspaceAt: FileManager.default.temporaryDirectory.path
         )
         appState.setAgentInteractionMode(.goal)
@@ -1532,6 +1961,48 @@ struct AgentDispatchCoordinatorTests {
         #expect(runtime.messages.isEmpty)
         #expect(appState.agentPrimaryDestination == .dispatchBoard)
         #expect(appState.agentDispatchCoordinator.selectedGoalID == session.id)
+    }
+
+    @Test("新建调度项目先进入无工作区草稿，绑定目录后才允许定义 Goal")
+    func dispatchGoalDraftOpensBeforeWorkspaceSelection() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-setup-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let draft = appState.startDispatchGoalDraft()
+        let runtime = try #require(appState.runtime(for: draft.id))
+
+        #expect(appState.isPreparingDispatchGoal)
+        #expect(runtime.workspaceLocation == nil)
+        #expect(runtime.session.presentationScope == .dispatchBoard)
+        #expect(runtime.interactionMode == .goal)
+        #expect(runtime.sessionModelOverride == "deepseek-v4-pro")
+
+        #expect(appState.bindDispatchGoalDraftWorkspace(to: workspace.path) == nil)
+        #expect(runtime.workspaceLocation == .local(path: workspace.path))
+
+        appState.setAgentGoal(statement: "完成调度项目", items: ["通过验收"])
+        let goal = try #require(runtime.currentGoal)
+        #expect(goal.planningProfileID == AgentExecutionProfile.recommendedPlannerID)
+        #expect(goal.selectedWorkerProfileIDs == [AgentExecutionProfile.recommendedWorkerID])
+        #expect(appState.agentDispatchCoordinator.selectedGoalID == draft.id)
+    }
+
+    @Test("取消未创建的调度草稿会删除临时会话并留在调度台")
+    func cancellingDispatchGoalDraftRemovesTemporarySession() {
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let draft = appState.startDispatchGoalDraft()
+
+        appState.cancelDispatchGoalDraft()
+
+        #expect(!appState.agentSessions.contains { $0.id == draft.id })
+        #expect(appState.activeAgentSessionID == nil)
+        #expect(appState.agentPrimaryDestination == .dispatchBoard)
+        #expect(!appState.isPreparingDispatchGoal)
     }
 
     @Test("同一工作区重复创建调度项目会复用现有项目")
@@ -1616,6 +2087,7 @@ struct AgentDispatchCoordinatorTests {
         let older = AgentSession(
             title: "Older",
             workspaceRootPath: workspace,
+            presentationScope: .dispatchBoard,
             updatedAt: Date(timeIntervalSince1970: 10),
             currentGoal: AgentGoal(
                 statement: "旧项目",
@@ -1625,6 +2097,7 @@ struct AgentDispatchCoordinatorTests {
         let newer = AgentSession(
             title: "Newer",
             workspaceRootPath: workspace,
+            presentationScope: .dispatchBoard,
             updatedAt: Date(timeIntervalSince1970: 20),
             currentGoal: AgentGoal(
                 statement: "新项目",
@@ -1707,21 +2180,20 @@ struct AgentDispatchCoordinatorTests {
         #expect(persisted.tasks.first(where: { $0.id == task.id })?.state == .reviewing)
     }
 
-    @Test("reopening a dispatch project observes completion without launching downstream work")
-    func reopeningDispatchProjectDoesNotLaunchQueuedTask() async throws {
+    @Test("reopening a dispatch project closes a completed node")
+    func reopeningDispatchProjectClosesCompletedTask() async throws {
         let workspace = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep-dispatch-observe-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let completedTaskID = UUID()
-        let queuedTaskID = UUID()
         let appState = AppState()
         appState.agentDispatchCoordinator.resetForTests()
         let project = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
         let projectRuntime = try #require(appState.runtime(for: project.id))
         projectRuntime.currentGoal = AgentGoal(
-            statement: "恢复时只观察",
+            statement: "恢复时收口",
             checklist: [AgentGoal.Item(text: "全部完成")],
             dispatchPlan: AgentGoalDispatchPlan(nodes: [
                 .init(
@@ -1732,15 +2204,6 @@ struct AgentDispatchCoordinatorTests {
                     primaryProfileID: nil,
                     fallbackProfileIDs: [],
                     acceptanceCriteria: ["节点完成"]
-                ),
-                .init(
-                    id: queuedTaskID,
-                    key: "NEXT-1",
-                    title: "不得自动启动",
-                    dependencyIDs: [completedTaskID],
-                    primaryProfileID: nil,
-                    fallbackProfileIDs: [],
-                    acceptanceCriteria: ["等待明确恢复"]
                 ),
             ])
         )
@@ -1772,8 +2235,6 @@ struct AgentDispatchCoordinatorTests {
             appState.agentDispatchCoordinator.goals.first(where: { $0.id == project.id })
         )
         #expect(refreshed.tasks.first(where: { $0.id == completedTaskID })?.state == .merged)
-        #expect(refreshed.tasks.first(where: { $0.id == queuedTaskID })?.state == .queued)
-        #expect(refreshed.tasks.first(where: { $0.id == queuedTaskID })?.runtimeSessionID == nil)
     }
 
     private func makeSandbox() throws -> DefaultsSandbox {
@@ -1789,6 +2250,6 @@ private struct DefaultsSandbox {
     let defaults: UserDefaults
 
     func cleanup() {
-        defaults.removePersistentDomain(forName: suiteName)
+        TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
     }
 }

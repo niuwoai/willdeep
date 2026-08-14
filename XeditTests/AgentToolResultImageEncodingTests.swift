@@ -67,7 +67,7 @@ struct AgentToolResultImageEncodingTests {
     }
 
     @Test
-    func deepSeekV4FlashUsesResponsesOnlyOnSupportedProviders() {
+    func deepSeekV4UsesResponsesOnlyOnSupportedProviders() {
         let directFlash = AgentConfiguration(
             providerID: AgentProviderPreset.deepSeekID,
             baseURL: "https://api.deepseek.com",
@@ -86,26 +86,40 @@ struct AgentToolResultImageEncodingTests {
             model: "deepseek-v4-pro",
             apiKey: "test"
         ).normalized
-        let someIMFlashAliases = [
+        let gatewayPro = AgentConfiguration(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://some.im/v1",
+            model: "deepseek-v4-pro",
+            apiKey: "test"
+        ).normalized
+        let someIMDeepSeekAliases = [
             "someim-judge",
             SomeIMManagedModel.securityGuard,
             "someim-auto-flash",
+            "someim-auto-pro",
             "someim-code-low",
+            "someim-code-high",
             "someim-coding-plan",
-            "someim-coding-plan-low"
+            "someim-coding-plan-low",
+            "someim-coding-plan-high"
         ]
-        let nonFlashSomeIMModels = [
-            "someim-coding-plan-high",
-            "someim-coding-plan-premium"
+        // Premium aliases resolve to non-DeepSeek backends and stay on Chat.
+        let nonDeepSeekSomeIMModels = [
+            "someim-coding-plan-premium",
+            "someim-code-premium",
+            "someim-auto-premium"
         ]
 
         #expect(directFlash.inferenceProviderKind == .openAIResponses)
         #expect(directFlash.usesStatelessDeepSeekResponses)
         #expect(gatewayFlash.inferenceProviderKind == .openAIResponses)
         #expect(gatewayFlash.usesWillDeepGatewayResponsesState)
-        #expect(directPro.inferenceProviderKind == .openAIChat)
+        #expect(directPro.inferenceProviderKind == .openAIResponses)
+        #expect(directPro.usesStatelessDeepSeekResponses)
+        #expect(gatewayPro.inferenceProviderKind == .openAIResponses)
+        #expect(gatewayPro.usesWillDeepGatewayResponsesState)
 
-        for model in someIMFlashAliases {
+        for model in someIMDeepSeekAliases {
             let configuration = AgentConfiguration(
                 providerID: AgentProviderPreset.someIMID,
                 baseURL: "https://some.im/v1",
@@ -126,10 +140,10 @@ struct AgentToolResultImageEncodingTests {
                 apiKey: "test"
             ).normalized
             #expect(customConfiguration.inferenceProviderKind == .openAIChat)
-            #expect(!customConfiguration.isDeepSeekV4FlashResponsesModel)
+            #expect(!customConfiguration.isDeepSeekV4ResponsesModel)
         }
 
-        for model in nonFlashSomeIMModels {
+        for model in nonDeepSeekSomeIMModels {
             let configuration = AgentConfiguration(
                 providerID: AgentProviderPreset.someIMID,
                 baseURL: "https://some.im/v1",
@@ -219,7 +233,9 @@ struct AgentToolResultImageEncodingTests {
             session: stub.session
         ).judgeCommandSafety(
             command: "yarn test",
-            historyContext: "THIS HISTORY MUST NOT BE SENT"
+            historyContext: "THIS HISTORY MUST NOT BE SENT",
+            toolName: "run_command",
+            taskContext: "Run the project's test suite"
         )
 
         #expect(result == .allow)
@@ -231,6 +247,8 @@ struct AgentToolResultImageEncodingTests {
         #expect(body["instructions"] == nil)
         #expect(body["messages"] == nil)
         #expect(request.body.contains("yarn test"))
+        #expect(request.body.contains("run_command"))
+        #expect(request.body.contains("Run the project's test suite"))
         #expect(!request.body.contains("THIS HISTORY MUST NOT BE SENT"))
         let input = try #require(body["input"] as? [[String: Any]])
         #expect(input.count == 1)

@@ -1,10 +1,10 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-12 | Current version: v1.247.0-rc11
+> Last updated: 2026-08-14 | Current version: v1.253.0-rc1
 
 ## Positioning
 
-WillDeep is a native macOS agent workspace organized around tasks, workspaces, sessions, and verifiable deliverables. Its primary experience is an agent that can inspect local or remote projects, use tools, operate terminals and browsers, coordinate plans and goals, and continue until work is ready to review. The built-in lightweight editor remains a maintained capability for file inspection, focused edits, diff review, and collaboration with the agent; it is no longer the product's defining surface.
+WillDeep is a native macOS agent workspace organized around tasks, workspaces, sessions, and verifiable deliverables. It can inspect local or remote projects, use tools, operate terminals and browsers, coordinate plans and goals, and continue until work is ready to review. General-purpose file editing now belongs to the standalone Qeditor app; WillDeep itself is Agent-only.
 
 Official product domain: [willdeep.com](https://willdeep.com).
 
@@ -12,10 +12,27 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **长会话渐进展示、终端自动显露与密钥落盘保护（1.250.0-rc5）** —— 对话正文与左侧用户输入定位条只处理当前 240 条消息窗口，滚动到顶部后按页加载更早历史并保持阅读位置；右侧浏览器、终端等面板不再自动藏掉用户已打开的会话列表。播放终端捷径时零标签会自动建立本地 Shell，AI 工具新建终端标签后会主动打开终端面板并选中该标签。会话 JSON 在写入边界再次脱敏常见 Key/Token/私钥；用户自己保存的钥匙串密钥可在 Touch ID 或系统密码认证后直接复制。
+- **调度历史、语言测试与对话收口（1.250.0-rc4）** —— “已安排的任务”页面全部文字统一采用 Agent 外观正文字体与字号，底部持久化展示近期运行时间并可跳回对应对话；“帐户与设备”支持跟随系统或指定简体中文、English、日本語（重启生效）。窗口菜单不再注册专家圆桌独立窗口或 Agent 专项入口；对话搜索支持 Escape 收起，已完成计划不再悬浮，也不能重新规划。
+- **Composer 活动卡统一灰阶与 Editor 菜单收口（1.250.0-rc3）** —— 计划、产物与 Dev Server 卡片共用安静的黑白灰视觉层级；产物不再使用系统蓝，运行中的 Dev Server 也不再使用绿色。Agent-only App 同时移除“显示 Editor / 切换到 Editor 模式”菜单及其快捷键，不再暴露已删除的 Editor Scene。
+- **侧边栏 Markdown 表格统一列宽（1.250.0-rc2）** —— 预览表格根据表头与全部数据行统一计算列宽，同一列的边界不再逐行漂移；单列宽度限制在 80–320 pt，DSN、命令和长说明会在单元格内换行，列数较多时仍可横向滚动。
+- **DeepSeek V4 Pro 接入 Responses 与网关状态续接（1.250.0-rc1）** —— `deepseek-v4-pro` 与 Flash 使用同一条 Responses 链路：直连 DeepSeek 时发送无服务端存储的请求，经 some.im 时启用 24 小时网关状态，有效游标下只上传新增 user/tool input，由 some.im 服务端按租户/API Key/会话/模型隔离地拼装完整历史。高档托管别名 `someim-coding-plan-high`、`someim-code-high`、`someim-auto-pro` 一并复用；premium 档解析到非 DeepSeek 后端，继续走 Chat Completions。
+- **Agent 与本地 Editor 正式拆分（1.249.0-rc1）** —— WillDeep 删除通用 Editor scene、文本/源码文件类型注册和 Editor 设置入口；Agent 文件面板与终端快捷 JSON 统一交给 macOS 默认外部编辑器。独立的 Qeditor 使用自己的 Bundle ID、沙盒容器、设置与 Sparkle feed，不迁移 WillDeep 数据。
+- **Coding Plan 主按钮对比度修复（1.248.0-rc8）** —— 模型选择面板的“了解并购买”按钮将文字与外链图标显式绑定到 Composer 主操作反差色，并将背景绑定到统一主操作填充色；浅色界面的黑色按钮恢复白色内容，深色界面也会自动保持反差。
+- **终端捷径编辑以正式存储为准（1.248.0-rc7）** —— 每次进入单条终端捷径编辑前，当前 Controller 都会先从正式 `shortcuts.json` 刷新，再生成临时 JSON。Editor 保存并关闭后，即使 Agent 回落到旧的 headless `AppState`，旧内存快照也不能覆盖已保存内容；重新打开会稳定显示最后一次成功保存的版本。
+- **调度项目先定义、后绑定工作区（1.248.0-rc6）** —— “新建调度项目”直接进入定义页，头部工作区按钮负责绑定或更换目录；绑定前整份项目配置只读，绑定后才可填写目标、调用 AI 生成验收清单并创建项目，取消会清理临时草稿。新项目默认由 some.im `deepseek-v4-pro` 规划、由单个 `deepseek-v4-flash` Worker Profile 执行；同一 Profile 可按 Provider 并发上限服务多个独立节点，补选多个 Worker 用于扩展路由和故障转移。AI 草稿与验收清单复用 Agent 外观中的正文字体、字号与行高。
+- **会话标题多展示约两个汉字（1.248.0-rc5）** —— 工作区会话行保留左侧 32 pt 子级缩进，继续与工作区标题的文本列对齐；右侧内容留白从 32 pt 收紧为 4 pt，为单行标题释放 28 pt。悬停图钉/归档区仍固定为 40 pt，空闲行仍完全归还操作区宽度，因此标题增宽不会牺牲操作命中区或运行状态标记。
+- **Planner 一主一备配置弹窗（1.248.0-rc4）** —— 调度台顶部 Planner 入口改为锚定按钮的原生 macOS Popover，主模型与备选模型各自单选，并显示 Profile 名称、Provider 与模型 ID；两者不能重复，旧的多级回退记录仅采用第一个有效备选。选择先保留为弹窗草稿，取消不会改变项目，点击“完成”后才由创建、更新、会话同步和持久化共用的归一化策略提交。
+- **Profile 模型目录解除白名单限制（1.248.0-rc3）** —— Worker Profile 管理器会按当前 Provider 刷新模型目录，并将可用的对话式 LLM 作为模型建议，不再只展示预设 Flash / Pro 与内建 Profile 已用模型；MiniMax、Opus、DeepSeek V4 Pro 等新增家族可以直接选择。模型 ID 同时允许自由输入，目录暂时拉取失败也不会阻断配置；图像、视频、Embedding、Rerank 与语音等明确非 LLM 模型不会混入执行模型建议。
+- **调度节点持久化验收 Harness（1.248.0-rc2）** —— 调度项目一旦启动，宿主会持续负责每个节点从执行、验收到明确收口：验收未完成时自动发起有限返工，恢复次数随节点持久化，重新进入调度台后继续挂载；预算耗尽或运行会话丢失时明确标记失败，并在自动执行模式下尝试尚未使用的 Worker Profile，不再把空闲节点永久伪装成“验收中”。节点合并后继续解锁下游，用户显式暂停仍会立即停止隐藏恢复。
+- **调度 Profile 联动选模与会话侧栏拖拽（1.248.0-rc1）** —— Profile 管理支持先选 Provider、再从该 Provider 的模型目录选模，内建 Profile 也可覆盖并按稳定 ID 持久化；新调度项目的默认规划模型由 Kimi K3 调整为 GPT-5.6 Sol，Kimi K3 仍作为可选内建项保留。调度台主操作按钮统一为黑底白字，破坏性停止操作继续使用红色。左侧会话列表现在可以在 230–520 pt 之间拖拽并记住宽度，交互反馈与右侧终端/预览分隔条一致；拖拽期间冻结聊天排版，松手后由阅读锚点恢复机制保留当前阅读位置。
+- **Agent 元信息紧凑排版（1.247.0-rc17）** —— 聊天正文与工具调用、统计总结元信息组之间统一保留当前正文字号 0.7 倍的留白，历史 TextKit 和运行中 SwiftUI 工具活动使用相同基准；同组工具活动行收紧为 2 pt 间距，使连续操作保持一组信息的视觉关系。
+- **普通会话与周期任务共享上下文感知 Auto-review（1.247.0-rc15）** —— Smart 审核会递归验证 SSH 的远端载荷；明确的 `journalctl` 日志读取、`systemctl show/status/is-active` 状态查询及只读文本分析链，可在后台周期任务、普通 `run_command` 和可见终端中静态放行。越界候选交给独立审核模型时携带精确工具、精确命令和脱敏限长的当前任务意图；任务意图不是授权，YES 不扩大沙箱权限，缓存也不会跨任务上下文复用。交互式远端 Shell、端口转发、远端写入、服务重启和日志清理仍保留模型或人工审核。
+- **工具参数审批前预检（1.247.0-rc18）** —— Agent 工具调用在风险分类和人工审批之前统一校验 Schema 必填参数及类型；缺少 `command` 的 `terminal_send_command` 等畸形调用会直接失败并反馈 Agent 重新提交，不再生成没有真实操作内容、只显示 `_approval_reason` / `_sandbox` 内部元数据的误导审批卡。
 - **Agent 侧边栏 Markdown 排版同步（1.247.0-rc5）** —— 右侧“预览”面板将 Agent 外观中的字体、字号和行高应用到 Markdown 正文、标题、列表、引用、表格及代码块；设置调整后与主聊天区同步更新，同时保留编辑器独立预览的既有默认排版。
 - **Agent 外观独占工作区背景（1.247.0-rc4）** —— 工作区壁纸及 Agent 背景效果统一由“Agent 外观”管理；编辑器设置移除重复的“背景”标签，仅保留编辑、格式、字体和工作区四个页面，避免同一壁纸在两个入口重复配置。
 - **Composer 图标黑白灰体系（1.247.0-rc3）** —— Composer 在卡片边界统一覆盖 macOS 控件强调色，顶部运行上下文、底部操作栏、附件与技能标签、任务进度及模型选择面板中的图标只使用黑、白、灰语义色；选中、警告、完成和失败状态改由图标形状、描边与明暗层级表达，不再被 `Menu`、无边框按钮、Provider 品牌色或彩色状态色染成蓝色等强调色。
-- **Agent 外观与消息层级（1.247.0-rc1）** —— 设置侧栏新增一级“Agent 外观”，统一管理 Agent 背景、正文字体、字号和行高；历史 TextKit 消息与流式 SwiftUI 消息共享同一套持久化排版设置，新安装默认使用系统字体、15 pt 与 1.50× 行高。正文结束后按当前排版留出一整行高度，再展示相邻成组的工具摘要与消息统计；元信息与正文共享字体、字号和行高。系统提示同时禁止用状态 emoji 堆叠完成标记。
+- **Agent 外观与消息层级（1.247.0-rc1）** —— 设置侧栏新增一级“Agent 外观”，统一管理 Agent 背景、正文字体、字号和行高；历史 TextKit 消息与流式 SwiftUI 消息共享同一套持久化排版设置，新安装默认使用系统字体、15 pt 与 1.50× 行高。正文结束后按当前正文字号的 0.7 倍留白展示相邻成组的工具摘要与消息统计；元信息与正文共享字体、字号和行高。系统提示同时禁止用状态 emoji 堆叠完成标记。
 - **Token 月度用量日历（1.246.0-rc1）** —— “新聊天”概览中的 Token 活动区可进入独立月历；每一天按真实会话快照汇总 Token、预估费用与会话数，支持上月、下月切换，并可返回概览。月历采用周日到周六的常规 7 列结构与黑白灰数据磁贴，今天以深色单元格标记；未知模型价格不会被伪装成部分费用。
 - **Goal 未完成自动续跑与播放/暂停控制（1.245.0-rc4）** —— Goal 的执行计划连续漏报机器可读状态时，不再按普通计划直接暂停；宿主在一次只读校准后恢复完整执行，并为未完成 Goal 提供更大的有界续跑预算。吸附目标条新增播放/暂停按钮：运行时可主动暂停，空闲时可从现有路线图、计划、验收项和证据继续，不会重启 Goal Teams 或重复已完成工作。
 - **窄计划卡状态徽标保持单行（1.245.0-rc3）** —— 对话右下角的折叠计划卡在同时展示阶段与执行状态时，会优先保留单行状态徽标；空间不足则先隐藏次要阶段标签，不再把“执行中”等文案挤成竖排。阶段、状态、展开与菜单行为保持不变。

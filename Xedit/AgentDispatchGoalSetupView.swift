@@ -6,19 +6,21 @@
 import SwiftUI
 
 struct AgentDispatchGoalSetupView: View {
+    @EnvironmentObject private var appState: AppState
+
     let workspaceLocation: WorkspaceLocation?
     let workspaceName: String
     let profiles: [AgentExecutionProfile]
+    let onChooseWorkspace: () -> Void
     let onManageProfiles: () -> Void
+    let onCancel: () -> Void
     let onAssess: (String, String, [String]) async throws -> AgentDispatchGoalAssessment
     let onCreate: (String, [String], String, [String], [String]) -> Void
 
     @State private var statement = ""
     @State private var checklistText = ""
     @State private var planningProfileID = AgentExecutionProfile.recommendedPlannerID
-    @State private var planningFallbackProfileIDs: Set<String> = [
-        AgentExecutionProfile.recommendedWorkerID,
-    ]
+    @State private var planningFallbackProfileID = AgentExecutionProfile.recommendedWorkerID
     @State private var selectedWorkerProfileIDs: Set<String> = [
         AgentExecutionProfile.recommendedWorkerID,
     ]
@@ -48,9 +50,21 @@ struct AgentDispatchGoalSetupView: View {
     private var canCreate: Bool {
         // Goal assessment is advisory. A user may accept responsibility for
         // an under-specified goal and continue once a checklist exists.
-        AgentDispatchGoalSetupPolicy.canCreateProject(
+        workspaceLocation != nil && AgentDispatchGoalSetupPolicy.canCreateProject(
             statement: normalizedStatement,
             acceptanceCriteria: checklistItems
+        )
+    }
+
+    private var bodyFont: Font {
+        (AgentChatFontChoice.byID(appState.agentChatFontID) ?? .system)
+            .swiftUIFont(size: appState.agentChatBaseFontSize)
+    }
+
+    private var bodyLineSpacing: CGFloat {
+        AgentChatTypography.lineSpacing(
+            fontSize: appState.agentChatBaseFontSize,
+            lineHeightMultiple: appState.agentChatLineHeightMultiple
         )
     }
 
@@ -78,7 +92,14 @@ struct AgentDispatchGoalSetupView: View {
         }
         .background(Color.primary.opacity(0.012))
         .onAppear {
-            focusedField = .statement
+            if workspaceLocation != nil {
+                focusedField = .statement
+            }
+        }
+        .onCompatibleChange(of: workspaceLocation) { _, location in
+            if location != nil {
+                focusedField = .statement
+            }
         }
         .onDisappear {
             assessmentRequestID = UUID()
@@ -99,6 +120,20 @@ struct AgentDispatchGoalSetupView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 12)
+            Button(action: onChooseWorkspace) {
+                Label(
+                    workspaceLocation == nil
+                        ? L10n.Dispatch.chooseWorkspace
+                        : L10n.Dispatch.changeWorkspace,
+                    systemImage: workspaceLocation == nil
+                        ? "folder.badge.plus"
+                        : "folder"
+                )
+                .font(.system(size: 12, weight: .medium))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .accessibilityIdentifier("dispatch.goal-setup.choose-workspace")
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 16)
@@ -113,14 +148,16 @@ struct AgentDispatchGoalSetupView: View {
                 ZStack(alignment: .topLeading) {
                     if statement.isEmpty {
                         Text(L10n.GoalEditorSheet.statementPlaceholder)
-                            .font(.system(size: 14))
+                            .font(bodyFont)
+                            .lineSpacing(bodyLineSpacing)
                             .foregroundStyle(.tertiary)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 9)
                             .allowsHitTesting(false)
                     }
                     TextEditor(text: $statement)
-                        .font(.system(size: 14))
+                        .font(bodyFont)
+                        .lineSpacing(bodyLineSpacing)
                         .scrollContentBackground(.hidden)
                         .focused($focusedField, equals: .statement)
                         .frame(minHeight: 116)
@@ -179,7 +216,8 @@ struct AgentDispatchGoalSetupView: View {
                 symbol: "checklist"
             ) {
                 TextEditor(text: $checklistText)
-                    .font(.system(size: 13))
+                    .font(bodyFont)
+                    .lineSpacing(bodyLineSpacing)
                     .scrollContentBackground(.hidden)
                     .focused($focusedField, equals: .checklist)
                     .frame(minHeight: 180)
@@ -194,6 +232,8 @@ struct AgentDispatchGoalSetupView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .disabled(workspaceLocation == nil)
+        .opacity(workspaceLocation == nil ? 0.48 : 1)
     }
 
     private var setupSummary: some View {
@@ -211,6 +251,10 @@ struct AgentDispatchGoalSetupView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                         .textSelection(.enabled)
+                } else {
+                    Text(L10n.Dispatch.selectWorkspaceFirst)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
                 }
             }
 
@@ -222,7 +266,11 @@ struct AgentDispatchGoalSetupView: View {
                     ForEach(profiles) { profile in
                         Button {
                             planningProfileID = profile.id
-                            planningFallbackProfileIDs.remove(profile.id)
+                            if planningFallbackProfileID == profile.id {
+                                planningFallbackProfileID = profiles.first {
+                                    $0.id != profile.id
+                                }?.id ?? ""
+                            }
                         } label: {
                             Label(
                                 profile.name,
@@ -245,18 +293,14 @@ struct AgentDispatchGoalSetupView: View {
                     .font(.system(size: 12, weight: .medium))
                 }
                 .menuStyle(.borderlessButton)
-                Menu(L10n.Dispatch.planningFallbacks) {
+                Menu(L10n.Dispatch.plannerFallbackModel) {
                     ForEach(profiles.filter { $0.id != planningProfileID }) { profile in
                         Button {
-                            if planningFallbackProfileIDs.contains(profile.id) {
-                                planningFallbackProfileIDs.remove(profile.id)
-                            } else {
-                                planningFallbackProfileIDs.insert(profile.id)
-                            }
+                            planningFallbackProfileID = profile.id
                         } label: {
                             Label(
                                 profile.name,
-                                systemImage: planningFallbackProfileIDs.contains(profile.id)
+                                systemImage: planningFallbackProfileID == profile.id
                                     ? "checkmark"
                                     : profile.executor.symbol
                             )
@@ -264,11 +308,13 @@ struct AgentDispatchGoalSetupView: View {
                     }
                 }
                 .menuStyle(.borderlessButton)
-                Text(L10n.Dispatch.aiPlansGraph)
+                Text(L10n.Dispatch.plannerPickerMessage)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .disabled(workspaceLocation == nil)
+            .opacity(workspaceLocation == nil ? 0.48 : 1)
 
             summaryCard(
                 title: L10n.Dispatch.environment,
@@ -281,6 +327,8 @@ struct AgentDispatchGoalSetupView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .disabled(workspaceLocation == nil)
+            .opacity(workspaceLocation == nil ? 0.48 : 1)
 
             summaryCard(
                 title: L10n.Dispatch.workers,
@@ -319,6 +367,8 @@ struct AgentDispatchGoalSetupView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .disabled(workspaceLocation == nil)
+            .opacity(workspaceLocation == nil ? 0.48 : 1)
         }
         .frame(width: 250)
     }
@@ -339,6 +389,10 @@ struct AgentDispatchGoalSetupView: View {
                 }
             }
             Spacer()
+            Button(L10n.Dispatch.cancel, action: onCancel)
+                .buttonStyle(.bordered)
+                .keyboardShortcut(.cancelAction)
+                .accessibilityIdentifier("dispatch.goal-setup.cancel")
             Button {
                 focusedField = nil
                 onCreate(
@@ -353,6 +407,7 @@ struct AgentDispatchGoalSetupView: View {
                     .font(.system(size: 12, weight: .semibold))
             }
             .buttonStyle(.borderedProminent)
+            .tint(.black)
             .disabled(!canCreate)
             .keyboardShortcut(.defaultAction)
             .accessibilityIdentifier("dispatch.goal-setup.create")
@@ -370,7 +425,10 @@ struct AgentDispatchGoalSetupView: View {
     }
 
     private var orderedPlanningFallbackIDs: [String] {
-        profiles.map(\.id).filter(planningFallbackProfileIDs.contains)
+        AgentDispatchPlannerSelection.normalizedFallbackProfileIDs(
+            primaryProfileID: planningProfileID,
+            fallbackProfileIDs: [planningFallbackProfileID]
+        )
     }
 
     private var orderedWorkerProfileIDs: [String] {
@@ -442,7 +500,8 @@ struct AgentDispatchGoalSetupView: View {
             .foregroundStyle(color)
 
             Text(current ? result.summary : L10n.Dispatch.goalAssessmentStaleHelp)
-                .font(.system(size: 11))
+                .font(bodyFont)
+                .lineSpacing(bodyLineSpacing)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -452,7 +511,8 @@ struct AgentDispatchGoalSetupView: View {
                         .font(.system(size: 11, weight: .semibold))
                     ForEach(Array(result.missingInformation.enumerated()), id: \.offset) { entry in
                         Label(entry.element, systemImage: "arrow.turn.down.right")
-                            .font(.system(size: 11))
+                            .font(bodyFont)
+                            .lineSpacing(bodyLineSpacing)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -463,7 +523,8 @@ struct AgentDispatchGoalSetupView: View {
                     Text(L10n.Dispatch.goalAssessmentSuggestedStatement)
                         .font(.system(size: 11, weight: .semibold))
                     Text(result.suggestedGoalStatement)
-                        .font(.system(size: 11))
+                        .font(bodyFont)
+                        .lineSpacing(bodyLineSpacing)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                     Button {

@@ -3,9 +3,8 @@
 //  WillDeep
 //
 //  专家圆桌的三个视图:主页(发起/历史)、讨论中(气泡+态势看板)、文档(终稿
-//  +导出)。同一套视图既能装进独立窗口(RoundtableWindowRootView,从
-//  EditorAppStateRegistry 取 AppState),也能嵌入主窗口的 .roundtable 目的地
-//  (RoundtableEmbeddedView,直接用环境里的 AppState)。所以导航栏用「页内
+//  +导出)。同一套视图嵌入主窗口的 .roundtable 目的地，直接使用环境里的
+//  AppState。所以导航栏用「页内
 //  chrome」而不是 `.toolbar` —— 后者在嵌入宿主里会挂到主窗口工具栏上。
 //
 
@@ -22,16 +21,14 @@ enum RoundtableRoute: Equatable {
     case expertProfile(role: AgentRoundtableExpertRole, fromRuntimeID: UUID, fromReportID: UUID)
 }
 
-/// 三个页面的共享路由器。宿主(独立窗口 / 嵌入页)各自持有 route 状态,把
-/// 「弹出到独立窗口」的动作(仅嵌入宿主提供)通过 onDetach 传进主页。
+/// 三个页面的共享路由器。嵌入宿主持有 route 状态。
 struct RoundtableRouter: View {
     @Binding var route: RoundtableRoute
-    var onDetach: (() -> Void)?
 
     var body: some View {
         switch route {
         case .home:
-            RoundtableHomeView(route: $route, onDetach: onDetach)
+            RoundtableHomeView(route: $route)
         case let .preparation(runtimeID, reportID):
             RoundtablePreparationContainer(
                 route: $route,
@@ -53,37 +50,13 @@ struct RoundtableRouter: View {
     }
 }
 
-// MARK: - 独立窗口宿主
-
-struct RoundtableWindowRootView: View {
-    @ObservedObject private var registry = EditorAppStateRegistry.shared
-    @State private var route: RoundtableRoute = .home
-
-    var body: some View {
-        Group {
-            if let appState = registry.current {
-                RoundtableRouter(route: $route)
-                    .environmentObject(appState)
-                    .tint(appState.editorSettings.interfaceSkin.palette.accent)
-                    .preferredColorScheme(appState.editorSettings.interfaceSkin.preferredColorScheme)
-            } else {
-                Color.clear.onAppear { registry.ensureHeadlessFallback() }
-            }
-        }
-        .frame(minWidth: 720, minHeight: 520)
-    }
-}
-
 // MARK: - 嵌入主窗口宿主(.roundtable 目的地)
 
 struct RoundtableEmbeddedView: View {
-    @Environment(\.openWindow) private var openWindow
     @State private var route: RoundtableRoute = .home
 
     var body: some View {
-        RoundtableRouter(route: $route, onDetach: {
-            openWindow(id: RoundtableWindowID.value)
-        })
+        RoundtableRouter(route: $route)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -93,7 +66,6 @@ struct RoundtableEmbeddedView: View {
 struct RoundtableHomeView: View {
     @EnvironmentObject var appState: AppState
     @Binding var route: RoundtableRoute
-    var onDetach: (() -> Void)?
     @State private var topic: String = ""
     @State private var history: [AgentRoundtableReport] = []
 
@@ -127,15 +99,6 @@ struct RoundtableHomeView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            if let onDetach {
-                Button(action: onDetach) {
-                    Label(L10n.Roundtable.detachAction, systemImage: "macwindow.on.rectangle")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help(L10n.Roundtable.detachAction)
-            }
         }
     }
 

@@ -57,7 +57,7 @@ struct AgentRemoteRuntimeTests {
         let previous = AgentRuntimeStore.setTestDefaults(defaults)
         defer {
             AgentRuntimeStore.setTestDefaults(previous)
-            defaults.removePersistentDomain(forName: suiteName)
+            TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
         }
 
         #expect(AgentRuntimeStore.loadDescriptors().isEmpty)

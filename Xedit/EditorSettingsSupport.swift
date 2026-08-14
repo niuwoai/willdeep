@@ -155,7 +155,7 @@ extension EditorSettingsTab {
 
 /// Top-level Settings groupings. Each becomes one tab in the Settings window;
 /// groups with more than one pane render a second-level segmented picker.
-enum SettingsGroup: Hashable, CaseIterable, Identifiable {
+enum SettingsGroup: Hashable, Identifiable {
     case accountAndDevices
     case ai
     case agentTools
@@ -167,6 +167,19 @@ enum SettingsGroup: Hashable, CaseIterable, Identifiable {
     case editor
     case agentAppearance
     case general
+
+    static let allCases: [Self] = [
+        .accountAndDevices,
+        .ai,
+        .agentTools,
+        .runtimes,
+        .integrations,
+        .terminal,
+        .voice,
+        .pet,
+        .agentAppearance,
+        .general,
+    ]
 
     var id: Self { self }
 

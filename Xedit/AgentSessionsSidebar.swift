@@ -196,6 +196,29 @@ enum AgentSidebarSessionPlacement {
     }
 }
 
+/// Which placeholder the sidebar renders below the workspace groups when
+/// there are no session rows. Pure branch selection, kept out of the view
+/// body so the three-way split (loading / truly empty / has rows) stays
+/// unit-testable.
+enum AgentSidebarCatalogPlaceholder: Equatable {
+    /// The on-disk session catalog is still loading. The list being empty
+    /// says nothing yet — show a quiet loading row instead of claiming
+    /// "no sessions" during the first few hundred milliseconds.
+    case loading
+    /// The catalog finished loading and there really are no sessions.
+    case empty
+    /// The list has rows; no placeholder is needed.
+    case none
+
+    static func state(
+        hasLoadedCatalog: Bool,
+        isSessionListEmpty: Bool
+    ) -> AgentSidebarCatalogPlaceholder {
+        guard isSessionListEmpty else { return .none }
+        return hasLoadedCatalog ? .empty : .loading
+    }
+}
+
 enum AgentSidebarSessionTrailingLayout {
     /// Idle rows reserve no trailing action width. The pinned section already
     /// communicates pin state, so a persistent row icon would add noise and
@@ -287,12 +310,33 @@ struct AgentSessionsSidebar: View {
                         ForEach(workspaceGroups) { group in
                             workspaceGroup(group)
                         }
-                        if appState.agentSessions.isEmpty {
+                        switch AgentSidebarCatalogPlaceholder.state(
+                            hasLoadedCatalog: appState.hasLoadedAgentSessionCatalog,
+                            isSessionListEmpty: appState.agentSessions.isEmpty
+                        ) {
+                        case .loading:
+                            // 冷启动头几百毫秒磁盘目录还没读完，此时列表
+                            // 必然为空——显示加载占位而不是"暂无会话"，
+                            // 否则用户会以为数据丢了。高度钉在正常行高，
+                            // 首行会话落地时不发生布局跳动。
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text(L10n.Sidebar.loadingState)
+                                    .font(AgentDesign.secondaryFont)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(height: AgentDesign.sidebarRowHeight)
+                            .padding(.horizontal, 14)
+                            .padding(.top, 16)
+                        case .empty:
                             Text(L10n.Sidebar.emptyState)
                                 .font(AgentDesign.secondaryFont)
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 14)
                                 .padding(.top, 16)
+                        case .none:
+                            EmptyView()
                         }
                     }
                 }
@@ -482,7 +526,7 @@ struct AgentSessionsSidebar: View {
                 ForEach(sessions) { session in
                     sessionRow(
                         session,
-                        contentHorizontalInset: AgentDesign.sidebarPinnedSessionContentHorizontalInset
+                        contentLeadingInset: AgentDesign.sidebarPinnedSessionContentHorizontalInset
                     )
                 }
             }
@@ -530,7 +574,9 @@ struct AgentSessionsSidebar: View {
                                 height: AgentDesign.sidebarWorkspaceIconSize
                             )
                         Text(group.displayName)
-                            .font(AgentDesign.sidebarWorkspaceFont)
+                            .font(AgentDesign.scaledSidebarWorkspaceFont(
+                                baseFontSize: appState.agentChatBaseFontSize
+                            ))
                             .foregroundStyle(palette.primaryText.opacity(AgentDesign.sidebarPrimaryTextOpacity))
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -613,7 +659,9 @@ struct AgentSessionsSidebar: View {
                         setWorkspaceExpanded(workspace, expanded: !isExpanded)
                     } label: {
                         Text(isExpanded ? L10n.Sidebar.sessionListShowLess : L10n.Sidebar.sessionListSeeMore)
-                            .font(AgentDesign.sidebarRowFont)
+                            .font(AgentDesign.scaledSidebarRowFont(
+                                baseFontSize: appState.agentChatBaseFontSize
+                            ))
                             .foregroundStyle(palette.secondaryText)
                             .padding(.horizontal, AgentDesign.sidebarSelectionHorizontalInset + AgentDesign.sidebarSessionContentHorizontalInset)
                             .frame(height: AgentDesign.sidebarRowHeight)
@@ -662,7 +710,9 @@ struct AgentSessionsSidebar: View {
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                 Text(L10n.Sidebar.archivedSessionsHeader(String(sessions.count)))
-                    .font(AgentDesign.sidebarRowFont)
+                    .font(AgentDesign.scaledSidebarRowFont(
+                        baseFontSize: appState.agentChatBaseFontSize
+                    ))
                     .foregroundStyle(appState.editorSettings.interfaceSkin.palette.secondaryText)
                 Spacer(minLength: 0)
             }
@@ -682,7 +732,8 @@ struct AgentSessionsSidebar: View {
     @ViewBuilder
     private func sessionRow(
         _ session: AgentSession,
-        contentHorizontalInset: CGFloat = AgentDesign.sidebarSessionContentHorizontalInset
+        contentLeadingInset: CGFloat = AgentDesign.sidebarSessionContentHorizontalInset,
+        contentTrailingInset: CGFloat = AgentDesign.sidebarSessionTrailingContentInset
     ) -> some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         let isActive = appState.activeAgentSessionID == session.id
@@ -705,12 +756,17 @@ struct AgentSessionsSidebar: View {
                 // 仍紧贴内容、徽章跟在标题后。
                 TruncatedTooltipText(
                     attributed: AttributedString(session.title),
-                    font: AgentDesign.sidebarRowFont,
+                    font: AgentDesign.scaledSidebarRowFont(
+                        baseFontSize: appState.agentChatBaseFontSize
+                    ),
                     color: palette.primaryText.opacity(
                         isActive ? 1 : AgentDesign.sidebarPrimaryTextOpacity
                     ),
                     tooltip: session.title,
-                    hugWidth: Self.sessionTitleNaturalWidth(session.title)
+                    hugWidth: Self.sessionTitleNaturalWidth(
+                        session.title,
+                        baseFontSize: appState.agentChatBaseFontSize
+                    )
                 )
                 // sidebar 收窄时:title 优先保留(给它 priority 1),
                 // progress / trailing actions 走默认 0，SwiftUI 会先
@@ -750,7 +806,8 @@ struct AgentSessionsSidebar: View {
                 )
                 .opacity(isHovered ? 0 : 1)
             }
-            .padding(.horizontal, contentHorizontalInset)
+            .padding(.leading, contentLeadingInset)
+            .padding(.trailing, contentTrailingInset)
             .frame(height: AgentDesign.sidebarRowHeight)
             .contentShape(Rectangle())
             .background(
@@ -861,11 +918,26 @@ struct AgentSessionsSidebar: View {
     ///
     /// 结果按标题缓存：`sessionRow` 每行调用一次，而侧栏 body 每帧都重跑，于是
     /// 同一批标题被反复量给同一个字号。采样(1.228.0-rc10,5 秒)里这个函数独占
-    /// 主线程 37 个样本,量的全是上一帧刚量过的东西。`sidebarRowFontSize` 是
-    /// 编译期常量,所以标题本身就是完整的缓存键。
-    private static func sessionTitleNaturalWidth(_ title: String) -> CGFloat {
+    /// 主线程 37 个样本,量的全是上一帧刚量过的东西。
+    ///
+    /// 行字号自 1.253.0-rc1 起跟随聊天正文字号,不再是编译期常量,标题本身已不足以
+    /// 做缓存键。这里不给每个字号各留一份,而是在字号变化时整体作废:改字号是罕见
+    /// 操作,代价只是接下来一帧重测一遍;若只按标题缓存,调字号后宽度会停留在旧值,
+    /// 出现"字变了、截断位置没变"的错位。
+    private static func sessionTitleNaturalWidth(
+        _ title: String,
+        baseFontSize: CGFloat
+    ) -> CGFloat {
+        let fontSize = AgentDesign.scaledChromeFontSize(
+            AgentDesign.sidebarRowFontSize,
+            baseFontSize: baseFontSize
+        )
+        if fontSize != titleNaturalWidthCacheFontSize {
+            titleNaturalWidthCache.removeAll(keepingCapacity: true)
+            titleNaturalWidthCacheFontSize = fontSize
+        }
         if let cached = titleNaturalWidthCache[title] { return cached }
-        let font = NSFont.systemFont(ofSize: AgentDesign.sidebarRowFontSize)
+        let font = NSFont.systemFont(ofSize: fontSize)
         let width = ceil((title as NSString).size(withAttributes: [.font: font]).width) + 2
         // 标题数随历史无限增长,缓存不能无界。到顶整体清空而不是做 LRU:代价只是
         // 接下来一帧重新测量一遍,换掉一整套淘汰逻辑。
@@ -877,6 +949,8 @@ struct AgentSessionsSidebar: View {
     }
 
     private static var titleNaturalWidthCache: [String: CGFloat] = [:]
+    /// 上面那批测量结果对应的行字号。与当前字号不符即整体作废。
+    private static var titleNaturalWidthCacheFontSize: CGFloat = 0
     private static let titleNaturalWidthCacheLimit = 1024
 
     private func presentRenameAlert(for session: AgentSession) {
@@ -1261,7 +1335,9 @@ struct SidebarActionRow: View {
                     .frame(width: 14)
                     .foregroundStyle(isDimmed ? .tertiary : .secondary)
                 Text(title)
-                    .font(AgentDesign.sidebarRowFont)
+                    .font(AgentDesign.scaledSidebarRowFont(
+                        baseFontSize: appState.agentChatBaseFontSize
+                    ))
                     .foregroundStyle(isDimmed ? .secondary : .primary)
                     .lineLimit(1)
                     .truncationMode(.tail)

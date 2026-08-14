@@ -6,6 +6,8 @@
 import SwiftUI
 
 struct AgentExecutionProfileManagerView: View {
+    @EnvironmentObject private var appState: AppState
+
     let workspacePath: String?
     let onChanged: () -> Void
     let onClose: () -> Void
@@ -14,8 +16,14 @@ struct AgentExecutionProfileManagerView: View {
     @State private var selectedID: String?
     @State private var draft: AgentExecutionProfile?
     @State private var availableExecutors = AgentDispatchExecutorResolver.localAvailableExecutors()
+    @State private var discoveredModelsByProvider: [UUID: [String]] = [:]
+    @State private var loadingProviderIDs: Set<UUID> = []
 
     private let store = AgentExecutionProfileStore()
+
+    private var providerEntries: [AgentProviderEntry] {
+        appState.agentProviderLibrary.entries
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -86,6 +94,7 @@ struct AgentExecutionProfileManagerView: View {
                     saveDraft()
                 }
                 draft = profiles.first { $0.id == selectedID }
+                refreshSelectedProviderModelsIfNeeded()
             }
             Divider()
             HStack {
@@ -117,6 +126,7 @@ struct AgentExecutionProfileManagerView: View {
                         L10n.Dispatch.profileName,
                         text: binding(\.name, fallback: "")
                     )
+                    .disabled(draft.origin != .managed)
                     Picker(
                         L10n.Dispatch.executor,
                         selection: binding(\.executor, fallback: .willDeep)
@@ -125,14 +135,68 @@ struct AgentExecutionProfileManagerView: View {
                             Text($0.displayName).tag($0)
                         }
                     }
-                    TextField(
-                        L10n.Dispatch.modelID,
-                        text: optionalBinding(\.modelID)
-                    )
-                    TextField(
-                        L10n.Dispatch.providerID,
-                        text: optionalBinding(\.providerID)
-                    )
+                    .disabled(draft.origin != .managed)
+                    if draft.executor == .willDeep {
+                        Picker(
+                            L10n.Dispatch.providerID,
+                            selection: providerBinding
+                        ) {
+                            ForEach(providerEntries) { entry in
+                                Text(entry.displayName).tag(entry.id)
+                            }
+                        }
+                        .disabled(providerEntries.isEmpty)
+
+                        HStack(spacing: 8) {
+                            TextField(
+                                L10n.Dispatch.modelID,
+                                text: modelBinding
+                            )
+                            .textFieldStyle(.roundedBorder)
+
+                            Menu {
+                                ForEach(selectedProviderModels, id: \.self) { model in
+                                    Button(model) {
+                                        modelBinding.wrappedValue = model
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "chevron.down")
+                                    .frame(width: 16, height: 16)
+                            }
+                            .menuStyle(.borderlessButton)
+                            .menuIndicator(.hidden)
+                            .disabled(selectedProviderModels.isEmpty)
+                            .help(L10n.AgentDelegation.profilePickFetchedModel)
+
+                            Button {
+                                refreshSelectedProviderModels(force: true)
+                            } label: {
+                                if let entryID = selectedProviderEntry?.id,
+                                   loadingProviderIDs.contains(entryID) {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Image(systemName: "arrow.down.circle")
+                                }
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(
+                                selectedProviderEntry == nil
+                                    || selectedProviderEntry.map { loadingProviderIDs.contains($0.id) } == true
+                            )
+                            .help(L10n.Settings.Provider.fetchModels)
+                        }
+                    } else {
+                        TextField(
+                            L10n.Dispatch.modelID,
+                            text: optionalBinding(\.modelID)
+                        )
+                        TextField(
+                            L10n.Dispatch.providerID,
+                            text: optionalBinding(\.providerID)
+                        )
+                    }
                     TextField(
                         L10n.Dispatch.nativeProfile,
                         text: optionalBinding(\.nativeProfileName)
@@ -146,7 +210,7 @@ struct AgentExecutionProfileManagerView: View {
                 }
             }
             .formStyle(.grouped)
-            .disabled(draft.origin != .managed)
+            .disabled(draft.origin == .discovered)
         } else {
             VStack(spacing: 10) {
                 Image(systemName: "person.crop.circle.badge.gearshape")
@@ -183,6 +247,8 @@ struct AgentExecutionProfileManagerView: View {
                 saveDraft()
                 onClose()
             }
+            .buttonStyle(.borderedProminent)
+            .tint(.black)
             .keyboardShortcut(.defaultAction)
         }
         .padding(14)
@@ -193,10 +259,11 @@ struct AgentExecutionProfileManagerView: View {
         profiles = store.availableProfiles(workspacePath: workspacePath)
         selectedID = profiles.first?.id
         draft = profiles.first
+        refreshSelectedProviderModelsIfNeeded()
     }
 
     private func saveDraft() {
-        guard let draft, draft.origin == .managed else { return }
+        guard let draft, draft.origin != .discovered else { return }
         if let index = profiles.firstIndex(where: { $0.id == draft.id }) {
             profiles[index] = draft
         }
@@ -208,11 +275,120 @@ struct AgentExecutionProfileManagerView: View {
         onChanged()
     }
 
+    private var selectedProviderEntry: AgentProviderEntry? {
+        guard let draft else { return nil }
+        return providerEntries.first { entry in
+            entry.providerID == draft.providerID
+                && AgentExecutionProfileModelCatalog.models(for: entry).contains {
+                    $0.caseInsensitiveCompare(draft.modelID ?? "") == .orderedSame
+                }
+        }
+            ?? providerEntries.first { $0.providerID == draft.providerID }
+            ?? providerEntries.first
+    }
+
+    private var selectedProviderModels: [String] {
+        guard let entry = selectedProviderEntry else { return [] }
+        let discoveries = discoveredModelsByProvider[entry.id]
+            ?? []
+        return AgentExecutionProfileModelCatalog.models(
+            for: entry,
+            discoveredModels: discoveries
+        )
+    }
+
+    private var providerBinding: Binding<UUID> {
+        Binding(
+            get: { selectedProviderEntry?.id ?? providerEntries.first?.id ?? UUID() },
+            set: { entryID in
+                guard var updated = draft,
+                      let entry = providerEntries.first(where: { $0.id == entryID }) else { return }
+                let models = AgentExecutionProfileModelCatalog.models(for: entry)
+                updated.providerID = entry.providerID
+                updated.modelID = models.first
+                draft = updated
+                appState.materializeProviderLibraryEntryAPIKey(id: entry.id)
+                refreshProviderModels(entry, force: false)
+            }
+        )
+    }
+
+    private var modelBinding: Binding<String> {
+        Binding(
+            get: { draft?.modelID ?? selectedProviderModels.first ?? "" },
+            set: { model in
+                guard var updated = draft else { return }
+                updated.modelID = model
+                updated.providerID = selectedProviderEntry?.providerID
+                draft = updated
+            }
+        )
+    }
+
     private func originLabel(_ origin: AgentExecutionProfileOrigin) -> String {
         switch origin {
         case .builtIn: return L10n.Dispatch.profileBuiltIn
         case .managed: return L10n.Dispatch.profileManaged
         case .discovered: return L10n.Dispatch.profileDiscovered
+        }
+    }
+
+    private func refreshSelectedProviderModelsIfNeeded() {
+        refreshSelectedProviderModels(force: false)
+    }
+
+    private func refreshSelectedProviderModels(force: Bool) {
+        guard let entry = selectedProviderEntry else { return }
+        refreshProviderModels(entry, force: force)
+    }
+
+    private func refreshProviderModels(_ entry: AgentProviderEntry, force: Bool) {
+        guard force || discoveredModelsByProvider[entry.id] == nil else { return }
+        guard !loadingProviderIDs.contains(entry.id) else { return }
+        loadingProviderIDs.insert(entry.id)
+        appState.materializeProviderLibraryEntryAPIKey(id: entry.id)
+        let resolvedEntry = appState.agentProviderLibrary.entries
+            .first(where: { $0.id == entry.id }) ?? entry
+
+        Task { @MainActor in
+            defer { loadingProviderIDs.remove(entry.id) }
+            do {
+                let discoveries = try await fetchModelDiscoveries(for: resolvedEntry)
+                let models = discoveries.map(\.id)
+                discoveredModelsByProvider[entry.id] = models
+                appState.recordFetchedAgentModelDiscoveries(discoveries)
+            } catch {
+                // The model field remains free-form and the configured
+                // catalogue remains available. A transient discovery failure
+                // must never turn Provider choice into a hard allowlist.
+                discoveredModelsByProvider[entry.id] = []
+            }
+        }
+    }
+
+    private func fetchModelDiscoveries(
+        for entry: AgentProviderEntry
+    ) async throws -> [AgentModelDiscovery] {
+        let configuration = entry.makeConfiguration().normalized
+        do {
+            return try await AgentClient(configuration: configuration).fetchModelDiscoveries()
+        } catch let originalError {
+            guard AgentProviderBaseURLV1Probe.shouldRetry(after: originalError),
+                  let candidate = AgentProviderBaseURLV1Probe.candidate(
+                    baseURL: configuration.baseURL,
+                    providerKind: configuration.providerKind
+                  ) else {
+                throw originalError
+            }
+            var candidateConfiguration = configuration
+            candidateConfiguration.baseURL = candidate.baseURL
+            do {
+                return try await AgentClient(
+                    configuration: candidateConfiguration
+                ).fetchModelDiscoveries()
+            } catch {
+                throw originalError
+            }
         }
     }
 

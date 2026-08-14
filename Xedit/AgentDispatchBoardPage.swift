@@ -157,7 +157,18 @@ private struct AgentDispatchBoardContent: View {
             workspaceName: appState.activeRuntime?.session.workspaceName
                 ?? L10n.Workspace.noWorkspace,
             profiles: executionProfiles,
+            onChooseWorkspace: {
+                appState.chooseLocalWorkspaceForDispatchDraft { error in
+                    if let error {
+                        alertTarget = .message(
+                            title: L10n.Dispatch.workspaceBindingFailed,
+                            message: error
+                        )
+                    }
+                }
+            },
             onManageProfiles: { isProfileManagerPresented = true },
+            onCancel: { appState.cancelDispatchGoalDraft() },
             onAssess: { statement, planningProfileID, fallbackProfileIDs in
                 try await appState.assessDispatchGoal(
                     statement: statement,
@@ -185,6 +196,7 @@ private struct AgentDispatchBoardContent: View {
                 goal: goal,
                 runtimeDescriptors: runtimeDescriptors,
                 profiles: executionProfiles,
+                parallelTaskLimit: appState.perProviderConcurrencyLimit,
                 onTargetChoice: { coordinator.updateGoalTargetChoice($0, goalID: goal.id) },
                 onPlanningProfiles: { primaryProfileID, fallbackProfileIDs in
                     appState.updateDispatchPlanningProfiles(
@@ -482,6 +494,7 @@ private struct AgentDispatchBoardContent: View {
                 Label(L10n.Dispatch.chooseWorkspaceAndStart, systemImage: "folder.badge.plus")
             }
             .buttonStyle(.borderedProminent)
+            .tint(.black)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)
@@ -859,6 +872,7 @@ private struct AgentDispatchTaskEditorSheet: View {
                     onSave(trimmedTitle, Array(dependencyIDs), criteria)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.black)
                 .keyboardShortcut(.defaultAction)
                 .disabled(trimmedTitle.isEmpty)
             }

@@ -208,6 +208,41 @@ struct AgentToolCallGroupingPresentationTests {
             "terminal",
         ])
     }
+
+    @Test("只有真正跑完并返回非零的命令才算普通失败")
+    func completedCommandExitCodeOnlyCoversFinishedCommands() {
+        // 探测型命令的普通答案：corepack 未安装退出 127、grep 无匹配退出 1。
+        #expect(AgentToolError.commandFailed(127, "command not found").completedCommandExitCode == 127)
+        #expect(AgentToolError.commandFailed(1, "no match").completedCommandExitCode == 1)
+        // -1 是 runCommand 在进程根本没起来时用的哨兵值，属于真故障。
+        #expect(AgentToolError.commandFailed(-1, "launch failed").completedCommandExitCode == nil)
+        #expect(AgentToolError.commandFailed(0, "").completedCommandExitCode == nil)
+        // 其余错误都没有"命令跑完了"这回事。
+        #expect(AgentToolError.commandTimeout.completedCommandExitCode == nil)
+        #expect(AgentToolError.missingArgument("command").completedCommandExitCode == nil)
+        #expect(AgentToolError.invalidArgument("command").completedCommandExitCode == nil)
+        #expect(AgentToolError.httpFailed(500, "boom").completedCommandExitCode == nil)
+    }
+
+    @Test("命令非零退出的活动行不进告警配色，真故障仍然进")
+    func activityRowMarksCompletedCommandFailureAsRoutine() {
+        var exited = makeCall("run_command", status: .failed)
+        exited.commandExitCode = 127
+        #expect(AgentToolActivityRowPresentation(call: exited).isCompletedCommandFailure)
+
+        // 进程没起来 / 超时 / 参数非法：commandExitCode 保持 nil。
+        var malfunctioned = makeCall("run_command", status: .failed)
+        malfunctioned.commandExitCode = nil
+        #expect(!AgentToolActivityRowPresentation(call: malfunctioned).isCompletedCommandFailure)
+
+        // 非失败态不受影响，避免把成功/跳过也算进去。
+        var succeeded = makeCall("run_command", status: .succeeded)
+        succeeded.commandExitCode = 127
+        #expect(!AgentToolActivityRowPresentation(call: succeeded).isCompletedCommandFailure)
+
+        // 标题文案不变，改的只是配色。
+        #expect(AgentToolActivityRowPresentation(call: exited).title.hasSuffix("失败"))
+    }
 }
 
 extension WillDeepTests {

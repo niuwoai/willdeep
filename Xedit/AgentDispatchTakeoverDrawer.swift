@@ -277,6 +277,7 @@ struct AgentDispatchTakeoverDrawer: View {
                     Label(L10n.Dispatch.sendTakeoverInstruction, systemImage: "paperplane.fill")
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.black)
                 .controlSize(.small)
                 .disabled(runtime.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -354,6 +355,7 @@ struct AgentDispatchTakeoverDrawer: View {
                     .frame(width: 24)
             }
             .menuStyle(.borderlessButton)
+            .agentQuietMenuChrome()
             .help(L10n.Dispatch.moreTaskTools)
         }
         .padding(.horizontal, 10)

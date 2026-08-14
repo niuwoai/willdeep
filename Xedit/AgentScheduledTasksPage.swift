@@ -95,6 +95,15 @@ struct AgentScheduledTasksPage: View {
         AgentScheduledTasksFilter.routines(appState.agentRoutines, matching: query)
     }
 
+    private var recentRuns: [AgentRoutineRunRecord] {
+        AgentRoutineRunHistory.recent(appState.agentRoutineRuns)
+    }
+
+    private func pageFont(weight: NSFont.Weight = .regular) -> Font {
+        (AgentChatFontChoice.byID(appState.agentChatFontID) ?? .system)
+            .swiftUIFont(size: appState.agentChatBaseFontSize, weight: weight)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -108,6 +117,9 @@ struct AgentScheduledTasksPage: View {
                 }
 
                 suggestionsSection
+                    .padding(.top, 30)
+
+                recentRunsSection
                     .padding(.top, 30)
             }
             .frame(maxWidth: 860, alignment: .leading)
@@ -130,10 +142,10 @@ struct AgentScheduledTasksPage: View {
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 7) {
                 Text(L10n.Automation.pageTitle)
-                    .font(.system(size: 29, weight: .semibold))
+                    .font(pageFont(weight: .semibold))
                     .foregroundStyle(.primary)
                 Text(L10n.Automation.pageSubtitle)
-                    .font(.system(size: 15))
+                    .font(pageFont())
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -142,7 +154,7 @@ struct AgentScheduledTasksPage: View {
                 openTemplate(nil)
             } label: {
                 Label(L10n.Automation.pageNewTask, systemImage: "plus")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(pageFont(weight: .medium))
                     .padding(.horizontal, 13)
                     .frame(height: 32)
                     .background(appState.editorSettings.interfaceSkin.palette.controlFill)
@@ -160,7 +172,7 @@ struct AgentScheduledTasksPage: View {
                 .foregroundStyle(.secondary)
             TextField(L10n.Automation.pageSearchPlaceholder, text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .font(pageFont())
         }
         .padding(.horizontal, 12)
         .frame(height: 36)
@@ -177,7 +189,7 @@ struct AgentScheduledTasksPage: View {
             sectionTitle(L10n.Automation.pageYourTasks)
             if filteredRoutines.isEmpty {
                 Text(L10n.Automation.pageEmptySearch)
-                    .font(.system(size: 13))
+                    .font(pageFont())
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 16)
             } else {
@@ -203,7 +215,7 @@ struct AgentScheduledTasksPage: View {
 
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 14, weight: .medium))
+            .font(pageFont(weight: .medium))
             .foregroundStyle(.secondary)
     }
 
@@ -221,16 +233,16 @@ struct AgentScheduledTasksPage: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 7) {
                         Text(routine.name)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(pageFont(weight: .medium))
                             .foregroundStyle(routine.isEnabled ? .primary : .secondary)
                             .lineLimit(1)
                         Text(routine.schedule.summary)
-                            .font(.system(size: 12))
+                            .font(pageFont())
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     Text(routine.prompt)
-                        .font(.system(size: 12))
+                        .font(pageFont())
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -239,7 +251,7 @@ struct AgentScheduledTasksPage: View {
                     routineActions(routine)
                 } else {
                     Text(routine.workspaceDisplayName)
-                        .font(.system(size: 11))
+                        .font(pageFont())
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
@@ -334,13 +346,13 @@ struct AgentScheduledTasksPage: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
                         Text(template.name)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(pageFont(weight: .medium))
                         Text(template.schedule.summary)
-                            .font(.system(size: 12))
+                            .font(pageFont())
                             .foregroundStyle(.secondary)
                     }
                     Text(template.prompt)
-                        .font(.system(size: 12))
+                        .font(pageFont())
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -351,6 +363,52 @@ struct AgentScheduledTasksPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private var recentRunsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle(L10n.Automation.pageRecentRuns)
+            if recentRuns.isEmpty {
+                Text(L10n.Automation.pageNoRecentRuns)
+                    .font(pageFont())
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 16)
+            } else {
+                VStack(spacing: 4) {
+                    ForEach(recentRuns) { run in
+                        recentRunRow(run)
+                    }
+                }
+            }
+        }
+    }
+
+    private func recentRunRow(_ run: AgentRoutineRunRecord) -> some View {
+        let conversationExists = appState.agentSessions.contains { $0.id == run.sessionID }
+        return Button {
+            _ = appState.selectAgentSession(id: run.sessionID)
+        } label: {
+            HStack(spacing: 13) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24)
+                Text(run.routineName)
+                    .font(pageFont(weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 12)
+                Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(pageFont())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!conversationExists)
+        .help(conversationExists ? L10n.Automation.helpOpenRecentRun : L10n.Automation.recentRunUnavailable)
     }
 
     private func openTemplate(_ template: AgentAutomationTemplate?) {

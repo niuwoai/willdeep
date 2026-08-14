@@ -1440,6 +1440,9 @@ nonisolated struct AgentGoal: Codable, Equatable {
     var planningAttemptedProfileIDs: [String]? = nil
     /// Project Worker pool selected before dispatch planning begins.
     var selectedWorkerProfileIDs: [String]? = nil
+    /// Budget and spend for the current execution segment. Persisted so a
+    /// relaunch cannot hand a long-running Goal a fresh full budget.
+    var continuationBudget: AgentGoalContinuationBudget? = nil
 
     struct Item: Codable, Equatable, Identifiable {
         var id: UUID
@@ -1460,7 +1463,8 @@ nonisolated struct AgentGoal: Codable, Equatable {
         planningProfileID: String? = nil,
         planningFallbackProfileIDs: [String]? = nil,
         planningAttemptedProfileIDs: [String]? = nil,
-        selectedWorkerProfileIDs: [String]? = nil
+        selectedWorkerProfileIDs: [String]? = nil,
+        continuationBudget: AgentGoalContinuationBudget? = nil
     ) {
         self.statement = statement
         self.checklist = checklist
@@ -1469,6 +1473,7 @@ nonisolated struct AgentGoal: Codable, Equatable {
         self.planningFallbackProfileIDs = planningFallbackProfileIDs
         self.planningAttemptedProfileIDs = planningAttemptedProfileIDs
         self.selectedWorkerProfileIDs = selectedWorkerProfileIDs
+        self.continuationBudget = continuationBudget
     }
 
     var isEmpty: Bool { statement.isEmpty && checklist.isEmpty }
@@ -1794,7 +1799,8 @@ struct AgentConfiguration: Codable, Equatable {
     /// Completions because several OpenAI-compatible relays expose those
     /// models without implementing the Responses `store` contract. Native
     /// Anthropic/Gemini configurations remain pinned to their own wire
-    /// formats; supported DeepSeek V4 Flash routes keep Responses behavior.
+    /// formats; supported DeepSeek V4 routes (Flash and Pro) keep Responses
+    /// behavior.
     var inferenceProviderKind: AgentProviderKind {
         let configuredKind = providerKind
         guard configuredKind == .openAIChat || configuredKind == .openAIResponses else {
@@ -1803,7 +1809,7 @@ struct AgentConfiguration: Codable, Equatable {
         if Self.isGPTFamilyModel(model) {
             return .openAIChat
         }
-        if usesDeepSeekV4FlashResponsesBehavior {
+        if usesDeepSeekV4ResponsesBehavior {
             return .openAIResponses
         }
         return configuredKind
@@ -1822,32 +1828,45 @@ struct AgentConfiguration: Codable, Equatable {
         }
     }
 
-    /// Model ids backed by DeepSeek V4 Flash on the some.im gateway.
-    /// The unsuffixed coding-plan id is retained for server-side/legacy aliases;
-    /// managed routing currently selects `someim-coding-plan-low`.
-    private static let someIMDeepSeekV4FlashModelIDs: Set<String> = [
+    /// Concrete DeepSeek V4 model ids that speak the Responses API on both
+    /// DeepSeek itself and the some.im gateway. Flash and Pro are the only
+    /// two tiers the gateway serves natively over `/v1/responses`.
+    private static let deepSeekV4ResponsesModelIDs: Set<String> = [
         "deepseek-v4-flash",
+        "deepseek-v4-pro"
+    ]
+
+    /// Model ids backed by DeepSeek V4 (Flash or Pro) on the some.im gateway.
+    /// The unsuffixed coding-plan id is retained for server-side/legacy aliases;
+    /// managed routing selects `someim-coding-plan-low` for the low tier and
+    /// `someim-coding-plan-high` / `someim-code-high` / `someim-auto-pro` for
+    /// the high tier. Premium aliases resolve to non-DeepSeek backends and
+    /// stay on Chat Completions.
+    private static let someIMDeepSeekV4ResponsesModelIDs: Set<String> = deepSeekV4ResponsesModelIDs.union([
         SomeIMManagedModel.judge,
         SomeIMManagedModel.securityGuard,
         SomeIMManagedModel.autoFlash,
+        SomeIMManagedModel.autoPro,
         SomeIMManagedModel.codeLow,
+        SomeIMManagedModel.codeHigh,
         "someim-coding-plan",
-        SomeIMManagedModel.codingPlanLow
-    ]
+        SomeIMManagedModel.codingPlanLow,
+        SomeIMManagedModel.codingPlanHigh
+    ])
 
-    var isDeepSeekV4FlashResponsesModel: Bool {
+    var isDeepSeekV4ResponsesModel: Bool {
         let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if providerID == AgentProviderPreset.deepSeekID {
-            return normalizedModel == "deepseek-v4-flash"
+            return Self.deepSeekV4ResponsesModelIDs.contains(normalizedModel)
         }
         if providerID == AgentProviderPreset.someIMID {
-            return Self.someIMDeepSeekV4FlashModelIDs.contains(normalizedModel)
+            return Self.someIMDeepSeekV4ResponsesModelIDs.contains(normalizedModel)
         }
         return false
     }
 
-    var usesDeepSeekV4FlashResponsesBehavior: Bool {
-        isDeepSeekV4FlashResponsesModel
+    var usesDeepSeekV4ResponsesBehavior: Bool {
+        isDeepSeekV4ResponsesModel
     }
 
     /// The some.im safety alias owns its fixed system policy on the gateway.
@@ -1861,18 +1880,18 @@ struct AgentConfiguration: Codable, Equatable {
     }
 
     var usesWillDeepGatewayResponsesState: Bool {
-        providerID == AgentProviderPreset.someIMID && isDeepSeekV4FlashResponsesModel
+        providerID == AgentProviderPreset.someIMID && isDeepSeekV4ResponsesModel
     }
 
     var usesStatelessDeepSeekResponses: Bool {
-        providerID == AgentProviderPreset.deepSeekID && isDeepSeekV4FlashResponsesModel
+        providerID == AgentProviderPreset.deepSeekID && isDeepSeekV4ResponsesModel
     }
 
     /// DeepSeek V4 Flash Responses routes can execute hosted web search in
     /// the inference service. The adapter keeps the local function tool as a
     /// compatibility fallback when an older relay explicitly rejects it.
     var prefersHostedWebSearch: Bool {
-        isDeepSeekV4FlashResponsesModel
+        isDeepSeekV4ResponsesModel
     }
 }
 

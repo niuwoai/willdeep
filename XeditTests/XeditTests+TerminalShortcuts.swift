@@ -255,6 +255,51 @@ extension WillDeepTests {
     }
 
     @MainActor
+    @Test("stale terminal controller cannot overwrite a saved shortcut edit")
+    func testStaleTerminalControllerRefreshesBeforePreparingEditFile() throws {
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-stale-controller-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let shortcutID = UUID()
+        let original = TerminalShortcut(
+            id: shortcutID,
+            title: "Before",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 1),
+            durationMilliseconds: 1_000,
+            events: [TerminalShortcutEvent(delayMilliseconds: 0, bytes: Array("pwd\n".utf8))],
+            hasProtectedInput: false
+        )
+        TerminalShortcutStore.save([original])
+
+        // Mirrors the retained Agent/headless AppState and the Editor window:
+        // both controllers start from the same snapshot, then only the Editor
+        // controller observes and persists the user's saved JSON edit.
+        let staleAgentController = AgentInteractiveTerminalController()
+        let editorController = AgentInteractiveTerminalController()
+        let editURL = try #require(editorController.prepareShortcutFileForEditing(id: shortcutID))
+        let originalJSON = try String(contentsOf: editURL, encoding: .utf8)
+        let editedJSON = originalJSON.replacingOccurrences(of: "\"Before\"", with: "\"After\"")
+        try editedJSON.write(to: editURL, atomically: true, encoding: .utf8)
+        #expect(editorController.reloadShortcutFromEditFile(id: shortcutID, url: editURL))
+        #expect(staleAgentController.shortcuts.first?.title == "Before")
+        #expect(TerminalShortcutStore.load().first?.title == "After")
+
+        // Reopening from the stale Agent controller must use the canonical
+        // store instead of writing its old in-memory value back to the file.
+        let reopenedURL = try #require(staleAgentController.prepareShortcutFileForEditing(id: shortcutID))
+        let reopenedJSON = try String(contentsOf: reopenedURL, encoding: .utf8)
+        #expect(reopenedJSON.contains("After"))
+        #expect(!reopenedJSON.contains("Before"))
+        #expect(staleAgentController.shortcuts.first?.title == "After")
+    }
+
+    @MainActor
     @Test("terminal shortcut clone creates an independent persisted copy")
     func testTerminalShortcutCloneCreatesIndependentPersistedCopy() throws {
         let shortcutsDirectory = FileManager.default.temporaryDirectory

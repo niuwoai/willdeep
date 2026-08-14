@@ -18,6 +18,36 @@ enum AgentComposerChrome {
     static let iconSecondary = Color.secondary
     static let iconMuted = Color.secondary.opacity(0.58)
     static let iconDisabled = Color.secondary.opacity(0.34)
+
+    // MARK: - Bottom action row metrics
+    //
+    // The row's four controls used to size themselves independently, so the
+    // mic circle sat 4pt smaller than send/stop and the two bare glyphs
+    // differed by 1pt — visible as a ragged row. Sizes live here so a new
+    // control inherits the row's scale instead of picking its own.
+
+    /// Diameter of the filled circular actions (mic, send/stop).
+    static let actionDiameter: CGFloat = 26
+    /// Point size of the bare glyph buttons (attach, insert secret).
+    static let barIconSize: CGFloat = 16
+    /// Point size of a glyph drawn inside `actionDiameter`.
+    static let actionGlyphSize: CGFloat = 11
+}
+
+extension View {
+    /// Keep an overflow "…" menu in the quiet gray hierarchy.
+    ///
+    /// `Menu` with `.borderlessButton` ignores the label's own
+    /// `foregroundStyle` and falls back to the macOS accent tint, so every
+    /// one of these ended up system blue no matter what the label asked for
+    /// — the label styling was not wrong, it was simply not consulted.
+    /// `.tint` is the level AppKit actually reads. Applied at each call site
+    /// rather than to a shared container so a deliberately accented control
+    /// nearby is not swept up with it.
+    func agentQuietMenuChrome(_ color: Color = AgentComposerChrome.iconSecondary) -> some View {
+        symbolRenderingMode(.monochrome)
+            .tint(color)
+    }
 }
 
 // MARK: - Composer run context

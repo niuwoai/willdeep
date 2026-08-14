@@ -1,6 +1,23 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-12（1.247.0-rc4）
+> Last updated: 2026-08-12（1.247.0-rc25）
+
+## 1.247.0-rc25 — Composer 分支胶囊跟随分支切换
+
+- ⏳ 在 Agent 会话里让 Agent 用 `run_command` 跑 `git switch -c tmp/branch-pill-check`，确认 composer 上方分支胶囊在这一轮工具收尾后就显示新分支名，不用切会话。
+- ⏳ 在 WillDeep 的内置终端里 `git switch -` 切回原分支，确认胶囊同样跟上（切走再切回 App 时最迟应刷新）。
+- ⏳ 在 WillDeep **外面**用自己的终端切分支，然后点回 WillDeep 窗口，确认胶囊在重新获得焦点后刷新。
+- ⏳ 开两个会话分别指向不同 worktree，在后台那个会话所在目录切分支，确认前台会话的胶囊**不**被改写。
+
+## 1.247.0-rc13 — 其余测试一次性 suite 前缀纳入卫生机制
+
+- ⏳ 跑一轮任一受影响套件（如 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/MobileGatewayCoordinatorTests`），跑完统计 `ls ~/Library/Preferences/willdeep-runtime-store-*.plist ~/Library/Preferences/com.willdeep.tests.learningReview.*.plist ~/Library/Preferences/willdeep-mobile-gateway-*.plist ~/Library/Preferences/test.workspace.identity.*.plist ~/Library/Preferences/CollaborationConnectorSettingsTests.*.plist 2>/dev/null | wc -l`，确认存量约 4800 个壳已被首轮 sweep 清空，残留收敛在一轮用例的量以内。
+- ⏳ 再跑第二轮同一套件，确认残留没有累加，且文件时间戳全部来自第二轮。
+
+## 1.247.0-rc12 — 测试 UserDefaults 壳文件收敛
+
+- ⏳ 在本机跑一轮全量单测，跑完统计 `ls ~/Library/Preferences/com.willdeep.agent.test.defaults.*.plist ~/Library/Preferences/com.willdeep.mcp.test.*.plist | wc -l`，确认残留不超过一轮用例的量（约 20 个 42 字节空壳；cfprefsd 会按自己的节奏 flush 出壳，进程内删不干净，属预期）。
+- ⏳ 再跑第二轮全量单测，确认残留没有累加：总数仍约 20 个，且文件时间戳全部来自第二轮（上一轮的壳已被进程启动时的 sweep 扫掉）。
 
 ## 1.247.0-rc4 — 桌面宠物空转开销
 

@@ -1,47 +1,51 @@
-# Design QA：编辑器移除重复背景设置
+# Design QA：调度项目工作区后置选择
 
 ## Comparison target
 
-- Source visual truth：`artifacts/design-qa/editor-background-removal-1.247.0-rc4/reference-before.png`（900 × 557）。它记录用户指出的旧状态：编辑器分段导航仍有“背景”，并重复展示已经归属“Agent 外观”的工作区壁纸。
-- Desired change：保留编辑器的编辑、格式、字体、工作区四项，彻底移除“背景”分段及其页面；Agent 外观继续作为壁纸与 Agent 背景效果的唯一入口。
-- Rendered implementation：`artifacts/design-qa/editor-background-removal-1.247.0-rc4/implementation.png`（900 × 608）。这是 `1.247.0-rc4` Debug App 重启后，通过 macOS Computer Use 打开“设置 → 编辑器”得到的真实窗口截图。
-- Focused comparison：`artifacts/design-qa/editor-background-removal-1.247.0-rc4/reference-vs-implementation.png`（900 × 368），上方为旧状态，下方为修复后实机标签区。
-- Viewport：实现窗口 900 × 608 px；参考原图 734 × 486 px，等比归一为 900 × 557 px。聚焦标签区均归一到 900 px 宽，不进行额外设备密度换算。
-- State：macOS 浅色模式，设置窗口，侧栏选中“编辑器”，编辑分段处于选中状态。
+- Source visual truth：用户提供的既有“定义这个项目”页面，`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-dc9de11c-0893-4502-bf38-e27206e89a10.png`（2194 × 1480 px）。
+- Intended change：保留原页面的信息结构，改为先进入页面、再从页头选择工作目录；目录绑定前锁定项目定义区，绑定后允许填写与创建。
+- Rendered implementation：`/tmp/Xedit-dispatch-goal-setup-design-qa.png`（2200 × 1400 px；生产 SwiftUI 组件，1100 × 700 pt，2× density）。
+- Source/final comparison：`/private/tmp/Xedit-dispatch-setup-comparison.png`（2200 × 700 px）。左侧为用户截图，右侧为最终无工作区初始态。
+- State：Rice Paper 浅色皮肤；Agent 正文 16 pt、1.6 倍行高；无工作区；默认 DeepSeek V4 Pro Planner；默认仅选择 DeepSeek V4 Flash Worker。
 
-## Findings and comparison history
+## Findings
 
-- 第一轮发现 `[P1]`：编辑器仍提供“背景”分段和完整壁纸页，与新设立的“Agent 外观”职责重复。用户可能在两个入口修改同一组持久化值，无法判断背景究竟属于编辑器还是 Agent。
-- 修复：从 `EditorSettingsTab` 删除 `.background`，从编辑器分段列表和页面路由移除该项，并删除只服务于旧入口的重复 `backgroundSettings` / `backgroundSections` 视图。共享壁纸选择与持久化逻辑继续由 Agent 外观使用。
-- 第二轮实机证据：Computer Use 读取到编辑器仅有“编辑 / 格式 / 字体 / 工作区”四个单选分段；无“背景”控件、空白占位或失效路由。未发现新的 P0、P1、P2 问题。
+- 页头右侧新增“选择项目工作区”按钮，初始入口清楚且不挤压标题；绑定后同一位置切换为“更改工作目录”。
+- 无工作区时，工作区卡片保持可读并以橙色提示“请先选择工作区”；目标陈述、AI 检查、验收清单、Planner、执行环境和 Worker 统一降级并禁用，避免形成可以输入却无法创建的半成品状态。
+- 主操作区保留右下角位置，新增 secondary“取消”按钮；“创建项目”在目录及必填内容未就绪时保持禁用。
+- Planner 默认值明确显示为 DeepSeek V4 Pro Planner，Worker 默认仅勾选 DeepSeek V4 Flash Worker；信息层级、卡片节奏与原页面一致。
+- 最终原生渲染和组合对照未发现新的 P0、P1、P2 问题。
 
 ## Required fidelity surfaces
 
-- Fonts and typography：标题、分段标签、表单标题和开关文字仍使用原有系统字体、字号与字重；移除标签后没有截断或异常换行。
-- Spacing and layout rhythm：四个标签自动居中收拢，分隔线、左右内边距和表单纵向节奏保持一致；没有为已删除标签残留空位。
-- Colors and visual tokens：沿用现有浅色设置页的系统蓝选中态、灰色分段底和中性表单表面；本次不改变设置页主题色。
-- Image quality and asset fidelity：编辑器页不再加载壁纸缩略图；当前页面只使用系统控件和 SF Symbols，没有新增或替换图像资产。
-- Copy and content：编辑、格式、字体、工作区四项保留；“背景”及其编辑器页面文案不再对用户可见。“Agent 外观”侧栏入口保持可见。
+- Fonts and typography：目标陈述、验收清单、AI 建议目标及诊断正文统一读取 Agent 窗口正文字体、字号和行高；标题与卡片标签继续沿用现有系统字体层级。
+- Spacing and layout rhythm：继续使用左侧定义区、右侧配置卡片和底部操作条的原有布局；新增页头按钮与底部取消按钮均沿用现有 macOS 控件间距。
+- Colors and visual tokens：沿用 Rice Paper 背景、现有卡片描边、禁用透明度和橙色警示色；未引入新的硬编码颜色。
+- Image quality and asset fidelity：不新增位图资产；工作区、Planner、环境与 Worker 图标继续使用现有 SF Symbols。
+- Copy and content：新增文案均进入中英文本地化资源；没有在 SwiftUI 视图中硬编码用户可见文本。
 
 ## Interaction and verification
 
-- Computer Use 执行了 Debug App 重启、打开设置窗口和点击“编辑器”，随后读取真实无障碍树并捕获窗口截图。
-- 无障碍树明确暴露四个单选按钮：编辑、格式、字体、工作区；未发现“背景”单选按钮。
-- 定向 XCTest：`SettingsInformationArchitectureTests` 3/3 通过。
-- 版本一致性检查通过：`1.247.0-rc4`；内部构建号 357，Help 与 Computer Use Helper 构建号 273。
-- 原生 macOS App 不使用浏览器运行时，浏览器控制台检查不适用。
+- “新建调度项目”直接创建可持久化的无工作区草稿并打开定义页，不再提前弹出目录选择器。
+- 选择目录后校验目录存在性及运行中项目冲突，成功后原地绑定、解锁页面并聚焦目标输入；失败时保留草稿与当前页面。
+- 取消会删除尚未创建的临时草稿并留在调度台，不产生 Goal 或聊天消息。
+- 一个 DeepSeek V4 Flash Worker Profile 可按 Provider 并发上限同时执行多个就绪节点；额外 Worker Profile 仅扩展模型池与故障转移顺序。
+- `AgentDispatchCoordinatorTests` 62/62 通过，覆盖草稿创建、目录绑定、取消、默认路由、单 Profile 多节点并行和本页生产组件渲染。
+- `git diff --check`、版本一致性、复杂度与本地化资源校验作为最终交付门禁执行。
 
 ## Open questions
 
-- 无。编辑器的格式、字体、工作区和编辑行为不在本次删除范围内。
+- 无。并行度继续由 Provider 并发设置统一控制，无需让用户为了并行重复添加同一个 Worker Profile。
 
 ## Implementation checklist
 
-- [x] 删除编辑器“背景”分段。
-- [x] 删除旧背景页面路由与重复视图。
-- [x] 保留 Agent 外观中的背景配置。
-- [x] 更新信息架构测试、版本与产品文档。
-- [x] 重启 Debug App 并完成真实窗口检查。
+- [x] 新建项目直接进入定义页，并在页头提供目录选择/更改入口。
+- [x] 目录绑定前禁用填写和配置，绑定后原地解锁。
+- [x] 默认 DeepSeek V4 Pro Planner 与单个 DeepSeek V4 Flash Worker。
+- [x] 支持同一 Worker Profile 多节点并行和用户补选 Worker。
+- [x] AI 草稿与验收正文继承 Agent 正文字体、字号和行高。
+- [x] 主按钮旁增加 secondary“取消”按钮。
+- [x] 同步版本号、CHANGELOG、产品概览、自动化测试与视觉 QA。
 
 ## Follow-up polish
 

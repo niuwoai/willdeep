@@ -8,6 +8,7 @@ import Foundation
 extension L10n {
     enum GoalPlanning {
         static let arbitration = String(localized: "goal-planning.arbitration", defaultValue: "Evidence arbitration")
+        static let budgetExhausted = String(localized: "goal-planning.budget-exhausted", defaultValue: "Goal paused: this execution segment ran out of budget. WillDeep asked for a handover snapshot. Press play to grant a new segment and continue.")
         static let header = String(localized: "goal-planning.header", defaultValue: "Goal Teams planning")
         static let phaseArbitrating = String(localized: "goal-planning.phase.arbitrating", defaultValue: "Arbitrating")
         static let phaseAwaitingApproval = String(localized: "goal-planning.phase.awaiting-approval", defaultValue: "Awaiting approval")

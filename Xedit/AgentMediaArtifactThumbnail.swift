@@ -125,6 +125,7 @@ struct AgentMediaArtifactThumbnail: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .agentQuietMenuChrome(AgentComposerChrome.iconPrimary)
             .focusable(false)
             .help(isImageArtifact ? "打开蒙版编辑、放大及更多操作" : "更多媒体操作")
         }

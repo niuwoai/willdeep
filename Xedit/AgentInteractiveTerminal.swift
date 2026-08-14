@@ -1514,7 +1514,33 @@ final class AgentInteractiveTerminalController: ObservableObject {
 
     func playShortcut(_ shortcut: TerminalShortcut) {
         guard !isRecording else { return }
-        activeTab?.playShortcut(shortcut)
+        guard let target = shortcutPlaybackTab() else { return }
+        target.playShortcut(shortcut)
+    }
+
+    /// Pick a safe local tab for a saved shortcut, creating one when the
+    /// terminal is empty. Playback used to be a silent no-op when every tab
+    /// was closed, while recording already had this fallback.
+    private func shortcutPlaybackTab() -> AgentTerminalTab? {
+        if let active = activeTab,
+           active.isRunning,
+           !active.kind.isDelegatedShell,
+           !active.isAutomationBusy {
+            return active
+        }
+        if let local = tabs.last(where: {
+            $0.kind == .localShell && $0.isRunning && !$0.isAutomationBusy
+        }) {
+            activeTabID = local.id
+            return local
+        }
+        guard let config = defaultLocalTabProvider?(nil) else { return nil }
+        return openLocalTab(
+            originAgentSessionID: config.originAgentSessionID,
+            workingDirectory: config.workingDirectory,
+            settings: config.settings,
+            skin: config.skin
+        )
     }
 
     func cancelActiveShortcutPlayback() {
@@ -1522,8 +1548,19 @@ final class AgentInteractiveTerminalController: ObservableObject {
     }
 
     func prepareShortcutFileForEditing(id: UUID) -> URL? {
-        guard let shortcut = shortcuts.first(where: { $0.id == id }) else { return nil }
         do {
+            // AppState instances each own an independent terminal controller.
+            // Saving an edit in an Editor window can therefore update the
+            // shared store while a retained/headless Agent AppState still has
+            // the pre-edit snapshot in memory. Always refresh from the
+            // canonical store before regenerating the per-item edit file, or
+            // that stale controller would overwrite the edit file with old
+            // content the next time the user chooses Edit.
+            let persistedShortcuts = try TerminalShortcutStore.loadEditableShortcuts()
+            guard let shortcut = persistedShortcuts.first(where: { $0.id == id }) else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            shortcuts = persistedShortcuts
             return try TerminalShortcutStore.prepareEditableFile(for: shortcut)
         } catch {
             print("AgentInteractiveTerminalController: failed to prepare shortcut edit file: \(error)")

@@ -25,7 +25,11 @@ struct AgentConversationActivityOverlay: View {
 
     /// The current plan is task progress, independent of conversation mode.
     private var visiblePlan: AgentPlan? {
-        return appState.agentCurrentPlan
+        guard let plan = appState.agentCurrentPlan,
+              AgentPlanCardExpansionPolicy.shouldDisplay(plan) else {
+            return nil
+        }
+        return plan
     }
 
     var body: some View {
@@ -408,6 +412,11 @@ private enum URLDetector {
     }
 }
 
+enum AgentActivityCardChrome {
+    static let artifactIcon = AgentComposerChrome.iconSecondary
+    static let devServerIcon = AgentComposerChrome.iconSecondary
+}
+
 private struct AgentArtifactActivityCard: View {
     @EnvironmentObject private var appState: AppState
     let urls: [URL]
@@ -418,7 +427,7 @@ private struct AgentArtifactActivityCard: View {
             Button(action: openPrimaryDestination) {
                 AgentActivityCardLabel(
                     systemImage: "folder",
-                    tint: .accentColor,
+                    tint: AgentActivityCardChrome.artifactIcon,
                     title: "\(urls.count) 个产物",
                     subtitle: subtitle,
                     isSelected: isSelected
@@ -453,6 +462,7 @@ private struct AgentArtifactActivityCard: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .agentQuietMenuChrome()
             .focusable(false)
             .help("选择产物")
             .cursor(.arrow)
@@ -615,7 +625,7 @@ private struct AgentDevServerActivityCard: View {
             Button(action: openPrimaryDestination) {
                 AgentActivityCardLabel(
                     systemImage: "server.rack",
-                    tint: .green,
+                    tint: AgentActivityCardChrome.devServerIcon,
                     title: "Dev Server",
                     subtitle: devServerSubtitle,
                     isSelected: isSelected
@@ -649,6 +659,7 @@ private struct AgentDevServerActivityCard: View {
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .agentQuietMenuChrome()
             .focusable(false)
             .help("预览或管理工作区 Dev Server")
             .cursor(.arrow)
@@ -718,6 +729,9 @@ private struct AgentDevServerActivityCard: View {
         _ = try? appState.agentJobRegistry.start(
             command: job.command,
             workingDirectory: workingDirectory,
+            additionalWorkspaceRoots: appState.activeRuntime.map {
+                appState.agentWorkspaceRoots(for: $0.session)
+            } ?? [],
             runtimeID: runtimeID,
             timeoutSeconds: nil,
             sandboxMode: .workspaceWriteNetwork,

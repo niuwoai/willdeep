@@ -186,9 +186,10 @@ nonisolated enum AgentSessionStore {
                     pendingWrites.finish(id)
                     return
                 }
-                let data = try encoder.encode(payload.externalizingAttachmentContent())
+                let data = try persistenceData(for: payload)
                 try coordinatedWrite(data, to: url)
                 writeCatalogEntryBestEffort(for: payload, sourceURL: url)
+                writeUsageCatalogEntryBestEffort(for: payload, sourceURL: url)
             } catch {
                 print("AgentSessionStore: failed to save session \(id): \(error)")
                 // Keep the unwritten snapshot around as an in-memory
@@ -394,6 +395,34 @@ nonisolated enum AgentSessionStore {
     private struct SourceSignature: Codable, Equatable {
         let fileSize: UInt64
         let modificationTime: TimeInterval
+    }
+
+    /// Usage-analytics sidecar record (`usage-v1/<uuid>.json`). Stores the
+    /// exact snapshot `loadUsageSnapshots()` used to derive by decoding the
+    /// full conversation JSON, guarded by the same source-signature scheme
+    /// as the launch catalog: a signature or schema mismatch falls back to
+    /// the full decode and repairs the sidecar, so this stays a cache and
+    /// never becomes a second source of truth.
+    private struct UsageCatalogEntry: Codable {
+        static let currentSchemaVersion = 1
+
+        let schemaVersion: Int
+        let snapshot: AgentUsageSessionSnapshot
+        let sourceSignature: SourceSignature
+
+        init(
+            snapshot: AgentUsageSessionSnapshot,
+            sourceSignature: SourceSignature,
+            schemaVersion: Int = Self.currentSchemaVersion
+        ) {
+            self.schemaVersion = schemaVersion
+            self.snapshot = snapshot
+            self.sourceSignature = sourceSignature
+        }
+
+        var isCurrentSchema: Bool {
+            schemaVersion == Self.currentSchemaVersion
+        }
     }
 
     private struct UsageImageIndex: Decodable {
@@ -779,6 +808,17 @@ nonisolated enum AgentSessionStore {
         catalogDirectory.appendingPathComponent("\(id.uuidString).json")
     }
 
+    /// Usage-analytics sidecar index, sibling of `catalog-v1`. The stats
+    /// dashboard's cold scan reads these small files instead of decoding
+    /// every full conversation JSON in `agent-sessions/`.
+    static var usageCatalogDirectory: URL {
+        directory.appendingPathComponent("usage-v1", isDirectory: true)
+    }
+
+    static func usageCatalogURL(for id: UUID) -> URL {
+        usageCatalogDirectory.appendingPathComponent("\(id.uuidString).json")
+    }
+
     private static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -854,6 +894,71 @@ nonisolated enum AgentSessionStore {
             // costs one fallback decode on the next launch but does not lose
             // user data, so keep this best-effort and self-healing.
             print("AgentSessionStore: failed to update catalog for \(entry.session.id): \(error)")
+        }
+    }
+
+    private static func loadOrRebuildUsageSnapshot(for sourceURL: URL) -> AgentUsageSessionSnapshot? {
+        if let id = UUID(uuidString: sourceURL.deletingPathExtension().lastPathComponent),
+           let signature = sourceSignature(for: sourceURL),
+           let data = try? Data(contentsOf: usageCatalogURL(for: id)),
+           let entry = try? decoder.decode(UsageCatalogEntry.self, from: data),
+           entry.isCurrentSchema,
+           entry.snapshot.id == id,
+           entry.sourceSignature == signature {
+            return entry.snapshot
+        }
+
+        // Same fallback discipline as the launch catalog: the full decode
+        // and its signature are captured inside one coordinated read slot,
+        // so a writer landing right afterwards merely makes this rebuilt
+        // sidecar stale — it can never make stale usage data look current.
+        var rebuilt: UsageCatalogEntry?
+        var readError: Error?
+        coordinatedRead(at: sourceURL) { readURL in
+            do {
+                let data = try Data(contentsOf: readURL)
+                let snapshot = try decodeUsageSnapshot(from: data)
+                guard let signature = sourceSignature(for: readURL) else { return }
+                rebuilt = UsageCatalogEntry(snapshot: snapshot, sourceSignature: signature)
+            } catch {
+                readError = error
+            }
+        }
+
+        guard let rebuilt else {
+            if let readError {
+                print("AgentSessionStore: skipping unreadable usage snapshot at \(sourceURL.lastPathComponent): \(readError)")
+            }
+            return nil
+        }
+        writeUsageCatalogEntryBestEffort(rebuilt)
+        return rebuilt.snapshot
+    }
+
+    /// Derives the usage snapshot from the in-memory session that was just
+    /// persisted — no decoding back the file we only just encoded. The
+    /// snapshot initializer and the `UsageSessionIndex` decode path are two
+    /// faces of the same contract; `AgentUsageSidecarTests` pins their
+    /// equivalence against the full-decode result.
+    private static func writeUsageCatalogEntryBestEffort(for session: AgentSession, sourceURL: URL) {
+        guard let signature = sourceSignature(for: sourceURL) else { return }
+        writeUsageCatalogEntryBestEffort(
+            UsageCatalogEntry(
+                snapshot: AgentUsageSessionSnapshot(session: session),
+                sourceSignature: signature
+            )
+        )
+    }
+
+    private static func writeUsageCatalogEntryBestEffort(_ entry: UsageCatalogEntry) {
+        do {
+            try ensureUsageCatalogDirectory()
+            let data = try encoder.encode(entry)
+            try coordinatedWrite(data, to: usageCatalogURL(for: entry.snapshot.id))
+        } catch {
+            // The conversation JSON already landed; a missing usage sidecar
+            // costs one fallback full decode on the next stats scan.
+            print("AgentSessionStore: failed to update usage catalog for \(entry.snapshot.id): \(error)")
         }
     }
 
@@ -974,6 +1079,11 @@ nonisolated enum AgentSessionStore {
         )
     }
 
+    /// Scans usage snapshots for the stats dashboard. Steady state reads
+    /// only the small `usage-v1` sidecars; a missing/stale sidecar (first
+    /// scan after upgrading to this build, an externally modified file, a
+    /// schema bump) triggers a one-time full-session decode and is repaired
+    /// for the next scan. Runs on the caller's background task either way.
     static func loadUsageSnapshots() -> [AgentUsageSessionSnapshot] {
         importLegacySessionsIfNeeded()
 
@@ -992,12 +1102,8 @@ nonisolated enum AgentSessionStore {
 
         var snapshots: [AgentUsageSessionSnapshot] = []
         for url in entries where url.pathExtension == "json" {
-            guard let data = try? Data(contentsOf: url) else { continue }
-            do {
-                snapshots.append(try decodeUsageSnapshot(from: data))
-            } catch {
-                print("AgentSessionStore: skipping unreadable usage snapshot at \(url.lastPathComponent): \(error)")
-            }
+            guard let snapshot = loadOrRebuildUsageSnapshot(for: url) else { continue }
+            snapshots.append(snapshot)
         }
         return snapshots.sorted { $0.updatedAt > $1.updatedAt }
     }
@@ -1077,6 +1183,39 @@ nonisolated enum AgentSessionStore {
         try decoder.decode(UsageSessionIndex.self, from: data).snapshot
     }
 
+    static var usageCatalogSchemaVersionForTesting: Int {
+        UsageCatalogEntry.currentSchemaVersion
+    }
+
+    static func decodeUsageCatalogEntryForTesting(
+        _ data: Data
+    ) throws -> (schemaVersion: Int, snapshot: AgentUsageSessionSnapshot) {
+        let entry = try decoder.decode(UsageCatalogEntry.self, from: data)
+        return (entry.schemaVersion, entry.snapshot)
+    }
+
+#if DEBUG
+    /// Plants a usage sidecar whose signature matches `sourceURL`'s current
+    /// on-disk state — with an arbitrary snapshot and schema version — so
+    /// tests can prove which path (sidecar vs. full decode) served a scan.
+    static func writeUsageCatalogEntryForTesting(
+        snapshot: AgentUsageSessionSnapshot,
+        sourceURL: URL,
+        schemaVersion: Int? = nil
+    ) throws {
+        guard let signature = sourceSignature(for: sourceURL) else {
+            throw CocoaError(.fileReadNoSuchFile)
+        }
+        let entry = UsageCatalogEntry(
+            snapshot: snapshot,
+            sourceSignature: signature,
+            schemaVersion: schemaVersion ?? UsageCatalogEntry.currentSchemaVersion
+        )
+        try ensureUsageCatalogDirectory()
+        try coordinatedWrite(try encoder.encode(entry), to: usageCatalogURL(for: snapshot.id))
+    }
+#endif
+
     @discardableResult
     static func save(_ session: AgentSession) -> Bool {
         metadataOnlySessions.remove(session.id)
@@ -1091,9 +1230,10 @@ nonisolated enum AgentSessionStore {
                     print("AgentSessionStore: refused to overwrite session \(session.id) with an empty transcript")
                     return false
                 }
-                let data = try encoder.encode(session.externalizingAttachmentContent())
+                let data = try persistenceData(for: session)
                 try coordinatedWrite(data, to: url)
                 writeCatalogEntryBestEffort(for: session, sourceURL: url)
+                writeUsageCatalogEntryBestEffort(for: session, sourceURL: url)
                 return true
             } catch {
                 print("AgentSessionStore: failed to save session \(session.id): \(error)")
@@ -1113,6 +1253,7 @@ nonisolated enum AgentSessionStore {
             do {
                 try coordinatedRemove(at: url)
                 try coordinatedRemove(at: catalogURL(for: id))
+                try coordinatedRemove(at: usageCatalogURL(for: id))
                 metadataOnlySessions.remove(id)
                 return true
             } catch {
@@ -1145,6 +1286,14 @@ nonisolated enum AgentSessionStore {
         var isDirectory: ObjCBool = false
         if !FileManager.default.fileExists(atPath: catalogDirectory.path, isDirectory: &isDirectory) {
             try FileManager.default.createDirectory(at: catalogDirectory, withIntermediateDirectories: true)
+        }
+    }
+
+    private static func ensureUsageCatalogDirectory() throws {
+        try ensureDirectory()
+        var isDirectory: ObjCBool = false
+        if !FileManager.default.fileExists(atPath: usageCatalogDirectory.path, isDirectory: &isDirectory) {
+            try FileManager.default.createDirectory(at: usageCatalogDirectory, withIntermediateDirectories: true)
         }
     }
 
@@ -1182,6 +1331,16 @@ nonisolated enum AgentSessionStore {
             return
         }
         if let writeError { throw writeError }
+    }
+
+    /// Final persistence boundary. Tool-level redaction remains useful for UI
+    /// and model payloads, but this pass guarantees a credential-shaped value
+    /// cannot survive in the generated conversation JSON even if an upstream
+    /// caller accidentally put plaintext into a message or tool argument.
+    static func persistenceData(for session: AgentSession) throws -> Data {
+        let encoded = try encoder.encode(session.externalizingAttachmentContent())
+        guard let json = String(data: encoded, encoding: .utf8) else { return encoded }
+        return Data(AgentSensitiveContentRedactor.redactCredentials(json).utf8)
     }
 
     /// Writes an imported file only when the destination is still absent.

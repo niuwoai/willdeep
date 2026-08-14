@@ -17,10 +17,19 @@ nonisolated enum AgentSidePanelResizeMetrics {
     static let lineWidth: CGFloat = 1
 }
 
+nonisolated enum AgentSessionsSidebarResizeMetrics {
+    static let minimumWidth: Double = 230
+    static let maximumWidth: Double = 520
+    static let hitTargetWidth: CGFloat = AgentSidePanelResizeMetrics.hitTargetWidth
+    static let lineWidth: CGFloat = AgentSidePanelResizeMetrics.lineWidth
+}
+
 struct AgentModeView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject private var computerUseCoordinator = AgentComputerUseCoordinator.shared
-    @State private var sidebarWidth: CGFloat = 230
+    @AppStorage("agentSessionsSidebarWidth") private var storedSidebarWidth: Double =
+        AgentSessionsSidebarResizeMetrics.minimumWidth
+    @State private var liveSidebarWidth: Double?
     /// Whether the leftmost session list is shown. Toggled from the chat
     /// header (rc24) so a user who lives in one long conversation can
     /// reclaim the 230pt for the transcript. Persisted across relaunch.
@@ -28,8 +37,7 @@ struct AgentModeView: View {
     /// Drives the title-only session search overlay (rc24).
     @State private var isSessionSearchPresented = false
     /// User-resizable width of the right side panel. Persisted so the
-    /// choice survives relaunch. The leftmost sessions sidebar stays
-    /// fixed; only the chat ↔ side-panel boundary is draggable.
+    /// choice survives relaunch.
     @AppStorage("agentSidePanelWidth") private var sidePanelWidth: Double = 320
     @State private var liveSidePanelWidth: Double?
     private let sidePanelWidthRange: ClosedRange<Double> = 240...760
@@ -47,7 +55,21 @@ struct AgentModeView: View {
     /// 挡不住这些),中间列也只是继续裁切,不会再发生列间相互遮盖。
     /// 右面板打开时把它的宽度计进窗口下限,否则 `sidebar + panel` 早
     /// 就超过旧的固定 720 窗口宽。
-    private var chatColumnComfortWidth: CGFloat { sidebarWidth * 1.4 }
+    private var committedSidebarWidth: Double {
+        min(
+            max(storedSidebarWidth, AgentSessionsSidebarResizeMetrics.minimumWidth),
+            AgentSessionsSidebarResizeMetrics.maximumWidth
+        )
+    }
+    private var currentSidebarWidth: Double {
+        min(
+            max(liveSidebarWidth ?? committedSidebarWidth, AgentSessionsSidebarResizeMetrics.minimumWidth),
+            AgentSessionsSidebarResizeMetrics.maximumWidth
+        )
+    }
+    private var chatColumnComfortWidth: CGFloat {
+        CGFloat(AgentSessionsSidebarResizeMetrics.minimumWidth * 1.4)
+    }
     private var currentSidePanelWidth: Double {
         min(max(liveSidePanelWidth ?? sidePanelWidth, sidePanelWidthRange.lowerBound), sidePanelWidthRange.upperBound)
     }
@@ -59,7 +81,9 @@ struct AgentModeView: View {
     static let absoluteMinContentHeight: CGFloat = 480
 
     private func contentMinWidth(isSidebarVisible: Bool) -> CGFloat {
-        let content = (isSidebarVisible ? sidebarWidth : 0)
+        let content = (isSidebarVisible
+            ? CGFloat(committedSidebarWidth) + AgentSessionsSidebarResizeMetrics.hitTargetWidth
+            : 0)
             + chatColumnComfortWidth
             // 面板宽度现在会随窗口宽度自适应封顶(见 panelWidthCap),
             // 窗口下限只需保证「最窄面板」放得下,不再跟着持久化宽度
@@ -72,7 +96,9 @@ struct AgentModeView: View {
 
     /// 侧栏(含 1pt 分隔线)当前占用的宽度。
     private func sidebarOccupiedWidth(isSidebarVisible: Bool) -> CGFloat {
-        isSidebarVisible ? sidebarWidth + 1 : 0
+        isSidebarVisible
+            ? CGFloat(currentSidebarWidth) + AgentSessionsSidebarResizeMetrics.hitTargetWidth
+            : 0
     }
 
     /// 窗口宽度给面板的封顶:面板再宽也必须给「会话侧栏 + chat 舒适
@@ -92,12 +118,11 @@ struct AgentModeView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let autoHidden = AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
-                totalWidth: proxy.size.width,
-                userPrefersVisible: sessionsSidebarVisible,
-                activeSidePanel: appState.agentSidePanelKind,
-                activeSidePanelWidth: CGFloat(currentSidePanelWidth)
-            )
+            // The session list is an explicit operator choice. A right-side
+            // browser/terminal/files panel may squeeze the chat column, but it
+            // must never silently revoke the left sidebar or disable its
+            // titlebar toggle.
+            let autoHidden = false
             mainContent(totalWidth: proxy.size.width, isSidebarAutoHidden: autoHidden)
                 .background {
                     AgentSessionsSidebarWindowChromeToggle(
@@ -116,7 +141,6 @@ struct AgentModeView: View {
     private func mainContent(totalWidth: CGFloat, isSidebarAutoHidden: Bool) -> some View {
         let skin = appState.editorSettings.interfaceSkin
         let effectiveSidebarVisible = sessionsSidebarVisible && !isSidebarAutoHidden
-        let occupiedSidebarWidth = sidebarOccupiedWidth(isSidebarVisible: effectiveSidebarVisible)
         let minimumContentWidth = contentMinWidth(isSidebarVisible: effectiveSidebarVisible)
         let cap = panelWidthCap(totalWidth: totalWidth, isSidebarVisible: effectiveSidebarVisible)
         // 「已提交」宽度在整个拖拽过程中保持不变(AppStorage 只在松手
@@ -126,27 +150,31 @@ struct AgentModeView: View {
         let committedPanelWidth = min(max(sidePanelWidth, sidePanelWidthRange.lowerBound), cap)
         let panelWidth = min(currentSidePanelWidth, cap)
         let isResizingPanel = liveSidePanelWidth != nil
+        let isResizingSidebar = liveSidebarWidth != nil
         let hasWallpaper = appState.editorSettings.hasConfiguredAgentWallpaper
-        let frozenChatWidth = max(
-            totalWidth
-                - occupiedSidebarWidth
-                - AgentSidePanelResizeMetrics.hitTargetWidth
-                - CGFloat(committedPanelWidth),
-            0
-        )
         let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks
             || appState.agentPrimaryDestination == .dispatchBoard {
             nil
         } else {
             appState.agentSidePanelKind
         }
+        let frozenChatWidth = max(
+            totalWidth
+                - (effectiveSidebarVisible
+                    ? CGFloat(committedSidebarWidth) + AgentSessionsSidebarResizeMetrics.hitTargetWidth
+                    : 0)
+                - (activeSidePanel != nil
+                    ? AgentSidePanelResizeMetrics.hitTargetWidth + CGFloat(committedPanelWidth)
+                    : 0),
+            0
+        )
         HStack(spacing: 0) {
             if effectiveSidebarVisible {
                 AgentSessionsSidebar()
-                    .frame(width: sidebarWidth)
+                    .frame(width: CGFloat(currentSidebarWidth))
                     // `.frame(width:)` 是 SwiftUI 的「建议」宽度,父 HStack
                     // 在窗口宽度不够时仍会把它继续压缩。`.fixedSize(...)`
-                    // 把宽度锁死为 sidebarWidth(230),收窄窗口只会从 chat
+                    // 把宽度锁死为当前用户宽度,收窄窗口只会从 chat
                     // 区域吃掉空间,不会再动 sidebar —— rc12 用户反馈:
                     // 「最左栏还是会被缩小,要不就固定个宽度」。
                     .fixedSize(horizontal: true, vertical: false)
@@ -157,7 +185,26 @@ struct AgentModeView: View {
                     )
                     .transition(.move(edge: .leading).combined(with: .opacity))
 
-                Divider()
+                AgentSessionsSidebarResizeHandle(
+                    width: Binding(
+                        get: { currentSidebarWidth },
+                        set: { liveSidebarWidth = $0 }
+                    ),
+                    range: ClosedRange(
+                        uncheckedBounds: (
+                            AgentSessionsSidebarResizeMetrics.minimumWidth,
+                            AgentSessionsSidebarResizeMetrics.maximumWidth
+                        )
+                    ),
+                    onCommit: { committedWidth in
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            storedSidebarWidth = committedWidth
+                            liveSidebarWidth = nil
+                        }
+                    }
+                )
             }
 
             VStack(spacing: 0) {
@@ -184,7 +231,7 @@ struct AgentModeView: View {
             // 「闪」),多出的部分被下面的 `.clipped()` 裁掉;左缘
             // (`.leading`)钉死不动,松手后一次性按新宽度重排。
             .frame(
-                width: activeSidePanel != nil && isResizingPanel ? frozenChatWidth : nil,
+                width: isResizingPanel || isResizingSidebar ? frozenChatWidth : nil,
                 alignment: .leading
             )
             // `minWidth: 0` 是关键:frame 只写 `maxWidth: .infinity` 时,
@@ -225,8 +272,12 @@ struct AgentModeView: View {
                     // chat 列挤没的宽度。
                     range: sidePanelWidthRange.lowerBound...cap,
                     onCommit: { committedWidth in
-                        liveSidePanelWidth = nil
-                        sidePanelWidth = committedWidth
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            sidePanelWidth = committedWidth
+                            liveSidePanelWidth = nil
+                        }
                     }
                 )
                 AgentSidePanelHost(
@@ -491,22 +542,15 @@ enum AgentSidebarToggleButtonState {
 }
 
 enum AgentModeResponsiveLayout {
-    /// Base width where chat + composer still feel usable with the session list.
-    /// Add the right panel's live width when that panel is open. Using only
-    /// its minimum width meant a terminal widened by dragging could crush the
-    /// queue and composer while the session list incorrectly stayed visible.
-    static let sidebarAutoHideBaseWidth: CGFloat = 800
-
     static func shouldAutoHideSessionsSidebar(
         totalWidth: CGFloat,
         userPrefersVisible: Bool,
         activeSidePanel: AgentSidePanelKind?,
         activeSidePanelWidth: CGFloat
     ) -> Bool {
-        guard userPrefersVisible, totalWidth > 0 else { return false }
-        let panelWidth = activeSidePanel == nil ? 0 : max(activeSidePanelWidth, 0)
-        let threshold = sidebarAutoHideBaseWidth + panelWidth
-        return totalWidth < threshold
+        // Kept as a pure policy seam for regression tests and older callers.
+        // Width and right-panel state no longer override the user's choice.
+        false
     }
 }
 
@@ -624,6 +668,70 @@ private struct AgentSidePanelResizeHandle: View {
     }
 }
 
+/// Draggable boundary between the session list and the chat. It deliberately
+/// mirrors the right-panel handle's hover/drag feedback while reversing the
+/// translation direction because the resized surface lives on the left.
+private struct AgentSessionsSidebarResizeHandle: View {
+    @Binding var width: Double
+    let range: ClosedRange<Double>
+    let onCommit: (Double) -> Void
+
+    @State private var dragStartWidth: Double?
+    @State private var isHovering = false
+    @State private var isDragging = false
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(
+                    isHovering || isDragging
+                        ? Color.accentColor.opacity(0.7)
+                        : Color(nsColor: .separatorColor).opacity(0.7)
+                )
+                .frame(width: AgentSessionsSidebarResizeMetrics.lineWidth)
+        }
+        .frame(width: AgentSessionsSidebarResizeMetrics.hitTargetWidth)
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .background(
+            isHovering || isDragging
+                ? Color.accentColor.opacity(0.08)
+                : Color.clear
+        )
+        .onHover { hovering in
+            isHovering = hovering
+            guard !isDragging else { return }
+            if hovering {
+                NSCursor.resizeLeftRight.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if !isDragging { isDragging = true }
+                    NSCursor.resizeLeftRight.set()
+                    let base = dragStartWidth ?? width
+                    if dragStartWidth == nil { dragStartWidth = base }
+                    let proposed = base + Double(value.translation.width)
+                    let snapped = min(max(proposed, range.lowerBound), range.upperBound).rounded()
+                    guard snapped != width else { return }
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { width = snapped }
+                }
+                .onEnded { _ in
+                    let committedWidth = width
+                    dragStartWidth = nil
+                    isDragging = false
+                    if !isHovering { NSCursor.pop() }
+                    onCommit(committedWidth)
+                }
+        )
+    }
+}
+
 // MARK: - Design tokens
 //
 // Centralized so the next time we want to tweak spacing/colors, it's all
@@ -644,10 +752,17 @@ enum AgentDesign {
     /// A readable baseline for side-by-side Git review. Small windows still
     /// clamp this value through `panelWidthCap`.
     static let reviewPanelPreferredWidth: Double = 520
-    /// Live tool activity belongs to the assistant prose immediately above
-    /// it, so it uses normal line rhythm instead of the full inter-message
-    /// gap reserved for separate chat turns.
-    static let liveActivityTopSpacing: CGFloat = 6
+    /// Tool activity and the message statistics form one metadata group below
+    /// the assistant prose. Keep that group visibly separate without spending
+    /// a complete blank body row on it.
+    static let assistantMetadataTopSpacingScale: CGFloat = 0.7
+    /// Rows inside the same live activity group should read as a compact list,
+    /// not as separate chat messages.
+    static let liveActivityRowSpacing: CGFloat = 2
+
+    static func assistantMetadataTopSpacing(baseFontSize: CGFloat) -> CGFloat {
+        max(0, baseFontSize * assistantMetadataTopSpacingScale)
+    }
     static let composerHeight: CGFloat = 124
     static let headerHeight: CGFloat = 44
     static let statusBarHeight: CGFloat = 26
@@ -662,6 +777,11 @@ enum AgentDesign {
     static let sidebarWorkspaceIconToTitleSpacing: CGFloat = 8
     static let sidebarSelectionHorizontalInset: CGFloat = 8
     static let sidebarSessionContentHorizontalInset: CGFloat = 32
+    // Workspace children keep their 40 pt text-column alignment on the left,
+    // but do not need the same deep indent on the trailing edge. Four points
+    // preserves breathing room while returning 28 pt — roughly two CJK
+    // characters at the 14 pt row font — to long conversation titles.
+    static let sidebarSessionTrailingContentInset: CGFloat = 4
     static let sidebarSessionTrailingActionsWidth: CGFloat = 40
     // Global pins are top-level navigation, so their title column starts at
     // 12 pt like Codex instead of inheriting the 40 pt workspace-child inset.
@@ -685,18 +805,63 @@ enum AgentDesign {
     static let sidebarSectionFont = Font.system(size: 11, weight: .semibold)
     static let sidebarRowFont = Font.system(size: sidebarRowFontSize)
     static let sidebarWorkspaceFont = Font.system(size: sidebarRowFontSize)
+
+    /// Chrome around the transcript (sidebar rows, composer input) follows the
+    /// chat body size by the same absolute step, so the established hierarchy
+    /// survives scaling: the 15 pt default body pairs with a 14 pt sidebar row
+    /// and a 13 pt composer, and raising the body to 20 pt carries them to
+    /// 19/18 rather than leaving them stranded at their old sizes.
+    ///
+    /// Deliberately an offset rather than a ratio — these surfaces sit side by
+    /// side with the transcript, and a proportional rule would drift them
+    /// apart at the extremes. The floor keeps titles and input legible when
+    /// the body size is set very small.
+    static func scaledChromeFontSize(
+        _ token: CGFloat,
+        baseFontSize: CGFloat
+    ) -> CGFloat {
+        let clamped = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
+        let scaled = token + (clamped - AgentSettingsStore.chatBaseFontSizeDefault)
+        return max(chromeFontSizeFloor, scaled)
+    }
+
+    static let chromeFontSizeFloor: CGFloat = 11
+
+    static func scaledSidebarRowFont(baseFontSize: CGFloat) -> Font {
+        .system(size: scaledChromeFontSize(sidebarRowFontSize, baseFontSize: baseFontSize))
+    }
+
+    static func scaledSidebarWorkspaceFont(baseFontSize: CGFloat) -> Font {
+        scaledSidebarRowFont(baseFontSize: baseFontSize)
+    }
+
+    /// Composer input. The `@`-reference tag derives its own size from the
+    /// live input font (one point smaller), so it is not listed here.
+    static let composerInputFontSize: CGFloat = 13
+
+    static func scaledComposerInputFontSize(baseFontSize: CGFloat) -> CGFloat {
+        scaledChromeFontSize(composerInputFontSize, baseFontSize: baseFontSize)
+    }
     static let sidebarAutomationFont = Font.system(size: sidebarAutomationFontSize)
 
     /// Keep supporting chat text readable and express hierarchy primarily
-    /// through color and weight instead of shrinking labels. The configured
-    /// body size remains the upper bound; callers can still request a larger
-    /// semantic minimum for values and headings.
+    /// through color and weight instead of shrinking labels. Callers can still
+    /// request a larger semantic minimum for values and headings.
+    ///
+    /// Scales with the body size on the same offset rule as the sidebar and
+    /// composer. It previously used `min(body, 13)`, which capped supporting
+    /// text at its default: raising the body size left timestamps and status
+    /// labels frozen at 13 pt while the text beside them grew, so the message
+    /// visibly came apart. The offset keeps the two-point gap at every size
+    /// instead of only below the default.
     static func chatSupportingFontSize(
         baseFontSize: CGFloat,
         visualMinimum: CGFloat = 0
     ) -> CGFloat {
-        let clampedBodySize = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
-        let supportingSize = min(clampedBodySize, chatSupportingFontSizeDefault)
+        let supportingSize = scaledChromeFontSize(
+            chatSupportingFontSizeDefault,
+            baseFontSize: baseFontSize
+        )
         return max(supportingSize, visualMinimum)
     }
 

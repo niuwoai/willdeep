@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import LocalAuthentication
 
 struct AgentSecretResolution: Equatable {
     var value: AgentJSONValue
@@ -103,6 +104,28 @@ enum AgentSecretStore {
                 if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
                 return $0.label.localizedStandardCompare($1.label) == .orderedAscending
             }
+    }
+
+    /// Reveals a user-owned saved value only after macOS authenticates the
+    /// device owner. `.deviceOwnerAuthentication` lets the OS choose Touch ID
+    /// when available and fall back to the login password on older hardware.
+    static func revealSecretForCopy(
+        identifier: String,
+        reason: String
+    ) async -> String? {
+        let context = LAContext()
+        context.localizedCancelTitle = L10n.Automation.cancel
+        do {
+            let authenticated = try await context.evaluatePolicy(
+                .deviceOwnerAuthentication,
+                localizedReason: reason
+            )
+            guard authenticated else { return nil }
+            let value = loadSecret(identifier: identifier)
+            return value.isEmpty ? nil : value
+        } catch {
+            return nil
+        }
     }
 
     nonisolated static func placeholderMatches(in text: String) -> [AgentSecretPlaceholderMatch] {

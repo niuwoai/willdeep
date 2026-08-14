@@ -593,16 +593,19 @@ enum AgentCommandAuthorization {
 ///    radius depends entirely on the path argument.
 enum AgentToolAuthorization {
     /// Cache key for safety-judge YES verdicts: tool name + exact normalized
-    /// command. A hidden, short-lived machine verdict must never broaden one
+    /// command + the compact redacted task context used for that review. A
+    /// hidden, short-lived machine verdict must never broaden one
     /// `git push`/`gh pr` decision to different arguments merely because the
     /// executable and subcommand match. Durable family rules remain a
     /// separate, explicit user choice.
     nonisolated static func judgeVerdictCacheKey(
         toolName: String,
-        command: String
+        command: String,
+        taskContext: String = ""
     ) -> String {
         let exactCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        return "\(toolName)|\(exactCommand)"
+        let exactTaskContext = taskContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(toolName)|\(exactCommand)|\(exactTaskContext)"
     }
 
     static func interactiveSurfaceSignature(toolName: String) -> String? {

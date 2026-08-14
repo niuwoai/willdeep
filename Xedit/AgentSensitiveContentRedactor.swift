@@ -29,11 +29,17 @@ nonisolated enum AgentSensitiveContentRedactor {
         let regex: NSRegularExpression
     }
 
-    private static let rules: [Rule] = [
+    /// Credential-shaped values that must never be persisted or sent without
+    /// an explicit redaction pass. Accept both `sk-...` and `sk_...`; several
+    /// providers use the underscore form and alphabetic-only bodies are valid.
+    private static let credentialRules: [Rule] = [
         rule("private-key", #"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"#),
-        rule("api-key", #"\b(?:sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b"#),
+        rule("api-key", #"\b(?:sk[-_][A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b"#),
         rule("bearer-token", #"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{16,}"#),
         rule("jwt", #"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"#),
+    ]
+
+    private static let rules: [Rule] = credentialRules + [
         rule("email", #"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"#, options: [.caseInsensitive]),
         rule("cn-phone", #"(?<!\d)1[3-9]\d{9}(?!\d)"#),
         rule("cn-id", #"(?<!\d)\d{17}[0-9Xx](?!\d)"#),
@@ -48,6 +54,17 @@ nonisolated enum AgentSensitiveContentRedactor {
     }
 
     static func redact(_ text: String) -> String {
+        redact(text, using: rules)
+    }
+
+    /// Persistence uses credential-only redaction: it must scrub keys and
+    /// tokens without destroying ordinary conversation data such as an email
+    /// address or phone number that the operator intentionally discussed.
+    static func redactCredentials(_ text: String) -> String {
+        redact(text, using: credentialRules)
+    }
+
+    private static func redact(_ text: String, using rules: [Rule]) -> String {
         var result = text
         for rule in rules {
             let range = NSRange(result.startIndex..<result.endIndex, in: result)

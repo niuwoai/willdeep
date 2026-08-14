@@ -656,6 +656,29 @@ extension AppState {
         }
     }
 
+    /// composer 上方那枚分支胶囊读的是 `agentWorkspaceGitStatus`，而它过去只在
+    /// 切会话 / 切根目录 / 建删 worktree 时才刷新——全都是**路径变了**的场合。
+    /// 分支却可以在同一个路径里被换掉（Agent 跑 `git switch`、内置终端、外部
+    /// 终端都会），于是胶囊会一直挂着旧分支名。
+    ///
+    /// 这里把任何一次**已经跑完**的 git 快照里的仓库身份（root + 分支）补录进
+    /// 来，不额外开 git 进程；`entries` 保持为空，维持 `agentWorkspaceGitStatus`
+    /// 只承载身份、不承载逐文件状态的既有约定。
+    func applyAgentWorkspaceGitIdentity(
+        from status: GitRepositoryStatus,
+        workspacePath: String
+    ) {
+        let activePath = (activeAgentLocalWorkspaceURL ?? rootDirectory?.standardizedFileURL)?.path
+        guard activePath == workspacePath else { return }
+        let identity = GitRepositoryStatus(
+            repositoryRoot: status.repositoryRoot,
+            branchName: status.branchName,
+            entries: [:]
+        )
+        guard agentWorkspaceGitStatus != identity else { return }
+        agentWorkspaceGitStatus = identity
+    }
+
     nonisolated private static func loadAgentGitRepositoryIdentity(
         for directoryURL: URL
     ) -> GitRepositoryStatus {

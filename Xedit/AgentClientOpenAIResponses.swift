@@ -249,7 +249,7 @@ struct OpenAIResponsesAdapter {
             messages: requestMessages,
             tools: tools,
             supportsImages: configuration.supportsImageInput,
-            store: !configuration.isDeepSeekV4FlashResponsesModel,
+            store: !configuration.isDeepSeekV4ResponsesModel,
             useHostedWebSearch: usesHostedWebSearch
         )
         var mayUseContinuation = !configuration.usesStatelessDeepSeekResponses
@@ -321,7 +321,7 @@ struct OpenAIResponsesAdapter {
                        statusCode: httpResponse.statusCode,
                        responseBody: responseBody
                    ) {
-                    // DeepSeek V4 Flash normally executes hosted web search
+                    // DeepSeek V4 (Flash / Pro) normally executes hosted web search
                     // inside the Responses request. Older relays may reject
                     // that hosted tool shape, so retry once with the existing
                     // client-executed function tool instead of failing the
@@ -334,7 +334,7 @@ struct OpenAIResponsesAdapter {
                         messages: requestMessages,
                         tools: tools,
                         supportsImages: configuration.supportsImageInput,
-                        store: !configuration.isDeepSeekV4FlashResponsesModel,
+                        store: !configuration.isDeepSeekV4ResponsesModel,
                         useHostedWebSearch: false
                     )
                     continue
@@ -413,7 +413,9 @@ struct OpenAIResponsesAdapter {
     /// is injected by the gateway.
     func judgeCommandSafety(
         command: String,
-        historyContext: String = ""
+        historyContext: String = "",
+        toolName: String = "run_command",
+        taskContext: String = ""
     ) async -> AgentSafetyJudgeResult {
         guard !configuration.apiKey.isEmpty else {
             return .unavailable("missing api key")
@@ -429,7 +431,11 @@ struct OpenAIResponsesAdapter {
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let userPayload = AgentInjectionDefense.judgeUserPayload(command: command)
+        let userPayload = AgentInjectionDefense.judgeUserPayload(
+            command: command,
+            toolName: toolName,
+            taskContext: taskContext
+        )
 
         var body: [String: Any] = [
             "model": configuration.model,

@@ -1,7 +1,533 @@
 # Changelog
 
-> 当前文件保留最新版本（1.247.0-rc11 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.253.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.253.0-rc1 - 2026-08-14
+
+### Changed
+
+- 字号设置不再只管正文：左侧会话列表标题、工作区名、「查看更多/更少」、归档分组行、侧边操作行、右侧最近会话轨道，以及 Composer 输入框的文字，全部跟随聊天正文字号变化。此前这些位置写死 14pt / 13pt，调大正文只有聊天区变大，界面其余部分纹丝不动。
+- 聊天区辅助文字（时间戳、状态标签等）改为等量跟随。原公式 `min(正文, 13)` 把辅助文字封顶在默认值上——只跟着缩、不跟着放，正文调到 18pt 时它们仍停在 13pt，与身边的文字明显脱节。现在恒定比正文小 2pt，任何字号下层级差一致。
+- 缩放规则统一为等量偏移而非比例：默认 15pt 正文对应侧边栏 14pt、Composer 与辅助文字 13pt，正文调到 20pt 时同步到 19pt / 18pt，层级差恒定。侧边栏与聊天区并排显示，差值恒定比比值恒定更稳，比例缩放在两端会互相漂开。统一下限 11pt（`AgentDesign.chromeFontSizeFloor`）保证极小字号下仍可读。
+
+### Fixed
+
+- 会话标题宽度缓存补齐字号维度。该缓存原本只按标题字符串索引，依据是「行字号是编译期常量」；字号可变后这个前提不再成立，不修的话调字号后宽度停留在旧值，出现「字变大了、截断位置没变」的错位。字号变化时整体作废缓存（改字号是罕见操作，代价只是下一帧重测，比给每个字号各留一份省内存）。
+- Composer 的 `@` 引用标签跟随输入字号。该标签是 layout manager 的临时属性、自带一份 font，不会跟着 `textView.font` 走，只换正文会让它僵在 12pt 与周围文字不齐。现改为从当前输入字号推导（恒小 1pt），并在换字号时重刷临时属性。
+
+### Tests
+
+- 新增「sidebar and composer text scale with the chat body size」：默认字号处缩放恒等（保证既有视觉不漂）、放大时侧边栏与 Composer 同步等量位移、超范围入参按正文字号同一规则 clamp、最小字号不击穿可读下限。
+- 更新 `chatSupportingFontSize` 的三条既有断言以反映语义变更。其中 `baseFontSize: 18` 一条最能说明问题：旧行为被压到 13pt、全靠调用方传 `visualMinimum: 15` 兜底才有 15，新行为直接给出 16pt。
+
+## 1.252.0-rc1 - 2026-08-14
+
+### Changed
+
+- 构建类命令默认获得网络：`go` / `cargo` / `swift` / `make` / `xcodebuild` / `npm` / `pnpm` / `yarn` / `node` / `python` / `ruby` / `rake` / `vite` 落到 workspace-write 档时一并授予 `workspaceWriteNetwork`，写入仍限工作区。此前 `go build` 在 module cache 未命中时必然要拉依赖，却被归进禁网档，构建只能失败。
+- 授网判定放在 `SafeCommand` 分类之外：命令落在 `alwaysSafe` 还是 `needsJudgment` 属于分类实现细节，只要是构建工具且进入 workspace-write 档就给网，`make` / `xcodebuild` 不再因分类差异被漏掉。
+- 只读网络诊断免审批放行：`ping` / `dig` / `host` / `nslookup` / `traceroute` / `whois` / `netstat` / `ifconfig` / `arp` / `scutil` 走 `readOnlyNetwork`，不再需要升级确认。此前 Agent 连"域名能不能解析"都无法自证。
+- 全局安装维持原边界：带 `-g` / `--global` / `--prefix` 的安装写在工作区外，沙箱本就拒写，不额外授网。`curl` / `wget` / `ssh` / `scp` / `rsync` 仍需升级审批。
+
+### Fixed
+
+- 沙箱拒网不再伪装成 DNS 故障。seatbelt 不报"网络被拒"，而是让域名解析失败，于是各运行时统一报成 `no such host` / `nodename nor servname provided` / `getaddrinfo ENOTFOUND` / `could not resolve host`——照字面读像是本机 DNS 坏了，排查方向被整个带偏。禁网档下这些输出一律识别为沙箱拒绝，失败提示明写"机器 DNS 没问题，别查 resolv.conf"；允许网络的档位下不做此判定，真故障仍按真故障报。
+- Workspace Access 自动审批补齐 `workspaceWriteNetwork`。构建命令升档带网后掉出自动审批白名单，`swift test` / `go build` 这类原本一键放行的命令变成每次都要手点——放宽沙箱反而多出一道弹窗。`commandUsesExternalAccess` 仍拦住 curl / ssh 与显式依赖安装，边界未松。
+
+### Tests
+
+- 新增 `AgentSandboxNetworkPolicyTests`（5 例）：构建命令取得 registry 网络、全局安装不授网、只读诊断免审批、禁网档下 DNS 形态失败被判为沙箱拒绝（且允许网络档不误判）、`deniesNetwork` 与实际下发的 seatbelt profile 保持一致。
+- 该 suite 刻意独立于聚合 suite `WillDeepTests`：函数级 `-only-testing` 选择器匹配不到聚合 suite，会静默跑 0 个用例却打印 `TEST SUCCEEDED`。独立后可用 `-only-testing:XeditTests/AgentSandboxNetworkPolicyTests` 精确复跑。
+
+## 1.251.0-rc2 - 2026-08-14
+
+### Fixed
+
+- `terminal_snapshot` 不再只读一屏。侧边栏很窄，一条长命令光回显就能占满可见窗口，滚上去的输出对 Agent 等于不存在，于是出现「用户明明看得到、WillDeep 却报告没有输出」。镜像本来就留着 500 行回滚，取屏时却被丢弃；现在会一并返回窗口上方的回滚尾部（默认回看 200 行，仍受 `max_characters` 约束），并在返回体里单列「earlier output」小节。
+- Composer 底部操作行的图标尺寸不再各写各的：麦克风的圆此前是 22pt、发送/停止是 26pt，附件与密钥两个裸图标又差 1pt，整行看着参差。尺寸收敛为 `AgentComposerChrome` 的共享 token（`actionDiameter` / `barIconSize` / `actionGlyphSize`），新增控件自动继承同一标度。
+
+### Changed
+
+- `terminal_snapshot` 工具描述同步说明可读回滚，并提示「输出看似缺失时先看 earlier output 再下结论」，避免模型继续以为自己只能看到一屏。
+
+### Tests
+
+- 新增 `AgentTerminalSnapshotScrollbackTests`（6 例）：滚出窗口的行仍可取到、未滚屏时回滚为空、回看深度受限、深度为 0/负数安全退化、回滚不足请求深度不越界、光标与网格信息不受影响。行号一律零填充，避免 `line-1` 命中 `line-10` 的假阳性。
+- 加固 `AgentStopHandlingTests` 的取消及时性用例：原本 `sleep 30` 判 15s，而满载调度抖动实测可达 29.5s，与「根本没取消」同量级，导致周期性假红。改为 `sleep 120` 判 45s，拉开信号与噪声的间距，判据仍是「不是等进程自然结束」。
+
+## 1.251.0-rc1 - 2026-08-14
+
+### Added
+
+- 长 Goal 的续推改为预算驱动：新增 `AgentGoalContinuationBudget`（wall-clock 上限 + 续推次数兜底 + 已用额度），随 Goal 持久化，重启不会把跑了几小时的一段预算刷回满格。
+- 预算耗尽时改为有序软停：宿主要求模型输出 STATE / DONE / REMAINING / BLOCKERS / NEXT 交接快照后才停，横幅降为 notice，点播放键即可续期开启新的执行段。
+
+### Changed
+
+- 「连续两轮验收清单没有进展」不再硬暂停 Goal。无进展轮次改为驱动退避阶梯：1-2 轮给引导，3-4 轮要求用 git / 文件系统做只读对账纠正无证据的勾选，5 轮以上要求指明正在等待的外部条件或换一条路。等待长构建、长测试这类正常状态不再被判成卡死。
+- 暂停横幅文案从硬编码中文迁到本地化目录（`goal-planning.budget-exhausted`，含 en / zh-Hans）。
+- Goal 续推提示的入队去重改为按提示自身首行比对，避免已排队的续推提示把交接请求一起吃掉。
+
+### Tests
+
+- 新增 `AgentGoalContinuationBudgetTests`（11 例）：阶梯升级、wall-clock 与次数两种软停、交接后不再追问、续期保留限额清空已用额度、预算随 Goal 编解码往返、旧会话缺字段仍可解码。
+- `AgentGoalTeamsTests` 原「连续两轮无进展会暂停」用例改写为「预算未尽继续推进」，并新增预算耗尽交接与恢复续期两例。
+
+## 1.250.0-rc5 - 2026-08-14
+
+### Changed
+
+- 长会话进入时仅渲染最近 240 条消息，左侧用户输入定位条也只计算当前窗口；滚动到顶部会按 240 条一页加载更早历史，并在前插内容后保持原阅读位置。
+- 左侧会话列表完全服从用户开关，右侧浏览器、终端、文件等面板存在或变宽时不再自动隐藏，也不再让标题栏开关失效。
+
+### Fixed
+
+- 播放已保存的终端捷径时，如果当前没有可用终端标签，会先建立本地 Shell 标签并在其中播放，不再无声失效。
+- AI 工具执行期间若创建了终端标签，会选中该标签并打开终端侧栏；用户关闭侧栏后，AI 后续再次新建标签仍会重新显露。
+- 会话 JSON 写入前新增凭据形态兜底脱敏，`sk_...`、`sk-...`（含纯字母主体）、GitHub Token、AWS Key、Bearer Token、JWT 与私钥即使绕过上游工具脱敏，也不会以明文落盘。
+- 已保存密钥行新增复制按钮；读取明文前由 macOS 要求 Touch ID 或系统登录密码认证，通过后才把用户本人保存的值复制到剪贴板。
+
+### Tests
+
+- 更新会话侧栏响应式策略回归测试，锁定任何窗口宽度与右侧面板组合都不会覆盖用户的显示选择。
+- 新增持久化凭据脱敏测试，覆盖下划线与纯字母 `sk` Key。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.250.0-rc4** 递增为 **1.250.0-rc5**，内部构建号 **381 → 382**，Help 与 Computer Use Helper 构建号 **297 → 298**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.250.0-rc4 - 2026-08-13
+
+### Added
+
+- “已安排的任务”页面底部新增持久化的近期运行记录，显示运行时间并可点击进入对应对话；升级前已有任务的最后一次运行会自动补入历史。
+- “帐户与设备”底部新增语言设置，默认跟随系统，也可指定简体中文、English 或日本語；语言变更在重新打开 WillDeep 后生效。
+
+### Changed
+
+- “已安排的任务”页面标题、说明、任务、模板、时间等所有文字统一采用 Agent 外观设置中的正文字体与字号，仅用字重区分层级。
+- 移除专家圆桌独立窗口 Scene、弹出按钮和 Agent 专项窗口菜单入口；主窗口统一显示为 WillDeep。
+
+### Fixed
+
+- 对话内搜索框展开时按 Escape 会立即收起，并清空当前搜索状态。
+- 已执行完成的计划不再显示悬浮计划卡片，完成态也不再提供“重新规划”。
+
+### Tests
+
+- 新增语言偏好解析、近期运行排序上限、完成计划显示与修订策略，以及 Agent-only 窗口契约回归测试。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.250.0-rc3** 递增为 **1.250.0-rc4**，内部构建号 **380 → 381**，Help 与 Computer Use Helper 构建号 **296 → 297**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.250.0-rc3 - 2026-08-13
+
+### Fixed
+
+- Composer 右侧活动区的“产物”与 “Dev Server”卡片移除蓝色、绿色图标，统一采用与计划卡一致的灰阶图标语义；运行与选中状态继续通过文字、明暗层级和卡片边框表达。
+- 清理 Agent-only App 中残留的“显示 Editor / 切换到 Editor 模式”菜单入口及三组快捷键承接；WillDeep 菜单不再提供已移除 Editor Scene 的幽灵入口。
+
+### Tests
+
+- 新增活动卡视觉契约测试，防止产物图标回退为系统强调色、Dev Server 图标回退为绿色。
+- 扩展 Agent-only 窗口契约测试，确保 Editor 菜单动作与文案不会重新进入 App 菜单树。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.250.0-rc2** 递增为 **1.250.0-rc3**，内部构建号 **379 → 380**，Help 与 Computer Use Helper 构建号 **295 → 296**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.250.0-rc2 - 2026-08-13
+
+### Fixed
+
+- 侧边栏 Markdown 预览表格改为整表共享列宽，表头与各数据行的列边界保持一致；单列最大宽度限制为 320 pt，超长 DSN、命令和说明在单元格内换行，不再无限撑出预览区域。
+
+### Tests
+
+- 新增表格布局回归测试，覆盖跨行共享列宽、长单元格宽度上限，以及内联 Markdown 标记不参与可见宽度计算。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.250.0-rc1** 递增为 **1.250.0-rc2**，内部构建号 **378 → 379**，Help 与 Computer Use Helper 构建号 **294 → 295**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.250.0-rc1 - 2026-08-13
+
+### Added
+
+- DeepSeek V4 Pro 与 Flash 同等使用 Responses 协议：`deepseek-v4-pro` 直连 DeepSeek 时走无服务端存储的 Responses 请求，经 some.im 时启用网关 24 小时状态续接，有效游标下只发送新增 user/tool input，由 some.im 服务端拼装历史。
+- some.im 高档托管别名 `someim-coding-plan-high`、`someim-code-high`、`someim-auto-pro` 一并复用该 Responses 链路；premium 档解析到非 DeepSeek 后端，继续走 Chat Completions。
+
+### Changed
+
+- `isDeepSeekV4FlashResponsesModel` / `usesDeepSeekV4FlashResponsesBehavior` 更名为 `isDeepSeekV4ResponsesModel` / `usesDeepSeekV4ResponsesBehavior`，白名单拆分为「DeepSeek 直连精确名」与「some.im 别名」两组，语义不再绑死 Flash 单档。
+
+### Tests
+
+- 协议选择契约测试扩展到 Pro：直连与网关 Pro 均断言 Responses 与对应状态属性，高档托管别名断言启用网关状态，premium 别名断言保持 Chat。
+
+### Meta
+
+- 功能新增版本从 **1.249.0-rc1** 升级为 **1.250.0-rc1**，内部构建号 **377 → 378**，Help 与 Computer Use Helper 构建号同步递增。
+
+## 1.249.0-rc1 - 2026-08-13
+
+### Changed
+
+- WillDeep 收敛为 Agent-only 应用，删除通用 Editor scene、文本/源码文档类型注册和 Editor 设置入口。
+- Agent 文件面板和终端快捷录制 JSON 改由 macOS 默认外部编辑器打开；用户可将独立 Qeditor 设为 JSON 或源码文件默认应用。
+
+### Tests
+
+- 更新 Agent 入口、启动策略与设置分组契约，锁定 WillDeep 不再注册或创建 Editor scene。
+
+### Meta
+
+- 功能拆分版本从 **1.248.0-rc8** 升级为 **1.249.0-rc1**，内部构建号 **376 → 377**，Help 与 Computer Use Helper 构建号 **292 → 293**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc8 - 2026-08-13
+
+### Fixed
+
+- 模型选择面板的 Coding Plan“了解并购买”主按钮显式使用 Composer 反差前景色，黑色按钮背景上的文字与外链图标恢复为白色；按钮背景同时绑定统一的主操作填充色，避免皮肤强调色造成前景与背景同色。
+
+### Tests
+
+- 扩展 Composer 单色视觉契约，锁定 Coding Plan 购买按钮必须采用主操作反差前景色，防止黑底黑字回归。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc7** 递增为 **1.248.0-rc8**，内部构建号 **375 → 376**，Help 与 Computer Use Helper 构建号 **291 → 292**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc7 - 2026-08-13
+
+### Fixed
+
+- 终端捷径再次进入“编辑”前，会先从正式 `shortcuts.json` 刷新当前 Controller，再生成单条临时编辑文件。Editor 窗口保存并关闭后，即使 Agent 回落到仍持有旧快照的 headless `AppState`，也不会再用旧内存内容覆盖临时文件，让已保存的编辑重新打开后恢复原样。
+
+### Tests
+
+- 新增双 Controller 回归：模拟保留的 Agent/headless Controller 与 Editor Controller 从同一旧快照启动，Editor 保存新内容后由旧 Controller 再次打开；断言临时文件和旧 Controller 均刷新为正式存储的新版本。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc6** 递增为 **1.248.0-rc7**，内部构建号 **374 → 375**，Help 与 Computer Use Helper 构建号 **290 → 291**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc6 - 2026-08-13
+
+### Changed
+
+- 新建调度项目不再先弹出目录选择器，而是直接进入完整的“定义这个项目”页面。页面头部新增“选择项目工作区/更改工作目录”按钮；未选择目录时目标陈述、AI 检查、验收清单、Planner、执行环境与 Worker 配置保持禁用，绑定成功后整体解锁并自动聚焦目标输入。
+- 新调度项目默认使用 some.im 的 DeepSeek V4 Pro Planner，并默认只选择一个 DeepSeek V4 Flash Worker。一个 Worker Profile 可以按 Provider 并发上限同时执行多个就绪节点；用户补选多个 Worker 用于扩展模型池与故障转移顺序，不再被误解释为并行槽数量。
+- AI 建议的目标草稿、诊断内容与自动填充的验收清单，统一采用“Agent 外观”中设置的正文字体、字号和行高。页脚在主操作“创建项目”旁新增 secondary“取消”按钮，取消会删除尚未创建的临时草稿并留在调度台。
+
+### Fixed
+
+- 新建流程现在拥有可持久化的无工作区草稿态；目录不存在或与运行中的调度项目冲突时会保留当前页面并明确报错，不会生成半成品项目或偷偷切回聊天。
+
+### Tests
+
+- `AgentDispatchCoordinatorTests` 62 项全部通过，新增无工作区草稿创建、目录绑定、取消清理、DeepSeek V4 Pro/Flash 默认路由与单 Profile 多节点并行容量回归；创建页使用生产 SwiftUI 组件完成原图组合对照与视觉 QA。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc5** 递增为 **1.248.0-rc6**，内部构建号 **373 → 374**，Help 与 Computer Use Helper 构建号 **289 → 290**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc5 - 2026-08-13
+
+### Fixed
+
+- 工作区会话行不再在右侧重复保留与左侧相同的 32 pt 深缩进。左侧仍维持 32 pt，以继续和工作区标题的 40 pt 文本列对齐；右侧收紧为 4 pt，为长会话标题释放 28 pt，按 14 pt 行字体约等于两个汉字宽度。
+- 悬停时的图钉与归档操作区继续固定为 40 pt，非悬停行仍不预留操作宽度；标题增宽不会挤压按钮、状态点或改变选中背景范围。
+
+### Tests
+
+- `AgentSidebarListVisualMetricsTests` 21 项全部通过，新增“左右缩进差值等于两个行字体宽度”的布局契约，并使用与用户截图一致的长标题数据重新生成原生侧栏验收图。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc4** 递增为 **1.248.0-rc5**，内部构建号 **372 → 373**，Help 与 Computer Use Helper 构建号 **288 → 289**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc4 - 2026-08-13
+
+### Changed
+
+- 调度台顶部 Planner 入口采用用户选定的图 1 方案，改为锚定入口的原生 macOS Popover；主模型与备选模型纵向排列，并通过方向连接符明确一主一备关系。弹窗内可直接进入 Profile 管理，取消不会落盘，只有“完成”才提交本轮选择。
+- Planner 从多级回退链收敛为一个主模型与一个备选模型。Goal 创建页、顶部快捷入口、项目更新、会话同步和旧记录读取统一执行同一归一化策略：备选不能与主模型重复，旧数据仅保留第一个有效备选。
+- Planner 弹窗文案补齐中英文 i18n，并使用现有 Profile 的 Provider、模型 ID 与 SF Symbol 展示，不新增硬编码可见文案或位图资产。
+
+### Tests
+
+- `AgentDispatchCoordinatorTests` 58 项全部通过；新增 Planner 单备选策略回归与原生 SwiftUI 聚焦渲染验收，并对照用户选定的图 1 完成视觉 QA。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc3** 递增为 **1.248.0-rc4**，内部构建号 **371 → 372**，Help 与 Computer Use Helper 构建号 **287 → 288**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc3 - 2026-08-13
+
+### Fixed
+
+- Worker Profile 的模型目录不再局限于 Provider 预设的 Flash / Pro 与内建 Profile 模型。管理器会刷新当前 Provider 的模型目录并纳入其对话式 LLM，包括名称含 MiniMax、Opus、DeepSeek V4 Pro 等模型；图像、视频、Embedding、Rerank、语音等明确的非 LLM 模型仍会过滤。
+- 模型 ID 改为“可自由输入 + Provider 建议菜单”的组合；远端模型目录暂时不可用时仍可手动填写，不会因为发现失败把 Profile 配置卡死。
+
+### Tests
+
+- `AgentDispatchCoordinatorTests` 56 项全部通过，新增 Provider LLM 家族纳入与非 LLM 排除回归，并覆盖既有 Profile 原生渲染、目录隔离和调度 Harness 行为。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc2** 递增为 **1.248.0-rc3**，内部构建号 **370 → 371**，Help 与 Computer Use Helper 构建号 **286 → 287**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc2 - 2026-08-13
+
+### Fixed
+
+- 调度节点不再在模型回合停止后永久停留于“验收中”。宿主现在把验收视为节点 Harness 的活跃阶段：未完成时在有限预算内自动发起返工，次数随节点持久化；重新进入调度台后会重新挂载完成监听，预算耗尽或运行会话丢失则明确失败，并在自动执行模式下尝试尚未使用的回退 Worker Profile。
+- 只有验收清单全部完成的节点才会合并并解锁下游；显式暂停仍会停止自动恢复，避免用户停止后出现隐藏执行。
+
+### Tests
+
+- 调度协调器新增验收恢复账本持久化与新运行重置、冷恢复预算耗尽、冷恢复运行会话丢失和重开后完成收口回归；`AgentDispatchCoordinatorTests` 55 项、节点接管与运行时查找补充回归 18 项全部通过。
+
+### Meta
+
+- Bugfix 预发布版本从 **1.248.0-rc1** 递增为 **1.248.0-rc2**，内部构建号 **369 → 370**，Help 与 Computer Use Helper 构建号 **285 → 286**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+## 1.248.0-rc1 - 2026-08-13
+
+### Added
+
+- 调度 Profile 管理改为 Provider 与模型两级选择：先确定 Provider，再从该 Provider 的可用模型中选择；内建 Profile 也允许修改 Provider/模型，覆盖会按原稳定 ID 持久化，不会复制成新 Profile 或破坏既有调度项目引用。
+- 左侧会话列表新增宽度拖拽和持久化，原 230 pt 宽度作为下限，上限为 520 pt；分隔条的命中区、悬停高亮和左右拖拽光标与右侧终端/预览面板保持一致。拖拽过程中聊天列保持已提交宽度，松手后一次性重排并由现有阅读锚点机制恢复相对位置，避免正文跳回顶部。
+
+### Changed
+
+- 新调度项目的默认规划 Profile 从 Kimi K3 改为 GPT-5.6 Sol；Kimi K3 仍作为可选内建 Profile 保留，已保存的旧项目也仍能按原 ID 解析。
+- Profile 管理的“好”按钮以及调度台的“启动执行”、“添加节点”、“启动任务”、创建、保存和发送等同级主操作统一为黑底白字；“停止任务”等破坏性操作保留红色语义。
+
+### Tests
+
+- 新增内建 Profile 覆盖持久化、Provider 模型目录隔离、默认规划模型与左侧拖拽分隔条尺寸契约回归。
+- 调度协调器测试夹具显式标记调度台会话，兼容 `develop` 的调度台归属边界，确保普通 Goal 不被误投影为调度项目的生产规则继续生效。
+
+### Meta
+
+- 调度 Profile 和会话侧栏功能新增使版本从 **1.247.0-rc25** 提升为 **1.248.0-rc1**，内部构建号 **368 → 369**，Help 与 Computer Use Helper 构建号 **284 → 285**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc25 - 2026-08-12
+
+### Fixed
+
+- Composer 上方的分支胶囊跟上工作区的分支切换。这枚胶囊读 `agentWorkspaceGitStatus`，而它此前只在切会话、切根目录、建删 worktree 时刷新——全是**路径变了**的场合；分支恰恰可以在同一个路径里被换掉（Agent 在 `run_command` 里跑 `git switch`、内置终端、用户自己的终端），于是切完分支后胶囊会一直挂着旧分支名，成了一条会骗人的运行上下文。现在编辑器 git 刷新、Agent 工具收尾（`refreshGitStatusAfterAgentTool`）、活动 worktree 变更刷新三条既有链路都把自己那份已经算好的仓库身份（root + 分支）补录给胶囊，不额外开 git 进程；补录只在快照路径等于当前活动 workspace 时生效，后台会话的快照不会串改前台显示。App 重新获得焦点时另补一次刷新，兜住在 WillDeep 外面切分支的情况。
+
+### Tests
+
+- `AgentComposerBranchPillTests` 新增两用例：同一 workspace 的新分支名能被采纳且身份视图不被灌入逐文件状态；另一个 workspace 的快照不得改写当前胶囊。
+
+### Meta
+
+- Composer 分支胶囊修复，预发布版本从 **1.247.0-rc24** 提升为 **1.247.0-rc25**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc24 - 2026-08-12
+
+### Fixed
+
+- 多文件夹项目的"可重建产物清理"自动放行补上最后一条单根链路。rc23 修完后台沙箱后，静态判定 `AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand` 仍只认主工作区：内部调用 `isRebuildableWorkspaceCleanup` 时硬编码传空的 `additionalWorkspaceRoots`，`cd` 目标与路径 token 的工作区判定也只看单根。后果是在项目第二个文件夹里跑 `rm -rf node_modules` 这类本该秒过的清理，多余地弹人工确认卡。现在该函数及其内部的 `commandDecision`、`isRebuildableWorkspaceCleanup`、全部 `isInsideWorkspace` 判定都接受并透传 `additionalWorkspaceRoots`；`autoApprovalSource` 同步加参，三个生产调用方（Agent 主循环、委派执行器审批、pending 审批重评估）统一传入 `agentWorkspaceRoots(for:).dropFirst()`。
+
+### Tests
+
+- `AgentCommandSafetyTests` 新增表驱动用例：第二个项目根下的相对/绝对/嵌套子目录 `node_modules` 清理均可自动放行；项目外路径、根目录本身、非可重建目录仍拒绝；负向对照确认不带 `additionalWorkspaceRoots` 时同一命令仍走人工审批。
+
+### Meta
+
+- 多文件夹清理自动放行修复，预发布版本从 **1.247.0-rc23** 提升为 **1.247.0-rc24**，内部构建号 **367 → 368**，Help 与 Computer Use Helper 构建号 **283 → 284**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc23 - 2026-08-12
+
+### Fixed
+
+- 多文件夹项目的后台任务不再把第二个文件夹当沙箱外来客。seatbelt profile 和路径守卫早已支持多个可写根，前台 `run_command` 也一直把项目全部文件夹传下去；唯独后台链路 `AgentJobRegistry.start` 没有"额外可写根"这个参数——前台能写的目录，转成后台任务（`npm install`、vite 建缓存）立刻 EPERM。现在 `start` / `startExecutor`、沙箱 EPERM 自动重试规格、Dev Server 面板与悬浮卡重启、本地委派执行器（Claude Code / Codex CLI 的 `AgentExecutorProcessSpecification`）全部带上项目全部文件夹。
+- seatbelt 可写根改为同时放行 realpath。sandbox-exec 匹配的是内核解析后的真实路径：经符号链接拼出的根（`/tmp/x` 真身是 `/private/tmp/x`；`$TMPDIR` 的 `/var/folders/…` 真身在 `/private/var/…`）此前从未真正命中过自己的 subpath 规则——临时目录的固定放行实际一直是坏的，只是被各工具对 `$TMPDIR` 写失败的静默降级掩盖。现在每个可写根（含临时目录）同时输出标准化路径与 realpath 两条规则。
+
+### Tests
+
+- `AgentBackgroundJobsTests` 新增两用例：带 `additionalWorkspaceRoots` 的后台任务能写入第二个项目根（两个根都造在 `/tmp` 下——profile 固定放行 `$TMPDIR`，造在那儿测了等于没测）；负向对照确认不带参数时同一条写入仍被拦，防止 seatbelt 悄悄失效时正向用例假绿。正向用例最初就红了——正是它揪出了上面 `/tmp` realpath 这条更深的 bug。
+
+### Meta
+
+- 后台任务多可写根与 seatbelt realpath 修复，预发布版本从 **1.247.0-rc22** 提升为 **1.247.0-rc23**，内部构建号 **366 → 367**，Help 与 Computer Use Helper 构建号 **282 → 283**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc22 - 2026-08-12
+
+### Changed
+
+- 排队消息行改用灰度层次，不再整条染橙。等待发送是正常且可逆的状态，不是警告；卡片底色与描边落到与其余 chrome 一致的安静灰，沙漏图标与"已排队"标签同步降到次级灰，删除按钮的红色一并移除。
+- 排队行右侧默认只保留「立即发送」纸飞机一个按钮，「修改」与「删除」收进新增的"…"溢出菜单。立即发送是这一行存在的理由，值得一个常驻位置；另外两个是偶发操作、且其中一个不可逆，放进菜单后误点碰不到。菜单沿用 `agentQuietMenuChrome` 保持灰色，删除项保留 macOS 原生的 destructive 样式。
+- `iconButton` 的 `role` 分支随之删除——移走删除按钮后已无调用方，留着就是死代码。
+
+### Meta
+
+- 排队行配色与操作层级调整，预发布版本从 **1.247.0-rc21** 提升为 **1.247.0-rc22**，内部构建号 **365 → 366**，Help 与 Computer Use Helper 构建号 **281 → 282**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc21 - 2026-08-12
+
+### Fixed
+
+- 调度台只收编在调度台里创建的项目。`AgentDispatchCoordinator.synchronizedGoals` 此前的收编条件只有"有 Goal 且不是子任务"，完全不看 `presentationScope`——而从 composer 切到目标模式**并不会**改变 `presentationScope`。于是任何普通聊天只要定下 Goal，就自动在调度台里多出一个用户从未创建过的项目。现在要求 `presentationScope == .dispatchBoard`，即真正从调度台入口开的会话；普通会话的 Goal 仍留在侧边栏，不再被投影过去。
+- composer 顶部的「此工作区已有未完成的 Goal」提示条不再指向调度台自有的会话。那条提示的"打开"对调度台项目及其子任务会直接切走到调度台，等于因为别处存在一个 Goal 就把用户拽离当前对话；调度台是相对独立的系统，不该这样倒灌。提示条现在只呈现同工作区里的普通会话 Goal，随之去掉了"调度台项目优先"的排序位。新增 `AgentWorkspaceSessionSnapshot.isDispatchOwned` 统一判定（调度台项目或其子任务）。
+- 系统提示词里的 `WORKSPACE GOAL AWARENESS` 保持原样：让 Agent 知道同工作区还有未完成的调度台项目，是为了避免重复开工，并不会把用户导向任何界面。
+
+### Tests
+
+- `AgentSidebarGoalVisibilityTests` 与 `AgentGoalModeSessionRecoveryTests` 里各有一份 `synchronizedGoals` 的"镜像判定"，此前不含 scope；两份镜像与其断言一并更新，否则它们会继续替旧契约站台、让改动看起来无害。现在分别断言：普通会话定下 Goal 后留在侧边栏且**不**被调度台收编；只有 `.dispatchBoard` 会话才被收编。
+- 新增 `isDispatchOwned` 用例，覆盖调度台项目、调度台子任务（含 scope 被写成 workspace 的子任务）与普通会话三种形态。
+
+### Meta
+
+- 调度台归属边界修复，预发布版本从 **1.247.0-rc20** 提升为 **1.247.0-rc21**，内部构建号 **364 → 365**，Help 与 Computer Use Helper 构建号 **280 → 281**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc20 - 2026-08-12
+
+### Changed
+
+- 计划卡的完成打勾从绿色改为分层灰。红绿正是红绿色盲读者分不开的那条轴，而"已完成"是计划的正常归宿、不需要抢眼；图标形状（实心勾 / 空心圆 / 减号）本身已经携带状态，灰度只负责排层次：已完成落在 `.secondary`，尚未开始与已跳过再退一档到 `iconMuted`。仍然需要你注意的两个状态（进行中、失败）保留原有颜色。
+- 计划卡的"已完成"徽章从蓝色胶囊改为安静灰底 + 次级墨色文字；白字只在饱和底色上才读得清，灰底上会糊。等待批准（橙）、执行中（绿）、已拒绝（红）保持原样，中断态一并归入安静灰。
+- 聊天区所有"…"更多按钮统一为灰色，不再是系统蓝：计划卡、产物卡、Dev Server 卡、聊天区右上角工具菜单、接管抽屉、媒体任务、终端快捷指令、媒体产物缩略图共八处。根因是 `Menu` 配 `.borderlessButton` 会**忽略 label 自身的 `foregroundStyle`** 回退到 macOS 强调色——其中计划卡与终端快捷指令早已写了灰色却依然显示为蓝，正是因为写在了不被读取的那一层。新增 `View.agentQuietMenuChrome(_:)` 统一在 `.tint` 这一层压住，逐个挂在按钮上而非套在容器上，以免顺带吞掉附近有意保留强调色的控件。
+
+### Tests
+
+- `AgentPlanProgressTests` 新增两个用例：步骤图标的分层灰映射（已完成不等于绿、未开始比已完成更淡、进行中与失败保留颜色）；"已完成"徽章不等于蓝或绿、文字随灰底改次级墨色，而执行中/已拒绝的配色与白字保持不变。
+
+### Meta
+
+- 计划卡与悬浮卡片配色去强调色，预发布版本从 **1.247.0-rc19** 提升为 **1.247.0-rc20**，内部构建号 **363 → 364**，Help 与 Computer Use Helper 构建号 **279 → 280**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc19 - 2026-08-12
+
+### Fixed
+
+- 命令跑完只是返回非零时，工具活动行不再染成告警橙。`run_command` 只要退出码非 0 就 `throw`，UI 拿到 `.failed` 就无条件上橙色——于是 `corepack --version` 在没装 corepack 的机器上退出 127、`grep` 无匹配退出 1 这类**探测型命令的正常答案**，看上去和"工具炸了"一模一样，而 Agent 读到结果后其实照常往下走。现在 `AgentToolCall` 新增 `commandExitCode`，只记录进程真正跑完并返回的正退出码；活动行、分组边框与完整卡片的图标、状态文字和边框据此改用中性灰。进程根本没起来（`runCommand` 用 `-1` 哨兵值）、超时、参数非法、批处理失败等真需要注意的故障，仍然保持橙色。标题文案不变，改的只是配色。
+
+### Tests
+
+- `AgentToolCallGroupingPresentationTests` 新增两个用例：`completedCommandExitCode` 只认跑完的正退出码（127 / 1 认，`-1` 哨兵、0、超时、缺参数、HTTP 失败都不认）；活动行据此标记普通失败，且成功态不受影响、标题仍以"失败"结尾。
+
+### Meta
+
+- 工具活动行配色修复，预发布版本从 **1.247.0-rc18** 提升为 **1.247.0-rc19**，内部构建号 **362 → 363**，Help 与 Computer Use Helper 构建号 **278 → 279**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc18 - 2026-08-12
+
+### Performance
+
+- 统计面板的 usage 扫描新增 `usage-v1` 侧车缓存：此前统计面板首次出现时，后台要把 `agent-sessions/` 下每一份完整会话 JSON（本机实测 587 个文件 / 67MB，最大单文件 7.2MB）逐个全量解码，只为数出每条消息的字符数与 token 统计；现在每个会话保存时由内存对象直接写出一份小索引文件（schemaVersion + 源文件签名 + usage 快照），冷启动扫描只验签名读小文件。签名（mtime+size）或 schemaVersion 对不上、以及被外部进程改写过的会话，自动回退整份 JSON 全量解码并自愈回写侧车；删除会话时侧车一并清理。对外契约不变，`loadUsageSnapshots()` 返回内容与逐份全量解码完全一致。升级后第一次扫描仍是一次性全量重建 + 回写（在既有后台任务里完成，不阻塞界面）。
+- 终端字体 ID 解析不再枚举整个字体库。设置 `load()` → `normalized()` 跑在首帧之前，旧的 `all.first { $0.id == id }` 会强制求值 `NSFontManager.availableFontFamilies`（几百个字体族的机器上冷启动 0.3–0.9s），首窗白屏正卡在这里。现在内置字体从固定表解析，`nf:` 开头的 Nerd Font ID 只用 `NSFont(name:)` 探测自己那一族，nil 即未安装、调用方回退默认字体，行为与此前一致；全量枚举只留给设置里的字体选择器。
+
+### Fixed
+
+- Agent 工具调用在风险分类和人工审批之前统一校验 Schema 必填参数及类型。缺少 `command` 的 `terminal_send_command` 等畸形调用会直接失败并反馈 Agent 重新提交，不再生成没有真实操作内容、只显示 `_approval_reason` / `_sandbox` 内部元数据的误导审批卡。
+
+### Docs
+
+- 补入用量日历第 4 版设计验收记录 `artifacts/design-qa/usage-calendar-1.246.0-rc1/design-qa.md`（配套参考图与实现截图此前已在库中）。文末附 Superseded 注记：其中"当天存在无法定价的用量时显示未知"一条已被 1.247.0-rc14 的"按 $0 计入"取代。
+
+### Tests
+
+- 新增 `AgentUsageSidecarTests`：保存后侧车内容与整份 JSON 全量解码逐字段相等；签名匹配时冷扫描走快路径（以"内容故意不同的诱饵侧车"证明未做全量解码）；会话被外部改写与 schemaVersion 不匹配两种失效均触发重建并回写；删除会话时侧车一并删除。
+- 新增 `EditorTerminalFontResolutionTests`，含"短路解析与全量枚举表逐项一致"的等价性用例。
+- 新增 `AgentToolArgumentValidationTests` 覆盖必填参数与类型校验。
+
+### Meta
+
+- 四个并行分支合入 develop，预发布版本从 **1.247.0-rc17** 提升为 **1.247.0-rc18**，内部构建号 **361 → 362**，Help 与 Computer Use Helper 构建号 **277 → 278**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+- 各分支自带的版本位点（rc13 / rc15 / rc16）在合并时统一取 develop 侧，条目文本归位到本条 rc18。
+
+## 1.247.0-rc17 - 2026-08-12
+
+### Fixed
+
+- Agent 聊天正文到工具调用与统计总结元信息组的留白由一整行字高收紧为当前正文字号的 **0.7 倍**；历史 TextKit 与运行中 SwiftUI 工具活动采用同一间距基准。
+- 同一组运行中工具活动的灰色摘要行改为 2 pt 紧凑行间距，连续的“已运行命令”“已发送终端命令”等记录不再像两条独立消息一样分散。
+
+### Tests
+
+- 扩充 Agent 聊天排版回归，覆盖正文到工具摘要、正文到统计总结的 0.7 倍字号留白，以及工具活动组内部紧凑间距；两套定向测试共 78 项通过。
+
+### Meta
+
+- Agent 元信息间距修复合入最新 develop，预发布版本从 **1.247.0-rc16** 递增为 **1.247.0-rc17**，内部构建号 **360 → 361**，Help 与 Computer Use Helper 构建号 **276 → 277**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc16 - 2026-08-12
+
+### Fixed
+
+- 侧边栏会话列表在冷启动加载完成前不再显示"您开始的会话将显示在这里。"的空态文案。会话目录在后台线程从磁盘读取（`AgentSessionStore.loadAllWithMetadata()`），头几百毫秒列表必然为空，旧逻辑只看 `agentSessions.isEmpty` 就渲染空态，用户会误以为会话丢了。现在空态三分：目录未加载完且列表为空 → 显示"正在加载会话…"加载占位（小号 ProgressView + 说明文字，高度钉在正常行高 31pt，首批会话落地时无布局跳动）；目录加载完且确实没有会话 → 维持既有空态文案；列表非空 → 现状不变。分支选择抽成纯函数 `AgentSidebarCatalogPlaceholder.state(hasLoadedCatalog:isSessionListEmpty:)`，由已有的 `@Published hasLoadedAgentSessionCatalog` 驱动视图刷新。
+- 中继模式的配对载荷不再复制局域网字段。`MobileGatewayCoordinator.relayPairingPayload` 此前把中继地址和中继 token 各复制一份填进 `base_url` / `pairing_token`，中继模式下压根没有本地网关可连，这两份副本换不来任何能力，却白占约 100 字节二维码容量（重复 token 单独就能把码推高一到两个版本）。现在两字段改为可选、传 `nil`，JSON 编码时直接省略；手机端本就从 `relay_base_url` / `relay_token` 取值（紧凑二维码参数 `r`/`t` 一直如此），紧凑分支不受影响，对 Android ≥ 1.25.0-rc5 线上兼容。
+- 设置面板"配对地址"一行改取 `baseURL ?? relayBaseURL`，中继模式显示手机实际加入的中继端点；两者皆空时整行隐藏，不再留一行空白。
+
+### Tests
+
+- `AgentSidebarListVisualMetricsTests` 新增占位三分支用例，覆盖加载中/真空态/列表非空的输入组合。
+- `MobileGatewayCoordinatorTests.relayPairingPayloadCarriesRelayCoordinates` 改为断言 `baseURL` / `pairingToken` 为 `nil`，并新增断言配对 JSON 不含 `"base_url"` / `"pairing_token"`。
+
+### Meta
+
+- 侧边栏加载态与中继配对载荷瘦身合入 develop，预发布版本从 **1.247.0-rc15** 提升为 **1.247.0-rc16**，内部构建号 **359 → 360**，Help 与 Computer Use Helper 构建号 **275 → 276**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+- 两个分支各自携带的版本位点（rc14 / rc12）在合并时统一取 develop 侧，条目文本归位到本条 rc16。
+
+## 1.247.0-rc15 - 2026-08-12
+
+### Fixed
+
+- “已安排”中的只读远程巡检会先验证 SSH 传输参数，再递归检查远端载荷；有时间边界的 `journalctl` 读取、`systemctl show/status/is-active` 查询和 grep/sort/head 等只读分析链可在 Smart 审核下直接执行，不再频繁停在无人值守的人工审批卡。
+- 普通 Smart 会话的可见终端与后台周期任务共用 `readOnlyNetwork` 边界；交互式 SSH、隧道或代理、远端重定向写入、服务重启及日志维护仍进入 `someim-security-guard` 或人工复核。
+- `someim-security-guard` 请求新增精确工具类型和从当前用户诉求截取、凭据脱敏、限长的任务意图。任务意图只帮助判断动作相关性，不构成授权、不能覆盖命令事实或扩大沙箱权限。
+- 智能审核 YES 缓存收紧为“工具 + 精确命令 + 脱敏任务上下文”，避免依赖一次任务意图的结论跨目标复用；明确 NO、无效输出和服务不可用继续失败关闭。
+
+### Tests
+
+- 新增只读 SSH 日志、服务状态、复合过滤链、交互式 SSH、代理参数、远端写入、服务重启及日志维护的分类回归覆盖。
+- 新增任务上下文 XML 隔离、凭据脱敏、长度上限、伪造 verdict 防护、上下文缓存键及 some.im 服务端托管请求体测试。
+
+### Meta
+
+- 周期任务、普通会话与 Auto-review 审核边界补齐，预发布版本从 **1.247.0-rc14** 提升为 **1.247.0-rc15**，内部构建号 **358 → 359**，Help 与 Computer Use Helper 构建号 **274 → 275**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc14 - 2026-08-12
+
+### Fixed
+
+- 用量统计价格表补齐缺口：some.im 托管系列（`someim-auto-*` / `someim-code-*` / `someim-coding-plan-*`，含经 `custom` 中转的场景）按 `deepseek-v4-flash` 价目（$0.14 / $0.28 每百万 token）估算；`kimi-k3` 按 Moonshot 官方牌价 $3 输入 / $0.30 缓存命中 / $15 输出补入。此前这批模型全部落入"未定价"。
+- 修复 `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` 被子串匹配误算成 gpt-5 价目（$1.25/$10）的问题：新增 gpt-5.6 三档专属价格行（sol $5/$30、terra $2/$12、luna $0.20/$1.20，缓存输入 10%），并置于 `gpt-5` 家族行之前。
+- 用量日历"未定价"不再一票否决：某天存在无法计价的消息（无价格行、外部 CLI 委托等）时按 $0 计入而非把整天金额置为"未定价"，月汇总同步恢复显示真实金额。
+
+### Meta
+
+- 定价与统计修复，预发布版本从 **1.247.0-rc13** 提升为 **1.247.0-rc14**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc13 - 2026-08-12
+
+### Fixed
+
+- 其余测试一次性 UserDefaults suite 全部纳入 rc12 引入的卫生机制。开发机上 `~/Library/Preferences` 里仍有约 4800 个未登记前缀的壳在泄漏：`willdeep-runtime-store-*` 数千个、`com.willdeep.tests.learningReview.*` 约 580 个，外加 `willdeep-mobile-gateway-*`、`test.workspace.identity.*`、`CollaborationConnectorSettingsTests.*` 等。8 个测试文件（AgentSelfLearningTests、AgentRemoteRuntimeTests、MobileGatewayCoordinatorTests、SomeIMManagedRoutingTests、CollaborationConnectorSettingsTests、AgentSidebarWorkspaceStateStoreTests、AgentMCPServerDirectoryTests、AgentDispatchCoordinatorTests）的收尾统一改走 `TestDefaultsHygiene.cleanup`，其中 MobileGatewayCoordinatorTests 的 6 处和 AgentWorkspaceIdentityStoreTests 此前完全没有收尾。
+- `TestDefaultsHygiene.disposableSuitePrefixes` 登记全部 16 个一次性前缀（含 `willdeep-runtime-store-` 这类 UUID 直接用连字符相接、不带结尾点的前缀，按实际字面量登记，不误伤 `com.willdeep.app` / `WillDeep` 等真实配置域）；`cleanup` 现在兜底触发进程级 sweep，`-only-testing` 只跑单个套件时也能扫掉上一轮残留，存量壳会在登记后的第一轮测试被自动清空。
+
+### Meta
+
+- 测试卫生修复，预发布版本从 **1.247.0-rc12** 提升为 **1.247.0-rc13**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.247.0-rc12 - 2026-08-12
+
+### Fixed
+
+- 单元测试不再往 `~/Library/Preferences` 里无限撒一次性 UserDefaults 壳文件（开发机上已累积 2182 个 `com.willdeep.agent.test.defaults.*.plist` 和 202 个 `com.willdeep.mcp.test.*.plist`）。两处根因实测确认：其一，MCP 信任测试的 defer 只调 `removePersistentDomain`，而该调用只清空域内容，磁盘上必留一个 ~42 字节空壳，每跑一次漏一个；其二，`KeychainSandbox` 虽然在 deinit 里删了壳文件（1.228.0-rc8 起），但删除动作与 cfprefsd 的异步落盘存在竞态，每轮全量测试仍漏出个位数的壳。
+- 新增 `XeditTests/TestDefaultsHygiene.swift` 双层防御：每个 suite 用完即走完整收尾（`removePersistentDomain` + `removeSuite(named:)` + 删壳文件），并在每个测试进程首次建 suite 时扫掉上一轮被 cfprefsd 复活的壳——磁盘残留从此收敛在一轮的量以内。`KeychainSandbox` 与 MCP 信任测试均改走该工具；一次性 suite 前缀集中登记，避免误伤 `com.willdeep.app` 等真实配置域。
+
+### Meta
+
+- 测试卫生修复，预发布版本从 **1.247.0-rc11** 提升为 **1.247.0-rc12**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.247.0-rc11 - 2026-08-12
 

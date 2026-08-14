@@ -88,7 +88,7 @@ struct AgentMCPServerDirectoryTests {
         AgentMCPSettingsStore._setTestDefaultsOverride(defaults)
         defer {
             AgentMCPSettingsStore._setTestDefaultsOverride(nil)
-            defaults.removePersistentDomain(forName: suiteName)
+            TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
         }
 
         let createJSON = """
@@ -162,7 +162,7 @@ struct AgentMCPServerDirectoryTests {
             AgentCredentialStore._wipeTestKeychain()
             AgentCredentialStore._setTestKeychainServiceOverride(nil)
             AgentMCPSettingsStore._setTestDefaultsOverride(nil)
-            defaults.removePersistentDomain(forName: suiteName)
+            TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
         }
 
         let server = AgentMCPServerConfig(

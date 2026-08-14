@@ -230,10 +230,10 @@ final class AppState: ObservableObject {
     var cachedJudgeHistoryBuiltAt: Date?
     /// App-lifetime cache of safety-judge YES verdicts, keyed by
     /// `AgentToolAuthorization.judgeVerdictCacheKey` (tool + exact normalized
-    /// command) with a grant timestamp. Repeating the same command avoids a
-    /// flash-model round trip, but changed arguments always receive a fresh
-    /// verdict. Denials are never cached, and danger-tier commands never
-    /// reach the judge at all.
+    /// command + compact redacted task context) with a grant timestamp.
+    /// Repeating the same reviewed action avoids a flash-model round trip,
+    /// but changed arguments or task intent receive a fresh verdict. Denials
+    /// are never cached, and danger-tier commands never reach the judge.
     var cachedJudgeAllowedVerdicts: [String: Date] = [:]
     /// User-tunable base font size (in points) for the Agent chat
     /// transcript body — applies to user/assistant message prose and
@@ -343,6 +343,9 @@ final class AppState: ObservableObject {
     /// first. Surfaces in the Agent-mode sidebar's Routines section and
     /// drives the AgentRoutineScheduler that wakes them up on schedule.
     @Published var agentRoutines: [AgentRoutine] = []
+    /// Durable newest-first history of scheduled runs. Each entry keeps the
+    /// resulting conversation id so the Scheduled page can reopen that run.
+    @Published var agentRoutineRuns: [AgentRoutineRunRecord] = []
     let agentRoutineScheduler = AgentRoutineScheduler()
 
     /// Goal-first dispatch console state. The coordinator owns durable task
@@ -354,12 +357,6 @@ final class AppState: ObservableObject {
     /// refresh at the same time, while still allowing a retry runtime to take
     /// over monitoring for the same task.
     var dispatchMonitoredRuntimeIDsByTaskID: [UUID: UUID] = [:]
-    /// An unattended node that returns with unchecked acceptance criteria is
-    /// not finished merely because its model turn stopped. Keep a small
-    /// host-owned retry budget so recoverable verification failures get a
-    /// fresh turn instead of silently parking the graph in review.
-    var dispatchAutomaticRecoveryAttemptsByTaskID: [UUID: Int] = [:]
-
     /// Process-wide registry of background `run_command` jobs. Scoped
     /// by `runtime.id` inside the registry so concurrent sessions can't
     /// steal each other's jobs or completion notices. See
@@ -674,6 +671,27 @@ final class AppState: ObservableObject {
         self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
         syncLocalModelComposerProvider(settings: AgentSettingsStore.loadLocalModelSettings())
         self.agentRoutines = AgentRoutineStore.loadAll()
+        let storedRuns = AgentRoutineRunStore.loadAll()
+        if storedRuns.isEmpty {
+            self.agentRoutineRuns = AgentRoutineRunHistory.recent(
+                agentRoutines.compactMap { routine in
+                    guard let startedAt = routine.lastRunAt,
+                          let sessionID = routine.lastSessionID else { return nil }
+                    return AgentRoutineRunRecord(
+                        routineID: routine.id,
+                        routineName: routine.name,
+                        sessionID: sessionID,
+                        startedAt: startedAt
+                    )
+                },
+                limit: AgentRoutineRunHistory.maximumStoredRuns
+            )
+            if !agentRoutineRuns.isEmpty {
+                AgentRoutineRunStore.save(agentRoutineRuns)
+            }
+        } else {
+            self.agentRoutineRuns = storedRuns
+        }
         agentRoutineScheduler.start(initialRoutines: agentRoutines) { [weak self] routineID in
             self?.fireRoutine(id: routineID) != nil
         }

@@ -84,6 +84,14 @@ final class AgentDispatchCoordinator: ObservableObject {
             existingGoals.flatMap { $0.tasks.compactMap(\.runtimeSessionID) }
         )
         let sourceSessions = sessions.filter { session in
+            // Only sessions that were actually started in the dispatch console
+            // become projects there. Having a goal is not enough: ordinary
+            // chats reach Goal mode straight from the composer without ever
+            // opting into the console, and filing them there filled the board
+            // with projects the user never created — then offered to navigate
+            // into it. The console is a separate system; it owns what was
+            // created inside it.
+            guard session.presentationScope == .dispatchBoard else { return false }
             // Goal-board projection does not remove the source conversation
             // from its workspace sidebar; it is an additional task view.
             guard session.hasBoardGoal else { return false }
@@ -291,9 +299,11 @@ final class AgentDispatchCoordinator: ObservableObject {
     ) {
         updateGoal(id: goalID) { goal in
             goal.planningProfileID = primaryProfileID
-            goal.planningFallbackProfileIDs = Self.uniqueStrings(
-                fallbackProfileIDs.filter { $0 != primaryProfileID }
-            )
+            goal.planningFallbackProfileIDs = AgentDispatchPlannerSelection
+                .normalizedFallbackProfileIDs(
+                    primaryProfileID: primaryProfileID,
+                    fallbackProfileIDs: fallbackProfileIDs
+                )
             goal.updatedAt = Date()
         }
     }
@@ -582,6 +592,18 @@ final class AgentDispatchCoordinator: ObservableObject {
                 runtimeSessionIDs.append(runtimeSessionID)
             }
             task.runtimeSessionIDs = runtimeSessionIDs
+            task.acceptanceRecoveryAttempts = 0
+            task.updatedAt = Date()
+        }
+    }
+
+    func recordTaskAcceptanceRecoveryAttempts(
+        goalID: UUID,
+        taskID: UUID,
+        attempts: Int
+    ) {
+        updateTask(goalID: goalID, taskID: taskID) { task in
+            task.acceptanceRecoveryAttempts = max(0, attempts)
             task.updatedAt = Date()
         }
     }
@@ -811,8 +833,15 @@ final class AgentDispatchCoordinator: ObservableObject {
             planningProfileID: sourceGoal.planningProfileID
                 ?? existing?.planningProfileID
                 ?? AgentExecutionProfile.recommendedPlannerID,
-            planningFallbackProfileIDs: sourceGoal.planningFallbackProfileIDs
-                ?? existing?.planningFallbackProfileIDs,
+            planningFallbackProfileIDs: AgentDispatchPlannerSelection
+                .normalizedFallbackProfileIDs(
+                    primaryProfileID: sourceGoal.planningProfileID
+                        ?? existing?.planningProfileID
+                        ?? AgentExecutionProfile.recommendedPlannerID,
+                    fallbackProfileIDs: sourceGoal.planningFallbackProfileIDs
+                        ?? existing?.planningFallbackProfileIDs
+                        ?? []
+                ),
             selectedWorkerProfileIDs: sourceGoal.selectedWorkerProfileIDs
                 ?? existing?.selectedWorkerProfileIDs
                 ?? [AgentExecutionProfile.recommendedWorkerID],

@@ -1092,6 +1092,7 @@ enum AgentToolRunner {
                     try registry.start(
                         command: command,
                         workingDirectory: root,
+                        additionalWorkspaceRoots: Array(context.workspaceRoots.dropFirst()),
                         runtimeID: runtimeID,
                         turnID: context.turnID,
                         timeoutSeconds: bgTimeout,
@@ -1439,6 +1440,7 @@ enum AgentToolRunner {
                 sessionID: delegatedAgentSessionID(arguments),
                 imagePaths: delegatedImagePaths(arguments),
                 workingDirectory: root,
+                additionalWorkspaceRoots: Array(context.workspaceRoots.dropFirst()),
                 environment: environment,
                 sandboxMode: context.sandboxMode
             )
@@ -1767,6 +1769,7 @@ enum AgentToolRunner {
                     ?? context.rootDirectory?.standardizedFileURL.path,
                 imagePaths: delegatedImagePaths(arguments),
                 workingDirectory: root,
+                additionalWorkspaceRoots: Array(context.workspaceRoots.dropFirst()),
                 environment: context.localCommandEnvironment ?? shellEnvironment(),
                 sandboxMode: context.sandboxMode
             )

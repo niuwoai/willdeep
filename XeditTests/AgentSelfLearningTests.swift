@@ -800,7 +800,7 @@ struct AgentSelfLearningTests {
         AgentLearningReviewStore._setTestDefaultsOverride(defaults)
         defer {
             AgentLearningReviewStore._setTestDefaultsOverride(nil)
-            defaults.removePersistentDomain(forName: suiteName)
+            TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
         }
 
         let createdAt = Date(timeIntervalSince1970: 1_800_000_500)
@@ -838,7 +838,7 @@ struct AgentSelfLearningTests {
         AgentLearningReviewStore._setTestDefaultsOverride(defaults)
         defer {
             AgentLearningReviewStore._setTestDefaultsOverride(nil)
-            defaults.removePersistentDomain(forName: suiteName)
+            TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
         }
 
         let event = AgentLearningEvent(
@@ -866,7 +866,7 @@ struct AgentSelfLearningTests {
         AgentLearningReviewStore._setTestDefaultsOverride(defaults)
         defer {
             AgentLearningReviewStore._setTestDefaultsOverride(nil)
-            defaults.removePersistentDomain(forName: suiteName)
+            TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
         }
 
         let createdAt = Date(timeIntervalSince1970: 1_800_000_000)
@@ -917,7 +917,7 @@ struct AgentSelfLearningTests {
         AgentLearningReviewStore._setTestDefaultsOverride(defaults)
         defer {
             AgentLearningReviewStore._setTestDefaultsOverride(nil)
-            defaults.removePersistentDomain(forName: suiteName)
+            TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
         }
 
         let event = AgentLearningEvent(

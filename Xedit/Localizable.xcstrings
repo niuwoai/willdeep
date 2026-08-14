@@ -54,6 +54,7 @@
     "dispatch.bind-workspace" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Bind Workspace" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "绑定工作区" } } } },
     "dispatch.cancel" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "取消" } } } },
     "dispatch.cancelled" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancelled" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已取消" } } } },
+    "dispatch.change-workspace" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Change Workspace" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更改工作目录" } } } },
     "dispatch.criteria-count" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld acceptance criteria" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%lld 条验收标准" } } } },
     "dispatch.current-mac" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This Mac" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这台 Mac" } } } },
     "dispatch.current-execution-model" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Current execution model" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前执行模型" } } } },
@@ -72,6 +73,7 @@
     "dispatch.delete-goal-confirmation-message" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "“%@” has received project instructions. Deleting it will stop its current work and remove its task conversations. This cannot be undone." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "“%@” 已经收到过项目指令。删除会停止正在进行的工作并移除其任务会话，且无法撤销。" } } } },
     "dispatch.delete-goal-confirmation-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete this project?" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除这个项目？" } } } },
     "dispatch.delete-profile" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete Profile" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除 Profile" } } } },
+    "dispatch.done" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Done" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "完成" } } } },
     "dispatch.empty-message" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Create a project here. WillDeep will turn its outcome and acceptance criteria into an executable task graph." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在这里创建项目，WillDeep 会把目标与验收标准整理成可执行任务图。" } } } },
     "dispatch.empty-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No dispatch projects yet" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "还没有调度项目" } } } },
     "dispatch.environment" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Environment" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行环境" } } } },
@@ -120,6 +122,7 @@
     "dispatch.interrupt-required" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Confirmation required · current execution will be interrupted" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要确认 · 将中断当前执行" } } } },
     "dispatch.interrupt-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Interrupt the current project execution?" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "中断当前项目执行？" } } } },
     "dispatch.keep-running" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Keep Running" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "继续运行" } } } },
+    "dispatch.acceptance-recovery-exhausted" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The node Harness could not satisfy every acceptance criterion within its bounded recovery budget. The node has failed explicitly instead of remaining stuck in review." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "节点 Harness 在有限恢复预算内未能满足全部验收标准。节点已明确失败，不会继续停滞在“验收中”。" } } } },
     "dispatch.launch-failed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Unable to launch task" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法启动任务" } } } },
     "dispatch.launch-task" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Launch Task" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动任务" } } } },
     "dispatch.stop-task" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop Node" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "停止节点" } } } },
@@ -127,7 +130,7 @@
     "dispatch.local-environment" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This Mac" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这台 Mac" } } } },
     "dispatch.manage-profiles" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Manage Profiles…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "管理 Profile…" } } } },
     "dispatch.selected-worker-count" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ Workers" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 个 Worker" } } } },
-    "dispatch.worker-pool-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Selected Workers run ready nodes in parallel and provide the automatic failover order." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "勾选的 Worker 会并行执行就绪节点，并作为自动故障转移顺序。" } } } },
+    "dispatch.worker-pool-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "One Worker profile can run multiple ready nodes in parallel. Add profiles to extend the model pool and failover order." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "一个 Worker Profile 可并行执行多个就绪节点；补选多个 Profile 用于扩展模型池与故障转移顺序。" } } } },
     "dispatch.worker-unavailable" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Unavailable" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "不可用" } } } },
     "dispatch.workers" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Workers" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Worker" } } } },
     "dispatch.map-workspace-message" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose another checkout of this project." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请选择当前项目的另一个工作目录。" } } } },
@@ -199,6 +202,13 @@
     "dispatch.planning-in-progress" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Planning…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "规划中…" } } } },
     "dispatch.planning-model" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Planning model" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "规划模型" } } } },
     "dispatch.planning-profile" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Planning Profile" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "规划 Profile" } } } },
+    "dispatch.planner-fallback-model" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Fallback model" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "备选模型" } } } },
+    "dispatch.planner-fallback-model-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Switches automatically when the primary model is unavailable" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主模型不可用时自动切换" } } } },
+    "dispatch.planner-model-unavailable" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No model available" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有可用模型" } } } },
+    "dispatch.planner-picker-message" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The Planner breaks down the goal and creates the task graph. It uses one primary model and one fallback model." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Planner 负责拆解目标和生成任务图，只使用一个主模型和一个备选模型。" } } } },
+    "dispatch.planner-picker-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose Planner" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择 Planner" } } } },
+    "dispatch.planner-primary-model" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Primary model" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主模型" } } } },
+    "dispatch.planner-primary-model-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Used first" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "优先使用" } } } },
     "dispatch.plan-not-ready" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Wait for the planner to produce a validated task graph before launching Workers." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请等待规划器生成并通过校验的任务图后再启动 Worker。" } } } },
     "dispatch.primary-profile" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Primary Profile" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主 Profile" } } } },
     "dispatch.profile" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Profile" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Profile" } } } },
@@ -5996,13 +6006,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "WillDeep Agent"
+            "value" : "WillDeep"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "WillDeep Agent"
+            "value" : "WillDeep"
           }
         }
       }
@@ -7139,6 +7149,10 @@
         }
       }
     },
+    "automation.help.open-recent-run" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open this run's conversation" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "この実行の会話を開く" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开本次运行的对话" } } } },
+    "automation.page.no-recent-runs" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No scheduled task runs yet" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "定期タスクの実行履歴はまだありません" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "还没有定时任务运行记录" } } } },
+    "automation.page.recent-run-unavailable" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This conversation is no longer available" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "この会話は利用できません" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个对话已不可用" } } } },
+    "automation.page.recent-runs" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Recent runs" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "最近の実行" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "近期运行" } } } },
     "automation.page.empty-search" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9623,6 +9637,42 @@
         }
       }
     },
+    "composer.secret.saved-copy-help" : {
+      "comment" : "Tooltip for copying a saved protected secret after system authentication",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authenticate and copy this secret"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "认证后复制这个密钥"
+          }
+        }
+      }
+    },
+    "composer.secret.saved-copy-reason" : {
+      "comment" : "macOS authentication reason shown before copying a saved secret",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authenticate to copy this saved secret from Keychain."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请认证以从钥匙串复制这个已保存的密钥。"
+          }
+        }
+      }
+    },
     "composer.secret.saved-insert-help" : {
       "comment" : "Tooltip for inserting a saved protected secret",
       "extractionState" : "manual",
@@ -11946,6 +11996,7 @@
       }
     },
     "goal-planning.arbitration" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Evidence arbitration" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "证据仲裁" } } } },
+    "goal-planning.budget-exhausted" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Goal paused: this execution segment ran out of budget. WillDeep asked for a handover snapshot. Press play to grant a new segment and continue." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Goal 已暂停：本段执行预算已用尽，WillDeep 已要求输出交接快照。点播放键可续期并继续。" } } } },
     "goal-planning.header" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Goal Teams planning" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Goal Teams 规划" } } } },
     "goal-planning.phase.arbitrating" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Arbitrating" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仲裁中" } } } },
     "goal-planning.phase.awaiting-approval" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Awaiting approval" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等待批准" } } } },
@@ -13029,24 +13080,6 @@
         }
       }
     },
-    "menu.view.show-editor" : {
-      "comment" : "Button label in View menu",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show Editor"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示 Editor"
-          }
-        }
-      }
-    },
     "menu.view.switch-to-agent-mode" : {
       "comment" : "Button label (conditional) in View menu",
       "extractionState" : "manual",
@@ -13061,24 +13094,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换到助手模式"
-          }
-        }
-      }
-    },
-    "menu.view.switch-to-editor-mode" : {
-      "comment" : "Button label (conditional) in View menu",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Switch to Editor Mode"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "切换到编辑器模式"
           }
         }
       }
@@ -19290,6 +19305,13 @@
         }
       }
     },
+    "settings.language.english" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "English" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "English" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "English" } } } },
+    "settings.language.japanese" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "日本語" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "日本語" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "日本語" } } } },
+    "settings.language.picker-label" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "App language" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "アプリの言語" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用语言" } } } },
+    "settings.language.restart-note" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quit and reopen WillDeep to apply the language change." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "言語の変更は WillDeep の再起動後に反映されます。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "退出并重新打开 WillDeep 后应用语言更改。" } } } },
+    "settings.language.system" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Follow system" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "システムに従う" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "跟随系统" } } } },
+    "settings.language.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Language" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "言語設定" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "语言设置" } } } },
+    "settings.language.zh-hans" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "简体中文" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "简体中文" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "简体中文" } } } },
     "settings.group.account-and-devices" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -30976,6 +30998,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "您开始的会话将显示在这里。"
+          }
+        }
+      }
+    },
+    "sidebar.loading-state" : {
+      "comment" : "loading placeholder shown while the session catalog is still loading from disk",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading sessions…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载会话…"
           }
         }
       }

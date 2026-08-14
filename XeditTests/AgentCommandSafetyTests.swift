@@ -202,6 +202,66 @@ extension WillDeepTests {
         }
     }
 
+    @Test("run_command auto-approves rebuildable cleanup inside a project's additional folders")
+    func testRebuildableWorkspaceCleanupPolicyWithAdditionalRoots() {
+        let workspace = URL(fileURLWithPath: "/tmp/willdeep-cleanup-workspace").standardizedFileURL
+        let secondary = URL(fileURLWithPath: "/tmp/willdeep-cleanup-secondary").standardizedFileURL
+
+        struct Case {
+            let command: String
+            let expected: Bool
+            let note: String
+        }
+        let cases = [
+            Case(
+                command: "cd \(secondary.path) && rm -rf node_modules",
+                expected: true,
+                note: "relative cleanup after cd into the second project folder"
+            ),
+            Case(
+                command: "rm -rf \(secondary.path)/node_modules",
+                expected: true,
+                note: "absolute cleanup target inside the second project folder"
+            ),
+            Case(
+                command: "cd \(secondary.path)/web && rm -rf node_modules dist",
+                expected: true,
+                note: "nested subdirectory of the second project folder"
+            ),
+            Case(
+                command: "rm -rf /tmp/willdeep-cleanup-elsewhere/node_modules",
+                expected: false,
+                note: "path outside every authorized root stays manual"
+            ),
+            Case(
+                command: "rm -rf \(secondary.path)",
+                expected: false,
+                note: "the authorized root itself is never a cleanup target"
+            ),
+            Case(
+                command: "cd \(secondary.path) && rm -rf src",
+                expected: false,
+                note: "non-rebuildable directory stays manual even inside the second root"
+            ),
+        ]
+
+        for testCase in cases {
+            let approved = AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+                command: testCase.command,
+                rootDirectory: workspace,
+                additionalWorkspaceRoots: [secondary]
+            )
+            #expect(approved == testCase.expected, "\(testCase.note): \(testCase.command)")
+        }
+
+        // Without the additional root the same second-folder cleanup must
+        // still fall back to a manual approval card.
+        #expect(!AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+            command: "cd \(secondary.path) && rm -rf node_modules",
+            rootDirectory: workspace
+        ))
+    }
+
     @Test("SafeCommand: shell wrappers with harmless sentinel commands auto-approve")
     func testSafeCommandShellWrapperSentinel() {
         #expect(SafeCommand.classify(command: #"/bin/sh -lc "echo DOCKER_DONE""#) == .alwaysSafe)
@@ -741,9 +801,11 @@ extension WillDeepTests {
         #expect(npmInstallRisk == .write)
         #expect(npmRegistryInstallRisk == .write)
         #expect(npmGlobalInstallRisk == .write)
-        #expect(goBuildDecision.mode == .workspaceWrite)
+        // Builds carry the registry grant: `go build` resolves modules through
+        // GOPROXY on a cold cache. Writes stay confined to the workspace.
+        #expect(goBuildDecision.mode == .workspaceWriteNetwork)
         #expect(goBuildDecision.requiresTypedConfirmation == false)
-        #expect(goBuildWithWorkspaceCacheDecision.mode == .workspaceWrite)
+        #expect(goBuildWithWorkspaceCacheDecision.mode == .workspaceWriteNetwork)
         #expect(goBuildWithWorkspaceCacheDecision.requiresUserApproval == true)
         #expect(goBuildWithWorkspaceCacheDecision.requiresTypedConfirmation == false)
         #expect(AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
@@ -875,6 +937,7 @@ extension WillDeepTests {
         #expect(curlPostRisk == .write)
         #expect(curlOutputRisk == .write)
         #expect(curlMetadataRisk == .write)
+
     }
 
     @Test("run_command uses home directory when no workspace is bound")
@@ -950,6 +1013,88 @@ extension WillDeepTests {
 }
 
 @Suite
+@MainActor
+struct AgentScheduledReadOnlySSHTests {
+    @Test("plain SSH inherits only a recursively proven read-only remote command")
+    func classifiesRemoteLogInspectionWithoutBlessingMutations() {
+        #expect(SafeCommand.classify(
+            command: #"ssh root@h1.niuwoai.com 'journalctl -u niuwo --since "24 hours ago" --no-pager'"#
+        ) == .alwaysSafe)
+        #expect(SafeCommand.classify(
+            command: #"ssh -p 2222 root@h1.niuwoai.com 'systemctl show niuwo -p ActiveEnterTimestamp -p RestartCount; systemctl status sslcat --no-pager'"#
+        ) == .alwaysSafe)
+        #expect(SafeCommand.classify(
+            command: #"ssh root@h1.niuwoai.com 'journalctl -u niuwo --since "24 hours ago" --no-pager | grep -Ei "error|failed|panic" | head -20'"#
+        ) == .alwaysSafe)
+
+        #expect(SafeCommand.classify(
+            command: "ssh root@h1.niuwoai.com 'systemctl restart niuwo'"
+        ) == .needsJudgment)
+        #expect(SafeCommand.classify(
+            command: "ssh root@h1.niuwoai.com 'systemctl cat niuwo'"
+        ) == .needsJudgment)
+        #expect(SafeCommand.classify(
+            command: "ssh root@h1.niuwoai.com 'journalctl --rotate'"
+        ) == .needsJudgment)
+        #expect(SafeCommand.classify(
+            command: "ssh root@h1.niuwoai.com 'journalctl -u niuwo > /tmp/niuwo.log'"
+        ) == .alwaysDangerous)
+        #expect(SafeCommand.classify(command: "ssh root@h1.niuwoai.com") == .needsJudgment)
+        #expect(SafeCommand.classify(
+            command: #"ssh -o ProxyCommand=helper root@h1.niuwoai.com 'journalctl -u niuwo'"#
+        ) == .needsJudgment)
+    }
+
+    @Test("read-only SSH selects an unattended network sandbox")
+    func selectsReadOnlyNetworkWithoutApproval() {
+        let workspace = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let decision = AgentSandboxPolicy.commandDecision(
+            command: #"ssh root@h1.niuwoai.com 'journalctl -u niuwo --since "24 hours ago" --no-pager'"#,
+            rootDirectory: workspace
+        )
+
+        #expect(decision.mode == .readOnlyNetwork)
+        #expect(!decision.requiresUserApproval)
+        #expect(!decision.requiresTypedConfirmation)
+    }
+
+    @Test("read-only network sandbox permits SSH but denies workspace writes")
+    func keepsNetworkedInspectionFilesystemReadOnly() {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else { return }
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+        let launch = AgentSandboxPolicy.shellLaunch(
+            command: #"ssh root@h1.niuwoai.com 'journalctl -u niuwo --no-pager'"#,
+            mode: .readOnlyNetwork,
+            rootDirectory: root
+        )
+        let profile = launch.arguments.first { $0.contains("allow network") } ?? ""
+
+        #expect(profile.contains("(allow network*)"))
+        #expect(!profile.contains("(subpath \"\(root.path)\")"))
+        #expect(profile.contains("(literal \"/dev/null\")"))
+    }
+
+    @Test("ordinary Smart conversations statically approve visible-terminal SSH inspection")
+    func ordinaryConversationReusesReadOnlyNetworkPolicy() async {
+        let appState = AppState()
+        let approval = await appState.autoApprovalSource(
+            toolName: "terminal_send_command",
+            arguments: [
+                "command": .string(
+                    #"ssh root@h1.niuwoai.com 'journalctl -u niuwo --since "24 hours ago" --no-pager'"#
+                )
+            ],
+            risk: .write,
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-workspace"),
+            interactionMode: .normal,
+            approvalMode: .smart
+        )
+
+        #expect(approval == .staticAllowlist)
+    }
+}
+
+@Suite
 struct AgentProjectWorkspaceCommandSafetyTests {
     @Test("read-only commands accept absolute paths in another Project root")
     func sandboxAcceptsAdditionalProjectRoot() {
@@ -979,5 +1124,156 @@ struct AgentProjectWorkspaceCommandSafetyTests {
         let profile = launch.arguments.dropFirst().first ?? ""
         #expect(profile.contains("/tmp/willdeep-frontend"))
         #expect(profile.contains("/tmp/willdeep-backend"))
+    }
+
+}
+
+/// 沙箱网络策略：构建取依赖、只读网络诊断，以及"拒网被误读成 DNS 故障"的识别。
+///
+/// 刻意独立成 suite 而不是挂进 `WillDeepTests`：函数级 `-only-testing`
+/// 选择器匹配不到那个聚合 suite，会静默跑 0 个用例却报 `TEST SUCCEEDED`。
+/// 独立后可以 `-only-testing:XeditTests/AgentSandboxNetworkPolicyTests`
+/// 精确复跑。
+@Suite("沙箱网络策略")
+struct AgentSandboxNetworkPolicyTests {
+    @Test("workspace builds may fetch dependencies over the network")
+    func buildCommandsGetWorkspaceNetwork() {
+        let root = URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+
+        for command in [
+            "go build ./...",
+            "cargo build --release",
+            "swift build",
+            "npm run build",
+            "yarn build",
+            "make all",
+            "xcodebuild -scheme Xedit build"
+        ] {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(
+                decision.mode == .workspaceWriteNetwork,
+                "\(command) should build with registry access, got \(decision.mode)"
+            )
+            #expect(!decision.requiresTypedConfirmation)
+        }
+    }
+
+    @Test("global installs stay outside the workspace network grant")
+    func globalInstallDoesNotGetNetwork() {
+        let root = URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+
+        for command in ["npm install -g left-pad", "yarn --global add left-pad"] {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(
+                decision.mode == .workspaceWrite,
+                "\(command) writes outside the workspace and must not gain network"
+            )
+        }
+    }
+
+    @Test("read-only network diagnostics run without approval")
+    func networkDiagnosticsAreAutoApproved() {
+        let root = URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+
+        for command in [
+            "ping -c 1 goproxy.cn",
+            "dig +short proxy.golang.org",
+            "nslookup repo.yarnpkg.com",
+            "host registry.npmjs.org",
+            "traceroute goproxy.cn",
+            "netstat -an"
+        ] {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(
+                decision.mode == .readOnlyNetwork,
+                "\(command) is a read-only diagnostic, got \(decision.mode)"
+            )
+            #expect(
+                !decision.requiresUserApproval,
+                "\(command) should not prompt for approval"
+            )
+        }
+    }
+
+    /// Seatbelt reports a denied connection as a name-resolution failure, so
+    /// these outputs must be recognised as sandbox denials rather than being
+    /// handed to the model as a genuine DNS fault.
+    @Test("denied-network DNS failures are recognised as sandbox denials")
+    func dnsShapedFailuresCountAsSandboxDenial() {
+        let outputs = [
+            "dial tcp: lookup proxy.golang.org: no such host",
+            "socket.gaierror: [Errno 8] nodename nor servname provided, or not known",
+            "npm ERR! getaddrinfo ENOTFOUND registry.npmjs.org",
+            "curl: (6) Could not resolve host: goproxy.cn"
+        ]
+
+        for output in outputs {
+            #expect(
+                AgentSandboxPolicy.looksLikeSandboxDenial(
+                    exitStatus: 1,
+                    output: output,
+                    sandboxMode: .workspaceWrite
+                ),
+                "\(output) under a denied-network profile is a sandbox denial"
+            )
+            // The same text under an allowed-network profile is a real
+            // network fault and must not be blamed on the sandbox.
+            #expect(
+                !AgentSandboxPolicy.looksLikeSandboxDenial(
+                    exitStatus: 1,
+                    output: output,
+                    sandboxMode: .workspaceWriteNetwork
+                ),
+                "\(output) with network allowed is a genuine failure"
+            )
+            #expect(
+                !AgentSandboxPolicy.looksLikeSandboxDenial(
+                    exitStatus: 1,
+                    output: output,
+                    sandboxMode: .escalated
+                )
+            )
+        }
+    }
+
+    @Test("deniesNetwork matches the emitted seatbelt profile")
+    func deniesNetworkMatchesProfile() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-frontend")
+
+        for mode in [
+            AgentSandboxMode.readOnly,
+            .readOnlyNetwork,
+            .workspaceWrite,
+            .workspaceWriteNetwork
+        ] {
+            // Must be a command that is sandboxed in *every* mode. Ordinary
+            // safe commands (`true`, `touch`) skip seatbelt entirely under
+            // `.readOnly`, so there would be no profile to compare against —
+            // a network head always keeps the profile.
+            let launch = AgentSandboxPolicy.shellLaunch(
+                command: "curl -sI https://example.com",
+                mode: mode,
+                rootDirectory: root
+            )
+            #expect(
+                launch.executableURL.lastPathComponent == "sandbox-exec",
+                "\(mode.rawValue): expected a sandboxed launch"
+            )
+            let profile = launch.arguments.dropFirst().first ?? ""
+            let profileDenies = profile.contains("(deny network*)")
+            #expect(
+                profileDenies == AgentSandboxPolicy.deniesNetwork(mode),
+                "\(mode.rawValue): profile and deniesNetwork disagree"
+            )
+        }
     }
 }

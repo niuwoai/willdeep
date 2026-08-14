@@ -16,47 +16,15 @@ struct WillDeepApp: App {
     var body: some Scene {
         let defaultSize = Self.defaultWindowSize
 
-        // Agent is the default launch surface. Keep this scene first so a
-        // plain app launch creates the Agent window directly; explicit file
-        // or folder opens still land in the URL-backed editor WindowGroup
-        // below.
+        // WillDeep is Agent-only. General-purpose file editing lives in the
+        // standalone Qeditor app; this process no longer owns Editor scenes.
         Window(L10n.AgentWindow.title, id: AgentWindowID.value) {
             AgentWindowRootView()
         }
         .defaultSize(width: defaultSize.width, height: defaultSize.height)
         .commands {
-            WillDeepCommands()
+            AgentOnlyCommands()
         }
-
-        WindowGroup(id: EditorWindowID.value) {
-            WindowRootView()
-        }
-        .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: defaultSize.width, height: defaultSize.height)
-        .commands {
-            WillDeepCommands()
-        }
-        WindowGroup(for: URL.self) { $url in
-            WindowRootView(initialExternalURL: url)
-        }
-        // Without an explicit external-event owner SwiftUI falls through to
-        // the first unqualified scene (Agent) and never creates this Editor
-        // WindowGroup. `*` is SwiftUI's documented match-all condition for
-        // URLs and document-open events claimed by this app.
-        .handlesExternalEvents(matching: ["*"])
-        .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: defaultSize.width, height: defaultSize.height)
-        .commands {
-            WillDeepCommands()
-        }
-
-        // 专家圆桌:独立单例窗口。照 Agent 窗口,不 attach
-        // EditorAppStateRegistry(避免污染 registry.current);从
-        // registry.current 取当前 AppState。
-        Window(L10n.Roundtable.windowTitle, id: RoundtableWindowID.value) {
-            RoundtableWindowRootView()
-        }
-        .defaultSize(width: 980, height: 720)
 
         // 侧边栏面板分离出的独立窗口:payload 即面板 kind,同 kind 去重
         // (openWindow(value:) 对相同值聚焦既有窗口)。内容与侧栏面板
@@ -114,12 +82,35 @@ enum AgentWindowID {
     static let value = "agent-window"
 }
 
+/// Kept only while internal preview/editor support is being untangled from
+/// AppState. There is deliberately no SwiftUI scene registered for this id.
 enum EditorWindowID {
-    static let value = "editor-window"
+    static let value = "removed-editor-window"
 }
 
-enum RoundtableWindowID {
-    static let value = "roundtable-window"
+private struct AgentOnlyCommands: Commands {
+    var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button(L10n.About.menuItem) {
+                Task { @MainActor in
+                    AboutWindowOpener.open()
+                }
+            }
+
+            Button(L10n.AppUpdate.checkForUpdates) {
+                AppUpdateController.shared.checkForUpdates()
+            }
+        }
+
+        CommandGroup(replacing: .newItem) {
+            Button(L10n.Sidebar.newChatAction) {
+                guard let appState = EditorAppStateRegistry.shared.current else { return }
+                appState.startNewAgentSession()
+                appState.agentComposerFocusRevision += 1
+            }
+            .keyboardShortcut("n", modifiers: .command)
+        }
+    }
 }
 
 /// Agent 窗口在前台时发的标记。⌘N 是 app 全局命令，靠这个分流：
@@ -291,29 +282,6 @@ private struct WillDeepCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(appState?.canShowPreview != true)
 
-                // 打开(或聚焦)独立的 Editor 窗口。抽成闭包复用，让多个
-                // 快捷键都能触发同一个动作。默认可见快捷键为 ⇧⌘E；另外内置
-                // ⌥⌘E、⌃⌘E 两个备用组合键(挂在下面隐藏承接按钮上)。
-                let showEditorAction = {
-                    if appState?.showEditor() != true {
-                        openWindow(id: EditorWindowID.value)
-                    }
-                }
-
-                Button(L10n.Menu.viewShowEditor, action: showEditorAction)
-                    .keyboardShortcut("e", modifiers: [.command, .shift])
-
-                // 备用进入 editor 的组合键。用零尺寸隐藏按钮承接额外快捷键，
-                // 因为 SwiftUI 单个 Button 只能绑定一个 .keyboardShortcut。
-                Button("", action: showEditorAction)
-                    .keyboardShortcut("e", modifiers: [.command, .option])
-                    .frame(width: 0, height: 0)
-                    .hidden()
-                Button("", action: showEditorAction)
-                    .keyboardShortcut("e", modifiers: [.command, .control])
-                    .frame(width: 0, height: 0)
-                    .hidden()
-
                 Button(L10n.Menu.viewToggleTerminal) {
                     appState?.toggleEditorTerminal(appState?.openedFileURL ?? appState?.rootDirectory)
                 }
@@ -341,18 +309,6 @@ private struct WillDeepCommands: Commands {
                 }
                 .keyboardShortcut("a", modifiers: [.command, .option])
 
-                // 1.80.0-rc1：不再 toggle editor↔agent，而是打开
-                // (或聚焦) 独立的 Agent 窗口。SwiftUI `openWindow(id:)`
-                // 对单例 Window scene 来说是幂等的 —— 已经存在就抬起，
-                // 不存在就创建。
-                Button(L10n.AgentWindow.openMenuItem) {
-                    openWindow(id: AgentWindowID.value)
-                }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
-                // Already in the Agent window → opening it is a no-op (the
-                // singleton just refocuses itself), so disable the item to
-                // make that obvious.
-                .disabled(agentWindowActive == true)
             }
 
             CommandGroup(before: .windowArrangement) {
@@ -563,7 +519,7 @@ enum InitialLaunchPolicy {
     static let plainLaunchWindowID = AgentWindowID.value
 
     static func shouldOpenEditor(forInitialExternalURL url: URL?) -> Bool {
-        url != nil
+        false
     }
 }
 
