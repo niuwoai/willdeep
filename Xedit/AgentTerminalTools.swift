@@ -110,8 +110,12 @@ enum AgentTerminalTools {
                 let redactedOutput = AgentTerminalRedactor.redact(rawCapture.viewport)
                 let redactedMarkedOutput = AgentTerminalRedactor.redact(rawCapture.markedViewport)
                 let redactedCursorLine = AgentTerminalRedactor.redact(rawCapture.cursorLine)
+                let redactedScrollback = AgentTerminalRedactor.redact(rawCapture.scrollback)
                 let trimmed = String(redactedOutput.suffix(max(1, maxCharacters)))
                 let trimmedMarked = String(redactedMarkedOutput.suffix(max(1, maxCharacters)))
+                // Keep the newest history: the tail is what leads into the
+                // visible screen, so trim from the front like the screen does.
+                let trimmedScrollback = String(redactedScrollback.suffix(max(1, maxCharacters)))
                 return RedactedTerminalSnapshot(
                     tabID: raw.tabID,
                     isRunning: raw.isRunning,
@@ -121,6 +125,7 @@ enum AgentTerminalTools {
                     runtimeTarget: raw.runtimeTarget,
                     output: trimmed,
                     markedOutput: trimmedMarked,
+                    scrollback: trimmedScrollback,
                     cursorLine: redactedCursorLine,
                     cursorRow: rawCapture.cursorRow,
                     cursorColumn: rawCapture.cursorColumn,
@@ -157,6 +162,16 @@ enum AgentTerminalTools {
         let cursorLine = snapshot.cursorLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "(cursor is on a blank line)"
             : snapshot.cursorLine
+        // The visible screen is one narrow window. Anything that already
+        // scrolled past it is still what the operator means by "the output",
+        // so carry a bounded tail of it instead of reporting nothing.
+        let earlierSection = snapshot.scrollback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? ""
+            : """
+
+            --- earlier output (scrolled above the visible screen, oldest first) ---
+            \(snapshot.scrollback)
+            """
         let payload = """
         \(statusLine)
         Input state: \(snapshot.inputState.rawValue)
@@ -178,7 +193,7 @@ enum AgentTerminalTools {
 
         Recent AI/auto commands:
         \(recent)
-
+        \(earlierSection)
         --- latest visible screen (=> marks current cursor line) ---
         \(markedScreen)
         """
@@ -201,6 +216,7 @@ enum AgentTerminalTools {
         let runtimeTarget: String
         let output: String
         let markedOutput: String
+        let scrollback: String
         let cursorLine: String
         let cursorRow: Int
         let cursorColumn: Int

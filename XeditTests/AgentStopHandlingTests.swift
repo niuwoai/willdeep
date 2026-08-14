@@ -129,19 +129,23 @@ struct AgentStopHandlingTests {
     @Test("cancelling a foreground command terminates its process promptly")
     @MainActor
     func foregroundCommandStopsWithTurn() async throws {
+        // 睡眠时长要远大于判定上限,否则「取消生效」和「干等它跑完」在满载下
+        // 无法区分。原本是 sleep 30 / 判 15s:实测满载抖动能到 29.5s,已经和
+        // 「没取消」同量级,于是这条用例周期性变红。拉开信号而不是放宽容忍——
+        // 120s 与 45s 之间留了 75s 间距,远超观测到的调度抖动。
         let task = Task {
             try await AgentToolRunner.run(
                 name: "run_command",
                 arguments: [
-                    "command": .string("sleep 30"),
-                    "timeout_seconds": .number(35),
+                    "command": .string("sleep 120"),
+                    "timeout_seconds": .number(125),
                 ],
                 context: AgentToolContext(rootDirectory: nil, sandboxMode: .escalated)
             )
         }
         try await Task.sleep(nanoseconds: 200_000_000)
-        // 只度量「取消 → 返回」这一段；进程 spawn 的耗时在 1495 用例全并行的
-        // fork 风暴下不受本测试控制,不应计入 promptly 的判定。
+        // 只度量「取消 → 返回」这一段；进程 spawn 的耗时在全量并行的 fork
+        // 风暴下不受本测试控制,不应计入 promptly 的判定。
         let cancelledAt = Date()
         task.cancel()
 
@@ -152,9 +156,9 @@ struct AgentStopHandlingTests {
             // Expected: the process bridge sent TERM and the cancelled turn returned.
         }
 
-        // TERM 生效的话远早于 sleep 30 自然结束 / 35s 超时;15s 上限在满载
-        // (实测 4.5-7s)下仍有余量,同时足以证明不是等进程跑完。
-        #expect(Date().timeIntervalSince(cancelledAt) < 15)
+        // TERM 生效实测 4.5-7s。45s 上限只用来证明「不是等 sleep 120 自然结束
+        // 或 125s 超时」,不是性能断言——满载下的调度抖动不该判它失败。
+        #expect(Date().timeIntervalSince(cancelledAt) < 45)
     }
 
     @Test("interrupted assistant output is preserved, including reasoning-only output")

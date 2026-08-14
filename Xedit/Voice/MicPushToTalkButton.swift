@@ -31,9 +31,12 @@ struct MicPushToTalkButton: View {
             ZStack {
                 Circle()
                     .fill(backgroundColor)
-                    .frame(width: 22, height: 22)
+                    .frame(
+                        width: AgentComposerChrome.actionDiameter,
+                        height: AgentComposerChrome.actionDiameter
+                    )
                 Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: AgentComposerChrome.actionGlyphSize, weight: .semibold))
                     .foregroundStyle(AgentComposerChrome.actionForeground)
             }
             .opacity(isAvailable ? 1.0 : 0.45)

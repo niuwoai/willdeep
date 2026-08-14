@@ -35,7 +35,7 @@ struct AttachButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "plus.circle")
-                .font(.system(size: 16))
+                .font(.system(size: AgentComposerChrome.barIconSize))
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
@@ -49,7 +49,7 @@ struct InsertSecretButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: "lock.shield")
-                .font(.system(size: 15))
+                .font(.system(size: AgentComposerChrome.barIconSize))
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
@@ -94,7 +94,7 @@ private struct AgentRuntimeSendStopButton: View {
                     if showsStop {
                         Circle()
                             .fill(AgentComposerChrome.selectedControlFill)
-                            .frame(width: 26, height: 26)
+                            .frame(width: AgentComposerChrome.actionDiameter, height: AgentComposerChrome.actionDiameter)
                             .overlay(
                                 Circle()
                                     .stroke(AgentComposerChrome.strongBorder, lineWidth: 1.2)
@@ -105,9 +105,9 @@ private struct AgentRuntimeSendStopButton: View {
                     } else {
                         Circle()
                             .fill(canSend ? AgentComposerChrome.actionFill : Color.secondary.opacity(0.24))
-                            .frame(width: 26, height: 26)
+                            .frame(width: AgentComposerChrome.actionDiameter, height: AgentComposerChrome.actionDiameter)
                         Image(systemName: "arrow.up")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: AgentComposerChrome.actionGlyphSize, weight: .bold))
                             .foregroundStyle(AgentComposerChrome.actionForeground)
                     }
                 }
@@ -156,10 +156,10 @@ private struct AgentRuntimeUnavailableSendButton: View {
     var body: some View {
         Circle()
             .fill(Color.secondary.opacity(0.3))
-            .frame(width: 26, height: 26)
+            .frame(width: AgentComposerChrome.actionDiameter, height: AgentComposerChrome.actionDiameter)
             .overlay {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: AgentComposerChrome.actionGlyphSize, weight: .bold))
                     .foregroundStyle(AgentComposerChrome.actionForeground)
             }
             .accessibilityHidden(true)
