@@ -27,6 +27,8 @@ struct SomeIMRequestContext: Equatable {
 }
 
 enum AgentNetworkSupport {
+    static let clientNameHeaderValue = "WillDeep Desktop"
+
     /// "No bytes seen for this long" — not a total budget. Reasoning
     /// models (Qwen3, QwQ, DeepSeek-R1, o-series, Claude extended
     /// thinking) can spend well over two minutes before the first visible
@@ -93,10 +95,13 @@ enum AgentNetworkSupport {
     }
 
     /// Stamp every outgoing adapter request with shared metadata
-    /// (`X-App-Version` + `User-Agent`). Auth headers and Content-Type
+    /// (`X-App-Version`, `X-Client-Name`, `X-Client-Version` + `User-Agent`).
+    /// Auth headers and Content-Type
     /// are per-adapter — see each adapter's `applyAuthenticationHeaders`.
     static func applyStandardHeaders(to request: inout URLRequest) {
         request.setValue(appVersionHeaderValue, forHTTPHeaderField: "X-App-Version")
+        request.setValue(clientNameHeaderValue, forHTTPHeaderField: "X-Client-Name")
+        request.setValue(appVersionHeaderValue, forHTTPHeaderField: "X-Client-Version")
         request.setValue(userAgentHeaderValue, forHTTPHeaderField: "User-Agent")
     }
 

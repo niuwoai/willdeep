@@ -25,6 +25,7 @@ def guard_groups(output_dir)
   complexity_md, complexity_json = report_paths(output_dir, "complexity")
   version_md, version_json = report_paths(output_dir, "version")
   i18n_md, i18n_json = report_paths(output_dir, "i18n")
+  i18n_locale_md, i18n_locale_json = report_paths(output_dir, "i18n_locale")
   fast_entry_md, fast_entry_json = report_paths(output_dir, "fast_test_entry_contract")
 
   computer_use_md, computer_use_json = report_paths(output_dir, "computer_use_helper_contract")
@@ -57,6 +58,10 @@ def guard_groups(output_dir)
       ["complexity", command("complexity_guard.rb", complexity_md, complexity_json)],
       ["version", command("version_consistency.rb", version_md, version_json)],
       ["i18n", command("i18n_coverage_guard.rb", i18n_md, i18n_json)],
+      [
+        "i18n-locale",
+        command("i18n_locale_registration_guard.rb", i18n_locale_md, i18n_locale_json)
+      ],
       [
         "fast-test-entry",
         command("fast_test_entry_contract_test.rb", fast_entry_json, fast_entry_md)

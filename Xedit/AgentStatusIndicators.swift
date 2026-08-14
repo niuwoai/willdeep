@@ -335,12 +335,6 @@ struct AgentStatsDashboard: View {
             )
             metricDivider
             CodexDashboardMetric(
-                value: AgentStatsDashboardFormatting.duration(longestTaskDuration),
-                title: L10n.StatsDashboard.metricLongestTask
-            )
-            .help(L10n.StatsDashboard.metricLongestTaskHelp)
-            metricDivider
-            CodexDashboardMetric(
                 value: L10n.StatsDashboard.dayCount("\(stats.currentStreak)"),
                 title: L10n.StatsDashboard.metricCurrentStreak
             )
@@ -816,10 +810,6 @@ struct AgentStatsDashboard: View {
 
     private var peakTaskTokenCount: Int {
         dashboardModel.peakTaskTokenCount
-    }
-
-    private var longestTaskDuration: TimeInterval {
-        dashboardModel.longestTaskDuration
     }
 
     private var managedRoutingRate: Double {
