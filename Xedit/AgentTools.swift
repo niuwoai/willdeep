@@ -903,6 +903,17 @@ enum AgentToolRunner {
             guard url.path == rootPath || url.path.hasPrefix(rootPath + "/") else {
                 throw AgentToolError.pathOutsideWorkspace(change.path)
             }
+            // A diff path may spell its way through a symlink; the lexical
+            // check above cannot see that. Same rule as resolveWorkspaceURL.
+            guard AgentWorkspacePathGuard.containingRoot(
+                for: url,
+                roots: context.workspaceRoots
+            ) != nil else {
+                throw AgentToolError.symlinkOutsideWorkspace(
+                    path: change.path,
+                    resolved: AgentWorkspacePathGuard.resolvedPath(of: url)
+                )
+            }
             if change.isNewFile {
                 // Creation diff: the file must NOT already exist (use a
                 // modify diff to change an existing file).

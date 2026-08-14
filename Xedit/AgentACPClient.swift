@@ -1075,6 +1075,16 @@ private nonisolated final class AgentACPTerminalStore: @unchecked Sendable {
     }
 }
 
+/// Shared workspace containment rules for every local path that a tool is
+/// about to touch. Two callers rely on it: the ACP bridge (`validate`) and
+/// `AgentToolContext.resolveWorkspaceURL` (`containingRoot`).
+///
+/// A lexical prefix check alone is not a boundary: a symlink inside an
+/// authorized folder can point anywhere on disk, so `root/link/secret` reads
+/// as "inside the workspace" while the kernel writes somewhere the user never
+/// authorized. `run_command` already refuses those paths — seatbelt matches
+/// the resolved vnode path — so accepting them in the native file tools only
+/// made the two channels disagree. Resolve first, then compare.
 nonisolated enum AgentWorkspacePathGuard {
     static func validate(
         _ candidateURL: URL,
@@ -1086,25 +1096,56 @@ nonisolated enum AgentWorkspacePathGuard {
         guard isContained(candidate.path, by: root.path) else {
             throw AgentACPError.pathOutsideWorkspace(candidate.path)
         }
-
-        let resolvedRoot = root.resolvingSymlinksInPath()
-            .standardizedFileURL
-        var existingAncestor = candidate
-        while !fileManager.fileExists(atPath: existingAncestor.path),
-              existingAncestor.path != root.path {
-            let parent = existingAncestor.deletingLastPathComponent()
-            guard parent.path != existingAncestor.path else { break }
-            existingAncestor = parent
-        }
-        let resolvedAncestor = existingAncestor.resolvingSymlinksInPath()
-            .standardizedFileURL
-        guard isContained(
-            resolvedAncestor.path,
-            by: resolvedRoot.path
-        ) else {
+        guard containingRoot(for: candidate, roots: [root], fileManager: fileManager) != nil else {
             throw AgentACPError.pathOutsideWorkspace(candidate.path)
         }
         return candidate
+    }
+
+    /// The authorized root that still contains `candidate` once symlinks are
+    /// resolved, or nil when the path escapes every root. Any root may match —
+    /// a link from one authorized folder into another is a legitimate shortcut
+    /// between folders the user already granted, and seatbelt allows the same
+    /// pair, so the two channels stay in agreement.
+    static func containingRoot(
+        for candidateURL: URL,
+        roots: [URL],
+        fileManager: FileManager = .default
+    ) -> URL? {
+        guard !roots.isEmpty else { return nil }
+        let resolvedCandidate = resolvedPath(of: candidateURL, fileManager: fileManager)
+        return roots.first { root in
+            let resolvedRoot = root.standardizedFileURL
+                .resolvingSymlinksInPath()
+                .standardizedFileURL
+                .path
+            return isContained(resolvedCandidate, by: resolvedRoot)
+        }
+    }
+
+    /// Resolve `url` through symlinks. A path that does not exist yet (a file
+    /// the agent is about to create) has nothing to resolve, so walk up to the
+    /// nearest existing ancestor, resolve that, and re-append the tail — this
+    /// is what makes "write a new file behind a symlinked folder" resolve to
+    /// the real destination instead of silently staying lexical.
+    static func resolvedPath(
+        of url: URL,
+        fileManager: FileManager = .default
+    ) -> String {
+        let standardized = url.standardizedFileURL
+        var existingAncestor = standardized
+        var trailingComponents: [String] = []
+        while !fileManager.fileExists(atPath: existingAncestor.path) {
+            let parent = existingAncestor.deletingLastPathComponent()
+            guard parent.path != existingAncestor.path else { break }
+            trailingComponents.insert(existingAncestor.lastPathComponent, at: 0)
+            existingAncestor = parent
+        }
+        var resolved = existingAncestor.resolvingSymlinksInPath().standardizedFileURL
+        for component in trailingComponents {
+            resolved.appendPathComponent(component)
+        }
+        return resolved.standardizedFileURL.path
     }
 
     private static func isContained(

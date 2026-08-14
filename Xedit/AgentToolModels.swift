@@ -464,6 +464,16 @@ struct AgentToolContext {
             .max(by: { $0.path.count < $1.path.count }) else {
             throw AgentToolError.pathOutsideWorkspace(rawPath)
         }
+        // The lexical match above says the *spelling* is inside a root. A
+        // symlink can still send the real write somewhere the user never
+        // authorized, so resolve before accepting — otherwise the folder set
+        // the user approved stops being the boundary it claims to be.
+        guard AgentWorkspacePathGuard.containingRoot(for: candidate, roots: workspaceRoots) != nil else {
+            throw AgentToolError.symlinkOutsideWorkspace(
+                path: rawPath,
+                resolved: AgentWorkspacePathGuard.resolvedPath(of: candidate)
+            )
+        }
         return (candidate, matchedRoot)
     }
 }
@@ -517,6 +527,7 @@ enum AgentToolError: LocalizedError {
     case invalidArgument(String)
     case noWorkspace
     case pathOutsideWorkspace(String)
+    case symlinkOutsideWorkspace(path: String, resolved: String)
     case notFound(String)
     case notRegular(String)
     case binaryFile(String)
@@ -537,6 +548,15 @@ enum AgentToolError: LocalizedError {
             return "Open a project folder before using this tool."
         case .pathOutsideWorkspace(let path):
             return "Path is outside the workspace: \(path)"
+        case .symlinkOutsideWorkspace(let path, let resolved):
+            return """
+            Path \(path) is a symbolic link (or sits behind one) that resolves to \(resolved), \
+            which is outside every folder authorized for this project. Symbolic links do not \
+            widen the authorized folder set — shell commands are blocked at the same boundary \
+            by the sandbox, so the native file tools refuse it too. Tell the user to add \
+            \(resolved) as a project folder (this app supports multiple folders per project), \
+            then use its real path.
+            """
         case .notFound(let path):
             return "Path does not exist: \(path)"
         case .notRegular(let path):
@@ -584,6 +604,11 @@ enum AgentToolError: LocalizedError {
             return .noWorkspace
         case .pathOutsideWorkspace(let path):
             return .pathOutsideWorkspace(AgentSecretStore.redact(path, secretValues: secretValues))
+        case .symlinkOutsideWorkspace(let path, let resolved):
+            return .symlinkOutsideWorkspace(
+                path: AgentSecretStore.redact(path, secretValues: secretValues),
+                resolved: AgentSecretStore.redact(resolved, secretValues: secretValues)
+            )
         case .notFound(let path):
             return .notFound(AgentSecretStore.redact(path, secretValues: secretValues))
         case .notRegular(let path):

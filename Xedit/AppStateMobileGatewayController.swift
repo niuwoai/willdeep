@@ -806,6 +806,11 @@ extension AppState: AgentMobileGatewayControlling {
         guard targetPath == rootPath || targetPath.hasPrefix(rootPath + "/") else {
             throw AgentMobileGatewayCommandError.pathOutsideWorkspace(path)
         }
+        // The phone reads through the same boundary as the agent: a symlink
+        // inside the workspace must not turn into a read of ~/.ssh.
+        guard AgentWorkspacePathGuard.containingRoot(for: targetURL, roots: [root]) != nil else {
+            throw AgentMobileGatewayCommandError.pathOutsideWorkspace(path)
+        }
 
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: targetPath, isDirectory: &isDirectory) else {

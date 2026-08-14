@@ -1093,6 +1093,14 @@ enum AgentMediaTools {
             guard standardized.path == root.path || standardized.path.hasPrefix(root.path + "/") else {
                 throw AgentToolError.pathOutsideWorkspace(rawDirectory)
             }
+            // Generated media must not land outside the workspace through a
+            // symlinked output folder — same boundary as every other write.
+            guard AgentWorkspacePathGuard.containingRoot(for: standardized, roots: [root]) != nil else {
+                throw AgentToolError.symlinkOutsideWorkspace(
+                    path: rawDirectory,
+                    resolved: AgentWorkspacePathGuard.resolvedPath(of: standardized)
+                )
+            }
             try FileManager.default.createDirectory(at: standardized, withIntermediateDirectories: true)
             return standardized
         }
