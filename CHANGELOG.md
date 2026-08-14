@@ -1,7 +1,36 @@
 # Changelog
 
-> 当前文件保留最新版本（1.255.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.256.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.256.0-rc1 - 2026-08-14
+
+### Added
+
+- **子代理「工种」与调度台「执行档案」合并为一套档案（agent-profile.v2）。** 两者此前是两套存储、两个入口，字段却大半重合（名称/服务商/模型）——用户要在两个地方配同一件事，两份副本必然漂移。现在统一为 `AgentProfile`：soul（职能 / 代码段提示词 / 用户提示词 / 技能包）+ runtime（执行器 / CLI 档案名 / 模型绑定）+ capability（工具白名单与预算）+ usages（子代理 / 调度台）。`AgentSubagentProfileStore` 与 `AgentExecutionProfileStore` 降为同一存储的两个门面，`spawn_agent`、调度台与 AppState 规划链的调用点一行未动。
+- **每个档案有自己的 soul。** 专属提示词拼在工种代码段之后；配置的技能包在 spawn 时内联进子代理系统提示词（不给子代理加 `read_skill` 工具，省一轮往返与一个 schema 槽），总量封顶 12k 字符，找不到或已禁用的技能静默跳过——卸载一个技能不能让 spawn 失败。用户自建的档案也会进入 `spawn_agent` 的工种目录，模型可以直接选。
+- 设置「AI → 子代理」页升级为**「代理档案」**：一份列表涵盖内置工种、调度台内置档案、自建档案与磁盘上扫到的 CLI 档案，可按用途筛选，并就地编辑 soul、模型、用途与（自建档案的）工具集。原 `AgentSubagentProfileSettingsSection` 删除。
+
+### Changed
+
+- **不合并掉的那一维是执行形态。** 进程内子 loop 能被给定工具白名单、提示词和轮数预算；外部 CLI（codex / claude / hermes）自带 harness，给不了。因此 capability 与 soul 只在 `executor == .willDeep` 时生效，UI 灰掉相应字段并写明原因，而不是收下配置然后悄悄忽略。
+- **内置档案只持久化 override，不存全量拷贝。** 全量拷贝会把今天版本的 `deep` 冻进用户配置，日后代码里改工具集或预算再也送不到老用户手上。`deep` 的提示词段此前因与通用开场重复而被跳过，现在只在用户没写 soul 时跳过。
+- v1 的两个 UserDefaults 键（`...subagent-profile-bindings.v1` / `...executionProfiles.v1`）迁移后只读保留，不删除，便于回滚到旧版本。
+
+### Fixed
+
+- 安全不变量在合并后逐条保住并加了单测：工具集永远是与全局只读白名单的**交集**；**写权限只属于内置 editor 工种**——`asSubagentProfile()` 强制 `origin == .builtIn && capability.requiresWriteAccess`，用户即使手改存储 JSON 也拿不到写工具；runner 的不变量提示词（只读边界、「最后一条消息就是交付物」、「不能问用户」）不进档案、不可覆盖。
+- 调度台编辑器看不见 soul，`AgentExecutionProfileStore.saveManaged` 会把既有档案的 soul / capability / `.subagent` 用途原样带过——否则在调度台改个模型就会把同一档案的子代理那半边抹掉。
+- `AgentProfileStore` 照搬 `AgentDispatchStore` 的 XCTest 进程级重定向，避免单测改写用户真实档案（`willdeep-profiles-` 前缀已登记进 `TestDefaultsHygiene`）。这正是调度台数据曾被测试清空的同一类事故。
+
+### Tests
+
+- 新增 `AgentProfileUnificationTests`（11 例）：两个 v1 键的迁移与一次性语义、内置档案存 override 而非拷贝、用户提示词追加而非替换、soul 编辑过的 `deep` 仍发送其段落、技能包传递与未知技能静默跳过、外部 CLI 档案不认领 soul 且不进 `spawn_agent`、自建档案拿不到写权限、内置 editor 保留其窄写口、调度台保存不抹掉子代理侧、用途筛选。
+
+### Meta
+
+- 档案合并属功能新增，版本从 **1.255.0-rc1** 提升为 **1.256.0-rc1**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+- 设计文档 `docs/AGENT_PROFILE_UNIFICATION_DESIGN.md` 的 §7 从「待确认」改为已确认决策，并补记落地要点。
 
 ## 1.255.0-rc1 - 2026-08-14
 
