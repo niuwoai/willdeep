@@ -1405,7 +1405,31 @@ extension L10n {
             static let simplifiedChinese = String(localized: "settings.language.zh-hans", defaultValue: "简体中文")
             static let english = String(localized: "settings.language.english", defaultValue: "English")
             static let japanese = String(localized: "settings.language.japanese", defaultValue: "日本語")
+            static let spanish = String(localized: "settings.language.spanish", defaultValue: "Español")
+            static let french = String(localized: "settings.language.french", defaultValue: "Français")
             static let restartNote = String(localized: "settings.language.restart-note", defaultValue: "Quit and reopen WillDeep to apply the language change.")
+            static let changedBannerTitle = String(localized: "settings.language.changed-banner-title", defaultValue: "Language changed — restart required")
+            static func changedBannerDetail(_ a1: String) -> String {
+                let template = String(
+                    localized: "settings.language.changed-banner-detail",
+                    defaultValue: "The app language is now %@. Quit and reopen WillDeep to apply it."
+                )
+                return String(format: template, a1)
+            }
+            static let relaunchButton = String(localized: "settings.language.relaunch", defaultValue: "Restart Now")
+            static let laterButton = String(localized: "settings.language.later", defaultValue: "Later")
+            static let changedAlertTitle = String(localized: "settings.language.changed-alert-title", defaultValue: "Language Changed")
+            static func changedAlertMessage(_ a1: String) -> String {
+                let template = String(
+                    localized: "settings.language.changed-alert-message",
+                    defaultValue: "The app language is now %@. WillDeep must restart before the new language takes effect."
+                )
+                return String(format: template, a1)
+            }
+            static let coverageNote = String(
+                localized: "settings.language.coverage-note",
+                defaultValue: "Text without a translation yet falls back to English."
+            )
         }
     }
 }

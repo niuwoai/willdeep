@@ -63,6 +63,9 @@ struct EditorSettingsView: View {
 
     @State private var anthropicMaxOutputTokens: Double = Double(AgentSettingsStore.loadAnthropicMaxOutputTokens())
     @State private var appLanguagePreference = AppLocale.preference
+    /// 非 nil = 用户这一轮改过语言但还没重启,横幅要一直挂着。
+    @State private var pendingLanguageRestart: AppLanguagePreference?
+    @State private var showLanguageRestartAlert = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -181,19 +184,87 @@ struct EditorSettingsView: View {
                     Text(L10n.Settings.Language.simplifiedChinese).tag(AppLanguagePreference.simplifiedChinese)
                     Text(L10n.Settings.Language.english).tag(AppLanguagePreference.english)
                     Text(L10n.Settings.Language.japanese).tag(AppLanguagePreference.japanese)
+                    Text(L10n.Settings.Language.spanish).tag(AppLanguagePreference.spanish)
+                    Text(L10n.Settings.Language.french).tag(AppLanguagePreference.french)
                 }
                 .labelsHidden()
                 .frame(width: 190)
                 .onChange(of: appLanguagePreference) { preference in
                     AppLocale.setPreference(preference)
+                    // 点了一圈又点回本进程正在用的语言 = 什么都没变,
+                    // 不该再催重启。
+                    guard preference != AppLocale.launchPreference else {
+                        pendingLanguageRestart = nil
+                        return
+                    }
+                    // 界面语言只有重启才换得掉,静默生效会让用户以为
+                    // 「点了没反应」。弹窗喊一嗓子,横幅留在原地兜底
+                    // (用户点了「稍后」也还看得见)。
+                    pendingLanguageRestart = preference
+                    showLanguageRestartAlert = true
                 }
             }
-            Text(L10n.Settings.Language.restartNote)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if let pending = pendingLanguageRestart {
+                languageRestartBanner(for: pending)
+            } else {
+                Text(L10n.Settings.Language.restartNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 4)
         .padding(.bottom, 2)
+        .alert(
+            L10n.Settings.Language.changedAlertTitle,
+            isPresented: $showLanguageRestartAlert
+        ) {
+            Button(L10n.Settings.Language.relaunchButton) {
+                AppRelaunch.relaunch()
+            }
+            Button(L10n.Settings.Language.laterButton, role: .cancel) {}
+        } message: {
+            Text(
+                L10n.Settings.Language.changedAlertMessage(
+                    (pendingLanguageRestart ?? appLanguagePreference).nativeDisplayName
+                )
+            )
+        }
+    }
+
+    /// 常驻横幅:弹窗关掉之后仍然提醒「这个改动还没生效」。
+    private func languageRestartBanner(for preference: AppLanguagePreference) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L10n.Settings.Language.changedBannerTitle)
+                    .font(.callout.weight(.semibold))
+                Text(L10n.Settings.Language.changedBannerDetail(preference.nativeDisplayName))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(L10n.Settings.Language.coverageNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 12)
+            Button(L10n.Settings.Language.relaunchButton) {
+                AppRelaunch.relaunch()
+            }
+            .buttonStyle(.borderedProminent)
+            .settingsFocusDisabled()
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.orange.opacity(0.12))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.orange.opacity(0.35), lineWidth: 1)
+                }
+        }
     }
 
     /// Second-level segmented-picker binding, scoped to one group.

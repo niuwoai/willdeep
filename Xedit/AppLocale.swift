@@ -27,6 +27,8 @@ nonisolated enum AppLanguagePreference: String, CaseIterable, Identifiable, Send
     case simplifiedChinese
     case english
     case japanese
+    case spanish
+    case french
 
     var id: String { rawValue }
 
@@ -36,6 +38,21 @@ nonisolated enum AppLanguagePreference: String, CaseIterable, Identifiable, Send
         case .simplifiedChinese: return "zh-Hans"
         case .english: return "en"
         case .japanese: return "ja"
+        case .spanish: return "es"
+        case .french: return "fr"
+        }
+    }
+
+    /// 语言自身的名字(而不是当前界面语言下的译名)。切换语言的提示卡片
+    /// 用它,这样「已切换为 日本語」在任何界面语言下都指向同一个东西。
+    var nativeDisplayName: String {
+        switch self {
+        case .system: return L10n.Settings.Language.system
+        case .simplifiedChinese: return "简体中文"
+        case .english: return "English"
+        case .japanese: return "日本語"
+        case .spanish: return "Español"
+        case .french: return "Français"
         }
     }
 }
@@ -50,7 +67,17 @@ enum AppLocale {
         ) ?? .system
     }
 
+    /// 本进程启动时生效的语言偏好——也就是当前这套 .lproj 是按什么选的。
+    /// 设置页拿它判断「用户点了一圈又点回来」,那种情况不该继续挂着
+    /// 「需要重启」的横幅。
+    ///
+    /// `static let` 首次访问时求值,而 `setPreference` 第一行就强制求它,
+    /// 所以它固化的一定是**本进程被改写之前**的值(setPreference 是这个
+    /// 偏好唯一的写入点)。
+    static let launchPreference: AppLanguagePreference = preference
+
     static func setPreference(_ preference: AppLanguagePreference) {
+        _ = launchPreference
         UserDefaults.standard.set(preference.rawValue, forKey: preferenceKey)
         if let languageTag = preference.languageTag {
             UserDefaults.standard.set([languageTag], forKey: "AppleLanguages")
