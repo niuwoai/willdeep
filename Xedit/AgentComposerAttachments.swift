@@ -48,9 +48,15 @@ struct InsertSecretButton: View {
 
     var body: some View {
         Button(action: action) {
+            // Two points larger than the other bar icons: this one carries no
+            // enclosing circle, so at the shared 16pt it reads noticeably
+            // smaller than its neighbours. The 24×24 hit area keeps the
+            // clickable target the same size as theirs.
             Image(systemName: "lock.shield")
-                .font(.system(size: AgentComposerChrome.barIconSize))
+                .font(.system(size: AgentComposerChrome.barIconSize + 2))
                 .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(L10n.Composer.insertSecretHelp)

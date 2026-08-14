@@ -106,6 +106,45 @@ enum AgentSecretStore {
             }
     }
 
+    /// Removes both the stored value and its index entry. Legacy entries
+    /// created before the index existed have no index row; deleting the
+    /// Keychain item is what makes them disappear from the list.
+    nonisolated static func deleteSecret(identifier: String) {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        AgentCredentialStore.delete(account: account(for: trimmed))
+        let remaining = loadIndex().filter { $0.identifier != trimmed }
+        saveIndex(remaining)
+    }
+
+    /// Renames the *display label* only.
+    ///
+    /// The identifier is baked into every `${secret:...}` placeholder already
+    /// sitting in saved conversations, so renaming must never touch it —
+    /// otherwise a rename silently breaks history. Returns false when the
+    /// identifier has no stored value (nothing to rename).
+    @discardableResult
+    nonisolated static func renameSecret(identifier: String, label: String) -> Bool {
+        let trimmedIdentifier = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedIdentifier.isEmpty,
+              !trimmedLabel.isEmpty,
+              !loadSecret(identifier: trimmedIdentifier).isEmpty else {
+            return false
+        }
+        // Keep the original timestamp: the list is ordered by recency of the
+        // *value*, and a rename would otherwise reshuffle the whole list.
+        let existing = loadIndex().first { $0.identifier == trimmedIdentifier }
+        upsertIndexEntry(
+            AgentSavedSecret(
+                identifier: trimmedIdentifier,
+                label: trimmedLabel,
+                updatedAt: existing?.updatedAt ?? Date()
+            )
+        )
+        return true
+    }
+
     /// Reveals a user-owned saved value only after macOS authenticates the
     /// device owner. `.deviceOwnerAuthentication` lets the OS choose Touch ID
     /// when available and fall back to the login password on older hardware.
@@ -282,6 +321,10 @@ enum AgentSecretStore {
     nonisolated private static func upsertIndexEntry(_ entry: AgentSavedSecret) {
         var entries = loadIndex().filter { $0.identifier != entry.identifier }
         entries.append(entry)
+        saveIndex(entries)
+    }
+
+    nonisolated private static func saveIndex(_ entries: [AgentSavedSecret]) {
         guard let data = try? JSONEncoder().encode(entries),
               let raw = String(data: data, encoding: .utf8) else { return }
         AgentCredentialStore.save(raw, account: indexAccount)

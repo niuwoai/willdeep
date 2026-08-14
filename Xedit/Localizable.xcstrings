@@ -1,6 +1,402 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "secret-manager.tab-title" : {
+      "comment" : "Settings tab title for the secret manager",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secrets"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥管理器"
+          }
+        }
+      }
+    },
+    "secret-manager.pane-title" : {
+      "comment" : "Header of the secret manager pane",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secret manager"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥管理器"
+          }
+        }
+      }
+    },
+    "secret-manager.pane-description" : {
+      "comment" : "Explains where secret values live",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Values stay in the Keychain. The model only ever sees the ${secret:…} placeholder; the real value is substituted locally, at the moment a tool runs."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥值只存在钥匙串里。模型全程只看到 ${secret:…} 占位符，真实值在本地工具执行的那一刻才代入。"
+          }
+        }
+      }
+    },
+    "secret-manager.search-placeholder" : {
+      "comment" : "Placeholder of the secret search field",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search by name or pinyin"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索名称或拼音"
+          }
+        }
+      }
+    },
+    "secret-manager.clear-search" : {
+      "comment" : "Tooltip of the clear-search button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear search"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除搜索"
+          }
+        }
+      }
+    },
+    "secret-manager.no-results" : {
+      "comment" : "Empty state when a search matches nothing",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No secret matches this search."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的密钥。"
+          }
+        }
+      }
+    },
+    "secret-manager.row-actions" : {
+      "comment" : "Tooltip of the per-row overflow menu",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More actions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多操作"
+          }
+        }
+      }
+    },
+    "secret-manager.rename" : {
+      "comment" : "Menu item that renames a secret",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名…"
+          }
+        }
+      }
+    },
+    "secret-manager.rename-title" : {
+      "comment" : "Title of the rename dialog",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename secret"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名密钥"
+          }
+        }
+      }
+    },
+    "secret-manager.rename-confirm" : {
+      "comment" : "Confirm button of the rename dialog",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rename"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名"
+          }
+        }
+      }
+    },
+    "secret-manager.rename-message" : {
+      "comment" : "Explains that renaming keeps the placeholder identifier",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only the display name changes. The placeholder stays %@, so secrets already inserted into past conversations keep working."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只改展示名称。占位符仍是 %@，历史会话里已插入的密钥照常可用。"
+          }
+        }
+      }
+    },
+    "secret-manager.delete" : {
+      "comment" : "Menu item that deletes a secret",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除…"
+          }
+        }
+      }
+    },
+    "secret-manager.delete-title" : {
+      "comment" : "Title of the delete confirmation dialog",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete secret"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除密钥"
+          }
+        }
+      }
+    },
+    "secret-manager.delete-confirm" : {
+      "comment" : "Confirm button of the delete dialog",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除"
+          }
+        }
+      }
+    },
+    "secret-manager.delete-message" : {
+      "comment" : "Warns that deleting breaks existing placeholders",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” will be removed from the Keychain. Placeholders already inserted into past conversations will stop resolving. This cannot be undone."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”将从钥匙串中移除。历史会话里已插入的占位符将无法再解析。此操作不可撤销。"
+          }
+        }
+      }
+    },
+    "secret-manager.previous-page" : {
+      "comment" : "Tooltip of the previous page button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previous page"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一页"
+          }
+        }
+      }
+    },
+    "secret-manager.next-page" : {
+      "comment" : "Tooltip of the next page button",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next page"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一页"
+          }
+        }
+      }
+    },
+    "secret-manager.page-indicator" : {
+      "comment" : "Current page out of total pages",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page %1$d of %2$d"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %1$d / %2$d 页"
+          }
+        }
+      }
+    },
+    "secret-manager.total-count" : {
+      "comment" : "Total number of secrets matching the current search",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d secrets"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共 %d 条"
+          }
+        }
+      }
+    },
+    "secret-manager.add-title" : {
+      "comment" : "Title of the add-secret sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add secrets"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增密钥"
+          }
+        }
+      }
+    },
+    "secret-manager.add-action" : {
+      "comment" : "Button that opens the add-secret sheet",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add secret"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增密钥"
+          }
+        }
+      }
+    },
+    "secret-manager.save-action" : {
+      "comment" : "Button that saves new secrets",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        }
+      }
+    },
     "app-termination.active-task.keep-working" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Keep Working" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "继续任务" } } } },
     "app-termination.active-task.message" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quitting now may interrupt active work and stop progress updates. Do you still want to quit WillDeep?" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "现在退出可能会中断正在进行的工作，并停止更新任务进度。仍要退出 WillDeep 吗？" } } } },
     "app-termination.active-task.quit-anyway" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quit Anyway" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仍要退出" } } } },
