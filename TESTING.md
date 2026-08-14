@@ -68,17 +68,32 @@ scripts/run_tests.sh
 
 ### 怎么读测试报告（别被绿勾骗了）
 
-`report.json` 里 `status` 才是结论，三种取值：
+**判定规则：退出码 + 原始日志 + `report.json` 三者一致才算数。** 任何一个说失败就是失败，任何一个对不上就不许当通过。别只看 `report.json` 的 `status`——它读的是 result bundle，而 bundle 可能是陈旧的、也可能是被中途掐死时只写了一半的（见下）。
+
+`report.json` 里 `status` 三种取值：
 
 | status | 含义 | 退出码 |
 | --- | --- | --- |
-| `passed` | 确认通过 | 0 |
-| `failed` | 确认有失败用例 | 1 |
-| `unknown` | **没能确认**——result bundle 读不出来，日志也捞不到结论 | 2 |
+| `passed` | 退出码、日志、bundle 三者一致确认通过 | 0 |
+| `failed` | 确认有失败用例（bundle 或日志任一发现失败即算） | 1 |
+| `unknown` | **没能确认**——读不出结论，或几个证据互相打架 | 2 |
 
 `source` 说明结论是从哪来的：`xcresult`（正常解析）、`xcodebuild-log`（bundle 坏了，从原始日志兜底捞的，计数为近似值）、`none`（什么都没捞到，此时必然是 `unknown`）。`unknown` 时 `reasons` 数组会写清楚为什么。
 
-为什么要有 `unknown`：xcodebuild 在 macOS 上跑完测试后有概率不退出，`scripts/xcodebuild_ci.rb` 的看门狗会把它杀掉，被杀的 bundle 缺 `Info.plist`，`xcresulttool` 全线失败。这种情况下报告绝不允许写出 `ok:true`——尤其是 `scripts/run_tests_fast.rb | tail -60` 这类写法本来就吞退出码，一个绿勾就足以让跑崩的构建冒充跑通的构建。
+报告里另外三个字段专门用来戳穿假绿：
+
+- `log_stats` — 从 `xcodebuild.log` 独立数出来的一份统计，跟 `stats` 对照看。
+- `total_mismatch` — `stats.total` 与日志对不上时为 `true`，`reasons` 里会写明差额。此时 `status` 一定不是 `passed`。
+- `test_exit` — 调用方透传的 xcodebuild 退出码。非 0 一律不许出 `passed`。
+
+为什么要有 `unknown`：
+
+1. xcodebuild 在 macOS 上跑完测试后有概率不退出，`scripts/xcodebuild_ci.rb` 的看门狗会把它杀掉，被杀的 bundle 缺 `Info.plist`，`xcresulttool` 全线失败。
+2. **bundle 能读出来也不等于可信。** 2026-08-14 实测过一次假绿：日志写着 `Test run with 2355 tests in 201 suites failed`、三个 `✘`、xcodebuild 退出 65，`report.json` 却是 `"status": "passed"`、`total` 只有 2340——bundle 少了 22 个用例，而三个失败恰好落在少掉的那批里。复用的旧 bundle、以及跑到一半没收尾的 bundle，都会这样"干干净净"地少报。
+
+所以这种情况下报告绝不允许写出 `ok:true`——尤其是 `scripts/run_tests_fast.rb | tail -60` 这类写法本来就吞退出码，一个绿勾就足以让跑崩的构建冒充跑通的构建。`scripts/run_tests.sh` 现在还会在开跑前先删掉上一轮的 `report.{json,md}`：中途任何一步被 `set -e` 掐断，宁可没有报告，也不能留一个旧绿勾在那儿冒充本次结论。
+
+这套契约由 `scripts/xcresult_report_contract_test.rb` 守着（`run_tests.sh` 与 CI 都会跑），改报告器前先看它。
 
 快速入口与完整入口会复用稳定的 DerivedData、SwiftPM checkout/package cache，并通过 Git common dir 派生的仓库级锁协调所有 linked worktree。完整 DerivedData 仍按工作树隔离，不允许多个工作树并发写入同一目录。
 

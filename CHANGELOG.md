@@ -1,9 +1,9 @@
 # Changelog
 
-> 当前文件保留最新版本（1.253.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.253.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.253.0-rc2 - 2026-08-14
+## 1.253.0-rc3 - 2026-08-14
 
 ### Fixed
 
@@ -18,7 +18,29 @@
 
 ### Meta
 
-- 计时用例抗抖动加固，预发布版本从 **1.253.0-rc1** 提升为 **1.253.0-rc2**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+- 计时用例抗抖动加固，预发布版本从 **1.253.0-rc2** 提升为 **1.253.0-rc3**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.253.0-rc2 - 2026-08-14
+
+### Fixed
+
+- `build/ci/report.json` 不再对"能读出来但不完整"的 result bundle 报假绿。2026-08-14 实测：同一次 `scripts/run_tests.sh` 里 xcodebuild 日志有 3 个 `✘`、脚本退出码 65、结论行是 `Test run with 2355 tests in 201 suites failed`，`report.json` 却写着 `"status": "passed"`、`total` 只有 2340（日志口径 2355 + 7 个 XCTest = 2362，少了 22 个），三个失败恰好落在少掉的那批里。根因是 `scripts/xcresult_report.rb` 把"bundle 能解析"当成"bundle 可信"：只要 `xcresulttool` 不报错就完全采信它的计数，原始日志仅在 bundle 读不出来时才作为兜底看一眼——而复用的旧 bundle、以及跑到一半没收尾的 bundle，都会这样干干净净地少报。现在原始日志每次都读：日志发现的失败一律进 `failures` 并把结论定为 `failed`；bundle 自报 `result: Failed` 同样不许出 `passed`。
+- 新增总数交叉校验：`stats.total` 与日志的 `Test run with N tests`（叠加 XCTest 的 `Executed N tests`）对不上时，`total_mismatch` 置 `true`、`reasons` 写明差额（如 `report=2340 log=2362 (delta +22)`），`status` 强制降级为 `unknown`，绝不报 `passed`。报告同时新增 `log_stats` 字段，把日志侧独立数出来的统计一并留档。
+- 新增 `--test-exit`：`scripts/run_tests.sh`、`scripts/run_tests_fast.rb` 与 CI 现在都把 xcodebuild 的退出码透传给报告器，非 0 退出码一律不许写出 `passed`。至此"退出码 + 日志 + 报告"三者一致才算通过。
+- `scripts/run_tests.sh` 开跑前先删掉上一轮的 `report.{json,md}`。此前从脚本开头到报告器之间任何一步被 `set -e` 掐断（例如某个契约守卫失败），磁盘上留着的仍是上一轮的 `"ok": true`，会被当成本次结论——实测到过两次运行 `stats` 一字不差（`total` 2362、`duration` 129.15）的情况。
+
+### Tests
+
+- `scripts/xcresult_report_contract_test.rb` 补齐回归覆盖（47 项检查）：新增 `scripts/fixtures/fake_xcresulttool.rb` 作为可注入的 `xcresulttool` 替身（经 `WILLDEEP_XCRESULTTOOL` 环境变量），据此构造"bundle 少报 22 个用例、失败落在少掉那批里"的真实事故形态，断言 `status=failed`、`failures` 含三个日志失败用例名、`total_mismatch=true`、`reasons` 写明 `report=2340 log=2362`；另覆盖"少报但日志也没报错 → `unknown` 且注明 `delta +22`"、"bundle 与日志一致 → 仍然放行 `passed`"、"bundle 自报 Failed"、"`--test-exit 65` 不许绿 / `--test-exit 0` 正常绿"。已验证去掉交叉校验后该 fixture 会退回 `status=passed`，即测试确实咬得住。
+- 契约测试同时钉住调用方：完整入口传 `--test-exit "${TEST_EXIT}"` 且开跑前 `rm -f` 旧报告，快速入口传 `test_exit:`，CI workflow 传 `--test-exit`。
+
+### Docs
+
+- `TESTING.md` 订正"`report.json` 里 `status` 才是结论"的说法，改为 **退出码 + 原始日志 + `report.json` 三者一致才算数**，并补上 `log_stats` / `total_mismatch` / `test_exit` 三个字段的读法与本次事故的原始数据。
+
+### Meta
+
+- 测试报告假绿修复，预发布版本从 **1.253.0-rc1** 提升为 **1.253.0-rc2**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.253.0-rc1 - 2026-08-14
 
