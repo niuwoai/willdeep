@@ -586,7 +586,7 @@ extension AppState {
             let outcome = captureAgentPlanFromLatestMessage(for: runtime)
             if outcome == .captured {
                 persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
-                agentDispatchCoordinator.synchronize(with: agentSessions)
+                synchronizeDispatchBoard()
                 _ = launchReadyDispatchTasks(goalID: runtime.id)
                 return false
             }

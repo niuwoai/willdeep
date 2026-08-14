@@ -285,6 +285,17 @@ final class AppState: ObservableObject {
     /// edge to run Goal recovery only after every persisted candidate is
     /// visible, avoiding a race with the initial empty in-memory list.
     @Published private(set) var hasLoadedAgentSessionCatalog = false
+
+#if DEBUG
+    /// Tests drive AppState flows synchronously, so the async catalog load
+    /// never completes inside a test body and the dispatch-board projection
+    /// gate (`synchronizeDispatchBoard()`) would stay shut. Tests that
+    /// legitimately exercise board projection declare the catalog
+    /// authoritative up front with this hook.
+    func markSessionCatalogLoadedForTesting() {
+        hasLoadedAgentSessionCatalog = true
+    }
+#endif
     /// Ids whose entry in `agentSessions` is still the catalog skeleton
     /// (messages stripped) and must be materialized from disk before it
     /// can be read or persisted. Owned per instance: several AppState
@@ -351,7 +362,7 @@ final class AppState: ObservableObject {
     /// Goal-first dispatch console state. The coordinator owns durable task
     /// metadata while AppState remains responsible for creating/running the
     /// underlying Agent sessions.
-    let agentDispatchCoordinator = AgentDispatchCoordinator()
+    let agentDispatchCoordinator: AgentDispatchCoordinator
     /// Tracks the runtime currently monitored for each dispatch task. This
     /// prevents duplicate completion pumps when the board and session list
     /// refresh at the same time, while still allowing a retry runtime to take
@@ -615,8 +626,12 @@ final class AppState: ObservableObject {
         fileContent: String = "",
         isEdited: Bool = false,
         rootDirectory: URL? = nil,
-        editorSettings: EditorSettings = EditorSettingsStore.load()
+        editorSettings: EditorSettings = EditorSettingsStore.load(),
+        // Test seam: dispatch-board persistence tests must not read or write
+        // the real `com.willdeep.agentDispatch.goals.v1` domain.
+        dispatchStore: AgentDispatchStore = AgentDispatchStore()
     ) {
+        self.agentDispatchCoordinator = AgentDispatchCoordinator(store: dispatchStore)
         self.openedFileURL = openedFileURL
         self.fileContent = fileContent
         self.isEdited = isEdited
@@ -854,6 +869,14 @@ final class AppState: ObservableObject {
             // Must follow the migration: repairing reads `agentProjects` to
             // resolve a leaked `project:<uuid>` back to its folder.
             self.repairAgentSessionsAnchoredToProjectKeys()
+
+            // Every dispatch-board synchronize before this point was refused
+            // (see synchronizeDispatchBoard(): projecting from a partially
+            // loaded catalog persisted an empty board over completed goals).
+            // The catalog is authoritative now — run the projection the
+            // early callers skipped so the board reflects reality without
+            // waiting for the next user interaction.
+            self.synchronizeDispatchBoardInBackground()
 
             // Empty placeholders are filtered by sidebar visibility instead
             // of being deleted from disk. Automatic deletion previously made

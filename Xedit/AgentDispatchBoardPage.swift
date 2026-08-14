@@ -80,13 +80,19 @@ private struct AgentDispatchBoardContent: View {
             }
         }
         .onAppear {
-            coordinator.synchronizeInBackground(with: appState.agentSessions)
+            appState.synchronizeDispatchBoardInBackground()
             localExecutors = AgentDispatchExecutorResolver.localAvailableExecutors()
             reloadExecutionProfiles()
             resumeSelectedGoalAfterSynchronization()
         }
-        .onReceive(appState.$agentSessions) { sessions in
-            coordinator.synchronizeInBackground(with: sessions, projects: appState.agentProjects)
+        // `onReceive` of a @Published fires with the CURRENT value at
+        // subscription time. When the app launches straight onto the board,
+        // that value is the pre-catalog empty array — the projection then
+        // persisted an empty board and completed goals came back "not
+        // started". The gated helper drops those early publishes; catalog
+        // completion runs the catch-up projection.
+        .onReceive(appState.$agentSessions) { _ in
+            appState.synchronizeDispatchBoardInBackground()
             resumeSelectedGoalAfterSynchronization()
         }
         .onChange(of: coordinator.selectedGoalID) { _ in

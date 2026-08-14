@@ -1940,6 +1940,10 @@ struct AgentDispatchCoordinatorTests {
     @Test("调度台选择工作区后保留结构化 Goal 草稿，不创建聊天消息")
     func dispatchGoalDraftKeepsOrchestratorDestination() throws {
         let appState = AppState()
+        // 面板投影以「会话目录已装载」为前提（防止半装载状态把已完成的
+        // 面板覆盖成空）。真实运行里用户能点到新建时目录早已就绪，测试
+        // 同步执行、异步装载永不完成，所以显式声明。
+        appState.markSessionCatalogLoadedForTesting()
         appState.agentDispatchCoordinator.resetForTests()
 
         let session = appState.startDispatchGoalSession(
@@ -1971,6 +1975,7 @@ struct AgentDispatchCoordinatorTests {
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState()
+        appState.markSessionCatalogLoadedForTesting()
         appState.agentDispatchCoordinator.resetForTests()
         let draft = appState.startDispatchGoalDraft()
         let runtime = try #require(appState.runtime(for: draft.id))

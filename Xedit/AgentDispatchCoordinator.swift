@@ -35,6 +35,11 @@ final class AgentDispatchCoordinator: ObservableObject {
         return selectedGoal.tasks.first { $0.id == selectedTaskID } ?? selectedGoal.tasks.first
     }
 
+    /// `sessions` must be the COMPLETE session catalog. The projection drops
+    /// any persisted goal whose backing session is absent and persists the
+    /// result immediately, so a partial list destroys recorded task states.
+    /// AppState callers go through `synchronizeDispatchBoard()`, which
+    /// refuses to project until the async catalog load has finished.
     func synchronize(with sessions: [AgentSession], projects: [AgentProject] = []) {
         backgroundSynchronizationRevision += 1
         applySynchronizedGoals(
@@ -791,7 +796,14 @@ final class AgentDispatchCoordinator: ObservableObject {
                 task.acceptanceCriteria = node.acceptanceCriteria.isEmpty
                     ? [defaultAcceptanceCriterion]
                     : node.acceptanceCriteria
-                if task.runtimeSessionID == nil {
+                // Dependency-derived state may only move a task between the
+                // two not-yet-started states. This used to run for every
+                // task without a runtime session, so a node completed by
+                // hand (accepted/merged, never linked to a runtime) was
+                // knocked back to queued/blocked on every board
+                // synchronization — "finished yesterday, not started today".
+                if task.runtimeSessionID == nil,
+                   task.state == .queued || task.state == .blocked {
                     task.state = node.dependencyIDs.isEmpty ? .queued : .blocked
                 }
                 task.updatedAt = max(task.updatedAt, session.updatedAt)
@@ -970,7 +982,30 @@ struct AgentDispatchStore {
     private static let defaultsKey = "com.willdeep.agentDispatch.goals.v1"
     private let defaults: UserDefaults
 
-    init(defaults: UserDefaults = .standard) {
+    /// AppState-based tests construct the real coordinator chain; before
+    /// this redirect they loaded — and via `resetForTests()` / projection
+    /// persists WIPED — the user's actual dispatch board in `.standard`,
+    /// which is one of the ways completed projects came back "not started".
+    /// Same lesson as `AgentSessionStore.testSandboxDirectory`: redirect
+    /// the entire test process so a newly added test cannot get it wrong.
+    /// The `willdeep-dispatch-` prefix is registered with
+    /// TestDefaultsHygiene, so leftover suites get swept.
+    private static let processDefaults: UserDefaults = {
+        let environment = ProcessInfo.processInfo.environment
+        let underTest = NSClassFromString("XCTestCase") != nil
+            || NSClassFromString("XCTest") != nil
+            || environment["XCTestConfigurationFilePath"] != nil
+            || environment["XCTestBundlePath"] != nil
+        guard underTest,
+              let sandbox = UserDefaults(
+                  suiteName: "willdeep-dispatch-process-\(ProcessInfo.processInfo.processIdentifier)"
+              ) else {
+            return .standard
+        }
+        return sandbox
+    }()
+
+    init(defaults: UserDefaults = AgentDispatchStore.processDefaults) {
         self.defaults = defaults
     }
 

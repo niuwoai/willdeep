@@ -990,7 +990,7 @@ extension AppState {
         if runtime.session.presentationScope == .dispatchBoard,
            let location = runtime.workspaceLocation
                 ?? runtime.workspaceRootPath.map({ .local(path: $0) }) {
-            agentDispatchCoordinator.synchronize(with: agentSessions)
+            synchronizeDispatchBoard()
             let ownProject = agentDispatchCoordinator.goals.first {
                 $0.sessionID == runtime.id
             }
@@ -1050,7 +1050,7 @@ extension AppState {
         persistActiveAgentSession()
         if runtime.session.presentationScope == .dispatchBoard,
            agentPrimaryDestination == .dispatchBoard {
-            agentDispatchCoordinator.synchronize(with: agentSessions)
+            synchronizeDispatchBoard()
             agentDispatchCoordinator.selectGoal(runtime.id)
             agentPrimaryDestination = .dispatchBoard
         }
