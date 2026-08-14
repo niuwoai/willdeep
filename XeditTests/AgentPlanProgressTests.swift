@@ -64,6 +64,14 @@ struct AgentPlanProgressTests {
         #expect(PlanStatusPill.textColor(status: .executing, isInterrupted: true) == .secondary)
     }
 
+    @Test("产物与 Dev Server 活动卡统一使用 Composer 灰阶图标")
+    func activityCardsUseMonochromeIcons() {
+        #expect(AgentActivityCardChrome.artifactIcon == AgentComposerChrome.iconSecondary)
+        #expect(AgentActivityCardChrome.artifactIcon != .accentColor)
+        #expect(AgentActivityCardChrome.devServerIcon == AgentComposerChrome.iconSecondary)
+        #expect(AgentActivityCardChrome.devServerIcon != .green)
+    }
+
     @MainActor
     @Test("渲染折叠计划与产物卡用于设计验收")
     func rendersCompactActivityOverlayForDesignQA() throws {
@@ -559,6 +567,13 @@ struct AgentPlanProgressTests {
         #expect(!AgentPlanCardExpansionPolicy.showsStatus(.approved, isInterrupted: false))
         #expect(AgentPlanCardExpansionPolicy.showsStatus(.executing, isInterrupted: false))
         #expect(AgentPlanCardExpansionPolicy.showsStatus(.approved, isInterrupted: true))
+
+        let active = AgentPlan(status: .executing, summary: "", stepTexts: ["Work"])
+        let done = AgentPlan(status: .done, summary: "", stepTexts: ["Work"])
+        #expect(AgentPlanCardExpansionPolicy.shouldDisplay(active))
+        #expect(AgentPlanCardExpansionPolicy.allowsRevision(active))
+        #expect(!AgentPlanCardExpansionPolicy.shouldDisplay(done))
+        #expect(!AgentPlanCardExpansionPolicy.allowsRevision(done))
     }
 
     @Test("plan card collapses only when a new assistant round appears")

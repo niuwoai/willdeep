@@ -22,14 +22,64 @@
 
 import Foundation
 
+nonisolated enum AppLanguagePreference: String, CaseIterable, Identifiable, Sendable {
+    case system
+    case simplifiedChinese
+    case english
+    case japanese
+
+    var id: String { rawValue }
+
+    var languageTag: String? {
+        switch self {
+        case .system: return nil
+        case .simplifiedChinese: return "zh-Hans"
+        case .english: return "en"
+        case .japanese: return "ja"
+        }
+    }
+}
+
 @MainActor
 enum AppLocale {
-    /// `zh-Hans` / `en-US` / `ja-JP` 之类的完整 BCP-47 标签。
-    static var languageTag: String {
-        if let preferred = Locale.preferredLanguages.first, !preferred.isEmpty {
+    static let preferenceKey = "appLanguagePreference"
+
+    static var preference: AppLanguagePreference {
+        AppLanguagePreference(
+            rawValue: UserDefaults.standard.string(forKey: preferenceKey) ?? ""
+        ) ?? .system
+    }
+
+    static func setPreference(_ preference: AppLanguagePreference) {
+        UserDefaults.standard.set(preference.rawValue, forKey: preferenceKey)
+        if let languageTag = preference.languageTag {
+            UserDefaults.standard.set([languageTag], forKey: "AppleLanguages")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+        }
+    }
+
+    nonisolated static func resolvedLanguageTag(
+        preference: AppLanguagePreference,
+        preferredLanguages: [String],
+        localeIdentifier: String
+    ) -> String {
+        if let languageTag = preference.languageTag {
+            return languageTag
+        }
+        if let preferred = preferredLanguages.first, !preferred.isEmpty {
             return preferred
         }
-        return Locale.current.identifier
+        return localeIdentifier
+    }
+
+    /// `zh-Hans` / `en-US` / `ja-JP` 之类的完整 BCP-47 标签。
+    static var languageTag: String {
+        resolvedLanguageTag(
+            preference: preference,
+            preferredLanguages: Locale.preferredLanguages,
+            localeIdentifier: Locale.current.identifier
+        )
     }
 
     /// 只取主语言部分(`zh` / `en` / `ja` …),用于粗粒度判断。

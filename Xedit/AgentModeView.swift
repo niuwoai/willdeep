@@ -118,12 +118,11 @@ struct AgentModeView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let autoHidden = AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
-                totalWidth: proxy.size.width,
-                userPrefersVisible: sessionsSidebarVisible,
-                activeSidePanel: appState.agentSidePanelKind,
-                activeSidePanelWidth: CGFloat(currentSidePanelWidth)
-            )
+            // The session list is an explicit operator choice. A right-side
+            // browser/terminal/files panel may squeeze the chat column, but it
+            // must never silently revoke the left sidebar or disable its
+            // titlebar toggle.
+            let autoHidden = false
             mainContent(totalWidth: proxy.size.width, isSidebarAutoHidden: autoHidden)
                 .background {
                     AgentSessionsSidebarWindowChromeToggle(
@@ -543,22 +542,15 @@ enum AgentSidebarToggleButtonState {
 }
 
 enum AgentModeResponsiveLayout {
-    /// Base width where chat + composer still feel usable with the session list.
-    /// Add the right panel's live width when that panel is open. Using only
-    /// its minimum width meant a terminal widened by dragging could crush the
-    /// queue and composer while the session list incorrectly stayed visible.
-    static let sidebarAutoHideBaseWidth: CGFloat = 800
-
     static func shouldAutoHideSessionsSidebar(
         totalWidth: CGFloat,
         userPrefersVisible: Bool,
         activeSidePanel: AgentSidePanelKind?,
         activeSidePanelWidth: CGFloat
     ) -> Bool {
-        guard userPrefersVisible, totalWidth > 0 else { return false }
-        let panelWidth = activeSidePanel == nil ? 0 : max(activeSidePanelWidth, 0)
-        let threshold = sidebarAutoHideBaseWidth + panelWidth
-        return totalWidth < threshold
+        // Kept as a pure policy seam for regression tests and older callers.
+        // Width and right-panel state no longer override the user's choice.
+        false
     }
 }
 

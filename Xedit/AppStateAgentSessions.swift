@@ -2139,11 +2139,26 @@ extension AppState {
             runtime.sessionModelOverride = modelID
         }
 
-        agentRoutines[index].lastRunAt = Date()
+        let startedAt = Date()
+        agentRoutines[index].lastRunAt = startedAt
         agentRoutines[index].lastSessionID = session.id
-        agentRoutines[index].updatedAt = Date()
+        agentRoutines[index].updatedAt = startedAt
         AgentRoutineStore.save(agentRoutines[index])
         agentRoutineScheduler.routinesChanged(agentRoutines)
+        agentRoutineRuns.insert(
+            AgentRoutineRunRecord(
+                routineID: routine.id,
+                routineName: routine.name,
+                sessionID: session.id,
+                startedAt: startedAt
+            ),
+            at: 0
+        )
+        agentRoutineRuns = AgentRoutineRunHistory.recent(
+            agentRoutineRuns,
+            limit: AgentRoutineRunHistory.maximumStoredRuns
+        )
+        AgentRoutineRunStore.save(agentRoutineRuns)
 
         // Scheduled runs have no operator watching their terminal. Give the
         // model a durable least-side-effect execution contract so diagnostic

@@ -6006,13 +6006,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "WillDeep Agent"
+            "value" : "WillDeep"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "WillDeep Agent"
+            "value" : "WillDeep"
           }
         }
       }
@@ -7149,6 +7149,10 @@
         }
       }
     },
+    "automation.help.open-recent-run" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open this run's conversation" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "この実行の会話を開く" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开本次运行的对话" } } } },
+    "automation.page.no-recent-runs" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No scheduled task runs yet" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "定期タスクの実行履歴はまだありません" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "还没有定时任务运行记录" } } } },
+    "automation.page.recent-run-unavailable" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This conversation is no longer available" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "この会話は利用できません" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个对话已不可用" } } } },
+    "automation.page.recent-runs" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Recent runs" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "最近の実行" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "近期运行" } } } },
     "automation.page.empty-search" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9629,6 +9633,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "还没有保存过可复用密钥。"
+          }
+        }
+      }
+    },
+    "composer.secret.saved-copy-help" : {
+      "comment" : "Tooltip for copying a saved protected secret after system authentication",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authenticate and copy this secret"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "认证后复制这个密钥"
+          }
+        }
+      }
+    },
+    "composer.secret.saved-copy-reason" : {
+      "comment" : "macOS authentication reason shown before copying a saved secret",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authenticate to copy this saved secret from Keychain."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请认证以从钥匙串复制这个已保存的密钥。"
           }
         }
       }
@@ -13040,24 +13080,6 @@
         }
       }
     },
-    "menu.view.show-editor" : {
-      "comment" : "Button label in View menu",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show Editor"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示 Editor"
-          }
-        }
-      }
-    },
     "menu.view.switch-to-agent-mode" : {
       "comment" : "Button label (conditional) in View menu",
       "extractionState" : "manual",
@@ -13072,24 +13094,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "切换到助手模式"
-          }
-        }
-      }
-    },
-    "menu.view.switch-to-editor-mode" : {
-      "comment" : "Button label (conditional) in View menu",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Switch to Editor Mode"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "切换到编辑器模式"
           }
         }
       }
@@ -19301,6 +19305,13 @@
         }
       }
     },
+    "settings.language.english" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "English" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "English" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "English" } } } },
+    "settings.language.japanese" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "日本語" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "日本語" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "日本語" } } } },
+    "settings.language.picker-label" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "App language" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "アプリの言語" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用语言" } } } },
+    "settings.language.restart-note" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quit and reopen WillDeep to apply the language change." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "言語の変更は WillDeep の再起動後に反映されます。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "退出并重新打开 WillDeep 后应用语言更改。" } } } },
+    "settings.language.system" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Follow system" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "システムに従う" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "跟随系统" } } } },
+    "settings.language.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Language" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "言語設定" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "语言设置" } } } },
+    "settings.language.zh-hans" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "简体中文" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "简体中文" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "简体中文" } } } },
     "settings.group.account-and-devices" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -1490,6 +1490,7 @@ private struct ConsultationButton: View {
 private struct AgentSecretInsertSheet: View {
     @State private var rows: [AgentSecretInput] = [AgentSecretInput(label: "", secret: "")]
     @State private var savedSecrets: [AgentSavedSecret] = []
+    @State private var copiedSecretID: String?
 
     let onCancel: () -> Void
     let onInsertSaved: (_ placeholder: String) -> Void
@@ -1527,10 +1528,11 @@ private struct AgentSecretInsertSheet: View {
                     ScrollView {
                         LazyVStack(spacing: 6) {
                             ForEach(savedSecrets) { secret in
-                                Button {
-                                    onInsertSaved(secret.placeholder)
-                                } label: {
-                                    HStack(spacing: 9) {
+                                HStack(spacing: 6) {
+                                    Button {
+                                        onInsertSaved(secret.placeholder)
+                                    } label: {
+                                        HStack(spacing: 9) {
                                         Image(systemName: "key.fill")
                                             .font(.system(size: 11, weight: .semibold))
                                             .foregroundStyle(AgentComposerChrome.iconPrimary)
@@ -1550,15 +1552,27 @@ private struct AgentSecretInsertSheet: View {
                                         Spacer(minLength: 8)
                                         Image(systemName: "plus.circle.fill")
                                             .foregroundStyle(AgentComposerChrome.iconPrimary)
+                                        }
+                                        .contentShape(Rectangle())
                                     }
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 7)
-                                    .contentShape(Rectangle())
-                                    .background(Color.primary.opacity(0.035))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .buttonStyle(.plain)
+                                    .help(L10n.Composer.savedSecretInsertHelp)
+
+                                    Button {
+                                        copySavedSecret(secret)
+                                    } label: {
+                                        Image(systemName: copiedSecretID == secret.id ? "checkmark" : "doc.on.doc")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .frame(width: 24, height: 24)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help(L10n.Composer.savedSecretCopyHelp)
                                 }
-                                .buttonStyle(.plain)
-                                .help(L10n.Composer.savedSecretInsertHelp)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 7)
+                                .background(Color.primary.opacity(0.035))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                         }
                     }
@@ -1626,6 +1640,23 @@ private struct AgentSecretInsertSheet: View {
     private func savedSecretLabel(_ secret: AgentSavedSecret) -> String {
         guard secret.label.isEmpty else { return secret.label }
         return L10n.Composer.legacySecretLabel(String(secret.identifier.prefix(8)))
+    }
+
+    private func copySavedSecret(_ secret: AgentSavedSecret) {
+        Task { @MainActor in
+            guard let value = await AgentSecretStore.revealSecretForCopy(
+                identifier: secret.identifier,
+                reason: L10n.Composer.savedSecretCopyReason
+            ) else { return }
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(value, forType: .string)
+            copiedSecretID = secret.id
+            try? await Task.sleep(for: .seconds(1.5))
+            if copiedSecretID == secret.id {
+                copiedSecretID = nil
+            }
+        }
     }
 
     private var hasIncompleteRow: Bool {

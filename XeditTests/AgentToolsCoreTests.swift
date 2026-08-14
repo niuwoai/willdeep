@@ -18,6 +18,16 @@ import Foundation
 @Suite
 @MainActor
 struct AgentToolsCoreTests {
+    @Test
+    func persistedCredentialRedactionCoversUnderscoreAndAlphabeticSKKeys() {
+        let source = "one=sk_abcdefghijklmnopqrstuvwxyz two=sk-abcdefghijklmnop"
+        let redacted = AgentSensitiveContentRedactor.redactCredentials(source)
+
+        #expect(!redacted.contains("sk_abcdefghijklmnopqrstuvwxyz"))
+        #expect(!redacted.contains("sk-abcdefghijklmnop"))
+        #expect(redacted == "one=[REDACTED:API-KEY] two=[REDACTED:API-KEY]")
+    }
+
     private static let headlessCommandTimeoutSeconds = 30.0
 
     // MARK: - Risk / status enums

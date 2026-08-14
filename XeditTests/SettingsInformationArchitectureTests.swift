@@ -2,6 +2,30 @@ import Testing
 @testable import WillDeep
 
 struct SettingsInformationArchitectureTests {
+    @Test("language preference resolves explicit Chinese, English, and Japanese overrides")
+    func explicitLanguagePreferenceOverridesSystem() {
+        #expect(AppLocale.resolvedLanguageTag(
+            preference: .system,
+            preferredLanguages: ["fr-FR"],
+            localeIdentifier: "de-DE"
+        ) == "fr-FR")
+        #expect(AppLocale.resolvedLanguageTag(
+            preference: .simplifiedChinese,
+            preferredLanguages: ["fr-FR"],
+            localeIdentifier: "de-DE"
+        ) == "zh-Hans")
+        #expect(AppLocale.resolvedLanguageTag(
+            preference: .english,
+            preferredLanguages: ["fr-FR"],
+            localeIdentifier: "de-DE"
+        ) == "en")
+        #expect(AppLocale.resolvedLanguageTag(
+            preference: .japanese,
+            preferredLanguages: ["fr-FR"],
+            localeIdentifier: "de-DE"
+        ) == "ja")
+    }
+
     @Test("settings groups follow task-oriented information architecture")
     @MainActor
     func taskOrientedGroups() {

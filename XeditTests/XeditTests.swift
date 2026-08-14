@@ -32,8 +32,8 @@ struct WillDeepTests {
 
     // Editor core behavior tests live in EditorCoreBehaviorTests.swift.
 
-    @Test("agent session sidebar auto-hides only below responsive width")
-    func testAgentSessionSidebarAutoHideThreshold() {
+    @Test("agent session sidebar remains operator-controlled at every width")
+    func testAgentSessionSidebarNeverAutoHides() {
         let minimumSidePanelWidth: CGFloat = 240
 
         #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
@@ -41,7 +41,7 @@ struct WillDeepTests {
             userPrefersVisible: true,
             activeSidePanel: nil,
             activeSidePanelWidth: minimumSidePanelWidth
-        ) == true)
+        ) == false)
         #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
             totalWidth: 800,
             userPrefersVisible: true,
@@ -59,7 +59,7 @@ struct WillDeepTests {
             userPrefersVisible: true,
             activeSidePanel: .backgroundTasks,
             activeSidePanelWidth: minimumSidePanelWidth
-        ) == true)
+        ) == false)
         #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
             totalWidth: 1_040,
             userPrefersVisible: true,
@@ -71,7 +71,7 @@ struct WillDeepTests {
             userPrefersVisible: true,
             activeSidePanel: .terminal,
             activeSidePanelWidth: 600
-        ) == true)
+        ) == false)
         #expect(AgentModeResponsiveLayout.shouldAutoHideSessionsSidebar(
             totalWidth: 1_400,
             userPrefersVisible: true,

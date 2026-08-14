@@ -471,6 +471,8 @@ nonisolated enum L10n {
         }
         static let newSecretsTitle = String(localized: "composer.secret.new-title", defaultValue: "Add or update a secret")
         static let savedSecretInsertHelp = String(localized: "composer.secret.saved-insert-help", defaultValue: "Insert this protected secret at the cursor")
+        static let savedSecretCopyHelp = String(localized: "composer.secret.saved-copy-help", defaultValue: "Authenticate and copy this secret")
+        static let savedSecretCopyReason = String(localized: "composer.secret.saved-copy-reason", defaultValue: "Authenticate to copy this saved secret from Keychain.")
         static let savedSecretsEmpty = String(localized: "composer.secret.saved-empty", defaultValue: "No reusable secrets have been saved yet.")
         static let savedSecretsTitle = String(localized: "composer.secret.saved-title", defaultValue: "Saved secrets")
         static let secretAliasRule = String(localized: "composer.secret.alias-rule", defaultValue: "Aliases become lowercase kebab-case placeholders. Saving the same alias updates its local value.")
@@ -1121,9 +1123,7 @@ nonisolated enum L10n {
         static let fileSaveAs = String(localized: "menu.file.save-as", defaultValue: "Save As…")
         static let viewOpenContainingFolder = String(localized: "menu.view.open-containing-folder", defaultValue: "Open Containing Folder")
         static let viewOpenSplitFile = String(localized: "menu.view.open-split-file", defaultValue: "Open Split File…")
-        static let viewShowEditor = String(localized: "menu.view.show-editor", defaultValue: "Show Editor")
         static let viewSwitchToAgentMode = String(localized: "menu.view.switch-to-agent-mode", defaultValue: "Switch to Agent Mode")
-        static let viewSwitchToEditorMode = String(localized: "menu.view.switch-to-editor-mode", defaultValue: "Switch to Editor Mode")
         static let viewToggleAgent = String(localized: "menu.view.toggle-agent", defaultValue: "Toggle Agent")
         static let viewToggleFocusMode = String(localized: "menu.view.toggle-focus-mode", defaultValue: "Toggle Focus Mode")
         static let viewToggleInspector = String(localized: "menu.view.toggle-inspector", defaultValue: "Toggle Inspector")

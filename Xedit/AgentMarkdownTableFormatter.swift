@@ -177,6 +177,13 @@ enum AgentMarkdownTableFormatter {
         return width
     }
 
+    /// Returns the user-visible text of one inline-Markdown table cell.
+    /// Shared with the SwiftUI table layout so formatting markers do not
+    /// inflate the measured column width.
+    static func visibleText(in raw: String) -> String {
+        renderCell(raw).visible
+    }
+
     /// True when this scalar is laid out as ~2 monospace columns.
     /// Ranges chosen for common CJK + emoji blocks; not exhaustive
     /// (CJK Ext G+ stop after the BMP ext range here).

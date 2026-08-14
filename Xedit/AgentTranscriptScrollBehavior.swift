@@ -93,6 +93,7 @@ nonisolated struct AgentTranscriptViewportReflowState<Anchor> {
 /// its expensive relayout path.
 struct AgentTranscriptScrollObserver: NSViewRepresentable {
     @Binding var isFollowingBottom: Bool
+    var onReachTop: () -> Bool = { false }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -107,6 +108,7 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
     func updateNSView(_ nsView: ProbeView, context: Context) {
         context.coordinator.isFollowingBottom = isFollowingBottom
         context.coordinator.onChange = { isFollowingBottom = $0 }
+        context.coordinator.onReachTop = onReachTop
         DispatchQueue.main.async { [weak nsView, weak coordinator = context.coordinator] in
             guard let nsView, let coordinator else { return }
             coordinator.attachIfNeeded(from: nsView)
@@ -135,6 +137,7 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
 
     final class Coordinator {
         private static let bottomTolerance: CGFloat = 56
+        private static let topTolerance: CGFloat = 40
         private static let geometryTolerance: CGFloat = 0.5
         private static let reflowSettleDelay: TimeInterval = 0.08
 
@@ -147,6 +150,7 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
         weak var documentView: NSView?
         var isFollowingBottom = true
         var onChange: ((Bool) -> Void)?
+        var onReachTop: (() -> Bool)?
         private var notificationTokens: [NSObjectProtocol] = []
         private var lastDocumentSize: CGSize?
         private var lastViewportSize: CGSize?
@@ -156,6 +160,8 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
         private var viewportRestoreGeneration = 0
         private var viewportReflowSettleGeneration = 0
         private var isViewportRestorePending = false
+        private var wasNearTop = false
+        private var pendingPrependAnchor: (documentHeight: CGFloat, offsetFromTop: CGFloat)?
 
         deinit {
             removeObservers()
@@ -208,6 +214,7 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
                 )
             }
             publish(isNearBottom(in: candidate))
+            wasNearTop = isNearTop(in: candidate)
             lastDocumentSize = candidateDocument?.bounds.size
             lastViewportSize = clipView.bounds.size
             captureViewportAnchor(in: candidate)
@@ -250,6 +257,13 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
             if viewportReflowState.isActive {
                 return
             }
+            let nowNearTop = isNearTop(in: scrollView)
+            if nowNearTop, !wasNearTop,
+               let metrics = viewportMetrics(in: scrollView),
+               onReachTop?() == true {
+                pendingPrependAnchor = (metrics.documentHeight, metrics.offsetFromTop)
+            }
+            wasNearTop = nowNearTop
             publish(isNearBottom(in: scrollView))
             scheduleViewportAnchorCapture(in: scrollView)
         }
@@ -259,6 +273,16 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
             let previousSize = lastDocumentSize
             let currentSize = documentView.bounds.size
             lastDocumentSize = currentSize
+
+            if let pending = pendingPrependAnchor,
+               currentSize.height > pending.documentHeight + Self.geometryTolerance {
+                let insertedHeight = currentSize.height - pending.documentHeight
+                restoreOffsetFromTop(pending.offsetFromTop + insertedHeight, in: scrollView)
+                pendingPrependAnchor = nil
+                publish(false)
+                captureViewportAnchor(in: scrollView)
+                return
+            }
 
             if isFollowingBottom {
                 cancelPendingViewportRestore()
@@ -432,6 +456,24 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
             return distance <= Self.bottomTolerance
         }
 
+        private func isNearTop(in scrollView: NSScrollView) -> Bool {
+            guard let metrics = viewportMetrics(in: scrollView) else { return true }
+            return metrics.offsetFromTop <= Self.topTolerance
+        }
+
+        private func restoreOffsetFromTop(_ offset: CGFloat, in scrollView: NSScrollView) {
+            guard let documentView = scrollView.documentView else { return }
+            let clipView = scrollView.contentView
+            let bounds = documentView.bounds
+            let viewportHeight = clipView.documentVisibleRect.height
+            let bounded = min(max(offset, 0), max(0, bounds.height - viewportHeight))
+            let targetY = documentView.isFlipped
+                ? bounds.minY + bounded
+                : bounds.maxY - viewportHeight - bounded
+            clipView.scroll(to: NSPoint(x: clipView.bounds.minX, y: targetY))
+            scrollView.reflectScrolledClipView(clipView)
+        }
+
         private func scrollToBottom(_ scrollView: NSScrollView) {
             guard let documentView = scrollView.documentView else { return }
             let clipView = scrollView.contentView
@@ -467,6 +509,8 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
             lastDocumentSize = nil
             lastViewportSize = nil
             viewportAnchor = nil
+            pendingPrependAnchor = nil
+            wasNearTop = false
         }
     }
 }

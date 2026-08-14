@@ -2115,6 +2115,10 @@ extension AppState {
                     patchAutoApplySource: patchAutoApplySource,
                     delegatedProgressSink: liveProgressSink
                 )
+                // Only tabs absent from this snapshot can have been created by
+                // the AI tool below. If one appears, surface Terminal even when
+                // the operator had closed the panel in the meantime.
+                let terminalTabIDsBeforeTool = Set(agentTerminalController.tabs.map(\.id))
                 let guardedMutation: AgentGuardedGitMutation? = {
                     guard call.toolName == "run_command",
                           let command = argsDict["command"]?.stringValue() else {
@@ -2277,8 +2281,14 @@ extension AppState {
                         runtime.toolCalls[index].arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey] = .bool(false)
                     }
                     runtime.recordComputerUseActivity(toolName: call.toolName, images: result.images)
-                    if call.toolName == "terminal_create_shortcut",
-                       !terminalShortcutResultRequiresChatPasswordCard(result) {
+                    let agentCreatedTerminalTabs = agentTerminalController.tabs.filter {
+                        !terminalTabIDsBeforeTool.contains($0.id)
+                    }
+                    if let createdTab = agentCreatedTerminalTabs.last {
+                        _ = try? agentTerminalController.selectTab(id: createdTab.id)
+                        agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .terminal)
+                    } else if call.toolName == "terminal_create_shortcut",
+                              !terminalShortcutResultRequiresChatPasswordCard(result) {
                         agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .terminal)
                     }
                     let effectiveApprovalSource = runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource

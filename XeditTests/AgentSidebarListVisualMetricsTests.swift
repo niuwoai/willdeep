@@ -5,6 +5,25 @@ import Testing
 @testable import WillDeep
 
 struct AgentSidebarListVisualMetricsTests {
+    @Test("scheduled run history is newest first and capped for the page")
+    func scheduledRunHistoryIsNewestFirst() {
+        let routineID = UUID()
+        let now = Date()
+        let records = (0..<15).map { offset in
+            AgentRoutineRunRecord(
+                routineID: routineID,
+                routineName: "Routine \(offset)",
+                sessionID: UUID(),
+                startedAt: now.addingTimeInterval(TimeInterval(-offset))
+            )
+        }.reversed()
+
+        let recent = AgentRoutineRunHistory.recent(Array(records))
+        #expect(recent.count == AgentRoutineRunHistory.defaultVisibleRuns)
+        #expect(recent.first?.routineName == "Routine 0")
+        #expect(recent.last?.routineName == "Routine 11")
+    }
+
     @Test("conversation sidebar follows the Codex typography and vertical rhythm")
     func codexReferenceMetricsStaySynchronized() {
         #expect(AgentDesign.sidebarRowFontSize == 14)

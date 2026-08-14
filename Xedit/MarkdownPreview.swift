@@ -657,6 +657,46 @@ enum MarkdownInlineSemanticEnhancer {
 
 // MARK: - Table block view
 
+/// Computes one shared set of widths for the whole table. Each rendered row
+/// must reuse these values; letting independent HStacks size their own cells
+/// makes the same column land at a different x-position on every row.
+enum MarkdownTableColumnLayout {
+    static let minimumWidth: CGFloat = 80
+    static let maximumWidth: CGFloat = 320
+    private static let horizontalPadding: CGFloat = 20
+    private static let averageHalfWidthGlyphRatio: CGFloat = 0.58
+
+    static func widths(
+        headers: [String],
+        rows: [[String]],
+        fontSize: CGFloat
+    ) -> [CGFloat] {
+        let allRows = headers.isEmpty ? rows : [headers] + rows
+        let columnCount = allRows.map(\.count).max() ?? 0
+        guard columnCount > 0 else { return [] }
+
+        var visualWidths = Array(repeating: 0, count: columnCount)
+        for row in allRows {
+            for (column, rawCell) in row.enumerated() {
+                let visibleText = AgentMarkdownTableFormatter.visibleText(in: rawCell)
+                visualWidths[column] = max(
+                    visualWidths[column],
+                    AgentMarkdownTableFormatter.displayWidth(of: visibleText)
+                )
+            }
+        }
+
+        let estimatedHalfWidthGlyph = max(1, fontSize * averageHalfWidthGlyphRatio)
+        return visualWidths.map { visualWidth in
+            let estimatedContentWidth = CGFloat(visualWidth) * estimatedHalfWidthGlyph
+            return min(
+                maximumWidth,
+                max(minimumWidth, estimatedContentWidth + horizontalPadding)
+            )
+        }
+    }
+}
+
 /// Renders a GFM-style pipe table. Header row bold + lightly tinted;
 /// body rows alternating background for legibility. The whole table sits
 /// in a horizontal ScrollView so wide tables don't squeeze the chat
@@ -672,14 +712,19 @@ struct MarkdownTableBlockView: View {
     }
 
     var body: some View {
+        let columnWidths = MarkdownTableColumnLayout.widths(
+            headers: headers,
+            rows: rows,
+            fontSize: typography.tableFontSize
+        )
         ScrollView(.horizontal, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
                 if !headers.isEmpty {
-                    headerRow
+                    headerRow(columnWidths: columnWidths)
                     Divider()
                 }
                 ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                    bodyRow(row, isOdd: index % 2 == 1)
+                    bodyRow(row, isOdd: index % 2 == 1, columnWidths: columnWidths)
                     if index < rows.count - 1 {
                         Divider().opacity(0.4)
                     }
@@ -698,27 +743,39 @@ struct MarkdownTableBlockView: View {
     }
 
     @ViewBuilder
-    private var headerRow: some View {
+    private func headerRow(columnWidths: [CGFloat]) -> some View {
         HStack(alignment: .top, spacing: 0) {
             ForEach(0..<columnCount, id: \.self) { col in
-                cell(text: col < headers.count ? headers[col] : "", isHeader: true)
+                cell(
+                    text: col < headers.count ? headers[col] : "",
+                    isHeader: true,
+                    width: columnWidths[col]
+                )
             }
         }
         .background(Color.primary.opacity(0.05))
     }
 
     @ViewBuilder
-    private func bodyRow(_ row: [String], isOdd: Bool) -> some View {
+    private func bodyRow(
+        _ row: [String],
+        isOdd: Bool,
+        columnWidths: [CGFloat]
+    ) -> some View {
         HStack(alignment: .top, spacing: 0) {
             ForEach(0..<columnCount, id: \.self) { col in
-                cell(text: col < row.count ? row[col] : "", isHeader: false)
+                cell(
+                    text: col < row.count ? row[col] : "",
+                    isHeader: false,
+                    width: columnWidths[col]
+                )
             }
         }
         .background(isOdd ? Color.primary.opacity(0.025) : Color.clear)
     }
 
     @ViewBuilder
-    private func cell(text: String, isHeader: Bool) -> some View {
+    private func cell(text: String, isHeader: Bool, width: CGFloat) -> some View {
         Text(MarkdownInline.attributedString(
             from: text,
             inlineCodeFontSize: typography.tableFontSize
@@ -732,7 +789,7 @@ struct MarkdownTableBlockView: View {
             .textSelection(.enabled)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .frame(minWidth: 80, alignment: .leading)
+            .frame(width: width, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .overlay(alignment: .trailing) {
                 Divider()

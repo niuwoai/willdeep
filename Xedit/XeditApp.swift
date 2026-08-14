@@ -26,14 +26,6 @@ struct WillDeepApp: App {
             AgentOnlyCommands()
         }
 
-        // 专家圆桌:独立单例窗口。照 Agent 窗口,不 attach
-        // EditorAppStateRegistry(避免污染 registry.current);从
-        // registry.current 取当前 AppState。
-        Window(L10n.Roundtable.windowTitle, id: RoundtableWindowID.value) {
-            RoundtableWindowRootView()
-        }
-        .defaultSize(width: 980, height: 720)
-
         // 侧边栏面板分离出的独立窗口:payload 即面板 kind,同 kind 去重
         // (openWindow(value:) 对相同值聚焦既有窗口)。内容与侧栏面板
         // 完全同源,详见 AgentDetachedPanelWindow.swift。
@@ -94,10 +86,6 @@ enum AgentWindowID {
 /// AppState. There is deliberately no SwiftUI scene registered for this id.
 enum EditorWindowID {
     static let value = "removed-editor-window"
-}
-
-enum RoundtableWindowID {
-    static let value = "roundtable-window"
 }
 
 private struct AgentOnlyCommands: Commands {
@@ -294,29 +282,6 @@ private struct WillDeepCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command, .option])
                 .disabled(appState?.canShowPreview != true)
 
-                // 打开(或聚焦)独立的 Editor 窗口。抽成闭包复用，让多个
-                // 快捷键都能触发同一个动作。默认可见快捷键为 ⇧⌘E；另外内置
-                // ⌥⌘E、⌃⌘E 两个备用组合键(挂在下面隐藏承接按钮上)。
-                let showEditorAction = {
-                    if appState?.showEditor() != true {
-                        openWindow(id: EditorWindowID.value)
-                    }
-                }
-
-                Button(L10n.Menu.viewShowEditor, action: showEditorAction)
-                    .keyboardShortcut("e", modifiers: [.command, .shift])
-
-                // 备用进入 editor 的组合键。用零尺寸隐藏按钮承接额外快捷键，
-                // 因为 SwiftUI 单个 Button 只能绑定一个 .keyboardShortcut。
-                Button("", action: showEditorAction)
-                    .keyboardShortcut("e", modifiers: [.command, .option])
-                    .frame(width: 0, height: 0)
-                    .hidden()
-                Button("", action: showEditorAction)
-                    .keyboardShortcut("e", modifiers: [.command, .control])
-                    .frame(width: 0, height: 0)
-                    .hidden()
-
                 Button(L10n.Menu.viewToggleTerminal) {
                     appState?.toggleEditorTerminal(appState?.openedFileURL ?? appState?.rootDirectory)
                 }
@@ -344,18 +309,6 @@ private struct WillDeepCommands: Commands {
                 }
                 .keyboardShortcut("a", modifiers: [.command, .option])
 
-                // 1.80.0-rc1：不再 toggle editor↔agent，而是打开
-                // (或聚焦) 独立的 Agent 窗口。SwiftUI `openWindow(id:)`
-                // 对单例 Window scene 来说是幂等的 —— 已经存在就抬起，
-                // 不存在就创建。
-                Button(L10n.AgentWindow.openMenuItem) {
-                    openWindow(id: AgentWindowID.value)
-                }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
-                // Already in the Agent window → opening it is a no-op (the
-                // singleton just refocuses itself), so disable the item to
-                // make that obvious.
-                .disabled(agentWindowActive == true)
             }
 
             CommandGroup(before: .windowArrangement) {
