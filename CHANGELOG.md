@@ -11,6 +11,10 @@
 - 手工完成的节点不再被重投影打回未启动。投影对每个 `runtimeSessionID == nil` 的任务无条件按依赖重算状态，导致从未关联运行会话、但已人工验收/合并的节点每次同步都被重置为 queued/blocked。现在依赖重算只允许在 `queued ↔ blocked` 两个未启动态之间进行，终态与 running 永不被覆盖；`merged` 解锁后继节点的行为保持不变。
 - 测试进程不再读写用户真实的调度台存储。`AgentDispatchStore` 此前默认落在 `UserDefaults.standard`，基于 `AppState` 的测试会连同 `resetForTests()` 一起作用于用户实际数据——这本身就是完成状态被清空的一条途径。改为在测试进程内整体重定向到独立 suite（与 `AgentSessionStore.testSandboxDirectory` 同一思路，新增测试无法误用），并为 `AppState` 增加 `dispatchStore` 注入缝。
 
+### Changed
+
+- `CURRENT_PROJECT_VERSION` 382 → 383。线上 appcast 当前发布的 `sparkle:version` 就是 382（对应 1.250.0-rc5），1.251 至 1.253 各 rc 均未发布，构建号一直停在 382。Sparkle 只按这个整数判断新旧，不递增会让本次发布对所有已安装用户表现为「无更新」。
+
 ### Tests
 
 - 新增 `AgentDispatchBoardPersistenceTests`（3 例）：目录装载完成前的同步不得抹掉已存面板（同时校验存储侧未被清空）、手工验收的节点跨重投影保持状态且 `merged` 仍能解锁后继、节点状态写盘后可被新协调器原样读回并经受完整重投影。
