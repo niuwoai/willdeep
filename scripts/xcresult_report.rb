@@ -7,10 +7,17 @@
 #   scripts/xcresult_report.rb <xcresult-path> <out.md> <out.json> [options]
 #
 # Options:
-#   --log PATH      Raw xcodebuild log to fall back on when the bundle is
-#                   unreadable. Defaults to xcodebuild.log next to the bundle.
-#   --allow-empty   Treat a parsed run of zero tests as a pass (only correct
-#                   when the caller deliberately selected no tests).
+#   --log PATH        Raw xcodebuild log. Used both to cross-check the bundle and
+#                     to fall back on when the bundle is unreadable. Defaults to
+#                     xcodebuild.log next to the bundle.
+#   --allow-empty     Treat a parsed run of zero tests as a pass (only correct
+#                     when the caller deliberately selected no tests).
+#   --test-exit CODE  xcodebuild's exit status. A non-zero code can never end up
+#                     as a pass, whatever the bundle claims.
+#
+# Environment:
+#   WILLDEEP_XCRESULTTOOL  Override the `xcrun xcresulttool` invocation. Exists so
+#                          the contract test can feed the parser recorded JSON.
 #
 # Implementation note: macOS 15 + Xcode 16's xcresulttool requires
 # `--legacy` to keep the old `get --format json` interface. We try the
@@ -26,16 +33,29 @@
 # if that fails too the report is explicitly `unknown` and the exit code is
 # non-zero.
 #
+# A readable bundle is not proof either. A bundle that was reused from an earlier
+# run, or written by a run that died before finalizing its last suites, parses
+# perfectly and reports its own truncated counters as a clean sweep — that is how
+# a run whose log carried three ✘ failures and whose xcodebuild exited 65 still
+# produced `"status": "passed", "failed": 0`: the bundle knew about 2340 of the
+# 2362 tests the log had actually run, and the missing tail held the failures.
+# So the raw log is now consulted on *every* run, not just when the bundle is
+# unreadable: any failure the log saw makes the verdict `failed`, and a test
+# total that disagrees with the log's makes it `unknown` with the delta spelled
+# out in `reasons`. The verdict is only `passed` when the exit code, the log and
+# the bundle all agree.
+#
 # Exit codes: 0 = passed, 1 = failed, 2 = unknown (nothing could be verified).
 
 require "json"
 require "open3"
+require "shellwords"
 
 Encoding.default_external = Encoding::UTF_8
 Encoding.default_internal = Encoding::UTF_8
 
 USAGE = <<~TEXT
-  usage: xcresult_report.rb <xcresult> <out.md> <out.json> [--log PATH] [--allow-empty]
+  usage: xcresult_report.rb <xcresult> <out.md> <out.json> [--log PATH] [--allow-empty] [--test-exit CODE]
 TEXT
 
 STATUS_PASSED  = "passed"
@@ -50,11 +70,21 @@ SOURCE_XCRESULT = "xcresult"
 SOURCE_LOG      = "xcodebuild-log"
 SOURCE_NONE     = "none"
 
+# The contract test swaps this for a stub that replays recorded xcresulttool
+# output; nothing else has a reason to set it.
+XCRESULTTOOL =
+  if (override = ENV["WILLDEEP_XCRESULTTOOL"].to_s.strip).empty?
+    ["xcrun", "xcresulttool"]
+  else
+    Shellwords.split(override)
+  end
+
 # --- argument parsing -------------------------------------------------------
 
 positional = []
 log_override = nil
 allow_empty = false
+test_exit = nil
 
 arguments = ARGV.dup
 until arguments.empty?
@@ -64,17 +94,25 @@ until arguments.empty?
     log_override = arguments.shift
   when "--allow-empty"
     allow_empty = true
+  when "--test-exit"
+    test_exit = arguments.shift.to_s.strip
   when "--help", "-h"
     puts USAGE
     exit 0
   else
     if argument.start_with?("--log=")
       log_override = argument.split("=", 2).last
+    elsif argument.start_with?("--test-exit=")
+      test_exit = argument.split("=", 2).last.to_s.strip
     else
       positional << argument
     end
   end
 end
+
+# An empty or non-numeric --test-exit means "the caller did not know", which must
+# not silently read as zero.
+test_exit = test_exit&.match?(/\A-?\d+\z/) ? test_exit.to_i : nil
 
 xcresult_path, md_path, json_path = positional
 abort(USAGE) unless xcresult_path && md_path && json_path
@@ -108,14 +146,14 @@ end
 # Parse the xcresult bundle. Returns nil when nothing at all could be read, so
 # the caller can tell "no data" apart from "genuinely zero tests".
 def parse_xcresult(path, reasons)
-  summary, summary_error = run_json(["xcrun", "xcresulttool", "get", "test-results", "summary",
+  summary, summary_error = run_json([*XCRESULTTOOL, "get", "test-results", "summary",
                                      "--path", path, "--format", "json"])
-  tests_json, tests_error = run_json(["xcrun", "xcresulttool", "get", "test-results", "tests",
+  tests_json, tests_error = run_json([*XCRESULTTOOL, "get", "test-results", "tests",
                                       "--path", path, "--format", "json"])
 
   legacy = nil
   if summary.nil? && tests_json.nil?
-    legacy, legacy_error = run_json(["xcrun", "xcresulttool", "get", "--legacy",
+    legacy, legacy_error = run_json([*XCRESULTTOOL, "get", "--legacy",
                                      "--path", path, "--format", "json"])
     if legacy.nil?
       reasons << "xcresulttool could not read #{path}: #{summary_error || tests_error || legacy_error}"
@@ -125,8 +163,12 @@ def parse_xcresult(path, reasons)
 
   stats = empty_stats
   failures = []
+  # The bundle's own headline verdict. Counters can be truncated; when this says
+  # the run failed we believe it regardless of what the counters add up to.
+  bundle_verdict = nil
 
   if summary
+    bundle_verdict  = STATUS_FAILED if summary["result"].to_s.casecmp?("failed")
     stats[:total]   = (summary["totalTestCount"] || summary["totalTests"] || 0).to_i
     stats[:failed]  = (summary["failedTests"] || 0).to_i
     stats[:skipped] = (summary["skippedTests"] || 0).to_i
@@ -170,7 +212,7 @@ def parse_xcresult(path, reasons)
   end
 
   stats[:passed] = [stats[:total] - stats[:failed] - stats[:skipped], 0].max if stats[:passed].zero?
-  { stats: stats, failures: failures }
+  { stats: stats, failures: failures, verdict: bundle_verdict }
 end
 
 # Recover pass/fail data from the raw xcodebuild log. Counts are approximate —
@@ -239,43 +281,81 @@ stats = nil
 failures = []
 source = SOURCE_NONE
 verdict = nil
+total_mismatch = false
 
 if File.directory?(xcresult_path)
   parsed = parse_xcresult(xcresult_path, reasons)
   if parsed
     stats = parsed[:stats]
     failures = parsed[:failures]
+    verdict = parsed[:verdict]
     source = SOURCE_XCRESULT
   end
 else
   reasons << "xcresult bundle not found at #{xcresult_path}."
 end
 
+# The log is read on every run, not only when the bundle is unreadable: it is the
+# only independent witness of what xcodebuild actually executed.
+log_view = parse_log(log_path)
+log_stats = log_view&.fetch(:stats, nil)
+
 # Fall back to the raw log when the bundle gave us nothing usable. A parsed
 # bundle reporting zero tests is also treated as "nothing usable": that is what a
 # bundle killed mid-write looks like, and it is exactly the case that used to
 # render as a green check.
 if stats.nil? || stats[:total].to_i.zero?
-  recovered = parse_log(log_path)
-  if recovered
+  if log_view
     reasons << "Recovered pass/fail data from #{log_path} (counts are approximate)."
-    stats = recovered[:stats]
-    failures = recovered[:failures]
-    verdict = recovered[:verdict]
+    stats = log_view[:stats]
+    failures = log_view[:failures]
+    verdict = log_view[:verdict]
     source = SOURCE_LOG
   elsif File.file?(log_path)
     reasons << "#{log_path} carries no recognizable test-run summary line."
   else
     reasons << "No xcodebuild log at #{log_path} to fall back on."
   end
+elsif log_view
+  # Bundle and log both have data — cross-check them. A bundle that is stale or
+  # was truncated mid-run parses cleanly and under-reports, so the log wins on
+  # any disagreement about whether tests failed.
+  if log_view[:verdict] == STATUS_FAILED
+    verdict = STATUS_FAILED
+    if failures.empty? && !log_view[:failures].empty?
+      reasons << "The xcresult bundle lists no failures, but #{log_path} does; using the log's list."
+      failures = log_view[:failures]
+    end
+    if stats[:failed].to_i.zero?
+      reasons << "The xcresult bundle reports failed=0 while #{log_path} records a failed run; " \
+                 "the bundle is stale or was written by a run that died before finalizing."
+    end
+  end
+
+  log_total = log_stats[:total].to_i
+  if log_total.positive? && log_total != stats[:total].to_i
+    total_mismatch = true
+    delta = log_total - stats[:total].to_i
+    reasons << "Test total disagrees with the xcodebuild log: report=#{stats[:total]} log=#{log_total} " \
+               "(delta #{format("%+d", delta)}). The bundle is missing #{delta.abs} of the tests the log ran, " \
+               "so any failure among them would be invisible here."
+  end
 end
 
 stats ||= empty_stats
+
+if test_exit && !test_exit.zero?
+  reasons << "xcodebuild exited #{test_exit}; a non-zero exit can never be reported as a pass."
+end
 
 status =
   if verdict == STATUS_FAILED || stats[:failed].to_i.positive? || !failures.empty?
     STATUS_FAILED
   elsif source == SOURCE_NONE
+    STATUS_UNKNOWN
+  elsif test_exit && !test_exit.zero?
+    STATUS_UNKNOWN
+  elsif total_mismatch
     STATUS_UNKNOWN
   elsif stats[:total].to_i.zero? && !allow_empty
     reasons << "Parsed zero tests; refusing to report an unverified pass (use --allow-empty if that is expected)."
@@ -292,8 +372,11 @@ File.write(json_path, "#{JSON.pretty_generate({
   source: source,
   xcresult: xcresult_path,
   log: File.file?(log_path) ? log_path : nil,
+  test_exit: test_exit,
   reasons: reasons,
   stats: stats,
+  log_stats: source == SOURCE_XCRESULT ? log_stats : nil,
+  total_mismatch: total_mismatch,
   failures: failures
 })}\n")
 

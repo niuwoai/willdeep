@@ -57,10 +57,87 @@ FAILING_LOG = <<~LOG
   ** TEST FAILED **
 LOG
 
+# A run whose xcresult bundle knows about fewer tests than the log did. This is
+# the 2026-08-14 false green: 2340 tests in the bundle, all "passed"; 2355 Swift
+# Testing tests plus 7 XCTest ones in the log, three of them failed. The missing
+# tail is where the failures were, so the bundle alone reads as a clean sweep.
+TRUNCATED_BUNDLE_LOG = <<~LOG
+  ✘ Test "sandbox policy blocks outbound curl" failed after 0.004 seconds.
+  ✘ Test "sandbox policy blocks outbound nc" failed after 0.002 seconds.
+  ✘ Test "sandbox policy keeps loopback reachable" failed after 0.003 seconds.
+  ✘ Suite AgentSandboxNetworkPolicyTests failed after 0.012 seconds.
+  \t Executed 7 tests, with 0 failures (0 unexpected) in 0.377 (0.379) seconds
+  ✘ Test run with 2355 tests in 201 suites failed after 201.3 seconds with 3 issues.
+
+  ** TEST FAILED **
+LOG
+
+# Same under-count, but nothing in the log flags a failure. Silent divergence:
+# the bundle cannot be trusted, yet there is no failure to report either.
+UNDERCOUNTING_PASSING_LOG = <<~LOG
+  ✔ Suite WillDeepTests passed after 200.9 seconds.
+  \t Executed 7 tests, with 0 failures (0 unexpected) in 0.377 (0.379) seconds
+  ✔ Test run with 2355 tests in 201 suites passed after 201.3 seconds.
+
+  ** TEST SUCCEEDED **
+LOG
+
+# The healthy case the guards must not break: 2355 + 7 = 2362, exactly what the
+# bundle counted.
+AGREEING_PASSING_LOG = UNDERCOUNTING_PASSING_LOG
+
 results = []
 
 def check(condition, message, results)
   results << { "ok" => !!condition, "message" => message }
+end
+
+# Build a bundle whose xcresulttool output the test controls. The directory has
+# to exist because the reporter refuses to parse a missing bundle.
+def recorded_bundle(directory, total:, failed: 0, result: "Passed", failing_tests: [])
+  bundle = File.join(directory, "XeditTests.xcresult")
+  FileUtils.mkdir_p(File.join(bundle, "Data"))
+
+  File.write(File.join(directory, "summary.json"), JSON.generate({
+    "result" => result,
+    "totalTestCount" => total,
+    "passedTests" => total - failed,
+    "failedTests" => failed,
+    "skippedTests" => 0,
+    "startTime" => 0,
+    "finishTime" => 201.3
+  }))
+  File.write(File.join(directory, "tests.json"), JSON.generate({
+    "testNodes" => [{
+      "nodeType" => "Test Plan",
+      "name" => "XeditUnitTests",
+      "children" => failing_tests.map do |name|
+        { "nodeType" => "Test Case", "name" => name, "result" => "Failed", "children" => [] }
+      end
+    }]
+  }))
+
+  bundle
+end
+
+def run_recorded_reporter(directory, log:, extra: [])
+  md_path = File.join(directory, "report.md")
+  json_path = File.join(directory, "report.json")
+  bundle = File.join(directory, "XeditTests.xcresult")
+  File.write(File.join(directory, "xcodebuild.log"), log)
+
+  environment = {
+    "WILLDEEP_XCRESULTTOOL" => "ruby #{File.join(ROOT, "scripts", "fixtures", "fake_xcresulttool.rb")}",
+    "FAKE_XCRESULT_DIR" => directory
+  }
+  _out, _err, status = Open3.capture3(
+    environment, "ruby", REPORTER, bundle, md_path, json_path, *extra, chdir: ROOT
+  )
+  {
+    exit_status: status.exitstatus,
+    markdown: File.file?(md_path) ? File.read(md_path, encoding: "UTF-8") : "",
+    json: File.file?(json_path) ? JSON.parse(File.read(json_path, encoding: "UTF-8")) : {}
+  }
 end
 
 # Build an .xcresult directory shaped like one xcodebuild was killed while
@@ -150,6 +227,85 @@ Dir.mktmpdir("xcresult-report-contract") do |workspace|
     permissive = run_reporter(bundle, directory, "--allow-empty")
     check(permissive[:json]["status"] == "passed", "--allow-empty accepts a deliberately empty run.", results)
   end
+
+  # 7. A readable-but-truncated bundle that missed the failing suite. The bundle
+  #    says 2340/2340 passed; the log says 2362 tests ran and three failed. The
+  #    log wins — this is the exact shape of the 2026-08-14 false green.
+  Dir.mktmpdir("truncated-bundle", workspace) do |directory|
+    recorded_bundle(directory, total: 2340, failed: 0, result: "Passed")
+    report = run_recorded_reporter(directory, log: TRUNCATED_BUNDLE_LOG)
+    check(report[:json]["status"] == "failed", "A bundle missing the failing suite still reports status=failed.", results)
+    check(report[:json]["ok"] == false, "A bundle missing the failing suite reports ok=false.", results)
+    check(report[:exit_status] == EXIT_FAILED, "A bundle missing the failing suite exits #{EXIT_FAILED}.", results)
+    check(!report[:markdown].include?("✅"), "A bundle missing the failing suite renders no green check.", results)
+    check(
+      report[:json]["failures"].to_a.length == 3,
+      "The three log failures are carried into the report's failures array.",
+      results
+    )
+    check(
+      report[:json]["failures"].to_a.any? { |failure| failure["name"].to_s.include?("blocks outbound curl") },
+      "The report names the failing tests the bundle omitted.",
+      results
+    )
+    check(report[:json]["total_mismatch"] == true, "The truncated bundle is flagged with total_mismatch.", results)
+    check(
+      report[:json]["reasons"].to_a.any? { |reason| reason.include?("report=2340") && reason.include?("log=2362") },
+      "The report spells out the 2340 vs 2362 total disagreement.",
+      results
+    )
+  end
+
+  # 8. Same under-count with a log that flags nothing. There is no failure to
+  #    report, but the bundle cannot be trusted either — that is `unknown`.
+  Dir.mktmpdir("undercount-bundle", workspace) do |directory|
+    recorded_bundle(directory, total: 2340, failed: 0, result: "Passed")
+    report = run_recorded_reporter(directory, log: UNDERCOUNTING_PASSING_LOG)
+    check(report[:json]["status"] == "unknown", "An under-counting bundle reports status=unknown, never passed.", results)
+    check(report[:exit_status] == EXIT_UNKNOWN, "An under-counting bundle exits #{EXIT_UNKNOWN}.", results)
+    check(
+      report[:json]["reasons"].to_a.any? { |reason| reason.include?("delta +22") },
+      "The unknown verdict states the missing-test delta.",
+      results
+    )
+  end
+
+  # 9. Control: bundle and log agree, so the guards must still let a pass through.
+  Dir.mktmpdir("agreeing-bundle", workspace) do |directory|
+    recorded_bundle(directory, total: 2362, failed: 0, result: "Passed")
+    report = run_recorded_reporter(directory, log: AGREEING_PASSING_LOG)
+    check(report[:json]["status"] == "passed", "A bundle that agrees with the log still reports status=passed.", results)
+    check(report[:exit_status] == EXIT_PASSED, "An agreeing bundle exits #{EXIT_PASSED}.", results)
+    check(report[:json]["total_mismatch"] == false, "An agreeing bundle sets total_mismatch=false.", results)
+    check(report[:json]["source"] == "xcresult", "An agreeing bundle keeps source=xcresult.", results)
+  end
+
+  # 10. A bundle that says the run failed outranks its own zeroed counters.
+  Dir.mktmpdir("failed-result-bundle", workspace) do |directory|
+    recorded_bundle(directory, total: 2362, failed: 0, result: "Failed")
+    report = run_recorded_reporter(directory, log: AGREEING_PASSING_LOG)
+    check(
+      report[:json]["status"] == "failed",
+      "A bundle whose own result is Failed is never reported as a pass.",
+      results
+    )
+  end
+
+  # 11. A non-zero xcodebuild exit can never come back green, whatever the
+  #     bundle and log say.
+  Dir.mktmpdir("nonzero-exit", workspace) do |directory|
+    recorded_bundle(directory, total: 2362, failed: 0, result: "Passed")
+    report = run_recorded_reporter(directory, log: AGREEING_PASSING_LOG, extra: ["--test-exit", "65"])
+    check(report[:json]["status"] == "unknown", "A non-zero --test-exit blocks a passed verdict.", results)
+    check(report[:json]["test_exit"] == 65, "The report records the xcodebuild exit code.", results)
+    check(
+      report[:json]["reasons"].to_a.any? { |reason| reason.include?("exited 65") },
+      "The report explains that xcodebuild exited non-zero.",
+      results
+    )
+    green = run_recorded_reporter(directory, log: AGREEING_PASSING_LOG, extra: ["--test-exit", "0"])
+    check(green[:json]["status"] == "passed", "--test-exit 0 leaves an otherwise clean run green.", results)
+  end
 end
 
 # 7. Callers must hand the reporter a log so the fallback can actually fire.
@@ -164,6 +320,23 @@ check(
   "CI passes the xcodebuild log to the reporter.",
   results
 )
+
+# 8. Callers must also hand over xcodebuild's exit code, and the full runner has
+#    to clear the previous verdict before it starts — everything between the
+#    `rm` and the reporter can abort under `set -e`, and a leftover green
+#    report.json is indistinguishable from this run's result.
+check(
+  full_runner.include?('--test-exit "${TEST_EXIT}"'),
+  "Full local runner passes xcodebuild's exit code to the reporter.",
+  results
+)
+check(
+  full_runner.match?(/rm -f "\$\{REPORT_JSON\}" "\$\{REPORT_MD\}"/),
+  "Full local runner deletes the previous report before running.",
+  results
+)
+check(fast_runner.include?("test_exit:"), "Fast runner passes xcodebuild's exit code to the reporter.", results)
+check(workflow.include?("--test-exit"), "CI passes the test step's outcome to the reporter.", results)
 
 failed = results.reject { |result| result["ok"] }
 report = {
