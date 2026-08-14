@@ -77,6 +77,14 @@ enum AgentPackageCommandPolicy {
         }
     }
 
+    /// Install scope that reaches outside the workspace (`-g`, `--global`,
+    /// `--prefix`). Such commands write where the sandbox denies writes
+    /// anyway, so they earn neither auto-approval nor the workspace network
+    /// grant that ordinary in-workspace builds get.
+    nonisolated static func hasGlobalInstallScope(_ tokens: [String]) -> Bool {
+        hasDisallowedWorkspaceScope(tokens)
+    }
+
     nonisolated private static func hasDisallowedWorkspaceScope(_ tokens: [String]) -> Bool {
         let lowered = tokens.map { $0.lowercased() }
         return lowered.contains(where: { globalInstallFlags.contains($0) })

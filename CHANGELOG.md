@@ -1,7 +1,26 @@
 # Changelog
 
-> 当前文件保留最新版本（1.251.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.252.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.252.0-rc1 - 2026-08-14
+
+### Changed
+
+- 构建类命令默认获得网络：`go` / `cargo` / `swift` / `make` / `xcodebuild` / `npm` / `pnpm` / `yarn` / `node` / `python` / `ruby` / `rake` / `vite` 落到 workspace-write 档时一并授予 `workspaceWriteNetwork`，写入仍限工作区。此前 `go build` 在 module cache 未命中时必然要拉依赖，却被归进禁网档，构建只能失败。
+- 授网判定放在 `SafeCommand` 分类之外：命令落在 `alwaysSafe` 还是 `needsJudgment` 属于分类实现细节，只要是构建工具且进入 workspace-write 档就给网，`make` / `xcodebuild` 不再因分类差异被漏掉。
+- 只读网络诊断免审批放行：`ping` / `dig` / `host` / `nslookup` / `traceroute` / `whois` / `netstat` / `ifconfig` / `arp` / `scutil` 走 `readOnlyNetwork`，不再需要升级确认。此前 Agent 连"域名能不能解析"都无法自证。
+- 全局安装维持原边界：带 `-g` / `--global` / `--prefix` 的安装写在工作区外，沙箱本就拒写，不额外授网。`curl` / `wget` / `ssh` / `scp` / `rsync` 仍需升级审批。
+
+### Fixed
+
+- 沙箱拒网不再伪装成 DNS 故障。seatbelt 不报"网络被拒"，而是让域名解析失败，于是各运行时统一报成 `no such host` / `nodename nor servname provided` / `getaddrinfo ENOTFOUND` / `could not resolve host`——照字面读像是本机 DNS 坏了，排查方向被整个带偏。禁网档下这些输出一律识别为沙箱拒绝，失败提示明写"机器 DNS 没问题，别查 resolv.conf"；允许网络的档位下不做此判定，真故障仍按真故障报。
+- Workspace Access 自动审批补齐 `workspaceWriteNetwork`。构建命令升档带网后掉出自动审批白名单，`swift test` / `go build` 这类原本一键放行的命令变成每次都要手点——放宽沙箱反而多出一道弹窗。`commandUsesExternalAccess` 仍拦住 curl / ssh 与显式依赖安装，边界未松。
+
+### Tests
+
+- 新增 `AgentSandboxNetworkPolicyTests`（5 例）：构建命令取得 registry 网络、全局安装不授网、只读诊断免审批、禁网档下 DNS 形态失败被判为沙箱拒绝（且允许网络档不误判）、`deniesNetwork` 与实际下发的 seatbelt profile 保持一致。
+- 该 suite 刻意独立于聚合 suite `WillDeepTests`：函数级 `-only-testing` 选择器匹配不到聚合 suite，会静默跑 0 个用例却打印 `TEST SUCCEEDED`。独立后可用 `-only-testing:XeditTests/AgentSandboxNetworkPolicyTests` 精确复跑。
 
 ## 1.251.0-rc1 - 2026-08-14
 
