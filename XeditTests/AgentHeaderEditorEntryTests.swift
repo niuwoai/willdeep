@@ -32,13 +32,18 @@ struct AgentHeaderEditorEntryTests {
         #expect(!appSource.contains("L10n.AgentWindow.openMenuItem"))
     }
 
-    @Test("Terminal shortcut JSON and ordinary files use the system default app")
+    @Test("Ordinary files use the system default app; shortcut JSON has its own window, not the Editor")
     func filesOpenExternally() throws {
         let terminalSource = try Self.source(in: "Xedit", named: "AgentSidePanelTerminalView.swift")
         let filePanelSource = try Self.source(in: "Xedit", named: "AgentSidePanel.swift")
         let infoPlist = try Self.source(in: "Xedit", named: "Info.plist")
 
-        #expect(terminalSource.contains("NSWorkspace.shared.open(url)"))
+        // 1.254.0-rc1 replaced "hand the shortcut JSON to the system editor"
+        // with WillDeep's own shortcut editor window. That is a dedicated
+        // scene, not the general Editor this suite exists to keep out — so
+        // the assertion tracks the new route while the invariant that
+        // matters (no routing into `openEditorFile`) stays.
+        #expect(terminalSource.contains("openWindow(value: TerminalShortcutEditorRequest"))
         #expect(!terminalSource.contains("appState.openEditorFile"))
         #expect(filePanelSource.contains("NSWorkspace.shared.open(url)"))
         #expect(!infoPlist.contains("CFBundleDocumentTypes"))
