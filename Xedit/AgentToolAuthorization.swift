@@ -1397,7 +1397,8 @@ enum AgentSandboxPolicy {
             case .commandFailed(let code, let output):
                 return looksLikeSandboxDenial(exitStatus: code, output: output, sandboxMode: sandboxMode)
             case .commandTimeout, .missingArgument, .invalidArgument, .noWorkspace,
-                    .pathOutsideWorkspace, .notFound, .notRegular, .binaryFile,
+                    .pathOutsideWorkspace, .symlinkOutsideWorkspace, .notFound,
+                    .notRegular, .binaryFile,
                     .fileTooLarge, .unknownTool, .invalidRegex, .httpFailed:
                 return false
             }
