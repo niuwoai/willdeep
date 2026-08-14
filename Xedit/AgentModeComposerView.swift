@@ -910,6 +910,7 @@ private struct ComposerCard: View {
                     onSubmit: { submitComposer() },
                     onPasteImage: handlePastedImage,
                     onPasteText: handlePastedText,
+                    onDropAttachments: { handleDroppedPasteboard($0) },
                     historyProvider: { appState.agentMessages
                         .filter(\.isOperatorInput)
                         .map(\.content)
@@ -1438,6 +1439,27 @@ private struct ComposerCard: View {
             pendingUnknownAttachment = nil
             attachmentNotice = L10n.Composer.unknownAttachmentUnreadable(url.lastPathComponent)
         }
+    }
+
+    /// 输入框自己收下的拖放(见 `ComposerDropSupport`)。文件优先——Finder
+    /// 拖过来的图片同时带 fileURL 和图片数据,走文件分支才能拿到文件名和
+    /// 「文件夹 = 知识目录」这些既有语义。
+    ///
+    /// - Returns: 是否已消费。返回 false 时 NSTextView 会走默认行为(把路径
+    ///   当文字插进来),所以只在确实什么都没收下时才返回 false。
+    private func handleDroppedPasteboard(_ pasteboard: NSPasteboard) -> Bool {
+        let urls = ComposerDropSupport.fileURLs(in: pasteboard)
+        if !urls.isEmpty {
+            for url in urls {
+                attachFile(url)
+            }
+            return true
+        }
+        if let png = ComposerDropSupport.imageData(in: pasteboard) {
+            ingest(data: png, mimeType: "image/png")
+            return true
+        }
+        return false
     }
 
     private func ingest(data: Data, mimeType: String) {
