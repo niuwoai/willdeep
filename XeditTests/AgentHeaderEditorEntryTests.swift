@@ -32,18 +32,21 @@ struct AgentHeaderEditorEntryTests {
         #expect(!appSource.contains("L10n.AgentWindow.openMenuItem"))
     }
 
-    @Test("Ordinary files use the system default app; shortcut JSON has its own window, not the Editor")
+    @Test("Ordinary files use the system default app; only shortcut JSON stays in-app")
     func filesOpenExternally() throws {
         let terminalSource = try Self.source(in: "Xedit", named: "AgentSidePanelTerminalView.swift")
         let filePanelSource = try Self.source(in: "Xedit", named: "AgentSidePanel.swift")
         let infoPlist = try Self.source(in: "Xedit", named: "Info.plist")
 
-        // 1.254.0-rc1 replaced "hand the shortcut JSON to the system editor"
-        // with WillDeep's own shortcut editor window. That is a dedicated
-        // scene, not the general Editor this suite exists to keep out — so
-        // the assertion tracks the new route while the invariant that
-        // matters (no routing into `openEditorFile`) stays.
-        #expect(terminalSource.contains("openWindow(value: TerminalShortcutEditorRequest"))
+        // Terminal shortcut JSON is the one deliberate exception to "files
+        // open externally": the recordings carry `${secret:...}` values, and
+        // handing that file to whichever app owns .json would leak them into
+        // another process. It opens in the app's own editor window instead.
+        #expect(terminalSource.contains("openWindow(value: TerminalShortcutEditorRequest("))
+        #expect(!terminalSource.contains("NSWorkspace.shared.open(url)"))
+        // The exception is that window, NOT a revived Editor scene: the local
+        // editor was split out into Qeditor and must not come back through
+        // this door.
         #expect(!terminalSource.contains("appState.openEditorFile"))
         #expect(filePanelSource.contains("NSWorkspace.shared.open(url)"))
         #expect(!infoPlist.contains("CFBundleDocumentTypes"))
