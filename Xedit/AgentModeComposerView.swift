@@ -1490,8 +1490,6 @@ private struct ConsultationButton: View {
 
 private struct AgentSecretInsertSheet: View {
     @State private var rows: [AgentSecretInput] = [AgentSecretInput(label: "", secret: "")]
-    @State private var savedSecrets: [AgentSavedSecret] = []
-    @State private var copiedSecretID: String?
 
     let onCancel: () -> Void
     let onInsertSaved: (_ placeholder: String) -> Void
@@ -1520,65 +1518,13 @@ private struct AgentSecretInsertSheet: View {
                 Text(L10n.Composer.savedSecretsTitle)
                     .font(.system(size: 12, weight: .semibold))
 
-                if savedSecrets.isEmpty {
-                    Text(L10n.Composer.savedSecretsEmpty)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .padding(.vertical, 4)
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 6) {
-                            ForEach(savedSecrets) { secret in
-                                HStack(spacing: 6) {
-                                    Button {
-                                        onInsertSaved(secret.placeholder)
-                                    } label: {
-                                        HStack(spacing: 9) {
-                                        Image(systemName: "key.fill")
-                                            .font(.system(size: 11, weight: .semibold))
-                                            .foregroundStyle(AgentComposerChrome.iconPrimary)
-                                            .frame(width: 22, height: 22)
-                                            .background(AgentComposerChrome.selectedControlFill)
-                                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(savedSecretLabel(secret))
-                                                .font(.system(size: 12, weight: .medium))
-                                                .foregroundStyle(.primary)
-                                                .lineLimit(1)
-                                            Text(secret.placeholder)
-                                                .font(.system(size: 10, design: .monospaced))
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
-                                        Spacer(minLength: 8)
-                                        Image(systemName: "plus.circle.fill")
-                                            .foregroundStyle(AgentComposerChrome.iconPrimary)
-                                        }
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help(L10n.Composer.savedSecretInsertHelp)
-
-                                    Button {
-                                        copySavedSecret(secret)
-                                    } label: {
-                                        Image(systemName: copiedSecretID == secret.id ? "checkmark" : "doc.on.doc")
-                                            .font(.system(size: 11, weight: .semibold))
-                                            .frame(width: 24, height: 24)
-                                            .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help(L10n.Composer.savedSecretCopyHelp)
-                                }
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 7)
-                                .background(Color.primary.opacity(0.035))
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            }
-                        }
-                    }
-                    .frame(maxHeight: 132)
-                }
+                // Same list the Settings pane renders — search, pagination,
+                // rename and delete included.
+                AgentSecretManagerView(
+                    mode: .insert,
+                    maxListHeight: 160,
+                    onInsertPlaceholder: onInsertSaved
+                )
             }
 
             Divider()
@@ -1591,27 +1537,7 @@ private struct AgentSecretInsertSheet: View {
                     .foregroundStyle(.secondary)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(rows.indices, id: \.self) { index in
-                    AgentSecretInputRow(
-                        ordinal: index + 1,
-                        label: $rows[index].label,
-                        secret: $rows[index].secret,
-                        shouldFocusOnAppear: index == 0,
-                        canRemove: rows.count > 1,
-                        onRemove: { removeRow(at: index) }
-                    )
-                }
-                if rows.count < AgentSecretStore.maxBatchInsertCount {
-                    Button {
-                        rows.append(AgentSecretInput(label: "", secret: ""))
-                    } label: {
-                        Label(L10n.Composer.addSecretAction, systemImage: "plus")
-                    }
-                    .buttonStyle(.link)
-                    .help(L10n.Composer.addSecretHelp)
-                }
-            }
+            AgentSecretRowsEditor(rows: $rows)
 
             HStack {
                 Spacer()
@@ -1621,105 +1547,14 @@ private struct AgentSecretInsertSheet: View {
                     onInsert(rows)
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(validSecretCount == 0 || hasIncompleteRow)
+                .disabled(
+                    AgentSecretRowValidation.validCount(rows) == 0
+                        || AgentSecretRowValidation.hasIncompleteRow(rows)
+                )
             }
         }
         .padding(18)
         .frame(width: 480)
-        .onAppear {
-            savedSecrets = AgentSecretStore.savedSecrets()
-        }
-    }
-
-    private var validSecretCount: Int {
-        rows.filter {
-            !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && !$0.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }.count
-    }
-
-    private func savedSecretLabel(_ secret: AgentSavedSecret) -> String {
-        guard secret.label.isEmpty else { return secret.label }
-        return L10n.Composer.legacySecretLabel(String(secret.identifier.prefix(8)))
-    }
-
-    private func copySavedSecret(_ secret: AgentSavedSecret) {
-        Task { @MainActor in
-            guard let value = await AgentSecretStore.revealSecretForCopy(
-                identifier: secret.identifier,
-                reason: L10n.Composer.savedSecretCopyReason
-            ) else { return }
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(value, forType: .string)
-            copiedSecretID = secret.id
-            try? await Task.sleep(for: .seconds(1.5))
-            if copiedSecretID == secret.id {
-                copiedSecretID = nil
-            }
-        }
-    }
-
-    private var hasIncompleteRow: Bool {
-        rows.contains {
-            let hasLabel = !$0.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let hasSecret = !$0.secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            return hasLabel != hasSecret
-        }
-    }
-
-    private func removeRow(at index: Int) {
-        guard rows.indices.contains(index), rows.count > 1 else { return }
-        rows.remove(at: index)
-    }
-}
-
-private struct AgentSecretInputRow: View {
-    let ordinal: Int
-    @Binding var label: String
-    @Binding var secret: String
-    let shouldFocusOnAppear: Bool
-    let canRemove: Bool
-    let onRemove: () -> Void
-    @FocusState private var labelFocused: Bool
-    @FocusState private var secretFocused: Bool
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text("\(ordinal)")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
-                .frame(width: 18, height: 24)
-
-            VStack(alignment: .leading, spacing: 6) {
-                TextField(L10n.Composer.secretLabelPlaceholder, text: $label)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($labelFocused)
-                SecureField(L10n.Composer.secretValuePlaceholder, text: $secret)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($secretFocused)
-                if !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(AgentSecretStore.placeholder(identifier: AgentSecretStore.normalizedAlias(label)))
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(Color.accentColor)
-                        .lineLimit(1)
-                }
-            }
-
-            Button(action: onRemove) {
-                Image(systemName: "minus.circle")
-                    .font(.system(size: 14))
-                    .foregroundStyle(canRemove ? .secondary : .tertiary)
-            }
-            .buttonStyle(.plain)
-            .disabled(!canRemove)
-            .help(L10n.Composer.removeSecretHelp)
-            .padding(.top, 4)
-        }
-        .onAppear {
-            guard shouldFocusOnAppear else { return }
-            DispatchQueue.main.async { labelFocused = true }
-        }
     }
 }
 

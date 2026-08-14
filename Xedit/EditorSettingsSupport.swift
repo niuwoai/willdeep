@@ -91,6 +91,7 @@ enum EditorSettingsTab: Hashable {
     case connectors
     case mcp
     case tools
+    case secrets
     case terminal
     case voice
     case pet
@@ -111,7 +112,7 @@ extension EditorSettingsTab {
         case .editing, .typography, .appearance, .workspace: return .editor
         case .agentAppearance: return .agentAppearance
         case .agent, .subagents, .memory, .rules: return .ai
-        case .skills, .mcp, .tools: return .agentTools
+        case .skills, .mcp, .tools, .secrets: return .agentTools
         case .localAgents, .remoteRuntimes: return .runtimes
         case .terminal: return .terminal
         case .someIM, .mobileGateway: return .accountAndDevices
@@ -146,6 +147,7 @@ extension EditorSettingsTab {
         case .connectors: return L10n.Settings.tabConnectors
         case .mcp: return L10n.Settings.tabMcp
         case .tools: return L10n.Settings.tabTools
+        case .secrets: return L10n.SecretManager.tabTitle
         case .terminal: return L10n.Settings.tabTerminal
         case .voice: return L10n.Settings.tabVoice
         case .pet: return L10n.DesktopPet.settingsTabTitle
@@ -193,7 +195,7 @@ enum SettingsGroup: Hashable, Identifiable {
         case .agentAppearance: return [.agentAppearance]
         case .pet: return [.pet]
         case .ai: return [.agent, .subagents, .memory, .rules]
-        case .agentTools: return [.skills, .mcp, .tools]
+        case .agentTools: return [.skills, .mcp, .tools, .secrets]
         case .accountAndDevices: return [.someIM, .mobileGateway]
         case .runtimes: return [.localAgents, .remoteRuntimes]
         // A single connectors hub pane; each integration (飞书 / 钉钉 /
