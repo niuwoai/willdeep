@@ -44,6 +44,36 @@ nonisolated enum AgentDispatchUnattendedRecoveryPolicy {
 }
 
 extension AppState {
+    /// Single entry point for projecting sessions onto the dispatch board.
+    ///
+    /// The coordinator's projection treats the passed sessions as the
+    /// complete catalog: goals whose backing session is absent are dropped
+    /// AND the result is persisted immediately. `agentSessions` starts empty
+    /// and fills from an async disk load, so any synchronize call racing
+    /// that load persisted an empty board over completed goals — every node
+    /// came back as "not started" after relaunch, with the recorded states
+    /// unrecoverable. Gate here, on the one flag that says the catalog is
+    /// real; never hand `agentSessions` to the coordinator directly. Session
+    /// removal has its own explicit path (`removeGoal`), so a skipped early
+    /// projection loses nothing.
+    func synchronizeDispatchBoard() {
+        guard hasLoadedAgentSessionCatalog else { return }
+        agentDispatchCoordinator.synchronize(
+            with: agentSessions,
+            projects: agentProjects
+        )
+    }
+
+    /// Coalesced off-main variant of `synchronizeDispatchBoard()` for view
+    /// appearance hooks; same catalog gate.
+    func synchronizeDispatchBoardInBackground() {
+        guard hasLoadedAgentSessionCatalog else { return }
+        agentDispatchCoordinator.synchronizeInBackground(
+            with: agentSessions,
+            projects: agentProjects
+        )
+    }
+
     /// Pet/system-notification navigation follows the session's product
     /// scope. Dispatch child runtimes return to their owning project graph
     /// instead of dropping the user into a chat transcript.
@@ -90,7 +120,7 @@ extension AppState {
     /// before macOS interrupts them with a folder panel.
     @discardableResult
     func startDispatchGoalDraft() -> AgentSession {
-        agentDispatchCoordinator.synchronize(with: agentSessions)
+        synchronizeDispatchBoard()
         if let existingDraft = agentSessions.first(where: { session in
             !session.isArchived
                 && session.presentationScope == .dispatchBoard
@@ -152,7 +182,7 @@ extension AppState {
             return L10n.Dispatch.workspaceMissing
         }
         let location = WorkspaceLocation.local(path: url.path)
-        agentDispatchCoordinator.synchronize(with: agentSessions)
+        synchronizeDispatchBoard()
         if let conflict = agentDispatchCoordinator.activeGoal(
             for: location,
             excluding: runtime.id
@@ -178,7 +208,7 @@ extension AppState {
     func cancelDispatchGoalDraft() {
         guard isPreparingDispatchGoal, let draftID = activeRuntime?.id else { return }
         deleteAgentSession(id: draftID)
-        agentDispatchCoordinator.synchronize(with: agentSessions)
+        synchronizeDispatchBoard()
         if let goalID = agentDispatchCoordinator.selectedGoalID
             ?? agentDispatchCoordinator.goals.first?.id {
             selectDispatchGoal(goalID)
@@ -195,7 +225,7 @@ extension AppState {
     func startDispatchGoalSession(inWorkspaceAt workspacePath: String) -> AgentSession {
         let normalizedPath = URL(fileURLWithPath: workspacePath).standardizedFileURL.path
         let location = WorkspaceLocation.local(path: normalizedPath)
-        agentDispatchCoordinator.synchronize(with: agentSessions)
+        synchronizeDispatchBoard()
 
         if let existingGoal = agentDispatchCoordinator.activeGoal(for: location),
            let existingSession = agentSessions.first(where: { $0.id == existingGoal.sessionID }) {
@@ -504,7 +534,7 @@ extension AppState {
             goalID: goalID,
             makePrimary: isPrimaryBinding
         )
-        agentDispatchCoordinator.synchronize(with: agentSessions)
+        synchronizeDispatchBoard()
         return nil
     }
 

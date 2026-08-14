@@ -23,7 +23,9 @@ struct AgentDispatchSidebarSections: View {
             environmentsSection
         }
         .onAppear {
-            coordinator.synchronizeInBackground(with: appState.agentSessions)
+            // Gated inside: a projection from the not-yet-loaded session
+            // catalog would persist an empty board over completed goals.
+            appState.synchronizeDispatchBoardInBackground()
         }
     }
 

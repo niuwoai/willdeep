@@ -1224,7 +1224,7 @@ extension AppState {
                     // Persist the accepted DAG and hand it to coordinator-
                     // owned child runtimes, then end the planner turn.
                     persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
-                    agentDispatchCoordinator.synchronize(with: agentSessions)
+                    synchronizeDispatchBoard()
                     _ = launchReadyDispatchTasks(goalID: runtime.id)
                     return
                 }

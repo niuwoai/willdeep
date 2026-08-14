@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.253.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.253.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.253.0-rc4 - 2026-08-14
+
+### Fixed
+
+- 调度台已完成的项目不再在重启后回到「未启动」。面板投影把传入的会话列表当作完整目录：不在列表里的 goal 直接丢弃，并**立刻写盘**。而 `agentSessions` 启动时为空、由异步磁盘装载回填，于是任何抢在装载完成前的同步都会把「空面板」持久化，覆盖掉已完成 goal 的全部任务状态；等目录装载完成再投影时，任务只能从计划节点重建，一律回到 queued/blocked。上次退出时停在调度台的用户必然命中该竞态（`onAppear` 与 `onReceive` 订阅时的当前值都发生在装载之前）。现在所有面板投影统一走 `AppState.synchronizeDispatchBoard()`，会话目录未装载完成前一律拒绝投影，装载完成后补一次追平同步。
+- 手工完成的节点不再被重投影打回未启动。投影对每个 `runtimeSessionID == nil` 的任务无条件按依赖重算状态，导致从未关联运行会话、但已人工验收/合并的节点每次同步都被重置为 queued/blocked。现在依赖重算只允许在 `queued ↔ blocked` 两个未启动态之间进行，终态与 running 永不被覆盖；`merged` 解锁后继节点的行为保持不变。
+- 测试进程不再读写用户真实的调度台存储。`AgentDispatchStore` 此前默认落在 `UserDefaults.standard`，基于 `AppState` 的测试会连同 `resetForTests()` 一起作用于用户实际数据——这本身就是完成状态被清空的一条途径。改为在测试进程内整体重定向到独立 suite（与 `AgentSessionStore.testSandboxDirectory` 同一思路，新增测试无法误用），并为 `AppState` 增加 `dispatchStore` 注入缝。
+
+### Tests
+
+- 新增 `AgentDispatchBoardPersistenceTests`（3 例）：目录装载完成前的同步不得抹掉已存面板（同时校验存储侧未被清空）、手工验收的节点跨重投影保持状态且 `merged` 仍能解锁后继、节点状态写盘后可被新协调器原样读回并经受完整重投影。
+- `AgentDispatchCoordinatorTests` 两例补 `markSessionCatalogLoadedForTesting()`：这两例走 `AppState` 的新建调度项目流程并断言投影结果，而测试同步执行、异步目录装载永不完成，需显式声明目录已就绪。
 
 ## 1.253.0-rc3 - 2026-08-14
 
