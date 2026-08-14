@@ -286,9 +286,35 @@ enum AgentSandboxPolicy {
         "mkdir", "touch", "mktemp"
     ]
 
+    /// Build commands that routinely fetch dependencies as part of building.
+    /// `go build` resolves modules through GOPROXY on a cold cache, `cargo
+    /// build` hits crates.io, `npm run build` may trigger lifecycle hooks that
+    /// install. Denying them network produced failures that *look* like broken
+    /// DNS (seatbelt makes `getaddrinfo` fail as "nodename nor servname
+    /// provided"), which sent debugging down the wrong path entirely. Writes
+    /// stay confined to the workspace; only the network rule differs from the
+    /// rest of `lowRiskWriteHeads`.
+    nonisolated private static let networkCapableBuildHeads: Set<String> = [
+        "make", "xcodebuild", "swift", "go", "cargo",
+        "npm", "pnpm", "yarn", "ruby", "node", "python", "python3", "rake",
+        "vite"
+    ]
+
     nonisolated private static let networkHeads: Set<String> = [
         "curl", "wget", "ssh", "scp", "rsync", "gh", "brew",
         "mysql", "mariadb"
+    ]
+
+    /// Read-only network diagnostics. They resolve names or probe reachability
+    /// and cannot write files, transfer payloads, or authenticate anywhere, so
+    /// they run under `readOnlyNetwork` without an approval prompt. Keeping
+    /// them out of the sandbox's network grant was a pure loss: the agent
+    /// could not even confirm whether a host resolved before concluding a
+    /// build failure was "a DNS problem".
+    nonisolated private static let diagnosticNetworkHeads: Set<String> = [
+        "ping", "ping6", "dig", "host", "nslookup",
+        "traceroute", "traceroute6", "whois",
+        "ifconfig", "netstat", "route", "arp", "scutil", "ipconfig"
     ]
 
     nonisolated private static let credentialHeads: Set<String> = [
@@ -760,6 +786,8 @@ enum AgentSandboxPolicy {
                 needsEscalation = true
                 needsConfirmation = true
                 reasons.append("Destructive or privilege-changing command `\(head)` requires typed confirmation.")
+            } else if diagnosticNetworkHeads.contains(head) {
+                needsReadOnlyNetwork = true
             } else if networkHeads.contains(head) {
                 switch classifyNetworkReadOnly(head: head, tokens: tokens) {
                 case .alwaysSafe:
@@ -810,6 +838,18 @@ enum AgentSandboxPolicy {
                     } else {
                         reasons.append("Command `\(head)` is not known to be read-only.")
                     }
+                }
+
+                // Deliberately outside the switch: whether a build tool lands
+                // in `alwaysSafe` or `needsJudgment` is an implementation
+                // detail of SafeCommand, but either way it ends up in a
+                // workspace-write profile and needs the registry. Global
+                // installs are excluded — they write outside the workspace,
+                // which the sandbox denies regardless of the network rule.
+                if networkCapableBuildHeads.contains(head),
+                   !AgentPackageCommandPolicy.hasGlobalInstallScope(tokens) {
+                    needsWorkspaceNetwork = true
+                    reasons.append("Command `\(head)` may fetch dependencies from a package registry.")
                 }
             }
 
@@ -1309,12 +1349,40 @@ enum AgentSandboxPolicy {
             // curl/ssh/… may be classified alwaysSafe for "read-shaped"
             // network ops, but they still need the seatbelt network deny
             // (or a prior escalation) — never skip the profile for them.
-            if networkHeads.contains(head) || credentialHeads.contains(head) {
+            if networkHeads.contains(head)
+                || credentialHeads.contains(head)
+                || diagnosticNetworkHeads.contains(head) {
                 return false
             }
         }
         return true
     }
+
+    /// Sandbox modes whose seatbelt profile carries `(deny network*)`.
+    nonisolated static func deniesNetwork(_ mode: AgentSandboxMode) -> Bool {
+        switch mode {
+        case .readOnly, .workspaceWrite:
+            return true
+        case .readOnlyNetwork, .workspaceWriteNetwork, .escalated:
+            return false
+        }
+    }
+
+    /// Name-resolution failures a denied-network seatbelt profile produces.
+    /// Deliberately matched only under `deniesNetwork` modes — see the call
+    /// site in `looksLikeSandboxDenial`.
+    nonisolated private static let networkDenialMarkers: [String] = [
+        "nodename nor servname provided",
+        "name or service not known",
+        "temporary failure in name resolution",
+        "no such host",
+        "could not resolve host",
+        "could not resolve proxy",
+        "getaddrinfo enotfound",
+        "getaddrinfo eai_again",
+        "network is unreachable",
+        "socket: operation not permitted"
+    ]
 
     /// Heuristic for "seatbelt / sandbox-exec blocked this command".
     /// Used to offer a one-shot escalation approval instead of treating the
@@ -1361,6 +1429,19 @@ enum AgentSandboxPolicy {
             return true
         }
 
+        // Seatbelt does not surface a "network denied" error. It makes name
+        // resolution fail, so every runtime reports it as a DNS fault instead:
+        // Go says "no such host", libc says "nodename nor servname provided",
+        // Node says "getaddrinfo ENOTFOUND". Read as-is these look like a
+        // broken resolver and send debugging entirely the wrong way. Only
+        // treat them as a denial in the modes that actually deny network —
+        // under an allowed-network profile a DNS failure is a real DNS
+        // failure and must not be misreported as a sandbox problem.
+        if deniesNetwork(sandboxMode),
+           networkDenialMarkers.contains(where: { lowered.contains($0) }) {
+            return true
+        }
+
         // "permission denied" shows up in many real app failures. Only treat
         // it as a sandbox signal when the failure looks primary / short, or
         // the phrase sits near the end of stderr (typical seatbelt shape).
@@ -1403,7 +1484,10 @@ enum AgentSandboxPolicy {
         case .workspaceWriteNetwork:
             restrictions = "writes allowed only inside the workspace and temp dir; network allowed"
         }
-        return "[sandbox] This command ran inside WillDeep's macOS sandbox (\(effectiveMode.rawValue): \(restrictions)). If the failure above looks like 'permission denied' / 'operation not permitted', do NOT retry the identical command — the sandbox will deny it again. Instead: use read_file/edit_file/create_file for file work, keep paths inside the workspace, or briefly tell the user why the command must run outside the sandbox so they can approve escalation."
+        let networkNote = deniesNetwork(effectiveMode)
+            ? " Network is denied in this mode, and seatbelt expresses that as a name-resolution failure: errors such as 'no such host', 'nodename nor servname provided', 'getaddrinfo ENOTFOUND' or 'could not resolve host' mean the sandbox blocked the connection — the machine's DNS is fine. Do not debug DNS, proxies, or /etc/resolv.conf."
+            : ""
+        return "[sandbox] This command ran inside WillDeep's macOS sandbox (\(effectiveMode.rawValue): \(restrictions)).\(networkNote) If the failure above looks like 'permission denied' / 'operation not permitted', do NOT retry the identical command — the sandbox will deny it again. Instead: use read_file/edit_file/create_file for file work, keep paths inside the workspace, or briefly tell the user why the command must run outside the sandbox so they can approve escalation."
     }
 
     /// Argument flag stamped onto a tool call while waiting for the user to

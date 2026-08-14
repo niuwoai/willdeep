@@ -1201,7 +1201,15 @@ extension AppState {
                   !AgentSandboxPolicy.commandUsesExternalAccess(command) else {
                 return false
             }
-            return sandboxDecision.mode == .readOnly || sandboxDecision.mode == .workspaceWrite
+            // `workspaceWriteNetwork` is included because ordinary builds
+            // (`go build`, `swift test`) now carry the registry grant. The
+            // genuinely outward-reaching cases — curl/ssh/scp and explicit
+            // dependency installs — are already rejected by
+            // `commandUsesExternalAccess` above, so widening here restores
+            // one-click builds without loosening that boundary.
+            return sandboxDecision.mode == .readOnly
+                || sandboxDecision.mode == .workspaceWrite
+                || sandboxDecision.mode == .workspaceWriteNetwork
         case "kill_job", "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli",
              "add_memory", "create_user_skill", "create_user_skills", "update_user_skill", "suggest_mcp_server", "configure_mcp_server":
             return true

@@ -801,9 +801,11 @@ extension WillDeepTests {
         #expect(npmInstallRisk == .write)
         #expect(npmRegistryInstallRisk == .write)
         #expect(npmGlobalInstallRisk == .write)
-        #expect(goBuildDecision.mode == .workspaceWrite)
+        // Builds carry the registry grant: `go build` resolves modules through
+        // GOPROXY on a cold cache. Writes stay confined to the workspace.
+        #expect(goBuildDecision.mode == .workspaceWriteNetwork)
         #expect(goBuildDecision.requiresTypedConfirmation == false)
-        #expect(goBuildWithWorkspaceCacheDecision.mode == .workspaceWrite)
+        #expect(goBuildWithWorkspaceCacheDecision.mode == .workspaceWriteNetwork)
         #expect(goBuildWithWorkspaceCacheDecision.requiresUserApproval == true)
         #expect(goBuildWithWorkspaceCacheDecision.requiresTypedConfirmation == false)
         #expect(AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
@@ -1122,5 +1124,156 @@ struct AgentProjectWorkspaceCommandSafetyTests {
         let profile = launch.arguments.dropFirst().first ?? ""
         #expect(profile.contains("/tmp/willdeep-frontend"))
         #expect(profile.contains("/tmp/willdeep-backend"))
+    }
+
+}
+
+/// 沙箱网络策略：构建取依赖、只读网络诊断，以及"拒网被误读成 DNS 故障"的识别。
+///
+/// 刻意独立成 suite 而不是挂进 `WillDeepTests`：函数级 `-only-testing`
+/// 选择器匹配不到那个聚合 suite，会静默跑 0 个用例却报 `TEST SUCCEEDED`。
+/// 独立后可以 `-only-testing:XeditTests/AgentSandboxNetworkPolicyTests`
+/// 精确复跑。
+@Suite("沙箱网络策略")
+struct AgentSandboxNetworkPolicyTests {
+    @Test("workspace builds may fetch dependencies over the network")
+    func buildCommandsGetWorkspaceNetwork() {
+        let root = URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+
+        for command in [
+            "go build ./...",
+            "cargo build --release",
+            "swift build",
+            "npm run build",
+            "yarn build",
+            "make all",
+            "xcodebuild -scheme Xedit build"
+        ] {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(
+                decision.mode == .workspaceWriteNetwork,
+                "\(command) should build with registry access, got \(decision.mode)"
+            )
+            #expect(!decision.requiresTypedConfirmation)
+        }
+    }
+
+    @Test("global installs stay outside the workspace network grant")
+    func globalInstallDoesNotGetNetwork() {
+        let root = URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+
+        for command in ["npm install -g left-pad", "yarn --global add left-pad"] {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(
+                decision.mode == .workspaceWrite,
+                "\(command) writes outside the workspace and must not gain network"
+            )
+        }
+    }
+
+    @Test("read-only network diagnostics run without approval")
+    func networkDiagnosticsAreAutoApproved() {
+        let root = URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+
+        for command in [
+            "ping -c 1 goproxy.cn",
+            "dig +short proxy.golang.org",
+            "nslookup repo.yarnpkg.com",
+            "host registry.npmjs.org",
+            "traceroute goproxy.cn",
+            "netstat -an"
+        ] {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: root
+            )
+            #expect(
+                decision.mode == .readOnlyNetwork,
+                "\(command) is a read-only diagnostic, got \(decision.mode)"
+            )
+            #expect(
+                !decision.requiresUserApproval,
+                "\(command) should not prompt for approval"
+            )
+        }
+    }
+
+    /// Seatbelt reports a denied connection as a name-resolution failure, so
+    /// these outputs must be recognised as sandbox denials rather than being
+    /// handed to the model as a genuine DNS fault.
+    @Test("denied-network DNS failures are recognised as sandbox denials")
+    func dnsShapedFailuresCountAsSandboxDenial() {
+        let outputs = [
+            "dial tcp: lookup proxy.golang.org: no such host",
+            "socket.gaierror: [Errno 8] nodename nor servname provided, or not known",
+            "npm ERR! getaddrinfo ENOTFOUND registry.npmjs.org",
+            "curl: (6) Could not resolve host: goproxy.cn"
+        ]
+
+        for output in outputs {
+            #expect(
+                AgentSandboxPolicy.looksLikeSandboxDenial(
+                    exitStatus: 1,
+                    output: output,
+                    sandboxMode: .workspaceWrite
+                ),
+                "\(output) under a denied-network profile is a sandbox denial"
+            )
+            // The same text under an allowed-network profile is a real
+            // network fault and must not be blamed on the sandbox.
+            #expect(
+                !AgentSandboxPolicy.looksLikeSandboxDenial(
+                    exitStatus: 1,
+                    output: output,
+                    sandboxMode: .workspaceWriteNetwork
+                ),
+                "\(output) with network allowed is a genuine failure"
+            )
+            #expect(
+                !AgentSandboxPolicy.looksLikeSandboxDenial(
+                    exitStatus: 1,
+                    output: output,
+                    sandboxMode: .escalated
+                )
+            )
+        }
+    }
+
+    @Test("deniesNetwork matches the emitted seatbelt profile")
+    func deniesNetworkMatchesProfile() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-frontend")
+
+        for mode in [
+            AgentSandboxMode.readOnly,
+            .readOnlyNetwork,
+            .workspaceWrite,
+            .workspaceWriteNetwork
+        ] {
+            // Must be a command that is sandboxed in *every* mode. Ordinary
+            // safe commands (`true`, `touch`) skip seatbelt entirely under
+            // `.readOnly`, so there would be no profile to compare against —
+            // a network head always keeps the profile.
+            let launch = AgentSandboxPolicy.shellLaunch(
+                command: "curl -sI https://example.com",
+                mode: mode,
+                rootDirectory: root
+            )
+            #expect(
+                launch.executableURL.lastPathComponent == "sandbox-exec",
+                "\(mode.rawValue): expected a sandboxed launch"
+            )
+            let profile = launch.arguments.dropFirst().first ?? ""
+            let profileDenies = profile.contains("(deny network*)")
+            #expect(
+                profileDenies == AgentSandboxPolicy.deniesNetwork(mode),
+                "\(mode.rawValue): profile and deniesNetwork disagree"
+            )
+        }
     }
 }
