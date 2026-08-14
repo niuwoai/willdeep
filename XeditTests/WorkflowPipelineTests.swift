@@ -233,14 +233,22 @@ extension WillDeepTests {
     @MainActor
     @Test("Workflow watchdog times out without waiting for a stuck operation")
     func workflowWatchdogDoesNotWaitForUncancellableOperation() async {
-        let startedAt = Date()
+        // 断言的本意是"没有傻等操作自然结束"，不是测量 watchdog 的精度。
+        // 满载全量下调度抖动实测能到 0.63s，所以把被守护操作拉到 5s、判据
+        // 放到 2s：抖动再大也够不着 2s，而 2s 远低于 5s，一旦真的等操作
+        // 跑完必然越线。信号与噪声之间留足间距，别把阈值往上抬一点点。
+        let stuckOperationSeconds: UInt64 = 5
+        let elapsedBudget: TimeInterval = 2
+
         var didTimeout = false
+        // 计时从 watchdog 启动那一刻算起。
+        let startedAt = Date()
 
         do {
             _ = try await AppState.runWorkflowWithWatchdog(seconds: 0.05) {
                 await withCheckedContinuation { continuation in
                     Task.detached {
-                        try? await Task.sleep(nanoseconds: 900_000_000)
+                        try? await Task.sleep(nanoseconds: stuckOperationSeconds * 1_000_000_000)
                         continuation.resume()
                     }
                 }
@@ -255,8 +263,12 @@ extension WillDeepTests {
             }
         }
 
+        let elapsed = Date().timeIntervalSince(startedAt)
         #expect(didTimeout)
-        #expect(Date().timeIntervalSince(startedAt) < 0.5)
+        #expect(
+            elapsed < elapsedBudget,
+            "watchdog 应在 \(elapsedBudget)s 内返回（实测 \(elapsed)s），说明它没有等被守护的 \(stuckOperationSeconds)s 操作跑完"
+        )
     }
 
     // MARK: - 省心托管 workflow 模型解析 (1.155.0-rc9)

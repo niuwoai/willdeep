@@ -133,8 +133,8 @@ struct AgentStopHandlingTests {
             try await AgentToolRunner.run(
                 name: "run_command",
                 arguments: [
-                    "command": .string("sleep 30"),
-                    "timeout_seconds": .number(35),
+                    "command": .string("sleep 120"),
+                    "timeout_seconds": .number(130),
                 ],
                 context: AgentToolContext(rootDirectory: nil, sandboxMode: .escalated)
             )
@@ -152,9 +152,16 @@ struct AgentStopHandlingTests {
             // Expected: the process bridge sent TERM and the cancelled turn returned.
         }
 
-        // TERM 生效的话远早于 sleep 30 自然结束 / 35s 超时;15s 上限在满载
-        // (实测 4.5-7s)下仍有余量,同时足以证明不是等进程跑完。
-        #expect(Date().timeIntervalSince(cancelledAt) < 15)
+        // 判据的本意只是「不是等进程自己跑完」,不是度量 TERM 的精度。满载
+        // (1495 用例全并行)实测 4.5-7s,旧的 15s 上限只有 ~2x 余量、且离
+        // sleep 30 也只有 2x,信号与噪声挤在一起。现在把被杀的进程拉到 120s、
+        // 判据放到 45s:抖动再大也够不着 45s,而 45s 远低于 120s,真退化成
+        // 傻等必然越线。
+        let elapsed = Date().timeIntervalSince(cancelledAt)
+        #expect(
+            elapsed < 45,
+            "取消后应在 45s 内返回(实测 \(elapsed)s),说明没有等 sleep 120 自然结束"
+        )
     }
 
     @Test("interrupted assistant output is preserved, including reasoning-only output")

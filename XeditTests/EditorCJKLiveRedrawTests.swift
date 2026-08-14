@@ -279,7 +279,13 @@ extension WillDeepTests {
         #expect(spy.text == "abcni")
         #expect(spy.editCount == 0)
 
-        try await Task.sleep(nanoseconds: 100_000_000)
+        // 旧写法固定睡 100ms 等 postInputDelay(0.05s)落地,只有 2x 余量——主队列
+        // asyncAfter 在满载全量下延迟轻易吃掉这点空隙,于是假红。改成轮询到
+        // 合并后的 onEdit 到达为止,上限 10s 只作挂死兜底。
+        let editDeadline = Date().addingTimeInterval(10)
+        while spy.editCount == 0 && Date() < editDeadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         #expect(spy.editCount == 1)
     }
@@ -317,7 +323,13 @@ extension WillDeepTests {
         #expect(spy.immediateEditCount == 3)
         #expect(spy.editCount == 0)
 
-        try await Task.sleep(nanoseconds: 100_000_000)
+        // 旧写法固定睡 100ms 等 postInputDelay(0.05s)落地,只有 2x 余量——主队列
+        // asyncAfter 在满载全量下延迟轻易吃掉这点空隙,于是假红。改成轮询到
+        // 合并后的 onEdit 到达为止,上限 10s 只作挂死兜底。
+        let editDeadline = Date().addingTimeInterval(10)
+        while spy.editCount == 0 && Date() < editDeadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         #expect(spy.editCount == 1)
     }
