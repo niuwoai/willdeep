@@ -1,7 +1,24 @@
 # Changelog
 
-> 当前文件保留最新版本（1.253.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.253.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.253.0-rc3 - 2026-08-14
+
+### Fixed
+
+- workflow watchdog 计时用例（`WorkflowPipelineTests` 的 "Workflow watchdog times out without waiting for a stuck operation"）在满载全量下不再假红。旧写法让 watchdog 设 0.05s、被守护操作 sleep 0.9s，却断言总耗时 < 0.5s——信号（0.05s）与噪声之间没有余量，2026-08-14 的四次全量里挂了两次，实测 0.6242s / 0.6331s，都只是略微越线；单独跑 `-only-testing:XeditTests/WillDeepTests` 时同一用例 0.053s 干净通过，纯属调度抖动。现在按 `AgentStopHandlingTests` 同类修复的手法拉开信号与噪声的间距，而不是把阈值往上抬一点点：被守护操作从 0.9s 拉到 5s，判据从 0.5s 放到 2s。判据的本意只是"没有傻等操作自然结束"，2s 抖动够不着、又远低于 5s，真退化成傻等必然越线。断言同时带上实测耗时，红了能直接看数值。
+- 顺带扫了 `XeditTests/` 下其余计时/超时类用例，同一类窄余量另修两处，都是固定 `Task.sleep` 赌主队列 `asyncAfter` 能在两倍延迟内落地，改为轮询到目标状态出现为止（上限 10s 只作挂死兜底，负载高只是变慢、不再假失败）：
+  - `AgentTerminalWinsizeDebounceTests` 的"尺寸抖动合并为一次 winsize 提交"：固定睡 250ms 等 0.12s debounce，仅 2x 余量。
+  - `EditorCJKLiveRedrawTests` 的两处输入合并用例（IME 组字期间不跑 CJK fallback、打字连发合并 `onEdit`）：固定睡 100ms 等 `postInputDelay`（0.05s），同样 2x 余量。改后这两条顺带从 100ms 降到 0.013s / 0.066s。
+
+### Known Issues
+
+- `AgentLiveActivityHeadlineCacheTests.tailScanIsBounded`（`elapsed < 1.0`，200 次扫 400KB 缓冲）仍是纯 CPU 吞吐闸门，空闲机实测约 0.21s，只有 ~4.8x 余量，而它要排除的 O(n²) 回归也在同一数量级附近——满载下有假红风险。这条不能靠"拉开间距"解决：`latestStatusLine` 现在仍对全量 `reasoning` 走一次 O(n) 的 `count`（`Xedit/AgentToolCallGrouping.swift:130`），所以改成大/小缓冲的相对比值也压不到 1。要治本得先动生产代码或换成行为断言（参考 `SomeIMAccountProfileTests` 去掉 wall-clock 断言的做法），本轮未动，留作单独议题。
+
+### Meta
+
+- 计时用例抗抖动加固，预发布版本从 **1.253.0-rc2** 提升为 **1.253.0-rc3**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.253.0-rc2 - 2026-08-14
 
@@ -24,6 +41,7 @@
 ### Meta
 
 - 测试报告假绿修复，预发布版本从 **1.253.0-rc1** 提升为 **1.253.0-rc2**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
 ## 1.253.0-rc1 - 2026-08-14
 
 ### Changed

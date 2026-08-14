@@ -213,7 +213,13 @@ struct AgentTerminalWinsizeDebounceTests {
         // Nothing may reach the child before the debounce window closes.
         #expect(spy.calls.isEmpty)
 
-        try await Task.sleep(for: .milliseconds(250))
+        // 旧写法固定睡 250ms 等 0.12s 的 debounce 落地,只有 ~2x 余量——主队列
+        // asyncAfter 在满载全量下延迟轻易超过这点空隙,于是假红。改成轮询到
+        // 提交出现为止,上限 10s 只作挂死兜底:负载高只是变慢,不再假失败。
+        let deadline = Date().addingTimeInterval(10)
+        while spy.calls.isEmpty && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
         // Exactly one commit, carrying the live settled geometry.
         #expect(spy.calls.count == 1)
         let live = view.getTerminal()

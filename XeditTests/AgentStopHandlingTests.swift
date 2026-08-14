@@ -158,7 +158,8 @@ struct AgentStopHandlingTests {
 
         // TERM 生效实测 4.5-7s。45s 上限只用来证明「不是等 sleep 120 自然结束
         // 或 125s 超时」,不是性能断言——满载下的调度抖动不该判它失败。
-        #expect(Date().timeIntervalSince(cancelledAt) < 45)
+        let elapsed = Date().timeIntervalSince(cancelledAt)
+        #expect(elapsed < 45, "取消后应在 45s 内返回(实测 \(elapsed)s)")
     }
 
     @Test("interrupted assistant output is preserved, including reasoning-only output")
