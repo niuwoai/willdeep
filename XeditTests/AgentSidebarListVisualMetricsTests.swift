@@ -24,6 +24,56 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(recent.last?.routineName == "Routine 11")
     }
 
+    @Test("sidebar and composer text scale with the chat body size")
+    func chromeFontsFollowChatBaseFontSize() {
+        let base = AgentSettingsStore.chatBaseFontSizeDefault
+
+        // At the default body size nothing moves — the established look is
+        // the baseline, not a special case.
+        #expect(
+            AgentDesign.scaledChromeFontSize(AgentDesign.sidebarRowFontSize, baseFontSize: base)
+                == AgentDesign.sidebarRowFontSize
+        )
+        #expect(
+            AgentDesign.scaledComposerInputFontSize(baseFontSize: base)
+                == AgentDesign.composerInputFontSize
+        )
+
+        // Raising the body carries both surfaces by the same absolute step,
+        // preserving the 1 pt / 2 pt hierarchy below the transcript.
+        let raised = base + 5
+        #expect(
+            AgentDesign.scaledChromeFontSize(AgentDesign.sidebarRowFontSize, baseFontSize: raised)
+                == AgentDesign.sidebarRowFontSize + 5
+        )
+        #expect(
+            AgentDesign.scaledComposerInputFontSize(baseFontSize: raised)
+                == AgentDesign.composerInputFontSize + 5
+        )
+
+        // Out-of-range requests are clamped like the body size itself, so no
+        // caller can drive the chrome past the settings range.
+        #expect(
+            AgentDesign.scaledComposerInputFontSize(baseFontSize: 999)
+                == AgentDesign.scaledComposerInputFontSize(
+                    baseFontSize: AgentSettingsStore.chatBaseFontSizeMax
+                )
+        )
+
+        // The smallest body size must not push chrome below the legibility
+        // floor.
+        let smallest = AgentDesign.scaledComposerInputFontSize(
+            baseFontSize: AgentSettingsStore.chatBaseFontSizeMin
+        )
+        #expect(smallest >= AgentDesign.chromeFontSizeFloor)
+        #expect(
+            AgentDesign.scaledChromeFontSize(
+                AgentDesign.sidebarRowFontSize,
+                baseFontSize: AgentSettingsStore.chatBaseFontSizeMin
+            ) >= AgentDesign.chromeFontSizeFloor
+        )
+    }
+
     @Test("conversation sidebar follows the Codex typography and vertical rhythm")
     func codexReferenceMetricsStaySynchronized() {
         #expect(AgentDesign.sidebarRowFontSize == 14)
@@ -42,9 +92,14 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentDesign.liveActivityRowSpacing == 2)
         #expect(AgentDesign.assistantMetadataTopSpacing(baseFontSize: 15) < AgentDesign.messageVerticalSpacing)
         #expect(AgentDesign.reviewPanelPreferredWidth == 520)
-        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 14, visualMinimum: 9) == 13)
-        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 18, visualMinimum: 15) == 15)
-        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 11) == 11)
+        // Supporting text tracks the body size on a constant 2 pt offset
+        // rather than being capped at its 13 pt default. Raising the body to
+        // 18 now yields 16 (it used to stall at 13 and rely on the caller's
+        // visualMinimum), and the floor still holds at the smallest body.
+        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 15) == 13)
+        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 14, visualMinimum: 9) == 12)
+        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 18, visualMinimum: 15) == 16)
+        #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 11) == AgentDesign.chromeFontSizeFloor)
         #expect(AgentModelUsageTableLayout.horizontalInset == 8)
         #expect(AgentModelUsageTableLayout.columnSpacing == 8)
         #expect(AgentModelUsageTableLayout.tokensWidth == 120)

@@ -54,6 +54,10 @@ enum ComposerSecretTagLayout {
 struct ComposerTextEditor: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
+    /// Chat body size the composer scales with, so what the user types is
+    /// sized like what they read. Defaulted so the many call sites that do
+    /// not care keep the previous fixed size.
+    var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
     let onSubmit: () -> Void
     let onPasteImage: () -> Void
     let onPasteText: (String) -> Void
@@ -136,7 +140,9 @@ struct ComposerTextEditor: NSViewRepresentable {
         let textView = ComposerNSTextView(frame: .zero)
         textView.delegate = context.coordinator
         textView.coordinator = context.coordinator
-        textView.font = NSFont.systemFont(ofSize: 13)
+        textView.font = NSFont.systemFont(
+            ofSize: AgentDesign.scaledComposerInputFontSize(baseFontSize: baseFontSize)
+        )
         textView.isRichText = false
         // Composer 输入的是命令 / 代码 / prompt,任何系统「智能替换」都会
         // 篡改原文(半角直引号 "" → 弯引号 “”、`--` → 破折号、`(c)` → ©、
@@ -173,6 +179,13 @@ struct ComposerTextEditor: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? ComposerNSTextView else { return }
         textView.placeholder = placeholder
+        // Applied before the text-sync dance below: font is independent of the
+        // binding-echo / IME-marked-text races guarded there, and skipping it
+        // on those early returns would strand the composer at the old size
+        // until the next unrelated refresh.
+        textView.applyInputFont(
+            ofSize: AgentDesign.scaledComposerInputFontSize(baseFontSize: baseFontSize)
+        )
         if textView.string != text {
             // 1.85.0-rc15:绝大多数「我输了东西被覆盖掉/回退掉」的现象,
             // 根因是这里的 binding-echo 竞态。流程:
@@ -783,6 +796,16 @@ fileprivate final class ComposerNSTextView: NSTextView {
         return false
     }
 
+    /// Swap the input font when the chat body size changes. The secret-tag
+    /// attributes are temporary layout-manager attributes carrying their own
+    /// font, so they must be re-applied — otherwise `@` tags stay at the old
+    /// size and sit visibly out of line with the text around them.
+    func applyInputFont(ofSize size: CGFloat) {
+        guard font?.pointSize != size else { return }
+        font = NSFont.systemFont(ofSize: size)
+        refreshSecretTagAttributes()
+    }
+
     private func refreshSecretTagAttributes() {
         guard let layoutManager else { return }
         let fullRange = NSRange(location: 0, length: (string as NSString).length)
@@ -790,7 +813,10 @@ fileprivate final class ComposerNSTextView: NSTextView {
         layoutManager.removeTemporaryAttribute(.font, forCharacterRange: fullRange)
         let tagColor = NSColor.controlAccentColor.blended(withFraction: 0.18, of: .labelColor)
             ?? NSColor.controlAccentColor
-        let tagFont = NSFont.systemFont(ofSize: 12, weight: .medium)
+        // Derived from the live input size rather than a constant, so the tag
+        // keeps its one-point-smaller relationship at every scale.
+        let inputSize = font?.pointSize ?? AgentDesign.composerInputFontSize
+        let tagFont = NSFont.systemFont(ofSize: max(1, inputSize - 1), weight: .medium)
         for match in AgentSecretStore.placeholderMatches(in: string) {
             layoutManager.addTemporaryAttribute(.foregroundColor, value: tagColor, forCharacterRange: match.range)
             layoutManager.addTemporaryAttribute(.font, value: tagFont, forCharacterRange: match.range)

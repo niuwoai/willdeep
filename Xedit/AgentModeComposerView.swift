@@ -906,6 +906,7 @@ private struct ComposerCard: View {
                         }
                     ),
                     placeholder: L10n.Composer.inputPlaceholder,
+                    baseFontSize: appState.agentChatBaseFontSize,
                     onSubmit: { submitComposer() },
                     onPasteImage: handlePastedImage,
                     onPasteText: handlePastedText,
