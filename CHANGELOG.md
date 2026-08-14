@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.256.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.256.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.256.0-rc2 - 2026-08-14
+
+### Tests
+
+- `AgentHeaderEditorEntryTests` 的终端捷径守卫补一条场景锚点：断言 `XeditApp.swift` 里注册了 `WindowGroup(for: TerminalShortcutEditorRequest.self)`。只锚定 `AgentSidePanelTerminalView` 那一侧的 `openWindow(value:)` 调用点是不够的——把窗口场景删掉，调用点还在、这条守卫照样绿，但捷径「编辑」在运行时会静默打不开窗口。捷径 JSON 带 `${secret:...}`，它打不开就意味着用户要么改不了捷径、要么被推回外部编辑器那条已经废弃的泄密路径。
+
+### Meta
+
+- 守卫加固，预发布版本从 **1.256.0-rc1** 递增为 **1.256.0-rc2**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.256.0-rc1 - 2026-08-14
 

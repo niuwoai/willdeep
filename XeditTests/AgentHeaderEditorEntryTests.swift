@@ -35,6 +35,7 @@ struct AgentHeaderEditorEntryTests {
     @Test("Ordinary files use the system default app; only shortcut JSON stays in-app")
     func filesOpenExternally() throws {
         let terminalSource = try Self.source(in: "Xedit", named: "AgentSidePanelTerminalView.swift")
+        let appSource = try Self.source(in: "Xedit", named: "XeditApp.swift")
         let filePanelSource = try Self.source(in: "Xedit", named: "AgentSidePanel.swift")
         let infoPlist = try Self.source(in: "Xedit", named: "Info.plist")
 
@@ -44,6 +45,9 @@ struct AgentHeaderEditorEntryTests {
         // another process. It opens in the app's own editor window instead.
         #expect(terminalSource.contains("openWindow(value: TerminalShortcutEditorRequest("))
         #expect(!terminalSource.contains("NSWorkspace.shared.open(url)"))
+        // The call site alone is not enough: without the matching scene the
+        // window silently fails to open at runtime while this test stays green.
+        #expect(appSource.contains("WindowGroup(for: TerminalShortcutEditorRequest.self)"))
         // The exception is that window, NOT a revived Editor scene: the local
         // editor was split out into Qeditor and must not come back through
         // this door.
