@@ -168,6 +168,46 @@ nonisolated struct AgentSubagentUsageRow: Identifiable, Equatable {
     var id: String { profileID }
 }
 
+/// The three Phase 0 KPIs from `docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md` §8,
+/// derived entirely from persisted worker runs.
+///
+/// Every rate is optional and nil means "no data yet", never zero. A panel
+/// that renders 0% for an empty denominator reads as "we tried and failed",
+/// which is the one thing these numbers must not say by accident.
+nonisolated struct AgentSkillWorkerKPIs: Equatable {
+    /// Runs on a narrow trade — every trade except `deep`, which inherits the
+    /// parent's model and so moves no work off the expensive tier.
+    var narrowRunCount: Int = 0
+    var deepRunCount: Int = 0
+    /// Parent assistant turns, i.e. work the main model did inline.
+    var parentTurnCount: Int = 0
+    /// Runs that actually had a verifier. Runs without one are excluded from
+    /// the success rate rather than counted as failures.
+    var verifiedRunCount: Int = 0
+    var verifiedPassCount: Int = 0
+    var escalatedRunCount: Int = 0
+
+    /// Share of model invocations a narrow trade handled. Runs and parent
+    /// turns are different units on purpose: the question is "how much of
+    /// what the model was asked to do went somewhere cheaper", and both a
+    /// child loop and an inline turn are one such ask.
+    var skillCoverage: Double? {
+        let total = narrowRunCount + deepRunCount + parentTurnCount
+        guard total > 0 else { return nil }
+        return Double(narrowRunCount) / Double(total)
+    }
+
+    var verifiedSuccessRate: Double? {
+        guard verifiedRunCount > 0 else { return nil }
+        return Double(verifiedPassCount) / Double(verifiedRunCount)
+    }
+
+    var escalationRate: Double? {
+        guard narrowRunCount > 0 else { return nil }
+        return Double(escalatedRunCount) / Double(narrowRunCount)
+    }
+}
+
 /// A distinct artifact referenced by chats that were active in the current
 /// calendar week. Artifact ledgers are session-scoped, so the label remains
 /// honest: this is work surfaced from this week's active chats, not a guess
@@ -297,6 +337,11 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
     /// Missing/unknown profile arguments resolve to `deep`, matching the
     /// runtime's backwards-compatible execution rule.
     var subagentProfileIDs: [String]
+    /// What the `spawn_agent` runs on this message actually cost and whether
+    /// they verified. Empty while a run is still going, and for every session
+    /// recorded before worker accounting existed — those keep reporting only
+    /// the parent's tokens, which is honest: we never had the child's.
+    var subagentRuns: [AgentSubagentRunUsage]
     var toolCallID: String?
     var toolCallStatus: AgentToolCallStatus?
     var toolErrorMessage: String?
@@ -323,6 +368,7 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
         toolCallNames: [String] = [],
         toolCallExternalIDs: [String] = [],
         subagentProfileIDs: [String] = [],
+        subagentRuns: [AgentSubagentRunUsage] = [],
         toolCallID: String? = nil,
         toolCallStatus: AgentToolCallStatus? = nil,
         toolErrorMessage: String? = nil,
@@ -348,6 +394,7 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
         self.toolCallNames = toolCallNames
         self.toolCallExternalIDs = toolCallExternalIDs
         self.subagentProfileIDs = subagentProfileIDs
+        self.subagentRuns = subagentRuns
         self.toolCallID = toolCallID
         self.toolCallStatus = toolCallStatus
         self.toolErrorMessage = toolErrorMessage
@@ -381,6 +428,7 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
                     argumentsJSON: $0.argumentsJSON
                 )
             },
+            subagentRuns: message.toolCalls.compactMap(\.subagentUsage),
             toolCallID: message.toolCallID,
             toolCallStatus: message.toolCallStatus,
             toolErrorMessage: message.toolErrorMessage,
@@ -424,6 +472,7 @@ nonisolated struct AgentUsageDashboardModel: Equatable {
     let capabilityUsage: [AgentCapabilityUsageRow]
     let subagentUsage: [AgentSubagentUsageRow]
     let subagentSessionCount: Int
+    let skillWorkerKPIs: AgentSkillWorkerKPIs
     let heatmapCells: [[AgentHeatmapCell]]
     let peakTaskTokenCount: Int
     let managedRoutingRate: Double
@@ -473,6 +522,7 @@ enum AgentUsageStats {
             subagentSessionCount: sessions.count { session in
                 session.messages.contains { !$0.subagentProfileIDs.isEmpty }
             },
+            skillWorkerKPIs: skillWorkerKPIs(for: sessions),
             heatmapCells: heatmap(for: sessions, weekCount: heatmapWeekCount, now: now),
             peakTaskTokenCount: peakTaskTokenCount,
             managedRoutingRate: managedRoutingRate,
@@ -772,6 +822,70 @@ enum AgentUsageStats {
                 row.estimatedCostUSD = estimatedCostUSD(for: row)
                 rows[key] = row
             }
+
+            // A worker's tokens bill to the model the worker ran on, not to
+            // the parent that spawned it. Folding them into the parent's row
+            // (or dropping them, which is what happened before worker
+            // accounting existed) makes the cheap tier look free: the whole
+            // point of the tier is that these tokens moved somewhere cheaper,
+            // and that only shows up if they are counted where they landed.
+            for run in session.messages.flatMap(\.subagentRuns) {
+                let modelID = normalizedModelID(run.model)
+                let declaredProviderID = run.providerID?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let providerID = declaredProviderID.isEmpty
+                    ? inferProviderID(from: modelID)
+                    : declaredProviderID
+                let key = "\(providerID)|\(modelID)"
+                var row = rows[key] ?? AgentModelUsageRow(
+                    providerID: providerID,
+                    providerName: AgentProviderPreset.normalizedDisplayName(
+                        providerID: providerID,
+                        storedDisplayName: nil
+                    ) ?? providerID,
+                    modelID: modelID,
+                    sessionCount: 0,
+                    messageCount: 0,
+                    promptTokens: 0,
+                    completionTokens: 0,
+                    cachedPromptTokens: 0,
+                    cacheWritePromptTokens: 0,
+                    reasoningTokens: 0,
+                    totalTokens: 0,
+                    estimatedTokens: 0,
+                    estimatedCostUSD: nil,
+                    hasEstimatedUsage: false,
+                    isDelegatedExternal: false,
+                    cacheDiagnosticTurns: 0,
+                    stablePrefixCharactersTotal: 0
+                )
+                if seenKeysInSession.insert(key).inserted {
+                    row.sessionCount += 1
+                }
+                // One child loop is one row entry, however many rounds it ran:
+                // `messageCount` counts requests the user's work produced, and
+                // the per-round detail already lives in the transcript sidecar.
+                row.messageCount += 1
+                if run.promptTokens > 0 || run.completionTokens > 0 {
+                    row.promptTokens += run.promptTokens
+                    row.completionTokens += run.completionTokens
+                    row.cachedPromptTokens += run.cachedPromptTokens
+                    row.totalTokens += max(
+                        run.usageTokens,
+                        run.promptTokens + run.completionTokens
+                    )
+                } else if run.usageTokens > 0 {
+                    // Total without a split: charge it as completion, matching
+                    // how this file already prices unmeasured tokens. Erring
+                    // high on a cost dashboard beats erring low.
+                    row.completionTokens += run.usageTokens
+                    row.totalTokens += run.usageTokens
+                    row.estimatedTokens += run.usageTokens
+                    row.hasEstimatedUsage = true
+                }
+                row.estimatedCostUSD = estimatedCostUSD(for: row)
+                rows[key] = row
+            }
         }
 
         return rows.values
@@ -805,6 +919,39 @@ enum AgentUsageStats {
 
     static func subagentUsage(for sessions: [AgentSession]) -> [AgentSubagentUsageRow] {
         subagentUsage(for: sessions.map { AgentUsageSessionSnapshot(session: $0) })
+    }
+
+    static func skillWorkerKPIs(
+        for sessions: [AgentUsageSessionSnapshot]
+    ) -> AgentSkillWorkerKPIs {
+        var kpis = AgentSkillWorkerKPIs()
+        let deepID = AgentSubagentProfileCatalog.deep.id
+
+        for session in sessions {
+            for message in session.messages {
+                if message.role == .assistant {
+                    kpis.parentTurnCount += 1
+                }
+                for run in message.subagentRuns {
+                    if run.profileID == deepID {
+                        kpis.deepRunCount += 1
+                    } else {
+                        kpis.narrowRunCount += 1
+                        if run.escalatedFromModel != nil {
+                            kpis.escalatedRunCount += 1
+                        }
+                    }
+                    // Only runs that were actually verified count toward the
+                    // success rate; `nil` is "never checked", not "failed".
+                    if let passed = run.verifierPassed {
+                        kpis.verifiedRunCount += 1
+                        if passed { kpis.verifiedPassCount += 1 }
+                    }
+                }
+            }
+        }
+
+        return kpis
     }
 
     static func subagentUsage(

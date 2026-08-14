@@ -433,6 +433,65 @@ nonisolated struct AgentTextAttachment: Codable, Equatable, Identifiable {
 /// Tool call emitted by the assistant in an OpenAI function-calling response.
 /// `argumentsJSON` is the raw JSON text the model produced (it may stream in
 /// fragments and only be valid JSON once complete).
+/// What one finished `spawn_agent` child loop cost and whether it worked.
+///
+/// This lives on the parent's tool call rather than only in the transcript
+/// sidecar because the stats dashboard is a pure function over session
+/// snapshots. Without it every token a worker spends is invisible to the
+/// model-usage table — the exact blind spot that makes a cheap-model tier
+/// look free while the bill says otherwise.
+nonisolated struct AgentSubagentRunUsage: Codable, Equatable, Sendable {
+    /// Trade that ran (`scout` / `test_fixer` / …).
+    var profileID: String
+    /// Model that actually produced the report. After an escalation this is
+    /// the parent's model, not the trade's cheap binding.
+    var model: String
+    var providerID: String?
+    /// Total tokens across every round of the child loop.
+    var usageTokens: Int
+    /// Prompt/completion split summed over the run's rounds. Zero when the
+    /// provider reported only a total; the dashboard then falls back to its
+    /// estimator rather than pricing a guessed ratio as if it were measured.
+    var promptTokens: Int
+    var completionTokens: Int
+    var cachedPromptTokens: Int
+    var roundCount: Int
+    var toolInvocationCount: Int
+    /// Model escalated away from, when a cheap trade stalled and the run was
+    /// re-run on the parent's model. Nil when no escalation happened.
+    var escalatedFromModel: String?
+    /// Verifier verdict for the run. Nil when the run had no verifier at all;
+    /// nil and `false` must stay distinct, because "never verified" is not
+    /// "verified and failed" and the two belong in different KPI buckets.
+    var verifierPassed: Bool?
+
+    init(
+        profileID: String,
+        model: String,
+        providerID: String? = nil,
+        usageTokens: Int = 0,
+        promptTokens: Int = 0,
+        completionTokens: Int = 0,
+        cachedPromptTokens: Int = 0,
+        roundCount: Int = 0,
+        toolInvocationCount: Int = 0,
+        escalatedFromModel: String? = nil,
+        verifierPassed: Bool? = nil
+    ) {
+        self.profileID = profileID
+        self.model = model
+        self.providerID = providerID
+        self.usageTokens = usageTokens
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.cachedPromptTokens = cachedPromptTokens
+        self.roundCount = roundCount
+        self.toolInvocationCount = toolInvocationCount
+        self.escalatedFromModel = escalatedFromModel
+        self.verifierPassed = verifierPassed
+    }
+}
+
 nonisolated struct AgentMessageToolCall: Codable, Equatable {
     var externalID: String
     var toolName: String
@@ -442,6 +501,10 @@ nonisolated struct AgentMessageToolCall: Codable, Equatable {
     /// so the inspector still opens after the session is reopened. Nil for
     /// every other tool and for runs recorded before this field existed.
     var subagentRunID: UUID?
+    /// Stamped when the run named by `subagentRunID` finishes. Nil while it
+    /// is still running, for every non-spawn tool, and for runs recorded
+    /// before worker accounting existed.
+    var subagentUsage: AgentSubagentRunUsage?
 }
 
 nonisolated struct AgentMessage: Identifiable, Codable, Equatable {

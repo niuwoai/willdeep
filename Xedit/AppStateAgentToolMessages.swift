@@ -302,8 +302,28 @@ extension AppState {
             outcome: AgentSubagentRunner.Outcome?,
             report: String,
             model: String,
+            providerID: String,
             escalatedFrom: String? = nil
         ) {
+            // Worker accounting rides every terminal path, including failures
+            // and cancellations: tokens a stalled child already burned are
+            // exactly the ones a cheap tier must be judged on.
+            recordSubagentRunUsage(
+                AgentSubagentRunUsage(
+                    profileID: profile.id,
+                    model: model,
+                    providerID: providerID,
+                    usageTokens: outcome?.usageTokens ?? 0,
+                    promptTokens: outcome?.usageSplit.prompt ?? 0,
+                    completionTokens: outcome?.usageSplit.completion ?? 0,
+                    cachedPromptTokens: outcome?.usageSplit.cachedPrompt ?? 0,
+                    roundCount: outcome?.roundCount ?? 0,
+                    toolInvocationCount: outcome?.toolInvocationCount ?? 0,
+                    escalatedFromModel: escalatedFrom
+                ),
+                runID: runID,
+                runtime: runtime
+            )
             AppState.persistSubagentTranscript(
                 AgentSubagentTranscript(
                     runID: runID,
@@ -380,6 +400,7 @@ extension AppState {
         do {
             var outcome = try await runChild(configuration: childConfiguration, profile: profile)
             var effectiveModel = childConfiguration.model
+            var effectiveProviderID = childConfiguration.providerID
             var escalatedFrom: String?
 
             // A cheap trade that ran out of rounds without a report is the
@@ -398,6 +419,7 @@ extension AppState {
                 ) {
                     escalatedFrom = childConfiguration.model
                     effectiveModel = configuration.model
+                    effectiveProviderID = configuration.providerID
                     outcome = retried
                 }
             }
@@ -411,6 +433,7 @@ extension AppState {
                 outcome: outcome,
                 report: outcome.report,
                 model: effectiveModel,
+                providerID: effectiveProviderID,
                 escalatedFrom: escalatedFrom
             )
             let notices = profileNotices.isEmpty ? "" : "\n\n" + profileNotices.joined(separator: "\n")
@@ -427,7 +450,8 @@ extension AppState {
                 status: .cancelled,
                 outcome: nil,
                 report: "(subagent cancelled)",
-                model: childConfiguration.model
+                model: childConfiguration.model,
+                providerID: childConfiguration.providerID
             )
             finishRecord(
                 status: .failed,
@@ -440,7 +464,8 @@ extension AppState {
                 status: .failed,
                 outcome: nil,
                 report: "Subagent failed: \(error.localizedDescription)",
-                model: childConfiguration.model
+                model: childConfiguration.model,
+                providerID: childConfiguration.providerID
             )
             finishRecord(
                 status: .failed,
@@ -465,6 +490,26 @@ extension AppState {
         guard let callIndex = runtime.messages[messageIndex].toolCalls
             .firstIndex(where: { $0.externalID == externalID }) else { return }
         runtime.messages[messageIndex].toolCalls[callIndex].subagentRunID = runID
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+    }
+
+    /// Stamp what a finished child loop cost onto the persisted tool call.
+    ///
+    /// The stats dashboard is a pure function over session snapshots, so this
+    /// is the only route by which worker tokens reach it. Without the stamp a
+    /// cheap-model tier looks free: the parent's tokens are counted and the
+    /// child's are not.
+    func recordSubagentRunUsage(
+        _ usage: AgentSubagentRunUsage,
+        runID: UUID,
+        runtime: AgentRuntime
+    ) {
+        guard let messageIndex = runtime.messages.lastIndex(where: { message in
+            message.toolCalls.contains { $0.subagentRunID == runID }
+        }) else { return }
+        guard let callIndex = runtime.messages[messageIndex].toolCalls
+            .firstIndex(where: { $0.subagentRunID == runID }) else { return }
+        runtime.messages[messageIndex].toolCalls[callIndex].subagentUsage = usage
         persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
     }
 

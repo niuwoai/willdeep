@@ -166,6 +166,7 @@ struct AgentStatsDashboard: View {
                 VStack(alignment: .leading, spacing: 14) {
                     workerDetailHeader
                     workerSummaryBand
+                    workerKPIBand
                     workerUsageList
                 }
             case .calendar:
@@ -870,6 +871,35 @@ struct AgentStatsDashboard: View {
         )
     }
 
+    /// The three skill-workers.v1 Phase 0 KPIs. Each shows a dash until it
+    /// has a denominator: an honest "no data yet" beats a 0% that reads like
+    /// a verdict.
+    private var workerKPIBand: some View {
+        let kpis = dashboardModel.skillWorkerKPIs
+        return HStack(spacing: 0) {
+            CodexDashboardMetric(
+                value: formatOptionalPercent(kpis.skillCoverage),
+                title: L10n.StatsDashboard.workersSkillCoverage
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatOptionalPercent(kpis.verifiedSuccessRate),
+                title: L10n.StatsDashboard.workersVerifiedSuccess
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatOptionalPercent(kpis.escalationRate),
+                title: L10n.StatsDashboard.workersEscalationRate
+            )
+        }
+        .frame(height: AgentStatsDashboardLayout.metricStripHeight)
+        .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
+                .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+        )
+    }
+
     private var workerUsageList: some View {
         let rowsByProfile = Dictionary(
             uniqueKeysWithValues: subagentUsageRows.map { ($0.profileID, $0) }
@@ -1321,6 +1351,13 @@ struct AgentStatsDashboard: View {
     private func formatPercent(_ value: Double) -> String {
         guard value > 0 else { return "0%" }
         return String(format: "%.0f%%", min(1, value) * 100)
+    }
+
+    /// nil means the metric has no denominator yet, which must render as
+    /// "no data" rather than as 0%.
+    private func formatOptionalPercent(_ value: Double?) -> String {
+        guard let value else { return L10n.StatsDashboard.workersMetricNoData }
+        return formatPercentage(value)
     }
 
     private func formatCost(_ row: AgentModelUsageRow) -> String {

@@ -119,6 +119,12 @@ extension L10n {
         static let workersTitle = String(localized: "stats-dashboard.workers.title", defaultValue: "Worker usage")
         static let workersTotalCalls = String(localized: "stats-dashboard.workers.total-calls", defaultValue: "Worker calls")
         static let workersChats = String(localized: "stats-dashboard.workers.chats", defaultValue: "Chats with workers")
+        static let workersSkillCoverage = String(localized: "stats-dashboard.workers.skill-coverage", defaultValue: "Handled by workers")
+        static let workersVerifiedSuccess = String(localized: "stats-dashboard.workers.verified-success", defaultValue: "Verified success")
+        static let workersEscalationRate = String(localized: "stats-dashboard.workers.escalation-rate", defaultValue: "Escalated to main")
+        /// Shown instead of a percentage when the metric has no denominator
+        /// yet. "0%" would read as a failure rather than as missing data.
+        static let workersMetricNoData = String(localized: "stats-dashboard.workers.metric-no-data", defaultValue: "—")
 
         static func pluginRunCount(_ a1: String) -> String {
             let template = String(localized: "stats-dashboard.plugins.run-count", defaultValue: "%@ runs")

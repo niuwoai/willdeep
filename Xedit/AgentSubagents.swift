@@ -51,11 +51,18 @@ struct AgentSubagentRun: Identifiable, Equatable {
     let parentRuntimeID: UUID
     let model: String
     let startedAt: Date
+    /// Trade this run executes. Carried on the run itself so the completion
+    /// hook can attribute worker cost without re-reading the spawn arguments.
+    var profileID: String = AgentSubagentProfileCatalog.deep.id
+    /// Provider the child model ran on. Worker trades often bind a different
+    /// provider than the parent, and pricing is per (provider, model).
+    var providerID: String?
     var status: Status = .running
     var finishedAt: Date?
     /// Final assistant text from the child loop. Empty until finished.
     var report: String = ""
     var usageTokens: Int = 0
+    var usageSplit = AgentSubagentRunner.UsageSplit()
     var roundCount: Int = 0
     var toolInvocationCount: Int = 0
 
@@ -226,7 +233,9 @@ final class AgentSubagentRegistry: ObservableObject {
             prompt: prompt,
             parentRuntimeID: parentRuntimeID,
             model: configuration.model,
-            startedAt: Date()
+            startedAt: Date(),
+            profileID: profile.id,
+            providerID: configuration.providerID
         )
         runs.insert(run, at: 0)
         if let originatingTurnID {
@@ -266,6 +275,7 @@ final class AgentSubagentRegistry: ObservableObject {
                 status: .completed,
                 report: outcome.report,
                 usageTokens: outcome.usageTokens,
+                usageSplit: outcome.usageSplit,
                 roundCount: outcome.roundCount,
                 toolInvocationCount: outcome.toolInvocationCount,
                 rounds: outcome.rounds,
@@ -333,6 +343,7 @@ final class AgentSubagentRegistry: ObservableObject {
         status: AgentSubagentRun.Status,
         report: String,
         usageTokens: Int = 0,
+        usageSplit: AgentSubagentRunner.UsageSplit = .init(),
         roundCount: Int = 0,
         toolInvocationCount: Int = 0,
         rounds: [AgentSubagentTranscript.Round] = [],
@@ -345,6 +356,7 @@ final class AgentSubagentRegistry: ObservableObject {
         runs[index].finishedAt = Date()
         runs[index].report = report
         runs[index].usageTokens = usageTokens
+        runs[index].usageSplit = usageSplit
         runs[index].roundCount = roundCount
         runs[index].toolInvocationCount = toolInvocationCount
 
@@ -506,9 +518,23 @@ enum AgentSubagentRunner {
     /// 校验,通过即结束 loop,失败就把 issues 回 tool result 让模型重试。
     static let structuredOutputToolName = "structured_output"
 
+    /// Prompt/completion breakdown of a child loop, summed over its rounds.
+    /// Zero when the provider reported only a total (or nothing at all).
+    struct UsageSplit: Equatable {
+        var prompt = 0
+        var completion = 0
+        var cachedPrompt = 0
+
+        var wasReported: Bool { prompt > 0 || completion > 0 }
+    }
+
     struct Outcome: Equatable {
         let report: String
         let usageTokens: Int
+        /// Kept alongside the total so worker cost can be priced instead of
+        /// guessed: a child loop is prompt-heavy, and output tokens cost
+        /// several times what input does.
+        var usageSplit = UsageSplit()
         let roundCount: Int
         let toolInvocationCount: Int
         /// Per-round record for the subagent inspector. The runner produces
@@ -760,6 +786,7 @@ enum AgentSubagentRunner {
             AgentMessage(role: .user, content: prompt),
         ]
         var totalTokens = 0
+        var usageSplit = UsageSplit()
         var toolInvocations = 0
         // The trade's narrowed tool table — resent every round, so this is
         // where a cheap profile earns most of its savings.
@@ -799,6 +826,9 @@ enum AgentSubagentRunner {
             reasoning = turn.reasoning
             toolCalls = turn.toolCalls
             totalTokens += turn.usageTokens
+            usageSplit.prompt += turn.promptTokens
+            usageSplit.completion += turn.completionTokens
+            usageSplit.cachedPrompt += turn.cachedPromptTokens
 
             transcript.append(AgentMessage(
                 role: .assistant,
@@ -875,6 +905,7 @@ enum AgentSubagentRunner {
                         return Outcome(
                             report: payload,
                             usageTokens: totalTokens,
+                            usageSplit: usageSplit,
                             roundCount: round,
                             toolInvocationCount: toolInvocations,
                             rounds: sealingRound(),
@@ -898,6 +929,7 @@ enum AgentSubagentRunner {
                         return Outcome(
                             report: fallback,
                             usageTokens: totalTokens,
+                            usageSplit: usageSplit,
                             roundCount: round,
                             toolInvocationCount: toolInvocations,
                             rounds: sealingRound(),
@@ -915,6 +947,7 @@ enum AgentSubagentRunner {
                 return Outcome(
                     report: report.isEmpty ? "(subagent finished without producing a report)" : report,
                     usageTokens: totalTokens,
+                    usageSplit: usageSplit,
                     roundCount: round,
                     toolInvocationCount: toolInvocations,
                     rounds: sealingRound(),
@@ -969,6 +1002,7 @@ enum AgentSubagentRunner {
         return Outcome(
             report: lastText.isEmpty ? note : "\(note)\n\n\(lastText)",
             usageTokens: totalTokens,
+            usageSplit: usageSplit,
             roundCount: roundLimit,
             toolInvocationCount: toolInvocations,
             rounds: recordedRounds,
@@ -1155,6 +1189,13 @@ private actor SubagentTurnCollector {
         var reasoning = ""
         var toolCalls: [AgentMessageToolCall] = []
         var usageTokens = 0
+        /// Kept split, not just totalled: a child loop resends its whole
+        /// history every round, so its cost is overwhelmingly prompt-side.
+        /// Collapsing to a total forces the dashboard to guess the ratio,
+        /// and output tokens cost several times what input does.
+        var promptTokens = 0
+        var completionTokens = 0
+        var cachedPromptTokens = 0
     }
 
     private var turn = Turn()
@@ -1171,8 +1212,11 @@ private actor SubagentTurnCollector {
             break
         case .finishedTurn:
             break
-        case .usageReported(_, _, let total, _, _, _):
+        case .usageReported(let prompt, let completion, let total, let cachedPrompt, _, _):
             turn.usageTokens = total
+            turn.promptTokens = prompt
+            turn.completionTokens = completion
+            turn.cachedPromptTokens = cachedPrompt ?? 0
         }
     }
 

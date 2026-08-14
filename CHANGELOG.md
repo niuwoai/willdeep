@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.258.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.259.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.259.0-rc1 - 2026-08-15
+
+### Added
+
+- **子代理花的钱终于进账了。** 以前一个子代理跑十二轮、烧掉几万 token，统计面板上一个数字都看不到——那些 token 只写在 transcript 侧车里，模型用量表只统计父会话的消息。结果就是「便宜档」看着永远免费，而账单不这么认为。现在每个 `spawn_agent` 运行结束时，会把工种、模型、provider、token（prompt/completion/cache 分开记）、轮数、工具调用次数盖到父会话那条工具调用上，随会话落盘；模型用量表按**子代理实际跑的那个模型**单独出行，而不是并进父模型。前台、后台、失败、取消四条路径都记——一个卡死的子代理烧掉的 token，正是评判便宜档时最该看见的那部分。
+- **子代理的 token 拆分不再被丢掉。** provider 本来就回了 prompt/completion 分项，子代理循环却只留了个总数。补上后 Worker 成本是算出来的而不是猜出来的（子代理每轮重发全部历史，是极度 prompt-heavy 的负载，按输出价一刀切会离谱）。只报总数的老数据仍然计入 token 并标记为估算。
+- **统计面板新增 skill-workers 三项指标**：Worker 承担占比、验证通过率、升级到主模型。三项都在没有分母时显示「—」而不是 0%——「还没数据」和「试过但失败」是两回事，后者是这块面板最不该误报的结论。
+- **子代理 transcript 补齐 verifier 与回放锚点字段**（`verifierCommand` / `verifierPassed` / `attemptCount` / `repoCommit`）。`verifierPassed` 的 nil 与 false 严格区分：没跑过验证不等于验证失败。加上 commit 锚点后，一条 transcript 就是一个可回放的 case，为后面换模型对比攒数据。旧侧车文件照常解码。
+
+### Docs
+
+- 新增 `docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md`（小上下文 Skill Worker 拆分设计）、`docs/SOMEIM_WORKER_VIRTUAL_MODELS.md`（some.im 侧 8 个 Worker 虚拟模型与逐字可粘贴的服务端提示词，含「登录即锁死模型与提示词、未登录才可配」的绑定规则）、`docs/SKILL_WORKERS_TASK_PLAN.md`（分期任务台账）。
 
 ## 1.258.0-rc5 - 2026-08-14
 

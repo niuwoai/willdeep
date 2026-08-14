@@ -61,6 +61,18 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
     /// parent's model; carries the model that was escalated away from.
     /// Escalation is recorded rather than silent — see AgentSubagentEscalation.
     var escalatedFromModel: String?
+    /// Verifier command attached to the run's task packet. Nil for runs
+    /// without a verifier (all records before skill-workers.v1).
+    var verifierCommand: String?
+    /// Ground-truth outcome: whether the verifier command exited 0.
+    /// Nil when no verifier ran — distinct from `false`, which is a real
+    /// failure. "Worker Verified Success" counts only non-nil values.
+    var verifierPassed: Bool?
+    /// Verifier attempts consumed (1-based). Nil when no verifier ran.
+    var attemptCount: Int?
+    /// Workspace HEAD when the run started; anchors the transcript as a
+    /// replayable case (same commit + same task packet → comparable reruns).
+    var repoCommit: String?
 
     var toolInvocationCount: Int {
         rounds.reduce(0) { $0 + $1.toolCalls.count }
@@ -79,7 +91,11 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
         finishedAt: Date? = nil,
         didTruncate: Bool = false,
         profileID: String? = nil,
-        escalatedFromModel: String? = nil
+        escalatedFromModel: String? = nil,
+        verifierCommand: String? = nil,
+        verifierPassed: Bool? = nil,
+        attemptCount: Int? = nil,
+        repoCommit: String? = nil
     ) {
         self.runID = runID
         self.label = label
@@ -94,6 +110,10 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
         self.didTruncate = didTruncate
         self.profileID = profileID
         self.escalatedFromModel = escalatedFromModel
+        self.verifierCommand = verifierCommand
+        self.verifierPassed = verifierPassed
+        self.attemptCount = attemptCount
+        self.repoCommit = repoCommit
     }
 }
 

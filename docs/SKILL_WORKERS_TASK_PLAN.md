@@ -45,7 +45,8 @@ S 与 O 无依赖可并行；C 依赖 S（虚拟模型可用）与 O（有仪表
 
 | # | 任务 | 依赖 | 验收 |
 |---|---|---|---|
-| C1 | profile 服务端托管开关：`AgentSubagentProfile` 增加「职能段由服务端托管」标记；命中时 runner **不再拼接本地 capabilityPromptSection**（只发不变量段），绑定解析指向 `someim-32b-<skill>`，`contextWindowTokens` 钉 32_768，`toolPayloadCharacterLimit` 下调 4_000 | S2 | 单测：托管 profile 的请求 system 不含本地职能段；回退链（some.im 不可用 → 父模型 + 本地职能段）仍工作 |
+| C1 | 服务端托管工种的登录态二分（规则见 `SOMEIM_WORKER_VIRTUAL_MODELS.md` §3.8，只作用于那 7 个工种）：**已登录** → 模型锁死 `someim-32b-<skill>`、职能段不发（服务端托管）、设置页该项显示为锁定并说明原因；**未登录** → 用用户为该工种指定的模型，未指定则回退当前会话模型，并拼接 App 内置职能段。两态共用 `contextWindowTokens` 32_768、`toolPayloadCharacterLimit` 4_000 | S2 | 单测：登录态请求 system 不含本地职能段且模型为托管值；未登录态用会话模型 + 内置职能段；登录/登出不迁移用户配置（spawn 时解析） |
+| C1b | Swift 侧内置七段职能提示词（`SOMEIM_WORKER_VIRTUAL_MODELS.md` §3 的离线镜像，未登录路径使用）；文档为 canonical 源，两边同步 | — | 单测：内置文案存在且非空；未登录 spawn 命中内置段 |
 | C2 | Task Packet：`spawn_agent` 新增可选 `task` 参数（goal / relevant_files / known_facts / constraints / verifier / max_attempts），runner 内联相关文件（32K 档上限 24K chars，超限截断明示）；verifier 命令过 `AgentSafeCommand` 白名单 | — | 单测：无 `task` 行为逐字节不变；内联截断；白名单拒绝危险命令 |
 | C3 | Verifier 闭环：runner 判定循环（「没跑过 verifier 的 done 不算 done」）、失败输出确定性消化后回灌、attempt 打满触发升档（升档条件从三条扩到四条）、结果写 transcript（O2 字段） | C2 O2 | 单测：exit 0 才算 done；连败升档且 transcript 可审计 |
 | C4 | 文件集写通道：`AgentSubagentWriteAccess` 从单文件泛化为声明式文件集（spawn 即审批列全集合、逐条 diff 路径校验、文件集互斥锁、失败放锁）；editor 成为集合大小 1 的特例 | — | 单测：越界 Denied、交集排队、editor 行为不变 |
