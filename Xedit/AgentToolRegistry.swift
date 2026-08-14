@@ -1758,7 +1758,8 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "label", type: .string, description: "Short display label for the UI (e.g. `explore-auth-flow`). Defaults to a prompt prefix.", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, return immediately with an agent handle (agent_xxxxxx); the report is injected as a system message when the subagent finishes. Up to 3 subagents may run in parallel per session. Defaults to false (wait for the report inline).", required: false),
                 AgentToolParameter(name: "profile", type: .string, description: "Which subagent trade to spawn. Each trade runs on its own model with a narrowed tool set, so prefer the narrowest one that fits the task — it is faster and far cheaper. Trades: \(AgentSubagentProfileStore.toolDescriptionCatalog) Defaults to `deep`.", required: false),
-                AgentToolParameter(name: "target_file", type: .string, description: "Required for `profile=\"editor\"`, ignored otherwise. Workspace-relative path of the single file the subagent may edit. The user approves this file explicitly; patches touching any other path are rejected.", required: false)
+                AgentToolParameter(name: "target_file", type: .string, description: "Required for `profile=\"editor\"`, ignored otherwise. Workspace-relative path of the single file the subagent may edit. The user approves this file explicitly; patches touching any other path are rejected.", required: false),
+                AgentToolParameter(name: "role", type: .string, description: "Optional goal-team role to run as (`developer` / `tester` / `reviewer`). A role binds a trade and may only narrow it further — a reviewer loses the shell, and no role can grant a write tool its trade lacks. Use it when the goal has a roles file; otherwise pick a `profile` directly.", required: false)
             ]
         ),
         AgentToolDescriptor(

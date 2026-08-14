@@ -141,14 +141,43 @@ extension AppState {
         // Which trade to run. Unknown or absent → `deep`, whose bindings and
         // budgets reproduce the pre-profile behaviour exactly.
         let requestedProfileID = arguments["profile"]?.stringValue()
-        let profile = AgentSubagentProfileStore.resolvedProfile(id: requestedProfileID)
+        var profile = AgentSubagentProfileStore.resolvedProfile(id: requestedProfileID)
         var profileNotices: [String] = []
+        // Validity is decided against the *resolved* trades, not the built-in
+        // catalog: since agent-profile.v2 a user-created profile is a real
+        // trade, and checking the catalog would report it as unknown while
+        // happily running it.
+        let availableTradeIDs = AgentSubagentProfileStore.resolvedProfiles().map(\.id)
         if let requestedProfileID,
            !requestedProfileID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           !AgentSubagentProfileCatalog.isKnown(id: requestedProfileID) {
+           !availableTradeIDs.contains(where: {
+               $0.caseInsensitiveCompare(requestedProfileID.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+           }) {
             profileNotices.append(
-                "Note: unknown profile `\(requestedProfileID)` — ran the `deep` trade instead. Valid trades: \(AgentSubagentProfileCatalog.builtIn.map(\.id).joined(separator: ", "))."
+                "Note: unknown profile `\(requestedProfileID)` — ran the `deep` trade instead. Valid trades: \(availableTradeIDs.joined(separator: ", "))."
             )
+        }
+
+        // A goal-team role binds a trade and may only narrow it further
+        // (docs/GOAL_TEAMS_ROLES_DESIGN.md §2.3). Roles live in the
+        // workspace's roles file, so an unknown role degrades to the plain
+        // trade rather than failing the spawn.
+        if let requestedRoleID = arguments["role"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !requestedRoleID.isEmpty {
+            let workspacePath = activeRuntime?.workspaceRootPath
+            let roster = AgentGoalTeamRoleStore.load(workspacePath: workspacePath)
+            if let role = roster.role(id: requestedRoleID),
+               let roleTrade = role.resolvedTrade(
+                   profiles: AgentProfileStore().profiles(),
+                   profileID: requestedProfileID
+               ) {
+                profile = roleTrade
+            } else {
+                profileNotices.append(
+                    "Note: unknown role `\(requestedRoleID)` — ran the `\(profile.id)` trade without role narrowing. Roles in this workspace: \(roster.roles.map(\.id).joined(separator: ", "))."
+                )
+            }
         }
         // The `model` parameter is retired: cost policy is the user's
         // configuration now, not something the model re-decides per call.
