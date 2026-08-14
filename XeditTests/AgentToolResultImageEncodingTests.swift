@@ -196,6 +196,10 @@ struct AgentToolResultImageEncodingTests {
         #expect(recorder.requests.count == 1)
         #expect(request.path == "/v1/responses")
         #expect(request.sessionID == "managed-session")
+        // The relay bills against X-Playground-Session-ID; sending only our
+        // own header leaves usage_records.session_id empty, which is what
+        // makes worker traffic unattributable to the chat that spawned it.
+        #expect(request.relaySessionID == "managed-session")
         let bodyData = try #require(request.body.data(using: .utf8))
         let body = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
         #expect(body["model"] as? String == SomeIMManagedModel.judge)
@@ -658,6 +662,7 @@ struct AgentToolResultImageEncodingTests {
             #expect(requests.count == 2)
             #expect(requests[0].stateHeader == stateProtocol)
             #expect(requests[0].sessionID == "session-503")
+            #expect(requests[0].relaySessionID == "session-503")
             #expect(requests[0].userAgent?.hasPrefix("some.im/WillDeep-") == true)
             #expect(requests[0].path == "/v1/responses")
             #expect(requests[1].stateHeader == nil)
@@ -964,6 +969,8 @@ private final class WillDeepResponsesFallbackRecorder: @unchecked Sendable {
     struct RecordedRequest {
         let stateHeader: String?
         let sessionID: String?
+        /// The header the relay's usage ledger actually reads.
+        let relaySessionID: String?
         let userAgent: String?
         let path: String?
         let body: String
@@ -980,6 +987,9 @@ private final class WillDeepResponsesFallbackRecorder: @unchecked Sendable {
                 ),
                 sessionID: request.value(
                     forHTTPHeaderField: AgentNetworkSupport.willDeepSessionHeaderName
+                ),
+                relaySessionID: request.value(
+                    forHTTPHeaderField: AgentNetworkSupport.relaySessionHeaderName
                 ),
                 userAgent: request.value(forHTTPHeaderField: "User-Agent"),
                 path: request.url?.path,

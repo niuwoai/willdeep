@@ -22,10 +22,45 @@
 
 import Foundation
 
-/// A granted, path-scoped write capability handed to one editor subagent.
+/// A granted, path-scoped write capability handed to one writing subagent.
+///
+/// The editor trade holds a set of one; the fixer trades hold the set the user
+/// approved at spawn time, because a real test fix usually moves the
+/// implementation and its test together and a one-file door would force the
+/// trade to report "cannot finish" on the common case. The guarantees are the
+/// same either way: the user saw every path in the set before approving, and
+/// anything outside it is denied on the execution path.
 nonisolated struct AgentSubagentWriteAccess: Sendable, Equatable {
-    /// Workspace-relative, normalized path this subagent may patch.
-    let targetRelativePath: String
+    /// Workspace-relative, normalized, de-duplicated and sorted so the
+    /// approval card, the prompt and the lock all name the same list in the
+    /// same order.
+    let targetRelativePaths: [String]
+
+    init?(targetRelativePaths: [String]) {
+        var seen = Set<String>()
+        var normalized: [String] = []
+        for raw in targetRelativePaths {
+            guard let path = Self.normalizedTargetPath(raw) else { return nil }
+            if seen.insert(path).inserted { normalized.append(path) }
+        }
+        guard !normalized.isEmpty else { return nil }
+        self.targetRelativePaths = normalized.sorted()
+    }
+
+    /// Single-file convenience for the editor trade and its tests. The path is
+    /// assumed already normalized by the caller.
+    init(targetRelativePath: String) {
+        self.targetRelativePaths = [targetRelativePath]
+    }
+
+    /// Backtick-quoted list for prompts and denial messages.
+    var displayList: String {
+        targetRelativePaths.map { "`\($0)`" }.joined(separator: ", ")
+    }
+
+    func allows(_ path: String) -> Bool {
+        targetRelativePaths.contains(path)
+    }
 
     /// Normalizes a user/model-supplied target path, rejecting anything that
     /// could escape the workspace. Returns nil when the path is unusable.
@@ -73,19 +108,21 @@ nonisolated struct AgentSubagentWriteAccess: Sendable, Equatable {
         guard case .object(let arguments) = AgentJSONValue.decode(from: argumentsJSON),
               let diff = arguments["diff"]?.stringValue(),
               !diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return "Denied: the patch had no readable `diff` argument. Re-emit the call with a unified diff for `\(targetRelativePath)`."
+            return "Denied: the patch had no readable `diff` argument. Re-emit the call with a unified diff for one of: \(displayList)."
         }
 
         let paths = Self.patchedPaths(inDiff: diff)
         guard !paths.isEmpty else {
-            return "Denied: no `--- a/… / +++ b/…` header found in the diff. Emit a standard unified diff for `\(targetRelativePath)`."
+            return "Denied: no `--- a/… / +++ b/…` header found in the diff. Emit a standard unified diff for one of: \(displayList)."
         }
         for path in paths {
             guard let path else {
-                return "Denied: this trade edits one existing file and cannot create or delete files. Patch `\(targetRelativePath)` in place, or report what should be created instead."
+                return "Denied: this trade edits existing files and cannot create or delete them. Patch one of \(displayList) in place, or report what should be created instead."
             }
-            guard path == targetRelativePath else {
-                return "Denied: you may only edit `\(targetRelativePath)`, but this patch touches `\(path)`. Report the change needed elsewhere in your final message instead of patching it."
+            guard allows(path) else {
+                // The denial names the escape route on purpose: the trade is
+                // supposed to report out-of-scope work, not quietly give up.
+                return "Denied: you may only edit \(displayList), but this patch touches `\(path)`. Report the change needed elsewhere in your final message instead of patching it."
             }
         }
         return nil
@@ -111,12 +148,31 @@ final class AgentSubagentEditorLock {
     /// Claims `path` for `runID`. Returns false when another live editor
     /// already holds it.
     func acquire(path: String, parentRuntimeID: UUID, runID: UUID) -> Bool {
-        let key = Key(parentRuntimeID: parentRuntimeID, path: path)
-        if let existing = holders[key], existing != runID {
-            return false
+        acquire(paths: [path], parentRuntimeID: parentRuntimeID, runID: runID)
+    }
+
+    /// Claims every path in the set for `runID`, all or nothing. A partial
+    /// claim would let two children each hold half of an overlapping set and
+    /// then deadlock or interleave — so a single conflict rejects the whole
+    /// acquisition and leaves the existing holder untouched.
+    func acquire(paths: [String], parentRuntimeID: UUID, runID: UUID) -> Bool {
+        let keys = paths.map { Key(parentRuntimeID: parentRuntimeID, path: $0) }
+        for key in keys {
+            if let existing = holders[key], existing != runID { return false }
         }
-        holders[key] = runID
+        for key in keys { holders[key] = runID }
         return true
+    }
+
+    /// Paths in `paths` already held by a different run, for telling the
+    /// caller exactly which file it is waiting on.
+    func conflictingPaths(_ paths: [String], parentRuntimeID: UUID, runID: UUID) -> [String] {
+        paths.filter { path in
+            guard let existing = holders[Key(parentRuntimeID: parentRuntimeID, path: path)] else {
+                return false
+            }
+            return existing != runID
+        }
     }
 
     /// Releases every claim held by `runID`. Safe to call more than once —

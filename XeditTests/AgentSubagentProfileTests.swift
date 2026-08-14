@@ -167,10 +167,62 @@ struct AgentSubagentProfileTests {
             profile: AgentSubagentProfileCatalog.scout
         )
 
-        #expect(scoutPrompt.contains("LOCATION"))
+        // Assert the section is present by its own text rather than a keyword
+        // that happens to be in it — the job prompts are mirrored from
+        // docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3 and their wording moves.
+        #expect(scoutPrompt.contains(AgentSubagentJobPrompts.scout))
         // The invariants stay regardless of trade.
         #expect(scoutPrompt.contains("READ-ONLY"))
         #expect(scoutPrompt.contains("cannot ask the user"))
+    }
+
+    @Test("a relay-hosted trade sends no local job section, only the invariants")
+    func hostedTradeOmitsLocalJobSection() {
+        let hosted = AgentSubagentRunner.systemPrompt(
+            workspaceURL: nil,
+            profile: AgentSubagentProfileCatalog.scout,
+            jobPromptIsHosted: true
+        )
+
+        // Sending our copy too would stack two sets of the same instructions
+        // on top of the relay's and pay for both.
+        #expect(!hosted.contains(AgentSubagentJobPrompts.scout))
+        // Safety rules are never hosted: they ship from the client always.
+        #expect(hosted.contains("READ-ONLY"))
+        #expect(hosted.contains("cannot ask the user"))
+    }
+
+    @Test("only the managed worker trades carry a hosted model")
+    func hostedModelsCoverExactlyTheManagedTrades() {
+        let hosted = AgentSubagentProfileCatalog.builtIn
+            .filter { $0.hostedVirtualModel != nil }
+            .map(\.id)
+
+        #expect(Set(hosted) == AgentSubagentJobPrompts.hostedTradeIDs)
+        // deep / tester / reviewer stay user-configurable in every login
+        // state — locking deep to a cheap tier would delete the trade whose
+        // whole job is to run at the parent's capability.
+        #expect(AgentSubagentProfileCatalog.deep.hostedVirtualModel == nil)
+        #expect(AgentSubagentProfileCatalog.tester.hostedVirtualModel == nil)
+        #expect(AgentSubagentProfileCatalog.reviewer.hostedVirtualModel == nil)
+    }
+
+    @Test("hosted model ids hyphenate snake_case trade ids")
+    func hostedModelIDsMatchRelayNaming() {
+        #expect(AgentSubagentProfileCatalog.testFixer.hostedVirtualModel == "someim-32b-test-fixer")
+        #expect(AgentSubagentProfileCatalog.scout.hostedVirtualModel == "someim-32b-scout")
+        #expect(AgentSubagentJobPrompts.hostedModel(for: "deep") == nil)
+    }
+
+    @Test("a trade is only hosted while signed in to some.im")
+    func hostedResolutionFollowsLoginState() {
+        let scout = AgentSubagentProfileCatalog.scout
+
+        #expect(scout.usesHostedJobPrompt(someIMAuthenticated: true))
+        // Signed out the user's own binding applies and the client supplies
+        // the job prompt, so the same trade still behaves the same way.
+        #expect(!scout.usesHostedJobPrompt(someIMAuthenticated: false))
+        #expect(!AgentSubagentProfileCatalog.deep.usesHostedJobPrompt(someIMAuthenticated: true))
     }
 
     @Test("结构化提示为不支持工具调用的 Provider 提供 JSON 兼容路径")

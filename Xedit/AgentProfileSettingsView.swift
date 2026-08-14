@@ -147,6 +147,13 @@ struct AgentProfileSettingsView: View {
     }
 
     private func detailLine(_ profile: AgentProfile) -> String {
+        // A hosted trade must advertise the model it will actually run on,
+        // not the binding it would use signed out — the list is where users
+        // check what a trade costs them.
+        if hostedModelIsLocked(profile),
+           let hosted = AgentSubagentJobPrompts.hostedModel(for: profile.id) {
+            return "some.im · \(hosted)"
+        }
         let model = profile.runtime.modelBinding.model ?? L10n.AgentProfiles.modelPlaceholder
         return "\(profile.runtime.executor.displayName) · \(model)"
     }
@@ -216,30 +223,52 @@ struct AgentProfileSettingsView: View {
         }
 
         Section(L10n.AgentProfiles.sectionModel) {
-            Picker(L10n.AgentProfiles.fieldProvider, selection: providerBinding(index)) {
-                Text(L10n.AgentProfiles.modelPlaceholder).tag(Optional<UUID>.none)
-                ForEach(appState.agentProviderLibrary.entries) { entry in
-                    Text(entry.displayName).tag(Optional(entry.id))
+            // Managed trades run a relay-hosted model whose server-side prompt
+            // was tuned for it; letting the user swap one half of that pair
+            // would silently break the other. Shown disabled with the reason
+            // rather than hidden — a control that vanishes reads as a lost
+            // feature, and the state reverses the moment they sign out.
+            if hostedModelIsLocked(profile) {
+                LabeledContent(L10n.AgentProfiles.fieldModel) {
+                    Text(profile.runtime.modelBinding.model ?? L10n.AgentProfiles.modelPlaceholder)
+                        .foregroundStyle(.secondary)
                 }
-            }
-            .disabled(profile.origin == .discovered)
-
-            HStack(spacing: 8) {
-                TextField(L10n.AgentProfiles.modelPlaceholder, text: modelBinding(index))
-                    .textFieldStyle(.roundedBorder)
-                Menu {
-                    ForEach(modelOptions(for: profile), id: \.self) { model in
-                        Button(model) { modelBinding(index).wrappedValue = model }
+                Label(
+                    L10n.AgentDelegation.profileHostedModelLocked,
+                    systemImage: "lock.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Text(L10n.AgentDelegation.profileHostedModelLockedHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Picker(L10n.AgentProfiles.fieldProvider, selection: providerBinding(index)) {
+                    Text(L10n.AgentProfiles.modelPlaceholder).tag(Optional<UUID>.none)
+                    ForEach(appState.agentProviderLibrary.entries) { entry in
+                        Text(entry.displayName).tag(Optional(entry.id))
                     }
-                } label: {
-                    Image(systemName: "chevron.down").frame(width: 16, height: 16)
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .disabled(modelOptions(for: profile).isEmpty)
-                .help(L10n.AgentDelegation.profilePickFetchedModel)
+                .disabled(profile.origin == .discovered)
+
+                HStack(spacing: 8) {
+                    TextField(L10n.AgentProfiles.modelPlaceholder, text: modelBinding(index))
+                        .textFieldStyle(.roundedBorder)
+                    Menu {
+                        ForEach(modelOptions(for: profile), id: \.self) { model in
+                            Button(model) { modelBinding(index).wrappedValue = model }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down").frame(width: 16, height: 16)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .disabled(modelOptions(for: profile).isEmpty)
+                    .help(L10n.AgentDelegation.profilePickFetchedModel)
+                }
+                .disabled(profile.origin == .discovered)
             }
-            .disabled(profile.origin == .discovered)
         }
 
         Section(L10n.AgentProfiles.sectionSoul) {
@@ -493,6 +522,16 @@ struct AgentProfileSettingsView: View {
     }
 
     // MARK: - Actions
+
+    /// True while some.im owns this trade's model and job prompt. Only the
+    /// managed worker trades qualify; `deep`, `tester`, `reviewer` and every
+    /// dispatch profile stay user-configurable in every login state
+    /// (docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3.8).
+    private func hostedModelIsLocked(_ profile: AgentProfile) -> Bool {
+        guard profile.usages.contains(.subagent),
+              AgentSubagentJobPrompts.hostedTradeIDs.contains(profile.id) else { return false }
+        return SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+    }
 
     private func modelOptions(for profile: AgentProfile) -> [String] {
         guard let entryID = providerEntryID(for: profile),

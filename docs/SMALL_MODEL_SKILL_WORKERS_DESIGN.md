@@ -126,6 +126,7 @@ attempt 打满 max_attempts → 触发 escalation（换父模型重跑或报告�
 
 要点：
 
+- **verifier 的准入不是「必须只读」（2026-08-15 修正）**。诚实的 verifier 本来就会写：build 产出目标文件、测试写 fixture。一刀切只读会把用户推回「相信模型自称通过」，比放行更危险。改成两段门禁：确定性判定为 read 档的命令直接放行；其余交给 **security_guard 裁判**（即 `safetyJudgeApproval` 这个全局收口，与 `run_command`、MCP、终端同一条路），裁判不放行才拒绝并明确告知。**唯一不可退让的是「不能没有门禁」**——子代理没有审批 UI，无人值守的命令必须有人判。
 - **「没跑过 verifier 的 done 不算 done」**：Worker 报完成但从未跑过 verifier 时，runner 自动代跑一次再判定。
 - escalation 触发条件从现有三条（爆窗 / 轮满 / 报告过短）**升级为四条**：加「verifier 连败满额」。
 - verifier 结果写入 `AgentSubagentTranscript` 新字段（`verifierCommand` / `verifierPassed` / `attemptCount`，optional decode 兼容旧 sidecar）。**这三个字段就是 Worker Verified Success 指标的数据源。**
@@ -145,6 +146,10 @@ attempt 打满 max_attempts → 触发 escalation（换父模型重跑或报告�
 | `reader` 已有 | 阅读总结 | 现状不变 | 下调至 32K 档 | — | 无 | 现状 |
 | `editor` 已有 | 单文件机械编辑 | 现状不变 | 下调至 32K 档 | **新增可选 verifier**（如 build） | 单文件锁（现状） | 现状 |
 | `reviewer` 改造 | 局部 diff 风险审查 | 现状只读集 | 64K | findings schema + 主模型抽检 | 无 | none |
+| `security_guard` **新** | 判断单条命令能否无人值守执行 | **无工具** | 8K | 结构化裁决 | 无 | retryWithParentModel |
+| `judge` **新** | 路由/质检等有界裁决 | **无工具** | 8～16K | 调用方指定的格式 | 无 | retryWithParentModel |
+
+两个裁判工种刻意**不给任何工具**：它们回答的是「就手上这份材料下结论」，给工具只会让小模型跑去找更多证据，而一个去找证据的裁判就是一个不再回答问题的裁判。同样刻意的是 `maxRounds: 1`——裁决不需要第二轮。
 
 刻意不拆的（方案 §6「更适合 Main」区）：跨模块重构、架构设计、产品语义模糊的任务——继续走 `deep` / 主模型 / 调度台。
 

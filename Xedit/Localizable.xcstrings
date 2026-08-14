@@ -145,6 +145,366 @@
         }
       }
     },
+    "agent-delegation.profile-build-fixer-name" : {
+      "comment" : "Display name of the build fixer subagent trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Build Fixer"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reparador de compilación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Répara-build"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ビルド修復"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "构建修复"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-build-fixer-purpose" : {
+      "comment" : "User-facing description of the build fixer trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fixes compiler, type-check and lint failures inside the files it was given, verified by the build command."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corrige fallos de compilación, tipos y lint en los archivos indicados, verificado por el comando de build."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corrige les erreurs de compilation, de typage et de lint dans les fichiers fournis, vérifié par la commande de build."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "渡されたファイル内のコンパイル・型・Lint エラーを修正し、ビルドコマンドで検証します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在给定文件范围内修复编译、类型与 lint 错误，由构建命令验证。"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-git-detective-name" : {
+      "comment" : "Display name of the git detective subagent trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git Detective"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detective de Git"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Détective Git"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 調査"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Git 溯源"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-git-detective-purpose" : {
+      "comment" : "User-facing description of the git detective trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Answers repository-history questions such as which commit introduced a regression. Never modifies the repository."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Responde preguntas sobre el historial del repositorio, como qué commit introdujo una regresión. Nunca modifica el repositorio."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Répond aux questions sur l'historique du dépôt, comme le commit à l'origine d'une régression. Ne modifie jamais le dépôt."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どのコミットがリグレッションを招いたかなど、リポジトリ履歴の質問に答えます。リポジトリを変更することはありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回答仓库历史问题，例如哪个提交引入了回归。从不修改仓库。"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-hosted-model-locked" : {
+      "comment" : "Settings label shown when a trade's model is managed by some.im",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model and prompt hosted by some.im"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelo y prompt alojados por some.im"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modèle et prompt hébergés par some.im"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "モデルとプロンプトは some.im が管理"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型与提示词由 some.im 托管"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-hosted-model-locked-hint" : {
+      "comment" : "Explanation for why a hosted trade's model cannot be changed",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "While signed in to some.im this trade runs on a managed model with a server-side prompt. Sign out to choose your own."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mientras tengas sesión en some.im, este oficio usa un modelo gestionado con prompt en el servidor. Cierra sesión para elegir el tuyo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tant que vous êtes connecté à some.im, ce métier utilise un modèle géré avec un prompt côté serveur. Déconnectez-vous pour choisir le vôtre."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "some.im にサインイン中、この職能はサーバー側プロンプト付きの管理モデルで動作します。自分で選ぶにはサインアウトしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 some.im 期间，该工种使用托管模型与服务端提示词。想自行选择请先退出登录。"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-judge-name" : {
+      "comment" : "Display name of the judge subagent trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Judge"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Árbitro"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arbitre"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "判定"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "裁判"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-judge-purpose" : {
+      "comment" : "User-facing description of the judge trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Returns one bounded verdict about material you supply: a routing choice, a quality check, a classification. No tools."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Devuelve un veredicto acotado sobre el material que le des: elección de ruta, control de calidad, clasificación. Sin herramientas."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rend un verdict borné sur le matériel fourni : choix de routage, contrôle qualité, classification. Sans outils."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "渡された材料について、ルーティング選択・品質チェック・分類などの限定的な判定を 1 つ返します。ツールなし。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "针对你给的材料返回一个有界裁决：路由选择、质量检查或分类。无工具。"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-log-inspector-name" : {
+      "comment" : "Display name of the log inspector subagent trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log Inspector"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inspector de registros"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inspecteur de logs"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ログ調査"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日志巡检"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-log-inspector-purpose" : {
+      "comment" : "User-facing description of the log inspector trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clusters and explains errors, stack traces and log excerpts. Read-only, no shell."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agrupa y explica errores, trazas y extractos de registros. Solo lectura, sin shell."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regroupe et explique erreurs, traces et extraits de logs. Lecture seule, sans shell."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エラー・スタックトレース・ログ抜粋をクラスタリングして説明します。読み取り専用、シェルなし。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对报错、堆栈与日志片段聚类并解释。只读，无 shell。"
+          }
+        }
+      }
+    },
     "agent-delegation.profile-reviewer-name" : {
       "comment" : "Display name of the reviewer subagent trade",
       "extractionState" : "manual",
@@ -177,6 +537,150 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "评审"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-security-guard-name" : {
+      "comment" : "Display name of the security guard subagent trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Security Guard"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardia de seguridad"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Garde de sécurité"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安全判定"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安全判定"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-security-guard-purpose" : {
+      "comment" : "User-facing description of the security guard trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decides whether a command is safe to run unattended. No tools — it judges the command, it never runs it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decide si un comando puede ejecutarse sin supervisión. Sin herramientas: juzga el comando, nunca lo ejecuta."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Décide si une commande peut s'exécuter sans surveillance. Sans outils : elle juge la commande, ne l'exécute jamais."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コマンドを無人実行してよいかを判定します。ツールなし——判定するだけで、実行はしません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "判断某条命令能否无人值守执行。无工具——只判断，从不执行。"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-test-fixer-name" : {
+      "comment" : "Display name of the test fixer subagent trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Test Fixer"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reparador de pruebas"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Répara-tests"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テスト修復"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "测试修复"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-test-fixer-purpose" : {
+      "comment" : "User-facing description of the test fixer trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fixes a failing test to green inside the files it was given. The verifier command decides success, not the model."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deja en verde una prueba fallida dentro de los archivos indicados. El comando verificador decide el éxito, no el modelo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fait repasser un test au vert dans les fichiers fournis. C'est la commande de vérification qui décide, pas le modèle."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "渡されたファイル内で失敗テストをグリーンにします。成功を決めるのは検証コマンドであり、モデルではありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在给定文件范围内把失败测试修到全绿。成功与否由验证命令判定，不是模型说了算。"
           }
         }
       }

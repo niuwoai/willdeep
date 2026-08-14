@@ -528,6 +528,16 @@ enum AgentSubagentRunner {
         var wasReported: Bool { prompt > 0 || completion > 0 }
     }
 
+    /// One execution of a task packet's verifier command.
+    ///
+    /// Pass/fail is the command's exit code, never the model's opinion:
+    /// `run_command` returns normally on exit 0 and throws `.commandFailed`
+    /// otherwise, so there is no output text to misread.
+    struct VerifierRun: Equatable {
+        let passed: Bool
+        let output: String
+    }
+
     struct Outcome: Equatable {
         let report: String
         let usageTokens: Int
@@ -537,6 +547,12 @@ enum AgentSubagentRunner {
         var usageSplit = UsageSplit()
         let roundCount: Int
         let toolInvocationCount: Int
+        /// Nil when the run had no verifier at all — distinct from `false`,
+        /// which means the command ran and did not pass. "Not verified" must
+        /// never be counted as a verified failure.
+        var verifierPassed: Bool? = nil
+        /// How many times the verifier ran. 0 when there was no verifier.
+        var verifierAttempts: Int = 0
         /// Per-round record for the subagent inspector. The runner produces
         /// the rounds; the caller owns the run identity and stamps them into
         /// an `AgentSubagentTranscript` before persisting.
@@ -559,15 +575,23 @@ enum AgentSubagentRunner {
         workspaceURL: URL?,
         outputSchema: AgentStructuredSchema? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
-        writeAccess: AgentSubagentWriteAccess? = nil
+        writeAccess: AgentSubagentWriteAccess? = nil,
+        jobPromptIsHosted: Bool = false
     ) -> String {
         var lines: [String] = []
         lines.append("You are a focused subagent spawned by a coding agent to complete one task.")
         // `deep`'s own section only restates the generic opening, so it is
         // skipped — but a user-authored soul section on `deep` is not generic
         // and must still be sent.
-        let capabilitySection = profile.capabilityPromptSection
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        //
+        // A hosted trade's job section is prepended by the relay, so sending
+        // ours too would stack two copies of the same instructions and burn
+        // the tokens twice. The invariant rules below are never hosted: they
+        // are the client's safety boundary and always ship from here.
+        let capabilitySection = jobPromptIsHosted
+            ? ""
+            : profile.capabilityPromptSection
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         let isRedundantDeepSection = profile.id == AgentSubagentProfileCatalog.deepID
             && capabilitySection == AgentSubagentProfileCatalog.deep.capabilityPromptSection
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -579,7 +603,7 @@ enum AgentSubagentRunner {
         }
         if let writeAccess {
             lines.append("""
-            The ONLY file you may edit is `\(writeAccess.targetRelativePath)`. Patches touching any \
+            The ONLY files you may edit are \(writeAccess.displayList). Patches touching any \
             other path are rejected automatically.
             """)
         }
@@ -591,9 +615,9 @@ enum AgentSubagentRunner {
             // contradicted rule is worse than no rule.
             lines.append("""
             Rules:
-            - You have READ access plus ONE write tool (`apply_patch`), scoped to the single file named above. Everything else is denied.
+            - You have READ access plus ONE write tool (`apply_patch`), scoped to the files named above. Everything else is denied.
             - You cannot ask the user anything. Make reasonable assumptions and note them.
-            - Read the file before patching it. Keep the change minimal and consistent with surrounding code.
+            - Read a file before patching it. Keep the change minimal and consistent with surrounding code.
             - Work autonomously until the edit is done, then STOP calling tools and write your final report as a normal message.
             - Your final message IS the deliverable returned to the parent agent. State exactly what you changed and why, and flag anything you deliberately left alone.
             """)
@@ -765,6 +789,10 @@ enum AgentSubagentRunner {
         outputSchema: AgentStructuredSchema? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         writeAccess: AgentSubagentWriteAccess? = nil,
+        /// Command that decides whether this run succeeded. When present the
+        /// worker's own "done" is never accepted on its word.
+        verifierCommand: String? = nil,
+        verifierMaxAttempts: Int = AgentSubagentTaskPacket.defaultMaxAttempts,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil,
         onProgress: ((_ round: Int, _ toolInvocations: Int) -> Void)? = nil
     ) async throws -> Outcome {
@@ -780,7 +808,15 @@ enum AgentSubagentRunner {
                     workspaceURL: workspaceURL,
                     outputSchema: outputSchema,
                     profile: profile,
-                    writeAccess: writeAccess
+                    writeAccess: writeAccess,
+                    // Derived rather than passed in: the relay hosts this
+                    // trade's job prompt exactly when we are actually calling
+                    // its hosted virtual model. Signed out, binding resolution
+                    // never pins that model, and an escalated re-run lands on
+                    // the parent's model — both correctly fall back to sending
+                    // our own copy, and the flag cannot drift from reality.
+                    jobPromptIsHosted: profile.hostedVirtualModel != nil
+                        && configuration.model == profile.hostedVirtualModel
                 )
             ),
             AgentMessage(role: .user, content: prompt),
@@ -788,6 +824,8 @@ enum AgentSubagentRunner {
         var totalTokens = 0
         var usageSplit = UsageSplit()
         var toolInvocations = 0
+        var verifierAttempts = 0
+        var verifierPassed: Bool?
         // The trade's narrowed tool table — resent every round, so this is
         // where a cheap profile earns most of its savings.
         var toolList = toolDescriptors(
@@ -908,6 +946,8 @@ enum AgentSubagentRunner {
                             usageSplit: usageSplit,
                             roundCount: round,
                             toolInvocationCount: toolInvocations,
+                            verifierPassed: verifierPassed,
+                            verifierAttempts: verifierAttempts,
                             rounds: sealingRound(),
                             didTruncate: didTruncateRecord
                         )
@@ -921,6 +961,67 @@ enum AgentSubagentRunner {
             // 文本会收到纠正回合，而不是第一轮就把整个 Goal Team 判死。
             if toolCalls.isEmpty {
                 let report = content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // The worker says it is finished. With a verifier configured,
+                // that claim is not the verdict — the command is. Run it here
+                // rather than trusting the report, because "I fixed it" is
+                // exactly the sentence a stuck small model produces.
+                if let verifierCommand, verifierPassed != true {
+                    let verification = await runVerifier(
+                        command: verifierCommand,
+                        workspaceURL: workspaceURL,
+                        runtimeDescriptor: runtimeDescriptor,
+                        workspaceLocation: workspaceLocation
+                    )
+                    verifierAttempts += 1
+                    verifierPassed = verification.passed
+
+                    if !verification.passed, verifierAttempts < verifierMaxAttempts {
+                        transcript.append(AgentMessage(
+                            role: .user,
+                            content: verifierRetryMessage(
+                                command: verifierCommand,
+                                output: verification.output,
+                                attempt: verifierAttempts,
+                                maxAttempts: verifierMaxAttempts,
+                                payloadLimit: profile.toolPayloadCharacterLimit
+                            )
+                        ))
+                        recordedRound.finishedAt = Date()
+                        recordedRounds.append(recordedRound)
+                        continue
+                    }
+
+                    if !verification.passed {
+                        // Attempts exhausted: report the failure honestly and
+                        // hand the caller the evidence. A wrong "done" here
+                        // would poison every KPI built on this field.
+                        let clamped = AgentSubagentTranscript.clamped(
+                            verification.output,
+                            to: profile.toolPayloadCharacterLimit
+                        )
+                        return Outcome(
+                            report: """
+                            [Verifier still failing after \(verifierAttempts) attempt\(verifierAttempts == 1 ? "" : "s"). \
+                            `\(verifierCommand)` did not exit 0.]
+
+                            \(report)
+
+                            Last verifier output:
+                            \(clamped.text)
+                            """,
+                            usageTokens: totalTokens,
+                            usageSplit: usageSplit,
+                            roundCount: round,
+                            toolInvocationCount: toolInvocations,
+                            verifierPassed: false,
+                            verifierAttempts: verifierAttempts,
+                            rounds: sealingRound(),
+                            didTruncate: didTruncateRecord
+                        )
+                    }
+                }
+
                 if let outputSchema {
                     if let fallback = validatedStructuredOutputFallback(
                         in: report,
@@ -932,6 +1033,8 @@ enum AgentSubagentRunner {
                             usageSplit: usageSplit,
                             roundCount: round,
                             toolInvocationCount: toolInvocations,
+                            verifierPassed: verifierPassed,
+                            verifierAttempts: verifierAttempts,
                             rounds: sealingRound(),
                             didTruncate: didTruncateRecord
                         )
@@ -950,6 +1053,8 @@ enum AgentSubagentRunner {
                     usageSplit: usageSplit,
                     roundCount: round,
                     toolInvocationCount: toolInvocations,
+                    verifierPassed: verifierPassed,
+                    verifierAttempts: verifierAttempts,
                     rounds: sealingRound(),
                     didTruncate: didTruncateRecord
                 )
@@ -997,6 +1102,20 @@ enum AgentSubagentRunner {
 
         // Free-text 模式 round cap 到了 — return partial value rather than
         // throwing away every token the child already spent.
+        //
+        // Run the verifier once even here: a worker can run out of rounds
+        // narrating after the change already landed, and "did the tests pass"
+        // is worth one command before we call the run a loss.
+        if let verifierCommand, verifierPassed == nil {
+            let verification = await runVerifier(
+                command: verifierCommand,
+                workspaceURL: workspaceURL,
+                runtimeDescriptor: runtimeDescriptor,
+                workspaceLocation: workspaceLocation
+            )
+            verifierAttempts += 1
+            verifierPassed = verification.passed
+        }
         let lastText = transcript.last(where: { $0.role == .assistant && !$0.content.isEmpty })?.content ?? ""
         let note = "[Subagent stopped after \(roundLimit) tool rounds without a final report. Last progress shown below.]"
         return Outcome(
@@ -1005,6 +1124,8 @@ enum AgentSubagentRunner {
             usageSplit: usageSplit,
             roundCount: roundLimit,
             toolInvocationCount: toolInvocations,
+            verifierPassed: verifierPassed,
+            verifierAttempts: verifierAttempts,
             rounds: recordedRounds,
             didTruncate: didTruncateRecord
         )
@@ -1095,9 +1216,81 @@ enum AgentSubagentRunner {
         return (true, trimmed)
     }
 
-    /// Execute one child tool call, enforcing the read-only contract.
-    /// Errors are folded into the payload string — the child should see
-    /// what went wrong and adapt, exactly like the parent loop does.
+    /// Whether `command` clears the deterministic read-tier bar on its own.
+    ///
+    /// Not the whole gate: a verifier that writes (a build emitting objects, a
+    /// test writing fixtures) is still a legitimate verdict, so the spawn site
+    /// sends anything that fails this check to the security-guard judge rather
+    /// than refusing it. What must never happen is a verifier running
+    /// unattended with no gate at all.
+    static func verifierCommandIsReadTier(_ command: String, workspaceURL: URL?) -> Bool {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string(trimmed)],
+            rootDirectory: workspaceURL
+        ) == .read
+    }
+
+    /// Run a task packet's verifier command and report the verdict.
+    ///
+    /// Deliberately not a tool the worker calls: if the model owned the
+    /// verification step it could skip it, misread it, or claim it ran. Here
+    /// the runner runs it, and the exit code is the whole judgement.
+    static func runVerifier(
+        command: String,
+        workspaceURL: URL?,
+        runtimeDescriptor: RuntimeDescriptor? = nil,
+        workspaceLocation: WorkspaceLocation? = nil
+    ) async -> VerifierRun {
+        let context = AgentToolContext(
+            rootDirectory: workspaceURL,
+            workspaceLocation: workspaceLocation,
+            runtimeDescriptor: runtimeDescriptor
+        )
+        do {
+            let result = try await AgentToolRunner.run(
+                name: "run_command",
+                arguments: ["command": .string(command)],
+                context: context
+            )
+            return VerifierRun(passed: true, output: result.payload)
+        } catch let error as AgentToolError {
+            if case .commandFailed(_, let output) = error {
+                return VerifierRun(passed: false, output: output)
+            }
+            return VerifierRun(passed: false, output: error.localizedDescription)
+        } catch {
+            return VerifierRun(passed: false, output: error.localizedDescription)
+        }
+    }
+
+    /// The failure text handed back to the worker between attempts. Trimmed to
+    /// the trade's payload budget so a 200-line build log cannot eat the
+    /// window the fix itself needs.
+    nonisolated static func verifierRetryMessage(
+        command: String,
+        output: String,
+        attempt: Int,
+        maxAttempts: Int,
+        payloadLimit: Int
+    ) -> String {
+        let clamped = AgentSubagentTranscript.clamped(output, to: payloadLimit)
+        let truncationNote = clamped.didTruncate ? "\n… (output truncated)" : ""
+        return """
+        The verifier failed (attempt \(attempt) of \(maxAttempts)).
+
+        `\(command)` did not exit 0:
+        \(clamped.text)\(truncationNote)
+
+        You are not done. Read the failure, refine your hypothesis, and fix the \
+        cause — do not repeat an attempt you already made, and do not weaken the \
+        check to make it pass. If you now believe the fix belongs outside the \
+        files you may edit, stop and say so instead of guessing.
+        """
+    }
+
     private static func executeToolCall(
         _ call: AgentMessageToolCall,
         workspaceURL: URL?,

@@ -59,6 +59,12 @@ enum AgentNetworkSupport {
     /// Agent session (see `SomeIMRequestContext`) and are only attached to
     /// `some-im` requests — never generated in this helper.
     static let willDeepSessionHeaderName = "x-willdeep-session-id"
+    /// The relay bills and logs against this header specifically: its usage
+    /// ledger reads `X-Playground-Session-ID` and ignores our own session
+    /// header, so sending only the latter leaves `usage_records.session_id`
+    /// empty and makes worker traffic impossible to attribute to the chat
+    /// that spawned it. Same opaque UUID, sent alongside.
+    static let relaySessionHeaderName = "X-Playground-Session-ID"
     static let willDeepWorkspaceHeaderName = "x-willdeep-workspace-id"
     static let willDeepResponsesStateHeaderName = "x-willdeep-responses-state"
     static let willDeepResponsesStateProtocol = "v1"

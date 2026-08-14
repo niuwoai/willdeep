@@ -1,0 +1,178 @@
+//
+//  AgentSubagentTaskPacket.swift
+//  WillDeep
+//
+//  The compiled task a worker receives instead of a bare sentence.
+//
+//  A small model with a 32K window cannot afford to discover its own context:
+//  every grep it runs to find the file it was supposed to edit is window it no
+//  longer has for the fix. So the parent, which already knows where things are,
+//  compiles what it knows into a packet — goal, the relevant files' contents,
+//  facts already established, constraints, and the command that decides
+//  success — and the worker starts hot.
+//
+//  See docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md §3.
+//
+
+import Foundation
+
+nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
+    /// What "done" looks like, in the parent's words.
+    var goal: String
+    /// Workspace-relative paths whose contents are inlined for the worker.
+    /// Reading context only — being handed a file to read never implies
+    /// permission to write it (that comes from `target_files`).
+    var relevantFiles: [String]
+    /// What the parent already established, so the worker does not re-derive
+    /// it at its own expense.
+    var knownFacts: [String]
+    var constraints: [String]
+    /// The command whose exit code decides success. Without it a worker's
+    /// "done" is just an assertion.
+    var verifierCommand: String?
+    var maxAttempts: Int
+
+    static let defaultMaxAttempts = 4
+    static let maxAttemptsCeiling = 6
+
+    /// Total characters of inlined file content for a 32K-window worker.
+    /// Roughly a third of the window: enough for the two or three files a
+    /// local fix touches, and hard-capped because the alternative failure —
+    /// blowing the window on round one — costs the whole run.
+    static let inlineCharacterBudget = 24_000
+
+    init(
+        goal: String,
+        relevantFiles: [String] = [],
+        knownFacts: [String] = [],
+        constraints: [String] = [],
+        verifierCommand: String? = nil,
+        maxAttempts: Int = defaultMaxAttempts
+    ) {
+        self.goal = goal
+        self.relevantFiles = relevantFiles
+        self.knownFacts = knownFacts
+        self.constraints = constraints
+        self.verifierCommand = verifierCommand
+        self.maxAttempts = min(max(1, maxAttempts), Self.maxAttemptsCeiling)
+    }
+
+    /// Parse the `task` argument of a `spawn_agent` call. Returns nil when the
+    /// argument is absent or carries no usable goal — callers then fall back to
+    /// the plain prompt, so an older prompt keeps working unchanged.
+    static func parse(_ value: AgentJSONValue?) -> AgentSubagentTaskPacket? {
+        // The schema declares `task` as a JSON string (the tool parameter
+        // vocabulary has no object type), but models routinely send a real
+        // object anyway. Accept both rather than lose a whole spawn to a
+        // formatting preference.
+        if case .string(let raw)? = value {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return parse(AgentJSONValue.decode(from: trimmed))
+        }
+        guard case .object(let fields)? = value else { return nil }
+        let goal = fields["goal"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !goal.isEmpty else { return nil }
+
+        var verifier: String?
+        if case .object(let verifierFields)? = fields["verifier"] {
+            verifier = verifierFields["command"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if let inline = fields["verifier"]?.stringValue() {
+            // Tolerate `verifier: "swift test"`: models routinely flatten a
+            // one-key object, and rejecting that would cost a whole round.
+            verifier = inline.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if verifier?.isEmpty == true { verifier = nil }
+
+        let attempts: Int
+        if case .number(let raw)? = fields["max_attempts"] {
+            attempts = Int(raw)
+        } else {
+            attempts = defaultMaxAttempts
+        }
+
+        return AgentSubagentTaskPacket(
+            goal: goal,
+            relevantFiles: stringList(fields["relevant_files"]),
+            knownFacts: stringList(fields["known_facts"]),
+            constraints: stringList(fields["constraints"]),
+            verifierCommand: verifier,
+            maxAttempts: attempts
+        )
+    }
+
+    private static func stringList(_ value: AgentJSONValue?) -> [String] {
+        guard case .array(let items)? = value else { return [] }
+        return items.compactMap {
+            let text = $0.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (text?.isEmpty == false) ? text : nil
+        }
+    }
+
+    /// The worker's opening user message: the packet rendered, with each
+    /// relevant file's contents inlined.
+    ///
+    /// `readFile` returns nil for anything it cannot read; a missing file is
+    /// reported in place rather than silently dropped, because "the file you
+    /// named isn't there" is information the worker needs before it starts
+    /// inventing one.
+    func openingMessage(
+        fallbackPrompt: String,
+        readFile: (String) -> String?
+    ) -> String {
+        var sections: [String] = ["## Task\n\(goal)"]
+
+        if !fallbackPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           fallbackPrompt.trimmingCharacters(in: .whitespacesAndNewlines) != goal {
+            sections.append("## Details\n\(fallbackPrompt)")
+        }
+        if !knownFacts.isEmpty {
+            sections.append("## Known facts\n" + knownFacts.map { "- \($0)" }.joined(separator: "\n"))
+        }
+        if !constraints.isEmpty {
+            sections.append(
+                "## Constraints (do not violate)\n"
+                    + constraints.map { "- \($0)" }.joined(separator: "\n")
+            )
+        }
+        if let verifierCommand {
+            sections.append("""
+            ## Verifier
+            `\(verifierCommand)`
+            This command decides whether you succeeded. It will be run for you; \
+            you are not done until it exits 0.
+            """)
+        }
+        if let files = inlinedFilesSection(readFile: readFile) {
+            sections.append(files)
+        }
+        return sections.joined(separator: "\n\n")
+    }
+
+    private func inlinedFilesSection(readFile: (String) -> String?) -> String? {
+        guard !relevantFiles.isEmpty else { return nil }
+        var remaining = Self.inlineCharacterBudget
+        var blocks: [String] = []
+
+        for path in relevantFiles {
+            guard let contents = readFile(path) else {
+                blocks.append("### \(path)\n(could not be read — it may not exist at this path)")
+                continue
+            }
+            if remaining <= 0 {
+                blocks.append("### \(path)\n(omitted: inline budget exhausted — read it yourself if you need it)")
+                continue
+            }
+            let slice = String(contents.prefix(remaining))
+            remaining -= slice.count
+            let truncationNote = slice.count < contents.count
+                ? "\n… (truncated at the inline budget — use `read_file` for the rest)"
+                : ""
+            blocks.append("### \(path)\n```\n\(slice)\n```\(truncationNote)")
+        }
+
+        return "## Relevant files\n" + blocks.joined(separator: "\n\n")
+    }
+}

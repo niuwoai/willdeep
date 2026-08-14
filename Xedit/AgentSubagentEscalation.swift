@@ -35,6 +35,15 @@ nonisolated enum AgentSubagentEscalation {
         profile: AgentSubagentProfile
     ) -> Bool {
         guard profile.escalation == .retryWithParentModel else { return false }
+        // A verifier that ran and did not pass is the least ambiguous failure
+        // this system can observe — no prose to interpret, no report length to
+        // guess at. It outranks the other triggers precisely because it is the
+        // one signal that cannot be faked by a confident-sounding model.
+        if outcome.verifierPassed == false { return true }
+        // Conversely, a passing verifier is proof the cheap trade did the job;
+        // escalating then would pay twice for work already finished, however
+        // terse the write-up.
+        if outcome.verifierPassed == true { return false }
         if outcome.roundCount >= profile.maxRounds { return true }
         let report = outcome.report.trimmingCharacters(in: .whitespacesAndNewlines)
         return report.count < minimumUsefulReportCharacters

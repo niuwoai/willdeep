@@ -204,20 +204,67 @@ extension AppState {
             )
         }
 
-        // Editor trades need an approved, locked target before anything runs.
+        // Writing trades need an approved, locked target set before anything
+        // runs. `target_file` is the editor's single-file form; `target_files`
+        // is the fixer form. The writable set is always declared explicitly
+        // and never inferred from the task packet's `relevant_files`: those
+        // are reading context, and "you may read it" is not "you may rewrite
+        // it" — the approval card has to show the exact write scope.
         var writeAccess: AgentSubagentWriteAccess?
         if profile.requiresWriteAccess {
-            guard let rawTarget = arguments["target_file"]?.stringValue(),
-                  let normalizedTarget = AgentSubagentWriteAccess.normalizedTargetPath(rawTarget) else {
+            var rawTargets: [String] = []
+            if case .array(let values)? = arguments["target_files"] {
+                rawTargets = values.compactMap { $0.stringValue() }
+            } else if let single = arguments["target_file"]?.stringValue() {
+                rawTargets = [single]
+            }
+            guard !rawTargets.isEmpty,
+                  let access = AgentSubagentWriteAccess(targetRelativePaths: rawTargets) else {
                 finishRecord(
                     status: .failed,
-                    summary: "missing target_file",
-                    payload: "Tool error: `profile=\"editor\"` requires a workspace-relative `target_file`. Absolute paths, `~`, and `..` are rejected.",
-                    errorMessage: "Missing target_file"
+                    summary: "missing target files",
+                    payload: "Tool error: `profile=\"\(profile.id)\"` requires the files it may edit: `target_file` (one path) or `target_files` (a list). Paths are workspace-relative; absolute paths, `~`, and `..` are rejected.",
+                    errorMessage: "Missing target files"
                 )
                 return
             }
-            writeAccess = AgentSubagentWriteAccess(targetRelativePath: normalizedTarget)
+            writeAccess = access
+        }
+
+        // A task packet lets the worker start hot: the parent already knows
+        // which files matter, so their contents ride along instead of costing
+        // the worker half its window to rediscover.
+        let taskPacket = AgentSubagentTaskPacket.parse(arguments["task"])
+        if let taskPacket {
+            prompt = await composedTaskPacketPrompt(
+                packet: taskPacket,
+                fallbackPrompt: prompt,
+                workspaceURL: workspaceURL,
+                runtimeDescriptor: runtimeDescriptor,
+                workspaceLocation: workspaceLocation
+            )
+        }
+        // The verifier runs unattended and repeatedly, so it needs a gate —
+        // but "read-only" is the wrong gate. Plenty of honest verifiers write
+        // (a build emits objects, a test writes fixtures), and refusing them
+        // would push users back to trusting the model's own "it passes".
+        // So: read-tier commands go straight through, and anything else is put
+        // to the security-guard judge — the same choke point every other
+        // unattended command in the app already goes through.
+        var verifierCommand = taskPacket?.verifierCommand
+        if let candidate = verifierCommand,
+           !AgentSubagentRunner.verifierCommandIsReadTier(candidate, workspaceURL: workspaceURL) {
+            let verdict = await safetyJudgeApproval(
+                toolName: "run_command",
+                command: candidate,
+                taskContext: taskPacket?.goal ?? ""
+            )
+            if verdict == nil {
+                verifierCommand = nil
+                profileNotices.append(
+                    "Note: the `verifier.command` `\(candidate)` was not cleared by the security guard, so it did not run. The subagent reported its own result instead, which is weaker evidence — supply a verifier the guard accepts if you need a real verdict."
+                )
+            }
         }
 
         let childConfiguration = resolvedSubagentConfiguration(
@@ -278,15 +325,21 @@ extension AppState {
         // file would interleave hunks against a moving base.
         if let writeAccess {
             guard AgentSubagentEditorLock.shared.acquire(
-                path: writeAccess.targetRelativePath,
+                paths: writeAccess.targetRelativePaths,
                 parentRuntimeID: runtime.id,
                 runID: runID
             ) else {
+                let busy = AgentSubagentEditorLock.shared.conflictingPaths(
+                    writeAccess.targetRelativePaths,
+                    parentRuntimeID: runtime.id,
+                    runID: runID
+                )
+                let busyList = busy.map { "`\($0)`" }.joined(separator: ", ")
                 finishRecord(
                     status: .failed,
-                    summary: "file locked",
-                    payload: "Tool error: another subagent is already editing `\(writeAccess.targetRelativePath)`. Wait for it to finish, or edit a different file.",
-                    errorMessage: "Target file locked"
+                    summary: "files locked",
+                    payload: "Tool error: another subagent is already editing \(busyList). Wait for it to finish, or narrow this spawn to files it does not hold.",
+                    errorMessage: "Target files locked"
                 )
                 return
             }
@@ -319,7 +372,8 @@ extension AppState {
                     cachedPromptTokens: outcome?.usageSplit.cachedPrompt ?? 0,
                     roundCount: outcome?.roundCount ?? 0,
                     toolInvocationCount: outcome?.toolInvocationCount ?? 0,
-                    escalatedFromModel: escalatedFrom
+                    escalatedFromModel: escalatedFrom,
+                    verifierPassed: outcome?.verifierPassed
                 ),
                 runID: runID,
                 runtime: runtime
@@ -344,7 +398,11 @@ extension AppState {
                     finishedAt: Date(),
                     didTruncate: outcome?.didTruncate ?? false,
                     profileID: profile.id,
-                    escalatedFromModel: escalatedFrom
+                    escalatedFromModel: escalatedFrom,
+                    verifierCommand: verifierCommand,
+                    verifierPassed: outcome?.verifierPassed,
+                    attemptCount: outcome?.verifierAttempts,
+                    repoCommit: AppState.workspaceHeadCommitShortSHA(for: workspaceURL)
                 )
             )
         }
@@ -389,6 +447,9 @@ extension AppState {
                 workspaceLocation: workspaceLocation,
                 profile: profile,
                 writeAccess: writeAccess,
+                verifierCommand: verifierCommand,
+                verifierMaxAttempts: taskPacket?.maxAttempts
+                    ?? AgentSubagentTaskPacket.defaultMaxAttempts,
                 patchProposalSink: editorPatchSink,
                 onProgress: { round, toolInvocations in
                     let toolPart = toolInvocations > 0 ? " · \(toolInvocations) 次工具" : ""
@@ -474,6 +535,48 @@ extension AppState {
                 errorMessage: error.localizedDescription
             )
         }
+    }
+
+    /// Workspace HEAD, short form, for anchoring a transcript as a replayable
+    /// case. Nil outside a git checkout — a case without a commit is still a
+    /// useful record, just not a reproducible one.
+    nonisolated static func workspaceHeadCommitShortSHA(for workspaceURL: URL?) -> String? {
+        guard let workspaceURL,
+              let root = findGitRepositoryRoot(startingAt: workspaceURL) else { return nil }
+        let output = runGit(arguments: ["rev-parse", "--short", "HEAD"], in: root)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return output.isEmpty ? nil : output
+    }
+
+    /// Render a task packet into the worker's opening message, inlining each
+    /// relevant file's contents.
+    ///
+    /// Files are read through the normal tool path rather than off disk so a
+    /// remote (SSH) workspace resolves the same way the worker's own reads
+    /// would — inlining that silently only worked locally would make the
+    /// packet a local-only feature without saying so.
+    func composedTaskPacketPrompt(
+        packet: AgentSubagentTaskPacket,
+        fallbackPrompt: String,
+        workspaceURL: URL?,
+        runtimeDescriptor: RuntimeDescriptor?,
+        workspaceLocation: WorkspaceLocation?
+    ) async -> String {
+        var contents: [String: String] = [:]
+        let context = AgentToolContext(
+            rootDirectory: workspaceURL,
+            workspaceLocation: workspaceLocation,
+            runtimeDescriptor: runtimeDescriptor
+        )
+        for path in packet.relevantFiles {
+            guard let result = try? await AgentToolRunner.run(
+                name: "read_file",
+                arguments: ["path": .string(path)],
+                context: context
+            ) else { continue }
+            contents[path] = result.payload
+        }
+        return packet.openingMessage(fallbackPrompt: fallbackPrompt) { contents[$0] }
     }
 
     /// Copy the run id onto the persisted assistant tool call so reopening

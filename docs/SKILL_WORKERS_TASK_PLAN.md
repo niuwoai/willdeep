@@ -81,6 +81,16 @@ S 与 O 无依赖可并行；C 依赖 S（虚拟模型可用）与 O（有仪表
 ## 8. 当前状态
 
 - [x] 规划与三份文档完成（主设计 / 服务端定义 / 本清单）
-- [ ] **等待用户「开始」指令**
-- [ ] S / O 并行动工
-- [ ] C → D → E
+- [x] **O 阶段（观测）完成并合回 develop**：1.259.0-rc1
+- [x] **C 阶段（闭环）完成**：C1 / C1b / C2 / C3 / C4 / C5 / C6 全部落地
+- [ ] S 阶段：服务端配置（rocky 执行，见 `SOMEIM_WORKER_VIRTUAL_MODELS.md` §5，现为 **9** 个工种档）
+- [ ] D 阶段：露脸触发点
+- [ ] E 阶段：扩面与回执端点
+
+### 8.1 实施中新增/修正的决定（2026-08-15）
+
+1. **`extended_billing` 租户标签不再是 Phase 1 必需**。每个工种有独立虚拟模型名，per-skill 维度经 `usage_records.request_model` 已免费获得；`X-Api-Tag` 只补 attempt/parent 这类细分，推迟到确有问题答不上来时再开。
+2. **客户端补发 `X-Playground-Session-ID`**（C6 实做内容）。原先只发 `x-willdeep-session-id`，而网关的用量账本只读前者，导致我们全部流量的 `usage_records.session_id` 为空、无法在服务端按会话聚合。
+3. **verifier 准入从「必须只读」改为「read 档直放 + 其余走 security_guard 裁判」**。理由见主设计 §4：诚实的 verifier 本来就会写。
+4. **新增两个判断型工种 `security_guard` / `judge`**，均为无工具、`maxRounds: 1` 的 32B 档，服务端虚拟模型 `someim-32b-security-guard` / `someim-32b-judge`。注意与既有 `someim-security-guard`（网关 replace 模式、服务于主循环自动审批）并存不合并。
+5. **写通道泛化为文件集**：`target_file`（editor，单文件）与 `target_files`（fixer，列表）并存；可写范围**必须显式声明**，绝不从 `task.relevant_files` 推断——「可读」不等于「可写」，审批卡要展示确切的写范围。
