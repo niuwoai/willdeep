@@ -1,7 +1,25 @@
 # Changelog
 
-> 当前文件保留最新版本（1.255.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.255.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.255.0-rc2 - 2026-08-14
+
+### Fixed
+
+- **智能审批裁判不再在复杂命令上静默掉线。** `judgeMaxOutputTokens` 从 512 提到 **8192**，`judgeTimeout` 从 20s 提到 **35s**。根因：现在裁判路由到的每个模型都是推理档——`someim-security-guard`（网关托管策略，实测后端 `Qwen/Qwen3.6-27B`）在吐 `<verdict>` 标签前先写 1800–3100 字符的私有推理，512 的预算连推理都装不下，回复被截断在 `<verdict>YES` 这种没有闭合标签的半截上，解析成 `.unclear` 后静默回落人工审批卡。**这个失败模式的方向最坏：命令越复杂推理越长、越容易掉线，而复杂命令恰恰是裁判存在的理由。** 2026-08-14 实测五类命令，512 下 3 例失败（多段 `&&` 链、带凭据的 `curl`、灰色地带 `UPDATE`），8192 下 5 例全部拿到完整裁决、最贵一次花 1349 tokens。审计日志 `judge.jsonl` 里 `someim-security-guard` 的 allow 率只有 57.0%（unavailable 41.9%）、而普通会话模型 `someim-auto-flash` 有 94.0%，差距基本来自这一条。
+- 预算与超时必须同步抬。8192 预算下实测最坏延迟 **16.9s**（1349 tokens，约 12.7 tok/s），旧的 20s 只剩三秒余量——只提预算会把「回复被截断」换成「请求超时」，用户照样落到同一张人工审批卡上。35s 约为实测最坏值的两倍；重复命令不会重复付这个延迟，allow 会按 `safetyJudgeVerdictCacheTTL` 缓存。
+- Anthropic 裁判请求按模型上限钳制 `max_tokens`。裁判预算（8192）高于 claude-3 档接受的上限（4096），原样发出去是硬 400，会让裁判在这些模型上整个变黑而不是降级。现在复用与普通回合同一套 `maxOutputTokens(forModel:configured:)` 钳制——推理短一点但标签闭合，好过没有裁决。
+
+### Changed
+
+- `judgeMaxReasoningOutputTokens`（Responses 分支专用的 1024）并入 `judgeMaxOutputTokens`。既然所有裁判路由都是推理档，「普通档 / 推理档」这个分级已经没有意义，留着只会让两个数字各自漂移。
+
+### Tests
+
+- 新增 `judgeBudgetAndTimeoutStayInStep`：锁住预算 ≥ 4096 与超时 ≥ 30s 这对必须同步的不变量，并在断言里记下实测依据。
+- 新增 `theJudgeBudgetNeverExceedsALegacyModelsCap`：claude-3 档钳到 4096、claude-3.5/3.7 钳到 8192、当代模型原样放行。
+- 修好 `AgentHeaderEditorEntryTests` 里一条过时的源码字符串守卫（与本次裁判改动无关的预存红）。1.254.0-rc1 的安全快捷方式 JSON 编辑器有意把终端快捷方式的编辑从 `NSWorkspace.shared.open(url)` 改成应用内 `openWindow(value: TerminalShortcutEditorRequest(...))`，断言没跟上，全量门禁自 15:27 起一直红。断言按新事实重写：快捷方式 JSON 走应用内编辑器窗口（录制里带 `${secret:...}`，交给外部 App 会把密钥泄露到别的进程），普通文件仍走系统默认 App，且这个例外不得成为老 Editor 场景复活的后门。
 
 ## 1.255.0-rc1 - 2026-08-14
 

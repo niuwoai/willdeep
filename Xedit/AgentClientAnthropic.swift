@@ -193,9 +193,22 @@ struct AnthropicMessagesAdapter {
         // block, so mark it `cache_control: ephemeral` — the identical prefix
         // is served from Anthropic's prompt cache across judge calls; only
         // the per-call <command> in the user message is uncached.
+        // Anthropic rejects a `max_tokens` above the model's own ceiling, and
+        // the judge budget (8192) sits above what the claude-3 tier accepts
+        // (4096). An out-of-range value is a 400, which the judge reports as
+        // `unavailable` — the whole judge would go dark on those models
+        // instead of degrading. Clamp to the model's ceiling; a shorter
+        // rationale that still closes its tag beats no verdict at all.
+        let judgeBudget = min(
+            AgentInjectionDefense.judgeMaxOutputTokens,
+            Self.maxOutputTokens(
+                forModel: configuration.model,
+                configured: AgentInjectionDefense.judgeMaxOutputTokens
+            )
+        )
         let body: [String: Any] = [
             "model": configuration.model,
-            "max_tokens": AgentInjectionDefense.judgeMaxOutputTokens,
+            "max_tokens": judgeBudget,
             "temperature": 0,
             "system": [
                 [
