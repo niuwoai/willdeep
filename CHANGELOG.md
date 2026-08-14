@@ -3,6 +3,27 @@
 > 当前文件保留最新版本（1.257.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.258.0-rc2 - 2026-08-14
+
+### Added
+
+- **切换界面语言后有明确的重启提示。** 以前改完语言只有一行灰色小字，改了像没改——弹窗当场说清「语言已更改为 X，重启后生效」，关掉弹窗后设置页里还留一条橙色横幅盯着你，直到真的重启。横幅和弹窗都带「立即重启」按钮：拉起一个守候进程盯着本进程的 pid，退干净了再 `open` 回来，不用用户自己去 Dock 上点两下。
+- **新增西班牙语和法语。** 语言选择器现在是 跟随系统 / 简体中文 / English / 日本語 / Español / Français 六项。日/西/法三种语言的界面文案各 3185 条全部翻译落库，覆盖率与简体中文一样是 100%。
+
+### Fixed
+
+- **网关客户端统计现在能识别 WillDeep。** 所有统一出站请求除既有 `User-Agent` 与 `X-App-Version` 外，新增 `X-Client-Name: WillDeep` 和同版本的 `X-Client-Version`，some.im 的客户端排行榜不再把 WillDeep 请求记成空客户端。
+
+- **往对话框里拖文件,现在真的会上传。** 以前拖一张图进去只得到一行 `/Users/…/微信图片_….jpg` 的文字,还因为路径以 `/` 开头触发了斜杠命令面板,弹出「没有匹配的命令」。根因不是没写拖放逻辑——SwiftUI 那层的 `.onDrop` 根本轮不上,`ComposerNSTextView` 作为 NSTextView 先把拖放事件吃掉,按默认行为把文件路径当文字插进缓冲区。改成在文本视图层拦截:文件和图片交给既有的附件管线(文件夹仍然按知识目录处理,多选拖放逐个收下),纯文本拖放保持原样插入。
+- **「最长任务时长」指标下线。** 概览条上的这一格连同背后的 `activeWorkDuration` 计算一起删掉——它每次统计都要把所有会话的消息遍历一遍算最大值,而统计面板本就吃力。
+
+- **日语选了等于没选。** `Xedit.xcodeproj` 的 `knownRegions` 只登记了 `en / Base / zh-Hans`，String Catalog 根本不会为日语生成 `ja.lproj`；加上 catalog 里日语只有 11 条译文，切过去之后整个界面照旧是英文。这次补齐 `knownRegions`（ja / es / fr），并把三种语言的界面文案全部翻译落库。
+- **新增 CI 守卫 `scripts/i18n_locale_registration_guard.rb`。** 钉死「Picker 里能选的语言 = knownRegions 里登记过的语言」，并要求语言切换界面自身（`settings.language.*`）在每种语言下都齐全——切过去之后至少得看得懂怎么切回来。挂在 `quality` 守卫组。
+
+### Changed
+
+- i18n 工具链补上多语言能力：`i18n_locale_batches.rb`（按语言切批次，带中文译文作消歧参考）、`i18n_merge_locale.rb`（文本级合并回 catalog）、`i18n_add_keys.rb`（增改少量 key 的多语言值）。都走文本级编辑而不是「parse → 全量 dump」，因为 catalog 现在是紧凑单行与展开多行混排，全量重写会把三万多行整体重排、淹没真实改动（`i18n_apply_translations.rb --verify` 现在就是红的，正是这个原因）。
+
 ## 1.257.0-rc1 - 2026-08-14
 
 ### Added
