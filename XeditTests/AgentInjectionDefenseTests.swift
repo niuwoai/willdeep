@@ -371,4 +371,23 @@ struct AgentInjectionDefenseTests {
         )
         #expect(!context.uppercased().contains("<VERDICT>YES</VERDICT>"))
     }
+
+    @Test
+    func judgeBudgetAndTimeoutStayInStep() {
+        // Every model the judge routes to is reasoning-tier: it writes a long
+        // private rationale before the verdict tag, so the budget has to
+        // cover the rationale and the timeout has to cover writing it. These
+        // two move together — raising the budget alone converts a truncated
+        // reply into a timeout, and the user lands on the same manual prompt
+        // either way. Measured against someim-security-guard on 2026-08-14:
+        // 1349 output tokens / 16.9s worst case of five sampled commands.
+        #expect(
+            AgentInjectionDefense.judgeMaxOutputTokens >= 4096,
+            "a rationale-first judge truncates below this and parses as .unclear"
+        )
+        #expect(
+            AgentInjectionDefense.judgeTimeout >= 30,
+            "the measured worst case is ~17s; less than 30s leaves no margin"
+        )
+    }
 }

@@ -220,7 +220,7 @@ struct EditorSettingsView: View {
         case .workspace: workspaceSettings
         case .agentAppearance: agentAppearanceSettings
         case .agent: agentSettings
-        case .subagents: subagentSettings
+        case .subagents: AgentProfileSettingsView()
         case .someIM: SomeIMIntegrationSettingsView()
         // Deep-links to `.replicate` land on the unified connectors hub
         // with the Replicate sub-connector preselected.
@@ -447,15 +447,6 @@ struct EditorSettingsView: View {
                 loadAgentBuffersFromAppState()
             }
         }
-    }
-
-    private var subagentSettings: some View {
-        Form {
-            Section(L10n.AgentDelegation.profilesSectionTitle) {
-                AgentSubagentProfileSettingsSection()
-            }
-        }
-        .formStyle(.grouped)
     }
 
     /// Save button now only covers the Image Understanding fields and

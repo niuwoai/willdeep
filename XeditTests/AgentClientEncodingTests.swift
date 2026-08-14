@@ -389,6 +389,35 @@ struct AnthropicMaxOutputTokensTests {
     }
 
     @Test
+    func theJudgeBudgetNeverExceedsALegacyModelsCap() {
+        // The judge budget is deliberately larger than what the claude-3 tier
+        // accepts. Sending it raw is a 400, which surfaces as an unavailable
+        // judge — the gate would go dark on those models rather than degrade,
+        // so the same clamp that guards normal turns has to guard this one.
+        let budget = AgentInjectionDefense.judgeMaxOutputTokens
+        #expect(budget > 4096, "a reasoning judge needs room for its rationale, not just the tag")
+        #expect(
+            AnthropicMessagesAdapter.maxOutputTokens(
+                forModel: "claude-3-opus-20240229",
+                configured: budget
+            ) == 4096
+        )
+        #expect(
+            AnthropicMessagesAdapter.maxOutputTokens(
+                forModel: "claude-3-5-sonnet-20241022",
+                configured: budget
+            ) == 8192
+        )
+        // Current-generation models take the budget as-is.
+        #expect(
+            AnthropicMessagesAdapter.maxOutputTokens(
+                forModel: "claude-opus-5",
+                configured: budget
+            ) == budget
+        )
+    }
+
+    @Test
     func storeClampsToConfiguredBounds() {
         #expect(AgentSettingsStore.clampAnthropicMaxOutputTokens(1) == AgentSettingsStore.anthropicMaxOutputTokensMin)
         #expect(AgentSettingsStore.clampAnthropicMaxOutputTokens(1_000_000) == AgentSettingsStore.anthropicMaxOutputTokensMax)

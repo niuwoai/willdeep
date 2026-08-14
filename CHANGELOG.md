@@ -1,17 +1,64 @@
 # Changelog
 
-> 当前文件保留最新版本（1.255.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.256.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.255.0-rc3 - 2026-08-14
+## 1.256.0-rc2 - 2026-08-14
 
-### Fixed
+### Tests
 
-- 修复 `AgentHeaderEditorEntryTests` 里「终端捷径 JSON 与普通文件都用系统默认 App 打开」这条守卫用例变红：断言仍要求 `AgentSidePanelTerminalView.swift` 含 `NSWorkspace.shared.open(url)`，没跟上 1.254.0-rc1 把捷径编辑改为 WillDeep 原生安全窗口的设计。捷径 JSON 内含加密后的受保护片段，交给外部编辑器等于把凭据落成明文，因此断言按新设计反转为「捷径走 `openWindow(value: TerminalShortcutEditorRequest(...))` + `XeditApp` 注册对应 `WindowGroup` 场景」，并保留「不走已下线的 Editor 模式」这条。核对确认「普通文件仍交给系统默认 App」的行为未丢失：`AgentSidePanel.swift` 的 `NSWorkspace.shared.open(url)` 与 `Info.plist` 不含 `CFBundleDocumentTypes` 两条断言原样保留且实测通过。
+- `AgentHeaderEditorEntryTests` 的终端捷径守卫补一条场景锚点：断言 `XeditApp.swift` 里注册了 `WindowGroup(for: TerminalShortcutEditorRequest.self)`。只锚定 `AgentSidePanelTerminalView` 那一侧的 `openWindow(value:)` 调用点是不够的——把窗口场景删掉，调用点还在、这条守卫照样绿，但捷径「编辑」在运行时会静默打不开窗口。捷径 JSON 带 `${secret:...}`，它打不开就意味着用户要么改不了捷径、要么被推回外部编辑器那条已经废弃的泄密路径。
 
 ### Meta
 
-- 守卫断言跟进重构，预发布版本从 **1.255.0-rc1** 提升为 **1.255.0-rc3**；`1.255.0-rc2` 让给并行开发中的智能审批裁判预算修复，避免两条分支撞号。App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+- 守卫加固，预发布版本从 **1.256.0-rc1** 递增为 **1.256.0-rc2**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+
+## 1.256.0-rc1 - 2026-08-14
+
+### Added
+
+- **子代理「工种」与调度台「执行档案」合并为一套档案（agent-profile.v2）。** 两者此前是两套存储、两个入口，字段却大半重合（名称/服务商/模型）——用户要在两个地方配同一件事，两份副本必然漂移。现在统一为 `AgentProfile`：soul（职能 / 代码段提示词 / 用户提示词 / 技能包）+ runtime（执行器 / CLI 档案名 / 模型绑定）+ capability（工具白名单与预算）+ usages（子代理 / 调度台）。`AgentSubagentProfileStore` 与 `AgentExecutionProfileStore` 降为同一存储的两个门面，`spawn_agent`、调度台与 AppState 规划链的调用点一行未动。
+- **每个档案有自己的 soul。** 专属提示词拼在工种代码段之后；配置的技能包在 spawn 时内联进子代理系统提示词（不给子代理加 `read_skill` 工具，省一轮往返与一个 schema 槽），总量封顶 12k 字符，找不到或已禁用的技能静默跳过——卸载一个技能不能让 spawn 失败。用户自建的档案也会进入 `spawn_agent` 的工种目录，模型可以直接选。
+- 设置「AI → 子代理」页升级为**「代理档案」**：一份列表涵盖内置工种、调度台内置档案、自建档案与磁盘上扫到的 CLI 档案，可按用途筛选，并就地编辑 soul、模型、用途与（自建档案的）工具集。原 `AgentSubagentProfileSettingsSection` 删除。
+
+### Changed
+
+- **不合并掉的那一维是执行形态。** 进程内子 loop 能被给定工具白名单、提示词和轮数预算；外部 CLI（codex / claude / hermes）自带 harness，给不了。因此 capability 与 soul 只在 `executor == .willDeep` 时生效，UI 灰掉相应字段并写明原因，而不是收下配置然后悄悄忽略。
+- **内置档案只持久化 override，不存全量拷贝。** 全量拷贝会把今天版本的 `deep` 冻进用户配置，日后代码里改工具集或预算再也送不到老用户手上。`deep` 的提示词段此前因与通用开场重复而被跳过，现在只在用户没写 soul 时跳过。
+- v1 的两个 UserDefaults 键（`...subagent-profile-bindings.v1` / `...executionProfiles.v1`）迁移后只读保留，不删除，便于回滚到旧版本。
+
+### Fixed
+
+- 安全不变量在合并后逐条保住并加了单测：工具集永远是与全局只读白名单的**交集**；**写权限只属于内置 editor 工种**——`asSubagentProfile()` 强制 `origin == .builtIn && capability.requiresWriteAccess`，用户即使手改存储 JSON 也拿不到写工具；runner 的不变量提示词（只读边界、「最后一条消息就是交付物」、「不能问用户」）不进档案、不可覆盖。
+- 调度台编辑器看不见 soul，`AgentExecutionProfileStore.saveManaged` 会把既有档案的 soul / capability / `.subagent` 用途原样带过——否则在调度台改个模型就会把同一档案的子代理那半边抹掉。
+- `AgentProfileStore` 照搬 `AgentDispatchStore` 的 XCTest 进程级重定向，避免单测改写用户真实档案（`willdeep-profiles-` 前缀已登记进 `TestDefaultsHygiene`）。这正是调度台数据曾被测试清空的同一类事故。
+
+### Tests
+
+- 新增 `AgentProfileUnificationTests`（11 例）：两个 v1 键的迁移与一次性语义、内置档案存 override 而非拷贝、用户提示词追加而非替换、soul 编辑过的 `deep` 仍发送其段落、技能包传递与未知技能静默跳过、外部 CLI 档案不认领 soul 且不进 `spawn_agent`、自建档案拿不到写权限、内置 editor 保留其窄写口、调度台保存不抹掉子代理侧、用途筛选。
+
+### Meta
+
+- 档案合并属功能新增，版本从 **1.255.0-rc1** 提升为 **1.256.0-rc1**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
+- 设计文档 `docs/AGENT_PROFILE_UNIFICATION_DESIGN.md` 的 §7 从「待确认」改为已确认决策，并补记落地要点。
+
+## 1.255.0-rc2 - 2026-08-14
+
+### Fixed
+
+- **智能审批裁判不再在复杂命令上静默掉线。** `judgeMaxOutputTokens` 从 512 提到 **8192**，`judgeTimeout` 从 20s 提到 **35s**。根因：现在裁判路由到的每个模型都是推理档——`someim-security-guard`（网关托管策略，实测后端 `Qwen/Qwen3.6-27B`）在吐 `<verdict>` 标签前先写 1800–3100 字符的私有推理，512 的预算连推理都装不下，回复被截断在 `<verdict>YES` 这种没有闭合标签的半截上，解析成 `.unclear` 后静默回落人工审批卡。**这个失败模式的方向最坏：命令越复杂推理越长、越容易掉线，而复杂命令恰恰是裁判存在的理由。** 2026-08-14 实测五类命令，512 下 3 例失败（多段 `&&` 链、带凭据的 `curl`、灰色地带 `UPDATE`），8192 下 5 例全部拿到完整裁决、最贵一次花 1349 tokens。审计日志 `judge.jsonl` 里 `someim-security-guard` 的 allow 率只有 57.0%（unavailable 41.9%）、而普通会话模型 `someim-auto-flash` 有 94.0%，差距基本来自这一条。
+- 预算与超时必须同步抬。8192 预算下实测最坏延迟 **16.9s**（1349 tokens，约 12.7 tok/s），旧的 20s 只剩三秒余量——只提预算会把「回复被截断」换成「请求超时」，用户照样落到同一张人工审批卡上。35s 约为实测最坏值的两倍；重复命令不会重复付这个延迟，allow 会按 `safetyJudgeVerdictCacheTTL` 缓存。
+- Anthropic 裁判请求按模型上限钳制 `max_tokens`。裁判预算（8192）高于 claude-3 档接受的上限（4096），原样发出去是硬 400，会让裁判在这些模型上整个变黑而不是降级。现在复用与普通回合同一套 `maxOutputTokens(forModel:configured:)` 钳制——推理短一点但标签闭合，好过没有裁决。
+
+### Changed
+
+- `judgeMaxReasoningOutputTokens`（Responses 分支专用的 1024）并入 `judgeMaxOutputTokens`。既然所有裁判路由都是推理档，「普通档 / 推理档」这个分级已经没有意义，留着只会让两个数字各自漂移。
+
+### Tests
+
+- 新增 `judgeBudgetAndTimeoutStayInStep`：锁住预算 ≥ 4096 与超时 ≥ 30s 这对必须同步的不变量，并在断言里记下实测依据。
+- 新增 `theJudgeBudgetNeverExceedsALegacyModelsCap`：claude-3 档钳到 4096、claude-3.5/3.7 钳到 8192、当代模型原样放行。
+- 修好 `AgentHeaderEditorEntryTests` 里一条过时的源码字符串守卫（与本次裁判改动无关的预存红）。1.254.0-rc1 的安全快捷方式 JSON 编辑器有意把终端快捷方式的编辑从 `NSWorkspace.shared.open(url)` 改成应用内 `openWindow(value: TerminalShortcutEditorRequest(...))`，断言没跟上，全量门禁自 15:27 起一直红。断言按新事实重写：快捷方式 JSON 走应用内编辑器窗口（录制里带 `${secret:...}`，交给外部 App 会把密钥泄露到别的进程），普通文件仍走系统默认 App，且这个例外不得成为老 Editor 场景复活的后门。
 
 ## 1.255.0-rc1 - 2026-08-14
 

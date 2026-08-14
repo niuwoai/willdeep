@@ -448,8 +448,9 @@ struct OpenAIResponsesAdapter {
                     ]
                 ]
             ],
-            // Responses reasoning (o-series) can spend more before the tag.
-            "max_output_tokens": AgentInjectionDefense.judgeMaxReasoningOutputTokens,
+            // Every judge route is reasoning-tier now, so they all share the
+            // one budget that covers a full rationale before the tag.
+            "max_output_tokens": AgentInjectionDefense.judgeMaxOutputTokens,
             "stream": false,
             "store": false
         ]

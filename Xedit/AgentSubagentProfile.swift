@@ -82,6 +82,9 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
     /// True only for the editor trade. Gates the write tool through the
     /// approval + single-file lock path instead of the read-only whitelist.
     var requiresWriteAccess: Bool
+    /// Skills preloaded into this trade's system prompt at spawn time. Empty
+    /// for every built-in trade; filled in from the profile's soul.
+    var skillIdentifiers: [String]
 
     init(
         id: String,
@@ -92,7 +95,8 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         maxRounds: Int,
         toolPayloadCharacterLimit: Int,
         escalation: EscalationPolicy = .none,
-        requiresWriteAccess: Bool = false
+        requiresWriteAccess: Bool = false,
+        skillIdentifiers: [String] = []
     ) {
         self.id = id
         self.purpose = purpose
@@ -103,6 +107,7 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         self.toolPayloadCharacterLimit = toolPayloadCharacterLimit
         self.escalation = escalation
         self.requiresWriteAccess = requiresWriteAccess
+        self.skillIdentifiers = skillIdentifiers
     }
 
     /// The tools this trade may actually call.
@@ -298,8 +303,15 @@ nonisolated enum AgentSubagentProfileCatalog {
     }
 
     /// Schema-facing catalog line for the `spawn_agent` tool description.
+    /// Built-ins only; `AgentSubagentProfileStore.toolDescriptionCatalog`
+    /// is the one the live schema uses, since it also lists user-created
+    /// trades.
     static var toolDescriptionCatalog: String {
-        builtIn
+        catalogLine(for: builtIn)
+    }
+
+    static func catalogLine(for profiles: [AgentSubagentProfile]) -> String {
+        profiles
             .map { "`\($0.id)` — \($0.purpose)" }
             .joined(separator: " ")
     }
@@ -321,38 +333,59 @@ nonisolated enum AgentSubagentProfileCatalog {
 
 // MARK: - Settings persistence
 
-/// User overrides for trade → model/provider bindings. Only the binding is
-/// stored; everything else about a trade is code.
+/// Trade → runtime resolution. Storage now lives in `AgentProfileStore`
+/// (agent-profile.v2), which also owns dispatch profiles; this enum stays as
+/// the trade-facing façade so the runner and the `spawn_agent` schema keep
+/// one call site.
 nonisolated enum AgentSubagentProfileStore {
-    private static let key = "com.willdeep.agent.subagent-profile-bindings.v1"
+    private static var store: AgentProfileStore { AgentProfileStore() }
 
+    /// Model bindings only, kept for callers that still think in v1 terms
+    /// (the settings section binds directly to these).
     static func loadOverrides() -> [String: AgentSubagentProfile.ModelBinding] {
-        guard let data = UserDefaults.standard.data(forKey: key),
-              let decoded = try? JSONDecoder().decode(
-                  [String: AgentSubagentProfile.ModelBinding].self,
-                  from: data
-              ) else {
-            return [:]
+        var bindings: [String: AgentSubagentProfile.ModelBinding] = [:]
+        for profile in store.profiles(usage: .subagent) where profile.origin == .builtIn {
+            bindings[profile.id] = profile.runtime.modelBinding
         }
-        // Drop overrides for trades that no longer exist so a renamed or
-        // removed profile cannot resurrect a stale binding.
-        return decoded.filter { AgentSubagentProfileCatalog.isKnown(id: $0.key) }
+        return bindings.filter { AgentSubagentProfileCatalog.isKnown(id: $0.key) }
     }
 
     static func saveOverrides(_ overrides: [String: AgentSubagentProfile.ModelBinding]) {
-        guard let data = try? JSONEncoder().encode(overrides) else { return }
-        UserDefaults.standard.set(data, forKey: key)
+        let store = store
+        var profiles = store.profiles()
+        for index in profiles.indices {
+            guard let binding = overrides[profiles[index].id] else { continue }
+            profiles[index].runtime.modelBinding = binding
+        }
+        store.save(profiles: profiles)
     }
 
+    /// Every trade `spawn_agent` may select: the four built-ins with the
+    /// user's soul/model edits applied, plus any user-created in-process
+    /// profile marked for subagent use.
     static func resolvedProfiles() -> [AgentSubagentProfile] {
-        AgentSubagentProfileCatalog.applyingOverrides(loadOverrides())
+        let resolved = store.profiles(usage: .subagent).compactMap { $0.asSubagentProfile() }
+        // A damaged or emptied store must never leave `spawn_agent` with no
+        // trades at all; fall back to code.
+        return resolved.isEmpty ? AgentSubagentProfileCatalog.builtIn : resolved
+    }
+
+    /// Schema catalog including user-created trades, so the model can pick
+    /// one the user configured rather than only the four built-ins.
+    static var toolDescriptionCatalog: String {
+        AgentSubagentProfileCatalog.catalogLine(for: resolvedProfiles())
     }
 
     static func resolvedProfile(id rawID: String?) -> AgentSubagentProfile {
-        let base = AgentSubagentProfileCatalog.profile(id: rawID)
-        guard let override = loadOverrides()[base.id] else { return base }
-        var copy = base
-        copy.modelBinding = override
-        return copy
+        let trimmed = rawID?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let profiles = resolvedProfiles()
+        if let trimmed, !trimmed.isEmpty,
+           let match = profiles.first(where: { $0.id.lowercased() == trimmed }) {
+            return match
+        }
+        // Unknown or missing → deep, which is what every pre-profile caller
+        // already expects.
+        return profiles.first { $0.id == AgentSubagentProfileCatalog.deepID }
+            ?? AgentSubagentProfileCatalog.deep
     }
 }

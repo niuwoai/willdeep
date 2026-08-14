@@ -460,22 +460,37 @@ enum AgentInjectionDefense {
     // MARK: - Judge request tuning
 
     /// Output-token budget for the judge round trip. It only needs to emit
-    /// `<verdict>YES</verdict>` (~5 tokens), but reasoning-tier "flash"
-    /// models (deepseek-v4-flash, o-series, Gemini thinking) spend tokens
-    /// on hidden reasoning FIRST. The old value of 16 was consumed entirely
-    /// by reasoning, truncating the reply before the verdict tag — so the
-    /// judge silently returned "unclear" on every call. 512 leaves room for
-    /// a short reasoning pass and the tag.
-    static let judgeMaxOutputTokens = 512
+    /// `<verdict>YES</verdict>` (~5 tokens), but every judge model we route
+    /// to is reasoning-tier (someim-security-guard, deepseek-v4-flash,
+    /// o-series, Gemini thinking) and spends tokens on hidden reasoning
+    /// FIRST. The budget therefore has to cover the whole rationale, not the
+    /// tag: whatever is left when the cap hits is truncated mid-reply, and a
+    /// verdict without its closing tag parses as `.unclear` — a silent
+    /// fallback to a manual prompt.
+    ///
+    /// The original 16 was consumed entirely by reasoning. 512 fixed the
+    /// simple cases but still failed the complex ones: measured against
+    /// `someim-security-guard` (gateway-managed policy, Qwen/Qwen3.6-27B
+    /// behind it) on 2026-08-14, a multi-segment `&&` chain, an authenticated
+    /// `curl`, and a borderline `UPDATE` each burned 1.8k–3.1k characters of
+    /// rationale and blew straight past 512 — 3 of 5 sampled commands came
+    /// back as `""` or a half-written `<verdict>YES`. **That failure mode
+    /// points the wrong way: the harder the command, the likelier the judge
+    /// drops out, and hard commands are exactly what it exists to review.**
+    /// At 8192 all five returned a complete verdict, worst case spending
+    /// 1349 tokens — the cap is headroom, not a target, and an unused
+    /// ceiling costs nothing.
+    static let judgeMaxOutputTokens = 8192
 
-    /// Reasoning-tier providers (OpenAI Responses / o-series) can spend
-    /// noticeably more on hidden reasoning; give them extra headroom.
-    static let judgeMaxReasoningOutputTokens = 1024
-
-    /// Inline gate, so keep it snappy — but a reasoning pass can take a few
-    /// seconds. 20s beats the old 12s that occasionally timed out mid-think
-    /// and fell back to a manual prompt.
-    static let judgeTimeout: TimeInterval = 20
+    /// Inline gate, so keep it snappy — but the rationale above is what we
+    /// are actually waiting for. Measured worst case at the 8192 budget was
+    /// 16.9s (1349 tokens, ~12.7 tok/s), which left the old 20s with about
+    /// three seconds of margin: raising the budget without raising this
+    /// would have traded a truncated reply for a timeout and landed the user
+    /// on the same manual prompt. 35s roughly doubles the measured worst
+    /// case. Repeat commands do not pay it twice — an allow is cached for
+    /// `safetyJudgeVerdictCacheTTL`.
+    static let judgeTimeout: TimeInterval = 35
 
     // MARK: - Prior-decision few-shot context
 

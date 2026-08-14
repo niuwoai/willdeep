@@ -1,6 +1,6 @@
 # 代理档案统一（agent-profile.v2）与密钥管理器设计
 
-> Last updated: 2026-08-14 | 状态：设计草案（§7 待确认项确认前不进入 P3/P4 编码）
+> Last updated: 2026-08-14 | 状态：**§7 已确认**（2026-08-14 用户拍板）；P1 已落地（1.255.0-rc1），P2 并入 P3，P3 已落地（1.256.0-rc1），P4 待做
 > 适用范围：Xedit（WillDeep macOS App）
 > 关联文档：`docs/SUBAGENT_PROFILES_DESIGN.md`、`docs/GOAL_TEAMS_ROLES_DESIGN.md`、`docs/ORCHESTRATOR_DESIGN.md`
 
@@ -117,10 +117,10 @@ struct Capability: Codable, Equatable, Sendable {   // 仅 executor == .willDeep
 
 | 期 | 内容 | 版本位 | 风险 |
 |---|---|---|---|
-| P1 | 锁形图标 16 → 18pt（`AgentComposerAttachments.swift:51`，配 24×24 热区）；密钥 store 补 delete/rename；`AgentSecretManagerView`（搜索+分页）；设置 `.secrets` 入口 | 1.254.0-rc2 | 低。删除是破坏性操作，需二次确认 + 单测覆盖索引一致性 |
-| P2 | 设置新增「代理档案」页：**不动数据模型**，先把现有两套编辑能力搬到同一页（两个 section），调度台按钮改指向它 | 1.254.0-rc3 | 低，纯 UI 搬迁 |
-| P3 | `agent-profile.v2` 统一模型 + 迁移器 + soul 生效：`promptSection` 拼接进子代理 system prompt、`skillIdentifiers` 在子代理启动时预加载技能 | 1.255.0-rc1（功能新增，rc 重置） | 中。迁移 + 安全不变量必须有单测；技能预加载会吃子代理上下文预算，需与 `toolPayloadCharacterLimit` 一起评估 |
-| P4 | 调度台 DAG 节点直接选统一档案；goal-teams 角色（developer/tester/reviewer）绑定统一档案 | 1.256.0-rc1 | 中，依赖 goal-teams §7 待确认项 |
+| P1 ✅ | 锁形图标 16 → 18pt（配 24×24 热区）；密钥 store 补 delete/rename；`AgentSecretManagerView`（搜索+拼音+分页）；设置 `.secrets` 入口 | **1.255.0-rc1**（develop 当时已到 1.254.0-rc1，故 MINOR 顺延） | 低。删除是破坏性操作，已加二次确认 + 索引一致性单测 |
+| ~~P2~~ | 并入 P3：先搬 UI 再重写等于把同一个页面做两遍 | — | — |
+| P3 ✅ | `agent-profile.v2` 统一模型 + 迁移器 + soul 生效 + 统一设置页 | **1.256.0-rc1** | 中。迁移与安全不变量已有单测；技能预载封顶 12k 字符 |
+| P4 | 调度台 DAG 节点直接选统一档案；goal-teams 角色（developer/tester/reviewer）绑定统一档案 | 待定 | 中，依赖 goal-teams §7 待确认项 |
 
 明确**不做**（本轮排除）：子代理独立聊天会话、跨端 runtime 合并、把外部 CLI 纳入进程内工具白名单体系、密钥的云同步/导出。
 
@@ -131,10 +131,19 @@ struct Capability: Codable, Equatable, Sendable {   // 仅 executor == .willDeep
 - 新增 `AgentSecretStoreManagementTests`：删除后索引与 Keychain 均无残留；重命名不改 identifier；搜索匹配（大小写/空白/子串）；分页边界（0 条 / 恰好整页 / 末页不足）。
 - 按 `project_test_defaults_hygiene`：新 suite 若用一次性 UserDefaults 前缀，必须登记到 `TestDefaultsHygiene`。
 
-## 7. 待确认默认假设
+## 7. 已确认决策（2026-08-14）
 
-- **Q1 合并深度**：默认采用方案 B（单一存储 + `usages` 标记 + 按执行形态灰字段）。若只想要「统一 UI、数据仍两份」，P3 取消。
-- **Q2 搜索语义**：默认 label + identifier 子串模糊匹配，**不做**中文拼音首字母。密钥数量通常两位数，拼音收益低。
-- **Q3 外部 CLI 档案的 soul**：默认「职能/提示词/技能包」对 `executor != .willDeep` 的档案**不生效**（UI 灰掉并说明）。备选是把 promptSection 作为附加指令传给 CLI（codex/claude 均支持追加 instructions），但技能包无法保证加载，属半吊子承诺。
-- **Q4 分页形态**：默认页码式（每页 20）。
-- **Q5 内置工种可编辑范围**：默认允许改 soul（提示词/技能包）与模型，**不允许**改工具集与写权限位（改了就不是那个工种了）；用户要自定义工具集请新建 managed 档案。
+- **Q1 合并深度**：✅ 方案 B —— 真合并。单一存储 `com.willdeep.agentProfiles.v2` + `usages` 标记，按执行形态灰字段。两个旧 store 降为门面。
+- **Q2 搜索语义**：✅ label + identifier 子串模糊匹配，**并加中文拼音**（全拼与首字母，`CFStringTransform` 转写，见 `AgentSecretSearch.pinyinTerms`）。
+- **Q3 外部 CLI 档案的 soul**：✅ 不生效。`AgentProfile.soulApplies == runtime.isInProcess`；UI 灰掉并写明「该档案跑在外部 CLI 上，人家自带 harness，这里配的送不进去」。
+- **Q4 分页形态**：✅ 页码式，每页 20。
+- **Q5 内置工种可编辑范围**：✅ 可改 soul 与模型，不可改工具集与写权限位。另加一条实现层拦截：**任何 managed 档案都拿不到写权限**（`asSubagentProfile()` 强制 `origin == .builtIn && ...`），改存储 JSON 也无效。
+
+### 7.1 落地后补记的实现要点
+
+- **内置档案存 override，不存全量拷贝**。全量拷贝会把今天的 `deep` 冻进用户配置，之后代码里改工具集/预算再也送不到老用户手上。`AgentProfileStore.override(for:base:)` 只写与代码不同的字段。
+- **`deep` 的提示词段**此前因与通用开场重复而被 `systemPrompt` 跳过；现在只在用户没写 soul 时跳过，写了必须发出（`Xedit/AgentSubagents.swift`）。
+- **技能预载**在 spawn 时直接内联进 system prompt（不给子代理加 `read_skill` 工具，省一轮往返与一个 schema 槽），封顶 `AgentSubagentRunner.skillPreloadCharacterLimit = 12_000`；找不到或已禁用的技能静默跳过——卸载一个技能不能让 spawn 失败。
+- **调度台编辑器看不见 soul**，所以 `AgentExecutionProfileStore.saveManaged` 必须把既有档案的 soul / capability / `.subagent` 用途原样带过，否则在调度台改个模型就会把子代理那半边抹掉（已有单测钉住）。
+- **测试进程重定向**：`AgentProfileStore` 照搬 `AgentDispatchStore` 的 XCTest 重定向（`willdeep-profiles-process-<pid>`，前缀已登记进 `TestDefaultsHygiene`）。两个门面遍布 AppState，任一测试碰到都会改写用户真实档案。
+- **并发会话事故记录**：本轮开发中该 worktree 被另一个会话的操作清过一次未提交改动。教训写在这里而不是聊天里——**多会话仓库，写完一组文件就提交**，别让改动裸奔等测试。

@@ -1,6 +1,744 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "agent-profiles.tab-title" : {
+      "comment" : "Settings tab title for unified agent profiles",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent profiles"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理档案"
+          }
+        }
+      }
+    },
+    "agent-profiles.pane-description" : {
+      "comment" : "Explains the unified profile list",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One list for both the trades `spawn_agent` can pick and the executors a dispatch node can run on. A profile carries its own soul: what it is for, its own prompt section, and the skills it preloads."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子代理工种与调度台执行器现在是同一份列表。每个档案有自己的「灵魂」：负责什么、专属提示词、以及自动加载的技能包。"
+          }
+        }
+      }
+    },
+    "agent-profiles.filter-all" : {
+      "comment" : "Filter showing every profile",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部"
+          }
+        }
+      }
+    },
+    "agent-profiles.filter-subagent" : {
+      "comment" : "Filter showing subagent trades",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subagents"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子代理"
+          }
+        }
+      }
+    },
+    "agent-profiles.filter-dispatch" : {
+      "comment" : "Filter showing dispatch executors",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispatch"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调度台"
+          }
+        }
+      }
+    },
+    "agent-profiles.origin-built-in" : {
+      "comment" : "Badge for a built-in profile",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Built-in"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内置"
+          }
+        }
+      }
+    },
+    "agent-profiles.origin-managed" : {
+      "comment" : "Badge for a user-created profile",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Custom"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自定义"
+          }
+        }
+      }
+    },
+    "agent-profiles.origin-discovered" : {
+      "comment" : "Badge for a profile discovered on disk",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detected"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已发现"
+          }
+        }
+      }
+    },
+    "agent-profiles.section-profile" : {
+      "comment" : "Section title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profile"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "档案"
+          }
+        }
+      }
+    },
+    "agent-profiles.section-model" : {
+      "comment" : "Section title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型"
+          }
+        }
+      }
+    },
+    "agent-profiles.section-soul" : {
+      "comment" : "Section title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Soul"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "灵魂"
+          }
+        }
+      }
+    },
+    "agent-profiles.section-capability" : {
+      "comment" : "Section title",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tools and budget"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具与预算"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-name" : {
+      "comment" : "Field label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-usages" : {
+      "comment" : "Field label for where a profile can be used",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used as"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用途"
+          }
+        }
+      }
+    },
+    "agent-profiles.usage-subagent" : {
+      "comment" : "Usage toggle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subagent trade"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子代理工种"
+          }
+        }
+      }
+    },
+    "agent-profiles.usage-dispatch" : {
+      "comment" : "Usage toggle",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dispatch executor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调度台执行器"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-executor" : {
+      "comment" : "Field label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Executor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "执行器"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-native-profile" : {
+      "comment" : "Field label for an external CLI profile name",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CLI profile name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CLI 档案名"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-provider" : {
+      "comment" : "Field label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Provider"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务商"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-model" : {
+      "comment" : "Field label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Model"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模型"
+          }
+        }
+      }
+    },
+    "agent-profiles.model-placeholder" : {
+      "comment" : "Placeholder when no model is pinned",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inherit the parent session"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随上级会话"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-purpose" : {
+      "comment" : "Field label for the model-facing purpose line",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What it is for"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "职能"
+          }
+        }
+      }
+    },
+    "agent-profiles.purpose-placeholder" : {
+      "comment" : "Placeholder for the purpose line",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One line, in English — the model reads this to choose a trade"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一行英文——模型据此挑选工种"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-prompt" : {
+      "comment" : "Field label for the profile's own prompt",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Its own prompt"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "专属提示词"
+          }
+        }
+      }
+    },
+    "agent-profiles.prompt-note" : {
+      "comment" : "Explains which prompt half is editable",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Appended after the trade's built-in section. The runner's own rules — read-only boundary, “your final message is the deliverable”, “you cannot ask the user” — are not editable here: they exist because models violated them."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会拼在工种自带的提示词之后。runner 的几条不变量（只读边界、「最后一条消息就是交付物」、「不能问用户」）不在这里改——它们的存在正是因为模型违反过。"
+          }
+        }
+      }
+    },
+    "agent-profiles.soul-external-note" : {
+      "comment" : "Explains why soul is disabled for external CLI profiles",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This profile runs on an external CLI, which brings its own harness. Prompt and skills configured here would not be delivered, so they are disabled."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该档案跑在外部 CLI 上，人家自带 harness。这里配的提示词与技能包送不进去，因此禁用。"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-skills" : {
+      "comment" : "Field label for preloaded skills",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preloaded skills"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动加载的技能包"
+          }
+        }
+      }
+    },
+    "agent-profiles.skills-empty" : {
+      "comment" : "Shown when no skill is selected",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "None"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未选择"
+          }
+        }
+      }
+    },
+    "agent-profiles.skills-none" : {
+      "comment" : "Shown when no skills are installed",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No skills installed"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未安装技能"
+          }
+        }
+      }
+    },
+    "agent-profiles.capability-built-in-note" : {
+      "comment" : "Explains why built-in tool sets are not editable",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A built-in trade's tool set and budgets are code, not settings: the narrow tool set is what makes it cheap and accurate. Create a custom profile to choose your own tools."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内置工种的工具集与预算属于代码而非配置：正是这份窄工具集让它又快又准。想自定义工具集请新建档案。"
+          }
+        }
+      }
+    },
+    "agent-profiles.capability-external-note" : {
+      "comment" : "Explains that an external CLI decides its own tools",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decided by this CLI's own harness."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由该 CLI 自身的 harness 决定。"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-tools" : {
+      "comment" : "Field label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tools"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-max-rounds" : {
+      "comment" : "Field label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Max rounds"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大轮数"
+          }
+        }
+      }
+    },
+    "agent-profiles.field-payload-limit" : {
+      "comment" : "Field label",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tool output limit"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具输出上限"
+          }
+        }
+      }
+    },
+    "agent-profiles.write-access-note" : {
+      "comment" : "Explains that write access is exclusive to the editor trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Write access belongs to the built-in editor trade only, gated by per-file approval and a lock."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "写权限只属于内置的编辑工种，且受单文件审批与文件锁约束。"
+          }
+        }
+      }
+    },
+    "agent-profiles.add" : {
+      "comment" : "Button that creates a profile",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New profile"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建档案"
+          }
+        }
+      }
+    },
+    "agent-profiles.new-name" : {
+      "comment" : "Default name of a newly created profile",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New profile"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建档案"
+          }
+        }
+      }
+    },
+    "agent-profiles.delete" : {
+      "comment" : "Button that deletes a profile",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete profile"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除档案"
+          }
+        }
+      }
+    },
+    "agent-profiles.delete-title" : {
+      "comment" : "Title of the delete confirmation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete this profile?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除这个档案？"
+          }
+        }
+      }
+    },
+    "agent-profiles.delete-message" : {
+      "comment" : "Warns what deleting a profile affects",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” will stop being offered to spawn_agent and to dispatch nodes. Nodes already assigned to it fall back to the default trade."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”将不再出现在 spawn_agent 与调度台可选项里。已指派给它的节点会回退到默认工种。"
+          }
+        }
+      }
+    },
+    "agent-profiles.empty-selection" : {
+      "comment" : "Placeholder when nothing is selected",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select a profile to edit it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择一个档案进行编辑。"
+          }
+        }
+      }
+    },
     "secret-manager.tab-title" : {
       "comment" : "Settings tab title for the secret manager",
       "extractionState" : "manual",

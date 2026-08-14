@@ -1757,7 +1757,7 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description for the subagent. Include all needed context — it cannot see the parent conversation or ask questions.", required: true),
                 AgentToolParameter(name: "label", type: .string, description: "Short display label for the UI (e.g. `explore-auth-flow`). Defaults to a prompt prefix.", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, return immediately with an agent handle (agent_xxxxxx); the report is injected as a system message when the subagent finishes. Up to 3 subagents may run in parallel per session. Defaults to false (wait for the report inline).", required: false),
-                AgentToolParameter(name: "profile", type: .string, description: "Which subagent trade to spawn. Each trade runs on its own model with a narrowed tool set, so prefer the narrowest one that fits the task — it is faster and far cheaper. Trades: \(AgentSubagentProfileCatalog.toolDescriptionCatalog) Defaults to `deep`.", required: false),
+                AgentToolParameter(name: "profile", type: .string, description: "Which subagent trade to spawn. Each trade runs on its own model with a narrowed tool set, so prefer the narrowest one that fits the task — it is faster and far cheaper. Trades: \(AgentSubagentProfileStore.toolDescriptionCatalog) Defaults to `deep`.", required: false),
                 AgentToolParameter(name: "target_file", type: .string, description: "Required for `profile=\"editor\"`, ignored otherwise. Workspace-relative path of the single file the subagent may edit. The user approves this file explicitly; patches touching any other path are rejected.", required: false)
             ]
         ),
@@ -1906,7 +1906,7 @@ enum AgentToolRegistry {
         // child one write tool. The user approves that spawn ("let a subagent
         // edit <file>") rather than each patch it produces.
         if name == "spawn_agent" {
-            let profile = AgentSubagentProfileCatalog.profile(
+            let profile = AgentSubagentProfileStore.resolvedProfile(
                 id: arguments["profile"]?.stringValue()
             )
             return profile.requiresWriteAccess ? .write : .read
