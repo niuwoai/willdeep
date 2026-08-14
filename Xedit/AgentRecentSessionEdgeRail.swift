@@ -130,7 +130,9 @@ struct AgentRecentSessionEdgeRail: View {
 
                 HStack(spacing: 6) {
                     Text(displaySession.title)
-                        .font(AgentDesign.sidebarRowFont)
+                        .font(AgentDesign.scaledSidebarRowFont(
+                            baseFontSize: appState.agentChatBaseFontSize
+                        ))
                         .foregroundStyle(isActive ? .primary : .secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)

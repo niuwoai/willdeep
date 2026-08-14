@@ -805,18 +805,63 @@ enum AgentDesign {
     static let sidebarSectionFont = Font.system(size: 11, weight: .semibold)
     static let sidebarRowFont = Font.system(size: sidebarRowFontSize)
     static let sidebarWorkspaceFont = Font.system(size: sidebarRowFontSize)
+
+    /// Chrome around the transcript (sidebar rows, composer input) follows the
+    /// chat body size by the same absolute step, so the established hierarchy
+    /// survives scaling: the 15 pt default body pairs with a 14 pt sidebar row
+    /// and a 13 pt composer, and raising the body to 20 pt carries them to
+    /// 19/18 rather than leaving them stranded at their old sizes.
+    ///
+    /// Deliberately an offset rather than a ratio — these surfaces sit side by
+    /// side with the transcript, and a proportional rule would drift them
+    /// apart at the extremes. The floor keeps titles and input legible when
+    /// the body size is set very small.
+    static func scaledChromeFontSize(
+        _ token: CGFloat,
+        baseFontSize: CGFloat
+    ) -> CGFloat {
+        let clamped = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
+        let scaled = token + (clamped - AgentSettingsStore.chatBaseFontSizeDefault)
+        return max(chromeFontSizeFloor, scaled)
+    }
+
+    static let chromeFontSizeFloor: CGFloat = 11
+
+    static func scaledSidebarRowFont(baseFontSize: CGFloat) -> Font {
+        .system(size: scaledChromeFontSize(sidebarRowFontSize, baseFontSize: baseFontSize))
+    }
+
+    static func scaledSidebarWorkspaceFont(baseFontSize: CGFloat) -> Font {
+        scaledSidebarRowFont(baseFontSize: baseFontSize)
+    }
+
+    /// Composer input. The `@`-reference tag derives its own size from the
+    /// live input font (one point smaller), so it is not listed here.
+    static let composerInputFontSize: CGFloat = 13
+
+    static func scaledComposerInputFontSize(baseFontSize: CGFloat) -> CGFloat {
+        scaledChromeFontSize(composerInputFontSize, baseFontSize: baseFontSize)
+    }
     static let sidebarAutomationFont = Font.system(size: sidebarAutomationFontSize)
 
     /// Keep supporting chat text readable and express hierarchy primarily
-    /// through color and weight instead of shrinking labels. The configured
-    /// body size remains the upper bound; callers can still request a larger
-    /// semantic minimum for values and headings.
+    /// through color and weight instead of shrinking labels. Callers can still
+    /// request a larger semantic minimum for values and headings.
+    ///
+    /// Scales with the body size on the same offset rule as the sidebar and
+    /// composer. It previously used `min(body, 13)`, which capped supporting
+    /// text at its default: raising the body size left timestamps and status
+    /// labels frozen at 13 pt while the text beside them grew, so the message
+    /// visibly came apart. The offset keeps the two-point gap at every size
+    /// instead of only below the default.
     static func chatSupportingFontSize(
         baseFontSize: CGFloat,
         visualMinimum: CGFloat = 0
     ) -> CGFloat {
-        let clampedBodySize = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
-        let supportingSize = min(clampedBodySize, chatSupportingFontSizeDefault)
+        let supportingSize = scaledChromeFontSize(
+            chatSupportingFontSizeDefault,
+            baseFontSize: baseFontSize
+        )
         return max(supportingSize, visualMinimum)
     }
 
