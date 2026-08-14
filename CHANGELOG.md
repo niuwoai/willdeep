@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.254.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.254.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.254.0-rc2 - 2026-08-14
+
+### Fixed
+
+- 修复 `AgentHeaderEditorEntryTests` 里「终端捷径 JSON 与普通文件都用系统默认 App 打开」这条守卫用例变红：断言仍要求 `AgentSidePanelTerminalView.swift` 含 `NSWorkspace.shared.open(url)`，没跟上 1.254.0-rc1 把捷径编辑改为 WillDeep 原生安全窗口的设计。捷径 JSON 内含加密后的受保护片段，交给外部编辑器等于把凭据落成明文，因此断言按新设计反转为「捷径走 `openWindow(value: TerminalShortcutEditorRequest(...))` + `XeditApp` 注册对应 `WindowGroup` 场景」，并保留「不走已下线的 Editor 模式」这条。核对确认「普通文件仍交给系统默认 App」的行为未丢失：`AgentSidePanel.swift` 的 `NSWorkspace.shared.open(url)` 与 `Info.plist` 不含 `CFBundleDocumentTypes` 两条断言原样保留且实测通过。
+
+### Meta
+
+- 守卫断言跟进重构，预发布版本从 **1.254.0-rc1** 提升为 **1.254.0-rc2**；App、Go agent、Help、Helper、浏览器扩展、响应头契约与产品文档保持一致。
 
 ## 1.254.0-rc1 - 2026-08-14
 
