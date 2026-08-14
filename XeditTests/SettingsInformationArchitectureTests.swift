@@ -45,7 +45,8 @@ struct SettingsInformationArchitectureTests {
         #expect(EditorSettingsTab.agentAppearance.group == .agentAppearance)
         #expect(SettingsGroup.allCases.suffix(2) == [.agentAppearance, .general])
         #expect(SettingsGroup.ai.tabs == [.agent, .subagents, .memory, .rules])
-        #expect(SettingsGroup.agentTools.tabs == [.skills, .mcp, .tools])
+        // 密钥管理器与技能/MCP/工具同属「Agent 的资源」，放在同一组末位。
+        #expect(SettingsGroup.agentTools.tabs == [.skills, .mcp, .tools, .secrets])
         #expect(SettingsGroup.accountAndDevices.tabs == [.someIM, .mobileGateway])
         // 连接器 hub 是集成组唯一的 pane;每个外部集成是 hub 里的子连接器。
         #expect(SettingsGroup.integrations.tabs == [.connectors])
