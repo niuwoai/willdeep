@@ -117,7 +117,7 @@ extension AppState {
             )
         }
 
-        let prompt = arguments["prompt"]?.stringValue()?
+        var prompt = arguments["prompt"]?.stringValue()?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !prompt.isEmpty else {
             finishRecord(
@@ -173,6 +173,21 @@ extension AppState {
                    profileID: requestedProfileID
                ) {
                 profile = roleTrade
+                // Cross-milestone memory (goal-teams §4.3): the flaky tests
+                // and environment traps the previous milestone's holder of
+                // this role wrote down. Memory lives in a file precisely so a
+                // fresh child context can still have it.
+                if let roleMemory = AgentGoalTeamArchive.memoryText(
+                    for: role,
+                    workspacePath: workspacePath
+                ) {
+                    prompt += """
+
+
+                    Notes carried over from earlier milestones in this role (read before starting):
+                    \(roleMemory)
+                    """
+                }
             } else {
                 profileNotices.append(
                     "Note: unknown role `\(requestedRoleID)` — ran the `\(profile.id)` trade without role narrowing. Roles in this workspace: \(roster.roles.map(\.id).joined(separator: ", "))."

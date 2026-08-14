@@ -1,6 +1,6 @@
 # Goal Teams 执行期角色与版本锚定里程碑设计（goal-teams.v1）
 
-> Last updated: 2026-08-12 | 状态：设计草案（§7 默认假设待确认，确认前不进入编码）
+> Last updated: 2026-08-14 | 状态：§7 已确认；Xedit 侧执行期角色与里程碑账本已落地（见 §6 映射与 docs/AGENT_PROFILE_UNIFICATION_DESIGN.md）
 > 适用范围：Xedit（WillDeep macOS App，本仓库）与 willdeep-rs（CLI/Runtime，`~/Sites/willdeep-rs`）
 > 本文件是双端共享的 canonical 规范；willdeep-rs 侧的引用与落地映射见其 `docs/GOAL_TEAMS.md`。
 
@@ -104,10 +104,10 @@
 
 ### 4.1 目录布局
 
-把 `.codex/goal-teams/` 的既有惯例升格为 WillDeep 自己的规范，双端读写同一格式：
+沿用 `.codex/goal-teams/` 既有惯例（2026-08-14 确认：不另起 `.willdeep/`，历史归档与新归档同一目录，不做双目录兼容），双端读写同一格式：
 
 ```
-<workspace>/.willdeep/goal-teams/
+<workspace>/.codex/goal-teams/
   INDEX.md                     # 目录：每个 Goal 一行（版本区间、状态、一句话）
   versions/<version>/
     plan.md                    # 本里程碑计划（含 Teams 表，固定列头见 §4.2）
@@ -200,13 +200,13 @@ Xedit 现有的目标收敛性诊断（1.223.0-rc1）输出并入此表，作为
 
 X1/R1（规范与归档，零业务代码）→ X2/R2（新工种）→ X3/R3（角色存续 + 里程碑锚定）→ X4/R4（capsule 与交互对齐）。每步独立提交、独立验收；两端可错峰（默认 Xedit 先行，§7）。
 
-## 7. 默认假设清单（待确认）
+## 7. 默认假设清单（2026-08-14 已确认：除 #3 改为 `.codex/goal-teams/` 外，其余照默认）
 
 | # | 假设 | 默认值 | 备注 |
 |---|---|---|---|
 | 1 | 周期门禁间隔 N | 40 版 | 与现有发版节奏一致；可配置 |
 | 2 | 执行期角色命名 | `developer` / `tester` / `reviewer`（开发/测试/评审） | 规划期三角色名不变 |
-| 3 | 归档目录位置 | `<workspace>/.willdeep/goal-teams/` | `.codex/goal-teams/` 保留只读，不迁移历史 |
+| 3 | 归档目录位置 | ✅ `<workspace>/.codex/goal-teams/`（2026-08-14 确认，改自原默认 `.willdeep/`） | 历史归档与新归档同目录，无需双目录兼容 |
 | 4 | 交接物格式 | 文档 Markdown、capsule JSON | Teams 表列头复用现有校验 |
 | 5 | 落地顺序 | Xedit 先行，willdeep-rs 随后 | R2 依赖的两处白名单已确认可改 |
 | 6 | 子代理独立聊天会话 | 本期不做 | 现有检视器窗口够用，见 §8 |
