@@ -79,7 +79,17 @@ image_tools_source = read_file(repo_root, "Xedit/AgentShortDramaImageTools.swift
 batch_tools_source = read_file(repo_root, "Xedit/AgentShortDramaBatchTools.swift")
 short_drama_dispatcher_source = read_file(repo_root, "Xedit/AgentShortDramaToolDispatcher.swift")
 media_task_tools_source = read_file(repo_root, "Xedit/AgentShortDramaMediaTaskTools.swift")
-dispatch_source = read_file(repo_root, "Xedit/AgentTools.swift")
+# AgentToolRunner 已按职责拆到多个同前缀文件，契约断言看的是整体行为，
+# 所以这里把总分发和各工具实现拼成一份源码再做包含性检查。
+dispatch_source = [
+  read_file(repo_root, "Xedit/AgentTools.swift"),
+  read_file(repo_root, "Xedit/AgentToolsFileEditing.swift"),
+  read_file(repo_root, "Xedit/AgentToolsCommandExecution.swift"),
+  read_file(repo_root, "Xedit/AgentToolsDelegatedAgents.swift"),
+  read_file(repo_root, "Xedit/AgentToolsJobs.swift"),
+  read_file(repo_root, "Xedit/AgentToolsExpertsAndSchedules.swift"),
+  read_file(repo_root, "Xedit/AgentToolsWidgets.swift")
+].join("\n")
 media_tools_source = read_file(repo_root, "Xedit/AgentMediaTools.swift")
 short_drama_main_source = read_file(repo_root, "Xedit/AgentShortDrama.swift")
 short_drama_chat_context_source = read_file(repo_root, "Xedit/AgentShortDramaChatContext.swift")

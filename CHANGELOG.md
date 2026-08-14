@@ -1,7 +1,14 @@
 # Changelog
 
-> 当前文件保留最新版本（1.258.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.258.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.258.0-rc4 - 2026-08-14
+
+### Changed
+
+- **`AgentTools.swift` 按职责拆成七个文件。** 该文件在 1.257.0-rc2 合并时涨到 3006 行，越过 `scripts/complexity_guard.rb` 的 3000 行硬限，把 CI 的 quality 守卫组顶红了。现在 `AgentTools.swift` 只留命令执行策略、进程树辅助和 `AgentToolRunner.run` 总分发（737 行），其余按关注点搬到 `AgentToolsFileEditing`（create_file / edit_file / apply_patch / generate_image）、`AgentToolsCommandExecution`（run_command 与输出收集、取消控制）、`AgentToolsDelegatedAgents`（claude_code / codex_cli / cursor_agent / hermes_cli / cline_cli）、`AgentToolsJobs`（lark_cli 与后台任务、队列查询）、`AgentToolsExpertsAndSchedules`（activate_expert 与会话内定时任务）、`AgentToolsWidgets`（show_widget / run_workflow）。全部是 `extension AgentToolRunner`，函数体逐字节搬运，只把总分发要调用的入口函数从 `private` 放宽到 internal，行为不变。拆完最大的文件是 695 行，全部低于 2000 行软限。
+- `scripts/short_drama_media_contract_test.rb` 的 `dispatch_source` 改成读取拆分后的全部同前缀文件再拼接——契约断言看的是整体行为，不该被文件边界变动带红。
 
 ## 1.258.0-rc3 - 2026-08-14
 
