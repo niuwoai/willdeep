@@ -31,7 +31,10 @@ struct AgentGoalMilestoneTests {
     func versionsAreUnique() {
         var ledger = AgentGoalMilestoneLedger()
 
-        #expect(ledger.append(milestone("1.248.0-rc1")).isEmpty)
+        // `#expect` evaluates its expression inside a closure, where the
+        // ledger is immutable — mutating calls have to happen outside it.
+        let firstErrors = ledger.append(milestone("1.248.0-rc1"))
+        #expect(firstErrors.isEmpty)
         let errors = ledger.append(milestone("1.248.0-RC1"))
 
         #expect(errors.contains { $0.contains("already used") })
@@ -47,13 +50,14 @@ struct AgentGoalMilestoneTests {
         let errors = ledger.append(sneaky)
         #expect(errors.contains { $0.contains("cannot carry its own scope") })
 
-        #expect(ledger.append(
+        let gateErrors = ledger.append(
             AgentGoalMilestoneLedger.periodicGate(
                 version: "1.249.0-rc1",
                 verification: "full suite + guards + smoke",
                 gitContract: "gate only, no feature commits"
             )
-        ).isEmpty)
+        )
+        #expect(gateErrors.isEmpty)
     }
 
     @Test("the periodic gate falls due every N milestones and resets after one")
@@ -90,20 +94,22 @@ struct AgentGoalMilestoneTests {
         let roster = AgentGoalTeamRoster.builtIn
 
         // The developer cannot sign its own milestone off.
-        #expect(!ledger.signOff(
+        let selfSigned = ledger.signOff(
             version: "1.251.0-rc1",
             byRoleID: AgentGoalTeamRoster.developerID,
             forRoleID: AgentGoalTeamRoster.developerID,
             roster: roster
-        ))
+        )
+        #expect(!selfSigned)
         #expect(!ledger.milestones[0].isSignedOff)
 
-        #expect(ledger.signOff(
+        let validatorSigned = ledger.signOff(
             version: "1.251.0-rc1",
             byRoleID: AgentGoalTeamRoster.reviewerID,
             forRoleID: AgentGoalTeamRoster.developerID,
             roster: roster
-        ))
+        )
+        #expect(validatorSigned)
         #expect(ledger.milestones[0].signedOffBy == AgentGoalTeamRoster.reviewerID)
     }
 
