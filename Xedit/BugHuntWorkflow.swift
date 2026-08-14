@@ -44,7 +44,16 @@ struct BugHuntWorkflow: WorkflowDefinition {
             pickerPrompt += "\n\nFocus hint from the user: \(hint)"
         }
 
-        let pickerOutput = try await engine.agent(pickerPrompt, label: "pick")
+        // Listing candidate files is exactly the scout trade's job, and its
+        // tool set (search / grep / list / read) covers everything this step
+        // needs. Annotating a step whose tools the trade lacks would get them
+        // denied mid-run, so only steps that fit inside a trade's whitelist
+        // are moved off the parent model.
+        let pickerOutput = try await engine.agent(
+            pickerPrompt,
+            label: "pick",
+            profile: AgentSubagentProfileCatalog.scout
+        )
         let files = pickerOutput
             .split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
