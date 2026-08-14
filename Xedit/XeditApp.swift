@@ -34,6 +34,11 @@ struct WillDeepApp: App {
         }
         .defaultSize(width: 560, height: 640)
 
+        WindowGroup(for: TerminalShortcutEditorRequest.self) { $request in
+            TerminalShortcutEditorWindowRoot(request: $request)
+        }
+        .defaultSize(width: 1_120, height: 760)
+
         Settings {
             SettingsRootView()
         }

@@ -1,54 +1,45 @@
-# Design QA：调度项目工作区后置选择
+# Design QA
 
-## Comparison target
+- source visual truth path: `/Users/rocky/.codex/generated_images/019ffef8-814c-7461-b561-242dc359dc39/exec-63b04b3a-0876-4033-a174-edb3e786b3ef.png`
+- implementation screenshot path: unavailable
+- viewport: intended native macOS window `1120 × 760 pt`; source image `1536 × 1024 px`
+- density normalization: not applicable because the implementation editor window could not be captured
+- state: existing protected terminal shortcut, JSON editor with secret drawer
 
-- Source visual truth：用户提供的既有“定义这个项目”页面，`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-dc9de11c-0893-4502-bf38-e27206e89a10.png`（2194 × 1480 px）。
-- Intended change：保留原页面的信息结构，改为先进入页面、再从页头选择工作目录；目录绑定前锁定项目定义区，绑定后允许填写与创建。
-- Rendered implementation：`/tmp/Xedit-dispatch-goal-setup-design-qa.png`（2200 × 1400 px；生产 SwiftUI 组件，1100 × 700 pt，2× density）。
-- Source/final comparison：`/private/tmp/Xedit-dispatch-setup-comparison.png`（2200 × 700 px）。左侧为用户截图，右侧为最终无工作区初始态。
-- State：Rice Paper 浅色皮肤；Agent 正文 16 pt、1.6 倍行高；无工作区；默认 DeepSeek V4 Pro Planner；默认仅选择 DeepSeek V4 Flash Worker。
+**Full-view comparison evidence**
 
-## Findings
+- The source mock was opened and used as the implementation target.
+- The freshly built Debug app was launched and its terminal shortcut list was captured successfully.
+- macOS accessibility automation could identify the shortcut action menu, but could not activate its menu item to open the new editor window, so a valid implementation screenshot was not available for comparison.
 
-- 页头右侧新增“选择项目工作区”按钮，初始入口清楚且不挤压标题；绑定后同一位置切换为“更改工作目录”。
-- 无工作区时，工作区卡片保持可读并以橙色提示“请先选择工作区”；目标陈述、AI 检查、验收清单、Planner、执行环境和 Worker 统一降级并禁用，避免形成可以输入却无法创建的半成品状态。
-- 主操作区保留右下角位置，新增 secondary“取消”按钮；“创建项目”在目录及必填内容未就绪时保持禁用。
-- Planner 默认值明确显示为 DeepSeek V4 Pro Planner，Worker 默认仅勾选 DeepSeek V4 Flash Worker；信息层级、卡片节奏与原页面一致。
-- 最终原生渲染和组合对照未发现新的 P0、P1、P2 问题。
+**Focused region comparison evidence**
 
-## Required fidelity surfaces
+- Not performed because the required full editor-window capture was unavailable.
 
-- Fonts and typography：目标陈述、验收清单、AI 建议目标及诊断正文统一读取 Agent 窗口正文字体、字号和行高；标题与卡片标签继续沿用现有系统字体层级。
-- Spacing and layout rhythm：继续使用左侧定义区、右侧配置卡片和底部操作条的原有布局；新增页头按钮与底部取消按钮均沿用现有 macOS 控件间距。
-- Colors and visual tokens：沿用 Rice Paper 背景、现有卡片描边、禁用透明度和橙色警示色；未引入新的硬编码颜色。
-- Image quality and asset fidelity：不新增位图资产；工作区、Planner、环境与 Worker 图标继续使用现有 SF Symbols。
-- Copy and content：新增文案均进入中英文本地化资源；没有在 SwiftUI 视图中硬编码用户可见文本。
+**Findings**
 
-## Interaction and verification
+- [P1] Missing rendered editor evidence
+  - Location: terminal shortcut editor window.
+  - Evidence: source mock is available; implementation window could not be opened through the available accessibility automation.
+  - Impact: typography, spacing, color-token fidelity, copy fit, icon alignment, pagination layout, and secure-field density cannot be visually certified.
+  - Fix: manually open a shortcut's “编辑” action in the Debug build, capture the `1120 × 760` editor window, and compare it with the source mock.
 
-- “新建调度项目”直接创建可持久化的无工作区草稿并打开定义页，不再提前弹出目录选择器。
-- 选择目录后校验目录存在性及运行中项目冲突，成功后原地绑定、解锁页面并聚焦目标输入；失败时保留草稿与当前页面。
-- 取消会删除尚未创建的临时草稿并留在调度台，不产生 Goal 或聊天消息。
-- 一个 DeepSeek V4 Flash Worker Profile 可按 Provider 并发上限同时执行多个就绪节点；额外 Worker Profile 仅扩展模型池与故障转移顺序。
-- `AgentDispatchCoordinatorTests` 62/62 通过，覆盖草稿创建、目录绑定、取消、默认路由、单 Profile 多节点并行和本页生产组件渲染。
-- `git diff --check`、版本一致性、复杂度与本地化资源校验作为最终交付门禁执行。
+**Required fidelity surfaces**
 
-## Open questions
+- Fonts and typography: blocked pending implementation capture.
+- Spacing and layout rhythm: blocked pending implementation capture.
+- Colors and visual tokens: blocked pending implementation capture.
+- Image quality and asset fidelity: no custom imagery is used; SF Symbols are expected, but visual verification is blocked.
+- Copy and content: localized strings compile; visible fit is blocked pending implementation capture.
 
-- 无。并行度继续由 Provider 并发设置统一控制，无需让用户为了并行重复添加同一个 Worker Profile。
+**Comparison history**
 
-## Implementation checklist
+- Pass 1: implementation build and targeted functional test passed; visual comparison blocked because the editor window could not be activated by accessibility automation. No visual fixes were made from this pass.
 
-- [x] 新建项目直接进入定义页，并在页头提供目录选择/更改入口。
-- [x] 目录绑定前禁用填写和配置，绑定后原地解锁。
-- [x] 默认 DeepSeek V4 Pro Planner 与单个 DeepSeek V4 Flash Worker。
-- [x] 支持同一 Worker Profile 多节点并行和用户补选 Worker。
-- [x] AI 草稿与验收正文继承 Agent 正文字体、字号和行高。
-- [x] 主按钮旁增加 secondary“取消”按钮。
-- [x] 同步版本号、CHANGELOG、产品概览、自动化测试与视觉 QA。
+**Implementation checklist**
 
-## Follow-up polish
+- Capture the editor window at `1120 × 760`.
+- Compare the whole window and the secret-table/search/pagination region against the source.
+- Resolve any P0/P1/P2 visual differences and repeat the comparison.
 
-- 无阻塞性 P3 项。
-
-final result: passed
+final result: blocked

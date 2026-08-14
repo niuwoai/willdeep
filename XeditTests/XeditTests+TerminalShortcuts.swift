@@ -300,6 +300,59 @@ extension WillDeepTests {
     }
 
     @MainActor
+    @Test("terminal shortcut native editor saves JSON and protected values without plaintext persistence")
+    func testTerminalShortcutNativeEditorSavesJSONAndProtectedValues() throws {
+        let shortcutsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("terminal-shortcut-native-editor-\(UUID().uuidString)", isDirectory: true)
+        TerminalShortcutStore._setTestDirectoryOverride(shortcutsDirectory)
+        defer {
+            TerminalShortcutStore._setTestDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: shortcutsDirectory)
+        }
+
+        let shortcutID = UUID()
+        let eventID = UUID()
+        let account = TerminalShortcutStore.protectedInputAccount(shortcutID: shortcutID, eventID: eventID)
+        let shortcut = TerminalShortcut(
+            id: shortcutID,
+            title: "Before",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 1),
+            durationMilliseconds: 1_000,
+            events: [
+                TerminalShortcutEvent(
+                    id: eventID,
+                    delayMilliseconds: 0,
+                    bytes: [],
+                    requiresEchoOff: true,
+                    protectedBytesReference: account,
+                    protectedPlaceholder: "SSH password"
+                ),
+                TerminalShortcutEvent(delayMilliseconds: 0, bytes: [13])
+            ],
+            hasProtectedInput: true
+        )
+        TerminalShortcutStore.save([shortcut])
+
+        let controller = AgentInteractiveTerminalController()
+        let source = try TerminalShortcutStore.editableJSON(for: shortcut)
+        let edited = source.replacingOccurrences(of: "\"Before\"", with: "\"After\"")
+        let secret = "native-editor-secret"
+        try controller.saveShortcutEdit(
+            id: shortcutID,
+            json: edited,
+            protectedValues: [eventID: secret]
+        )
+
+        #expect(TerminalShortcutStore.load().first?.title == "After")
+        #expect(controller.shortcuts.first?.title == "After")
+        #expect(TerminalShortcutProtectedVault.load(account: account) == Array(secret.utf8))
+        let persistedJSON = try String(contentsOf: TerminalShortcutStore.fileURL, encoding: .utf8)
+        #expect(!persistedJSON.contains(secret))
+        #expect(TerminalShortcutStore.load().first?.events.first?.protectedBytesReference == account)
+    }
+
+    @MainActor
     @Test("terminal shortcut clone creates an independent persisted copy")
     func testTerminalShortcutCloneCreatesIndependentPersistedCopy() throws {
         let shortcutsDirectory = FileManager.default.temporaryDirectory
