@@ -1,9 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.251.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.251.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.251.0-rc1 - 2026-08-14
+## 1.251.0-rc2 - 2026-08-14
+
+### Fixed
+
+- `terminal_snapshot` 不再只读一屏。侧边栏很窄，一条长命令光回显就能占满可见窗口，滚上去的输出对 Agent 等于不存在，于是出现「用户明明看得到、WillDeep 却报告没有输出」。镜像本来就留着 500 行回滚，取屏时却被丢弃；现在会一并返回窗口上方的回滚尾部（默认回看 200 行，仍受 `max_characters` 约束），并在返回体里单列「earlier output」小节。
+- Composer 底部操作行的图标尺寸不再各写各的：麦克风的圆此前是 22pt、发送/停止是 26pt，附件与密钥两个裸图标又差 1pt，整行看着参差。尺寸收敛为 `AgentComposerChrome` 的共享 token（`actionDiameter` / `barIconSize` / `actionGlyphSize`），新增控件自动继承同一标度。
+
+### Changed
+
+- `terminal_snapshot` 工具描述同步说明可读回滚，并提示「输出看似缺失时先看 earlier output 再下结论」，避免模型继续以为自己只能看到一屏。
+
+### Tests
+
+- 新增 `AgentTerminalSnapshotScrollbackTests`（6 例）：滚出窗口的行仍可取到、未滚屏时回滚为空、回看深度受限、深度为 0/负数安全退化、回滚不足请求深度不越界、光标与网格信息不受影响。行号一律零填充，避免 `line-1` 命中 `line-10` 的假阳性。
+- 加固 `AgentStopHandlingTests` 的取消及时性用例：原本 `sleep 30` 判 15s，而满载调度抖动实测可达 29.5s，与「根本没取消」同量级，导致周期性假红。改为 `sleep 120` 判 45s，拉开信号与噪声的间距，判据仍是「不是等进程自然结束」。
 
 ### Added
 

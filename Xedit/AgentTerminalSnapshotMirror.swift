@@ -30,6 +30,9 @@ import SwiftTerm
 struct AgentTerminalSnapshotCapture: Sendable {
     let viewport: String
     let markedViewport: String
+    /// Output that scrolled above the visible screen, oldest first. Empty
+    /// when nothing has scrolled off yet.
+    let scrollback: String
     let cursorLine: String
     let cursorRow: Int
     let cursorColumn: Int
@@ -39,6 +42,18 @@ struct AgentTerminalSnapshotCapture: Sendable {
 }
 
 final class AgentTerminalSnapshotMirror: @unchecked Sendable {
+    /// How many scrolled-off lines a capture reports by default.
+    ///
+    /// A single viewport is not what the operator sees. The side panel is
+    /// narrow, so one long command echoes across several visual rows, and a
+    /// build that printed fifty lines leaves only the last handful on screen
+    /// — the rest is one scroll-wheel away for a human but used to be
+    /// invisible to the agent, which then reported "no output" for work that
+    /// plainly ran. The mirror already retains scrollback; this is how much
+    /// of it a snapshot is allowed to look back through. The tool still
+    /// bounds the final payload by characters.
+    static let defaultHistoryLines = 200
+
     /// Serial queue that exclusively owns `terminal`. Also the queue the
     /// owning `LocalProcess` delivers PTY bytes on, so feeds are ordered and
     /// never contend with the main thread's rendering.
@@ -84,10 +99,13 @@ final class AgentTerminalSnapshotMirror: @unchecked Sendable {
         capture().viewport
     }
 
-    /// Capture the visible viewport with cursor context. The cursor row is
-    /// authoritative for "where the shell is now"; other visible rows can be
-    /// old output or prompts from before an SSH hop.
-    func capture() -> AgentTerminalSnapshotCapture {
+    /// Capture the visible viewport with cursor context, plus the output that
+    /// already scrolled above it. The cursor row is authoritative for "where
+    /// the shell is now"; other visible rows can be old output or prompts
+    /// from before an SSH hop.
+    func capture(
+        historyLines: Int = AgentTerminalSnapshotMirror.defaultHistoryLines
+    ) -> AgentTerminalSnapshotCapture {
         queue.sync {
             let rows = terminal.rows
             let cols = terminal.cols
@@ -95,6 +113,7 @@ final class AgentTerminalSnapshotMirror: @unchecked Sendable {
                 return AgentTerminalSnapshotCapture(
                     viewport: "",
                     markedViewport: "",
+                    scrollback: "",
                     cursorLine: "",
                     cursorRow: 0,
                     cursorColumn: 0,
@@ -116,6 +135,17 @@ final class AgentTerminalSnapshotMirror: @unchecked Sendable {
                 start: Position(col: 0, row: startRow),
                 end: Position(col: cols - 1, row: bottom)
             )
+            // `getText` indexes the same line array, so rows below the top
+            // visible row are exactly the scrolled-off history. Reading a
+            // bounded tail of it is what turns "I see nothing" into the
+            // output the operator can see by scrolling up.
+            let historyStart = max(0, startRow - max(historyLines, 0))
+            let scrollback = historyStart < startRow
+                ? terminal.getText(
+                    start: Position(col: 0, row: historyStart),
+                    end: Position(col: cols - 1, row: startRow - 1)
+                )
+                : ""
             let cursorLine = terminal.getText(
                 start: Position(col: 0, row: absoluteCursorRow),
                 end: Position(col: cols - 1, row: absoluteCursorRow)
@@ -134,6 +164,7 @@ final class AgentTerminalSnapshotMirror: @unchecked Sendable {
             return AgentTerminalSnapshotCapture(
                 viewport: viewport,
                 markedViewport: markedRows.joined(separator: "\n"),
+                scrollback: scrollback,
                 cursorLine: cursorLine,
                 cursorRow: visibleCursorRow,
                 cursorColumn: cursorColumn,
