@@ -459,14 +459,7 @@ private struct AgentSidePanelTerminalContentView: View {
     }
 
     private func editShortcut(_ shortcut: TerminalShortcut) {
-        guard let url = controller.prepareShortcutFileForEditing(id: shortcut.id) else {
-            NSSound.beep()
-            return
-        }
-        // Terminal shortcut JSON remains owned by WillDeep, but editing is a
-        // normal file-editing job. Let macOS route it to Qeditor or whichever
-        // external editor the user selected as the default for JSON files.
-        NSWorkspace.shared.open(url)
+        openWindow(value: TerminalShortcutEditorRequest(shortcutID: shortcut.id))
     }
 
     private var tabBar: some View {

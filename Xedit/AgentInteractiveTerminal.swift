@@ -1596,6 +1596,32 @@ final class AgentInteractiveTerminalController: ObservableObject {
         }
     }
 
+    func saveShortcutEdit(
+        id: UUID,
+        json: String,
+        protectedValues: [UUID: String]
+    ) throws {
+        var persisted = try TerminalShortcutStore.loadEditableShortcuts()
+        guard let index = persisted.firstIndex(where: { $0.id == id }) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        var edited = try TerminalShortcutStore.decodeEditableShortcut(json, expectedID: id)
+        edited.updatedAt = Date()
+
+        for eventIndex in edited.events.indices where edited.events[eventIndex].requiresEchoOff {
+            let eventID = edited.events[eventIndex].id
+            let account = edited.events[eventIndex].protectedBytesReference
+                ?? TerminalShortcutStore.protectedInputAccount(shortcutID: id, eventID: eventID)
+            edited.events[eventIndex].protectedBytesReference = account
+            guard let value = protectedValues[eventID], !value.isEmpty else { continue }
+            TerminalShortcutProtectedVault.save(Array(value.utf8), account: account)
+        }
+
+        persisted[index] = edited
+        TerminalShortcutStore.save(persisted)
+        shortcuts = TerminalShortcutStore.load()
+    }
+
     func renameShortcut(id: UUID, title: String) {
         guard let index = shortcuts.firstIndex(where: { $0.id == id }) else { return }
         var shortcut = shortcuts[index]

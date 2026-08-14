@@ -510,6 +510,26 @@ enum TerminalShortcutStore {
         return normalized(try decoder.decode([TerminalShortcut].self, from: data))
     }
 
+    static func editableJSON(for shortcut: TerminalShortcut) throws -> String {
+        let data = try encoder.encode(prepareForPersistence(shortcut))
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw CocoaError(.fileWriteInapplicableStringEncoding)
+        }
+        return text
+    }
+
+    static func decodeEditableShortcut(_ text: String, expectedID: UUID) throws -> TerminalShortcut {
+        guard let data = text.data(using: .utf8) else {
+            throw CocoaError(.fileReadInapplicableStringEncoding)
+        }
+        var shortcut = try decoder.decode(TerminalShortcut.self, from: data).normalized
+        guard shortcut.id == expectedID, shortcut.isPlayable else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        shortcut.hasProtectedInput = shortcut.events.contains(where: \.requiresEchoOff)
+        return shortcut
+    }
+
     @discardableResult
     static func prepareEditableFile(for shortcut: TerminalShortcut) throws -> URL {
         try ensureDirectory(editableDirectory)
@@ -530,6 +550,10 @@ enum TerminalShortcutStore {
         }
         shortcut.hasProtectedInput = shortcut.events.contains(where: \.requiresEchoOff)
         return shortcut
+    }
+
+    static func protectedInputAccount(shortcutID: UUID, eventID: UUID) -> String {
+        "terminal-shortcut/\(shortcutID.uuidString)/\(eventID.uuidString)"
     }
 
     static func isStoreFile(_ url: URL) -> Bool {
@@ -601,10 +625,6 @@ enum TerminalShortcutStore {
             return prepared
         }
         return copy
-    }
-
-    private static func protectedInputAccount(shortcutID: UUID, eventID: UUID) -> String {
-        "terminal-shortcut/\(shortcutID.uuidString)/\(eventID.uuidString)"
     }
 
     private static func loadFromDisk() -> [TerminalShortcut]? {
@@ -690,6 +710,15 @@ enum TerminalShortcutProtectedVault {
         } catch {
             print("TerminalShortcutProtectedVault: failed to load protected input: \(error)")
             return nil
+        }
+    }
+
+    static func existingAccounts() -> Set<String> {
+        do {
+            return Set(try loadPayload().entries.keys)
+        } catch {
+            print("TerminalShortcutProtectedVault: failed to list protected inputs: \(error)")
+            return []
         }
     }
 

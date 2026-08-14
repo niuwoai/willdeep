@@ -91,6 +91,30 @@ extension L10n {
         static let shortcutRename = String(localized: "agent-terminal.shortcut.rename", defaultValue: "Rename...")
         static let shortcutClone = String(localized: "agent-terminal.shortcut.clone", defaultValue: "Clone")
         static let shortcutDelete = String(localized: "agent-terminal.shortcut.delete", defaultValue: "Delete")
+        static let shortcutEditorTitle = String(localized: "agent-terminal.shortcut-editor.title", defaultValue: "Edit Terminal Shortcut")
+        static let shortcutEditorCancel = String(localized: "agent-terminal.shortcut-editor.cancel", defaultValue: "Cancel")
+        static let shortcutEditorSave = String(localized: "agent-terminal.shortcut-editor.save", defaultValue: "Save Changes")
+        static let shortcutEditorSaved = String(localized: "agent-terminal.shortcut-editor.saved", defaultValue: "Saved")
+        static let shortcutEditorJSONValid = String(localized: "agent-terminal.shortcut-editor.json-valid", defaultValue: "JSON Valid")
+        static let shortcutEditorJSONInvalid = String(localized: "agent-terminal.shortcut-editor.json-invalid", defaultValue: "JSON Invalid")
+        static let shortcutEditorJSONHint = String(localized: "agent-terminal.shortcut-editor.json-hint", defaultValue: "Protected values are referenced here but never embedded in JSON.")
+        static let shortcutEditorJSON = String(localized: "agent-terminal.shortcut-editor.json", defaultValue: "JSON")
+        static let shortcutSecretsSearch = String(localized: "agent-terminal.shortcut-editor.secrets-search", defaultValue: "Search name or JSON reference")
+        static let shortcutSecretsStatus = String(localized: "agent-terminal.shortcut-editor.secrets-status", defaultValue: "Secret status")
+        static let shortcutSecretsAll = String(localized: "agent-terminal.shortcut-editor.secrets-all", defaultValue: "All statuses")
+        static let shortcutSecretsSaved = String(localized: "agent-terminal.shortcut-editor.secrets-saved", defaultValue: "Saved")
+        static let shortcutSecretsMissing = String(localized: "agent-terminal.shortcut-editor.secrets-missing", defaultValue: "Missing")
+        static let shortcutSecretsSafety = String(localized: "agent-terminal.shortcut-editor.secrets-safety", defaultValue: "Secrets stay in the local encrypted vault and are never sent to AI.")
+        static let shortcutSecretsAdd = String(localized: "agent-terminal.shortcut-editor.secrets-add", defaultValue: "Add Secret")
+        static let shortcutSecretsEmpty = String(localized: "agent-terminal.shortcut-editor.secrets-empty", defaultValue: "No matching secrets")
+        static let shortcutSecretsEmptyDescription = String(localized: "agent-terminal.shortcut-editor.secrets-empty-description", defaultValue: "Adjust the search or status filter, or add a protected input.")
+        static let shortcutSecretName = String(localized: "agent-terminal.shortcut-editor.secret-name", defaultValue: "Name")
+        static let shortcutSecretReference = String(localized: "agent-terminal.shortcut-editor.secret-reference", defaultValue: "JSON Reference")
+        static let shortcutSecretValue = String(localized: "agent-terminal.shortcut-editor.secret-value", defaultValue: "Secret Value")
+        static let shortcutSecretState = String(localized: "agent-terminal.shortcut-editor.secret-state", defaultValue: "Status")
+        static let shortcutSecretReplacePlaceholder = String(localized: "agent-terminal.shortcut-editor.secret-replace-placeholder", defaultValue: "Saved; type to replace")
+        static let shortcutSecretEnterPlaceholder = String(localized: "agent-terminal.shortcut-editor.secret-enter-placeholder", defaultValue: "Enter secret")
+        static let shortcutSecretsPageSize = String(localized: "agent-terminal.shortcut-editor.page-size", defaultValue: "Page size")
         static let shortcutPasswordCardDescription = String(localized: "agent-terminal.shortcut.password-card.description", defaultValue: "Saved only to this Mac's encrypted terminal vault. The AI never receives these values.")
         static let shortcutPasswordSave = String(localized: "agent-terminal.shortcut.password-card.save", defaultValue: "Save to Recording")
         static let shortcutRenameTitle = String(localized: "agent-terminal.shortcut.rename-title", defaultValue: "Rename Terminal Shortcut")
@@ -108,6 +132,22 @@ extension L10n {
         static func shortcutPasswordDefaultLabel(_ a1: String) -> String {
             let template = String(localized: "agent-terminal.shortcut.password-card.default-label", defaultValue: "Password %@")
             return String(format: template, a1)
+        }
+        static func shortcutSecretDefaultName(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut-editor.secret-default-name", defaultValue: "Secret %@")
+            return String(format: template, a1)
+        }
+        static func shortcutSecretsCount(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut-editor.secrets-count", defaultValue: "Secrets (%@)")
+            return String(format: template, a1)
+        }
+        static func shortcutSecretsPerPage(_ a1: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut-editor.per-page", defaultValue: "%@ per page")
+            return String(format: template, a1)
+        }
+        static func shortcutSecretsPageSummary(_ a1: String, _ a2: String, _ a3: String) -> String {
+            let template = String(localized: "agent-terminal.shortcut-editor.page-summary", defaultValue: "%1$@–%2$@ / %3$@")
+            return String(format: template, a1, a2, a3)
         }
         static func shortcutMeta(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "agent-terminal.shortcut.meta", defaultValue: "%1$@ · %2$@ events")
