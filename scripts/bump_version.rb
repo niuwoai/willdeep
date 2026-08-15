@@ -84,6 +84,24 @@ File.write(chrome_readme_path, chrome_readme.gsub(old, new))
 total += chrome_readme_count
 puts "chrome-extension/willdeep-browser/README.md: #{chrome_readme_count} 处"
 
+# CFBundleVersion。Sparkle 用它排序,发布引擎要求"版本号变了构建号必须
+# 严格增长",而它不含版本字符串,所以上面的字面量替换永远碰不到它。漏掉
+# 的代价是发布跑完编译、签名、公证十几分钟后才在 appcast 那步被拒
+# (1.257.0-rc1 到 1.261.0-rc2 之间它一直卡在 384)。
+pbxproj_path = File.join(root, "Xedit.xcodeproj/project.pbxproj")
+pbxproj = File.read(pbxproj_path, encoding: "UTF-8")
+build_numbers = pbxproj.scan(/CURRENT_PROJECT_VERSION = (\d+);/).flatten.map(&:to_i).uniq
+abort "no CURRENT_PROJECT_VERSION found in project.pbxproj" if build_numbers.empty?
+abort "CURRENT_PROJECT_VERSION is inconsistent: #{build_numbers.inspect}" if build_numbers.size > 1
+next_build = build_numbers.first + 1
+build_count = pbxproj.scan(/CURRENT_PROJECT_VERSION = \d+;/).size
+File.write(
+  pbxproj_path,
+  pbxproj.gsub(/CURRENT_PROJECT_VERSION = \d+;/, "CURRENT_PROJECT_VERSION = #{next_build};")
+)
+total += build_count
+puts "Xedit.xcodeproj/project.pbxproj: #{build_count} 处 (build #{build_numbers.first} → #{next_build})"
+
 readme = File.join(root, "README.md")
 rtext = File.read(readme, encoding: "UTF-8")
 rcount = rtext.scan(badge_old).size
