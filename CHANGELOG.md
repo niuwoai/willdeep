@@ -1,7 +1,26 @@
 # Changelog
 
-> 当前文件保留最新版本（1.262.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.262.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.262.0-rc2 - 2026-08-16
+
+### Fixed
+
+- **沙箱给了网络却不给钥匙，部署类命令必死，而且死状具有误导性。** 除 `escalated` 外的所有沙箱档都会把 `HOME` 指到临时目录、清空 `SSH_AUTH_SOCK`，于是 `~/.ssh/config`、私钥、known_hosts 一个都读不到；同时 seatbelt 拒绝网络的方式是**让域名解析失败**，命令报出来的是 `no such host` / `nodename nor servname provided`。两件事叠在一起，Agent 看到的是"DNS 坏了 + Operation not permitted"，于是一头扎进网络策略和备用 SSH 端口里查——而它想去翻的那个 `~/.ssh/config`，在沙箱 HOME 下根本不存在。实测有会话为此连查 26 条命令无果。
+  - 新增沙箱档 `workspaceWriteNetworkCredentialed`：seatbelt profile 与 `workspaceWriteNetwork` **一字不差**（写入仍只限 workspace + temp），唯独保留真实 `HOME` 与 `SSH_AUTH_SOCK`。**把"解开凭证"和"解开写入限制"拆成两件事**——在此之前，想要一把钥匙就得整体跳到 `escalated`，连写入边界一起放掉。
+  - 实现之所以这么小，是因为 seatbelt profile 里 `file-read*` 本来就全放行：唯一挡住 `ssh` 读 `~/.ssh` 的，从来只是那行被改写的 `HOME`。
+  - token 类环境变量（`GITHUB_TOKEN` / `*_API_KEY` / `*_SECRET` 形态）在新档里**照剥不误**。放行的是凭证**文件**，不是环境里的明文 token；`gh` 在真实 HOME 下会自己从 `~/.config/gh` 读到凭证。
+  - **无人值守调度节点改用新档**。此前它拿的是"有网无钥匙"的 `workspaceWriteNetwork`，而这类任务按设计又没有 operator 能批准提权——部署、`git push`、`scp` 一律失败且无路可走。
+  - **依赖安装与构建命令一并改用新档**。`npm install` / `go build` / `cargo` 需要的 `~/.npmrc`、`~/.gitconfig`（git+ssh 依赖）、`~/.cargo/config` 全在真实 HOME 里；HOME 一换，私有源 401、走 SSH 的依赖直接失败。
+  - 补 `AgentSandboxCredentialedModeTests`：钉住"只解开凭证、不解开写入"，并覆盖"新档下 DNS 失败是真 DNS 失败，不得再误报成沙箱拒绝"。
+
+### Changed
+
+- **`scripts/run_tests_fast.rb` 新增 `--changed-only`**：只跑工作区改动能波及的 suite。它narrow 的是**执行**而非**编译**——xcodebuild 该重编的一行都不会少，所以"我的改动编不过"这个失败模式不受影响。
+  - **宁可不省，不可假绿**：映射不到任何 suite 时直接拒绝启动，而不是跑 0 个用例报成功；有改动文件映射不到 suite 时逐个列出来；选中的 suite 超过 40 个就退回全量（覆盖面已接近全量，一次全量反而更快也更诚实）。
+  - 修好两处 suite 识别缺陷：`@Suite` 与声明之间夹着 `@MainActor` 等属性时识别不到（**占全部测试文件的 37%**），以及压根不写 `@Suite`、靠 Swift Testing 自动发现 `@Test` 的文件。现在 193 个测试文件识别出 212 个 suite，剩余 3 个识别不到的**本来就不含测试**（`TestDefaultsHygiene` 与两个 `TestSupport`）。
+  - 保守起见，无 `@Suite` 注解时只认名字以 `Tests` 结尾的顶层类型：把辅助结构体误当 suite 传给 `-only-testing:` 不会报错，只会静默匹配不到并报成功——正是本仓踩过的坑。
 
 ## 1.262.0-rc1 - 2026-08-15
 

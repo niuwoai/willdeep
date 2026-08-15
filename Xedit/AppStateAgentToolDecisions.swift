@@ -579,7 +579,8 @@ extension AppState {
         }
 
         if sandboxDecision.mode == .workspaceWrite
-            || sandboxDecision.mode == .workspaceWriteNetwork {
+            || sandboxDecision.mode == .workspaceWriteNetwork
+            || sandboxDecision.mode == .workspaceWriteNetworkCredentialed {
             // Smart review treats workspace containment as the local write
             // boundary. Git remains useful for recovery, but its absence must
             // not turn every in-workspace change into a user approval card.
@@ -860,8 +861,14 @@ extension AppState {
         // the command itself does not look like a conventional network tool.
         // They already run in isolated task worktrees and have no operator
         // available to approve a second attempt after a seatbelt denial.
+        //
+        // 光给网络不够：部署、`git push`、`scp` 走的都是用户的 SSH 钥匙，而
+        // 除凭证档外的所有档位都会把 HOME 指到临时目录、断掉 ssh-agent。于是
+        // 无人值守任务会卡在"网通了但没钥匙"，还没有 operator 能批准提权——
+        // 表现就是它什么也干不成，并且因为 seatbelt 把网络拒绝伪装成域名解析
+        // 失败，Agent 会一头扎进 DNS 里查半天。写入限制仍由 seatbelt 把守。
         if isUnattendedDispatchTask {
-            return .workspaceWriteNetwork
+            return .workspaceWriteNetworkCredentialed
         }
         if risk == .read {
             return sandboxDecision.mode == .readOnlyNetwork ? .readOnlyNetwork : .readOnly
@@ -872,7 +879,14 @@ extension AppState {
         // already-approved workspace writers.
         case .workspaceAccess, .goalMode, .dispatchTask, .alwaysAllowList, .trustedServer,
              .user, .controlLease, .subagentEditor:
-            return sandboxDecision.mode == .workspaceWriteNetwork ? .workspaceWriteNetwork : .workspaceWrite
+            switch sandboxDecision.mode {
+            case .workspaceWriteNetworkCredentialed:
+                return .workspaceWriteNetworkCredentialed
+            case .workspaceWriteNetwork:
+                return .workspaceWriteNetwork
+            default:
+                return .workspaceWrite
+            }
         case .escalated:
             return .escalated
         case .staticAllowlist, .llmJudge, .none:
@@ -1210,6 +1224,7 @@ extension AppState {
             return sandboxDecision.mode == .readOnly
                 || sandboxDecision.mode == .workspaceWrite
                 || sandboxDecision.mode == .workspaceWriteNetwork
+                || sandboxDecision.mode == .workspaceWriteNetworkCredentialed
         case "kill_job", "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli",
              "add_memory", "create_user_skill", "create_user_skills", "update_user_skill", "suggest_mcp_server", "configure_mcp_server":
             return true
