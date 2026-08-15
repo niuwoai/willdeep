@@ -470,7 +470,7 @@ struct AgentMessageBubble: View {
     private func copyToClipboard() {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(message.copyableContent, forType: .string)
+        pb.setString(AgentCopyTextSanitizer.sanitize(message.copyableContent), forType: .string)
         didJustCopy = true
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_400_000_000)

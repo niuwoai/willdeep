@@ -1361,6 +1361,10 @@ struct SidebarActionRow: View {
             )
         }
         .buttonStyle(.plain)
+        // 侧边栏导航行只用 selectionFill 表达"当前在哪儿"。留着可聚焦时,
+        // 首个 Button(「新聊天」)会在窗口打开时拿到 first responder 并画出
+        // 蓝色焦点环,和实际选中的「调度台」打架,看着像选了两行。
+        .focusable(false)
         .onHover { isHovered = $0 }
         .disabled(isDimmed)
     }

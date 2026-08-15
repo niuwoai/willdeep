@@ -32,6 +32,34 @@ enum AgentLongTokenBreaker {
         "[", "]", "{", "}", "<", ">", "=", "+", "?", "&"
     ]
 
+    /// CJK 文本本来就允许**任意字符间断行**，塞假断点纯属白给。
+    ///
+    /// 这张表原先只有 ASCII，于是「，。：；（）」和汉字本身都被当成
+    /// "不可断行"——任何超过 30 字的中文句子都会被均匀插上 U+200B。
+    /// 英文用户偶尔踩，中文界面下是每条消息都踩，也是用户在剪贴板里
+    /// 看到 `<200b>` 的主要来源。
+    private static func isNaturalBreaker(_ ch: Character) -> Bool {
+        if naturalBreakers.contains(ch) { return true }
+        guard let scalar = ch.unicodeScalars.first,
+              ch.unicodeScalars.count == 1 else {
+            return false
+        }
+        switch scalar.value {
+        case 0x2E80...0x303F,   // CJK 部首补充 / 康熙部首 / CJK 标点(、。「」)
+             0x3040...0x30FF,   // 平假名 / 片假名
+             0x3400...0x4DBF,   // CJK 扩展 A
+             0x4E00...0x9FFF,   // CJK 基本区
+             0xAC00...0xD7AF,   // 谚文音节
+             0xF900...0xFAFF,   // CJK 兼容表意文字
+             0xFF00...0xFF60,   // 全角 ASCII(，．：；（）！？)
+             0xFF61...0xFF9F,   // 半角片假名
+             0x20000...0x3FFFF: // CJK 扩展 B 及以后
+            return true
+        default:
+            return false
+        }
+    }
+
     /// LRU keyed by source hash. Same reasoning as for
     /// `AgentUserContentSplitter`: SwiftUI re-evaluates user/
     /// assistant body many times per layout pass, and walking a
@@ -69,7 +97,7 @@ enum AgentLongTokenBreaker {
         var runLength = 0
 
         for ch in source {
-            if naturalBreakers.contains(ch) {
+            if isNaturalBreaker(ch) {
                 result.append(ch)
                 runLength = 0
                 continue
@@ -82,6 +110,51 @@ enum AgentLongTokenBreaker {
             runLength += 1
         }
         return result
+    }
+}
+
+/// 剪贴板出口的净化器：屏幕上可以有排版专用的不可见字符，剪贴板里
+/// 一个都不许有。
+///
+/// 两个来源：
+/// 1. `AgentLongTokenBreaker` 为了防止长 token 卡死布局插的 U+200B——
+///    它是**渲染态**，跟着复制出去就变成了粘贴到终端/编译器里的隐形
+///    地雷。
+/// 2. 模型自己吐的零宽字符、BOM、软连字符。模型输出不保证干净，这层
+///    顺手一起收了。
+///
+/// 刻意**不**清理的：U+200D(ZWJ，emoji 组合靠它)、U+200C(ZWNJ，波斯语
+/// / 印度语系有语义)、U+200E/200F(双向控制符，RTL 文本靠它)。这些"不
+/// 可见"但携带语义，一把梭会把用户的正文改错。
+enum AgentCopyTextSanitizer {
+    /// 纯排版用途、删掉不改变任何语言语义的不可见字符。
+    private static let renderOnlyScalars: Set<UInt32> = [
+        0x200B, // ZERO WIDTH SPACE —— 我们自己插的假断点
+        0x2060, // WORD JOINER
+        0xFEFF, // ZERO WIDTH NO-BREAK SPACE / BOM
+        0x00AD, // SOFT HYPHEN
+    ]
+
+    static func sanitize(_ text: String) -> String {
+        guard text.unicodeScalars.contains(where: { renderOnlyScalars.contains($0.value) }) else {
+            return text
+        }
+        var scalars = String.UnicodeScalarView()
+        scalars.reserveCapacity(text.unicodeScalars.count)
+        for scalar in text.unicodeScalars where !renderOnlyScalars.contains(scalar.value) {
+            scalars.append(scalar)
+        }
+        return String(scalars)
+    }
+
+    /// 会回流给模型的出口（右键「加入任务」、引用选区）专用。
+    ///
+    /// 先净化再**重新打断注入标记**：`AgentInjectionDefense` 是靠往
+    /// `<system-reminder>`、`</command>` 这类标记里插 U+200B 来废掉
+    /// tokenizer 的识别的。只 sanitize 不补这一刀，等于把用户选中的
+    /// 一段工具输出还原成一个可用的注入载荷再喂回去。
+    static func sanitizeForModelRoundTrip(_ text: String) -> String {
+        AgentInjectionDefense.neutralizeInjectionMarkers(in: sanitize(text))
     }
 }
 
@@ -498,7 +571,9 @@ struct AgentMessageFooter: View {
     private func copyToClipboard() {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(message.copyableContent, forType: .string)
+        // copyableContent 是原始模型输出,不带我们插的断点;净化这一刀是
+        // 冲着模型自己吐的零宽字符/BOM 去的——模型输出不保证干净。
+        pb.setString(AgentCopyTextSanitizer.sanitize(message.copyableContent), forType: .string)
         didJustCopy = true
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_400_000_000)

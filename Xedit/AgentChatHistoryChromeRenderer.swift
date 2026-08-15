@@ -599,7 +599,7 @@ extension AgentChatHistoryRenderer {
         }
         result.append(AgentChatHistoryFooterChrome.copyButton(
             copied: false,
-            message: message.copyableContent,
+            message: AgentCopyTextSanitizer.sanitize(message.copyableContent),
             isVisible: isVisible,
             baseFontSize: baseFontSize,
             font: metadataFont

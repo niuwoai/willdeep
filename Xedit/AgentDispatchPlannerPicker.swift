@@ -90,64 +90,31 @@ struct AgentDispatchPlannerPicker: View {
             Text(title)
                 .font(.system(size: 12, weight: .semibold))
 
-            ZStack {
-                HStack(spacing: 13) {
-                    Image(systemName: profile?.executor == .willDeep
-                        ? "brain.head.profile"
-                        : profile?.executor.symbol ?? "questionmark")
-                        .font(.system(size: 19, weight: .regular))
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 36, height: 36)
-                        .background(Color.accentColor.opacity(0.07))
-                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
-                        }
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(profile?.name ?? L10n.Dispatch.plannerModelUnavailable)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        if let profile {
-                            Text(profileDetail(profile))
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+            // 菜单的 label 必须是**真正的整行内容**：借 ZStack 在行上盖一个
+            // Color.clear label 的 Menu 时,borderlessButton 背后的 AppKit
+            // 控件会按空 label 的固有尺寸收缩,外层 .frame(maxWidth:) 撑不开
+            // 它——点整行都打不开菜单(1.261.0-rc3 之前的老毛病)。
+            Menu {
+                ForEach(candidates) { candidate in
+                    Button {
+                        onSelect(candidate.id)
+                    } label: {
+                        Label(
+                            candidate.name,
+                            systemImage: candidate.id == profile?.id
+                                ? "checkmark"
+                                : candidate.executor.symbol
+                        )
                     }
-                    Spacer(minLength: 12)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.primary)
                 }
-                .contentShape(Rectangle())
-
-                Menu {
-                    ForEach(candidates) { candidate in
-                        Button {
-                            onSelect(candidate.id)
-                        } label: {
-                            Label(
-                                candidate.name,
-                                systemImage: candidate.id == profile?.id
-                                    ? "checkmark"
-                                    : candidate.executor.symbol
-                            )
-                        }
-                    }
-                } label: {
-                    Color.clear
-                        .contentShape(Rectangle())
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .disabled(candidates.isEmpty)
-                .accessibilityLabel(title)
-                .accessibilityIdentifier("dispatch.planner-picker.\(title)")
+            } label: {
+                modelRow(profile: profile)
             }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .disabled(candidates.isEmpty)
+            .accessibilityLabel(title)
+            .accessibilityIdentifier("dispatch.planner-picker.\(title)")
 
             Label(help, systemImage: "circle.fill")
                 .font(.system(size: 10))
@@ -157,6 +124,42 @@ struct AgentDispatchPlannerPicker: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 12)
+    }
+
+    private func modelRow(profile: AgentExecutionProfile?) -> some View {
+        HStack(spacing: 13) {
+            Image(systemName: profile?.executor == .willDeep
+                ? "brain.head.profile"
+                : profile?.executor.symbol ?? "questionmark")
+                .font(.system(size: 19, weight: .regular))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 36, height: 36)
+                .background(Color.accentColor.opacity(0.07))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
+                }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(profile?.name ?? L10n.Dispatch.plannerModelUnavailable)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                if let profile {
+                    Text(profileDetail(profile))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 12)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.primary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private var fallbackConnector: some View {
