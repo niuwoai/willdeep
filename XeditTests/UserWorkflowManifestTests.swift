@@ -281,6 +281,20 @@ struct UserWorkflowManifestTests {
         let slashes = Set(workflows.map(\.slashCommand))
         #expect(slashes.contains("/code-review"))
         #expect(slashes.contains("/research"))
-        #expect(slashes.contains("/video-clip"))
+        // 1.262.0：/video-clip 依赖本地转写（"转录 → LLM 找片段"），随
+        // SenseVoice 栈一起下线；不依赖转写的视频工作流仍须在册。
+        #expect(slashes.contains("/video-compress"))
+        // 转写栈下线后不得留下任何仍在册的语音工作流。
+        for removed in [
+            "/transcribe",
+            "/video-summary",
+            "/meeting-notes",
+            "/video-clip",
+            "/video-gif",
+            "/video-subtitle",
+            "/video-subtitle-export",
+        ] {
+            #expect(!slashes.contains(removed))
+        }
     }
 }

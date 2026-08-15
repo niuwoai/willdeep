@@ -84,7 +84,6 @@ struct SettingsInformationArchitectureTests {
             .runtimes,
             .integrations,
             .terminal,
-            .voice,
             .pet,
             .agentAppearance,
             .general,
@@ -110,7 +109,6 @@ struct SettingsInformationArchitectureTests {
         #expect(!groupedTabs.contains(.workspace))
         #expect(groupedTabs.contains(.agentAppearance))
         #expect(groupedTabs.contains(.subagents))
-        #expect(groupedTabs.contains(.voice))
     }
 
     @Test("the replicate deep-link tab still resolves inside the integrations group")

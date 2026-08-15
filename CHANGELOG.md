@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.261.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.262.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.262.0-rc1 - 2026-08-15
+
+### Removed
+
+- **本地语音转文字整体下线。** 从 1.82.0-rc1 移植进来的 SenseVoice ONNX 管道连同它长出来的所有枝叶一起拔除：composer 的麦克风按钮、Fn 按住说话、悬浮波形条、Settings → Voice 整个分组（含 21 套配色和 9 种波形）、Onboarding 的语音步骤与 937 MB 模型下载器、转写后 AI 润色。`Xedit/Voice/` 整目录 29 个文件退场，**仓库随之瘦身 72 MB**（ONNXRuntime 1.23.2 通用二进制 + Kaldi-native-fbank 源码），Release 构建里那道"重签 ONNX dylib"的构建阶段也一并撤掉。
+- **麦克风权限声明移除。** `NSMicrophoneUsageDescription` 和 entitlement 里的 `com.apple.security.device.audio-input` 都已删除——App 不再录音，就不该继续举着这块牌子要权限。
+- **7 个依赖转写的工作流下线**：`/transcribe`、`/video-summary`、`/meeting-notes`、`/video-clip`、`/video-gif`、`/video-subtitle`、`/video-subtitle-export`。它们的骨架都是"先本地转录，再让 LLM 在转录文字里找东西"，引擎一走只剩空壳。
+- **`/video-extract` 保留**，只摘掉转录那一步。它一次产出 `metadata.json`、`audio.m4a`、`keyframes/`、`report.md` 四样，之前还有第五样 `transcript.md`——为了拔掉一样而废掉另外四样能正常工作的能力不划算。分析报告改为只依据技术参数与场景切换帧推断节奏，不再臆测旁白内容。
+- 不依赖转写的视频工作流全部照旧：`/video-compress`、`/video-thumbnail`、`/video-merge`、`/video-watermark`、`/video-speedup`、`/video-extract`。
+
+### Fixed
+
+- **共享 helper 不再寄居在具体工作流文件里。** `VideoMediaHelpers`（ffprobe 封装）原本住在 `VideoClipWorkflow.swift` 里，删掉那个工作流直接把仍在用它的 `/video-compress`、`/video-merge`、`/video-extract` 一起带崩。现在它有了自己的 `VideoMediaHelpers.swift`；只保留还有人用的 `probe`，专供 STT 的 `extractWavAudio` 和只有 `/video-clip` 用的 `cutSegment` 随转写栈一起移除。
 
 ## 1.261.0-rc4 - 2026-08-15
 

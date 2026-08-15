@@ -7,7 +7,8 @@ import Testing
 struct OnboardingFlowTests {
     @Test("some.im login precedes custom provider setup")
     func someIMPrecedesProvider() {
-        #expect(OnboardingStep.allCases == [.welcome, .someIM, .provider, .voice, .done])
+        // 1.262.0：本地语音转文字整体下线，引导里的 .voice 步骤随之移除。
+        #expect(OnboardingStep.allCases == [.welcome, .someIM, .provider, .done])
         #expect(OnboardingStep.someIM.next == .provider)
         #expect(OnboardingStep.provider.previous == .someIM)
     }

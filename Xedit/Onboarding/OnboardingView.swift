@@ -12,7 +12,6 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
     case welcome
     case someIM
     case provider
-    case voice
     case done
 
     var id: Int { rawValue }
@@ -29,7 +28,6 @@ enum OnboardingStep: Int, CaseIterable, Identifiable {
 struct OnboardingView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject private var controller = OnboardingFlowController.shared
-    @ObservedObject private var downloader = VoiceModelDownloader.shared
 
     @State private var currentStep: OnboardingStep = .welcome
     @State private var presetID = "claude"
@@ -188,7 +186,6 @@ struct OnboardingView: View {
         case .welcome: L10n.Onboarding.Navigation.welcome
         case .someIM: L10n.Onboarding.Navigation.someIM
         case .provider: L10n.Onboarding.Navigation.provider
-        case .voice: L10n.Onboarding.Navigation.voice
         case .done: L10n.Onboarding.Navigation.done
         }
     }
@@ -198,7 +195,6 @@ struct OnboardingView: View {
         case .welcome: "sparkles"
         case .someIM: "person.crop.circle.badge.checkmark"
         case .provider: "key.horizontal"
-        case .voice: "waveform"
         case .done: "checkmark.seal"
         }
     }
@@ -208,7 +204,6 @@ struct OnboardingView: View {
         case .welcome: "welcome"
         case .someIM: "some-im"
         case .provider: "provider"
-        case .voice: "voice"
         case .done: "done"
         }
     }
@@ -221,7 +216,6 @@ struct OnboardingView: View {
         case .welcome: welcomeStep
         case .someIM: someIMStep
         case .provider: providerStep
-        case .voice: voiceStep
         case .done: doneStep
         }
     }
@@ -263,12 +257,6 @@ struct OnboardingView: View {
                     title: L10n.Onboarding.Welcome.providerTitle,
                     detail: L10n.Onboarding.Welcome.providerDetail,
                     tint: .orange
-                )
-                benefitRow(
-                    icon: "waveform",
-                    title: L10n.Onboarding.Welcome.voiceTitle,
-                    detail: L10n.Onboarding.Welcome.voiceDetail,
-                    tint: .purple
                 )
             }
         }
@@ -762,122 +750,6 @@ struct OnboardingView: View {
         return nil
     }
 
-    // MARK: - Voice
-
-    private var voiceStep: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            stepHeader(
-                eyebrow: L10n.Onboarding.Common.optional,
-                eyebrowColor: .purple,
-                title: L10n.Onboarding.Voice.title,
-                subtitle: L10n.Onboarding.Voice.subtitle
-            )
-
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top, spacing: 13) {
-                    statusIcon(
-                        systemName: VoiceModelDownloader.isModelInstalled ? "checkmark" : "arrow.down",
-                        tint: VoiceModelDownloader.isModelInstalled ? .green : .purple
-                    )
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(VoiceModelDownloader.isModelInstalled
-                            ? L10n.Onboarding.Voice.installedTitle
-                            : L10n.Onboarding.Voice.notInstalledTitle)
-                            .font(.system(size: 15, weight: .semibold))
-                        Text(VoiceModelDownloader.isModelInstalled
-                            ? L10n.Onboarding.Voice.installedDetail
-                            : L10n.Onboarding.Voice.notInstalledDetail)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 0)
-                }
-
-                if !VoiceModelDownloader.isModelInstalled {
-                    HStack(spacing: 10) {
-                        Button {
-                            Task { await downloader.download() }
-                        } label: {
-                            Label(L10n.Onboarding.Voice.downloadButton, systemImage: "arrow.down.to.line")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isVoiceBusy)
-
-                        if VoiceModelDownloader.canImportFromFastv {
-                            Button {
-                                Task { try? await downloader.importFromFastv() }
-                            } label: {
-                                Label(L10n.Onboarding.Voice.importButton, systemImage: "link")
-                            }
-                            .disabled(isVoiceBusy)
-                        }
-
-                        if isVoiceBusy {
-                            Button(L10n.Onboarding.Voice.cancel) {
-                                downloader.cancel()
-                            }
-                        }
-                    }
-                }
-
-                voiceProgress
-            }
-            .padding(18)
-            .background(cardBackground)
-
-            Label(L10n.Onboarding.Voice.privacyNote, systemImage: "hand.raised.fill")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    @ViewBuilder
-    private var voiceProgress: some View {
-        switch downloader.state {
-        case .idle, .finished:
-            EmptyView()
-        case .importing:
-            HStack(spacing: 7) {
-                ProgressView().controlSize(.small)
-                Text(L10n.Onboarding.Voice.importing)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        case .downloading(let progress, let received, let total, let speed):
-            VStack(alignment: .leading, spacing: 7) {
-                ProgressView(value: progress, total: 1)
-                Text(L10n.Onboarding.Voice.downloadProgress(
-                    formatMB(received),
-                    formatMB(total),
-                    formatMB(Int64(speed))
-                ))
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-            }
-        case .failed(let message):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .lineLimit(4)
-        }
-    }
-
-    private var isVoiceBusy: Bool {
-        switch downloader.state {
-        case .downloading, .importing: true
-        default: false
-        }
-    }
-
-    private func formatMB(_ bytes: Int64) -> String {
-        let megabytes = Double(bytes) / (1024 * 1024)
-        return megabytes >= 100
-            ? String(format: "%.0f MB", megabytes)
-            : String(format: "%.1f MB", megabytes)
-    }
-
     // MARK: - Done
 
     private var doneStep: some View {
@@ -895,14 +767,6 @@ struct OnboardingView: View {
                     title: L10n.Onboarding.Done.aiTitle,
                     detail: aiSetupSummary,
                     isReady: isAIReady
-                )
-                summaryRow(
-                    icon: "waveform",
-                    title: L10n.Onboarding.Done.voiceTitle,
-                    detail: VoiceModelDownloader.isModelInstalled
-                        ? L10n.Onboarding.Done.voiceReady
-                        : L10n.Onboarding.Done.voiceLater,
-                    isReady: VoiceModelDownloader.isModelInstalled
                 )
                 summaryRow(
                     icon: "gearshape",
@@ -1042,10 +906,6 @@ struct OnboardingView: View {
             apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? L10n.Onboarding.Footer.skipForNow
                 : L10n.Onboarding.Footer.saveContinue
-        case .voice:
-            VoiceModelDownloader.isModelInstalled
-                ? L10n.Onboarding.Footer.continue
-                : L10n.Onboarding.Footer.skipForNow
         case .done:
             L10n.Onboarding.Footer.getStarted
         }
@@ -1066,8 +926,6 @@ struct OnboardingView: View {
                 return
             }
             providerSaveError = nil
-            advance()
-        case .voice:
             advance()
         case .done:
             controller.markCompleted()

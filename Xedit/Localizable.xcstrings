@@ -32980,31 +32980,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Press ⌘, anytime to change providers, voice, memory, or skills."
+            "value" : "Press ⌘, anytime to change providers, memory, or skills."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pulsa ⌘, en cualquier momento para cambiar proveedores, voz, memoria o habilidades."
+            "value" : "Pulsa ⌘, en cualquier momento para cambiar proveedores, memoria o habilidades."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Appuyez sur ⌘, à tout moment pour changer de fournisseur, de voix, de mémoire ou de compétences."
+            "value" : "Appuyez sur ⌘, à tout moment pour changer de fournisseur, de mémoire ou de compétences."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "プロバイダ、音声、メモリ、スキルはいつでも ⌘, で変更できます。"
+            "value" : "プロバイダ、メモリ、スキルはいつでも ⌘, で変更できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "随时按 ⌘, 修改服务商、语音、记忆或技能。"
+            "value" : "随时按 ⌘, 修改服务商、记忆或技能。"
           }
         }
       }
@@ -34695,31 +34695,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Set up AI and optional on-device voice now. You can change every choice later."
+            "value" : "Set up your AI connection now. You can change every choice later."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Configura la IA y la voz opcional en el dispositivo ahora. Puedes cambiar cada elección más tarde."
+            "value" : "Configura tu conexión de IA ahora. Puedes cambiar cada elección más tarde."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Configurez l'IA et, si vous le souhaitez, la voix sur l'appareil dès maintenant. Vous pourrez modifier chaque choix plus tard."
+            "value" : "Configurez votre connexion IA dès maintenant. Vous pourrez modifier chaque choix plus tard."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "今すぐAIと任意のオンデバイス音声を設定しましょう。すべての選択は後から変更できます。"
+            "value" : "まず AI 接続を設定しましょう。すべての選択は後から変更できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "现在配置 AI 和可选的本机语音；之后随时可以修改所有选择。"
+            "value" : "现在配置 AI 连接；之后随时可以修改所有选择。"
           }
         }
       }

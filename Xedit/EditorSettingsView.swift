@@ -307,7 +307,6 @@ struct EditorSettingsView: View {
         case .tools: toolsSettings
         case .secrets: AgentSecretSettingsView()
         case .terminal: terminalSettings
-        case .voice: VoiceSettingsView()
         case .pet: petSettings
         }
     }

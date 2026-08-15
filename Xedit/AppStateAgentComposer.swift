@@ -1665,26 +1665,6 @@ extension AppState {
         return true
     }
 
-    @discardableResult
-    func appendVoiceTranscriptCreatingSessionIfNeeded(_ transcript: String) async -> Bool {
-        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-
-        let mode = UserPreferences.shared.transcriptCleanupMode
-        guard mode.usesAI else {
-            return appendAgentInputTextCreatingSessionIfNeeded(trimmed)
-        }
-
-        let modelID = agentConfiguration.normalized.titleSummaryModel()
-        let configurations = titleSummaryConfigurationCandidates(remoteModelID: modelID)
-        let polished = await VoiceTranscriptPolisher.polish(
-            transcript: trimmed,
-            mode: mode,
-            configurations: configurations
-        )
-        return appendAgentInputTextCreatingSessionIfNeeded(polished ?? trimmed)
-    }
-
     func composeAttachedPrompt(
         userText: String,
         skills: [AgentSkillEntry],

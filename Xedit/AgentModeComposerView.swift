@@ -980,7 +980,6 @@ private struct ComposerCard: View {
                 InsertSecretButton {
                     isSecretSheetPresented = true
                 }
-                MicPushToTalkButton()
                 SendStopButton()
             }
         }
