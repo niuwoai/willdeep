@@ -1005,11 +1005,22 @@ struct AgentStatsDashboard: View {
         .padding(.vertical, 10)
     }
 
+    /// One glyph per trade. With ten trades in the list, sharing a default
+    /// icon between seven of them makes the column unreadable — the icon is
+    /// how you find the row you care about without reading every label.
     private func workerSymbol(_ profileID: String) -> String {
         switch profileID {
         case AgentSubagentProfileCatalog.scoutID: return "scope"
         case AgentSubagentProfileCatalog.readerID: return "doc.text.magnifyingglass"
         case AgentSubagentProfileCatalog.editorID: return "pencil.line"
+        case AgentSubagentProfileCatalog.testerID: return "checkmark.seal"
+        case AgentSubagentProfileCatalog.reviewerID: return "eye"
+        case AgentSubagentProfileCatalog.testFixerID: return "ladybug"
+        case AgentSubagentProfileCatalog.buildFixerID: return "hammer"
+        case AgentSubagentProfileCatalog.logInspectorID: return "list.bullet.rectangle"
+        case AgentSubagentProfileCatalog.gitDetectiveID: return "arrow.triangle.branch"
+        case AgentSubagentProfileCatalog.securityGuardID: return "lock.shield"
+        case AgentSubagentProfileCatalog.judgeID: return "scalemass"
         default: return "brain.head.profile"
         }
     }

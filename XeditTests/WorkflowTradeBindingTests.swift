@@ -34,6 +34,20 @@ struct WorkflowTradeBindingTests {
             .effectiveToolNames(writeAccessGranted: false).contains("run_command"))
     }
 
+    @Test("every built-in trade carries a localized name, not a raw id")
+    func everyTradeIsNamed() {
+        // The stats dashboard and the settings list both enumerate `builtIn`,
+        // so a trade added without a display-name case silently shows up as
+        // its English id in a Chinese UI. This has already happened twice.
+        for trade in AgentSubagentProfileCatalog.builtIn {
+            let name = trade.localizedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            #expect(!name.isEmpty, "\(trade.id) has no display name")
+            #expect(name != trade.id, "\(trade.id) falls back to its raw id")
+            #expect(!trade.localizedPurpose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    "\(trade.id) has no purpose text")
+        }
+    }
+
     @Test("deep stays the default so unannotated steps are unchanged")
     func deepRemainsTheDefault() {
         // Every workflow step that names no trade keeps running exactly as it
