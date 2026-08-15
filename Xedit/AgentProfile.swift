@@ -109,6 +109,8 @@ nonisolated struct AgentProfile: Codable, Equatable, Identifiable, Sendable {
         case AgentSubagentProfileCatalog.gitDetectiveID: return L10n.AgentDelegation.profileGitDetectiveName
         case AgentSubagentProfileCatalog.securityGuardID: return L10n.AgentDelegation.profileSecurityGuardName
         case AgentSubagentProfileCatalog.judgeID: return L10n.AgentDelegation.profileJudgeName
+        case AgentSubagentProfileCatalog.opsRunnerID: return L10n.AgentDelegation.profileOpsRunnerName
+        case AgentSubagentProfileCatalog.terminalOperatorID: return L10n.AgentDelegation.profileTerminalOperatorName
         default: return name
         }
     }

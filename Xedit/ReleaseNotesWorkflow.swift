@@ -48,7 +48,14 @@ struct ReleaseNotesWorkflow: WorkflowDefinition {
 
         Do not group or categorize yet — that's the next phase.
         """
-        let rawMaterial = try await engine.agent(scoutPrompt, label: "scout")
+        // 这一步要跑 `git log` / `gh pr view` 才能收集素材，而窄工种里带 shell
+        // 的只有 git_detective——它的职能又正好是"回答仓库历史问题"，语义与
+        // 工具集双双吻合。
+        let rawMaterial = try await engine.agent(
+            scoutPrompt,
+            label: "scout",
+            profile: AgentSubagentProfileCatalog.gitDetective
+        )
 
         // Phase 2: 3 个并发分类 agent，各从一个角度切。
         let categoryPrompts: [(label: String, prompt: String)] = [

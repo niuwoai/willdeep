@@ -433,6 +433,150 @@
         }
       }
     },
+    "agent-delegation.profile-ops-runner-name" : {
+      "comment" : "Display name of the ops-runner subagent trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ops Runner"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Operador de consultas"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exécuteur d'exploitation"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "運用ランナー"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运维查询员"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-ops-runner-purpose" : {
+      "comment" : "User-facing description of the ops-runner trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read-only operations queries via shell: service status, log tails, kubectl/gh inspection. Can inspect, never change."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Consultas de operaciones de solo lectura por shell: estado de servicios, colas de logs, inspección de kubectl/gh. Puede inspeccionar, nunca cambiar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Requêtes d'exploitation en lecture seule via le shell : état des services, fins de journaux, inspection kubectl/gh. Peut inspecter, jamais modifier."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "シェル経由の読み取り専用の運用クエリ：サービス状態、ログ末尾、kubectl/gh の確認。調査はできるが変更は一切しない。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只读运维查询：服务状态、日志尾部、kubectl/gh 检视。只看不改。"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-terminal-operator-name" : {
+      "comment" : "Display name of the terminal-operator subagent trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminal Operator"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Operador de terminal"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opérateur de terminal"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ターミナルオペレーター"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端操作员"
+          }
+        }
+      }
+    },
+    "agent-delegation.profile-terminal-operator-purpose" : {
+      "comment" : "User-facing description of the terminal-operator trade",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drives the visible side-panel terminal: runs given read-only commands in a tab, reads the screen, reports results."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maneja el terminal visible del panel lateral: ejecuta comandos de solo lectura en una pestaña, lee la pantalla e informa resultados."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pilote le terminal visible du panneau latéral : exécute des commandes en lecture seule dans un onglet, lit l'écran et rapporte les résultats."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サイドパネルの可視ターミナルを操作：指定タブで読み取り専用コマンドを実行し、画面を読んで結果を報告する。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "驾驶侧栏可见终端：在指定标签页执行只读命令、读屏并汇报结果。"
+          }
+        }
+      }
+    },
     "agent-delegation.profile-log-inspector-name" : {
       "comment" : "Display name of the log inspector subagent trade",
       "extractionState" : "manual",

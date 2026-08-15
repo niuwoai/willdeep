@@ -231,6 +231,24 @@ extension AppState {
             writeAccess = access
         }
 
+        // 单命令授权（ops_runner 专属）：spawn 审批卡上用户批准的那条确切
+        // 命令。传给了别的工种就是路由错误——报回去让父模型改，不静默吞。
+        var approvedCommand: String?
+        if let targetCommand = arguments["target_command"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !targetCommand.isEmpty {
+            guard profile.id == AgentSubagentProfileCatalog.opsRunnerID else {
+                finishRecord(
+                    status: .failed,
+                    summary: "target_command misrouted",
+                    payload: "Tool error: `target_command` is only honored for `profile=\"ops_runner\"`. Re-spawn with that profile, or drop the parameter.",
+                    errorMessage: "target_command requires ops_runner"
+                )
+                return
+            }
+            approvedCommand = targetCommand
+        }
+
         // A task packet lets the worker start hot: the parent already knows
         // which files matter, so their contents ride along instead of costing
         // the worker half its window to rediscover.
@@ -451,6 +469,10 @@ extension AppState {
                 verifierMaxAttempts: taskPacket?.maxAttempts
                     ?? AgentSubagentTaskPacket.defaultMaxAttempts,
                 patchProposalSink: editorPatchSink,
+                // terminal_operator 需要父会话的侧栏终端；其余工种在执行层
+                // 拿不到这个 controller（见 executeToolCall）。
+                terminalController: agentTerminalController,
+                approvedCommand: approvedCommand,
                 onProgress: { round, toolInvocations in
                     let toolPart = toolInvocations > 0 ? " · \(toolInvocations) 次工具" : ""
                     updateSubagent(progress: "第 \(round)/\(profile.maxRounds) 轮\(toolPart)")

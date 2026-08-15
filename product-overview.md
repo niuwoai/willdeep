@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-14 | Current version: v1.262.0-rc2
+> Last updated: 2026-08-14 | Current version: v1.263.0-rc1
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Workflow fan-out 绑定小模型工种 + 审查素材预取（1.263.0-rc1）** —— 派工率盘点实测仅 1.4% 会话派过工后，第一刀切在 workflow 引擎：`/code-review`、`/pr-review`、`/bug-hunt` 的维度审查绑 reviewer，`/release-notes` 素材收集绑 git_detective，`/competitor` 调研绑 reader；synthesize 一律保持 deep。`git diff` / `gh pr diff` 改为 Swift 侧确定性取一次、内联下发（此前 4 个维度各自跑一遍），素材超 28K 字符回落父模型档。新增 WorkflowWorkerBindingTests 守住"绑定工种的提示词不得点名它没有的工具"。凭证沙箱档（1.262.0-rc2）解开 `~/.ssh` 钥匙后，运维类场景（终端操作/发布执行/k8s 查询）进入小模型候选，见设计文档 §10.5。
 - **本地语音转文字整体下线（1.262.0-rc1）** —— SenseVoice ONNX 转写栈连同它的全部界面一起移除：composer 麦克风、Fn 按住说话、悬浮波形条、Settings → Voice 分组、Onboarding 语音步骤与 937 MB 模型下载器、转写后 AI 润色。`Xedit/Voice/` 整目录退场，仓库瘦身 72 MB，麦克风权限声明与 entitlement 同步撤除。依赖转写的 7 个工作流（`/transcribe`、`/video-summary`、`/meeting-notes`、`/video-clip`、`/video-gif`、`/video-subtitle`、`/video-subtitle-export`）随之下线；`/video-extract` 保留并只摘掉转录一步，其余视频与图片工具箱不受影响。
 - **终端捷径专用 JSON 与密钥编辑窗口（1.254.0-rc1）** —— “编辑”不再生成临时 JSON 并交给外部编辑器，而是打开原生独立窗口，直接从正式存储读取并原子合并保存。上半区实时校验 JSON，下半区集中管理受保护输入；密钥值只进入本机加密保险库，不写入 JSON，也不进入模型上下文。密钥表支持名称/JSON 引用搜索、已保存/待填写筛选、25/50/100 条分页和大量记录的懒加载滚动，少量密钥仍保持紧凑。
 - **长会话渐进展示、终端自动显露与密钥落盘保护（1.250.0-rc5）** —— 对话正文与左侧用户输入定位条只处理当前 240 条消息窗口，滚动到顶部后按页加载更早历史并保持阅读位置；右侧浏览器、终端等面板不再自动藏掉用户已打开的会话列表。播放终端捷径时零标签会自动建立本地 Shell，AI 工具新建终端标签后会主动打开终端面板并选中该标签。会话 JSON 在写入边界再次脱敏常见 Key/Token/私钥；用户自己保存的钥匙串密钥可在 Touch ID 或系统密码认证后直接复制。

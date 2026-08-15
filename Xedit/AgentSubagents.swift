@@ -794,6 +794,16 @@ enum AgentSubagentRunner {
         verifierCommand: String? = nil,
         verifierMaxAttempts: Int = AgentSubagentTaskPacket.defaultMaxAttempts,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil,
+        /// 仅 terminal_operator 工种需要：把父会话的侧栏终端 controller 递
+        /// 给子循环，terminal_* 工具才有执行对象。其余工种传了也会在
+        /// executeToolCall 里被丢弃。
+        terminalController: AgentInteractiveTerminalController? = nil,
+        /// 单命令授权（仅 ops_runner）：用户在 spawn 审批卡上批准的那条
+        /// 确切命令。子循环里恰好等于这条文本的 run_command 可以越过
+        /// "只许 read"的死门执行——语义上等同用户在主会话批准了这条命令，
+        /// 爆炸半径恰好一条。可重复执行（发布脚本按部署规范应幂等），
+        /// verifier 循环靠这一点重试。
+        approvedCommand: String? = nil,
         onProgress: ((_ round: Int, _ toolInvocations: Int) -> Void)? = nil
     ) async throws -> Outcome {
         // some.im-gated providers require the session/workspace context headers on
@@ -1073,6 +1083,8 @@ enum AgentSubagentRunner {
                     workspaceLocation: workspaceLocation,
                     profile: profile,
                     writeAccess: writeAccess,
+                    terminalController: terminalController,
+                    approvedCommand: approvedCommand,
                     patchProposalSink: patchProposalSink
                 )
                 // Budgeted per trade: a 128K-window child cannot afford the
@@ -1291,6 +1303,13 @@ enum AgentSubagentRunner {
         """
     }
 
+    /// 单命令授权的匹配规则：修剪首尾空白后的**精确相等**。刻意不做
+    /// 前缀/家族匹配——用户批准的是一条命令，不是一类命令。
+    nonisolated static func approvedCommandMatches(_ candidate: String, approved: String) -> Bool {
+        candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            == approved.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func executeToolCall(
         _ call: AgentMessageToolCall,
         workspaceURL: URL?,
@@ -1298,6 +1317,8 @@ enum AgentSubagentRunner {
         workspaceLocation: WorkspaceLocation? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         writeAccess: AgentSubagentWriteAccess? = nil,
+        terminalController: AgentInteractiveTerminalController? = nil,
+        approvedCommand: String? = nil,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil
     ) async -> String {
         let permitted = profile.effectiveToolNames(writeAccessGranted: writeAccess != nil)
@@ -1344,7 +1365,34 @@ enum AgentSubagentRunner {
         // for one specific file. Everything else stays read-only.
         let isApprovedWrite = writeAccess != nil
             && AgentSubagentProfileCatalog.editorWriteToolNames.contains(call.toolName)
-        guard risk == .read || isApprovedWrite else {
+        // terminal_operator 的 send_command 是 .write 档，但放行的口子开得
+        // 很窄：命令文本自己必须分类为只读（`kubectl get` 能敲，`rm` 在这
+        // 里就被拒）。终端是用户的真实 shell，seatbelt 管不到那里，所以这
+        // 道文本分类闸是唯一的边界——分不出只读的一律拒。此外一切都发生
+        // 在用户可见的侧栏终端里，本身就是一层监督。
+        let isTerminalOperatorReadOnlySend: Bool = {
+            guard call.toolName == "terminal_send_command",
+                  profile.id == AgentSubagentProfileCatalog.terminalOperatorID,
+                  let command = argsDict["command"]?.stringValue() else { return false }
+            return AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: workspaceURL
+            ).risk == .read
+        }()
+        // 单命令授权：用户在 spawn 审批卡上批准的那条确切命令（仅
+        // ops_runner）。精确文本匹配——多一个字符都不放。
+        let isApprovedCommandRun: Bool = {
+            guard call.toolName == "run_command",
+                  profile.id == AgentSubagentProfileCatalog.opsRunnerID,
+                  let approvedCommand,
+                  let command = argsDict["command"]?.stringValue() else { return false }
+            return approvedCommandMatches(command, approved: approvedCommand)
+        }()
+        guard risk == .read || isApprovedWrite || isTerminalOperatorReadOnlySend || isApprovedCommandRun else {
+            if call.toolName == "terminal_send_command",
+               profile.id == AgentSubagentProfileCatalog.terminalOperatorID {
+                return "Denied: this command did not classify as read-only, and the terminal-operator trade may only send read-only commands. Report it back to the parent agent instead of working around the denial."
+            }
             return "Denied: subagents may only run read-only operations, and this call classified as `\(risk.rawValue)`. Report the suggested change to the parent agent instead of performing it."
         }
 
@@ -1354,11 +1402,36 @@ enum AgentSubagentRunner {
         // The patch sink is handed down only for an approved editor trade,
         // so `apply_patch` remains unreachable for every other subagent —
         // the tool errors out without a sink even if it somehow got called.
+        // 子代理的 run_command 沙箱档按命令自身的分类走，而不是死钉
+        // .readOnly：查询类命令（kubectl get / gh run list）分类为
+        // readOnlyNetwork，钉 readOnly 会 deny network，把它们全逼进
+        // "假 DNS 失败"——ops_runner 上架即残废。被授权的单命令则拿它
+        // 分类应得的档（发布脚本通常是 workspaceWriteNetworkCredentialed，
+        // 正好接上凭证沙箱的 ~/.ssh）。
+        var sandboxMode: AgentSandboxMode = .readOnly
+        if call.toolName == "run_command",
+           let command = argsDict["command"]?.stringValue() {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: workspaceURL
+            )
+            if isApprovedCommandRun {
+                sandboxMode = decision.mode
+            } else if decision.mode == .readOnlyNetwork {
+                sandboxMode = .readOnlyNetwork
+            }
+        }
+
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: runtimeDescriptor,
-            patchProposalSink: writeAccess == nil ? nil : patchProposalSink
+            sandboxMode: sandboxMode,
+            patchProposalSink: writeAccess == nil ? nil : patchProposalSink,
+            // 终端 controller 只随 terminal_operator 下发；其他工种即便被
+            // 允许调 snapshot 之类，也拿不到执行所需的 controller。
+            terminalController: profile.id == AgentSubagentProfileCatalog.terminalOperatorID
+                ? terminalController : nil
         )
         do {
             let result = try await AgentToolRunner.run(

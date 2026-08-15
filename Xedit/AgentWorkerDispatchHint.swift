@@ -26,11 +26,14 @@ nonisolated enum AgentWorkerDispatchHint {
     enum Kind: Equatable {
         case testFixer
         case buildFixer
+        /// 发布/部署类脚本 → ops_runner 的单命令授权通道（target_command）。
+        case opsRunner
 
         var tradeID: String {
             switch self {
             case .testFixer: return AgentSubagentProfileCatalog.testFixerID
             case .buildFixer: return AgentSubagentProfileCatalog.buildFixerID
+            case .opsRunner: return AgentSubagentProfileCatalog.opsRunnerID
             }
         }
     }
@@ -60,14 +63,29 @@ nonisolated enum AgentWorkerDispatchHint {
         guard let kind = classify(command: command) else { return nil }
 
         let quoted = command.count <= quotedCommandLimit ? "`\(command)`" : "the command above"
-        return """
+        switch kind {
+        case .testFixer, .buildFixer:
+            return """
 
-        (WillDeep: this looks like a \(kind == .testFixer ? "test" : "build") failure a worker can own. \
-        Spawn `profile="\(kind.tradeID)"` with `target_files` (the files it may edit) and a \
-        `task` whose `verifier.command` is \(quoted) — the worker then iterates until that command \
-        exits 0, on a cheaper model, without spending your context on the loop. Fix it yourself \
-        instead when the cause is already obvious to you or spans files outside a small set.)
-        """
+            (WillDeep: this looks like a \(kind == .testFixer ? "test" : "build") failure a worker can own. \
+            Spawn `profile="\(kind.tradeID)"` with `target_files` (the files it may edit) and a \
+            `task` whose `verifier.command` is \(quoted) — the worker then iterates until that command \
+            exits 0, on a cheaper model, without spending your context on the loop. Fix it yourself \
+            instead when the cause is already obvious to you or spans files outside a small set.)
+            """
+        case .opsRunner:
+            // 发布失败与测试失败的分野：worker 能拥有的是"重试并盯梢"，
+            // 不是"决定回滚"。提示词把这条边界写死。
+            return """
+
+            (WillDeep: this looks like a release/deploy command. If the failure is transient \
+            (network, registry, lock, notarization queue — anything a retry can clear), spawn \
+            `profile="ops_runner"` with `target_command` set to EXACTLY \(quoted) and a `task` whose \
+            `verifier.command` is a read-only health/status check — the user approves that one \
+            command on the spawn card, and the worker re-runs and watches it on a cheaper model. \
+            Keep the failure diagnosis, rollback, and any irreversible decision in this session.)
+            """
+        }
     }
 
     /// Classify a command by shape, not by trying to run it.
@@ -82,6 +100,10 @@ nonisolated enum AgentWorkerDispatchHint {
         let head = lowered.split(separator: "|").first.map(String.init) ?? lowered
 
         if testMarkers.contains(where: { head.contains($0) }) { return .testFixer }
+        // 发布检测优先于构建：`make deploy` 也含 "make"，但失败的是部署，
+        // 而部署的正确出路是 ops_runner 的单命令授权，不是 build_fixer
+        // 改代码。
+        if releaseMarkers.contains(where: { head.contains($0) }) { return .opsRunner }
         if buildMarkers.contains(where: { head.contains($0) }) { return .buildFixer }
         return nil
     }
@@ -96,6 +118,16 @@ nonisolated enum AgentWorkerDispatchHint {
         "rspec", "rake test", "bundle exec rspec",
         "jest", "vitest", "mocha", "phpunit", "gradle test", "mvn test",
         "ctest", "dotnet test",
+    ]
+
+    /// 发布/部署形状的命令。特征取"这个仓库群和常见栈实际在用的"，不追求
+    /// 穷举——漏判只是少一条提示，误判则会把构建失败指去发布通道。
+    private static let releaseMarkers: [String] = [
+        "release.rb", "release.sh", "release_mac_app", "scripts/release",
+        "deploy", "publish", "fastlane",
+        "helm upgrade", "helm install", "kubectl apply", "kubectl rollout",
+        "terraform apply", "ansible-playbook",
+        "gh release create", "npm publish", "cargo publish", "gem push",
     ]
 
     private static let buildMarkers: [String] = [

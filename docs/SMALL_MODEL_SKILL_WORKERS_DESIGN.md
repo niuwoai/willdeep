@@ -210,6 +210,67 @@ attempt 打满 max_attempts → 触发 escalation（换父模型重跑或报告�
 
 每期照常：feature 分支 → 全量单测绿 → bump 版本 + CHANGELOG → 合回 develop。
 
+## 10.5 运维类场景扩面（2026-08-16 补充，源于派工率盘点）
+
+2026-08-16 盘点实测：358 个会话侧车里仅 5 个派过工（1.4%），近 5 天 86 个会话 0 次。
+第一刀已切（workflow fan-out 绑窄工种，见 1.263.0-rc1），下一批候选按"机械程度 ×
+工具可得性"排序如下。共同前提：**1.262.0-rc2 的凭证沙箱档已解开钥匙问题**，无人
+值守任务能用 `~/.ssh` / `~/.npmrc`，这类场景才第一次变得可行。
+
+### 三个用户点名的场景，判定各不相同
+
+| 场景 | 判定 | 依据 |
+|---|---|---|
+| **侧边栏终端操作** | ✅ 最适合，缺的只是一个工种 | `terminal_list_tabs / select_tab / snapshot / send_command / send_control` 五件套现成；"发命令 → 读屏 → 汇报"是纯机械闭环，上下文天然小（一屏 snapshot ≪ 4K payload 上限），32B 干这个绰绰有余 |
+| **在线服务发布** | ✅ 可以，但只当"执行员"不当"决策者" | 发布 = 跑一个**已知脚本**（`release.rb run` / `deploy.sh`）+ 盯退出码 + 转述失败摘要，正是 Task Packet + verifier 闭环的形状（§3/§4）。前提：脚本由主模型/用户选定，Worker 只执行与转述；回滚决策必须升档或问人 |
+| **k8s 管理** | ⚠️ 拆开看：查询可以，变更不行 | `kubectl get/describe/logs`、`helm status` 是只读 shell 查询，机械且高频，适合小模型；`apply/delete/rollout` 是危险档，审批与决策留在主模型/用户。小模型的价值在"先把现场信息收齐"，不在"决定动手术" |
+
+### 由此推出的两个新工种（1.263.0-rc1 已实现 v1）
+
+1. **`ops_runner`（只读 shell 查询员）**：工具 = `run_command` + `read_file` +
+   `grep_files` + `list_directory`。吃下 `kubectl get/logs`、`gh run watch`、
+   `gh issue list`、`gh pr view` 这类纯抓取步骤。实现零新增安全面：子代理执行层
+   "只许 read 风险"的既有死门自动实现"查询可以、变更不行"。
+2. **`terminal_operator`（侧边栏终端操作员）**：工具 = `terminal_list_tabs` /
+   `select_tab` / `snapshot` / `send_command` + `read_file`。终端工具照 editor
+   写工具先例**按工种专属放行**（`AgentSubagentProfileCatalog.terminalOperatorToolNames`，
+   不进全局白名单）；`send_command` 在执行层加第二道闸——命令文本必须分类为只读。
+   v1 刻意不给 `send_control`（打断用户前台任务）与捷径写工具。终端 controller
+   仅随该工种从 spawn 点下发。
+   两者 cheapBinding（glm-5 / 32K），未进 relay 托管名单——服务端补
+   `someim-32b-ops-runner` / `someim-32b-terminal-operator` 档后再进
+   `hostedTradeIDs`。
+
+### 单命令授权通道（target_command，同期落地）
+
+"发布执行员"场景的钥匙孔：`spawn_agent(profile: "ops_runner",
+target_command: "<确切命令>", task: {verifier: …})`。
+
+- **授权语义**：带 target_command 的 spawn 升 write 档过审批卡，用户批准的
+  就是那条命令本身。执行层修剪后精确匹配放行，可重复执行（verifier 重试
+  依赖脚本幂等，deployment.md 的既有硬约束）。
+- **沙箱**：命令按自身分类拿档。`ruby scripts/release.rb` → ruby 属
+  networkCapableBuildHeads → `workspaceWriteNetworkCredentialed`，凭证沙箱
+  的 `~/.ssh` / `~/.npmrc` 可用——1.262.0-rc2 那刀是这条通道的前置。
+- **触发**：AgentWorkerDispatchHint 新增 releaseMarkers（release.rb / deploy /
+  helm upgrade / kubectl apply / npm publish 等），失败带退出码时附提示；
+  发布检测优先于构建检测。提示写死边界：worker 只"重试并盯梢"，诊断、
+  回滚、不可逆决策留在主会话。
+- **连带修复**：子代理 run_command 的沙箱档从死钉 .readOnly 改为按命令
+  分类（查询 → readOnlyNetwork；授权单命令 → 分类应得档）。不修这个,
+  ops_runner 的 kubectl/gh 查询全部死于 deny network 的假 DNS 失败。
+
+两者都遵守 §19 教训：触发点确定性优先——由 workflow / 调度台 / 确定性提示派活，
+不指望主模型自觉。危险命令边界不因工种便宜而放松：`AgentSafeCommand` 分类、
+审批闸门、typed confirm 原样适用。
+
+### 32B 的能力边界（据此选活，不是拍脑袋）
+
+适合：固定流程执行、退出码/日志的模式识别与转述、单文件小改（有 verifier 兜底）、
+一屏内的状态判读。
+不适合：开放式排障（要跨多处线索推理）、严格 JSON schema 输出（DeepResearch 5 处
+结构化步骤因此暂不下放）、不可逆操作的决策（回滚、删除、对外发布的"按不按钮"）。
+
 ## 11. 风险
 
 | 风险 | 缓解 |

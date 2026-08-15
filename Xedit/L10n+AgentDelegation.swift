@@ -252,6 +252,22 @@ extension L10n {
             localized: "agent-delegation.profile-judge-purpose",
             defaultValue: "Returns one bounded verdict about material you supply: a routing choice, a quality check, a classification. No tools."
         )
+        static let profileOpsRunnerName = String(
+            localized: "agent-delegation.profile-ops-runner-name",
+            defaultValue: "Ops Runner"
+        )
+        static let profileOpsRunnerPurpose = String(
+            localized: "agent-delegation.profile-ops-runner-purpose",
+            defaultValue: "Read-only operations queries via shell: service status, log tails, kubectl/gh inspection. Can inspect, never change."
+        )
+        static let profileTerminalOperatorName = String(
+            localized: "agent-delegation.profile-terminal-operator-name",
+            defaultValue: "Terminal Operator"
+        )
+        static let profileTerminalOperatorPurpose = String(
+            localized: "agent-delegation.profile-terminal-operator-purpose",
+            defaultValue: "Drives the visible side-panel terminal: runs given read-only commands in a tab, reads the screen, reports results."
+        )
 
         // MARK: Hosted trades (some.im)
 

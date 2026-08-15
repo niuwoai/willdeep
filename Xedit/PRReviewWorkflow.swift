@@ -11,6 +11,10 @@
 import Foundation
 
 struct PRReviewWorkflow: WorkflowDefinition {
+    /// 与 CodeReviewWorkflow 同一口径：reviewer 钉在 32K token 窗口，28K
+    /// 字符给提示词和输出留余量；超限回落父模型档。
+    private static let inlineDiffCharacterLimit = 28_000
+
     var name: String { "pr-review" }
     var displayTitle: String { "PR Review" }
     var slashCommand: String { "/pr-review" }
@@ -69,15 +73,31 @@ struct PRReviewWorkflow: WorkflowDefinition {
              "Untested edge cases, swallowed errors, missing fallbacks, hard-to-test code, regressions a test would catch."),
         ]
 
+        // Diff 在 Swift 侧确定性取一次、内联下发。reviewer 没有 shell，
+        // "Now run `gh pr diff`" 那句老提示词对它就是一条必然被拒的指令
+        // ——守卫测试 WorkflowWorkerBindingTests 抓出来的正是这一处。
+        // 太大装不进 32K 窗口时回落父模型档，提示词同步保留自取指引。
+        let prDiff = await engine.capturedCommandOutput(["gh", "pr", "diff", "\(prNumber)"])
+        let inlinedDiff: String? = {
+            guard let prDiff, !prDiff.isEmpty,
+                  prDiff.count <= Self.inlineDiffCharacterLimit else { return nil }
+            return "```diff\n\(prDiff)\n```"
+        }()
+
         let reviewPrompts = dimensions.map { dim in
-            """
+            let diffSection = inlinedDiff.map {
+                "The full PR diff (fetched for you — do not try to run commands):\n\n\($0)"
+            } ?? "Now run `gh pr diff \(prNumber)` to read the actual diff."
+            return """
             You are reviewing GitHub PR #\(prNumber) along the **\(dim.lens)** axis.
 
             Context (collected by another agent — trust it, don't re-fetch):
 
             \(contextDoc)
 
-            Now run `gh pr diff \(prNumber)` to read the actual diff, then look for:
+            \(diffSection)
+
+            Look for:
             \(dim.detail)
 
             For each finding, output a structured block:
@@ -91,7 +111,14 @@ struct PRReviewWorkflow: WorkflowDefinition {
 
         let reviewResults = try await engine.parallel(maxConcurrent: 4, reviewPrompts.enumerated().map { idx, prompt in
             { @Sendable in
-                try await engine.agent(prompt, label: "review:\(dimensions[idx].label)")
+                try await engine.agent(
+                    prompt,
+                    label: "review:\(dimensions[idx].label)",
+                    // diff 内联成功才下放 reviewer；取不到或超窗回落父模型档。
+                    profile: inlinedDiff != nil
+                        ? AgentSubagentProfileCatalog.reviewer
+                        : AgentSubagentProfileCatalog.deep
+                )
             }
         })
 

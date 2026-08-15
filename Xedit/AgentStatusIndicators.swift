@@ -1021,6 +1021,8 @@ struct AgentStatsDashboard: View {
         case AgentSubagentProfileCatalog.gitDetectiveID: return "arrow.triangle.branch"
         case AgentSubagentProfileCatalog.securityGuardID: return "lock.shield"
         case AgentSubagentProfileCatalog.judgeID: return "scalemass"
+        case AgentSubagentProfileCatalog.opsRunnerID: return "server.rack"
+        case AgentSubagentProfileCatalog.terminalOperatorID: return "terminal"
         default: return "brain.head.profile"
         }
     }

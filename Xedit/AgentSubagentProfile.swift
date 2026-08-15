@@ -139,6 +139,13 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         if requiresWriteAccess, writeAccessGranted {
             allowed.formUnion(AgentSubagentProfileCatalog.editorWriteToolNames)
         }
+        // 终端工具照 editor 写工具的先例走**按工种放行**，不进全局白名单：
+        // 进了全局名单，deep/tester 会静默获得读用户终端屏幕的能力。
+        // send_command 虽在此放行，执行层仍有第二道闸——只许命令文本分类
+        // 为只读的（见 AgentSubagents.executeToolCall）。
+        if id == AgentSubagentProfileCatalog.terminalOperatorID {
+            allowed.formUnion(AgentSubagentProfileCatalog.terminalOperatorToolNames)
+        }
         return toolNames.intersection(allowed)
     }
 
@@ -155,6 +162,8 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.gitDetectiveID: return L10n.AgentDelegation.profileGitDetectiveName
         case AgentSubagentProfileCatalog.securityGuardID: return L10n.AgentDelegation.profileSecurityGuardName
         case AgentSubagentProfileCatalog.judgeID: return L10n.AgentDelegation.profileJudgeName
+        case AgentSubagentProfileCatalog.opsRunnerID: return L10n.AgentDelegation.profileOpsRunnerName
+        case AgentSubagentProfileCatalog.terminalOperatorID: return L10n.AgentDelegation.profileTerminalOperatorName
         default: return L10n.AgentDelegation.profileDeepName
         }
     }
@@ -175,6 +184,8 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.gitDetectiveID: return L10n.AgentDelegation.profileGitDetectivePurpose
         case AgentSubagentProfileCatalog.securityGuardID: return L10n.AgentDelegation.profileSecurityGuardPurpose
         case AgentSubagentProfileCatalog.judgeID: return L10n.AgentDelegation.profileJudgePurpose
+        case AgentSubagentProfileCatalog.opsRunnerID: return L10n.AgentDelegation.profileOpsRunnerPurpose
+        case AgentSubagentProfileCatalog.terminalOperatorID: return L10n.AgentDelegation.profileTerminalOperatorPurpose
         default: return L10n.AgentDelegation.profileDeepPurpose
         }
     }
@@ -195,6 +206,8 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let gitDetectiveID = "git_detective"
     static let securityGuardID = "security_guard"
     static let judgeID = "judge"
+    static let opsRunnerID = "ops_runner"
+    static let terminalOperatorID = "terminal_operator"
 
     /// Per-tool-result cap for the 32K-window worker tier. Well under the
     /// 8K the 128K trades use: at 32K a single fat `read_file` is the
@@ -209,6 +222,15 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// Tools the editor trade adds on top of the read-only set, and only
     /// while its per-file approval is held.
     static let editorWriteToolNames: Set<String> = ["apply_patch"]
+
+    /// Tools the terminal-operator trade adds on top of the read-only set.
+    /// snapshot / list_tabs / select_tab 本来就是 .read 档；send_command
+    /// 是 .write，但执行层限定其命令文本必须分类为只读才放行。刻意不含
+    /// send_control——打断用户前台任务的爆炸半径不给子代理。
+    static let terminalOperatorToolNames: Set<String> = [
+        "terminal_list_tabs", "terminal_select_tab",
+        "terminal_snapshot", "terminal_send_command",
+    ]
 
     /// Default binding for the cheap trades: some.im's GLM tier when the
     /// user is signed in, otherwise inherit the parent (resolved at spawn
@@ -410,6 +432,34 @@ nonisolated enum AgentSubagentProfileCatalog {
         hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: judgeID)
     )
 
+    static let opsRunner = AgentSubagentProfile(
+        id: opsRunnerID,
+        purpose: "Read-only operations queries via shell: service status, log tails, `kubectl get/describe/logs`, `gh run list`, CI results. The sandbox denies anything that mutates state, so it can inspect but never change.",
+        modelBinding: cheapBinding,
+        toolNames: ["run_command", "read_file", "grep_files", "list_directory"],
+        capabilityPromptSection: AgentSubagentJobPrompts.opsRunner,
+        maxRounds: 8,
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: opsRunnerID)
+    )
+
+    static let terminalOperator = AgentSubagentProfile(
+        id: terminalOperatorID,
+        purpose: "Drive the visible side-panel terminal: run given read-only commands in a specified tab, read the screen, report results. Everything happens in front of the user; write commands are denied by policy.",
+        modelBinding: cheapBinding,
+        toolNames: [
+            "terminal_list_tabs", "terminal_select_tab",
+            "terminal_snapshot", "terminal_send_command", "read_file",
+        ],
+        capabilityPromptSection: AgentSubagentJobPrompts.terminalOperator,
+        // 每条命令要「snapshot → send → snapshot」三步起，轮次给足。
+        maxRounds: 12,
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: terminalOperatorID)
+    )
+
     static let builtIn: [AgentSubagentProfile] = [
         scout,
         reader,
@@ -423,6 +473,8 @@ nonisolated enum AgentSubagentProfileCatalog {
         gitDetective,
         securityGuard,
         judge,
+        opsRunner,
+        terminalOperator,
     ]
 
     /// Resolve a spawn's `profile` argument. Unknown or missing → `deep`,

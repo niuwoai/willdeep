@@ -323,6 +323,29 @@ final class WorkflowEngine {
     private func mutateReport(_ mutation: (inout WorkflowReport) -> Void) {
         appState?.updateWorkflowReport(id: reportID, runtimeID: runtimeID, mutation: mutation)
     }
+
+    // MARK: - Deterministic command capture
+
+    /// 在 workspace 里确定性地跑一条只读命令、拿 stdout；失败一律返回 nil，
+    /// 由调用方回落到"让 agent 自己想办法"的老路。
+    ///
+    /// 存在的理由：取 `git diff` / `gh pr diff` 这类素材不需要模型参与。
+    /// 之前的写法是让 fan-out 的每个维度 agent 各自跑一遍——既是 N 倍浪费，
+    /// 也让这些步骤依赖 shell 工具、永远下放不到没有 shell 的窄工种
+    /// （reviewer）。素材在这里取一次、内联进提示词，正是 Task Packet
+    /// "相关文件内联使 Worker 基本不需要搜索"的原则。
+    func capturedCommandOutput(
+        _ arguments: [String],
+        timeout: TimeInterval = 60
+    ) async -> String? {
+        let process = Process()
+        process.launchPath = "/usr/bin/env"
+        process.arguments = arguments
+        process.currentDirectoryURL = workspaceURL
+        guard let result = try? await AgentSubprocess.run(process, timeout: timeout),
+              result.exitStatus == 0 else { return nil }
+        return String(data: result.stdout, encoding: .utf8)
+    }
 }
 
 enum WorkflowError: Error, LocalizedError {

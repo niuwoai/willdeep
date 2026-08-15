@@ -1,7 +1,30 @@
 # Changelog
 
-> 当前文件保留最新版本（1.262.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.263.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.263.0-rc1 - 2026-08-16
+
+### Added
+
+- **Workflow fan-out 步骤绑定小模型工种。** 派工率盘点实测（358 个会话侧车、25340 条消息）：派过工的会话只有 5 个（1.4%），近 5 天 86 个会话 0 次——小模型工种上线以来基本没露过脸，主模型把活全包了。第一刀切在 workflow 引擎：36 处 `engine.agent()` 里此前只有 1 处指定工种，其余全跑在主模型上，而**这些步骤本来就在派工，只是全派给了大模型**。本次绑定：
+  - `/code-review`、`/pr-review` 的各维度审查、`/bug-hunt` 的单文件审查 → **reviewer**；
+  - `/release-notes` 的素材收集（要跑 `git log` / `gh pr view`）→ **git_detective**（窄工种里唯一带 shell 的）；
+  - `/competitor` 的产品调研（只用 `web_search`）→ **reader**（唯一能联网的窄工种）。
+  - **所有 `synthesize` 综合步骤保持 deep**——判断质量的地方不省。
+  - **主动不动的**：DeepResearch 的 5 处结构化输出步骤（32B 的严格 JSON schema 合规是已知风险，等实测数据）；CSV/DB 三个 workflow（要跑 duckdb/psql，窄工种无此工具）；IssueTriage 的 `gh issue list` 抓取与 PRReview 的 context 收集（需要"只读 + shell"的通用工种，目录里还没有——候选设计见下）。
+- **Diff 预取：审查素材在 Swift 侧确定性取一次，内联下发。** 以前 `/code-review` 的 4 个维度 agent **各自**跑一遍 `git diff`（PR 模式各自跑 `gh pr view` + `gh pr diff`），4-8 次工具往返全烧在大模型上。现在 `WorkflowEngine.capturedCommandOutput` 取材零模型成本，完整素材直接进提示词——这也是窄工种能接手的前提（reviewer 没有 shell）。素材超过 28K 字符（32K 窗口装不下）或取不到时，自动回落父模型档并保留工具自取指引：**只升不降**。
+- **`WorkflowWorkerBindingTests` 守卫：绑定工种的步骤，提示词点名的工具必须在该工种白名单里。** 这条守卫第一次运行就抓到两处真伤——CodeReview 和 PRReview 的维度提示词都写着"跑 `gh pr diff`"，而它们刚被绑给没有 shell 的 reviewer；没有守卫，审查卡片照常变绿，只是审的人从头到尾没看到过 diff。顺带修掉一处**既有**同型 bug：BugHunt 的 picker 提示词让 scout 跑 `git_status` / `git log`，scout 两样都没有，调用被拒后只能退回猜（该步骤从 churn 启发式改为纯静态启发式）。
+- **设计文档新增 §10.5 运维类场景扩面**：侧边栏终端操作（工具五件套现成，最适合 32B）、在线服务发布（只当执行员不当决策者，凭证沙箱档解开钥匙后才可行）、k8s 管理（查询可以、变更不行）；32B 能力边界清单一并沉淀。
+- **新工种 `ops_runner`（运维查询员）**：只读 shell 查询——服务状态、日志尾部、`kubectl get/describe/logs`、`gh run list`、CI 结果。**零新增安全面**：子代理执行层"只许 read 风险"的既有死门自动实现"查询可以、变更不行"，`kubectl apply` 这类变更在分类层就被拒。同时补上了本次绑定时暴露的目录缺口——`gh issue list`、`gh pr view` 这类纯抓取步骤从此有处可去。
+- **新工种 `terminal_operator`（终端操作员）**：驾驶用户可见的侧栏终端——指定 tab 里执行给定命令、读屏、汇报。安全模型三层：① 终端工具照 editor 写工具的先例**按工种专属放行**，不进全局白名单（否则 deep/tester 会静默获得读用户终端屏幕的能力）；② `terminal_send_command` 虽放行，执行层第二道闸只许**命令文本分类为只读**的通过（`kubectl get` 能敲，`rm` 被拒并要求汇报父级）——终端是用户的真实 shell，seatbelt 管不到那里，这道文本分类闸就是边界；③ 刻意不给 `send_control`（打断用户前台任务的爆炸半径不给子代理）与捷径写工具。终端 controller 只随该工种下发，其他工种即便声明了终端工具也拿不到执行对象。
+- 两个新工种都走 cheapBinding（glm-5 / 32K 窗口 / 4K payload），未进 relay 托管名单（服务端虚拟模型档待建，职能段暂由客户端自带）；显示名、图标、五语言文案、目录登记一次配齐——上次加工种漏过这一课。
+- **单命令授权通道（`target_command`）：发布脚本可以包成 Task Packet 派给 worker 了。** `spawn_agent` 新增 `target_command` 参数（仅 ops_runner）：带上它的 spawn 升为 write 档、必过审批卡——**用户在卡上批准的就是那条命令本身**，语义等同在主会话批准一条 write 命令，爆炸半径恰好一条。子代理执行层对修剪后**精确相等**的命令文本放行（多一个 flag 都不行），可重复执行以支撑 verifier 重试循环（发布脚本按部署规范应幂等）。命令按自身分类拿沙箱档——发布脚本通常落 `workspaceWriteNetworkCredentialed`，正好接上 1.262.0-rc2 凭证沙箱的 `~/.ssh` 钥匙。配套确定性触发：`release.rb` / `deploy` / `helm upgrade` / `kubectl apply` 这类命令失败且有退出码时，失败结果尾部附派工提示（发布检测优先于构建检测，`make deploy` 归发布通道而不是 build_fixer）；提示里写死边界——**worker 拥有的是"重试并盯梢"，失败诊断、回滚、一切不可逆决策留在主会话**。
+- **连带修复：子代理的 `run_command` 沙箱档不再死钉 `.readOnly`。** 此前子代理 context 用默认只读档，deny network 会把 `kubectl get` / `gh run list` 这类查询逼进"假 DNS 失败"——ops_runner 上架即残废，且重演今早刚修过的那种误导性失败。现在按命令自身分类走：查询命令拿 `readOnlyNetwork`，被授权的单命令拿它分类应得的档。
+
+### 预期管理（重要）
+
+- 这一刀救的是"**已经在派工的地方派错了对象**"：跑一次 `/code-review` 的派工次数就超过此前五天总和。但**不跑 workflow 的日常对话派工率不会变**——决定权仍在 `.automatic`（模型自决）手里，而实测证明模型的决定就是不派。把日常对话的派工率抬起来需要确定性触发点（设计文档 §7 触发点 1）与小活旁路，那是下一刀。看数据别看错表。
 
 ## 1.262.0-rc2 - 2026-08-16
 
