@@ -391,7 +391,11 @@ extension AppState {
                     roundCount: outcome?.roundCount ?? 0,
                     toolInvocationCount: outcome?.toolInvocationCount ?? 0,
                     escalatedFromModel: escalatedFrom,
-                    verifierPassed: outcome?.verifierPassed
+                    verifierPassed: outcome?.verifierPassed,
+                    citationsChecked: (outcome?.citationsChecked).flatMap { $0 > 0 ? $0 : nil },
+                    citationsUnverifiable: (outcome?.citationsChecked).flatMap {
+                        $0 > 0 ? (outcome?.citationsUnverifiable ?? 0) : nil
+                    }
                 ),
                 runID: runID,
                 runtime: runtime
@@ -420,6 +424,13 @@ extension AppState {
                     verifierCommand: verifierCommand,
                     verifierPassed: outcome?.verifierPassed,
                     attemptCount: outcome?.verifierAttempts,
+                    // Only record a citation check that actually ran: zero
+                    // checked would otherwise be indistinguishable from a
+                    // clean sheet.
+                    citationsChecked: (outcome?.citationsChecked).flatMap { $0 > 0 ? $0 : nil },
+                    citationsUnverifiable: (outcome?.citationsChecked).flatMap {
+                        $0 > 0 ? (outcome?.citationsUnverifiable ?? 0) : nil
+                    },
                     repoCommit: AppState.workspaceHeadCommitShortSHA(for: workspaceURL)
                 )
             )

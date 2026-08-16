@@ -3,6 +3,28 @@
 > 当前文件保留最新版本（1.263.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.264.0-rc1 - 2026-08-16
+
+### Added
+
+- **只读工种的弱验证：报告引用抽查（回流自 willdeep-rs）。** `test_fixer` 有退出码，`scout` 没有。在此之前只读工种（`scout` / `reader` / `log_inspector` / `git_detective`）的 `verifierPassed` 永远是 nil——**永远「未验证」，于是在三个北极星指标里永远隐身，而隐身读起来就像没问题**。它们的答案并非不可证伪：一个位置要么存在，要么不存在。运行结束后 runner 用纯代码抽查报告里点名的 `路径`、`路径:行号` 与 commit 哈希（`git cat-file -e`），不花模型、不占轮次。结果三处落地：报告尾部追加 `<citation-check checked="N" unverifiable="M">` 并逐条点名对不上的引用（父代理直接看得见）、transcript 与 usage 记录带上 `citationsChecked` / `citationsUnverifiable`、统计面板新增第四个指标 **Citation Accuracy**。
+  - **它只证伪「地名是编的」，不证明「答对了」**：一个 Worker 可以引用十个真实文件同时完全答非所问。
+  - **解析不出的 token 一律不计**——把解析器读不懂的词算成坏引用，指标就变成在量解析器。
+  - **`checked = 0` 不进分子也不进分母**：「没引用任何位置」和「引用全对」是两件事，正如「没验证」不是「通过」。
+  - 结构化输出（schema）模式**刻意不做**这件事：payload 必须保持 schema 合规，往里追加一段注记就是把它弄坏。
+- **实弹靶场（回流自 willdeep-rs）**：`XeditTests/AgentSubagentLiveFireRangeTests.swift` + `scripts/skill_worker_range.rb`。此前仓库里没有任何一处能证伪「可自动验证的小任务可以交给 32B」这句话——单测里的 provider 全是桩，而**桩 provider 永远修得好**。靶场现建五个带真实缺陷的 SwiftPM 仓库（三个编译错误派 `build_fixer`、两个只读样本派 `scout` 与 `git_detective`），用真 Provider 派工、真 `swift build` 退出码判定，产出 JSON + Markdown 两份报告。**不进 CI**：要真凭据、要网络、要花钱，没有 `XEDIT_RANGE_API_KEY` 时整个 suite 自己跳过。
+  - 派工走的是**产线同一条路径**：Task Packet 渲染出的开场白，不是靶场自编的提示词——自编一套，量到的就是那套提示词。
+  - 首轮实测（`glm-5`，5 样本）：可验证样本 **3/3 一次通过**、0 作弊；只读样本引用准确率 **6/6**、答对率 **2/2**；总耗时 84 秒。
+  - 判定纪律与 rs 侧逐字一致：**成功 = verifier 通过且靶子没被搬走**（删掉出问题的函数一样能让 `swift build` 变绿，所以另查公开 API 还在）；**派工前先确认靶子是红的**，绿着的靶子测不出任何东西。
+
+### Fixed
+
+- **嵌套沙盒：SwiftPM 工程里把 `swift build` 当 verifier 会稳定收到一个与代码无关的红。** 靶场第一轮三个编译样本全红，而 Worker 的补丁每次都打对了——`swift build` 在编译 `Package.swift` manifest 时自己要调 `sandbox-exec`，而 verifier 已经跑在 Agent 的 seatbelt 沙盒里，内核直接拒（`sandbox_apply: Operation not permitted`）。**这条对真实用户同样成立**：verifier 要写成 `swift build --disable-sandbox`（或直接 `swiftc -typecheck`）。改完同一样本一次通过、16.6 秒。已写进设计文档 §8.2，靶场样本一并改用该命令。
+
+### Docs
+
+- `docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md` §8 新增 Citation Accuracy 指标、§8.1 只读工种弱验证、§8.2 实弹靶场三节，并记录 rs 侧首轮实测（`glm-5`，12 样本：可验证 10/10 一次通过、0 作弊；只读样本引用准确率 4/4、答对率 2/2）与这组数字**不支持**的结论。
+
 ## 1.263.0-rc1 - 2026-08-16
 
 ### Added

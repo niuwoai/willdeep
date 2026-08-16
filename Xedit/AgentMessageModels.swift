@@ -464,6 +464,12 @@ nonisolated struct AgentSubagentRunUsage: Codable, Equatable, Sendable {
     /// nil and `false` must stay distinct, because "never verified" is not
     /// "verified and failed" and the two belong in different KPI buckets.
     var verifierPassed: Bool?
+    /// Citations the runtime spot-checked in a report-only run, and how many
+    /// pointed at nothing. Nil when no check ran. Report-only trades never
+    /// earn a verifier verdict, so without these the dashboard has nothing to
+    /// say about them at all — and silence there reads as "fine".
+    var citationsChecked: Int?
+    var citationsUnverifiable: Int?
 
     init(
         profileID: String,
@@ -476,7 +482,9 @@ nonisolated struct AgentSubagentRunUsage: Codable, Equatable, Sendable {
         roundCount: Int = 0,
         toolInvocationCount: Int = 0,
         escalatedFromModel: String? = nil,
-        verifierPassed: Bool? = nil
+        verifierPassed: Bool? = nil,
+        citationsChecked: Int? = nil,
+        citationsUnverifiable: Int? = nil
     ) {
         self.profileID = profileID
         self.model = model
@@ -489,6 +497,8 @@ nonisolated struct AgentSubagentRunUsage: Codable, Equatable, Sendable {
         self.toolInvocationCount = toolInvocationCount
         self.escalatedFromModel = escalatedFromModel
         self.verifierPassed = verifierPassed
+        self.citationsChecked = citationsChecked
+        self.citationsUnverifiable = citationsUnverifiable
     }
 }
 
