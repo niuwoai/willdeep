@@ -553,6 +553,12 @@ enum AgentSubagentRunner {
         var verifierPassed: Bool? = nil
         /// How many times the verifier ran. 0 when there was no verifier.
         var verifierAttempts: Int = 0
+        /// Citations the runtime spot-checked in a report-only run, and how
+        /// many of them pointed at nothing. Read-only trades never earn a
+        /// verifier verdict, so without these two numbers they are invisible
+        /// in the telemetry — and invisible reads as fine.
+        var citationsChecked: Int = 0
+        var citationsUnverifiable: Int = 0
         /// Per-round record for the subagent inspector. The runner produces
         /// the rounds; the caller owns the run identity and stamps them into
         /// an `AgentSubagentTranscript` before persisting.
@@ -836,6 +842,24 @@ enum AgentSubagentRunner {
         var toolInvocations = 0
         var verifierAttempts = 0
         var verifierPassed: Bool?
+
+        // A run with a verifier is judged by its exit code; a report-only run
+        // has nothing to judge it, so the runtime checks what the report
+        // cites. Structured output is exempt: the payload has to stay
+        // schema-valid, and an appended note would break it.
+        let auditCitations: (String) -> AgentSubagentCitationAudit.Result = { report in
+            guard verifierCommand == nil, outputSchema == nil else {
+                return AgentSubagentCitationAudit.Result()
+            }
+            return AgentSubagentCitationAudit.audit(
+                report: report,
+                workspaceURL: workspaceURL
+            )
+        }
+        let annotate: (String, AgentSubagentCitationAudit.Result) -> String = { report, audit in
+            guard let note = audit.note else { return report }
+            return "\(report)\n\n\(note)"
+        }
         // The trade's narrowed tool table — resent every round, so this is
         // where a cheap profile earns most of its savings.
         var toolList = toolDescriptors(
@@ -1057,14 +1081,20 @@ enum AgentSubagentRunner {
                     recordedRounds.append(recordedRound)
                     continue
                 }
+                let finalReport = report.isEmpty
+                    ? "(subagent finished without producing a report)"
+                    : report
+                let audit = auditCitations(finalReport)
                 return Outcome(
-                    report: report.isEmpty ? "(subagent finished without producing a report)" : report,
+                    report: annotate(finalReport, audit),
                     usageTokens: totalTokens,
                     usageSplit: usageSplit,
                     roundCount: round,
                     toolInvocationCount: toolInvocations,
                     verifierPassed: verifierPassed,
                     verifierAttempts: verifierAttempts,
+                    citationsChecked: audit.checked,
+                    citationsUnverifiable: audit.unverifiable.count,
                     rounds: sealingRound(),
                     didTruncate: didTruncateRecord
                 )
@@ -1130,14 +1160,18 @@ enum AgentSubagentRunner {
         }
         let lastText = transcript.last(where: { $0.role == .assistant && !$0.content.isEmpty })?.content ?? ""
         let note = "[Subagent stopped after \(roundLimit) tool rounds without a final report. Last progress shown below.]"
+        let cappedReport = lastText.isEmpty ? note : "\(note)\n\n\(lastText)"
+        let cappedAudit = auditCitations(cappedReport)
         return Outcome(
-            report: lastText.isEmpty ? note : "\(note)\n\n\(lastText)",
+            report: annotate(cappedReport, cappedAudit),
             usageTokens: totalTokens,
             usageSplit: usageSplit,
             roundCount: roundLimit,
             toolInvocationCount: toolInvocations,
             verifierPassed: verifierPassed,
             verifierAttempts: verifierAttempts,
+            citationsChecked: cappedAudit.checked,
+            citationsUnverifiable: cappedAudit.unverifiable.count,
             rounds: recordedRounds,
             didTruncate: didTruncateRecord
         )

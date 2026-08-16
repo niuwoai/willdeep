@@ -70,6 +70,12 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
     var verifierPassed: Bool?
     /// Verifier attempts consumed (1-based). Nil when no verifier ran.
     var attemptCount: Int?
+    /// Citations the runtime spot-checked in a report-only run, and how many
+    /// pointed at nothing. Nil when no check ran — a report-only trade has no
+    /// verifier verdict to record, and these two are the only thing about its
+    /// answer a program can confirm. See AgentSubagentCitationAudit.
+    var citationsChecked: Int?
+    var citationsUnverifiable: Int?
     /// Workspace HEAD when the run started; anchors the transcript as a
     /// replayable case (same commit + same task packet → comparable reruns).
     var repoCommit: String?
@@ -95,6 +101,8 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
         verifierCommand: String? = nil,
         verifierPassed: Bool? = nil,
         attemptCount: Int? = nil,
+        citationsChecked: Int? = nil,
+        citationsUnverifiable: Int? = nil,
         repoCommit: String? = nil
     ) {
         self.runID = runID
@@ -113,6 +121,8 @@ nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
         self.verifierCommand = verifierCommand
         self.verifierPassed = verifierPassed
         self.attemptCount = attemptCount
+        self.citationsChecked = citationsChecked
+        self.citationsUnverifiable = citationsUnverifiable
         self.repoCommit = repoCommit
     }
 }

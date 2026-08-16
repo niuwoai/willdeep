@@ -186,6 +186,11 @@ nonisolated struct AgentSkillWorkerKPIs: Equatable {
     var verifiedRunCount: Int = 0
     var verifiedPassCount: Int = 0
     var escalatedRunCount: Int = 0
+    /// Citations spot-checked across report-only runs, and how many resolved.
+    /// Trades without a verifier can never move the success rate, so this is
+    /// the only number that says anything about their answers.
+    var citationsChecked: Int = 0
+    var citationsResolved: Int = 0
 
     /// Share of model invocations a narrow trade handled. Runs and parent
     /// turns are different units on purpose: the question is "how much of
@@ -205,6 +210,17 @@ nonisolated struct AgentSkillWorkerKPIs: Equatable {
     var escalationRate: Double? {
         guard narrowRunCount > 0 else { return nil }
         return Double(escalatedRunCount) / Double(narrowRunCount)
+    }
+
+    /// Share of cited locations that actually exist. Nil when nothing was
+    /// checked — "no citations yet" and "every citation was wrong" must not
+    /// render as the same thing.
+    ///
+    /// It measures grounding, not correctness: a report can cite ten real
+    /// files and still answer the wrong question.
+    var citationAccuracy: Double? {
+        guard citationsChecked > 0 else { return nil }
+        return Double(citationsResolved) / Double(citationsChecked)
     }
 }
 
@@ -946,6 +962,12 @@ enum AgentUsageStats {
                     if let passed = run.verifierPassed {
                         kpis.verifiedRunCount += 1
                         if passed { kpis.verifiedPassCount += 1 }
+                    }
+                    // Report-only runs land here instead: no verdict to count,
+                    // but the places they named either exist or they do not.
+                    if let checked = run.citationsChecked, checked > 0 {
+                        kpis.citationsChecked += checked
+                        kpis.citationsResolved += checked - (run.citationsUnverifiable ?? 0)
                     }
                 }
             }

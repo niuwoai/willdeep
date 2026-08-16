@@ -189,6 +189,85 @@ attempt 打满 max_attempts → 触发 escalation（换父模型重跑或报告�
 | Skill Coverage | 窄工种 spawn 次数 / （窄工种 + deep + 主模型内联轮次） | ≥ 50% |
 | Worker Verified Success | verifierPassed / 有 verifier 的运行数 | ≥ 85% |
 | Main Escalation Rate | escalatedFromModel 非空 / 窄工种运行数 | ≤ 15% |
+| Citation Accuracy（2026-08-16 新增，回流自 willdeep-rs） | 报告里核实存在的引用 / 被核实的引用总数（仅只读工种） | ≥ 90% |
+
+### 8.1 只读工种的弱验证（回流自 willdeep-rs）
+
+`test_fixer` 有退出码，`scout` 没有。在此之前只读工种（`scout` / `reader` /
+`log_inspector` / `git_detective`）的 `verifierPassed` 永远是 nil——**永远
+「未验证」，于是在三个 KPI 里永远隐身，而隐身读起来就像没问题**。
+
+它们的答案并非不可证伪：一个位置要么存在，要么不存在。运行结束后 runner 对
+报告做一次确定性抽查（`AgentSubagentCitationAudit`，纯代码，不花模型、不占轮次）：
+
+| 引用形态 | 核对方式 |
+|---|---|
+| `Sources/Foo.swift` | 文件在不在 |
+| `Sources/Foo.swift:42` | 文件在不在 + 行号是否越过文件末尾 |
+| 7–40 位十六进制 | `git cat-file -e <sha>^{commit}` 能否解析 |
+
+结果两处落地：报告尾部追加 `<citation-check checked="N" unverifiable="M">`
+（点名对不上的条目，父代理直接看得见），transcript 与 usage 记录带上
+`citationsChecked` / `citationsUnverifiable`，统计面板据此算 Citation Accuracy。
+
+三条边界：
+
+1. **它只证伪「地名是编的」，不证明「答对了」**。一个 Worker 可以引用十个真实
+   文件同时完全答非所问，所以靶场把「引用准确率」和「答对率」分成两列算。
+2. **认不出来的 token 一律不计**，否则量的是解析器不是 Worker。
+3. **`checked = 0` 不进分子也不进分母**——「没引用任何位置」和「引用全对」是
+   两件事，正如「没验证」不是「通过」。
+
+### 8.2 实弹靶场（回流自 willdeep-rs）
+
+KPI 只能算「已经派出去的工」的成绩。**「32B 到底修不修得动」这个问题，靶场
+才能回答**：`XeditTests/AgentSubagentLiveFireRangeTests.swift` 现建五个带真实
+缺陷的 SwiftPM 仓库（三个编译错误派 `build_fixer`，两个只读样本派 `scout` 与
+`git_detective`），用真 Provider 派工、真 `swift build` 退出码判定；驱动器
+`scripts/skill_worker_range.rb` 产出 JSON + Markdown 两份报告。
+
+```bash
+ruby scripts/skill_worker_range.rb
+ruby scripts/skill_worker_range.rb --cases scout_finds_the_symbol
+ruby scripts/skill_worker_range.rb --report-only   # 不花钱，重渲染
+```
+
+**不进 CI**：要真凭据、要网络、要花钱，没有 `XEDIT_RANGE_API_KEY` 时整个 suite
+自己跳过。两条判定纪律与 rs 侧逐字一致：
+
+1. **成功 = verifier 通过 且 靶子没被搬走**。退出码只知道绿了，不知道绿得干不
+   干净——把出问题的函数删掉一样能让 `swift build` 变绿，所以另查公开 API 还在。
+2. **派工前先确认靶子是红的**。绿着的靶子测不出任何东西，报告会点名这类无效样本。
+
+Xedit 侧首轮实测当场打出两个真问题，都不是模型的问题：
+
+1. **`apply_patch` 在没有补丁通道的上下文里直接报「只在交互式会话里可用」**。
+   Worker 第一轮就诊断对了（`let` → `var`，连 diff 都给了），补丁却落不了地，
+   而报告读起来像是模型不会修。靶场因此必须自带一条落盘 sink，解析与应用仍
+   走产线的 `AgentPatchApplier`——靶场自己写一套 diff 应用逻辑，量到的就会是
+   那套逻辑。
+2. **嵌套沙盒：`swift build` 在 Agent 沙盒里必然失败**。SwiftPM 编译 manifest
+   时自己要调 `sandbox-exec`，而 verifier 已经跑在 seatbelt 里，内核直接拒
+   （`sandbox_apply: Operation not permitted`），报出来的失败与源码毫无关系。
+   **这条对真实用户同样成立**：在 SwiftPM 工程里派 `build_fixer` 并把
+   `swift build` 当 verifier，会稳定收到一个与代码无关的红。verifier 要写成
+   `swift build --disable-sandbox`（或直接 `swiftc -typecheck`）。改完同一样本
+   一次通过、16.6 秒。
+
+实测（`glm-5`）：
+
+| | Xedit（5 样本，2026-08-16） | willdeep-rs（12 样本，2026-08-16） |
+|---|---|---|
+| Worker Verified Success | **3/3（100%）**，均 1 次尝试 | **10/10（100%）**，均 1.00 次尝试 |
+| 作弊 | 0 | 0 |
+| 只读工种引用准确率 | **6/6** | **4/4** |
+| 只读工种答对率 | **2/2** | **2/2** |
+| 总耗时 | 84 秒 | 227 秒 |
+
+**这组数字只支持一条结论**：形状有界、失败可由退出码判定的局部修复，以及有界
+的定位类问题，交给 32K 档够用。它**不支持**「小模型能替代主模型」——样本是十几
+个几十行的独立小仓库，是难度谱系最容易的一端。要把结论往难处推，先往靶场里加
+难样本。
 
 ## 9. 模型档位：先 API 模拟，不买卡
 
