@@ -3,6 +3,17 @@
 > 当前文件保留最新版本（1.263.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.265.0-rc1 - 2026-08-16
+
+### Added
+
+- **技能声明自己的上下文档位：SKILL.md frontmatter `tier: worker|standard|deep`**（model-tiers.v1，与 willdeep-rs 同一套语义与解析规则，rs 侧 0.27.0-rc1 已落地）。`list_skills` 的列表带出 `tier=…`，**派工决策在读技能正文之前就能做**：worker 档技能是 spawn_agent 的候选，不是烧主会话窗口的理由。容错别名 small/medium/large；认不出的拼写静默忽略——技能是用户数据，别的工具写的技能不能因此坏掉，坏拼写也不许污染同一段 frontmatter 里的 name/description。
+- 29 个用户技能（`~/.willdeep/skills`）已在 rs 侧审计并逐个标注（S 11 / M 14 / L 4），Xedit 与 rs 读的是同一个目录，本版起两边看到同一份档位。
+
+### Tests
+
+- `AgentSkillTierTests`：声明的档位（含别名大小写）必须解析；未知拼写与缺失必须沉默且不污染其余元数据。
+
 ## 1.264.0-rc1 - 2026-08-16
 
 ### Added
