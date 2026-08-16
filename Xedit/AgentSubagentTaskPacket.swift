@@ -19,6 +19,11 @@ import Foundation
 nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
     /// What "done" looks like, in the parent's words.
     var goal: String
+    /// Installed skill whose body is inlined into the worker's opening
+    /// message. Workers have no business fetching their own instructions —
+    /// every fetch round burns the window the fix itself needs — so the
+    /// parent names the skill and the dispatcher does the reading.
+    var skill: String?
     /// Workspace-relative paths whose contents are inlined for the worker.
     /// Reading context only — being handed a file to read never implies
     /// permission to write it (that comes from `target_files`).
@@ -43,6 +48,7 @@ nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
 
     init(
         goal: String,
+        skill: String? = nil,
         relevantFiles: [String] = [],
         knownFacts: [String] = [],
         constraints: [String] = [],
@@ -50,6 +56,7 @@ nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
         maxAttempts: Int = defaultMaxAttempts
     ) {
         self.goal = goal
+        self.skill = skill
         self.relevantFiles = relevantFiles
         self.knownFacts = knownFacts
         self.constraints = constraints
@@ -95,6 +102,11 @@ nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
 
         return AgentSubagentTaskPacket(
             goal: goal,
+            skill: fields["skill"]?.stringValue()
+                .flatMap {
+                    let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return trimmed.isEmpty ? nil : trimmed
+                },
             relevantFiles: stringList(fields["relevant_files"]),
             knownFacts: stringList(fields["known_facts"]),
             constraints: stringList(fields["constraints"]),
@@ -123,6 +135,23 @@ nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
         readFile: (String) -> String?
     ) -> String {
         var sections: [String] = ["## Task\n\(goal)"]
+
+        if let skill = skill?.trimmingCharacters(in: .whitespacesAndNewlines), !skill.isEmpty {
+            // Unresolvable skills are named, never silent: a worker that
+            // thinks it was handed a procedure must not improvise one.
+            if let record = AgentSkillDirectory.list(includeDisabled: false).first(where: {
+                $0.identifier == skill || $0.name == skill
+            }), let body = AgentSkillDirectory.loadBody(
+                for: record,
+                maxCharacters: Self.inlineCharacterBudget / 2
+            ) {
+                sections.append("## Skill: \(record.identifier)\n\(body)")
+            } else {
+                sections.append(
+                    "## Skill: \(skill)\n(unavailable: not installed on this runtime; say so in your report instead of improvising the procedure)"
+                )
+            }
+        }
 
         if !fallbackPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            fallbackPrompt.trimmingCharacters(in: .whitespacesAndNewlines) != goal {

@@ -1756,6 +1756,9 @@ extension AppState {
                         settings: editorTerminalSettings
                     ),
                     sandboxMode: sandboxMode,
+                    // The main loop can spawn subagents; hints that end in
+                    // spawn_agent are only rendered for it.
+                    canSpawnSubagents: true,
                     isUnattendedDispatchTask: runtime.isUnattendedDispatchTask,
                     patchProposalSink: { title, diff, applyImmediately, workspaceRoot in
                         try self.enqueueAgentPatchProposal(

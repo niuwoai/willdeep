@@ -19,7 +19,10 @@
 import Foundation
 
 enum AgentSkillCatalog {
-    static func listSkills(arguments: [String: AgentJSONValue]) throws -> AgentToolResult {
+    static func listSkills(
+        arguments: [String: AgentJSONValue],
+        includeDispatchHint: Bool = false
+    ) throws -> AgentToolResult {
         let query = arguments["query"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let skills = AgentSkillDirectory.list(includeDisabled: false).filter { record in
             guard let query, !query.isEmpty else { return true }
@@ -33,9 +36,26 @@ enum AgentSkillCatalog {
             let tier = record.tier.map { " | tier=\($0.rawValue)" } ?? ""
             return "- \(record.identifier) | name=\(AgentSkillLocalization.displayName(for: record))\(tier) | \(AgentSkillLocalization.displayDescription(for: record))"
         }
-        let payload = lines.isEmpty
+        var payload = lines.isEmpty
             ? "No installed Codex skills found."
             : lines.joined(separator: "\n")
+        // Deterministic dispatch trigger, same philosophy as the failed-test
+        // hint: visibility must not depend on the model remembering the
+        // routing rule — the dispatch-rate audit measured what "remembering"
+        // is worth (1.4%). Main loop only: a child cannot spawn, and a hint
+        // it cannot act on is just noise in a small window.
+        if includeDispatchHint {
+            let workers = skills.filter { $0.tier == .worker }.map(\.identifier)
+            if !workers.isEmpty {
+                payload += """
+
+
+                <delegation-hint tier="worker">
+                These skills fit a small-context worker: \(workers.joined(separator: ", ")). Instead of running one inline, spawn_agent with a task packet — set task.skill to the skill name (the runtime inlines its body for the worker), task.goal to the outcome, and task.relevant_files to the inputs. Your window stays free and the worker starts warm.
+                </delegation-hint>
+                """
+            }
+        }
         return AgentToolResult(summary: "\(skills.count) skills", payload: payload)
     }
 

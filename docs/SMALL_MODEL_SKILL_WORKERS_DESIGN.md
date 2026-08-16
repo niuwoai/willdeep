@@ -369,8 +369,14 @@ target_command: "<确切命令>", task: {verifier: …})`。
 - **skill→档位关联**：SKILL.md frontmatter `tier: worker|standard|deep`。
   rs 侧已实现解析并把 tier 带进 list_skills，29 个用户技能已逐个审计标注
   （S 11 / M 14 / L 4，每个 S 档技能写明验证方式）。
-- **Xedit 侧待办**：技能加载器解析同一个 `tier:` 键并在技能列表/派工提示里
-  带出；workflow 步骤绑定可据此从「手标 profile」升级为「按技能声明自动选档」。
+- **Xedit 侧落地（1.265.0-rc1 起）**：技能加载器解析 `tier:` 并在 `list_skills`
+  带出；1.266.0-rc1 补上确定性派工触发（列表命中 worker 技能时附
+  `<delegation-hint>` 配方，仅主循环——子循环共用同一 tool runner 但不能
+  spawn，靠 `AgentToolContext.canSpawnSubagents` 门控）与 `task.skill`
+  （派工时把技能正文内联进 Worker 首条消息，没装的技能点名 unavailable）。
+  **workflow 步骤保持手标 profile 不变**：内置 workflow 的步骤是 Swift 代码、
+  不经过技能系统，「按 tier 自动选档」适用的地方是技能被调用的地方——
+  list_skills 命中与 spawn_agent 派工，两处都已自动化。
 
 ## 11. 风险
 

@@ -229,6 +229,11 @@ struct AgentToolContext {
     /// environment; user-approved write/network/credential commands run
     /// in the escalated/full-user environment.
     let sandboxMode: AgentSandboxMode
+    /// True when the calling loop can spawn subagents (the main session).
+    /// Child loops share this tool runner but cannot spawn, so hints that end
+    /// in "spawn_agent" are suppressed for them — a recipe the caller cannot
+    /// execute is pure noise in a small window.
+    let canSpawnSubagents: Bool
     /// True only for scheduler-owned dispatch child sessions. External agent
     /// adapters use this host-derived bit to select their non-interactive
     /// permission mode; it is intentionally not accepted from model arguments.
@@ -291,6 +296,7 @@ struct AgentToolContext {
         sessionPersistenceBarrier: (@MainActor () -> Void)? = nil,
         localCommandEnvironment: [String: String]? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
+        canSpawnSubagents: Bool = false,
         isUnattendedDispatchTask: Bool = false,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil,
         editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
@@ -323,6 +329,7 @@ struct AgentToolContext {
         self.sessionPersistenceBarrier = sessionPersistenceBarrier
         self.localCommandEnvironment = localCommandEnvironment
         self.sandboxMode = sandboxMode
+        self.canSpawnSubagents = canSpawnSubagents
         self.isUnattendedDispatchTask = isUnattendedDispatchTask
         self.patchProposalSink = patchProposalSink
         self.editableContentProvider = editableContentProvider
@@ -380,6 +387,7 @@ struct AgentToolContext {
             sessionPersistenceBarrier: sessionPersistenceBarrier,
             localCommandEnvironment: localCommandEnvironment,
             sandboxMode: sandboxMode,
+            canSpawnSubagents: canSpawnSubagents,
             isUnattendedDispatchTask: isUnattendedDispatchTask,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,
@@ -414,6 +422,7 @@ struct AgentToolContext {
             sessionPersistenceBarrier: sessionPersistenceBarrier,
             localCommandEnvironment: localCommandEnvironment,
             sandboxMode: mode,
+            canSpawnSubagents: canSpawnSubagents,
             isUnattendedDispatchTask: isUnattendedDispatchTask,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,

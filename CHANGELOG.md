@@ -3,6 +3,18 @@
 > 当前文件保留最新版本（1.263.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.266.0-rc1 - 2026-08-16
+
+### Added
+
+- **worker 技能的确定性派工触发**（与 willdeep-rs 0.28.0-rc1 同一刀）。`list_skills` 命中 `tier=worker` 技能时，结果尾部附 `<delegation-hint>` 派工配方——与失败测试提示同一哲学：**露脸不能依赖模型记得路由规则**，1.263.0-rc1 的派工率盘点（358 会话仅 1.4% 派过工）量过「记得」值多少。仅主循环可见：子循环共用同一 tool runner 但不能 spawn，新增 `AgentToolContext.canSpawnSubagents` 门控，给不能执行的调用方看配方只是小窗口里的噪音。
+- **`task.skill`：Task Packet 点名技能，派工时把 SKILL.md 正文内联进 Worker 首条消息**（预算 = 内联预算一半）。Worker 自己取指令的每一轮都在烧修复本身需要的窗口；没装的技能在开场白里**点名 unavailable 并要求如实报告**，不许即兴发挥出一套它以为的流程。
+- **workflow 步骤明确保持手标 profile**：内置 workflow 的步骤是 Swift 代码、不经过技能系统，「按 tier 自动选档」适用于技能被调用的两处（list_skills 命中、spawn_agent 派工），均已自动化——这个边界写进了设计文档 §10.6，是决定，不是遗漏。
+
+### Tests
+
+- 派工提示门控（能 spawn 的看得到配方）与 `task.skill` 解析/unavailable 点名。
+
 ## 1.265.0-rc1 - 2026-08-16
 
 ### Added

@@ -424,7 +424,12 @@ enum AgentToolRunner {
             case "kill_job":
                 result = try await killJob(arguments: activeArguments, context: activeContext)
             case "list_skills":
-                result = try AgentSkillCatalog.listSkills(arguments: activeArguments)
+                result = try AgentSkillCatalog.listSkills(
+                    arguments: activeArguments,
+                    // Children share this runner but cannot spawn: the recipe
+                    // only rides when the caller can act on it.
+                    includeDispatchHint: activeContext.canSpawnSubagents
+                )
             case "read_skill":
                 result = try AgentSkillCatalog.readSkill(arguments: activeArguments)
             case "activate_expert":

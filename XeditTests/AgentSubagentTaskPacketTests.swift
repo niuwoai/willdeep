@@ -30,6 +30,21 @@ struct AgentSubagentTaskPacketTests {
         #expect(packet.maxAttempts == 3)
     }
 
+    @Test("a named skill parses, and a missing one is called out, not improvised")
+    func skillFieldParsesAndMissingSkillIsNamed() throws {
+        let value = AgentJSONValue.decode(from: """
+        {"goal":"convert the asset","skill":"definitely-not-installed-xyz"}
+        """)
+        let packet = try #require(AgentSubagentTaskPacket.parse(value))
+        #expect(packet.skill == "definitely-not-installed-xyz")
+
+        let message = packet.openingMessage(fallbackPrompt: "do it") { _ in nil }
+        #expect(
+            message.contains("unavailable") && message.contains("definitely-not-installed-xyz"),
+            "a worker that thinks it was handed a procedure must not improvise one: \(message)"
+        )
+    }
+
     @Test("a packet sent as a JSON string parses the same way")
     func parsesStringForm() throws {
         // The tool schema declares `task` as a string because the parameter
