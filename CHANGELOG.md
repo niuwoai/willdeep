@@ -23,6 +23,7 @@
 
 ### Docs
 
+- §10.6 新增**模型上下文三档切分（model-tiers.v1）**：S（32–64K）/ M（256K 默认）/ L（1M 申请制），动机从省钱改为主权（私有化机房只有 S+M 可部署，体系必须在无 L 时完整可用）；skill→档位经 `tier:` frontmatter 关联，rs 侧已实现并完成 29 技能审计，Xedit 侧解析待办已登记。完整设计见 willdeep-rs `docs/MODEL_TIERS.md`。
 - `docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md` §8 新增 Citation Accuracy 指标、§8.1 只读工种弱验证、§8.2 实弹靶场三节，并记录 rs 侧首轮实测（`glm-5`，12 样本：可验证 10/10 一次通过、0 作弊；只读样本引用准确率 4/4、答对率 2/2）与这组数字**不支持**的结论。
 
 ## 1.263.0-rc1 - 2026-08-16
