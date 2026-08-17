@@ -106,17 +106,31 @@ struct AgentTerminalForegroundOwnershipIntegrationTests {
         #expect(await waitForInputState(.shellReady, tab: tab))
     }
 
+    /// Budget for a state this test cannot make happen faster: a real login
+    /// shell has to spawn, run its profile, and hand the PTY's foreground
+    /// process group over to `sleep`.
+    ///
+    /// Was 3s, which spawning zsh with a user profile can eat on its own — the
+    /// test then failed whenever suite scheduling shifted (adding an unrelated
+    /// suite anywhere in the target was enough). Widening the budget does not
+    /// weaken the assertion: a genuine regression never reaches the expected
+    /// state at all, so it still fails, just later.
+    private static let inputStateTimeout = Duration.seconds(10)
+    private static let inputStatePollInterval = Duration.milliseconds(50)
+
     @MainActor
     private func waitForInputState(
         _ expected: AgentTerminalInputState,
         tab: AgentTerminalTab
     ) async -> Bool {
-        for _ in 0..<60 {
+        let deadline = ContinuousClock.now + Self.inputStateTimeout
+        while ContinuousClock.now < deadline {
             tab.refreshInputState()
             if tab.inputState == expected { return true }
-            try? await Task.sleep(for: .milliseconds(50))
+            try? await Task.sleep(for: Self.inputStatePollInterval)
         }
-        return false
+        tab.refreshInputState()
+        return tab.inputState == expected
     }
 }
 

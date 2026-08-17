@@ -25,6 +25,24 @@ extension EditorSettingsView {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                // Bound straight to Sparkle's own preference rather than a
+                // parallel @AppStorage: the update alert's checkbox writes the
+                // same value, and two stores would drift the moment a user
+                // touched one of them.
+                Toggle(L10n.Settings.automaticUpdates, isOn: Binding(
+                    get: { AppUpdateController.shared.automaticallyDownloadsUpdates },
+                    set: { AppUpdateController.shared.automaticallyDownloadsUpdates = $0 }
+                ))
+                .disabled(!AppUpdateController.shared.canEnableAutomaticDownloads)
+
+                Text(
+                    AppUpdateController.shared.canEnableAutomaticDownloads
+                        ? L10n.Settings.automaticUpdatesHelp
+                        : L10n.Settings.automaticUpdatesUnavailable
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
                 Button {
                     AppUpdateController.shared.checkForUpdates()
                 } label: {

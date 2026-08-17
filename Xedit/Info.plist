@@ -6,6 +6,12 @@
 	<true/>
 	<key>SUAutomaticallyUpdate</key>
 	<true/>
+	<!-- Sparkle's default is 24h, which is why automatic installs almost never
+	     won the race: the app's own 17-minute update poller surfaced the banner
+	     first and users took the manual path. Hourly gives the automatic path a
+	     real chance without polling the appcast aggressively. -->
+	<key>SUScheduledCheckInterval</key>
+	<integer>3600</integer>
 	<key>SUFeedURL</key>
 	<string>https://some.im/api/v1/public/app-updates/appcast.xml?app_id=willdeep&amp;platform=macos&amp;channel=stable</string>
 	<key>SUPublicEDKey</key>
