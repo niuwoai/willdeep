@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.271.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.272.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.272.0-rc1 - 2026-08-17
+
+### Added
+
+- **设置里终于有了「自动下载并安装更新」开关。** 此前唯一能表达这个意愿的地方是 Sparkle 更新弹窗里那个复选框，而实测 `SUAutomaticallyUpdate` 这个键在 UserDefaults 里从不存在——复选框显示的是 Info.plist 默认值，看着已勾选，实际从未被用户确认过。开关直接绑 Sparkle 自己的偏好，不另建平行的 `@AppStorage`：Sparkle 的 setter 本身就会持久化，其文档明确要求不要维护第二份。于是弹窗那个勾和设置页这个开关成为同一个值的两个视图，不会互相打脸。选项不可用时开关置灰并给出原因，而不是静默失效。
+
+### Fixed
+
+- **自动更新此前几乎不可能真正发生。** `SUScheduledCheckInterval` 未设置，Sparkle 按默认 24 小时检查；而 app 自己另有一套 17 分钟的轮询会先发现新版本并弹出侧栏横幅，用户随即走手动路径——那条路调用的是 Sparkle 的用户主动检查 API，按其契约永远弹窗、永不静默安装。现在检查间隔设为 1 小时，自动安装那条路才有机会跑在轮询之前。
+- 启动时记录一行自动更新状态（`checks` / `downloads` / `allowed` / `interval` / `lastCheck`）。排查上一次这个问题时系统日志里一片空白，只能靠代码路径推断；现在下一次"没有自动更新"的反馈可以查日志而不是猜。
+
+### Tests
+
+- 新增 5 个契约测试锁住决定自动安装的 Info.plist 键：自动检查与自动安装默认开启、检查间隔不得慢于应用内轮询、`SUAllowsAutomaticUpdates` 不得为 false（那会让设置页开关变成空操作）、EdDSA 公钥与 HTTPS appcast 完好、开关三种状态的文案齐备。
+- **修掉一个潜伏的测试脆弱性**：`AgentTerminalForegroundOwnershipIntegrationTests` 等待真实 PTY 前台进程组换手的预算是「循环 60 次 × 睡 50ms」，名义 3 秒，而带 profile 的 zsh 光启动就可能吃掉一秒多；且被调度挤压时每次 sleep 实际更久，预算本身不确定。改为按 `ContinuousClock` 计算 10 秒真实截止时间。此前只要在测试目标里任何位置新增一个 suite，改变 Swift Testing 的并行交织就足以让它失败——本次新增契约测试正是这样暴露了它。等待预算放宽不削弱断言：真出回归时状态永远不会到达期望值，仍然失败。
 
 ## 1.271.0-rc1 - 2026-08-17
 

@@ -126,6 +126,9 @@ extension L10n {
         static let savedStatus = String(localized: "settings.saved-status", defaultValue: "Saved.")
         static let allChangesSaved = String(localized: "settings.all-changes-saved", defaultValue: "All changes saved")
         static let softwareUpdateHelp = String(localized: "settings.software-update.help", defaultValue: "WillDeep checks for signed updates automatically. You can also check now; Sparkle verifies the download before installing it.")
+        static let automaticUpdates = String(localized: "settings.software-update.automatic", defaultValue: "Download and install updates automatically")
+        static let automaticUpdatesHelp = String(localized: "settings.software-update.automatic-help", defaultValue: "Signed updates install in the background and apply the next time WillDeep launches. Turn this off to be asked every time.")
+        static let automaticUpdatesUnavailable = String(localized: "settings.software-update.automatic-unavailable", defaultValue: "Automatic updates are unavailable for this build.")
         static func versionAndBuild(_ version: String, _ build: String) -> String {
             let template = String(localized: "settings.software-update.version-and-build", defaultValue: "%@ (Build %@)")
             return String(format: template, version, build)
