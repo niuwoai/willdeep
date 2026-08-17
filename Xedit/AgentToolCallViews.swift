@@ -41,6 +41,64 @@ nonisolated enum AgentToolDisplay {
         }
     }
 
+    /// 审批卡只展示用户真正需要核对的工具参数。以下划线开头的字段由
+    /// 宿主写入，供沙箱判定和审计使用；把它们原样展示会泄露实现细节，
+    /// 还会让英文安全原因挤掉文件路径、写入内容等关键信息。
+    static func approvalArgumentsLines(
+        for arguments: [String: AgentJSONValue]
+    ) -> String {
+        arguments
+            .filter { !$0.key.hasPrefix("_") }
+            .sorted {
+                let left = argumentOrder[$0.key] ?? Int.max
+                let right = argumentOrder[$1.key] ?? Int.max
+                return left == right ? $0.key < $1.key : left < right
+            }
+            .map { "\(argumentName(for: $0.key))：\(approvalValueSummary($0.value))" }
+            .joined(separator: "\n")
+    }
+
+    private static func argumentName(for key: String) -> String {
+        argumentNames[key] ?? key
+    }
+
+    private static func approvalValueSummary(_ value: AgentJSONValue) -> String {
+        switch value {
+        case .bool(let enabled): return enabled ? "是" : "否"
+        case .null: return "空"
+        default: return value.displaySummary
+        }
+    }
+
+    private static let argumentNames: [String: String] = [
+        "command": "执行命令",
+        "content": "写入内容",
+        "control": "控制键",
+        "cwd": "工作目录",
+        "download_directory": "下载目录",
+        "file_path": "文件路径",
+        "max_chars": "最大读取字符数",
+        "overwrite": "覆盖已有文件",
+        "path": "文件路径",
+        "paths": "文件路径",
+        "query": "查询内容",
+        "text": "文本内容",
+        "title": "标题",
+        "url": "访问地址",
+        "zmodem_download_directory": "ZMODEM 下载目录",
+        "zmodem_upload_paths": "ZMODEM 上传文件",
+    ]
+
+    private static let argumentOrder: [String: Int] = [
+        "path": 0,
+        "file_path": 0,
+        "cwd": 1,
+        "url": 1,
+        "command": 2,
+        "overwrite": 3,
+        "content": 4,
+    ]
+
     static let toolNames: [String: String] = [
         "search_files": "搜索文件",
         "grep_files": "正则搜索",
@@ -2642,8 +2700,11 @@ struct AgentToolCallCard: View {
             }
             return ("技能清单", lines.joined(separator: "\n"))
         }
-        guard !argumentsLines.isEmpty else { return nil }
-        return ("操作内容", argumentsLines)
+        let localizedArguments = AgentToolDisplay.approvalArgumentsLines(
+            for: call.arguments
+        )
+        guard !localizedArguments.isEmpty else { return nil }
+        return ("操作内容", localizedArguments)
     }
 
     private var approvalWorkingDirectoryName: String? {

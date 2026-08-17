@@ -845,6 +845,26 @@ extension WillDeepTests {
         #expect(AgentApprovalActionMetrics.cornerRadius >= 12)
     }
 
+    @Test("approval details localize user arguments and hide host audit metadata")
+    func testApprovalArgumentLocalization() {
+        let lines = AgentToolDisplay.approvalArgumentsLines(for: [
+            "_approval_reason": .string("Writing a sensitive path requires approval"),
+            "_sandbox": .string("escalated"),
+            "content": .string("Include ~/.orbstack/ssh/config"),
+            "overwrite": .bool(true),
+            "path": .string("/Users/rocky/.ssh/config"),
+        ])
+
+        #expect(lines.contains("写入内容：Include ~/.orbstack/ssh/config"))
+        #expect(lines.contains("覆盖已有文件：是"))
+        #expect(lines.contains("文件路径：/Users/rocky/.ssh/config"))
+        #expect(lines.hasPrefix("文件路径：/Users/rocky/.ssh/config"))
+        #expect(!lines.contains("_approval_reason"))
+        #expect(!lines.contains("Writing a sensitive path requires approval"))
+        #expect(!lines.contains("_sandbox"))
+        #expect(!lines.contains("escalated"))
+    }
+
     @Test("command confirmation stays calm, scrollable, and honest about shortcuts")
     func testCommandConfirmationReviewMetrics() {
         #expect(AgentConfirmationReviewMetrics.commandVisibleLineCount == 5)

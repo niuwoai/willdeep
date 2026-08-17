@@ -281,6 +281,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// `spawn_agent` invocations observed during the current turn. Only used
     /// to audit whether a `.required` policy was actually honored.
     var currentTurnSpawnAgentCallCount: Int = 0
+    /// Commands this turn already handed to a worker automatically. A worker
+    /// re-runs the failing command as its own verifier, so a second automatic
+    /// dispatch for the same command would repeat a fight it already lost —
+    /// at that point the failure is the parent's to reason about.
+    var currentTurnAutoDispatchedCommands: Set<String> = []
     /// Goal may continue across several provider turns, but repeated
     /// no-change self-checks must pause instead of spinning forever.
     var consecutiveGoalRoundsWithoutChecklistProgress: Int = 0

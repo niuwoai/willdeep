@@ -140,10 +140,9 @@ private enum AgentApprovalExplanationPrompt {
     }
 
     static func userPayload(for call: AgentToolCall) -> String {
-        let arguments = call.arguments
-            .sorted { $0.key < $1.key }
-            .map { "\($0.key): \($0.value.displaySummary)" }
-            .joined(separator: "\n")
+        let arguments = AgentToolDisplay.approvalArgumentsLines(
+            for: call.arguments
+        )
         return """
         工具: \(AgentToolDisplay.nameWithRawID(for: call.toolName))
         风险等级: \(riskLabel(call.risk))

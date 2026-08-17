@@ -51,6 +51,7 @@ extension AppState {
         runtime.pendingDelegationPolicy = .automatic
         runtime.currentTurnDelegationPolicy = delegationPolicy
         runtime.currentTurnSpawnAgentCallCount = 0
+        runtime.currentTurnAutoDispatchedCommands = []
         if source == .operatorInput {
             runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
         }
@@ -2455,10 +2456,28 @@ extension AppState {
                             sandboxNote = "\n\n" + note
                         }
                     }
-                    let dispatchHint = AgentWorkerDispatchHint.hint(
+                    // Interception first: when the failure is a bounded repair
+                    // job we run the worker ourselves and report its verdict.
+                    // The suggestion is the fallback for everything that is
+                    // not auto-dispatchable — a hint the parent has already
+                    // been measured ignoring.
+                    let exitCode = (error as? AgentToolError)?.completedCommandExitCode
+                    let autoDispatched = await autoDispatchWorkerForFailedCommand(
                         toolName: call.toolName,
                         arguments: argsDict,
-                        exitCode: (error as? AgentToolError)?.completedCommandExitCode
+                        exitCode: exitCode,
+                        failureOutput: errorMessage,
+                        runtime: runtime,
+                        configuration: turnConfiguration,
+                        workspaceURL: workspaceURL,
+                        runtimeDescriptor: remoteRuntimeDescriptor,
+                        workspaceLocation: workspaceLocation,
+                        assistantMessageID: assistantID
+                    )
+                    let dispatchHint = autoDispatched ?? AgentWorkerDispatchHint.hint(
+                        toolName: call.toolName,
+                        arguments: argsDict,
+                        exitCode: exitCode
                     ) ?? ""
                     appendToolMessage(
                         for: runtime,
