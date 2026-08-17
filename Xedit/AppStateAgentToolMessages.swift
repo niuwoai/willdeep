@@ -204,12 +204,16 @@ extension AppState {
             )
         }
 
-        // Writing trades need an approved, locked target set before anything
-        // runs. `target_file` is the editor's single-file form; `target_files`
-        // is the fixer form. The writable set is always declared explicitly
-        // and never inferred from the task packet's `relevant_files`: those
-        // are reading context, and "you may read it" is not "you may rewrite
-        // it" — the approval card has to show the exact write scope.
+        // Parse the packet before the write scope: implementer/fixer trades
+        // may use `task.relevant_files` as the same declared set used by the
+        // Rust runtime. An explicit `target_files` remains authoritative for
+        // compatibility and for parents that want a narrower write set than
+        // the read context.
+        let taskPacket = AgentSubagentTaskPacket.parse(arguments["task"])
+
+        // Writing trades need a bounded, locked target set before anything
+        // runs. Smart / Workspace Access inherit the parent workspace grant;
+        // Strict still gates the whole spawn. Every path stays enforced here.
         var writeAccess: AgentSubagentWriteAccess?
         if profile.requiresWriteAccess {
             var rawTargets: [String] = []
@@ -217,13 +221,15 @@ extension AppState {
                 rawTargets = values.compactMap { $0.stringValue() }
             } else if let single = arguments["target_file"]?.stringValue() {
                 rawTargets = [single]
+            } else if profile.id != AgentSubagentProfileCatalog.editorID {
+                rawTargets = taskPacket?.relevantFiles ?? []
             }
             guard !rawTargets.isEmpty,
                   let access = AgentSubagentWriteAccess(targetRelativePaths: rawTargets) else {
                 finishRecord(
                     status: .failed,
                     summary: "missing target files",
-                    payload: "Tool error: `profile=\"\(profile.id)\"` requires the files it may edit: `target_file` (one path) or `target_files` (a list). Paths are workspace-relative; absolute paths, `~`, and `..` are rejected.",
+                    payload: "Tool error: `profile=\"\(profile.id)\"` requires 1–\(AgentSubagentWriteAccess.maxTargetCount) files it may create or edit: `target_file` (editor), `target_files`, or `task.relevant_files`. Paths are workspace-relative; absolute paths, `~`, and `..` are rejected.",
                     errorMessage: "Missing target files"
                 )
                 return
@@ -252,7 +258,6 @@ extension AppState {
         // A task packet lets the worker start hot: the parent already knows
         // which files matter, so their contents ride along instead of costing
         // the worker half its window to rediscover.
-        let taskPacket = AgentSubagentTaskPacket.parse(arguments["task"])
         if let taskPacket {
             prompt = await composedTaskPacketPrompt(
                 packet: taskPacket,

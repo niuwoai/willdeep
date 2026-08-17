@@ -609,8 +609,8 @@ enum AgentSubagentRunner {
         }
         if let writeAccess {
             lines.append("""
-            The ONLY files you may edit are \(writeAccess.displayList). Patches touching any \
-            other path are rejected automatically.
+            The ONLY files you may create or edit are \(writeAccess.displayList). Write calls \
+            touching any other path are rejected automatically; file deletion is not allowed.
             """)
         }
         if let workspaceURL {
@@ -621,7 +621,7 @@ enum AgentSubagentRunner {
             // contradicted rule is worse than no rule.
             lines.append("""
             Rules:
-            - You have READ access plus ONE write tool (`apply_patch`), scoped to the files named above. Everything else is denied.
+            - You have READ access plus bounded write tools (`create_file` / `apply_patch`) carried by your trade, scoped to the files named above. Everything else is denied.
             - You cannot ask the user anything. Make reasonable assumptions and note them.
             - Read a file before patching it. Keep the change minimal and consistent with surrounding code.
             - Work autonomously until the edit is done, then STOP calling tools and write your final report as a normal message.
@@ -1367,12 +1367,13 @@ enum AgentSubagentRunner {
             return "Denied: tool `\(call.toolName)` is not available to the `\(profile.id)` subagent trade. Available tools: \(available).\(redirect)"
         }
 
-        // The editor trade's single-file lock. Its write tool is the only
-        // way a subagent can mutate anything, so the path check lives on the
+        // The writing trades' exact file-set lock. These tools are the only
+        // way a child can mutate anything, so the path check lives on the
         // execution path rather than in the prompt.
-        if let writeAccess, AgentSubagentProfileCatalog.editorWriteToolNames.contains(call.toolName) {
+        if let writeAccess, AgentSubagentProfileCatalog.writeToolNames.contains(call.toolName) {
             if let violation = writeAccess.violationMessage(
-                forArgumentsJSON: call.argumentsJSON,
+                forToolName: call.toolName,
+                argumentsJSON: call.argumentsJSON,
                 workspaceURL: workspaceURL
             ) {
                 return violation
@@ -1395,10 +1396,10 @@ enum AgentSubagentRunner {
             arguments: argsDict,
             rootDirectory: workspaceURL
         )
-        // Editor trades carry one write tool, already approved by the user
-        // for one specific file. Everything else stays read-only.
+        // Writing trades carry bounded tools backed by an exact workspace
+        // capability. Everything else stays read-only.
         let isApprovedWrite = writeAccess != nil
-            && AgentSubagentProfileCatalog.editorWriteToolNames.contains(call.toolName)
+            && AgentSubagentProfileCatalog.writeToolNames.contains(call.toolName)
         // terminal_operator 的 send_command 是 .write 档，但放行的口子开得
         // 很窄：命令文本自己必须分类为只读（`kubectl get` 能敲，`rm` 在这
         // 里就被拒）。终端是用户的真实 shell，seatbelt 管不到那里，所以这

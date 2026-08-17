@@ -113,6 +113,10 @@ extension L10n {
             localized: "agent-delegation.profile-editor-name",
             defaultValue: "Editor"
         )
+        static let profileImplementerName = String(
+            localized: "agent-delegation.profile-implementer-name",
+            defaultValue: "Implementer"
+        )
 
         static let profileTesterName = String(
             localized: "agent-delegation.profile-tester-name",
@@ -218,7 +222,11 @@ extension L10n {
         )
         static let profileEditorPurpose = String(
             localized: "agent-delegation.profile-editor-purpose",
-            defaultValue: "Edit ONE approved file. Requires a `target_file` argument and the user's approval; cannot touch any other path."
+            defaultValue: "Edits one declared file inside the parent workspace policy; cannot touch any other path."
+        )
+        static let profileImplementerPurpose = String(
+            localized: "agent-delegation.profile-implementer-purpose",
+            defaultValue: "Implements a bounded multi-file feature or refactor across at most 16 declared existing or new paths on a deployable 256K model."
         )
         static let profileTesterPurpose = String(
             localized: "agent-delegation.profile-tester-purpose",
@@ -277,7 +285,7 @@ extension L10n {
         )
         static let profileHostedModelLockedHint = String(
             localized: "agent-delegation.profile-hosted-model-locked-hint",
-            defaultValue: "While signed in to some.im this trade runs on a managed model with a server-side prompt. Sign out to choose your own."
+            defaultValue: "While the current provider is some.im this trade runs on a managed model with a server-side prompt. Choose a private provider to keep the trade on that provider."
         )
 
         // MARK: Escalation

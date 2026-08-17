@@ -291,6 +291,7 @@ struct EditorSettingsView: View {
         case .workspace: workspaceSettings
         case .agentAppearance: agentAppearanceSettings
         case .agent: agentSettings
+        case .notifications: AgentAttentionSettingsView()
         case .subagents: AgentProfileSettingsView()
         case .someIM: SomeIMIntegrationSettingsView()
         // Deep-links to `.replicate` land on the unified connectors hub

@@ -32,11 +32,23 @@ enum AgentToolApprovalNotifier {
     static func notifyIfBackgrounded(
         toolName: String,
         arguments: [String: AgentJSONValue],
-        status: AgentToolCallStatus
+        status: AgentToolCallStatus,
+        runtimeID: UUID? = nil,
+        sessionTitle: String? = nil,
+        executor: String? = nil
     ) {
         guard let body = bodyText(for: toolName, arguments: arguments, status: status) else {
             return
         }
+        AgentAttentionWebhookClient.enqueue(
+            kind: .attentionRequired,
+            runtimeID: runtimeID,
+            sessionTitle: sessionTitle,
+            executor: executor,
+            status: status.rawValue,
+            attentionKind: toolName,
+            summary: body
+        )
         // App is the foreground app and a window is key — the user is
         // already looking at the card, no banner needed.
         if NSApp.isActive {
@@ -47,7 +59,8 @@ enum AgentToolApprovalNotifier {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        content.sound = .default
+        let preferences = AgentAttentionPreferencesStore.load()
+        content.sound = AgentNotificationSoundManager.notificationSound(for: preferences)
         if let attachment = AgentNotificationIcon.attachment() {
             content.attachments = [attachment]
         }
@@ -61,6 +74,17 @@ enum AgentToolApprovalNotifier {
     /// notifier — see header comment for rationale.
     @MainActor
     static func notifyJobFinished(job: AgentBackgroundJob) {
+        if let executor = job.executor {
+            AgentAttentionWebhookClient.enqueue(
+                kind: .taskCompleted,
+                runtimeID: job.runtimeID,
+                sessionTitle: job.runtimeDisplayName,
+                executor: executor.displayName,
+                status: job.status.rawValue,
+                taskID: job.displayHandle,
+                summary: "\(job.displayHandle) · \(job.status.rawValue)"
+            )
+        }
         guard shouldNotifyJobFinished(
             status: job.status,
             isAppActive: NSApp.isActive
@@ -83,7 +107,8 @@ enum AgentToolApprovalNotifier {
         // job finished. The full command used to be dumped here; users found
         // it noisy and it leaked long paths into the banner.
         content.body = "\(job.displayHandle) · \(statusWord) · \(commandSummary(job.command))"
-        content.sound = .default
+        let preferences = AgentAttentionPreferencesStore.load()
+        content.sound = AgentNotificationSoundManager.notificationSound(for: preferences)
         // Deep-link: tapping the banner jumps to the session that owns this
         // job (see AgentNotificationResponder).
         content.userInfo = [AgentNotificationUserInfoKey.runtimeID: job.runtimeID.uuidString]

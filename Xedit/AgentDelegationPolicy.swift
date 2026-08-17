@@ -60,12 +60,11 @@ nonisolated enum AgentDelegationPolicy: String, Codable, Equatable, Sendable {
         case .required:
             return """
             Delegation directive (user-selected `/subagent`): the user explicitly asked you to \
-            delegate this turn's investigation to subagents. Break the task into independent \
-            read-only units and call `spawn_agent` for them — prefer several parallel children \
-            over doing the reading yourself. Your own job is to plan the split, then verify and \
-            synthesize what the children report. If the task genuinely cannot be split (it is a \
-            single trivial lookup, or it requires write access, which subagents do not have), \
-            say so explicitly in your reply and explain why you handled it directly.
+            delegate this turn to subagents. Break it into bounded units and call `spawn_agent` \
+            with the narrowest deployable profile that fits. Use read-only workers for \
+            exploration, `editor` for one declared file, and `implementer` for bounded \
+            multi-file coding. Your own job is to plan the split, verify, and synthesize. Handle \
+            work directly only when it is trivial or genuinely cannot be bounded; say why.
             """
         case .forbidden:
             return """

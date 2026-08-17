@@ -111,16 +111,16 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
-    static let stablePrefixVersion = "willdeep-agent-system-v28"
+    static let stablePrefixVersion = "willdeep-agent-system-v29"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "80f67a30d2ac24aa"
-    static let compactPrefixSnapshotHash = "2378e227888976a7"
-    static let extendedPrefixSnapshotHash = "5521f80f572fd488"
+    static let stablePrefixSnapshotHash = "5de1500404957ef3"
+    static let compactPrefixSnapshotHash = "b9125edb00226948"
+    static let extendedPrefixSnapshotHash = "9568219dcca01656"
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
@@ -566,7 +566,7 @@ enum AgentContextBuilder {
                 Extended operating model:
                 - Workspace exploration: search_files, grep_files, read_file, list_directory, git_status.
                 - Shell and verification: run_command for build/test/render commands; use run_in_background with list_jobs/get_job_output/kill_job for long tasks.
-                - Delegation: spawn_agent for read-only parallel exploration; claude_code/codex_cli/hermes_cli/cursor_agent/cline_cli for approved end-to-end delegated coding tasks.
+                - Delegation: treat deployable 32K/48K/64K/256K subagent models as the default execution substrate, especially when their Provider is local or on-prem. Use spawn_agent with the narrowest bounded trade: read workers for exploration, editor for one file, implementer for up to 16 declared existing or new paths, and deep only after digesting/splitting still cannot fit. Use claude_code/codex_cli/hermes_cli/cursor_agent/cline_cli only for the separately governed external-agent path.
                 - External context: web_search/web_fetch for current public information, list_mcp_servers/list_mcp_tools/call_mcp_tool for configured integrations, configure_mcp_server for approved pasted MCP JSON add/update, and lark_cli for configured Feishu/Lark work.
                 - Browser (chrome_*/embedded_browser_*), web-dev workflow, and native-app computer_use_* guidance is appended under "Capability guidance" only while the matching capability is active; when those tools are absent from your tool list they are unavailable, not broken.
                 """)
@@ -594,6 +594,7 @@ enum AgentContextBuilder {
             - The side-panel terminal supports rz/sz ZMODEM transfers. Before orchestrating one, call read_skill "zmodem-terminal-transfers" — it covers the terminal_send_command preselect arguments, lrzsz installation on both ends, and the scp/rsync fallbacks. Do not improvise the flow from memory.
             - To CREATE a new file, call create_file with the path and full content — it writes straight to disk. Do NOT craft a `/dev/null` diff for new files. For code EDITS to an existing file, use edit_file: pass the exact current text as old_string (copied verbatim from the file — same whitespace/indentation, WITHOUT read_file line-number prefixes) and the replacement as new_string; old_string must be unique in the file, so include a few surrounding lines, or set replace_all=true for bulk renames. File arguments are literal text: `${{ ... }}` in GitHub Actions YAML is fully supported, and a `${{ secrets.NAME }}` reference is not the secret value. Never claim the file tools reject that syntax or switch to shell/Python merely because it is present. The host locates the match and builds the diff itself. If every edited file is already tracked by git and clean against HEAD, the edit lands directly; if any file is untracked, already dirty, or has unsaved editor changes, a patch card appears inline in the chat for the user to Apply (Goal / workspace-access modes auto-apply). Do NOT hand-craft unified diffs with apply_patch unless edit_file genuinely cannot express the change — hand-written hunks frequently fail to match. Never tell the user to look in a "right-side review panel" — cards appear inline in the conversation. If the user explicitly asked to write/save an edit directly without review ("直接写", "直接落盘", "不用审核", "just write it"), pass apply_immediately=true so the edit lands without a card. If edit_file is unavailable or the edit requires unsupported deletion/binary changes, explain that limit and provide the diff or next step instead.
             - When tool calls are independent, batch them into one assistant turn so they can run in parallel. In particular, emit independent create_file/edit_file calls for multiple files together: WillDeep collects their patch cards into one review group with Apply All / Reject All instead of interrupting the user once per file. Keep dependent edits to the same file ordered.
+            - Prefer `spawn_agent` whenever you can state a bounded goal, known facts, and no more than 16 write paths. Use deployable/private Provider bindings for 32K/48K/64K workers and the 256K `implementer`; ordinary multi-file coding is not by itself a reason to keep work in the parent or escalate to `deep`. Writing workers inherit Smart/Workspace Access only for their declared paths; Strict still asks and undeclared writes are rejected.
             - You can discover installed skills with list_skills and read a selected skill's SKILL.md with read_skill. Use skills when the user's task matches a specialized workflow. With approval, you can create_user_skill, create_user_skills, update_user_skill, or delete_user_skill, but only user-created skills may be changed or deleted. When one request asks for two or more skills, submit every draft through one create_user_skills call so the user sees one complete batch confirmation; never issue repeated create_user_skill calls for that batch.
             - Expert guidance: if the user's task clearly enters a specialist domain and the relevant expert is not active, ask once with ask_user whether to activate it, then call activate_expert if they agree. Examples: short-drama production/storyboard work → shortDrama; web UI/frontend/static HTML/Vite/Next/React/Vue/screenshot-to-UI/dev-server orchestration → webCoding. If activating would only slow down a tiny one-off answer, continue without ceremony.
             - You can inspect configured MCP servers with list_mcp_servers, inspect a server's tools with list_mcp_tools, and call a configured MCP tool with call_mcp_tool. MCP tool calls may require approval.

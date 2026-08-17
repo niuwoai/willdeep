@@ -91,7 +91,7 @@ struct SettingsInformationArchitectureTests {
         #expect(SettingsGroup.agentAppearance.tabs == [.agentAppearance])
         #expect(EditorSettingsTab.agentAppearance.group == .agentAppearance)
         #expect(SettingsGroup.allCases.suffix(2) == [.agentAppearance, .general])
-        #expect(SettingsGroup.ai.tabs == [.agent, .subagents, .memory, .rules])
+        #expect(SettingsGroup.ai.tabs == [.agent, .notifications, .subagents, .memory, .rules])
         // 密钥管理器与技能/MCP/工具同属「Agent 的资源」，放在同一组末位。
         #expect(SettingsGroup.agentTools.tabs == [.skills, .mcp, .tools, .secrets])
         #expect(SettingsGroup.accountAndDevices.tabs == [.someIM, .mobileGateway])

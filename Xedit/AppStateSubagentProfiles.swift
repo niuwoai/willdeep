@@ -5,11 +5,10 @@
 //  Resolving a subagent trade's model binding against the provider library.
 //
 //  Binding resolution happens at spawn time, never at configuration time.
-//  A trade's default binding names some.im's GLM tier, and whether that is
-//  usable depends on a login state that changes underneath us — resolving
-//  late means signing in or out never requires migrating stored settings,
-//  and an unusable binding degrades to the parent's model instead of
-//  failing the spawn.
+//  A trade's legacy default binding names some.im's GLM tier. That default is
+//  used only when the parent conversation itself uses some.im; a private or
+//  on-prem parent keeps every implicit worker on the same provider. An exact
+//  provider entry chosen by the user is explicit and remains authoritative.
 //
 
 import Foundation
@@ -25,17 +24,31 @@ extension AppState {
         for profile: AgentSubagentProfile,
         parentConfiguration: AgentConfiguration
     ) -> AgentConfiguration {
-        // Managed trades: while signed in to some.im the model is not the
-        // user's to pick. It is pinned to the virtual model that carries this
-        // trade's server-side job prompt, so the prompt and the model that was
-        // tuned for it always travel together
+        // Managed trades: while the parent itself uses some.im, the model is
+        // pinned to the virtual model that carries this trade's server-side
+        // job prompt, so the prompt and the model tuned for it travel together
         // (docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3.8).
-        if let hosted = resolvedHostedConfiguration(for: profile) {
+        if let hosted = resolvedHostedConfiguration(
+            for: profile,
+            parentConfiguration: parentConfiguration
+        ) {
             return hosted
         }
 
         let binding = profile.modelBinding
         guard !binding.inheritsEverything else { return parentConfiguration }
+
+        // Built-in profiles historically carried `some-im` as an automatic
+        // cheap-model default. Do not let that implicit default exfiltrate a
+        // private conversation merely because the same Mac is also signed in
+        // to some.im. Selecting an exact provider entry in Settings is an
+        // explicit override and is therefore still honored.
+        if Self.implicitSomeIMBindingFollowsParent(
+            binding: binding,
+            parentProviderID: parentConfiguration.providerID
+        ) {
+            return parentConfiguration
+        }
 
         // Model-only override (no provider selection): keep the parent's
         // transport and just swap the model id. New Settings bindings carry
@@ -80,10 +93,14 @@ extension AppState {
     }
 
     /// Whether this trade's model and job prompt are currently owned by
-    /// some.im. Drives both the spawn-time model pin and the settings row's
-    /// locked state, so the two can never disagree.
-    func subagentTradeIsHosted(_ profile: AgentSubagentProfile) -> Bool {
-        profile.usesHostedJobPrompt(
+    /// some.im. Login alone is insufficient: private parent configurations
+    /// remain private.
+    func subagentTradeIsHosted(
+        _ profile: AgentSubagentProfile,
+        parentConfiguration: AgentConfiguration
+    ) -> Bool {
+        parentConfiguration.providerID == AgentProviderPreset.someIMID
+            && profile.usesHostedJobPrompt(
             someIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
         )
     }
@@ -93,9 +110,13 @@ extension AppState {
     /// revoked, entry deleted) — in which case the caller continues down the
     /// normal user-configurable path.
     private func resolvedHostedConfiguration(
-        for profile: AgentSubagentProfile
+        for profile: AgentSubagentProfile,
+        parentConfiguration: AgentConfiguration
     ) -> AgentConfiguration? {
-        guard subagentTradeIsHosted(profile),
+        guard subagentTradeIsHosted(
+            profile,
+            parentConfiguration: parentConfiguration
+        ),
               let hostedModel = profile.hostedVirtualModel else { return nil }
         guard let entry = agentProviderLibrary.entries
             .first(where: { $0.providerID == AgentProviderPreset.someIMID }),
@@ -127,5 +148,14 @@ extension AppState {
             for: binding,
             in: agentProviderLibrary
         )?.isUsableForChatSelection(isSomeIMAuthenticated: authenticated) == true
+    }
+
+    nonisolated static func implicitSomeIMBindingFollowsParent(
+        binding: AgentSubagentProfile.ModelBinding,
+        parentProviderID: String
+    ) -> Bool {
+        binding.preferredProviderEntryID == nil
+            && binding.preferredProviderID == AgentProviderPreset.someIMID
+            && parentProviderID != AgentProviderPreset.someIMID
     }
 }

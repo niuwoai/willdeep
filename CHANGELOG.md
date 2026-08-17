@@ -1,7 +1,72 @@
 # Changelog
 
-> 当前文件保留最新版本（1.263.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.270.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.270.0-rc1 - 2026-08-17
+
+### Added
+
+- **256K `implementer` Coding Worker。** 新工种承担普通多文件功能与重构，可在一个任务内创建或修改最多 16 个已声明路径，并可携带确定性 verifier；默认复用用户配置的本地、私有或企业内网 Provider，不依赖托管虚拟模型。
+- **可部署上下文四档。** 内置工种显式映射到 32K、48K、64K、256K，正式移除 16K 档；窄窗口负责检索、阅读和有界修复，Deep/1M 仅保留为无法切分任务的升级路径。
+
+### Changed
+
+- **子代理继承父任务的工作区写权限。** Smart Approval 与 Workspace Access 对带合法文件集锁的内置写工种自动放行，Strict 继续逐次审批；`target_files` 最多 16 项，也可由非单文件工种的 Task Packet `relevant_files` 提供。
+- **隐式模型路由改为数据主权优先。** 当前会话选择本地、私有或企业内网 Provider 时，内置 Worker 默认留在同一 Provider，不再因为设备同时登录了 some.im 而静默改走公网；只有当前会话本来使用 some.im 时才自动启用 relay 托管工种，用户显式选择的工种 Provider 仍然优先。
+
+### Security
+
+- 新文件创建与已有文件修改共用声明路径校验、文件集锁和工作区边界；删除、改名、未声明路径、工作区逃逸及符号链接逃逸仍被拒绝，模型不能自行扩大权限。
+
+### Tests
+
+- 覆盖四档上下文、无 16K、`implementer` 私有绑定、Smart/Workspace/Strict 权限分流、16 路径上限，以及声明内创建、未声明写入和删除拒绝。
+
+## 1.269.0-rc1 - 2026-08-17
+
+### Added
+
+- **后台命令自动恢复沙箱阻断。** Smart Approval、Always Allow 与无人值守调度现在会把宿主侧生成的一次性恢复许可传给后台 `run_command`；构建、测试或服务命令若命中明确的 seatbelt 拒绝，会在原任务失败后自动无沙箱重跑一次，并且只把最终重跑结果唤醒给 Agent。
+- **更完整的拒绝识别。** 新增只读文件系统、常见 `EPERM` / `EACCES`、Cocoa 无权限错误、Java/Rust DNS 失败与“网络被禁用”等特征，减少把沙箱阻断误判为依赖、DNS 或文件系统故障的情况。
+
+### Security
+
+- 自动恢复许可不能由模型参数设置；Request Every Time 与 Workspace Access 不会静默跳出沙箱，除非该命令已有 Always Allow 授权。每次任务最多无沙箱重跑一次，升级和结果均写入沙箱审计日志。
+
+### Tests
+
+- 覆盖后台恢复授权来源、不同审批模式的权限边界、常见文件/网络拒绝形态与一次性后台重跑。
+
+## 1.268.0-rc1 - 2026-08-17
+
+### Added
+
+- **Webhook 多 Agent 自识别与兼容字段。** Webhook 请求新增 `X-Agent-Source`、`X-Agent-Executor`、`X-Webhook-Schema` 与 `X-Agent-Event`，并保留真实的 WillDeep `User-Agent`；JSON payload 在原生 `event` 之外补充 `schema_version`、`type`、`hook_event_name`、`session_id` 与 Codex 旧通知使用的 `thread-id`。完成事件兼容 `Stop` / `agent-turn-complete`，等待处理事件按执行器映射 Claude Code `Notification` 或 Codex `PermissionRequest`。
+- **Webhook 来源检测器。** 接收侧复用的检测逻辑按显式来源头、`User-Agent`、再到 JSON 特征的顺序识别 WillDeep、Claude Code 与 Codex；共享的 `Stop` 字段不单独用于猜测来源，头与 body 冲突时保留冲突标记。
+
+### Changed
+
+- 完成通知不再把命令摘要写入 Webhook，继续只发送任务句柄、状态和会话元数据。
+
+### Tests
+
+- 新增请求头、自描述兼容 payload、三种 Agent 格式识别与头/body 冲突测试。
+
+## 1.267.0-rc3 - 2026-08-17
+
+### Added
+
+- **后台提醒声音与 Webhook。** 设置新增通知页，可选择系统声音或导入 MP3/AIFF/WAV/CAF/M4A（自动转为系统兼容、最长 30 秒的 CAF）；外部执行器任务完成、以及 Agent 等待授权/确认/回答时可 POST 事件到本地或远程 HTTP(S) Webhook。地址直接保存在 `~/.willdeep/config.toml` 的 `[notifications]`，与 willdeep-rs 0.29.0-rc1 使用同一 Schema；payload 只含事件元数据和简短工具描述，不含完整命令行、模型输出或用户回答。
+
+### Changed
+
+- **Agent 注意力组件统一灰阶。** confirm、ask_user、沙盒升级与授权卡不再使用系统蓝色强调色，主操作统一黑底白字，次操作使用灰阶描边。
+- **排队消息扩大立即发送命中区。** 纸飞机图标改为“立即发送”文字加 Return 符号，保持辅助功能标签与提示。
+
+### Tests
+
+- 新增通知 TOML 保留式读写、Webhook URL 校验和 willdeep-rs 跨客户端 Schema 测试。
 
 ## 1.266.0-rc1 - 2026-08-16
 

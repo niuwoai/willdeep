@@ -229,6 +229,11 @@ struct AgentToolContext {
     /// environment; user-approved write/network/credential commands run
     /// in the escalated/full-user environment.
     let sandboxMode: AgentSandboxMode
+    /// When non-nil, a background `run_command` may replay exactly once
+    /// outside seatbelt after a positively identified sandbox denial. The
+    /// source is host-derived from Smart Approval / Always Allow / dispatch;
+    /// model arguments can never opt into this capability.
+    let automaticBackgroundSandboxRetryApprovalSource: AgentToolApprovalSource?
     /// True when the calling loop can spawn subagents (the main session).
     /// Child loops share this tool runner but cannot spawn, so hints that end
     /// in "spawn_agent" are suppressed for them — a recipe the caller cannot
@@ -296,6 +301,7 @@ struct AgentToolContext {
         sessionPersistenceBarrier: (@MainActor () -> Void)? = nil,
         localCommandEnvironment: [String: String]? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
+        automaticBackgroundSandboxRetryApprovalSource: AgentToolApprovalSource? = nil,
         canSpawnSubagents: Bool = false,
         isUnattendedDispatchTask: Bool = false,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil,
@@ -329,6 +335,7 @@ struct AgentToolContext {
         self.sessionPersistenceBarrier = sessionPersistenceBarrier
         self.localCommandEnvironment = localCommandEnvironment
         self.sandboxMode = sandboxMode
+        self.automaticBackgroundSandboxRetryApprovalSource = automaticBackgroundSandboxRetryApprovalSource
         self.canSpawnSubagents = canSpawnSubagents
         self.isUnattendedDispatchTask = isUnattendedDispatchTask
         self.patchProposalSink = patchProposalSink
@@ -387,6 +394,7 @@ struct AgentToolContext {
             sessionPersistenceBarrier: sessionPersistenceBarrier,
             localCommandEnvironment: localCommandEnvironment,
             sandboxMode: sandboxMode,
+            automaticBackgroundSandboxRetryApprovalSource: automaticBackgroundSandboxRetryApprovalSource,
             canSpawnSubagents: canSpawnSubagents,
             isUnattendedDispatchTask: isUnattendedDispatchTask,
             patchProposalSink: patchProposalSink,
@@ -422,6 +430,7 @@ struct AgentToolContext {
             sessionPersistenceBarrier: sessionPersistenceBarrier,
             localCommandEnvironment: localCommandEnvironment,
             sandboxMode: mode,
+            automaticBackgroundSandboxRetryApprovalSource: automaticBackgroundSandboxRetryApprovalSource,
             canSpawnSubagents: canSpawnSubagents,
             isUnattendedDispatchTask: isUnattendedDispatchTask,
             patchProposalSink: patchProposalSink,

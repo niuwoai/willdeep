@@ -261,7 +261,9 @@ extension AppState {
         AgentToolApprovalNotifier.notifyIfBackgrounded(
             toolName: runtime.toolCalls[index].toolName,
             arguments: runtime.toolCalls[index].arguments,
-            status: status
+            status: status,
+            runtimeID: runtime.id,
+            sessionTitle: runtime.session.title
         )
     }
 

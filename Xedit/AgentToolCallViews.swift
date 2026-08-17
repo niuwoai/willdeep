@@ -180,6 +180,26 @@ private struct AgentApprovalOutlinedButtonStyle: ButtonStyle {
     }
 }
 
+/// Neutral companion to the black/white primary action. Interactive Agent
+/// surfaces intentionally avoid the macOS accent tint so the controls remain
+/// calm and consistent across every interface skin.
+private struct AgentApprovalSecondaryButtonStyle: ButtonStyle {
+    let colorScheme: ColorScheme
+    let cornerRadius: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let foreground: Color = colorScheme == .dark ? .white.opacity(0.88) : .black.opacity(0.78)
+        let border: Color = colorScheme == .dark ? .white.opacity(0.26) : .black.opacity(0.22)
+        return configuration.label
+            .foregroundStyle(foreground)
+            .background(shape.fill(Color.clear))
+            .overlay(shape.strokeBorder(border, lineWidth: 1))
+            .contentShape(shape)
+            .opacity(configuration.isPressed ? 0.62 : 1)
+    }
+}
+
 /// Codex-style high-contrast approval action. Light appearances use a black
 /// button with white text; dark appearances invert the pair so the primary
 /// action remains clearly visible instead of disappearing into the card.
@@ -1066,7 +1086,7 @@ struct AgentToolCallCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: isInteractive ? 6 : 3) {
-            if !isAuthorizationNotice {
+            if !isAttentionNotice {
                 HStack(spacing: 6) {
                     Image(systemName: iconName)
                         .font(.system(size: 11, weight: .semibold))
@@ -1205,12 +1225,12 @@ struct AgentToolCallCard: View {
                 terminalShortcutProtectedInputsBody
             }
         }
-        .padding(.horizontal, isAuthorizationNotice ? 0 : 7)
-        .padding(.vertical, isAuthorizationNotice ? 0 : (isInteractive ? 7 : 4))
+        .padding(.horizontal, isAttentionNotice ? 0 : 7)
+        .padding(.vertical, isAttentionNotice ? 0 : (isInteractive ? 7 : 4))
         .background(cardBackground)
         .clipShape(
             RoundedRectangle(
-                cornerRadius: isAuthorizationNotice
+                cornerRadius: isAttentionNotice
                     ? authorizationCornerRadius
                     : 6,
                 style: .continuous
@@ -1218,7 +1238,7 @@ struct AgentToolCallCard: View {
         )
         .overlay(
             RoundedRectangle(
-                cornerRadius: isAuthorizationNotice
+                cornerRadius: isAttentionNotice
                     ? authorizationCornerRadius
                     : 6,
                 style: .continuous
@@ -1245,7 +1265,7 @@ struct AgentToolCallCard: View {
                 HStack(spacing: 8) {
                     Image(systemName: descriptor.iconName)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.accent)
+                        .foregroundStyle(appState.editorSettings.interfaceSkin.palette.secondaryText)
                         .frame(width: 18, height: 18)
                     Text(descriptor.title)
                         .font(.system(size: 12, weight: .medium))
@@ -1333,9 +1353,12 @@ struct AgentToolCallCard: View {
         } label: {
             compactAuthorizationActionLabel(L10n.ToolCard.deny)
         }
-        .buttonStyle(.bordered)
-        .approvalButtonBorderShape(cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius)
-        .tint(appState.editorSettings.interfaceSkin.palette.accent)
+        .buttonStyle(
+            AgentApprovalSecondaryButtonStyle(
+                colorScheme: colorScheme,
+                cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius
+            )
+        )
         .cursor(.arrow)
     }
 
@@ -1409,10 +1432,10 @@ struct AgentToolCallCard: View {
                     cornerRadius: AgentConfirmationReviewMetrics.innerCornerRadius,
                     style: .continuous
                 )
-                .fill(palette.selectionFill)
+                .fill(palette.primaryText.opacity(colorScheme == .dark ? 0.12 : 0.06))
                 Image(systemName: descriptor.iconName)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(palette.accent)
+                    .foregroundStyle(palette.primaryText)
             }
             .frame(
                 width: AgentConfirmationReviewMetrics.iconTileSize,
@@ -1422,7 +1445,7 @@ struct AgentToolCallCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("需要你的确认")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(palette.accent)
+                    .foregroundStyle(palette.secondaryText)
                 Text(descriptor.title)
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(palette.primaryText)
@@ -1551,7 +1574,7 @@ struct AgentToolCallCard: View {
         .foregroundStyle(palette.secondaryText)
         .padding(.horizontal, 9)
         .padding(.vertical, 6)
-        .background(palette.selectionFill.opacity(0.68))
+        .background(palette.primaryText.opacity(colorScheme == .dark ? 0.09 : 0.05))
         .clipShape(Capsule())
     }
 
@@ -1581,7 +1604,7 @@ struct AgentToolCallCard: View {
                 Text(approvalExplanation == nil ? title : "重新查看说明")
                     .font(.system(size: 11, weight: .semibold))
             }
-            .foregroundStyle(palette.accent)
+            .foregroundStyle(palette.primaryText)
         }
         .buttonStyle(.plain)
         .disabled(isLoadingApprovalExplanation)
@@ -1663,16 +1686,16 @@ struct AgentToolCallCard: View {
                     } label: {
                         approvalActionLabel(descriptor.declineTitle, systemImage: "xmark")
                     }
-                    .buttonStyle(.bordered)
-                    .approvalButtonBorderShape(cornerRadius: AgentApprovalActionMetrics.cornerRadius)
-                    .tint(palette.accent)
+                    .buttonStyle(
+                        AgentApprovalSecondaryButtonStyle(
+                            colorScheme: colorScheme,
+                            cornerRadius: AgentApprovalActionMetrics.cornerRadius
+                        )
+                    )
                     .cursor(.arrow)
                     .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
 
-                    authorizationApproveButton(
-                        descriptor,
-                        accent: palette.accent
-                    )
+                    authorizationApproveButton(descriptor)
                 }
                 .controlSize(.regular)
 
@@ -1690,8 +1713,7 @@ struct AgentToolCallCard: View {
 
     @ViewBuilder
     private func authorizationApproveButton(
-        _ descriptor: AgentApprovalNoticeDescriptor,
-        accent: Color
+        _ descriptor: AgentApprovalNoticeDescriptor
     ) -> some View {
         Button {
             approveAuthorizationNotice()
@@ -1699,12 +1721,11 @@ struct AgentToolCallCard: View {
             approvalActionLabel(descriptor.approveTitle, systemImage: "arrow.right")
         }
         .buttonStyle(
-            AgentApprovalOutlinedButtonStyle(
-                accent: accent,
+            AgentApprovalPrimaryButtonStyle(
+                colorScheme: colorScheme,
                 cornerRadius: AgentApprovalActionMetrics.cornerRadius
             )
         )
-        .tint(accent)
         .cursor(.arrow)
         .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
     }
@@ -2139,47 +2160,130 @@ struct AgentToolCallCard: View {
         let options = AgentInjectionDefense.sanitizeAskUserOptions(rawOptions)
         let isMultiSelect = call.arguments["multi_select"]?.boolValue() ?? false
 
-        VStack(alignment: .leading, spacing: 8) {
-            if !question.isEmpty {
-                Text(question)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        let palette = appState.editorSettings.interfaceSkin.palette
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: AgentConfirmationReviewMetrics.sectionSpacing) {
+                HStack(alignment: .top, spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(
+                            cornerRadius: AgentConfirmationReviewMetrics.innerCornerRadius,
+                            style: .continuous
+                        )
+                        .fill(palette.primaryText.opacity(colorScheme == .dark ? 0.12 : 0.06))
+                        Image(systemName: "bubble.left")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(palette.primaryText)
+                    }
+                    .frame(
+                        width: AgentConfirmationReviewMetrics.iconTileSize,
+                        height: AgentConfirmationReviewMetrics.iconTileSize
+                    )
 
-            if !options.isEmpty {
-                if isMultiSelect {
-                    multiSelectChoices(options)
-                } else {
-                    singleSelectChoices(options)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L10n.ToolCard.askUserEyebrow)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(palette.secondaryText)
+                        if !question.isEmpty {
+                            Text(question)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(palette.primaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Text(
+                            isMultiSelect
+                                ? L10n.ToolCard.askUserMultipleHint
+                                : L10n.ToolCard.askUserSingleHint
+                        )
+                            .font(.system(size: 13))
+                            .foregroundStyle(palette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
                 }
-            }
 
-            // Free-form text input is always available — even with preset
-            // options, the user may want to write "none of these".
-            TextField(options.isEmpty ? L10n.ToolCard.askUserAnswerPlaceholder : L10n.ToolCard.askUserOtherAnswerPlaceholder,
-                      text: $answerInput,
-                      axis: .vertical)
-                .textFieldStyle(.roundedBorder)
+                if !options.isEmpty {
+                    if isMultiSelect {
+                        multiSelectChoices(options)
+                    } else {
+                        singleSelectChoices(options)
+                    }
+                }
+
+                TextField(
+                    options.isEmpty
+                        ? L10n.ToolCard.askUserAnswerPlaceholder
+                        : L10n.ToolCard.askUserOtherAnswerPlaceholder,
+                    text: $answerInput,
+                    axis: .vertical
+                )
+                .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .lineLimit(1...4)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(palette.controlFill.opacity(0.72))
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: AgentConfirmationReviewMetrics.innerCornerRadius,
+                        style: .continuous
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(
+                        cornerRadius: AgentConfirmationReviewMetrics.innerCornerRadius,
+                        style: .continuous
+                    )
+                    .stroke(palette.hairline, lineWidth: 1)
+                )
+            }
+            .padding(AgentConfirmationReviewMetrics.contentPadding)
 
-            // rc16:Skip 在左、Send 在右,对齐「正向操作右、误触概率低」的
-            // macOS 习惯。Send 的 disabled 状态自然把视觉重心保留在右侧。
-            HStack(spacing: 6) {
-                Button(L10n.ToolCard.askUserSkip) {
+            Rectangle()
+                .fill(palette.hairline)
+                .frame(height: AgentConfirmationReviewMetrics.dividerThickness)
+
+            HStack(spacing: AgentConfirmationReviewMetrics.actionButtonSpacing) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.ToolCard.askUserFooterTitle)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(palette.primaryText)
+                    Text(L10n.ToolCard.askUserFooterHint)
+                        .font(.system(size: 12))
+                        .foregroundStyle(palette.secondaryText)
+                }
+                Spacer(minLength: 16)
+                Button {
                     appState.denyAgentToolCall(id: call.id)
                     resetAskUserInputs()
+                } label: {
+                    approvalActionLabel(L10n.ToolCard.askUserSkip, systemImage: "xmark")
                 }
+                .buttonStyle(
+                    AgentApprovalSecondaryButtonStyle(
+                        colorScheme: colorScheme,
+                        cornerRadius: AgentApprovalActionMetrics.cornerRadius
+                    )
+                )
+                .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
                 .cursor(.arrow)
-                Spacer(minLength: 0)
-                Button(L10n.ToolCard.askUserSend) {
+
+                Button {
                     submitAnswer(options: options, isMultiSelect: isMultiSelect)
+                } label: {
+                    approvalActionLabel(L10n.ToolCard.askUserSend, systemImage: "arrow.right")
                 }
+                .buttonStyle(
+                    AgentApprovalPrimaryButtonStyle(
+                        colorScheme: colorScheme,
+                        cornerRadius: AgentApprovalActionMetrics.cornerRadius
+                    )
+                )
                 .disabled(!canSubmitAskUser(isMultiSelect: isMultiSelect))
+                .frame(maxWidth: AgentConfirmationReviewMetrics.actionButtonMaxWidth)
                 .cursor(.arrow)
             }
-            .font(.caption)
+            .font(.system(size: 13, weight: .semibold))
+            .padding(AgentConfirmationReviewMetrics.contentPadding)
         }
     }
 
@@ -2315,32 +2419,36 @@ struct AgentToolCallCard: View {
     }
 
     private func singleSelectChoices(_ options: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return VStack(alignment: .leading, spacing: 6) {
             ForEach(options, id: \.self) { option in
                 Button {
-                    appState.answerAgentToolCall(id: call.id, answer: option)
-                    resetAskUserInputs()
+                    selectedOptions = [option]
                 } label: {
                     HStack(spacing: 8) {
+                        Image(systemName: selectedOptions.contains(option) ? "circle.inset.filled" : "circle")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(selectedOptions.contains(option) ? palette.primaryText : palette.secondaryText)
                         Text(option)
                             .font(.system(size: 12, weight: .medium))
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 8)
-                        Image(systemName: "arrow.turn.down.left")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(askUserSecondaryAccentColor.opacity(0.72))
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .foregroundStyle(.primary)
-                    .background(askUserAccentColor.opacity(0.08))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(askUserAccentColor.opacity(0.28), lineWidth: 1)
+                    .foregroundStyle(palette.primaryText)
+                    .background(
+                        selectedOptions.contains(option)
+                            ? palette.primaryText.opacity(colorScheme == .dark ? 0.12 : 0.07)
+                            : palette.controlFill.opacity(0.58)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(palette.hairline, lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .cursor(.arrow)
@@ -2349,30 +2457,42 @@ struct AgentToolCallCard: View {
     }
 
     private func multiSelectChoices(_ options: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let palette = appState.editorSettings.interfaceSkin.palette
+        return VStack(alignment: .leading, spacing: 6) {
             ForEach(options, id: \.self) { option in
-                Toggle(isOn: Binding(
-                    get: { selectedOptions.contains(option) },
-                    set: { isOn in
-                        if isOn { selectedOptions.insert(option) }
-                        else { selectedOptions.remove(option) }
+                Button {
+                    if selectedOptions.contains(option) {
+                        selectedOptions.remove(option)
+                    } else {
+                        selectedOptions.insert(option)
                     }
-                )) {
-                    Text(option)
-                        .font(.system(size: 12, weight: .medium))
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: selectedOptions.contains(option) ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(selectedOptions.contains(option) ? palette.primaryText : palette.secondaryText)
+                        Text(option)
+                            .font(.system(size: 12, weight: .medium))
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(palette.primaryText)
+                    .background(
+                        selectedOptions.contains(option)
+                            ? palette.primaryText.opacity(colorScheme == .dark ? 0.12 : 0.07)
+                            : palette.controlFill.opacity(0.58)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(palette.hairline, lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
-                .toggleStyle(.checkbox)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(selectedOptions.contains(option) ? askUserAccentColor.opacity(0.10) : appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.58))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(selectedOptions.contains(option) ? askUserAccentColor.opacity(0.32) : appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .buttonStyle(.plain)
                 .cursor(.arrow)
             }
         }
@@ -2382,8 +2502,7 @@ struct AgentToolCallCard: View {
         if !answerInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return true
         }
-        if isMultiSelect { return !selectedOptions.isEmpty }
-        return false
+        return !selectedOptions.isEmpty
     }
 
     private func submitAnswer(options: [String], isMultiSelect: Bool) {
@@ -2397,6 +2516,8 @@ struct AgentToolCallCard: View {
             // Preserve the order the model offered them so the
             // assistant can correlate.
             answer = options.filter { selectedOptions.contains($0) }.joined(separator: ", ")
+        } else if let selected = options.first(where: { selectedOptions.contains($0) }) {
+            answer = selected
         } else {
             return
         }
@@ -2618,6 +2739,10 @@ struct AgentToolCallCard: View {
         call.status == .pendingApproval || call.status == .awaitingConfirm
     }
 
+    private var isAttentionNotice: Bool {
+        isAuthorizationNotice || call.status == .awaitingUserAnswer
+    }
+
     private var isCompactSurfaceAuthorizationNotice: Bool {
         AgentApprovalPresentationPolicy.usesCompactAuthorization(
             toolName: call.toolName,
@@ -2683,7 +2808,7 @@ struct AgentToolCallCard: View {
     }
 
     private var cardBackground: Color {
-        if isAuthorizationNotice {
+        if isAttentionNotice {
             return appState.editorSettings.interfaceSkin.palette.panelFill
         }
         if isInteractive {
@@ -2730,12 +2855,12 @@ struct AgentToolCallCard: View {
     }
 
     private var borderColor: Color {
-        if isAuthorizationNotice {
+        if isAttentionNotice {
             return Color.clear
         }
         switch call.status {
         case .pendingApproval, .awaitingConfirm: return appState.editorSettings.interfaceSkin.palette.hairline
-        case .awaitingUserAnswer: return askUserAccentColor.opacity(0.4)
+        case .awaitingUserAnswer: return appState.editorSettings.interfaceSkin.palette.hairline
         case .failed:
             return call.commandExitCode == nil
                 ? Color.orange.opacity(0.4)

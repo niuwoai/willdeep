@@ -332,31 +332,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "While signed in to some.im this trade runs on a managed model with a server-side prompt. Sign out to choose your own."
+            "value" : "While the current provider is some.im this trade runs on a managed model with a server-side prompt. Choose a private provider to keep the trade on that provider."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mientras tengas sesión en some.im, este oficio usa un modelo gestionado con prompt en el servidor. Cierra sesión para elegir el tuyo."
+            "value" : "Mientras el proveedor actual sea some.im, este oficio usa un modelo gestionado con prompt en el servidor. Elige un proveedor privado para mantener allí el oficio."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tant que vous êtes connecté à some.im, ce métier utilise un modèle géré avec un prompt côté serveur. Déconnectez-vous pour choisir le vôtre."
+            "value" : "Tant que le fournisseur actuel est some.im, ce métier utilise un modèle géré avec un prompt côté serveur. Choisissez un fournisseur privé pour y conserver ce métier."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "some.im にサインイン中、この職能はサーバー側プロンプト付きの管理モデルで動作します。自分で選ぶにはサインアウトしてください。"
+            "value" : "現在のプロバイダーが some.im の場合、この職能はサーバー側プロンプト付きの管理モデルで動作します。プライベートプロバイダーを選ぶと、そのプロバイダー内で実行されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "登录 some.im 期间，该工种使用托管模型与服务端提示词。想自行选择请先退出登录。"
+            "value" : "当前 Provider 为 some.im 时，该工种使用托管模型与服务端提示词；选择私有 Provider 后，工种会留在该 Provider 内执行。"
           }
         }
       }
@@ -3204,7 +3204,9 @@
     "agent-delegation.profile-deep-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Deep" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Profundo" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Approfondi" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "精査" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深查" } } } },
     "agent-delegation.profile-deep-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Complex investigation: reasoning across many files, read-only shell commands, and git status." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Investigación compleja: razonamiento a través de muchos archivos, comandos de shell de solo lectura y estado de git." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Investigation complexe : raisonnement sur de nombreux fichiers, commandes shell en lecture seule et état Git." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "複雑な調査: 多数のファイルを横断した推論、読み取り専用の shell コマンド、git ステータスの確認。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复杂调查：跨多文件推理、只读 shell 命令和 git 状态。" } } } },
     "agent-delegation.profile-editor-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Editor" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Editor" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Éditeur" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "編集" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑" } } } },
-    "agent-delegation.profile-editor-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit ONE approved file. Requires a `target_file` argument and the user's approval; cannot touch any other path." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Edita UN solo archivo aprobado. Requiere un argumento `target_file` y la aprobación del usuario; no puede tocar ninguna otra ruta." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Modifie UN seul fichier approuvé. Nécessite un argument `target_file` et l'approbation de l'utilisateur ; ne peut toucher aucun autre chemin." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "承認された1つのファイルのみを編集します。`target_file` 引数とユーザーの承認が必要で、他のパスには一切触れません。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "只编辑一个已批准的文件。必须带 `target_file` 参数并经用户批准；不能碰任何其他路径。" } } } },
+    "agent-delegation.profile-editor-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edits one declared file inside the parent workspace policy; cannot touch any other path." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Edita un archivo declarado dentro de la política del espacio de trabajo principal; no puede tocar ninguna otra ruta." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Modifie un fichier déclaré dans la politique de l'espace de travail parent ; ne peut toucher aucun autre chemin." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "親ワークスペースのポリシー内で宣言された1つのファイルだけを編集し、他のパスには触れません。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在父会话工作区策略内编辑一个已声明文件，不能触碰其他路径。" } } } },
+    "agent-delegation.profile-implementer-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Implementer" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Implementador" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Implémenteur" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "実装" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实现" } } } },
+    "agent-delegation.profile-implementer-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Implements a bounded multi-file feature or refactor across at most 16 declared existing or new paths on a deployable 256K model." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Implementa una función o refactorización acotada en hasta 16 rutas declaradas, existentes o nuevas, con un modelo desplegable de 256K." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Implémente une fonctionnalité ou refactorisation bornée sur au plus 16 chemins déclarés, existants ou nouveaux, avec un modèle déployable de 256K." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "デプロイ可能な256Kモデルで、宣言済みの既存または新規パス最大16件に限定した複数ファイルの機能実装やリファクタリングを行います。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用可部署的 256K 模型，在最多 16 个已声明的现有或新路径内完成有界多文件功能或重构。" } } } },
     "agent-delegation.profile-inherits-parent" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Same as this chat" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Igual que esta conversación" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Identique à cette conversation" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "このチャットと同じ" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "与本会话相同" } } } },
     "agent-delegation.profile-fetched-models" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Fetched %1$d models from %2$@." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Se obtuvieron %1$d modelos de %2$@." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "%1$d modèles récupérés depuis %2$@." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%2$@ から %1$d 個のモデルを取得しました。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已从 %2$@ 获取 %1$d 个模型。" } } } },
     "agent-delegation.profile-model-label" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Model" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Modelo" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Modèle" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "モデル" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型" } } } },
@@ -7503,6 +7505,29 @@
       }
     },
     "agent-notification.command" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Command" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Comando" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Commande" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "コマンド" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "命令" } } } },
+    "agent-notification.settings.choose-audio" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose audio…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择音频…" } } } },
+    "agent-notification.settings.audio-empty" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The selected audio file is empty or unreadable." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "所选音频为空或无法读取。" } } } },
+    "agent-notification.settings.audio-too-long" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Notification sounds must be 30 seconds or shorter." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通知声音不能超过 30 秒。" } } } },
+    "agent-notification.settings.no-audio-selected" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No audio selected" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "尚未选择音频" } } } },
+    "agent-notification.settings.preview-sound" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Preview" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "试听" } } } },
+    "agent-notification.settings.save" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Save" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存" } } } },
+    "agent-notification.settings.saved" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已保存" } } } },
+    "agent-notification.settings.sound-custom" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Custom audio" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自定义音频" } } } },
+    "agent-notification.settings.sound-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Used when WillDeep needs authorization, confirmation, or an answer while it is in the background. Custom MP3, AIFF, WAV, CAF, and M4A files are converted to a system-compatible notification sound." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 在后台等待授权、确认或回答时播放。自定义 MP3、AIFF、WAV、CAF 与 M4A 会转换为系统兼容的通知声音。" } } } },
+    "agent-notification.settings.sound-label" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sound" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "声音" } } } },
+    "agent-notification.settings.sound-none" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "None" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无" } } } },
+    "agent-notification.settings.sound-section" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Background notification sound" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "后台通知声音" } } } },
+    "agent-notification.settings.sound-system-default" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "System default" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统默认" } } } },
+    "agent-notification.settings.tab" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Notifications" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通知" } } } },
+    "agent-notification.settings.test-webhook" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Send test" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送测试" } } } },
+    "agent-notification.settings.webhook-attention-required" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Authorization, confirmation, or answer required" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要授权、确认或回答" } } } },
+    "agent-notification.settings.webhook-enabled" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Send webhook events" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送 Webhook 事件" } } } },
+    "agent-notification.settings.webhook-invalid-url" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter a valid HTTP or HTTPS webhook URL." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请输入有效的 HTTP 或 HTTPS Webhook 地址。" } } } },
+    "agent-notification.settings.webhook-privacy-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Webhook payloads include only event metadata, session title, executor, status, and time. Commands, model output, and your answers are not sent." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Webhook 只发送事件元数据、会话标题、执行器、状态和时间，不发送命令、模型输出或你的回答。" } } } },
+    "agent-notification.settings.webhook-section" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Webhook" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Webhook" } } } },
+    "agent-notification.settings.webhook-task-completed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "External executor task completed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "外部执行器任务完成" } } } },
+    "agent-notification.settings.webhook-test-succeeded" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Test delivered" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "测试已送达" } } } },
+    "agent-notification.settings.webhook-url" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Webhook URL" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Webhook 地址" } } } },
     "agent-notification.interaction.answer-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent is waiting for your answer" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El Agent espera tu respuesta" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "L'agent attend votre réponse" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "Agent が回答を待っています" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 在等你回答" } } } },
     "agent-notification.interaction.approval-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent needs authorization" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El Agent necesita autorización" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "L'agent a besoin d'une autorisation" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "Agent に承認が必要です" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 需要授权" } } } },
     "agent-notification.interaction.attention-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent needs your attention" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El Agent necesita tu atención" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "L'agent a besoin de votre attention" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "Agent の確認が必要です" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 需要你处理" } } } },
@@ -37018,6 +37043,17 @@
             "value" : "立即发送排队消息"
           }
         }
+      }
+    },
+    "queued-message.send-now-compact" : {
+      "comment" : "visible label for sending a queued message immediately",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send now" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Enviar ahora" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Envoyer" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "今すぐ送信" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "立即发送" } }
       }
     },
     "queued-message.send-now-button.help" : {
@@ -71486,6 +71522,11 @@
         }
       }
     },
+    "tool-card.ask-user.eyebrow" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent wants to know" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 想了解" } } } },
+    "tool-card.ask-user.footer-hint" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent will continue the current task using your answer." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 会根据你的回答继续当前任务。" } } } },
+    "tool-card.ask-user.footer-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Submit answer" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提交回答" } } } },
+    "tool-card.ask-user.multiple-hint" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose one or more answers, or add your own." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可以选择多项，也可以补充自己的回答。" } } } },
+    "tool-card.ask-user.single-hint" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose an answer or enter your own." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择一个答案，或直接输入你的想法。" } } } },
     "tool-card.ask-user.answer-placeholder" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -525,12 +525,14 @@ struct AgentProfileSettingsView: View {
 
     /// True while some.im owns this trade's model and job prompt. Only the
     /// managed worker trades qualify; `deep`, `tester`, `reviewer` and every
-    /// dispatch profile stay user-configurable in every login state
+    /// dispatch profile stay user-configurable. Being signed in is not enough:
+    /// a private/on-prem current provider must never be silently rerouted
     /// (docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3.8).
     private func hostedModelIsLocked(_ profile: AgentProfile) -> Bool {
         guard profile.usages.contains(.subagent),
               AgentSubagentJobPrompts.hostedTradeIDs.contains(profile.id) else { return false }
-        return SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+        return appState.agentConfiguration.providerID == AgentProviderPreset.someIMID
+            && SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
     }
 
     private func modelOptions(for profile: AgentProfile) -> [String] {

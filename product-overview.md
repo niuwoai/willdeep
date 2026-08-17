@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-14 | Current version: v1.266.0-rc1
+> Last updated: 2026-08-17 | Current version: v1.270.0-rc1
 
 ## Positioning
 
@@ -12,6 +12,9 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **私有模型优先的 Coding Worker（1.270.0-rc1）** —— 内置子代理按可私有部署的 32K、48K、64K、256K 四档分工，正式放弃 16K；新增 256K `implementer` 承担普通多文件实现与重构，最多锁定 16 个已声明的现有或新文件。Smart Approval 与 Workspace Access 会把父任务的工作区写权限继承给这些内置写工种，Strict 仍逐次审批；创建和修改使用同一文件集锁，删除、改名、越界与符号链接逃逸继续拒绝。当前会话使用本地或企业内网 Provider 时，Worker 默认留在同一 Provider，不会因为设备另有 some.im 登录而把数据送上公网；Deep/1M 只作为无法切分任务的升级路径。
+- **沙箱阻断自动恢复（1.269.0-rc1）** —— 前台与后台 `run_command` 都会识别 seatbelt 导致的写入、进程与网络失败。Smart Approval、Always Allow 和无人值守调度可自动携带宿主生成的一次性恢复许可，在明确命中沙箱拒绝后无沙箱重跑一次；Request Every Time 与 Workspace Access 仍要求显式授权，不会被模型参数绕开。原始失败、中间恢复与最终结果均保留审计记录，第二次失败不会继续循环提权。
+- **Agent 注意力交互、声音与多格式 Webhook（1.268.0-rc1）** —— confirm、ask_user 与授权卡统一采用黑白灰层级和黑底白字主按钮；后台等待授权、确认或回答时可选系统声音或用户 MP3/AIFF/WAV/CAF/M4A，导入后会转为系统兼容的 30 秒内 CAF。设置新增任务完成/需要输入 Webhook，地址与声音偏好共存于 `~/.willdeep/config.toml` 的 `[notifications]`，与 willdeep-rs 0.29.0-rc1 共用 Schema。请求用真实 WillDeep `User-Agent` 以及显式来源、执行器和 Schema header 自描述，payload 同时提供 WillDeep 原生事件、Claude/Codex `hook_event_name` 公共字段和 Codex 旧 `agent-turn-complete` 别名；检测器按 header → User-Agent → JSON 特征识别来源并报告冲突。Webhook 只发送事件元数据和简短工具描述，不发送完整命令行、模型输出或用户回答。排队消息的纸飞机改为更大的“立即发送 ↵”操作区。
 - **Workflow fan-out 绑定小模型工种 + 审查素材预取（1.263.0-rc1）** —— 派工率盘点实测仅 1.4% 会话派过工后，第一刀切在 workflow 引擎：`/code-review`、`/pr-review`、`/bug-hunt` 的维度审查绑 reviewer，`/release-notes` 素材收集绑 git_detective，`/competitor` 调研绑 reader；synthesize 一律保持 deep。`git diff` / `gh pr diff` 改为 Swift 侧确定性取一次、内联下发（此前 4 个维度各自跑一遍），素材超 28K 字符回落父模型档。新增 WorkflowWorkerBindingTests 守住"绑定工种的提示词不得点名它没有的工具"。凭证沙箱档（1.262.0-rc2）解开 `~/.ssh` 钥匙后，运维类场景（终端操作/发布执行/k8s 查询）进入小模型候选，见设计文档 §10.5。
 - **本地语音转文字整体下线（1.262.0-rc1）** —— SenseVoice ONNX 转写栈连同它的全部界面一起移除：composer 麦克风、Fn 按住说话、悬浮波形条、Settings → Voice 分组、Onboarding 语音步骤与 937 MB 模型下载器、转写后 AI 润色。`Xedit/Voice/` 整目录退场，仓库瘦身 72 MB，麦克风权限声明与 entitlement 同步撤除。依赖转写的 7 个工作流（`/transcribe`、`/video-summary`、`/meeting-notes`、`/video-clip`、`/video-gif`、`/video-subtitle`、`/video-subtitle-export`）随之下线；`/video-extract` 保留并只摘掉转录一步，其余视频与图片工具箱不受影响。
 - **终端捷径专用 JSON 与密钥编辑窗口（1.254.0-rc1）** —— “编辑”不再生成临时 JSON 并交给外部编辑器，而是打开原生独立窗口，直接从正式存储读取并原子合并保存。上半区实时校验 JSON，下半区集中管理受保护输入；密钥值只进入本机加密保险库，不写入 JSON，也不进入模型上下文。密钥表支持名称/JSON 引用搜索、已保存/待填写筛选、25/50/100 条分页和大量记录的懒加载滚动，少量密钥仍保持紧凑。

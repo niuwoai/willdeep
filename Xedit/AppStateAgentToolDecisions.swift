@@ -113,7 +113,9 @@ extension AppState {
         AgentToolApprovalNotifier.notifyIfBackgrounded(
             toolName: record.toolName,
             arguments: record.arguments,
-            status: initialStatus
+            status: initialStatus,
+            runtimeID: runtime.id,
+            sessionTitle: runtime.session.title
         )
 
         let decision: AgentDelegatedApprovalDecision
@@ -389,6 +391,16 @@ extension AppState {
 
         if approvalMode == .requestEveryTime {
             return nil
+        }
+
+        // Built-in writing subagents are coding workers, not an external
+        // effect. Smart and Workspace Access inherit the parent's bounded
+        // workspace-write grant, while Strict returned above. The execution
+        // path still locks and checks every declared path, so this removes a
+        // duplicate approval without widening the child's file authority.
+        if toolName == "spawn_agent",
+           Self.subagentWriteScopeIsBounded(arguments: arguments) {
+            return approvalMode == .workspaceAccess ? .workspaceAccess : .staticAllowlist
         }
 
         // Delegated coding agents can modify many files in one call. Smart
@@ -813,6 +825,25 @@ extension AppState {
 
     nonisolated static func isTrustedDelegatedAgentTool(_ toolName: String) -> Bool {
         trustedDelegatedAgentToolNames.contains(toolName)
+    }
+
+    nonisolated static func subagentWriteScopeIsBounded(
+        arguments: [String: AgentJSONValue]
+    ) -> Bool {
+        let profile = AgentSubagentProfileStore.resolvedProfile(
+            id: arguments["profile"]?.stringValue()
+        )
+        guard profile.requiresWriteAccess else { return false }
+
+        var targets: [String] = []
+        if case .array(let values)? = arguments["target_files"] {
+            targets = values.compactMap { $0.stringValue() }
+        } else if let target = arguments["target_file"]?.stringValue() {
+            targets = [target]
+        } else if profile.id != AgentSubagentProfileCatalog.editorID {
+            targets = AgentSubagentTaskPacket.parse(arguments["task"])?.relevantFiles ?? []
+        }
+        return AgentSubagentWriteAccess(targetRelativePaths: targets) != nil
     }
 
     /// Remote media-generation lifecycle tools (submit / poll / cancel an

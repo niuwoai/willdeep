@@ -1247,6 +1247,30 @@ struct AgentSandboxNetworkPolicyTests {
         }
     }
 
+    @Test("common filesystem and runtime denial shapes trigger one-shot recovery")
+    func commonFilesystemDenialsCountAsSandboxDenial() {
+        let outputs = [
+            "mkdir: /Library/Caches/tool: Read-only file system",
+            "npm ERR! code EACCES\nnpm ERR! syscall mkdir",
+            "Error: EACCES: permission denied, open '/Users/test/.cache/tool'",
+            "NSCocoaErrorDomain Code=513: You don’t have permission to save the file.",
+            "spawn helper EPERM: operation blocked",
+        ]
+
+        for output in outputs {
+            #expect(AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: output,
+                sandboxMode: .workspaceWrite
+            ))
+            #expect(!AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: output,
+                sandboxMode: .escalated
+            ))
+        }
+    }
+
     @Test("deniesNetwork matches the emitted seatbelt profile")
     func deniesNetworkMatchesProfile() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-frontend")
