@@ -32,22 +32,15 @@ enum WorkflowRegistry {
         CSVAskWorkflow(),
         DBExploreWorkflow(),
         DBSchemaDocWorkflow(),
-        // Phase 1 voice-to-text (feat/voice-to-text branch). Local
-        // SenseVoice ONNX pipeline ported from fastv. No LLM sub-agents
-        // —— pure Swift work, runs through Workflow surface for card UI.
-        TranscribeWorkflow(),
-        // Phase 2 voice → application workflows. Both share the local
-        // SenseVoice pipeline; /video-summary additionally needs
-        // ffmpeg + (for URL inputs) yt-dlp.
-        VideoSummaryWorkflow(),
-        MeetingNotesWorkflow(),
-        // 1.85.0-rc1: ffmpeg-driven video manipulation workflows. All
-        // three rely on SpeechTranscriber to locate moments in the
-        // video (clip / gif) or none at all (compress). Output goes to
-        // ~/Downloads/.
-        VideoClipWorkflow(),
+        // 1.85.0-rc1: ffmpeg-driven video manipulation workflows.
+        // 输出到 ~/Downloads/。
+        //
+        // 1.262.0: 本地 SenseVoice/ONNX 转写栈整体下线，依赖"先转录再让
+        // LLM 在文字里找片段"的那批工作流（/transcribe、/video-summary、
+        // /meeting-notes、/video-clip、/video-gif、/video-subtitle、
+        // /video-subtitle-export）随之移除——引擎一走它们只剩空壳。
+        // 不依赖转写的（压缩/缩略图/合并/水印/变速/抽取）全部保留。
         VideoCompressWorkflow(),
-        VideoGifWorkflow(),
         // 1.85.0-rc2: "extract everything" + thumbnail + merge —— the
         // tools you reach for when copying someone else's video.
         VideoExtractWorkflow(),
@@ -57,8 +50,6 @@ enum WorkflowRegistry {
         // 要加点自己的东西"场景：水印、变速、字幕。
         VideoWatermarkWorkflow(),
         VideoSpeedupWorkflow(),
-        VideoSubtitleWorkflow(),
-        VideoSubtitleExportWorkflow(),
         // 1.92.0: deterministic image toolbox. These are native
         // AppKit/CoreGraphics/Vision workflows, so common image jobs do
         // not need ImageMagick, Pillow, or a model call.

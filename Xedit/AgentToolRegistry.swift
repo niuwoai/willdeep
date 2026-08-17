@@ -1759,6 +1759,9 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, return immediately with an agent handle (agent_xxxxxx); the report is injected as a system message when the subagent finishes. Up to 3 subagents may run in parallel per session. Defaults to false (wait for the report inline).", required: false),
                 AgentToolParameter(name: "profile", type: .string, description: "Which subagent trade to spawn. Each trade runs on its own model with a narrowed tool set, so prefer the narrowest one that fits the task — it is faster and far cheaper. Trades: \(AgentSubagentProfileStore.toolDescriptionCatalog) Defaults to `deep`.", required: false),
                 AgentToolParameter(name: "target_file", type: .string, description: "Required for `profile=\"editor\"`, ignored otherwise. Workspace-relative path of the single file the subagent may edit. The user approves this file explicitly; patches touching any other path are rejected.", required: false),
+                AgentToolParameter(name: "target_files", type: .stringArray, description: "Required for the fixer trades (`test_fixer`, `build_fixer`), ignored otherwise. Workspace-relative paths the subagent may edit — usually the implementation plus its test. The user approves this exact list; patches touching any other path are rejected, so include every file the fix needs and nothing more.", required: false),
+                AgentToolParameter(name: "target_command", type: .string, description: "Only for `profile=\"ops_runner\"`, ignored otherwise. The EXACT shell command the worker may execute despite it being write-tier (a release/deploy script, typically). The user approves this specific command on the spawn card; the worker may run it repeatedly (retry loops need idempotent scripts) but any other write command is denied. Combine with a `task` whose `verifier.command` is a read-only health/status check so success is decided by exit code, not the worker's claim. Keep rollback and other irreversible decisions in this session.", required: false),
+                AgentToolParameter(name: "task", type: .string, description: "Structured task packet, as a JSON STRING. Strongly preferred for the fixer trades and useful for any trade: it lets the worker start hot instead of spending its window searching. Fields: `goal` (string, what done looks like), `skill` (string, an installed skill's identifier — its SKILL.md body is inlined into the worker's first message, so use it for tier=worker skills instead of pasting their steps), `relevant_files` (array of workspace-relative paths — their contents are inlined into the worker's first message so it does not have to find them), `known_facts` (array of strings you already established), `constraints` (array of strings it must not violate), `verifier` (object with `command`: a read-only test/build/lint command whose exit code decides success — with it, the worker's own claim of success is not accepted), `max_attempts` (integer, default 4).", required: false),
                 AgentToolParameter(name: "role", type: .string, description: "Optional goal-team role to run as (`developer` / `tester` / `reviewer`). A role binds a trade and may only narrow it further — a reviewer loses the shell, and no role can grant a write tool its trade lacks. Use it when the goal has a roles file; otherwise pick a `profile` directly.", required: false)
             ]
         ),
@@ -1910,7 +1913,14 @@ enum AgentToolRegistry {
             let profile = AgentSubagentProfileStore.resolvedProfile(
                 id: arguments["profile"]?.stringValue()
             )
-            return profile.requiresWriteAccess ? .write : .read
+            if profile.requiresWriteAccess { return .write }
+            // 单命令授权：带 target_command 的 spawn 走审批卡——用户批准
+            // 的正是那条命令本身（等同在主会话批准一条 write 命令）。
+            if let command = arguments["target_command"]?.stringValue(),
+               !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return .write
+            }
+            return .read
         }
         // Reading this workspace's own history is ordinary; reaching into
         // every other project's conversations is the user's call, so that

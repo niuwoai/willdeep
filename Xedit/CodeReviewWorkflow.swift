@@ -47,14 +47,35 @@ struct CodeReviewWorkflow: WorkflowDefinition {
         return try await runWorkingTreeMode(engine: engine, hint: parsed.hint)
     }
 
-    // MARK: - Working tree mode (unchanged behavior from 1.81.0-rc1)
+    // MARK: - Diff 预取（两种模式共用）
+
+    /// 内联 diff 的上限。reviewer 钉在 32K token 窗口上，28K 字符（约 7-14K
+    /// token）给提示词和输出留足余量；超过就说明这份改动本身太大，回落到带
+    /// shell 的父模型档自己翻——只升不降。
+    private static let inlineDiffCharacterLimit = 28_000
+
+    // MARK: - Working tree mode (diff 预取自 1.263.0-rc1；行为语义不变)
 
     private func runWorkingTreeMode(engine: WorkflowEngine, hint: String) async throws -> String {
+        // Diff 取一次，内联进所有维度提示词。reviewer 没有 shell——绑定它
+        // 的前提就是它需要的一切都已在提示词里（Task Packet 原则）。
+        let status = await engine.capturedCommandOutput(["git", "status", "--short"])
+        let diff = await engine.capturedCommandOutput(["git", "diff"])
+        let inlinedDiff: String? = {
+            guard let diff, !diff.isEmpty else { return nil }
+            let material = "```\n\(status ?? "")\n```\n\n```diff\n\(diff)\n```"
+            return material.count <= Self.inlineDiffCharacterLimit ? material : nil
+        }()
+
         let prompts = dimensions.map { dim in
             var lines: [String] = []
             lines.append("You are reviewing the current uncommitted git diff for **\(dim.lens)**.")
             lines.append("")
-            lines.append("1. Run `git_status` and `run_command \"git diff\"` to see what changed.")
+            if inlinedDiff != nil {
+                lines.append("1. The full `git status --short` and `git diff` output is provided below — do not try to run commands.")
+            } else {
+                lines.append("1. Run `git_status` and `run_command \"git diff\"` to see what changed.")
+            }
             lines.append("2. \(dim.detail)")
             lines.append("3. For each finding, output:")
             lines.append("   - **file:line** — what you saw")
@@ -65,12 +86,27 @@ struct CodeReviewWorkflow: WorkflowDefinition {
                 lines.append("")
                 lines.append("Focus hint from the user: \(hint)")
             }
+            if let inlinedDiff {
+                lines.append("")
+                lines.append("The change under review:")
+                lines.append(inlinedDiff)
+            }
             return lines.joined(separator: "\n")
         }
 
         let results = try await engine.parallel(maxConcurrent: 4, prompts.enumerated().map { idx, prompt in
             { @Sendable in
-                try await engine.agent(prompt, label: "review:\(self.dimensions[idx].label)")
+                try await engine.agent(
+                    prompt,
+                    label: "review:\(self.dimensions[idx].label)",
+                    // fan-out 用窄工种：每个维度只读地审一份 diff，正是 reviewer
+                    // 的职能定义。综合那一步仍留给 deep——判断质量的地方不省。
+                    // diff 太大装不进 32K 窗口时回落父模型档，让它自己用 shell
+                    // 翻（提示词同步保留工具指引）。
+                    profile: inlinedDiff != nil
+                        ? AgentSubagentProfileCatalog.reviewer
+                        : AgentSubagentProfileCatalog.deep
+                )
             }
         })
 
@@ -90,12 +126,25 @@ struct CodeReviewWorkflow: WorkflowDefinition {
     // MARK: - PR mode (1.81.0-rc2+)
 
     private func runPRMode(engine: WorkflowEngine, prNumber: Int, hint: String) async throws -> String {
+        // 同工作区模式：PR 元数据和 diff 在 Swift 侧各取一次，内联下发。
+        let prView = await engine.capturedCommandOutput(["gh", "pr", "view", "\(prNumber)"])
+        let prDiff = await engine.capturedCommandOutput(["gh", "pr", "diff", "\(prNumber)"])
+        let inlinedDiff: String? = {
+            guard let prView, let prDiff, !prDiff.isEmpty else { return nil }
+            let material = "```\n\(prView)\n```\n\n```diff\n\(prDiff)\n```"
+            return material.count <= Self.inlineDiffCharacterLimit ? material : nil
+        }()
+
         let prompts = dimensions.map { dim in
             var lines: [String] = []
             lines.append("You are reviewing **GitHub PR #\(prNumber)** of this repository for **\(dim.lens)**.")
             lines.append("")
-            lines.append("1. Run `run_command \"gh pr view \(prNumber)\"` once to read the PR title, description, and base branch.")
-            lines.append("2. Run `run_command \"gh pr diff \(prNumber)\"` to see the full diff.")
+            if inlinedDiff != nil {
+                lines.append("1. The PR description and its full diff are provided below — do not try to run commands.")
+            } else {
+                lines.append("1. Run `run_command \"gh pr view \(prNumber)\"` once to read the PR title, description, and base branch.")
+                lines.append("2. Run `run_command \"gh pr diff \(prNumber)\"` to see the full diff.")
+            }
             lines.append("3. \(dim.detail)")
             lines.append("4. For each finding, output:")
             lines.append("   - **file:line** (in the PR diff) — what you saw")
@@ -106,12 +155,25 @@ struct CodeReviewWorkflow: WorkflowDefinition {
                 lines.append("")
                 lines.append("Focus hint from the user: \(hint)")
             }
+            if let inlinedDiff {
+                lines.append("")
+                lines.append("The PR under review:")
+                lines.append(inlinedDiff)
+            }
             return lines.joined(separator: "\n")
         }
 
         let results = try await engine.parallel(maxConcurrent: 4, prompts.enumerated().map { idx, prompt in
             { @Sendable in
-                try await engine.agent(prompt, label: "review:\(self.dimensions[idx].label)")
+                try await engine.agent(
+                    prompt,
+                    label: "review:\(self.dimensions[idx].label)",
+                    // 同工作区模式：diff 内联成功才下放 reviewer；取不到或太大
+                    // 就回落父模型档自己跑 gh。
+                    profile: inlinedDiff != nil
+                        ? AgentSubagentProfileCatalog.reviewer
+                        : AgentSubagentProfileCatalog.deep
+                )
             }
         })
 

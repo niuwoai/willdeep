@@ -27,6 +27,8 @@ struct SomeIMRequestContext: Equatable {
 }
 
 enum AgentNetworkSupport {
+    static let clientNameHeaderValue = "WillDeep Desktop"
+
     /// "No bytes seen for this long" — not a total budget. Reasoning
     /// models (Qwen3, QwQ, DeepSeek-R1, o-series, Claude extended
     /// thinking) can spend well over two minutes before the first visible
@@ -57,6 +59,12 @@ enum AgentNetworkSupport {
     /// Agent session (see `SomeIMRequestContext`) and are only attached to
     /// `some-im` requests — never generated in this helper.
     static let willDeepSessionHeaderName = "x-willdeep-session-id"
+    /// The relay bills and logs against this header specifically: its usage
+    /// ledger reads `X-Playground-Session-ID` and ignores our own session
+    /// header, so sending only the latter leaves `usage_records.session_id`
+    /// empty and makes worker traffic impossible to attribute to the chat
+    /// that spawned it. Same opaque UUID, sent alongside.
+    static let relaySessionHeaderName = "X-Playground-Session-ID"
     static let willDeepWorkspaceHeaderName = "x-willdeep-workspace-id"
     static let willDeepResponsesStateHeaderName = "x-willdeep-responses-state"
     static let willDeepResponsesStateProtocol = "v1"
@@ -93,10 +101,13 @@ enum AgentNetworkSupport {
     }
 
     /// Stamp every outgoing adapter request with shared metadata
-    /// (`X-App-Version` + `User-Agent`). Auth headers and Content-Type
+    /// (`X-App-Version`, `X-Client-Name`, `X-Client-Version` + `User-Agent`).
+    /// Auth headers and Content-Type
     /// are per-adapter — see each adapter's `applyAuthenticationHeaders`.
     static func applyStandardHeaders(to request: inout URLRequest) {
         request.setValue(appVersionHeaderValue, forHTTPHeaderField: "X-App-Version")
+        request.setValue(clientNameHeaderValue, forHTTPHeaderField: "X-Client-Name")
+        request.setValue(appVersionHeaderValue, forHTTPHeaderField: "X-Client-Version")
         request.setValue(userAgentHeaderValue, forHTTPHeaderField: "User-Agent")
     }
 

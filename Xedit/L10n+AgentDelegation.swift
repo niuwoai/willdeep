@@ -122,6 +122,30 @@ extension L10n {
             localized: "agent-delegation.profile-reviewer-name",
             defaultValue: "Reviewer"
         )
+        static let profileTestFixerName = String(
+            localized: "agent-delegation.profile-test-fixer-name",
+            defaultValue: "Test Fixer"
+        )
+        static let profileBuildFixerName = String(
+            localized: "agent-delegation.profile-build-fixer-name",
+            defaultValue: "Build Fixer"
+        )
+        static let profileLogInspectorName = String(
+            localized: "agent-delegation.profile-log-inspector-name",
+            defaultValue: "Log Inspector"
+        )
+        static let profileGitDetectiveName = String(
+            localized: "agent-delegation.profile-git-detective-name",
+            defaultValue: "Git Detective"
+        )
+        static let profileSecurityGuardName = String(
+            localized: "agent-delegation.profile-security-guard-name",
+            defaultValue: "Security Guard"
+        )
+        static let profileJudgeName = String(
+            localized: "agent-delegation.profile-judge-name",
+            defaultValue: "Judge"
+        )
 
         static let profilesSectionTitle = String(
             localized: "agent-delegation.profiles-section-title",
@@ -203,6 +227,57 @@ extension L10n {
         static let profileReviewerPurpose = String(
             localized: "agent-delegation.profile-reviewer-purpose",
             defaultValue: "Independent read-only review of a change's scope, version consistency and git hygiene."
+        )
+        static let profileTestFixerPurpose = String(
+            localized: "agent-delegation.profile-test-fixer-purpose",
+            defaultValue: "Fixes a failing test to green inside the files it was given. The verifier command decides success, not the model."
+        )
+        static let profileBuildFixerPurpose = String(
+            localized: "agent-delegation.profile-build-fixer-purpose",
+            defaultValue: "Fixes compiler, type-check and lint failures inside the files it was given, verified by the build command."
+        )
+        static let profileLogInspectorPurpose = String(
+            localized: "agent-delegation.profile-log-inspector-purpose",
+            defaultValue: "Clusters and explains errors, stack traces and log excerpts. Read-only, no shell."
+        )
+        static let profileGitDetectivePurpose = String(
+            localized: "agent-delegation.profile-git-detective-purpose",
+            defaultValue: "Answers repository-history questions such as which commit introduced a regression. Never modifies the repository."
+        )
+        static let profileSecurityGuardPurpose = String(
+            localized: "agent-delegation.profile-security-guard-purpose",
+            defaultValue: "Decides whether a command is safe to run unattended. No tools — it judges the command, it never runs it."
+        )
+        static let profileJudgePurpose = String(
+            localized: "agent-delegation.profile-judge-purpose",
+            defaultValue: "Returns one bounded verdict about material you supply: a routing choice, a quality check, a classification. No tools."
+        )
+        static let profileOpsRunnerName = String(
+            localized: "agent-delegation.profile-ops-runner-name",
+            defaultValue: "Ops Runner"
+        )
+        static let profileOpsRunnerPurpose = String(
+            localized: "agent-delegation.profile-ops-runner-purpose",
+            defaultValue: "Read-only operations queries via shell: service status, log tails, kubectl/gh inspection. Can inspect, never change."
+        )
+        static let profileTerminalOperatorName = String(
+            localized: "agent-delegation.profile-terminal-operator-name",
+            defaultValue: "Terminal Operator"
+        )
+        static let profileTerminalOperatorPurpose = String(
+            localized: "agent-delegation.profile-terminal-operator-purpose",
+            defaultValue: "Drives the visible side-panel terminal: runs given read-only commands in a tab, reads the screen, reports results."
+        )
+
+        // MARK: Hosted trades (some.im)
+
+        static let profileHostedModelLocked = String(
+            localized: "agent-delegation.profile-hosted-model-locked",
+            defaultValue: "Model and prompt hosted by some.im"
+        )
+        static let profileHostedModelLockedHint = String(
+            localized: "agent-delegation.profile-hosted-model-locked-hint",
+            defaultValue: "While signed in to some.im this trade runs on a managed model with a server-side prompt. Sign out to choose your own."
         )
 
         // MARK: Escalation

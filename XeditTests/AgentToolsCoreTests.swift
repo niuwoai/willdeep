@@ -387,18 +387,20 @@ struct AgentToolsCoreTests {
             prefixRule: nil
         )
 
+        // 1.263.0：无人值守节点改拿凭证档。光给网络不给钥匙，部署 / git push /
+        // scp 一律失败，而这类任务又没有 operator 能批准提权。
         #expect(appState.sandboxModeForToolExecution(
             risk: .read,
             approvalSource: nil,
             sandboxDecision: readOnlyDecision,
             isUnattendedDispatchTask: true
-        ) == .workspaceWriteNetwork)
+        ) == .workspaceWriteNetworkCredentialed)
         #expect(appState.sandboxModeForToolExecution(
             risk: .write,
             approvalSource: .dispatchTask,
             sandboxDecision: workspaceDecision,
             isUnattendedDispatchTask: true
-        ) == .workspaceWriteNetwork)
+        ) == .workspaceWriteNetworkCredentialed)
         #expect(appState.sandboxModeForToolExecution(
             risk: .read,
             approvalSource: nil,

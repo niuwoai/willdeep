@@ -803,9 +803,9 @@ extension WillDeepTests {
         #expect(npmGlobalInstallRisk == .write)
         // Builds carry the registry grant: `go build` resolves modules through
         // GOPROXY on a cold cache. Writes stay confined to the workspace.
-        #expect(goBuildDecision.mode == .workspaceWriteNetwork)
+        #expect(goBuildDecision.mode == .workspaceWriteNetworkCredentialed)
         #expect(goBuildDecision.requiresTypedConfirmation == false)
-        #expect(goBuildWithWorkspaceCacheDecision.mode == .workspaceWriteNetwork)
+        #expect(goBuildWithWorkspaceCacheDecision.mode == .workspaceWriteNetworkCredentialed)
         #expect(goBuildWithWorkspaceCacheDecision.requiresUserApproval == true)
         #expect(goBuildWithWorkspaceCacheDecision.requiresTypedConfirmation == false)
         #expect(AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
@@ -818,9 +818,9 @@ extension WillDeepTests {
             command: "cd /Users/rocky/Sites/Xedit && GOCACHE=$(rm -rf /tmp/cache) go build -o bin/metaserver .",
             rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
         ))
-        #expect(npmInstallDecision.mode == .workspaceWriteNetwork)
+        #expect(npmInstallDecision.mode == .workspaceWriteNetworkCredentialed)
         #expect(npmInstallDecision.requiresTypedConfirmation == false)
-        #expect(npmRegistryInstallDecision.mode == .workspaceWriteNetwork)
+        #expect(npmRegistryInstallDecision.mode == .workspaceWriteNetworkCredentialed)
         #expect(npmRegistryInstallDecision.requiresTypedConfirmation == false)
         #expect(AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
             command: "npm install left-pad",
@@ -1153,8 +1153,10 @@ struct AgentSandboxNetworkPolicyTests {
                 command: command,
                 rootDirectory: root
             )
+            // 1.263.0：构建工具除了 registry 网络，还需要真实 HOME 才能读到
+            // `~/.npmrc` / `~/.gitconfig` / `~/.cargo/config`。写入限制不变。
             #expect(
-                decision.mode == .workspaceWriteNetwork,
+                decision.mode == .workspaceWriteNetworkCredentialed,
                 "\(command) should build with registry access, got \(decision.mode)"
             )
             #expect(!decision.requiresTypedConfirmation)

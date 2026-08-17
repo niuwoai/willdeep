@@ -123,7 +123,10 @@ struct AgentProfileUnificationTests {
         profile.soul.promptSection = "Always report paths relative to the repo root."
 
         let combined = profile.combinedPromptSection
-        #expect(combined.hasPrefix("Your trade is LOCATION."))
+        // Anchor on the contract (code half first, user half appended) rather
+        // than on the job prompt's wording, which is mirrored from
+        // docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3 and gets retuned there.
+        #expect(combined.hasPrefix(AgentSubagentProfileCatalog.scout.capabilityPromptSection))
         #expect(combined.hasSuffix("Always report paths relative to the repo root."))
 
         let trade = try #require(profile.asSubagentProfile())

@@ -52,7 +52,12 @@ struct CompetitorAnalysisWorkflow: WorkflowDefinition {
 
         let briefs = try await engine.parallel(maxConcurrent: products.count, scoutPrompts.enumerated().map { idx, prompt in
             { @Sendable in
-                try await engine.agent(prompt, label: "scout:\(products[products.index(products.startIndex, offsetBy: idx)])")
+                try await engine.agent(
+                    prompt,
+                    label: "scout:\(products[products.index(products.startIndex, offsetBy: idx)])",
+                    // 这一步只用 web_search，正是 reader 唯一带联网的工具集。
+                    profile: AgentSubagentProfileCatalog.reader
+                )
             }
         })
 

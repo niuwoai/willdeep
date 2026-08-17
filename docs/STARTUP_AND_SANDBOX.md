@@ -18,7 +18,7 @@
 
 ### 2. AppDelegate 生命周期（[AIPipeBootstrap.swift](../Xedit/AIPipeBootstrap.swift)）
 
-- `applicationDidFinishLaunching`：`AIPipeBootstrap.initialize()`（无 API key 则空转）→ `AppUpdateChecker.checkForUpdatesOnLaunch()`（后台）→ 注册通知 delegate → 安装 Fn 语音监听与语音模型控制器。
+- `applicationDidFinishLaunching`：`AIPipeBootstrap.initialize()`（无 API key 则空转）→ `AppUpdateChecker.checkForUpdatesOnLaunch()`（后台）→ 注册通知 delegate → 安装 Computer Use 状态控制器与手机网关自连。
 - `applicationWillTerminate` / `applicationShouldTerminate`：`AIPipe.flush()` + **`AgentSessionStore.flushPendingWrites()`**（同步排空会话写队列，保证退出前落盘，⌘Q 不丢最后一条消息）。
 
 ### 3. `AppState.init` 启动序列（[AppState.swift](../Xedit/AppState.swift)）

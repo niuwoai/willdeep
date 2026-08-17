@@ -28,7 +28,8 @@ struct ImageWorkflowTests {
             "/image-compare",
             "/image-alt-text",
             "/screenshot-to-code",
-            "/video-subtitle-export",
+            // 1.262.0：/video-subtitle-export 随本地转写栈一起下线，
+            // 这里只留仍在册的图片工具箱条目。
         ] {
             #expect(commands.contains(command))
         }

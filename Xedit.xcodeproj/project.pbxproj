@@ -55,15 +55,6 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
-				"Voice/Libraries/kaldi-native-fbank/csrc/feature-fbank.cc",
-				"Voice/Libraries/kaldi-native-fbank/csrc/feature-functions.cc",
-				"Voice/Libraries/kaldi-native-fbank/csrc/feature-window.cc",
-				"Voice/Libraries/kaldi-native-fbank/csrc/fftsg.c",
-				"Voice/Libraries/kaldi-native-fbank/csrc/log.cc",
-				"Voice/Libraries/kaldi-native-fbank/csrc/mel-computations.cc",
-				"Voice/Libraries/kaldi-native-fbank/csrc/online-feature.cc",
-				"Voice/Libraries/kaldi-native-fbank/csrc/rfft.cc",
-				Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib,
 			);
 			target = 5CA6B0602FC6D8F9006DFCCC /* Xedit */;
 		};
@@ -200,7 +191,6 @@
 				5CA6B05F2FC6D8F9006DFCCC /* Resources */,
 				5CA6B0B72FE10A01006DFCCC /* Build willdeep-agent */,
 				5CA6B0E12FE10A02006DFCCC /* Build WillDeep Computer Use Helper */,
-				5CA6B0C02FE10B00006DFCCC /* Re-sign ONNX dylib (Release only) */,
 			);
 			buildRules = (
 			);
@@ -291,6 +281,9 @@
 				en,
 				Base,
 				"zh-Hans",
+				ja,
+				es,
+				fr,
 			);
 			mainGroup = 5CA6B0582FC6D8F9006DFCCC;
 			minimizedProjectReferenceProxies = 1;
@@ -357,26 +350,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
 			shellScript = "set -euo pipefail\nif ! command -v go >/dev/null 2>&1; then\n  echo \"warning: go not found; skipping willdeep-agent resource build\"\n  exit 0\nfi\nif ! command -v lipo >/dev/null 2>&1; then\n  echo \"warning: lipo not found; skipping willdeep-agent universal resource build\"\n  exit 0\nfi\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ntmpdir=\"$(mktemp -d)\"\ntrap 'rm -rf \"$tmpdir\"' EXIT\ncd \"$SRCROOT/willdeep-agent\"\nCGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o \"$tmpdir/willdeep-agent-arm64\" ./cmd/willdeep-agent\nCGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o \"$tmpdir/willdeep-agent-amd64\" ./cmd/willdeep-agent\nlipo -create \"$tmpdir/willdeep-agent-arm64\" \"$tmpdir/willdeep-agent-amd64\" -output \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/willdeep-agent\"\nchmod +x \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/willdeep-agent\"\nlipo -info \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/willdeep-agent\"\n";
-		};
-		5CA6B0C02FE10B00006DFCCC /* Re-sign ONNX dylib (Release only) */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
-			);
-			name = "Re-sign ONNX dylib (Release only)";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libonnxruntime.1.23.2.dylib",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/zsh;
-			shellScript = "set -euo pipefail\n\n# Debug / CI 一律跳过 —— Debug 用 Library Validation entitlement\n# 解决 dylib 加载（rc1 验过），CI 用 CODE_SIGNING_ALLOWED=NO 跳过\n# 整个签名链路，重签反而可能引入 PTY 启动问题。Release archive 才走\n# 这条路径。\nif [ \"${CONFIGURATION:-}\" != \"Release\" ]; then\n  echo \"Skipping ONNX dylib re-sign on configuration='${CONFIGURATION:-unknown}'\"\n  exit 0\nfi\n\nSRC_DYLIB=\"${SRCROOT}/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib\"\nif [ ! -f \"${SRC_DYLIB}\" ]; then\n  echo \"warning: ONNX dylib not found at ${SRC_DYLIB}\"\n  exit 0\nfi\n\nDEST_DIR=\"${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}\"\nmkdir -p \"${DEST_DIR}\"\nDEST_DYLIB=\"${DEST_DIR}/libonnxruntime.1.23.2.dylib\"\ncp -f \"${SRC_DYLIB}\" \"${DEST_DYLIB}\"\ncd \"${DEST_DIR}\"\nrm -f libonnxruntime.dylib\nln -s libonnxruntime.1.23.2.dylib libonnxruntime.dylib\n\nif [ \"${CODE_SIGNING_ALLOWED:-YES}\" = \"NO\" ]; then\n  SIGN=\"-\"\nelse\n  SIGN=\"${EXPANDED_CODE_SIGN_IDENTITY:-${CODE_SIGN_IDENTITY:--}}\"\n  [ -n \"${SIGN}\" ] || SIGN=\"-\"\nfi\nif [ \"${SIGN}\" != \"-\" ] && [ -n \"${DEVELOPMENT_TEAM:-}\" ]; then\n  identity_output=\"$(security find-identity -v -p codesigning 2>/dev/null || true)\"\n  resolved_sign=\"$(/usr/bin/awk -v label=\"${SIGN}\" -v team=\"$DEVELOPMENT_TEAM\" 'index($0, label) > 0 && index($0, \"(\" team \")\") > 0 { print $2; exit }' <<< \"$identity_output\")\"\n  [ -z \"$resolved_sign\" ] || SIGN=\"$resolved_sign\"\nfi\necho \"Re-signing ${DEST_DYLIB} with identity: ${SIGN}\"\ncodesign --remove-signature \"${DEST_DYLIB}\" 2>/dev/null || true\ncodesign --force --sign \"${SIGN}\" --timestamp=none \"${DEST_DYLIB}\"\necho \"ONNX dylib re-signed and ready for distribution\"\n";
 		};
 		5CA6B0E12FE10A02006DFCCC /* Build WillDeep Computer Use Helper */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -472,7 +445,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 384;
+				CURRENT_PROJECT_VERSION = 393;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -483,8 +456,6 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/Vendor/iossdk/AIPipe",
-					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/include",
-					"$(SRCROOT)/Xedit/Voice/Libraries",
 				);
 				INFOPLIST_FILE = Xedit/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WillDeep;
@@ -494,17 +465,9 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
-					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
-				);
-				MARKETING_VERSION = 1.257.0-rc1;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
-					"-Wl,-rpath,$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
-				);
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
+				MARKETING_VERSION = "1.266.0-rc1";
+				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
 				REGISTER_APP_GROUPS = YES;
@@ -527,7 +490,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 384;
+				CURRENT_PROJECT_VERSION = 393;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -538,8 +501,6 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/Vendor/iossdk/AIPipe",
-					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/include",
-					"$(SRCROOT)/Xedit/Voice/Libraries",
 				);
 				INFOPLIST_FILE = Xedit/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WillDeep;
@@ -549,17 +510,9 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
-					"$(PROJECT_DIR)/Xedit/Voice/Libraries/onnxruntime",
-				);
-				MARKETING_VERSION = 1.257.0-rc1;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime/libonnxruntime.1.23.2.dylib",
-					"-Wl,-rpath,$(SRCROOT)/Xedit/Voice/Libraries/onnxruntime",
-				);
+				LIBRARY_SEARCH_PATHS = "$(inherited)";
+				MARKETING_VERSION = "1.266.0-rc1";
+				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
 				REGISTER_APP_GROUPS = YES;
@@ -698,11 +651,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 384;
+				CURRENT_PROJECT_VERSION = 393;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.257.0-rc1;
+				MARKETING_VERSION = "1.266.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -719,11 +672,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 384;
+				CURRENT_PROJECT_VERSION = 393;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.257.0-rc1;
+				MARKETING_VERSION = "1.266.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -739,10 +692,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 384;
+				CURRENT_PROJECT_VERSION = 393;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.257.0-rc1;
+				MARKETING_VERSION = "1.266.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -758,10 +711,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 384;
+				CURRENT_PROJECT_VERSION = 393;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.257.0-rc1;
+				MARKETING_VERSION = "1.266.0-rc1";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

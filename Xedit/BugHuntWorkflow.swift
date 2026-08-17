@@ -28,13 +28,11 @@ struct BugHuntWorkflow: WorkflowDefinition {
         You are a code-auditor scout. Pick the \(maxFilesToHunt) source files
         in this workspace that are MOST likely to harbor latent bugs.
         Heuristics:
-        - Recent churn (look at git log)
         - High complexity (long, branchy)
         - Public API / boundary code (input handling, persistence, auth)
         - Code with known TODO/FIXME comments
 
-        Use `git_status`, `run_command \"git log --pretty=%H -n 20\"`,
-        `list_directory`, `grep_files`, `search_files` as needed.
+        Use `list_directory`, `grep_files`, `search_files` as needed.
 
         Output: exactly \(maxFilesToHunt) lines, each line a workspace-relative
         path. No commentary, no fences — just paths. If the workspace
@@ -44,7 +42,21 @@ struct BugHuntWorkflow: WorkflowDefinition {
             pickerPrompt += "\n\nFocus hint from the user: \(hint)"
         }
 
-        let pickerOutput = try await engine.agent(pickerPrompt, label: "pick")
+        // Listing candidate files is exactly the scout trade's job, and its
+        // tool set (search / grep / list / read) covers everything this step
+        // needs — the prompt used to also ask for `git_status` / `git log`,
+        // which scout does not carry, so those calls were denied mid-run and
+        // the worker fell back to guessing. Churn is now dropped from the
+        // heuristics rather than papered over: picking bug-prone files does
+        // not require history, and scout is the cheapest trade there is.
+        // Annotating a step whose tools the trade lacks would get them
+        // denied mid-run, so only steps that fit inside a trade's whitelist
+        // are moved off the parent model.
+        let pickerOutput = try await engine.agent(
+            pickerPrompt,
+            label: "pick",
+            profile: AgentSubagentProfileCatalog.scout
+        )
         let files = pickerOutput
             .split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -76,7 +88,13 @@ struct BugHuntWorkflow: WorkflowDefinition {
             maxConcurrent: Swift.min(self.maxAgents - 2, hunterPrompts.count),
             hunterPrompts.enumerated().map { idx, prompt in
                 { @Sendable in
-                    try await engine.agent(prompt, label: "hunt:\(files[files.index(files.startIndex, offsetBy: idx)].split(separator: "/").last ?? "?")")
+                    try await engine.agent(
+                        prompt,
+                        label: "hunt:\(files[files.index(files.startIndex, offsetBy: idx)].split(separator: "/").last ?? "?")",
+                        // 单文件只读审查 = reviewer 的职能；其工具集
+                        // （read / list / grep / search / git_status）覆盖这一步。
+                        profile: AgentSubagentProfileCatalog.reviewer
+                    )
                 }
             }
         )

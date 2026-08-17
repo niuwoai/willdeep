@@ -284,6 +284,29 @@ final class AgentChatHistoryNSTextView: NSTextView {
         // 拖拽选区时结束的 mouseUp 会被 NSTextView 内部跟踪循环吞掉，这里不再依赖它触发。
     }
 
+    /// 拖选 + ⌘C 走的是 AppKit 自己的复制链路,拿的是 textStorage 里的
+    /// **渲染串**——排版专用的零宽断点会原样进剪贴板。纯文本这一味在这里
+    /// 换成净化版;RTF 等富文本口味仍交给 super(粘到富文本编辑器里那些
+    /// 零宽字符本来就是随格式走的,而且真正会被塞进终端的是 .string)。
+    override func writeSelection(
+        to pboard: NSPasteboard,
+        type: NSPasteboard.PasteboardType
+    ) -> Bool {
+        guard type == .string else {
+            return super.writeSelection(to: pboard, type: type)
+        }
+        let range = selectedRange()
+        guard range.location != NSNotFound,
+              range.length > 0,
+              NSMaxRange(range) <= (textStorage?.length ?? 0),
+              let storageString = textStorage?.string else {
+            return super.writeSelection(to: pboard, type: type)
+        }
+        let raw = (storageString as NSString).substring(with: range)
+        pboard.setString(AgentCopyTextSanitizer.sanitize(raw), forType: .string)
+        return true
+    }
+
     override func menu(for event: NSEvent) -> NSMenu? {
         let point = convert(event.locationInWindow, from: nil)
         let marker = generatedImageReferenceMarker(at: point)
@@ -400,7 +423,10 @@ final class AgentChatHistoryNSTextView: NSTextView {
             return nil
         }
         let rawText = (storageString as NSString).substring(with: range)
-        let selectedText = AgentTextAttachment.sanitizedPastedContent(rawText)
+        // 选区取的是渲染串,带着排版专用的零宽断点。这条出口会回流给模型
+        // (「加入任务」/引用选区),所以净化之后必须重新打断注入标记。
+        let cleaned = AgentCopyTextSanitizer.sanitizeForModelRoundTrip(rawText)
+        let selectedText = AgentTextAttachment.sanitizedPastedContent(cleaned)
         return selectedText.isEmpty ? nil : selectedText
     }
 

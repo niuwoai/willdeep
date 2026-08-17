@@ -25,6 +25,15 @@ extension AppState {
         for profile: AgentSubagentProfile,
         parentConfiguration: AgentConfiguration
     ) -> AgentConfiguration {
+        // Managed trades: while signed in to some.im the model is not the
+        // user's to pick. It is pinned to the virtual model that carries this
+        // trade's server-side job prompt, so the prompt and the model that was
+        // tuned for it always travel together
+        // (docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3.8).
+        if let hosted = resolvedHostedConfiguration(for: profile) {
+            return hosted
+        }
+
         let binding = profile.modelBinding
         guard !binding.inheritsEverything else { return parentConfiguration }
 
@@ -66,6 +75,41 @@ extension AppState {
         if configuration.normalized.requiresAPIKey,
            configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return parentConfiguration
+        }
+        return configuration
+    }
+
+    /// Whether this trade's model and job prompt are currently owned by
+    /// some.im. Drives both the spawn-time model pin and the settings row's
+    /// locked state, so the two can never disagree.
+    func subagentTradeIsHosted(_ profile: AgentSubagentProfile) -> Bool {
+        profile.usesHostedJobPrompt(
+            someIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+        )
+    }
+
+    /// The pinned configuration for a hosted trade, or nil when the trade is
+    /// not hosted or some.im has no usable entry right now (signed out, key
+    /// revoked, entry deleted) — in which case the caller continues down the
+    /// normal user-configurable path.
+    private func resolvedHostedConfiguration(
+        for profile: AgentSubagentProfile
+    ) -> AgentConfiguration? {
+        guard subagentTradeIsHosted(profile),
+              let hostedModel = profile.hostedVirtualModel else { return nil }
+        guard let entry = agentProviderLibrary.entries
+            .first(where: { $0.providerID == AgentProviderPreset.someIMID }),
+              entry.isUsableForChatSelection(isSomeIMAuthenticated: true) else { return nil }
+
+        materializeProviderLibraryEntryAPIKey(id: entry.id)
+        let materialized = agentProviderLibrary.entries.first { $0.id == entry.id } ?? entry
+        var configuration = materialized.makeConfiguration(
+            imageDescription: agentConfiguration.imageDescription
+        )
+        configuration.model = hostedModel
+        guard !configuration.normalized.requiresAPIKey
+            || !configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
         }
         return configuration
     }

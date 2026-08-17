@@ -93,7 +93,6 @@ enum EditorSettingsTab: Hashable {
     case tools
     case secrets
     case terminal
-    case voice
     case pet
 }
 
@@ -119,7 +118,6 @@ extension EditorSettingsTab {
         // `.replicate` stays a distinct case for deep-links, but renders as
         // a sub-connector inside the unified connectors hub.
         case .replicate, .connectors: return .integrations
-        case .voice: return .voice
         case .pet: return .pet
         }
     }
@@ -149,7 +147,6 @@ extension EditorSettingsTab {
         case .tools: return L10n.Settings.tabTools
         case .secrets: return L10n.SecretManager.tabTitle
         case .terminal: return L10n.Settings.tabTerminal
-        case .voice: return L10n.Settings.tabVoice
         case .pet: return L10n.DesktopPet.settingsTabTitle
         }
     }
@@ -164,7 +161,6 @@ enum SettingsGroup: Hashable, Identifiable {
     case runtimes
     case integrations
     case terminal
-    case voice
     case pet
     case editor
     case agentAppearance
@@ -177,7 +173,6 @@ enum SettingsGroup: Hashable, Identifiable {
         .runtimes,
         .integrations,
         .terminal,
-        .voice,
         .pet,
         .agentAppearance,
         .general,
@@ -202,7 +197,6 @@ enum SettingsGroup: Hashable, Identifiable {
         // 企业微信 / Replicate / …) is a sub-connector inside it.
         case .integrations: return [.connectors]
         case .terminal: return [.terminal]
-        case .voice: return [.voice]
         }
     }
 
@@ -218,7 +212,6 @@ enum SettingsGroup: Hashable, Identifiable {
         case .runtimes: return L10n.Settings.groupRuntimes
         case .integrations: return L10n.Settings.groupIntegrations
         case .terminal: return L10n.Settings.groupTerminal
-        case .voice: return L10n.Settings.groupVoice
         }
     }
 
@@ -234,7 +227,6 @@ enum SettingsGroup: Hashable, Identifiable {
         case .runtimes: return "network"
         case .integrations: return "puzzlepiece.extension"
         case .terminal: return "rectangle.bottomthird.inset.filled"
-        case .voice: return "waveform"
         }
     }
 }

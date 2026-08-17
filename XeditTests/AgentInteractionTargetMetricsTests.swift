@@ -71,7 +71,6 @@ struct AgentInteractionTargetMetricsTests {
             "Xedit/AgentComposerPickers.swift",
             "Xedit/AgentComposerSecondaryPickers.swift",
             "Xedit/AgentComposerTaskProgress.swift",
-            "Xedit/Voice/MicPushToTalkButton.swift",
         ]
         let source = try relativePaths.map { relativePath in
             try String(

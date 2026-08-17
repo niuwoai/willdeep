@@ -4,12 +4,14 @@
 //
 //  /video-extract <path> — 一键 dump 这个视频里所有"可抄"的素材到
 //  ~/Downloads/<stem>-extracted-<timestamp>/。专门为"照抄别人视频"
-//  设计：技术参数 + 音轨 + 转录 + 场景切换抽帧 + LLM 综合分析。
+//  设计：技术参数 + 音轨 + 场景切换抽帧 + LLM 综合分析。
+//
+//  1.262.0：本地转写栈下线，不再产出 transcript.md；分析报告改为只看
+//  技术参数与关键帧。
 //
 //  目录结构：
 //   ├── metadata.json     ffprobe -show_format -show_streams 全部 JSON
 //   ├── audio.m4a         音轨复制（无重编码）
-//   ├── transcript.md     带时间戳的转录
 //   ├── keyframes/        ffmpeg scene-detect 抽出的关键帧（00-..jpg）
 //   └── report.md         1 个 sub-agent 综合写的「这视频是怎么做的」分析
 //
@@ -21,7 +23,7 @@ struct VideoExtractWorkflow: WorkflowDefinition {
     var name: String { "video-extract" }
     var displayTitle: String { "Video Extract" }
     var slashCommand: String { "/video-extract" }
-    var shortDescription: String { "Dump every reusable element from a video — metadata, audio, transcript, keyframes, analysis" }
+    var shortDescription: String { "Dump every reusable element from a video — metadata, audio, keyframes, analysis" }
     var argsPlaceholder: String { "<path to video>" }
     var maxAgents: Int { 1 }
     var allowsEmptyArgs: Bool { false }
@@ -39,12 +41,10 @@ struct VideoExtractWorkflow: WorkflowDefinition {
         }
 
         do {
-            try WhisperPreflight.checkModel()
             try VideoToolPreflight.checkFFmpeg()
             try VideoToolPreflight.checkFFprobe()
             try VideoToolPreflight.checkLocalVideoFile(path)
-        } catch let f as WhisperPreflight.Failure { return f.errorDescription ?? "Preflight failed." }
-        catch let f as VideoToolPreflight.Failure { return f.errorDescription ?? "Preflight failed." }
+        } catch let f as VideoToolPreflight.Failure { return f.errorDescription ?? "Preflight failed." }
 
         let expanded = (path as NSString).expandingTildeInPath
         let videoURL = URL(fileURLWithPath: expanded)
@@ -112,35 +112,11 @@ struct VideoExtractWorkflow: WorkflowDefinition {
             .filter { $0.hasSuffix(".jpg") }
             .count
 
-        // -- 4. STT transcript.md --
-        // 临时 wav 提取，跑 SenseVoice，写带时间戳的 markdown。
-        let workDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("WillDeep-Extract-\(UUID().uuidString.prefix(8))")
-        try? FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: workDir) }
-        let wavURL = workDir.appendingPathComponent("audio.wav")
-        var transcript = ""
-        do {
-            try await VideoMediaHelpers.extractWavAudio(videoURL: videoURL, audioURL: wavURL)
-            transcript = try await SpeechTranscriber.transcribe(
-                audioURL: wavURL,
-                language: .auto,
-                enableCTCDeduplication: false
-            )
-        } catch {
-            transcript = "(transcription failed: \(error.localizedDescription))"
-        }
-        let transcriptMD = """
-        # Transcript — \(stem)
-
-        Source: `\(expanded)`
-
-        \(transcript)
-        """
-        let transcriptURL = outputDir.appendingPathComponent("transcript.md")
-        try? transcriptMD.write(to: transcriptURL, atomically: true, encoding: .utf8)
-
-        // -- 5. 综合 report.md：1 个 sub-agent 看 metadata + transcript --
+        // -- 4. 综合 report.md：1 个 sub-agent 看 metadata + 关键帧 --
+        //
+        // 1.262.0 起不再产出 transcript.md：本地 SenseVoice/ONNX 转写栈
+        // 整体下线。元数据、音轨、关键帧、分析报告这四样照旧——为了拔掉
+        // 一样而废掉另外四样不划算。
         let techSpecs = summarizeProbe(probeJSON)
         let durationSeconds = (try? await AVURLAsset(url: videoURL).load(.duration))?.seconds ?? 0
         let reportPrompt = """
@@ -155,10 +131,6 @@ struct VideoExtractWorkflow: WorkflowDefinition {
 
         \(techSpecs)
 
-        Transcript:
-
-        \(transcript)
-
         Keyframes available: \(keyframeCount) scene-detected frames in `\(keyframesDir.path)`
 
         Produce a markdown analysis named "How this video was made":
@@ -170,12 +142,9 @@ struct VideoExtractWorkflow: WorkflowDefinition {
         about its construction.
 
         ## Structure
-        Inferred chapters or beats from the transcript — title + 1-line
-        summary + approximate timestamp (mm:ss). Aim for 4-10 beats.
-
-        ## Voice & tone
-        How does the narrator/speaker present? Pacing, register, fillers,
-        rhetorical moves. Quote 2-3 distinctive lines verbatim.
+        Inferred beats from the scene-detected keyframe count and the
+        duration — how often the video cuts, and what that implies about
+        pacing. Say plainly when the specs can't support a claim.
 
         ## Technical choices
         Read from the specs above — resolution, fps, bitrate, codec,
@@ -197,8 +166,8 @@ struct VideoExtractWorkflow: WorkflowDefinition {
         let reportURL = outputDir.appendingPathComponent("report.md")
         try? reportBody.write(to: reportURL, atomically: true, encoding: .utf8)
 
-        // -- 6. Keyframes widget：6 张代表帧缩成 240px jpg 后 base64
-        //       嵌进 HTML，让用户直接在 transcript 里看到画面概览。
+        // -- 5. Keyframes widget：6 张代表帧缩成 240px jpg 后 base64
+        //       嵌进 HTML，让用户直接在会话流里看到画面概览。
         //       Widget HTML 上限 1 MB —— 6 张 240px jpg 大约 120-180 KB
         //       base64，安全。
         await pushKeyframeGalleryWidget(
@@ -221,7 +190,6 @@ struct VideoExtractWorkflow: WorkflowDefinition {
         |---|---|
         | `metadata.json` | Full ffprobe output (format + streams) |
         | `audio.m4a` | Audio track copy (\(String(format: "%.1f MB", audioMB))) |
-        | `transcript.md` | SenseVoice transcript |
         | `keyframes/` | \(keyframeCount) scene-detected frames (jpg) |
         | `report.md` | LLM "how this was made" analysis |
 

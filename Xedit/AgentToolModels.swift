@@ -229,6 +229,11 @@ struct AgentToolContext {
     /// environment; user-approved write/network/credential commands run
     /// in the escalated/full-user environment.
     let sandboxMode: AgentSandboxMode
+    /// True when the calling loop can spawn subagents (the main session).
+    /// Child loops share this tool runner but cannot spawn, so hints that end
+    /// in "spawn_agent" are suppressed for them — a recipe the caller cannot
+    /// execute is pure noise in a small window.
+    let canSpawnSubagents: Bool
     /// True only for scheduler-owned dispatch child sessions. External agent
     /// adapters use this host-derived bit to select their non-interactive
     /// permission mode; it is intentionally not accepted from model arguments.
@@ -291,6 +296,7 @@ struct AgentToolContext {
         sessionPersistenceBarrier: (@MainActor () -> Void)? = nil,
         localCommandEnvironment: [String: String]? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
+        canSpawnSubagents: Bool = false,
         isUnattendedDispatchTask: Bool = false,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil,
         editableContentProvider: (@MainActor (URL) throws -> String)? = nil,
@@ -323,6 +329,7 @@ struct AgentToolContext {
         self.sessionPersistenceBarrier = sessionPersistenceBarrier
         self.localCommandEnvironment = localCommandEnvironment
         self.sandboxMode = sandboxMode
+        self.canSpawnSubagents = canSpawnSubagents
         self.isUnattendedDispatchTask = isUnattendedDispatchTask
         self.patchProposalSink = patchProposalSink
         self.editableContentProvider = editableContentProvider
@@ -380,6 +387,7 @@ struct AgentToolContext {
             sessionPersistenceBarrier: sessionPersistenceBarrier,
             localCommandEnvironment: localCommandEnvironment,
             sandboxMode: sandboxMode,
+            canSpawnSubagents: canSpawnSubagents,
             isUnattendedDispatchTask: isUnattendedDispatchTask,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,
@@ -414,6 +422,7 @@ struct AgentToolContext {
             sessionPersistenceBarrier: sessionPersistenceBarrier,
             localCommandEnvironment: localCommandEnvironment,
             sandboxMode: mode,
+            canSpawnSubagents: canSpawnSubagents,
             isUnattendedDispatchTask: isUnattendedDispatchTask,
             patchProposalSink: patchProposalSink,
             editableContentProvider: editableContentProvider,
@@ -463,6 +472,16 @@ struct AgentToolContext {
             .filter({ candidate.path == $0.path || candidate.path.hasPrefix($0.path + "/") })
             .max(by: { $0.path.count < $1.path.count }) else {
             throw AgentToolError.pathOutsideWorkspace(rawPath)
+        }
+        // The lexical match above says the *spelling* is inside a root. A
+        // symlink can still send the real write somewhere the user never
+        // authorized, so resolve before accepting — otherwise the folder set
+        // the user approved stops being the boundary it claims to be.
+        guard AgentWorkspacePathGuard.containingRoot(for: candidate, roots: workspaceRoots) != nil else {
+            throw AgentToolError.symlinkOutsideWorkspace(
+                path: rawPath,
+                resolved: AgentWorkspacePathGuard.resolvedPath(of: candidate)
+            )
         }
         return (candidate, matchedRoot)
     }
@@ -517,6 +536,7 @@ enum AgentToolError: LocalizedError {
     case invalidArgument(String)
     case noWorkspace
     case pathOutsideWorkspace(String)
+    case symlinkOutsideWorkspace(path: String, resolved: String)
     case notFound(String)
     case notRegular(String)
     case binaryFile(String)
@@ -537,6 +557,15 @@ enum AgentToolError: LocalizedError {
             return "Open a project folder before using this tool."
         case .pathOutsideWorkspace(let path):
             return "Path is outside the workspace: \(path)"
+        case .symlinkOutsideWorkspace(let path, let resolved):
+            return """
+            Path \(path) is a symbolic link (or sits behind one) that resolves to \(resolved), \
+            which is outside every folder authorized for this project. Symbolic links do not \
+            widen the authorized folder set — shell commands are blocked at the same boundary \
+            by the sandbox, so the native file tools refuse it too. Tell the user to add \
+            \(resolved) as a project folder (this app supports multiple folders per project), \
+            then use its real path.
+            """
         case .notFound(let path):
             return "Path does not exist: \(path)"
         case .notRegular(let path):
@@ -584,6 +613,11 @@ enum AgentToolError: LocalizedError {
             return .noWorkspace
         case .pathOutsideWorkspace(let path):
             return .pathOutsideWorkspace(AgentSecretStore.redact(path, secretValues: secretValues))
+        case .symlinkOutsideWorkspace(let path, let resolved):
+            return .symlinkOutsideWorkspace(
+                path: AgentSecretStore.redact(path, secretValues: secretValues),
+                resolved: AgentSecretStore.redact(resolved, secretValues: secretValues)
+            )
         case .notFound(let path):
             return .notFound(AgentSecretStore.redact(path, secretValues: secretValues))
         case .notRegular(let path):

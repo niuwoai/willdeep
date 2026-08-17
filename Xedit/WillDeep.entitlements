@@ -13,12 +13,6 @@
 	<key>com.apple.security.cs.disable-library-validation</key>
 	<true/>
 
-	<!-- Microphone access: needed for the voice-driven composer + push-
-	     to-talk + future /meeting-notes live recording. Lands now so
-	     the user only sees one permission prompt across phase 2-3. -->
-	<key>com.apple.security.device.audio-input</key>
-	<true/>
-
 	<!-- Shared Keychain access group for cross-app some.im login state.
 	     $(AppIdentifierPrefix) expands to the Team ID prefix "ZH2S7D6PL6.".
 	     Every app that shares the login (museterm, etc.) must be signed with

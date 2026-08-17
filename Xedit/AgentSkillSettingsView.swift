@@ -572,6 +572,7 @@ struct AgentSkillSettingsView: View {
                                 identifier: existing.identifier,
                                 name: existing.name,
                                 description: existing.description,
+                                tier: existing.tier,
                                 url: existing.url,
                                 source: existing.source,
                                 isEnabled: enabled

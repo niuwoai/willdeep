@@ -1,7 +1,7 @@
 ---
 title: 设置、账号、远端 Runtime 与安全配置
 order: 7
-description: 配置编辑器、AI、some.im、Skill、MCP、SSH、daemon、终端、语音和移动网关。
+description: 配置编辑器、AI、some.im、Skill、MCP、SSH、daemon、终端和移动网关。
 ---
 
 # 第 7 章：设置、账号、远端 Runtime 与安全配置
@@ -20,7 +20,6 @@ description: 配置编辑器、AI、some.im、Skill、MCP、SSH、daemon、终�
 - Runtimes
 - Integrations
 - Terminal
-- Voice
 
 含多个子页的分组会在内容区顶部显示分段选择器。
 
@@ -119,11 +118,10 @@ Mobile Gateway 用于把手机端与 Mac 会话配对。配置时：
 
 二维码可能携带连接信息，不要把生产配对码放进公开教程或工单。
 
-## 9. Integrations、Terminal 与 Voice
+## 9. Integrations 与 Terminal
 
 - Integrations：Replicate 和协作连接器等第三方服务。
 - Terminal：默认 shell、终端行为和相关工具配置。
-- Voice：语音模型、转写和 AI 后处理策略。
 
 第三方服务的 webhook、Token 和 secret 应写入 `.env`、Keychain 或专用 secret store，并确保相关文件被 `.gitignore` 排除。
 

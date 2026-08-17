@@ -51,6 +51,40 @@ enum ComposerSecretTagLayout {
     }
 }
 
+/// 往输入框里拖东西时,谁来接。
+///
+/// NSTextView 自带的拖放会把文件**路径当成一段文字**插进缓冲区——用户拖张
+/// 截图进来,得到的是 `/Users/…/微信图片_…jpg` 这一行字(还因为以 `/` 开头
+/// 触发了斜杠命令面板,弹出「没有匹配的命令」)。SwiftUI 那层的 `.onDrop`
+/// 根本轮不上,因为 AppKit 的文本视图先把事件吃掉了。
+///
+/// 所以在文本视图这一层拦截:文件和图片交给附件管线,其余(纯文本片段)
+/// 仍然走 NSTextView 默认行为,原样插进去。
+enum ComposerDropSupport {
+    /// 需要接管的拖放类型。纯文本不在此列——拖一段文字进输入框,本来就
+    /// 该变成文字。
+    static let attachableTypes: [NSPasteboard.PasteboardType] = [.fileURL, .png, .tiff]
+
+    static func shouldHandle(types: [NSPasteboard.PasteboardType]) -> Bool {
+        types.contains { attachableTypes.contains($0) }
+    }
+
+    /// 拖进来的文件。Finder 一次可以拖多个,所以是数组。
+    static func fileURLs(in pasteboard: NSPasteboard) -> [URL] {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        let objects = pasteboard.readObjects(forClasses: [NSURL.self], options: options)
+        return (objects as? [URL]) ?? []
+    }
+
+    /// 没有文件本体、只有图片数据的来源(浏览器里拖一张图、预览里拖选区)。
+    static func imageData(in pasteboard: NSPasteboard) -> Data? {
+        if let png = pasteboard.data(forType: .png) { return png }
+        guard let tiff = pasteboard.data(forType: .tiff),
+              let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
+        return bitmap.representation(using: .png, properties: [:])
+    }
+}
+
 struct ComposerTextEditor: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
@@ -61,6 +95,9 @@ struct ComposerTextEditor: NSViewRepresentable {
     let onSubmit: () -> Void
     let onPasteImage: () -> Void
     let onPasteText: (String) -> Void
+    /// 拖进输入框的文件/图片。返回 true 表示已经收下(变成附件),文本视图
+    /// 就不再把路径当文字插进来。默认 nil = 保持 NSTextView 原行为。
+    var onDropAttachments: ((NSPasteboard) -> Bool)?
     /// Returns the user's prior messages in chronological order. `↑` walks
     /// from the most recent backwards; `↓` walks forward and eventually
     /// restores the draft the user was typing before they started cycling.
@@ -162,6 +199,14 @@ struct ComposerTextEditor: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: 0, height: 2)
         textView.placeholder = placeholder
         textView.string = text
+        textView.onDropAttachments = onDropAttachments
+        // NSTextView 默认注册的拖放类型里未必有文件/图片(取决于 isRichText
+        // 等设置),补齐后 draggingEntered/performDragOperation 才会被调到。
+        let registered = Set(textView.registeredDraggedTypes)
+        textView.registerForDraggedTypes(
+            textView.registeredDraggedTypes
+                + ComposerDropSupport.attachableTypes.filter { !registered.contains($0) }
+        )
         textView.drawsBackground = false
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
@@ -179,6 +224,7 @@ struct ComposerTextEditor: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? ComposerNSTextView else { return }
         textView.placeholder = placeholder
+        textView.onDropAttachments = onDropAttachments
         // Applied before the text-sync dance below: font is independent of the
         // binding-echo / IME-marked-text races guarded there, and skipping it
         // on those early returns would strand the composer at the old size
@@ -725,6 +771,34 @@ fileprivate final class ComposerNSTextView: NSTextView {
     // then routes it into the image-attach pipeline.
     override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
         super.readablePasteboardTypes + [.png, .tiff]
+    }
+
+    /// 见 `ComposerDropSupport`:拖文件进来要变成附件,不是变成一行路径。
+    fileprivate var onDropAttachments: ((NSPasteboard) -> Bool)?
+
+    private func handlesDrop(_ sender: NSDraggingInfo) -> Bool {
+        onDropAttachments != nil
+            && ComposerDropSupport.shouldHandle(types: sender.draggingPasteboard.types ?? [])
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        handlesDrop(sender) ? .copy : super.draggingEntered(sender)
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        handlesDrop(sender) ? .copy : super.draggingUpdated(sender)
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        handlesDrop(sender) ? true : super.prepareForDragOperation(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard handlesDrop(sender), let onDropAttachments else {
+            return super.performDragOperation(sender)
+        }
+        // 收下了就绝不调 super,否则路径还是会被插进缓冲区。
+        return onDropAttachments(sender.draggingPasteboard)
     }
 
     override func draw(_ dirtyRect: NSRect) {

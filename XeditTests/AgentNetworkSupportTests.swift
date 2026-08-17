@@ -44,6 +44,8 @@ struct AgentNetworkSupportTests {
 
         #expect(request.value(forHTTPHeaderField: "User-Agent") == AgentNetworkSupport.userAgentHeaderValue)
         #expect(request.value(forHTTPHeaderField: "X-App-Version") == AgentNetworkSupport.appVersionHeaderValue)
+        #expect(request.value(forHTTPHeaderField: "X-Client-Name") == AgentNetworkSupport.clientNameHeaderValue)
+        #expect(request.value(forHTTPHeaderField: "X-Client-Version") == AgentNetworkSupport.appVersionHeaderValue)
         #expect(request.value(forHTTPHeaderField: "User-Agent")?.hasPrefix("some.im/WillDeep-") == true)
     }
 }

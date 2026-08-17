@@ -27,6 +27,20 @@ enum AgentSandboxMode: String, Codable, Equatable {
     case readOnlyNetwork
     case workspaceWrite
     case workspaceWriteNetwork
+    /// 和 `workspaceWriteNetwork` 同样的 seatbelt profile（写只限 workspace +
+    /// temp，网络放行），**唯一的差别是保留真实 `HOME` 与 `SSH_AUTH_SOCK`**。
+    ///
+    /// 存在的理由：部署、`git push`、`scp`/`rsync` 这类活儿需要的不是"更大的
+    /// 写权限"，而是**用户的钥匙**。之前它们只有两个选择——要么落在
+    /// `workspaceWriteNetwork`（有网但 HOME 被指到临时目录，`~/.ssh/config`、
+    /// 私钥、known_hosts 一个都读不到，必然失败），要么整体跳到 `escalated`
+    /// （连 workspace 写入限制一起放掉，杀鸡用牛刀）。这一档把"解开凭证"和
+    /// "解开写入限制"拆成两件事。
+    ///
+    /// 注意：sensitive 环境变量（token/secret/password/api_key 形态）仍然照
+    /// 剥不误。这一档放行的是**凭证文件**（靠真实 HOME 读到），不是环境里的
+    /// 明文 token。
+    case workspaceWriteNetworkCredentialed
     case escalated
 }
 
@@ -593,6 +607,8 @@ enum AgentSandboxPolicy {
 
         var needsWorkspaceWrite = false
         var needsWorkspaceNetwork = false
+        /// 需要真实 HOME / ssh-agent（凭证文件），但**不**需要放开写入限制。
+        var needsWorkspaceCredentials = false
         var needsReadOnlyNetwork = false
         var needsEscalation = expansionResolution.requiresJudgment
         var needsConfirmation = false
@@ -808,7 +824,12 @@ enum AgentSandboxPolicy {
                 if AgentPackageCommandPolicy.isDependencyInstallCommand(tokens: tokens) {
                     needsWorkspaceWrite = true
                     needsWorkspaceNetwork = true
-                    reasons.append("Package dependency installation may write inside the workspace and needs registry network access.")
+                    // 依赖安装是最依赖真实 HOME 的一类：`~/.npmrc`、`~/.gitconfig`
+                    // （git+ssh 依赖）、`~/.cargo/config`、`~/.gem/credentials` 全在
+                    // 那里。HOME 被换成临时目录时，私有源直接 401、走 SSH 的依赖
+                    // 直接失败。
+                    needsWorkspaceCredentials = true
+                    reasons.append("Package dependency installation may write inside the workspace, needs registry network access, and reads its credentials from the real home directory.")
                     continue
                 }
                 switch SafeCommand.classify(command: segment.text) {
@@ -849,7 +870,15 @@ enum AgentSandboxPolicy {
                 if networkCapableBuildHeads.contains(head),
                    !AgentPackageCommandPolicy.hasGlobalInstallScope(tokens) {
                     needsWorkspaceNetwork = true
-                    reasons.append("Command `\(head)` may fetch dependencies from a package registry.")
+                    // 光有网络不够：这些工具的配置和凭证都在真实 HOME 里
+                    // （`~/.npmrc`、`~/.gitconfig`、`~/.cargo/config`、
+                    // `~/.gem/credentials`、`~/.ssh` 下的 git-over-ssh 依赖）。
+                    // HOME 被指到临时目录时，私有 registry 拉不动、走 SSH 的
+                    // 依赖必然失败，而且 `ruby scripts/deploy.rb` 这类**把网络
+                    // 与 ssh 藏在脚本里**的命令，从命令头上根本看不出来——它
+                    // 正是用户会拿来做部署的形态。
+                    needsWorkspaceCredentials = true
+                    reasons.append("Command `\(head)` may fetch dependencies from a package registry and read its configuration from the real home directory.")
                 }
             }
 
@@ -891,8 +920,16 @@ enum AgentSandboxPolicy {
         }
 
         if needsWorkspaceWrite {
+            let workspaceMode: AgentSandboxMode
+            if needsWorkspaceNetwork {
+                workspaceMode = needsWorkspaceCredentials
+                    ? .workspaceWriteNetworkCredentialed
+                    : .workspaceWriteNetwork
+            } else {
+                workspaceMode = .workspaceWrite
+            }
             return AgentSandboxDecision(
-                mode: needsWorkspaceNetwork ? .workspaceWriteNetwork : .workspaceWrite,
+                mode: workspaceMode,
                 requiresUserApproval: true,
                 requiresTypedConfirmation: false,
                 reason: reasons.uniqued().joined(separator: " "),
@@ -931,7 +968,11 @@ enum AgentSandboxPolicy {
             rootDirectory: rootDirectory,
             additionalWorkspaceRoots: additionalWorkspaceRoots
         )
-        guard (decision.mode == .workspaceWrite || decision.mode == .workspaceWriteNetwork),
+        // 凭证档必须和另外两档一样留在自动放行的名单里：它只是"同样的写入
+        // 限制 + 真实 HOME"，风险等级没变。漏掉它会让 `npm install`、
+        // `go build` 这类本来免批的命令突然全部要人点确认。
+        guard [.workspaceWrite, .workspaceWriteNetwork, .workspaceWriteNetworkCredentialed]
+            .contains(decision.mode),
               decision.requiresUserApproval,
               !decision.requiresTypedConfirmation else {
             return false
@@ -1235,7 +1276,12 @@ enum AgentSandboxPolicy {
             let sandboxHome = sandboxTemporaryDirectory
                 .appendingPathComponent("willdeep-agent-sandbox-home", isDirectory: true)
             try? FileManager.default.createDirectory(at: sandboxHome, withIntermediateDirectories: true)
-            environment["HOME"] = sandboxHome.path
+            // 凭证档保留真实 HOME：seatbelt 的 `file-read*` 本来就全放行，
+            // 真正挡住 ssh 读 `~/.ssh` 的从来只是这一行改写的 HOME。写入限制
+            // 由 seatbelt 独立把守，不受影响。
+            if mode != .workspaceWriteNetworkCredentialed {
+                environment["HOME"] = sandboxHome.path
+            }
             // Node/Playwright inherit the GUI process' TMPDIR by default. On
             // macOS that path can be a parent of Foundation's actual
             // temporaryDirectory, while the seatbelt profile only allows the
@@ -1245,7 +1291,13 @@ enum AgentSandboxPolicy {
             environment["TMPDIR"] = sandboxTemporaryDirectory.path
             environment["TMP"] = sandboxTemporaryDirectory.path
             environment["TEMP"] = sandboxTemporaryDirectory.path
-            environment["SSH_AUTH_SOCK"] = nil
+            // ssh-agent 同理：凭证档保留，其余档位一律断掉。
+            if mode != .workspaceWriteNetworkCredentialed {
+                environment["SSH_AUTH_SOCK"] = nil
+            }
+            // token 类环境变量**所有非 escalated 档都剥**，凭证档也不例外。
+            // `gh` 在真实 HOME 下会从 ~/.config/gh 读到自己的凭证，不需要我们
+            // 把明文 token 塞进它的环境。
             environment["GITHUB_TOKEN"] = nil
             environment["GH_TOKEN"] = nil
         }
@@ -1325,7 +1377,7 @@ enum AgentSandboxPolicy {
         switch mode {
         case .escalated:
             return true
-        case .workspaceWrite, .workspaceWriteNetwork:
+        case .workspaceWrite, .workspaceWriteNetwork, .workspaceWriteNetworkCredentialed:
             return false
         case .readOnly, .readOnlyNetwork:
             break
@@ -1363,7 +1415,7 @@ enum AgentSandboxPolicy {
         switch mode {
         case .readOnly, .workspaceWrite:
             return true
-        case .readOnlyNetwork, .workspaceWriteNetwork, .escalated:
+        case .readOnlyNetwork, .workspaceWriteNetwork, .workspaceWriteNetworkCredentialed, .escalated:
             return false
         }
     }
@@ -1397,7 +1449,8 @@ enum AgentSandboxPolicy {
             case .commandFailed(let code, let output):
                 return looksLikeSandboxDenial(exitStatus: code, output: output, sandboxMode: sandboxMode)
             case .commandTimeout, .missingArgument, .invalidArgument, .noWorkspace,
-                    .pathOutsideWorkspace, .notFound, .notRegular, .binaryFile,
+                    .pathOutsideWorkspace, .symlinkOutsideWorkspace, .notFound,
+                    .notRegular, .binaryFile,
                     .fileTooLarge, .unknownTool, .invalidRegex, .httpFailed:
                 return false
             }
@@ -1483,6 +1536,8 @@ enum AgentSandboxPolicy {
             restrictions = "writes allowed only inside the workspace and temp dir; network denied"
         case .workspaceWriteNetwork:
             restrictions = "writes allowed only inside the workspace and temp dir; network allowed"
+        case .workspaceWriteNetworkCredentialed:
+            restrictions = "writes allowed only inside the workspace and temp dir; network allowed; the real HOME and ssh-agent are available, so ~/.ssh keys and host config work"
         }
         let networkNote = deniesNetwork(effectiveMode)
             ? " Network is denied in this mode, and seatbelt expresses that as a name-resolution failure: errors such as 'no such host', 'nodename nor servname provided', 'getaddrinfo ENOTFOUND' or 'could not resolve host' mean the sandbox blocked the connection — the machine's DNS is fine. Do not debug DNS, proxies, or /etc/resolv.conf."
@@ -1541,13 +1596,17 @@ enum AgentSandboxPolicy {
             }
         }
         allowSubpath(FileManager.default.temporaryDirectory)
-        if mode == .workspaceWrite || mode == .workspaceWriteNetwork {
+        if mode == .workspaceWrite
+            || mode == .workspaceWriteNetwork
+            || mode == .workspaceWriteNetworkCredentialed {
             for rootURL in [rootDirectory].compactMap({ $0 }) + additionalWorkspaceRoots {
                 allowSubpath(rootURL)
             }
         }
         let writeRule = "(allow file-write* \(writeAllows.joined(separator: " ")))"
-        let networkRule = mode == .readOnlyNetwork || mode == .workspaceWriteNetwork
+        let networkRule = mode == .readOnlyNetwork
+            || mode == .workspaceWriteNetwork
+            || mode == .workspaceWriteNetworkCredentialed
             ? "(allow network*)"
             : "(deny network*)"
         return """

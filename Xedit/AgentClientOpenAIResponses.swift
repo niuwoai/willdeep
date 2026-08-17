@@ -1008,6 +1008,10 @@ struct OpenAIResponsesAdapter {
             someIMContext.sessionID,
             forHTTPHeaderField: AgentNetworkSupport.willDeepSessionHeaderName
         )
+        request.setValue(
+            someIMContext.sessionID,
+            forHTTPHeaderField: AgentNetworkSupport.relaySessionHeaderName
+        )
         if let workspaceID = someIMContext.workspaceID, !workspaceID.isEmpty {
             request.setValue(
                 workspaceID,

@@ -166,6 +166,7 @@ struct AgentStatsDashboard: View {
                 VStack(alignment: .leading, spacing: 14) {
                     workerDetailHeader
                     workerSummaryBand
+                    workerKPIBand
                     workerUsageList
                 }
             case .calendar:
@@ -333,12 +334,6 @@ struct AgentStatsDashboard: View {
                 value: formatTokenCount(peakTaskTokenCount),
                 title: L10n.StatsDashboard.metricPeakTokens
             )
-            metricDivider
-            CodexDashboardMetric(
-                value: AgentStatsDashboardFormatting.duration(longestTaskDuration),
-                title: L10n.StatsDashboard.metricLongestTask
-            )
-            .help(L10n.StatsDashboard.metricLongestTaskHelp)
             metricDivider
             CodexDashboardMetric(
                 value: L10n.StatsDashboard.dayCount("\(stats.currentStreak)"),
@@ -818,10 +813,6 @@ struct AgentStatsDashboard: View {
         dashboardModel.peakTaskTokenCount
     }
 
-    private var longestTaskDuration: TimeInterval {
-        dashboardModel.longestTaskDuration
-    }
-
     private var managedRoutingRate: Double {
         dashboardModel.managedRoutingRate
     }
@@ -870,6 +861,35 @@ struct AgentStatsDashboard: View {
             CodexDashboardMetric(
                 value: formatInteger(dashboardModel.subagentSessionCount),
                 title: L10n.StatsDashboard.workersChats
+            )
+        }
+        .frame(height: AgentStatsDashboardLayout.metricStripHeight)
+        .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
+                .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+        )
+    }
+
+    /// The three skill-workers.v1 Phase 0 KPIs. Each shows a dash until it
+    /// has a denominator: an honest "no data yet" beats a 0% that reads like
+    /// a verdict.
+    private var workerKPIBand: some View {
+        let kpis = dashboardModel.skillWorkerKPIs
+        return HStack(spacing: 0) {
+            CodexDashboardMetric(
+                value: formatOptionalPercent(kpis.skillCoverage),
+                title: L10n.StatsDashboard.workersSkillCoverage
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatOptionalPercent(kpis.verifiedSuccessRate),
+                title: L10n.StatsDashboard.workersVerifiedSuccess
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatOptionalPercent(kpis.escalationRate),
+                title: L10n.StatsDashboard.workersEscalationRate
             )
         }
         .frame(height: AgentStatsDashboardLayout.metricStripHeight)
@@ -985,11 +1005,24 @@ struct AgentStatsDashboard: View {
         .padding(.vertical, 10)
     }
 
+    /// One glyph per trade. With ten trades in the list, sharing a default
+    /// icon between seven of them makes the column unreadable — the icon is
+    /// how you find the row you care about without reading every label.
     private func workerSymbol(_ profileID: String) -> String {
         switch profileID {
         case AgentSubagentProfileCatalog.scoutID: return "scope"
         case AgentSubagentProfileCatalog.readerID: return "doc.text.magnifyingglass"
         case AgentSubagentProfileCatalog.editorID: return "pencil.line"
+        case AgentSubagentProfileCatalog.testerID: return "checkmark.seal"
+        case AgentSubagentProfileCatalog.reviewerID: return "eye"
+        case AgentSubagentProfileCatalog.testFixerID: return "ladybug"
+        case AgentSubagentProfileCatalog.buildFixerID: return "hammer"
+        case AgentSubagentProfileCatalog.logInspectorID: return "list.bullet.rectangle"
+        case AgentSubagentProfileCatalog.gitDetectiveID: return "arrow.triangle.branch"
+        case AgentSubagentProfileCatalog.securityGuardID: return "lock.shield"
+        case AgentSubagentProfileCatalog.judgeID: return "scalemass"
+        case AgentSubagentProfileCatalog.opsRunnerID: return "server.rack"
+        case AgentSubagentProfileCatalog.terminalOperatorID: return "terminal"
         default: return "brain.head.profile"
         }
     }
@@ -1331,6 +1364,13 @@ struct AgentStatsDashboard: View {
     private func formatPercent(_ value: Double) -> String {
         guard value > 0 else { return "0%" }
         return String(format: "%.0f%%", min(1, value) * 100)
+    }
+
+    /// nil means the metric has no denominator yet, which must render as
+    /// "no data" rather than as 0%.
+    private func formatOptionalPercent(_ value: Double?) -> String {
+        guard let value else { return L10n.StatsDashboard.workersMetricNoData }
+        return formatPercentage(value)
     }
 
     private func formatCost(_ row: AgentModelUsageRow) -> String {

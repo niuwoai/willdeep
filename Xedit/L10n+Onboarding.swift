@@ -18,7 +18,6 @@ extension L10n {
             static let welcome = String(localized: "onboarding.navigation.welcome", defaultValue: "Welcome")
             static let someIM = String(localized: "onboarding.navigation.some-im", defaultValue: "some.im account")
             static let provider = String(localized: "onboarding.navigation.provider", defaultValue: "AI provider")
-            static let voice = String(localized: "onboarding.navigation.voice", defaultValue: "Voice")
             static let done = String(localized: "onboarding.navigation.done", defaultValue: "Ready")
             static let changeLater = String(localized: "onboarding.navigation.change-later", defaultValue: "You can change everything later in Settings.")
         }
@@ -41,13 +40,11 @@ extension L10n {
         enum Welcome {
             static let eyebrow = String(localized: "onboarding.welcome.eyebrow", defaultValue: "A few quick choices")
             static let title = String(localized: "onboarding.welcome.title", defaultValue: "Welcome to WillDeep")
-            static let subtitle = String(localized: "onboarding.welcome.subtitle", defaultValue: "Set up AI and optional on-device voice now. You can change every choice later.")
+            static let subtitle = String(localized: "onboarding.welcome.subtitle", defaultValue: "Set up your AI connection now. You can change every choice later.")
             static let someIMTitle = String(localized: "onboarding.welcome.some-im-title", defaultValue: "Start with some.im")
             static let someIMDetail = String(localized: "onboarding.welcome.some-im-detail", defaultValue: "Sign in once for managed chat, image, video, and vision models.")
             static let providerTitle = String(localized: "onboarding.welcome.provider-title", defaultValue: "Or bring your own provider")
             static let providerDetail = String(localized: "onboarding.welcome.provider-detail", defaultValue: "Use an existing Claude, OpenAI, DeepSeek, or compatible API key.")
-            static let voiceTitle = String(localized: "onboarding.welcome.voice-title", defaultValue: "Add private on-device voice")
-            static let voiceDetail = String(localized: "onboarding.welcome.voice-detail", defaultValue: "Download SenseVoice only if you want push-to-talk transcription.")
         }
 
         enum Provider {
@@ -74,36 +71,15 @@ extension L10n {
             static let errorVisionAPIKeyRequired = String(localized: "onboarding.provider.error-vision-api-key-required", defaultValue: "Vision API key is required for this provider.")
         }
 
-        enum Voice {
-            static let title = String(localized: "onboarding.voice.title", defaultValue: "Add on-device voice")
-            static let subtitle = String(localized: "onboarding.voice.subtitle", defaultValue: "Talk to your agent instead of typing. The optional SenseVoice model is about 937 MB.")
-            static let installedTitle = String(localized: "onboarding.voice.installed-title", defaultValue: "Voice is ready")
-            static let notInstalledTitle = String(localized: "onboarding.voice.not-installed-title", defaultValue: "Download the voice model")
-            static let installedDetail = String(localized: "onboarding.voice.installed-detail", defaultValue: "Hold the microphone button in the composer, or hold Fn anywhere in WillDeep.")
-            static let notInstalledDetail = String(localized: "onboarding.voice.not-installed-detail", defaultValue: "Download it now, or import an existing copy from fastv without transferring data.")
-            static let downloadButton = String(localized: "onboarding.voice.download-button", defaultValue: "Download · ~937 MB")
-            static let importButton = String(localized: "onboarding.voice.import-button", defaultValue: "Import from fastv")
-            static let importing = String(localized: "onboarding.voice.importing", defaultValue: "Importing from fastv…")
-            static let cancel = String(localized: "onboarding.voice.cancel", defaultValue: "Cancel")
-            static let privacyNote = String(localized: "onboarding.voice.privacy-note", defaultValue: "Transcription runs entirely on this Mac. Audio is not sent to an AI provider.")
-            static func downloadProgress(_ a1: String, _ a2: String, _ a3: String) -> String {
-                let template = String(localized: "onboarding.voice.download-progress", defaultValue: "%@ of %@ · %@/s")
-                return String(format: template, a1, a2, a3)
-            }
-        }
-
         enum Done {
             static let eyebrow = String(localized: "onboarding.done.eyebrow", defaultValue: "Setup complete")
             static let title = String(localized: "onboarding.done.title", defaultValue: "You're ready to build")
             static let subtitle = String(localized: "onboarding.done.subtitle", defaultValue: "WillDeep is ready. Here's what was configured on this Mac.")
             static let aiTitle = String(localized: "onboarding.done.ai-title", defaultValue: "AI connection")
-            static let voiceTitle = String(localized: "onboarding.done.voice-title", defaultValue: "On-device voice")
             static let settingsTitle = String(localized: "onboarding.done.settings-title", defaultValue: "Settings")
             static let providerReady = String(localized: "onboarding.done.provider-ready", defaultValue: "Your AI provider is saved and active.")
             static let aiLater = String(localized: "onboarding.done.ai-later", defaultValue: "Not configured yet. Add a provider from Settings when you're ready.")
-            static let voiceReady = String(localized: "onboarding.done.voice-ready", defaultValue: "SenseVoice is installed and ready for push-to-talk.")
-            static let voiceLater = String(localized: "onboarding.done.voice-later", defaultValue: "Skipped for now. Download it later from Settings → Voice.")
-            static let settingsDetail = String(localized: "onboarding.done.settings-detail", defaultValue: "Press ⌘, anytime to change providers, voice, memory, or skills.")
+            static let settingsDetail = String(localized: "onboarding.done.settings-detail", defaultValue: "Press ⌘, anytime to change providers, memory, or skills.")
             static let tipAgent = String(localized: "onboarding.done.tip-agent", defaultValue: "Start with a plain-language request. WillDeep will inspect the workspace, use tools, and show its progress.")
             static func someIMReady(_ a1: String) -> String {
                 let template = String(localized: "onboarding.done.some-im-ready", defaultValue: "some.im is connected as %@.")

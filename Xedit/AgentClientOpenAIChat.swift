@@ -410,6 +410,7 @@ struct OpenAIChatAdapter {
         guard configuration.providerID == AgentProviderPreset.someIMID,
               let context = someIMContext else { return }
         request.setValue(context.sessionID, forHTTPHeaderField: AgentNetworkSupport.willDeepSessionHeaderName)
+        request.setValue(context.sessionID, forHTTPHeaderField: AgentNetworkSupport.relaySessionHeaderName)
         if let workspaceID = context.workspaceID, !workspaceID.isEmpty {
             request.setValue(workspaceID, forHTTPHeaderField: AgentNetworkSupport.willDeepWorkspaceHeaderName)
         }

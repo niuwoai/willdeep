@@ -96,8 +96,6 @@ extension L10n {
         static let metricCurrentStreak = String(localized: "stats-dashboard.metric.current-streak", defaultValue: "Current streak")
         static let metricFilesChanged = String(localized: "stats-dashboard.metric.files-changed", defaultValue: "Files changed")
         static let metricLongestStreak = String(localized: "stats-dashboard.metric.longest-streak", defaultValue: "Longest streak")
-        static let metricLongestTask = String(localized: "stats-dashboard.metric.longest-task", defaultValue: "Longest task")
-        static let metricLongestTaskHelp = String(localized: "stats-dashboard.metric.longest-task.help", defaultValue: "Time actually spent on the longest conversation. Pauses over 15 minutes are not counted.")
         static let metricPeakTokens = String(localized: "stats-dashboard.metric.peak-tokens", defaultValue: "Peak tokens")
         static let metricTaskTurns = String(localized: "stats-dashboard.metric.task-turns", defaultValue: "Task turns")
         static let metricTotalTokens = String(localized: "stats-dashboard.metric.total-tokens", defaultValue: "Total tokens")
@@ -121,6 +119,12 @@ extension L10n {
         static let workersTitle = String(localized: "stats-dashboard.workers.title", defaultValue: "Worker usage")
         static let workersTotalCalls = String(localized: "stats-dashboard.workers.total-calls", defaultValue: "Worker calls")
         static let workersChats = String(localized: "stats-dashboard.workers.chats", defaultValue: "Chats with workers")
+        static let workersSkillCoverage = String(localized: "stats-dashboard.workers.skill-coverage", defaultValue: "Handled by workers")
+        static let workersVerifiedSuccess = String(localized: "stats-dashboard.workers.verified-success", defaultValue: "Verified success")
+        static let workersEscalationRate = String(localized: "stats-dashboard.workers.escalation-rate", defaultValue: "Escalated to main")
+        /// Shown instead of a percentage when the metric has no denominator
+        /// yet. "0%" would read as a failure rather than as missing data.
+        static let workersMetricNoData = String(localized: "stats-dashboard.workers.metric-no-data", defaultValue: "—")
 
         static func pluginRunCount(_ a1: String) -> String {
             let template = String(localized: "stats-dashboard.plugins.run-count", defaultValue: "%@ runs")

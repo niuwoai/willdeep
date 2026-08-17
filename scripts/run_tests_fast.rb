@@ -134,6 +134,7 @@ end
 
 without_building = false
 force = false
+changed_only = false
 xcode_arguments = []
 
 ARGV.each do |argument|
@@ -142,17 +143,162 @@ ARGV.each do |argument|
     without_building = true
   when "--force"
     force = true
+  when "--changed-only"
+    changed_only = true
   when "--help", "-h"
     puts <<~USAGE
       Usage: ruby scripts/run_tests_fast.rb [options] [xcodebuild test selection arguments]
 
         --without-building  Re-run tests only when the current source fingerprint matches.
         --force             Ignore the successful-result cache; keep incremental build data.
+        --changed-only      Run only the suites reachable from the working tree's changes.
+                            Narrows execution, not compilation — xcodebuild still rebuilds
+                            whatever the edit touched. Refuses to run (rather than passing
+                            vacuously) when it cannot map a change to any suite.
         -only-testing:...   Select a test bundle, suite, or test.
     USAGE
     exit 0
   else
     xcode_arguments << argument
+  end
+end
+
+# --- --changed-only ---------------------------------------------------------
+#
+# Narrows *execution* to the suites that can observe the working tree's edits.
+# It never narrows compilation: xcodebuild still rebuilds whatever the change
+# touched, so the "my edit did not compile" failure mode is unaffected.
+#
+# The mapping is deliberately conservative and loud. A selective test run that
+# silently misses the one suite covering a change is worse than no shortcut at
+# all — it manufactures a green. So: every changed source file that maps to no
+# suite is reported, and a run where *nothing* maps refuses to start instead of
+# passing vacuously.
+CHANGED_ONLY_PATHS = ["Xedit", "XeditTests"].freeze
+# Past this many suites the flag stops paying for itself: the selection is
+# approaching the whole bundle anyway, and one bundle-wide run is both faster to
+# launch and strictly more honest about coverage.
+CHANGED_ONLY_SUITE_CEILING = 40
+
+def changed_relative_paths
+  tracked = command_output("git", "diff", "--name-only", "HEAD", "--", *CHANGED_ONLY_PATHS)
+  untracked = command_output(
+    "git", "ls-files", "--others", "--exclude-standard", "--", *CHANGED_ONLY_PATHS
+  )
+  (tracked.split("\n") + untracked.split("\n"))
+    .map(&:strip)
+    .reject(&:empty?)
+    .select { |path| path.end_with?(".swift") }
+    .uniq
+end
+
+# Top-level type names a Swift file declares. Used both to describe a changed
+# source file and to recognize what a test file exercises.
+def declared_type_names(absolute_path)
+  return [] unless File.file?(absolute_path)
+
+  utf8(File.read(absolute_path))
+    .scan(/\b(?:struct|class|actor|enum|protocol|extension)\s+([A-Z][A-Za-z0-9_]*)/)
+    .flatten
+    .uniq
+end
+
+# Suite identifiers `-only-testing:` accepts for a test file. Suite names come
+# from the declared container type, never the file name — several files here
+# hang their tests off `extension WillDeepTests`, and filtering by file name
+# silently matches nothing.
+def suite_names_in_test_file(absolute_path)
+  return [] unless File.file?(absolute_path)
+
+  source = utf8(File.read(absolute_path))
+  names = []
+  # `@Suite` and the declaration are routinely separated by further attributes
+  # and modifiers — `@MainActor`, `final`, access levels — each on its own line.
+  # Skipping only lowercase tokens missed 37% of this bundle's files, every one
+  # of them an `@Suite` + `@MainActor` pair.
+  names.concat(
+    source.scan(
+      /@Suite\b[^\n]*\n(?:\s*(?:@[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?|public|internal|private|fileprivate|final|nonisolated)\s*\n?)*\s*(?:struct|class|actor)\s+([A-Za-z_][A-Za-z0-9_]*)/
+    ).flatten
+  )
+  names.concat(source.scan(/\bextension\s+([A-Za-z_][A-Za-z0-9_]*Tests)\b/).flatten)
+  names.concat(source.scan(/\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*XCTestCase\b/).flatten)
+  # Swift Testing discovers any type holding `@Test` methods, so `@Suite` is
+  # optional and a good number of files here omit it. Restrict the bare form to
+  # `…Tests`-named top-level types: a helper struct wrongly passed to
+  # `-only-testing:` does not error, it matches nothing and reports success.
+  if source.include?("@Test")
+    names.concat(
+      source.scan(/^(?:(?:public|internal|final|nonisolated)\s+)*(?:struct|class|actor)\s+([A-Za-z_][A-Za-z0-9_]*Tests)\b/)
+        .flatten
+    )
+  end
+  names.uniq
+end
+
+def changed_only_selection
+  changed = changed_relative_paths
+  abort "--changed-only: no modified Swift files under #{CHANGED_ONLY_PATHS.join(" / ")}." if changed.empty?
+
+  test_files = Dir.glob(File.join(ROOT, "XeditTests", "**", "*.swift")).sort
+  test_index = test_files.map do |absolute_path|
+    [absolute_path, utf8(File.read(absolute_path)), suite_names_in_test_file(absolute_path)]
+  end
+
+  suites = []
+  unmapped = []
+
+  changed.each do |relative_path|
+    absolute_path = File.join(ROOT, relative_path)
+
+    # A changed test file is its own answer — run exactly what it declares.
+    if relative_path.start_with?("XeditTests/")
+      declared = suite_names_in_test_file(absolute_path)
+      declared.empty? ? unmapped << relative_path : suites.concat(declared)
+      next
+    end
+
+    symbols = declared_type_names(absolute_path)
+    if symbols.empty?
+      unmapped << relative_path
+      next
+    end
+
+    matched = test_index.select do |_path, body, names|
+      !names.empty? && symbols.any? { |symbol| body.match?(/\b#{Regexp.escape(symbol)}\b/) }
+    end
+    matched.empty? ? unmapped << relative_path : suites.concat(matched.flat_map { |entry| entry[2] })
+  end
+
+  [suites.uniq.sort, unmapped, changed]
+end
+
+if changed_only && xcode_arguments.any? { |argument| argument.start_with?("-only-testing:", "-skip-testing:") }
+  warn "--changed-only ignored: an explicit -only-testing/-skip-testing selection was given."
+  changed_only = false
+end
+
+if changed_only
+  suites, unmapped, changed = changed_only_selection
+  puts "[changed-only] #{changed.length} changed Swift file(s)"
+
+  unless unmapped.empty?
+    warn "[changed-only] no suite maps to these changed files:"
+    unmapped.each { |path| warn "  - #{path}" }
+  end
+
+  if suites.empty?
+    abort "[changed-only] nothing maps to a suite; refusing to report a vacuous pass. " \
+          "Run without --changed-only."
+  end
+
+  if suites.length > CHANGED_ONLY_SUITE_CEILING
+    puts "[changed-only] #{suites.length} suites selected (> #{CHANGED_ONLY_SUITE_CEILING}); " \
+         "running the whole bundle instead."
+  else
+    puts "[changed-only] running #{suites.length} suite(s): #{suites.join(", ")}"
+    warn "[changed-only] NOT a full run — unrelated regressions are out of scope." unless unmapped.empty?
+    suites.each { |suite| xcode_arguments << "-only-testing:XeditTests/#{suite}" }
   end
 end
 

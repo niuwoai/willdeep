@@ -102,6 +102,47 @@ struct AgentSubagentTranscriptTests {
         #expect(AgentSubagentTranscriptStore.directory.lastPathComponent == "subagent-transcripts")
     }
 
+    // MARK: skill-workers.v1 verifier fields
+
+    @Test("verifier outcome and repo anchor survive a save/load round trip")
+    func verifierFieldsRoundTrip() throws {
+        let runID = UUID()
+        var transcript = makeTranscript(runID: runID)
+        transcript.verifierCommand = "swift test --filter AuthTests"
+        transcript.verifierPassed = false
+        transcript.attemptCount = 3
+        transcript.repoCommit = "caba8df7"
+        defer { AgentSubagentTranscriptStore.delete(runID: runID) }
+
+        AgentSubagentTranscriptStore.save(transcript)
+        let loaded = try #require(AgentSubagentTranscriptStore.load(runID: runID))
+
+        #expect(loaded.verifierCommand == "swift test --filter AuthTests")
+        #expect(loaded.verifierPassed == false)
+        #expect(loaded.attemptCount == 3)
+        #expect(loaded.repoCommit == "caba8df7")
+    }
+
+    @Test("sidecar files written before verifier fields existed still decode")
+    func legacySidecarDecodesWithoutVerifierFields() throws {
+        let legacyJSON = """
+        {"runID":"11111111-2222-3333-4444-555555555555","label":"audit","prompt":"go",\
+        "model":"glm-5","status":"completed","rounds":[],"report":"done","usageTokens":10,\
+        "startedAt":"2026-08-01T00:00:00Z","didTruncate":false}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let decoded = try decoder.decode(AgentSubagentTranscript.self, from: Data(legacyJSON.utf8))
+
+        // No verifier is nil, never false: absence of evidence must not
+        // count as a failed verification in the KPI denominators.
+        #expect(decoded.verifierCommand == nil)
+        #expect(decoded.verifierPassed == nil)
+        #expect(decoded.attemptCount == nil)
+        #expect(decoded.repoCommit == nil)
+    }
+
     // MARK: Runner outcome plumbing
 
     @Test("outcome rounds default to empty for callers that ignore recording")

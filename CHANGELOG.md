@@ -1,7 +1,242 @@
 # Changelog
 
-> 当前文件保留最新版本（1.257.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.263.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.266.0-rc1 - 2026-08-16
+
+### Added
+
+- **worker 技能的确定性派工触发**（与 willdeep-rs 0.28.0-rc1 同一刀）。`list_skills` 命中 `tier=worker` 技能时，结果尾部附 `<delegation-hint>` 派工配方——与失败测试提示同一哲学：**露脸不能依赖模型记得路由规则**，1.263.0-rc1 的派工率盘点（358 会话仅 1.4% 派过工）量过「记得」值多少。仅主循环可见：子循环共用同一 tool runner 但不能 spawn，新增 `AgentToolContext.canSpawnSubagents` 门控，给不能执行的调用方看配方只是小窗口里的噪音。
+- **`task.skill`：Task Packet 点名技能，派工时把 SKILL.md 正文内联进 Worker 首条消息**（预算 = 内联预算一半）。Worker 自己取指令的每一轮都在烧修复本身需要的窗口；没装的技能在开场白里**点名 unavailable 并要求如实报告**，不许即兴发挥出一套它以为的流程。
+- **workflow 步骤明确保持手标 profile**：内置 workflow 的步骤是 Swift 代码、不经过技能系统，「按 tier 自动选档」适用于技能被调用的两处（list_skills 命中、spawn_agent 派工），均已自动化——这个边界写进了设计文档 §10.6，是决定，不是遗漏。
+
+### Tests
+
+- 派工提示门控（能 spawn 的看得到配方）与 `task.skill` 解析/unavailable 点名。
+
+## 1.265.0-rc1 - 2026-08-16
+
+### Added
+
+- **技能声明自己的上下文档位：SKILL.md frontmatter `tier: worker|standard|deep`**（model-tiers.v1，与 willdeep-rs 同一套语义与解析规则，rs 侧 0.27.0-rc1 已落地）。`list_skills` 的列表带出 `tier=…`，**派工决策在读技能正文之前就能做**：worker 档技能是 spawn_agent 的候选，不是烧主会话窗口的理由。容错别名 small/medium/large；认不出的拼写静默忽略——技能是用户数据，别的工具写的技能不能因此坏掉，坏拼写也不许污染同一段 frontmatter 里的 name/description。
+- 29 个用户技能（`~/.willdeep/skills`）已在 rs 侧审计并逐个标注（S 11 / M 14 / L 4），Xedit 与 rs 读的是同一个目录，本版起两边看到同一份档位。
+
+### Tests
+
+- `AgentSkillTierTests`：声明的档位（含别名大小写）必须解析；未知拼写与缺失必须沉默且不污染其余元数据。
+
+## 1.264.0-rc1 - 2026-08-16
+
+### Added
+
+- **只读工种的弱验证：报告引用抽查（回流自 willdeep-rs）。** `test_fixer` 有退出码，`scout` 没有。在此之前只读工种（`scout` / `reader` / `log_inspector` / `git_detective`）的 `verifierPassed` 永远是 nil——**永远「未验证」，于是在三个北极星指标里永远隐身，而隐身读起来就像没问题**。它们的答案并非不可证伪：一个位置要么存在，要么不存在。运行结束后 runner 用纯代码抽查报告里点名的 `路径`、`路径:行号` 与 commit 哈希（`git cat-file -e`），不花模型、不占轮次。结果三处落地：报告尾部追加 `<citation-check checked="N" unverifiable="M">` 并逐条点名对不上的引用（父代理直接看得见）、transcript 与 usage 记录带上 `citationsChecked` / `citationsUnverifiable`、统计面板新增第四个指标 **Citation Accuracy**。
+  - **它只证伪「地名是编的」，不证明「答对了」**：一个 Worker 可以引用十个真实文件同时完全答非所问。
+  - **解析不出的 token 一律不计**——把解析器读不懂的词算成坏引用，指标就变成在量解析器。
+  - **`checked = 0` 不进分子也不进分母**：「没引用任何位置」和「引用全对」是两件事，正如「没验证」不是「通过」。
+  - 结构化输出（schema）模式**刻意不做**这件事：payload 必须保持 schema 合规，往里追加一段注记就是把它弄坏。
+- **实弹靶场（回流自 willdeep-rs）**：`XeditTests/AgentSubagentLiveFireRangeTests.swift` + `scripts/skill_worker_range.rb`。此前仓库里没有任何一处能证伪「可自动验证的小任务可以交给 32B」这句话——单测里的 provider 全是桩，而**桩 provider 永远修得好**。靶场现建五个带真实缺陷的 SwiftPM 仓库（三个编译错误派 `build_fixer`、两个只读样本派 `scout` 与 `git_detective`），用真 Provider 派工、真 `swift build` 退出码判定，产出 JSON + Markdown 两份报告。**不进 CI**：要真凭据、要网络、要花钱，没有 `XEDIT_RANGE_API_KEY` 时整个 suite 自己跳过。
+  - 派工走的是**产线同一条路径**：Task Packet 渲染出的开场白，不是靶场自编的提示词——自编一套，量到的就是那套提示词。
+  - 首轮实测（`glm-5`，5 样本）：可验证样本 **3/3 一次通过**、0 作弊；只读样本引用准确率 **6/6**、答对率 **2/2**；总耗时 84 秒。
+  - 判定纪律与 rs 侧逐字一致：**成功 = verifier 通过且靶子没被搬走**（删掉出问题的函数一样能让 `swift build` 变绿，所以另查公开 API 还在）；**派工前先确认靶子是红的**，绿着的靶子测不出任何东西。
+
+### Fixed
+
+- **嵌套沙盒：SwiftPM 工程里把 `swift build` 当 verifier 会稳定收到一个与代码无关的红。** 靶场第一轮三个编译样本全红，而 Worker 的补丁每次都打对了——`swift build` 在编译 `Package.swift` manifest 时自己要调 `sandbox-exec`，而 verifier 已经跑在 Agent 的 seatbelt 沙盒里，内核直接拒（`sandbox_apply: Operation not permitted`）。**这条对真实用户同样成立**：verifier 要写成 `swift build --disable-sandbox`（或直接 `swiftc -typecheck`）。改完同一样本一次通过、16.6 秒。已写进设计文档 §8.2，靶场样本一并改用该命令。
+
+### Docs
+
+- §10.6 新增**模型上下文三档切分（model-tiers.v1）**：S（32–64K）/ M（256K 默认）/ L（1M 申请制），动机从省钱改为主权（私有化机房只有 S+M 可部署，体系必须在无 L 时完整可用）；skill→档位经 `tier:` frontmatter 关联，rs 侧已实现并完成 29 技能审计，Xedit 侧解析待办已登记。完整设计见 willdeep-rs `docs/MODEL_TIERS.md`。
+- `docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md` §8 新增 Citation Accuracy 指标、§8.1 只读工种弱验证、§8.2 实弹靶场三节，并记录 rs 侧首轮实测（`glm-5`，12 样本：可验证 10/10 一次通过、0 作弊；只读样本引用准确率 4/4、答对率 2/2）与这组数字**不支持**的结论。
+
+## 1.263.0-rc1 - 2026-08-16
+
+### Added
+
+- **Workflow fan-out 步骤绑定小模型工种。** 派工率盘点实测（358 个会话侧车、25340 条消息）：派过工的会话只有 5 个（1.4%），近 5 天 86 个会话 0 次——小模型工种上线以来基本没露过脸，主模型把活全包了。第一刀切在 workflow 引擎：36 处 `engine.agent()` 里此前只有 1 处指定工种，其余全跑在主模型上，而**这些步骤本来就在派工，只是全派给了大模型**。本次绑定：
+  - `/code-review`、`/pr-review` 的各维度审查、`/bug-hunt` 的单文件审查 → **reviewer**；
+  - `/release-notes` 的素材收集（要跑 `git log` / `gh pr view`）→ **git_detective**（窄工种里唯一带 shell 的）；
+  - `/competitor` 的产品调研（只用 `web_search`）→ **reader**（唯一能联网的窄工种）。
+  - **所有 `synthesize` 综合步骤保持 deep**——判断质量的地方不省。
+  - **主动不动的**：DeepResearch 的 5 处结构化输出步骤（32B 的严格 JSON schema 合规是已知风险，等实测数据）；CSV/DB 三个 workflow（要跑 duckdb/psql，窄工种无此工具）；IssueTriage 的 `gh issue list` 抓取与 PRReview 的 context 收集（需要"只读 + shell"的通用工种，目录里还没有——候选设计见下）。
+- **Diff 预取：审查素材在 Swift 侧确定性取一次，内联下发。** 以前 `/code-review` 的 4 个维度 agent **各自**跑一遍 `git diff`（PR 模式各自跑 `gh pr view` + `gh pr diff`），4-8 次工具往返全烧在大模型上。现在 `WorkflowEngine.capturedCommandOutput` 取材零模型成本，完整素材直接进提示词——这也是窄工种能接手的前提（reviewer 没有 shell）。素材超过 28K 字符（32K 窗口装不下）或取不到时，自动回落父模型档并保留工具自取指引：**只升不降**。
+- **`WorkflowWorkerBindingTests` 守卫：绑定工种的步骤，提示词点名的工具必须在该工种白名单里。** 这条守卫第一次运行就抓到两处真伤——CodeReview 和 PRReview 的维度提示词都写着"跑 `gh pr diff`"，而它们刚被绑给没有 shell 的 reviewer；没有守卫，审查卡片照常变绿，只是审的人从头到尾没看到过 diff。顺带修掉一处**既有**同型 bug：BugHunt 的 picker 提示词让 scout 跑 `git_status` / `git log`，scout 两样都没有，调用被拒后只能退回猜（该步骤从 churn 启发式改为纯静态启发式）。
+- **设计文档新增 §10.5 运维类场景扩面**：侧边栏终端操作（工具五件套现成，最适合 32B）、在线服务发布（只当执行员不当决策者，凭证沙箱档解开钥匙后才可行）、k8s 管理（查询可以、变更不行）；32B 能力边界清单一并沉淀。
+- **新工种 `ops_runner`（运维查询员）**：只读 shell 查询——服务状态、日志尾部、`kubectl get/describe/logs`、`gh run list`、CI 结果。**零新增安全面**：子代理执行层"只许 read 风险"的既有死门自动实现"查询可以、变更不行"，`kubectl apply` 这类变更在分类层就被拒。同时补上了本次绑定时暴露的目录缺口——`gh issue list`、`gh pr view` 这类纯抓取步骤从此有处可去。
+- **新工种 `terminal_operator`（终端操作员）**：驾驶用户可见的侧栏终端——指定 tab 里执行给定命令、读屏、汇报。安全模型三层：① 终端工具照 editor 写工具的先例**按工种专属放行**，不进全局白名单（否则 deep/tester 会静默获得读用户终端屏幕的能力）；② `terminal_send_command` 虽放行，执行层第二道闸只许**命令文本分类为只读**的通过（`kubectl get` 能敲，`rm` 被拒并要求汇报父级）——终端是用户的真实 shell，seatbelt 管不到那里，这道文本分类闸就是边界；③ 刻意不给 `send_control`（打断用户前台任务的爆炸半径不给子代理）与捷径写工具。终端 controller 只随该工种下发，其他工种即便声明了终端工具也拿不到执行对象。
+- 两个新工种都走 cheapBinding（glm-5 / 32K 窗口 / 4K payload），未进 relay 托管名单（服务端虚拟模型档待建，职能段暂由客户端自带）；显示名、图标、五语言文案、目录登记一次配齐——上次加工种漏过这一课。
+- **单命令授权通道（`target_command`）：发布脚本可以包成 Task Packet 派给 worker 了。** `spawn_agent` 新增 `target_command` 参数（仅 ops_runner）：带上它的 spawn 升为 write 档、必过审批卡——**用户在卡上批准的就是那条命令本身**，语义等同在主会话批准一条 write 命令，爆炸半径恰好一条。子代理执行层对修剪后**精确相等**的命令文本放行（多一个 flag 都不行），可重复执行以支撑 verifier 重试循环（发布脚本按部署规范应幂等）。命令按自身分类拿沙箱档——发布脚本通常落 `workspaceWriteNetworkCredentialed`，正好接上 1.262.0-rc2 凭证沙箱的 `~/.ssh` 钥匙。配套确定性触发：`release.rb` / `deploy` / `helm upgrade` / `kubectl apply` 这类命令失败且有退出码时，失败结果尾部附派工提示（发布检测优先于构建检测，`make deploy` 归发布通道而不是 build_fixer）；提示里写死边界——**worker 拥有的是"重试并盯梢"，失败诊断、回滚、一切不可逆决策留在主会话**。
+- **连带修复：子代理的 `run_command` 沙箱档不再死钉 `.readOnly`。** 此前子代理 context 用默认只读档，deny network 会把 `kubectl get` / `gh run list` 这类查询逼进"假 DNS 失败"——ops_runner 上架即残废，且重演今早刚修过的那种误导性失败。现在按命令自身分类走：查询命令拿 `readOnlyNetwork`，被授权的单命令拿它分类应得的档。
+
+### 预期管理（重要）
+
+- 这一刀救的是"**已经在派工的地方派错了对象**"：跑一次 `/code-review` 的派工次数就超过此前五天总和。但**不跑 workflow 的日常对话派工率不会变**——决定权仍在 `.automatic`（模型自决）手里，而实测证明模型的决定就是不派。把日常对话的派工率抬起来需要确定性触发点（设计文档 §7 触发点 1）与小活旁路，那是下一刀。看数据别看错表。
+
+## 1.262.0-rc2 - 2026-08-16
+
+### Fixed
+
+- **沙箱给了网络却不给钥匙，部署类命令必死，而且死状具有误导性。** 除 `escalated` 外的所有沙箱档都会把 `HOME` 指到临时目录、清空 `SSH_AUTH_SOCK`，于是 `~/.ssh/config`、私钥、known_hosts 一个都读不到；同时 seatbelt 拒绝网络的方式是**让域名解析失败**，命令报出来的是 `no such host` / `nodename nor servname provided`。两件事叠在一起，Agent 看到的是"DNS 坏了 + Operation not permitted"，于是一头扎进网络策略和备用 SSH 端口里查——而它想去翻的那个 `~/.ssh/config`，在沙箱 HOME 下根本不存在。实测有会话为此连查 26 条命令无果。
+  - 新增沙箱档 `workspaceWriteNetworkCredentialed`：seatbelt profile 与 `workspaceWriteNetwork` **一字不差**（写入仍只限 workspace + temp），唯独保留真实 `HOME` 与 `SSH_AUTH_SOCK`。**把"解开凭证"和"解开写入限制"拆成两件事**——在此之前，想要一把钥匙就得整体跳到 `escalated`，连写入边界一起放掉。
+  - 实现之所以这么小，是因为 seatbelt profile 里 `file-read*` 本来就全放行：唯一挡住 `ssh` 读 `~/.ssh` 的，从来只是那行被改写的 `HOME`。
+  - token 类环境变量（`GITHUB_TOKEN` / `*_API_KEY` / `*_SECRET` 形态）在新档里**照剥不误**。放行的是凭证**文件**，不是环境里的明文 token；`gh` 在真实 HOME 下会自己从 `~/.config/gh` 读到凭证。
+  - **无人值守调度节点改用新档**。此前它拿的是"有网无钥匙"的 `workspaceWriteNetwork`，而这类任务按设计又没有 operator 能批准提权——部署、`git push`、`scp` 一律失败且无路可走。
+  - **依赖安装与构建命令一并改用新档**。`npm install` / `go build` / `cargo` 需要的 `~/.npmrc`、`~/.gitconfig`（git+ssh 依赖）、`~/.cargo/config` 全在真实 HOME 里；HOME 一换，私有源 401、走 SSH 的依赖直接失败。
+  - 补 `AgentSandboxCredentialedModeTests`：钉住"只解开凭证、不解开写入"，并覆盖"新档下 DNS 失败是真 DNS 失败，不得再误报成沙箱拒绝"。
+
+### Changed
+
+- **`scripts/run_tests_fast.rb` 新增 `--changed-only`**：只跑工作区改动能波及的 suite。它narrow 的是**执行**而非**编译**——xcodebuild 该重编的一行都不会少，所以"我的改动编不过"这个失败模式不受影响。
+  - **宁可不省，不可假绿**：映射不到任何 suite 时直接拒绝启动，而不是跑 0 个用例报成功；有改动文件映射不到 suite 时逐个列出来；选中的 suite 超过 40 个就退回全量（覆盖面已接近全量，一次全量反而更快也更诚实）。
+  - 修好两处 suite 识别缺陷：`@Suite` 与声明之间夹着 `@MainActor` 等属性时识别不到（**占全部测试文件的 37%**），以及压根不写 `@Suite`、靠 Swift Testing 自动发现 `@Test` 的文件。现在 193 个测试文件识别出 212 个 suite，剩余 3 个识别不到的**本来就不含测试**（`TestDefaultsHygiene` 与两个 `TestSupport`）。
+  - 保守起见，无 `@Suite` 注解时只认名字以 `Tests` 结尾的顶层类型：把辅助结构体误当 suite 传给 `-only-testing:` 不会报错，只会静默匹配不到并报成功——正是本仓踩过的坑。
+
+## 1.262.0-rc1 - 2026-08-15
+
+### Removed
+
+- **本地语音转文字整体下线。** 从 1.82.0-rc1 移植进来的 SenseVoice ONNX 管道连同它长出来的所有枝叶一起拔除：composer 的麦克风按钮、Fn 按住说话、悬浮波形条、Settings → Voice 整个分组（含 21 套配色和 9 种波形）、Onboarding 的语音步骤与 937 MB 模型下载器、转写后 AI 润色。`Xedit/Voice/` 整目录 29 个文件退场，**仓库随之瘦身 72 MB**（ONNXRuntime 1.23.2 通用二进制 + Kaldi-native-fbank 源码），Release 构建里那道"重签 ONNX dylib"的构建阶段也一并撤掉。
+- **麦克风权限声明移除。** `NSMicrophoneUsageDescription` 和 entitlement 里的 `com.apple.security.device.audio-input` 都已删除——App 不再录音，就不该继续举着这块牌子要权限。
+- **7 个依赖转写的工作流下线**：`/transcribe`、`/video-summary`、`/meeting-notes`、`/video-clip`、`/video-gif`、`/video-subtitle`、`/video-subtitle-export`。它们的骨架都是"先本地转录，再让 LLM 在转录文字里找东西"，引擎一走只剩空壳。
+- **`/video-extract` 保留**，只摘掉转录那一步。它一次产出 `metadata.json`、`audio.m4a`、`keyframes/`、`report.md` 四样，之前还有第五样 `transcript.md`——为了拔掉一样而废掉另外四样能正常工作的能力不划算。分析报告改为只依据技术参数与场景切换帧推断节奏，不再臆测旁白内容。
+- 不依赖转写的视频工作流全部照旧：`/video-compress`、`/video-thumbnail`、`/video-merge`、`/video-watermark`、`/video-speedup`、`/video-extract`。
+
+### Fixed
+
+- **共享 helper 不再寄居在具体工作流文件里。** `VideoMediaHelpers`（ffprobe 封装）原本住在 `VideoClipWorkflow.swift` 里，删掉那个工作流直接把仍在用它的 `/video-compress`、`/video-merge`、`/video-extract` 一起带崩。现在它有了自己的 `VideoMediaHelpers.swift`；只保留还有人用的 `probe`，专供 STT 的 `extractWavAudio` 和只有 `/video-clip` 用的 `cutSegment` 随转写栈一起移除。
+
+## 1.261.0-rc4 - 2026-08-15
+
+### Fixed
+
+- **复制出来的文本里混着看不见的 `U+200B`，粘到终端或编译器里就是一串查无此因的报错。** 罪魁不是模型，是我们自己：`AgentLongTokenBreaker` 为了防止 150 字符的 hash 路径把 TextKit 的断行器拖死，会往超长不可断行片段里插零宽空格——那是排版手段，本该只活在屏幕上。但代码块的复制载荷是从**已经插过断点的字符串**里解析出来的（先 `inject` 再 `blocks(from:)`），于是原样进了剪贴板；拖选 + ⌘C 直接取渲染串，同样带毒。现在复制出口一律经净化：渲染照插不误，剪贴板永远干净。
+- **中文正文压根就不该被插断点。** 判断"哪些字符算天然断行位"的表里清一色 ASCII，「，。：；（）」和汉字本身全被当成"不可断行"，于是任何超过 30 字的中文句子都被均匀插上零宽空格——而 CJK 本来就允许任意字符间断行，这些断点从第一天起就是纯负担，也是用户天天在剪贴板里看见 `<200b>` 的主因。现在 CJK 区段和全角标点都算天然断点，中文消息一个都不插。
+- 净化只清排版字符（ZWSP / WORD JOINER / BOM / 软连字符），**刻意不碰**带语义的不可见字符：ZWJ（emoji 组合靠它，删了一家三口散成三个人）、ZWNJ、双向控制符。
+- 会回流给模型的出口（右键「加入任务」、引用选区）净化之后**重新打断注入标记**——`AgentInjectionDefense` 正是靠往 `<system-reminder>` 里插 U+200B 来废掉 tokenizer 识别的，只净化不补这一刀，等于把用户选中的一段工具输出还原成一个可用的注入载荷再喂回去。
+- 补了 `AgentCopyTextSanitizerTests` 守住"渲染态不可见字符不得进入剪贴板"这条不变量。
+
+## 1.261.0-rc3 - 2026-08-15
+
+### Fixed
+
+- **「选择 Planner」弹窗里的主模型／备选模型根本点不开。** 那两行长得像下拉选择器（有图标、有型号、右边还有个 chevron），实际上菜单的 label 是一块盖在行上的 `Color.clear`——`.menuStyle(.borderlessButton)` 背后的 AppKit 控件按空 label 的固有尺寸收缩，外层 `.frame(maxWidth: .infinity)` 撑不开它，于是整行只有中间极小一块能触发菜单，用户体验上就是"点了没反应"。现在菜单的 label 就是那一整行本身，点哪儿都能弹出候选列表。
+- **侧边栏「新聊天」永远挂着一圈蓝色焦点环，跟真正选中的行打架。** 窗口打开时第一个 Button 拿到 first responder，于是「新聊天」画焦点环、「调度台」画选中底色，看着像同时选了两行。导航行现在不参与键盘焦点，"当前在哪儿"只由选中底色一个人说了算。
+
+## 1.261.0-rc2 - 2026-08-15
+
+### Fixed
+
+- **新加的六个工种在统计面板和设置页里认不出来。** 工种列表本身没问题（面板和设置页都遍历内置目录，新工种自动在列），但两处按工种 ID 分支的地方没跟上：设置页的档案名回落到英文原名（中文界面里显示 `test_fixer`），面板的图标十个工种有七个共用同一个默认脑袋图标——图标本来就是让人不用逐行读标签就能找到自己关心的那行，七个一样等于没有。现在十个工种各有其名、各有其形（测试修复是瓢虫、构建修复是锤子、Git 溯源是分支、安全判定是盾、裁判是天平）。
+- 补了一条不变量测试：**每个内置工种都必须有本地化名字和职能说明，不得回落到原始 ID**。这个坑已经踩过两次（这次是加工种时漏了分支），交给测试盯着比交给记性靠谱。
+
+## 1.261.0-rc1 - 2026-08-15
+
+### Added
+
+- **测试/构建失败时，失败信息里直接带上"这活可以派出去"。** 便宜的 Worker 档只有在活真的流过去时才省钱，而"主模型主动决定委派"恰恰是整条链上最不可靠的一环——它正在任务中间、文件都打开着，自己顺手改比写个任务包看起来快得多。所以现在不指望这个判断：`swift test` / `npm test` / `tsc` / `cargo build` 这类命令非零退出时，工具结果尾部附一句结构化提示，直接点명该派 `test_fixer` 还是 `build_fixer`、要带哪些参数，并把**刚失败的这条命令**指定成 verifier。派工的成本从此是一句话，不是一段准备工作。
+  - 没有退出码的失败（启动失败、超时、被取消）不提示——那是机器问题，派个 fixer 去修等于白扔一整轮。
+  - 命令太长就说"上面那条命令"而不是原样抄回来：它就在上一行，每次失败重复四百字符纯属烧 token。
+  - 只是提示，不是拦截：主模型仍然自己决定要不要派。变的是"派出去"现在是更省力的那个选项。
+- **Workflow 的 fan-out 步骤可以按工种跑了。** `WorkflowEngine.agent()` 新增 `profile` 参数，按工种解析模型与工具集。以前每个扇出步骤都整份继承父会话的模型和全量只读工具表——一个十文件的 BugHunt 就是十次父模型单价去干窄工种的活，而 workflow 还刻意绕开了子代理并发上限，所以这是全 App 最大的一块可下沉工作量。BugHunt 的选文件步骤已改走 `scout`。
+  - **标注原则：只标注工具需求落在该工种白名单之内的步骤。**标错会让工具在运行中被拒、整条 workflow 挂掉，所以宁可少标；未标注的步骤仍走 `deep`＝父配置，与改动前逐字节相同。
+
+### Docs
+
+- `docs/SKILL_WORKERS_TASK_PLAN.md` §8.2 记录 D 阶段的范围决定，含两项**主动不做**的说明：小活旁路推迟（标题与上下文压缩本就有便宜档路径，重路由收益边际且压缩的分块预算与窗口耦合；真正空白的超长工具输出摘要在热路径上且必须保留失败断言原文，要做成加法式改动单独一期），调度台绑定不做（它分派的是"任务→执行器"，与"步骤→工种"是两个轴）。
+
+## 1.260.0-rc1 - 2026-08-15
+
+### Added
+
+- **子代理不再只能读了：多文件写通道 + 四个新工种。** 以前一个子代理要么只读、要么只能改一个文件，于是"修好这个失败的测试"这种最常见的活它干不了——真实的修复几乎总是同时动实现和测试。现在写权限是一组显式声明的文件（`target_files`），审批卡列出确切范围，越界的补丁照旧当场拒绝，同一批文件同时只允许一个子代理持有（有交集就整组排队，不做半持有）。可写范围**必须显式声明**，绝不从任务包的 `relevant_files` 推断——"给你读"和"给你改"是两回事。
+- **`test_fixer` / `build_fixer` 两个新工种**：拿着失败测试或编译错误，在给定文件范围内修到绿。**成功与否由 verifier 命令的退出码判定，不是模型自称**——它说"我修好了"不算数，命令说了才算。修不好就诚实报告诊断和试过什么，不许靠删断言、放宽期望或跳过测试来"修"。
+- **`log_inspector` / `git_detective` 两个新工种**：日志聚类解释、回归定位与 commit 解释。
+- **`security_guard` / `judge` 两个判断型工种**：前者判断一条命令能否无人值守执行，后者做路由/质检类的有界裁决。两者刻意**不给任何工具**、只跑一轮——给工具只会让小模型跑去找更多证据，而一个去找证据的裁判就是一个不再回答问题的裁判。
+- **Task Packet：让 Worker 起手就是热的。** `spawn_agent` 新增 `task` 参数（goal / relevant_files / known_facts / constraints / verifier / max_attempts）。相关文件的**内容**直接内联进 Worker 的第一条消息——32K 窗口的小模型每 grep 一次找文件，就少一分窗口留给真正的修复。内联有预算上限并在截断处明说；读不到的文件原地报告而不是静默丢掉，否则 Worker 会对着一个它以为拿到了的文件凭空发挥。
+- **Verifier 闭环。** Worker 声称完成时，runner 自己跑 verifier 命令判定：过了才算过，没过就把失败输出（按工种预算裁剪）回灌让它重来，打满 `max_attempts` 仍不过就升级到主模型重跑。轮数耗尽时也补跑一次——模型可能在改好之后才开始啰嗦。verifier 失败是本系统能观测到的最不含糊的失败信号，因此它现在**优先于**其他升档触发条件；反过来，verifier 通过时不再因为报告太短而白白升档一次。
+
+### Changed
+
+- **托管工种登录 some.im 后不再可选模型。** 侦察 / 阅读 / 编辑 / 四个新工种 / 两个裁判共 9 个工种，登录状态下模型锁死为 `someim-32b-<工种>`、职能提示词由服务端下发（客户端不再重复发一份），设置页把模型显示为锁定并说明原因而不是把控件藏起来。未登录则用用户为该工种指定的模型、没指定就回退当前会话模型，并使用 App 内置的同一套职能提示词——同一个工种不该因为登录与否跑出两种性格。解析发生在 spawn 时，登录/登出不迁移任何配置。深查 / 测试 / 评审 / 调度台档案不受影响，照常可选。
+- **verifier 的准入不再要求"必须只读"。** 诚实的 verifier 本来就会写：build 产出目标文件、测试写 fixture。一刀切只读会把用户推回"相信模型自称通过"，比放行更危险。现在 read 档命令直接放行，其余交给 security guard 裁判（与 `run_command`、MCP、终端同一个全局收口）；不放行就明确告知并退回弱证据模式。不可退让的是"不能没有门禁"——子代理没有审批 UI，无人值守的命令必须有人判。
+- **请求补发 `X-Playground-Session-ID`。** 客户端此前只发自家的 `x-willdeep-session-id`，而网关的用量账本只读前者，导致我们全部流量的 `session_id` 为空，服务端无法把主模型请求和它派出去的 Worker 请求归到同一次会话。同一个不透明 UUID，随另一个头一起发。
+
+### Docs
+
+- `docs/SOMEIM_WORKER_VIRTUAL_MODELS.md` 增补 security guard 与 judge 两个虚拟模型的服务端提示词，并写明与既有 `someim-security-guard`（网关 replace 模式、服务于主循环自动审批）并存不合并；裁判类模型的 `max_tokens` 必须给足——这条是智能审批裁判"一次都没生效却全程静默"换来的教训。
+- `docs/SKILL_WORKERS_TASK_PLAN.md` 记录实施中的五项决定修正，含"`extended_billing` 租户标签在 Phase 1 并非必需"的判断依据。
+
+## 1.259.0-rc1 - 2026-08-15
+
+### Added
+
+- **子代理花的钱终于进账了。** 以前一个子代理跑十二轮、烧掉几万 token，统计面板上一个数字都看不到——那些 token 只写在 transcript 侧车里，模型用量表只统计父会话的消息。结果就是「便宜档」看着永远免费，而账单不这么认为。现在每个 `spawn_agent` 运行结束时，会把工种、模型、provider、token（prompt/completion/cache 分开记）、轮数、工具调用次数盖到父会话那条工具调用上，随会话落盘；模型用量表按**子代理实际跑的那个模型**单独出行，而不是并进父模型。前台、后台、失败、取消四条路径都记——一个卡死的子代理烧掉的 token，正是评判便宜档时最该看见的那部分。
+- **子代理的 token 拆分不再被丢掉。** provider 本来就回了 prompt/completion 分项，子代理循环却只留了个总数。补上后 Worker 成本是算出来的而不是猜出来的（子代理每轮重发全部历史，是极度 prompt-heavy 的负载，按输出价一刀切会离谱）。只报总数的老数据仍然计入 token 并标记为估算。
+- **统计面板新增 skill-workers 三项指标**：Worker 承担占比、验证通过率、升级到主模型。三项都在没有分母时显示「—」而不是 0%——「还没数据」和「试过但失败」是两回事，后者是这块面板最不该误报的结论。
+- **子代理 transcript 补齐 verifier 与回放锚点字段**（`verifierCommand` / `verifierPassed` / `attemptCount` / `repoCommit`）。`verifierPassed` 的 nil 与 false 严格区分：没跑过验证不等于验证失败。加上 commit 锚点后，一条 transcript 就是一个可回放的 case，为后面换模型对比攒数据。旧侧车文件照常解码。
+
+### Docs
+
+- 新增 `docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md`（小上下文 Skill Worker 拆分设计）、`docs/SOMEIM_WORKER_VIRTUAL_MODELS.md`（some.im 侧 8 个 Worker 虚拟模型与逐字可粘贴的服务端提示词，含「登录即锁死模型与提示词、未登录才可配」的绑定规则）、`docs/SKILL_WORKERS_TASK_PLAN.md`（分期任务台账）。
+
+## 1.258.0-rc5 - 2026-08-14
+
+### Fixed
+
+- **`scripts/agent_terminal_smoke.rb` 的「visible strings use L10n」不再是假红。** 这条守卫断言 `settings.remote-runtimes.terminal-section` 出现在 L10n 源码里，但它只拼了 `L10n.swift` 和 `L10n+AgentTerminal.swift` 两个文件；`999c5378` 那次「拆回 3000 行以内」把 Settings 段搬去了 `L10n+Settings.swift`，key 和界面用法都完好无损（`AgentRuntimeSettingsView` 照旧走 `L10n.Settings.RemoteRuntimes.terminalSection`，catalog 里条目也在），红的只是断言没跟上文件边界。现在改成 glob `Xedit/L10n*.swift` 整层再拼接——和 rc4 给 `short_drama_media_contract_test.rb` 做的处理同一路数，往后再拆 L10n 也不会把这条守卫带红。13 条检查全绿。
+
+## 1.258.0-rc4 - 2026-08-14
+
+### Changed
+
+- **`AgentTools.swift` 按职责拆成七个文件。** 该文件在 1.257.0-rc2 合并时涨到 3006 行，越过 `scripts/complexity_guard.rb` 的 3000 行硬限，把 CI 的 quality 守卫组顶红了。现在 `AgentTools.swift` 只留命令执行策略、进程树辅助和 `AgentToolRunner.run` 总分发（737 行），其余按关注点搬到 `AgentToolsFileEditing`（create_file / edit_file / apply_patch / generate_image）、`AgentToolsCommandExecution`（run_command 与输出收集、取消控制）、`AgentToolsDelegatedAgents`（claude_code / codex_cli / cursor_agent / hermes_cli / cline_cli）、`AgentToolsJobs`（lark_cli 与后台任务、队列查询）、`AgentToolsExpertsAndSchedules`（activate_expert 与会话内定时任务）、`AgentToolsWidgets`（show_widget / run_workflow）。全部是 `extension AgentToolRunner`，函数体逐字节搬运，只把总分发要调用的入口函数从 `private` 放宽到 internal，行为不变。拆完最大的文件是 695 行，全部低于 2000 行软限。
+- `scripts/short_drama_media_contract_test.rb` 的 `dispatch_source` 改成读取拆分后的全部同前缀文件再拼接——契约断言看的是整体行为，不该被文件边界变动带红。
+
+## 1.258.0-rc3 - 2026-08-14
+
+### Added
+
+- **切换界面语言后有明确的重启提示。** 以前改完语言只有一行灰色小字，改了像没改——弹窗当场说清「语言已更改为 X，重启后生效」，关掉弹窗后设置页里还留一条橙色横幅盯着你，直到真的重启。横幅和弹窗都带「立即重启」按钮：拉起一个守候进程盯着本进程的 pid，退干净了再 `open` 回来，不用用户自己去 Dock 上点两下。
+- **新增西班牙语和法语。** 语言选择器现在是 跟随系统 / 简体中文 / English / 日本語 / Español / Français 六项。日/西/法三种语言的界面文案各 3185 条全部翻译落库，覆盖率与简体中文一样是 100%。
+
+### Fixed
+
+- **网关客户端统计现在能识别 WillDeep Desktop。** 所有统一出站请求除既有 `User-Agent` 与 `X-App-Version` 外，新增 `X-Client-Name: WillDeep Desktop` 和同版本的 `X-Client-Version`，some.im 的客户端排行榜不再把桌面端请求记成空客户端，并可与 WillDeep CLI 清楚区分。
+
+- **往对话框里拖文件,现在真的会上传。** 以前拖一张图进去只得到一行 `/Users/…/微信图片_….jpg` 的文字,还因为路径以 `/` 开头触发了斜杠命令面板,弹出「没有匹配的命令」。根因不是没写拖放逻辑——SwiftUI 那层的 `.onDrop` 根本轮不上,`ComposerNSTextView` 作为 NSTextView 先把拖放事件吃掉,按默认行为把文件路径当文字插进缓冲区。改成在文本视图层拦截:文件和图片交给既有的附件管线(文件夹仍然按知识目录处理,多选拖放逐个收下),纯文本拖放保持原样插入。
+- **「最长任务时长」指标下线。** 概览条上的这一格连同背后的 `activeWorkDuration` 计算一起删掉——它每次统计都要把所有会话的消息遍历一遍算最大值,而统计面板本就吃力。
+
+- **日语选了等于没选。** `Xedit.xcodeproj` 的 `knownRegions` 只登记了 `en / Base / zh-Hans`，String Catalog 根本不会为日语生成 `ja.lproj`；加上 catalog 里日语只有 11 条译文，切过去之后整个界面照旧是英文。这次补齐 `knownRegions`（ja / es / fr），并把三种语言的界面文案全部翻译落库。
+- **新增 CI 守卫 `scripts/i18n_locale_registration_guard.rb`。** 钉死「Picker 里能选的语言 = knownRegions 里登记过的语言」，并要求语言切换界面自身（`settings.language.*`）在每种语言下都齐全——切过去之后至少得看得懂怎么切回来。挂在 `quality` 守卫组。
+
+### Changed
+
+- 出站请求新增 `X-Client-Name: WillDeep Desktop` 与 `X-Client-Version` 两个头，服务端不必再从 User-Agent 里抠客户端身份。
+- i18n 工具链补上多语言能力：`i18n_locale_batches.rb`（按语言切批次，带中文译文作消歧参考）、`i18n_merge_locale.rb`（文本级合并回 catalog）、`i18n_add_keys.rb`（增改少量 key 的多语言值）。都走文本级编辑而不是「parse → 全量 dump」，因为 catalog 现在是紧凑单行与展开多行混排，全量重写会把三万多行整体重排、淹没真实改动（`i18n_apply_translations.rb --verify` 现在就是红的，正是这个原因）。
+
+## 1.257.0-rc2 - 2026-08-14
+
+### Fixed
+
+- **软链接不再是绕过授权目录的暗门。** `AgentToolContext.resolveWorkspaceURL` 此前只做词法前缀匹配：`<项目>/link/x` 字符串上落在项目里就放行，而这条链接指向哪儿它根本没看。于是工作区里任何一条软链接都能把 Agent 的读写权限悄悄扩到 `~/.ssh` 或别的仓库，而用户在界面上完全看不出自己授权了什么。现在解析后再判定——落在**任一**已授权目录内才放行（链接从一个已授权目录指到另一个是正当抄近路，seatbelt 对这一对同样放行），否则拒。
+- **三条通道的口径终于一致。** `run_command` 走 seatbelt，内核按解析后的真实路径匹配，一直是拒的；原生文件工具却放行。同一条路径两种结果——Agent 自己写文件成功、一跑 git/npm 就 EPERM——比直接拒绝更难排查。
+- **另外三个入口的同款漏洞一并堵上：** `apply_patch` 的 diff 路径（补丁能把 `linked/x` 写到工作区外）、媒体工具的 `output_directory`（生成的图片/视频经软链接落到外面）、移动网关的读文件（手机端可经工作区内的链接读到 `~/.ssh`）。仓库里其余大量 `hasPrefix(root + "/")` 属于归属判断与相对路径显示，不是授权边界，保持原样。
+- **侧边栏能认软链接目录了。** `.isDirectoryKey` 描述的是链接文件本身，恒为 false，指向目录的软链接因此被渲染成一个展不开的「文件」，也就是用户看到的「说不是真实目录」。改为跟随解析判定，并且 `FileManager.enumerator` 不肯下降进软链接目录，扫描改扫解析后的目标再把名字接回原路径——树里显示的仍是 `<项目>/link/file`，选中态、git 角标、reveal-to-path 这些按路径前缀工作的功能不受影响。指向文件的软链接仍然是文件。
+- **软链接成环不再无限展开。** 沿展开链记录祖先的真实路径，`a/link -> a` 这类链接展示为文件夹但拒绝加载子节点，直接间接成环都拦得住。
+
+### Changed
+
+- 新增 `AgentToolError.symlinkOutsideWorkspace`，报错讲清三件事：这是条软链接、真实目标是哪个目录、要访问就把该目录加为项目目录（本 App 支持一个项目挂多个目录）。刻意不做「一键加入」按钮——正规通道已经有了，缺的只是撞墙那一刻把路指清楚。
+- `AgentWorkspacePathGuard` 从 ACP 专用提为共享守卫，ACP 桥接与原生工具共用同一套「先解析再比较」的判定。
+
+### Tests
+
+- 新增 `WorkspaceSymlinkBoundaryTests`（11 例）：越界链接被拒且报错带真实目标、目标尚不存在的新文件写入同样被拒、指向第二个已授权目录的链接放行、工作区内部链接放行、普通路径与 `../` 词法越界行为不变、`apply_patch` 经链接写工作区外被拒且目标文件内容不变；文件树把软链接目录当目录并能展开、软链接文件仍是文件、直接与两跳成环都停止展开。临时目录本身位于 `/var/folders/…`（`/var` 即软链接），因此每条用例顺带覆盖了「根目录自身路径含软链接」。
+
+### Meta
+
+- 属缺陷修复，版本从 **1.257.0-rc1** 递增为 **1.257.0-rc2**；App、Go agent、Help、Helper、浏览器扩展与产品文档保持一致。
+
 
 ## 1.257.0-rc1 - 2026-08-14
 

@@ -804,6 +804,24 @@ final class AppState: ObservableObject {
             }
             guard
                   let runtime = self.runtime(for: run.parentRuntimeID) else { return }
+            // Background runs finish long after their spawn call returned, so
+            // their cost has to be stamped onto the persisted tool call here —
+            // the foreground path does the same inside its own `persist`.
+            self.recordSubagentRunUsage(
+                AgentSubagentRunUsage(
+                    profileID: run.profileID,
+                    model: run.model,
+                    providerID: run.providerID,
+                    usageTokens: run.usageTokens,
+                    promptTokens: run.usageSplit.prompt,
+                    completionTokens: run.usageSplit.completion,
+                    cachedPromptTokens: run.usageSplit.cachedPrompt,
+                    roundCount: run.roundCount,
+                    toolInvocationCount: run.toolInvocationCount
+                ),
+                runID: run.id,
+                runtime: runtime
+            )
             self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
         // Session writes ride a background queue now; when one fails

@@ -19,7 +19,10 @@
 import Foundation
 
 enum AgentSkillCatalog {
-    static func listSkills(arguments: [String: AgentJSONValue]) throws -> AgentToolResult {
+    static func listSkills(
+        arguments: [String: AgentJSONValue],
+        includeDispatchHint: Bool = false
+    ) throws -> AgentToolResult {
         let query = arguments["query"]?.stringValue()?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let skills = AgentSkillDirectory.list(includeDisabled: false).filter { record in
             guard let query, !query.isEmpty else { return true }
@@ -27,11 +30,32 @@ enum AgentSkillCatalog {
         }
 
         let lines = skills.map { record in
-            "- \(record.identifier) | name=\(AgentSkillLocalization.displayName(for: record)) | \(AgentSkillLocalization.displayDescription(for: record))"
+            // The tier rides in the listing so the dispatch decision can be
+            // made before the body is read: `tier=worker` → package a task
+            // packet and spawn the matching trade instead of running inline.
+            let tier = record.tier.map { " | tier=\($0.rawValue)" } ?? ""
+            return "- \(record.identifier) | name=\(AgentSkillLocalization.displayName(for: record))\(tier) | \(AgentSkillLocalization.displayDescription(for: record))"
         }
-        let payload = lines.isEmpty
+        var payload = lines.isEmpty
             ? "No installed Codex skills found."
             : lines.joined(separator: "\n")
+        // Deterministic dispatch trigger, same philosophy as the failed-test
+        // hint: visibility must not depend on the model remembering the
+        // routing rule — the dispatch-rate audit measured what "remembering"
+        // is worth (1.4%). Main loop only: a child cannot spawn, and a hint
+        // it cannot act on is just noise in a small window.
+        if includeDispatchHint {
+            let workers = skills.filter { $0.tier == .worker }.map(\.identifier)
+            if !workers.isEmpty {
+                payload += """
+
+
+                <delegation-hint tier="worker">
+                These skills fit a small-context worker: \(workers.joined(separator: ", ")). Instead of running one inline, spawn_agent with a task packet — set task.skill to the skill name (the runtime inlines its body for the worker), task.goal to the outcome, and task.relevant_files to the inputs. Your window stays free and the worker starts warm.
+                </delegation-hint>
+                """
+            }
+        }
         return AgentToolResult(summary: "\(skills.count) skills", payload: payload)
     }
 
@@ -94,13 +118,61 @@ enum AgentSkillCatalog {
 /// composer popover). Mirrors `AgentSkillCatalog.SkillRecord` but exposed
 /// outside the private enum so views and AppState helpers can list and
 /// inline skills without going through the LLM tool-call round-trip.
+/// Context tier a skill declares for itself (`tier:` in SKILL.md
+/// frontmatter). Shared semantics with willdeep-rs (model-tiers.v1): this is
+/// a dispatch hint read *before* the skill body — a worker-tier skill is a
+/// spawn_agent candidate, not a reason to burn the parent's window. The point
+/// is sovereignty as much as cost: in an air-gapped deployment the deployable
+/// models are usually exactly the ones the worker and standard tiers run on.
+nonisolated enum AgentSkillTier: String, Sendable {
+    /// 32–64K window, verifiable or strongly templated work.
+    case worker
+    /// ~256K window: the session's default tier.
+    case standard
+    /// Long-context work that needs the largest window available.
+    case deep
+
+    /// Unknown spellings are user data, not errors: a skill written for some
+    /// other tool must not break discovery here.
+    static func parse(_ value: String) -> AgentSkillTier? {
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "worker", "small": return .worker
+        case "standard", "medium": return .standard
+        case "deep", "large": return .deep
+        default: return nil
+        }
+    }
+}
+
 nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable {
     let identifier: String
     let name: String
     let description: String
+    /// Declared context tier, if the skill's frontmatter names one. Defaults
+    /// to nil so the dozens of existing construction sites (tests included)
+    /// stay valid — an untagged skill is the common case, not an error.
+    let tier: AgentSkillTier?
     let url: URL
     let source: AgentSkillSource
     let isEnabled: Bool
+
+    init(
+        identifier: String,
+        name: String,
+        description: String,
+        tier: AgentSkillTier? = nil,
+        url: URL,
+        source: AgentSkillSource,
+        isEnabled: Bool
+    ) {
+        self.identifier = identifier
+        self.name = name
+        self.description = description
+        self.tier = tier
+        self.url = url
+        self.source = source
+        self.isEnabled = isEnabled
+    }
 
     var id: String { identifier }
 }
@@ -191,6 +263,7 @@ nonisolated enum AgentSkillDirectory {
                 identifier: record.identifier,
                 name: record.name,
                 description: record.description,
+                tier: record.tier,
                 url: record.url,
                 source: record.source,
                 isEnabled: isEnabled
@@ -271,6 +344,7 @@ nonisolated enum AgentSkillDirectory {
                 identifier: trimmed,
                 name: metadata.name.isEmpty ? trimmed : metadata.name,
                 description: metadata.description.isEmpty ? "(no description)" : metadata.description,
+                tier: metadata.tier,
                 url: url,
                 source: .bundled,
                 isEnabled: isEnabled
@@ -343,6 +417,7 @@ nonisolated enum AgentSkillDirectory {
                 identifier: identifier,
                 name: name,
                 description: metadata.description.isEmpty ? "(no description)" : metadata.description,
+                tier: metadata.tier,
                 url: url,
                 source: root.source,
                 isEnabled: true
@@ -365,21 +440,26 @@ nonisolated enum AgentSkillDirectory {
         return "\(trimmed[..<idx])\n\n[truncated]"
     }
 
-    private static func parseMetadata(from text: String) -> (name: String, description: String) {
+    static func parseMetadata(
+        from text: String
+    ) -> (name: String, description: String, tier: AgentSkillTier?) {
         let lines = text.components(separatedBy: .newlines)
-        guard lines.first == "---" else { return ("", "") }
+        guard lines.first == "---" else { return ("", "", nil) }
 
         var name = ""
         var description = ""
+        var tier: AgentSkillTier?
         for line in lines.dropFirst() {
             if line == "---" { break }
             if let value = yamlValue(line, key: "name") {
                 name = value
             } else if let value = yamlValue(line, key: "description") {
                 description = value
+            } else if let value = yamlValue(line, key: "tier") {
+                tier = AgentSkillTier.parse(value)
             }
         }
-        return (name, description)
+        return (name, description, tier)
     }
 
     private static func yamlValue(_ line: String, key: String) -> String? {

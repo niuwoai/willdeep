@@ -24,6 +24,54 @@ struct SettingsInformationArchitectureTests {
             preferredLanguages: ["fr-FR"],
             localeIdentifier: "de-DE"
         ) == "ja")
+        #expect(AppLocale.resolvedLanguageTag(
+            preference: .spanish,
+            preferredLanguages: ["ja-JP"],
+            localeIdentifier: "de-DE"
+        ) == "es")
+        #expect(AppLocale.resolvedLanguageTag(
+            preference: .french,
+            preferredLanguages: ["ja-JP"],
+            localeIdentifier: "de-DE"
+        ) == "fr")
+    }
+
+    @Test("every selectable language maps to a bundle locale except system")
+    func languagePreferenceTags() {
+        #expect(AppLanguagePreference.allCases.map(\.rawValue) == [
+            "system",
+            "simplifiedChinese",
+            "english",
+            "japanese",
+            "spanish",
+            "french",
+        ])
+        #expect(AppLanguagePreference.system.languageTag == nil)
+        // 每个非 system 选项都要有唯一的 BCP-47 标签,否则 Picker 里两
+        // 个条目会指向同一份 .lproj。
+        let tags = AppLanguagePreference.allCases.compactMap(\.languageTag)
+        #expect(tags == ["zh-Hans", "en", "ja", "es", "fr"])
+        #expect(Set(tags).count == tags.count)
+        // 提示卡片写的是语言自己的名字,不能空。
+        for preference in AppLanguagePreference.allCases {
+            #expect(!preference.nativeDisplayName.isEmpty)
+        }
+    }
+
+    @Test("relaunch hands the bundle path to sh as an argument, never inside the script")
+    func relaunchArgumentsKeepPathOutOfScript() {
+        let path = "/Applications/Some App (beta)'s \"build\".app"
+        let arguments = AppRelaunch.relaunchArguments(pid: 4242, bundlePath: path)
+        #expect(arguments.first == "-c")
+        #expect(arguments.count == 5)
+        // 路径以位置参数传入,脚本正文里不出现 → shell 不会二次解析它。
+        let script = arguments[1]
+        #expect(!script.contains(path))
+        #expect(script.contains("$1"))
+        #expect(script.contains("$2"))
+        #expect(arguments[2] == "sh")
+        #expect(arguments[3] == "4242")
+        #expect(arguments[4] == path)
     }
 
     @Test("settings groups follow task-oriented information architecture")
@@ -36,7 +84,6 @@ struct SettingsInformationArchitectureTests {
             .runtimes,
             .integrations,
             .terminal,
-            .voice,
             .pet,
             .agentAppearance,
             .general,
@@ -62,7 +109,6 @@ struct SettingsInformationArchitectureTests {
         #expect(!groupedTabs.contains(.workspace))
         #expect(groupedTabs.contains(.agentAppearance))
         #expect(groupedTabs.contains(.subagents))
-        #expect(groupedTabs.contains(.voice))
     }
 
     @Test("the replicate deep-link tab still resolves inside the integrations group")

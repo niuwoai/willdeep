@@ -55,12 +55,33 @@ final class WorkflowEngine {
         self.appState = appState
     }
 
+    /// The configuration a fan-out step runs on.
+    ///
+    /// Workflow steps used to inherit the parent's model wholesale, so a
+    /// ten-file fan-out paid ten times the parent's rate to do work a narrow
+    /// trade handles — and workflows bypass the per-session subagent cap, so
+    /// this is the largest single block of delegatable work in the app.
+    /// `deep` still resolves to the parent's configuration, keeping every
+    /// unannotated step byte-identical to before.
+    private func resolvedConfiguration(for profile: AgentSubagentProfile) -> AgentConfiguration {
+        guard profile.id != AgentSubagentProfileCatalog.deepID,
+              let appState else { return configuration }
+        return appState.resolvedSubagentConfiguration(
+            for: profile,
+            parentConfiguration: configuration
+        )
+    }
+
     // MARK: - DSL: agent
 
     /// 派一个 sub-agent 跑 prompt，await 拿到它的最终报告字符串。
     /// 失败抛 WorkflowError.subAgentFailed，由调用方决定整个 workflow
     /// 是否要 fail。
-    func agent(_ prompt: String, label: String) async throws -> String {
+    func agent(
+        _ prompt: String,
+        label: String,
+        profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep
+    ) async throws -> String {
         let subAgentID = UUID()
         let startedAt = Date()
         mutateReport { report in
@@ -76,11 +97,12 @@ final class WorkflowEngine {
         do {
             outcome = try await AgentSubagentRunner.run(
                 prompt: prompt,
-                configuration: configuration,
+                configuration: resolvedConfiguration(for: profile),
                 workspaceURL: workspaceURL,
                 runtimeDescriptor: runtimeDescriptor,
                 workspaceLocation: workspaceLocation,
-                someIMContext: someIMContext
+                someIMContext: someIMContext,
+                profile: profile
             )
         } catch is CancellationError {
             mutateReport { report in
@@ -131,7 +153,8 @@ final class WorkflowEngine {
         _ prompt: String,
         label: String,
         schema: AgentStructuredSchema,
-        decode: T.Type = T.self
+        decode: T.Type = T.self,
+        profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep
     ) async throws -> T {
         let subAgentID = UUID()
         let startedAt = Date()
@@ -148,12 +171,13 @@ final class WorkflowEngine {
         do {
             outcome = try await AgentSubagentRunner.run(
                 prompt: prompt,
-                configuration: configuration,
+                configuration: resolvedConfiguration(for: profile),
                 workspaceURL: workspaceURL,
                 runtimeDescriptor: runtimeDescriptor,
                 workspaceLocation: workspaceLocation,
                 someIMContext: someIMContext,
-                outputSchema: schema
+                outputSchema: schema,
+                profile: profile
             )
         } catch is CancellationError {
             mutateReport { report in
@@ -298,6 +322,29 @@ final class WorkflowEngine {
 
     private func mutateReport(_ mutation: (inout WorkflowReport) -> Void) {
         appState?.updateWorkflowReport(id: reportID, runtimeID: runtimeID, mutation: mutation)
+    }
+
+    // MARK: - Deterministic command capture
+
+    /// 在 workspace 里确定性地跑一条只读命令、拿 stdout；失败一律返回 nil，
+    /// 由调用方回落到"让 agent 自己想办法"的老路。
+    ///
+    /// 存在的理由：取 `git diff` / `gh pr diff` 这类素材不需要模型参与。
+    /// 之前的写法是让 fan-out 的每个维度 agent 各自跑一遍——既是 N 倍浪费，
+    /// 也让这些步骤依赖 shell 工具、永远下放不到没有 shell 的窄工种
+    /// （reviewer）。素材在这里取一次、内联进提示词，正是 Task Packet
+    /// "相关文件内联使 Worker 基本不需要搜索"的原则。
+    func capturedCommandOutput(
+        _ arguments: [String],
+        timeout: TimeInterval = 60
+    ) async -> String? {
+        let process = Process()
+        process.launchPath = "/usr/bin/env"
+        process.arguments = arguments
+        process.currentDirectoryURL = workspaceURL
+        guard let result = try? await AgentSubprocess.run(process, timeout: timeout),
+              result.exitStatus == 0 else { return nil }
+        return String(data: result.stdout, encoding: .utf8)
     }
 }
 

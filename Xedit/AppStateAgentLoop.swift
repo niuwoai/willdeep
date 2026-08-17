@@ -1756,6 +1756,9 @@ extension AppState {
                         settings: editorTerminalSettings
                     ),
                     sandboxMode: sandboxMode,
+                    // The main loop can spawn subagents; hints that end in
+                    // spawn_agent are only rendered for it.
+                    canSpawnSubagents: true,
                     isUnattendedDispatchTask: runtime.isUnattendedDispatchTask,
                     patchProposalSink: { title, diff, applyImmediately, workspaceRoot in
                         try self.enqueueAgentPatchProposal(
@@ -2439,10 +2442,15 @@ extension AppState {
                             sandboxNote = "\n\n" + note
                         }
                     }
+                    let dispatchHint = AgentWorkerDispatchHint.hint(
+                        toolName: call.toolName,
+                        arguments: argsDict,
+                        exitCode: (error as? AgentToolError)?.completedCommandExitCode
+                    ) ?? ""
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Tool error: \(errorMessage)\(sandboxNote)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)",
+                        payload: "Tool error: \(errorMessage)\(sandboxNote)\n\n(WillDeep: this tool call failed. Do not stop here — diagnose the cause from the exit code/stderr above and try another approach to accomplish the goal. Only give up if you are genuinely blocked, and then explain what you tried and what you still need.)\(dispatchHint)",
                         source: .systemNotice,
                         outcomeStatus: .failed,
                         errorMessage: errorMessage

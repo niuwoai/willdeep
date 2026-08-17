@@ -51,11 +51,18 @@ struct AgentSubagentRun: Identifiable, Equatable {
     let parentRuntimeID: UUID
     let model: String
     let startedAt: Date
+    /// Trade this run executes. Carried on the run itself so the completion
+    /// hook can attribute worker cost without re-reading the spawn arguments.
+    var profileID: String = AgentSubagentProfileCatalog.deep.id
+    /// Provider the child model ran on. Worker trades often bind a different
+    /// provider than the parent, and pricing is per (provider, model).
+    var providerID: String?
     var status: Status = .running
     var finishedAt: Date?
     /// Final assistant text from the child loop. Empty until finished.
     var report: String = ""
     var usageTokens: Int = 0
+    var usageSplit = AgentSubagentRunner.UsageSplit()
     var roundCount: Int = 0
     var toolInvocationCount: Int = 0
 
@@ -226,7 +233,9 @@ final class AgentSubagentRegistry: ObservableObject {
             prompt: prompt,
             parentRuntimeID: parentRuntimeID,
             model: configuration.model,
-            startedAt: Date()
+            startedAt: Date(),
+            profileID: profile.id,
+            providerID: configuration.providerID
         )
         runs.insert(run, at: 0)
         if let originatingTurnID {
@@ -266,6 +275,7 @@ final class AgentSubagentRegistry: ObservableObject {
                 status: .completed,
                 report: outcome.report,
                 usageTokens: outcome.usageTokens,
+                usageSplit: outcome.usageSplit,
                 roundCount: outcome.roundCount,
                 toolInvocationCount: outcome.toolInvocationCount,
                 rounds: outcome.rounds,
@@ -333,6 +343,7 @@ final class AgentSubagentRegistry: ObservableObject {
         status: AgentSubagentRun.Status,
         report: String,
         usageTokens: Int = 0,
+        usageSplit: AgentSubagentRunner.UsageSplit = .init(),
         roundCount: Int = 0,
         toolInvocationCount: Int = 0,
         rounds: [AgentSubagentTranscript.Round] = [],
@@ -345,6 +356,7 @@ final class AgentSubagentRegistry: ObservableObject {
         runs[index].finishedAt = Date()
         runs[index].report = report
         runs[index].usageTokens = usageTokens
+        runs[index].usageSplit = usageSplit
         runs[index].roundCount = roundCount
         runs[index].toolInvocationCount = toolInvocationCount
 
@@ -506,11 +518,47 @@ enum AgentSubagentRunner {
     /// 校验,通过即结束 loop,失败就把 issues 回 tool result 让模型重试。
     static let structuredOutputToolName = "structured_output"
 
+    /// Prompt/completion breakdown of a child loop, summed over its rounds.
+    /// Zero when the provider reported only a total (or nothing at all).
+    struct UsageSplit: Equatable {
+        var prompt = 0
+        var completion = 0
+        var cachedPrompt = 0
+
+        var wasReported: Bool { prompt > 0 || completion > 0 }
+    }
+
+    /// One execution of a task packet's verifier command.
+    ///
+    /// Pass/fail is the command's exit code, never the model's opinion:
+    /// `run_command` returns normally on exit 0 and throws `.commandFailed`
+    /// otherwise, so there is no output text to misread.
+    struct VerifierRun: Equatable {
+        let passed: Bool
+        let output: String
+    }
+
     struct Outcome: Equatable {
         let report: String
         let usageTokens: Int
+        /// Kept alongside the total so worker cost can be priced instead of
+        /// guessed: a child loop is prompt-heavy, and output tokens cost
+        /// several times what input does.
+        var usageSplit = UsageSplit()
         let roundCount: Int
         let toolInvocationCount: Int
+        /// Nil when the run had no verifier at all — distinct from `false`,
+        /// which means the command ran and did not pass. "Not verified" must
+        /// never be counted as a verified failure.
+        var verifierPassed: Bool? = nil
+        /// How many times the verifier ran. 0 when there was no verifier.
+        var verifierAttempts: Int = 0
+        /// Citations the runtime spot-checked in a report-only run, and how
+        /// many of them pointed at nothing. Read-only trades never earn a
+        /// verifier verdict, so without these two numbers they are invisible
+        /// in the telemetry — and invisible reads as fine.
+        var citationsChecked: Int = 0
+        var citationsUnverifiable: Int = 0
         /// Per-round record for the subagent inspector. The runner produces
         /// the rounds; the caller owns the run identity and stamps them into
         /// an `AgentSubagentTranscript` before persisting.
@@ -533,15 +581,23 @@ enum AgentSubagentRunner {
         workspaceURL: URL?,
         outputSchema: AgentStructuredSchema? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
-        writeAccess: AgentSubagentWriteAccess? = nil
+        writeAccess: AgentSubagentWriteAccess? = nil,
+        jobPromptIsHosted: Bool = false
     ) -> String {
         var lines: [String] = []
         lines.append("You are a focused subagent spawned by a coding agent to complete one task.")
         // `deep`'s own section only restates the generic opening, so it is
         // skipped — but a user-authored soul section on `deep` is not generic
         // and must still be sent.
-        let capabilitySection = profile.capabilityPromptSection
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        //
+        // A hosted trade's job section is prepended by the relay, so sending
+        // ours too would stack two copies of the same instructions and burn
+        // the tokens twice. The invariant rules below are never hosted: they
+        // are the client's safety boundary and always ship from here.
+        let capabilitySection = jobPromptIsHosted
+            ? ""
+            : profile.capabilityPromptSection
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         let isRedundantDeepSection = profile.id == AgentSubagentProfileCatalog.deepID
             && capabilitySection == AgentSubagentProfileCatalog.deep.capabilityPromptSection
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -553,7 +609,7 @@ enum AgentSubagentRunner {
         }
         if let writeAccess {
             lines.append("""
-            The ONLY file you may edit is `\(writeAccess.targetRelativePath)`. Patches touching any \
+            The ONLY files you may edit are \(writeAccess.displayList). Patches touching any \
             other path are rejected automatically.
             """)
         }
@@ -565,9 +621,9 @@ enum AgentSubagentRunner {
             // contradicted rule is worse than no rule.
             lines.append("""
             Rules:
-            - You have READ access plus ONE write tool (`apply_patch`), scoped to the single file named above. Everything else is denied.
+            - You have READ access plus ONE write tool (`apply_patch`), scoped to the files named above. Everything else is denied.
             - You cannot ask the user anything. Make reasonable assumptions and note them.
-            - Read the file before patching it. Keep the change minimal and consistent with surrounding code.
+            - Read a file before patching it. Keep the change minimal and consistent with surrounding code.
             - Work autonomously until the edit is done, then STOP calling tools and write your final report as a normal message.
             - Your final message IS the deliverable returned to the parent agent. State exactly what you changed and why, and flag anything you deliberately left alone.
             """)
@@ -739,7 +795,21 @@ enum AgentSubagentRunner {
         outputSchema: AgentStructuredSchema? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         writeAccess: AgentSubagentWriteAccess? = nil,
+        /// Command that decides whether this run succeeded. When present the
+        /// worker's own "done" is never accepted on its word.
+        verifierCommand: String? = nil,
+        verifierMaxAttempts: Int = AgentSubagentTaskPacket.defaultMaxAttempts,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil,
+        /// 仅 terminal_operator 工种需要：把父会话的侧栏终端 controller 递
+        /// 给子循环，terminal_* 工具才有执行对象。其余工种传了也会在
+        /// executeToolCall 里被丢弃。
+        terminalController: AgentInteractiveTerminalController? = nil,
+        /// 单命令授权（仅 ops_runner）：用户在 spawn 审批卡上批准的那条
+        /// 确切命令。子循环里恰好等于这条文本的 run_command 可以越过
+        /// "只许 read"的死门执行——语义上等同用户在主会话批准了这条命令，
+        /// 爆炸半径恰好一条。可重复执行（发布脚本按部署规范应幂等），
+        /// verifier 循环靠这一点重试。
+        approvedCommand: String? = nil,
         onProgress: ((_ round: Int, _ toolInvocations: Int) -> Void)? = nil
     ) async throws -> Outcome {
         // some.im-gated providers require the session/workspace context headers on
@@ -754,13 +824,42 @@ enum AgentSubagentRunner {
                     workspaceURL: workspaceURL,
                     outputSchema: outputSchema,
                     profile: profile,
-                    writeAccess: writeAccess
+                    writeAccess: writeAccess,
+                    // Derived rather than passed in: the relay hosts this
+                    // trade's job prompt exactly when we are actually calling
+                    // its hosted virtual model. Signed out, binding resolution
+                    // never pins that model, and an escalated re-run lands on
+                    // the parent's model — both correctly fall back to sending
+                    // our own copy, and the flag cannot drift from reality.
+                    jobPromptIsHosted: profile.hostedVirtualModel != nil
+                        && configuration.model == profile.hostedVirtualModel
                 )
             ),
             AgentMessage(role: .user, content: prompt),
         ]
         var totalTokens = 0
+        var usageSplit = UsageSplit()
         var toolInvocations = 0
+        var verifierAttempts = 0
+        var verifierPassed: Bool?
+
+        // A run with a verifier is judged by its exit code; a report-only run
+        // has nothing to judge it, so the runtime checks what the report
+        // cites. Structured output is exempt: the payload has to stay
+        // schema-valid, and an appended note would break it.
+        let auditCitations: (String) -> AgentSubagentCitationAudit.Result = { report in
+            guard verifierCommand == nil, outputSchema == nil else {
+                return AgentSubagentCitationAudit.Result()
+            }
+            return AgentSubagentCitationAudit.audit(
+                report: report,
+                workspaceURL: workspaceURL
+            )
+        }
+        let annotate: (String, AgentSubagentCitationAudit.Result) -> String = { report, audit in
+            guard let note = audit.note else { return report }
+            return "\(report)\n\n\(note)"
+        }
         // The trade's narrowed tool table — resent every round, so this is
         // where a cheap profile earns most of its savings.
         var toolList = toolDescriptors(
@@ -799,6 +898,9 @@ enum AgentSubagentRunner {
             reasoning = turn.reasoning
             toolCalls = turn.toolCalls
             totalTokens += turn.usageTokens
+            usageSplit.prompt += turn.promptTokens
+            usageSplit.completion += turn.completionTokens
+            usageSplit.cachedPrompt += turn.cachedPromptTokens
 
             transcript.append(AgentMessage(
                 role: .assistant,
@@ -875,8 +977,11 @@ enum AgentSubagentRunner {
                         return Outcome(
                             report: payload,
                             usageTokens: totalTokens,
+                            usageSplit: usageSplit,
                             roundCount: round,
                             toolInvocationCount: toolInvocations,
+                            verifierPassed: verifierPassed,
+                            verifierAttempts: verifierAttempts,
                             rounds: sealingRound(),
                             didTruncate: didTruncateRecord
                         )
@@ -890,6 +995,67 @@ enum AgentSubagentRunner {
             // 文本会收到纠正回合，而不是第一轮就把整个 Goal Team 判死。
             if toolCalls.isEmpty {
                 let report = content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // The worker says it is finished. With a verifier configured,
+                // that claim is not the verdict — the command is. Run it here
+                // rather than trusting the report, because "I fixed it" is
+                // exactly the sentence a stuck small model produces.
+                if let verifierCommand, verifierPassed != true {
+                    let verification = await runVerifier(
+                        command: verifierCommand,
+                        workspaceURL: workspaceURL,
+                        runtimeDescriptor: runtimeDescriptor,
+                        workspaceLocation: workspaceLocation
+                    )
+                    verifierAttempts += 1
+                    verifierPassed = verification.passed
+
+                    if !verification.passed, verifierAttempts < verifierMaxAttempts {
+                        transcript.append(AgentMessage(
+                            role: .user,
+                            content: verifierRetryMessage(
+                                command: verifierCommand,
+                                output: verification.output,
+                                attempt: verifierAttempts,
+                                maxAttempts: verifierMaxAttempts,
+                                payloadLimit: profile.toolPayloadCharacterLimit
+                            )
+                        ))
+                        recordedRound.finishedAt = Date()
+                        recordedRounds.append(recordedRound)
+                        continue
+                    }
+
+                    if !verification.passed {
+                        // Attempts exhausted: report the failure honestly and
+                        // hand the caller the evidence. A wrong "done" here
+                        // would poison every KPI built on this field.
+                        let clamped = AgentSubagentTranscript.clamped(
+                            verification.output,
+                            to: profile.toolPayloadCharacterLimit
+                        )
+                        return Outcome(
+                            report: """
+                            [Verifier still failing after \(verifierAttempts) attempt\(verifierAttempts == 1 ? "" : "s"). \
+                            `\(verifierCommand)` did not exit 0.]
+
+                            \(report)
+
+                            Last verifier output:
+                            \(clamped.text)
+                            """,
+                            usageTokens: totalTokens,
+                            usageSplit: usageSplit,
+                            roundCount: round,
+                            toolInvocationCount: toolInvocations,
+                            verifierPassed: false,
+                            verifierAttempts: verifierAttempts,
+                            rounds: sealingRound(),
+                            didTruncate: didTruncateRecord
+                        )
+                    }
+                }
+
                 if let outputSchema {
                     if let fallback = validatedStructuredOutputFallback(
                         in: report,
@@ -898,8 +1064,11 @@ enum AgentSubagentRunner {
                         return Outcome(
                             report: fallback,
                             usageTokens: totalTokens,
+                            usageSplit: usageSplit,
                             roundCount: round,
                             toolInvocationCount: toolInvocations,
+                            verifierPassed: verifierPassed,
+                            verifierAttempts: verifierAttempts,
                             rounds: sealingRound(),
                             didTruncate: didTruncateRecord
                         )
@@ -912,11 +1081,20 @@ enum AgentSubagentRunner {
                     recordedRounds.append(recordedRound)
                     continue
                 }
+                let finalReport = report.isEmpty
+                    ? "(subagent finished without producing a report)"
+                    : report
+                let audit = auditCitations(finalReport)
                 return Outcome(
-                    report: report.isEmpty ? "(subagent finished without producing a report)" : report,
+                    report: annotate(finalReport, audit),
                     usageTokens: totalTokens,
+                    usageSplit: usageSplit,
                     roundCount: round,
                     toolInvocationCount: toolInvocations,
+                    verifierPassed: verifierPassed,
+                    verifierAttempts: verifierAttempts,
+                    citationsChecked: audit.checked,
+                    citationsUnverifiable: audit.unverifiable.count,
                     rounds: sealingRound(),
                     didTruncate: didTruncateRecord
                 )
@@ -935,6 +1113,8 @@ enum AgentSubagentRunner {
                     workspaceLocation: workspaceLocation,
                     profile: profile,
                     writeAccess: writeAccess,
+                    terminalController: terminalController,
+                    approvedCommand: approvedCommand,
                     patchProposalSink: patchProposalSink
                 )
                 // Budgeted per trade: a 128K-window child cannot afford the
@@ -964,13 +1144,34 @@ enum AgentSubagentRunner {
 
         // Free-text 模式 round cap 到了 — return partial value rather than
         // throwing away every token the child already spent.
+        //
+        // Run the verifier once even here: a worker can run out of rounds
+        // narrating after the change already landed, and "did the tests pass"
+        // is worth one command before we call the run a loss.
+        if let verifierCommand, verifierPassed == nil {
+            let verification = await runVerifier(
+                command: verifierCommand,
+                workspaceURL: workspaceURL,
+                runtimeDescriptor: runtimeDescriptor,
+                workspaceLocation: workspaceLocation
+            )
+            verifierAttempts += 1
+            verifierPassed = verification.passed
+        }
         let lastText = transcript.last(where: { $0.role == .assistant && !$0.content.isEmpty })?.content ?? ""
         let note = "[Subagent stopped after \(roundLimit) tool rounds without a final report. Last progress shown below.]"
+        let cappedReport = lastText.isEmpty ? note : "\(note)\n\n\(lastText)"
+        let cappedAudit = auditCitations(cappedReport)
         return Outcome(
-            report: lastText.isEmpty ? note : "\(note)\n\n\(lastText)",
+            report: annotate(cappedReport, cappedAudit),
             usageTokens: totalTokens,
+            usageSplit: usageSplit,
             roundCount: roundLimit,
             toolInvocationCount: toolInvocations,
+            verifierPassed: verifierPassed,
+            verifierAttempts: verifierAttempts,
+            citationsChecked: cappedAudit.checked,
+            citationsUnverifiable: cappedAudit.unverifiable.count,
             rounds: recordedRounds,
             didTruncate: didTruncateRecord
         )
@@ -1061,9 +1262,88 @@ enum AgentSubagentRunner {
         return (true, trimmed)
     }
 
-    /// Execute one child tool call, enforcing the read-only contract.
-    /// Errors are folded into the payload string — the child should see
-    /// what went wrong and adapt, exactly like the parent loop does.
+    /// Whether `command` clears the deterministic read-tier bar on its own.
+    ///
+    /// Not the whole gate: a verifier that writes (a build emitting objects, a
+    /// test writing fixtures) is still a legitimate verdict, so the spawn site
+    /// sends anything that fails this check to the security-guard judge rather
+    /// than refusing it. What must never happen is a verifier running
+    /// unattended with no gate at all.
+    static func verifierCommandIsReadTier(_ command: String, workspaceURL: URL?) -> Bool {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return AgentToolRegistry.risk(
+            for: "run_command",
+            arguments: ["command": .string(trimmed)],
+            rootDirectory: workspaceURL
+        ) == .read
+    }
+
+    /// Run a task packet's verifier command and report the verdict.
+    ///
+    /// Deliberately not a tool the worker calls: if the model owned the
+    /// verification step it could skip it, misread it, or claim it ran. Here
+    /// the runner runs it, and the exit code is the whole judgement.
+    static func runVerifier(
+        command: String,
+        workspaceURL: URL?,
+        runtimeDescriptor: RuntimeDescriptor? = nil,
+        workspaceLocation: WorkspaceLocation? = nil
+    ) async -> VerifierRun {
+        let context = AgentToolContext(
+            rootDirectory: workspaceURL,
+            workspaceLocation: workspaceLocation,
+            runtimeDescriptor: runtimeDescriptor
+        )
+        do {
+            let result = try await AgentToolRunner.run(
+                name: "run_command",
+                arguments: ["command": .string(command)],
+                context: context
+            )
+            return VerifierRun(passed: true, output: result.payload)
+        } catch let error as AgentToolError {
+            if case .commandFailed(_, let output) = error {
+                return VerifierRun(passed: false, output: output)
+            }
+            return VerifierRun(passed: false, output: error.localizedDescription)
+        } catch {
+            return VerifierRun(passed: false, output: error.localizedDescription)
+        }
+    }
+
+    /// The failure text handed back to the worker between attempts. Trimmed to
+    /// the trade's payload budget so a 200-line build log cannot eat the
+    /// window the fix itself needs.
+    nonisolated static func verifierRetryMessage(
+        command: String,
+        output: String,
+        attempt: Int,
+        maxAttempts: Int,
+        payloadLimit: Int
+    ) -> String {
+        let clamped = AgentSubagentTranscript.clamped(output, to: payloadLimit)
+        let truncationNote = clamped.didTruncate ? "\n… (output truncated)" : ""
+        return """
+        The verifier failed (attempt \(attempt) of \(maxAttempts)).
+
+        `\(command)` did not exit 0:
+        \(clamped.text)\(truncationNote)
+
+        You are not done. Read the failure, refine your hypothesis, and fix the \
+        cause — do not repeat an attempt you already made, and do not weaken the \
+        check to make it pass. If you now believe the fix belongs outside the \
+        files you may edit, stop and say so instead of guessing.
+        """
+    }
+
+    /// 单命令授权的匹配规则：修剪首尾空白后的**精确相等**。刻意不做
+    /// 前缀/家族匹配——用户批准的是一条命令，不是一类命令。
+    nonisolated static func approvedCommandMatches(_ candidate: String, approved: String) -> Bool {
+        candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            == approved.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func executeToolCall(
         _ call: AgentMessageToolCall,
         workspaceURL: URL?,
@@ -1071,6 +1351,8 @@ enum AgentSubagentRunner {
         workspaceLocation: WorkspaceLocation? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         writeAccess: AgentSubagentWriteAccess? = nil,
+        terminalController: AgentInteractiveTerminalController? = nil,
+        approvedCommand: String? = nil,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil
     ) async -> String {
         let permitted = profile.effectiveToolNames(writeAccessGranted: writeAccess != nil)
@@ -1117,7 +1399,34 @@ enum AgentSubagentRunner {
         // for one specific file. Everything else stays read-only.
         let isApprovedWrite = writeAccess != nil
             && AgentSubagentProfileCatalog.editorWriteToolNames.contains(call.toolName)
-        guard risk == .read || isApprovedWrite else {
+        // terminal_operator 的 send_command 是 .write 档，但放行的口子开得
+        // 很窄：命令文本自己必须分类为只读（`kubectl get` 能敲，`rm` 在这
+        // 里就被拒）。终端是用户的真实 shell，seatbelt 管不到那里，所以这
+        // 道文本分类闸是唯一的边界——分不出只读的一律拒。此外一切都发生
+        // 在用户可见的侧栏终端里，本身就是一层监督。
+        let isTerminalOperatorReadOnlySend: Bool = {
+            guard call.toolName == "terminal_send_command",
+                  profile.id == AgentSubagentProfileCatalog.terminalOperatorID,
+                  let command = argsDict["command"]?.stringValue() else { return false }
+            return AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: workspaceURL
+            ).risk == .read
+        }()
+        // 单命令授权：用户在 spawn 审批卡上批准的那条确切命令（仅
+        // ops_runner）。精确文本匹配——多一个字符都不放。
+        let isApprovedCommandRun: Bool = {
+            guard call.toolName == "run_command",
+                  profile.id == AgentSubagentProfileCatalog.opsRunnerID,
+                  let approvedCommand,
+                  let command = argsDict["command"]?.stringValue() else { return false }
+            return approvedCommandMatches(command, approved: approvedCommand)
+        }()
+        guard risk == .read || isApprovedWrite || isTerminalOperatorReadOnlySend || isApprovedCommandRun else {
+            if call.toolName == "terminal_send_command",
+               profile.id == AgentSubagentProfileCatalog.terminalOperatorID {
+                return "Denied: this command did not classify as read-only, and the terminal-operator trade may only send read-only commands. Report it back to the parent agent instead of working around the denial."
+            }
             return "Denied: subagents may only run read-only operations, and this call classified as `\(risk.rawValue)`. Report the suggested change to the parent agent instead of performing it."
         }
 
@@ -1127,11 +1436,36 @@ enum AgentSubagentRunner {
         // The patch sink is handed down only for an approved editor trade,
         // so `apply_patch` remains unreachable for every other subagent —
         // the tool errors out without a sink even if it somehow got called.
+        // 子代理的 run_command 沙箱档按命令自身的分类走，而不是死钉
+        // .readOnly：查询类命令（kubectl get / gh run list）分类为
+        // readOnlyNetwork，钉 readOnly 会 deny network，把它们全逼进
+        // "假 DNS 失败"——ops_runner 上架即残废。被授权的单命令则拿它
+        // 分类应得的档（发布脚本通常是 workspaceWriteNetworkCredentialed，
+        // 正好接上凭证沙箱的 ~/.ssh）。
+        var sandboxMode: AgentSandboxMode = .readOnly
+        if call.toolName == "run_command",
+           let command = argsDict["command"]?.stringValue() {
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: workspaceURL
+            )
+            if isApprovedCommandRun {
+                sandboxMode = decision.mode
+            } else if decision.mode == .readOnlyNetwork {
+                sandboxMode = .readOnlyNetwork
+            }
+        }
+
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: runtimeDescriptor,
-            patchProposalSink: writeAccess == nil ? nil : patchProposalSink
+            sandboxMode: sandboxMode,
+            patchProposalSink: writeAccess == nil ? nil : patchProposalSink,
+            // 终端 controller 只随 terminal_operator 下发；其他工种即便被
+            // 允许调 snapshot 之类，也拿不到执行所需的 controller。
+            terminalController: profile.id == AgentSubagentProfileCatalog.terminalOperatorID
+                ? terminalController : nil
         )
         do {
             let result = try await AgentToolRunner.run(
@@ -1155,6 +1489,13 @@ private actor SubagentTurnCollector {
         var reasoning = ""
         var toolCalls: [AgentMessageToolCall] = []
         var usageTokens = 0
+        /// Kept split, not just totalled: a child loop resends its whole
+        /// history every round, so its cost is overwhelmingly prompt-side.
+        /// Collapsing to a total forces the dashboard to guess the ratio,
+        /// and output tokens cost several times what input does.
+        var promptTokens = 0
+        var completionTokens = 0
+        var cachedPromptTokens = 0
     }
 
     private var turn = Turn()
@@ -1171,8 +1512,11 @@ private actor SubagentTurnCollector {
             break
         case .finishedTurn:
             break
-        case .usageReported(_, _, let total, _, _, _):
+        case .usageReported(let prompt, let completion, let total, let cachedPrompt, _, _):
             turn.usageTokens = total
+            turn.promptTokens = prompt
+            turn.completionTokens = completion
+            turn.cachedPromptTokens = cachedPrompt ?? 0
         }
     }
 

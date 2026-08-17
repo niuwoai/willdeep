@@ -85,6 +85,16 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
     /// Skills preloaded into this trade's system prompt at spawn time. Empty
     /// for every built-in trade; filled in from the profile's soul.
     var skillIdentifiers: [String]
+    /// some.im virtual model that hosts this trade's job prompt server-side
+    /// (`someim-32b-<skill>`). Non-nil marks a **managed trade**: while the
+    /// user is signed in to some.im its model is pinned to this id and its job
+    /// prompt is prepended by the relay, so the client sends neither and the
+    /// settings row shows the model as locked. Signed out, the trade falls
+    /// back to the user's own binding (or the session's model) and the client
+    /// sends `capabilityPromptSection`, which is the offline mirror of the
+    /// hosted text — see docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3.8.
+    /// Nil for `deep` / `tester` / `reviewer`, which stay user-configurable.
+    var hostedVirtualModel: String?
 
     init(
         id: String,
@@ -96,7 +106,8 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         toolPayloadCharacterLimit: Int,
         escalation: EscalationPolicy = .none,
         requiresWriteAccess: Bool = false,
-        skillIdentifiers: [String] = []
+        skillIdentifiers: [String] = [],
+        hostedVirtualModel: String? = nil
     ) {
         self.id = id
         self.purpose = purpose
@@ -108,6 +119,14 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         self.escalation = escalation
         self.requiresWriteAccess = requiresWriteAccess
         self.skillIdentifiers = skillIdentifiers
+        self.hostedVirtualModel = hostedVirtualModel
+    }
+
+    /// Whether this spawn runs against the relay-hosted job prompt right now.
+    /// Resolved at spawn time, never at configuration time, so signing in or
+    /// out changes behaviour without migrating anyone's saved settings.
+    func usesHostedJobPrompt(someIMAuthenticated: Bool) -> Bool {
+        someIMAuthenticated && hostedVirtualModel != nil
     }
 
     /// The tools this trade may actually call.
@@ -120,6 +139,13 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         if requiresWriteAccess, writeAccessGranted {
             allowed.formUnion(AgentSubagentProfileCatalog.editorWriteToolNames)
         }
+        // 终端工具照 editor 写工具的先例走**按工种放行**，不进全局白名单：
+        // 进了全局名单，deep/tester 会静默获得读用户终端屏幕的能力。
+        // send_command 虽在此放行，执行层仍有第二道闸——只许命令文本分类
+        // 为只读的（见 AgentSubagents.executeToolCall）。
+        if id == AgentSubagentProfileCatalog.terminalOperatorID {
+            allowed.formUnion(AgentSubagentProfileCatalog.terminalOperatorToolNames)
+        }
         return toolNames.intersection(allowed)
     }
 
@@ -130,6 +156,14 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.editorID: return L10n.AgentDelegation.profileEditorName
         case AgentSubagentProfileCatalog.testerID: return L10n.AgentDelegation.profileTesterName
         case AgentSubagentProfileCatalog.reviewerID: return L10n.AgentDelegation.profileReviewerName
+        case AgentSubagentProfileCatalog.testFixerID: return L10n.AgentDelegation.profileTestFixerName
+        case AgentSubagentProfileCatalog.buildFixerID: return L10n.AgentDelegation.profileBuildFixerName
+        case AgentSubagentProfileCatalog.logInspectorID: return L10n.AgentDelegation.profileLogInspectorName
+        case AgentSubagentProfileCatalog.gitDetectiveID: return L10n.AgentDelegation.profileGitDetectiveName
+        case AgentSubagentProfileCatalog.securityGuardID: return L10n.AgentDelegation.profileSecurityGuardName
+        case AgentSubagentProfileCatalog.judgeID: return L10n.AgentDelegation.profileJudgeName
+        case AgentSubagentProfileCatalog.opsRunnerID: return L10n.AgentDelegation.profileOpsRunnerName
+        case AgentSubagentProfileCatalog.terminalOperatorID: return L10n.AgentDelegation.profileTerminalOperatorName
         default: return L10n.AgentDelegation.profileDeepName
         }
     }
@@ -144,6 +178,14 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.editorID: return L10n.AgentDelegation.profileEditorPurpose
         case AgentSubagentProfileCatalog.testerID: return L10n.AgentDelegation.profileTesterPurpose
         case AgentSubagentProfileCatalog.reviewerID: return L10n.AgentDelegation.profileReviewerPurpose
+        case AgentSubagentProfileCatalog.testFixerID: return L10n.AgentDelegation.profileTestFixerPurpose
+        case AgentSubagentProfileCatalog.buildFixerID: return L10n.AgentDelegation.profileBuildFixerPurpose
+        case AgentSubagentProfileCatalog.logInspectorID: return L10n.AgentDelegation.profileLogInspectorPurpose
+        case AgentSubagentProfileCatalog.gitDetectiveID: return L10n.AgentDelegation.profileGitDetectivePurpose
+        case AgentSubagentProfileCatalog.securityGuardID: return L10n.AgentDelegation.profileSecurityGuardPurpose
+        case AgentSubagentProfileCatalog.judgeID: return L10n.AgentDelegation.profileJudgePurpose
+        case AgentSubagentProfileCatalog.opsRunnerID: return L10n.AgentDelegation.profileOpsRunnerPurpose
+        case AgentSubagentProfileCatalog.terminalOperatorID: return L10n.AgentDelegation.profileTerminalOperatorPurpose
         default: return L10n.AgentDelegation.profileDeepPurpose
         }
     }
@@ -158,10 +200,37 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let editorID = "editor"
     static let testerID = "tester"
     static let reviewerID = "reviewer"
+    static let testFixerID = "test_fixer"
+    static let buildFixerID = "build_fixer"
+    static let logInspectorID = "log_inspector"
+    static let gitDetectiveID = "git_detective"
+    static let securityGuardID = "security_guard"
+    static let judgeID = "judge"
+    static let opsRunnerID = "ops_runner"
+    static let terminalOperatorID = "terminal_operator"
+
+    /// Per-tool-result cap for the 32K-window worker tier. Well under the
+    /// 8K the 128K trades use: at 32K a single fat `read_file` is the
+    /// difference between a run that finishes and a run that blows the window
+    /// on round two (docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md §2).
+    static let workerPayloadCharacterLimit = 4_000
+    /// Window pinned for the worker tier. `someim-32b` is a tier name, not a
+    /// context promise — the small-context discipline is enforced here, on the
+    /// client, which is also what makes the collected P50/P95 data meaningful.
+    static let workerContextWindowTokens = 32_768
 
     /// Tools the editor trade adds on top of the read-only set, and only
     /// while its per-file approval is held.
     static let editorWriteToolNames: Set<String> = ["apply_patch"]
+
+    /// Tools the terminal-operator trade adds on top of the read-only set.
+    /// snapshot / list_tabs / select_tab 本来就是 .read 档；send_command
+    /// 是 .write，但执行层限定其命令文本必须分类为只读才放行。刻意不含
+    /// send_control——打断用户前台任务的爆炸半径不给子代理。
+    static let terminalOperatorToolNames: Set<String> = [
+        "terminal_list_tabs", "terminal_select_tab",
+        "terminal_snapshot", "terminal_send_command",
+    ]
 
     /// Default binding for the cheap trades: some.im's GLM tier when the
     /// user is signed in, otherwise inherit the parent (resolved at spawn
@@ -169,7 +238,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     private static let cheapBinding = AgentSubagentProfile.ModelBinding(
         preferredProviderID: AgentProviderPreset.someIMID,
         model: "glm-5",
-        contextWindowTokens: 128_000
+        contextWindowTokens: workerContextWindowTokens
     )
 
     /// Deep used to inherit the parent session. Subagents now default to a
@@ -187,14 +256,11 @@ nonisolated enum AgentSubagentProfileCatalog {
         purpose: "Locate things: find files, symbols, call sites, or answer \"where is X / does X exist\". Fastest and cheapest; no shell.",
         modelBinding: cheapBinding,
         toolNames: ["grep_files", "search_files", "list_directory", "read_file"],
-        capabilityPromptSection: """
-        Your trade is LOCATION. Find where things live and report exact paths with line numbers. \
-        Read only as much of a file as you need to confirm a match. Do not review, critique, or \
-        redesign what you find — report where it is and move on.
-        """,
+        capabilityPromptSection: AgentSubagentJobPrompts.scout,
         maxRounds: 8,
-        toolPayloadCharacterLimit: 8_000,
-        escalation: .retryWithParentModel
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: scoutID)
     )
 
     static let reader = AgentSubagentProfile(
@@ -202,14 +268,11 @@ nonisolated enum AgentSubagentProfileCatalog {
         purpose: "Read and summarize: digest long files, docs, or public web pages and answer questions about their content. No shell.",
         modelBinding: cheapBinding,
         toolNames: ["read_file", "list_directory", "web_search"],
-        capabilityPromptSection: """
-        Your trade is READING. Digest the sources you are pointed at and answer with specifics \
-        (quotes, paths, line numbers) rather than impressions. When a source is too large to read \
-        whole, say which parts you read.
-        """,
+        capabilityPromptSection: AgentSubagentJobPrompts.reader,
         maxRounds: 8,
-        toolPayloadCharacterLimit: 8_000,
-        escalation: .retryWithParentModel
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: readerID)
     )
 
     /// The full read-only investigation trade. Any spawn that does not name a
@@ -235,16 +298,12 @@ nonisolated enum AgentSubagentProfileCatalog {
         purpose: "Edit ONE approved file. Requires a `target_file` argument and the user's approval; cannot touch any other path.",
         modelBinding: cheapBinding,
         toolNames: ["read_file", "apply_patch"],
-        capabilityPromptSection: """
-        Your trade is EDITING EXACTLY ONE FILE. You may only patch the target file named in your \
-        task; any other path is denied. Read the file before patching it, keep the change minimal \
-        and consistent with the surrounding code, and report what you changed and why. If the \
-        change cannot be made safely within this one file, make no edit and say so.
-        """,
+        capabilityPromptSection: AgentSubagentJobPrompts.editor,
         maxRounds: 6,
-        toolPayloadCharacterLimit: 8_000,
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
         escalation: .retryWithParentModel,
-        requiresWriteAccess: true
+        requiresWriteAccess: true,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: editorID)
     )
 
     /// Runs the gates and reports evidence. Deliberately has the read-only
@@ -287,7 +346,136 @@ nonisolated enum AgentSubagentProfileCatalog {
         escalation: .none
     )
 
-    static let builtIn: [AgentSubagentProfile] = [scout, reader, deep, editor, tester, reviewer]
+    /// Fixes a failing test to green. Unlike `editor` it needs more than one
+    /// file — the implementation and its test usually move together — so it
+    /// runs on the file-set write channel, and unlike `tester` it is allowed
+    /// to change code. The separation stays honest because the verdict is not
+    /// its own: the verifier command decides, not the model.
+    static let testFixer = AgentSubagentProfile(
+        id: testFixerID,
+        purpose: "Fix a failing test to green within the files listed in the task. Requires a `task` with `relevant_files` and a `verifier` command; the verifier's exit code decides success, not the model.",
+        modelBinding: cheapBinding,
+        toolNames: ["read_file", "grep_files", "apply_patch", "run_command"],
+        capabilityPromptSection: AgentSubagentJobPrompts.testFixer,
+        maxRounds: 6,
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        requiresWriteAccess: true,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: testFixerID)
+    )
+
+    static let buildFixer = AgentSubagentProfile(
+        id: buildFixerID,
+        purpose: "Fix compiler, type-check, or lint failures within the files listed in the task. Requires a `task` with `relevant_files` and a build/lint `verifier` command.",
+        modelBinding: cheapBinding,
+        toolNames: ["read_file", "grep_files", "apply_patch", "run_command"],
+        capabilityPromptSection: AgentSubagentJobPrompts.buildFixer,
+        maxRounds: 6,
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        requiresWriteAccess: true,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: buildFixerID)
+    )
+
+    /// Reads pre-processed log excerpts. No shell: whoever hands this trade
+    /// its input is responsible for slicing the log deterministically, which
+    /// is the whole reason a small model can do this job at all.
+    static let logInspector = AgentSubagentProfile(
+        id: logInspectorID,
+        purpose: "Explain errors, stack traces, or pre-processed log excerpts: cluster them, rank by severity, quote the decisive lines. Read-only, no shell.",
+        modelBinding: cheapBinding,
+        toolNames: ["read_file", "grep_files", "list_directory"],
+        capabilityPromptSection: AgentSubagentJobPrompts.logInspector,
+        maxRounds: 6,
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: logInspectorID)
+    )
+
+    static let gitDetective = AgentSubagentProfile(
+        id: gitDetectiveID,
+        purpose: "Answer repository-history questions: which commit introduced a regression, what a commit changed, how branches differ. Read-only git; never modifies repository state.",
+        modelBinding: cheapBinding,
+        toolNames: ["read_file", "grep_files", "git_status", "run_command"],
+        capabilityPromptSection: AgentSubagentJobPrompts.gitDetective,
+        maxRounds: 8,
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: gitDetectiveID)
+    )
+
+    /// Judgement trades: no tools at all. They answer a bounded question about
+    /// material handed to them, so a tool table would only give a small model
+    /// room to wander — and a judge that goes looking for more evidence is a
+    /// judge that stopped answering the question.
+    static let securityGuard = AgentSubagentProfile(
+        id: securityGuardID,
+        purpose: "Decide whether one command is safe to run unattended. Answers with a verdict and one sentence of reason; has no tools and cannot run anything itself.",
+        modelBinding: cheapBinding,
+        toolNames: [],
+        capabilityPromptSection: AgentSubagentJobPrompts.securityGuard,
+        maxRounds: 1,
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: securityGuardID)
+    )
+
+    static let judge = AgentSubagentProfile(
+        id: judgeID,
+        purpose: "Return one bounded verdict about material you supply — a routing choice, a quality check, a classification. No tools; answers only from what it is given.",
+        modelBinding: cheapBinding,
+        toolNames: [],
+        capabilityPromptSection: AgentSubagentJobPrompts.judge,
+        maxRounds: 1,
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: judgeID)
+    )
+
+    static let opsRunner = AgentSubagentProfile(
+        id: opsRunnerID,
+        purpose: "Read-only operations queries via shell: service status, log tails, `kubectl get/describe/logs`, `gh run list`, CI results. The sandbox denies anything that mutates state, so it can inspect but never change.",
+        modelBinding: cheapBinding,
+        toolNames: ["run_command", "read_file", "grep_files", "list_directory"],
+        capabilityPromptSection: AgentSubagentJobPrompts.opsRunner,
+        maxRounds: 8,
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: opsRunnerID)
+    )
+
+    static let terminalOperator = AgentSubagentProfile(
+        id: terminalOperatorID,
+        purpose: "Drive the visible side-panel terminal: run given read-only commands in a specified tab, read the screen, report results. Everything happens in front of the user; write commands are denied by policy.",
+        modelBinding: cheapBinding,
+        toolNames: [
+            "terminal_list_tabs", "terminal_select_tab",
+            "terminal_snapshot", "terminal_send_command", "read_file",
+        ],
+        capabilityPromptSection: AgentSubagentJobPrompts.terminalOperator,
+        // 每条命令要「snapshot → send → snapshot」三步起，轮次给足。
+        maxRounds: 12,
+        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: terminalOperatorID)
+    )
+
+    static let builtIn: [AgentSubagentProfile] = [
+        scout,
+        reader,
+        deep,
+        editor,
+        tester,
+        reviewer,
+        testFixer,
+        buildFixer,
+        logInspector,
+        gitDetective,
+        securityGuard,
+        judge,
+        opsRunner,
+        terminalOperator,
+    ]
 
     /// Resolve a spawn's `profile` argument. Unknown or missing → `deep`,
     /// which is the behaviour every pre-profile caller already expects.

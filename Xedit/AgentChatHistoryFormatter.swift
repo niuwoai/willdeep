@@ -1356,9 +1356,13 @@ enum AgentChatHistoryRenderer {
                         .foregroundColor: secondaryColor,
                     ]
                 ))
+                // block.text 是从**已经插过零宽断点**的 `safe` 里解析出来
+                // 的(见 appendMarkdownBody),直接当复制载荷会把 U+200B 一起
+                // 送进剪贴板——粘到终端或编译器里就是一串查无此因的报错。
+                // 渲染仍用带断点的 block.text,只有复制走净化版。
                 result.append(AgentChatHistoryCodeCopyChrome.button(
                     copied: false,
-                    code: block.text,
+                    code: AgentCopyTextSanitizer.sanitize(block.text),
                     font: codeHeaderFont,
                     color: secondaryColor
                 ))
