@@ -699,12 +699,30 @@ private struct QueuedMessageRow: View {
                 // one of them is destructive, so they move behind the overflow
                 // menu where a stray click cannot reach them.
                 HStack(spacing: 2) {
-                    iconButton(
-                        systemName: "paperplane.fill",
-                        accessibilityLabel: L10n.QueuedMessage.sendNowButton,
-                        help: L10n.QueuedMessage.sendNowButtonHelp,
-                        action: onSendNow
+                    Button(action: onSendNow) {
+                        HStack(spacing: 5) {
+                            Text(L10n.QueuedMessage.sendNowCompact)
+                            Image(systemName: "return")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 9)
+                        .frame(minHeight: 28)
+                        .contentShape(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .background(Color.primary.opacity(0.055))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.primary.opacity(0.10), lineWidth: 1)
                     )
+                    .focusable(false)
+                    .accessibilityLabel(L10n.QueuedMessage.sendNowButton)
+                    .help(L10n.QueuedMessage.sendNowButtonHelp)
                     Menu {
                         Button(L10n.QueuedMessage.editButton, action: onEdit)
                         Button(L10n.QueuedMessage.deleteButton, role: .destructive, action: onRemove)

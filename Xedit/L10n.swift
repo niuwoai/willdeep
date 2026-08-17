@@ -1276,6 +1276,7 @@ nonisolated enum L10n {
         static let label = String(localized: "queued-message.label", defaultValue: "Queued")
         static let sendNowButton = String(localized: "queued-message.send-now-button", defaultValue: "Send queued message now")
         static let sendNowButtonHelp = String(localized: "queued-message.send-now-button.help", defaultValue: "Send this queued message now")
+        static let sendNowCompact = String(localized: "queued-message.send-now-compact", defaultValue: "Send now")
         static func textAttachmentCount(_ a1: String) -> String {
             let template = String(localized: "queued-message.text-attachment-count", defaultValue: "%@ text attachments")
             return String(format: template, a1)

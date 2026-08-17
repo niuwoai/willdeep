@@ -9,6 +9,27 @@
 import Foundation
 
 extension L10n.ToolCard {
+    static let askUserEyebrow = String(
+        localized: "tool-card.ask-user.eyebrow",
+        defaultValue: "Agent wants to know"
+    )
+    static let askUserSingleHint = String(
+        localized: "tool-card.ask-user.single-hint",
+        defaultValue: "Choose an answer or enter your own."
+    )
+    static let askUserMultipleHint = String(
+        localized: "tool-card.ask-user.multiple-hint",
+        defaultValue: "Choose one or more answers, or add your own."
+    )
+    static let askUserFooterTitle = String(
+        localized: "tool-card.ask-user.footer-title",
+        defaultValue: "Submit answer"
+    )
+    static let askUserFooterHint = String(
+        localized: "tool-card.ask-user.footer-hint",
+        defaultValue: "Agent will continue the current task using your answer."
+    )
+
     static let sandboxEscalationTitle = String(
         localized: "tool-card.authorization.sandbox-escalation.title",
         defaultValue: "Sandbox blocked this command"

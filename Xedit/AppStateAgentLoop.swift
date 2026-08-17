@@ -1690,6 +1690,7 @@ extension AppState {
             func makeToolContext(
                 sandboxMode: AgentSandboxMode,
                 patchAutoApplySource: AgentToolApprovalSource?,
+                automaticBackgroundSandboxRetryApprovalSource: AgentToolApprovalSource? = nil,
                 delegatedProgressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)? = nil
             ) -> AgentToolContext {
                 let delegatedApprovalHandler: (@MainActor (AgentDelegatedApprovalRequest) async -> AgentDelegatedApprovalDecision)?
@@ -1756,6 +1757,7 @@ extension AppState {
                         settings: editorTerminalSettings
                     ),
                     sandboxMode: sandboxMode,
+                    automaticBackgroundSandboxRetryApprovalSource: automaticBackgroundSandboxRetryApprovalSource,
                     // The main loop can spawn subagents; hints that end in
                     // spawn_agent are only rendered for it.
                     canSpawnSubagents: true,
@@ -2108,6 +2110,16 @@ extension AppState {
                 } else {
                     liveProgressSink = nil
                 }
+                let currentApprovalSource = runtime.toolCalls
+                    .first(where: { $0.id == recordID })?
+                    .approvalSource
+                    ?? autoApproval
+                let automaticBackgroundSandboxRetrySource = Self
+                    .automaticBackgroundSandboxRetryApprovalSource(
+                        approvalMode: runtime.approvalMode,
+                        existingApprovalSource: currentApprovalSource,
+                        isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
+                    )
                 let context = makeToolContext(
                     sandboxMode: sandboxModeForToolExecution(
                         risk: risk,
@@ -2116,6 +2128,7 @@ extension AppState {
                         isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
                     ),
                     patchAutoApplySource: patchAutoApplySource,
+                    automaticBackgroundSandboxRetryApprovalSource: automaticBackgroundSandboxRetrySource,
                     delegatedProgressSink: liveProgressSink
                 )
                 // Only tabs absent from this snapshot can have been created by

@@ -2032,6 +2032,70 @@ struct AgentToolsCoreTests {
                 approvalMode: .workspaceAccess
             )
         )
+
+        #expect(
+            AppState.automaticBackgroundSandboxRetryApprovalSource(
+                approvalMode: .smart,
+                existingApprovalSource: .llmJudge,
+                isUnattendedDispatchTask: false
+            ) == .llmJudge
+        )
+        #expect(
+            AppState.automaticBackgroundSandboxRetryApprovalSource(
+                approvalMode: .requestEveryTime,
+                existingApprovalSource: .user,
+                isUnattendedDispatchTask: false
+            ) == nil
+        )
+        #expect(
+            AppState.automaticBackgroundSandboxRetryApprovalSource(
+                approvalMode: .workspaceAccess,
+                existingApprovalSource: .alwaysAllowList,
+                isUnattendedDispatchTask: false
+            ) == .alwaysAllowList
+        )
+        #expect(
+            AppState.automaticBackgroundSandboxRetryApprovalSource(
+                approvalMode: .requestEveryTime,
+                existingApprovalSource: nil,
+                isUnattendedDispatchTask: true
+            ) == .dispatchTask
+        )
+    }
+
+    @Test("后台 run_command 会把宿主恢复许可交给任务注册表")
+    func backgroundRunCommandCarriesAutomaticSandboxRetryGrant() async throws {
+        let registry = AgentJobRegistry()
+        let runtimeID = UUID()
+        let context = AgentToolContext(
+            rootDirectory: FileManager.default.temporaryDirectory,
+            runtimeID: runtimeID,
+            jobRegistry: registry,
+            sandboxMode: .workspaceWrite,
+            automaticBackgroundSandboxRetryApprovalSource: .llmJudge
+        )
+
+        _ = try await AgentToolRunner.run(
+            name: "run_command",
+            arguments: [
+                "command": .string("printf 'EACCES: permission denied\\n' >&2; exit 1"),
+                "run_in_background": .bool(true),
+            ],
+            context: context
+        )
+
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline,
+              registry.jobs.count < 2 || registry.jobs.contains(where: \.isAlive) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        #expect(registry.jobs.count == 2)
+        let hasLiveJobs = registry.jobs.contains { $0.isAlive }
+        #expect(!hasLiveJobs)
+        #expect(registry.jobs.contains {
+            registry.output(id: $0.id).contains("automatically retried outside the sandbox")
+        })
     }
 }
 
