@@ -1432,7 +1432,12 @@ enum AgentSandboxPolicy {
         "could not resolve proxy",
         "getaddrinfo enotfound",
         "getaddrinfo eai_again",
+        "unknownhostexception",
+        "failed to lookup address information",
+        "dns lookup failed",
         "network is unreachable",
+        "network access denied",
+        "network access is disabled",
         "socket: operation not permitted"
     ]
 
@@ -1477,6 +1482,13 @@ enum AgentSandboxPolicy {
             "deny file-write",
             "deny network",
             "operation not permitted",
+            "read-only file system",
+            "eperm:",
+            "eacces:",
+            "npm err! code eacces",
+            "you don't have permission",
+            "you don’t have permission",
+            "not permitted in sandbox",
         ]
         if strongMarkers.contains(where: { lowered.contains($0) }) {
             return true

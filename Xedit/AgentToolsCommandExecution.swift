@@ -130,9 +130,8 @@ extension AgentToolRunner {
                         secretRedactionValues: context.secretRedactionValues,
                         lifetime: jobLifetime,
                         goalPhaseID: jobLifetime == .phase ? context.goalPhaseID : nil,
-                        automaticSandboxRetryApprovalSource: context.isUnattendedDispatchTask
-                            ? .dispatchTask
-                            : nil
+                        automaticSandboxRetryApprovalSource: context
+                            .automaticBackgroundSandboxRetryApprovalSource
                     )
                 }
             } catch {

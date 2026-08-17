@@ -97,7 +97,9 @@ extension AppState {
         AgentToolApprovalNotifier.notifyIfBackgrounded(
             toolName: toolName,
             arguments: arguments,
-            status: .pendingApproval
+            status: .pendingApproval,
+            runtimeID: runtime.id,
+            sessionTitle: runtime.session.title
         )
 
         let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
@@ -127,6 +129,30 @@ extension AppState {
         approvalMode: AgentApprovalMode
     ) -> Bool {
         approvalMode == .smart
+    }
+
+    /// Background commands finish after their originating tool call has
+    /// returned, so they cannot reuse the foreground approval waiter. Carry a
+    /// host-derived one-shot retry grant only when the session policy already
+    /// permits it. Request Every Time and Workspace Access deliberately return
+    /// nil unless the exact command has an Always Allow grant.
+    nonisolated static func automaticBackgroundSandboxRetryApprovalSource(
+        approvalMode: AgentApprovalMode,
+        existingApprovalSource: AgentToolApprovalSource?,
+        isUnattendedDispatchTask: Bool
+    ) -> AgentToolApprovalSource? {
+        if isUnattendedDispatchTask {
+            return .dispatchTask
+        }
+        if existingApprovalSource == .alwaysAllowList {
+            return .alwaysAllowList
+        }
+        guard smartApprovalAutomaticallyRetriesSandboxDenial(
+            approvalMode: approvalMode
+        ) else {
+            return nil
+        }
+        return existingApprovalSource ?? .staticAllowlist
     }
 
     /// Signature pin check that does not require `.write` risk — sandbox

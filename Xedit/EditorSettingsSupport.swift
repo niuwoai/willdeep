@@ -79,6 +79,7 @@ enum EditorSettingsTab: Hashable {
     case workspace
     case agentAppearance
     case agent
+    case notifications
     case subagents
     case someIM
     case replicate
@@ -110,7 +111,7 @@ extension EditorSettingsTab {
         // appears as a duplicate Editor pane.
         case .editing, .typography, .appearance, .workspace: return .editor
         case .agentAppearance: return .agentAppearance
-        case .agent, .subagents, .memory, .rules: return .ai
+        case .agent, .notifications, .subagents, .memory, .rules: return .ai
         case .skills, .mcp, .tools, .secrets: return .agentTools
         case .localAgents, .remoteRuntimes: return .runtimes
         case .terminal: return .terminal
@@ -133,6 +134,7 @@ extension EditorSettingsTab {
         case .workspace: return L10n.Settings.tabWorkspace
         case .agentAppearance: return L10n.Settings.tabAgentAppearance
         case .agent: return L10n.Settings.tabAgent
+        case .notifications: return L10n.AgentNotifications.Settings.tabTitle
         case .subagents: return L10n.AgentProfiles.tabTitle
         case .someIM: return L10n.Settings.tabSomeIM
         case .replicate: return L10n.Settings.tabReplicate
@@ -189,7 +191,7 @@ enum SettingsGroup: Hashable, Identifiable {
         case .editor: return [.editing, .appearance, .typography, .workspace]
         case .agentAppearance: return [.agentAppearance]
         case .pet: return [.pet]
-        case .ai: return [.agent, .subagents, .memory, .rules]
+        case .ai: return [.agent, .notifications, .subagents, .memory, .rules]
         case .agentTools: return [.skills, .mcp, .tools, .secrets]
         case .accountAndDevices: return [.someIM, .mobileGateway]
         case .runtimes: return [.localAgents, .remoteRuntimes]

@@ -7503,6 +7503,29 @@
       }
     },
     "agent-notification.command" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Command" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Comando" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Commande" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "コマンド" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "命令" } } } },
+    "agent-notification.settings.choose-audio" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose audio…" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择音频…" } } } },
+    "agent-notification.settings.audio-empty" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The selected audio file is empty or unreadable." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "所选音频为空或无法读取。" } } } },
+    "agent-notification.settings.audio-too-long" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Notification sounds must be 30 seconds or shorter." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通知声音不能超过 30 秒。" } } } },
+    "agent-notification.settings.no-audio-selected" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No audio selected" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "尚未选择音频" } } } },
+    "agent-notification.settings.preview-sound" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Preview" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "试听" } } } },
+    "agent-notification.settings.save" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Save" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存" } } } },
+    "agent-notification.settings.saved" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已保存" } } } },
+    "agent-notification.settings.sound-custom" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Custom audio" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自定义音频" } } } },
+    "agent-notification.settings.sound-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Used when WillDeep needs authorization, confirmation, or an answer while it is in the background. Custom MP3, AIFF, WAV, CAF, and M4A files are converted to a system-compatible notification sound." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 在后台等待授权、确认或回答时播放。自定义 MP3、AIFF、WAV、CAF 与 M4A 会转换为系统兼容的通知声音。" } } } },
+    "agent-notification.settings.sound-label" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sound" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "声音" } } } },
+    "agent-notification.settings.sound-none" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "None" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无" } } } },
+    "agent-notification.settings.sound-section" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Background notification sound" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "后台通知声音" } } } },
+    "agent-notification.settings.sound-system-default" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "System default" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统默认" } } } },
+    "agent-notification.settings.tab" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Notifications" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通知" } } } },
+    "agent-notification.settings.test-webhook" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Send test" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送测试" } } } },
+    "agent-notification.settings.webhook-attention-required" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Authorization, confirmation, or answer required" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要授权、确认或回答" } } } },
+    "agent-notification.settings.webhook-enabled" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Send webhook events" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送 Webhook 事件" } } } },
+    "agent-notification.settings.webhook-invalid-url" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter a valid HTTP or HTTPS webhook URL." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请输入有效的 HTTP 或 HTTPS Webhook 地址。" } } } },
+    "agent-notification.settings.webhook-privacy-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Webhook payloads include only event metadata, session title, executor, status, and time. Commands, model output, and your answers are not sent." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Webhook 只发送事件元数据、会话标题、执行器、状态和时间，不发送命令、模型输出或你的回答。" } } } },
+    "agent-notification.settings.webhook-section" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Webhook" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Webhook" } } } },
+    "agent-notification.settings.webhook-task-completed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "External executor task completed" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "外部执行器任务完成" } } } },
+    "agent-notification.settings.webhook-test-succeeded" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Test delivered" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "测试已送达" } } } },
+    "agent-notification.settings.webhook-url" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Webhook URL" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Webhook 地址" } } } },
     "agent-notification.interaction.answer-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent is waiting for your answer" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El Agent espera tu respuesta" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "L'agent attend votre réponse" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "Agent が回答を待っています" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 在等你回答" } } } },
     "agent-notification.interaction.approval-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent needs authorization" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El Agent necesita autorización" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "L'agent a besoin d'une autorisation" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "Agent に承認が必要です" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 需要授权" } } } },
     "agent-notification.interaction.attention-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent needs your attention" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El Agent necesita tu atención" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "L'agent a besoin de votre attention" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "Agent の確認が必要です" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 需要你处理" } } } },
@@ -37018,6 +37041,17 @@
             "value" : "立即发送排队消息"
           }
         }
+      }
+    },
+    "queued-message.send-now-compact" : {
+      "comment" : "visible label for sending a queued message immediately",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send now" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Enviar ahora" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Envoyer" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "今すぐ送信" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "立即发送" } }
       }
     },
     "queued-message.send-now-button.help" : {
@@ -71486,6 +71520,11 @@
         }
       }
     },
+    "tool-card.ask-user.eyebrow" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent wants to know" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 想了解" } } } },
+    "tool-card.ask-user.footer-hint" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent will continue the current task using your answer." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 会根据你的回答继续当前任务。" } } } },
+    "tool-card.ask-user.footer-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Submit answer" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提交回答" } } } },
+    "tool-card.ask-user.multiple-hint" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose one or more answers, or add your own." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可以选择多项，也可以补充自己的回答。" } } } },
+    "tool-card.ask-user.single-hint" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose an answer or enter your own." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择一个答案，或直接输入你的想法。" } } } },
     "tool-card.ask-user.answer-placeholder" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -113,7 +113,9 @@ extension AppState {
         AgentToolApprovalNotifier.notifyIfBackgrounded(
             toolName: record.toolName,
             arguments: record.arguments,
-            status: initialStatus
+            status: initialStatus,
+            runtimeID: runtime.id,
+            sessionTitle: runtime.session.title
         )
 
         let decision: AgentDelegatedApprovalDecision

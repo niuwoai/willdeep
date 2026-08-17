@@ -243,6 +243,21 @@ extension AppState {
                 risk: .write,
                 status: .pendingApproval
             ),
+            AgentToolCall(
+                messageID: messageID,
+                externalID: "local-confirmation-preview-ask-user",
+                toolName: "ask_user",
+                arguments: [
+                    "question": .string("接下来优先处理哪一部分？"),
+                    "options": .array([
+                        .string("先完成界面细节"),
+                        .string("先验证通知与 Webhook"),
+                        .string("两部分一起收口"),
+                    ]),
+                ],
+                risk: .userInput,
+                status: .awaitingUserAnswer
+            ),
         ]
     }
 
@@ -569,7 +584,10 @@ extension AppState {
             AgentToolApprovalNotifier.notifyIfBackgrounded(
                 toolName: toolName,
                 arguments: arguments,
-                status: .pendingApproval
+                status: .pendingApproval,
+                runtimeID: runtime.id,
+                sessionTitle: runtime.session.title,
+                executor: executionAgent.displayName
             )
             let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
             if Task.isCancelled {
@@ -667,6 +685,12 @@ extension AppState {
                 sandboxDecision: sandboxDecision,
                 isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
             ),
+            automaticBackgroundSandboxRetryApprovalSource: Self
+                .automaticBackgroundSandboxRetryApprovalSource(
+                    approvalMode: runtime.approvalMode,
+                    existingApprovalSource: approvalSource,
+                    isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
+                ),
             isUnattendedDispatchTask: runtime.isUnattendedDispatchTask,
             editableContentProvider: { url in
                 try self.editableContent(forAgentPatchURL: url)
