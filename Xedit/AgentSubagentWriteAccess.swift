@@ -2,17 +2,13 @@
 //  AgentSubagentWriteAccess.swift
 //  WillDeep
 //
-//  The editor trade's write door: one approved file, one holder at a time.
+//  The writing trades' door: one declared file set, one holder at a time.
 //
-//  Subagents are read-only by construction, and a lot rests on that: they
-//  have no approval UI, cancelling one has no side effects, and three of
-//  them can run in parallel without coordinating. The editor trade opens
-//  exactly one hole in that, so the hole is guarded on three sides:
+//  Most subagents are read-only by construction. A few built-in coding
+//  trades receive a bounded workspace capability, guarded on three sides:
 //
-//   1. Approval — the `spawn_agent` call itself is write-tier and goes
-//      through the parent's approval card. The user approves "let a
-//      subagent edit <file>", not each individual patch: one file is a
-//      claim a person can actually evaluate.
+//   1. Workspace policy — Smart / Workspace Access inherit the parent's
+//      workspace write grant; Strict still shows the whole set on one card.
 //   2. Path — every patch is parsed and rejected unless every path it
 //      touches is the approved file. Enforced on the execution path, not
 //      by asking the prompt nicely.
@@ -25,12 +21,14 @@ import Foundation
 /// A granted, path-scoped write capability handed to one writing subagent.
 ///
 /// The editor trade holds a set of one; the fixer trades hold the set the user
-/// approved at spawn time, because a real test fix usually moves the
+/// declared at spawn time, because a real test fix usually moves the
 /// implementation and its test together and a one-file door would force the
 /// trade to report "cannot finish" on the common case. The guarantees are the
-/// same either way: the user saw every path in the set before approving, and
-/// anything outside it is denied on the execution path.
+/// same either way: the parent declared every path in the set, and anything
+/// outside it is denied on the execution path.
 nonisolated struct AgentSubagentWriteAccess: Sendable, Equatable {
+    static let maxTargetCount = 16
+
     /// Workspace-relative, normalized, de-duplicated and sorted so the
     /// approval card, the prompt and the lock all name the same list in the
     /// same order.
@@ -43,7 +41,7 @@ nonisolated struct AgentSubagentWriteAccess: Sendable, Equatable {
             guard let path = Self.normalizedTargetPath(raw) else { return nil }
             if seen.insert(path).inserted { normalized.append(path) }
         }
-        guard !normalized.isEmpty else { return nil }
+        guard !normalized.isEmpty, normalized.count <= Self.maxTargetCount else { return nil }
         self.targetRelativePaths = normalized.sorted()
     }
 
@@ -79,50 +77,98 @@ nonisolated struct AgentSubagentWriteAccess: Sendable, Equatable {
         return components.joined(separator: "/")
     }
 
-    /// Paths a unified diff touches, normalized. `/dev/null` (file creation
-    /// or deletion) is reported as nil so callers can refuse it — the editor
-    /// trade edits an existing, named file and nothing else.
-    static func patchedPaths(inDiff diff: String) -> [String?] {
-        diff
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .compactMap { line -> String?? in
-                let text = String(line)
-                guard text.hasPrefix("--- ") || text.hasPrefix("+++ ") else { return nil }
-                var payload = String(text.dropFirst(4))
-                // Strip a trailing timestamp column if the model emitted one.
-                if let tabIndex = payload.firstIndex(of: "\t") {
-                    payload = String(payload[..<tabIndex])
-                }
-                payload = payload.trimmingCharacters(in: .whitespaces)
-                if payload == "/dev/null" { return .some(nil) }
-                if payload.hasPrefix("a/") || payload.hasPrefix("b/") {
-                    payload = String(payload.dropFirst(2))
-                }
-                return .some(normalizedTargetPath(payload))
+    private enum DiffHeaderPath: Equatable {
+        case path(String)
+        case devNull
+        case invalid
+    }
+
+    private struct DiffOperation: Equatable {
+        let old: DiffHeaderPath
+        let new: DiffHeaderPath
+    }
+
+    private static func diffHeaderPath(_ line: String) -> DiffHeaderPath {
+        var payload = String(line.dropFirst(4))
+        if let tabIndex = payload.firstIndex(of: "\t") {
+            payload = String(payload[..<tabIndex])
+        }
+        payload = payload.trimmingCharacters(in: .whitespaces)
+        if payload == "/dev/null" { return .devNull }
+        if payload.hasPrefix("a/") || payload.hasPrefix("b/") {
+            payload = String(payload.dropFirst(2))
+        }
+        guard let normalized = normalizedTargetPath(payload) else { return .invalid }
+        return .path(normalized)
+    }
+
+    /// Parse old/new header pairs rather than flattening paths: `/dev/null`
+    /// on the old side means creation and is allowed for a declared target;
+    /// on the new side it means deletion and remains forbidden.
+    private static func patchOperations(inDiff diff: String) -> [DiffOperation]? {
+        var previousOldPath: DiffHeaderPath?
+        var operations: [DiffOperation] = []
+        for rawLine in diff.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(rawLine)
+            if line.hasPrefix("--- ") {
+                guard previousOldPath == nil else { return nil }
+                previousOldPath = diffHeaderPath(line)
+            } else if line.hasPrefix("+++ ") {
+                guard let old = previousOldPath else { return nil }
+                operations.append(DiffOperation(old: old, new: diffHeaderPath(line)))
+                previousOldPath = nil
             }
+        }
+        guard previousOldPath == nil, !operations.isEmpty else { return nil }
+        return operations
     }
 
     /// Nil when the call may proceed; otherwise the denial text handed back
     /// to the child model as its tool result.
-    func violationMessage(forArgumentsJSON argumentsJSON: String, workspaceURL: URL?) -> String? {
+    func violationMessage(
+        forToolName toolName: String,
+        argumentsJSON: String,
+        workspaceURL: URL?
+    ) -> String? {
+        if toolName == "create_file" {
+            guard case .object(let arguments) = AgentJSONValue.decode(from: argumentsJSON),
+                  let rawPath = arguments["path"]?.stringValue(),
+                  let path = Self.normalizedTargetPath(rawPath) else {
+                return "Denied: create_file needs one valid workspace-relative `path` from \(displayList)."
+            }
+            return allows(path)
+                ? nil
+                : "Denied: you may only create or edit \(displayList), but this call targets `\(path)`."
+        }
+
+        guard toolName == "apply_patch" else {
+            return "Denied: `\(toolName)` is not an approved write tool for this subagent."
+        }
         guard case .object(let arguments) = AgentJSONValue.decode(from: argumentsJSON),
               let diff = arguments["diff"]?.stringValue(),
               !diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return "Denied: the patch had no readable `diff` argument. Re-emit the call with a unified diff for one of: \(displayList)."
         }
 
-        let paths = Self.patchedPaths(inDiff: diff)
-        guard !paths.isEmpty else {
+        guard let operations = Self.patchOperations(inDiff: diff) else {
             return "Denied: no `--- a/… / +++ b/…` header found in the diff. Emit a standard unified diff for one of: \(displayList)."
         }
-        for path in paths {
-            guard let path else {
-                return "Denied: this trade edits existing files and cannot create or delete them. Patch one of \(displayList) in place, or report what should be created instead."
+        for operation in operations {
+            let path: String
+            switch (operation.old, operation.new) {
+            case (.devNull, .path(let created)):
+                path = created
+            case (.path, .devNull):
+                return "Denied: writing subagents may create or edit declared paths but cannot delete files."
+            case (.path(let old), .path(let new)) where old == new:
+                path = new
+            case (.path(let old), .path(let new)):
+                return "Denied: renaming `\(old)` to `\(new)` is outside the bounded write contract."
+            case (.invalid, _), (_, .invalid), (.devNull, .devNull):
+                return "Denied: the diff contains an invalid or unusable file header."
             }
             guard allows(path) else {
-                // The denial names the escape route on purpose: the trade is
-                // supposed to report out-of-scope work, not quietly give up.
-                return "Denied: you may only edit \(displayList), but this patch touches `\(path)`. Report the change needed elsewhere in your final message instead of patching it."
+                return "Denied: you may only create or edit \(displayList), but this patch touches `\(path)`. Report the change needed elsewhere in your final message instead of patching it."
             }
         }
         return nil

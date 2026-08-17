@@ -36,6 +36,26 @@ struct AgentSubagentProfileTests {
         #expect(deep.escalation == .none)
     }
 
+    @Test("implicit some.im worker defaults follow a private parent provider")
+    func implicitHostedDefaultDoesNotEscapePrivateProvider() {
+        let binding = AgentSubagentProfileCatalog.scout.modelBinding
+        #expect(AppState.implicitSomeIMBindingFollowsParent(
+            binding: binding,
+            parentProviderID: "private-openai-compatible"
+        ))
+        #expect(!AppState.implicitSomeIMBindingFollowsParent(
+            binding: binding,
+            parentProviderID: AgentProviderPreset.someIMID
+        ))
+
+        var explicit = binding
+        explicit.preferredProviderEntryID = UUID()
+        #expect(!AppState.implicitSomeIMBindingFollowsParent(
+            binding: explicit,
+            parentProviderID: "private-openai-compatible"
+        ))
+    }
+
     // MARK: Narrowing
 
     @Test("a trade can only narrow the global whitelist, never widen it")
@@ -78,8 +98,8 @@ struct AgentSubagentProfileTests {
 
     // MARK: Write access
 
-    @Test("only the editor trade can ever reach a write tool")
-    func writeToolsOnlyForEditor() {
+    @Test("only built-in writing trades can reach their scoped write tools")
+    func writeToolsOnlyForWritingTrades() {
         // Even with the grant flag set, a read-only trade gets nothing extra.
         let scout = AgentSubagentProfileCatalog.scout.effectiveToolNames(writeAccessGranted: true)
         #expect(!scout.contains("apply_patch"))
@@ -89,9 +109,14 @@ struct AgentSubagentProfileTests {
 
         let editorGranted = AgentSubagentProfileCatalog.editor.effectiveToolNames(writeAccessGranted: true)
         #expect(editorGranted.contains("apply_patch"))
+
+        let implementer = AgentSubagentProfileCatalog.implementer
+            .effectiveToolNames(writeAccessGranted: true)
+        #expect(implementer.contains("apply_patch"))
+        #expect(implementer.contains("create_file"))
     }
 
-    @Test("spawning the editor trade is write-tier so it hits the approval card")
+    @Test("writing trades remain write-tier for policy and audit")
     func editorSpawnIsWriteTier() {
         let editorRisk = AgentToolRegistry.risk(
             for: "spawn_agent",
@@ -106,6 +131,73 @@ struct AgentSubagentProfileTests {
         #expect(editorRisk == .write)
         #expect(scoutRisk == .read)
         #expect(defaultRisk == .read)
+    }
+
+    @Test("deployable trades use 32K 48K 64K and 256K windows with no 16K tier")
+    func deployableContextTiersAreExplicit() {
+        #expect(AgentSubagentProfileCatalog.scout.modelBinding.contextWindowTokens == 32_768)
+        #expect(AgentSubagentProfileCatalog.logInspector.modelBinding.contextWindowTokens == 32_768)
+        #expect(AgentSubagentProfileCatalog.reader.modelBinding.contextWindowTokens == 49_152)
+        #expect(AgentSubagentProfileCatalog.editor.modelBinding.contextWindowTokens == 49_152)
+        #expect(AgentSubagentProfileCatalog.buildFixer.modelBinding.contextWindowTokens == 49_152)
+        #expect(AgentSubagentProfileCatalog.testFixer.modelBinding.contextWindowTokens == 65_536)
+        #expect(AgentSubagentProfileCatalog.implementer.modelBinding.contextWindowTokens == 262_144)
+        #expect(!AgentSubagentProfileCatalog.builtIn.contains {
+            $0.modelBinding.contextWindowTokens == 16_384
+        })
+    }
+
+    @Test("smart and workspace access inherit bounded subagent writes while strict still asks")
+    func boundedWriterApprovalFollowsParentWorkspacePolicy() async {
+        let appState = AppState()
+        let arguments: [String: AgentJSONValue] = [
+            "profile": .string("implementer"),
+            "target_files": .array([.string("Sources/A.swift"), .string("Sources/New.swift")]),
+        ]
+
+        let smart = await appState.autoApprovalSource(
+            toolName: "spawn_agent",
+            arguments: arguments,
+            risk: .write,
+            rootDirectory: nil,
+            approvalMode: .smart
+        )
+        let workspace = await appState.autoApprovalSource(
+            toolName: "spawn_agent",
+            arguments: arguments,
+            risk: .write,
+            rootDirectory: nil,
+            approvalMode: .workspaceAccess
+        )
+        let strict = await appState.autoApprovalSource(
+            toolName: "spawn_agent",
+            arguments: arguments,
+            risk: .write,
+            rootDirectory: nil,
+            approvalMode: .requestEveryTime
+        )
+
+        #expect(smart == .staticAllowlist)
+        #expect(workspace == .workspaceAccess)
+        #expect(strict == nil)
+
+        let taskFallback = await appState.autoApprovalSource(
+            toolName: "spawn_agent",
+            arguments: [
+                "profile": .string("implementer"),
+                "task": .object([
+                    "goal": .string("Implement the feature"),
+                    "relevant_files": .array([
+                        .string("Sources/A.swift"),
+                        .string("Sources/New.swift"),
+                    ]),
+                ]),
+            ],
+            risk: .write,
+            rootDirectory: nil,
+            approvalMode: .smart
+        )
+        #expect(taskFallback == .staticAllowlist)
     }
 
     // MARK: Payload budget
@@ -205,6 +297,7 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentProfileCatalog.deep.hostedVirtualModel == nil)
         #expect(AgentSubagentProfileCatalog.tester.hostedVirtualModel == nil)
         #expect(AgentSubagentProfileCatalog.reviewer.hostedVirtualModel == nil)
+        #expect(AgentSubagentProfileCatalog.implementer.hostedVirtualModel == nil)
     }
 
     @Test("hosted model ids hyphenate snake_case trade ids")
@@ -272,8 +365,8 @@ struct AgentSubagentProfileTests {
         #expect(scout.maxRounds == AgentSubagentProfileCatalog.scout.maxRounds)
     }
 
-    @Test("subagent provider defaults to some.im even when another provider is active")
-    func defaultProviderPrefersSomeIM() throws {
+    @Test("the legacy some.im default can still locate its provider entry")
+    func legacyDefaultCanLocateSomeIM() throws {
         let deepSeek = AgentProviderEntry(
             providerID: AgentProviderPreset.deepSeekID,
             displayName: "DeepSeek",
@@ -295,8 +388,8 @@ struct AgentSubagentProfileTests {
         #expect(selected.id == someIM.id)
     }
 
-    @Test("subagent provider falls back to the active provider when some.im is absent")
-    func defaultProviderFallsBackToActive() throws {
+    @Test("provider lookup falls back to the active entry when some.im is absent")
+    func providerLookupFallsBackToActive() throws {
         let first = AgentProviderEntry(
             providerID: AgentProviderPreset.openAIID,
             displayName: "OpenAI",

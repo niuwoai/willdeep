@@ -25,8 +25,9 @@ nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
     /// parent names the skill and the dispatcher does the reading.
     var skill: String?
     /// Workspace-relative paths whose contents are inlined for the worker.
-    /// Reading context only — being handed a file to read never implies
-    /// permission to write it (that comes from `target_files`).
+    /// For read-only trades these are context only. For a non-editor writing
+    /// trade they also become its declared write set when `target_files` is
+    /// omitted; an explicit `target_files` always wins and may be narrower.
     var relevantFiles: [String]
     /// What the parent already established, so the worker does not re-derive
     /// it at its own expense.

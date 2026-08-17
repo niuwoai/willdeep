@@ -332,31 +332,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "While signed in to some.im this trade runs on a managed model with a server-side prompt. Sign out to choose your own."
+            "value" : "While the current provider is some.im this trade runs on a managed model with a server-side prompt. Choose a private provider to keep the trade on that provider."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mientras tengas sesión en some.im, este oficio usa un modelo gestionado con prompt en el servidor. Cierra sesión para elegir el tuyo."
+            "value" : "Mientras el proveedor actual sea some.im, este oficio usa un modelo gestionado con prompt en el servidor. Elige un proveedor privado para mantener allí el oficio."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tant que vous êtes connecté à some.im, ce métier utilise un modèle géré avec un prompt côté serveur. Déconnectez-vous pour choisir le vôtre."
+            "value" : "Tant que le fournisseur actuel est some.im, ce métier utilise un modèle géré avec un prompt côté serveur. Choisissez un fournisseur privé pour y conserver ce métier."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "some.im にサインイン中、この職能はサーバー側プロンプト付きの管理モデルで動作します。自分で選ぶにはサインアウトしてください。"
+            "value" : "現在のプロバイダーが some.im の場合、この職能はサーバー側プロンプト付きの管理モデルで動作します。プライベートプロバイダーを選ぶと、そのプロバイダー内で実行されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "登录 some.im 期间，该工种使用托管模型与服务端提示词。想自行选择请先退出登录。"
+            "value" : "当前 Provider 为 some.im 时，该工种使用托管模型与服务端提示词；选择私有 Provider 后，工种会留在该 Provider 内执行。"
           }
         }
       }
@@ -3204,7 +3204,9 @@
     "agent-delegation.profile-deep-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Deep" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Profundo" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Approfondi" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "精査" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深查" } } } },
     "agent-delegation.profile-deep-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Complex investigation: reasoning across many files, read-only shell commands, and git status." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Investigación compleja: razonamiento a través de muchos archivos, comandos de shell de solo lectura y estado de git." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Investigation complexe : raisonnement sur de nombreux fichiers, commandes shell en lecture seule et état Git." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "複雑な調査: 多数のファイルを横断した推論、読み取り専用の shell コマンド、git ステータスの確認。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复杂调查：跨多文件推理、只读 shell 命令和 git 状态。" } } } },
     "agent-delegation.profile-editor-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Editor" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Editor" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Éditeur" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "編集" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑" } } } },
-    "agent-delegation.profile-editor-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit ONE approved file. Requires a `target_file` argument and the user's approval; cannot touch any other path." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Edita UN solo archivo aprobado. Requiere un argumento `target_file` y la aprobación del usuario; no puede tocar ninguna otra ruta." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Modifie UN seul fichier approuvé. Nécessite un argument `target_file` et l'approbation de l'utilisateur ; ne peut toucher aucun autre chemin." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "承認された1つのファイルのみを編集します。`target_file` 引数とユーザーの承認が必要で、他のパスには一切触れません。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "只编辑一个已批准的文件。必须带 `target_file` 参数并经用户批准；不能碰任何其他路径。" } } } },
+    "agent-delegation.profile-editor-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edits one declared file inside the parent workspace policy; cannot touch any other path." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Edita un archivo declarado dentro de la política del espacio de trabajo principal; no puede tocar ninguna otra ruta." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Modifie un fichier déclaré dans la politique de l'espace de travail parent ; ne peut toucher aucun autre chemin." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "親ワークスペースのポリシー内で宣言された1つのファイルだけを編集し、他のパスには触れません。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在父会话工作区策略内编辑一个已声明文件，不能触碰其他路径。" } } } },
+    "agent-delegation.profile-implementer-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Implementer" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Implementador" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Implémenteur" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "実装" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实现" } } } },
+    "agent-delegation.profile-implementer-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Implements a bounded multi-file feature or refactor across at most 16 declared existing or new paths on a deployable 256K model." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Implementa una función o refactorización acotada en hasta 16 rutas declaradas, existentes o nuevas, con un modelo desplegable de 256K." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Implémente une fonctionnalité ou refactorisation bornée sur au plus 16 chemins déclarés, existants ou nouveaux, avec un modèle déployable de 256K." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "デプロイ可能な256Kモデルで、宣言済みの既存または新規パス最大16件に限定した複数ファイルの機能実装やリファクタリングを行います。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用可部署的 256K 模型，在最多 16 个已声明的现有或新路径内完成有界多文件功能或重构。" } } } },
     "agent-delegation.profile-inherits-parent" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Same as this chat" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Igual que esta conversación" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Identique à cette conversation" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "このチャットと同じ" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "与本会话相同" } } } },
     "agent-delegation.profile-fetched-models" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Fetched %1$d models from %2$@." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Se obtuvieron %1$d modelos de %2$@." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "%1$d modèles récupérés depuis %2$@." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%2$@ から %1$d 個のモデルを取得しました。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已从 %2$@ 获取 %1$d 个模型。" } } } },
     "agent-delegation.profile-model-label" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Model" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Modelo" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Modèle" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "モデル" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型" } } } },

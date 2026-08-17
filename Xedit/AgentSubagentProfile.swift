@@ -16,9 +16,9 @@
 //   - Cost policy belongs to the user's configuration, not to whether the
 //     model remembers to pick a cheap model this time.
 //
-//  A profile may only NARROW the global read-only whitelist. The one
-//  exception is the editor trade, whose write access is gated by its own
-//  approval + file lock (see AgentSubagentEditorLock).
+//  A profile may only NARROW the global read-only whitelist. Built-in
+//  writing trades are the exception: their write access is constrained by
+//  the parent's workspace policy plus an exact file-set lock.
 //
 
 import Foundation
@@ -79,8 +79,9 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
     /// window.
     var toolPayloadCharacterLimit: Int
     var escalation: EscalationPolicy
-    /// True only for the editor trade. Gates the write tool through the
-    /// approval + single-file lock path instead of the read-only whitelist.
+    /// True only for built-in writing trades. Gates write tools through the
+    /// workspace policy + exact file-set lock path instead of the read-only
+    /// whitelist.
     var requiresWriteAccess: Bool
     /// Skills preloaded into this trade's system prompt at spawn time. Empty
     /// for every built-in trade; filled in from the profile's soul.
@@ -132,12 +133,13 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
     /// The tools this trade may actually call.
     ///
     /// Intersection, never union: a profile can only take tools away from
-    /// the global read-only set. `writeAccessGranted` is the editor trade's
-    /// narrow door, opened only once its approval and file lock are held.
+    /// the global read-only set. `writeAccessGranted` is the writing trades'
+    /// narrow door, opened only once the workspace policy and file lock are
+    /// satisfied.
     func effectiveToolNames(writeAccessGranted: Bool = false) -> Set<String> {
         var allowed = AgentSubagentRunner.allowedToolNames
         if requiresWriteAccess, writeAccessGranted {
-            allowed.formUnion(AgentSubagentProfileCatalog.editorWriteToolNames)
+            allowed.formUnion(AgentSubagentProfileCatalog.writeToolNames)
         }
         // 终端工具照 editor 写工具的先例走**按工种放行**，不进全局白名单：
         // 进了全局名单，deep/tester 会静默获得读用户终端屏幕的能力。
@@ -154,6 +156,7 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.scoutID: return L10n.AgentDelegation.profileScoutName
         case AgentSubagentProfileCatalog.readerID: return L10n.AgentDelegation.profileReaderName
         case AgentSubagentProfileCatalog.editorID: return L10n.AgentDelegation.profileEditorName
+        case AgentSubagentProfileCatalog.implementerID: return L10n.AgentDelegation.profileImplementerName
         case AgentSubagentProfileCatalog.testerID: return L10n.AgentDelegation.profileTesterName
         case AgentSubagentProfileCatalog.reviewerID: return L10n.AgentDelegation.profileReviewerName
         case AgentSubagentProfileCatalog.testFixerID: return L10n.AgentDelegation.profileTestFixerName
@@ -176,6 +179,7 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.scoutID: return L10n.AgentDelegation.profileScoutPurpose
         case AgentSubagentProfileCatalog.readerID: return L10n.AgentDelegation.profileReaderPurpose
         case AgentSubagentProfileCatalog.editorID: return L10n.AgentDelegation.profileEditorPurpose
+        case AgentSubagentProfileCatalog.implementerID: return L10n.AgentDelegation.profileImplementerPurpose
         case AgentSubagentProfileCatalog.testerID: return L10n.AgentDelegation.profileTesterPurpose
         case AgentSubagentProfileCatalog.reviewerID: return L10n.AgentDelegation.profileReviewerPurpose
         case AgentSubagentProfileCatalog.testFixerID: return L10n.AgentDelegation.profileTestFixerPurpose
@@ -198,6 +202,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let readerID = "reader"
     static let deepID = "deep"
     static let editorID = "editor"
+    static let implementerID = "implementer"
     static let testerID = "tester"
     static let reviewerID = "reviewer"
     static let testFixerID = "test_fixer"
@@ -209,19 +214,23 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let opsRunnerID = "ops_runner"
     static let terminalOperatorID = "terminal_operator"
 
-    /// Per-tool-result cap for the 32K-window worker tier. Well under the
-    /// 8K the 128K trades use: at 32K a single fat `read_file` is the
-    /// difference between a run that finishes and a run that blows the window
-    /// on round two (docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md §2).
     static let workerPayloadCharacterLimit = 4_000
-    /// Window pinned for the worker tier. `someim-32b` is a tier name, not a
-    /// context promise — the small-context discipline is enforced here, on the
-    /// client, which is also what makes the collected P50/P95 data meaningful.
-    static let workerContextWindowTokens = 32_768
+    static let balancedPayloadCharacterLimit = 5_000
+    static let widePayloadCharacterLimit = 6_000
+    static let implementerPayloadCharacterLimit = 16_000
 
-    /// Tools the editor trade adds on top of the read-only set, and only
-    /// while its per-file approval is held.
-    static let editorWriteToolNames: Set<String> = ["apply_patch"]
+    /// Deployable model tiers. 16K is deliberately absent: the target 16GB
+    /// baseline can run 35B-A3B-class models at 32K and, depending on KV cache
+    /// and quantization, at 48K/64K. 256K is the ordinary multi-file coding
+    /// tier; `deep` remains the exceptional parent-model fallback.
+    static let workerContextWindowTokens = 32_768
+    static let balancedContextWindowTokens = 49_152
+    static let wideContextWindowTokens = 65_536
+    static let implementerContextWindowTokens = 262_144
+
+    /// Tools a built-in writing trade adds on top of the read-only set, and
+    /// only while its exact file-set workspace grant is held.
+    static let writeToolNames: Set<String> = ["apply_patch", "create_file"]
 
     /// Tools the terminal-operator trade adds on top of the read-only set.
     /// snapshot / list_tabs / select_tab 本来就是 .read 档；send_command
@@ -239,6 +248,24 @@ nonisolated enum AgentSubagentProfileCatalog {
         preferredProviderID: AgentProviderPreset.someIMID,
         model: "glm-5",
         contextWindowTokens: workerContextWindowTokens
+    )
+
+    private static let balancedBinding = AgentSubagentProfile.ModelBinding(
+        preferredProviderID: AgentProviderPreset.someIMID,
+        model: "glm-5",
+        contextWindowTokens: balancedContextWindowTokens
+    )
+
+    private static let wideBinding = AgentSubagentProfile.ModelBinding(
+        preferredProviderID: AgentProviderPreset.someIMID,
+        model: "glm-5",
+        contextWindowTokens: wideContextWindowTokens
+    )
+
+    private static let implementerBinding = AgentSubagentProfile.ModelBinding(
+        preferredProviderID: AgentProviderPreset.someIMID,
+        model: "glm-5",
+        contextWindowTokens: implementerContextWindowTokens
     )
 
     /// Deep used to inherit the parent session. Subagents now default to a
@@ -266,11 +293,11 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let reader = AgentSubagentProfile(
         id: readerID,
         purpose: "Read and summarize: digest long files, docs, or public web pages and answer questions about their content. No shell.",
-        modelBinding: cheapBinding,
+        modelBinding: balancedBinding,
         toolNames: ["read_file", "list_directory", "web_search"],
         capabilityPromptSection: AgentSubagentJobPrompts.reader,
         maxRounds: 8,
-        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        toolPayloadCharacterLimit: balancedPayloadCharacterLimit,
         escalation: .retryWithParentModel,
         hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: readerID)
     )
@@ -295,15 +322,30 @@ nonisolated enum AgentSubagentProfileCatalog {
 
     static let editor = AgentSubagentProfile(
         id: editorID,
-        purpose: "Edit ONE approved file. Requires a `target_file` argument and the user's approval; cannot touch any other path.",
-        modelBinding: cheapBinding,
+        purpose: "Edit ONE declared file inside the parent workspace policy; cannot touch any other path.",
+        modelBinding: balancedBinding,
         toolNames: ["read_file", "apply_patch"],
         capabilityPromptSection: AgentSubagentJobPrompts.editor,
         maxRounds: 6,
-        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        toolPayloadCharacterLimit: balancedPayloadCharacterLimit,
         escalation: .retryWithParentModel,
         requiresWriteAccess: true,
         hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: editorID)
+    )
+
+    static let implementer = AgentSubagentProfile(
+        id: implementerID,
+        purpose: "Implement a bounded multi-file feature or refactor across at most 16 declared existing or new paths on a deployable 256K model.",
+        modelBinding: implementerBinding,
+        toolNames: [
+            "search_files", "grep_files", "list_directory", "read_file",
+            "create_file", "apply_patch", "run_command",
+        ],
+        capabilityPromptSection: AgentSubagentJobPrompts.implementer,
+        maxRounds: 18,
+        toolPayloadCharacterLimit: implementerPayloadCharacterLimit,
+        escalation: .retryWithParentModel,
+        requiresWriteAccess: true
     )
 
     /// Runs the gates and reports evidence. Deliberately has the read-only
@@ -354,11 +396,11 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let testFixer = AgentSubagentProfile(
         id: testFixerID,
         purpose: "Fix a failing test to green within the files listed in the task. Requires a `task` with `relevant_files` and a `verifier` command; the verifier's exit code decides success, not the model.",
-        modelBinding: cheapBinding,
+        modelBinding: wideBinding,
         toolNames: ["read_file", "grep_files", "apply_patch", "run_command"],
         capabilityPromptSection: AgentSubagentJobPrompts.testFixer,
         maxRounds: 6,
-        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        toolPayloadCharacterLimit: widePayloadCharacterLimit,
         escalation: .retryWithParentModel,
         requiresWriteAccess: true,
         hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: testFixerID)
@@ -367,11 +409,11 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let buildFixer = AgentSubagentProfile(
         id: buildFixerID,
         purpose: "Fix compiler, type-check, or lint failures within the files listed in the task. Requires a `task` with `relevant_files` and a build/lint `verifier` command.",
-        modelBinding: cheapBinding,
+        modelBinding: balancedBinding,
         toolNames: ["read_file", "grep_files", "apply_patch", "run_command"],
         capabilityPromptSection: AgentSubagentJobPrompts.buildFixer,
         maxRounds: 6,
-        toolPayloadCharacterLimit: workerPayloadCharacterLimit,
+        toolPayloadCharacterLimit: balancedPayloadCharacterLimit,
         escalation: .retryWithParentModel,
         requiresWriteAccess: true,
         hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: buildFixerID)
@@ -465,6 +507,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         reader,
         deep,
         editor,
+        implementer,
         tester,
         reviewer,
         testFixer,

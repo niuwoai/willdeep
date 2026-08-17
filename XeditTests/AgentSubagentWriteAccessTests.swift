@@ -44,7 +44,8 @@ struct AgentSubagentWriteAccessTests {
     @Test("a patch to the approved file is allowed")
     func targetFilePatchPasses() {
         let violation = access.violationMessage(
-            forArgumentsJSON: argumentsJSON(diff: diff(path: "Sources/Auth.swift")),
+            forToolName: "apply_patch",
+            argumentsJSON: argumentsJSON(diff: diff(path: "Sources/Auth.swift")),
             workspaceURL: nil
         )
 
@@ -54,7 +55,8 @@ struct AgentSubagentWriteAccessTests {
     @Test("a patch to any other file is denied and names both paths")
     func otherFilePatchIsDenied() throws {
         let violation = try #require(access.violationMessage(
-            forArgumentsJSON: argumentsJSON(diff: diff(path: "Sources/Other.swift")),
+            forToolName: "apply_patch",
+            argumentsJSON: argumentsJSON(diff: diff(path: "Sources/Other.swift")),
             workspaceURL: nil
         ))
 
@@ -67,15 +69,16 @@ struct AgentSubagentWriteAccessTests {
         let combined = diff(path: "Sources/Auth.swift") + "\n" + diff(path: "Sources/Other.swift")
 
         let violation = access.violationMessage(
-            forArgumentsJSON: argumentsJSON(diff: combined),
+            forToolName: "apply_patch",
+            argumentsJSON: argumentsJSON(diff: combined),
             workspaceURL: nil
         )
 
         #expect(violation != nil)
     }
 
-    @Test("file creation and deletion are denied — this trade edits in place")
-    func devNullPatchIsDenied() throws {
+    @Test("a declared new file may be created but deletion stays denied")
+    func declaredCreationIsAllowedAndDeletionIsDenied() throws {
         let creation = """
         --- /dev/null
         +++ b/Sources/Auth.swift
@@ -83,19 +86,59 @@ struct AgentSubagentWriteAccessTests {
         +new
         """
 
+        #expect(access.violationMessage(
+            forToolName: "apply_patch",
+            argumentsJSON: argumentsJSON(diff: creation),
+            workspaceURL: nil
+        ) == nil)
+
+        let deletion = """
+        --- a/Sources/Auth.swift
+        +++ /dev/null
+        @@ -1,1 +0,0 @@
+        -old
+        """
         let violation = try #require(access.violationMessage(
-            forArgumentsJSON: argumentsJSON(diff: creation),
+            forToolName: "apply_patch",
+            argumentsJSON: argumentsJSON(diff: deletion),
             workspaceURL: nil
         ))
+        #expect(violation.contains("cannot delete"))
+    }
 
-        #expect(violation.contains("cannot create or delete"))
+    @Test("create_file is allowed only for a declared path")
+    func createFileChecksTheSameWriteSet() {
+        #expect(access.violationMessage(
+            forToolName: "create_file",
+            argumentsJSON: #"{"path":"Sources/Auth.swift","content":"new"}"#,
+            workspaceURL: nil
+        ) == nil)
+        #expect(access.violationMessage(
+            forToolName: "create_file",
+            argumentsJSON: #"{"path":"Sources/Other.swift","content":"new"}"#,
+            workspaceURL: nil
+        ) != nil)
+    }
+
+    @Test("a writing worker may declare at most sixteen paths")
+    func writeSetHasAReviewableCeiling() {
+        let sixteen = (0..<16).map { "Sources/File\($0).swift" }
+        let seventeen = (0..<17).map { "Sources/File\($0).swift" }
+
+        #expect(AgentSubagentWriteAccess(targetRelativePaths: sixteen) != nil)
+        #expect(AgentSubagentWriteAccess(targetRelativePaths: seventeen) == nil)
     }
 
     @Test("a malformed or missing diff is denied rather than passed through")
     func malformedDiffIsDenied() {
-        #expect(access.violationMessage(forArgumentsJSON: "{}", workspaceURL: nil) != nil)
         #expect(access.violationMessage(
-            forArgumentsJSON: argumentsJSON(diff: "just some prose, no headers"),
+            forToolName: "apply_patch",
+            argumentsJSON: "{}",
+            workspaceURL: nil
+        ) != nil)
+        #expect(access.violationMessage(
+            forToolName: "apply_patch",
+            argumentsJSON: argumentsJSON(diff: "just some prose, no headers"),
             workspaceURL: nil
         ) != nil)
     }
@@ -111,7 +154,8 @@ struct AgentSubagentWriteAccessTests {
         """
 
         #expect(access.violationMessage(
-            forArgumentsJSON: argumentsJSON(diff: timestamped),
+            forToolName: "apply_patch",
+            argumentsJSON: argumentsJSON(diff: timestamped),
             workspaceURL: nil
         ) == nil)
     }

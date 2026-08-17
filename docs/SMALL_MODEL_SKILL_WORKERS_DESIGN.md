@@ -138,16 +138,17 @@ attempt 打满 max_attempts → 触发 escalation（换父模型重跑或报告�
 
 | 工种 id | 职能 | 工具白名单 | 窗口档 | Verifier | 写通道 | 升档 |
 |---|---|---|---|---|---|---|
-| `test_fixer` **新** | 修失败测试到绿（改测试或改实现） | `read_file` `apply_patch` `run_command`（限 verifier 命令） | 32K～64K | 测试命令 exit 0 | **文件集锁**（见 §6） | verifier 连败→父模型 |
-| `build_fixer` **新** | 修编译/类型/lint 错误 | 同上 | 32K | build/lint exit 0 | 文件集锁 | 同上 |
-| `log_inspector` **新** | 报错/日志聚类解释，输出结构化结论 | `read_file`（读预处理产物） | 8～16K | structured_output schema | 无 | none（报告型） |
-| `git_detective` **新** | 回归定位（bisect 由 Runtime 驱动）、commit 解释 | `run_command`（git 只读白名单）`read_file` | 16～32K | bisect 结果本身确定 + schema | 无 | retryWithParentModel |
-| `scout` 已有 | 定位文件/符号 | 现状不变 | **下调至 32K 档** | —（报告型） | 无 | 现状 |
-| `reader` 已有 | 阅读总结 | 现状不变 | 下调至 32K 档 | — | 无 | 现状 |
-| `editor` 已有 | 单文件机械编辑 | 现状不变 | 下调至 32K 档 | **新增可选 verifier**（如 build） | 单文件锁（现状） | 现状 |
+| `test_fixer` **新** | 修失败测试到绿（改测试或改实现） | `read_file` `apply_patch` `run_command`（限 verifier 命令） | 64K | 测试命令 exit 0 | **文件集锁**（见 §6） | verifier 连败→父模型 |
+| `build_fixer` **新** | 修编译/类型/lint 错误 | 同上 | 48K | build/lint exit 0 | 文件集锁 | 同上 |
+| `log_inspector` **新** | 报错/日志聚类解释，输出结构化结论 | `read_file`（读预处理产物） | 32K（典型输入 8～16K） | structured_output schema | 无 | none（报告型） |
+| `git_detective` **新** | 回归定位（bisect 由 Runtime 驱动）、commit 解释 | `run_command`（git 只读白名单）`read_file` | 32K | bisect 结果本身确定 + schema | 无 | retryWithParentModel |
+| `scout` 已有 | 定位文件/符号 | 现状不变 | **32K 档** | —（报告型） | 无 | 现状 |
+| `reader` 已有 | 阅读总结 | 现状不变 | 48K 档 | — | 无 | 现状 |
+| `editor` 已有 | 单文件机械编辑 | 现状不变 | 48K 档 | **新增可选 verifier**（如 build） | 单文件锁（现状） | 现状 |
+| `implementer` **新** | 普通多文件功能、重构与新文件创建 | `search_files` `grep_files` `list_directory` `read_file` `create_file` `apply_patch` `run_command` | **256K** | 可选测试/build/lint exit 0 | 最多 16 路径文件集锁 | retryWithParentModel |
 | `reviewer` 改造 | 局部 diff 风险审查 | 现状只读集 | 64K | findings schema + 主模型抽检 | 无 | none |
-| `security_guard` **新** | 判断单条命令能否无人值守执行 | **无工具** | 8K | 结构化裁决 | 无 | retryWithParentModel |
-| `judge` **新** | 路由/质检等有界裁决 | **无工具** | 8～16K | 调用方指定的格式 | 无 | retryWithParentModel |
+| `security_guard` **新** | 判断单条命令能否无人值守执行 | **无工具** | 32K（典型输入 <8K） | 结构化裁决 | 无 | retryWithParentModel |
+| `judge` **新** | 路由/质检等有界裁决 | **无工具** | 32K（典型输入 8～16K） | 调用方指定的格式 | 无 | retryWithParentModel |
 
 两个裁判工种刻意**不给任何工具**：它们回答的是「就手上这份材料下结论」，给工具只会让小模型跑去找更多证据，而一个去找证据的裁判就是一个不再回答问题的裁判。同样刻意的是 `maxRounds: 1`——裁决不需要第二轮。
 
@@ -353,12 +354,16 @@ target_command: "<确切命令>", task: {verifier: …})`。
 ## 10.6 模型上下文三档切分（model-tiers.v1，2026-08-16，与 willdeep-rs 共用）
 
 完整设计在 willdeep-rs 的 `docs/MODEL_TIERS.md`（两客户端共用同一套档位语义），
-此处记结论与 Xedit 侧的待办：
+此处记结论与 Xedit 侧实现：
 
 - **三档**：S（32–64K，worker，已建成）/ M（~256K，会话默认档）/ L（1M，
   申请制稀缺资源）。**档位绑定用现有网关模型，不建新虚拟档**：
   L=`deepseek-v4-flash`（1M）、M=`glm-5.x`/`kimi-k3`（256K 段），均实测在线。
   `someim-32b-<工种>` 保留是因为托管职能提示词，不是窗口。
+- **S 档内部固定为 32K / 48K / 64K 三个可部署窗口，M 档固定为 256K**。
+  16K 不再作为模型档：16GB 显存已经能运行 35B-A3B 级模型并提供至少 32K，
+  继续围绕 16K 设计只会把任务切得过碎。文中 8～16K 仅表示某些裁判任务的
+  典型输入量，不表示存在 8K/16K 模型。
 - **动机从省钱改为主权**：很多公司数据不出机房，能私有化的开源权重主流在
   32K–256K，1M 档几乎没有。**体系必须在只有 S+M 的机房里完整可用，L 是
   加速器不是地基**——一个默认假设 1M 窗口的工作流，在私有化那天停摆，而那
@@ -377,6 +382,15 @@ target_command: "<确切命令>", task: {verifier: …})`。
   **workflow 步骤保持手标 profile 不变**：内置 workflow 的步骤是 Swift 代码、
   不经过技能系统，「按 tier 自动选档」适用的地方是技能被调用的地方——
   list_skills 命中与 spawn_agent 派工，两处都已自动化。
+- **Xedit 1.270.0-rc1 与 willdeep-rs 同步写工种能力**：新增 256K
+  `implementer`，可创建或修改最多 16 个已声明路径；Smart Approval 与
+  Workspace Access 继承父任务的工作区授权，Strict 保留审批。创建和修改都
+  经过同一文件集锁，删除、改名、未声明路径、工作区逃逸与符号链接逃逸不放宽。
+  `implementer` 不绑定 some.im 托管虚拟模型，默认使用用户配置的本地、私有或
+  企业内网 Provider；Deep/1M 只在任务无法切分时升级。
+- **Provider 不越界**：内置工种遗留的 some.im 默认绑定只在父会话本身使用
+  some.im 时生效；父会话选择本地/内网 Provider 时，所有隐式 Worker 留在同一
+  Provider。仅用户在工种设置里显式选择的 Provider 可以覆盖这一规则。
 
 ## 11. 风险
 
