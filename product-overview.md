@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-18 | Current version: v1.272.0-rc3
+> Last updated: 2026-08-18 | Current version: v1.272.0-rc4
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **发布测试与安全判定解耦（1.272.0-rc4）** —— Goal 模式的命令型工具继续遵循“静态分类 → AI 安全判定”闸门；发布回归测试不再假设测试机缺少安全判定配置，而是同时验证判定放行与回退人工审批两条合法路径，并禁止 Goal 模式或静态白名单绕过命令安全检查。
 - **Agent Markdown 有序列表连续编号（1.272.0-rc3）** —— Markdown 解析块现在携带按缩进层级解析出的显示序号，不再由实时、历史和预览渲染器各自写死 `1.`。同一列表允许项目之间存在空行，也兼容模型统一使用 `1.` 标记的常见写法；自定义起始序号、嵌套列表独立计数、返回父层后续号及段落边界重置均由同一解析器统一处理。
 - **审批内容中文化（1.272.0-rc2）** —— Agent 写入外部文件等通用审批卡只展示用户需要核对的业务参数，文件路径、写入内容、工作目录等使用中文标签；`_approval_reason`、`_sandbox` 等宿主内部审计字段仍随调用记录保留并参与安全判定，但不再以英文实现细节占据审批正文。
 - **自动更新真正可用（1.272.0-rc1）** —— 设置页新增「自动下载并安装更新」开关，直接绑定 Sparkle 自身的偏好而非另建平行存储，与更新弹窗里那个复选框成为同一个值的两个视图。此前的实际状态是：`SUAutomaticallyUpdate` 在 UserDefaults 里根本不存在，弹窗显示的是 Info.plist 默认值，看着已勾选却从未被用户确认；同时 `SUScheduledCheckInterval` 未设置、Sparkle 按 24 小时检查，而应用自己的 17 分钟轮询总是先弹出侧栏横幅，把用户导向 Sparkle 的用户主动检查 API——按其契约那条路永远弹窗、永不静默安装。现在检查间隔为 1 小时，自动安装才有机会跑在轮询之前；启动时记录 `checks` / `downloads` / `allowed` / `interval` / `lastCheck` 五个决定性取值，下次反馈可查日志而非推断。
