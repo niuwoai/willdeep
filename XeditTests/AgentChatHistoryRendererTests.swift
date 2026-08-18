@@ -430,6 +430,24 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
+    func orderedMarkdownListsAdvanceInStreamingAndHistoryRenderers() {
+        let markdown = "1. 封面\n\n1. 背景与痛点\n\n1. 产品定位"
+        let streaming = String(AgentAssistantMarkdownRenderer.render(
+            markdown,
+            isDark: false,
+            baseFontSize: 14
+        ).characters)
+        let history = AgentChatHistoryRenderer.render(
+            messages: [AgentMessage(role: .assistant, content: markdown)],
+            isDark: false
+        ).string
+
+        for rendered in [streaming, history] {
+            #expect(rendered.contains("1. 封面\n2. 背景与痛点\n3. 产品定位"))
+        }
+    }
+
+    @Test
     func chatMarkdownTrimsProviderOuterBlankLinesButPreservesInnerParagraphs() {
         let normalized = AgentMarkdownNormalizer.normalizedForChatRendering(
             "\n\n我先获取模型列表。\n\n然后逐个测试。\n\n"
