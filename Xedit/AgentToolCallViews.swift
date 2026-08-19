@@ -1811,9 +1811,11 @@ struct AgentToolCallCard: View {
         case .pendingApproval, .awaitingConfirm: return appState.editorSettings.interfaceSkin.palette.hairline
         case .awaitingUserAnswer: return appState.editorSettings.interfaceSkin.palette.hairline
         case .failed:
-            return call.commandExitCode == nil
-                ? Color.orange.opacity(0.4)
-                : Color.secondary.opacity(0.3)
+            // Every failure — a non-zero command and a tool that malfunctioned
+            // alike — stays in the neutral palette. The icon and title went
+            // grayscale first; an orange border on the same card was the last
+            // thing still styling "编辑文件失败" as an alarm.
+            return Color.secondary.opacity(0.3)
         case .denied: return Color.secondary.opacity(0.3)
         default: return Color.clear
         }
