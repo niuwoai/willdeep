@@ -769,46 +769,35 @@ struct AgentSemanticActivityStatusLine: View {
     private var backgroundTaskComposerCard: some View {
         let runningJobs = currentSessionAliveJobs
         let leadJob = runningJobs.first
-        return Button {
-            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .backgroundTasks)
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.green)
-                Text(L10n.AgentJobs.composerRunningSummary(runningJobs.count))
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                if let leadJob {
-                    Text("·")
-                        .foregroundStyle(.tertiary)
-                    Text(AgentBackgroundTaskPresentation.processName(command: leadJob.command))
-                        .font(.system(size: 11.5, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
+        return HStack(spacing: 7) {
+            Image(systemName: "play.circle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.green)
+            Text(L10n.AgentJobs.composerRunningSummary(runningJobs.count))
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+            if let leadJob {
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                Text(AgentBackgroundTaskPresentation.processName(command: leadJob.command))
+                    .font(.system(size: 11.5, design: .monospaced))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 12)
-            .frame(height: 30)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.green.opacity(0.09))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.green.opacity(0.18), lineWidth: 1)
-            )
+            Spacer(minLength: 4)
         }
-        .buttonStyle(.plain)
-        .focusable(false)
-        .accessibilityLabel(Text(L10n.AgentJobs.managerTitle))
-        .accessibilityHint(Text(L10n.AgentJobs.openManagerHelp))
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.green.opacity(0.09))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.green.opacity(0.18), lineWidth: 1)
+        )
+        .accessibilityLabel(Text(L10n.AgentJobs.composerRunningSummary(runningJobs.count)))
     }
 
     private var currentSessionJobs: [AgentBackgroundJob] {
