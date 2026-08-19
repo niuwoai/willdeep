@@ -1087,7 +1087,10 @@ struct WillDeepTests {
             rootDirectory: root,
             interactionMode: .goal
         )
-        #expect(curlApproval == nil)
+        // Goal 模式不能绕过命令型工具的安全闸门；安全判定可明确
+        // 放行，也可因拒绝/不可用回退给用户，但绝不能走 Goal 或
+        // 静态白名单直接放行。这里不应依赖测试机是否配置了判定模型。
+        #expect(curlApproval == nil || curlApproval == .llmJudge)
 
         // Smart 模式信任受控委托式编码 Agent；其自身仍受沙箱约束。
         let normalApproval = await appState.autoApprovalSource(

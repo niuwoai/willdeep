@@ -178,6 +178,9 @@ final class AppState: ObservableObject {
     /// The center-column destination in Agent mode. Scheduled tasks use a
     /// dedicated page instead of expanding an unbounded list in the sidebar.
     @Published var agentPrimaryDestination: AgentPrimaryDestination = .conversation
+    /// Shared by the header magnifier and the sidebar's Search action, so
+    /// both entry points always open the same destination palette.
+    @Published var isAgentSessionSearchPresented = false
     /// One-shot request to collapse the floating plan card. The transcript
     /// bumps this when a new assistant round begins so the plan folds away
     /// while the agent works, matching the old inline-card behaviour. Pure UI
@@ -281,6 +284,10 @@ final class AppState: ObservableObject {
     /// workspace. Empty until the user creates one, which is why every
     /// pre-project session keeps its path-based group unchanged.
     @Published var agentProjects: [AgentProject] = AgentProjectStore.load()
+    /// A transient sidebar navigation intent emitted by chat title search.
+    /// It is intentionally separate from activeAgentSessionID: selecting a
+    /// project highlights its group without opening or changing a chat.
+    @Published var agentSidebarRevealRequest: AgentSidebarRevealRequest?
     /// Launch catalog loading is asynchronous. The Agent window uses this
     /// edge to run Goal recovery only after every persisted candidate is
     /// visible, avoiding a race with the initial empty in-memory list.

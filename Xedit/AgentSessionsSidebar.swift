@@ -29,6 +29,24 @@ struct AgentProjectEditorTarget: Identifiable {
     let seedFolderPath: String?
 }
 
+/// One-shot request from title search to reveal an item in the left chat
+/// sidebar. A fresh id is deliberate: selecting the same result twice still
+/// recentres the row after the user has scrolled somewhere else.
+struct AgentSidebarRevealRequest: Equatable, Identifiable {
+    enum Target: Equatable {
+        case session(AgentSession.ID)
+        case project(AgentProject.ID)
+    }
+
+    let id: UUID
+    let target: Target
+
+    init(target: Target, id: UUID = UUID()) {
+        self.target = target
+        self.id = id
+    }
+}
+
 private struct SidebarWorkspaceGroup: Identifiable {
     let id: String
     let displayName: String
@@ -256,6 +274,10 @@ struct AgentSessionsSidebar: View {
         .isAuthenticated
     @State private var isRefreshingSomeIMAccount = false
     @State private var someIMAccountStatus = ""
+    /// Project-name search results focus the group header itself. Session
+    /// selection clears this and continues to use the existing active-row
+    /// highlight.
+    @State private var focusedWorkspaceGroupKey: String?
 
     private let initialRowCount = 5
 
@@ -289,7 +311,8 @@ struct AgentSessionsSidebar: View {
             // strip duplicated information available elsewhere and consumed
             // valuable vertical space in the sidebar.
             Color.clear.frame(height: trafficLightReserve)
-            ScrollView {
+            ScrollViewReader { scrollProxy in
+                ScrollView {
                 // Keep the workspace stack eager. On macOS 26 the lazy-stack
                 // item-phase cache can continuously invalidate when these
                 // dynamic workspace groups contain nested ForEach rows. That
@@ -309,10 +332,11 @@ struct AgentSessionsSidebar: View {
                         workspacesHeader
                         ForEach(workspaceGroups) { group in
                             workspaceGroup(group)
+                                .id(group.id)
                         }
                         switch AgentSidebarCatalogPlaceholder.state(
                             hasLoadedCatalog: appState.hasLoadedAgentSessionCatalog,
-                            isSessionListEmpty: appState.agentSessions.isEmpty
+                            isSessionListEmpty: appState.agentSessions.isEmpty && appState.agentProjects.isEmpty
                         ) {
                         case .loading:
                             // 冷启动头几百毫秒磁盘目录还没读完，此时列表
@@ -342,15 +366,29 @@ struct AgentSessionsSidebar: View {
                 }
                 // 30pt 交通灯安全区继续保留；顶部只补 3pt 呼吸感，
                 // 避免再叠加完整的 8pt，让“新聊天”显得离顶部过远。
-                .padding(.top, 3)
-                .padding(.bottom, 8)
+                    .padding(.top, 3)
+                    .padding(.bottom, 8)
                 // 父 AgentModeView 给了 `.frame(width: sidebarWidth)`,
                 // 但 SwiftUI ScrollView 里的内容若声明了更大的固有宽
                 // 度(比如长 session title 跑出 truncation 边界),会向
                 // 右溢出到 chat 区域。把内容显式钉到 maxWidth=.infinity
                 // 让 ScrollView 知道它就只有那么宽,内部 Text 会按
                 // truncationMode 收尾。
-                .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .onCompatibleChange(of: appState.agentSidebarRevealRequest) { _, request in
+                    guard let request else { return }
+                    reveal(request, using: scrollProxy)
+                }
+                .onAppear {
+                    // When title search was opened with the sidebar hidden,
+                    // AgentModeView mounts this reader only after receiving
+                    // the same request. Consume the already-published value
+                    // here as well so the first reveal is not missed.
+                    if let request = appState.agentSidebarRevealRequest {
+                        reveal(request, using: scrollProxy)
+                    }
+                }
             }
             someIMAccountFooter
         }
@@ -368,6 +406,9 @@ struct AgentSessionsSidebar: View {
         .onAppear(perform: handleAppear)
         .onCompatibleChange(of: workspaceStatePruneKey) { _, _ in
             prunePersistedWorkspaceStateIfNeeded()
+        }
+        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
+            focusedWorkspaceGroupKey = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: SomeIMIntegrationStore.accountDidChangeNotification)) { _ in
             reloadSomeIMAuthenticationState()
@@ -444,6 +485,9 @@ struct AgentSessionsSidebar: View {
         VStack(spacing: 0) {
             SidebarActionRow(icon: "square.and.pencil", title: L10n.Sidebar.newChatAction, shortcut: "⌘N") {
                 appState.startNewAgentSession()
+            }
+            SidebarActionRow(icon: "magnifyingglass", title: L10n.Sidebar.searchSessionsAction, shortcut: "⌘⇧P") {
+                appState.isAgentSessionSearchPresented = true
             }
             SidebarActionRow(
                 icon: "clock",
@@ -547,6 +591,7 @@ struct AgentSessionsSidebar: View {
         let remoteWorkspace = remoteWorkspaceGroup(from: workspace)
         let remoteRuntime = group.remoteRuntime
         let isWorkspaceHovered = hoveredWorkspaceGroup == workspace
+        let isFocused = focusedWorkspaceGroupKey == workspace
 
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: AgentDesign.sidebarWorkspaceIconToTitleSpacing) {
@@ -617,6 +662,18 @@ struct AgentSessionsSidebar: View {
             .padding(.horizontal, AgentDesign.sidebarWorkspaceHorizontalInset)
             .frame(height: AgentDesign.sidebarRowHeight)
             .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(
+                    cornerRadius: AgentDesign.sidebarSelectionCornerRadius,
+                    style: .continuous
+                )
+                .fill(isFocused ? palette.selectionFill : Color.clear)
+            )
+            .clipShape(RoundedRectangle(
+                cornerRadius: AgentDesign.sidebarSelectionCornerRadius,
+                style: .continuous
+            ))
+            .padding(.horizontal, AgentDesign.sidebarSelectionHorizontalInset)
             .contextMenu {
                 Button(L10n.Sidebar.workspaceMenuNewChat) {
                     startNewSession(inWorkspaceGroup: workspace)
@@ -740,6 +797,7 @@ struct AgentSessionsSidebar: View {
         let displaySession = observedRuntime?.session ?? session
 
         Button {
+            focusedWorkspaceGroupKey = nil
             appState.selectAgentSession(id: session.id)
         } label: {
             HStack(spacing: 6) {
@@ -822,6 +880,7 @@ struct AgentSessionsSidebar: View {
             .padding(.horizontal, AgentDesign.sidebarSelectionHorizontalInset)
         }
         .buttonStyle(.plain)
+        .id(session.id)
         .onHover { hovering in
             if hovering {
                 hoveredSessionID = session.id
@@ -1024,11 +1083,20 @@ struct AgentSessionsSidebar: View {
     // workspace has no real chat yet, one empty placeholder is kept so an
     // added project does not vanish the moment the next project is added.
     private func groupedSessions(from visibleSessions: [AgentSession]) -> [SidebarWorkspaceGroup] {
-        let groups = Dictionary(grouping: visibleSessions) { session in
+        var groups = Dictionary(grouping: visibleSessions) { session in
             session.workspaceSidebarGroupKey
         }
         let remoteDescriptors = remoteRuntimeDescriptorsByID
         let projects = appState.agentProjects
+        // A named project remains a searchable sidebar destination even when
+        // its final conversation was archived or removed. Otherwise title
+        // search could truthfully find a project yet have nowhere to reveal.
+        for project in projects {
+            let key = AgentSession.projectSidebarGroupKeyPrefix + project.id.uuidString
+            if groups[key] == nil {
+                groups[key] = []
+            }
+        }
         // Group order rules — fully static, never depends on session
         // updatedAt or on which folder is currently open. The user
         // explicitly asked for the workspace list to stop moving around,
@@ -1083,7 +1151,11 @@ struct AgentSessionsSidebar: View {
     }
 
     private var workspaceStatePruneKey: [String] {
-        Array(Set(appState.agentSessions.map(\.workspaceSidebarGroupKey))).sorted()
+        let sessionKeys = appState.agentSessions.map(\.workspaceSidebarGroupKey)
+        let projectKeys = appState.agentProjects.map {
+            AgentSession.projectSidebarGroupKeyPrefix + $0.id.uuidString
+        }
+        return Array(Set(sessionKeys + projectKeys)).sorted()
     }
 
     private func setWorkspaceExpanded(_ workspace: String, expanded: Bool) {
@@ -1091,6 +1163,45 @@ struct AgentSessionsSidebar: View {
         guard updateWorkspaceState(&updated, workspace: workspace, enabled: expanded) else { return }
         expandedWorkspaces = updated
         AgentSidebarWorkspaceStateStore.save(updated, kind: .expandedWorkspaces)
+    }
+
+    private func reveal(_ request: AgentSidebarRevealRequest, using proxy: ScrollViewProxy) {
+        switch request.target {
+        case .session(let sessionID):
+            guard let session = appState.agentSessions.first(where: { $0.id == sessionID }) else { return }
+            let workspace = session.workspaceSidebarGroupKey
+            focusedWorkspaceGroupKey = nil
+            prepareWorkspaceForReveal(workspace, archived: session.isArchived)
+            recenter(sessionID, using: proxy)
+        case .project(let projectID):
+            guard appState.agentProjects.contains(where: { $0.id == projectID }) else { return }
+            let workspace = AgentSession.projectSidebarGroupKeyPrefix + projectID.uuidString
+            focusedWorkspaceGroupKey = workspace
+            prepareWorkspaceForReveal(workspace, archived: false)
+            recenter(workspace, using: proxy)
+        }
+    }
+
+    private func prepareWorkspaceForReveal(_ workspace: String, archived: Bool) {
+        appState.unhideWorkspace(key: workspace)
+        setWorkspaceCollapsed(workspace, collapsed: false)
+        setWorkspaceExpanded(workspace, expanded: true)
+        if archived {
+            setArchivedGroupExpanded(workspace, expanded: true)
+        }
+    }
+
+    private func recenter<ID: Hashable>(_ id: ID, using proxy: ScrollViewProxy) {
+        // State changes above can insert previously hidden rows. Deferring two
+        // turns gives SwiftUI time to materialize them before scrollTo asks for
+        // the anchor, including archived and "see more" cases.
+        DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    proxy.scrollTo(id, anchor: .center)
+                }
+            }
+        }
     }
 
     private func setWorkspaceCollapsed(_ workspace: String, collapsed: Bool) {

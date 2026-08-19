@@ -73,6 +73,15 @@ nonisolated struct AgentDailyUsage: Identifiable, Equatable {
     let sessionCount: Int
 }
 
+nonisolated struct AgentDailyUsageDetail: Equatable {
+    let date: Date
+    let overview: AgentUsageOverview
+    let modelUsage: [AgentModelUsageRow]
+    let capabilityUsage: [AgentCapabilityUsageRow]
+    let cacheHitRate: Double
+    let maximumContextTokens: Int
+}
+
 struct AgentModelUsageRow: Identifiable, Equatable {
     var id: String { "\(providerID)|\(modelID)" }
     let providerID: String
@@ -744,6 +753,55 @@ enum AgentUsageStats {
                 estimatedCostUSD: costByDay[day] ?? 0,
                 sessionCount: sessionIDsByDay[day]?.count ?? 0
             )
+        }
+    }
+
+    static func dailyDetail(
+        for sessionSnapshots: [AgentUsageSessionSnapshot],
+        on day: Date,
+        calendar sourceCalendar: Calendar = .current
+    ) -> AgentDailyUsageDetail {
+        let dailySessions = sessions(on: day, from: sessionSnapshots, calendar: sourceCalendar)
+        let rows = modelUsage(for: dailySessions)
+        let promptTokens = rows.reduce(0) { $0 + $1.promptTokens }
+        let cachedPromptTokens = rows.reduce(0) { $0 + $1.cachedPromptTokens }
+        let maximumContextTokens = dailySessions
+            .flatMap(\.messages)
+            .filter { $0.role == .assistant }
+            .map { message in
+                if let prompt = message.promptTokens {
+                    return prompt + max(0, message.completionTokens ?? 0)
+                }
+                return max(0, message.usageTokens ?? 0)
+            }
+            .max() ?? 0
+
+        return AgentDailyUsageDetail(
+            date: sourceCalendar.startOfDay(for: day),
+            overview: overview(for: dailySessions, now: day),
+            modelUsage: rows,
+            capabilityUsage: capabilityUsage(for: dailySessions),
+            cacheHitRate: promptTokens > 0
+                ? Double(cachedPromptTokens) / Double(promptTokens)
+                : 0,
+            maximumContextTokens: maximumContextTokens
+        )
+    }
+
+    static func sessions(
+        on day: Date,
+        from sessions: [AgentUsageSessionSnapshot],
+        calendar sourceCalendar: Calendar = .current
+    ) -> [AgentUsageSessionSnapshot] {
+        guard let interval = sourceCalendar.dateInterval(of: .day, for: day) else {
+            return []
+        }
+        return sessions.compactMap { session in
+            let messages = session.messages.filter { interval.contains($0.createdAt) }
+            guard !messages.isEmpty else { return nil }
+            var dailySession = session
+            dailySession.messages = messages
+            return dailySession
         }
     }
 

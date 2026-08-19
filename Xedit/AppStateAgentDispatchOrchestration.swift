@@ -43,6 +43,22 @@ nonisolated enum AgentDispatchUnattendedRecoveryPolicy {
     }
 }
 
+/// Resolves the terminal node state from the two independent signals owned by
+/// the task Harness. A completed acceptance checklist is the authoritative
+/// delivery verdict: a later provider/plan-continuation warning must not turn
+/// already verified work back into a failed graph node.
+nonisolated enum AgentDispatchCompletionPolicy {
+    static func terminalState(
+        hasCompletedAcceptance: Bool,
+        hasRuntimeError: Bool
+    ) -> AgentDispatchTaskState? {
+        if hasCompletedAcceptance {
+            return .merged
+        }
+        return hasRuntimeError ? .failed : nil
+    }
+}
+
 extension AppState {
     /// Single entry point for projecting sessions onto the dispatch board.
     ///
@@ -809,6 +825,32 @@ extension AppState {
               !goal.isPaused else {
             return
         }
+
+        // Repair durable graph records written by older builds where a
+        // provider/continuation warning won over an already completed Goal
+        // checklist. This is deliberately limited to failed nodes: a user
+        // explicitly stopped (`cancelled`) node must stay stopped.
+        var didRepairCompletedFailure = false
+        for task in goal.tasks where task.state == .failed {
+            guard let runtimeSessionID = task.runtimeSessionID,
+                  let taskRuntime = runtime(for: runtimeSessionID),
+                  taskRuntime.currentGoal.map({
+                      !$0.checklist.isEmpty && $0.checklist.allSatisfy(\.done)
+                  }) == true else {
+                continue
+            }
+            dispatchMonitoredRuntimeIDsByTaskID[task.id] = nil
+            agentDispatchCoordinator.updateTaskState(
+                goalID: goalID,
+                taskID: task.id,
+                state: .merged
+            )
+            didRepairCompletedFailure = true
+        }
+        if didRepairCompletedFailure {
+            _ = launchReadyDispatchTasks(goalID: goalID)
+        }
+
         for task in goal.tasks where task.state == .running || task.state == .reviewing {
             guard let runtimeSessionID = task.runtimeSessionID,
                   let taskRuntime = runtime(for: runtimeSessionID) else {
@@ -870,6 +912,46 @@ extension AppState {
             taskID: taskID,
             state: .cancelled
         )
+        return true
+    }
+
+    /// Explicit operator override for a node whose automated verdict is
+    /// wrong. The action is only accepted while the node runtime is idle,
+    /// records the checklist as complete when one exists, unlocks dependent
+    /// nodes, and immediately asks the scheduler to continue the graph.
+    @discardableResult
+    func markDispatchTaskSuccessfulAndContinue(goalID: UUID, taskID: UUID) -> Bool {
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              let task = goal.tasks.first(where: { $0.id == taskID }),
+              [.failed, .cancelled, .reviewing, .accepted].contains(task.state) else {
+            return false
+        }
+
+        let taskRuntime = task.runtimeSessionID.flatMap { runtime(for: $0) }
+        guard taskRuntime?.isResponding != true,
+              taskRuntime?.isAwaitingProviderSlot != true else {
+            return false
+        }
+
+        dispatchMonitoredRuntimeIDsByTaskID[taskID] = nil
+        if let taskRuntime, var completedGoal = taskRuntime.currentGoal {
+            for index in completedGoal.checklist.indices {
+                completedGoal.checklist[index].done = true
+            }
+            taskRuntime.currentGoal = completedGoal
+            taskRuntime.errorMessage = nil
+            taskRuntime.errorDetails = nil
+            persistAgentSession(runtime: taskRuntime)
+        }
+
+        agentDispatchCoordinator.updateTaskState(
+            goalID: goalID,
+            taskID: taskID,
+            state: .merged
+        )
+        if !goal.isPaused {
+            _ = launchReadyDispatchTasks(goalID: goalID)
+        }
         return true
     }
 
@@ -1093,10 +1175,11 @@ extension AppState {
                 }
 
                 let state: AgentDispatchTaskState
-                if runtime.errorMessage != nil {
-                    state = .failed
-                } else if hasCompletedAcceptance {
-                    state = .merged
+                if let terminalState = AgentDispatchCompletionPolicy.terminalState(
+                    hasCompletedAcceptance: hasCompletedAcceptance,
+                    hasRuntimeError: runtime.errorMessage != nil
+                ) {
+                    state = terminalState
                 } else {
                     // `reviewing` is an active Harness phase, never an idle
                     // terminal state. Exhausting its bounded repair budget is

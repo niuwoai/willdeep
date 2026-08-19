@@ -1316,7 +1316,7 @@ enum AgentChatHistoryRenderer {
                 appendBlockSeparator()
                 let indent = String(repeating: "  ", count: min(block.indent, 4))
                 result.append(NSAttributedString(
-                    string: "\(indent)1. ",
+                    string: "\(indent)\(block.orderedListNumber ?? 1). ",
                     attributes: [
                         .font: bodyFont,
                         .foregroundColor: secondaryColor,

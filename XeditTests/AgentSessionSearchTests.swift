@@ -36,6 +36,39 @@ struct AgentSessionSearchTests {
         #expect(!AgentSessionSearch.matches("anything", query: "   "))
     }
 
+    @Test("title results include matching projects before matching chats")
+    func titleResultsIncludeProjectsAndChats() {
+        let project = AgentProject(
+            displayName: "支付平台",
+            folderPaths: ["/tmp/payment"],
+            createdAt: .distantPast,
+            updatedAt: Date(timeIntervalSinceReferenceDate: 20)
+        )
+        let matchingChat = AgentSession(
+            title: "支付接口排障",
+            workspaceRootPath: "/tmp/payment",
+            createdAt: .distantPast,
+            updatedAt: Date(timeIntervalSinceReferenceDate: 10)
+        )
+        let results = AgentSessionSearch.titleResults(
+            sessions: [matchingChat, session(title: "无关会话")],
+            projects: [project],
+            query: "支付"
+        )
+
+        #expect(results == [.project(project), .session(matchingChat)])
+    }
+
+    @Test("sidebar reveal requests remain one-shot even for the same target")
+    func sidebarRevealRequestsAreUnique() {
+        let sessionID = UUID()
+        let first = AgentSidebarRevealRequest(target: .session(sessionID))
+        let second = AgentSidebarRevealRequest(target: .session(sessionID))
+
+        #expect(first.target == .session(sessionID))
+        #expect(first.id != second.id)
+    }
+
     @Test("only user and assistant turns are searched")
     func toolOutputIsNotSearched() {
         let found = AgentSessionSearch.matches(

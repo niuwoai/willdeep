@@ -17,7 +17,15 @@
 //  so the chat empty state and plan card can mount them across files.
 //
 
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
+
+extension Notification.Name {
+    static let agentStatsDashboardPageDidChange = Notification.Name(
+        "willdeep.agent.statsDashboard.pageDidChange"
+    )
+}
 
 // MARK: - Stats dashboard
 
@@ -49,9 +57,56 @@ enum AgentStatsDashboardLayout {
     static let profileAvatarSize: CGFloat = 80
     static let summaryCornerRadius: CGFloat = 15
     static let metricStripHeight: CGFloat = 61
-    static let heatmapCellSize: CGFloat = 8
-    static let heatmapCellSpacing: CGFloat = 3
-    static let maximumHeatmapWeeks = 52
+    static let heatmapCellSize: CGFloat = 12
+    static let maximumHeatmapCellSize: CGFloat = 14
+    static let heatmapCellSpacing: CGFloat = 4
+    static let maximumHeatmapWeeks = 32
+    static let visibleHeatmapMonths = 8
+
+    struct HeatmapMetrics: Equatable {
+        let weekCount: Int
+        let cellSize: CGFloat
+        let columnSpacing: CGFloat
+
+        var width: CGFloat {
+            CGFloat(weekCount) * cellSize
+                + CGFloat(max(0, weekCount - 1)) * columnSpacing
+        }
+    }
+
+    static func heatmapMetrics(
+        availableWidth: CGFloat,
+        availableWeekCount: Int
+    ) -> HeatmapMetrics {
+        let width = max(0, availableWidth)
+        let cappedAvailableWeeks = max(1, min(maximumHeatmapWeeks, availableWeekCount))
+        let targetStride = heatmapCellSize + heatmapCellSpacing
+        let fittingWeekCount = max(1, Int((width + heatmapCellSpacing) / targetStride))
+        let weekCount = min(cappedAvailableWeeks, fittingWeekCount)
+        let gapCount = CGFloat(max(0, weekCount - 1))
+        let targetGapWidth = gapCount * heatmapCellSpacing
+        let unconstrainedCellSize = weekCount > 0
+            ? max(0, width - targetGapWidth) / CGFloat(weekCount)
+            : 0
+        let minimumCellSize = min(heatmapCellSize, width)
+        let cellSize = min(
+            maximumHeatmapCellSize,
+            max(minimumCellSize, unconstrainedCellSize)
+        )
+        let columnSpacing = weekCount > 1
+            ? max(0, width - CGFloat(weekCount) * cellSize) / gapCount
+            : 0
+
+        return HeatmapMetrics(
+            weekCount: weekCount,
+            cellSize: cellSize,
+            columnSpacing: columnSpacing
+        )
+    }
+
+    static func heatmapHeight(cellSize: CGFloat) -> CGFloat {
+        7 * cellSize + 6 * heatmapCellSpacing
+    }
 }
 
 enum AgentStatsDashboardFormatting {
@@ -79,6 +134,9 @@ struct AgentStatsDashboard: View {
     @State private var selectedTab: DashboardTab
     @State private var activityMode: ActivityMode = .daily
     @State private var displayedMonth: Date
+    @State private var selectedDay: Date
+    @State private var sharePreview: AgentDailySharePreview?
+    @State private var isGeneratingShareImage = false
     @State private var account = SomeIMIntegrationStore.loadAuthenticatedAccount()
     private let now: Date
 
@@ -87,6 +145,7 @@ struct AgentStatsDashboard: View {
         _displayedMonth = State(
             initialValue: Calendar.current.dateInterval(of: .month, for: now)?.start ?? now
         )
+        _selectedDay = State(initialValue: Calendar.current.startOfDay(for: now))
         self.now = now
     }
 
@@ -95,6 +154,7 @@ struct AgentStatsDashboard: View {
         case models = "Models"
         case workers = "Workers"
         case calendar = "Calendar"
+        case day = "Day"
         var id: String { rawValue }
         var title: String {
             switch self {
@@ -102,6 +162,7 @@ struct AgentStatsDashboard: View {
             case .models: return L10n.StatsDashboard.tabsModels
             case .workers: return L10n.StatsDashboard.tabsWorkers
             case .calendar: return L10n.StatsDashboard.usageCalendarTitle
+            case .day: return L10n.StatsDashboard.dailyDetailTitle
             }
         }
     }
@@ -141,6 +202,17 @@ struct AgentStatsDashboard: View {
         ) { _ in
             account = SomeIMIntegrationStore.loadAuthenticatedAccount()
         }
+        .onCompatibleChange(of: selectedTab) { _, _ in
+            NotificationCenter.default.post(name: .agentStatsDashboardPageDidChange, object: nil)
+        }
+        .sheet(item: $sharePreview) { preview in
+            AgentDailyShareSheet(
+                image: preview.image,
+                suggestedFilename: preview.suggestedFilename,
+                onSave: { saveShareImage(preview.image) },
+                onShare: { shareImage(preview.image) }
+            )
+        }
     }
 
     private var dashboardContent: some View {
@@ -171,6 +243,8 @@ struct AgentStatsDashboard: View {
                 }
             case .calendar:
                 usageCalendar
+            case .day:
+                dailyUsageDetail
             }
         }
     }
@@ -324,7 +398,8 @@ struct AgentStatsDashboard: View {
             } label: {
                 CodexDashboardMetric(
                     value: formatTokenCount(stats.totalTokens),
-                    title: L10n.StatsDashboard.metricTotalTokens
+                    title: L10n.StatsDashboard.metricTotalTokens,
+                    showsDisclosure: true
                 )
             }
             .buttonStyle(.plain)
@@ -387,47 +462,55 @@ struct AgentStatsDashboard: View {
             .padding(.bottom, 11)
 
             GeometryReader { proxy in
-                let cellSize = AgentStatsDashboardLayout.heatmapCellSize
-                let cellSpacing = AgentStatsDashboardLayout.heatmapCellSpacing
-                let cells = activityCells
+                let metrics = AgentStatsDashboardLayout.heatmapMetrics(
+                    availableWidth: proxy.size.width,
+                    availableWeekCount: activityCells.count
+                )
+                let cells = Array(activityCells.suffix(metrics.weekCount))
                 let displayCounts = activityDisplayCounts(cells)
                 let maxCount = displayCounts.flatMap { $0 }.max() ?? 0
 
-                HStack(spacing: cellSpacing) {
-                    ForEach(Array(cells.enumerated()), id: \.offset) { columnIndex, column in
-                        VStack(spacing: cellSpacing) {
-                            ForEach(Array(column.enumerated()), id: \.element.id) { rowIndex, cell in
-                                // One tooltip string per cell per pass, via
-                                // the cached formatter. The previous code
-                                // formatted the tooltip twice per cell with
-                                // a freshly allocated DateFormatter each
-                                // time — ~700 formatter allocations for the
-                                // 53-week grid on every body evaluation,
-                                // which showed up as periodic main-thread
-                                // stutter whenever AppState published.
-                                let tooltip = L10n.HeatmapCell.tooltip(
-                                    cellDateLabel(cell.date),
-                                    formatInteger(cell.requestCount),
-                                    formatTokenCount(cell.tokenCount)
-                                )
-                                RoundedRectangle(cornerRadius: 1.5)
-                                    .fill(color(
-                                        for: displayCounts[columnIndex][rowIndex],
-                                        peak: maxCount
-                                    ))
-                                    .frame(width: cellSize, height: cellSize)
-                                    .help(tooltip)
-                                    .accessibilityLabel(tooltip)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: metrics.columnSpacing) {
+                        ForEach(Array(cells.enumerated()), id: \.offset) { columnIndex, column in
+                            VStack(spacing: AgentStatsDashboardLayout.heatmapCellSpacing) {
+                                ForEach(Array(column.enumerated()), id: \.element.id) { rowIndex, cell in
+                                    // One tooltip string per cell per pass, via
+                                    // the cached formatter. The previous code
+                                    // formatted the tooltip twice per cell with
+                                    // a freshly allocated DateFormatter each
+                                    // time — ~700 formatter allocations for the
+                                    // 53-week grid on every body evaluation,
+                                    // which showed up as periodic main-thread
+                                    // stutter whenever AppState published.
+                                    let tooltip = L10n.HeatmapCell.tooltip(
+                                        cellDateLabel(cell.date),
+                                        formatInteger(cell.requestCount),
+                                        formatTokenCount(cell.tokenCount)
+                                    )
+                                    RoundedRectangle(cornerRadius: 1.5)
+                                        .fill(color(
+                                            for: displayCounts[columnIndex][rowIndex],
+                                            peak: maxCount
+                                        ))
+                                        .frame(width: metrics.cellSize, height: metrics.cellSize)
+                                        .help(tooltip)
+                                        .accessibilityLabel(tooltip)
+                                }
                             }
                         }
                     }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(height: heatmapHeight)
-            .padding(.bottom, 10)
+                    .frame(width: metrics.width, alignment: .leading)
 
-            monthLabels
+                    monthLabels
+                }
+                .frame(width: proxy.size.width, alignment: .leading)
+            }
+            .frame(
+                height: AgentStatsDashboardLayout.heatmapHeight(
+                    cellSize: AgentStatsDashboardLayout.maximumHeatmapCellSize
+                ) + 28
+            )
         }
         .contentShape(Rectangle())
         .onTapGesture {
@@ -537,47 +620,57 @@ struct AgentStatsDashboard: View {
         let isDisplayedMonth = Calendar.current.isDate(date, equalTo: displayedMonth, toGranularity: .month)
         let isToday = isDisplayedMonth && Calendar.current.isDate(date, inSameDayAs: now)
         let dayNumber = Calendar.current.component(.day, from: date)
-        return VStack(alignment: .center, spacing: 0) {
-            Text("\(dayNumber)")
-                .font(supportingFont(
-                    visualMinimum: AgentStatsDashboardTypography.body,
-                    weight: isToday ? .semibold : .regular
-                ))
-                .foregroundStyle(dayCellForeground(isToday: isToday, isDisplayedMonth: isDisplayedMonth))
-
-            if isDisplayedMonth {
-                Spacer(minLength: 4)
-                Text(formatCalendarTokens(usage?.tokenCount ?? 0))
+        return Button {
+            guard isDisplayedMonth else { return }
+            selectedDay = Calendar.current.startOfDay(for: date)
+            selectedTab = .day
+        } label: {
+            VStack(alignment: .center, spacing: 0) {
+                Text("\(dayNumber)")
                     .font(supportingFont(
-                        visualMinimum: AgentStatsDashboardTypography.metricValue,
-                        weight: .medium,
-                        design: .rounded
+                        visualMinimum: AgentStatsDashboardTypography.body,
+                        weight: isToday ? .semibold : .regular
                     ))
-                    .foregroundStyle(dayCellForeground(isToday: isToday, isDisplayedMonth: true))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                    .foregroundStyle(dayCellForeground(isToday: isToday, isDisplayedMonth: isDisplayedMonth))
 
-                Text(calendarDayFooter(usage))
-                    .font(supportingFont(visualMinimum: 10))
-                    .foregroundStyle(isToday ? Color.white.opacity(0.84) : Color.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-            } else {
-                Spacer(minLength: 0)
+                if isDisplayedMonth {
+                    Spacer(minLength: 4)
+                    Text(formatCalendarTokens(usage?.tokenCount ?? 0))
+                        .font(supportingFont(
+                            visualMinimum: AgentStatsDashboardTypography.metricValue,
+                            weight: .medium,
+                            design: .rounded
+                        ))
+                        .foregroundStyle(dayCellForeground(isToday: isToday, isDisplayedMonth: true))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+
+                    Text(calendarDayFooter(usage))
+                        .font(supportingFont(visualMinimum: 10))
+                        .foregroundStyle(isToday ? Color.white.opacity(0.84) : Color.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                } else {
+                    Spacer(minLength: 0)
+                }
             }
-        }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 7)
-        .frame(maxWidth: .infinity, minHeight: 78, alignment: .top)
-        .background(dayCellBackground(isToday: isToday, isDisplayedMonth: isDisplayedMonth))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .overlay {
-            if isDisplayedMonth && !isToday {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, minHeight: 78, alignment: .top)
+            .background(dayCellBackground(isToday: isToday, isDisplayedMonth: isDisplayedMonth))
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay {
+                if isDisplayedMonth && !isToday {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+                }
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .disabled(!isDisplayedMonth)
         .accessibilityElement(children: .combine)
+        .accessibilityHint(isDisplayedMonth ? L10n.StatsDashboard.dailyDetailOpenHelp : "")
     }
 
     private var usageCalendarColumns: [GridItem] {
@@ -666,10 +759,340 @@ struct AgentStatsDashboard: View {
         return .clear
     }
 
-    private var heatmapHeight: CGFloat {
-        let cellSize = AgentStatsDashboardLayout.heatmapCellSize
-        let cellSpacing = AgentStatsDashboardLayout.heatmapCellSpacing
-        return 7 * cellSize + 6 * cellSpacing
+    private var selectedDailyDetail: AgentDailyUsageDetail {
+        AgentUsageStats.dailyDetail(
+            for: appState.agentUsageSnapshots,
+            on: selectedDay
+        )
+    }
+
+    private var dailyUsageDetail: some View {
+        let detail = selectedDailyDetail
+        return VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                Button {
+                    selectedTab = .calendar
+                } label: {
+                    Label(L10n.StatsDashboard.usageCalendarTitle, systemImage: "chevron.left")
+                        .font(supportingFont(
+                            visualMinimum: AgentStatsDashboardTypography.body,
+                            weight: .medium
+                        ))
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 8)
+
+                Button {
+                    generateShareImage()
+                } label: {
+                    AgentShareImageButtonLabel(isGenerating: isGeneratingShareImage)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isGeneratingShareImage)
+                .accessibilityIdentifier("stats-daily-generate-share-image")
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(selectedDay.formatted(.dateTime.year().month(.wide).day()))
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.profileName,
+                        weight: .semibold
+                    ))
+                Text(L10n.StatsDashboard.dailyDetailTitle)
+                    .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                    .foregroundStyle(.secondary)
+            }
+
+            dailyMetricBand(detail)
+
+            HStack(alignment: .top, spacing: 22) {
+                dailyModelEfficiency(detail)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                Divider()
+
+                dailyAchievementColumn(detail)
+                    .frame(width: 230, alignment: .topLeading)
+            }
+        }
+        .accessibilityIdentifier("stats-daily-usage-detail")
+    }
+
+    private func dailyMetricBand(_ detail: AgentDailyUsageDetail) -> some View {
+        HStack(spacing: 0) {
+            CodexDashboardMetric(
+                value: formatTokenCount(detail.overview.totalTokens),
+                title: L10n.StatsDashboard.metricTotalTokens
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatInteger(detail.overview.userTurnCount),
+                title: L10n.StatsDashboard.insightTasksTotal
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatInteger(detail.overview.sessionCount),
+                title: L10n.StatsDashboard.insightSessions
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatPercentage(detail.cacheHitRate),
+                title: L10n.StatsDashboard.metricCacheHitRate
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatTokenCount(detail.maximumContextTokens),
+                title: L10n.StatsDashboard.metricMaximumContext
+            )
+        }
+        .frame(height: AgentStatsDashboardLayout.metricStripHeight)
+        .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
+                .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+        }
+    }
+
+    private func dailyModelEfficiency(_ detail: AgentDailyUsageDetail) -> some View {
+        let rows = detail.modelUsage
+        let maximumTokens = max(1, rows.map(\.totalTokens).max() ?? 0)
+        return VStack(alignment: .leading, spacing: 13) {
+            Text(L10n.StatsDashboard.dailyModelEfficiencyTitle)
+                .font(supportingFont(
+                    visualMinimum: AgentStatsDashboardTypography.sectionTitle,
+                    weight: .semibold
+                ))
+            Text(L10n.StatsDashboard.dailyModelEfficiencySubtitle)
+                .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                .foregroundStyle(.secondary)
+
+            if rows.isEmpty {
+                Text(L10n.ModelUsage.empty)
+                    .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 140)
+            } else {
+                ForEach(rows.prefix(6)) { row in
+                    dailyModelEfficiencyRow(row, maximumTokens: maximumTokens)
+                }
+            }
+        }
+    }
+
+    private func dailyModelEfficiencyRow(
+        _ row: AgentModelUsageRow,
+        maximumTokens: Int
+    ) -> some View {
+        let total = max(1, row.totalTokens)
+        let uncachedPromptTokens = max(0, row.promptTokens - min(row.cachedPromptTokens, row.promptTokens))
+        let inputShare = Double(uncachedPromptTokens) / Double(total)
+        let outputShare = Double(row.completionTokens) / Double(total)
+        let cacheShare = Double(min(row.cachedPromptTokens, row.promptTokens)) / Double(total)
+        let widthShare = max(0.04, Double(row.totalTokens) / Double(maximumTokens))
+
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "brain.head.profile")
+                    .foregroundStyle(dashboardAccent)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.modelID)
+                        .font(supportingFont(
+                            visualMinimum: AgentStatsDashboardTypography.body,
+                            weight: .semibold
+                        ))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(L10n.StatsDashboard.dailyModelUsageSummary(
+                        formatTokenCount(row.totalTokens),
+                        formatPercentage(row.cacheHitRate)
+                    ))
+                        .font(supportingFont(visualMinimum: 11))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Text(formatPercentage(Double(row.totalTokens) / Double(maximumTokens)))
+                    .font(supportingFont(
+                        visualMinimum: AgentStatsDashboardTypography.metricLabel,
+                        design: .monospaced
+                    ))
+                    .foregroundStyle(.secondary)
+            }
+
+            GeometryReader { proxy in
+                let availableWidth = proxy.size.width * widthShare
+                HStack(spacing: 0) {
+                    Rectangle()
+                        .fill(dashboardAccent.opacity(0.32))
+                        .frame(width: availableWidth * inputShare)
+                    Rectangle()
+                        .fill(dashboardAccent)
+                        .frame(width: availableWidth * outputShare)
+                    Rectangle()
+                        .fill(dashboardAccent.opacity(0.12))
+                        .frame(width: availableWidth * cacheShare)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(dashboardHeatmapInactive)
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            }
+            .frame(height: 10)
+
+            HStack(spacing: 14) {
+                dailyLegendValue(L10n.ModelUsage.summaryInputTokens, uncachedPromptTokens)
+                dailyLegendValue(L10n.ModelUsage.summaryOutputTokens, row.completionTokens)
+                dailyLegendValue(L10n.ModelUsage.headerCache, row.cachedPromptTokens)
+            }
+        }
+        .padding(.vertical, 5)
+    }
+
+    private func dailyLegendValue(_ title: String, _ tokens: Int) -> some View {
+        Text("\(title) \(formatTokenCount(tokens))")
+            .font(supportingFont(visualMinimum: 10, design: .monospaced))
+            .foregroundStyle(.secondary)
+    }
+
+    private func dailyAchievementColumn(_ detail: AgentDailyUsageDetail) -> some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text(L10n.StatsDashboard.dailyAchievementsTitle)
+                .font(supportingFont(
+                    visualMinimum: AgentStatsDashboardTypography.sectionTitle,
+                    weight: .semibold
+                ))
+
+            dailyAchievement(
+                symbol: "bolt.circle",
+                title: L10n.StatsDashboard.dailyCacheAchievement,
+                detail: formatPercentage(detail.cacheHitRate)
+            )
+            dailyAchievement(
+                symbol: "chart.line.uptrend.xyaxis.circle",
+                title: L10n.StatsDashboard.dailyProductivityAchievement,
+                detail: L10n.StatsDashboard.dailyTaskChatSummary(
+                    formatInteger(detail.overview.userTurnCount),
+                    formatInteger(detail.overview.sessionCount)
+                )
+            )
+
+            Divider()
+
+            Text(L10n.StatsDashboard.pluginsTitle)
+                .font(supportingFont(
+                    visualMinimum: AgentStatsDashboardTypography.sectionTitle,
+                    weight: .semibold
+                ))
+            if detail.capabilityUsage.isEmpty {
+                Text(L10n.StatsDashboard.pluginsEmpty)
+                    .font(supportingFont(visualMinimum: 11))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(detail.capabilityUsage.prefix(5).enumerated()), id: \.element.id) { index, row in
+                    CodexDashboardPluginRow(
+                        capability: row.capability,
+                        callCount: row.callCount,
+                        tint: pluginTint(at: index)
+                    )
+                }
+            }
+        }
+    }
+
+    private func dailyAchievement(symbol: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(dashboardAccent)
+                .frame(width: 26, height: 26)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(supportingFont(visualMinimum: 12, weight: .semibold))
+                Text(detail)
+                    .font(supportingFont(visualMinimum: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var shareImageFilename: String {
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: selectedDay)
+        let date = String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
+        return "WillDeep-\(date).png"
+    }
+
+    private func generateShareImage() {
+        guard !isGeneratingShareImage else { return }
+        isGeneratingShareImage = true
+
+        Task { @MainActor in
+            // Give SwiftUI one frame to commit the inline progress state
+            // before ImageRenderer performs its synchronous AppKit render.
+            try? await Task.sleep(for: .milliseconds(30))
+            let image = renderShareImage()
+            isGeneratingShareImage = false
+            guard let image else { return }
+            sharePreview = AgentDailySharePreview(
+                image: image,
+                suggestedFilename: shareImageFilename
+            )
+        }
+    }
+
+    private func renderShareImage() -> NSImage? {
+        let detail = selectedDailyDetail
+        let streak = AgentUsageStats.overview(
+            for: appState.agentUsageSnapshots,
+            now: selectedDay
+        ).currentStreak
+        let activity = AgentUsageStats.heatmap(
+            for: appState.agentUsageSnapshots,
+            weekCount: 1,
+            now: selectedDay
+        ).first ?? []
+        let card = AgentDailyShareCard(
+            detail: detail,
+            currentStreak: streak,
+            activity: activity
+        )
+        .frame(width: 540, height: 675)
+
+        let renderer = ImageRenderer(content: card)
+        renderer.scale = 2
+        return renderer.nsImage
+    }
+
+    private func saveShareImage(_ image: NSImage) {
+        guard let data = pngData(for: image) else { return }
+        let panel = NSSavePanel()
+        panel.title = L10n.StatsDashboard.saveShareImage
+        panel.nameFieldStringValue = shareImageFilename
+        panel.allowedContentTypes = [.png]
+        panel.canCreateDirectories = true
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+
+    private func shareImage(_ image: NSImage) {
+        guard let view = NSApp.keyWindow?.contentView else { return }
+        let picker = NSSharingServicePicker(items: [image])
+        let anchor = NSRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
+        picker.show(relativeTo: anchor, of: view, preferredEdge: .minY)
+    }
+
+    private func pngData(for image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation,
+              let representation = NSBitmapImageRep(data: tiff) else {
+            return nil
+        }
+        return representation.representation(using: .png, properties: [:])
     }
 
     private var detailSections: some View {
@@ -788,10 +1211,14 @@ struct AgentStatsDashboard: View {
         }
         let calendar = Calendar.current
         let currentMonth = calendar.date(
-            from: calendar.dateComponents([.year, .month], from: Date())
-        ) ?? Date()
-        let months = (0..<12).compactMap { offset in
-            calendar.date(byAdding: .month, value: offset - 11, to: currentMonth)
+            from: calendar.dateComponents([.year, .month], from: now)
+        ) ?? now
+        let months = (0..<AgentStatsDashboardLayout.visibleHeatmapMonths).compactMap { offset in
+            calendar.date(
+                byAdding: .month,
+                value: offset - (AgentStatsDashboardLayout.visibleHeatmapMonths - 1),
+                to: currentMonth
+            )
         }
         return HStack(spacing: 0) {
             ForEach(Array(months.enumerated()), id: \.offset) { index, date in
@@ -1251,19 +1678,6 @@ struct AgentStatsDashboard: View {
         }
     }
 
-    private func heatmapWeekCount(for width: CGFloat, cellSize: CGFloat, spacing: CGFloat) -> Int {
-        let minimumWeekCount = 16
-        let availableWidth = max(0, width)
-        let stride = cellSize + spacing
-        guard stride > 0 else { return minimumWeekCount }
-
-        let fittingColumns = Int((availableWidth + spacing) / stride)
-        return min(
-            AgentStatsDashboardLayout.maximumHeatmapWeeks,
-            max(minimumWeekCount, fittingColumns)
-        )
-    }
-
     private func color(for count: Int, peak: Int) -> Color {
         guard count > 0, peak > 0 else { return dashboardHeatmapInactive }
         let intensity = min(1.0, Double(count) / Double(peak))
@@ -1470,6 +1884,274 @@ struct AgentStatsDashboard: View {
     }
 }
 
+private struct AgentDailySharePreview: Identifiable {
+    let id = UUID()
+    let image: NSImage
+    let suggestedFilename: String
+}
+
+struct AgentShareImageButtonLabel: View {
+    let isGenerating: Bool
+
+    var body: some View {
+        if isGenerating {
+            HStack(spacing: 7) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(L10n.StatsDashboard.generatingShareImage)
+            }
+        } else {
+            Label(
+                L10n.StatsDashboard.generateShareImage,
+                systemImage: "square.and.arrow.up"
+            )
+        }
+    }
+}
+
+enum AgentSharePreviewFocusPolicy {
+    static let isCloseButtonFocusable = false
+}
+
+private struct AgentDailyShareSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let image: NSImage
+    let suggestedFilename: String
+    let onSave: () -> Void
+    let onShare: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text(L10n.StatsDashboard.sharePreviewTitle)
+                    .font(.headline)
+                Spacer()
+                Button(L10n.StatsDashboard.close) {
+                    dismiss()
+                }
+                .buttonStyle(.plain)
+                .focusable(AgentSharePreviewFocusPolicy.isCloseButtonFocusable)
+            }
+
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: 360, height: 450)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
+                .accessibilityLabel(suggestedFilename)
+
+            HStack {
+                Button(action: onSave) {
+                    Label(L10n.StatsDashboard.saveShareImage, systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.bordered)
+                Spacer()
+                Button(action: onShare) {
+                    Label(L10n.StatsDashboard.shareImage, systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(20)
+        .frame(width: 430)
+    }
+}
+
+private struct AgentDailyShareCard: View {
+    let detail: AgentDailyUsageDetail
+    let currentStreak: Int
+    let activity: [AgentHeatmapCell]
+
+    private let accent = Color(red: 0.23, green: 0.45, blue: 0.98)
+    private let background = Color(red: 0.025, green: 0.035, blue: 0.045)
+    private let muted = Color(red: 0.61, green: 0.68, blue: 0.78)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(L10n.StatsDashboard.shareRecordTitle, systemImage: "terminal")
+                    .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                Spacer()
+                Text(detail.date.formatted(.dateTime.year().month().day()))
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(accent)
+            }
+            .padding(.bottom, 18)
+
+            Divider().overlay(muted.opacity(0.35))
+
+            Text("\(formatTokenCount(detail.overview.totalTokens)) Token")
+                .font(.system(size: 52, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white)
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+                .padding(.top, 28)
+
+            Text(L10n.StatsDashboard.shareRecentActivity)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(muted)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.top, 13)
+
+            shareActivityStrip
+                .padding(.top, 9)
+                .padding(.bottom, 24)
+
+            shareMetricGrid
+
+            HStack(spacing: 0) {
+                shareFooterFact(
+                    title: L10n.StatsDashboard.shareMostUsedModel,
+                    value: detail.modelUsage.first?.modelID ?? "—"
+                )
+                Divider().frame(height: 38).overlay(muted.opacity(0.35))
+                shareFooterFact(
+                    title: L10n.StatsDashboard.shareMostUsedSkill,
+                    value: detail.capabilityUsage.first.map { "@\($0.capability.rawValue)" } ?? "—"
+                )
+                Divider().frame(height: 38).overlay(muted.opacity(0.35))
+                shareFooterFact(
+                    title: L10n.StatsDashboard.metricCurrentStreak,
+                    value: L10n.StatsDashboard.dayCount("\(currentStreak)")
+                )
+            }
+            .padding(.top, 18)
+
+            Spacer(minLength: 10)
+
+            Text(L10n.StatsDashboard.shareGeneratedBy)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(muted.opacity(0.8))
+        }
+        .padding(28)
+        .foregroundStyle(.white)
+        .background(background)
+    }
+
+    private var shareActivityStrip: some View {
+        let peak = max(1, activity.map(\.tokenCount).max() ?? 0)
+        return HStack(alignment: .bottom, spacing: 10) {
+            ForEach(activity) { cell in
+                let level = cell.tokenCount == 0
+                    ? 0
+                    : max(1, Int(ceil(Double(cell.tokenCount) / Double(peak) * 5)))
+                VStack(spacing: 3) {
+                    VStack(spacing: 3) {
+                        ForEach((1...5).reversed(), id: \.self) { index in
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                .fill(index <= level ? accent : muted.opacity(0.18))
+                                .frame(height: 9)
+                        }
+                    }
+                    Text(cell.date.formatted(.dateTime.month().day()))
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(Calendar.current.isDate(cell.date, inSameDayAs: detail.date) ? accent : muted)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private var shareMetricGrid: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                shareMetric(L10n.StatsDashboard.metricTotalTokens, formatTokenCount(detail.overview.totalTokens))
+                Divider().overlay(muted.opacity(0.35))
+                shareMetric(L10n.StatsDashboard.insightTasksTotal, formatInteger(detail.overview.userTurnCount))
+            }
+            Divider().overlay(muted.opacity(0.35))
+            HStack(spacing: 0) {
+                shareMetric(L10n.StatsDashboard.insightSessions, formatInteger(detail.overview.sessionCount))
+                Divider().overlay(muted.opacity(0.35))
+                shareMetric(L10n.StatsDashboard.metricCacheHitRate, formatPercentage(detail.cacheHitRate))
+            }
+            Divider().overlay(muted.opacity(0.35))
+            HStack(spacing: 0) {
+                shareMetric(L10n.StatsDashboard.metricMaximumContext, formatTokenCount(detail.maximumContextTokens))
+                Color.clear.frame(maxWidth: .infinity, minHeight: 66)
+            }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(muted.opacity(0.35), lineWidth: 1)
+        }
+    }
+
+    private func shareMetric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(muted)
+            Text(value)
+                .font(.system(size: 23, weight: .medium, design: .monospaced))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
+    }
+
+    private func shareFooterFact(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(muted)
+            Text(value)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func formatTokenCount(_ count: Int) -> String {
+        let isSimplifiedChinese = Locale.preferredLanguages.first?
+            .lowercased()
+            .hasPrefix("zh-hans") == true
+        if isSimplifiedChinese {
+            if count >= 100_000_000 {
+                return compactDecimal(Double(count) / 100_000_000) + "亿"
+            }
+            if count >= 10_000 {
+                return compactDecimal(Double(count) / 10_000) + "万"
+            }
+        } else {
+            if count >= 1_000_000_000 {
+                return compactDecimal(Double(count) / 1_000_000_000) + "B"
+            }
+            if count >= 1_000_000 {
+                return compactDecimal(Double(count) / 1_000_000) + "M"
+            }
+            if count >= 1_000 {
+                return compactDecimal(Double(count) / 1_000) + "K"
+            }
+        }
+        return formatInteger(count)
+    }
+
+    private func compactDecimal(_ value: Double) -> String {
+        if value >= 100 || value.rounded() == value {
+            return String(format: "%.0f", value)
+        }
+        return String(format: "%.1f", value)
+    }
+
+    private func formatInteger(_ value: Int) -> String {
+        NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
+    }
+
+    private func formatPercentage(_ value: Double) -> String {
+        String(format: "%.0f%%", min(1, max(0, value)) * 100)
+    }
+}
+
 struct StatCell: View {
     @EnvironmentObject var appState: AppState
 
@@ -1508,18 +2190,27 @@ private struct CodexDashboardMetric: View {
     @EnvironmentObject var appState: AppState
     let value: String
     let title: String
+    var showsDisclosure = false
 
     var body: some View {
         VStack(spacing: 3) {
-            Text(value)
-                .font(AgentDesign.chatSupportingFont(
-                    baseFontSize: appState.agentChatBaseFontSize,
-                    visualMinimum: AgentStatsDashboardTypography.metricValue,
-                    weight: .regular
-                ))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+            HStack(spacing: 4) {
+                Text(value)
+                if showsDisclosure {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .font(AgentDesign.chatSupportingFont(
+                baseFontSize: appState.agentChatBaseFontSize,
+                visualMinimum: AgentStatsDashboardTypography.metricValue,
+                weight: .regular
+            ))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
             Text(title)
                 .font(AgentDesign.chatSupportingFont(
                     baseFontSize: appState.agentChatBaseFontSize,

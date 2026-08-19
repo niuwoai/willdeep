@@ -702,7 +702,6 @@ struct ModelPickerPill: View {
     @State private var isModelPanelPresented = false
     @State private var selectedModelProviderID: UUID?
     @State private var selectedModelSourceIsManaged = false
-    @State private var isRefreshingCodingPlan = false
     @State private var selectedSource: AgentModelPickerSource = .managed
     @State private var selectedTierFilter: AgentModelPickerTierFilter = .all
     @State private var searchText = ""
@@ -1001,7 +1000,6 @@ struct ModelPickerPill: View {
     private var managedCatalogOverview: some View {
         managedSelectionSummary
         managedBenefitsSummary
-        codingPlanSection
     }
 
     @ViewBuilder
@@ -1074,12 +1072,6 @@ struct ModelPickerPill: View {
                     title: L10n.AgentModelPicker.managedWorkerTitle,
                     description: L10n.AgentModelPicker.managedWorkerDescription
                 )
-                Divider().padding(.leading, 36)
-                Text(L10n.AgentModelPicker.managedPlanIndependence)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 9)
             }
             .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.42))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -1519,7 +1511,6 @@ struct ModelPickerPill: View {
             }
         }
 
-        codingPlanSection
         recommendedModelsSection
     }
 
@@ -1564,7 +1555,6 @@ struct ModelPickerPill: View {
         }
 
         if entry.providerID == AgentProviderPreset.someIMID, menuSnapshot.isSomeIMAuthenticated {
-            codingPlanSection
             recommendedModelsSection
         }
 
@@ -1803,174 +1793,6 @@ struct ModelPickerPill: View {
     }
 
     @ViewBuilder
-    private var codingPlanSection: some View {
-        let status = appState.someIMCodingPlanStatus
-        let hasActivePlan = menuSnapshot.isSomeIMAuthenticated && status.isActiveNow
-        let refreshFailure = menuSnapshot.isSomeIMAuthenticated
-            ? appState.someIMCodingPlanRefreshFailure
-            : nil
-        let isChecking = menuSnapshot.isSomeIMAuthenticated
-            && isRefreshingCodingPlan
-            && !hasActivePlan
-        let statusTint: Color = hasActivePlan ? .green : (refreshFailure == nil ? .teal : .orange)
-        let statusIcon = hasActivePlan
-            ? "checkmark.seal.fill"
-            : (refreshFailure == nil ? "shippingbox" : "exclamationmark.triangle.fill")
-        modelPanelSection(title: L10n.AgentModelPicker.codingPlanTitle, systemImage: "creditcard") {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(L10n.AgentModelPicker.codingPlanBenefit)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Divider()
-
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: statusIcon)
-                        .foregroundStyle(hasActivePlan ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
-                        .frame(width: 22)
-                    VStack(alignment: .leading, spacing: 4) {
-                        if hasActivePlan {
-                            HStack(spacing: 6) {
-                                Text(status.planName ?? L10n.AgentModelPicker.codingPlanTitle)
-                                    .font(.system(size: 12, weight: .semibold))
-                                Text(L10n.AgentModelPicker.codingPlanSubscribed)
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(.green)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(.green.opacity(0.12))
-                                    .clipShape(Capsule())
-                            }
-                            Text(codingPlanValidityText(status))
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        } else if isChecking {
-                            HStack(spacing: 7) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text(L10n.AgentModelPicker.codingPlanChecking)
-                                    .font(.system(size: 12, weight: .medium))
-                            }
-                            Text(L10n.AgentModelPicker.codingPlanCheckingHint)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        } else if let refreshFailure {
-                            Text(L10n.AgentModelPicker.codingPlanCheckFailed)
-                                .font(.system(size: 12, weight: .semibold))
-                            Text(codingPlanRefreshFailureDescription(refreshFailure))
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } else {
-                            Text(L10n.AgentModelPicker.codingPlanNotPurchased)
-                                .font(.system(size: 12, weight: .semibold))
-                            Text(menuSnapshot.isSomeIMAuthenticated
-                                ? L10n.AgentModelPicker.codingPlanNotPurchasedDescription
-                                : L10n.AgentModelPicker.codingPlanLoginDescription)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-
-                HStack {
-                    Spacer()
-                    if hasActivePlan {
-                        Button {
-                            openURL(URL(string: "https://some.im/customer/plan")!)
-                        } label: {
-                            Label(
-                                L10n.AgentModelPicker.manageCodingPlan,
-                                systemImage: "arrow.up.right.square"
-                            )
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .focusable(false)
-                    } else if isChecking {
-                        EmptyView()
-                    } else if let refreshFailure {
-                        if refreshFailure == .authenticationRequired {
-                            Button {
-                                isModelPanelPresented = false
-                                EditorSettingsNavigation.shared.openSomeIM(
-                                    autogenerateBrowserLogin: true,
-                                    appState: appState
-                                )
-                            } label: {
-                                Label(
-                                    L10n.AgentModelPicker.signInSomeIM,
-                                    systemImage: "person.crop.circle.badge.checkmark"
-                                )
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                            .focusable(false)
-                        } else {
-                            Button(L10n.AgentModelPicker.codingPlanRetry) {
-                                refreshCodingPlanStatus()
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                            .focusable(false)
-                        }
-                    } else {
-                        Button {
-                            openURL(URL(string: "https://some.im/customer/plan")!)
-                        } label: {
-                            Label(
-                                L10n.AgentModelPicker.buyCodingPlan,
-                                systemImage: "arrow.up.right.square"
-                            )
-                            .foregroundStyle(AgentComposerChrome.actionForeground)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(AgentComposerChrome.actionFill)
-                        .controlSize(.small)
-                        .focusable(false)
-                    }
-                }
-            }
-            .padding(12)
-            .background(hasActivePlan
-                ? Color.green.opacity(0.07)
-                : appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.48))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-        }
-    }
-
-    private func codingPlanRefreshFailureDescription(
-        _ failure: SomeIMCodingPlanRefreshFailure
-    ) -> String {
-        switch failure {
-        case .authenticationRequired:
-            return L10n.AgentModelPicker.codingPlanAuthenticationRequired
-        case .unavailable:
-            return L10n.AgentModelPicker.codingPlanUnavailable
-        }
-    }
-
-    private func codingPlanValidityText(_ status: SomeIMCodingPlanStatus) -> String {
-        guard let periodEnd = status.periodEnd else {
-            return L10n.AgentModelPicker.codingPlanActive
-        }
-        return L10n.AgentModelPicker.codingPlanExpires(
-            periodEnd.formatted(date: .abbreviated, time: .omitted)
-        )
-    }
-
-    private func refreshCodingPlanStatus() {
-        guard !isRefreshingCodingPlan else { return }
-        isRefreshingCodingPlan = true
-        Task { @MainActor in
-            _ = await appState.refreshedSomeIMCodingPlanStatusIfNeeded(force: true)
-            isRefreshingCodingPlan = false
-        }
-    }
-
-    @ViewBuilder
     private var recommendedModelsSection: some View {
         modelPanelSection(title: "重点推荐", systemImage: "star") {
             ForEach(Self.recommendedSomeIMModels) { item in
@@ -1991,7 +1813,7 @@ struct ModelPickerPill: View {
     private var someIMLockedSection: some View {
         modelPanelSection(title: "some.im", systemImage: "lock") {
             VStack(alignment: .leading, spacing: 8) {
-                Text("绑定 some.im 后可解锁省心托管、推荐模型列表和 Coding Plan。")
+                Text(L10n.AgentModelPicker.someIMConnectHint)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                 Button {
@@ -2324,9 +2146,6 @@ struct ModelPickerPill: View {
             selectSource(.provider(activeID))
         } else {
             selectSource(.allModels)
-        }
-        if menuSnapshot.isSomeIMAuthenticated {
-            refreshCodingPlanStatus()
         }
         selectableProviderEntries.forEach { entry in
             refreshProviderCatalog(entry)

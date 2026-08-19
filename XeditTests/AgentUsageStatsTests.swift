@@ -540,6 +540,69 @@ extension WillDeepTests {
         #expect(abs(try #require(day.estimatedCostUSD) - 10) < 0.000_001)
     }
 
+    @Test("daily usage detail excludes other days and reports model efficiency")
+    func dailyUsageDetailFiltersAndAggregates() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let selectedDay = try #require(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 18, hour: 10))
+        )
+        let followingDay = try #require(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 19, hour: 10))
+        )
+        let snapshot = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: "gpt-5.6-terra",
+            providerID: "openai",
+            providerDisplayName: "OpenAI",
+            createdAt: selectedDay,
+            updatedAt: followingDay,
+            messages: [
+                AgentUsageMessageSnapshot(
+                    role: .user,
+                    contentCharacterCount: 8,
+                    createdAt: selectedDay
+                ),
+                AgentUsageMessageSnapshot(
+                    role: .assistant,
+                    contentCharacterCount: 2,
+                    toolCallNames: ["run_command"],
+                    usageTokens: 120,
+                    promptTokens: 100,
+                    completionTokens: 20,
+                    cachedPromptTokens: 40,
+                    requestModelID: "gpt-5.6-terra",
+                    requestProviderID: "openai",
+                    requestProviderDisplayName: "OpenAI",
+                    createdAt: selectedDay
+                ),
+                AgentUsageMessageSnapshot(
+                    role: .assistant,
+                    contentCharacterCount: 2,
+                    usageTokens: 900,
+                    promptTokens: 800,
+                    completionTokens: 100,
+                    createdAt: followingDay
+                )
+            ]
+        )
+
+        let detail = AgentUsageStats.dailyDetail(
+            for: [snapshot],
+            on: selectedDay,
+            calendar: calendar
+        )
+
+        #expect(detail.overview.sessionCount == 1)
+        #expect(detail.overview.userTurnCount == 1)
+        #expect(detail.modelUsage.count == 1)
+        #expect(detail.modelUsage.first?.totalTokens == 120)
+        #expect(abs(detail.cacheHitRate - 0.4) < 0.000_001)
+        #expect(detail.maximumContextTokens == 120)
+        #expect(detail.capabilityUsage.first?.capability == .terminal)
+        #expect(detail.capabilityUsage.first?.callCount == 1)
+    }
+
     @Test("monthly usage calendar treats unpriced usage as free instead of vetoing the day")
     func monthlyUsageCalendarCountsUnpricedUsageAsFree() throws {
         var calendar = Calendar(identifier: .gregorian)

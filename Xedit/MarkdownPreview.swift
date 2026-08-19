@@ -59,6 +59,11 @@ struct MarkdownPreviewBlock: Equatable {
     /// 4-space leading indentation both count as one level. Always 0
     /// for non-list blocks.
     var indent: Int = 0
+    /// Display number for an ordered-list item. The parser resolves this
+    /// from list context instead of rendering every Markdown `1.` marker
+    /// literally, so the common `1. item` authoring style still appears as
+    /// a continuous 1, 2, 3 sequence. Nil for non-ordered-list blocks.
+    var orderedListNumber: Int? = nil
 }
 
 enum MarkdownPreviewParser {
@@ -69,6 +74,32 @@ enum MarkdownPreviewParser {
         var code: [String] = []
         var codeLanguage: String? = nil
         var isInCodeBlock = false
+        var orderedListNumbersByIndent: [Int: Int] = [:]
+
+        func endListContext() {
+            orderedListNumbersByIndent.removeAll()
+        }
+
+        func leaveOrderedLists(atOrBelow indent: Int) {
+            orderedListNumbersByIndent = orderedListNumbersByIndent.filter { level, _ in
+                level < indent
+            }
+        }
+
+        func nextOrderedListNumber(marker: Int, indent: Int) -> Int {
+            orderedListNumbersByIndent = orderedListNumbersByIndent.filter { level, _ in
+                level <= indent
+            }
+            let number: Int
+            if let previous = orderedListNumbersByIndent[indent] {
+                let advanced = previous.addingReportingOverflow(1)
+                number = advanced.overflow ? previous : advanced.partialValue
+            } else {
+                number = marker
+            }
+            orderedListNumbersByIndent[indent] = number
+            return number
+        }
 
         func flushParagraph() {
             guard !paragraph.isEmpty else { return }
@@ -106,6 +137,7 @@ enum MarkdownPreviewParser {
                     isInCodeBlock = false
                 } else {
                     flushParagraph()
+                    endListContext()
                     isInCodeBlock = true
                     // Everything after the opening ``` (e.g. ```tsx) is
                     // the language hint. Strip any extra whitespace.
@@ -127,18 +159,21 @@ enum MarkdownPreviewParser {
 
             if trimmedLine == "---" || trimmedLine == "***" || trimmedLine == "___" {
                 flushParagraph()
+                endListContext()
                 blocks.append(MarkdownPreviewBlock(kind: .divider, text: ""))
                 i += 1; continue
             }
 
             if let heading = headingBlock(from: trimmedLine) {
                 flushParagraph()
+                endListContext()
                 blocks.append(heading)
                 i += 1; continue
             }
 
             if trimmedLine.hasPrefix(">") {
                 flushParagraph()
+                endListContext()
                 let quote = trimmedLine.dropFirst().trimmingCharacters(in: .whitespaces)
                 blocks.append(MarkdownPreviewBlock(kind: .quote, text: quote))
                 i += 1; continue
@@ -154,6 +189,7 @@ enum MarkdownPreviewParser {
                i + 1 < lines.count,
                isAlignmentRow(lines[i + 1].trimmingCharacters(in: .whitespaces)) {
                 flushParagraph()
+                endListContext()
                 let headers = parseRow(trimmedLine)
                 var rows: [[String]] = []
                 var j = i + 2
@@ -173,18 +209,25 @@ enum MarkdownPreviewParser {
                 continue
             }
 
-            if let (indent, body) = listItem(from: line, unordered: true) {
+            if let (indent, body) = unorderedListItem(from: line) {
                 flushParagraph()
+                leaveOrderedLists(atOrBelow: indent)
                 blocks.append(MarkdownPreviewBlock(kind: .unorderedList, text: body, indent: indent))
                 i += 1; continue
             }
 
-            if let (indent, body) = listItem(from: line, unordered: false) {
+            if let (indent, marker, body) = orderedListItem(from: line) {
                 flushParagraph()
-                blocks.append(MarkdownPreviewBlock(kind: .orderedList, text: body, indent: indent))
+                blocks.append(MarkdownPreviewBlock(
+                    kind: .orderedList,
+                    text: body,
+                    indent: indent,
+                    orderedListNumber: nextOrderedListNumber(marker: marker, indent: indent)
+                ))
                 i += 1; continue
             }
 
+            endListContext()
             paragraph.append(trimmedLine)
             i += 1
         }
@@ -248,21 +291,11 @@ enum MarkdownPreviewParser {
         return MarkdownPreviewBlock(kind: .heading(level: hashes.count), text: text)
     }
 
-    private static func orderedListText(from line: String) -> String? {
-        guard let dotIndex = line.firstIndex(of: ".") else { return nil }
-        let number = line[..<dotIndex]
-        guard !number.isEmpty, number.allSatisfy(\.isNumber) else { return nil }
-        let afterDot = line[line.index(after: dotIndex)...]
-        guard afterDot.hasPrefix(" ") else { return nil }
-        return String(afterDot.dropFirst())
-    }
-
-    /// Detect a list item line. Reads the raw (un-trimmed) line so we
+    /// Detect an unordered list item line. Reads the raw (un-trimmed) line so we
     /// can count leading spaces / tabs as indentation. Returns
     /// `(indent, body)` on match; `indent` is the nesting level
-    /// (`leadingSpaces / 2`, tabs count as 4 spaces). `unordered`
-    /// selects bullet (`- ` / `* `) vs ordered (`N. `).
-    private static func listItem(from rawLine: String, unordered: Bool) -> (Int, String)? {
+    /// (`leadingSpaces / 2`, tabs count as 4 spaces).
+    private static func unorderedListItem(from rawLine: String) -> (Int, String)? {
         var spaces = 0
         var i = rawLine.startIndex
         while i < rawLine.endIndex {
@@ -274,24 +307,43 @@ enum MarkdownPreviewParser {
         }
         guard i < rawLine.endIndex else { return nil }
         let rest = rawLine[i...]
-        if unordered {
-            if rest.hasPrefix("- ") || rest.hasPrefix("* ") {
-                let body = String(rest.dropFirst(2)).trimmingCharacters(in: .whitespaces)
-                return (spaces / 2, body)
-            }
-        } else {
-            if let dotIndex = rest.firstIndex(of: ".") {
-                let number = rest[..<dotIndex]
-                if !number.isEmpty, number.allSatisfy(\.isNumber) {
-                    let afterDot = rest[rest.index(after: dotIndex)...]
-                    if afterDot.hasPrefix(" ") {
-                        let body = String(afterDot.dropFirst()).trimmingCharacters(in: .whitespaces)
-                        return (spaces / 2, body)
-                    }
-                }
-            }
+        if rest.hasPrefix("- ") || rest.hasPrefix("* ") {
+            let body = String(rest.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+            return (spaces / 2, body)
         }
         return nil
+    }
+
+    /// Ordered-list counterpart to `unorderedListItem`. Besides indentation and body,
+    /// keep the numeric marker so a list can legitimately start at a value
+    /// other than one while subsequent items still advance continuously.
+    private static func orderedListItem(from rawLine: String) -> (Int, Int, String)? {
+        var spaces = 0
+        var index = rawLine.startIndex
+        while index < rawLine.endIndex {
+            let character = rawLine[index]
+            if character == " " { spaces += 1 }
+            else if character == "\t" { spaces += 4 }
+            else { break }
+            index = rawLine.index(after: index)
+        }
+        guard index < rawLine.endIndex else { return nil }
+
+        let rest = rawLine[index...]
+        guard let dotIndex = rest.firstIndex(of: ".") else { return nil }
+        let markerText = rest[..<dotIndex]
+        guard
+            !markerText.isEmpty,
+            markerText.allSatisfy(\.isNumber),
+            let marker = Int(markerText)
+        else {
+            return nil
+        }
+
+        let afterDot = rest[rest.index(after: dotIndex)...]
+        guard afterDot.hasPrefix(" ") else { return nil }
+        let body = String(afterDot.dropFirst()).trimmingCharacters(in: .whitespaces)
+        return (spaces / 2, marker, body)
     }
 }
 
@@ -510,7 +562,7 @@ struct MarkdownPreviewBlockView: View {
             .padding(.leading, listIndentPadding(block.indent))
         case .orderedList:
             HStack(alignment: .top, spacing: 8) {
-                Text("1.")
+                Text("\(block.orderedListNumber ?? 1).")
                     .foregroundColor(.secondary)
                 Text(inlineText(block.text))
             }
