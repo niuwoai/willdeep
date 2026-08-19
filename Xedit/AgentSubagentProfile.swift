@@ -130,6 +130,21 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         someIMAuthenticated && hostedVirtualModel != nil
     }
 
+    /// Whether this trade should actually be pinned to its hosted virtual
+    /// model, i.e. whether the recommendation still stands.
+    ///
+    /// An empty `modelBinding.model` means "take the recommendation"; anything
+    /// else is the user having chosen, and their choice wins. The hosted model
+    /// was never meant to be a lock — the job prompt follows whichever model
+    /// is actually called (`jobPromptIsHosted`), so overriding it swaps the
+    /// relay's copy for the client's rather than losing it.
+    func usesRecommendedHostedModel(someIMAuthenticated: Bool) -> Bool {
+        guard usesHostedJobPrompt(someIMAuthenticated: someIMAuthenticated) else { return false }
+        return modelBinding.model?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty ?? true
+    }
+
     /// The tools this trade may actually call.
     ///
     /// Intersection, never union: a profile can only take tools away from
@@ -245,24 +260,31 @@ nonisolated enum AgentSubagentProfileCatalog {
         "terminal_snapshot", "terminal_send_command",
     ]
 
-    /// Default binding for the cheap trades: some.im's GLM tier when the
-    /// user is signed in, otherwise inherit the parent (resolved at spawn
-    /// time, so signing in or out never requires a settings migration).
+    /// Default binding for the managed worker trades.
+    ///
+    /// `model` is **nil on purpose**: nil means "use the recommended default",
+    /// which for a managed trade resolves at spawn time to its hosted
+    /// `someim-32b-<trade>` model while signed in, and to the provider's own
+    /// primary model otherwise. A non-nil value here would be indistinguishable
+    /// from a user's explicit choice, and the settings row could no longer
+    /// offer "recommended" as a state — which is exactly the bug this replaces:
+    /// these bindings said `glm-5`, the hosted override ignored them entirely,
+    /// and the user had no say either way.
     private static let cheapBinding = AgentSubagentProfile.ModelBinding(
         preferredProviderID: AgentProviderPreset.someIMID,
-        model: "glm-5",
+        model: nil,
         contextWindowTokens: workerContextWindowTokens
     )
 
     private static let balancedBinding = AgentSubagentProfile.ModelBinding(
         preferredProviderID: AgentProviderPreset.someIMID,
-        model: "glm-5",
+        model: nil,
         contextWindowTokens: balancedContextWindowTokens
     )
 
     private static let wideBinding = AgentSubagentProfile.ModelBinding(
         preferredProviderID: AgentProviderPreset.someIMID,
-        model: "glm-5",
+        model: nil,
         contextWindowTokens: wideContextWindowTokens
     )
 

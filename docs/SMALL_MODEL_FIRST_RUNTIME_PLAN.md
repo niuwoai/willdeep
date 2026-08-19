@@ -86,8 +86,25 @@ rs 侧把「优先用小模型」从系统提示词里的劝告，搬进了 Runt
 **实现（1.273.0-rc1）**：`SomeIMIntegrationSettings.defaultTextModel` 与 some.im preset 的
 `defaultModel` 均改为 `glm-5`；`deepBinding` 显式钉 `deepseek-v4-flash` + `deepContextWindowTokens`
 (1M)；preset 的 `defaultVisionModel` 加 some.im 分支，避免文本档位下调把图像模型带歪。
-**未完成**：七个托管工种「显式 `glm-5` 绑定 vs `resolvedHostedConfiguration` 覆盖」谁赢，
-仍只有读码推断，没有实际请求日志验证——这仍是开工第一件该实测的事。
+
+**「谁赢」的答案（1.273.0-rc2）**：**托管覆盖赢，而且用户完全没得选**。
+`resolvedSubagentConfiguration` 的第一件事就是查 `resolvedHostedConfiguration`，命中即 return，
+用户的 `modelBinding` 根本走不到——七个工种写死的 `glm-5` 在登录状态下是死代码，
+设置界面还把这一行 `disabled` 掉，理由是「服务端职能提示词与模型是一对，换一半会破坏另一半」。
+
+这个理由站不住：`jobPromptIsHosted` 本来就是**从实际调用的模型推导**的
+（`profile.hostedVirtualModel != nil && configuration.model == profile.hostedVirtualModel`，
+注释原话是 "the flag cannot drift from reality"）。指向别的模型时，客户端会自动改发自己那份
+职能提示词镜像。两半根本拆不开，锁只是白锁。
+
+**因此改为可配置**（对齐 rs 0.38.0-rc1「允许覆盖 some.im 托管模型 + 提供恢复推荐值入口」）：
+- 语义：`modelBinding.model` 为空 = 采纳推荐（登录时解析为 `someim-32b-<trade>`）；
+  非空 = 用户已选择，用户赢。抽成 `usesRecommendedHostedModel(someIMAuthenticated:)` 以便测试。
+- 七个托管工种的内置 binding 的 `model` 由 `"glm-5"` 改为 **nil**——非 nil 与「用户显式选择」
+  无法区分，"推荐" 就无法成为一个可表达的状态。因 `AgentProfileStore` 的 override 是**差异化**
+  写入（只存与内置默认不同的字段），没动过设置的用户不会有存量记录，改默认是干净的。
+- 设置界面解锁：文本框 + 菜单，菜单首项是「推荐：someim-32b-xxx」（点选即清空 = 恢复推荐），
+  下方文案说明留空与覆盖各自的含义；列表摘要行在被覆盖时不再谎报托管模型名。
 
 ### 第 2 步：Deep 准入（`AgentDeepAdmission`，新文件）
 

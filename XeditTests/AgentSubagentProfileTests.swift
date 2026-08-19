@@ -332,6 +332,44 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentJobPrompts.hostedModel(for: "deep") == nil)
     }
 
+    @Test("managed trades ship with no pinned model, so 'recommended' is a real state")
+    func managedTradesDefaultToTheRecommendation() {
+        // These used to say `glm-5` while the hosted override ignored them
+        // entirely: the binding was dead code and the user had no say. An
+        // empty model is what makes "use the recommendation" distinguishable
+        // from "the user picked this".
+        for trade in [
+            AgentSubagentProfileCatalog.scout,
+            AgentSubagentProfileCatalog.reader,
+            AgentSubagentProfileCatalog.editor,
+            AgentSubagentProfileCatalog.testFixer,
+            AgentSubagentProfileCatalog.buildFixer,
+            AgentSubagentProfileCatalog.logInspector,
+            AgentSubagentProfileCatalog.gitDetective,
+        ] {
+            #expect(trade.modelBinding.model == nil, "\(trade.id) should not pin a model")
+            #expect(trade.usesRecommendedHostedModel(someIMAuthenticated: true))
+            // Signed out there is no hosted model to recommend.
+            #expect(!trade.usesRecommendedHostedModel(someIMAuthenticated: false))
+        }
+    }
+
+    @Test("an explicit model overrides the hosted recommendation")
+    func explicitModelBeatsTheHostedRecommendation() {
+        var scout = AgentSubagentProfileCatalog.scout
+        scout.modelBinding.model = "glm-5"
+
+        // The user asked for glm-5; the relay's virtual model no longer wins.
+        #expect(!scout.usesRecommendedHostedModel(someIMAuthenticated: true))
+        // Still a managed trade — it just runs elsewhere, and the job prompt
+        // follows the model actually called rather than being lost.
+        #expect(scout.usesHostedJobPrompt(someIMAuthenticated: true))
+
+        // Whitespace is not a choice.
+        scout.modelBinding.model = "   "
+        #expect(scout.usesRecommendedHostedModel(someIMAuthenticated: true))
+    }
+
     @Test("a trade is only hosted while signed in to some.im")
     func hostedResolutionFollowsLoginState() {
         let scout = AgentSubagentProfileCatalog.scout

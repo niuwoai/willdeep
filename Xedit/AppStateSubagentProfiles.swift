@@ -118,6 +118,12 @@ extension AppState {
             parentConfiguration: parentConfiguration
         ),
               let hostedModel = profile.hostedVirtualModel else { return nil }
+        // The hosted model is the *recommendation*, not a lock: an explicit
+        // model in the trade's binding is the user having chosen, so fall
+        // through to the ordinary user-configurable path.
+        guard profile.usesRecommendedHostedModel(
+            someIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+        ) else { return nil }
         guard let entry = agentProviderLibrary.entries
             .first(where: { $0.providerID == AgentProviderPreset.someIMID }),
               entry.isUsableForChatSelection(isSomeIMAuthenticated: true) else { return nil }
