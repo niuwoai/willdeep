@@ -17,8 +17,11 @@ struct AgentDispatchInspectorView: View {
     let onManageProfiles: () -> Void
     let onLaunch: () -> Void
     let onStop: () -> Void
+    let onMarkSuccessfulAndContinue: () -> Void
     let onOpenConversation: () -> Void
     let onEdit: () -> Void
+
+    @State private var isConfirmingManualCompletion = false
 
     private var effectiveWorkspaceBinding: AgentDispatchWorkspaceBinding? {
         goal.resolvedWorkspaceBinding(for: task)
@@ -89,6 +92,17 @@ struct AgentDispatchInspectorView: View {
             .padding(16)
         }
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.38))
+        .alert(
+            L10n.Dispatch.markSuccessfulConfirmationTitle,
+            isPresented: $isConfirmingManualCompletion
+        ) {
+            Button(L10n.Dispatch.cancel, role: .cancel) {}
+            Button(L10n.Dispatch.markSuccessfulAndContinue) {
+                onMarkSuccessfulAndContinue()
+            }
+        } message: {
+            Text(L10n.Dispatch.markSuccessfulConfirmationMessage)
+        }
     }
 
     private var profileSection: some View {
@@ -350,6 +364,20 @@ struct AgentDispatchInspectorView: View {
                 }
                 .buttonStyle(.bordered)
             }
+            if canMarkSuccessfulAndContinue {
+                Button {
+                    isConfirmingManualCompletion = true
+                } label: {
+                    Label(
+                        L10n.Dispatch.markSuccessfulAndContinue,
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .help(L10n.Dispatch.markSuccessfulAndContinueHelp)
+                .accessibilityIdentifier("dispatch-inspector-mark-successful")
+            }
             if task.state == .running {
                 Button(role: .destructive, action: onStop) {
                     Label(L10n.Dispatch.stopTask, systemImage: "stop.fill")
@@ -375,6 +403,10 @@ struct AgentDispatchInspectorView: View {
                 )
             }
         }
+    }
+
+    private var canMarkSuccessfulAndContinue: Bool {
+        task.state == .failed || task.state == .cancelled || task.state == .accepted
     }
 
     private var sectionDivider: some View {

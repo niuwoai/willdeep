@@ -42,3 +42,39 @@
 - Pass 2: Debug build and 12 targeted tests passed; no further blocking visual differences found.
 
 final result: pass
+
+---
+
+## Token 单日详情与分享卡（1.272.0-rc7）
+
+- source visual truth paths:
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/daily-reference.png`
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/share-reference.png`
+- implementation screenshot paths:
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/daily-implementation.jpeg`
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/share-implementation.jpeg`
+- viewport: native macOS window `1402 × 768 px`; share preview sheet `430 × 562 px`
+- source sizes: daily reference `1536 × 1024 px`; share reference `1124 × 1402 px`
+- density normalization: the single-day page was compared inside the real chat/composer shell; the share card was compared by its exported 4:5 composition, hierarchy, contrast, grid proportions, and data density.
+- state: populated 2026-08-18 calendar day with real local usage snapshots; share preview generated from the same day.
+
+### Full-view comparison evidence
+
+- The selected option-2 daily hierarchy is preserved: date and share action, five-metric strip, model efficiency on the left, achievements and capability usage on the right.
+- The selected option-3 share direction is preserved: near-black background, blue activity accents, monospaced developer styling, dominant Token total, bordered metric grid, and compact model/skill/streak footer.
+- Initial live navigation exposed inherited transcript scroll position when changing dashboard pages. The implementation now posts a page-change request and scrolls the transcript to its top anchor; the second live capture starts at the daily header as intended.
+
+### Focused comparison evidence
+
+- Typography and hierarchy: pass; the day title, hero Token count, metric values, and supporting labels retain the selected emphasis order.
+- Spacing and layout rhythm: pass; the production page is intentionally denser than the concept so it fits the existing 568pt dashboard column without introducing a new window.
+- Model bars: pass after separating uncached input, output, and cached input so the rendered segments sum to the model total instead of overflowing 100%.
+- Share card: pass; all selected information is visible without clipping, and the preview exposes working Save and Share actions.
+- Localization and assets: pass; visible copy comes from the string catalog and icons use native SF Symbols consistent with the existing product.
+
+### Findings
+
+- No open P0/P1/P2 visual defects after the scroll-position and model-segment corrections.
+- The app shell and composer remain visible around the daily detail by design; the concept image represented only the content surface.
+
+final result: pass

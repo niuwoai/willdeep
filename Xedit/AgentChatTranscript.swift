@@ -217,6 +217,7 @@ final class AgentTranscriptVisibleMessagesCache {
 struct AgentChatTranscript: View {
     @EnvironmentObject var appState: AppState
     var showsEmptyState = true
+    private static let topScrollID = "agent-chat-transcript-top"
     private static let bottomScrollID = "agent-chat-transcript-bottom"
 
     /// 1.103.0-rc11: TextKit footer 里 doc.text 图标点开后呈现
@@ -249,6 +250,10 @@ struct AgentChatTranscript: View {
                 // LazyVStack's placement cache is the unstable part when
                 // scrolling mixed SwiftUI/AppKit dynamic-height rows.
                 VStack(alignment: .leading, spacing: AgentDesign.messageVerticalSpacing) {
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.topScrollID)
+
                     // Plan + Goal banners — pinned above the transcript so
                     // the user always sees the current execution gate /
                     // long-term objective.
@@ -644,6 +649,12 @@ struct AgentChatTranscript: View {
                     DispatchQueue.main.async {
                         guard !isConversationSearchActive, isFollowingTranscriptBottom else { return }
                         proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .agentStatsDashboardPageDidChange)) { _ in
+                    DispatchQueue.main.async {
+                        isFollowingTranscriptBottom = false
+                        proxy.scrollTo(Self.topScrollID, anchor: .top)
                     }
                 }
             }

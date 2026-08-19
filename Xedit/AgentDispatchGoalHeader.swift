@@ -194,7 +194,11 @@ struct AgentDispatchGoalHeader: View {
             }
             Divider()
             Text(L10n.Dispatch.workerPoolHelp)
-            Button(action: onManageProfiles) {
+            Button {
+                DispatchQueue.main.async {
+                    onManageProfiles()
+                }
+            } label: {
                 Label(L10n.Dispatch.manageProfiles, systemImage: "gearshape")
             }
         } label: {

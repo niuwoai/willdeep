@@ -356,6 +356,12 @@ private struct AgentDispatchBoardContent: View {
                 onStop: {
                     appState.stopDispatchTask(goalID: goal.id, taskID: task.id)
                 },
+                onMarkSuccessfulAndContinue: {
+                    appState.markDispatchTaskSuccessfulAndContinue(
+                        goalID: goal.id,
+                        taskID: task.id
+                    )
+                },
                 onOpenConversation: {
                     openTaskTakeover(goalID: goal.id, taskID: task.id)
                 },
@@ -711,8 +717,7 @@ private struct AgentDispatchBoardContent: View {
     /// 13.7, so the 13-compatible opener in `EditorSettingsNavigation`
     /// (showSettingsWindow: plus a fallback window controller) is used.
     private func openProfileSettings() {
-        EditorSettingsNavigation.shared.selectedTab = .subagents
-        EditorSettingsNavigation.shared.openWindow(appState: appState)
+        EditorSettingsNavigation.shared.open(.subagents, appState: appState)
         reloadExecutionProfiles()
     }
 

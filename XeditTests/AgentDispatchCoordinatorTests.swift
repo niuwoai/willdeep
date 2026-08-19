@@ -12,6 +12,28 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentDispatchCoordinatorTests {
+    @Test("验收已完成时成功裁决优先于后续运行时错误")
+    func completedAcceptanceWinsOverRuntimeError() {
+        #expect(
+            AgentDispatchCompletionPolicy.terminalState(
+                hasCompletedAcceptance: true,
+                hasRuntimeError: true
+            ) == .merged
+        )
+        #expect(
+            AgentDispatchCompletionPolicy.terminalState(
+                hasCompletedAcceptance: false,
+                hasRuntimeError: true
+            ) == .failed
+        )
+        #expect(
+            AgentDispatchCompletionPolicy.terminalState(
+                hasCompletedAcceptance: false,
+                hasRuntimeError: false
+            ) == nil
+        )
+    }
+
     @Test("无人值守节点验收未完成时有界自动恢复")
     func unattendedRecoveryRetriesOnlyRecoverableIncompleteAcceptance() {
         #expect(AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
@@ -168,6 +190,108 @@ struct AgentDispatchCoordinatorTests {
         #expect(restoredTask.acceptanceRecoveryAttempts == 2)
         #expect(childRuntime.errorMessage == L10n.Dispatch.acceptanceRecoveryExhausted)
         #expect(appState.dispatchMonitoredRuntimeIDsByTaskID[task.id] == nil)
+    }
+
+    @Test("重开调度台时自动修复验收全绿但图状态失败的节点")
+    func restoredFailedTaskWithCompletedAcceptanceRepairsToMerged() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-repair-complete-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let project = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
+        appState.setAgentGoal(statement: "修复错误状态", items: ["完成节点"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+        let task = try #require(appState.agentDispatchCoordinator.appendTask(
+            title: "已完成节点",
+            goalID: project.id
+        ))
+        let child = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        let childRuntime = try #require(appState.runtime(for: child.id))
+        childRuntime.session.dispatchParentProjectID = project.id
+        childRuntime.session.dispatchTaskID = task.id
+        childRuntime.currentGoal = AgentGoal(
+            statement: task.title,
+            checklist: [AgentGoal.Item(text: "验收通过", done: true)]
+        )
+        appState.persistAgentSession(runtime: childRuntime)
+        appState.agentDispatchCoordinator.markTaskStarted(
+            goalID: project.id,
+            taskID: task.id,
+            executor: .willDeep,
+            target: .local,
+            runtimeSessionID: child.id
+        )
+        appState.agentDispatchCoordinator.updateTaskState(
+            goalID: project.id,
+            taskID: task.id,
+            state: .failed
+        )
+
+        appState.resumeDispatchGoal(goalID: project.id)
+
+        let repaired = try #require(
+            appState.agentDispatchCoordinator.goals
+                .first(where: { $0.id == project.id })?.tasks
+                .first(where: { $0.id == task.id })
+        )
+        #expect(repaired.state == .merged)
+    }
+
+    @Test("人工标记成功同步验收状态并完成节点")
+    func manualSuccessOverrideCompletesGoalAndTask() throws {
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-manual-success-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        appState.agentDispatchCoordinator.resetForTests()
+        let project = appState.startDispatchGoalSession(inWorkspaceAt: workspace.path)
+        appState.setAgentGoal(statement: "人工纠正状态", items: ["完成节点"])
+        appState.agentDispatchCoordinator.synchronize(with: appState.agentSessions)
+        let task = try #require(appState.agentDispatchCoordinator.appendTask(
+            title: "误报失败节点",
+            goalID: project.id
+        ))
+        let child = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        let childRuntime = try #require(appState.runtime(for: child.id))
+        childRuntime.session.dispatchParentProjectID = project.id
+        childRuntime.session.dispatchTaskID = task.id
+        childRuntime.currentGoal = AgentGoal(
+            statement: task.title,
+            checklist: [AgentGoal.Item(text: "人工已核验", done: false)]
+        )
+        childRuntime.errorMessage = "stale automated verdict"
+        appState.persistAgentSession(runtime: childRuntime)
+        appState.agentDispatchCoordinator.markTaskStarted(
+            goalID: project.id,
+            taskID: task.id,
+            executor: .willDeep,
+            target: .local,
+            runtimeSessionID: child.id
+        )
+        appState.agentDispatchCoordinator.updateTaskState(
+            goalID: project.id,
+            taskID: task.id,
+            state: .failed
+        )
+
+        #expect(appState.markDispatchTaskSuccessfulAndContinue(
+            goalID: project.id,
+            taskID: task.id
+        ))
+
+        let completed = try #require(
+            appState.agentDispatchCoordinator.goals
+                .first(where: { $0.id == project.id })?.tasks
+                .first(where: { $0.id == task.id })
+        )
+        #expect(completed.state == .merged)
+        #expect(childRuntime.currentGoal?.checklist.allSatisfy(\.done) == true)
+        #expect(childRuntime.errorMessage == nil)
     }
 
     @Test("冷恢复缺失运行会话时节点明确失败")

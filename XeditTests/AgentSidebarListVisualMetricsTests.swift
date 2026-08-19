@@ -119,9 +119,10 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentStatsDashboardLayout.profileAvatarSize == 80)
         #expect(AgentStatsDashboardLayout.summaryCornerRadius == 15)
         #expect(AgentStatsDashboardLayout.metricStripHeight == 61)
-        #expect(AgentStatsDashboardLayout.heatmapCellSize == 8)
-        #expect(AgentStatsDashboardLayout.heatmapCellSpacing == 3)
-        #expect(AgentStatsDashboardLayout.maximumHeatmapWeeks == 52)
+        #expect(AgentStatsDashboardLayout.heatmapCellSize == 12)
+        #expect(AgentStatsDashboardLayout.heatmapCellSpacing == 4)
+        #expect(AgentStatsDashboardLayout.maximumHeatmapWeeks == 26)
+        #expect(AgentStatsDashboardLayout.visibleHeatmapMonths == 6)
     }
 
     @Test("longest task duration uses compact day, hour, and minute units")

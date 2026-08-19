@@ -38,6 +38,7 @@ struct AgentDispatchTakeoverDrawer: View {
 
     @State private var selectedPanel: AgentSidePanelKind?
     @State private var selectedFile: URL?
+    @State private var isConfirmingManualCompletion = false
 
     private var drawerWidth: CGFloat { width }
 
@@ -95,6 +96,20 @@ struct AgentDispatchTakeoverDrawer: View {
         .background(drawerBackground)
         .onAppear {
             _ = appState.prepareDispatchTaskTakeover(runtimeSessionID: runtime.id)
+        }
+        .alert(
+            L10n.Dispatch.markSuccessfulConfirmationTitle,
+            isPresented: $isConfirmingManualCompletion
+        ) {
+            Button(L10n.Dispatch.cancel, role: .cancel) {}
+            Button(L10n.Dispatch.markSuccessfulAndContinue) {
+                appState.markDispatchTaskSuccessfulAndContinue(
+                    goalID: goal.id,
+                    taskID: task.id
+                )
+            }
+        } message: {
+            Text(L10n.Dispatch.markSuccessfulConfirmationMessage)
         }
     }
 
@@ -271,6 +286,21 @@ struct AgentDispatchTakeoverDrawer: View {
                     .accessibilityIdentifier("dispatch-takeover-stop-task")
                 }
 
+                if canMarkSuccessfulAndContinue {
+                    Button {
+                        isConfirmingManualCompletion = true
+                    } label: {
+                        Label(
+                            L10n.Dispatch.markSuccessfulAndContinue,
+                            systemImage: "checkmark.circle.fill"
+                        )
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help(L10n.Dispatch.markSuccessfulAndContinueHelp)
+                    .accessibilityIdentifier("dispatch-takeover-mark-successful")
+                }
+
                 Button {
                     sendInstruction()
                 } label: {
@@ -397,6 +427,12 @@ struct AgentDispatchTakeoverDrawer: View {
         runtime.isResponding
             || runtime.isAwaitingProviderSlot
             || task.state == .running
+    }
+
+    private var canMarkSuccessfulAndContinue: Bool {
+        !runtime.isResponding
+            && !runtime.isAwaitingProviderSlot
+            && (task.state == .failed || task.state == .cancelled || task.state == .accepted)
     }
 
     private func sendInstruction() {

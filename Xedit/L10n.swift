@@ -31,6 +31,19 @@ nonisolated enum L10n {
 
     enum AppUpdate {
         static let checkForUpdates = String(localized: "app-update.check-for-updates", defaultValue: "Check for Updates…")
+        static let diagnosticClose = String(localized: "app-update.diagnostic-close", defaultValue: "Close")
+        static let diagnosticCopy = String(localized: "app-update.diagnostic-copy", defaultValue: "Copy Details")
+        static let diagnosticInstallerLaunchHint = String(localized: "app-update.diagnostic-installer-launch-hint", defaultValue: "The installer could not obtain authorization or start. Reinstall a signed WillDeep release in Applications, then try again.")
+        static func diagnosticMessage(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "app-update.diagnostic-message", defaultValue: "Error: %1$@\n%2$@\n\nDetails were saved to the update log.")
+            return String(format: template, a1, a2)
+        }
+        static func diagnosticMessageWithoutLog(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "app-update.diagnostic-message-without-log", defaultValue: "Error: %1$@\n%2$@\n\nThe update log could not be written. Copy the details when reporting the problem.")
+            return String(format: template, a1, a2)
+        }
+        static let diagnosticShowLog = String(localized: "app-update.diagnostic-show-log", defaultValue: "Show Log")
+        static let diagnosticTitle = String(localized: "app-update.diagnostic-title", defaultValue: "Update Details")
         static let download = String(localized: "app-update.download", defaultValue: "Download")
         static let downloadFailedTitle = String(localized: "app-update.download-failed-title", defaultValue: "Download Failed")
         static func downloadedMessage(_ a1: String) -> String {
