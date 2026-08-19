@@ -59,6 +59,26 @@ struct AgentReadOnlyPreflightTests {
         #expect(!steering.contains("<runtime-route"))
     }
 
+    @Test("an oversized report is truncated and says it was truncated")
+    func oversizedReportIsClampedHonestly() {
+        let huge = String(repeating: "x", count: 40_000)
+        let clamped = AppState.clampedReport(huge)
+
+        #expect(clamped.count < huge.count)
+        #expect(clamped.hasPrefix("x"))
+        // Silence would be read as "the worker looked and found nothing",
+        // which is exactly the wrong conclusion to draw from a cut report.
+        #expect(clamped.contains("truncated"))
+        #expect(clamped.contains("not evidence") || clamped.contains("do not read the absence"))
+    }
+
+    @Test("a report within budget is passed through untouched")
+    func smallReportIsUnchanged() {
+        let report = "AuthGate.swift:42 gates the permission check."
+
+        #expect(AppState.clampedReport(report) == report)
+    }
+
     @Test("only read-only classifications are preflight candidates")
     func onlyReadOnlyWorkIsEligible() {
         // The executing half keys off exactly this flag, so the invariant

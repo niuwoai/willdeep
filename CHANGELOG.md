@@ -3,6 +3,22 @@
 > 当前文件保留最新版本（1.273.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.273.0-rc8 - 2026-08-19
+
+### Changed
+
+- **拆分 `AgentToolCallViews.swift`（3121 行）。** 它超过仓库 3000 行硬阈值，`scripts/run_tests.sh` 因此卡在第一关 `complexity_guard`，本地全量单测一个都跑不到。按内聚度拆成六个文件：`AgentToolDisplayNames`（工具 id → 展示名）、`AgentApprovalPresentation`（审批版面度量、按钮样式与文案）、`AgentActivityTimelineViews`（活动时间线及其行）、`AgentToolCallGroupView`（折叠分组）、`AgentTerminalShortcutPrompts`（终端快捷指令的受保护提示模型）、`AgentToolResultImageViews`（工具产出图缩略图），主文件保留工具卡片本体，从 3121 行降到 1851 行。
+- 纯代码移动，无逻辑改写。六处 `private` 因跨越新文件边界改为 internal（三个审批按钮样式、`approvalButtonBorderShape`、`TerminalShortcutProtectedInputState`、`AgentDelegatedLiveProgressView`、`AgentToolResultImageStrip`），并在各自定义处注明「原本 file-private 只是因为它们曾同处一文件」。搬迁中错位的两处文档注释（`AgentToolDisplay` 的说明、图缩略图的 MARK 与说明）已归位到对应新文件。
+- 现在 `complexity_guard` 报 `hard=0`，`run_tests.sh` 可完整跑通。
+
+### Fixed
+
+- 只读预检的报告注入新增 6000 字符上限。子 Agent 报告上限是 32K 字符（≈8K token），而系统提示在每个工具轮次都会重建，注入的文本按轮计费。超出部分截断并**明说被截断**——静默截断会让根模型把「报告里没提」当成「仓库里没有」。
+
+### Docs
+
+- 更正规划文档里一处**错误结论**：先前写「willdeep-rs 注入用户消息所以只出现一次，我们走系统提示所以每轮重复，是一项代价」。这是错的——每次请求都是「系统提示 + 完整历史」，报告放系统提示与放用户消息在同一回合内 token 完全相同，rs 的报告进了历史后续每轮照样带着。真正的差别在跨回合：`currentTurnRouteSteering` 下一回合被重置，而写进历史的报告永久累积，因此现行实现反而更省，不应改向 rs 那条路。
+
 ## 1.273.0-rc7 - 2026-08-19
 
 ### Fixed

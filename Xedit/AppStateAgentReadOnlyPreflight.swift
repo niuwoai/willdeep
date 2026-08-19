@@ -143,6 +143,18 @@ extension AppState {
         """
     }
 
+    /// Upper bound on the report as injected, independent of the 32K-character
+    /// cap a subagent transcript is stored under.
+    ///
+    /// The system prompt is rebuilt on every tool round, so this text is paid
+    /// for once per round of the turn. (Injecting into the user message the
+    /// way willdeep-rs does costs exactly the same — that copy lives in the
+    /// history every round too — but it also never expires, whereas
+    /// `currentTurnRouteSteering` is cleared when the next turn starts.)
+    /// A preflight worth reading fits in this; a report that does not is one
+    /// the root model should be re-deriving selectively anyway.
+    static let injectedReportCharacterLimit = 6_000
+
     /// Fold the worker's report into the steering paragraph the turn already
     /// carries, so the system prompt gains one block rather than two.
     static func steeringWithReport(
@@ -151,6 +163,7 @@ extension AppState {
         model: String,
         report: String
     ) -> String {
+        let report = clampedReport(report)
         let block = """
         <runtime-preflight profile="\(profileID)" model="\(model)">
         WillDeep ran this bounded read-only worker before you saw the request. Treat the report \
@@ -163,5 +176,20 @@ extension AppState {
         """
         guard let existing, !existing.isEmpty else { return block }
         return existing + "\n\n" + block
+    }
+
+    /// Truncate from the end and say so. A silently cut report reads as a
+    /// complete one, and the root model would then treat "the worker did not
+    /// mention it" as evidence of absence.
+    static func clampedReport(_ report: String) -> String {
+        guard report.count > injectedReportCharacterLimit else { return report }
+        let kept = report.prefix(injectedReportCharacterLimit)
+        return kept + """
+
+
+        […truncated at \(injectedReportCharacterLimit) characters. This report was cut, not \
+        completed — do not read the absence of something here as evidence it is not there. \
+        Inspect the workspace yourself for anything the visible part leaves open.]
+        """
     }
 }
