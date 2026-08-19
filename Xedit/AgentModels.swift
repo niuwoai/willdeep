@@ -1589,6 +1589,16 @@ struct AgentConfiguration: Codable, Equatable {
     /// deepseek-chat, qwen-turbo …) for the "give this chat a 12-char
     /// title" task without dragging that model into the main loop.
     var titleModel: String
+    /// Optional dedicated model for context compression. Empty → fall back to
+    /// `flashModel`. Kept separate from `titleModel` because the two tasks
+    /// pull in opposite directions: titling is a 12-character one-shot where
+    /// any small model wins, while compression feeds a whole transcript in and
+    /// pays for every chunk the summariser's window cannot hold. A large
+    /// context window matters more here than raw speed.
+    ///
+    /// Never point this at a reasoning model. A truncated summary silently
+    /// loses conversation state, which is worse than a slow one.
+    var compressionModel: String
     /// When `providerID == custom`, this lets the user pin which
     /// transport-protocol family the adapter facade dispatches into.
     /// `nil` (every other preset / older config) falls back to the
@@ -1606,7 +1616,8 @@ struct AgentConfiguration: Codable, Equatable {
         routingMode: .auto,
         imageDescription: .default,
         apiKey: "",
-        titleModel: ""
+        titleModel: "",
+        compressionModel: ""
     )
 
     init(
@@ -1619,6 +1630,7 @@ struct AgentConfiguration: Codable, Equatable {
         imageDescription: AgentImageDescriptionConfiguration = .default,
         apiKey: String,
         titleModel: String = "",
+        compressionModel: String = "",
         customKindOverride: AgentProviderKind? = nil
     ) {
         self.providerID = providerID
@@ -1630,6 +1642,7 @@ struct AgentConfiguration: Codable, Equatable {
         self.imageDescription = imageDescription
         self.apiKey = apiKey
         self.titleModel = titleModel
+        self.compressionModel = compressionModel
         // Override only applies to Custom — guard here too so callers
         // that forget to filter don't accidentally override a named
         // preset's kind. Matches the same defensive check in
@@ -1649,6 +1662,8 @@ struct AgentConfiguration: Codable, Equatable {
         imageDescription = try container.decodeIfPresent(AgentImageDescriptionConfiguration.self, forKey: .imageDescription) ?? .default
         apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
         titleModel = try container.decodeIfPresent(String.self, forKey: .titleModel) ?? ""
+        // New field — 1.275.0. Older configs have no key → "" → uses flashModel.
+        compressionModel = try container.decodeIfPresent(String.self, forKey: .compressionModel) ?? ""
         // New field — 1.56.1. Older configs have no key → nil → uses preset kind.
         let override = try container.decodeIfPresent(AgentProviderKind.self, forKey: .customKindOverride)
         customKindOverride = (providerID == AgentProviderPreset.customID) ? override : nil
@@ -1664,6 +1679,7 @@ struct AgentConfiguration: Codable, Equatable {
         result.imageDescription = result.imageDescription.normalized
         result.apiKey = result.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         result.titleModel = result.titleModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.compressionModel = result.compressionModel.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let preset = AgentProviderPreset.preset(id: result.providerID)
         if preset == nil {
@@ -1711,7 +1727,7 @@ struct AgentConfiguration: Codable, Equatable {
     func model(for purpose: AgentModelPurpose) -> String {
         switch purpose {
         case .compression:
-            return flashModel
+            return contextCompressionModel()
         case .interactive:
             switch routingMode {
             case .auto, .flash:
@@ -1728,6 +1744,15 @@ struct AgentConfiguration: Codable, Equatable {
     /// the task is trivial and the price gap is real).
     func titleSummaryModel() -> String {
         let trimmed = titleModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? flashModel : trimmed
+    }
+
+    /// Model to use for context compression. Returns `compressionModel` if
+    /// explicitly set, otherwise `flashModel` — never `proModel`, for the same
+    /// reason titling doesn't: the task is mechanical and the price gap is
+    /// real, and compression can fire many times in one long session.
+    func contextCompressionModel() -> String {
+        let trimmed = compressionModel.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? flashModel : trimmed
     }
 

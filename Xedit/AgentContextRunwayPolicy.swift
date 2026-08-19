@@ -19,6 +19,16 @@ nonisolated enum AgentContextRunwayPolicy {
     static let criticalUsedFraction = 0.90
     static let firstGuardedToolRound = 1
 
+    /// How many times one user turn may be auto-resumed after a runway stop.
+    ///
+    /// The ordered stop plus compression normally buys back enough window for
+    /// the work to finish. The case this bounds is the one where it doesn't:
+    /// a task whose tool output refills the window as fast as compression
+    /// drains it would otherwise loop stop → compress → resume → stop for as
+    /// long as the user's credit lasts. After the ceiling the session parks
+    /// and waits for a human.
+    static let maximumAutomaticResumes = 3
+
     nonisolated struct Snapshot: Equatable, Sendable {
         let usedTokens: Int
         let contextWindow: Int
@@ -74,9 +84,25 @@ nonisolated enum AgentContextRunwayPolicy {
         - NEXT PROMPT: one standalone sentence the user can send to resume, naming the first action and the most useful durable file/symbol anchor
 
         Continuity rules:
-        - WillDeep keeps the full transcript locally and will attempt normal context compression after this turn, so the user may continue in this same session once compression finishes.
+        - WillDeep keeps the full transcript locally and will compress this conversation as soon as this turn ends, then resume the work automatically using your NEXT PROMPT. Write it as the instruction that resumption will actually run.
+        - Compression replaces the older turns with a summary, so anything only you can still see must be written into ANCHORS now or it is gone by the time work resumes.
         - A brand-new session does not automatically inherit this conversation. The NEXT PROMPT must therefore point to durable workspace state instead of saying only "continue".
         - Preserve any required machine-readable `progress` or `goal-check` block, using no changes when nothing became newly verified.
+        """
+    }
+
+    /// Instruction handed back to the model after compression has reclaimed
+    /// the window. The handover the model just wrote survives compression as
+    /// part of the kept tail, so this only has to point at it rather than
+    /// restate the task.
+    static func resumePrompt(attempt: Int) -> String {
+        """
+        === CONTEXT RUNWAY RESUME ===
+        Context compression finished and the window has been reclaimed. This is automatic resumption \(attempt) of at most \(maximumAutomaticResumes) for this task.
+
+        Continue the work described by the NEXT PROMPT and REMAINING sections of your own handover above, treating its ANCHORS as the current state. Do not restate the handover, do not re-verify work its DONE section already recorded as verified, and do not start over from the original request.
+
+        If the remaining work cannot be finished before the window fills again, prefer durable progress — write findings to files, land reviewable commits — over holding state in this conversation.
         """
     }
 }

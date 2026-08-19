@@ -106,6 +106,17 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var isAwaitingProviderSlot: Bool = false
     @Published var turnStartedAt: Date?
     @Published var isCompressingContext: Bool = false
+    /// Set when a turn ended because `AgentContextRunwayPolicy` ordered a stop
+    /// at 90% context usage. It tells the turn's cleanup to compress even if
+    /// the ordinary 75% predicate says no, and tells compression to resume the
+    /// interrupted work once it finishes. Cleared as soon as the resume is
+    /// dispatched or refused.
+    @Published var pendingContextRunwayResume: Bool = false
+    /// How many times this session has auto-resumed after a runway stop. The
+    /// pathological case is a task that refills the window as fast as
+    /// compression drains it; without a ceiling that spins forever on the
+    /// user's money. Reset when a human sends a new message.
+    @Published var contextRunwayResumeCount: Int = 0
     @Published var errorMessage: String?
     @Published var errorDetails: AgentErrorDetails?
     /// How loudly the banner should present `errorMessage`. Not every banner
