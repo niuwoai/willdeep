@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-19 | Current version: v1.274.0-rc4
+> Last updated: 2026-08-19 | Current version: v1.274.0-rc5
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **命令失败提示降噪（1.274.0-rc5）** —— 对话活动时间线和可展开工具卡中的命令失败统一使用系统次级灰色；失败详情仍可查看，Agent 的诊断与重试流程不受影响，界面不再把常见的中间失败渲染成强警告。
 - **Goal Plan 阶段边界收紧（1.274.0-rc4）** —— Goal 路线图继续按阶段生成有界 Plan；若模型在当前 `plan` 块内提前写出后续 Phase，宿主会在下一阶段标题前截断当前卡片和执行契约，避免“阶段 1/2”的卡片混入 Phase 2 步骤。普通模式仍解析完整计划，不受阶段截断影响。
 - **会话搜索入口统一到原生标题栏（1.274.0-rc3）** —— 搜索放大镜紧跟在 macOS 红绿灯后的会话栏切换按钮右侧，成为唯一可见入口；“新聊天”下方与聊天标题栏中的重复入口已移除。`⌘⇧P`、搜索弹窗、会话与项目匹配及定位行为不变，隐藏会话栏时聊天标题会自动避让完整的窗口控件组。
 - **调度 worktree 与项目目录隔离（1.274.0-rc2）** —— 调度节点会话在首次持久化前即带上调度台归属，不再把内部 `dispatch-*` worktree 注册为最近工作区或绑定为用户项目；启动迁移只提升普通工作区会话。已受旧版本影响的自动项目记录会在会话目录加载完成后保守清理：仅处理 `~/.willdeep/worktrees` 下、使用默认目录名、未置顶且没有普通会话占用的 `dispatch-*` 项目，不删除 worktree、分支、调度会话或任务历史。

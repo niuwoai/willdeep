@@ -1654,7 +1654,7 @@ struct AgentToolCallCard: View {
         case .awaitingUserAnswer: return askUserAccentColor
         case .running: return .secondary
         case .succeeded: return .secondary
-        case .failed: return call.commandExitCode == nil ? .orange : .secondary
+        case .failed: return .secondary
         case .denied: return .secondary
         }
     }
@@ -1667,7 +1667,7 @@ struct AgentToolCallCard: View {
         case .pendingApproval: return appState.editorSettings.interfaceSkin.palette.accent
         case .awaitingConfirm: return appState.editorSettings.interfaceSkin.palette.secondaryAccent
         case .awaitingUserAnswer: return askUserAccentColor
-        case .failed: return call.commandExitCode == nil ? .orange : .secondary
+        case .failed: return .secondary
         case .running, .succeeded, .denied: return .secondary
         }
     }
@@ -1855,4 +1855,3 @@ struct AgentToolCallCard: View {
         return .pending(TerminalShortcutProtectedPromptSet(shortcutID: parsed.shortcutID, title: parsed.title, prompts: pendingPrompts))
     }
 }
-
