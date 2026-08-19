@@ -384,7 +384,7 @@ struct AgentDispatchInspectorView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.red)
+                .tint(.black)
                 .help(L10n.Dispatch.stopTaskHelp)
                 .accessibilityIdentifier("dispatch-inspector-stop-task")
             } else {
