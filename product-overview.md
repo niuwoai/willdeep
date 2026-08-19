@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-19 | Current version: v1.273.0-rc5
+> Last updated: 2026-08-19 | Current version: v1.273.0-rc6
 
 ## Positioning
 
@@ -12,7 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
-- **请求级只读预检与共享路由配置（1.273.0-rc5）** —— 高置信度的定位/阅读/日志/回归追溯请求，可在根模型读到之前先跑一个只读 Worker，报告作为证据注入（默认关闭，由共享 `config.toml` 的 `agent.auto_dispatch_read_only` 一次开两端）。`~/.willdeep/config.toml` 的 `[agent]` 段与 willdeep-rs 共用，路由开关和 deep 预算改一处两端生效。统计面板新增 Deep Share「动用 1M 档」，与 rs `agent-metrics` 同口径，用来判断稀缺档是否真的保持稀缺。
+- **请求级只读预检与共享路由配置（1.273.0-rc6）** —— 高置信度的定位/阅读/日志/回归追溯请求，可在根模型读到之前先跑一个只读 Worker，报告作为证据注入（默认关闭，由共享 `config.toml` 的 `agent.auto_dispatch_read_only` 一次开两端）。`~/.willdeep/config.toml` 的 `[agent]` 段与 willdeep-rs 共用，路由开关和 deep 预算改一处两端生效。统计面板新增 Deep Share「动用 1M 档」，与 rs `agent-metrics` 同口径，用来判断稀缺档是否真的保持稀缺。
 - **托管窄工种的模型可配置（1.273.0-rc2）** —— 登录 some.im 后，七个托管工种此前被无条件钉在 `someim-32b-<工种>` 上，用户在设置里配的模型根本走不到、设置行还是禁用的。现在托管模型是推荐值而非锁：留空即采纳推荐，填别的模型即覆盖，菜单首项一点即恢复推荐。解锁是安全的——职能提示词本来就跟着实际调用的模型走，指向别处时客户端自动改发本地镜像。
 - **小模型优先从建议变成强制（1.273.0-rc1）** —— 新会话默认模型由 1M 的 `deepseek-v4-flash` 下调到 256K 的 `glm-5`，1M 档收归 `deep` 工种独占并显式绑定；`spawn_agent(profile="deep")` 改为申请制，票据里点名的低档尝试必须与本会话**实际观测到的**记录对得上，且受每会话预算约束（默认 3 次，可配 0–16）。未知 profile 不再静默回落 `deep`，拼写错误不再等于免费升档。用户请求在模型读到之前先经中英关键词分类，命中有界特征时向当轮系统提示追加 `<runtime-route>` 引导段——只引导不强制派工，因为分类是关键词匹配、会误判。Task Packet 拆出 `read_files` 与 `write_files`，给 Worker 看一个文件不再顺手给它改这个文件的权限。详见 `docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md`。
 - **会话与项目统一搜索定位（1.272.0-rc12）** —— 左侧“新聊天”下新增搜索入口，并与顶部放大镜、⌘⇧P 共用同一面板；搜索会匹配会话标题和项目名称。选择会话会自动显示左栏、展开必要的项目/归档/更多会话区并将目标行居中后打开；选择项目则只聚焦并居中高亮该项目标题，不擅自切换当前会话。
