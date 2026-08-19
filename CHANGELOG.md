@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.274.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.274.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.274.0-rc4 - 2026-08-19
+
+### Fixed
+
+- **Goal Plan 卡片严格限制在当前阶段。** 阶段计划解析新增 Markdown Phase 边界：模型即使在同一个 `plan` 块里提前展开 Phase 2，当前卡片和执行契约也只收录 Phase 1；普通模式的完整计划继续保留全部步骤。
+
+### Tests
+
+- 新增截图同形的 Phase 1/Phase 2 解析回归及 Goal 提案到 Plan 卡片的集成回归；相关 `AgentPlanProgressTests` 与 `AgentGoalTeamsTests` 共 77 项通过。
 
 ## 1.274.0-rc3 - 2026-08-19
 

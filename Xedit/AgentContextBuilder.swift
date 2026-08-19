@@ -950,7 +950,15 @@ enum AgentContextBuilder {
 /// everything inside the block before the first numbered line becomes
 /// `summary`. Returns nil when no such block is present.
 nonisolated enum AgentPlanParser {
-    static func extract(from content: String) -> AgentPlan? {
+    enum ExtractionScope: Equatable {
+        case entireBlock
+        case firstPhase
+    }
+
+    static func extract(
+        from content: String,
+        scope: ExtractionScope = .entireBlock
+    ) -> AgentPlan? {
         guard let body = fencedBody(in: content, tag: "plan") else { return nil }
         var stepTexts: [String] = []
         var summaryLines: [String] = []
@@ -960,6 +968,15 @@ nonisolated enum AgentPlanParser {
                 if !stepTexts.isEmpty { continue }
                 summaryLines.append("")
                 continue
+            }
+            // Goal roadmaps execute one bounded phase at a time. Models can
+            // still occasionally expand a later phase inside the same plan
+            // block; stop at that Markdown heading so the active Plan card
+            // and execution contract cannot silently absorb future work.
+            if scope == .firstPhase,
+               !stepTexts.isEmpty,
+               isPhaseHeading(trimmed) {
+                break
             }
             if let step = numberedStep(from: trimmed) {
                 stepTexts.append(step)
@@ -974,6 +991,23 @@ nonisolated enum AgentPlanParser {
         guard !stepTexts.isEmpty else { return nil }
         let summary = summaryLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return AgentPlan(status: .proposed, summary: summary, stepTexts: stepTexts)
+    }
+
+    private static func isPhaseHeading(_ line: String) -> Bool {
+        guard line.hasPrefix("#") else { return false }
+        let heading = line
+            .drop { $0 == "#" }
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !heading.isEmpty else { return false }
+        if heading.range(
+            of: #"^phase[\s:_-]*(?:\d+|[ivxlcdm]+)(?:$|[\s:：_-])"#,
+            options: .regularExpression
+        ) != nil {
+            return true
+        }
+        return heading.hasPrefix("阶段")
+            || (heading.hasPrefix("第") && heading.contains("阶段"))
     }
 
     /// Returns a copy of `plan` with step statuses updated from any
