@@ -396,11 +396,16 @@ struct EditorCoreBehaviorTests {
         #expect(script.contains("app_path='/Applications/WillDeep.app'"))
     }
 
-    @Test("command line installer uses a user-local path")
+    @Test("command line installer uses a user-local path under its own name")
     func testCommandLineInstallerUsesUserLocalPath() {
         let path = CommandLineToolInstaller.installURL.standardizedFileURL.path
 
-        #expect(path.hasSuffix("/.local/bin/willdeep"))
+        #expect(path.hasSuffix("/.local/bin/willdeep-app"))
+        // Not the bare `willdeep`: that name belongs to the willdeep-rs CLI,
+        // and ~/.local/bin sits ahead of ~/.cargo/bin on PATH, so a launcher
+        // installed there under the bare name shadows the entire CLI.
+        #expect(!path.hasSuffix("/.local/bin/willdeep"))
+        #expect(path.hasSuffix("/\(CommandLineToolInstaller.toolName)"))
     }
 
     @Test("command line installer shell quoting handles apostrophes")
