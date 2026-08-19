@@ -87,6 +87,36 @@ struct AgentTranscriptScrollPolicyTests {
     }
 
     @Test
+    func sidePanelReflowDoesNotImpersonateAnOperatorScroll() {
+        #expect(
+            AgentTranscriptScrollPolicy.followingBottomAfterViewportChange(
+                current: true,
+                isNearBottom: false,
+                viewportWidthChanged: true
+            )
+        )
+        #expect(
+            !AgentTranscriptScrollPolicy.followingBottomAfterViewportChange(
+                current: false,
+                isNearBottom: true,
+                viewportWidthChanged: true
+            )
+        )
+        #expect(
+            !AgentTranscriptScrollPolicy.followingBottomAfterViewportChange(
+                current: true,
+                isNearBottom: false,
+                viewportWidthChanged: false
+            )
+        )
+    }
+
+    @Test
+    func selectingAnotherConversationStartsAtTheBottom() {
+        #expect(AgentTranscriptScrollPolicy.followingBottomAfterSessionChange())
+    }
+
+    @Test
     func taskUpdateKeepsHistoryPositionWhenOperatorScrolledUp() {
         let assistant = AgentMessage(role: .assistant, content: "Task update")
 

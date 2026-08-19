@@ -1037,38 +1037,29 @@ extension AppState {
         }
     }
 
-    /// Keeps `body` from moving the operator to another primary destination.
-    ///
-    /// `startNewAgentSession(inWorkspaceAt:)` routes ordinary callers to the
-    /// conversation destination — right for "new chat", wrong for every node
-    /// the scheduler starts on its own. Without this restore, pressing Launch
-    /// on the board threw the operator into the plain chat transcript of
-    /// whichever node started last, and a multi-node launch did it per node.
-    func withPreservedAgentPrimaryDestination<T>(_ body: () -> T) -> T {
-        let previousDestination = agentPrimaryDestination
-        defer { agentPrimaryDestination = previousDestination }
-        return body()
-    }
-
     private func createDispatchTaskRuntime(
         workspaceLocation: WorkspaceLocation
     ) -> AgentRuntime? {
-        withPreservedAgentPrimaryDestination {
-            switch workspaceLocation {
-            case .local(let path):
-                let session = startNewAgentSession(inWorkspaceAt: path)
-                return runtime(for: session.id)
-            case .remote(let runtimeID, let path):
-                guard AgentRuntimeStore.descriptor(id: runtimeID) != nil else { return nil }
-                let session = startNewAgentSession(inWorkspaceAt: nil)
-                guard let taskRuntime = runtime(for: session.id) else { return nil }
-                taskRuntime.rebindRemoteWorkspace(
-                    runtimeID: runtimeID,
-                    path: path
-                )
-                persistAgentSession(runtime: taskRuntime)
-                return taskRuntime
-            }
+        switch workspaceLocation {
+        case .local(let path):
+            let session = startNewAgentSession(
+                inWorkspaceAt: path,
+                makeActive: false
+            )
+            return runtime(for: session.id)
+        case .remote(let runtimeID, let path):
+            guard AgentRuntimeStore.descriptor(id: runtimeID) != nil else { return nil }
+            let session = startNewAgentSession(
+                inWorkspaceAt: nil,
+                makeActive: false
+            )
+            guard let taskRuntime = runtime(for: session.id) else { return nil }
+            taskRuntime.rebindRemoteWorkspace(
+                runtimeID: runtimeID,
+                path: path
+            )
+            persistAgentSession(runtime: taskRuntime)
+            return taskRuntime
         }
     }
 
