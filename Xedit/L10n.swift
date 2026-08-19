@@ -1393,6 +1393,8 @@ nonisolated enum L10n {
         static let someIMNotLoggedInTooltip = String(localized: "sidebar.some-im.not-logged-in-tooltip", defaultValue: "Open some.im integration settings")
         static let workspaceHeader = String(localized: "sidebar.workspace-header", defaultValue: "Workspaces")
         static let workspaceHeaderOpenTooltip = String(localized: "sidebar.workspace-header.open-tooltip", defaultValue: "Add a folder as a new project")
+        static let workspaceHeaderCollapseAllTooltip = String(localized: "sidebar.workspace-header.collapse-all-tooltip", defaultValue: "Collapse all projects")
+        static let workspaceHeaderExpandAllTooltip = String(localized: "sidebar.workspace-header.expand-all-tooltip", defaultValue: "Expand all projects")
         static let workspaceMenuNewChat = String(localized: "sidebar.workspace-menu.new-chat", defaultValue: "New Chat in this Workspace")
         static let workspaceMenuRemove = String(localized: "sidebar.workspace-menu.remove", defaultValue: "Remove from List")
         static let workspaceToggleCollapseTooltip = String(localized: "sidebar.workspace-toggle.collapse-tooltip", defaultValue: "Collapse session list")
