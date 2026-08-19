@@ -536,13 +536,49 @@ struct AgentContextCompressionSplitTests {
         #expect(segments[1].hasPrefix("USER:"))
     }
 
-    /// The budget has to absorb the gap between our character heuristic and
-    /// the provider's real tokenizer, so it stays a small slice of the window.
+    /// The budget still leaves headroom for the instruction prompt, the
+    /// generated summary, and the gap between our character heuristic and the
+    /// provider's real tokenizer — but not so much headroom that a full
+    /// session gets shredded into a long train of requests.
     @Test
     func compressionChunkBudgetLeavesHeadroom() {
-        #expect(AppState.compressionChunkTokenBudget(contextWindow: 1_000_000) == 150_000)
+        #expect(AppState.compressionChunkTokenBudget(contextWindow: 1_000_000) == 350_000)
+        #expect(AppState.compressionChunkTokenBudget(contextWindow: 8_000) == 2_800)
         // Tiny windows still get a workable floor rather than a useless budget.
-        #expect(AppState.compressionChunkTokenBudget(contextWindow: 8_000) == 2_000)
+        #expect(AppState.compressionChunkTokenBudget(contextWindow: 4_000) == 2_000)
+    }
+
+    /// Wall-clock regression guard. The chunk count is what compression pays
+    /// for in round trips, and the old 0.15 fraction turned a nearly full
+    /// session into a six-request serial train. Assert the shape that costs
+    /// time — how many chunks a realistic full transcript produces — rather
+    /// than only the constant that produces it.
+    @Test
+    func fullTranscriptFoldsIntoFewChunks() {
+        let window = 1_000_000
+        let budget = AppState.compressionChunkTokenBudget(contextWindow: window)
+        // ~900K tokens of transcript: a session that reached the 90% runway.
+        let segments = (0..<900).map { index in
+            "USER:\n" + String(repeating: "word ", count: 800) + "#\(index)"
+        }
+        let chunks = AppState.compressionChunks(segments: segments, tokenBudget: budget)
+
+        #expect(chunks.count <= 4)
+        // And the whole fold still fits in a single concurrent wave, so the
+        // user waits for one round trip rather than a queue of them.
+        #expect(chunks.count <= AppState.maximumConcurrentCompressionRequests)
+        for chunk in chunks {
+            #expect(AppState.estimateTextTokens(chunk) <= budget)
+        }
+    }
+
+    /// Folding partial summaries again is another full round of requests for a
+    /// diminishing gain, so the depth stays shallow. Below 2 there would be no
+    /// merge pass at all and multi-part sessions would ship joined parts.
+    @Test
+    func compressionFoldDepthStaysShallow() {
+        #expect(AppState.maximumCompressionFoldDepth == 2)
+        #expect(AppState.maximumConcurrentCompressionRequests > 1)
     }
 
     /// The real rejection observed in the field, verbatim. Recognising it is
