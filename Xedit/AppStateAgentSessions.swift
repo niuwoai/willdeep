@@ -1879,6 +1879,16 @@ extension AppState {
         return true
     }
 
+    /// Selects a conversation and asks the left sidebar to reveal its row in
+    /// the viewport centre. Kept as one operation so title-search callers do
+    /// not accidentally emit a reveal for a session that failed to load.
+    @discardableResult
+    func selectAndRevealAgentSessionInSidebar(id: AgentSession.ID) -> Bool {
+        guard selectAgentSession(id: id) else { return false }
+        agentSidebarRevealRequest = AgentSidebarRevealRequest(target: .session(id))
+        return true
+    }
+
     func dismissAgentSessionLoadFailure() {
         agentSessionLoadFailure = nil
     }

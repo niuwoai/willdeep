@@ -34,8 +34,6 @@ struct AgentModeView: View {
     /// header (rc24) so a user who lives in one long conversation can
     /// reclaim the 230pt for the transcript. Persisted across relaunch.
     @AppStorage("agentSessionsSidebarVisible") private var sessionsSidebarVisible = true
-    /// Drives the title-only session search overlay (rc24).
-    @State private var isSessionSearchPresented = false
     /// User-resizable width of the right side panel. Persisted so the
     /// choice survives relaunch.
     @AppStorage("agentSidePanelWidth") private var sidePanelWidth: Double = 320
@@ -218,7 +216,7 @@ struct AgentModeView: View {
                     AgentChatHeader(
                         sidePanel: sidePanelBinding,
                         sessionsSidebarVisible: $sessionsSidebarVisible,
-                        isSessionSearchPresented: $isSessionSearchPresented
+                        isSessionSearchPresented: $appState.isAgentSessionSearchPresented
                     )
                     Divider().opacity(0.5)
                     AgentChatTranscript()
@@ -321,9 +319,17 @@ struct AgentModeView: View {
                 thumbnailTrailingInset: activeSidePanel == nil ? 0 : CGFloat(panelWidth + 1)
             )
         }
-        .sheet(isPresented: $isSessionSearchPresented) {
+        .sheet(isPresented: $appState.isAgentSessionSearchPresented) {
             AgentSessionSearchView()
                 .environmentObject(appState)
+        }
+        .onCompatibleChange(of: appState.agentSidebarRevealRequest) { _, request in
+            // A result must be visible when it is selected. This also makes
+            // title search useful when the user had manually hidden the
+            // sidebar before opening it from the header shortcut.
+            if request != nil {
+                sessionsSidebarVisible = true
+            }
         }
         .onAppear {
             DesktopPetWindowManager.shared.attach(to: appState)

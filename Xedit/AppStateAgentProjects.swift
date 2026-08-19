@@ -15,6 +15,15 @@ import Combine
 import Foundation
 
 extension AppState {
+    /// Focus a project group in the sidebar without changing the open
+    /// conversation. This is the project-name counterpart of a title-search
+    /// hit on a single chat.
+    func revealAgentProjectInSidebar(id: AgentProject.ID) {
+        guard agentProjects.contains(where: { $0.id == id }) else { return }
+        agentPrimaryDestination = .conversation
+        agentSidebarRevealRequest = AgentSidebarRevealRequest(target: .project(id))
+    }
+
     /// Local filesystem roots explicitly authorized by the session's Project.
     /// The session workspace stays first so relative tool paths remain stable.
     func agentWorkspaceRoots(for session: AgentSession) -> [URL] {

@@ -38,6 +38,23 @@ nonisolated struct AgentSessionSearchMatch: Equatable {
     let excerpt: String
 }
 
+/// A selectable title-search destination. The palette searches both individual
+/// conversations and user-defined projects; keeping those as distinct cases
+/// lets the sidebar either activate a chat row or focus a workspace header.
+nonisolated enum AgentSessionSearchResult: Identifiable, Equatable {
+    case session(AgentSession)
+    case project(AgentProject)
+
+    var id: String {
+        switch self {
+        case .session(let session):
+            return "session-\(session.id.uuidString)"
+        case .project(let project):
+            return "project-\(project.id.uuidString)"
+        }
+    }
+}
+
 nonisolated enum AgentSessionSearch {
     /// Caps chosen so a full result set stays a few thousand tokens: this is
     /// a pointer into history, not a replacement for reading it.
@@ -61,6 +78,34 @@ nonisolated enum AgentSessionSearch {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         return text.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+    }
+
+    /// Finds title matches in both conversations and named projects. Projects
+    /// lead the result list because a project-name hit is a direct request to
+    /// navigate the sidebar group rather than to open one arbitrary chat in
+    /// that group. Conversations remain newest-first, matching the old search
+    /// behaviour; project ties use their latest edit time then a stable name.
+    static func titleResults(
+        sessions: [AgentSession],
+        projects: [AgentProject],
+        query: String
+    ) -> [AgentSessionSearchResult] {
+        let projectResults = projects
+            .filter { matches($0.resolvedDisplayName, query: query) }
+            .sorted { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+                let nameOrder = lhs.resolvedDisplayName.localizedCaseInsensitiveCompare(rhs.resolvedDisplayName)
+                if nameOrder != .orderedSame { return nameOrder == .orderedAscending }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            .map(AgentSessionSearchResult.project)
+
+        let sessionResults = sessions
+            .filter { matches($0.title, query: query) }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .map(AgentSessionSearchResult.session)
+
+        return projectResults + sessionResults
     }
 
     /// Whether a session belongs to the workspace the user is looking at.

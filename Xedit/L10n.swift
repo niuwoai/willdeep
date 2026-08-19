@@ -914,9 +914,15 @@ nonisolated enum L10n {
     }
 
     enum SessionSearch {
-        static let placeholder = String(localized: "session-search.placeholder", defaultValue: "Search chats by title…")
-        static let empty = String(localized: "session-search.empty", defaultValue: "No matching chats")
-        static let prompt = String(localized: "session-search.prompt", defaultValue: "Type to search your chats")
+        static let placeholder = String(localized: "session-search.placeholder", defaultValue: "Search chats and projects by title…")
+        static let empty = String(localized: "session-search.empty", defaultValue: "No matching chats or projects")
+        static let prompt = String(localized: "session-search.prompt", defaultValue: "Type to search chats and projects")
+        static let sessionResultKind = String(localized: "session-search.result-kind-session", defaultValue: "Chat")
+        static let projectResultKind = String(localized: "session-search.result-kind-project", defaultValue: "Project")
+        static func projectResultSubtitle(_ a1: String) -> String {
+            let template = String(localized: "session-search.project-result-subtitle", defaultValue: "%1$@ folders")
+            return String(format: template, a1)
+        }
         static func resultCount(_ a1: String) -> String {
             let template = String(localized: "session-search.result-count", defaultValue: "%@ results")
             return String(format: template, a1)
@@ -1314,6 +1320,7 @@ nonisolated enum L10n {
         static let emptyState = String(localized: "sidebar.empty-state", defaultValue: "Sessions you start will appear here.")
         static let loadingState = String(localized: "sidebar.loading-state", defaultValue: "Loading sessions…")
         static let newChatAction = String(localized: "sidebar.new-chat-action", defaultValue: "New Chat")
+        static let searchSessionsAction = String(localized: "sidebar.search-sessions-action", defaultValue: "Search chats")
         static let pinnedHeader = String(localized: "sidebar.pinned-header", defaultValue: "Pinned")
         static let defaultSessionTitle = String(localized: "sidebar.default-session-title", defaultValue: "New Chat")
         static let recentSessionsRailTitle = String(localized: "sidebar.recent-sessions-rail.title", defaultValue: "Recent chats")
