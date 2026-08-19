@@ -150,9 +150,19 @@ rs 侧把「优先用小模型」从系统提示词里的劝告，搬进了 Runt
 注入走**当轮系统提示**而不是用户消息——rs 拼进 `user_message.content` 的做法在 GUI 里会
 把 `<runtime-route>` 标记直接显示给用户，Xedit 走 `AgentDelegationPolicy.systemPromptInstruction`
 同一条通路。
-**未完成**：`Decision.autoDispatchEligible` 已计算并有测试，但**没有接执行**——高置信只读活
-仍不会在 Root 之前真的跑一个 worker。按 §3 的决策它本就默认关闭，接线与 GUI 上的等待反馈
-留到 Deep Share 数据能说话之后。
+**执行侧（1.273.0-rc5）**：`AppStateAgentReadOnlyPreflight` 在首次 provider 调用之前、
+工具循环之外跑一个只读 worker，报告折进同一个 steering 段。默认关闭，由共享
+`agent.auto_dispatch_read_only` 开启（一次开两端）。
+
+只读是构造性的，不是约定：不传 `writeAccess`、不传 `verifier`、不取编辑锁、不接 patch sink，
+并且只有 `autoDispatchEligible` 的分类才会走到这里——而该标志对任何含改动意图的请求都为 false
+（有测试锁住）。远端工作区直接跳过（这批工种是本地文件/Git 类）。派工前先在 WillDeep 自己的
+账本里落一条可见记录：让用户说不清缘由地等，比等本身更糟。预检失败对模型**静默**——预检跑不起来
+不构成「这活很难」的证据，把 WillDeep 的管道故障讲给根模型只会引它去推理错误的东西。
+
+**已知代价**：注入走系统提示，而系统提示每轮重建，因此报告会在该回合的每一轮里重复出现
+（子 Agent 报告上限 32K 字符 ≈ 8K token）。rs 注入用户消息因而只出现一次。开启自动预检前
+应先给报告加注入上限。
 
 ---
 

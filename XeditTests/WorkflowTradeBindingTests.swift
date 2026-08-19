@@ -53,6 +53,9 @@ struct WorkflowTradeBindingTests {
         // Every workflow step that names no trade keeps running exactly as it
         // did before trades existed — the migration is opt-in per step.
         #expect(AgentSubagentProfileCatalog.profile(id: nil).id == AgentSubagentProfileCatalog.deepID)
-        #expect(AgentSubagentProfileCatalog.deep.modelBinding.model == nil)
+        // deep is now pinned to the 1M tier rather than inheriting whatever
+        // the provider's primary model happens to be — that is what makes an
+        // escalation to it mean something.
+        #expect(AgentSubagentProfileCatalog.deep.modelBinding.model == "deepseek-v4-flash")
     }
 }

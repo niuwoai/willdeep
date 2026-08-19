@@ -256,6 +256,19 @@ extension AppState {
                 self.consumeNextQueuedMessageIfNeeded(for: runtime)
                 return
             }
+            // Before the first provider call, not inside the tool loop: the
+            // whole point is that the expensive model reads findings rather
+            // than deriving them. The report folds into
+            // currentTurnRouteSteering, which runAgentLoop reads when it
+            // assembles the system prompt.
+            if source == .operatorInput {
+                await self.runReadOnlyPreflightIfNeeded(
+                    for: runtime,
+                    requestText: text,
+                    configuration: configuration,
+                    assistantMessageID: userMessage.id
+                )
+            }
             await self.runAgentLoop(
                 for: runtime,
                 configuration: configuration,

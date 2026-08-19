@@ -573,11 +573,12 @@ struct AgentProviderLibraryTests {
     }
 
     @Test
-    func someIMPresetDefaultsToDeepSeekChatModels() {
+    func someIMPresetDefaultsToTheStandardTierForChat() {
         let preset = AgentProviderPreset.preset(id: "some-im")
 
         #expect(preset?.displayName == "some.im")
-        #expect(preset?.defaultModel == "deepseek-v4-flash")
+        // The flash/default slot is the 256K M tier; pro stays DeepSeek.
+        #expect(preset?.defaultModel == "glm-5")
         #expect(preset?.defaultProModel == "deepseek-v4-pro")
     }
 
