@@ -60,6 +60,11 @@ extension AppState {
             : nil
         if source == .operatorInput {
             runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
+            // A human steering the session starts a fresh budget of automatic
+            // runway resumes. The ceiling exists to stop an unattended loop,
+            // not to ration what the user asks for directly.
+            runtime.contextRunwayResumeCount = 0
+            runtime.pendingContextRunwayResume = false
         }
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
@@ -502,7 +507,16 @@ extension AppState {
             startAgentGoalPlanningAfterCaptureIfNeeded(didDefineGoal, for: runtime)
             persistAgentSession(runtime: runtime)
             if !shouldConsumeQueueAfterStop {
-                maybeAutoCompressContext(for: runtime)
+                // A runway stop means the window is already at 90%, well past
+                // the ordinary 75% trigger — but `shouldAutoCompressNow` can
+                // still refuse (too few messages, a tail that will not split).
+                // Ask for it explicitly so the ordered stop is always followed
+                // by the compression it promised the model.
+                if runtime.pendingContextRunwayResume {
+                    compressAgentContext(for: runtime, keepRecent: 2)
+                } else {
+                    maybeAutoCompressContext(for: runtime)
+                }
             }
             consumeNextQueuedMessageIfNeeded(for: runtime)
             // Always release the provider slot last so the queue drain
@@ -1278,9 +1292,12 @@ extension AppState {
                 if didRequestContextRunwayHandoff {
                     // Do not let Plan/Goal auto-continuation immediately undo
                     // the ordered stop. We still ingest any honest status
-                    // blocks the handover supplied, then the turn-level defer
-                    // runs normal context compression and leaves the session
-                    // ready for an explicit resume.
+                    // blocks the handover supplied; the turn-level defer then
+                    // force-compresses and, if the resume ceiling allows,
+                    // hands the work back to the model on its own.
+                    if runtime.contextRunwayResumeCount < AgentContextRunwayPolicy.maximumAutomaticResumes {
+                        runtime.pendingContextRunwayResume = true
+                    }
                     _ = captureAgentPlanFromLatestMessage(for: runtime)
                     if runtime.interactionMode == .goal {
                         _ = captureAgentGoalEvaluationFromLatestMessage(

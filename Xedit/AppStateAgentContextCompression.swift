@@ -146,13 +146,30 @@ extension AppState {
         priorSummary: String? = nil,
         configurations: [AgentConfiguration]
     ) async {
+        var didReclaimWindow = false
         defer {
             runtime.isCompressingContext = false
             persistAgentSession(runtime: runtime)
+            // A message the user queued while compression ran outranks an
+            // automatic resume: they are redirecting, and both would be
+            // competing for the same runtime. Stand the resume down.
+            if !runtime.queuedMessages.isEmpty {
+                runtime.pendingContextRunwayResume = false
+                runtime.contextRunwayResumeCount = 0
+            }
             // Auto-compression can be racing with a queued message; resume
             // the queue once compression resolves so the user doesn't see
             // "queued" forever.
             consumeNextQueuedMessageIfNeeded(for: runtime)
+            if didReclaimWindow {
+                resumeAfterContextRunwayStopIfNeeded(for: runtime)
+            } else if runtime.pendingContextRunwayResume {
+                // Compression failed, so the window is still at 90%. Resuming
+                // would burn a request to hit the same ordered stop again.
+                // Park instead: the error banner already explains why, and
+                // the user can retry compression or start a fresh session.
+                runtime.pendingContextRunwayResume = false
+            }
             // A background job/media task/subagent finishing while
             // `isCompressingContext` was set had its auto-resume guarded
             // off — and auto-compression runs in the turn's defer BEFORE
@@ -192,6 +209,7 @@ extension AppState {
                 }
                 runtime.contextSummary = trimmed
                 runtime.contextSummaryThroughMessageID = head.last?.id
+                didReclaimWindow = true
                 return
             } catch {
                 lastError = error
@@ -253,6 +271,41 @@ extension AppState {
                 continue
             }
         }
+    }
+
+    /// Hand the interrupted work back to the model after a runway stop.
+    ///
+    /// Without this the 90% ordered stop was only half a mechanism: the model
+    /// wrote a careful handover, compression reclaimed the window — and then
+    /// the session just sat there until the user re-sent the NEXT PROMPT by
+    /// hand. The handover survives compression as part of the kept tail, so
+    /// resuming only needs to point the model back at what it already wrote.
+    ///
+    /// Every bail-out clears `pendingContextRunwayResume`, so a refused resume
+    /// parks the session rather than leaving a flag armed for a later,
+    /// unrelated turn to trip over.
+    func resumeAfterContextRunwayStopIfNeeded(for runtime: AgentRuntime) {
+        guard runtime.pendingContextRunwayResume else { return }
+        guard !runtime.isResponding, !runtime.isCompressingContext else { return }
+        // A queued user message already claimed the runtime in this same
+        // defer. Their turn owns the conversation now.
+        guard runtime.queuedMessages.isEmpty else {
+            runtime.pendingContextRunwayResume = false
+            return
+        }
+        runtime.pendingContextRunwayResume = false
+        guard runtime.contextRunwayResumeCount < AgentContextRunwayPolicy.maximumAutomaticResumes else {
+            return
+        }
+        runtime.contextRunwayResumeCount += 1
+
+        dispatchAgentMessageUsingSelectedExecutor(
+            runtime.executionAgent,
+            for: runtime,
+            text: AgentContextRunwayPolicy.resumePrompt(attempt: runtime.contextRunwayResumeCount),
+            images: [],
+            source: .hostInstruction
+        )
     }
 
     /// Summarize every chunk of one fold, concurrently, in transcript order.

@@ -427,6 +427,11 @@ enum AgentSettingsStore {
         var imageProviderID: String?
         var imageBaseURL: String?
         var imageModel: String?
+        /// Auxiliary model slots. `titleModel` was documented as persisted
+        /// here from the start but never actually had a field, so a Title
+        /// Model typed into Settings survived only until the next launch.
+        var titleModel: String?
+        var compressionModel: String?
     }
 
     static func load() -> AgentConfiguration {
@@ -469,7 +474,9 @@ enum AgentSettingsStore {
             proModel: proModel,
             routingMode: stored.routingMode ?? .auto,
             imageDescription: imageDescription,
-            apiKey: loadAPIKey(account: keychainAccount)
+            apiKey: loadAPIKey(account: keychainAccount),
+            titleModel: stored.titleModel ?? "",
+            compressionModel: stored.compressionModel ?? ""
         ).normalized
     }
 
@@ -506,7 +513,9 @@ enum AgentSettingsStore {
             routingMode: normalized.routingMode,
             imageProviderID: normalized.imageDescription.providerID,
             imageBaseURL: normalized.imageDescription.baseURL,
-            imageModel: normalized.imageDescription.model
+            imageModel: normalized.imageDescription.model,
+            titleModel: normalized.titleModel,
+            compressionModel: normalized.compressionModel
         )
         if let data = try? JSONEncoder().encode(stored) {
             defaults.set(data, forKey: defaultsKey)

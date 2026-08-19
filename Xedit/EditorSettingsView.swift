@@ -47,6 +47,7 @@ struct EditorSettingsView: View {
     /// AgentConfiguration.titleSummaryModel() and
     /// AppStateAgentTitleSummarizer.
     @State private var agentTitleModelBuffer: String = ""
+    @State private var agentCompressionModelBuffer: String = ""
     @State private var agentSaveStatus: String = ""
     // Web search provider preference plus provider keys for the
     // built-in web_search tool. Saved/loaded straight through
@@ -419,6 +420,20 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(L10n.Settings.sectionContextCompression) {
+                LabeledContent(L10n.Settings.AgentBehavior.compressionModelLabel) {
+                    TextField(
+                        "",
+                        text: $agentCompressionModelBuffer,
+                        prompt: Text(L10n.Settings.AgentBehavior.compressionModelPlaceholder)
+                    )
+                    .textFieldStyle(.roundedBorder)
+                }
+                Text(L10n.Settings.AgentBehavior.compressionModelDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(L10n.Settings.sectionWebTools) {
                 Picker(L10n.Settings.WebTools.providerLabel, selection: $webSearchProviderBuffer) {
                     ForEach(AgentWebSearchProvider.allCases) { provider in
@@ -531,6 +546,7 @@ struct EditorSettingsView: View {
             || imageModelBuffer != configuration.imageDescription.model
             || imageAPIKeyBuffer != configuration.imageDescription.apiKey
             || agentTitleModelBuffer != configuration.titleModel
+            || agentCompressionModelBuffer != configuration.compressionModel
     }
 
     private func loadAgentBuffersFromAppState() {
@@ -546,6 +562,7 @@ struct EditorSettingsView: View {
         imageModelBuffer = configuration.imageDescription.model
         imageAPIKeyBuffer = configuration.imageDescription.apiKey
         agentTitleModelBuffer = configuration.titleModel
+        agentCompressionModelBuffer = configuration.compressionModel
         webSearchProviderSaved = AgentSettingsStore.loadWebSearchProvider()
         webSearchProviderBuffer = webSearchProviderSaved
         exaSearchAPIKeySaved = AgentSettingsStore.loadExaSearchAPIKey()
@@ -588,6 +605,8 @@ struct EditorSettingsView: View {
             apiKey: imageAPIKeyBuffer
         )
         configuration.titleModel = agentTitleModelBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+        configuration.compressionModel = agentCompressionModelBuffer
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         appState.agentConfiguration = configuration.normalized
         loadAgentBuffersFromAppState()
         agentSaveStatus = L10n.Settings.savedStatus

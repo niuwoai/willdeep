@@ -581,6 +581,56 @@ struct AgentContextCompressionSplitTests {
         #expect(AppState.maximumConcurrentCompressionRequests > 1)
     }
 
+    /// Compression gets its own model slot so a user can point it at a
+    /// large-window summariser without dragging that model into the main
+    /// loop. Empty keeps the historical behaviour — the Flash slot, which
+    /// ships as deepseek-v4-flash.
+    @Test
+    func compressionModelSlotFallsBackToFlash() {
+        var configuration = AgentConfiguration.default
+        #expect(configuration.compressionModel.isEmpty)
+        #expect(configuration.contextCompressionModel() == "deepseek-v4-flash")
+        #expect(configuration.model(for: .compression) == "deepseek-v4-flash")
+
+        configuration.compressionModel = "  qwen3.7-plus  "
+        // Whitespace-only input must not count as a selection.
+        #expect(configuration.normalized.contextCompressionModel() == "qwen3.7-plus")
+        #expect(configuration.normalized.model(for: .compression) == "qwen3.7-plus")
+
+        configuration.compressionModel = "   "
+        #expect(configuration.contextCompressionModel() == configuration.flashModel)
+
+        // Compression must never silently ride the Pro slot, whatever the
+        // routing mode says — it can fire many times in one long session.
+        configuration.compressionModel = ""
+        configuration.routingMode = .pro
+        #expect(configuration.normalized.model(for: .compression) == configuration.flashModel)
+    }
+
+    /// `titleModel` was documented as persisted but had no field in
+    /// `StoredSettings`, so it silently reset on every launch. Both auxiliary
+    /// slots must survive a save/load round trip.
+    ///
+    /// Runs inside `KeychainSandbox` — without it this writes the developer's
+    /// real Agent settings, which is how fixture providers once showed up in
+    /// the running app after a test run.
+    @MainActor
+    @Test
+    func auxiliaryModelSlotsSurviveARoundTrip() {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+
+        var configuration = AgentConfiguration.default
+        configuration.titleModel = "qwen-turbo"
+        configuration.compressionModel = "glm-5.2"
+
+        AgentSettingsStore.saveAuxiliaryConfiguration(configuration)
+        let reloaded = AgentSettingsStore.load()
+
+        #expect(reloaded.titleModel == "qwen-turbo")
+        #expect(reloaded.compressionModel == "glm-5.2")
+    }
+
     /// The real rejection observed in the field, verbatim. Recognising it is
     /// what lets compression halve its chunk budget and retry instead of
     /// surfacing a 400 the user cannot act on.
