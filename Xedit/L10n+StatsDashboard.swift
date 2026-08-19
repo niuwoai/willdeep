@@ -27,6 +27,7 @@ extension L10n {
         static let dailyCacheAchievement = String(localized: "stats-dashboard.daily-detail.cache-achievement", defaultValue: "Efficient context reuse")
         static let dailyProductivityAchievement = String(localized: "stats-dashboard.daily-detail.productivity-achievement", defaultValue: "Productive AI workday")
         static let generateShareImage = String(localized: "stats-dashboard.share.generate", defaultValue: "Generate share image")
+        static let generatingShareImage = String(localized: "stats-dashboard.share.generating", defaultValue: "Generating…")
         static let saveShareImage = String(localized: "stats-dashboard.share.save", defaultValue: "Save image")
         static let shareImage = String(localized: "stats-dashboard.share.action", defaultValue: "Share")
         static let sharePreviewTitle = String(localized: "stats-dashboard.share.preview-title", defaultValue: "Share preview")

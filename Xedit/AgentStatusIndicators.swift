@@ -58,9 +58,55 @@ enum AgentStatsDashboardLayout {
     static let summaryCornerRadius: CGFloat = 15
     static let metricStripHeight: CGFloat = 61
     static let heatmapCellSize: CGFloat = 12
+    static let maximumHeatmapCellSize: CGFloat = 14
     static let heatmapCellSpacing: CGFloat = 4
-    static let maximumHeatmapWeeks = 26
-    static let visibleHeatmapMonths = 6
+    static let maximumHeatmapWeeks = 32
+    static let visibleHeatmapMonths = 8
+
+    struct HeatmapMetrics: Equatable {
+        let weekCount: Int
+        let cellSize: CGFloat
+        let columnSpacing: CGFloat
+
+        var width: CGFloat {
+            CGFloat(weekCount) * cellSize
+                + CGFloat(max(0, weekCount - 1)) * columnSpacing
+        }
+    }
+
+    static func heatmapMetrics(
+        availableWidth: CGFloat,
+        availableWeekCount: Int
+    ) -> HeatmapMetrics {
+        let width = max(0, availableWidth)
+        let cappedAvailableWeeks = max(1, min(maximumHeatmapWeeks, availableWeekCount))
+        let targetStride = heatmapCellSize + heatmapCellSpacing
+        let fittingWeekCount = max(1, Int((width + heatmapCellSpacing) / targetStride))
+        let weekCount = min(cappedAvailableWeeks, fittingWeekCount)
+        let gapCount = CGFloat(max(0, weekCount - 1))
+        let targetGapWidth = gapCount * heatmapCellSpacing
+        let unconstrainedCellSize = weekCount > 0
+            ? max(0, width - targetGapWidth) / CGFloat(weekCount)
+            : 0
+        let minimumCellSize = min(heatmapCellSize, width)
+        let cellSize = min(
+            maximumHeatmapCellSize,
+            max(minimumCellSize, unconstrainedCellSize)
+        )
+        let columnSpacing = weekCount > 1
+            ? max(0, width - CGFloat(weekCount) * cellSize) / gapCount
+            : 0
+
+        return HeatmapMetrics(
+            weekCount: weekCount,
+            cellSize: cellSize,
+            columnSpacing: columnSpacing
+        )
+    }
+
+    static func heatmapHeight(cellSize: CGFloat) -> CGFloat {
+        7 * cellSize + 6 * heatmapCellSpacing
+    }
 }
 
 enum AgentStatsDashboardFormatting {
@@ -89,8 +135,8 @@ struct AgentStatsDashboard: View {
     @State private var activityMode: ActivityMode = .daily
     @State private var displayedMonth: Date
     @State private var selectedDay: Date
-    @State private var sharePreviewImage: NSImage?
-    @State private var isSharePreviewPresented = false
+    @State private var sharePreview: AgentDailySharePreview?
+    @State private var isGeneratingShareImage = false
     @State private var account = SomeIMIntegrationStore.loadAuthenticatedAccount()
     private let now: Date
 
@@ -159,15 +205,13 @@ struct AgentStatsDashboard: View {
         .onCompatibleChange(of: selectedTab) { _, _ in
             NotificationCenter.default.post(name: .agentStatsDashboardPageDidChange, object: nil)
         }
-        .sheet(isPresented: $isSharePreviewPresented) {
-            if let sharePreviewImage {
-                AgentDailyShareSheet(
-                    image: sharePreviewImage,
-                    suggestedFilename: shareImageFilename,
-                    onSave: { saveShareImage(sharePreviewImage) },
-                    onShare: { shareImage(sharePreviewImage) }
-                )
-            }
+        .sheet(item: $sharePreview) { preview in
+            AgentDailyShareSheet(
+                image: preview.image,
+                suggestedFilename: preview.suggestedFilename,
+                onSave: { saveShareImage(preview.image) },
+                onShare: { shareImage(preview.image) }
+            )
         }
     }
 
@@ -418,47 +462,55 @@ struct AgentStatsDashboard: View {
             .padding(.bottom, 11)
 
             GeometryReader { proxy in
-                let cellSize = AgentStatsDashboardLayout.heatmapCellSize
-                let cellSpacing = AgentStatsDashboardLayout.heatmapCellSpacing
-                let cells = activityCells
+                let metrics = AgentStatsDashboardLayout.heatmapMetrics(
+                    availableWidth: proxy.size.width,
+                    availableWeekCount: activityCells.count
+                )
+                let cells = Array(activityCells.suffix(metrics.weekCount))
                 let displayCounts = activityDisplayCounts(cells)
                 let maxCount = displayCounts.flatMap { $0 }.max() ?? 0
 
-                HStack(spacing: cellSpacing) {
-                    ForEach(Array(cells.enumerated()), id: \.offset) { columnIndex, column in
-                        VStack(spacing: cellSpacing) {
-                            ForEach(Array(column.enumerated()), id: \.element.id) { rowIndex, cell in
-                                // One tooltip string per cell per pass, via
-                                // the cached formatter. The previous code
-                                // formatted the tooltip twice per cell with
-                                // a freshly allocated DateFormatter each
-                                // time — ~700 formatter allocations for the
-                                // 53-week grid on every body evaluation,
-                                // which showed up as periodic main-thread
-                                // stutter whenever AppState published.
-                                let tooltip = L10n.HeatmapCell.tooltip(
-                                    cellDateLabel(cell.date),
-                                    formatInteger(cell.requestCount),
-                                    formatTokenCount(cell.tokenCount)
-                                )
-                                RoundedRectangle(cornerRadius: 1.5)
-                                    .fill(color(
-                                        for: displayCounts[columnIndex][rowIndex],
-                                        peak: maxCount
-                                    ))
-                                    .frame(width: cellSize, height: cellSize)
-                                    .help(tooltip)
-                                    .accessibilityLabel(tooltip)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: metrics.columnSpacing) {
+                        ForEach(Array(cells.enumerated()), id: \.offset) { columnIndex, column in
+                            VStack(spacing: AgentStatsDashboardLayout.heatmapCellSpacing) {
+                                ForEach(Array(column.enumerated()), id: \.element.id) { rowIndex, cell in
+                                    // One tooltip string per cell per pass, via
+                                    // the cached formatter. The previous code
+                                    // formatted the tooltip twice per cell with
+                                    // a freshly allocated DateFormatter each
+                                    // time — ~700 formatter allocations for the
+                                    // 53-week grid on every body evaluation,
+                                    // which showed up as periodic main-thread
+                                    // stutter whenever AppState published.
+                                    let tooltip = L10n.HeatmapCell.tooltip(
+                                        cellDateLabel(cell.date),
+                                        formatInteger(cell.requestCount),
+                                        formatTokenCount(cell.tokenCount)
+                                    )
+                                    RoundedRectangle(cornerRadius: 1.5)
+                                        .fill(color(
+                                            for: displayCounts[columnIndex][rowIndex],
+                                            peak: maxCount
+                                        ))
+                                        .frame(width: metrics.cellSize, height: metrics.cellSize)
+                                        .help(tooltip)
+                                        .accessibilityLabel(tooltip)
+                                }
                             }
                         }
                     }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(height: heatmapHeight)
-            .padding(.bottom, 10)
+                    .frame(width: metrics.width, alignment: .leading)
 
-            monthLabels
+                    monthLabels
+                }
+                .frame(width: proxy.size.width, alignment: .leading)
+            }
+            .frame(
+                height: AgentStatsDashboardLayout.heatmapHeight(
+                    cellSize: AgentStatsDashboardLayout.maximumHeatmapCellSize
+                ) + 28
+            )
         }
         .contentShape(Rectangle())
         .onTapGesture {
@@ -734,9 +786,10 @@ struct AgentStatsDashboard: View {
                 Button {
                     generateShareImage()
                 } label: {
-                    Label(L10n.StatsDashboard.generateShareImage, systemImage: "square.and.arrow.up")
+                    AgentShareImageButtonLabel(isGenerating: isGeneratingShareImage)
                 }
                 .buttonStyle(.bordered)
+                .disabled(isGeneratingShareImage)
                 .accessibilityIdentifier("stats-daily-generate-share-image")
             }
 
@@ -974,6 +1027,24 @@ struct AgentStatsDashboard: View {
     }
 
     private func generateShareImage() {
+        guard !isGeneratingShareImage else { return }
+        isGeneratingShareImage = true
+
+        Task { @MainActor in
+            // Give SwiftUI one frame to commit the inline progress state
+            // before ImageRenderer performs its synchronous AppKit render.
+            try? await Task.sleep(for: .milliseconds(30))
+            let image = renderShareImage()
+            isGeneratingShareImage = false
+            guard let image else { return }
+            sharePreview = AgentDailySharePreview(
+                image: image,
+                suggestedFilename: shareImageFilename
+            )
+        }
+    }
+
+    private func renderShareImage() -> NSImage? {
         let detail = selectedDailyDetail
         let streak = AgentUsageStats.overview(
             for: appState.agentUsageSnapshots,
@@ -993,8 +1064,7 @@ struct AgentStatsDashboard: View {
 
         let renderer = ImageRenderer(content: card)
         renderer.scale = 2
-        sharePreviewImage = renderer.nsImage
-        isSharePreviewPresented = sharePreviewImage != nil
+        return renderer.nsImage
     }
 
     private func saveShareImage(_ image: NSImage) {
@@ -1023,12 +1093,6 @@ struct AgentStatsDashboard: View {
             return nil
         }
         return representation.representation(using: .png, properties: [:])
-    }
-
-    private var heatmapHeight: CGFloat {
-        let cellSize = AgentStatsDashboardLayout.heatmapCellSize
-        let cellSpacing = AgentStatsDashboardLayout.heatmapCellSpacing
-        return 7 * cellSize + 6 * cellSpacing
     }
 
     private var detailSections: some View {
@@ -1147,8 +1211,8 @@ struct AgentStatsDashboard: View {
         }
         let calendar = Calendar.current
         let currentMonth = calendar.date(
-            from: calendar.dateComponents([.year, .month], from: Date())
-        ) ?? Date()
+            from: calendar.dateComponents([.year, .month], from: now)
+        ) ?? now
         let months = (0..<AgentStatsDashboardLayout.visibleHeatmapMonths).compactMap { offset in
             calendar.date(
                 byAdding: .month,
@@ -1614,19 +1678,6 @@ struct AgentStatsDashboard: View {
         }
     }
 
-    private func heatmapWeekCount(for width: CGFloat, cellSize: CGFloat, spacing: CGFloat) -> Int {
-        let minimumWeekCount = 16
-        let availableWidth = max(0, width)
-        let stride = cellSize + spacing
-        guard stride > 0 else { return minimumWeekCount }
-
-        let fittingColumns = Int((availableWidth + spacing) / stride)
-        return min(
-            AgentStatsDashboardLayout.maximumHeatmapWeeks,
-            max(minimumWeekCount, fittingColumns)
-        )
-    }
-
     private func color(for count: Int, peak: Int) -> Color {
         guard count > 0, peak > 0 else { return dashboardHeatmapInactive }
         let intensity = min(1.0, Double(count) / Double(peak))
@@ -1833,6 +1884,35 @@ struct AgentStatsDashboard: View {
     }
 }
 
+private struct AgentDailySharePreview: Identifiable {
+    let id = UUID()
+    let image: NSImage
+    let suggestedFilename: String
+}
+
+struct AgentShareImageButtonLabel: View {
+    let isGenerating: Bool
+
+    var body: some View {
+        if isGenerating {
+            HStack(spacing: 7) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(L10n.StatsDashboard.generatingShareImage)
+            }
+        } else {
+            Label(
+                L10n.StatsDashboard.generateShareImage,
+                systemImage: "square.and.arrow.up"
+            )
+        }
+    }
+}
+
+enum AgentSharePreviewFocusPolicy {
+    static let isCloseButtonFocusable = false
+}
+
 private struct AgentDailyShareSheet: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -1851,6 +1931,7 @@ private struct AgentDailyShareSheet: View {
                     dismiss()
                 }
                 .buttonStyle(.plain)
+                .focusable(AgentSharePreviewFocusPolicy.isCloseButtonFocusable)
             }
 
             Image(nsImage: image)
