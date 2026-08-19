@@ -1,0 +1,177 @@
+# Small-model-first 进 Runtime：从建议到强制（Xedit 侧规划）
+
+> 状态：第 1–4 步已于 1.273.0-rc1 落地（见 §4 各步的「实现」行）；自动预检的**执行**部分
+> 仍未接线，只有分类与资格判定（见 §4 第 4 步）。
+> 日期：2026-08-19
+> 来源：willdeep-rs `0.37.0-rc1` / `0.38.0-rc1`（2026-08-19 上午）的回流。
+> 关联：`docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md`（主设计）、willdeep-rs
+> `docs/MODEL_TIERS.md`（两端共用的档位语义）、`docs/SOMEIM_WORKER_VIRTUAL_MODELS.md`。
+
+---
+
+## 0. 一句话
+
+rs 侧把「优先用小模型」从系统提示词里的劝告，搬进了 Runtime 的准入控制：
+**模型可以帮忙编 Task Packet，但「稀缺的 1M 上下文是不是免费的」不再由模型决定。**
+本文档是这套机制在 Xedit（Swift/macOS）侧的落地规划。
+
+主设计 §7 当时写的是「不强制、但把派工成本降到一句话」。实测结论推翻了它——
+提示一发出去，父模型读完照样自己动手，因为文件已经打开、编 packet 感觉是绕远路。
+派工率上不去，小模型体系就只是账面上的省钱方案。
+
+---
+
+## 1. rs 侧到底改了什么（六条机制）
+
+| # | 机制 | rs 落点 |
+|---|---|---|
+| 1 | **请求级确定性分类**。用户消息先过 `classify()`；高置信只读活（定位/阅读/日志/Git 追溯）在 Root 看到仓库之前自动派给 worker，报告以 `<worker-report>` 注入；改动类活注入 `<runtime-route>` 引导段 | `willdeep-core/src/routing.rs`、`agent.rs::apply_runtime_route` |
+| 2 | **Deep 改申请制**。`profile="deep"` 必须带票据（`reason` / `attempted_profiles` / `context_evidence` / `why_not_decompose`），Runtime 用**本 harness 实际观测到的**低档尝试或 ≥2 次成功仓库检查交叉验证，再扣预算 | `RoutingGuard::authorize_deep` |
+| 3 | **未知 profile 不再静默回落 deep**；外部 spawn deep 直接禁止 | `subagent.rs::profile()` |
+| 4 | **Task Packet 拆 `read_files` / `write_files`**——「让 worker 看见文件」不再顺手给写权限；老 `relevant_files` 保留兼容语义 | `TaskPacket` |
+| 5 | **模型绑定纠偏**：Root `deepseek-v4-flash` → `glm-5`；七个托管窄工种删掉显式 `glm-5` 覆盖，真正命中 `someim-32b-<trade>`；deep 显式钉 1M | `config.example.toml` |
+| 6 | **Deep Share 指标**进 `agent-metrics`，持续盯 ≤5% | `daemon` |
+
+配套的 `0.38.0-rc1` 是 UI（TUI `/routing` 面板 + Web 设置矩阵）。Xedit 已有工种设置界面，
+只需在其中补开关，不需要新面板。
+
+---
+
+## 2. Xedit 现状对照
+
+| rs 机制 | Xedit 现状 | 判定 |
+|---|---|---|
+| 请求级确定性路由 | **无**。只有失败驱动的 `AgentWorkerAutoDispatch`（`run_command` 测试/构建失败时派 fixer） | 缺口 |
+| Deep 准入票据 + 预算 | **无**。`AgentSubagentEscalation` 名字撞车但语义相反——它是「小模型失败后向上兜底重试」 | 缺口 |
+| 未知 profile 不回落 deep | `AgentSubagentProfileStore.resolvedProfile(id:)` 明确回落 deep（`AgentSubagentProfile.swift:657`） | 小改 |
+| read/write 分离 | `AgentSubagentTaskPacket.relevantFiles` 读写合一；无 `target_files` 时它就是写集 | 中等 |
+| 窄工种真跑小模型 | 七个工种 `modelBinding` 全是显式 `glm-5`；`someim-32b-*` 只在「父会话用 some.im **且**已登录」时由 `resolvedHostedConfiguration` 钉上 | 需实测核对 |
+| **Root 默认模型** | some.im preset `defaultModel = "deepseek-v4-flash"`（`AgentModels.swift:2130`）——主会话默认就坐在 L 档 1M 上 | 与「默认 M、向上申请」直接冲突 |
+| 技能索引 / MCP 上下文税 | 已是 `list_skills` / `list_mcp_tools` 按需加载 | **已具备，不搬** |
+| 派工 KPI | `AgentSkillWorkerKPIs` 已有 `skillCoverage` / `verifiedSuccessRate` / `escalationRate` / `citationAccuracy`，且已统计 `deepRunCount` | 补一个展示口径即可 |
+
+**结论**：地基比预期厚，但最关键的两块（请求级路由、Deep 准入）正好没有；
+而且现在的 Xedit 里 **L 档不稀缺——它是默认值**，这让「向上申请」在默认路径上无从谈起。
+
+---
+
+## 3. 已定决策（2026-08-19）
+
+| 决策 | 结论 | 理由 |
+|---|---|---|
+| Root 默认模型 | **改为 M 档（`glm-5`），但只影响新会话** | 整套「L 稀缺、向上申请」的前提；已有会话保留用户已选模型，不做迁移，避免存量用户被静默改窗口 |
+| Deep 预算 | **每会话 3 次，设置里可配 0–16**，0 表示彻底禁用 deep | rs 取 1 次/harness；Xedit 一次会话显著更长，1 次会频繁误挡。0–16 与 rs 的校验区间对齐 |
+| 请求级路由第一版 | **只做引导注入；自动预检写好但默认关闭** | rs 是 TUI，先跑 scout 再答可接受；Xedit 是 GUI，自动预检让首字延迟翻倍，且 `classify()` 是关键词匹配、中文误判代价可见。先用数据说话 |
+
+---
+
+## 4. 分步落地
+
+四步按「收益 / 风险比」排序，每步独立成一个 PR（不混 feat + fix）。
+
+### 第 1 步：模型绑定纠偏（不改架构，收益最大）
+
+- some.im preset `defaultModel` 改为 M 档模型；`defaultProModel` 维持。
+  **只改新会话的默认解析路径**，已有会话的显式模型选择不动。
+- `deep` 的 `automaticProviderBinding`（`model: nil`）改为显式钉 1M 模型，
+  并给出 `contextWindowTokens`，让 L 档在设置界面上是可见的、有名字的东西。
+- **核对七个托管窄工种是否真的命中 `someim-32b-*`**：目前它们的 `modelBinding`
+  是显式 `glm-5`，而 `resolvedHostedConfiguration`（`AppStateSubagentProfiles.swift:112`）
+  只在「父会话 provider == some.im && 已登录」时才覆盖成 `hostedVirtualModel`。
+  这两条路径的优先级要有测试钉住，否则「窄工种跑在小模型上」只是配置表上的说法。
+
+验收：新建会话的 Root 落在 M 档；`deep` 在设置界面显示 1M 绑定；
+七个托管工种在已登录状态下实际请求模型为 `someim-32b-<trade>`（用请求日志或契约测试断言）。
+
+**实现（1.273.0-rc1）**：`SomeIMIntegrationSettings.defaultTextModel` 与 some.im preset 的
+`defaultModel` 均改为 `glm-5`；`deepBinding` 显式钉 `deepseek-v4-flash` + `deepContextWindowTokens`
+(1M)；preset 的 `defaultVisionModel` 加 some.im 分支，避免文本档位下调把图像模型带歪。
+**未完成**：七个托管工种「显式 `glm-5` 绑定 vs `resolvedHostedConfiguration` 覆盖」谁赢，
+仍只有读码推断，没有实际请求日志验证——这仍是开工第一件该实测的事。
+
+### 第 2 步：Deep 准入（`AgentDeepAdmission`，新文件）
+
+- `spawn_agent` schema（`AgentToolRegistry.swift:1753`）新增 `escalation` 对象，
+  四个字段照搬 rs：`reason` / `attempted_profiles` / `context_evidence` / `why_not_decompose`。
+- 新增纯函数 `AgentDeepAdmission`：持有本会话已尝试 profile 集合与成功只读工具计数，
+  提供 `authorize(ticket:) -> Result<Void, Refusal>`。判定顺序与 rs 一致：
+  字段非空且不敷衍（最小长度）→ 交叉验证观测证据 → 扣预算。
+- **命名边界**：不要复用 `AgentSubagentEscalation`。那个是「向上兜底」（小模型失败后换父模型重试），
+  这个是「向上准入」（能不能动用 L 档）。两者会在同一段代码里同时出现，重名一定会误读。
+- `AgentSubagentProfileStore.resolvedProfile(id:)` 的未知 profile 回落改为报错。
+  **注意**：这是行为破坏性变更，先确认没有内部调用方依赖「传 nil 拿 deep」这个语义
+  （`profileID` 默认值就是 `deep`，见 `AgentSubagents.swift:56`）。
+- 预算耗尽 / 证据不足时的拒绝要**讲清楚**，走错误文案而不是新 UI
+  （参见既有结论：正规通道已存在时只把错误讲明白）。
+
+验收：无票据的 deep spawn 被拒；票据齐全但本会话没有任何低档尝试也被拒；
+第 4 次 deep 被预算挡下；每一种拒绝在 transcript 上都有可读原因。
+
+### 第 3 步：Task Packet 拆读写
+
+- `AgentSubagentTaskPacket` 新增 `readFiles` / `writeFiles`；
+  `relevantFiles` 保留**原语义**（读写合一）供老调用方使用，与 rs 的兼容策略一致。
+- 内联预算按 `readFiles + writeFiles + relevantFiles` 去重后计算；
+  写集只取 `writeFiles`（为空时回落 `relevantFiles`）。
+- `spawn_agent` schema 与 `AgentSubagentJobPrompts` 里的工种 prompt 同步措辞。
+
+验收：给 worker 一个只读上下文文件不会让它获得该文件的写权限；老 packet 行为逐字节不变。
+
+### 第 4 步：请求级路由（引导注入）
+
+- 新增纯函数 `AgentRequestRouter.classify(_:) -> RouteDecision`，移植 rs 的分类器与中英关键词表。
+  分类结果只用于把 `<runtime-route>` 段拼进用户消息，**不替模型跑 worker**。
+- 自动预检（高置信只读活先跑 worker、报告作为证据注入）一并实现，
+  但开关默认关闭，位置与 `autoDispatchWorkersEnabled`（`AppStateAgentWorkerAutoDispatch.swift:61`）同层。
+- **与 `/subagent`、`/no-subagent` 协调**：`AgentDelegationPolicy.forbidden` 时不注入任何路由段
+  （该策略的语义是「这一轮全部自己干」），`required` 时注入更强的措辞。
+
+验收：中文「这个函数在哪」被分类为 `scout` 且只注入引导；「修复登录失败」被分类为 mutating
+且不注入只读引导；`/no-subagent` 轮次里没有任何 `<runtime-route>` 段。
+
+**实现（1.273.0-rc1）**：`AgentRequestRouter`（纯函数）+ `runtime.currentTurnRouteSteering`，
+注入走**当轮系统提示**而不是用户消息——rs 拼进 `user_message.content` 的做法在 GUI 里会
+把 `<runtime-route>` 标记直接显示给用户，Xedit 走 `AgentDelegationPolicy.systemPromptInstruction`
+同一条通路。
+**未完成**：`Decision.autoDispatchEligible` 已计算并有测试，但**没有接执行**——高置信只读活
+仍不会在 Root 之前真的跑一个 worker。按 §3 的决策它本就默认关闭，接线与 GUI 上的等待反馈
+留到 Deep Share 数据能说话之后。
+
+---
+
+## 5. 指标
+
+`AgentSkillWorkerKPIs`（`AgentUsageStats.swift:195`）已统计 `deepRunCount`，
+补一个 **Deep Share = deepRunCount / (narrowRunCount + deepRunCount)** 的展示口径，
+目标 ≤ 5%（与 rs 的 `agent-metrics` 同口径，便于两端横向对比）。
+
+这个数字是判断第 4 步的自动预检该不该默认打开的**唯一依据**——
+在只有引导注入的版本上跑一段时间，Deep Share 和 Skill Coverage 说了算。
+
+---
+
+## 6. 风险与明确不做
+
+**风险**
+
+1. `classify()` 是关键词匹配，中文误判是必然的。第一版只做引导注入正是为了让误判的代价
+   停留在「多了一段没用的提示」，而不是「跑了一个没用的 worker」。
+2. 第 1 步改 Root 默认模型，对新用户是可感知的能力变化。M 档能不能扛住日常编码，
+   要靠 Skill Coverage 与升档率验证，不能只看账单。
+3. 未知 profile 不再回落 deep 是破坏性变更，`profileID` 的默认值链路必须先盘干净。
+
+**明确不做**
+
+- 不搬技能索引 4KB 上限与 MCP 按需加载——Xedit 两处都已是按需，搬过来是负优化。
+- 不新建 `/routing` 面板。Xedit 已有工种设置界面，新开关进去即可。
+- 不改内置 workflow 的手标 profile。它们是 Swift 代码、不经过技能系统，
+  「按 tier 自动选档」适用的地方是 `list_skills` 命中与 `spawn_agent` 派工，两处都已自动化。
+
+---
+
+## 7. 版本与 Git 流程
+
+- 功能新增，`1.272.0-rc11` → **`1.273.0-rc1`**，rc 重置。
+- 四步各走一个从 `develop` 拉出的分支，顺序固定：**跑单测 → 提交 → 合回 develop**。
+- 版本 bump 涉及多处 canonical 源，push 前跑 `scripts/version_consistency.rb` 确认 `failures=0`。
+- 仓库常有并行会话共用 working tree：提交前先查并发，精确 `git add`，不要 `git add -A`。

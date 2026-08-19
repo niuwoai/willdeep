@@ -52,6 +52,12 @@ extension AppState {
         runtime.currentTurnDelegationPolicy = delegationPolicy
         runtime.currentTurnSpawnAgentCallCount = 0
         runtime.currentTurnAutoDispatchedCommands = []
+        // Classified from what the user actually typed. Tool-loop
+        // continuations and system notices re-enter here with the same
+        // runtime; routing those would classify WillDeep's own plumbing.
+        runtime.currentTurnRouteSteering = source == .operatorInput
+            ? AgentRequestRouter.steering(for: text, delegationPolicy: delegationPolicy)
+            : nil
         if source == .operatorInput {
             runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
         }
@@ -901,6 +907,14 @@ extension AppState {
             // transport would reject.
             if let delegationInstruction = runtime.currentTurnDelegationPolicy.systemPromptInstruction {
                 assembledPrompt += "\n\n\(delegationInstruction)"
+            }
+            // The runtime's classification of this turn's request. Advisory
+            // by design — it names the trade that fits so delegating is the
+            // short path rather than the detour, and says so where the model
+            // reads instructions rather than where the user reads their own
+            // words.
+            if let routeSteering = runtime.currentTurnRouteSteering {
+                assembledPrompt += "\n\n\(routeSteering)"
             }
             let promptComponents = AgentContextBuilder.requestComponents(from: assembledPrompt)
             // allowRefresh only on the dispatch's first round: rounds 2+ of
@@ -2298,6 +2312,7 @@ extension AppState {
                         runtime.toolCalls[index].arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey] = .bool(false)
                     }
                     runtime.recordComputerUseActivity(toolName: call.toolName, images: result.images)
+                    runtime.deepAdmissionObservation.recordToolSuccess(call.toolName)
                     let agentCreatedTerminalTabs = agentTerminalController.tabs.filter {
                         !terminalTabIDsBeforeTool.contains($0.id)
                     }

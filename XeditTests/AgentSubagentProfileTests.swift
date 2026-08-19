@@ -13,8 +13,12 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentProfileCatalog.profile(id: "").id == "deep")
     }
 
-    @Test("an unknown trade name falls back to deep rather than failing the spawn")
-    func unknownProfileFallsBackToDeep() {
+    /// Catalog lookup still resolves to deep — it is a lookup, not a policy.
+    /// The spawn path refuses unknown names outright (see
+    /// `AppState.executeSpawnAgentToolCall`), so a typo no longer buys the 1M
+    /// tier for free; `isKnown` is what that check reads.
+    @Test("catalog lookup resolves unknown names to deep, but reports them as unknown")
+    func unknownProfileIsReportedAsUnknown() {
         #expect(AgentSubagentProfileCatalog.profile(id: "librarian").id == "deep")
         #expect(!AgentSubagentProfileCatalog.isKnown(id: "librarian"))
     }
@@ -25,15 +29,36 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentProfileCatalog.profile(id: " Reader ").id == "reader")
     }
 
-    @Test("deep preserves the full investigation budget and uses automatic provider routing")
-    func deepUsesAutomaticProviderRouting() {
+    @Test("deep preserves the full investigation budget and is pinned to the L tier")
+    func deepIsPinnedToTheDeepTier() {
         let deep = AgentSubagentProfileCatalog.deep
 
         #expect(deep.effectiveToolNames() == AgentSubagentRunner.allowedToolNames)
         #expect(deep.maxRounds == AgentSubagentRunner.maxRounds)
         #expect(deep.modelBinding.preferredProviderID == AgentProviderPreset.someIMID)
-        #expect(deep.modelBinding.model == nil)
+        // Previously nil, i.e. "whatever the provider's primary model is".
+        // That made the 1M tier the default rather than the exception, so
+        // there was nothing for an escalation to escalate to.
+        #expect(deep.modelBinding.model == "deepseek-v4-flash")
+        #expect(deep.modelBinding.contextWindowTokens
+            == AgentSubagentProfileCatalog.deepContextWindowTokens)
         #expect(deep.escalation == .none)
+    }
+
+    @Test("a new session opens on the standard tier, not the scarce one")
+    func newSessionsDefaultToTheStandardTier() {
+        // The whole admission mechanism is theatre if the session already
+        // starts on the model `deep` would escalate to.
+        #expect(SomeIMIntegrationSettings.defaultTextModel == "glm-5")
+        #expect(SomeIMIntegrationSettings.defaultTextModel
+            != AgentSubagentProfileCatalog.deep.modelBinding.model)
+
+        let preset = AgentProviderPreset.preset(id: AgentProviderPreset.someIMID)
+        #expect(preset?.defaultModel == "glm-5")
+        // Vision must not follow the text default down: some.im has its own
+        // multimodal model and the picker reads it through the preset.
+        #expect(preset?.defaultVisionModel == SomeIMIntegrationSettings.defaultVisionModel)
+        #expect(preset?.defaultVisionModel == "qwen3-vl-plus")
     }
 
     @Test("implicit some.im worker defaults follow a private parent provider")

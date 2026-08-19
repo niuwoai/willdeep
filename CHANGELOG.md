@@ -3,6 +3,27 @@
 > 当前文件保留最新版本（1.272.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.273.0-rc1 - 2026-08-19
+
+### Added
+
+- **`deep` 档改为申请制。** `spawn_agent(profile="deep")` 现在必须携带 `escalation` 票据（`reason` / `attempted_profiles` / `context_evidence` / `why_not_decompose`）。WillDeep 用**本会话实际观测到的**记录交叉验证：票据里点名的低档工种必须真的跑过，或者本会话已自行完成至少 2 次成功的只读仓库检查（grep / read_file / git log 等）。仅凭"我试过了"的自述不再能打开 1M 窗口。每个会话的 deep 调用有预算（默认 3 次，可在设置中配 0–16，0 表示彻底禁用）。
+- **请求级确定性路由。** 用户消息在模型读到之前先经关键词分类（中英双语），命中定位 / 阅读 / 日志 / 回归追溯 / 测试失败 / 构建失败等特征时，向当轮系统提示追加一段 `<runtime-route>`，点名适配的工种。刻意只做引导不做强制派工——分类是关键词匹配，会误判，模型仍可否决。`/no-subagent` 的回合完全不注入。
+- Task Packet 新增 `read_files` 与 `write_files`：前者只提供上下文，**不因为可读而变得可写**。旧的 `relevant_files` 保留原有读写合一语义，老 packet 行为逐字节不变。
+
+### Changed
+
+- **新会话默认模型从 `deepseek-v4-flash`（1M）下调到 `glm-5`（256K）。** 此前主会话开箱即坐在最稀缺的档位上，"deep 只在无法收敛时升级"这条纪律因此形同虚设——没有可升的地方。已有会话保留用户已选模型，不做迁移。
+- `deep` 工种从"跟随 Provider 主模型"改为显式绑定 `deepseek-v4-flash` 与 1M 上下文窗口，让 L 档在工种设置里是一个看得见、有名字的东西。
+- **未知 profile 不再静默回落 `deep`。** `spawn_agent(profile="scoutt")` 这类拼写错误此前会免费拿到 1M 档并只附一条无人处理的提示；现在直接返回错误并列出可用工种，重试一轮即可落到本来想要的工种。
+- some.im 的 preset 视觉模型不再跟随文本默认模型，改为显式取 `qwen3-vl-plus`——否则文本档位下调会把图像模型一并带歪。
+
+### Tests
+
+- 新增 `AgentDeepAdmissionTests`：票据解析（JSON 字符串 / 对象 / 单值降级）、四类拒绝、观测证据交叉验证、预算耗尽与 0 预算禁用、以及"每条拒绝都必须可据以行动"的下限。
+- 新增 `AgentRequestRouterTests`：中英双语分类、"定位"与"定位并修复"必须分流、长粘贴只取头部分类、`/no-subagent` 抑制注入。
+- 新增 Task Packet 读写分离回归：只读上下文不得授予写权限、legacy packet 语义不变、重复声明只内联一次。
+
 ## 1.272.0-rc11 - 2026-08-19
 
 ### Changed

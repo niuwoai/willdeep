@@ -227,6 +227,10 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let balancedContextWindowTokens = 49_152
     static let wideContextWindowTokens = 65_536
     static let implementerContextWindowTokens = 262_144
+    /// The L tier. Deliberately spelled out rather than left implicit: a
+    /// budget nobody can see is a budget nobody defends. `AgentDeepAdmission`
+    /// is what decides whether a spawn may spend it.
+    static let deepContextWindowTokens = 1_048_576
 
     /// Tools a built-in writing trade adds on top of the read-only set, and
     /// only while its exact file-set workspace grant is held.
@@ -278,6 +282,20 @@ nonisolated enum AgentSubagentProfileCatalog {
         contextWindowTokens: nil
     )
 
+    /// `deep` is the only trade that gets the 1M window, and now it says so.
+    ///
+    /// It used to share `automaticProviderBinding` with tester/reviewer, which
+    /// meant it silently adopted whatever the provider's primary model was.
+    /// That was fine while the primary model *was* the 1M one — but then the
+    /// L tier was simply the default, and "escalate to deep" bought nothing
+    /// the session did not already have. Pinning it makes the escalation real
+    /// and makes the tier visible in the trade settings row.
+    private static let deepBinding = AgentSubagentProfile.ModelBinding(
+        preferredProviderID: AgentProviderPreset.someIMID,
+        model: "deepseek-v4-flash",
+        contextWindowTokens: deepContextWindowTokens
+    )
+
     static let scout = AgentSubagentProfile(
         id: scoutID,
         purpose: "Locate things: find files, symbols, call sites, or answer \"where is X / does X exist\". Fastest and cheapest; no shell.",
@@ -308,8 +326,8 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// routing shared by every subagent trade.
     static let deep = AgentSubagentProfile(
         id: deepID,
-        purpose: "Complex investigation: reasoning across many files, read-only shell commands, and git status.",
-        modelBinding: automaticProviderBinding,
+        purpose: "Complex investigation: reasoning across many files, read-only shell commands, and git status. Scarce 1M tier — requires an admission ticket.",
+        modelBinding: deepBinding,
         toolNames: AgentSubagentRunner.allowedToolNames,
         capabilityPromptSection: """
         Your trade is INVESTIGATION. Follow the evidence across files, verify claims before \
@@ -395,7 +413,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// its own: the verifier command decides, not the model.
     static let testFixer = AgentSubagentProfile(
         id: testFixerID,
-        purpose: "Fix a failing test to green within the files listed in the task. Requires a `task` with `relevant_files` and a `verifier` command; the verifier's exit code decides success, not the model.",
+        purpose: "Fix a failing test to green within the files listed in the task. Requires a `task` with `write_files` and a `verifier` command; the verifier's exit code decides success, not the model.",
         modelBinding: wideBinding,
         toolNames: ["read_file", "grep_files", "apply_patch", "run_command"],
         capabilityPromptSection: AgentSubagentJobPrompts.testFixer,
@@ -408,7 +426,7 @@ nonisolated enum AgentSubagentProfileCatalog {
 
     static let buildFixer = AgentSubagentProfile(
         id: buildFixerID,
-        purpose: "Fix compiler, type-check, or lint failures within the files listed in the task. Requires a `task` with `relevant_files` and a build/lint `verifier` command.",
+        purpose: "Fix compiler, type-check, or lint failures within the files listed in the task. Requires a `task` with `write_files` and a build/lint `verifier` command.",
         modelBinding: balancedBinding,
         toolNames: ["read_file", "grep_files", "apply_patch", "run_command"],
         capabilityPromptSection: AgentSubagentJobPrompts.buildFixer,
