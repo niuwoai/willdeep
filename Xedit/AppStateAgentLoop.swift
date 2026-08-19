@@ -684,6 +684,7 @@ extension AppState {
             images: latestUserImages
         )
         var designToCodeGateContinuationCount = 0
+        var didRequestContextRunwayHandoff = false
 
         for toolRound in 0..<Self.maxAgentToolRounds {
             // `run_workflow` is asynchronous, but unlike the workflow card its
@@ -964,7 +965,50 @@ extension AppState {
             // (setting the fresh user message's modelContext, or inserting a
             // hidden host carrier on notification-only wake-ups), so the
             // model-facing history and the next turn's replay share bytes.
-            let collapsedHistory = Self.collapseOldToolResults(in: history)
+            var collapsedHistory = Self.collapseOldToolResults(in: history)
+            var requestTools = AgentToolRegistry.tools(
+                activeExperts: activeExperts,
+                interactionMode: runtime.interactionMode,
+                executionAgent: runtime.executionAgent,
+                delegationPolicy: runtime.currentTurnDelegationPolicy
+            )
+            let requestWithoutRunwayHandoff = [AgentMessage(role: .system, content: systemPrompt)]
+                + collapsedHistory
+            let estimatedRequestTokens = Self.estimateAgentTokens(
+                messages: requestWithoutRunwayHandoff,
+                tools: requestTools
+            )
+            let providerAnchoredTokens = Self.providerAnchoredUsedTokens(
+                messages: runtime.messages,
+                contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
+            )
+            let contextWindow = Self.agentContextWindow(
+                model: turnConfiguration.model,
+                providerID: turnConfiguration.providerID
+            )
+            let runwayDecision = AgentContextRunwayPolicy.evaluate(
+                usedTokens: max(estimatedRequestTokens, providerAnchoredTokens ?? 0),
+                contextWindow: contextWindow,
+                toolRound: toolRound,
+                handoffAlreadyRequested: didRequestContextRunwayHandoff
+            )
+            if case .handoff(let snapshot) = runwayDecision {
+                let handoffInstruction = AgentMessage(
+                    role: .user,
+                    content: AgentContextRunwayPolicy.handoffPrompt(snapshot: snapshot),
+                    source: .hostInstruction
+                )
+                if let assistantIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
+                    runtime.messages.insert(handoffInstruction, at: assistantIndex)
+                }
+                collapsedHistory.append(handoffInstruction)
+                // The final slice of runway is reserved for a useful state
+                // capsule. Removing tool schemas both frees input space and
+                // makes "no new work" a transport fact rather than a polite
+                // request the model can accidentally ignore.
+                requestTools = []
+                didRequestContextRunwayHandoff = true
+            }
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
 
             var finishReason: String?
@@ -977,12 +1021,7 @@ extension AppState {
                     do {
                         try await client.streamChat(
                             messages: requestMessages,
-                            tools: AgentToolRegistry.tools(
-                                activeExperts: activeExperts,
-                                interactionMode: runtime.interactionMode,
-                                executionAgent: runtime.executionAgent,
-                                delegationPolicy: runtime.currentTurnDelegationPolicy
-                            )
+                            tools: requestTools
                         ) { event in
                             await MainActor.run { [weak runtime] in
                                 guard let runtime,
@@ -1124,7 +1163,8 @@ extension AppState {
                 // from `runtime.messages` (excluding the removed message), so a
                 // retry that emits tool calls flows into the tool path and
                 // history stays intact. The judge shares this turn's slot.
-                if !didQualityRetry,
+                if !didRequestContextRunwayHandoff,
+                   !didQualityRetry,
                    runtime.managedRouting != nil,
                    configuration.providerID == AgentProviderPreset.someIMID,
                    let escalatedModel = SomeIMManagedModel.escalated(from: turnConfiguration.model),
@@ -1191,7 +1231,8 @@ extension AppState {
                         continue
                     }
                 }
-                if requiresDesignToCodeAcceptance,
+                if !didRequestContextRunwayHandoff,
+                   requiresDesignToCodeAcceptance,
                    designToCodeGateContinuationCount < AgentDesignToCode.maximumGateContinuations,
                    let notice = AgentDesignToCode.completionGateNotice(
                        toolCalls: runtime.toolCalls.dropFirst(designToCodeToolCallBaseline)
@@ -1231,6 +1272,22 @@ extension AppState {
                         for: runtime
                     )
                     _ = retryDispatchPlanningAfterWillDeepFailureIfNeeded(for: runtime)
+                    return
+                }
+
+                if didRequestContextRunwayHandoff {
+                    // Do not let Plan/Goal auto-continuation immediately undo
+                    // the ordered stop. We still ingest any honest status
+                    // blocks the handover supplied, then the turn-level defer
+                    // runs normal context compression and leaves the session
+                    // ready for an explicit resume.
+                    _ = captureAgentPlanFromLatestMessage(for: runtime)
+                    if runtime.interactionMode == .goal {
+                        _ = captureAgentGoalEvaluationFromLatestMessage(
+                            for: runtime,
+                            finishReason: finishReason
+                        )
+                    }
                     return
                 }
 
