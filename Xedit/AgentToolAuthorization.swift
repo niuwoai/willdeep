@@ -835,10 +835,12 @@ enum AgentSandboxPolicy {
                 switch SafeCommand.classify(command: segment.text) {
                 case .alwaysSafe:
                     // A SafeCommand-certified call is auto-approvable, but some
-                    // of those still write (go build, npm run build, mkdir).
+                    // of those still write (go build, npm run build, mkdir,
+                    // and the reversible local `git commit`).
                     // Bump only those to workspace-write; read-only certs like
                     // `git diff` stay read-only. See `lowRiskWriteHeads`.
-                    if lowRiskWriteHeads.contains(head) {
+                    if lowRiskWriteHeads.contains(head)
+                        || SafeCommand.isLocalGitCommit(command: segment.text) {
                         needsWorkspaceWrite = true
                         reasons.append("Command `\(head)` is a low-risk workspace build or development operation.")
                     }

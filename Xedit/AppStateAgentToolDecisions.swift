@@ -335,6 +335,19 @@ extension AppState {
             additionalWorkspaceRoots: additionalWorkspaceRoots
         )
 
+        // A local commit only records the already-staged workspace state and
+        // remains recoverable through Git history/reflog. Run it in the
+        // workspace-write sandbox without interrupting the user, including in
+        // Strict mode; push and every other Git mutation keep their existing
+        // approval boundaries.
+        if toolName == "run_command",
+           let command = arguments["command"]?.stringValue(),
+           SafeCommand.isLocalGitCommit(command: command),
+           sandboxDecision.mode == .workspaceWrite,
+           !sandboxDecision.requiresTypedConfirmation {
+            return .staticAllowlist
+        }
+
         // Computer Use never participates in the generic Goal, conversation,
         // durable, or workspace auto-approval paths below. A small reversible
         // action may run only while the same runtime and turn own a controlling
