@@ -2,8 +2,8 @@
 //  AgentSessionSearchView.swift
 //  WillDeep
 //
-//  Conversation-and-project title search overlay. Opened from the chat
-//  header magnifier, its ⌘⇧P shortcut, or the left-sidebar Search action.
+//  Conversation-and-project title search overlay. Opened from the native
+//  titlebar magnifier or its ⌘⇧P shortcut.
 //  Substring-matches conversation and project titles across every workspace
 //  — archived sessions included — then reveals the selected sidebar target.
 //

@@ -486,9 +486,6 @@ struct AgentSessionsSidebar: View {
             SidebarActionRow(icon: "square.and.pencil", title: L10n.Sidebar.newChatAction, shortcut: "⌘N") {
                 appState.startNewAgentSession()
             }
-            SidebarActionRow(icon: "magnifyingglass", title: L10n.Sidebar.searchSessionsAction, shortcut: "⌘⇧P") {
-                appState.isAgentSessionSearchPresented = true
-            }
             SidebarActionRow(
                 icon: "clock",
                 title: L10n.Automation.navigationTitle,

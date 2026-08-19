@@ -197,6 +197,22 @@ struct AgentConfirmationVisualTests {
         )
     }
 
+    @Test("标题栏搜索按钮紧跟在侧栏切换按钮之后")
+    func titlebarSearchFollowsSidebarToggle() {
+        let zoomFrame = CGRect(x: 54, y: 9, width: 14, height: 14)
+        let sidebarFrame = AgentWindowChromeControlLayout.sidebarButtonFrame(after: zoomFrame)
+        let searchFrame = AgentWindowChromeControlLayout.searchButtonFrame(after: sidebarFrame)
+
+        #expect(sidebarFrame.minX == zoomFrame.maxX + AgentWindowChromeControlLayout.gapAfterZoom)
+        #expect(searchFrame.minX == sidebarFrame.maxX + AgentWindowChromeControlLayout.interButtonGap)
+        #expect(searchFrame.minY == sidebarFrame.minY)
+        #expect(searchFrame.size == sidebarFrame.size)
+        #expect(
+            AgentWindowChromeControlLayout.hiddenSidebarHeaderLeadingInset
+                > searchFrame.maxX - zoomFrame.minX
+        )
+    }
+
     @Test("当前动作文字从左向右扫光，计时保持稳定")
     func currentActionSweepStaysSubtle() {
         #expect(AgentActivitySweepMetrics.sweepDuration >= 1.0)

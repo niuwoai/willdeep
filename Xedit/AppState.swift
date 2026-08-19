@@ -178,8 +178,8 @@ final class AppState: ObservableObject {
     /// The center-column destination in Agent mode. Scheduled tasks use a
     /// dedicated page instead of expanding an unbounded list in the sidebar.
     @Published var agentPrimaryDestination: AgentPrimaryDestination = .conversation
-    /// Shared by the header magnifier and the sidebar's Search action, so
-    /// both entry points always open the same destination palette.
+    /// Presented by the native titlebar magnifier or its keyboard shortcut.
+    /// One shared flag keeps search navigation independent from sidebar state.
     @Published var isAgentSessionSearchPresented = false
     /// One-shot request to collapse the floating plan card. The transcript
     /// bumps this when a new assistant round begins so the plan folds away
