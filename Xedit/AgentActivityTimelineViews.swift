@@ -248,12 +248,9 @@ private struct AgentToolActivityTimelineRow: View {
         case .running, .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
             return appState.editorSettings.interfaceSkin.palette.accent
         case .failed:
-            // A command that ran and exited non-zero is an answer, not an
-            // alarm — the Agent reads it and moves on. Orange stays for
-            // failures that actually need attention.
-            return presentation.isCompletedCommandFailure
-                ? Color(nsColor: .secondaryLabelColor)
-                : .orange
+            // Command failures are usually intermediate retry signals. Keep
+            // them visible without giving a recoverable state alarm styling.
+            return Color(nsColor: .secondaryLabelColor)
         case .succeeded, .denied:
             return Color(nsColor: .secondaryLabelColor)
         }
@@ -267,9 +264,7 @@ private struct AgentToolActivityTimelineRow: View {
         case .running:
             return .primary
         case .failed:
-            return presentation.isCompletedCommandFailure
-                ? Color(nsColor: .secondaryLabelColor)
-                : .orange
+            return Color(nsColor: .secondaryLabelColor)
         case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
             return appState.editorSettings.interfaceSkin.palette.accent
         case .succeeded, .denied:
@@ -430,4 +425,3 @@ struct AgentDelegatedLiveProgressView: View {
         }
     }
 }
-

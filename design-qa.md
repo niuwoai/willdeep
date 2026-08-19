@@ -45,6 +45,48 @@ final result: passed
 
 ---
 
+## 原生标题栏会话搜索入口（1.274.0-rc3，随当前 1.274.0-rc4 验证）
+
+- source visual truth path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/reference.png`
+- implementation screenshot paths:
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/implementation-default.png`
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/implementation-search-open.png`
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/implementation-sidebar-hidden.png`
+- viewport: native macOS window `1359 × 768 px`; search sheet `520 × 440 px`
+- source size: Claude Code reference `1748 × 1274 px`
+- density normalization: the reference and implementation were inspected together in one comparison input; comparison scope is the macOS window-control cluster and search-entry placement rather than unrelated application content.
+- state: populated light-mode session sidebar, native titlebar controls, search sheet open, and sidebar hidden.
+
+### Full-view comparison evidence
+
+- The native titlebar now preserves the reference ordering: macOS traffic lights, sidebar toggle, then search magnifier.
+- The former search row below “新聊天” is absent; “已安排” now immediately follows the primary new-chat action.
+- The duplicate magnifier in the chat header is also absent, leaving one stable visible search entry for every Agent destination.
+
+### Focused comparison evidence
+
+- Control geometry: pass; the sidebar and search buttons share a `26 pt` footprint with a `3 pt` inter-button gap and align on the same titlebar baseline.
+- Sidebar-visible state: pass; the controls remain visually grouped with the traffic lights and do not consume sidebar menu height.
+- Sidebar-hidden state: pass; the chat title begins after the complete native control cluster, with no overlap or clipping.
+- Search presentation: pass; clicking the magnifier opens the existing localized search sheet with focus in the search field.
+- Keyboard behavior: pass; `⌘⇧P` opens the same search sheet from the native titlebar command.
+- Assets and localization: pass; the implementation uses the system `magnifyingglass` SF Symbol and the existing localized `header.search-sessions` string.
+
+### Findings
+
+- No open P0/P1/P2 visual defects in the changed titlebar/sidebar surfaces.
+- The production search sheet remains intentionally compact and follows WillDeep’s existing visual system; the Claude Code screenshot is used for entry placement and control ordering, not as a request to clone its full search-results layout.
+
+### Comparison history
+
+- Pass 1: combined reference/implementation review confirmed the requested control order and removal of the sidebar row.
+- Interaction pass: Computer Use verified click-to-open, `⌘⇧P`, close behavior, and sidebar hide/show behavior in the freshly built Debug app.
+- Verification: 22 targeted tests passed across `AgentConfirmationVisualTests`, `AgentHeaderEditorEntryTests`, and `AgentSessionSearchTests`.
+
+final result: passed
+
+---
+
 ## Token 单日详情与分享卡（1.272.0-rc7）
 
 - source visual truth paths:
