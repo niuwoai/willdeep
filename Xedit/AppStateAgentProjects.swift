@@ -252,6 +252,29 @@ extension AppState {
         return repaired
     }
 
+    /// Remove the project-catalog rows created by the old workspace migration
+    /// for Dispatch task worktrees. This deliberately does not remove folders,
+    /// Git branches, sessions, or task history.
+    @discardableResult
+    func repairLeakedDispatchProjects() -> Int {
+        let managedRoot = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".willdeep/worktrees", isDirectory: true)
+            .standardizedFileURL.path
+        let leakedIDs = AgentDispatchProjectLeakRepair.projectIDsToRemove(
+            projects: agentProjects,
+            sessions: agentSessions,
+            managedWorktreeRoot: managedRoot
+        )
+        guard !leakedIDs.isEmpty else { return 0 }
+
+        agentProjects.removeAll { leakedIDs.contains($0.id) }
+        AgentProjectStore.save(agentProjects)
+        // Clear the stale projectID from task sessions through the existing
+        // metadata-safe path. Their Dispatch ownership fields stay intact.
+        rebindAgentSessionsToProjects()
+        return leakedIDs.count
+    }
+
     /// Guarantee that `path` is covered by a project, creating one named after
     /// the folder if it is not.
     ///

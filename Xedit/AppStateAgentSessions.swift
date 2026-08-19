@@ -1572,7 +1572,11 @@ extension AppState {
     @discardableResult
     func startNewAgentSession(
         inWorkspaceAt workspacePath: String?,
-        makeActive: Bool = true
+        makeActive: Bool = true,
+        presentationScope: AgentSessionPresentationScope = .workspace,
+        dispatchParentProjectID: UUID? = nil,
+        dispatchTaskID: UUID? = nil,
+        isManagedBackgroundWorkspace: Bool = false
     ) -> AgentSession {
         if makeActive {
             agentPrimaryDestination = .conversation
@@ -1582,7 +1586,9 @@ extension AppState {
             let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
             if Self.isExistingDirectory(url) {
                 _ = activateSecurityScope(for: url)
-                registerRecentFolder(url)
+                if !isManagedBackgroundWorkspace {
+                    registerRecentFolder(url)
+                }
             }
             normalizedPath = url.path
         } else {
@@ -1601,7 +1607,12 @@ extension AppState {
         let session = AgentSession(
             workspaceRootPath: normalizedPath,
             workspaceLocation: normalizedPath.map { WorkspaceLocation.local(path: $0) },
-            projectID: AgentProjectResolver.project(for: normalizedPath, in: agentProjects)?.id,
+            projectID: isManagedBackgroundWorkspace
+                ? nil
+                : AgentProjectResolver.project(for: normalizedPath, in: agentProjects)?.id,
+            presentationScope: presentationScope,
+            dispatchParentProjectID: dispatchParentProjectID,
+            dispatchTaskID: dispatchTaskID,
             modelID: defaultModelID,
             providerEntryID: defaultProvider?.id,
             providerID: defaultProvider?.providerID,
@@ -1632,7 +1643,9 @@ extension AppState {
         // instance's NSFileCoordinator hold on the session directory.
         AgentSessionStore.saveAsync(session)
         upsertAgentUsageSnapshot(for: session)
-        unhideWorkspace(key: session.workspaceSidebarGroupKey)
+        if !isManagedBackgroundWorkspace {
+            unhideWorkspace(key: session.workspaceSidebarGroupKey)
+        }
         if makeActive {
             refreshAgentGitWorktrees()
         }

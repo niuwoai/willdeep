@@ -150,12 +150,14 @@ extension AppState {
             return existingDraft
         }
 
-        let session = startNewAgentSession(inWorkspaceAt: nil)
+        let session = startNewAgentSession(
+            inWorkspaceAt: nil,
+            presentationScope: .dispatchBoard
+        )
         guard let runtime = runtime(for: session.id) else {
             agentPrimaryDestination = .dispatchBoard
             return session
         }
-        runtime.session.presentationScope = .dispatchBoard
         // Goal mode normally requires a workspace. A dispatch draft is the one
         // intentional exception: it is configuration-only and cannot create a
         // goal, plan, or task until the setup screen binds a directory.
@@ -265,13 +267,15 @@ extension AppState {
             return existingDraft
         }
 
-        let session = startNewAgentSession(inWorkspaceAt: normalizedPath)
+        let session = startNewAgentSession(
+            inWorkspaceAt: normalizedPath,
+            presentationScope: .dispatchBoard
+        )
         guard let runtime = runtime(for: session.id) else {
             agentPrimaryDestination = .dispatchBoard
             return session
         }
 
-        runtime.session.presentationScope = .dispatchBoard
         setAgentInteractionMode(.goal)
         applyDispatchModel(
             AgentDispatchModelRouting.costOptimized.planningModelID,
@@ -727,14 +731,15 @@ extension AppState {
             return .blocked(message: L10n.Dispatch.noExecutorOnTarget)
         }
 
-        guard let runtime = createDispatchTaskRuntime(workspaceLocation: workspaceLocation) else {
+        guard let runtime = createDispatchTaskRuntime(
+            workspaceLocation: workspaceLocation,
+            goalID: goal.id,
+            taskID: task.id
+        ) else {
             return .blocked(message: L10n.Dispatch.launchFailed)
         }
         runtime.session.title = "\(goal.title) · \(task.title)"
         runtime.session.titleIsUserSet = true
-        runtime.session.presentationScope = .dispatchBoard
-        runtime.session.dispatchParentProjectID = goal.id
-        runtime.session.dispatchTaskID = task.id
         runtime.interactionMode = .goal
         runtime.currentGoal = AgentGoal(
             statement: task.title,
@@ -1038,20 +1043,30 @@ extension AppState {
     }
 
     private func createDispatchTaskRuntime(
-        workspaceLocation: WorkspaceLocation
+        workspaceLocation: WorkspaceLocation,
+        goalID: UUID,
+        taskID: UUID
     ) -> AgentRuntime? {
         switch workspaceLocation {
         case .local(let path):
             let session = startNewAgentSession(
                 inWorkspaceAt: path,
-                makeActive: false
+                makeActive: false,
+                presentationScope: .dispatchBoard,
+                dispatchParentProjectID: goalID,
+                dispatchTaskID: taskID,
+                isManagedBackgroundWorkspace: true
             )
             return runtime(for: session.id)
         case .remote(let runtimeID, let path):
             guard AgentRuntimeStore.descriptor(id: runtimeID) != nil else { return nil }
             let session = startNewAgentSession(
                 inWorkspaceAt: nil,
-                makeActive: false
+                makeActive: false,
+                presentationScope: .dispatchBoard,
+                dispatchParentProjectID: goalID,
+                dispatchTaskID: taskID,
+                isManagedBackgroundWorkspace: true
             )
             guard let taskRuntime = runtime(for: session.id) else { return nil }
             taskRuntime.rebindRemoteWorkspace(

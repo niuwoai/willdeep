@@ -885,6 +885,10 @@ final class AppState: ObservableObject {
             self.metadataOnlySessionIDs = metadataOnlyIDs
             self.metadataOnlyUserMessageIDs = metadataOnlyUserMessageIDs
             self.hasLoadedAgentSessionCatalog = true
+            // Older builds promoted Dispatch task worktrees into named
+            // projects. Remove those catalog rows before migration runs, or
+            // they would keep rendering as empty `dispatch-*` sidebar groups.
+            self.repairLeakedDispatchProjects()
             // Projects are the only grouping concept now; any session still
             // keyed to a bare folder gets that folder promoted to a project of
             // the same name. Runs after the catalog lands because it reads
