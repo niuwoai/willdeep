@@ -203,22 +203,19 @@ extension AgentToolRunner {
             let stdoutCollector = CommandOutputCollector(limit: outputLimit)
             let stderrCollector = CommandOutputCollector(limit: outputLimit)
             let runState = CommandRunState()
-            let stdoutDrain = Task.detached(priority: .utility) {
-                stdoutCollector.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
-            }
-            let stderrDrain = Task.detached(priority: .utility) {
-                stderrCollector.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
-            }
             do {
                 try process.run()
                 cancellationController.bind(process)
             } catch {
+                // Do not start pipe readers until launch succeeds. A failed
+                // Process.run() leaves no producer behind; closing a handle
+                // while readDataToEndOfFile() is already running can raise an
+                // Objective-C NSFileHandleOperationException, which bypasses
+                // Swift error handling and crashes the entire app/test host.
                 try? stdoutPipe.fileHandleForReading.close()
                 try? stdoutPipe.fileHandleForWriting.close()
                 try? stderrPipe.fileHandleForReading.close()
                 try? stderrPipe.fileHandleForWriting.close()
-                await stdoutDrain.value
-                await stderrDrain.value
                 return CommandOutcome(
                     exitStatus: -1,
                     stdout: "",
@@ -226,6 +223,12 @@ extension AgentToolRunner {
                     timedOut: false,
                     launchFailed: true
                 )
+            }
+            let stdoutDrain = Task.detached(priority: .utility) {
+                stdoutCollector.append(stdoutPipe.fileHandleForReading.readDataToEndOfFile())
+            }
+            let stderrDrain = Task.detached(priority: .utility) {
+                stderrCollector.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
             }
 
             let timeoutWorkItem = DispatchWorkItem {

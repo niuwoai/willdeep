@@ -961,6 +961,31 @@ extension WillDeepTests {
         #expect(result.payload.contains(home))
     }
 
+    @Test("run_command reports launch failure without crashing pipe readers")
+    @MainActor
+    func testRunCommandLaunchFailureDoesNotCrash() async {
+        let missingWorkspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_missing_run_command_\(UUID().uuidString)")
+        let context = AgentToolContext(
+            rootDirectory: missingWorkspace,
+            sandboxMode: .escalated
+        )
+
+        do {
+            _ = try await AgentToolRunner.run(
+                name: "run_command",
+                arguments: [
+                    "command": .string("pwd"),
+                    "timeout_seconds": .number(headlessCommandTimeoutSeconds)
+                ],
+                context: context
+            )
+            Issue.record("run_command unexpectedly launched in a missing working directory")
+        } catch {
+            #expect(!error.localizedDescription.isEmpty)
+        }
+    }
+
     @Test("run_command drains large output without hanging")
     @MainActor
     func testRunCommandDrainsLargeOutput() async throws {

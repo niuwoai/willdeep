@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-19 | Current version: v1.272.0-rc9
+> Last updated: 2026-08-19 | Current version: v1.272.0-rc10
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **前台命令启动失败不再击穿进程（1.272.0-rc10）** —— `run_command` 只在子进程成功启动后才创建 stdout/stderr 排空任务，避免启动失败清理文件句柄时与并发读取发生竞态并抛出无法由 Swift 捕获的 `NSFileHandleOperationException`；单个命令启动错误现在只返回结构化工具失败，不再让应用或整套发布测试崩溃。
 - **模型选择视觉契约收口（1.272.0-rc9）** —— 发布级灰阶图标测试不再要求已经从省心托管页删除的 Coding Plan 购买按钮重新出现，改为明确守住该入口不存在，并继续检查其余 Composer 控件采用单色语义色。
 - **调度节点完成态纠偏与人工接管（1.272.0-rc8）** —— 结构化验收已全部完成时，节点不再被随后发生的计划续跑或运行错误覆盖成失败；重新进入调度项目会自动修复历史上“失败但验收 4/4”的错标节点并放行依赖。失败、已停止或待验收节点还可在节点详情及任务对话中经确认后“标记成功并继续”，同步收口运行时清单、解锁后继节点并恢复调度。
 - **单日 Token 复盘与黑底分享卡（1.272.0-rc7）** —— 启动页 Token 活动格子放大并聚焦最近半年，累计 Token 增加可点击提示；日历中的单天可下钻到模型输入/输出/缓存、任务与会话、主要技能/插件、缓存率和最大上下文，并生成 1080×1350 黑底 PNG，通过系统面板保存或分享。省心托管页同步移除 Coding Plan 推广区，Worker 菜单的 Profile 管理入口改走稳定设置深链。

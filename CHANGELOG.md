@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.272.0-rc9 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.272.0-rc10 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.272.0-rc10 - 2026-08-19
+
+### Fixed
+
+- 修复前台 `run_command` 启动失败时，stdout/stderr 读取任务与文件句柄清理并发，触发 `NSFileHandleOperationException` 并让应用或整套测试宿主崩溃的问题；管道排空任务现在只会在 `Process.run()` 成功后启动。
+
+### Verification
+
+- 发布前完整测试在旧实现上准确捕获了该崩溃，发布器在归档、签名、公证和上传前安全停止；修复后重新执行目标回归与完整发布测试。
 
 ## 1.272.0-rc9 - 2026-08-19
 
