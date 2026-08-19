@@ -893,10 +893,9 @@ struct AgentSemanticActivityStatusLine: View {
             let label = AgentToolKind.of(call).delegatedActivityLabel(
                 progress: delegatedProgress ?? call.subagentProgress
             ) ?? "委派中"
-            // 委派保留 accent 色：由另一个 agent 代跑与本地自己在跑是两回事，
-            // 这是有专门测试锁定的既有设计决策（见
-            // AgentToolCallGroupingTests 的 delegatedAgentActivityUsesSystemAccentColor）。
-            return AgentActivityPhase(label: label, systemImage: "person.2", tint: .accentColor)
+            // 委派同样属于无需用户介入的正常推进状态。用灰度保留进度
+            // 可见性，避免长时间运行时整条蓝色状态栏持续抢注意力。
+            return AgentActivityPhase(label: label, systemImage: "person.2", tint: .secondary)
         case .askUser:
             // 唯一保留彩色的分支：进度真的卡在用户身上。
             return AgentActivityPhase(label: "等待你回答", systemImage: "bubble.left.and.text.bubble.right", tint: .orange)

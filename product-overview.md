@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-19 | Current version: v1.274.0-rc6
+> Last updated: 2026-08-19 | Current version: v1.274.0-rc7
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **子代理委派进度降噪（1.274.0-rc7）** —— Composer 中持续展示的“委派给子代理”状态条改用系统次级灰色，图标、进度文案、运行时长、浅色背景与描边不再使用蓝色；轮次和工具调用进度仍完整保留。
 - **本地 commit 免确认（1.274.0-rc6）** —— 单条 `git commit` 被视为可通过 Git 历史或 reflog 回退的本地记录操作，在所有审批模式下不再打断用户；执行仍限制在 workspace-write 沙箱内，Hook 不能写出工作区或联网。push、强制 reset/clean 等外部或破坏性 Git 操作不受影响。
 - **命令失败提示降噪（1.274.0-rc5）** —— 对话活动时间线和可展开工具卡中的命令失败统一使用系统次级灰色；失败详情仍可查看，Agent 的诊断与重试流程不受影响，界面不再把常见的中间失败渲染成强警告。
 - **Goal Plan 阶段边界收紧（1.274.0-rc4）** —— Goal 路线图继续按阶段生成有界 Plan；若模型在当前 `plan` 块内提前写出后续 Phase，宿主会在下一阶段标题前截断当前卡片和执行契约，避免“阶段 1/2”的卡片混入 Phase 2 步骤。普通模式仍解析完整计划，不受阶段截断影响。
