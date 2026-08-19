@@ -3,6 +3,17 @@
 > 当前文件保留最新版本（1.273.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.273.0-rc10 - 2026-08-19
+
+### Changed
+
+- **终端启动器改名为 `willdeep-app`，把 `willdeep` 这个名字让给 willdeep-rs 的 CLI。** 二者此前同名，而 `~/.local/bin` 在 PATH 上通常排在 `~/.cargo/bin` 之前——于是这个 600 字节的转发脚本把整个 rs CLI（TUI、daemon、headless）挡在了后面，敲 `willdeep` 实际打开的是 Mac App。名字归属按本分划分：rs 那个从头到尾是命令行程序，本启动器只是把路径转交给 App 的便利入口。
+- 设置里的安装提示与「试试」示例同步改为 `willdeep-app`（五种语言）。
+
+### 升级说明
+
+- **改名不会删除以旧名安装的启动器。** `~/.local/bin/willdeep` 若仍存在，会继续遮蔽 rs 的 CLI，需要自行删除；删除后到「设置 → 工具」重新安装即可得到 `willdeep-app`。
+
 ## 1.273.0-rc9 - 2026-08-19
 
 ### Added

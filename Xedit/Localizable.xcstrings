@@ -63198,31 +63198,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Installed. Try: willdeep . Add ~/.local/bin to PATH if needed."
+            "value" : "Installed. Try: willdeep-app . Add ~/.local/bin to PATH if needed."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Instalado. Prueba: willdeep . Añade ~/.local/bin al PATH si es necesario."
+            "value" : "Instalado. Prueba: willdeep-app . Añade ~/.local/bin al PATH si es necesario."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Installé. Essayez : willdeep . Ajoutez ~/.local/bin à PATH si nécessaire."
+            "value" : "Installé. Essayez : willdeep-app . Ajoutez ~/.local/bin à PATH si nécessaire."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "インストールしました。試してみてください：willdeep 。必要に応じて ~/.local/bin を PATH に追加してください。"
+            "value" : "インストールしました。試してみてください：willdeep-app 。必要に応じて ~/.local/bin を PATH に追加してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已安装。试试 willdeep 。如有需要把 ~/.local/bin 加入 PATH。"
+            "value" : "已安装。试试 willdeep-app 。如有需要把 ~/.local/bin 加入 PATH。"
           }
         }
       }
@@ -63338,31 +63338,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Install the willdeep command for Terminal."
+            "value" : "Install the willdeep-app command for Terminal."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Instala el comando willdeep para Terminal."
+            "value" : "Instala el comando willdeep-app para Terminal."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Installez la commande willdeep pour le Terminal."
+            "value" : "Installez la commande willdeep-app pour le Terminal."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ターミナル用の willdeep コマンドをインストールします。"
+            "value" : "ターミナル用の willdeep-app コマンドをインストールします。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在终端安装 willdeep 命令。"
+            "value" : "在终端安装 willdeep-app 命令。"
           }
         }
       }
