@@ -448,13 +448,13 @@ extension L10n {
                 let template = String(localized: "settings.tools.cli-needs-update", defaultValue: "A command exists at %@ and can be updated.")
                 return String(format: template, a1)
             }
-            static let notInstalled = String(localized: "settings.tools.cli-not-installed", defaultValue: "Install the willdeep command for Terminal.")
+            static let notInstalled = String(localized: "settings.tools.cli-not-installed", defaultValue: "Install the willdeep-app command for Terminal.")
             static let installingButton = String(localized: "settings.tools.cli-installing", defaultValue: "Installing...")
             static let reinstallButton = String(localized: "settings.tools.cli-reinstall", defaultValue: "Reinstall")
             static let updateButton = String(localized: "settings.tools.cli-update", defaultValue: "Update")
             static let installButton = String(localized: "settings.tools.cli-install", defaultValue: "Install")
             static let installingMessage = String(localized: "settings.tools.cli-installing-message", defaultValue: "Installing without administrator privileges.")
-            static let installedMessage = String(localized: "settings.tools.cli-installed-message", defaultValue: "Installed. Try: willdeep . Add ~/.local/bin to PATH if needed.")
+            static let installedMessage = String(localized: "settings.tools.cli-installed-message", defaultValue: "Installed. Try: willdeep-app . Add ~/.local/bin to PATH if needed.")
         }
 
         enum LocalAgents {
