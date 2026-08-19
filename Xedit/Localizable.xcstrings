@@ -68046,42 +68046,6 @@
         }
       }
     },
-    "sidebar.search-sessions-action" : {
-      "comment" : "button label below New Chat that opens title search for chats and projects",
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Search chats"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Buscar chats"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rechercher des conversations"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "チャットを検索"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "搜索会话"
-          }
-        }
-      }
-    },
     "sidebar.recent-sessions-rail.empty" : {
       "comment" : "empty state in the collapsed-sidebar recent chats hover rail",
       "extractionState" : "manual",

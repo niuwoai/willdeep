@@ -11,6 +11,8 @@ struct AgentHeaderEditorEntryTests {
     @Test("Agent header stays flat and the app owns no Editor scene")
     func headerEntriesStayFlatAndEditorIsUnavailable() throws {
         let headerSource = try Self.source(in: "Xedit", named: "AgentChatHeader.swift")
+        let modeSource = try Self.source(in: "Xedit", named: "AgentModeView.swift")
+        let sidebarSource = try Self.source(in: "Xedit", named: "AgentSessionsSidebar.swift")
         let appSource = try Self.source(in: "Xedit", named: "XeditApp.swift")
 
         #expect(!headerSource.contains("pencil.and.outline"))
@@ -21,6 +23,10 @@ struct AgentHeaderEditorEntryTests {
         #expect(headerSource.contains("ForEach(visibleKinds)"))
         #expect(headerSource.contains("@ObservedObject private var detachedPanels = AgentDetachedPanelRegistry.shared"))
         #expect(headerSource.contains("sidePanel == item || detachedPanels.isDetached(item)"))
+        #expect(!headerSource.contains("sessionSearchButton"))
+        #expect(modeSource.contains("#selector(presentSearch)"))
+        #expect(modeSource.contains("AgentWindowChromeControlLayout.searchButtonFrame"))
+        #expect(!sidebarSource.contains("L10n.Sidebar.searchSessionsAction"))
         #expect(appSource.contains("AgentOnlyCommands()"))
         #expect(!appSource.contains("WindowGroup(id: EditorWindowID.value)"))
         #expect(!appSource.contains("WindowGroup(for: URL.self)"))

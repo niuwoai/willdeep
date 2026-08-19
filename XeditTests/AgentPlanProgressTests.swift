@@ -219,6 +219,38 @@ struct AgentPlanProgressTests {
         #expect(plan?.summary == "We'll do it in three passes.")
     }
 
+    @Test("Goal 阶段计划在下一个 Phase 标题前停止")
+    func firstPhaseExtractionStopsBeforeLaterPhaseSteps() {
+        let content = """
+        ```plan
+        ## MySQL 迁移 + 后端核心认证服务开发
+
+        ### Phase 1: 数据库迁移到 MySQL
+        1. 修改 go.mod
+        2. 重写迁移脚本
+        3. 更新 models.go
+        4. 更新文档
+
+        ### Phase 2: 后端核心代码
+        5. 配置管理
+        6. 数据库连接
+        ```
+        """
+
+        let phasePlan = AgentPlanParser.extract(from: content, scope: .firstPhase)
+        #expect(phasePlan?.summary.contains("Phase 1") == true)
+        #expect(phasePlan?.summary.contains("Phase 2") == false)
+        #expect(phasePlan?.steps.map(\.text) == [
+            "修改 go.mod",
+            "重写迁移脚本",
+            "更新 models.go",
+            "更新文档",
+        ])
+
+        let ordinaryPlan = AgentPlanParser.extract(from: content)
+        #expect(ordinaryPlan?.steps.count == 6)
+    }
+
     /// A progress block flips matched step indexes to the new status and
     /// promotes the plan to .executing once any step is touched.
     @Test

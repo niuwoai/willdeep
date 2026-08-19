@@ -626,7 +626,10 @@ extension AppState {
            !last.content.contains("<!-- goal-planning-generation:\(generationID.uuidString) -->") {
             return .noProposal
         }
-        if let parsed = AgentPlanParser.extract(from: last.content) {
+        let extractionScope: AgentPlanParser.ExtractionScope = runtime.interactionMode == .goal
+            ? .firstPhase
+            : .entireBlock
+        if let parsed = AgentPlanParser.extract(from: last.content, scope: extractionScope) {
             if runtime.interactionMode == .normal {
                 if let existing = runtime.currentPlan,
                    AgentPlanContinuationPolicy.hasActiveExecutionContract(existing) {

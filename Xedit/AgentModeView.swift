@@ -125,6 +125,7 @@ struct AgentModeView: View {
                 .background {
                     AgentSessionsSidebarWindowChromeToggle(
                         isVisible: sidebarVisibilityBinding(isAutoHidden: autoHidden),
+                        isSearchPresented: $appState.isAgentSessionSearchPresented,
                         isAutoHidden: autoHidden
                     )
                     .frame(width: 0, height: 0)
@@ -215,8 +216,7 @@ struct AgentModeView: View {
                 } else {
                     AgentChatHeader(
                         sidePanel: sidePanelBinding,
-                        sessionsSidebarVisible: $sessionsSidebarVisible,
-                        isSessionSearchPresented: $appState.isAgentSessionSearchPresented
+                        sessionsSidebarVisible: $sessionsSidebarVisible
                     )
                     Divider().opacity(0.5)
                     AgentChatTranscript()
@@ -398,16 +398,53 @@ struct AgentModeView: View {
 
 }
 
-/// Puts the Agent-session sidebar button in the native titlebar, immediately
-/// after the macOS close/minimize/zoom controls. Keeping it in AppKit's
-/// titlebar container makes its vertical position match the traffic lights;
-/// a SwiftUI overlay would instead be anchored in the content area below them.
+/// Native titlebar geometry for the Agent window's sidebar and search controls.
+/// The search icon deliberately follows the sidebar toggle, matching the
+/// traffic-light toolbar order used by Claude Code.
+nonisolated enum AgentWindowChromeControlLayout {
+    static let buttonWidth: CGFloat = 26
+    static let gapAfterZoom: CGFloat = 7
+    static let interButtonGap: CGFloat = 3
+
+    /// When the sidebar is hidden, the conversation header begins under the
+    /// titlebar controls. Reserve through the trailing edge of the search icon
+    /// plus a small breathing gap so the session title never overlaps it.
+    static let hiddenSidebarHeaderLeadingInset: CGFloat = 122
+
+    static func sidebarButtonFrame(after zoomFrame: CGRect) -> CGRect {
+        CGRect(
+            x: zoomFrame.maxX + gapAfterZoom,
+            y: zoomFrame.minY,
+            width: buttonWidth,
+            height: zoomFrame.height
+        )
+    }
+
+    static func searchButtonFrame(after sidebarFrame: CGRect) -> CGRect {
+        CGRect(
+            x: sidebarFrame.maxX + interButtonGap,
+            y: sidebarFrame.minY,
+            width: buttonWidth,
+            height: sidebarFrame.height
+        )
+    }
+}
+
+/// Puts the Agent-session sidebar and search buttons in the native titlebar,
+/// immediately after the macOS close/minimize/zoom controls. Keeping them in
+/// AppKit's titlebar container makes their vertical position match the traffic
+/// lights; a SwiftUI overlay would sit in the content area below them.
 private struct AgentSessionsSidebarWindowChromeToggle: NSViewRepresentable {
     @Binding var isVisible: Bool
+    @Binding var isSearchPresented: Bool
     let isAutoHidden: Bool
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isVisible: $isVisible, isAutoHidden: isAutoHidden)
+        Coordinator(
+            isVisible: $isVisible,
+            isSearchPresented: $isSearchPresented,
+            isAutoHidden: isAutoHidden
+        )
     }
 
     func makeNSView(context: Context) -> NSView {
@@ -417,31 +454,45 @@ private struct AgentSessionsSidebarWindowChromeToggle: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.update(isVisible: $isVisible, isAutoHidden: isAutoHidden)
+        context.coordinator.update(
+            isVisible: $isVisible,
+            isSearchPresented: $isSearchPresented,
+            isAutoHidden: isAutoHidden
+        )
         context.coordinator.attach(to: nsView)
     }
 
     static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        coordinator.removeButton()
+        coordinator.removeButtons()
     }
 
     final class Coordinator: NSObject {
-        private let buttonWidth: CGFloat = 26
-        private let buttonGapFromZoom: CGFloat = 7
         private weak var anchorView: NSView?
-        private weak var button: NSButton?
+        private weak var sidebarButton: NSButton?
+        private weak var searchButton: NSButton?
         private var isVisible: Binding<Bool>
+        private var isSearchPresented: Binding<Bool>
         private var isAutoHidden: Bool
 
-        init(isVisible: Binding<Bool>, isAutoHidden: Bool) {
+        init(
+            isVisible: Binding<Bool>,
+            isSearchPresented: Binding<Bool>,
+            isAutoHidden: Bool
+        ) {
             self.isVisible = isVisible
+            self.isSearchPresented = isSearchPresented
             self.isAutoHidden = isAutoHidden
         }
 
-        func update(isVisible: Binding<Bool>, isAutoHidden: Bool) {
+        func update(
+            isVisible: Binding<Bool>,
+            isSearchPresented: Binding<Bool>,
+            isAutoHidden: Bool
+        ) {
             self.isVisible = isVisible
+            self.isSearchPresented = isSearchPresented
             self.isAutoHidden = isAutoHidden
-            configureButton()
+            configureButtons()
         }
 
         func attach(to anchorView: NSView) {
@@ -451,9 +502,11 @@ private struct AgentSessionsSidebarWindowChromeToggle: NSViewRepresentable {
             }
         }
 
-        func removeButton() {
-            button?.removeFromSuperview()
-            button = nil
+        func removeButtons() {
+            sidebarButton?.removeFromSuperview()
+            searchButton?.removeFromSuperview()
+            sidebarButton = nil
+            searchButton = nil
         }
 
         private func installButtonIfNeeded() {
@@ -463,17 +516,30 @@ private struct AgentSessionsSidebarWindowChromeToggle: NSViewRepresentable {
                 return
             }
 
-            let button = button ?? makeButton()
-            if button.superview !== titlebarView {
-                button.removeFromSuperview()
-                titlebarView.addSubview(button, positioned: .above, relativeTo: zoomButton)
+            let sidebarButton = sidebarButton ?? makeSidebarButton()
+            if sidebarButton.superview !== titlebarView {
+                sidebarButton.removeFromSuperview()
+                titlebarView.addSubview(sidebarButton, positioned: .above, relativeTo: zoomButton)
             }
-            self.button = button
-            position(button, after: zoomButton)
-            configureButton()
+            self.sidebarButton = sidebarButton
+
+            let searchButton = searchButton ?? makeSearchButton()
+            if searchButton.superview !== titlebarView {
+                searchButton.removeFromSuperview()
+                titlebarView.addSubview(searchButton, positioned: .above, relativeTo: sidebarButton)
+            }
+            self.searchButton = searchButton
+
+            sidebarButton.frame = AgentWindowChromeControlLayout.sidebarButtonFrame(
+                after: zoomButton.frame
+            )
+            searchButton.frame = AgentWindowChromeControlLayout.searchButtonFrame(
+                after: sidebarButton.frame
+            )
+            configureButtons()
         }
 
-        private func makeButton() -> NSButton {
+        private func makeSidebarButton() -> NSButton {
             let button = NSButton(frame: .zero)
             button.isBordered = false
             button.imagePosition = .imageOnly
@@ -490,18 +556,25 @@ private struct AgentSessionsSidebarWindowChromeToggle: NSViewRepresentable {
             return button
         }
 
-        private func position(_ button: NSButton, after zoomButton: NSButton) {
-            let zoomFrame = zoomButton.frame
-            button.frame = NSRect(
-                x: zoomFrame.maxX + buttonGapFromZoom,
-                y: zoomFrame.minY,
-                width: buttonWidth,
-                height: zoomFrame.height
-            )
+        private func makeSearchButton() -> NSButton {
+            let button = NSButton(frame: .zero)
+            button.isBordered = false
+            button.imagePosition = .imageOnly
+            button.focusRingType = .none
+            button.target = self
+            button.action = #selector(presentSearch)
+            button.setButtonType(.momentaryPushIn)
+            button.keyEquivalent = "p"
+            button.keyEquivalentModifierMask = [.command, .shift]
+            if let image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil) {
+                image.isTemplate = true
+                button.image = image
+            }
+            return button
         }
 
-        private func configureButton() {
-            guard let button else { return }
+        private func configureButtons() {
+            guard let sidebarButton else { return }
             let title = AgentSidebarToggleButtonState.tooltip(
                 isAutoHidden: isAutoHidden,
                 isVisible: isVisible.wrappedValue
@@ -511,10 +584,15 @@ private struct AgentSessionsSidebarWindowChromeToggle: NSViewRepresentable {
             // read as inert with no hint that the window is simply too narrow.
             // `toggleSidebar` no-ops in that state and the dimmed alpha carries
             // the unavailable look.
-            button.isEnabled = AgentSidebarToggleButtonState.isEnabled(isAutoHidden: isAutoHidden)
-            button.alphaValue = isAutoHidden ? 0.72 : 1
-            button.toolTip = title
-            button.setAccessibilityLabel(title)
+            sidebarButton.isEnabled = AgentSidebarToggleButtonState.isEnabled(isAutoHidden: isAutoHidden)
+            sidebarButton.alphaValue = isAutoHidden ? 0.72 : 1
+            sidebarButton.toolTip = title
+            sidebarButton.setAccessibilityLabel(title)
+
+            searchButton?.isEnabled = true
+            searchButton?.alphaValue = 1
+            searchButton?.toolTip = L10n.Header.searchSessions
+            searchButton?.setAccessibilityLabel(L10n.Header.searchSessions)
         }
 
         @objc private func toggleSidebar() {
@@ -522,7 +600,11 @@ private struct AgentSessionsSidebarWindowChromeToggle: NSViewRepresentable {
             // window; refusing the toggle is this method's job.
             guard AgentSidebarToggleButtonState.acceptsToggle(isAutoHidden: isAutoHidden) else { return }
             isVisible.wrappedValue.toggle()
-            configureButton()
+            configureButtons()
+        }
+
+        @objc private func presentSearch() {
+            isSearchPresented.wrappedValue = true
         }
     }
 }
