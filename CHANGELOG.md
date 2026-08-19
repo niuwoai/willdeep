@@ -3,6 +3,22 @@
 > 当前文件保留最新版本（1.272.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.273.0-rc4 - 2026-08-19
+
+### Added
+
+- **统计面板新增 Deep Share 指标「动用 1M 档」。** 这是本轮唯一一个「结论依赖它、它却缺席」的数字：请求级自动预检该不该默认打开，判据就是稀缺档是否真的保持稀缺（目标 ≤ 5%）。此前 `deepRunCount` 只作为 Skill Coverage 的分母之一存在，没有独立口径，这个决定等于悬在半空。
+- 口径与 willdeep-rs `agent-metrics` 的 `deep_share` 对齐（deep 子运行 / 全部子运行），两端数字可直接横向比较。
+
+### Changed
+
+- Deep Share 的分母是**子运行数**，刻意与 Skill Coverage 不同：后者含父轮次，问的是「有多少活流向了更便宜的地方」；Deep Share 问的是「已经派出去的活里，有多少非用贵档不可」——父轮次根本不是 1M 档的候选，算进去只会把数字稀释成永远好看。
+- 没有任何子运行时显示 `—` 而不是 `0%`：什么都没派出去的会话，0% 会被读成「稀缺档控制得很好」。
+
+### Tests
+
+- 新增 `AgentSkillWorkerKPITests`（独立 suite，不挂在聚合的 `WillDeepTests` 下——函数级 `-only-testing` 对那个聚合 suite 有匹配 0 个用例却报 TEST SUCCEEDED 的前科，对一个以「可信」为全部价值的指标来说这是最糟的失败方式）：分母不含父轮次、与 rs 同口径、无子运行时为 nil、全 deep 时为 100%。
+
 ## 1.273.0-rc3 - 2026-08-19
 
 ### Added

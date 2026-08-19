@@ -158,6 +158,7 @@ extension L10n {
         static let workersSkillCoverage = String(localized: "stats-dashboard.workers.skill-coverage", defaultValue: "Handled by workers")
         static let workersVerifiedSuccess = String(localized: "stats-dashboard.workers.verified-success", defaultValue: "Verified success")
         static let workersEscalationRate = String(localized: "stats-dashboard.workers.escalation-rate", defaultValue: "Escalated to main")
+        static let workersDeepShare = String(localized: "stats-dashboard.workers.deep-share", defaultValue: "Used the 1M tier")
         /// Shown instead of a percentage when the metric has no denominator
         /// yet. "0%" would read as a failure rather than as missing data.
         static let workersMetricNoData = String(localized: "stats-dashboard.workers.metric-no-data", defaultValue: "—")

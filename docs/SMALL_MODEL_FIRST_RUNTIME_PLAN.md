@@ -165,9 +165,16 @@ rs 侧把「优先用小模型」从系统提示词里的劝告，搬进了 Runt
 这个数字是判断第 4 步的自动预检该不该默认打开的**唯一依据**——
 在只有引导注入的版本上跑一段时间，Deep Share 和 Skill Coverage 说了算。
 
-**状态：未做。** 截至 1.273.0-rc3，`deepRunCount` 仍只作为 `skillCoverage` 的分母之一存在，
-没有独立的 Deep Share 展示口径。这意味着「自动预检该不该开」目前**没有数据可依**——
-这是第 4 步收尾前必须补上的一环，也是本规划里唯一一个「指标缺席但结论依赖它」的地方。
+**状态：已做（1.273.0-rc4）。** `AgentSkillWorkerKPIs.deepShare` +
+统计面板 Worker KPI 带的第四格「动用 1M 档」。
+
+分母是**子运行数**（`narrowRunCount + deepRunCount`），刻意与 `skillCoverage` 不同：
+后者含 `parentTurnCount`，问的是「有多少活流向了更便宜的地方」；Deep Share 问的是
+「已经派出去的活里，有多少非用贵档不可」——父轮次根本不是 1M 档的候选，算进去只会把
+数字稀释成永远好看。这与 rs `agent-metrics` 的 `deep_share = deep / children.len()`
+同分母（Xedit 的子运行非 deep 即 narrow），两端可直接横向对比。
+
+无子运行时显示 `—` 而非 `0%`：什么都没派出去的会话，0% 会被读成「稀缺档控制得很好」。
 
 ---
 

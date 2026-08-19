@@ -211,6 +211,23 @@ nonisolated struct AgentSkillWorkerKPIs: Equatable {
         return Double(narrowRunCount) / Double(total)
     }
 
+    /// Share of child runs that spent the scarce 1M tier. Target ≤ 5%.
+    ///
+    /// Denominator is child runs only — deliberately *not* the same one
+    /// `skillCoverage` uses. That metric asks "how much of the work went
+    /// somewhere cheaper", so parent turns belong in it. This one asks "of
+    /// the work that was delegated, how much needed the expensive tier",
+    /// where a parent turn is not a candidate at all and would only dilute
+    /// the number into always looking fine.
+    ///
+    /// Same denominator as willdeep-rs `agent-metrics deep_share`
+    /// (deep children / all children), so the two clients are comparable.
+    var deepShare: Double? {
+        let total = narrowRunCount + deepRunCount
+        guard total > 0 else { return nil }
+        return Double(deepRunCount) / Double(total)
+    }
+
     var verifiedSuccessRate: Double? {
         guard verifiedRunCount > 0 else { return nil }
         return Double(verifiedPassCount) / Double(verifiedRunCount)
