@@ -1570,8 +1570,13 @@ extension AppState {
     /// 用入参重建 session,而不是甩给无参版本 —— 否则新会话会继承 editor
     /// 当前的根,跟用户在菜单里选的目录对不上。
     @discardableResult
-    func startNewAgentSession(inWorkspaceAt workspacePath: String?) -> AgentSession {
-        agentPrimaryDestination = .conversation
+    func startNewAgentSession(
+        inWorkspaceAt workspacePath: String?,
+        makeActive: Bool = true
+    ) -> AgentSession {
+        if makeActive {
+            agentPrimaryDestination = .conversation
+        }
         let normalizedPath: String?
         if let workspacePath, !workspacePath.isEmpty {
             let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
@@ -1607,20 +1612,30 @@ extension AppState {
         let newRuntime = AgentRuntime(session: session)
         seedPersistedSessionModelOverride(for: newRuntime)
         agentRuntimes[session.id] = newRuntime
-        activeAgentSessionID = session.id
-        subscribeToActiveRuntime()
-        evictInactiveAgentRuntimesIfNeeded()
-        agentSessionDidEditFiles = false
-        agentInteractionMode = .normal
-        agentApprovalMode = .smart
-        agentCurrentPlan = nil
-        agentCurrentGoal = nil
+        if makeActive {
+            activeAgentSessionID = session.id
+            subscribeToActiveRuntime()
+            evictInactiveAgentRuntimesIfNeeded()
+            agentSessionDidEditFiles = false
+            agentInteractionMode = .normal
+            agentApprovalMode = .smart
+            agentCurrentPlan = nil
+            agentCurrentGoal = nil
+        } else {
+            // Scheduler-owned sessions run in the background. Protect both the
+            // new runtime and the operator's currently selected runtime from
+            // cache eviction without redirecting the chat/composer to this
+            // internal dispatch task.
+            evictInactiveAgentRuntimesIfNeeded(protecting: session.id)
+        }
         // saveAsync, not save: sync save can beachball behind another
         // instance's NSFileCoordinator hold on the session directory.
         AgentSessionStore.saveAsync(session)
         upsertAgentUsageSnapshot(for: session)
         unhideWorkspace(key: session.workspaceSidebarGroupKey)
-        refreshAgentGitWorktrees()
+        if makeActive {
+            refreshAgentGitWorktrees()
+        }
         return session
     }
 

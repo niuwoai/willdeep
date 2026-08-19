@@ -236,6 +236,7 @@ struct AgentChatTranscript: View {
     @State private var conversationSearchMatchCount = 0
     @State private var conversationSearchActiveIndex = 0
     @State private var isFollowingTranscriptBottom = true
+    @State private var scrollToBottomRequestToken = 0
     /// Conversation history is disclosed in bounded pages. This keeps both
     /// TextKit and the user-turn minimap proportional to what the operator has
     /// actually reached instead of rebuilding an entire long transcript.
@@ -568,6 +569,7 @@ struct AgentChatTranscript: View {
                 .background {
                     AgentTranscriptScrollObserver(
                         isFollowingBottom: $isFollowingTranscriptBottom,
+                        scrollToBottomRequestToken: scrollToBottomRequestToken,
                         onReachTop: loadEarlierHistoryPage
                     )
                     .frame(width: 0, height: 0)
@@ -642,6 +644,7 @@ struct AgentChatTranscript: View {
                     DispatchQueue.main.async {
                         guard !isConversationSearchActive else { return }
                         isFollowingTranscriptBottom = true
+                        scrollToBottomRequestToken &+= 1
                         proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
                     }
                 }
@@ -696,9 +699,18 @@ struct AgentChatTranscript: View {
         .onCompatibleChange(of: conversationSearchQuery) { _, _ in
             conversationSearchActiveIndex = 0
         }
-        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
+        .onCompatibleChange(of: appState.activeAgentSessionID) { previousID, currentID in
             closeConversationSearch()
             renderedMessageLimit = Self.renderedMessageCap
+            guard previousID != currentID else { return }
+            isFollowingTranscriptBottom = AgentTranscriptScrollPolicy
+                .followingBottomAfterSessionChange()
+            scrollToBottomRequestToken &+= 1
+        }
+        .onCompatibleChange(of: appState.agentSidePanelKind) { previousPanel, currentPanel in
+            guard previousPanel != currentPanel,
+                  isFollowingTranscriptBottom else { return }
+            scrollToBottomRequestToken &+= 1
         }
     }
 
