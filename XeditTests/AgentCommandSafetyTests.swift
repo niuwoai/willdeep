@@ -90,6 +90,12 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "git merge-base HEAD develop") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "git version") == .alwaysSafe)
 
+        // A local commit is reversible and runs inside the workspace sandbox.
+        #expect(SafeCommand.classify(command: "git commit -m 'fix: retry'") == .alwaysSafe)
+        #expect(SafeCommand.isLocalGitCommit(command: "git commit -m 'fix: retry'"))
+        #expect(!SafeCommand.isLocalGitCommit(command: "git commit -m ok && git push"))
+        #expect(!SafeCommand.isLocalGitCommit(command: "git push origin main"))
+
         // git config writes must NOT be auto-approved.
         #expect(SafeCommand.classify(command: "git config user.email rocky@example.com") == .needsJudgment)
         #expect(SafeCommand.classify(command: "git config --add safe.directory /tmp/foo") == .needsJudgment)

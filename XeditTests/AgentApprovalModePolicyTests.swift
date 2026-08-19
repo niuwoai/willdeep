@@ -178,6 +178,32 @@ struct AgentApprovalModePolicyTests {
         )
         #expect(strictBuild == nil)
 
+        let commitCommand = "git commit -m 'fix: keep retry state neutral'"
+        let commitDecision = AgentSandboxPolicy.commandDecision(
+            command: commitCommand,
+            rootDirectory: workspace
+        )
+        #expect(commitDecision.mode == .workspaceWrite)
+        #expect(!commitDecision.requiresTypedConfirmation)
+
+        let strictCommit = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string(commitCommand)],
+            risk: .write,
+            rootDirectory: workspace,
+            approvalMode: .requestEveryTime
+        )
+        #expect(strictCommit == .staticAllowlist)
+
+        let strictCommitAndPush = await appState.autoApprovalSource(
+            toolName: "run_command",
+            arguments: ["command": .string("\(commitCommand) && git push")],
+            risk: .write,
+            rootDirectory: workspace,
+            approvalMode: .requestEveryTime
+        )
+        #expect(strictCommitAndPush == nil)
+
         let strictCleanup = await appState.autoApprovalSource(
             toolName: "run_command",
             arguments: ["command": .string("rm -rf node_modules")],

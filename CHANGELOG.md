@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.274.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.274.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.274.0-rc6 - 2026-08-19
+
+### Changed
+
+- **本地 `git commit` 不再要求用户确认。** 单条 commit 作为可通过 Git 历史或 reflog 回退的本地操作，在所有审批模式下直接运行；命令仍受 workspace-write 沙箱约束，Hook 无法写出工作区或访问网络。`git push`、强制历史改写及其他 Git 写操作继续沿用原审批边界。
+
+### Tests
+
+- 新增 commit 静态分类、单命令边界及 commit 后串联 push 不得继承免批策略的回归覆盖。
 
 ## 1.274.0-rc5 - 2026-08-19
 
