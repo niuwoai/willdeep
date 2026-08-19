@@ -69479,6 +69479,78 @@
         }
       }
     },
+    "sidebar.workspace-header.collapse-all-tooltip" : {
+      "comment" : "Sidebar workspace header button that folds every project",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Collapse all projects"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contraer todos los proyectos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réduire tous les projets"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのプロジェクトを折りたたむ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部收起"
+          }
+        }
+      }
+    },
+    "sidebar.workspace-header.expand-all-tooltip" : {
+      "comment" : "Sidebar workspace header button that unfolds every project",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expand all projects"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expandir todos los proyectos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Développer tous les projets"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのプロジェクトを展開"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部展开"
+          }
+        }
+      }
+    },
     "sidebar.workspace-header.open-tooltip" : {
       "comment" : "tooltip for the + button on the Workspaces section header",
       "extractionState" : "manual",

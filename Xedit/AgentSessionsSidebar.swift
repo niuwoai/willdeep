@@ -329,7 +329,7 @@ struct AgentSessionsSidebar: View {
                         )
                     } else {
                         pinnedSessionsSection(visibleSessions: visibleSessions)
-                        workspacesHeader
+                        workspacesHeader(groups: workspaceGroups)
                         ForEach(workspaceGroups) { group in
                             workspaceGroup(group)
                                 .id(group.id)
@@ -525,13 +525,48 @@ struct AgentSessionsSidebar: View {
         }
     }
 
-    private var workspacesHeader: some View {
-        HStack {
+    private func workspacesHeader(groups: [SidebarWorkspaceGroup]) -> some View {
+        let workspaceIDs = groups.map(\.id)
+        let everythingCollapsed = AgentSidebarCollapseAll.isEverythingCollapsed(
+            workspaceIDs: workspaceIDs,
+            collapsed: collapsedWorkspaces
+        )
+        return HStack {
             Text(L10n.Sidebar.workspaceHeader)
                 .font(AgentDesign.sidebarSectionFont)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             Spacer(minLength: 0)
+            // Fold every project down to its title line, so a long list of
+            // folders can be taken in at a glance. Flips to Expand All once
+            // everything is folded — otherwise the button would sit there
+            // doing nothing on the second click.
+            if AgentSidebarCollapseAll.isAvailable(workspaceCount: groups.count) {
+                Button {
+                    setCollapsedWorkspaces(
+                        AgentSidebarCollapseAll.toggled(
+                            workspaceIDs: workspaceIDs,
+                            collapsed: collapsedWorkspaces
+                        )
+                    )
+                } label: {
+                    Image(
+                        systemName: everythingCollapsed
+                            ? "rectangle.expand.vertical"
+                            : "rectangle.compress.vertical"
+                    )
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(
+                    everythingCollapsed
+                        ? L10n.Sidebar.workspaceHeaderExpandAllTooltip
+                        : L10n.Sidebar.workspaceHeaderCollapseAllTooltip
+                )
+            }
             // 标题行右侧"打开新工作区"入口。和 Composer 下方
             // WorkspacePickerPill 的 "Choose folder…" 走同一条路：
             // 选完目录后**立刻**新建一个 Agent 会话并锚到这个
@@ -1211,6 +1246,15 @@ struct AgentSessionsSidebar: View {
         AgentSidebarWorkspaceStateStore.save(updated, kind: .collapsedWorkspaces)
     }
 
+    /// Bulk counterpart to `setWorkspaceCollapsed`, for the header's
+    /// collapse-all control. Persisted the same way, so the folded state
+    /// survives a relaunch exactly like a per-folder click does.
+    private func setCollapsedWorkspaces(_ updated: Set<String>) {
+        guard updated != collapsedWorkspaces else { return }
+        collapsedWorkspaces = updated
+        AgentSidebarWorkspaceStateStore.save(updated, kind: .collapsedWorkspaces)
+    }
+
     private func setArchivedGroupExpanded(_ workspace: String, expanded: Bool) {
         var updated = expandedArchivedGroups
         guard updateWorkspaceState(&updated, workspace: workspace, enabled: expanded) else { return }
@@ -1345,6 +1389,45 @@ struct AgentSessionsSidebar: View {
         return (runtimeID, path)
     }
 
+}
+
+/// The workspace header's collapse-all control.
+///
+/// Pure so the "what does the button do next" question is answerable without
+/// a running sidebar — the answer depends on state that is otherwise only
+/// reachable through `@State`.
+nonisolated enum AgentSidebarCollapseAll {
+    /// Whether every currently listed workspace is already collapsed, in
+    /// which case the control flips to Expand All. A button that stays
+    /// "collapse all" after everything is collapsed is a dead control.
+    static func isEverythingCollapsed(
+        workspaceIDs: [String],
+        collapsed: Set<String>
+    ) -> Bool {
+        !workspaceIDs.isEmpty && workspaceIDs.allSatisfy { collapsed.contains($0) }
+    }
+
+    /// The collapsed set after the control is used.
+    ///
+    /// Only the listed workspaces are touched. The stored set can still hold
+    /// keys for folders that are not on screen right now (a project whose
+    /// sessions are all archived, a workspace on another machine); expanding
+    /// "all" must not silently un-collapse those — the user never saw them.
+    static func toggled(
+        workspaceIDs: [String],
+        collapsed: Set<String>
+    ) -> Set<String> {
+        isEverythingCollapsed(workspaceIDs: workspaceIDs, collapsed: collapsed)
+            ? collapsed.subtracting(workspaceIDs)
+            : collapsed.union(workspaceIDs)
+    }
+
+    /// The control only earns its place once there is more than one project
+    /// to fold away; with a single group it would collapse the very thing the
+    /// user is looking at and save nothing.
+    static func isAvailable(workspaceCount: Int) -> Bool {
+        workspaceCount > 1
+    }
 }
 
 enum AgentSidebarWorkspaceStateStore {
