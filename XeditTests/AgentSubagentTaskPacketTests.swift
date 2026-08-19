@@ -30,6 +30,53 @@ struct AgentSubagentTaskPacketTests {
         #expect(packet.maxAttempts == 3)
     }
 
+    @Test("read context never becomes write authority")
+    func readFilesDoNotGrantWriteAccess() throws {
+        let value = AgentJSONValue.decode(from: """
+        {"goal":"make the failing assertion pass",
+         "read_files":["Sources/Schema.swift","Sources/Wire.swift"],
+         "write_files":["Tests/AuthTests.swift"]}
+        """)
+
+        let packet = try #require(AgentSubagentTaskPacket.parse(value))
+
+        // The whole point of the split: two files of context, one file of
+        // authority. Before this, handing a worker the schema to read meant
+        // handing it the schema to rewrite.
+        #expect(packet.requestedWriteFiles == ["Tests/AuthTests.swift"])
+        #expect(packet.inlineFiles == [
+            "Sources/Schema.swift", "Sources/Wire.swift", "Tests/AuthTests.swift",
+        ])
+    }
+
+    @Test("a legacy packet keeps its original combined semantics")
+    func legacyRelevantFilesStillGrantWrites() throws {
+        let value = AgentJSONValue.decode(from: """
+        {"goal":"fix the OAuth test","relevant_files":["a.swift","b.swift"]}
+        """)
+
+        let packet = try #require(AgentSubagentTaskPacket.parse(value))
+
+        // Old callers declared one set meaning both. Silently narrowing that
+        // to "read-only" would break every packet written before the split.
+        #expect(packet.requestedWriteFiles == ["a.swift", "b.swift"])
+        #expect(packet.inlineFiles == ["a.swift", "b.swift"])
+    }
+
+    @Test("a file declared in both lists is inlined once")
+    func inlineFilesAreDeduplicated() throws {
+        let value = AgentJSONValue.decode(from: """
+        {"goal":"tighten the parser",
+         "read_files":["Parser.swift","Lexer.swift"],
+         "write_files":["Parser.swift"]}
+        """)
+
+        let packet = try #require(AgentSubagentTaskPacket.parse(value))
+
+        #expect(packet.inlineFiles == ["Parser.swift", "Lexer.swift"])
+        #expect(packet.requestedWriteFiles == ["Parser.swift"])
+    }
+
     @Test("a named skill parses, and a missing one is called out, not improvised")
     func skillFieldParsesAndMissingSkillIsNamed() throws {
         let value = AgentJSONValue.decode(from: """

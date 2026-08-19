@@ -3,6 +3,95 @@
 > 当前文件保留最新版本（1.272.0-rc12 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.273.0-rc5 - 2026-08-19
+
+### Added
+
+- **请求级只读预检接上执行侧。** 高置信度的定位 / 阅读 / 日志 / 回归追溯类请求，可以在根模型读到之前先跑一个只读 Worker，报告作为证据折进同一段 `<runtime-preflight>`，让贵模型把窗口花在推理结论上而不是重新推导。**默认关闭**，由共享 `config.toml` 的 `agent.auto_dispatch_read_only` 开启（一次开两端）。
+- 只读是构造性的而非约定：不传写权限、不传 verifier、不取编辑锁、不接 patch sink，且只有分类判定 `autoDispatchEligible` 的请求才会走到这条路——该标志对任何含改动意图的请求都为 false，并有测试锁住。远端工作区直接跳过。派工前先在 WillDeep 自己的账本里落一条可见记录：让用户说不清缘由地等，比等本身更糟。
+
+### Fixed
+
+- **模型选择器的编码推荐首项与新会话默认模型脱节。** 推荐列表是硬编码的，首项写死 1M 的 `deepseek-v4-flash`；默认模型下调到 `glm-5` 后两者对不上，等于在选择器里把刚关上的门又推开一条缝。现在 `glm-5` 排首位（既有测试本来就断言「首项 == 默认文本模型」，是实现没跟上），`deepseek-v4-flash` 保留推荐但不再第一——它存在的理由是 1M 窗口，那是例外而非日常。
+
+### Changed
+
+- 更新四处断言旧默认模型的既有测试（新会话默认、preset 默认、推荐列表、`deep` 的模型绑定）。这些断言描述的是本轮被有意改掉的产品决策，两处连测试函数名一起改正。
+
+### Tests
+
+- 新增 `AgentReadOnlyPreflightTests`：默认关闭且由共享配置开启、Worker 简报自足且禁止猜测、报告折进既有 steering 而非替换、以及「只有只读分类才是预检候选」这条不变量。
+- **全量单测本地跑通**：2587 个用例执行、0 失败（此前一轮 10 个失败全部来自上述过时断言）。
+
+## 1.273.0-rc4 - 2026-08-19
+
+### Added
+
+- **统计面板新增 Deep Share 指标「动用 1M 档」。** 这是本轮唯一一个「结论依赖它、它却缺席」的数字：请求级自动预检该不该默认打开，判据就是稀缺档是否真的保持稀缺（目标 ≤ 5%）。此前 `deepRunCount` 只作为 Skill Coverage 的分母之一存在，没有独立口径，这个决定等于悬在半空。
+- 口径与 willdeep-rs `agent-metrics` 的 `deep_share` 对齐（deep 子运行 / 全部子运行），两端数字可直接横向比较。
+
+### Changed
+
+- Deep Share 的分母是**子运行数**，刻意与 Skill Coverage 不同：后者含父轮次，问的是「有多少活流向了更便宜的地方」；Deep Share 问的是「已经派出去的活里，有多少非用贵档不可」——父轮次根本不是 1M 档的候选，算进去只会把数字稀释成永远好看。
+- 没有任何子运行时显示 `—` 而不是 `0%`：什么都没派出去的会话，0% 会被读成「稀缺档控制得很好」。
+
+### Tests
+
+- 新增 `AgentSkillWorkerKPITests`（独立 suite，不挂在聚合的 `WillDeepTests` 下——函数级 `-only-testing` 对那个聚合 suite 有匹配 0 个用例却报 TEST SUCCEEDED 的前科，对一个以「可信」为全部价值的指标来说这是最糟的失败方式）：分母不含父轮次、与 rs 同口径、无子运行时为 nil、全 deep 时为 100%。
+
+## 1.273.0-rc3 - 2026-08-19
+
+### Added
+
+- **读取 `~/.willdeep/config.toml` 的 `[agent]` 段，与 willdeep-rs 共用一份路由配置。** 该文件的 `[notifications]` 段自 0.29.0-rc1 起就是两端共用的；willdeep-rs 0.37.0-rc1 新增的 `small_model_routing`、`auto_dispatch_read_only`、`max_deep_calls_per_harness` 现在 WillDeep 也认。把 deep 预算调到 1 的人是在为这台机器做决定，不是为他当时正好打开的那个客户端。
+- `agent.small_model_routing = false` 可一次关掉两端的路由引导；`agent.max_deep_calls_per_harness` 直接决定 deep 准入预算（超出 0–16 的手写值会被夹取，不会照单全收）。缺省即未配置，各客户端回落到自己的默认值。
+
+### Changed
+
+- deep 预算的优先级为：`config.toml` 显式值 > WillDeep 自身设置 > 默认 3 次。config.toml 是用户手工打开编辑过的文件，也是两端唯一都能看见的那份配置。
+- `[agent]` 段只读不写。该段及其注释归 CLI 所有，App 只读它不会损坏任何东西；而回写一个我们没有完整建模的段，有丢掉 CLI 认识、我们不认识的键的风险。`[notifications]` 继续可写，因为那部分 UI 归 App 所有。
+
+### Fixed
+
+- 修正 1.273.0-rc1 的 CHANGELOG 描述：当时写的「可在设置中配 0–16」不属实——deep 预算的读写接口存在，但没有任何设置界面调用它，用户实际只能用默认值。现在的配置途径是 `config.toml`，条目已按实际改正。
+
+### Tests
+
+- 新增共享配置解析回归：在含 `[providers.*]`、`[subagents.*]`、`[notifications]` 的真实配置里正确取出 `[agent]` 段、行内注释剥离、`[agent.experimental]` 子表不算 `[agent]`、其他段的同名键不串味、文件缺失即空配置；以及预算优先级、越界夹取与 `small_model_routing = false` 关闭引导。
+
+## 1.273.0-rc2 - 2026-08-19
+
+### Changed
+
+- **托管窄工种的模型改为可配置，不再锁死。** 登录 some.im 后，`scout` / `reader` / `editor` / `test_fixer` / `build_fixer` / `log_inspector` / `git_detective` 七个工种此前被**无条件**钉在 `someim-32b-<工种>` 上：`resolvedSubagentConfiguration` 第一件事就是查托管配置、命中即返回，用户在工种设置里配的模型根本走不到（那七个写死的 `glm-5` 绑定在登录状态下是死代码），设置界面还把该行禁用掉。现在托管模型是**推荐值而非锁**——留空即采纳推荐，填入其他模型即覆盖，菜单首项「推荐：someim-32b-xxx」一点即恢复。
+- 解锁是安全的，因为 `jobPromptIsHosted` 本来就从**实际调用的模型**推导：指向别的模型时，客户端自动改发自己那份职能提示词镜像，服务端提示词与模型这两半拆不开。此前禁用该行的理由（「换一半会破坏另一半」）在代码里早有对策。
+- 七个托管工种的内置模型绑定由 `"glm-5"` 改为**留空**。非空值与「用户显式选择」无法区分，"推荐" 就无法成为一个可表达的状态。`AgentProfileStore` 的 override 是差异化写入（只存与内置默认不同的字段），未改过设置的用户没有存量记录，因此改默认值不会影响任何人已保存的选择。
+- 工种列表的摘要行在模型被覆盖时不再继续显示托管模型名。
+
+### Tests
+
+- 新增托管工种默认留空、`usesRecommendedHostedModel` 在登录/登出与显式覆盖下的取值、以及「纯空白不算一次选择」的回归。
+
+## 1.273.0-rc1 - 2026-08-19
+
+### Added
+
+- **`deep` 档改为申请制。** `spawn_agent(profile="deep")` 现在必须携带 `escalation` 票据（`reason` / `attempted_profiles` / `context_evidence` / `why_not_decompose`）。WillDeep 用**本会话实际观测到的**记录交叉验证：票据里点名的低档工种必须真的跑过，或者本会话已自行完成至少 2 次成功的只读仓库检查（grep / read_file / git log 等）。仅凭"我试过了"的自述不再能打开 1M 窗口。每个会话的 deep 调用有预算（默认 3 次）。
+- **请求级确定性路由。** 用户消息在模型读到之前先经关键词分类（中英双语），命中定位 / 阅读 / 日志 / 回归追溯 / 测试失败 / 构建失败等特征时，向当轮系统提示追加一段 `<runtime-route>`，点名适配的工种。刻意只做引导不做强制派工——分类是关键词匹配，会误判，模型仍可否决。`/no-subagent` 的回合完全不注入。
+- Task Packet 新增 `read_files` 与 `write_files`：前者只提供上下文，**不因为可读而变得可写**。旧的 `relevant_files` 保留原有读写合一语义，老 packet 行为逐字节不变。
+
+### Changed
+
+- **新会话默认模型从 `deepseek-v4-flash`（1M）下调到 `glm-5`（256K）。** 此前主会话开箱即坐在最稀缺的档位上，"deep 只在无法收敛时升级"这条纪律因此形同虚设——没有可升的地方。已有会话保留用户已选模型，不做迁移。
+- `deep` 工种从"跟随 Provider 主模型"改为显式绑定 `deepseek-v4-flash` 与 1M 上下文窗口，让 L 档在工种设置里是一个看得见、有名字的东西。
+- **未知 profile 不再静默回落 `deep`。** `spawn_agent(profile="scoutt")` 这类拼写错误此前会免费拿到 1M 档并只附一条无人处理的提示；现在直接返回错误并列出可用工种，重试一轮即可落到本来想要的工种。
+- some.im 的 preset 视觉模型不再跟随文本默认模型，改为显式取 `qwen3-vl-plus`——否则文本档位下调会把图像模型一并带歪。
+
+### Tests
+
+- 新增 `AgentDeepAdmissionTests`：票据解析（JSON 字符串 / 对象 / 单值降级）、四类拒绝、观测证据交叉验证、预算耗尽与 0 预算禁用、以及"每条拒绝都必须可据以行动"的下限。
+- 新增 `AgentRequestRouterTests`：中英双语分类、"定位"与"定位并修复"必须分流、长粘贴只取头部分类、`/no-subagent` 抑制注入。
+- 新增 Task Packet 读写分离回归：只读上下文不得授予写权限、legacy packet 语义不变、重复声明只内联一次。
 ## 1.272.0-rc12 - 2026-08-19
 
 ### Added

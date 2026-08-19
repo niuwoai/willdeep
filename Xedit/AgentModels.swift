@@ -1946,6 +1946,14 @@ struct AgentProviderPreset: Identifiable, Equatable {
         if id == "dashscope" {
             return "qwen3-vl-plus"
         }
+        // some.im routes vision through its own model, which is not the text
+        // default and never was. Falling through to `defaultFlashModel` here
+        // only looked harmless while that happened to be a multimodal model;
+        // once the text default moved down to the M tier it would have handed
+        // the image picker a text-only model.
+        if id == Self.someIMID {
+            return SomeIMIntegrationSettings.defaultVisionModel
+        }
         if id == Self.customID {
             return ""
         }
@@ -2127,7 +2135,9 @@ struct AgentProviderPreset: Identifiable, Equatable {
             id: "some-im",
             displayName: "some.im",
             baseURL: "https://some.im/v1",
-            defaultModel: "deepseek-v4-flash",
+            // M tier by default; the 1M `deepseek-v4-flash` is now what `deep`
+            // escalates to, not where every session starts.
+            defaultModel: "glm-5",
             defaultProModel: "deepseek-v4-pro",
             supportsModelFetch: true,
             modelHints: []

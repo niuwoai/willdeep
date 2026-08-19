@@ -2377,6 +2377,114 @@
         }
       }
     },
+    "agent-profiles.hosted-model-overridden" : {
+      "comment" : "Caption shown when a managed trade points at a model other than its hosted one",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Overriding the recommended hosted model. This trade keeps its job prompt — WillDeep sends its own copy whenever the hosted model is not the one being called."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anulando el modelo alojado recomendado. Este oficio conserva su prompt de función: WillDeep envía su propia copia siempre que el modelo llamado no sea el alojado."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remplacement du modèle hébergé recommandé. Ce métier conserve son invite : WillDeep envoie sa propre copie dès que le modèle appelé n’est pas celui hébergé."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推奨のホスト型モデルを上書きしています。この職種の職能プロンプトは失われません。ホスト型モデル以外を呼ぶ場合は、WillDeep が同じ内容を自前で送ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已覆盖推荐的托管模型。该工种的职能提示词不会丢失——调用的不是托管模型时，WillDeep 会改发本地的同一份提示词。"
+          }
+        }
+      }
+    },
+    "agent-profiles.hosted-model-recommended" : {
+      "comment" : "Menu item that clears the override and returns to the hosted model",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recommended: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recomendado: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recommandé : %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推奨: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推荐：%@"
+          }
+        }
+      }
+    },
+    "agent-profiles.hosted-model-using-recommended" : {
+      "comment" : "Caption shown when a managed trade is on its recommended hosted model",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leave empty to run on %@, whose job prompt is hosted by some.im. Enter another model to override it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déjalo vacío para usar %@, cuyo prompt de función está alojado en some.im. Introduce otro modelo para anularlo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laissez vide pour utiliser %@, dont l’invite de métier est hébergée par some.im. Saisissez un autre modèle pour le remplacer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空欄のままにすると %@ を使用します（職能プロンプトは some.im がホストします）。別のモデルを入力すると上書きできます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "留空即使用 %@，其职能提示词由 some.im 托管。填入其他模型即可覆盖。"
+          }
+        }
+      }
+    },
     "secret-manager.tab-title" : {
       "comment" : "Settings tab title for the secret manager",
       "extractionState" : "manual",
@@ -70319,6 +70427,7 @@
     "stats-dashboard.workers.skill-coverage" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Handled by workers" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Gestionado por workers" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Traité par les Workers" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "Worker が担当した割合" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Worker 承担占比" } } } },
     "stats-dashboard.workers.verified-success" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Verified success" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Éxito verificado" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Succès vérifié" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "検証済み成功率" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "验证通过率" } } } },
     "stats-dashboard.workers.escalation-rate" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Escalated to main" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Escalado al principal" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Escaladé au principal" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "メインへの引き継ぎ率" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "升级到主模型" } } } },
+    "stats-dashboard.workers.deep-share" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Used the 1M tier" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Usó el nivel 1M" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "A utilisé le palier 1M" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "1M 枠の使用率" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "动用 1M 档" } } } },
     "stats-dashboard.workers.metric-no-data" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "—" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "—" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "—" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "—" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "—" } } } },
     "stats-dashboard.plugins.empty" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Your most-used tools will appear here after a few tasks." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Tus herramientas más usadas aparecerán aquí después de algunas tareas." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Vos outils les plus utilisés apparaîtront ici après quelques tâches." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "いくつかタスクをこなすと、よく使うツールがここに表示されます。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "完成几项任务后，这里会显示最常用的工具。" } } } },
     "stats-dashboard.plugins.run-count" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ runs" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "%@ ejecuciones" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "%@ exécutions" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%@ 回実行" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 次运行" } } } },

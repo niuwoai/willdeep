@@ -1298,9 +1298,14 @@ struct AgentStatsDashboard: View {
         )
     }
 
-    /// The three skill-workers.v1 Phase 0 KPIs. Each shows a dash until it
-    /// has a denominator: an honest "no data yet" beats a 0% that reads like
-    /// a verdict.
+    /// The skill-workers.v1 Phase 0 KPIs. Each shows a dash until it has a
+    /// denominator: an honest "no data yet" beats a 0% that reads like a
+    /// verdict.
+    ///
+    /// Deep Share is the one that decides policy rather than describing it:
+    /// whether request-level auto-dispatch should default on depends on
+    /// whether the scarce tier is actually staying rare. Without it that
+    /// decision has no evidence behind it.
     private var workerKPIBand: some View {
         let kpis = dashboardModel.skillWorkerKPIs
         return HStack(spacing: 0) {
@@ -1317,6 +1322,11 @@ struct AgentStatsDashboard: View {
             CodexDashboardMetric(
                 value: formatOptionalPercent(kpis.escalationRate),
                 title: L10n.StatsDashboard.workersEscalationRate
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatOptionalPercent(kpis.deepShare),
+                title: L10n.StatsDashboard.workersDeepShare
             )
         }
         .frame(height: AgentStatsDashboardLayout.metricStripHeight)

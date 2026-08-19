@@ -286,6 +286,16 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// dispatch for the same command would repeat a fight it already lost —
     /// at that point the failure is the parent's to reason about.
     var currentTurnAutoDispatchedCommands: Set<String> = []
+    /// The runtime's own read of what this turn's request is, rendered as a
+    /// system-prompt paragraph. Lives here rather than being appended to the
+    /// user's message because the user's message is *shown* — steering markup
+    /// in the transcript would be the model's context leaking onto screen.
+    var currentTurnRouteSteering: String?
+    /// What this session was observed doing, checked against any `deep`
+    /// escalation ticket. Per-session rather than per-turn on purpose: the
+    /// worker you ran three turns ago is still evidence that you tried, and
+    /// the 1M budget is spent against the session, not the turn.
+    var deepAdmissionObservation = AgentDeepAdmissionObservation()
     /// Goal may continue across several provider turns, but repeated
     /// no-change self-checks must pause instead of spinning forever.
     var consecutiveGoalRoundsWithoutChecklistProgress: Int = 0

@@ -150,6 +150,10 @@ extension AppState {
                     runtime.toolCalls[recordIndex].arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey] = .bool(false)
                 }
                 runtime.recordComputerUseActivity(toolName: entry.toolName, images: result.images)
+                // First-hand repository inspection. Only successes count:
+                // a grep that found nothing taught this session nothing, and
+                // must not accumulate into evidence that the work is too big.
+                runtime.deepAdmissionObservation.recordToolSuccess(entry.toolName)
                 AgentSandboxAuditLog.append(
                     toolName: entry.toolName,
                     arguments: entry.arguments,

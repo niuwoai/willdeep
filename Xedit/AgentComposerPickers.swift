@@ -2677,6 +2677,20 @@ struct ModelPickerPill: View {
     }
 
     static let codingRecommendations: [CodingRecommendation] = [
+        // First place tracks `SomeIMIntegrationSettings.defaultTextModel`, and
+        // a test enforces that. The two had come apart when the default moved
+        // down to the M tier: the picker still recommended the 1M model first,
+        // which reopened the door the routing work had just closed.
+        CodingRecommendation(
+            providerID: AgentProviderPreset.someIMID,
+            title: "GLM 5",
+            model: "glm-5",
+            note: L10n.AgentModelPicker.dailyCodingNote,
+            tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.fast],
+            tier: .flash
+        ),
+        // Still recommended, no longer first: its reason to exist is the 1M
+        // window, which is the exception rather than the daily driver.
         CodingRecommendation(
             providerID: AgentProviderPreset.someIMID,
             title: "DeepSeek V4 Flash",

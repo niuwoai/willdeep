@@ -841,7 +841,10 @@ extension AppState {
         } else if let target = arguments["target_file"]?.stringValue() {
             targets = [target]
         } else if profile.id != AgentSubagentProfileCatalog.editorID {
-            targets = AgentSubagentTaskPacket.parse(arguments["task"])?.relevantFiles ?? []
+            // Must match the write set `executeSpawnAgentToolCall` will
+            // actually lock, or the approval card would describe a different
+            // set of files than the one the worker gets.
+            targets = AgentSubagentTaskPacket.parse(arguments["task"])?.requestedWriteFiles ?? []
         }
         return AgentSubagentWriteAccess(targetRelativePaths: targets) != nil
     }
