@@ -1919,8 +1919,18 @@ struct AgentShareImageButtonLabel: View {
     }
 }
 
+/// Nothing in the share preview joins the keyboard focus chain on open.
+///
+/// The sheet exists to show a picture. SwiftUI hands initial focus to the
+/// first focusable control, which paints a blue focus ring over a button
+/// nobody asked to be on — and taking it off one button only moves the ring
+/// to the next one, which is why these are declared together rather than
+/// fixed one at a time.
 enum AgentSharePreviewFocusPolicy {
     static let isCloseButtonFocusable = false
+    /// Save and Share. Both, deliberately: with Close already out of the
+    /// chain, excusing only Save would hand the ring to Share.
+    static let isActionButtonFocusable = false
 }
 
 private struct AgentDailyShareSheet: View {
@@ -1958,11 +1968,13 @@ private struct AgentDailyShareSheet: View {
                     Label(L10n.StatsDashboard.saveShareImage, systemImage: "square.and.arrow.down")
                 }
                 .buttonStyle(.bordered)
+                .focusable(AgentSharePreviewFocusPolicy.isActionButtonFocusable)
                 Spacer()
                 Button(action: onShare) {
                     Label(L10n.StatsDashboard.shareImage, systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.borderedProminent)
+                .focusable(AgentSharePreviewFocusPolicy.isActionButtonFocusable)
             }
         }
         .padding(20)

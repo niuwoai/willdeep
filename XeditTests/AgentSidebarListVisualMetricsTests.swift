@@ -172,9 +172,12 @@ struct AgentSidebarListVisualMetricsTests {
         try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
     }
 
-    @Test("share preview close button stays out of the keyboard focus chain")
-    func sharePreviewCloseButtonIsNotFocusable() {
+    @Test("no share preview control joins the keyboard focus chain on open")
+    func sharePreviewControlsAreNotFocusable() {
         #expect(!AgentSharePreviewFocusPolicy.isCloseButtonFocusable)
+        // Save and Share together: excusing only one hands the focus ring to
+        // the other, which moves the blue outline rather than removing it.
+        #expect(!AgentSharePreviewFocusPolicy.isActionButtonFocusable)
     }
 
     @Test("longest task duration uses compact day, hour, and minute units")
