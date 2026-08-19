@@ -3,6 +3,26 @@
 > 当前文件保留最新版本（1.272.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.273.0-rc3 - 2026-08-19
+
+### Added
+
+- **读取 `~/.willdeep/config.toml` 的 `[agent]` 段，与 willdeep-rs 共用一份路由配置。** 该文件的 `[notifications]` 段自 0.29.0-rc1 起就是两端共用的；willdeep-rs 0.37.0-rc1 新增的 `small_model_routing`、`auto_dispatch_read_only`、`max_deep_calls_per_harness` 现在 WillDeep 也认。把 deep 预算调到 1 的人是在为这台机器做决定，不是为他当时正好打开的那个客户端。
+- `agent.small_model_routing = false` 可一次关掉两端的路由引导；`agent.max_deep_calls_per_harness` 直接决定 deep 准入预算（超出 0–16 的手写值会被夹取，不会照单全收）。缺省即未配置，各客户端回落到自己的默认值。
+
+### Changed
+
+- deep 预算的优先级为：`config.toml` 显式值 > WillDeep 自身设置 > 默认 3 次。config.toml 是用户手工打开编辑过的文件，也是两端唯一都能看见的那份配置。
+- `[agent]` 段只读不写。该段及其注释归 CLI 所有，App 只读它不会损坏任何东西；而回写一个我们没有完整建模的段，有丢掉 CLI 认识、我们不认识的键的风险。`[notifications]` 继续可写，因为那部分 UI 归 App 所有。
+
+### Fixed
+
+- 修正 1.273.0-rc1 的 CHANGELOG 描述：当时写的「可在设置中配 0–16」不属实——deep 预算的读写接口存在，但没有任何设置界面调用它，用户实际只能用默认值。现在的配置途径是 `config.toml`，条目已按实际改正。
+
+### Tests
+
+- 新增共享配置解析回归：在含 `[providers.*]`、`[subagents.*]`、`[notifications]` 的真实配置里正确取出 `[agent]` 段、行内注释剥离、`[agent.experimental]` 子表不算 `[agent]`、其他段的同名键不串味、文件缺失即空配置；以及预算优先级、越界夹取与 `small_model_routing = false` 关闭引导。
+
 ## 1.273.0-rc2 - 2026-08-19
 
 ### Changed
@@ -20,7 +40,7 @@
 
 ### Added
 
-- **`deep` 档改为申请制。** `spawn_agent(profile="deep")` 现在必须携带 `escalation` 票据（`reason` / `attempted_profiles` / `context_evidence` / `why_not_decompose`）。WillDeep 用**本会话实际观测到的**记录交叉验证：票据里点名的低档工种必须真的跑过，或者本会话已自行完成至少 2 次成功的只读仓库检查（grep / read_file / git log 等）。仅凭"我试过了"的自述不再能打开 1M 窗口。每个会话的 deep 调用有预算（默认 3 次，可在设置中配 0–16，0 表示彻底禁用）。
+- **`deep` 档改为申请制。** `spawn_agent(profile="deep")` 现在必须携带 `escalation` 票据（`reason` / `attempted_profiles` / `context_evidence` / `why_not_decompose`）。WillDeep 用**本会话实际观测到的**记录交叉验证：票据里点名的低档工种必须真的跑过，或者本会话已自行完成至少 2 次成功的只读仓库检查（grep / read_file / git log 等）。仅凭"我试过了"的自述不再能打开 1M 窗口。每个会话的 deep 调用有预算（默认 3 次）。
 - **请求级确定性路由。** 用户消息在模型读到之前先经关键词分类（中英双语），命中定位 / 阅读 / 日志 / 回归追溯 / 测试失败 / 构建失败等特征时，向当轮系统提示追加一段 `<runtime-route>`，点名适配的工种。刻意只做引导不做强制派工——分类是关键词匹配，会误判，模型仍可否决。`/no-subagent` 的回合完全不注入。
 - Task Packet 新增 `read_files` 与 `write_files`：前者只提供上下文，**不因为可读而变得可写**。旧的 `relevant_files` 保留原有读写合一语义，老 packet 行为逐字节不变。
 

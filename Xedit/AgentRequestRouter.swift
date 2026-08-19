@@ -170,8 +170,13 @@ nonisolated enum AgentRequestRouter {
     /// been removed from its table just wastes a round.
     static func steering(
         for request: String,
-        delegationPolicy: AgentDelegationPolicy
+        delegationPolicy: AgentDelegationPolicy,
+        sharedConfig: AgentSharedRuntimeConfig = .load()
     ) -> String? {
+        // `agent.small_model_routing = false` in the shared config.toml turns
+        // this off for both clients at once. Absent means on, matching the
+        // willdeep-rs default.
+        guard sharedConfig.smallModelRouting != false else { return nil }
         guard delegationPolicy != .forbidden else { return nil }
         return classify(request).steering
     }

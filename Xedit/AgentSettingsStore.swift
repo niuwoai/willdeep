@@ -295,10 +295,19 @@ enum AgentSettingsStore {
 
     /// How many `deep` (1M tier) spawns one session may be granted.
     ///
+    /// `~/.willdeep/config.toml` wins when it names a value: that file is
+    /// shared with willdeep-rs, and someone who set `max_deep_calls_per_harness`
+    /// there meant it for the machine, not for whichever client they had open.
+    ///
     /// Unlike the concurrency limit, **0 is a meaningful stored value** here —
     /// it turns the scarce tier off entirely — so absence is detected via
     /// `object(forKey:)` rather than by treating 0 as unset.
-    static func loadDeepAdmissionBudget() -> Int {
+    static func loadDeepAdmissionBudget(
+        sharedConfig: AgentSharedRuntimeConfig = .load()
+    ) -> Int {
+        if let shared = sharedConfig.maxDeepCallsPerHarness {
+            return AgentDeepAdmission.clampBudget(shared)
+        }
         guard defaults.object(forKey: deepAdmissionBudgetKey) != nil else {
             return AgentDeepAdmission.defaultBudgetPerSession
         }

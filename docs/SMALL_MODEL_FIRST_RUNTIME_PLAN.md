@@ -165,9 +165,38 @@ rs 侧把「优先用小模型」从系统提示词里的劝告，搬进了 Runt
 这个数字是判断第 4 步的自动预检该不该默认打开的**唯一依据**——
 在只有引导注入的版本上跑一段时间，Deep Share 和 Skill Coverage 说了算。
 
+**状态：未做。** 截至 1.273.0-rc3，`deepRunCount` 仍只作为 `skillCoverage` 的分母之一存在，
+没有独立的 Deep Share 展示口径。这意味着「自动预检该不该开」目前**没有数据可依**——
+这是第 4 步收尾前必须补上的一环，也是本规划里唯一一个「指标缺席但结论依赖它」的地方。
+
 ---
 
-## 6. 风险与明确不做
+## 6. 与 willdeep-rs 的配置共用（1.273.0-rc3）
+
+`~/.willdeep/config.toml` 不是新通道：`[notifications]` 段自 rs 0.29.0-rc1 起就是两端共用的，
+Xedit 侧的读写在 `AgentAttentionPreferencesStore`（行级 TOML，段级替换，保留其他段与注释——
+与 rs 0.38.0-rc1「只修改受管键」是同一思路）。路径解析含 `WILLDEEP_HOME` 环境变量覆盖，
+与 rs 一致。
+
+rs 0.37.0-rc1 新增的三个路由开关落在 `[agent]` 段，因此 Xedit 也读它：
+
+| key | 含义 | Xedit 侧行为 |
+|---|---|---|
+| `small_model_routing` | 是否做请求级路由 | `false` 即不注入引导；缺省=开（对齐 rs 默认） |
+| `auto_dispatch_read_only` | 高置信只读活是否先跑 worker | **仅解析不生效**——执行半边尚未接线，先认下键名与语义，避免两端漂移 |
+| `max_deep_calls_per_harness` | L 档准入预算 | 直接作为 deep 预算；rs 的单位是 harness，Xedit 用会话，是它最接近的等价单位 |
+
+优先级：`config.toml` 显式值 > Xedit 自身设置 > 内置默认。手工编辑过的文件是更审慎的配置，
+也是两端唯一都看得见的那份。越界值夹取到 0–16，不照单全收。
+
+**`[agent]` 段只读不写。** 该段与其注释归 CLI 所有；App 读它零风险，而回写一个没有完整建模的
+段，有丢掉「CLI 认识、我们不认识」的键的风险。`[notifications]` 继续可写，因为那部分 UI 归 App。
+
+**尚未共用的**：`[subagents.<trade>]` 的 provider/model/context_window（Xedit 的工种绑定存在
+`AgentProfileStore` 的 UserDefaults 里，与 TOML 是两套模型，合并需要先定义冲突语义）、
+`[providers.*]`（Xedit 有自己的 Provider 库与钥匙串凭据，不适合从明文 TOML 取）。
+
+## 7. 风险与明确不做
 
 **风险**
 
@@ -186,7 +215,7 @@ rs 侧把「优先用小模型」从系统提示词里的劝告，搬进了 Runt
 
 ---
 
-## 7. 版本与 Git 流程
+## 8. 版本与 Git 流程
 
 - 功能新增，`1.272.0-rc11` → **`1.273.0-rc1`**，rc 重置。
 - 四步各走一个从 `develop` 拉出的分支，顺序固定：**跑单测 → 提交 → 合回 develop**。
