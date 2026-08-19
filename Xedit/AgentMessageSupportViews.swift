@@ -674,19 +674,14 @@ private struct QueuedMessageRow: View {
                 .foregroundStyle(AgentComposerChrome.iconMuted)
                 .frame(width: 16)
             HStack(alignment: .center, spacing: 6) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(alignment: .center, spacing: 5) {
-                        Image(systemName: "hourglass")
-                            .font(.system(size: 10))
-                            .foregroundStyle(AgentComposerChrome.iconMuted)
-                        Text(L10n.QueuedMessage.label)
-                            .font(AgentDesign.chatSupportingFont(
-                                baseFontSize: baseFontSize,
-                                weight: .semibold
-                            ))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                    }
+                // The hourglass alone says "queued"; spelling it out cost a
+                // second line of height for a word the icon already carries.
+                // The label survives as the icon's accessibility text.
+                HStack(alignment: .center, spacing: 5) {
+                    Image(systemName: "hourglass")
+                        .font(.system(size: 10))
+                        .foregroundStyle(AgentComposerChrome.iconMuted)
+                        .accessibilityLabel(L10n.QueuedMessage.label)
                     Text(previewText)
                         .font(AgentDesign.chatSupportingFont(baseFontSize: baseFontSize))
                         .foregroundStyle(.secondary)
@@ -743,7 +738,9 @@ private struct QueuedMessageRow: View {
             }
         }
         .padding(.horizontal, 10)
-        .frame(height: 46)
+        // Single-line row: 28pt send-now button plus 4pt breathing room
+        // top and bottom, down from the 46pt the two-line layout needed.
+        .frame(height: 36)
     }
 
     private var previewText: String {

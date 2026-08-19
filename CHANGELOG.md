@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.272.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.272.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.272.0-rc5 - 2026-08-19
+
+### Changed
+
+- 排队消息卡片压成单行：去掉「已排队」字样，沙漏图标与消息正文并排显示，行高由 46pt 降到 36pt。图标保留「已排队」作为无障碍标签，读屏体验不变。
+
+### Fixed
+
+- 补齐 1.272.0-rc4 遗漏的版本号位点：帮助包、Computer Use Helper、README 徽章、移动网关与 Agent Harness 文档、Chrome 扩展的 manifest 与 README 仍停在 1.272.0-rc3，现已随本次发布统一到 1.272.0-rc5，`scripts/version_consistency.rb` 恢复全绿。
 
 ## 1.272.0-rc4 - 2026-08-18
 
