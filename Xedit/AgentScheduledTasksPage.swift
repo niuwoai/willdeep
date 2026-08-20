@@ -16,6 +16,45 @@ enum AgentPrimaryDestination: Equatable {
     case roundtable
 }
 
+/// How one run outcome reads in the recent-runs list. Pure mapping so the
+/// glyph/label pairing is testable and stays in one place instead of being
+/// re-derived inside a view body.
+struct AgentRoutineRunOutcomePresentation: Equatable {
+    let systemImage: String
+    let label: String?
+    /// Whether the row should carry full text weight. Reserved for outcomes
+    /// the user has to act on — the list is otherwise uniformly muted, so
+    /// emphasis is the signal that replaces a colour badge.
+    let emphasized: Bool
+
+    init(outcome: AgentRoutineRunOutcome) {
+        switch outcome {
+        case .running:
+            systemImage = "clock.arrow.circlepath"
+            label = L10n.Automation.runOutcomeRunning
+            emphasized = false
+        case .succeeded:
+            systemImage = "checkmark.circle"
+            label = L10n.Automation.runOutcomeSucceeded
+            emphasized = false
+        case .failed:
+            systemImage = "exclamationmark.triangle"
+            label = L10n.Automation.runOutcomeFailed
+            emphasized = true
+        case .interrupted:
+            systemImage = "minus.circle"
+            label = L10n.Automation.runOutcomeInterrupted
+            emphasized = false
+        case .unknown:
+            // Records from before outcomes were tracked. Keep the old neutral
+            // glyph and say nothing rather than invent a verdict.
+            systemImage = "clock.arrow.circlepath"
+            label = nil
+            emphasized = false
+        }
+    }
+}
+
 enum AgentScheduledTasksFilter {
     static func routines(_ routines: [AgentRoutine], matching query: String) -> [AgentRoutine] {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -385,22 +424,47 @@ struct AgentScheduledTasksPage: View {
 
     private func recentRunRow(_ run: AgentRoutineRunRecord) -> some View {
         let conversationExists = appState.agentSessions.contains { $0.id == run.sessionID }
+        let presentation = AgentRoutineRunOutcomePresentation(outcome: run.outcome)
         return Button {
             _ = appState.selectAgentSession(id: run.sessionID)
         } label: {
             HStack(spacing: 13) {
-                Image(systemName: "clock.arrow.circlepath")
+                Image(systemName: presentation.systemImage)
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    // Grayscale, like the error banner and the terminal tab
+                    // strip: a failed run is marked by carrying full text
+                    // weight against the muted rest of the list, not by red.
+                    .foregroundStyle(presentation.emphasized ? .primary : .secondary)
                     .frame(width: 24)
-                Text(run.routineName)
-                    .font(pageFont(weight: .medium))
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(run.routineName)
+                        .font(pageFont(weight: .medium))
+                        .lineLimit(1)
+                    // The reason is the whole point of recording the outcome:
+                    // without it the page can only say a run went wrong, and
+                    // the user still has to open the conversation to find out
+                    // what happened.
+                    if let failureMessage = run.failureMessage, !failureMessage.isEmpty {
+                        Text(failureMessage)
+                            .font(pageFont())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
                 Spacer(minLength: 12)
-                Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(pageFont())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
+                        .font(pageFont())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if let label = presentation.label {
+                        Text(label)
+                            .font(pageFont())
+                            .foregroundStyle(presentation.emphasized ? .primary : .secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
             .padding(.horizontal, 12)
             .frame(minHeight: 48)

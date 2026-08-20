@@ -343,7 +343,16 @@ nonisolated enum L10n {
             let template = String(localized: "automation.notification.body.started", defaultValue: "%@ started")
             return String(format: template, a1)
         }
+        static func notificationBodyFailed(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "automation.notification.body.failed", defaultValue: "%1$@ failed: %2$@")
+            return String(format: template, a1, a2)
+        }
+        static let notificationFailedTitle = String(localized: "automation.notification.failed-title", defaultValue: "Automation failed")
         static let notificationTitle = String(localized: "automation.notification.title", defaultValue: "Automation started")
+        static let runOutcomeFailed = String(localized: "automation.run-outcome.failed", defaultValue: "Failed")
+        static let runOutcomeInterrupted = String(localized: "automation.run-outcome.interrupted", defaultValue: "Interrupted")
+        static let runOutcomeRunning = String(localized: "automation.run-outcome.running", defaultValue: "Running")
+        static let runOutcomeSucceeded = String(localized: "automation.run-outcome.succeeded", defaultValue: "Succeeded")
         static func scheduleDailySummary(_ a1: String) -> String {
             let template = String(localized: "automation.schedule.daily.summary", defaultValue: "Daily %@")
             return String(format: template, a1)

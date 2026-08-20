@@ -100,6 +100,13 @@ extension AppState {
         // message is always on screen; the queue only delays the network
         // call, never the display. On a drain re-dispatch the message is
         // already present, so reuse it via `existingUserMessageID`.
+        //
+        // Retire the previous turn's failure here rather than after the gates
+        // below: the persist that follows this block is the one that reaches
+        // disk, so clearing later would leave a stale `lastTurnFailure` in the
+        // file (and a resurrected banner) whenever the new dispatch parks in
+        // the provider queue instead of starting immediately.
+        runtime.clearTurnError()
         let userMessage: AgentMessage
         if let existingUserMessageID,
            let existing = runtime.messages.first(where: { $0.id == existingUserMessageID }) {
@@ -134,6 +141,9 @@ extension AppState {
             runtime.goalTurnRecoveryCheckpoint = nil
             setSomeIMLoginRequiredError(for: runtime)
             persistAgentSession(runtime: runtime)
+            // A routine that fires while logged out never starts a turn, so
+            // nothing downstream would ever settle its run record.
+            recordRoutineRunCompletionIfNeeded(for: runtime)
             return
         }
 
@@ -160,10 +170,7 @@ extension AppState {
         }
 
         runtime.isAwaitingProviderSlot = false
-        runtime.errorMessage = nil
-        runtime.errorDetails = nil
-        runtime.errorSeverity = .error
-        runtime.errorRequiresSomeIMLogin = false
+        runtime.clearTurnError()
         runtime.latestComputerUseActivity = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
@@ -253,6 +260,12 @@ extension AppState {
                 }
                 runtime.goalTurnRecoveryCheckpoint = nil
                 self.persistAgentSession(runtime: runtime)
+                // This path dies before `runAgentLoop` is ever entered, so its
+                // defer — the usual place a routine run gets settled — never
+                // runs. Without this the record would sit at `running` until
+                // the next launch reconciled it into `interrupted`, hiding a
+                // real failure behind a vaguer one.
+                self.recordRoutineRunCompletionIfNeeded(for: runtime)
                 self.releaseProviderSlot(
                     for: runtime,
                     claimID: providerSlotClaim.id,
@@ -340,8 +353,7 @@ extension AppState {
         guard acquireProviderSlotIfPossible(providerID: providerID) else { return }
 
         runtime.isAwaitingProviderSlot = false
-        runtime.errorMessage = nil
-        runtime.errorDetails = nil
+        runtime.clearTurnError()
         runtime.latestComputerUseActivity = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
@@ -413,8 +425,7 @@ extension AppState {
         agentPendingImages.removeAll()
         agentPendingTextAttachments.removeAll()
         activeRuntime?.latestComputerUseActivity = nil
-        agentErrorMessage = nil
-        agentErrorDetails = nil
+        activeRuntime?.clearTurnError()
         agentToolDecisionWaiter?.resume(returning: .denied(reason: "Conversation cleared"))
         agentToolDecisionWaiter = nil
         activeRuntime?.pendingToolDecisions.removeAll()
@@ -506,6 +517,10 @@ extension AppState {
             // evaluation capture and cycle advancement.
             startAgentGoalPlanningAfterCaptureIfNeeded(didDefineGoal, for: runtime)
             persistAgentSession(runtime: runtime)
+            // Runs after the persist so the record reads the same settled
+            // state the session file just captured. No-op for anything a
+            // human started.
+            recordRoutineRunCompletionIfNeeded(for: runtime)
             if !shouldConsumeQueueAfterStop {
                 // A runway stop means the window is already at 90%, well past
                 // the ordinary 75% trigger — but `shouldAutoCompressNow` can
@@ -1076,7 +1091,7 @@ extension AppState {
                         throw CancellationError()
                     } catch {
                         streamBuffer.flushPending()
-                        guard shouldRetryTransientGoalNetworkError(
+                        guard shouldRetryTransientNetworkError(
                             error,
                             for: runtime,
                             assistantID: assistantID,
@@ -1090,9 +1105,11 @@ extension AppState {
                             throw error
                         }
                         retryCount += 1
-                        let retryDelay = Self.isTLSHandshakeError(error)
-                            ? Self.tlsHandshakeRetryDelayNanoseconds
-                            : Self.goalTransientNetworkRetryDelayNanoseconds
+                        let retryDelay = transientRetryDelayNanoseconds(
+                            for: error,
+                            runtime: runtime,
+                            attempt: retryCount
+                        )
                         try await Task.sleep(nanoseconds: retryDelay)
                     }
                 }

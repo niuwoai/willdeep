@@ -707,7 +707,10 @@ final class AppState: ObservableObject {
                         routineID: routine.id,
                         routineName: routine.name,
                         sessionID: sessionID,
-                        startedAt: startedAt
+                        startedAt: startedAt,
+                        // Back-filled from the routine's own `lastRunAt`; we
+                        // never observed how these ended.
+                        outcome: .unknown
                     )
                 },
                 limit: AgentRoutineRunHistory.maximumStoredRuns
@@ -716,7 +719,14 @@ final class AppState: ObservableObject {
                 AgentRoutineRunStore.save(agentRoutineRuns)
             }
         } else {
-            self.agentRoutineRuns = storedRuns
+            // Runs still marked `running` were owned by a process that is
+            // gone; this launch will never see their completion.
+            let reconciled = AgentRoutineRunHistory
+                .reconcilingRunsOrphanedByPreviousLaunch(storedRuns)
+            self.agentRoutineRuns = reconciled
+            if reconciled != storedRuns {
+                AgentRoutineRunStore.save(reconciled)
+            }
         }
         agentRoutineScheduler.start(initialRoutines: agentRoutines) { [weak self] routineID in
             self?.fireRoutine(id: routineID) != nil

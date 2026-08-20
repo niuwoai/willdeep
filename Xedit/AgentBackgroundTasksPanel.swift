@@ -18,6 +18,105 @@ nonisolated enum AgentBackgroundTaskScopeFilter: String, CaseIterable, Identifia
     var id: String { rawValue }
 }
 
+/// Neutral palette for every segmented switch in this panel. Mirrors the
+/// terminal tab strip's `TerminalTabChrome`: permanent chrome carries no
+/// accent colour, and selection is expressed through fill density, a border,
+/// and text weight instead.
+private enum BackgroundTaskSegmentChrome {
+    static let trackFillOpacity: Double = 0.05
+    static let selectedFillOpacity: Double = 0.10
+    static let selectedStrokeOpacity: Double = 0.22
+    static let selectedTextOpacity: Double = 0.88
+}
+
+/// Hand-drawn replacement for `.pickerStyle(.segmented)`.
+///
+/// The native control paints its selected segment with the system accent
+/// (blue under the `system` skin). Scope, log layout, and output stream are
+/// all permanent panel chrome — three accent-coloured strips stacked down one
+/// narrow panel, none of which is the thing the user came to look at. Shared
+/// rather than copied per call site so the three stay identical; a divergent
+/// fourth copy is how this kind of chrome drifts back apart.
+private struct BackgroundTaskSegmentedControl<Value: Hashable>: View {
+    struct Segment: Identifiable {
+        let value: Value
+        let title: String
+        var systemImage: String?
+
+        var id: Value { value }
+
+        init(value: Value, title: String, systemImage: String? = nil) {
+            self.value = value
+            self.title = title
+            self.systemImage = systemImage
+        }
+    }
+
+    let segments: [Segment]
+    @Binding var selection: Value
+    let palette: EditorInterfaceSkinPalette
+    let accessibilityLabel: String
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(segments) { segment in
+                button(for: segment)
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(palette.primaryText.opacity(BackgroundTaskSegmentChrome.trackFillOpacity))
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func button(for segment: Segment) -> some View {
+        let isSelected = selection == segment.value
+        return Button {
+            selection = segment.value
+        } label: {
+            HStack(spacing: 4) {
+                if let systemImage = segment.systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 10, weight: .medium))
+                }
+                Text(segment.title)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(
+                isSelected
+                    ? palette.primaryText.opacity(BackgroundTaskSegmentChrome.selectedTextOpacity)
+                    : palette.secondaryText
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: 21)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(
+                    isSelected
+                        ? palette.primaryText.opacity(BackgroundTaskSegmentChrome.selectedFillOpacity)
+                        : Color.clear
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .stroke(
+                    isSelected
+                        ? palette.primaryText.opacity(BackgroundTaskSegmentChrome.selectedStrokeOpacity)
+                        : Color.clear,
+                    lineWidth: 1
+                )
+        )
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
 nonisolated enum AgentBackgroundTaskStatusFilter: String, CaseIterable, Identifiable {
     case all
     case running
@@ -203,12 +302,7 @@ struct AgentBackgroundTasksPanel: View {
 
     private var filters: some View {
         VStack(spacing: 9) {
-            Picker(L10n.AgentJobs.scope, selection: $scope) {
-                Text(L10n.AgentJobs.currentSession).tag(AgentBackgroundTaskScopeFilter.currentSession)
-                Text(L10n.AgentJobs.allSessions).tag(AgentBackgroundTaskScopeFilter.allSessions)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            scopeTabs
 
             HStack(spacing: 8) {
                 TextField(L10n.AgentJobs.searchPlaceholder, text: $query)
@@ -225,6 +319,18 @@ struct AgentBackgroundTasksPanel: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
+    }
+
+    private var scopeTabs: some View {
+        BackgroundTaskSegmentedControl(
+            segments: [
+                .init(value: AgentBackgroundTaskScopeFilter.currentSession, title: L10n.AgentJobs.currentSession),
+                .init(value: AgentBackgroundTaskScopeFilter.allSessions, title: L10n.AgentJobs.allSessions),
+            ],
+            selection: $scope,
+            palette: palette,
+            accessibilityLabel: L10n.AgentJobs.scope
+        )
     }
 
     @ViewBuilder
@@ -472,14 +578,23 @@ struct AgentBackgroundTasksPanel: View {
 
     private var logControls: some View {
         HStack(spacing: 8) {
-            Picker(L10n.AgentJobs.logLayout, selection: $logLayout) {
-                Label(L10n.AgentJobs.tabbedLogs, systemImage: "rectangle.stack")
-                    .tag(AgentBackgroundTaskLogLayout.tabs)
-                Label(L10n.AgentJobs.splitLogs, systemImage: "rectangle.split.2x1")
-                    .tag(AgentBackgroundTaskLogLayout.split)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            BackgroundTaskSegmentedControl(
+                segments: [
+                    .init(
+                        value: AgentBackgroundTaskLogLayout.tabs,
+                        title: L10n.AgentJobs.tabbedLogs,
+                        systemImage: "rectangle.stack"
+                    ),
+                    .init(
+                        value: AgentBackgroundTaskLogLayout.split,
+                        title: L10n.AgentJobs.splitLogs,
+                        systemImage: "rectangle.split.2x1"
+                    ),
+                ],
+                selection: $logLayout,
+                palette: palette,
+                accessibilityLabel: L10n.AgentJobs.logLayout
+            )
             .frame(maxWidth: 220)
 
             Spacer(minLength: 4)
@@ -509,13 +624,16 @@ struct AgentBackgroundTasksPanel: View {
                 }
             }
         } else {
-            Picker(L10n.AgentJobs.outputStream, selection: $selectedStream) {
-                Text(L10n.AgentJobs.combined).tag(AgentJobOutputStream.combined)
-                Text(L10n.AgentJobs.stdout).tag(AgentJobOutputStream.stdout)
-                Text(L10n.AgentJobs.stderr).tag(AgentJobOutputStream.stderr)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            BackgroundTaskSegmentedControl(
+                segments: [
+                    .init(value: AgentJobOutputStream.combined, title: L10n.AgentJobs.combined),
+                    .init(value: AgentJobOutputStream.stdout, title: L10n.AgentJobs.stdout),
+                    .init(value: AgentJobOutputStream.stderr, title: L10n.AgentJobs.stderr),
+                ],
+                selection: $selectedStream,
+                palette: palette,
+                accessibilityLabel: L10n.AgentJobs.outputStream
+            )
             logConsole(job: job, stream: selectedStream)
         }
     }
@@ -536,6 +654,11 @@ struct AgentBackgroundTasksPanel: View {
         // HStack this makes the two panes share the panel evenly, and a floor
         // would let them overflow instead of shrinking.
         .frame(maxWidth: .infinity)
+        // One scroll position per (job, stream). Without a distinct identity
+        // SwiftUI reuses the same console across tab switches, so stdout
+        // inherited whatever offset combined/stderr was left at — including a
+        // horizontal one the user never chose for this stream.
+        .id("\(job.id.uuidString)-\(stream.rawValue)")
     }
 
     /// Builds each row once — `processName` included — then filters and sorts.
@@ -644,6 +767,21 @@ struct AgentBackgroundTaskDurationLabel: View {
     }
 }
 
+/// Scroll behaviour for the job log consoles. Pulled out of the view body so
+/// the anchor is a named value a test can pin rather than a literal nobody
+/// reviews.
+enum AgentBackgroundTaskLogScroll {
+    static let bottomSentinelID = "agent-background-task-log-bottom"
+
+    /// `ScrollViewProxy.scrollTo` applies its anchor to **both** axes, and
+    /// `.bottom` carries `x == 0.5`. Following the tail with that anchor also
+    /// told the scroll view to centre the content horizontally, so opening
+    /// stdout landed in the middle of the longest line instead of at its first
+    /// character. `.bottomLeading` keeps the vertical follow and pins x to the
+    /// start of the line.
+    static let followAnchor: UnitPoint = .bottomLeading
+}
+
 private struct AgentBackgroundTaskLogConsole: View {
     let title: String
     let tint: Color
@@ -651,7 +789,7 @@ private struct AgentBackgroundTaskLogConsole: View {
     let followsLatestOutput: Bool
     let copyOutput: () -> Void
 
-    private static let bottomID = "agent-background-task-log-bottom"
+    private static let bottomID = AgentBackgroundTaskLogScroll.bottomSentinelID
 
     var body: some View {
         VStack(spacing: 0) {
@@ -679,17 +817,24 @@ private struct AgentBackgroundTaskLogConsole: View {
 
             ScrollViewReader { proxy in
                 ScrollView([.horizontal, .vertical]) {
-                    Text(output.isEmpty ? L10n.AgentJobs.noOutput : output)
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(
-                            output.isEmpty
-                                ? Color.secondary
-                                : Color.primary.opacity(0.86)
-                        )
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(9)
-                    Color.clear.frame(width: 1, height: 1).id(Self.bottomID)
+                    // Explicit leading-aligned stack. The tail sentinel must
+                    // sit at the content's leading edge: `scrollTo` positions
+                    // the *target* view inside the viewport, so a sentinel
+                    // centred by the default VStack alignment would drag the
+                    // whole log to the middle even with a leading anchor.
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(output.isEmpty ? L10n.AgentJobs.noOutput : output)
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(
+                                output.isEmpty
+                                    ? Color.secondary
+                                    : Color.primary.opacity(0.86)
+                            )
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(9)
+                        Color.clear.frame(width: 1, height: 1).id(Self.bottomID)
+                    }
                 }
                 .frame(minHeight: 190, maxHeight: 320)
                 .onAppear {
@@ -716,7 +861,10 @@ private struct AgentBackgroundTaskLogConsole: View {
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         guard followsLatestOutput else { return }
         DispatchQueue.main.async {
-            proxy.scrollTo(Self.bottomID, anchor: .bottom)
+            proxy.scrollTo(
+                Self.bottomID,
+                anchor: AgentBackgroundTaskLogScroll.followAnchor
+            )
         }
     }
 }
