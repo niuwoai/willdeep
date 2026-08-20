@@ -1534,8 +1534,10 @@ enum AgentChatHistoryRenderer {
     private static func applyInlineCodeChipAttributes(to attributed: NSMutableAttributedString, baseFont: NSFont) {
         let fullRange = NSRange(location: 0, length: attributed.length)
         guard fullRange.length > 0 else { return }
+        var codeRanges: [NSRange] = []
         attributed.enumerateAttributes(in: fullRange, options: []) { attributes, range, _ in
             guard range.length > 0, isInlineCode(attributes[inlinePresentationIntentKey]) else { return }
+            codeRanges.append(range)
             attributed.addAttributes([
                 .font: inlineMonospacedFont(for: baseFont, weight: .regular),
                 .baselineOffset: NSNumber(value: Double(MarkdownInline.inlineCodeBaselineOffset)),
@@ -1543,6 +1545,19 @@ enum AgentChatHistoryRenderer {
             ], range: range)
             attributed.removeAttribute(.backgroundColor, range: range)
             attributed.removeAttribute(swiftUIBackgroundColorKey, range: range)
+        }
+        // 与路径 chip 同一个 TextKit 故障:显式钉上的 SF Mono run 在部分
+        // macOS 上不合成 CJK fallback,字符还在 attributed string 里但拿到
+        // 缺失/零宽字形——`runtime/枪机日志.log` 就塌成 `runtime/ .log`。
+        // 路径 chip 修过(见 applyPathChipAttributes),但 `.log` 这类不在
+        // 后缀白名单里的行内代码只走本函数,得在这里同样补上 fallback。
+        for range in codeRanges {
+            SyntaxHighlighter.applyEditorCJKFallbackFonts(
+                to: attributed,
+                source: attributed.string,
+                defaultFont: baseFont,
+                range: range
+            )
         }
     }
 
@@ -1618,6 +1633,14 @@ enum AgentChatHistoryRenderer {
                     sourceReference: sourceReference
                 ),
             ], range: match.range)
+            // 引用里的相对路径可以是中文文件名,显式 SF Mono run 同样
+            // 会丢 CJK 字形(同 applyInlineCodeChipAttributes 的修法)。
+            SyntaxHighlighter.applyEditorCJKFallbackFonts(
+                to: attributed,
+                source: attributed.string,
+                defaultFont: baseFont,
+                range: match.range
+            )
         }
     }
 
