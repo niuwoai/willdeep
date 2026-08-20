@@ -488,12 +488,17 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.workspaceRootPath = workspaceRootPath
         session.workspaceLocation = workspaceLocation
         session.sidebarWorkspaceRootPath = nil
+        session.worktreeRecoveryInfo = nil
         session.localWorkspaceIdentity = AgentWorkspaceAvailabilityResolver.captureIdentity(for: workspaceRootPath)
     }
 
     /// Change only the conversation's execution checkout. A Git worktree is
     /// an isolation detail, not a new sidebar workspace.
-    func rebindGitWorktree(to path: String, sidebarWorkspaceRootPath: String) {
+    func rebindGitWorktree(
+        to path: String,
+        sidebarWorkspaceRootPath: String,
+        recoveryInfo: AgentWorktreeRecoveryInfo? = nil
+    ) {
         let normalizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
         let normalizedSidebarPath = URL(fileURLWithPath: sidebarWorkspaceRootPath).standardizedFileURL.path
         workspaceRootPath = normalizedPath
@@ -502,6 +507,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.workspaceRootPath = normalizedPath
         session.workspaceLocation = workspaceLocation
         session.sidebarWorkspaceRootPath = normalizedPath == normalizedSidebarPath ? nil : normalizedSidebarPath
+        session.worktreeRecoveryInfo = normalizedPath == normalizedSidebarPath ? nil : recoveryInfo
         session.localWorkspaceIdentity = AgentWorkspaceAvailabilityResolver.captureIdentity(for: normalizedPath)
     }
 
@@ -513,6 +519,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.workspaceRootPath = nil
         session.workspaceLocation = workspaceLocation
         session.sidebarWorkspaceRootPath = nil
+        session.worktreeRecoveryInfo = nil
         session.localWorkspaceIdentity = nil
     }
 

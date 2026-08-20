@@ -746,7 +746,7 @@ private struct AgentScrollToLatestButton: View {
             Image("AgentScrollToLatestRocket")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 30, height: 30)
+                .frame(width: 38, height: 38)
                 .frame(width: 44, height: 44)
                 .background(
                     Color(nsColor: .windowBackgroundColor).opacity(0.97),

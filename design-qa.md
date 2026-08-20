@@ -1,5 +1,35 @@
 # Design QA
 
+## 聊天“滚动到最新消息”火箭放大（1.279.0-rc1）
+
+- source visual truth: 用户选定的 1 号概念图，以及“接近填满整个圆形”的本轮反馈。
+- implementation screenshot path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/worktree-recovery-1.279.0-rc1/rocket-off-bottom.jpeg`
+- viewport: native macOS window `1359 × 768 px`
+- state: 长会话已滚离底部，浮动按钮可见；回到底部后按钮仍由既有滚动策略自动隐藏。
+
+### Full-view comparison evidence
+
+- 按钮仍吸附在聊天区右下方、composer 上方，没有遮挡输入区或会话正文。
+- 圆形点击热区保持 `44 pt`，只放大内部火箭，不改变布局占位。
+- 实机辅助功能树确认 `agent-chat-scroll-to-latest` 节点仅在离底状态出现。
+
+### Focused comparison evidence
+
+- 原始透明图的空白边被裁去，资源画布由大面积留白改为紧贴火箭主体。
+- SwiftUI 图像框由 `30 pt` 提升到 `38 pt`，火箭主体现在接近填满圆形，同时保留少量呼吸边距。
+- 蓝紫配色、Q 版造型、白色圆面、描边与阴影均沿用选定概念，没有引入新的视觉语言。
+
+### Findings
+
+- Pass 1: 单纯放大 SwiftUI frame 后，透明资源留白导致实机观感仍偏小。
+- Fix: 机械裁切透明边并保留原始透明 PNG 质量，再重新构建。
+- Pass 2: Computer Use 在新 Debug 构建中确认火箭显著放大、无裁切，位置和交互状态正确。
+- Asset Catalog 重新编译无未分配资源警告；相关 51 项测试全部通过。
+
+final result: passed
+
+---
+
 ## 聊天“滚动到最新消息”火箭（1.277.0-rc3）
 
 - source visual truth path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/scroll-to-latest-1.277.0-rc3/reference.png`

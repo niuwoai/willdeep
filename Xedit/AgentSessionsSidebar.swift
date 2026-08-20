@@ -21,6 +21,35 @@
 import AppKit
 import SwiftUI
 
+enum AgentSessionDeepLink {
+    static func url(for sessionID: AgentSession.ID) -> URL {
+        var components = URLComponents()
+        components.scheme = "willdeep"
+        components.host = "chat"
+        components.queryItems = [URLQueryItem(name: "session_id", value: sessionID.uuidString)]
+        return components.url!
+    }
+
+    static func sessionID(from url: URL) -> AgentSession.ID? {
+        guard url.scheme?.lowercased() == "willdeep", url.host?.lowercased() == "chat" else { return nil }
+        let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "session_id" })?.value
+        return raw.flatMap(UUID.init(uuidString:))
+    }
+}
+
+enum AgentSessionUnreadStore {
+    private static let key = "com.willdeep.sidebar.unreadSessionIDs.v1"
+
+    static func load() -> Set<AgentSession.ID> {
+        Set((UserDefaults.standard.stringArray(forKey: key) ?? []).compactMap(UUID.init(uuidString:)))
+    }
+
+    static func save(_ ids: Set<AgentSession.ID>) {
+        UserDefaults.standard.set(ids.map(\.uuidString).sorted(), forKey: key)
+    }
+}
+
 /// Identifies what the project sheet is editing: an existing project, or a
 /// plain folder group about to become one.
 struct AgentProjectEditorTarget: Identifiable {
@@ -278,6 +307,7 @@ struct AgentSessionsSidebar: View {
     /// selection clears this and continues to use the existing active-row
     /// highlight.
     @State private var focusedWorkspaceGroupKey: String?
+    @State private var unreadSessionIDs = AgentSessionUnreadStore.load()
 
     private let initialRowCount = 5
 
@@ -830,6 +860,7 @@ struct AgentSessionsSidebar: View {
 
         Button {
             focusedWorkspaceGroupKey = nil
+            setSessionUnread(session.id, unread: false)
             appState.selectAgentSession(id: session.id)
         } label: {
             HStack(spacing: 6) {
@@ -887,6 +918,19 @@ struct AgentSessionsSidebar: View {
                 // exclusive (dot hides on hover, actions appear), so their
                 // trailing slots don't fight for width.
                 sessionRowTrailingActions(session: session, isHovered: isHovered)
+                if displaySession.isRunningInGitWorktree {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(palette.secondaryText)
+                        .help(L10n.WorktreeRecovery.sessionBadgeHelp)
+                        .accessibilityLabel(L10n.WorktreeRecovery.sessionBadgeHelp)
+                }
+                if unreadSessionIDs.contains(session.id) && !isActive {
+                    Circle()
+                        .fill(palette.accent)
+                        .frame(width: 6, height: 6)
+                        .accessibilityLabel(L10n.Sidebar.sessionUnreadIndicator)
+                }
                 AgentSessionRowStatusDot(
                     runtime: observedRuntime,
                     isActive: isActive,
@@ -924,22 +968,67 @@ struct AgentSessionsSidebar: View {
             Button(session.isPinned ? L10n.Sidebar.sessionMenuUnpin : L10n.Sidebar.sessionMenuPin) {
                 appState.toggleAgentSessionPinned(id: session.id)
             }
-            Button(session.isArchived ? L10n.Sidebar.sessionMenuUnarchive : L10n.Sidebar.sessionMenuArchive) {
-                requestArchiveToggle(for: session)
-            }
-            Divider()
             Button(L10n.Sidebar.sessionMenuRename) {
                 presentRenameAlert(for: session)
             }
+            Button(session.isArchived ? L10n.Sidebar.sessionMenuUnarchive : L10n.Sidebar.sessionMenuArchive) {
+                requestArchiveToggle(for: session)
+            }
+            Button(unreadSessionIDs.contains(session.id)
+                   ? L10n.Sidebar.sessionMenuMarkRead
+                   : L10n.Sidebar.sessionMenuMarkUnread) {
+                setSessionUnread(session.id, unread: !unreadSessionIDs.contains(session.id))
+            }
+            Divider()
+            Button(L10n.Sidebar.sessionMenuShowInFinder) {
+                _ = appState.materializeAgentSessionIfNeeded(id: session.id)
+                NSWorkspace.shared.activateFileViewerSelecting([AgentSessionStore.fileURL(for: session.id)])
+            }
+            Button(L10n.Sidebar.sessionMenuCopyWorkingDirectory) {
+                copyToPasteboard(session.workspaceLocation?.localPath ?? session.workspaceRootPath ?? "")
+            }
+            .disabled((session.workspaceLocation?.localPath ?? session.workspaceRootPath) == nil)
+            Button(L10n.Sidebar.sessionMenuCopySessionID) {
+                copyToPasteboard(session.id.uuidString)
+            }
+            Button(L10n.Sidebar.sessionMenuCopyDeepLink) {
+                copyToPasteboard(AgentSessionDeepLink.url(for: session.id).absoluteString)
+            }
+            Divider()
+            Button(L10n.Sidebar.sessionMenuContinueInNewChat) {
+                _ = appState.continueAgentSession(id: session.id)
+                appState.agentComposerFocusRevision += 1
+            }
+            Button(L10n.Sidebar.sessionMenuContinueInNewWorktree) {
+                guard appState.continueAgentSession(id: session.id) != nil else { return }
+                appState.createAgentGitWorktreeFromActiveWorkspace()
+            }
+            .disabled((session.workspaceLocation?.localPath ?? session.workspaceRootPath) == nil)
+            Divider()
+            Button(L10n.Sidebar.sessionMenuOpenInNewWindow) {
+                _ = appState.materializeAgentSessionIfNeeded(id: session.id)
+                let current = appState.agentSessions.first(where: { $0.id == session.id }) ?? session
+                AgentTranscriptReader.open(session: current)
+            }
+            Divider()
             Button(L10n.Sidebar.sessionMenuSummarizeTitle) {
                 appState.manuallySummarizeAgentSessionTitle(id: session.id)
             }
             .disabled(appState.agentRuntimes[session.id] == nil)
-            Divider()
             Button(L10n.Sidebar.sessionMenuDelete, role: .destructive) {
                 presentDeleteAlert(for: session)
             }
         }
+    }
+
+    private func setSessionUnread(_ id: AgentSession.ID, unread: Bool) {
+        if unread { unreadSessionIDs.insert(id) } else { unreadSessionIDs.remove(id) }
+        AgentSessionUnreadStore.save(unreadSessionIDs)
+    }
+
+    private func copyToPasteboard(_ value: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
     }
 
     /// Deletion is the only unrecoverable action in this menu (rename

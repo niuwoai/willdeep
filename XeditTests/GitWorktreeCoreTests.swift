@@ -691,6 +691,107 @@ struct GitWorktreeCoreTests {
         #expect(AppState.gitWorktreeCheckoutProgress(from: "Preparing worktree") == nil)
     }
 
+    @Test("session worktree marker follows the current execution binding")
+    func testSessionWorktreeMarkerFollowsBinding() {
+        var session = AgentSession(
+            workspaceRootPath: "/tmp/project-worktree",
+            workspaceLocation: .local(path: "/tmp/project-worktree"),
+            sidebarWorkspaceRootPath: "/tmp/project"
+        )
+        #expect(session.isRunningInGitWorktree)
+
+        session.workspaceRootPath = "/tmp/project"
+        session.workspaceLocation = .local(path: "/tmp/project")
+        session.sidebarWorkspaceRootPath = nil
+        session.worktreeRecoveryInfo = nil
+        #expect(!session.isRunningInGitWorktree)
+
+        session.workspaceRootPath = "/tmp/project-worktree"
+        session.workspaceLocation = .local(path: "/tmp/project-worktree")
+        session.sidebarWorkspaceRootPath = "/tmp/project"
+        #expect(session.isRunningInGitWorktree)
+    }
+
+    @Test("missing worktrees without a complete restore recipe stay unavailable")
+    func testLegacyMissingWorktreeDoesNotOfferRestore() {
+        let missingPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_missing_worktree_\(UUID().uuidString)")
+            .path
+        let session = AgentSession(
+            workspaceRootPath: missingPath,
+            workspaceLocation: .local(path: missingPath),
+            sidebarWorkspaceRootPath: "/tmp/project"
+        )
+        #expect(AppState.worktreeRecoveryState(for: session) == .unavailable(path: missingPath))
+    }
+
+    @Test("complete recovery metadata restores the original branch and path")
+    func testManagedWorktreeRecovery() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_worktree_recovery_\(UUID().uuidString)")
+        let repository = base.appendingPathComponent("main")
+        let managedHome = base.appendingPathComponent("home")
+        let worktree = managedHome.appendingPathComponent(".willdeep/worktrees/project/feature")
+        try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        try requireGit(["init"], in: repository)
+        try requireGit(["config", "user.email", "tests@example.com"], in: repository)
+        try requireGit(["config", "user.name", "WillDeep Tests"], in: repository)
+        try "hello\n".write(to: repository.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        try requireGit(["add", "README.md"], in: repository)
+        try requireGit(["commit", "-m", "initial"], in: repository)
+        try requireGit(["branch", "feature/recover-me"], in: repository)
+
+        let info = AgentWorktreeRecoveryInfo(
+            repositoryRootPath: repository.path,
+            worktreePath: worktree.path,
+            branchName: "feature/recover-me",
+            managedByWillDeep: true
+        )
+        let session = AgentSession(
+            workspaceRootPath: worktree.path,
+            workspaceLocation: .local(path: worktree.path),
+            sidebarWorkspaceRootPath: repository.path,
+            worktreeRecoveryInfo: info
+        )
+        let outsideManagedRoot = AgentWorktreeRecoveryInfo(
+            repositoryRootPath: repository.path,
+            worktreePath: base.appendingPathComponent("outside/feature").path,
+            branchName: "feature/recover-me",
+            managedByWillDeep: true
+        )
+        let outsideSession = AgentSession(
+            workspaceRootPath: outsideManagedRoot.worktreePath,
+            workspaceLocation: .local(path: outsideManagedRoot.worktreePath),
+            sidebarWorkspaceRootPath: repository.path,
+            worktreeRecoveryInfo: outsideManagedRoot
+        )
+        #expect(AppState.worktreeRecoveryState(
+            for: outsideSession,
+            managedHomeDirectory: managedHome
+        ) == .unavailable(path: outsideManagedRoot.worktreePath))
+        guard case .failure = AppState.restoreGitWorktree(
+            from: outsideManagedRoot,
+            managedHomeDirectory: managedHome
+        ) else {
+            Issue.record("Expected paths outside the managed worktree root to be rejected")
+            return
+        }
+        #expect(AppState.worktreeRecoveryState(
+            for: session,
+            managedHomeDirectory: managedHome
+        ) == .restorable(info))
+
+        let result = AppState.restoreGitWorktree(from: info, managedHomeDirectory: managedHome)
+        guard case .success(let restored) = result else {
+            Issue.record("Expected the worktree restore to succeed")
+            return
+        }
+        #expect(restored.worktree.url.path == worktree.standardizedFileURL.path)
+        #expect(restored.worktree.branch == "feature/recover-me")
+    }
+
     @Test("git worktree creation lists and detects worktree git-file roots")
     func testGitWorktreeCreateListAndFindRoot() throws {
         let base = FileManager.default.temporaryDirectory

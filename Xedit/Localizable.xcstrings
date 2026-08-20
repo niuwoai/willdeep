@@ -1,6 +1,14 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "worktree.recovery.choose-workspace" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Choose Workspace"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"选择工作区"}}}},
+    "worktree.recovery.failed-message" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"The worktree could not be restored: %@"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"无法恢复工作树：%@"}}}},
+    "worktree.recovery.restorable-message" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"This conversation's worktree was removed. Restore it to continue on the original branch."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"此会话的工作树已被移除，恢复后可继续在原分支工作。"}}}},
+    "worktree.recovery.restore" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Restore Worktree"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"恢复工作树"}}}},
+    "worktree.recovery.restoring" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Restoring…"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"正在恢复…"}}}},
+    "worktree.recovery.session-badge-help" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"This conversation runs in a Git worktree"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"此会话正在 Git 工作树中运行"}}}},
+    "worktree.recovery.title" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Worktree cleaned up"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"工作树已清理"}}}},
+    "worktree.recovery.unavailable-message" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"This conversation's worktree is unavailable and cannot be safely restored. Choose another workspace to continue."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"此会话的工作树已不可用，且无法安全恢复。请选择其他工作区继续。"}}}},
     "goal-teams.role-developer" : {
       "comment" : "Execution-period role name",
       "extractionState" : "manual",
@@ -68838,6 +68846,16 @@
         }
       }
     },
+    "sidebar.session-menu.continue-in-new-chat" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Continue in New Chat" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在新聊天中继续" } } } },
+    "sidebar.session-menu.continue-in-new-worktree" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Continue in New Worktree" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在新工作树中继续" } } } },
+    "sidebar.session-menu.copy-deep-link" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy Deep Link" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制深度链接" } } } },
+    "sidebar.session-menu.copy-session-id" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy Session ID" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制会话 ID" } } } },
+    "sidebar.session-menu.copy-working-directory" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy Working Directory" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制工作目录" } } } },
+    "sidebar.session-menu.mark-read" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Mark as Read" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标记为已读" } } } },
+    "sidebar.session-menu.mark-unread" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Mark as Unread" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标记为未读" } } } },
+    "sidebar.session-menu.open-in-new-window" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Transcript in New Window" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在新窗口中打开转录" } } } },
+    "sidebar.session-menu.show-in-finder" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show in Finder" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 Finder 中显示" } } } },
+    "sidebar.session-row.unread-indicator" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Unread chat" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未读聊天" } } } },
     "sidebar.session-menu.delete" : {
       "comment" : "destructive context menu item",
       "extractionState" : "manual",

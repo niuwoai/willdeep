@@ -708,6 +708,10 @@ nonisolated enum AgentSessionStore {
         directoryOverride ?? testSandboxDirectory ?? applicationSupportDirectory
     }
 
+    static func fileURL(for sessionID: AgentSession.ID) -> URL {
+        directory.appendingPathComponent("\(sessionID.uuidString).json")
+    }
+
     /// The product was named VeilWriter before 1.59. The rename changed the
     /// Application Support directory but did not move existing conversations,
     /// which also made usage tokens and streaks appear to reset. Keep this as

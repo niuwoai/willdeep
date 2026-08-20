@@ -81,6 +81,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Git worktree. The tools use `workspaceLocation`; the sidebar continues
     /// to group the conversation under the original project workspace.
     var sidebarWorkspaceRootPath: String?
+    /// Complete restore recipe for a WillDeep-managed Git worktree. Nil for
+    /// primary workspaces, remote workspaces, and legacy/external worktrees
+    /// that cannot be recreated without guessing.
+    var worktreeRecoveryInfo: AgentWorktreeRecoveryInfo?
     /// Explicit project ownership, once resolved. Nil means "not in a managed
     /// project" and falls back to the path-based grouping below, which is
     /// what every session predating projects decodes to.
@@ -238,6 +242,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         workspaceRootPath: String? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
         sidebarWorkspaceRootPath: String? = nil,
+        worktreeRecoveryInfo: AgentWorktreeRecoveryInfo? = nil,
         projectID: UUID? = nil,
         presentationScope: AgentSessionPresentationScope = .workspace,
         dispatchParentProjectID: UUID? = nil,
@@ -285,6 +290,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.workspaceRootPath = workspaceRootPath
         self.workspaceLocation = workspaceLocation ?? workspaceRootPath.map { .local(path: $0) }
         self.sidebarWorkspaceRootPath = sidebarWorkspaceRootPath
+        self.worktreeRecoveryInfo = worktreeRecoveryInfo
         self.projectID = projectID
         self.presentationScope = presentationScope
         self.dispatchParentProjectID = dispatchParentProjectID
@@ -440,7 +446,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     // currentGoal) loads cleanly — every newer field uses
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
-        case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
+        case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, worktreeRecoveryInfo, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
         case providerEntryID, providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
         case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
@@ -456,6 +462,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.workspaceLocation = try c.decodeIfPresent(WorkspaceLocation.self, forKey: .workspaceLocation)
             ?? self.workspaceRootPath.map { .local(path: $0) }
         self.sidebarWorkspaceRootPath = try c.decodeIfPresent(String.self, forKey: .sidebarWorkspaceRootPath)
+        self.worktreeRecoveryInfo = try c.decodeIfPresent(AgentWorktreeRecoveryInfo.self, forKey: .worktreeRecoveryInfo)
         self.projectID = try c.decodeIfPresent(UUID.self, forKey: .projectID)
         self.dispatchParentProjectID = try c.decodeIfPresent(
             UUID.self,
