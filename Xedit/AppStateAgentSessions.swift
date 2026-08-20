@@ -1219,10 +1219,7 @@ extension AppState {
         if runtime.isAwaitingProviderSlot, !runtime.isResponding {
             pendingDispatchQueue.removeAll { $0.runtimeID == runtime.id }
             runtime.isAwaitingProviderSlot = false
-            runtime.errorMessage = nil
-            runtime.errorDetails = nil
-            runtime.errorSeverity = .error
-            runtime.errorRequiresSomeIMLogin = false
+            runtime.clearTurnError()
             markCurrentPlanInterruptedByUser(for: runtime)
             _ = appendStoppedTurnEvent(to: runtime, content: L10n.Composer.stopped)
             return
@@ -1261,10 +1258,7 @@ extension AppState {
             liveJobs = []
         }
 
-        runtime.errorMessage = nil
-        runtime.errorDetails = nil
-        runtime.errorSeverity = .error
-        runtime.errorRequiresSomeIMLogin = false
+        runtime.clearTurnError()
         let immediateStoppedCount = activeWorkflowIDs.count + subagentStopCount
         let eventContent: String
         if liveJobs.isEmpty {
@@ -1453,8 +1447,7 @@ extension AppState {
             agentToolCalls = []
             agentQueuedMessages = []
             agentPendingImages = []
-            agentErrorMessage = nil
-            agentErrorDetails = nil
+            activeRuntime?.clearTurnError()
             isAgentResponding = false
             agentTurnStartedAt = nil
             startNewAgentSession()
@@ -2158,7 +2151,13 @@ extension AppState {
         // activeAgentSessionID or appMode — that would yank the user
         // out of whatever they're reading.
         let routineProvider = agentProviderLibrary.active
-        let session = AgentSession(
+        // `forRoutineRun` stamps `originRoutineID`, which marks the run
+        // unattended for the rest of its life: nobody is watching this
+        // conversation at 22:00, so its turn loop gets the minutes-long
+        // transient-network recovery window instead of the interactive "show
+        // the error card and wait for a click" path.
+        let session = AgentSession.forRoutineRun(
+            routineID: routine.id,
             workspaceRootPath: routine.workspaceRootPath,
             modelID: routine.modelID?.isEmpty == false
                 ? routine.modelID

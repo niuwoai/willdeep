@@ -222,6 +222,15 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// means "title is still the placeholder prefix; feel free to
     /// update on next persist".
     var titleIsUserSet: Bool
+    /// Set when this conversation was spawned by a scheduled routine
+    /// (`AppState.fireRoutine`). Nil for anything a human started. Unattended
+    /// runs get a longer transient-network retry window than interactive
+    /// chats, because nobody is sitting there to click 重试.
+    var originRoutineID: UUID?
+    /// See `AgentTurnFailure`. Non-nil only while the newest turn in this
+    /// conversation ended in a failure the user has neither retried nor
+    /// dismissed.
+    var lastTurnFailure: AgentTurnFailure?
 
     init(
         id: UUID = UUID(),
@@ -267,7 +276,9 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         sidePanelState: AgentSidePanelState = .empty,
         pinnedAt: Date? = nil,
         archivedAt: Date? = nil,
-        titleIsUserSet: Bool = false
+        titleIsUserSet: Bool = false,
+        originRoutineID: UUID? = nil,
+        lastTurnFailure: AgentTurnFailure? = nil
     ) {
         self.id = id
         self.title = title
@@ -314,6 +325,34 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.pinnedAt = pinnedAt
         self.archivedAt = archivedAt
         self.titleIsUserSet = titleIsUserSet
+        self.originRoutineID = originRoutineID
+        self.lastTurnFailure = lastTurnFailure
+    }
+
+    /// The session shape for one scheduled-routine run.
+    ///
+    /// A factory rather than an inline `AgentSession(...)` at the call site so
+    /// `originRoutineID` is part of constructing a routine run instead of one
+    /// more argument a later edit can quietly drop. Without the marker the run
+    /// falls back to interactive retry behaviour, and a routine that fires into
+    /// a dead network goes silent again — which is the whole bug this exists
+    /// to prevent.
+    static func forRoutineRun(
+        routineID: UUID,
+        workspaceRootPath: String?,
+        modelID: String?,
+        providerEntryID: UUID?,
+        providerID: String?,
+        providerDisplayName: String?
+    ) -> AgentSession {
+        AgentSession(
+            workspaceRootPath: workspaceRootPath,
+            modelID: modelID,
+            providerEntryID: providerEntryID,
+            providerID: providerID,
+            providerDisplayName: providerDisplayName,
+            originRoutineID: routineID
+        )
     }
 
     var isPinned: Bool { pinnedAt != nil }
@@ -406,6 +445,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
         case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
+        case originRoutineID, lastTurnFailure
     }
 
     init(from decoder: Decoder) throws {
@@ -484,6 +524,11 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.pinnedAt = try c.decodeIfPresent(Date.self, forKey: .pinnedAt)
         self.archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
         self.titleIsUserSet = try c.decodeIfPresent(Bool.self, forKey: .titleIsUserSet) ?? false
+        self.originRoutineID = try c.decodeIfPresent(UUID.self, forKey: .originRoutineID)
+        // A malformed failure snapshot must never cost the user the whole
+        // conversation: the transcript is the valuable part, this is only the
+        // banner it should re-show.
+        self.lastTurnFailure = try? c.decodeIfPresent(AgentTurnFailure.self, forKey: .lastTurnFailure)
         self.presentationScope = try c.decodeIfPresent(
             AgentSessionPresentationScope.self,
             forKey: .presentationScope
@@ -2586,6 +2631,75 @@ struct AgentErrorDetails: Equatable, Identifiable {
         let id = UUID()
         let title: String
         let text: String
+    }
+}
+
+/// The last turn that ended without an assistant reply, persisted alongside
+/// the conversation.
+///
+/// `AgentRuntime`'s error banner is `@Published` state that dies with the
+/// process. That is fine for a human sitting in front of the chat, but a
+/// scheduled routine that fails at 22:00 leaves nothing behind: the empty
+/// assistant message is dropped by the turn loop, the banner disappears with
+/// the app, and the reopened conversation reads as "message sent, never
+/// answered". Persisting the failure lets the transcript re-show the same
+/// error card — with its 重试 button — after a relaunch.
+///
+/// Detail sections are stored pre-truncated (see
+/// `AppState.persistableDetailSections`): the live payload can carry an entire
+/// provider request body, which has no business bloating every session file.
+nonisolated struct AgentTurnFailure: Codable, Equatable, Sendable {
+    nonisolated struct DetailSection: Codable, Equatable, Sendable {
+        var title: String
+        var text: String
+
+        init(title: String, text: String) {
+            self.title = title
+            self.text = text
+        }
+    }
+
+    var message: String
+    var detailSections: [DetailSection]
+    /// Mirrors `AgentRuntime.errorRequiresSomeIMLogin` so a restored card keeps
+    /// offering "去登录 some.im" instead of a retry that cannot succeed.
+    var requiresSomeIMLogin: Bool
+    var occurredAt: Date
+
+    init(
+        message: String,
+        detailSections: [DetailSection] = [],
+        requiresSomeIMLogin: Bool = false,
+        occurredAt: Date = Date()
+    ) {
+        self.message = message
+        self.detailSections = detailSections
+        self.requiresSomeIMLogin = requiresSomeIMLogin
+        self.occurredAt = occurredAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case message, detailSections, requiresSomeIMLogin, occurredAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.message = try c.decode(String.self, forKey: .message)
+        self.detailSections = try c.decodeIfPresent([DetailSection].self, forKey: .detailSections) ?? []
+        self.requiresSomeIMLogin = try c.decodeIfPresent(Bool.self, forKey: .requiresSomeIMLogin) ?? false
+        self.occurredAt = try c.decodeIfPresent(Date.self, forKey: .occurredAt) ?? Date()
+    }
+}
+
+extension AgentErrorDetails {
+    /// Rebuild the expandable "详情" payload from a persisted failure. Nil when
+    /// the failure carried no sections, matching the live path where
+    /// `AppState.details(for:)` returns nil for errors with nothing to show.
+    init?(_ failure: AgentTurnFailure) {
+        guard !failure.detailSections.isEmpty else { return nil }
+        self.init(sections: failure.detailSections.map {
+            Section(title: $0.title, text: $0.text)
+        })
     }
 }
 

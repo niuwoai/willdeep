@@ -8,18 +8,92 @@
 
 import Foundation
 
+/// Self-recovery schedules for a turn that died on a transient network error
+/// before producing anything. Pure policy, no runtime state — the caller
+/// decides which lane a turn belongs to (`AppState.transientNetworkRetryLane`).
+nonisolated enum AgentTransientRetryLane: Equatable, Sendable {
+    /// Goal mode with a human nearby. Seconds-scale: enough to ride out a
+    /// Wi-Fi roam, short enough that a real outage surfaces the error fast.
+    case goal
+    /// Scheduled routines and dispatch-board tasks. Nobody will click 重试, so
+    /// the window stretches to minutes with exponential backoff. It stops at
+    /// ~5 minutes on purpose: the turn holds a provider concurrency slot while
+    /// it sleeps, and a longer hold would starve whatever the user is doing in
+    /// the foreground. Outages that outlive this become a persisted
+    /// `AgentTurnFailure` — visible and retryable — rather than silence.
+    case unattended
+
+    static let goalDelayNanoseconds: UInt64 = 3_000_000_000
+    /// 5s, 15s, 45s, 1m30s, 2m30s — ≈5 minutes of coverage in total.
+    static let unattendedDelaysNanoseconds: [UInt64] = [
+        5_000_000_000,
+        15_000_000_000,
+        45_000_000_000,
+        90_000_000_000,
+        150_000_000_000,
+    ]
+
+    var maximumRetries: Int {
+        switch self {
+        case .goal: return 5
+        case .unattended: return Self.unattendedDelaysNanoseconds.count
+        }
+    }
+
+    /// `attempt` is 1-based. Anything past the schedule clamps to its last
+    /// step, so a future bump to `maximumRetries` cannot index out of bounds.
+    func delayNanoseconds(attempt: Int) -> UInt64 {
+        switch self {
+        case .goal:
+            return Self.goalDelayNanoseconds
+        case .unattended:
+            let delays = Self.unattendedDelaysNanoseconds
+            let index = min(max(attempt - 1, 0), delays.count - 1)
+            return delays[index]
+        }
+    }
+}
+
 extension AppState {
-    static let maxGoalTransientNetworkRetries = 5
-    static let goalTransientNetworkRetryDelayNanoseconds: UInt64 = 3_000_000_000
     static let maxTLSHandshakeRetries = 5
     static let tlsHandshakeRetryDelayNanoseconds: UInt64 = 5_000_000_000
 
     func setAgentError(_ error: Error, for runtime: AgentRuntime) {
-        runtime.errorMessage = Self.friendlyMessage(for: error)
-        runtime.errorDetails = Self.details(for: error)
+        let message = Self.friendlyMessage(for: error)
+        let details = Self.details(for: error)
+        runtime.errorMessage = message
+        runtime.errorDetails = details
         runtime.errorSeverity = .error
         runtime.errorRequiresSomeIMLogin = false
+        runtime.lastTurnFailure = AgentTurnFailure(
+            message: message,
+            detailSections: Self.persistableDetailSections(from: details)
+        )
     }
+
+    /// Detail sections trimmed to what the card actually renders, so the
+    /// persisted copy stays a banner and never becomes an archive. The live
+    /// payload embeds the whole provider request body — megabytes of it for a
+    /// long conversation — and every one of those bytes would otherwise be
+    /// re-encoded into the session file on every subsequent persist.
+    static func persistableDetailSections(
+        from details: AgentErrorDetails?
+    ) -> [AgentTurnFailure.DetailSection] {
+        guard let details else { return [] }
+        return details.sections.map { section in
+            AgentTurnFailure.DetailSection(
+                title: section.title,
+                text: AgentErrorDetailsPreview.text(
+                    section.text,
+                    totalLimit: persistedDetailSectionCharacterLimit,
+                    lineLimit: persistedDetailLineCharacterLimit
+                ).text
+            )
+        }
+    }
+
+    static let persistedDetailSectionCharacterLimit = 4_000
+    static let persistedDetailLineCharacterLimit = 800
 
     /// "省心托管 / some.im" needs a live shared-session login. If the login was
     /// lost (logout in this or another app, an expired token) AFTER a session
@@ -43,10 +117,15 @@ extension AppState {
     /// the user's just-typed message in the transcript so it can be re-sent
     /// with the "重试" button once they log back in.
     func setSomeIMLoginRequiredError(for runtime: AgentRuntime) {
-        runtime.errorMessage = "some.im 未登录，「省心托管」无法工作。请先登录 some.im，然后点「重试」重新发送这条消息。"
+        let message = "some.im 未登录，「省心托管」无法工作。请先登录 some.im，然后点「重试」重新发送这条消息。"
+        runtime.errorMessage = message
         runtime.errorDetails = nil
         runtime.errorSeverity = .error
         runtime.errorRequiresSomeIMLogin = true
+        runtime.lastTurnFailure = AgentTurnFailure(
+            message: message,
+            requiresSomeIMLogin: true
+        )
     }
 
     /// Translate the raw `Error` thrown by `AgentClient` into a one-line
@@ -193,6 +272,10 @@ extension AppState {
         // firing another unauthenticated request.
         guard !someIMLoginRequiredForTurn(for: runtime, providerID: configuration.providerID) else {
             setSomeIMLoginRequiredError(for: runtime)
+            // No turn starts here, so nothing downstream will persist this for
+            // us — write it now, or the login gate is the one failure that
+            // still evaporates on relaunch.
+            persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
             return
         }
 
@@ -216,10 +299,7 @@ extension AppState {
         runtime.collectingPatchReviewMessageIDs.removeAll()
         _ = resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
-        runtime.errorMessage = nil
-        runtime.errorDetails = nil
-        runtime.errorSeverity = .error
-        runtime.errorRequiresSomeIMLogin = false
+        runtime.clearTurnError()
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
         let turnID = UUID()
@@ -251,10 +331,15 @@ extension AppState {
     /// (×) affordance on the error card. Keeps the user's last message in
     /// history so they can edit/copy and re-send manually.
     func dismissAgentError() {
-        agentErrorMessage = nil
-        agentErrorDetails = nil
-        agentErrorSeverity = .error
-        agentErrorRequiresSomeIMLogin = false
+        guard let runtime = activeRuntime else { return }
+        let hadPersistedFailure = runtime.lastTurnFailure != nil
+        runtime.clearTurnError()
+        // Dismissal has to reach disk, otherwise the banner the user just
+        // closed comes back on the next launch. Don't touch `updatedAt` or the
+        // sidebar order for it — closing a banner is not conversation activity.
+        if hadPersistedFailure {
+            persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+        }
     }
 
     static func details(for error: Error) -> AgentErrorDetails? {
@@ -310,20 +395,49 @@ extension AppState {
         ])
     }
 
-    func shouldRetryTransientGoalNetworkError(
+    /// Which self-recovery schedule this turn gets for a transient network
+    /// failure, or nil when it gets none and the error card is the answer.
+    ///
+    /// An ordinary chat is deliberately excluded: the human is right there,
+    /// the banner appears instantly, and one click is faster and cheaper than
+    /// any backoff we could pick for them.
+    func transientNetworkRetryLane(for runtime: AgentRuntime) -> AgentTransientRetryLane? {
+        if runtime.isUnattendedRun { return .unattended }
+        if runtime.interactionMode == .goal { return .goal }
+        return nil
+    }
+
+    func shouldRetryTransientNetworkError(
         _ error: Error,
         for runtime: AgentRuntime,
         assistantID: AgentMessage.ID,
         retryCount: Int
     ) -> Bool {
-        guard runtime.interactionMode == .goal else { return false }
-        guard retryCount < Self.maxGoalTransientNetworkRetries else { return false }
+        guard let lane = transientNetworkRetryLane(for: runtime) else { return false }
+        guard retryCount < lane.maximumRetries else { return false }
         guard isTransientAgentNetworkError(error) else { return false }
         guard let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) else { return false }
         let message = runtime.messages[index]
+        // Only a turn that produced literally nothing may be replayed. Once a
+        // single token, tool call, or reasoning fragment has landed, a retry
+        // would re-run whatever side effects that partial turn already caused.
         return message.content.isEmpty
             && message.toolCalls.isEmpty
             && (message.reasoningContent ?? "").isEmpty
+    }
+
+    /// How long to wait before replaying `attempt` (1-based). TLS handshake
+    /// flapping keeps its own flat delay; everything else follows the lane.
+    func transientRetryDelayNanoseconds(
+        for error: Error,
+        runtime: AgentRuntime,
+        attempt: Int
+    ) -> UInt64 {
+        if Self.isTLSHandshakeError(error) {
+            return Self.tlsHandshakeRetryDelayNanoseconds
+        }
+        return (transientNetworkRetryLane(for: runtime) ?? .goal)
+            .delayNanoseconds(attempt: attempt)
     }
 
     func shouldRetryTLSHandshakeError(

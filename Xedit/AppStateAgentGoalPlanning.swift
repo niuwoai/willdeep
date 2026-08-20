@@ -292,10 +292,7 @@ extension AppState {
             && goal.checklist.allSatisfy(\.done)
         guard !isGoalComplete else { return }
 
-        runtime.errorMessage = nil
-        runtime.errorDetails = nil
-        runtime.errorSeverity = .error
-        runtime.errorRequiresSomeIMLogin = false
+        runtime.clearTurnError()
         runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
         // Resuming opens a new execution segment: keep the configured limits
         // but hand back a full budget, otherwise a Goal that soft-stopped once

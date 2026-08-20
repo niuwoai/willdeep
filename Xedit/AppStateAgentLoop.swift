@@ -100,6 +100,13 @@ extension AppState {
         // message is always on screen; the queue only delays the network
         // call, never the display. On a drain re-dispatch the message is
         // already present, so reuse it via `existingUserMessageID`.
+        //
+        // Retire the previous turn's failure here rather than after the gates
+        // below: the persist that follows this block is the one that reaches
+        // disk, so clearing later would leave a stale `lastTurnFailure` in the
+        // file (and a resurrected banner) whenever the new dispatch parks in
+        // the provider queue instead of starting immediately.
+        runtime.clearTurnError()
         let userMessage: AgentMessage
         if let existingUserMessageID,
            let existing = runtime.messages.first(where: { $0.id == existingUserMessageID }) {
@@ -160,10 +167,7 @@ extension AppState {
         }
 
         runtime.isAwaitingProviderSlot = false
-        runtime.errorMessage = nil
-        runtime.errorDetails = nil
-        runtime.errorSeverity = .error
-        runtime.errorRequiresSomeIMLogin = false
+        runtime.clearTurnError()
         runtime.latestComputerUseActivity = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
@@ -340,8 +344,7 @@ extension AppState {
         guard acquireProviderSlotIfPossible(providerID: providerID) else { return }
 
         runtime.isAwaitingProviderSlot = false
-        runtime.errorMessage = nil
-        runtime.errorDetails = nil
+        runtime.clearTurnError()
         runtime.latestComputerUseActivity = nil
         runtime.isResponding = true
         runtime.turnStartedAt = Date()
@@ -413,8 +416,7 @@ extension AppState {
         agentPendingImages.removeAll()
         agentPendingTextAttachments.removeAll()
         activeRuntime?.latestComputerUseActivity = nil
-        agentErrorMessage = nil
-        agentErrorDetails = nil
+        activeRuntime?.clearTurnError()
         agentToolDecisionWaiter?.resume(returning: .denied(reason: "Conversation cleared"))
         agentToolDecisionWaiter = nil
         activeRuntime?.pendingToolDecisions.removeAll()
@@ -1076,7 +1078,7 @@ extension AppState {
                         throw CancellationError()
                     } catch {
                         streamBuffer.flushPending()
-                        guard shouldRetryTransientGoalNetworkError(
+                        guard shouldRetryTransientNetworkError(
                             error,
                             for: runtime,
                             assistantID: assistantID,
@@ -1090,9 +1092,11 @@ extension AppState {
                             throw error
                         }
                         retryCount += 1
-                        let retryDelay = Self.isTLSHandshakeError(error)
-                            ? Self.tlsHandshakeRetryDelayNanoseconds
-                            : Self.goalTransientNetworkRetryDelayNanoseconds
+                        let retryDelay = transientRetryDelayNanoseconds(
+                            for: error,
+                            runtime: runtime,
+                            attempt: retryCount
+                        )
                         try await Task.sleep(nanoseconds: retryDelay)
                     }
                 }

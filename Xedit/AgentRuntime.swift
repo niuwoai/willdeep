@@ -128,6 +128,25 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// `AppState.someIMLoginRequiredForTurn`). Drives the error card's extra
     /// "去登录 some.im" affordance. Always reset alongside `errorMessage`.
     @Published var errorRequiresSomeIMLogin: Bool = false
+    /// Durable mirror of the banner above, for failures only. Everything else
+    /// in this block dies with the process; this is what survives to disk so a
+    /// conversation whose last turn failed can re-show its error card (and its
+    /// 重试 button) on the next launch instead of reading as "sent, never
+    /// answered". `.notice` banners are deliberately excluded — they report a
+    /// healthy pause, not a failure worth resurrecting.
+    @Published var lastTurnFailure: AgentTurnFailure?
+
+    /// Clear the banner and the durable failure together. Every "a new turn is
+    /// starting" and "the user stopped this" site must go through here: a site
+    /// that clears only the `@Published` fields would leave the persisted
+    /// failure behind, and it would pop back on the next launch.
+    func clearTurnError() {
+        errorMessage = nil
+        errorDetails = nil
+        errorSeverity = .error
+        errorRequiresSomeIMLogin = false
+        lastTurnFailure = nil
+    }
 
     // MARK: - Per-session mode & overrides
 
@@ -165,6 +184,14 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.presentationScope == .dispatchBoard
             || session.dispatchParentProjectID != nil
             || session.dispatchTaskID != nil
+    }
+    /// Every conversation that runs with nobody watching: dispatch-board tasks
+    /// and scheduled-routine runs. The distinction matters for transient
+    /// network failures — an interactive chat surfaces the error card
+    /// immediately and the human clicks 重试 within seconds, while an
+    /// unattended run has to recover on its own or not at all.
+    var isUnattendedRun: Bool {
+        isUnattendedDispatchTask || session.originRoutineID != nil
     }
     /// Most recent media task completion surfaced to this runtime. This keeps
     /// async image/video outputs actionable in the same turn that drains the
@@ -404,6 +431,17 @@ final class AgentRuntime: ObservableObject, Identifiable {
         if session.dispatchParentProjectID != nil {
             self.sessionProviderIDOverride = session.providerID
         }
+        // Re-arm the error banner for a conversation whose last turn died
+        // without an answer. Without this the transcript restores as a lone
+        // user message and the failure is unrecoverable information — exactly
+        // the "自动化任务发出去了，没有返回" report.
+        self.lastTurnFailure = session.lastTurnFailure
+        if let failure = session.lastTurnFailure {
+            self.errorMessage = failure.message
+            self.errorDetails = AgentErrorDetails(failure)
+            self.errorSeverity = .error
+            self.errorRequiresSomeIMLogin = failure.requiresSomeIMLogin
+        }
     }
 
     private static func normalizingInterruptedWorkflow(_ message: AgentMessage) -> AgentMessage {
@@ -556,6 +594,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.redactSensitiveAttachmentContent = redactSensitiveAttachmentContent
         session.sidePanelState = sidePanelState
         session.managedRouting = managedRouting
+        session.lastTurnFailure = lastTurnFailure
         session.openAIResponsesContinuation = openAIResponsesContinuationState.persistedSnapshot
         if touchUpdatedAt {
             session.updatedAt = Date()
