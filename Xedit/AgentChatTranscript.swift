@@ -554,6 +554,12 @@ struct AgentChatTranscript: View {
                             onRemove: { queued in
                                 appState.removeQueuedAgentMessage(id: queued.id)
                             },
+                            onOpenInSideChat: { queued in
+                                appState.openQueuedAgentMessageInSideChat(id: queued.id)
+                            },
+                            onCloseQueue: {
+                                appState.clearAgentQueue()
+                            },
                             onMove: { sourceID, targetID in
                                 appState.moveQueuedAgentMessage(id: sourceID, to: targetID)
                             }

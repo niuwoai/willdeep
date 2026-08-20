@@ -16,6 +16,7 @@ struct AgentChatHeader: View {
     @ObservedObject private var detachedPanels = AgentDetachedPanelRegistry.shared
     @Binding var sidePanel: AgentSidePanelKind?
     @Binding var sessionsSidebarVisible: Bool
+    @State private var isDesktopPetHovered = false
 
     /// When the session sidebar is hidden the chat column slides to the
     /// window's left edge, where the macOS traffic lights and their
@@ -99,13 +100,13 @@ struct AgentChatHeader: View {
         // highlighted just like the desktop-pet button remains highlighted
         // while its independent window is enabled.
         let isSelected = sidePanel == item || detachedPanels.isDetached(item)
-        let palette = appState.editorSettings.interfaceSkin.palette
         return AgentSidePanelShortcutControl(
             systemImage: item.systemImage,
             title: sidePanelTitle(for: item),
             isSelected: isSelected,
-            selectedColor: NSColor(palette.accent),
-            normalColor: NSColor(palette.secondaryText)
+            selectedColor: .black,
+            hoverColor: NSColor.labelColor.withAlphaComponent(0.72),
+            normalColor: .secondaryLabelColor
         ) {
             toggleSidePanel(item)
         }
@@ -126,9 +127,10 @@ struct AgentChatHeader: View {
         .focusable(false)
         .foregroundStyle(
             desktopPet.isEnabled
-                ? appState.editorSettings.interfaceSkin.palette.accent
-                : appState.editorSettings.interfaceSkin.palette.secondaryText
+                ? Color.black
+                : (isDesktopPetHovered ? Color.primary.opacity(0.72) : Color.secondary)
         )
+        .onHover { isDesktopPetHovered = $0 }
         .help(L10n.DesktopPet.toggleHelp)
         .accessibilityLabel(Text(L10n.DesktopPet.toggleHelp))
     }
@@ -154,7 +156,8 @@ struct AgentChatHeader: View {
     }
 
     /// Plan 一项只在 active runtime 真的有 plan 时出现 — 没有 plan
-    /// 还展示这个入口是浪费一行 + 误导用户。其它项始终可见。
+    /// 还展示这个入口是浪费一行 + 误导用户。后台任务入口必须始终
+    /// 可见：空列表也是有效状态，用户需要能从这里确认当前没有任务。
     private var visibleKinds: [AgentSidePanelKind] {
         if dispatchContext != nil {
             return AgentDispatchTaskToolPolicy.primaryKinds(
@@ -165,8 +168,6 @@ struct AgentChatHeader: View {
         return AgentSidePanelKind.allCases.filter { kind in
             guard kind.isAvailable(activeExperts: appState.agentActiveExperts) else { return false }
             switch kind {
-            case .backgroundTasks:
-                return !appState.agentJobRegistry.jobs.isEmpty
             case .plan: return appState.agentCurrentPlan != nil
             default: return true
             }
@@ -259,6 +260,7 @@ private struct AgentSidePanelShortcutControl: NSViewRepresentable {
     let title: String
     let isSelected: Bool
     let selectedColor: NSColor
+    let hoverColor: NSColor
     let normalColor: NSColor
     let action: () -> Void
 
@@ -266,35 +268,49 @@ private struct AgentSidePanelShortcutControl: NSViewRepresentable {
         Coordinator(action: action)
     }
 
-    func makeNSView(context: Context) -> NSButton {
-        let button = NSButton(frame: .zero)
+    func makeNSView(context: Context) -> AgentSidePanelHoverButton {
+        let button = AgentSidePanelHoverButton(frame: .zero)
         button.isBordered = false
         button.imagePosition = .imageOnly
         button.focusRingType = .none
         button.setButtonType(.momentaryPushIn)
         button.target = context.coordinator
         button.action = #selector(Coordinator.performAction)
-        configure(button)
+        button.onHoverChange = { [weak coordinator = context.coordinator] isHovered in
+            coordinator?.isHovered = isHovered
+            coordinator?.refresh?()
+        }
+        context.coordinator.refresh = { [weak button] in
+            guard let button else { return }
+            configure(button, isHovered: context.coordinator.isHovered)
+        }
+        configure(button, isHovered: false)
         return button
     }
 
-    func updateNSView(_ button: NSButton, context: Context) {
+    func updateNSView(_ button: AgentSidePanelHoverButton, context: Context) {
         context.coordinator.action = action
-        configure(button)
+        context.coordinator.refresh = { [weak button, weak coordinator = context.coordinator] in
+            guard let button, let coordinator else { return }
+            configure(button, isHovered: coordinator.isHovered)
+        }
+        configure(button, isHovered: context.coordinator.isHovered)
     }
 
-    private func configure(_ button: NSButton) {
+    private func configure(_ button: NSButton, isHovered: Bool) {
         let weight: NSFont.Weight = isSelected ? .semibold : .regular
         let configuration = NSImage.SymbolConfiguration(pointSize: 12, weight: weight)
         button.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: title)?
             .withSymbolConfiguration(configuration)
-        button.contentTintColor = isSelected ? selectedColor : normalColor
+        button.contentTintColor = isSelected ? selectedColor : (isHovered ? hoverColor : normalColor)
         button.toolTip = title
         button.setAccessibilityLabel(title)
     }
 
     final class Coordinator: NSObject {
         var action: () -> Void
+        var isHovered = false
+        var refresh: (() -> Void)?
 
         init(action: @escaping () -> Void) {
             self.action = action
@@ -303,5 +319,35 @@ private struct AgentSidePanelShortcutControl: NSViewRepresentable {
         @objc func performAction() {
             action()
         }
+    }
+}
+
+private final class AgentSidePanelHoverButton: NSButton {
+    var onHoverChange: ((Bool) -> Void)?
+    private var hoverTrackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        hoverTrackingArea = area
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        onHoverChange?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        onHoverChange?(false)
     }
 }

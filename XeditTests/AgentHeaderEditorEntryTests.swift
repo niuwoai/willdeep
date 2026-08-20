@@ -21,8 +21,13 @@ struct AgentHeaderEditorEntryTests {
         #expect(!headerSource.contains("sidePanelMenu"))
         #expect(!headerSource.contains("Image(systemName: \"ellipsis\")"))
         #expect(headerSource.contains("ForEach(visibleKinds)"))
+        #expect(!headerSource.contains("return !appState.agentJobRegistry.jobs.isEmpty"))
         #expect(headerSource.contains("@ObservedObject private var detachedPanels = AgentDetachedPanelRegistry.shared"))
         #expect(headerSource.contains("sidePanel == item || detachedPanels.isDetached(item)"))
+        #expect(headerSource.contains("selectedColor: .black"))
+        #expect(headerSource.contains("isHovered ? hoverColor : normalColor"))
+        #expect(headerSource.contains("private final class AgentSidePanelHoverButton"))
+        #expect(headerSource.contains(".onHover { isDesktopPetHovered = $0 }"))
         #expect(!headerSource.contains("sessionSearchButton"))
         #expect(modeSource.contains("#selector(presentSearch)"))
         #expect(modeSource.contains("AgentWindowChromeControlLayout.searchButtonFrame"))
@@ -36,6 +41,16 @@ struct AgentHeaderEditorEntryTests {
         #expect(!appSource.contains("RoundtableWindowID"))
         #expect(!appSource.contains("RoundtableWindowRootView"))
         #expect(!appSource.contains("L10n.AgentWindow.openMenuItem"))
+    }
+
+    @Test("Chat links and adjacent error actions stay in the grayscale hierarchy")
+    func chatActionsAvoidAccentBlue() throws {
+        let formatterSource = try Self.source(in: "Xedit", named: "AgentChatHistoryFormatter.swift")
+        let errorSource = try Self.source(in: "Xedit", named: "AgentErrorCard.swift")
+
+        #expect(!formatterSource.contains("NSColor.linkColor"))
+        #expect(formatterSource.contains("NSColor.secondaryLabelColor.blended"))
+        #expect(errorSource.components(separatedBy: ".foregroundStyle(.secondary)").count >= 3)
     }
 
     @Test("Ordinary files use the system default app; only shortcut JSON stays in-app")
@@ -60,6 +75,19 @@ struct AgentHeaderEditorEntryTests {
         #expect(!terminalSource.contains("appState.openEditorFile"))
         #expect(filePanelSource.contains("NSWorkspace.shared.open(url)"))
         #expect(!infoPlist.contains("CFBundleDocumentTypes"))
+    }
+
+    @Test("Queued rows mirror the Codex hover handle and action order")
+    func queuedRowsExposeCodexActions() throws {
+        let source = try Self.source(in: "Xedit", named: "AgentMessageSupportViews.swift")
+
+        #expect(source.contains("private var sixDotDragHandle"))
+        #expect(source.contains(".opacity(isHovering ? 1 : 0)"))
+        #expect(source.contains("Text(L10n.QueuedMessage.adjustDirection)"))
+        #expect(source.contains("systemName: \"trash\""))
+        #expect(source.contains("Label(L10n.QueuedMessage.editButton"))
+        #expect(source.contains("Label(L10n.QueuedMessage.openInSideChat"))
+        #expect(source.contains("Label(L10n.QueuedMessage.closeQueue"))
     }
 
     private static func source(in directory: String, named fileName: String) throws -> String {

@@ -299,11 +299,9 @@ struct AgentSidePanelIconTests {
         }
     }
 
-    @Test("background tasks does not reuse a plain document glyph")
-    func backgroundTasksIconIsNotADocument() {
-        // `list.bullet.rectangle` read as "a document" at rail size and said
-        // nothing about work running on its own.
-        #expect(AgentSidePanelKind.backgroundTasks.systemImage != "list.bullet.rectangle")
+    @Test("background tasks uses a recognizable progress-clock glyph")
+    func backgroundTasksIconReadsAsBackgroundWork() {
+        #expect(AgentSidePanelKind.backgroundTasks.systemImage == "clock.arrow.circlepath")
         #expect(
             AgentSidePanelKind.allCases.filter {
                 $0.systemImage == AgentSidePanelKind.backgroundTasks.systemImage

@@ -2219,6 +2219,34 @@ struct AgentQueueModeTests {
 
     @Test
     @MainActor
+    func queuedMessageCanMoveIntoFreshSideChat() {
+        let state = AppState()
+        _ = state.startNewAgentSession()
+        guard let sourceRuntime = state.activeRuntime else {
+            Issue.record("Expected active runtime")
+            return
+        }
+
+        let queued = AgentQueuedMessage(
+            text: "investigate this separately",
+            executionAgent: .claudeCode,
+            delegationPolicy: .required
+        )
+        sourceRuntime.queuedMessages = [queued]
+        let previousSessionCount = state.agentSessions.count
+
+        state.openQueuedAgentMessageInSideChat(id: queued.id)
+
+        #expect(sourceRuntime.queuedMessages.isEmpty)
+        #expect(state.agentSessions.count == previousSessionCount + 1)
+        #expect(state.activeRuntime !== sourceRuntime)
+        #expect(state.activeRuntime?.input == queued.text)
+        #expect(state.activeRuntime?.executionAgent == .claudeCode)
+        #expect(state.activeRuntime?.pendingDelegationPolicy == .required)
+    }
+
+    @Test
+    @MainActor
     func sendingQueuedMessageNowDeniesAwaitingConfirm() {
         let state = AppState()
         _ = state.startNewAgentSession()

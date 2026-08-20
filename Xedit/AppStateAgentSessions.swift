@@ -1389,12 +1389,37 @@ extension AppState {
         else { return }
 
         let message = runtime.queuedMessages.remove(at: index)
+        stageQueuedMessage(message, in: runtime)
+    }
+
+    /// Moves one queued direction into a fresh sidebar conversation while
+    /// preserving the current task. The new chat opens with the message staged
+    /// in its composer so the operator can review it before sending.
+    func openQueuedAgentMessageInSideChat(id: AgentQueuedMessage.ID) {
+        guard let sourceRuntime = activeRuntime,
+              let index = sourceRuntime.queuedMessages.firstIndex(where: { $0.id == id })
+        else { return }
+
+        let message = sourceRuntime.queuedMessages.remove(at: index)
+        let newSession = startNewAgentSession(
+            inWorkspaceAt: sourceRuntime.session.workspaceRootPath
+        )
+        guard let destinationRuntime = agentRuntimes[newSession.id] else {
+            sourceRuntime.queuedMessages.insert(message, at: index)
+            return
+        }
+        stageQueuedMessage(message, in: destinationRuntime)
+    }
+
+    private func stageQueuedMessage(_ message: AgentQueuedMessage, in runtime: AgentRuntime) {
         runtime.input = message.text
         runtime.pendingImages = message.images
         runtime.pendingTextAttachments = message.textAttachments
-        runtime.pendingSkills = []
+        runtime.pendingSkills = message.attachedSkills
         runtime.pendingFiles = []
         runtime.pendingIncludeWorkspaceOverview = false
+        runtime.executionAgent = message.executionAgent
+        runtime.pendingDelegationPolicy = message.delegationPolicy
     }
 
     func sendQueuedAgentMessageNow(id: AgentQueuedMessage.ID) {
