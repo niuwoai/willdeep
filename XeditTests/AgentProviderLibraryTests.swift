@@ -814,6 +814,22 @@ struct AgentProviderLibraryTests {
         #expect(retrySource.contains(repairBeforeSnapshot))
     }
 
+    @Test("managed routing pre-describes images before selecting a text-only tier")
+    func managedRoutingPreparesImageDescriptionsBeforeRouteSelection() {
+        #expect(AgentImagePreparationPolicy.requiresTextDescription(
+            mainModelSupportsImages: true,
+            usesManagedRouting: true
+        ))
+        #expect(AgentImagePreparationPolicy.requiresTextDescription(
+            mainModelSupportsImages: false,
+            usesManagedRouting: false
+        ))
+        #expect(!AgentImagePreparationPolicy.requiresTextDescription(
+            mainModelSupportsImages: true,
+            usesManagedRouting: false
+        ))
+    }
+
     @MainActor
     @Test
     func syncingSomeIMImageUnderstandingUsesResolvedRelayRoute() {

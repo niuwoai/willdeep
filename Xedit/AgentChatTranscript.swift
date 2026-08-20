@@ -575,6 +575,29 @@ struct AgentChatTranscript: View {
                     .frame(width: 0, height: 0)
                 }
             }
+                .overlay(alignment: .bottomTrailing) {
+                    if AgentTranscriptScrollPolicy.shouldShowScrollToLatest(
+                        hasVisibleContent: !visibleMessages.isEmpty || !localConfirmationPreviewCalls.isEmpty,
+                        isFollowingBottom: isFollowingTranscriptBottom,
+                        isConversationSearchActive: isConversationSearchActive
+                    ) {
+                        AgentScrollToLatestButton {
+                            isFollowingTranscriptBottom = true
+                            scrollToBottomRequestToken &+= 1
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                            }
+                        }
+                        .padding(.trailing, 24)
+                        .padding(.bottom, 20)
+                        .transition(
+                            .scale(scale: 0.88, anchor: .bottomTrailing)
+                                .combined(with: .opacity)
+                        )
+                        .zIndex(12)
+                    }
+                }
+                .animation(.easeOut(duration: 0.16), value: isFollowingTranscriptBottom)
             // CRITICAL: only react to count, not the whole array.
             // Pre-fix this watched `appState.agentMessages` (the full
             // [AgentMessage]) — every streaming-token delta mutates
@@ -713,6 +736,41 @@ struct AgentChatTranscript: View {
             scrollToBottomRequestToken &+= 1
         }
     }
+
+private struct AgentScrollToLatestButton: View {
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image("AgentScrollToLatestRocket")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 30, height: 30)
+                .frame(width: 44, height: 44)
+                .background(
+                    Color(nsColor: .windowBackgroundColor).opacity(0.97),
+                    in: Circle()
+                )
+                .overlay {
+                    Circle()
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+                .shadow(
+                    color: Color.black.opacity(isHovering ? 0.16 : 0.1),
+                    radius: isHovering ? 8 : 6,
+                    y: isHovering ? 3 : 2
+                )
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(isHovering ? 1.06 : 1)
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .onHover { isHovering = $0 }
+        .help(L10n.AgentTranscriptReader.scrollToLatest)
+        .accessibilityLabel(L10n.AgentTranscriptReader.scrollToLatest)
+        .accessibilityIdentifier("agent-chat-scroll-to-latest")
+    }
+}
 
     /// Turns for the left-edge user-input minimap: one entry per user message
     /// in the currently-rendered window, with its reply + edited files folded in.

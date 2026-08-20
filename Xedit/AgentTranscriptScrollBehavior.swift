@@ -10,6 +10,14 @@ import AppKit
 import SwiftUI
 
 nonisolated enum AgentTranscriptScrollPolicy {
+    static func shouldShowScrollToLatest(
+        hasVisibleContent: Bool,
+        isFollowingBottom: Bool,
+        isConversationSearchActive: Bool
+    ) -> Bool {
+        hasVisibleContent && !isFollowingBottom && !isConversationSearchActive
+    }
+
     static func shouldScrollAfterAppending(
         _ message: AgentMessage?,
         isFollowingBottom: Bool

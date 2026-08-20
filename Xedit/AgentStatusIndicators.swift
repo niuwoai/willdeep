@@ -488,14 +488,14 @@ struct AgentStatsDashboard: View {
                                         formatInteger(cell.requestCount),
                                         formatTokenCount(cell.tokenCount)
                                     )
-                                    RoundedRectangle(cornerRadius: 1.5)
-                                        .fill(color(
+                                    AgentTokenActivityHeatmapCell(
+                                        fillColor: color(
                                             for: displayCounts[columnIndex][rowIndex],
                                             peak: maxCount
-                                        ))
-                                        .frame(width: metrics.cellSize, height: metrics.cellSize)
-                                        .help(tooltip)
-                                        .accessibilityLabel(tooltip)
+                                        ),
+                                        size: metrics.cellSize,
+                                        tooltip: tooltip
+                                    )
                                 }
                             }
                         }
@@ -1891,6 +1891,40 @@ struct AgentStatsDashboard: View {
             return nil
         }
         return url
+    }
+}
+
+private struct AgentTokenActivityHeatmapCell: View {
+    let fillColor: Color
+    let size: CGFloat
+    let tooltip: String
+
+    @State private var isHovering = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 1.5)
+            .fill(fillColor)
+            .frame(width: size, height: size)
+            .contentShape(Rectangle())
+            .overlay(alignment: .top) {
+                if isHovering {
+                    Text(tooltip)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.white)
+                        .fixedSize()
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(
+                            Color.black.opacity(0.86),
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        )
+                        .offset(y: -31)
+                        .allowsHitTesting(false)
+                }
+            }
+            .zIndex(isHovering ? 1 : 0)
+            .onHover { isHovering = $0 }
+            .accessibilityLabel(tooltip)
     }
 }
 

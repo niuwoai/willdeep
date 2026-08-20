@@ -130,6 +130,10 @@ nonisolated enum L10n {
             let template = String(localized: "agent-transcript-reader.load-earlier", defaultValue: "Load %1$lld earlier messages (%2$lld not shown)")
             return String(format: template, batch, hidden)
         }
+        static let scrollToLatest = String(
+            localized: "agent-transcript-reader.scroll-to-latest",
+            defaultValue: "Scroll to latest message"
+        )
     }
 
     enum ComputerUsePreview {

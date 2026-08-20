@@ -10,6 +10,38 @@ import Testing
 @Suite
 struct AgentTranscriptScrollPolicyTests {
     @Test
+    func scrollToLatestButtonOnlyAppearsWhileReadingAboveTheBottom() {
+        #expect(
+            AgentTranscriptScrollPolicy.shouldShowScrollToLatest(
+                hasVisibleContent: true,
+                isFollowingBottom: false,
+                isConversationSearchActive: false
+            )
+        )
+        #expect(
+            !AgentTranscriptScrollPolicy.shouldShowScrollToLatest(
+                hasVisibleContent: true,
+                isFollowingBottom: true,
+                isConversationSearchActive: false
+            )
+        )
+        #expect(
+            !AgentTranscriptScrollPolicy.shouldShowScrollToLatest(
+                hasVisibleContent: false,
+                isFollowingBottom: false,
+                isConversationSearchActive: false
+            )
+        )
+        #expect(
+            !AgentTranscriptScrollPolicy.shouldShowScrollToLatest(
+                hasVisibleContent: true,
+                isFollowingBottom: false,
+                isConversationSearchActive: true
+            )
+        )
+    }
+
+    @Test
     func sidePanelWidthChangeIsRecognizedAsViewportReflow() {
         #expect(
             AgentTranscriptViewportPolicy.widthChanged(
