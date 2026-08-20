@@ -2,6 +2,18 @@ import Foundation
 import Testing
 @testable import WillDeep
 
+@Suite("Agent session context-menu support")
+struct AgentSessionContextMenuSupportTests {
+    @Test("deep links round-trip the exact session id")
+    func deepLinkRoundTrip() throws {
+        let id = UUID()
+        let url = AgentSessionDeepLink.url(for: id)
+        #expect(url.absoluteString == "willdeep://chat?session_id=\(id.uuidString)")
+        #expect(AgentSessionDeepLink.sessionID(from: url) == id)
+        #expect(AgentSessionDeepLink.sessionID(from: URL(string: "willdeep://open?path=/tmp")!) == nil)
+    }
+}
+
 @Suite("Sidebar session placement")
 struct AgentSidebarSessionPlacementTests {
     private static func session(

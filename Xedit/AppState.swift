@@ -118,12 +118,14 @@ final class AppState: ObservableObject {
     @Published var gitStatus = GitRepositoryStatus()
     @Published var agentWorkspaceGitStatus = GitRepositoryStatus()
     @Published var agentGitWorktrees: [AgentGitWorktree] = []
+    @Published var agentWorktreeRecoveryState: AgentWorktreeRecoveryState = .none
     /// "Another live session is running a turn in this same local checkout"
     /// hint. Recomputed cheaply (no git/IO) from the shared agent-loop
     /// start/end and on session switch — see `refreshAgentWorkspaceCollision`.
     @Published var agentWorkspaceCollision = AgentWorkspaceCollision()
     @Published var agentGitWorktreeCreation: AgentGitWorktreeCreation?
     var agentGitWorktreeRefreshTask: Task<Void, Never>?
+    var agentWorktreeRecoveryTask: Task<Void, Never>?
     var agentGitWorktreeRefreshPath: String?
     var agentGitWorktreeCreationTask: Task<Void, Never>?
     var agentGitWorktreeProcessController: AgentGitWorktreeProcessController?

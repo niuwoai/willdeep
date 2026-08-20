@@ -84,6 +84,11 @@ struct AgentChatComposer: View {
                         .frame(maxWidth: AgentDesign.chatMaxContentWidth)
                 }
 
+                if appState.agentWorktreeRecoveryState != .none {
+                    AgentComposerWorktreeRecoveryBar()
+                        .frame(maxWidth: AgentDesign.chatMaxContentWidth)
+                }
+
                 ComposerCard()
                 // Keep the card tied to the chat column instead of its
                 // bottom control row's intrinsic width. The control row
@@ -99,17 +104,20 @@ struct AgentChatComposer: View {
             appState.refreshActiveAgentWorktreeChanges()
             appState.refreshAgentGitWorktrees()
             appState.refreshAgentWorkspaceCollision()
+            appState.refreshActiveAgentWorktreeRecoveryState()
         }
         .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
             appState.refreshActiveAgentWorktreeChanges()
             appState.refreshAgentGitWorktrees()
             appState.refreshAgentWorkspaceCollision()
+            appState.refreshActiveAgentWorktreeRecoveryState()
         }
         // 用户可能在 App 外面（自己的终端、别的 Git 客户端）切了分支，路径没变，
         // 我们也收不到任何工具回调。重新获得焦点时补一次身份刷新，胶囊不至于
         // 长期挂着旧分支。
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             appState.refreshAgentGitWorktrees()
+            appState.refreshActiveAgentWorktreeRecoveryState()
         }
         .sheet(item: $appState.agentWorktreeDiffPreview) { preview in
             AgentWorktreeDiffPreviewSheet(preview: preview)
@@ -182,6 +190,72 @@ struct AgentChatComposer: View {
         )
     }
 
+}
+
+private struct AgentComposerWorktreeRecoveryBar: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            Text(L10n.WorktreeRecovery.title)
+                .font(.system(size: 13, weight: .semibold))
+
+            Text(message)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            Spacer(minLength: 10)
+
+            if case .restorable = appState.agentWorktreeRecoveryState {
+                Button(L10n.WorktreeRecovery.restore) {
+                    appState.restoreActiveAgentGitWorktree()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            } else if case .restoring = appState.agentWorktreeRecoveryState {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(L10n.WorktreeRecovery.restoring)
+                }
+                .font(.system(size: 12, weight: .medium))
+            } else {
+                Button(L10n.WorktreeRecovery.chooseWorkspace) {
+                    appState.chooseReplacementWorkspaceForActiveSession()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.58))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var message: String {
+        switch appState.agentWorktreeRecoveryState {
+        case .none:
+            return ""
+        case .restorable, .restoring:
+            return L10n.WorktreeRecovery.restorableMessage
+        case .unavailable:
+            return L10n.WorktreeRecovery.unavailableMessage
+        case .failed(_, let details):
+            return L10n.WorktreeRecovery.failedMessage(details)
+        }
+    }
 }
 
 private struct AgentComposerWorkspaceGoalCard: View {

@@ -23,6 +23,7 @@ struct AgentWindowRootView: View {
     @ObservedObject private var registry = EditorAppStateRegistry.shared
     @ObservedObject private var onboarding = OnboardingFlowController.shared
     @Environment(\.openWindow) private var openWindow
+    @State private var pendingDeepLinkedSessionID: AgentSession.ID?
 
     var body: some View {
         Group {
@@ -79,10 +80,18 @@ struct AgentWindowRootView: View {
             if CollaborationConnectorOAuthCoordinator.handleCallback(url) {
                 return
             }
+            if let sessionID = AgentSessionDeepLink.sessionID(from: url) {
+                pendingDeepLinkedSessionID = sessionID
+                revealPendingDeepLinkedSessionIfPossible()
+                return
+            }
             if InitialLaunchPolicy.shouldOpenEditor(forInitialExternalURL: url) {
                 WillDeepExternalOpenRouter.shared.enqueue(url)
                 openPendingExternalEditorRequests()
             }
+        }
+        .onChange(of: registry.current?.hasLoadedAgentSessionCatalog) { _ in
+            revealPendingDeepLinkedSessionIfPossible()
         }
         .onReceive(
             NotificationCenter.default.publisher(for: .willDeepExternalEditorOpenRequested)
@@ -106,6 +115,15 @@ struct AgentWindowRootView: View {
         for url in WillDeepExternalOpenRouter.shared.drain() {
             openWindow(value: url)
         }
+    }
+
+    private func revealPendingDeepLinkedSessionIfPossible() {
+        guard let sessionID = pendingDeepLinkedSessionID,
+              let appState = registry.current,
+              appState.hasLoadedAgentSessionCatalog,
+              appState.selectAgentSession(id: sessionID) else { return }
+        pendingDeepLinkedSessionID = nil
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 

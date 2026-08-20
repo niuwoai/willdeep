@@ -39,6 +39,46 @@ struct AgentGitWorktree: Identifiable, Equatable {
     }
 }
 
+/// Durable information required to recreate a WillDeep-managed worktree after
+/// its checkout directory has been cleaned up. Sessions that only remember a
+/// path deliberately do not get a restore button: guessing a repository or
+/// branch here could bind an old conversation to the wrong code.
+nonisolated struct AgentWorktreeRecoveryInfo: Codable, Equatable {
+    var repositoryRootPath: String
+    var worktreePath: String
+    var branchName: String
+    var managedByWillDeep: Bool
+}
+
+nonisolated enum AgentWorktreeRecoveryState: Equatable {
+    case none
+    case unavailable(path: String)
+    case restorable(AgentWorktreeRecoveryInfo)
+    case restoring(AgentWorktreeRecoveryInfo)
+    case failed(path: String, message: String)
+
+    var blocksComposer: Bool {
+        switch self {
+        case .none:
+            return false
+        case .unavailable, .restorable, .restoring, .failed:
+            return true
+        }
+    }
+}
+
+extension AgentSession {
+    nonisolated var isRunningInGitWorktree: Bool {
+        guard let sidebarWorkspaceRootPath, !sidebarWorkspaceRootPath.isEmpty,
+              let executionPath = workspaceLocation?.localPath ?? workspaceRootPath,
+              !executionPath.isEmpty else {
+            return false
+        }
+        return URL(fileURLWithPath: sidebarWorkspaceRootPath).standardizedFileURL.path
+            != URL(fileURLWithPath: executionPath).standardizedFileURL.path
+    }
+}
+
 struct AgentGitWorktreeCreateResult: Equatable {
     var worktree: AgentGitWorktree
     var output: String
@@ -160,6 +200,213 @@ nonisolated private final class AgentGitWorktreeOutputCollector: @unchecked Send
 }
 
 extension AppState {
+    nonisolated static func worktreeRecoveryInfo(
+        worktreePath: String,
+        repositoryHint: URL,
+        managedHomeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> AgentWorktreeRecoveryInfo? {
+        let worktreeURL = URL(fileURLWithPath: worktreePath).standardizedFileURL
+        let managedRoot = managedHomeDirectory
+            .appendingPathComponent(".willdeep/worktrees", isDirectory: true)
+            .standardizedFileURL
+        let managedPrefix = managedRoot.path.hasSuffix("/") ? managedRoot.path : managedRoot.path + "/"
+        guard worktreeURL.path.hasPrefix(managedPrefix),
+              let repositoryRoot = findGitRepositoryRoot(startingAt: repositoryHint),
+              let worktree = listGitWorktrees(repositoryRoot: repositoryRoot).first(where: {
+                  $0.url.path == worktreeURL.path
+              }),
+              !worktree.isPrimary,
+              !worktree.isDetached,
+              let branch = worktree.branch,
+              !branch.isEmpty else {
+            return nil
+        }
+        return AgentWorktreeRecoveryInfo(
+            repositoryRootPath: repositoryRoot.standardizedFileURL.path,
+            worktreePath: worktreeURL.path,
+            branchName: branch,
+            managedByWillDeep: true
+        )
+    }
+
+    nonisolated static func worktreeRecoveryState(
+        for session: AgentSession,
+        fileManager: FileManager = .default,
+        managedHomeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> AgentWorktreeRecoveryState {
+        guard session.isRunningInGitWorktree,
+              let path = session.workspaceLocation?.localPath ?? session.workspaceRootPath,
+              !path.isEmpty else {
+            return .none
+        }
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
+            return .none
+        }
+        guard let info = session.worktreeRecoveryInfo,
+              info.managedByWillDeep,
+              isWillDeepManagedWorktreePath(info.worktreePath, homeDirectory: managedHomeDirectory),
+              URL(fileURLWithPath: info.worktreePath).standardizedFileURL.path
+                == URL(fileURLWithPath: path).standardizedFileURL.path else {
+            return .unavailable(path: path)
+        }
+        let repositoryURL = URL(fileURLWithPath: info.repositoryRootPath).standardizedFileURL
+        guard findGitRepositoryRoot(startingAt: repositoryURL)?.standardizedFileURL.path == repositoryURL.path else {
+            return .unavailable(path: path)
+        }
+        let branch = runGitCommand(
+            arguments: ["show-ref", "--verify", "--quiet", "refs/heads/\(info.branchName)"],
+            in: repositoryURL,
+            allowedExitStatuses: [0, 1]
+        )
+        guard branch.status == 0 else { return .unavailable(path: path) }
+        let conflictingCheckout = listGitWorktrees(repositoryRoot: repositoryURL).contains { worktree in
+            worktree.branch == info.branchName
+                && worktree.url.path != URL(fileURLWithPath: path).standardizedFileURL.path
+                && !worktree.isPrunable
+        }
+        return conflictingCheckout ? .unavailable(path: path) : .restorable(info)
+    }
+
+    nonisolated static func restoreGitWorktree(
+        from info: AgentWorktreeRecoveryInfo,
+        managedHomeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Result<AgentGitWorktreeCreateResult, AgentGitWorktreeFailure> {
+        guard info.managedByWillDeep,
+              isWillDeepManagedWorktreePath(info.worktreePath, homeDirectory: managedHomeDirectory) else {
+            return .failure(.init(message: "This worktree was not created by WillDeep."))
+        }
+        let repositoryURL = URL(fileURLWithPath: info.repositoryRootPath).standardizedFileURL
+        let worktreeURL = URL(fileURLWithPath: info.worktreePath).standardizedFileURL
+        guard !FileManager.default.fileExists(atPath: worktreeURL.path) else {
+            return .failure(.init(message: "The original worktree path is already occupied."))
+        }
+        _ = runGitCommand(arguments: ["worktree", "prune"], in: repositoryURL)
+        let branch = runGitCommand(
+            arguments: ["show-ref", "--verify", "--quiet", "refs/heads/\(info.branchName)"],
+            in: repositoryURL,
+            allowedExitStatuses: [0, 1]
+        )
+        guard branch.status == 0 else {
+            return .failure(.init(message: "The original branch no longer exists."))
+        }
+        let conflictingCheckout = listGitWorktrees(repositoryRoot: repositoryURL).contains {
+            $0.branch == info.branchName && !$0.isPrunable
+        }
+        guard !conflictingCheckout else {
+            return .failure(.init(message: "The original branch is already checked out elsewhere."))
+        }
+        if let failure = prepareGitWorktreeParentDirectory(for: worktreeURL) {
+            return .failure(failure)
+        }
+        let result = runGitCommand(
+            arguments: ["worktree", "add", worktreeURL.path, info.branchName],
+            in: repositoryURL
+        )
+        guard result.succeeded else {
+            return .failure(.init(message: result.userMessage))
+        }
+        guard let restored = listGitWorktrees(repositoryRoot: repositoryURL).first(where: {
+            $0.url.path == worktreeURL.path
+        }) else {
+            return .failure(.init(message: "Git restored the checkout but did not report the worktree."))
+        }
+        return .success(.init(worktree: restored, output: result.stdout))
+    }
+
+    nonisolated private static func isWillDeepManagedWorktreePath(
+        _ path: String,
+        homeDirectory: URL
+    ) -> Bool {
+        let worktreePath = URL(fileURLWithPath: path).standardizedFileURL.path
+        let managedRootPath = homeDirectory
+            .appendingPathComponent(".willdeep/worktrees", isDirectory: true)
+            .standardizedFileURL.path
+        let managedPrefix = managedRootPath.hasSuffix("/") ? managedRootPath : managedRootPath + "/"
+        return worktreePath.hasPrefix(managedPrefix)
+    }
+
+    func refreshActiveAgentWorktreeRecoveryState() {
+        agentWorktreeRecoveryTask?.cancel()
+        agentWorktreeRecoveryState = .none
+        guard let runtime = activeRuntime else {
+            return
+        }
+        let session = runtime.session
+        let sessionID = session.id
+        agentWorktreeRecoveryTask = Task { [weak self] in
+            let state = await Task.detached(priority: .utility) {
+                Self.worktreeRecoveryState(for: session)
+            }.value
+            guard let self, !Task.isCancelled, self.activeAgentSessionID == sessionID else { return }
+            self.agentWorktreeRecoveryState = state
+            if state.blocksComposer {
+                _ = runtime.diagnoseLocalWorkspaceAfterFailure()
+            }
+        }
+    }
+
+    func restoreActiveAgentGitWorktree() {
+        guard case .restorable(let info) = agentWorktreeRecoveryState,
+              let sessionID = activeAgentSessionID else { return }
+        agentWorktreeRecoveryState = .restoring(info)
+        Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) {
+                Self.restoreGitWorktree(from: info)
+            }.value
+            guard let self, self.activeAgentSessionID == sessionID,
+                  let runtime = self.activeRuntime else { return }
+            switch result {
+            case .success:
+                runtime.rebindGitWorktree(
+                    to: info.worktreePath,
+                    sidebarWorkspaceRootPath: info.repositoryRootPath,
+                    recoveryInfo: info
+                )
+                runtime.worktreeChanges = .init()
+                self.persistAgentSession(runtime: runtime)
+                self.agentWorktreeRecoveryState = .none
+                self.refreshAgentGitWorktrees()
+                self.refreshActiveAgentWorktreeChanges()
+            case .failure(let failure):
+                self.agentWorktreeRecoveryState = .failed(
+                    path: info.worktreePath,
+                    message: failure.message
+                )
+            }
+        }
+    }
+
+    func chooseReplacementWorkspaceForActiveSession() {
+        guard let runtime = activeRuntime, !runtime.isResponding else { return }
+        let panel = NSOpenPanel()
+        panel.title = L10n.WorktreeRecovery.chooseWorkspace
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        let completion: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor [weak self] in
+                guard let self, let activeRuntime = self.activeRuntime,
+                      activeRuntime.id == runtime.id else { return }
+                _ = self.activateSecurityScope(for: url)
+                self.registerRecentFolder(url)
+                activeRuntime.rebindWorkspace(to: url.standardizedFileURL.path)
+                activeRuntime.worktreeChanges = .init()
+                activeRuntime.agentArtifactPaths = []
+                self.persistAgentSession(runtime: activeRuntime)
+                self.agentWorktreeRecoveryState = .none
+                self.refreshAgentGitWorktrees()
+                self.refreshAgentWorkspaceCollision()
+            }
+        }
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            panel.begin(completionHandler: completion)
+        }
+    }
+
     nonisolated static func parseGitWorktreeListPorcelain(_ output: String) -> [AgentGitWorktree] {
         var records: [[String]] = []
         var current: [String] = []

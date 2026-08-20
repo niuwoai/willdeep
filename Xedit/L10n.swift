@@ -595,6 +595,22 @@ nonisolated enum L10n {
         }
     }
 
+    enum WorktreeRecovery {
+        static let title = String(localized: "worktree.recovery.title", defaultValue: "Worktree cleaned up")
+        static let restorableMessage = String(localized: "worktree.recovery.restorable-message", defaultValue: "This conversation's worktree was removed. Restore it to continue on the original branch.")
+        static let unavailableMessage = String(localized: "worktree.recovery.unavailable-message", defaultValue: "This conversation's worktree is unavailable and cannot be safely restored. Choose another workspace to continue.")
+        static let restore = String(localized: "worktree.recovery.restore", defaultValue: "Restore Worktree")
+        static let restoring = String(localized: "worktree.recovery.restoring", defaultValue: "Restoring…")
+        static let chooseWorkspace = String(localized: "worktree.recovery.choose-workspace", defaultValue: "Choose Workspace")
+        static let sessionBadgeHelp = String(localized: "worktree.recovery.session-badge-help", defaultValue: "This conversation runs in a Git worktree")
+        static func failedMessage(_ details: String) -> String {
+            String(
+                format: String(localized: "worktree.recovery.failed-message", defaultValue: "The worktree could not be restored: %@"),
+                details
+            )
+        }
+    }
+
     enum Command {
         static let closeTabShortcut = String(localized: "command.close-tab.shortcut", defaultValue: "⌘W")
         static let closeTabSubtitle = String(localized: "command.close-tab.subtitle", defaultValue: "Close the active tab")
@@ -1345,6 +1361,15 @@ nonisolated enum L10n {
         static let sessionListShowLess = String(localized: "sidebar.session-list.show-less", defaultValue: "Show less")
         static let sessionMenuArchive = String(localized: "sidebar.session-menu.archive", defaultValue: "Archive")
         static let sessionMenuDelete = String(localized: "sidebar.session-menu.delete", defaultValue: "Delete session")
+        static let sessionMenuContinueInNewChat = String(localized: "sidebar.session-menu.continue-in-new-chat", defaultValue: "Continue in New Chat")
+        static let sessionMenuContinueInNewWorktree = String(localized: "sidebar.session-menu.continue-in-new-worktree", defaultValue: "Continue in New Worktree")
+        static let sessionMenuCopyDeepLink = String(localized: "sidebar.session-menu.copy-deep-link", defaultValue: "Copy Deep Link")
+        static let sessionMenuCopySessionID = String(localized: "sidebar.session-menu.copy-session-id", defaultValue: "Copy Session ID")
+        static let sessionMenuCopyWorkingDirectory = String(localized: "sidebar.session-menu.copy-working-directory", defaultValue: "Copy Working Directory")
+        static let sessionMenuMarkRead = String(localized: "sidebar.session-menu.mark-read", defaultValue: "Mark as Read")
+        static let sessionMenuMarkUnread = String(localized: "sidebar.session-menu.mark-unread", defaultValue: "Mark as Unread")
+        static let sessionMenuOpenInNewWindow = String(localized: "sidebar.session-menu.open-in-new-window", defaultValue: "Open Transcript in New Window")
+        static let sessionMenuShowInFinder = String(localized: "sidebar.session-menu.show-in-finder", defaultValue: "Show in Finder")
         static let sessionMenuPin = String(localized: "sidebar.session-menu.pin", defaultValue: "Pin")
         static let sessionMenuRename = String(localized: "sidebar.session-menu.rename", defaultValue: "Rename…")
         static let sessionMenuSummarizeTitle = String(localized: "sidebar.session-menu.summarize-title", defaultValue: "Summarize with AI")
@@ -1381,6 +1406,7 @@ nonisolated enum L10n {
         static let sessionRowUnpinTooltip = String(localized: "sidebar.session-row.unpin-tooltip", defaultValue: "Unpin")
         static let sessionRowWaitingApproval = String(localized: "sidebar.session-row.waiting-approval", defaultValue: "Waiting approval")
         static let sessionRowWaitingApprovalTooltip = String(localized: "sidebar.session-row.waiting-approval-tooltip", defaultValue: "This session is waiting for your approval or answer.")
+        static let sessionUnreadIndicator = String(localized: "sidebar.session-row.unread-indicator", defaultValue: "Unread chat")
         static func sessionTodoPlanTooltip(_ a1: String, _ a2: String, _ a3: String) -> String {
             let template = String(localized: "sidebar.session-todo.plan-tooltip", defaultValue: "Plan progress: %@ of %@ done. Current: %@")
             return String(format: template, a1, a2, a3)

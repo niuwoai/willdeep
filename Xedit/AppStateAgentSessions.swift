@@ -1458,7 +1458,7 @@ extension AppState {
         setAppMode(appMode == .agent ? .editor : .agent)
     }
 
-    private func upsertAgentUsageSnapshot(for session: AgentSession) {
+    func upsertAgentUsageSnapshot(for session: AgentSession) {
         let snapshot = AgentUsageSessionSnapshot(session: session)
         var snapshots = agentUsageSnapshots
         if let index = snapshots.firstIndex(where: { $0.id == session.id }) {
@@ -1713,6 +1713,7 @@ extension AppState {
             runtime.worktreeChanges = .init()
             runtime.agentArtifactPaths = []
             persistAgentSession(runtime: runtime)
+            agentWorktreeRecoveryState = .none
             unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
             refreshAgentGitWorktrees()
             refreshAgentWorkspaceCollision()
@@ -1741,11 +1742,16 @@ extension AppState {
         _ = activateSecurityScope(for: worktreeURL)
         runtime.rebindGitWorktree(
             to: worktreeURL.path,
-            sidebarWorkspaceRootPath: sidebarURL.path
+            sidebarWorkspaceRootPath: sidebarURL.path,
+            recoveryInfo: Self.worktreeRecoveryInfo(
+                worktreePath: worktreeURL.path,
+                repositoryHint: sidebarURL
+            )
         )
         runtime.worktreeChanges = .init()
         runtime.agentArtifactPaths = []
         persistAgentSession(runtime: runtime)
+        agentWorktreeRecoveryState = .none
         unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
         refreshAgentGitWorktrees()
         refreshAgentWorkspaceCollision()
@@ -1774,6 +1780,9 @@ extension AppState {
         runtime.worktreeChanges = .init()
         runtime.agentArtifactPaths = []
         persistAgentSession(runtime: runtime)
+        if activeAgentSessionID == runtimeID {
+            agentWorktreeRecoveryState = .none
+        }
         unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
         return url.path
     }
@@ -1794,6 +1803,7 @@ extension AppState {
             runtime.worktreeChanges = .init()
             runtime.agentArtifactPaths = []
             persistAgentSession(runtime: runtime)
+            agentWorktreeRecoveryState = .none
             unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
             return runtime.session
         }
@@ -1977,7 +1987,7 @@ extension AppState {
     }
 
     @discardableResult
-    private func materializeAgentSessionIfNeeded(id: AgentSession.ID) -> AgentSession? {
+    func materializeAgentSessionIfNeeded(id: AgentSession.ID) -> AgentSession? {
         guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return nil }
         guard agentSessionIsMetadataOnly(id) else {
             return agentSessions[index]
@@ -1990,7 +2000,7 @@ extension AppState {
         return fullSession
     }
 
-    private func evictInactiveAgentRuntimesIfNeeded(
+    func evictInactiveAgentRuntimesIfNeeded(
         protecting additionalProtectedID: AgentSession.ID? = nil
     ) {
         let maximumIdleRuntimes = 6
