@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.276.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.277.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.277.0-rc1 - 2026-08-20
+
+### Added
+
+- **Agent 记忆现在有了 Markdown 镜像和索引文件。** 记忆此前只存在 `UserDefaults` 里——是权威来源，但不可 grep、不可 diff、不可 review。现在每次保存都会同步投影到 `~/Library/Application Support/WillDeep/AgentMemory/`：`global/` 与 `projects/<fingerprint>/` 各自一棵树，每棵树一个 `MEMORY.md` 索引加 `topics/<slug>.md` 明细，带 YAML 头（id、scope、topics、时间戳）。投影是**单向**的，文件头写明由 WillDeep 生成、编辑会被覆盖，store 保持唯一真源。写入走后台串行队列且只写内容真变了的文件；归档或删除记忆会同步删掉对应文件。
+- **每轮上下文追加一段记忆索引，模型可用 `read_memory` 按需取用。** 原来只有宿主端打分召回：选 top-N 塞进 prompt，打分没捞到的记忆模型根本不知道它存在。现在打分召回之后追加一段索引——每条剩余记忆一行钩子加短 id，默认 24 条 / 1800 字符封顶；模型觉得哪条相关就用 `read_memory` 拉全文（读 store 不读投影文件，漂移过的文件不可能反过来喂出一个过期答案）。
+  - 这里是**两层并存不是替换**：打分召回是地板，保证不管会话路由到哪个模型 top-N 都送得到；索引是上限，让漏召回的条目至少可见。刻意没有照搬 Claude Code 的纯模型驱动方案，因为 WillDeep 的会话模型可能是省心托管路由到的小模型（定时任务尤其常见），「自己看索引判断该读哪条」对小模型执行度不稳定。同理索引行写的是钩子不是标题——即使模型永远不去读详情，钩子行本身已经可用。
+  - 设计取舍与待办（反向导入、跨仓库项目组、候选制）记在 [docs/AGENT_PROJECT_MEMORY_DESIGN.md](docs/AGENT_PROJECT_MEMORY_DESIGN.md) 新增的「实现现状」一节。
+
+### Tests
+
+- 新增 `AgentMemoryProjectionTests` / `AgentMemoryIndexBlockTests`：钩子可独立使用、长短内容的截断行为、多行压平、相似记忆的 slug 不碰撞、索引封顶且声明被截断、生成声明存在、全局与项目记忆分树且不串味、删除与归档同步删文件、内容没变不重写文件；索引块的排除逻辑、空集不出块、开关门禁、跨工作区隔离、预算上限。
 
 ## 1.276.0-rc2 - 2026-08-20
 

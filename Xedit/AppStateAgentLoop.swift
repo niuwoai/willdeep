@@ -711,6 +711,15 @@ extension AppState {
             attachedSkills: runtime.currentTurnAttachedSkills
         )
         let memoryContextBlock = AgentMemoryEngine.contextBlock(for: retrievedMemories)
+        // Everything scoring did not surface, one hook line each. Cheap enough
+        // to send every turn, and it is what makes `read_memory` reachable —
+        // the model cannot ask for a memory it was never told exists.
+        let memoryIndexBlock = AgentMemoryEngine.indexBlock(
+            records: memoryState.memories,
+            excluding: Set(retrievedMemories.map(\.record.id)),
+            settings: memoryState.settings,
+            rootDirectory: workspaceURL
+        )
 
         // Managed-routing output quality caps its escalation at one retry per
         // user turn (design doc §"重试限制").
@@ -963,6 +972,9 @@ extension AppState {
             }
             if let memoryContextBlock {
                 assembledPrompt += "\n\n\(memoryContextBlock)"
+            }
+            if let memoryIndexBlock {
+                assembledPrompt += "\n\n\(memoryIndexBlock)"
             }
             // Per-turn `/subagent` / `/no-subagent` directive. `.forbidden`
             // is already enforced by the tool table below; this paragraph

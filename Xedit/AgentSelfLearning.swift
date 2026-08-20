@@ -279,6 +279,67 @@ enum AgentSelfLearning {
         )
     }
 
+    /// On-demand recall. The per-turn context carries one hook line per
+    /// memory; this is how the model pulls the rest of one when the hook turns
+    /// out to matter.
+    ///
+    /// Reads the store rather than the projected Markdown on purpose: the
+    /// files are a one-way mirror, and a stale file must never be able to feed
+    /// the model an answer the store no longer holds.
+    static func readMemory(
+        arguments: [String: AgentJSONValue],
+        rootDirectory: URL?,
+        state: AgentMemoryState? = nil
+    ) throws -> AgentToolResult {
+        let state = state ?? AgentMemoryState()
+        let requested = try limitedRequiredString("id", in: arguments, maxCharacters: 64)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        let projectID = AgentMemoryEngine.projectFingerprint(for: rootDirectory)
+        let rootPath = rootDirectory?.standardizedFileURL.path
+        let visible = state.memories
+            .map(\.normalized)
+            .filter { !$0.isArchived }
+            .filter { AgentMemoryEngine.applies($0, projectID: projectID, rootPath: rootPath) }
+
+        // Accept the short id from the index and a full UUID alike — the model
+        // should not have to know which one it is holding.
+        guard let record = visible.first(where: {
+            $0.id.uuidString.lowercased() == requested
+                || AgentMemoryProjection.shortID($0.id) == requested
+        }) else {
+            let available = visible
+                .prefix(20)
+                .map { AgentMemoryProjection.shortID($0.id) }
+                .joined(separator: ", ")
+            return AgentToolResult(
+                summary: "No memory \(requested)",
+                payload: available.isEmpty
+                    ? "No memory with id \"\(requested)\" is available in this workspace, and no memories are recorded yet."
+                    : "No memory with id \"\(requested)\" is available in this workspace. Available ids: \(available)"
+            )
+        }
+
+        let entry = AgentMemoryProjection.entry(for: record)
+        var lines = [
+            "id: \(AgentMemoryProjection.shortID(record.id))",
+            "scope: \(record.scope.rawValue)",
+        ]
+        if !record.topics.isEmpty {
+            lines.append("topics: \(record.topics.sorted().joined(separator: ", "))")
+        }
+        if record.containsSensitiveContent {
+            lines.append("note: sensitive fragments were redacted when this was saved")
+        }
+        lines.append("")
+        lines.append(record.content)
+        return AgentToolResult(
+            summary: "Memory \(AgentMemoryProjection.shortID(record.id)): \(entry.title)",
+            payload: lines.joined(separator: "\n")
+        )
+    }
+
     static func createUserSkill(
         arguments: [String: AgentJSONValue],
         root: URL = AgentSkillFileManager.userSkillsRoot
