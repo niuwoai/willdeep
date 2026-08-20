@@ -493,25 +493,50 @@ extension AgentChatHistoryRenderer {
         }
     }
 
+    /// How a message's images are sized in the transcript.
+    ///
+    /// A user's own upload is metadata — they know what they attached, and
+    /// echoing it back at full size pushes the conversation off screen. An
+    /// image the assistant produced is *content*: a screenshot the user
+    /// has not seen is useless at 96pt, which is why captures used to read
+    /// as decorative specks next to the prose describing them.
+    enum ImageAttachmentPresentation {
+        case thumbnail
+        case content(layoutWidth: CGFloat)
+    }
+
     static func appendImageAttachments(
         _ images: [AgentImageAttachment],
         to result: NSMutableAttributedString,
         font: NSFont,
-        secondaryColor: NSColor
+        secondaryColor: NSColor,
+        presentation: ImageAttachmentPresentation = .thumbnail
     ) {
         for (index, image) in images.enumerated() {
             if index > 0 {
-                result.append(NSAttributedString(string: "  ", attributes: [.font: font]))
+                switch presentation {
+                case .thumbnail:
+                    result.append(NSAttributedString(string: "  ", attributes: [.font: font]))
+                case .content:
+                    // Content images stack; a row of large pictures would
+                    // wrap unpredictably mid-attachment.
+                    result.append(NSAttributedString(string: "\n", attributes: [.font: font]))
+                }
             }
             let attachmentStart = result.length
-            if let thumbnail = chatHistoryThumbnail(for: image) {
+            if let rendered = chatHistoryImage(for: image, presentation: presentation) {
                 let attachment = NSTextAttachment()
-                attachment.image = thumbnail
+                attachment.image = rendered
+                let baselineOffset: CGFloat
+                switch presentation {
+                case .thumbnail: baselineOffset = -4
+                case .content: baselineOffset = 0
+                }
                 attachment.bounds = NSRect(
                     x: 0,
-                    y: -4,
-                    width: thumbnail.size.width,
-                    height: thumbnail.size.height
+                    y: baselineOffset,
+                    width: rendered.size.width,
+                    height: rendered.size.height
                 )
                 result.append(NSAttributedString(attachment: attachment))
             } else {
@@ -532,28 +557,136 @@ extension AgentChatHistoryRenderer {
             if let marker = image.generatedReferenceMarker {
                 result.addAttribute(.agentChatHistoryImageReferenceMarker, value: marker, range: imageRange)
             }
+            if case .content = presentation, let caption = image.originCaption {
+                result.append(NSAttributedString(
+                    string: "\n\(caption)",
+                    attributes: [
+                        .font: NSFont.systemFont(ofSize: max(10, font.pointSize - 2)),
+                        .foregroundColor: secondaryColor,
+                    ]
+                ))
+            }
         }
     }
 
-    private static func chatHistoryThumbnail(for image: AgentImageAttachment) -> NSImage? {
+    private static func chatHistoryImage(
+        for image: AgentImageAttachment,
+        presentation: ImageAttachmentPresentation
+    ) -> NSImage? {
+        switch presentation {
+        case .thumbnail:
+            return chatHistoryThumbnail(for: image)
+        case .content(let layoutWidth):
+            return chatHistoryContentImage(for: image, layoutWidth: layoutWidth)
+        }
+    }
+
+    private static func chatHistoryContentImage(
+        for image: AgentImageAttachment,
+        layoutWidth: CGFloat
+    ) -> NSImage? {
+        guard let source = chatHistoryImageSource(for: image) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(MarkdownInlineImage.decodeMaxPixelSize),
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        let contentWidth = AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(layoutWidth)
+        let displaySize = MarkdownInlineImage.displaySize(
+            pixelSize: NSSize(width: cgImage.width, height: cgImage.height),
+            contentWidth: contentWidth
+        )
+        return NSImage(cgImage: cgImage, size: displaySize)
+    }
+
+    private static func chatHistoryImageSource(for image: AgentImageAttachment) -> CGImageSource? {
         // Never touch `dataBase64` here: for file-backed images it
         // round-trips the whole file through a base64 String on every
         // render. Inline bytes decode directly; file-backed images go
-        // through CGImageSourceCreateWithURL below.
+        // through CGImageSourceCreateWithURL.
         if let data = image.inlineImageData,
            let source = CGImageSourceCreateWithData(data as CFData, nil) {
-            return chatHistoryThumbnail(from: source)
+            return source
         }
         if let filePath = image.filePath?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !filePath.isEmpty,
-           let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: filePath) as CFURL, nil) {
-            return chatHistoryThumbnail(from: source)
+           !filePath.isEmpty {
+            return CGImageSourceCreateWithURL(URL(fileURLWithPath: filePath) as CFURL, nil)
         }
         return nil
     }
 
+    /// Renders a standalone `![alt](path)` line as a real picture sized to
+    /// the chat column, with the alt text as a caption underneath. Remote
+    /// sources and unreadable files fall back to the alt-text label —
+    /// assistant prose is model-controlled, so nothing here touches the
+    /// network. See `MarkdownInlineImage` for the resolution rules.
+    static func appendMarkdownImageBlock(
+        alt: String,
+        source: String,
+        to result: NSMutableAttributedString,
+        bodyFont: NSFont,
+        secondaryColor: NSColor,
+        layoutWidth: CGFloat
+    ) {
+        guard let url = MarkdownInlineImage.localFileURL(for: source),
+              let image = MarkdownInlineImage.loadImage(at: url) else {
+            result.append(NSAttributedString(
+                string: MarkdownInlineImage.fallbackLabel(alt: alt, source: source),
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: bodyFont.pointSize, weight: .medium),
+                    .foregroundColor: secondaryColor,
+                ]
+            ))
+            return
+        }
+
+        let contentWidth = AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(layoutWidth)
+        let displaySize = MarkdownInlineImage.displaySize(
+            pixelSize: image.size,
+            contentWidth: contentWidth
+        )
+        let sized = NSImage(size: displaySize)
+        sized.addRepresentations(image.representations)
+
+        let attachmentStart = result.length
+        let attachment = NSTextAttachment()
+        attachment.image = sized
+        attachment.bounds = NSRect(
+            x: 0,
+            y: 0,
+            width: displaySize.width,
+            height: displaySize.height
+        )
+        result.append(NSAttributedString(attachment: attachment))
+        result.addAttributes([
+            .link: url,
+            .cursor: NSCursor.pointingHand,
+            .toolTip: url.path,
+        ], range: NSRange(location: attachmentStart, length: result.length - attachmentStart))
+
+        let trimmedAlt = alt.trimmingCharacters(in: .whitespaces)
+        if !trimmedAlt.isEmpty {
+            result.append(NSAttributedString(
+                string: "\n\(trimmedAlt)",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: max(10, bodyFont.pointSize - 2)),
+                    .foregroundColor: secondaryColor,
+                ]
+            ))
+        }
+    }
+
+    private static func chatHistoryThumbnail(for image: AgentImageAttachment) -> NSImage? {
+        guard let source = chatHistoryImageSource(for: image) else { return nil }
+        return chatHistoryThumbnail(from: source)
+    }
+
     private static func chatHistoryThumbnail(from source: CGImageSource) -> NSImage? {
-        let maxSide: CGFloat = 96
+        let maxSide = MarkdownInlineImage.thumbnailMaxSide
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,

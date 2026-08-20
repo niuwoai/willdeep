@@ -672,7 +672,8 @@ enum AgentChatHistoryRenderer {
                             bodyColor: bodyColor,
                             secondaryColor: secondaryColor,
                             codeBackgroundColor: codeBackgroundColor,
-                            isDark: isDark
+                            isDark: isDark,
+                            layoutWidth: layoutWidth
                         )
                     }
                 }
@@ -717,7 +718,8 @@ enum AgentChatHistoryRenderer {
                     message.images,
                     to: result,
                     font: bodyFont,
-                    secondaryColor: secondaryColor
+                    secondaryColor: secondaryColor,
+                    presentation: .content(layoutWidth: layoutWidth)
                 )
                 let imageRange = NSRange(location: imageStart, length: result.length - imageStart)
                 applyBubbleChrome(
@@ -1227,7 +1229,8 @@ enum AgentChatHistoryRenderer {
         bodyColor: NSColor,
         secondaryColor: NSColor,
         codeBackgroundColor: NSColor,
-        isDark: Bool
+        isDark: Bool,
+        layoutWidth: CGFloat
     ) {
         let normalized = AgentMarkdownNormalizer.normalizedForChatRendering(source)
         let safe = AgentLongTokenBreaker.inject(into: normalized)
@@ -1404,6 +1407,17 @@ enum AgentChatHistoryRenderer {
                         .foregroundColor: secondaryColor,
                     ]
                 ))
+
+            case .image:
+                appendBlockSeparator()
+                appendMarkdownImageBlock(
+                    alt: block.text,
+                    source: block.imageSource ?? "",
+                    to: result,
+                    bodyFont: bodyFont,
+                    secondaryColor: secondaryColor,
+                    layoutWidth: layoutWidth
+                )
 
             case .table:
                 appendBlockSeparator()
