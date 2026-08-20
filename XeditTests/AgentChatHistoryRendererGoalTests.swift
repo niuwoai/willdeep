@@ -1246,6 +1246,51 @@ struct AgentChatHistoryRendererGoalTests {
         #expect(!basenameFont.fontDescriptor.symbolicTraits.contains(.monoSpace))
     }
 
+    /// `.log` 不在路径 chip 的后缀白名单里,`runtime/枪机日志.log` 这种行内
+    /// 代码只走 inline-code chip 链路。该链路把整段钉成 SF Mono,而显式
+    /// SF Mono run 在部分 macOS 上不合成 CJK fallback——中文拿到缺失/零宽
+    /// 字形,视觉上塌成 `runtime/ .log`(用户截图反馈)。路径 chip 早修过
+    /// 同款问题,回归锁住 inline-code 链路也补了 fallback。
+    @Test
+    func inlineCodeWithCJKKeepsVisibleGlyphFont() throws {
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [
+                AgentMessage(
+                    role: .assistant,
+                    content: "恢复 `hlw_gun_log()` 函数(写 `runtime/枪机日志.log`)"
+                )
+            ],
+            isDark: false
+        )
+        let text = rendered.string as NSString
+
+        // 中文段必须还在,且不能顶着 SF Mono——fallback 后是 PingFang/系统字体。
+        let cjkRange = text.range(of: "枪机日志")
+        #expect(cjkRange.location != NSNotFound)
+        let cjkFont = try #require(rendered.attribute(
+            .font,
+            at: cjkRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        #expect(!cjkFont.fontDescriptor.symbolicTraits.contains(.monoSpace))
+
+        // 同一个代码 chip 里的 ASCII 段保持等宽 + chip 底色,确认 fallback
+        // 只动了 CJK 子段、没有拆掉代码样式。
+        let asciiRange = text.range(of: "runtime/")
+        #expect(asciiRange.location != NSNotFound)
+        let asciiFont = try #require(rendered.attribute(
+            .font,
+            at: asciiRange.location,
+            effectiveRange: nil
+        ) as? NSFont)
+        #expect(asciiFont.fontDescriptor.symbolicTraits.contains(.monoSpace))
+        #expect(rendered.attribute(
+            .agentChatHistoryInlineCodeChipColor,
+            at: cjkRange.location,
+            effectiveRange: nil
+        ) != nil)
+    }
+
     @Test
     func localPathLinksUseQuietTextStylingWithoutChipBackgrounds() throws {
         let rendered = AgentChatHistoryRenderer.render(
