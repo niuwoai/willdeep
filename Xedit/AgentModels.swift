@@ -759,6 +759,14 @@ nonisolated enum SomeIMManagedModel {
     /// long, stable policy remains server-managed and cache-friendly.
     static let securityGuard = "someim-security-guard"
 
+    /// Dedicated context-compression model whose fixed compression prompt is
+    /// injected by the some.im gateway in replace mode (currently backed by
+    /// deepseek-v4-flash, billed at flash tier). The client sends only the
+    /// bare transcript; part labels ride in the user payload so the server
+    /// prompt stays byte-stable and cache-friendly. See muchtoken
+    /// docs/someim-32b-compressor.md. Never a turn's main model.
+    static let contextCompressor = "someim-32b-compressor"
+
     /// Every main-call model a judge decision is allowed to resolve to. A
     /// `target_model` outside this set is rejected and the local
     /// (domain, tier) mapping is used instead.
@@ -1947,6 +1955,16 @@ struct AgentConfiguration: Codable, Equatable {
         providerID == AgentProviderPreset.someIMID
             && model.trimmingCharacters(in: .whitespacesAndNewlines)
                 .caseInsensitiveCompare(SomeIMManagedModel.securityGuard) == .orderedSame
+    }
+
+    /// The some.im context compressor owns its fixed compression prompt on
+    /// the gateway (replace mode). Provider-scoped for the same reason as
+    /// `usesServerManagedSafetyJudge`: a custom provider exposing the same
+    /// model id must not silently lose the compression instruction.
+    var usesServerManagedCompressionPrompt: Bool {
+        providerID == AgentProviderPreset.someIMID
+            && model.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(SomeIMManagedModel.contextCompressor) == .orderedSame
     }
 
     var usesWillDeepGatewayResponsesState: Bool {
