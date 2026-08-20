@@ -435,6 +435,48 @@ extension WillDeepTests {
         }
     }
 
+    @Test("MySQL 多语句按句判定：全只读走 AI 复核，夹带写或引号不闭合仍留人工")
+    func mysqlMultiStatementReadOnlyBoundaries() {
+        // 用户实测案例：`SELECT 'SOCKET_OK'; SHOW DATABASES;` 每一句都只读，
+        // 却因为“看见分号就整条判危”落到人工确认卡，而同一天单语句的
+        // `SELECT VERSION();` 被裁判自动放行。分号不该是判据，语句内容才是。
+        let aiReviewed = [
+            "mysql -uroot -e \"SELECT 'SOCKET_OK'; SHOW DATABASES;\"",
+            "mysql -h127.0.0.1 -e \"SELECT VERSION(); SHOW DATABASES; SHOW TABLES;\"",
+            // 引号内的分号是数据，不是分隔符。
+            "mysql -uroot -e \"SELECT ';' AS semicolon\"",
+            // 空语句（连续分号、结尾分号）不改变判定。
+            "mysql -uroot -e \"SELECT 1;; SHOW DATABASES;\"",
+        ]
+        for command in aiReviewed {
+            #expect(SafeCommand.classify(command: command) == .needsJudgment)
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-mysql-review-workspace")
+            )
+            #expect(!decision.requiresTypedConfirmation)
+            #expect(AppState.canSendToSafetyJudge(toolName: "run_command", sandboxDecision: decision))
+        }
+
+        // 逐句判定不是放水：任意一句不是只读，整条仍然落人工。
+        let humanGated = [
+            "mysql -uroot -e \"SELECT 1; DROP TABLE jobs\"",
+            "mysql -uroot -e \"SHOW DATABASES; DELETE FROM jobs WHERE id = 1\"",
+            "mysql -uroot -e \"SELECT 1; SELECT * FROM jobs INTO OUTFILE '/tmp/x'\"",
+            // 引号不闭合 —— 解析不确定就 fail-closed。
+            "mysql -uroot -e \"SELECT 'unterminated; SHOW DATABASES\"",
+        ]
+        for command in humanGated {
+            #expect(SafeCommand.classify(command: command) == .alwaysDangerous)
+            let decision = AgentSandboxPolicy.commandDecision(
+                command: command,
+                rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-mysql-review-workspace")
+            )
+            #expect(decision.requiresTypedConfirmation)
+            #expect(!AppState.canSendToSafetyJudge(toolName: "run_command", sandboxDecision: decision))
+        }
+    }
+
     @Test("SafeCommand: shell 控制流 + whois 等只读网络命令自动放行")
     func testSafeCommandShellControlFlow() {
         // 用户实测案例：纯只读 whois 循环此前落到 LLM judge 又被拒，

@@ -1273,12 +1273,23 @@ nonisolated enum SafeCommand {
         return nil
     }
 
+    /// 一次 `-e` 里可以带多条语句，而诊断命令天然就是这个形状
+    /// （`SELECT 'SOCKET_OK'; SHOW DATABASES;`）。早期实现看见分号就整条
+    /// 判危，于是**每一句都只读**的探活命令也拿不到 AI 复核，只能次次人工点
+    /// （用户实测：同一天同一个 mysql，单语句 `SELECT VERSION();` 被裁判自动
+    /// 放行，多加一句 `SHOW DATABASES;` 就直接落到确认卡）。
+    ///
+    /// 改为逐句判定后边界反而更紧：`SELECT 1; DROP TABLE jobs` 里的第二句照样
+    /// 撞上 mutation 正则，而合法的只读组合不再被误伤。
     private static func databaseSQLIsReadOnly(_ sql: String) -> Bool {
-        let trimmed = sql.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !databaseSQLContainsMultipleStatements(trimmed) else {
+        guard let statements = databaseSQLStatements(sql), !statements.isEmpty else {
             return false
         }
-        let lowered = trimmed.lowercased()
+        return statements.allSatisfy(databaseSQLStatementIsReadOnly)
+    }
+
+    private static func databaseSQLStatementIsReadOnly(_ statement: String) -> Bool {
+        let lowered = statement.lowercased()
         let readOnlyPrefixes = [
             "select", "show", "describe", "desc", "explain", "with"
         ]
@@ -1303,7 +1314,12 @@ nonisolated enum SafeCommand {
         })
     }
 
-    private static func databaseSQLContainsMultipleStatements(_ sql: String) -> Bool {
+    /// 按语句分隔符拆开内联 SQL。引号（`'`、`"`、反引号）内的分号是数据而不是
+    /// 分隔符，所以 `SELECT ';'` 仍然是一条语句。引号没闭合或整串以转义符结尾时
+    /// 返回 `nil`——解析不确定就 fail-closed，交回人工，绝不猜。
+    private static func databaseSQLStatements(_ sql: String) -> [String]? {
+        var statements: [String] = []
+        var current = ""
         var activeQuote: Character?
         var escaped = false
         var cursor = sql.startIndex
@@ -1311,27 +1327,37 @@ nonisolated enum SafeCommand {
             let character = sql[cursor]
             let next = sql.index(after: cursor)
             if escaped {
+                current.append(character)
                 escaped = false
                 cursor = next
                 continue
             }
             if character == "\\" {
+                current.append(character)
                 escaped = true
                 cursor = next
                 continue
             }
             if ["'", "\"", "`"].contains(character) {
                 activeQuote = activeQuote == character ? nil : (activeQuote == nil ? character : activeQuote)
+                current.append(character)
                 cursor = next
                 continue
             }
             if character == ";", activeQuote == nil {
-                let remainder = sql[next...].trimmingCharacters(in: .whitespacesAndNewlines)
-                if !remainder.isEmpty { return true }
+                let statement = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !statement.isEmpty { statements.append(statement) }
+                current = ""
+                cursor = next
+                continue
             }
+            current.append(character)
             cursor = next
         }
-        return activeQuote != nil || escaped
+        guard activeQuote == nil, !escaped else { return nil }
+        let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tail.isEmpty { statements.append(tail) }
+        return statements
     }
 
     /// Network fetchers never receive a static allow: even a GET can follow a
