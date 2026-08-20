@@ -18,6 +18,21 @@ private enum SessionIdentityMetrics {
     static let popoverWidth: CGFloat = 330
 }
 
+/// 侧边终端标签条的中性配色层次。标签条是常驻 chrome,不该用强调色长期
+/// 抢注意力;「运行中 / 选中 / 本会话打开 / 带快捷方式」这些状态改由中性灰
+/// 的深浅拉开层次,与错误横幅、委派进度条的灰度改造同一套思路。
+private enum TerminalTabChrome {
+    static let runningIconOpacity: Double = 0.78
+    static let idleIconOpacity: Double = 0.62
+    static let activeFillOpacity: Double = 0.10
+    static let ownedBorderOpacity: Double = 0.30
+    static let badgeActiveTextOpacity: Double = 0.85
+    static let badgeActiveFillOpacity: Double = 0.12
+    static let badgeIdleFillOpacity: Double = 0.06
+    static let badgeActiveStrokeOpacity: Double = 0.24
+    static let badgeIdleStrokeOpacity: Double = 0.13
+}
+
 enum TerminalRecordingMetrics {
     static let controlRowHeight: CGFloat = 42
     static let recordButtonHeight: CGFloat = 28
@@ -489,7 +504,11 @@ private struct AgentSidePanelTerminalContentView: View {
         return HStack(spacing: 5) {
             Image(systemName: tab.kind.isSSH ? "network" : "terminal")
                 .font(.system(size: 9))
-                .foregroundStyle(tab.isRunning ? interfacePalette.accent : interfacePalette.secondaryText)
+                .foregroundStyle(
+                    tab.isRunning
+                        ? interfacePalette.primaryText.opacity(TerminalTabChrome.runningIconOpacity)
+                        : interfacePalette.secondaryText.opacity(TerminalTabChrome.idleIconOpacity)
+                )
             Text(tab.title)
                 .font(.system(size: 11))
                 .lineLimit(1)
@@ -504,7 +523,7 @@ private struct AgentSidePanelTerminalContentView: View {
             if isOwned {
                 Image(systemName: "link")
                     .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(interfacePalette.accent)
+                    .foregroundStyle(interfacePalette.secondaryText)
             }
             Button {
                 controller.closeTab(id: tab.id)
@@ -526,7 +545,11 @@ private struct AgentSidePanelTerminalContentView: View {
         .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isActive ? interfacePalette.selectionFill : interfacePalette.controlFill.opacity(0.42))
+                .fill(
+                    isActive
+                        ? interfacePalette.primaryText.opacity(TerminalTabChrome.activeFillOpacity)
+                        : interfacePalette.controlFill.opacity(0.42)
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -544,17 +567,34 @@ private struct AgentSidePanelTerminalContentView: View {
             .font(.system(size: 9, weight: .semibold))
             .lineLimit(1)
             .truncationMode(.tail)
-            .foregroundStyle(isActive ? interfacePalette.accent : interfacePalette.secondaryText)
+            .foregroundStyle(
+                isActive
+                    ? interfacePalette.primaryText.opacity(TerminalTabChrome.badgeActiveTextOpacity)
+                    : interfacePalette.secondaryText
+            )
             .padding(.horizontal, 5)
             .frame(maxWidth: 74)
             .frame(height: 15)
             .background(
                 Capsule(style: .continuous)
-                    .fill(interfacePalette.accent.opacity(isActive ? 0.14 : 0.08))
+                    .fill(
+                        interfacePalette.primaryText.opacity(
+                            isActive
+                                ? TerminalTabChrome.badgeActiveFillOpacity
+                                : TerminalTabChrome.badgeIdleFillOpacity
+                        )
+                    )
             )
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(interfacePalette.accent.opacity(isActive ? 0.28 : 0.14), lineWidth: 1)
+                    .stroke(
+                        interfacePalette.primaryText.opacity(
+                            isActive
+                                ? TerminalTabChrome.badgeActiveStrokeOpacity
+                                : TerminalTabChrome.badgeIdleStrokeOpacity
+                        ),
+                        lineWidth: 1
+                    )
             )
     }
 
@@ -599,8 +639,10 @@ private struct AgentSidePanelTerminalContentView: View {
             .focusable(false)
         } label: {
             Image(systemName: "plus")
+                .foregroundStyle(interfacePalette.secondaryText)
         }
         .menuStyle(.borderlessButton)
+        .agentQuietMenuChrome(interfacePalette.secondaryText)
         .menuIndicator(.hidden)
         .focusable(false)
         .fixedSize()
@@ -837,7 +879,7 @@ private struct AgentSidePanelTerminalContentView: View {
 
     private func tabBorderColor(_ tab: AgentTerminalTab, isActive: Bool) -> Color {
         if isOpenedByCurrentSession(tab) {
-            return interfacePalette.accent.opacity(0.55)
+            return interfacePalette.primaryText.opacity(TerminalTabChrome.ownedBorderOpacity)
         }
         return isActive ? interfacePalette.hairline.opacity(0.92) : interfacePalette.hairline.opacity(0.56)
     }
