@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.275.0-rc6 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.276.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.276.0-rc1 - 2026-08-20
+
+### Added
+
+- **上下文压缩改走网关托管的 `someim-32b-compressor`。** 登录 some.im 后，压缩候选链在本地模型之后、会话压缩模型之前插入托管压缩配置：固定压缩指令存在服务端并以 replace 模式注入（见 muchtoken `docs/someim-32b-compressor.md`），客户端只发裸转录；map-reduce 分段的"第 X/Y 部分"标注改随 user payload 走，服务端 prompt 保持字节级稳定、前缀缓存可命中。用户在设置里显式指定压缩模型时尊重该选择，不插入托管候选；未登录 / 自定义 Provider 保留本地英文压缩 prompt 原样兜底。
+- 压缩请求补上 some.im 归因头（session id + workspace id）。此前压缩流量不带这两个头，服务端看不出它属于哪个会话；仅对 some.im 配置附加，非 some.im 候选不受影响。
+
+### Tests
+
+- 新增回归：托管压缩请求必须无 system prompt、多段标注在 user payload；其它 Provider（含自定义 relay 暴露同名模型 id）必须保留本地压缩 prompt；登录态压缩候选链托管模型排在会话模型之前、显式指定压缩模型时托管候选不出现。
 
 ## 1.275.0-rc6 - 2026-08-20
 

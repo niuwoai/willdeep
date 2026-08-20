@@ -185,12 +185,23 @@ extension AppState {
             priorSummary: priorSummary
         )
 
+        // some.im 归因头：压缩流量此前不带 session/workspace id，服务端
+        // 看不出这笔请求属于哪个会话。与主循环同一构造（AppStateAgentLoop），
+        // 发请求时仅对 some.im 配置附加。
+        let someIMContext = SomeIMRequestContext(
+            sessionID: runtime.id.uuidString,
+            workspaceID: AgentWorkspaceIdentityStore.workspaceID(
+                forWorkspaceKey: Self.managedWorkspaceKey(for: runtime)
+            )
+        )
+
         var lastError: Error?
         for configuration in configurations {
             do {
                 let trimmed = try await summarizeForCompression(
                     segments: segments,
-                    configuration: configuration
+                    configuration: configuration,
+                    someIMContext: someIMContext
                 )
                 guard !trimmed.isEmpty else {
                     lastError = AgentClientError.serverStatus(
@@ -237,7 +248,8 @@ extension AppState {
     @MainActor
     private func summarizeForCompression(
         segments: [String],
-        configuration: AgentConfiguration
+        configuration: AgentConfiguration,
+        someIMContext: SomeIMRequestContext?
     ) async throws -> String {
         let window = Self.agentContextWindow(
             model: configuration.model,
@@ -251,7 +263,11 @@ extension AppState {
             let chunks = Self.compressionChunks(segments: current, tokenBudget: budget)
             guard !chunks.isEmpty else { return "" }
             do {
-                let summaries = try await summarizeChunks(chunks, configuration: configuration)
+                let summaries = try await summarizeChunks(
+                    chunks,
+                    configuration: configuration,
+                    someIMContext: someIMContext
+                )
                 if chunks.count == 1 || summaries.count <= 1 {
                     return summaries.first ?? ""
                 }
@@ -323,12 +339,14 @@ extension AppState {
     @MainActor
     private func summarizeChunks(
         _ chunks: [String],
-        configuration: AgentConfiguration
+        configuration: AgentConfiguration,
+        someIMContext: SomeIMRequestContext?
     ) async throws -> [String] {
         if chunks.count == 1 {
             let summary = try await requestCompressionSummary(
                 transcript: chunks[0],
                 configuration: configuration,
+                someIMContext: someIMContext,
                 part: 1,
                 partCount: 1
             )
@@ -345,6 +363,7 @@ extension AppState {
                     let summary = try await self.requestCompressionSummary(
                         transcript: transcript,
                         configuration: configuration,
+                        someIMContext: someIMContext,
                         part: index + 1,
                         partCount: partCount
                     )
@@ -370,17 +389,20 @@ extension AppState {
     private func requestCompressionSummary(
         transcript: String,
         configuration: AgentConfiguration,
+        someIMContext: SomeIMRequestContext?,
         part: Int,
         partCount: Int
     ) async throws -> String {
-        let client = AgentClient(configuration: configuration)
+        let context = configuration.providerID == AgentProviderPreset.someIMID
+            ? someIMContext
+            : nil
+        let client = AgentClient(configuration: configuration, someIMContext: context)
         let collector = CompressionSummaryCollector()
-        let messages = AgentLocalModelPrompting.messagesWithLanguageInstruction(
-            systemPrompt: Self.compressionSystemPrompt(part: part, partCount: partCount),
-            userMessages: [
-                AgentMessage(role: .user, content: "Transcript to compress:\n\n\(transcript)")
-            ],
-            configuration: configuration
+        let messages = Self.compressionRequestMessages(
+            transcript: transcript,
+            configuration: configuration,
+            part: part,
+            partCount: partCount
         )
         try await client.streamChat(messages: messages) { event in
             if case .textDelta(let delta) = event {
@@ -388,6 +410,36 @@ extension AppState {
             }
         }
         return await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The exact messages one compression request carries.
+    ///
+    /// Hosted mode (`someim-32b-compressor`): the fixed compression prompt is
+    /// injected by the some.im gateway in replace mode, so the client sends
+    /// only the bare transcript, and the multi-part label rides in the user
+    /// payload — the server prompt stays byte-stable and cache-friendly.
+    /// Every other configuration keeps the local system prompt below as the
+    /// signed-out / custom-provider mirror.
+    nonisolated static func compressionRequestMessages(
+        transcript: String,
+        configuration: AgentConfiguration,
+        part: Int,
+        partCount: Int
+    ) -> [AgentMessage] {
+        if configuration.usesServerManagedCompressionPrompt {
+            var content = "Transcript to compress:\n\n\(transcript)"
+            if partCount > 1 {
+                content = "第 \(part)/\(partCount) 部分（按顺序切分，后续合并）\n\n" + content
+            }
+            return [AgentMessage(role: .user, content: content)]
+        }
+        return AgentLocalModelPrompting.messagesWithLanguageInstruction(
+            systemPrompt: compressionSystemPrompt(part: part, partCount: partCount),
+            userMessages: [
+                AgentMessage(role: .user, content: "Transcript to compress:\n\n\(transcript)")
+            ],
+            configuration: configuration
+        )
     }
 
     nonisolated static func compressionSystemPrompt(part: Int, partCount: Int) -> String {

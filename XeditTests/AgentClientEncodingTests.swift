@@ -509,6 +509,74 @@ struct AgentContextCompressionSplitTests {
         #expect(chunks[0].contains("elided for compression"))
     }
 
+    /// Hosted compressor (`someim-32b-compressor`): the fixed compression
+    /// prompt is injected by the some.im gateway in replace mode, so the
+    /// request must carry only the bare transcript — no client system prompt
+    /// — with the multi-part label riding in the user payload.
+    @Test
+    func compressionRequestMessagesAreBareForHostedCompressor() {
+        let configuration = AgentConfiguration(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: SomeIMIntegrationSettings.defaultBaseURL,
+            model: SomeIMManagedModel.contextCompressor,
+            apiKey: "sk-test"
+        ).normalized
+        #expect(configuration.usesServerManagedCompressionPrompt)
+
+        let single = AppState.compressionRequestMessages(
+            transcript: "USER:\nhello",
+            configuration: configuration,
+            part: 1,
+            partCount: 1
+        )
+        #expect(single.count == 1)
+        #expect(single.first?.role == .user)
+        #expect(single.first?.content.contains("You compress") == false)
+        #expect(single.first?.content.contains("第") == false)
+
+        let multi = AppState.compressionRequestMessages(
+            transcript: "USER:\nhello",
+            configuration: configuration,
+            part: 2,
+            partCount: 3
+        )
+        #expect(multi.count == 1)
+        #expect(multi.first?.content.contains("第 2/3 部分") == true)
+    }
+
+    /// Every other configuration keeps the local system prompt — the
+    /// signed-out / custom-provider mirror must never lose the task
+    /// description. A custom provider exposing the same model id is also not
+    /// hosted (provider-scoped guard, same rationale as the safety judge).
+    @Test
+    func compressionRequestMessagesKeepLocalPromptElsewhere() {
+        let openAI = AgentConfiguration(
+            providerID: AgentProviderPreset.openAIID,
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-5.4-mini",
+            apiKey: "sk-test"
+        ).normalized
+        #expect(!openAI.usesServerManagedCompressionPrompt)
+
+        let messages = AppState.compressionRequestMessages(
+            transcript: "USER:\nhello",
+            configuration: openAI,
+            part: 1,
+            partCount: 1
+        )
+        #expect(messages.count == 2)
+        #expect(messages.first?.role == .system)
+        #expect(messages.first?.content.contains("You compress") == true)
+
+        let sameIDElsewhere = AgentConfiguration(
+            providerID: AgentProviderPreset.openAIID,
+            baseURL: "https://relay.example.com/v1",
+            model: SomeIMManagedModel.contextCompressor,
+            apiKey: "sk-test"
+        ).normalized
+        #expect(!sameIDElsewhere.usesServerManagedCompressionPrompt)
+    }
+
     /// The summary request must not carry more bytes than an ordinary chat
     /// request — tool results go through the same compaction.
     @Test

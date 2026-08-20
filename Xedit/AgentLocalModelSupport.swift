@@ -675,10 +675,54 @@ extension AppState {
     }
 
     func contextCompressionConfigurationCandidates() -> [AgentConfiguration] {
-        auxiliaryConfigurationCandidates(
-            local: localAuxiliaryConfiguration(for: .contextSummary),
-            fallback: agentConfiguration.normalized.resolved(for: .compression)
-        )
+        // 顺序：用户显式偏好的本地模型 → some.im 网关托管压缩模型
+        // （someim-32b-compressor，固定指令由服务端 replace 注入）→ 会话
+        // 压缩模型兜底。用户在设置里显式指定了压缩模型时尊重该选择，
+        // 不插入托管压缩候选。
+        let normalized = agentConfiguration.normalized
+        let hasExplicitCompressionModel = !normalized.compressionModel
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hosted = hasExplicitCompressionModel ? nil : someIMContextCompressorConfiguration()
+        return auxiliaryConfigurationCandidates(ordered: [
+            localAuxiliaryConfiguration(for: .contextSummary),
+            hosted,
+            normalized.resolved(for: .compression)
+        ])
+    }
+
+    /// A some.im hosted-compressor configuration, or `nil` when the user is
+    /// not signed into some.im. Mirrors `someIMSecurityGuardConfiguration`:
+    /// built from the some.im library entry when one exists and always
+    /// carrying the shared-session key.
+    private func someIMContextCompressorConfiguration() -> AgentConfiguration? {
+        guard SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults() else {
+            return nil
+        }
+        let key = SomeIMIntegrationStore.loadAPIKey()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return nil }
+
+        if let entry = agentProviderLibrary.entries.first(where: {
+            $0.providerID == AgentProviderPreset.someIMID
+        }) {
+            var config = entry.makeConfiguration(
+                flashOverride: SomeIMManagedModel.contextCompressor,
+                routingMode: .flash
+            )
+            config.model = SomeIMManagedModel.contextCompressor
+            config.apiKey = key
+            return config.normalized
+        }
+
+        return AgentConfiguration(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: SomeIMIntegrationSettings.defaultBaseURL,
+            model: SomeIMManagedModel.contextCompressor,
+            flashModel: SomeIMManagedModel.contextCompressor,
+            proModel: SomeIMManagedModel.autoPro,
+            routingMode: .flash,
+            apiKey: key
+        ).normalized
     }
 
     func titleSummaryConfigurationCandidates(remoteModelID: String) -> [AgentConfiguration] {
@@ -697,11 +741,13 @@ extension AppState {
         local: AgentConfiguration?,
         fallback: AgentConfiguration
     ) -> [AgentConfiguration] {
-        var candidates: [AgentConfiguration] = []
-        if let local {
-            candidates.append(local.normalized)
-        }
-        candidates.append(fallback.normalized)
+        auxiliaryConfigurationCandidates(ordered: [local, fallback])
+    }
+
+    private func auxiliaryConfigurationCandidates(
+        ordered: [AgentConfiguration?]
+    ) -> [AgentConfiguration] {
+        let candidates = ordered.compactMap { $0?.normalized }
         var seen = Set<String>()
         return candidates.filter { configuration in
             let usable = !configuration.requiresAPIKey || !configuration.apiKey.isEmpty
