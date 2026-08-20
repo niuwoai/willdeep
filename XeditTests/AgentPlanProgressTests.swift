@@ -969,10 +969,101 @@ struct AgentPlanProgressTests {
         )
         #expect(executionPrompt.contains("=== ACTIVE PLAN — CONTINUE, DO NOT RE-PLAN ==="))
         #expect(executionPrompt.contains("refresh the visible checklist immediately"))
-        #expect(executionPrompt.contains("Only a valid `progress` fenced block changes WillDeep's visible checklist"))
+        #expect(executionPrompt.contains("Only lines in exactly that shape update WillDeep's visible checklist"))
         #expect(executionPrompt.contains("Do not emit a replacement `plan` block"))
         #expect(executionPrompt.contains("The plan is now in unattended execution"))
         #expect(executionPrompt.contains("ordinary Git/worktree conflicts"))
         #expect(executionPrompt.contains("Re-contact the user only for missing authority or credentials"))
+    }
+
+    @Test("中断计划的提示词带上与活跃计划同一份 progress 格式合同")
+    func interruptedPlanPromptCarriesProgressFormatContract() {
+        // 回归：格式合同过去只写在活跃分支。用户按 Stop 后每回合注入的是
+        // 中断分支，只说“发一个 progress 块”不给格式，模型于是发人类可读的
+        // ✓ 清单 → 解析出 0 条 → interruptedAt 清不掉 → 下回合仍是无格式的
+        // 中断提示词，自锁死循环。两个分支必须带同一份格式说明和示例。
+        var interrupted = AgentPlan(
+            status: .approved,
+            steps: [AgentPlan.Step(text: "Run the tests")],
+            summary: ""
+        )
+        interrupted.interruptedAt = Date()
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: nil,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .normal,
+            currentPlan: interrupted
+        )
+        #expect(prompt.contains("=== INTERRUPTED PLAN — USER DECIDES WHAT'S NEXT ==="))
+        #expect(prompt.contains("1: done"))
+        #expect(prompt.contains("2: in_progress"))
+        #expect(prompt.contains("Status tokens:"))
+        #expect(prompt.contains("Only lines in exactly that shape update WillDeep's visible checklist"))
+        // 恢复前先对账：历史显示做完、状态却仍是 pending 的步骤应补登记而非重做。
+        #expect(prompt.contains("Reconcile before you resume"))
+        // 没有违规时不得出现纠偏段落。
+        #expect(!prompt.contains("CORRECTION — REQUIRED"))
+    }
+
+    @Test("progress 块解析为零时下一轮注入纠偏，正常时不打扰")
+    func unparsableProgressBlockTriggersCorrectionNotice() {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "Run the tests")],
+            summary: ""
+        )
+        let corrected = AgentContextBuilder.systemPrompt(
+            rootDirectory: nil,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .normal,
+            currentPlan: plan,
+            planProgressFormatViolation: true
+        )
+        #expect(corrected.contains("CORRECTION — REQUIRED"))
+        #expect(corrected.contains("stale step counter"))
+
+        let clean = AgentContextBuilder.systemPrompt(
+            rootDirectory: nil,
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .normal,
+            currentPlan: plan,
+            planProgressFormatViolation: false
+        )
+        #expect(!clean.contains("CORRECTION — REQUIRED"))
+    }
+
+    @Test("containsProgressBlock 认围栏本身，与其中的行能否解析无关")
+    func containsProgressBlockDetectsUnparsableBodies() {
+        // 取自实际卡死会话：模型把 ```progress 当成状态展示框使用。
+        let humanReadable = """
+        进展如下：
+
+        ```progress
+        Phase 1: 基础管理 API
+        ✓ 租户管理：GET/POST/PATCH/DELETE /api/v1/tenants
+        ✓ 机房管理：/api/v1/tenants/:tenant_id/regions
+        ```
+        """
+        #expect(AgentPlanParser.containsProgressBlock(humanReadable))
+
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "A"), AgentPlan.Step(text: "B")],
+            summary: ""
+        )
+        // 围栏在、但一行都解析不出——正是静默失败的形态。
+        #expect(AgentPlanParser.applyProgress(to: plan, from: humanReadable) == nil)
+
+        // 没有围栏就不该报“违规”，避免打扰只写散文的回合。
+        #expect(!AgentPlanParser.containsProgressBlock("已完成租户管理，继续下一项。"))
     }
 }

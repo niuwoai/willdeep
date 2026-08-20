@@ -762,14 +762,54 @@ extension AppState {
     }
 
     func applyAgentPlanProgressFromLatestMessage(for runtime: AgentRuntime, existingPlan: AgentPlan) {
-        guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else { return }
-        if var next = AgentPlanParser.applyProgress(to: existingPlan, from: last.content) {
-            // A progress report against an interrupted plan is the model
-            // resuming it (the interrupted-plan prompt only allows progress
-            // blocks on resume) — restore it as the execution contract.
-            next.interruptedAt = nil
-            runtime.currentPlan = next
+        // 扫描本回合的每一条助手消息，按时间顺序逐条应用（后报的状态覆盖
+        // 先报的）。只看"最后一条非空助手消息"会漏掉回合中段的 progress
+        // 块：模型常在两轮工具调用之间上报进度，而收尾那条是纯叙述——实测
+        // 一个会话里 7 个 progress 块有 2 个正是这样被丢掉的。
+        var next = existingPlan
+        var didApply = false
+        for message in assistantMessagesInLatestTurn(of: runtime) {
+            guard let updated = AgentPlanParser.applyProgress(to: next, from: message.content) else {
+                continue
+            }
+            next = updated
+            didApply = true
         }
+        guard didApply else { return }
+        // A progress report against an interrupted plan is the model
+        // resuming it (the interrupted-plan prompt only allows progress
+        // blocks on resume) — restore it as the execution contract.
+        next.interruptedAt = nil
+        runtime.currentPlan = next
+    }
+
+    /// 当前回合内**已发出**的助手消息里，是否出现过"有 `progress` 围栏、却
+    /// 一行都解析不出"的情况。为真时下一轮请求的系统提示词追加纠偏，把静默
+    /// 失败变成可自愈的显式反馈。
+    ///
+    /// 作用窗口是回合内：一个回合里模型会多轮工具调用、每轮重新组装请求，
+    /// 所以第一次发错格式后，下一轮就能收到纠偏，不必等到回合结束。任何
+    /// 一条能解析的块都算模型守约，本回合不再纠偏。
+    func latestTurnHasUnparsableProgressBlock(for runtime: AgentRuntime) -> Bool {
+        guard let plan = runtime.currentPlan, !plan.steps.isEmpty else { return false }
+        var sawProgressBlock = false
+        for message in assistantMessagesInLatestTurn(of: runtime)
+        where AgentPlanParser.containsProgressBlock(message.content) {
+            sawProgressBlock = true
+            if AgentPlanParser.applyProgress(to: plan, from: message.content) != nil {
+                return false
+            }
+        }
+        return sawProgressBlock
+    }
+
+    /// 本回合（最后一条用户消息之后）的非空助手消息，保持原始顺序。
+    func assistantMessagesInLatestTurn(of runtime: AgentRuntime) -> [AgentMessage] {
+        let messages = runtime.messages
+        let start = messages.lastIndex { $0.role == .user }
+            .map { messages.index(after: $0) } ?? messages.startIndex
+        guard start < messages.endIndex else { return [] }
+        return messages[start...].filter { $0.role == .assistant && !$0.content.isEmpty }
     }
 
     /// Convenience wrapper that targets `activeRuntime`.
