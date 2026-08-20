@@ -750,27 +750,28 @@ extension AppState {
             return .llmJudge
         }
 
-        let configuration = configurationForSafetyJudge()
-        var effectiveConfiguration = configuration
+        // 候选链依次尝试，直到拿到明确判决。修复审计里成批的「missing api
+        // key」死局：主选落到会话自身 provider 而它没配钥匙时，旧逻辑仍然
+        // 发起一次注定失败的请求，且唯一替补 some.im 安全卫士恰恰在未登录时
+        // 也是 nil——裁判必然缺席，全部回落人工。现在没钥匙的候选不占跳数，
+        // 替补链还包括 provider 库里其它当下真正可用的入口。
+        let candidates = safetyJudgeCandidateConfigurations()
+        var effectiveConfiguration = candidates.first ?? configurationForSafetyJudge()
         var fallbackDetail = ""
         let judgeCommand = AgentInjectionDefense.redactedCommandForSafetyJudge(command)
-        var result = await AgentClient(configuration: configuration).judgeCommandSafety(
-            command: judgeCommand,
-            historyContext: safetyJudgeHistoryContext(),
-            toolName: toolName,
-            taskContext: judgeTaskContext
-        )
-        if case .unavailable(let primaryReason) = result,
-           let fallback = someIMSecurityGuardConfiguration(),
-           fallback != configuration {
-            effectiveConfiguration = fallback
-            fallbackDetail = "managed fallback after \(primaryReason)"
-            result = await AgentClient(configuration: fallback).judgeCommandSafety(
+        var result = AgentSafetyJudgeResult.unavailable("missing api key")
+        for candidate in candidates {
+            effectiveConfiguration = candidate
+            result = await AgentClient(configuration: candidate).judgeCommandSafety(
                 command: judgeCommand,
                 historyContext: safetyJudgeHistoryContext(),
                 toolName: toolName,
                 taskContext: judgeTaskContext
             )
+            guard case .unavailable(let reason) = result else { break }
+            if fallbackDetail.isEmpty {
+                fallbackDetail = "fallback after \(reason)"
+            }
         }
         let verdict: String
         let detail: String
@@ -1006,6 +1007,41 @@ extension AppState {
             if !key.isEmpty { return key }
         }
         return ""
+    }
+
+    /// 裁判候选链，按“当下真正可用”排序、去重、封顶 3 家：
+    /// 1. `configurationForSafetyJudge()` 的主选——但没配钥匙就不占第一跳
+    ///    （requiresAPIKey 且 key 为空的候选必然 unavailable，发请求纯烧超时）；
+    /// 2. some.im 安全卫士（已登录时通常就是主选，去重兜住）；
+    /// 3. provider 库里其它有可用钥匙（或不需要钥匙）的入口，flash 档。
+    /// 空数组意味着当前一台裁判都请不来，调用方按 unavailable 回落人工。
+    func safetyJudgeCandidateConfigurations() -> [AgentConfiguration] {
+        var candidates: [AgentConfiguration] = []
+        func append(_ configuration: AgentConfiguration) {
+            guard candidates.count < 3, !candidates.contains(configuration) else { return }
+            candidates.append(configuration)
+        }
+        let primary = configurationForSafetyJudge()
+        if !primary.requiresAPIKey || !primary.apiKey.isEmpty {
+            append(primary)
+        }
+        if let managed = someIMSecurityGuardConfiguration() {
+            append(managed)
+        }
+        for entry in agentProviderLibrary.entries {
+            guard candidates.count < 3 else { break }
+            // some.im 入口只走上面的安全卫士路径：普通 entry 的 per-entry
+            // key 槽位与共享会话 key 不同，绕开卫士构造会拿到空钥匙配置。
+            guard entry.providerID != AgentProviderPreset.someIMID else { continue }
+            var configuration = entry.makeConfiguration(routingMode: .flash).normalized
+            if configuration.requiresAPIKey, configuration.apiKey.isEmpty {
+                let key = providerLibraryAPIKey(forProviderID: entry.providerID)
+                guard !key.isEmpty else { continue }
+                configuration.apiKey = key
+            }
+            append(configuration.normalized)
+        }
+        return candidates
     }
 
     /// A some.im security-guard configuration, or `nil` when the user is not

@@ -3,6 +3,16 @@
 > 当前文件保留最新版本（1.280.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.280.0-rc2 - 2026-08-21
+
+### Fixed
+
+- 智能审批的凭据词扫描不再把下划线当词边界：`token_plan_quota.go` 这类 snake_case 标识符/文件名不再被误判为凭据引用（审计日志中人工确认的最大误伤源）；连字符仍是边界，`tokenhub-secret` 等 k8s secret 对象名照常拦截。
+- `git commit -m` 的提交信息文本不再参与凭据词扫描——提交一段"支持 Bearer Token 认证"的说明不是凭据访问；message 之外的参数（含 pathspec）照常扫描。
+- 工作区内"词撞名"路径（如 `internal/auth/token.go`）豁免凭据词升级：`read_file` 工具本就免审可读同一文件；`.env`、`~/.ssh` 等敏感路径片段与工作区外路径永不豁免。
+- AI 安全裁判改为按"当下真正可用"的候选链依次尝试：没配 API Key 的候选不再占用请求（此前会话 provider 无钥匙且未登录 some.im 时裁判必然缺席、全部回落人工，八月审计中此类死局 127 次）；替补链新增 provider 库中其它可用入口。
+- 裁判提示词与 1.279.0-rc4 的多语句只读 SQL 分类器对齐：分号串联的全只读 SELECT/SHOW 链不再因"single-statement"措辞被裁判否决。
+
 ## 1.280.0-rc1 - 2026-08-20
 
 ### Added

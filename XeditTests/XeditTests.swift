@@ -1252,6 +1252,52 @@ struct WillDeepTests {
         #expect(judge.usesServerManagedSafetyJudge)
     }
 
+    @Test("safety judge candidate chain skips keyless providers")
+    @MainActor
+    func testSafetyJudgeCandidateChainSkipsKeylessProviders() async {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        // 未登录 some.im，且会话自身 provider 没配钥匙——审计里 127 次
+        // 「missing api key」死局的现场。候选链必须跳过无钥匙候选，
+        // 并从 provider 库里捞出真正可用的替补。
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true, session: nil)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        let keylessDeepseek = AgentProviderEntry(
+            providerID: AgentProviderPreset.deepSeekID,
+            baseURL: "https://api.deepseek.com",
+            apiKey: "",
+            flashPrimary: "deepseek-v4-flash",
+            proPrimary: "deepseek-v4-pro"
+        )
+        let keyedOpenAI = AgentProviderEntry(
+            providerID: AgentProviderPreset.openAIID,
+            baseURL: "https://api.openai.com/v1",
+            apiKey: "sk-live-openai",
+            flashPrimary: "gpt-5.4-mini",
+            proPrimary: "gpt-5.6-sol"
+        )
+        appState.agentProviderLibrary = AgentProviderLibrary(
+            entries: [keylessDeepseek, keyedOpenAI],
+            activeID: keylessDeepseek.id
+        )
+        appState.agentConfiguration = AgentConfiguration(
+            providerID: AgentProviderPreset.deepSeekID,
+            baseURL: "https://api.deepseek.com",
+            model: "deepseek-v4-flash",
+            apiKey: ""
+        )
+
+        let candidates = appState.safetyJudgeCandidateConfigurations()
+        #expect(!candidates.isEmpty)
+        #expect(candidates.contains {
+            $0.providerID == AgentProviderPreset.openAIID && $0.apiKey == "sk-live-openai"
+        })
+        // 链上不允许出现必然 unavailable 的候选。
+        #expect(!candidates.contains { $0.requiresAPIKey && $0.apiKey.isEmpty })
+    }
+
     @Test("signed-in compression candidates prefer the hosted compressor")
     @MainActor
     func testSignedInCompressionCandidatesPreferHostedCompressor() async {
