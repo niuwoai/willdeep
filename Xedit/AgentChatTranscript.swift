@@ -217,6 +217,7 @@ final class AgentTranscriptVisibleMessagesCache {
 struct AgentChatTranscript: View {
     @EnvironmentObject var appState: AppState
     var showsEmptyState = true
+    private static let topScrollID = "agent-chat-transcript-top"
     private static let bottomScrollID = "agent-chat-transcript-bottom"
 
     /// 1.103.0-rc11: TextKit footer 里 doc.text 图标点开后呈现
@@ -235,6 +236,7 @@ struct AgentChatTranscript: View {
     @State private var conversationSearchMatchCount = 0
     @State private var conversationSearchActiveIndex = 0
     @State private var isFollowingTranscriptBottom = true
+    @State private var scrollToBottomRequestToken = 0
     /// Conversation history is disclosed in bounded pages. This keeps both
     /// TextKit and the user-turn minimap proportional to what the operator has
     /// actually reached instead of rebuilding an entire long transcript.
@@ -249,6 +251,10 @@ struct AgentChatTranscript: View {
                 // LazyVStack's placement cache is the unstable part when
                 // scrolling mixed SwiftUI/AppKit dynamic-height rows.
                 VStack(alignment: .leading, spacing: AgentDesign.messageVerticalSpacing) {
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.topScrollID)
+
                     // Plan + Goal banners — pinned above the transcript so
                     // the user always sees the current execution gate /
                     // long-term objective.
@@ -563,6 +569,7 @@ struct AgentChatTranscript: View {
                 .background {
                     AgentTranscriptScrollObserver(
                         isFollowingBottom: $isFollowingTranscriptBottom,
+                        scrollToBottomRequestToken: scrollToBottomRequestToken,
                         onReachTop: loadEarlierHistoryPage
                     )
                     .frame(width: 0, height: 0)
@@ -637,6 +644,7 @@ struct AgentChatTranscript: View {
                     DispatchQueue.main.async {
                         guard !isConversationSearchActive else { return }
                         isFollowingTranscriptBottom = true
+                        scrollToBottomRequestToken &+= 1
                         proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
                     }
                 }
@@ -644,6 +652,12 @@ struct AgentChatTranscript: View {
                     DispatchQueue.main.async {
                         guard !isConversationSearchActive, isFollowingTranscriptBottom else { return }
                         proxy.scrollTo(Self.bottomScrollID, anchor: .bottom)
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .agentStatsDashboardPageDidChange)) { _ in
+                    DispatchQueue.main.async {
+                        isFollowingTranscriptBottom = false
+                        proxy.scrollTo(Self.topScrollID, anchor: .top)
                     }
                 }
             }
@@ -685,9 +699,18 @@ struct AgentChatTranscript: View {
         .onCompatibleChange(of: conversationSearchQuery) { _, _ in
             conversationSearchActiveIndex = 0
         }
-        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
+        .onCompatibleChange(of: appState.activeAgentSessionID) { previousID, currentID in
             closeConversationSearch()
             renderedMessageLimit = Self.renderedMessageCap
+            guard previousID != currentID else { return }
+            isFollowingTranscriptBottom = AgentTranscriptScrollPolicy
+                .followingBottomAfterSessionChange()
+            scrollToBottomRequestToken &+= 1
+        }
+        .onCompatibleChange(of: appState.agentSidePanelKind) { previousPanel, currentPanel in
+            guard previousPanel != currentPanel,
+                  isFollowingTranscriptBottom else { return }
+            scrollToBottomRequestToken &+= 1
         }
     }
 

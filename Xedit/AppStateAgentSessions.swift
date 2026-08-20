@@ -626,7 +626,10 @@ extension AppState {
            !last.content.contains("<!-- goal-planning-generation:\(generationID.uuidString) -->") {
             return .noProposal
         }
-        if let parsed = AgentPlanParser.extract(from: last.content) {
+        let extractionScope: AgentPlanParser.ExtractionScope = runtime.interactionMode == .goal
+            ? .firstPhase
+            : .entireBlock
+        if let parsed = AgentPlanParser.extract(from: last.content, scope: extractionScope) {
             if runtime.interactionMode == .normal {
                 if let existing = runtime.currentPlan,
                    AgentPlanContinuationPolicy.hasActiveExecutionContract(existing) {
@@ -1570,14 +1573,25 @@ extension AppState {
     /// 用入参重建 session,而不是甩给无参版本 —— 否则新会话会继承 editor
     /// 当前的根,跟用户在菜单里选的目录对不上。
     @discardableResult
-    func startNewAgentSession(inWorkspaceAt workspacePath: String?) -> AgentSession {
-        agentPrimaryDestination = .conversation
+    func startNewAgentSession(
+        inWorkspaceAt workspacePath: String?,
+        makeActive: Bool = true,
+        presentationScope: AgentSessionPresentationScope = .workspace,
+        dispatchParentProjectID: UUID? = nil,
+        dispatchTaskID: UUID? = nil,
+        isManagedBackgroundWorkspace: Bool = false
+    ) -> AgentSession {
+        if makeActive {
+            agentPrimaryDestination = .conversation
+        }
         let normalizedPath: String?
         if let workspacePath, !workspacePath.isEmpty {
             let url = URL(fileURLWithPath: workspacePath).standardizedFileURL
             if Self.isExistingDirectory(url) {
                 _ = activateSecurityScope(for: url)
-                registerRecentFolder(url)
+                if !isManagedBackgroundWorkspace {
+                    registerRecentFolder(url)
+                }
             }
             normalizedPath = url.path
         } else {
@@ -1596,7 +1610,12 @@ extension AppState {
         let session = AgentSession(
             workspaceRootPath: normalizedPath,
             workspaceLocation: normalizedPath.map { WorkspaceLocation.local(path: $0) },
-            projectID: AgentProjectResolver.project(for: normalizedPath, in: agentProjects)?.id,
+            projectID: isManagedBackgroundWorkspace
+                ? nil
+                : AgentProjectResolver.project(for: normalizedPath, in: agentProjects)?.id,
+            presentationScope: presentationScope,
+            dispatchParentProjectID: dispatchParentProjectID,
+            dispatchTaskID: dispatchTaskID,
             modelID: defaultModelID,
             providerEntryID: defaultProvider?.id,
             providerID: defaultProvider?.providerID,
@@ -1607,20 +1626,32 @@ extension AppState {
         let newRuntime = AgentRuntime(session: session)
         seedPersistedSessionModelOverride(for: newRuntime)
         agentRuntimes[session.id] = newRuntime
-        activeAgentSessionID = session.id
-        subscribeToActiveRuntime()
-        evictInactiveAgentRuntimesIfNeeded()
-        agentSessionDidEditFiles = false
-        agentInteractionMode = .normal
-        agentApprovalMode = .smart
-        agentCurrentPlan = nil
-        agentCurrentGoal = nil
+        if makeActive {
+            activeAgentSessionID = session.id
+            subscribeToActiveRuntime()
+            evictInactiveAgentRuntimesIfNeeded()
+            agentSessionDidEditFiles = false
+            agentInteractionMode = .normal
+            agentApprovalMode = .smart
+            agentCurrentPlan = nil
+            agentCurrentGoal = nil
+        } else {
+            // Scheduler-owned sessions run in the background. Protect both the
+            // new runtime and the operator's currently selected runtime from
+            // cache eviction without redirecting the chat/composer to this
+            // internal dispatch task.
+            evictInactiveAgentRuntimesIfNeeded(protecting: session.id)
+        }
         // saveAsync, not save: sync save can beachball behind another
         // instance's NSFileCoordinator hold on the session directory.
         AgentSessionStore.saveAsync(session)
         upsertAgentUsageSnapshot(for: session)
-        unhideWorkspace(key: session.workspaceSidebarGroupKey)
-        refreshAgentGitWorktrees()
+        if !isManagedBackgroundWorkspace {
+            unhideWorkspace(key: session.workspaceSidebarGroupKey)
+        }
+        if makeActive {
+            refreshAgentGitWorktrees()
+        }
         return session
     }
 
@@ -1876,6 +1907,16 @@ extension AppState {
             refreshAgentGitWorktrees()
             autoSummarizeTitleIfPlaceholder(runtime)
         }
+        return true
+    }
+
+    /// Selects a conversation and asks the left sidebar to reveal its row in
+    /// the viewport centre. Kept as one operation so title-search callers do
+    /// not accidentally emit a reveal for a session that failed to load.
+    @discardableResult
+    func selectAndRevealAgentSessionInSidebar(id: AgentSession.ID) -> Bool {
+        guard selectAgentSession(id: id) else { return false }
+        agentSidebarRevealRequest = AgentSidebarRevealRequest(target: .session(id))
         return true
     }
 
@@ -2438,6 +2479,7 @@ extension AppState {
     func recordFetchedAgentModelDiscoveries(_ models: [AgentModelDiscovery]) {
         recordFetchedAgentModels(models.map(\.id))
         agentDiscoveredModelMetadata = models
+        AgentModelContextWindowCatalog.merge(models)
         AgentSettingsStore.saveDiscoveredModelMetadata(models)
     }
 

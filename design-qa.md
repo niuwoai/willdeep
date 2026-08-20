@@ -41,4 +41,135 @@
 - Fix: changed the compact authorization icon from `palette.accent` to `palette.secondaryText`.
 - Pass 2: Debug build and 12 targeted tests passed; no further blocking visual differences found.
 
-final result: pass
+final result: passed
+
+---
+
+## 原生标题栏会话搜索入口（1.274.0-rc3，随当前 1.274.0-rc4 验证）
+
+- source visual truth path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/reference.png`
+- implementation screenshot paths:
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/implementation-default.png`
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/implementation-search-open.png`
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/implementation-sidebar-hidden.png`
+- viewport: native macOS window `1359 × 768 px`; search sheet `520 × 440 px`
+- source size: Claude Code reference `1748 × 1274 px`
+- density normalization: the reference and implementation were inspected together in one comparison input; comparison scope is the macOS window-control cluster and search-entry placement rather than unrelated application content.
+- state: populated light-mode session sidebar, native titlebar controls, search sheet open, and sidebar hidden.
+
+### Full-view comparison evidence
+
+- The native titlebar now preserves the reference ordering: macOS traffic lights, sidebar toggle, then search magnifier.
+- The former search row below “新聊天” is absent; “已安排” now immediately follows the primary new-chat action.
+- The duplicate magnifier in the chat header is also absent, leaving one stable visible search entry for every Agent destination.
+
+### Focused comparison evidence
+
+- Control geometry: pass; the sidebar and search buttons share a `26 pt` footprint with a `3 pt` inter-button gap and align on the same titlebar baseline.
+- Sidebar-visible state: pass; the controls remain visually grouped with the traffic lights and do not consume sidebar menu height.
+- Sidebar-hidden state: pass; the chat title begins after the complete native control cluster, with no overlap or clipping.
+- Search presentation: pass; clicking the magnifier opens the existing localized search sheet with focus in the search field.
+- Keyboard behavior: pass; `⌘⇧P` opens the same search sheet from the native titlebar command.
+- Assets and localization: pass; the implementation uses the system `magnifyingglass` SF Symbol and the existing localized `header.search-sessions` string.
+
+### Findings
+
+- No open P0/P1/P2 visual defects in the changed titlebar/sidebar surfaces.
+- The production search sheet remains intentionally compact and follows WillDeep’s existing visual system; the Claude Code screenshot is used for entry placement and control ordering, not as a request to clone its full search-results layout.
+
+### Comparison history
+
+- Pass 1: combined reference/implementation review confirmed the requested control order and removal of the sidebar row.
+- Interaction pass: Computer Use verified click-to-open, `⌘⇧P`, close behavior, and sidebar hide/show behavior in the freshly built Debug app.
+- Verification: 22 targeted tests passed across `AgentConfirmationVisualTests`, `AgentHeaderEditorEntryTests`, and `AgentSessionSearchTests`.
+
+final result: passed
+
+---
+
+## Token 单日详情与分享卡（1.272.0-rc7）
+
+- source visual truth paths:
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/daily-reference.png`
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/share-reference.png`
+- implementation screenshot paths:
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/daily-implementation.jpeg`
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/share-implementation.jpeg`
+- viewport: native macOS window `1402 × 768 px`; share preview sheet `430 × 562 px`
+- source sizes: daily reference `1536 × 1024 px`; share reference `1124 × 1402 px`
+- density normalization: the single-day page was compared inside the real chat/composer shell; the share card was compared by its exported 4:5 composition, hierarchy, contrast, grid proportions, and data density.
+- state: populated 2026-08-18 calendar day with real local usage snapshots; share preview generated from the same day.
+
+### Full-view comparison evidence
+
+- The selected option-2 daily hierarchy is preserved: date and share action, five-metric strip, model efficiency on the left, achievements and capability usage on the right.
+- The selected option-3 share direction is preserved: near-black background, blue activity accents, monospaced developer styling, dominant Token total, bordered metric grid, and compact model/skill/streak footer.
+- Initial live navigation exposed inherited transcript scroll position when changing dashboard pages. The implementation now posts a page-change request and scrolls the transcript to its top anchor; the second live capture starts at the daily header as intended.
+
+### Focused comparison evidence
+
+- Typography and hierarchy: pass; the day title, hero Token count, metric values, and supporting labels retain the selected emphasis order.
+- Spacing and layout rhythm: pass; the production page is intentionally denser than the concept so it fits the existing 568pt dashboard column without introducing a new window.
+- Model bars: pass after separating uncached input, output, and cached input so the rendered segments sum to the model total instead of overflowing 100%.
+- Share card: pass; all selected information is visible without clipping, and the preview exposes working Save and Share actions.
+- Localization and assets: pass; visible copy comes from the string catalog and icons use native SF Symbols consistent with the existing product.
+
+### Findings
+
+- No open P0/P1/P2 visual defects after the scroll-position and model-segment corrections.
+- The app shell and composer remain visible around the daily detail by design; the concept image represented only the content surface.
+
+final result: passed
+
+---
+
+## Token 活动填宽、分享图加载态与预览焦点（1.272.0-rc11）
+
+- source visual truth paths:
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-heatmap-1.272.0-rc11/reference.png`
+  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-3b67a02d-609e-455e-bb49-f9b59d6afe7d.png`
+  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-3ff6542e-0e93-434b-a691-db203506a31b.png`
+- implementation screenshot paths:
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-heatmap-1.272.0-rc11/implementation.png`
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-heatmap-1.272.0-rc11/reference-vs-implementation.png`
+  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-heatmap-1.272.0-rc11/share-loading.png`
+- viewport: production statistics dashboard `608 × 740 pt` at `@2x`; focused heatmap comparison normalized to `700 px` width; loading control captured at `300 × 96 px`.
+- source sizes: focused heatmap `700 × 208 px`; implementation heatmap `700 × 298 px`; side-by-side comparison `1400 × 298 px`.
+- state: populated light-mode statistics overview, up to 32 visible weeks with 8 month labels, active share-image generation, and share-preview close action.
+
+### Full-view comparison evidence
+
+- The production dashboard render preserves the existing title, range switcher, summary metrics, insight hierarchy, and surrounding content while extending only the activity visualization.
+- At the common 568 pt content width, the heatmap fills the available row from its first column to its last column with 32 recent weeks instead of leaving an empty right-hand region.
+- Narrow content widths reduce the number of visible weeks before reducing legibility, so the grid remains inside the same content boundaries without horizontal scrolling.
+
+### Focused comparison evidence
+
+- Heatmap geometry: pass; cells resolve within the 12–14 pt target and distribute the remaining width as inter-column spacing, keeping the first and last columns aligned to the content edges.
+- Month coverage: pass; the focused implementation shows eight labels covering the recent 32-week window while preserving chronological order.
+- Share generation feedback: pass; the initiating button stays visible and changes to a spinner plus localized “生成中…” label until the rendered image payload exists.
+- Sheet presentation: pass; the preview sheet is driven by a completed image payload and therefore no longer presents an empty white surface during rendering.
+- Keyboard focus: pass; the top-right close button remains clickable but is explicitly excluded from the focus chain, preventing the default blue focus ring seen in the source report.
+
+### Findings
+
+- No open P0/P1/P2 visual defects after the second pass.
+- The implementation heatmap capture is taller than the cropped source because it includes the complete section rhythm and eight month labels; width was normalized for the alignment judgment.
+
+### Required fidelity surfaces
+
+- Fonts and typography: pass; existing dashboard text styles and weights are unchanged.
+- Spacing and layout rhythm: pass; grid boundaries align with the section header and range controls, and the longer month range does not crowd adjacent sections.
+- Colors and visual tokens: pass; activity intensity continues to use the established neutral-to-blue scale and the loading state uses the existing secondary button treatment.
+- Image quality and asset fidelity: pass; comparison and loading evidence are captured directly from production SwiftUI components at Retina density.
+- Copy and content: pass; the loading label is sourced from all five localization resources and the close-button behavior changes no visible copy.
+
+### Comparison history
+
+- Pass 1: the source crop exposed a fixed 26-week grid anchored to the left with unused space on the right.
+- Fix: introduced width-derived cell metrics, expanded the recent window to 32 weeks/eight labels, and reduced visible weeks only when the available width requires it.
+- Pass 2: the share flow exposed a blank-sheet interval and a blue focus ring on “关闭”.
+- Fix: delayed item-based sheet presentation until rendering completes, added inline generation progress, and marked the close action non-focusable.
+- Verification: 27 targeted statistics-dashboard and visual-metrics tests passed, including common-width edge alignment, narrow-width reduction, loading-state rendering, and close-button focus policy.
+
+final result: passed

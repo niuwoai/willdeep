@@ -16,6 +16,26 @@ nonisolated enum AgentTranscriptScrollPolicy {
     ) -> Bool {
         isFollowingBottom || message?.isOperatorInput == true
     }
+
+    /// A different conversation has its own reading context. Never inherit
+    /// the previous conversation's off-bottom state into the newly selected
+    /// transcript; the operator can scroll that conversation after it opens.
+    static func followingBottomAfterSessionChange() -> Bool {
+        true
+    }
+
+    /// Horizontal viewport changes are layout, not reading intent. Opening,
+    /// closing, or resizing a side panel may briefly make AppKit report the
+    /// top of the document while TextKit reflows; keep the existing follow
+    /// decision until that transaction settles. A vertical-only bounds change
+    /// is allowed to reflect an actual operator scroll.
+    static func followingBottomAfterViewportChange(
+        current: Bool,
+        isNearBottom: Bool,
+        viewportWidthChanged: Bool
+    ) -> Bool {
+        viewportWidthChanged ? current : isNearBottom
+    }
 }
 
 /// Maps a viewport to the same relative reading position after a horizontal
@@ -93,6 +113,7 @@ nonisolated struct AgentTranscriptViewportReflowState<Anchor> {
 /// its expensive relayout path.
 struct AgentTranscriptScrollObserver: NSViewRepresentable {
     @Binding var isFollowingBottom: Bool
+    var scrollToBottomRequestToken: Int? = nil
     var onReachTop: () -> Bool = { false }
 
     func makeCoordinator() -> Coordinator {
@@ -109,6 +130,7 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
         context.coordinator.isFollowingBottom = isFollowingBottom
         context.coordinator.onChange = { isFollowingBottom = $0 }
         context.coordinator.onReachTop = onReachTop
+        context.coordinator.requestScrollToBottom(token: scrollToBottomRequestToken)
         DispatchQueue.main.async { [weak nsView, weak coordinator = context.coordinator] in
             guard let nsView, let coordinator else { return }
             coordinator.attachIfNeeded(from: nsView)
@@ -162,6 +184,7 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
         private var isViewportRestorePending = false
         private var wasNearTop = false
         private var pendingPrependAnchor: (documentHeight: CGFloat, offsetFromTop: CGFloat)?
+        private var handledScrollToBottomRequestToken: Int?
 
         deinit {
             removeObservers()
@@ -213,7 +236,12 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
                     }
                 )
             }
-            publish(isNearBottom(in: candidate))
+            if isFollowingBottom {
+                scrollToBottom(candidate)
+                publish(true)
+            } else {
+                publish(isNearBottom(in: candidate))
+            }
             wasNearTop = isNearTop(in: candidate)
             lastDocumentSize = candidateDocument?.bounds.size
             lastViewportSize = clipView.bounds.size
@@ -248,10 +276,20 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
             // the transient top/zero offset can overwrite viewportAnchor;
             // the following document resize then faithfully "restores" the
             // transcript to the top. Preserve the pre-resize anchor instead.
-            if viewportWidthChanged,
-               !isFollowingBottom,
-               let viewportAnchor {
-                scheduleViewportReflowRestore(viewportAnchor, in: scrollView)
+            if viewportWidthChanged {
+                let followsBottom = AgentTranscriptScrollPolicy.followingBottomAfterViewportChange(
+                    current: isFollowingBottom,
+                    isNearBottom: isNearBottom(in: scrollView),
+                    viewportWidthChanged: true
+                )
+                if followsBottom {
+                    cancelPendingViewportRestore()
+                    scrollToBottom(scrollView)
+                    publish(true)
+                    captureViewportAnchor(in: scrollView)
+                } else if let viewportAnchor {
+                    scheduleViewportReflowRestore(viewportAnchor, in: scrollView)
+                }
                 return
             }
             if viewportReflowState.isActive {
@@ -264,8 +302,30 @@ struct AgentTranscriptScrollObserver: NSViewRepresentable {
                 pendingPrependAnchor = (metrics.documentHeight, metrics.offsetFromTop)
             }
             wasNearTop = nowNearTop
-            publish(isNearBottom(in: scrollView))
+            publish(
+                AgentTranscriptScrollPolicy.followingBottomAfterViewportChange(
+                    current: isFollowingBottom,
+                    isNearBottom: isNearBottom(in: scrollView),
+                    viewportWidthChanged: false
+                )
+            )
             scheduleViewportAnchorCapture(in: scrollView)
+        }
+
+        /// Imperative navigation reset used when a different conversation is
+        /// selected. The SwiftUI scroll proxy can run before TextKit finishes
+        /// replacing the history string; this AppKit-side request updates the
+        /// follow intent immediately and lets subsequent geometry changes keep
+        /// pinning the final document height.
+        func requestScrollToBottom(token: Int?) {
+            guard let token else { return }
+            guard handledScrollToBottomRequestToken != token else { return }
+            handledScrollToBottomRequestToken = token
+            isFollowingBottom = true
+            cancelPendingViewportRestore()
+            guard let scrollView else { return }
+            scrollToBottom(scrollView)
+            captureViewportAnchor(in: scrollView)
         }
 
         private func handleDocumentGeometryChange() {

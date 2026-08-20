@@ -202,6 +202,10 @@ nonisolated enum AgentWorkspaceProjectMigration {
         var result: [String] = []
         var seen = Set<String>()
         for session in sessions {
+            // Dispatch-board and roundtable sessions are internal product
+            // runtimes, not user workspaces. Promoting their isolated Git
+            // worktrees created one permanent `dispatch-*` project per task.
+            guard session.presentationScope == .workspace else { continue }
             let key = session.workspaceSidebarGroupKey
             guard key != AgentSession.noWorkspaceSidebarGroupKey,
                   AgentSession.projectID(fromSidebarGroupKey: key) == nil,
@@ -218,6 +222,41 @@ nonisolated enum AgentWorkspaceProjectMigration {
             result.append(path)
         }
         return result
+    }
+}
+
+/// Finds project records accidentally minted from Dispatch task worktrees.
+///
+/// The repair is intentionally conservative: a candidate must live below
+/// WillDeep's private worktree root, use the automatic folder-name title, be
+/// unpinned, and have no ordinary workspace session attached. It removes only
+/// the catalog record; the worktree and every task session remain untouched.
+nonisolated enum AgentDispatchProjectLeakRepair {
+    static func projectIDsToRemove(
+        projects: [AgentProject],
+        sessions: [AgentSession],
+        managedWorktreeRoot: String
+    ) -> Set<AgentProject.ID> {
+        guard let root = AgentProject.normalizedPath(managedWorktreeRoot) else { return [] }
+        let sessionsByProject = Dictionary(grouping: sessions.compactMap { session in
+            session.projectID.map { ($0, session) }
+        }, by: { $0.0 })
+
+        return Set(projects.compactMap { project in
+            guard !project.isPinned,
+                  project.folderPaths.count == 1,
+                  let folder = project.primaryFolderPath,
+                  AgentProject.folder(root, contains: folder),
+                  URL(fileURLWithPath: folder).lastPathComponent.hasPrefix("dispatch-"),
+                  project.resolvedDisplayName == URL(fileURLWithPath: folder).lastPathComponent else {
+                return nil
+            }
+            let attachedSessions = sessionsByProject[project.id, default: []].map(\.1)
+            guard attachedSessions.allSatisfy({ $0.presentationScope != .workspace }) else {
+                return nil
+            }
+            return project.id
+        })
     }
 }
 

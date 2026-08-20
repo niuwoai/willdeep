@@ -90,6 +90,12 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "git merge-base HEAD develop") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "git version") == .alwaysSafe)
 
+        // A local commit is reversible and runs inside the workspace sandbox.
+        #expect(SafeCommand.classify(command: "git commit -m 'fix: retry'") == .alwaysSafe)
+        #expect(SafeCommand.isLocalGitCommit(command: "git commit -m 'fix: retry'"))
+        #expect(!SafeCommand.isLocalGitCommit(command: "git commit -m ok && git push"))
+        #expect(!SafeCommand.isLocalGitCommit(command: "git push origin main"))
+
         // git config writes must NOT be auto-approved.
         #expect(SafeCommand.classify(command: "git config user.email rocky@example.com") == .needsJudgment)
         #expect(SafeCommand.classify(command: "git config --add safe.directory /tmp/foo") == .needsJudgment)
@@ -959,6 +965,31 @@ extension WillDeepTests {
 
         let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
         #expect(result.payload.contains(home))
+    }
+
+    @Test("run_command reports launch failure without crashing pipe readers")
+    @MainActor
+    func testRunCommandLaunchFailureDoesNotCrash() async {
+        let missingWorkspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep_missing_run_command_\(UUID().uuidString)")
+        let context = AgentToolContext(
+            rootDirectory: missingWorkspace,
+            sandboxMode: .escalated
+        )
+
+        do {
+            _ = try await AgentToolRunner.run(
+                name: "run_command",
+                arguments: [
+                    "command": .string("pwd"),
+                    "timeout_seconds": .number(headlessCommandTimeoutSeconds)
+                ],
+                context: context
+            )
+            Issue.record("run_command unexpectedly launched in a missing working directory")
+        } catch {
+            #expect(!error.localizedDescription.isEmpty)
+        }
     }
 
     @Test("run_command drains large output without hanging")

@@ -68,11 +68,18 @@ struct SomeIMModel: Identifiable, Codable, Equatable {
     var kinds: [SomeIMGenerationKind]
     var isHot: Bool = false
     var isNew: Bool = false
+    /// Context window from some.im's pricing catalog, when it reports one.
+    var contextWindowTokens: Int?
 
     var supportsImageGeneration: Bool { kinds.contains(.image) || model.localizedCaseInsensitiveContains("image") }
     var supportsVideoGeneration: Bool { kinds.contains(.video) || model.localizedCaseInsensitiveContains("video") }
     var agentDiscovery: AgentModelDiscovery {
-        AgentModelDiscovery(id: model, isHot: isHot, isNew: isNew)
+        AgentModelDiscovery(
+            id: model,
+            isHot: isHot,
+            isNew: isNew,
+            contextWindowTokens: contextWindowTokens
+        )
     }
 }
 
@@ -133,7 +140,17 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
     static let defaultBaseURL = SomeIMRelayRegion.internationalBaseURL
     static let defaultImageModel = "gpt-image-2"
     static let defaultVideoModel = "seedance-2.0"
-    static let defaultTextModel = "deepseek-v4-flash"
+    /// New sessions open on the M tier (256K), not the L tier.
+    ///
+    /// This used to be `deepseek-v4-flash` — a 1M-context model — which made
+    /// the scarcest tier the default one. Every "escalate to deep only when
+    /// the work cannot be bounded" rule downstream was then arguing about a
+    /// door that was already open: there was nothing to escalate *to*.
+    /// See docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md §4 step 1.
+    ///
+    /// Only new sessions are affected. A session that carries an explicit
+    /// model override keeps it, so nobody's running work changes underfoot.
+    static let defaultTextModel = "glm-5"
     static let defaultVisionModel = "qwen3-vl-plus"
 
     var enabled: Bool
@@ -1665,7 +1682,13 @@ enum SomeIMClient {
         }
         let decoded = try JSONDecoder().decode(PricingResponse.self, from: data)
         return decoded.items.map { item in
-            SomeIMModel(model: item.model, kinds: item.detectedKinds, isHot: item.is_hot ?? false, isNew: item.is_new ?? false)
+            SomeIMModel(
+                model: item.model,
+                kinds: item.detectedKinds,
+                isHot: item.is_hot ?? false,
+                isNew: item.is_new ?? false,
+                contextWindowTokens: item.context_tokens_max.flatMap { $0 > 0 ? $0 : nil }
+            )
         }
     }
 
@@ -1904,6 +1927,11 @@ enum SomeIMClient {
         let catalog_tags: [String]?
         let is_hot: Bool?
         let is_new: Bool?
+        /// some.im publishes the context window here. Only a minority of rows
+        /// fill it in today (9 of 47 at the time of writing, and notably not
+        /// the DeepSeek defaults), so this supplements the id-matching table
+        /// rather than replacing it.
+        let context_tokens_max: Int?
 
         var detectedKinds: [SomeIMGenerationKind] {
             detectKinds(model: model, words: [

@@ -121,11 +121,13 @@ struct AgentModelPickerCatalogTests {
 
         #expect(recommendations.first?.providerID == AgentProviderPreset.someIMID)
         #expect(recommendations.first?.model == SomeIMIntegrationSettings.defaultTextModel)
+        // glm-5 leads because it is the new-session default; the 1M
+        // deepseek-v4-flash stays recommended but no longer first.
         #expect(Set(recommendations.prefix(4).map(\.model)) == [
+            "glm-5",
             "deepseek-v4-flash",
             "gpt-5.6-sol",
             "gpt-5.6-luna",
-            "gpt-5.6-terra",
         ])
         #expect(recommendations.prefix(4).allSatisfy {
             $0.providerID == AgentProviderPreset.someIMID

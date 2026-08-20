@@ -178,6 +178,9 @@ final class AppState: ObservableObject {
     /// The center-column destination in Agent mode. Scheduled tasks use a
     /// dedicated page instead of expanding an unbounded list in the sidebar.
     @Published var agentPrimaryDestination: AgentPrimaryDestination = .conversation
+    /// Presented by the native titlebar magnifier or its keyboard shortcut.
+    /// One shared flag keeps search navigation independent from sidebar state.
+    @Published var isAgentSessionSearchPresented = false
     /// One-shot request to collapse the floating plan card. The transcript
     /// bumps this when a new assistant round begins so the plan folds away
     /// while the agent works, matching the old inline-card behaviour. Pure UI
@@ -281,6 +284,10 @@ final class AppState: ObservableObject {
     /// workspace. Empty until the user creates one, which is why every
     /// pre-project session keeps its path-based group unchanged.
     @Published var agentProjects: [AgentProject] = AgentProjectStore.load()
+    /// A transient sidebar navigation intent emitted by chat title search.
+    /// It is intentionally separate from activeAgentSessionID: selecting a
+    /// project highlights its group without opening or changing a chat.
+    @Published var agentSidebarRevealRequest: AgentSidebarRevealRequest?
     /// Launch catalog loading is asynchronous. The Agent window uses this
     /// edge to run Goal recovery only after every persisted candidate is
     /// visible, avoiding a race with the initial empty in-memory list.
@@ -682,6 +689,10 @@ final class AppState: ObservableObject {
         self.agentUsageSnapshots = []
         self.agentKnownModelIDs = AgentSettingsStore.loadKnownModelIDs()
         self.agentDiscoveredModelMetadata = AgentSettingsStore.loadDiscoveredModelMetadata()
+        // Seed reported context windows before any turn can ask for one, so a
+        // relaunch keeps the real window instead of falling back to the
+        // id-matching guess until the next model-list fetch.
+        AgentModelContextWindowCatalog.merge(self.agentDiscoveredModelMetadata)
         self.agentRecentlyUsedModelIDs = AgentSettingsStore.loadRecentlyUsedModelIDs()
         self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
         syncLocalModelComposerProvider(settings: AgentSettingsStore.loadLocalModelSettings())
@@ -878,6 +889,10 @@ final class AppState: ObservableObject {
             self.metadataOnlySessionIDs = metadataOnlyIDs
             self.metadataOnlyUserMessageIDs = metadataOnlyUserMessageIDs
             self.hasLoadedAgentSessionCatalog = true
+            // Older builds promoted Dispatch task worktrees into named
+            // projects. Remove those catalog rows before migration runs, or
+            // they would keep rendering as empty `dispatch-*` sidebar groups.
+            self.repairLeakedDispatchProjects()
             // Projects are the only grouping concept now; any session still
             // keyed to a bare folder gets that folder promoted to a project of
             // the same name. Runs after the catalog lands because it reads

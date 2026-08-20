@@ -287,6 +287,22 @@ extension L10n {
             localized: "dispatch.stop-task-help",
             defaultValue: "Interrupt this node's current turn and mark it stopped. Other nodes keep running; the node can be launched again later."
         )
+        static let markSuccessfulAndContinue = String(
+            localized: "dispatch.mark-successful-and-continue",
+            defaultValue: "Mark Successful & Continue"
+        )
+        static let markSuccessfulAndContinueHelp = String(
+            localized: "dispatch.mark-successful-and-continue-help",
+            defaultValue: "Override the automated verdict, complete this node, and launch newly unblocked nodes."
+        )
+        static let markSuccessfulConfirmationTitle = String(
+            localized: "dispatch.mark-successful-confirmation-title",
+            defaultValue: "Mark this node successful?"
+        )
+        static let markSuccessfulConfirmationMessage = String(
+            localized: "dispatch.mark-successful-confirmation-message",
+            defaultValue: "Use this only after reviewing the task evidence. WillDeep will override the automated verdict, unlock dependent nodes, and continue execution."
+        )
         static let planningModel = String(
             localized: "dispatch.planning-model",
             defaultValue: "Planning model"

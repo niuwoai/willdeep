@@ -409,24 +409,31 @@ struct AgentDispatchTaskTakeoverTests {
         #expect(tasks.first(where: { $0.id == downstreamTaskID })?.state == .blocked)
     }
 
-    @Test("调度台启动节点不会把操作员甩进普通聊天界面")
-    func launchingDispatchRuntimeKeepsOperatorOnTheBoard() throws {
+    @Test("调度台后台启动节点不抢当前会话、页面或输入草稿")
+    func launchingDispatchRuntimePreservesOperatorConversation() throws {
         let workspace = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep-dispatch-destination-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
 
         let appState = AppState()
-        appState.agentPrimaryDestination = .dispatchBoard
+        let operatorSession = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        let operatorRuntime = try #require(appState.runtime(for: operatorSession.id))
+        operatorRuntime.input = "尚未发送的草稿"
+        appState.agentPrimaryDestination = .conversation
 
-        let taskSession = appState.withPreservedAgentPrimaryDestination {
-            appState.startNewAgentSession(inWorkspaceAt: workspace.path)
-        }
-        #expect(appState.activeAgentSessionID == taskSession.id)
-        #expect(appState.agentPrimaryDestination == .dispatchBoard)
+        let taskSession = appState.startNewAgentSession(
+            inWorkspaceAt: workspace.path,
+            makeActive: false
+        )
+        #expect(appState.activeAgentSessionID == operatorSession.id)
+        #expect(appState.agentPrimaryDestination == .conversation)
+        #expect(appState.agentInput == "尚未发送的草稿")
+        #expect(appState.runtime(for: taskSession.id) != nil)
 
         // 对照组：普通「新建聊天」照旧切到会话界面，包裹的存在才有意义。
-        _ = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        let ordinarySession = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        #expect(appState.activeAgentSessionID == ordinarySession.id)
         #expect(appState.agentPrimaryDestination == .conversation)
     }
 

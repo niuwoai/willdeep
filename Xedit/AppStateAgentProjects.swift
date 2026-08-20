@@ -15,6 +15,15 @@ import Combine
 import Foundation
 
 extension AppState {
+    /// Focus a project group in the sidebar without changing the open
+    /// conversation. This is the project-name counterpart of a title-search
+    /// hit on a single chat.
+    func revealAgentProjectInSidebar(id: AgentProject.ID) {
+        guard agentProjects.contains(where: { $0.id == id }) else { return }
+        agentPrimaryDestination = .conversation
+        agentSidebarRevealRequest = AgentSidebarRevealRequest(target: .project(id))
+    }
+
     /// Local filesystem roots explicitly authorized by the session's Project.
     /// The session workspace stays first so relative tool paths remain stable.
     func agentWorkspaceRoots(for session: AgentSession) -> [URL] {
@@ -241,6 +250,29 @@ extension AppState {
             objectWillChange.send()
         }
         return repaired
+    }
+
+    /// Remove the project-catalog rows created by the old workspace migration
+    /// for Dispatch task worktrees. This deliberately does not remove folders,
+    /// Git branches, sessions, or task history.
+    @discardableResult
+    func repairLeakedDispatchProjects() -> Int {
+        let managedRoot = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".willdeep/worktrees", isDirectory: true)
+            .standardizedFileURL.path
+        let leakedIDs = AgentDispatchProjectLeakRepair.projectIDsToRemove(
+            projects: agentProjects,
+            sessions: agentSessions,
+            managedWorktreeRoot: managedRoot
+        )
+        guard !leakedIDs.isEmpty else { return 0 }
+
+        agentProjects.removeAll { leakedIDs.contains($0.id) }
+        AgentProjectStore.save(agentProjects)
+        // Clear the stale projectID from task sessions through the existing
+        // metadata-safe path. Their Dispatch ownership fields stay intact.
+        rebindAgentSessionsToProjects()
+        return leakedIDs.count
     }
 
     /// Guarantee that `path` is covered by a project, creating one named after

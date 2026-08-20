@@ -295,7 +295,7 @@ enum AgentContextBuilder {
 
             Follow the user's latest message:
             - If it starts a different task, do that task directly. Do not resume the interrupted plan, do not treat its steps as pending work, and do not mention it unless relevant. For a genuinely multi-step new task, emit one complete numbered `plan` fenced block — it replaces the interrupted plan as the visible checklist.
-            - If it asks to continue or resume, pick the interrupted plan back up from its current step statuses and report progress with `progress` fenced blocks as usual.
+            - If it asks to continue or resume, pick the interrupted plan back up from its current step statuses. Emit a `progress` block marking the step you are resuming as in_progress BEFORE you start working on it — that block is what tells WillDeep the plan is live again and clears the paused badge the user is looking at. Keep reporting with `progress` blocks as usual after that.
             - If it is ambiguous about which of the two they mean, ask one concise question instead of guessing.
             """)
         } else if interactionMode == .normal, let plan = currentPlan,
@@ -950,7 +950,15 @@ enum AgentContextBuilder {
 /// everything inside the block before the first numbered line becomes
 /// `summary`. Returns nil when no such block is present.
 nonisolated enum AgentPlanParser {
-    static func extract(from content: String) -> AgentPlan? {
+    enum ExtractionScope: Equatable {
+        case entireBlock
+        case firstPhase
+    }
+
+    static func extract(
+        from content: String,
+        scope: ExtractionScope = .entireBlock
+    ) -> AgentPlan? {
         guard let body = fencedBody(in: content, tag: "plan") else { return nil }
         var stepTexts: [String] = []
         var summaryLines: [String] = []
@@ -960,6 +968,15 @@ nonisolated enum AgentPlanParser {
                 if !stepTexts.isEmpty { continue }
                 summaryLines.append("")
                 continue
+            }
+            // Goal roadmaps execute one bounded phase at a time. Models can
+            // still occasionally expand a later phase inside the same plan
+            // block; stop at that Markdown heading so the active Plan card
+            // and execution contract cannot silently absorb future work.
+            if scope == .firstPhase,
+               !stepTexts.isEmpty,
+               isPhaseHeading(trimmed) {
+                break
             }
             if let step = numberedStep(from: trimmed) {
                 stepTexts.append(step)
@@ -974,6 +991,23 @@ nonisolated enum AgentPlanParser {
         guard !stepTexts.isEmpty else { return nil }
         let summary = summaryLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return AgentPlan(status: .proposed, summary: summary, stepTexts: stepTexts)
+    }
+
+    private static func isPhaseHeading(_ line: String) -> Bool {
+        guard line.hasPrefix("#") else { return false }
+        let heading = line
+            .drop { $0 == "#" }
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !heading.isEmpty else { return false }
+        if heading.range(
+            of: #"^phase[\s:_-]*(?:\d+|[ivxlcdm]+)(?:$|[\s:：_-])"#,
+            options: .regularExpression
+        ) != nil {
+            return true
+        }
+        return heading.hasPrefix("阶段")
+            || (heading.hasPrefix("第") && heading.contains("阶段"))
     }
 
     /// Returns a copy of `plan` with step statuses updated from any
@@ -1024,6 +1058,24 @@ nonisolated enum AgentPlanParser {
             next.status = .executing
         }
         return next
+    }
+
+    /// Lift a plan's paused badge as soon as the model commits to resuming it.
+    ///
+    /// Returns the un-paused plan when `content` carries a `progress` block
+    /// that parses against it, and nil when nothing should change — the plan
+    /// is not paused, or the model is doing something else entirely.
+    ///
+    /// Deliberately narrower than `applyProgress`: only `interruptedAt` is
+    /// cleared, step statuses are left alone. This runs against streaming
+    /// content, where a `progress` block can still be half-written, and the
+    /// end-of-turn capture owns the checklist itself.
+    static func liftingInterruption(of plan: AgentPlan, from content: String) -> AgentPlan? {
+        guard plan.isInterrupted else { return nil }
+        guard applyProgress(to: plan, from: content) != nil else { return nil }
+        var lifted = plan
+        lifted.interruptedAt = nil
+        return lifted
     }
 
     fileprivate static func fencedBody(in content: String, tag: String) -> String? {

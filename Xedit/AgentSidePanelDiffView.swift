@@ -14,6 +14,7 @@ import SwiftUI
 
 struct AgentSidePanelDiffView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
     @State private var state: LoadState = .idle
     @State private var scope: AgentGitReviewScope = .uncommitted
     @State private var selectedPath: String?
@@ -465,6 +466,23 @@ struct AgentSidePanelDiffView: View {
         }
     }
 
+    /// Geometry for the monochrome commit actions. The bar button and the
+    /// popover pair share it so the black/white call-to-action reads as one
+    /// control wherever it appears.
+    private static let commitButtonHeight: CGFloat = 22
+    private static let commitButtonCornerRadius: CGFloat = 6
+
+    private var commitActionsDisabled: Bool {
+        commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCommitting
+    }
+
+    private func commitActionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 12)
+            .frame(height: Self.commitButtonHeight)
+    }
+
     private var commitBar: some View {
         HStack(spacing: 8) {
             if case .loaded(let snapshot) = state {
@@ -485,9 +503,15 @@ struct AgentSidePanelDiffView: View {
             } label: {
                 Label(L10n.AgentGitReview.commit, systemImage: "arrow.down.doc")
                     .font(.system(size: 12, weight: .semibold))
+                    .padding(.horizontal, 10)
+                    .frame(height: Self.commitButtonHeight)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
+            .buttonStyle(
+                AgentApprovalPrimaryButtonStyle(
+                    colorScheme: colorScheme,
+                    cornerRadius: Self.commitButtonCornerRadius
+                )
+            )
             .focusable(false)
             .popover(isPresented: $showsCommitPopover, arrowEdge: .bottom) {
                 commitPopover
@@ -558,16 +582,30 @@ struct AgentSidePanelDiffView: View {
             }
 
             HStack(spacing: 8) {
-                Button(L10n.AgentGitReview.commit) {
+                Button {
                     performCommit(pushAfterCommit: false)
+                } label: {
+                    commitActionLabel(L10n.AgentGitReview.commit)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(
+                    AgentApprovalPrimaryButtonStyle(
+                        colorScheme: colorScheme,
+                        cornerRadius: Self.commitButtonCornerRadius
+                    )
+                )
                 .keyboardShortcut(.return, modifiers: .command)
 
-                Button(L10n.AgentGitReview.commitAndPush) {
+                Button {
                     performCommit(pushAfterCommit: true)
+                } label: {
+                    commitActionLabel(L10n.AgentGitReview.commitAndPush)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(
+                    AgentApprovalSecondaryButtonStyle(
+                        colorScheme: colorScheme,
+                        cornerRadius: Self.commitButtonCornerRadius
+                    )
+                )
 
                 if case .running = commitState {
                     ProgressView()
@@ -575,7 +613,12 @@ struct AgentSidePanelDiffView: View {
                 }
             }
             .controlSize(.small)
-            .disabled(commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isCommitting)
+            // The monochrome styles paint their own fill, so SwiftUI's
+            // automatic disabled dimming for system button styles no longer
+            // applies — fade the pair explicitly or a disabled Commit still
+            // looks fully live.
+            .opacity(commitActionsDisabled ? 0.42 : 1)
+            .disabled(commitActionsDisabled)
         }
         .padding(14)
         .frame(width: 340)

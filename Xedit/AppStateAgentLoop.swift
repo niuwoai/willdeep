@@ -52,8 +52,19 @@ extension AppState {
         runtime.currentTurnDelegationPolicy = delegationPolicy
         runtime.currentTurnSpawnAgentCallCount = 0
         runtime.currentTurnAutoDispatchedCommands = []
+        // Classified from what the user actually typed. Tool-loop
+        // continuations and system notices re-enter here with the same
+        // runtime; routing those would classify WillDeep's own plumbing.
+        runtime.currentTurnRouteSteering = source == .operatorInput
+            ? AgentRequestRouter.steering(for: text, delegationPolicy: delegationPolicy)
+            : nil
         if source == .operatorInput {
             runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
+            // A human steering the session starts a fresh budget of automatic
+            // runway resumes. The ceiling exists to stop an unattended loop,
+            // not to ration what the user asks for directly.
+            runtime.contextRunwayResumeCount = 0
+            runtime.pendingContextRunwayResume = false
         }
         resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime)
 
@@ -249,6 +260,19 @@ extension AppState {
                 )
                 self.consumeNextQueuedMessageIfNeeded(for: runtime)
                 return
+            }
+            // Before the first provider call, not inside the tool loop: the
+            // whole point is that the expensive model reads findings rather
+            // than deriving them. The report folds into
+            // currentTurnRouteSteering, which runAgentLoop reads when it
+            // assembles the system prompt.
+            if source == .operatorInput {
+                await self.runReadOnlyPreflightIfNeeded(
+                    for: runtime,
+                    requestText: text,
+                    configuration: configuration,
+                    assistantMessageID: userMessage.id
+                )
             }
             await self.runAgentLoop(
                 for: runtime,
@@ -483,7 +507,16 @@ extension AppState {
             startAgentGoalPlanningAfterCaptureIfNeeded(didDefineGoal, for: runtime)
             persistAgentSession(runtime: runtime)
             if !shouldConsumeQueueAfterStop {
-                maybeAutoCompressContext(for: runtime)
+                // A runway stop means the window is already at 90%, well past
+                // the ordinary 75% trigger — but `shouldAutoCompressNow` can
+                // still refuse (too few messages, a tail that will not split).
+                // Ask for it explicitly so the ordered stop is always followed
+                // by the compression it promised the model.
+                if runtime.pendingContextRunwayResume {
+                    compressAgentContext(for: runtime, keepRecent: 2)
+                } else {
+                    maybeAutoCompressContext(for: runtime)
+                }
             }
             consumeNextQueuedMessageIfNeeded(for: runtime)
             // Always release the provider slot last so the queue drain
@@ -665,6 +698,7 @@ extension AppState {
             images: latestUserImages
         )
         var designToCodeGateContinuationCount = 0
+        var didRequestContextRunwayHandoff = false
 
         for toolRound in 0..<Self.maxAgentToolRounds {
             // `run_workflow` is asynchronous, but unlike the workflow card its
@@ -902,6 +936,14 @@ extension AppState {
             if let delegationInstruction = runtime.currentTurnDelegationPolicy.systemPromptInstruction {
                 assembledPrompt += "\n\n\(delegationInstruction)"
             }
+            // The runtime's classification of this turn's request. Advisory
+            // by design — it names the trade that fits so delegating is the
+            // short path rather than the detour, and says so where the model
+            // reads instructions rather than where the user reads their own
+            // words.
+            if let routeSteering = runtime.currentTurnRouteSteering {
+                assembledPrompt += "\n\n\(routeSteering)"
+            }
             let promptComponents = AgentContextBuilder.requestComponents(from: assembledPrompt)
             // allowRefresh only on the dispatch's first round: rounds 2+ of
             // the same tool loop keep already-sent history byte-stable, and
@@ -937,7 +979,50 @@ extension AppState {
             // (setting the fresh user message's modelContext, or inserting a
             // hidden host carrier on notification-only wake-ups), so the
             // model-facing history and the next turn's replay share bytes.
-            let collapsedHistory = Self.collapseOldToolResults(in: history)
+            var collapsedHistory = Self.collapseOldToolResults(in: history)
+            var requestTools = AgentToolRegistry.tools(
+                activeExperts: activeExperts,
+                interactionMode: runtime.interactionMode,
+                executionAgent: runtime.executionAgent,
+                delegationPolicy: runtime.currentTurnDelegationPolicy
+            )
+            let requestWithoutRunwayHandoff = [AgentMessage(role: .system, content: systemPrompt)]
+                + collapsedHistory
+            let estimatedRequestTokens = Self.estimateAgentTokens(
+                messages: requestWithoutRunwayHandoff,
+                tools: requestTools
+            )
+            let providerAnchoredTokens = Self.providerAnchoredUsedTokens(
+                messages: runtime.messages,
+                contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
+            )
+            let contextWindow = Self.agentContextWindow(
+                model: turnConfiguration.model,
+                providerID: turnConfiguration.providerID
+            )
+            let runwayDecision = AgentContextRunwayPolicy.evaluate(
+                usedTokens: max(estimatedRequestTokens, providerAnchoredTokens ?? 0),
+                contextWindow: contextWindow,
+                toolRound: toolRound,
+                handoffAlreadyRequested: didRequestContextRunwayHandoff
+            )
+            if case .handoff(let snapshot) = runwayDecision {
+                let handoffInstruction = AgentMessage(
+                    role: .user,
+                    content: AgentContextRunwayPolicy.handoffPrompt(snapshot: snapshot),
+                    source: .hostInstruction
+                )
+                if let assistantIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
+                    runtime.messages.insert(handoffInstruction, at: assistantIndex)
+                }
+                collapsedHistory.append(handoffInstruction)
+                // The final slice of runway is reserved for a useful state
+                // capsule. Removing tool schemas both frees input space and
+                // makes "no new work" a transport fact rather than a polite
+                // request the model can accidentally ignore.
+                requestTools = []
+                didRequestContextRunwayHandoff = true
+            }
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
 
             var finishReason: String?
@@ -950,12 +1035,7 @@ extension AppState {
                     do {
                         try await client.streamChat(
                             messages: requestMessages,
-                            tools: AgentToolRegistry.tools(
-                                activeExperts: activeExperts,
-                                interactionMode: runtime.interactionMode,
-                                executionAgent: runtime.executionAgent,
-                                delegationPolicy: runtime.currentTurnDelegationPolicy
-                            )
+                            tools: requestTools
                         ) { event in
                             await MainActor.run { [weak runtime] in
                                 guard let runtime,
@@ -1097,7 +1177,8 @@ extension AppState {
                 // from `runtime.messages` (excluding the removed message), so a
                 // retry that emits tool calls flows into the tool path and
                 // history stays intact. The judge shares this turn's slot.
-                if !didQualityRetry,
+                if !didRequestContextRunwayHandoff,
+                   !didQualityRetry,
                    runtime.managedRouting != nil,
                    configuration.providerID == AgentProviderPreset.someIMID,
                    let escalatedModel = SomeIMManagedModel.escalated(from: turnConfiguration.model),
@@ -1164,7 +1245,8 @@ extension AppState {
                         continue
                     }
                 }
-                if requiresDesignToCodeAcceptance,
+                if !didRequestContextRunwayHandoff,
+                   requiresDesignToCodeAcceptance,
                    designToCodeGateContinuationCount < AgentDesignToCode.maximumGateContinuations,
                    let notice = AgentDesignToCode.completionGateNotice(
                        toolCalls: runtime.toolCalls.dropFirst(designToCodeToolCallBaseline)
@@ -1204,6 +1286,25 @@ extension AppState {
                         for: runtime
                     )
                     _ = retryDispatchPlanningAfterWillDeepFailureIfNeeded(for: runtime)
+                    return
+                }
+
+                if didRequestContextRunwayHandoff {
+                    // Do not let Plan/Goal auto-continuation immediately undo
+                    // the ordered stop. We still ingest any honest status
+                    // blocks the handover supplied; the turn-level defer then
+                    // force-compresses and, if the resume ceiling allows,
+                    // hands the work back to the model on its own.
+                    if runtime.contextRunwayResumeCount < AgentContextRunwayPolicy.maximumAutomaticResumes {
+                        runtime.pendingContextRunwayResume = true
+                    }
+                    _ = captureAgentPlanFromLatestMessage(for: runtime)
+                    if runtime.interactionMode == .goal {
+                        _ = captureAgentGoalEvaluationFromLatestMessage(
+                            for: runtime,
+                            finishReason: finishReason
+                        )
+                    }
                     return
                 }
 
@@ -2298,6 +2399,7 @@ extension AppState {
                         runtime.toolCalls[index].arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey] = .bool(false)
                     }
                     runtime.recordComputerUseActivity(toolName: call.toolName, images: result.images)
+                    runtime.deepAdmissionObservation.recordToolSuccess(call.toolName)
                     let agentCreatedTerminalTabs = agentTerminalController.tabs.filter {
                         !terminalTabIDsBeforeTool.contains($0.id)
                     }

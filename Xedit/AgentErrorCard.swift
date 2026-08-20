@@ -10,6 +10,7 @@ import SwiftUI
 
 struct AgentErrorCard: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
     let message: String
     let details: AgentErrorDetails?
     var severity: AgentBannerSeverity = .error
@@ -48,9 +49,16 @@ struct AgentErrorCard: View {
                         appState.retryLastAgentTurn()
                     } label: {
                         Label("重试", systemImage: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 10)
+                            .frame(height: 22)
                     }
-                    .buttonStyle(.borderless)
-                    .font(.caption)
+                    .buttonStyle(
+                        AgentApprovalPrimaryButtonStyle(
+                            colorScheme: colorScheme,
+                            cornerRadius: 6
+                        )
+                    )
                     .help("重新发送上一条消息")
                 }
                 if details != nil {
@@ -147,23 +155,37 @@ struct AgentErrorCard: View {
         }
         .padding(9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(accentColor.opacity(severity == .error ? 0.06 : 0.07))
+        .background(surfaceColor.opacity(severity == .error ? 0.05 : 0.07))
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(accentColor.opacity(severity == .error ? 0.18 : 0.22), lineWidth: 1)
+                .stroke(surfaceColor.opacity(severity == .error ? 0.14 : 0.22), lineWidth: 1)
         )
     }
 
     // MARK: - Severity styling
     //
-    // `.notice` deliberately drops red and the warning triangle: those
-    // banners hand control back to the user without anything having failed,
-    // and the alarm treatment made a healthy run look broken.
+    // `.notice` deliberately drops the warning triangle: those banners hand
+    // control back to the user without anything having failed, and the alarm
+    // treatment made a healthy run look broken.
+    //
+    // `.error` is monochrome for a related reason. A model timeout or a 500 is
+    // something the user retries, not a wound — the red wash made every
+    // recoverable hiccup read as data loss. The triangle still marks it as a
+    // failure; the retry button carries the emphasis now.
 
     private var accentColor: Color {
         switch severity {
-        case .error: return .red
+        case .error: return Color(nsColor: .secondaryLabelColor)
+        case .notice: return .accentColor
+        }
+    }
+
+    /// Background/border wash. Grey needs to key off `labelColor` rather than
+    /// the accent so the banner stays visible in both appearances.
+    private var surfaceColor: Color {
+        switch severity {
+        case .error: return Color(nsColor: .labelColor)
         case .notice: return .accentColor
         }
     }
@@ -173,10 +195,7 @@ struct AgentErrorCard: View {
     }
 
     private var textStyle: AnyShapeStyle {
-        switch severity {
-        case .error: return AnyShapeStyle(.red)
-        case .notice: return AnyShapeStyle(.primary)
-        }
+        AnyShapeStyle(.primary)
     }
 
     private var iconName: String {

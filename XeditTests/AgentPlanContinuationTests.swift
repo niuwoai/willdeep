@@ -250,6 +250,62 @@ struct AgentPlanContinuationTests {
         ))
     }
 
+    /// The card used to keep reading "已中断" for a whole resumed turn —
+    /// route edits, compiles, new files — because `interruptedAt` was cleared
+    /// only by the end-of-turn capture. The stream now lifts it as soon as a
+    /// `progress` block parses.
+    @Test("流式里出现 progress 块即解除中断标记")
+    func streamedProgressLiftsInterruption() throws {
+        let plan = Self.interruptedPlan()
+        let content = """
+        继续完成中断的计划。先注册成员管理路由：
+
+        ```progress
+        1: done
+        2: in_progress
+        ```
+        """
+
+        let lifted = try #require(AgentPlanParser.liftingInterruption(of: plan, from: content))
+        #expect(!lifted.isInterrupted)
+        // Only the badge is lifted here; the checklist stays with the
+        // end-of-turn capture, which sees the completed block.
+        #expect(lifted.steps.map(\.status) == plan.steps.map(\.status))
+    }
+
+    /// The pause is a real contract release, so prose alone must not undo it.
+    /// Only the explicit `progress` signal counts — otherwise a reply that
+    /// merely mentions the old plan while starting new work would silently
+    /// re-arm auto-continuation on it.
+    @Test("没有 progress 块时中断标记保持不变")
+    func proseAloneDoesNotLiftInterruption() {
+        let plan = Self.interruptedPlan()
+
+        #expect(AgentPlanParser.liftingInterruption(of: plan, from: "") == nil)
+        #expect(AgentPlanParser.liftingInterruption(
+            of: plan,
+            from: "继续完成中断的计划。现在编译验证："
+        ) == nil)
+        // A progress block whose rows parse to nothing is not a resume signal.
+        #expect(AgentPlanParser.liftingInterruption(
+            of: plan,
+            from: "```progress\n(nothing yet)\n```"
+        ) == nil)
+    }
+
+    /// A plan that was never paused must not be rewritten by this path — it
+    /// runs on every streaming flush, so a spurious non-nil return would
+    /// republish `currentPlan` a few times a second.
+    @Test("未中断的计划不被该路径改写")
+    func activePlanIsLeftAlone() {
+        let active = AgentPlan(status: .executing, summary: "", stepTexts: ["Inspect"])
+
+        #expect(AgentPlanParser.liftingInterruption(
+            of: active,
+            from: "```progress\n1: done\n```"
+        ) == nil)
+    }
+
     @Test("interrupted plans decode from legacy payloads as active")
     func legacyPlanDecodesWithoutInterruption() throws {
         let legacy = #"{"status":"executing","steps":[],"summary":""}"#

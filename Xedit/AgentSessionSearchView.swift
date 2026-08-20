@@ -2,10 +2,10 @@
 //  AgentSessionSearchView.swift
 //  WillDeep
 //
-//  Title-only session search overlay (rc24). Opened from the chat header
-//  magnifier (⌘⇧P). Substring-matches `AgentSession.title` across every
-//  workspace — archived sessions included — and jumps to the chosen one
-//  via `selectAgentSession(id:)`.
+//  Conversation-and-project title search overlay. Opened from the native
+//  titlebar magnifier or its ⌘⇧P shortcut.
+//  Substring-matches conversation and project titles across every workspace
+//  — archived sessions included — then reveals the selected sidebar target.
 //
 //  macOS 13.7 deployment target: `onKeyPress` (14+) is unavailable, so the
 //  keyboard path is "type to filter → Enter opens the top match"; mouse
@@ -66,11 +66,11 @@ struct AgentSessionSearchView: View {
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(results) { session in
+                    ForEach(results) { result in
                         Button {
-                            open(session)
+                            open(result)
                         } label: {
-                            SessionSearchRow(session: session)
+                            SessionSearchRow(result: result)
                         }
                         .buttonStyle(.plain)
                     }
@@ -107,14 +107,14 @@ struct AgentSessionSearchView: View {
         .padding(.vertical, 10)
     }
 
-    /// Case- and diacritic-insensitive substring match on the title, then
-    /// most-recently-updated first so the row you probably want is on top.
-    private var results: [AgentSession] {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else { return [] }
-        return appState.agentSessions
-            .filter { $0.title.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
-            .sorted { $0.updatedAt > $1.updatedAt }
+    /// Searches chat titles and named projects. The shared matcher keeps the
+    /// literal, case/diacritic-insensitive rules consistent with model tools.
+    private var results: [AgentSessionSearchResult] {
+        AgentSessionSearch.titleResults(
+            sessions: appState.agentSessions,
+            projects: appState.agentProjects,
+            query: query
+        )
     }
 
     private func openTopResult() {
@@ -122,36 +122,45 @@ struct AgentSessionSearchView: View {
         open(first)
     }
 
-    private func open(_ session: AgentSession) {
-        // Restoring an archived session purely by selecting it would be
-        // surprising; selection just focuses it — the sidebar still shows
-        // it under "Archived". Dismiss first so the selection isn't fighting
-        // the sheet's own state teardown.
+    private func open(_ result: AgentSessionSearchResult) {
+        // Dismiss first so the sidebar animation isn't fighting the sheet's
+        // teardown. A session result opens the transcript; a project result
+        // only centres and highlights its group header.
         dismiss()
-        appState.selectAgentSession(id: session.id)
+        switch result {
+        case .session(let session):
+            _ = appState.selectAndRevealAgentSessionInSidebar(id: session.id)
+        case .project(let project):
+            appState.revealAgentProjectInSidebar(id: project.id)
+        }
     }
 }
 
 private struct SessionSearchRow: View {
-    let session: AgentSession
+    let result: AgentSessionSearchResult
     @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: session.archivedAt != nil ? "archivebox" : "bubble.left.and.bubble.right")
+            Image(systemName: iconName)
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.title)
+                Text(title)
                     .font(.system(size: 13))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 5) {
+                    Text(resultKind)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             }
             Spacer(minLength: 8)
         }
@@ -164,12 +173,44 @@ private struct SessionSearchRow: View {
     }
 
     private var subtitle: String {
-        let workspace = session.workspaceRootPath
-            .map { URL(fileURLWithPath: $0).lastPathComponent }
-            .flatMap { $0.isEmpty ? nil : $0 }
-            ?? L10n.Workspace.noWorkspace
-        let when = Self.relativeFormatter.localizedString(for: session.updatedAt, relativeTo: Date())
-        return "\(workspace) · \(when)"
+        switch result {
+        case .project(let project):
+            return L10n.SessionSearch.projectResultSubtitle("\(project.folderPaths.count)")
+        case .session(let session):
+            let workspace = session.workspaceRootPath
+                .map { URL(fileURLWithPath: $0).lastPathComponent }
+                .flatMap { $0.isEmpty ? nil : $0 }
+                ?? L10n.Workspace.noWorkspace
+            let when = Self.relativeFormatter.localizedString(for: session.updatedAt, relativeTo: Date())
+            return "\(workspace) · \(when)"
+        }
+    }
+
+    private var iconName: String {
+        switch result {
+        case .project:
+            return "folder"
+        case .session(let session):
+            return session.archivedAt != nil ? "archivebox" : "bubble.left.and.bubble.right"
+        }
+    }
+
+    private var title: String {
+        switch result {
+        case .project(let project):
+            return project.resolvedDisplayName
+        case .session(let session):
+            return session.title
+        }
+    }
+
+    private var resultKind: String {
+        switch result {
+        case .project:
+            return L10n.SessionSearch.projectResultKind
+        case .session:
+            return L10n.SessionSearch.sessionResultKind
+        }
     }
 
     private static let relativeFormatter: RelativeDateTimeFormatter = {

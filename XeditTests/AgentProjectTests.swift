@@ -17,12 +17,14 @@ struct AgentProjectTests {
 
     private func session(
         workspacePath: String?,
-        projectID: UUID? = nil
+        projectID: UUID? = nil,
+        presentationScope: AgentSessionPresentationScope = .workspace
     ) -> AgentSession {
         AgentSession(
             title: "s",
             workspaceRootPath: workspacePath,
-            projectID: projectID
+            projectID: projectID,
+            presentationScope: presentationScope
         )
     }
 
@@ -124,6 +126,66 @@ struct AgentProjectTests {
         #expect(AgentWorkspaceProjectMigration.foldersNeedingProject(
             sessions: [remote],
             existing: []
+        ).isEmpty)
+    }
+
+    @Test("调度台 worktree 不会被升级成项目")
+    func dispatchWorktreesAreSkipped() {
+        let dispatch = session(
+            workspacePath: "/Users/rocky/.willdeep/worktrees/repo/dispatch--12345678",
+            presentationScope: .dispatchBoard
+        )
+
+        #expect(AgentWorkspaceProjectMigration.foldersNeedingProject(
+            sessions: [dispatch],
+            existing: []
+        ).isEmpty)
+    }
+
+    @Test("历史调度 worktree 项目会被识别但不会误伤普通项目")
+    func leakedDispatchProjectsAreSelectedConservatively() {
+        let leaked = project(
+            name: "dispatch--12345678",
+            folders: ["/Users/rocky/.willdeep/worktrees/repo/dispatch--12345678"]
+        )
+        let ordinary = project(
+            name: "willdeep",
+            folders: ["/Users/rocky/Sites/willdeep"]
+        )
+        let manuallyRenamed = project(
+            name: "保留这个调度现场",
+            folders: ["/Users/rocky/.willdeep/worktrees/repo/dispatch--87654321"]
+        )
+        let dispatchSession = session(
+            workspacePath: leaked.primaryFolderPath,
+            projectID: leaked.id,
+            presentationScope: .dispatchBoard
+        )
+
+        let selected = AgentDispatchProjectLeakRepair.projectIDsToRemove(
+            projects: [leaked, ordinary, manuallyRenamed],
+            sessions: [dispatchSession],
+            managedWorktreeRoot: "/Users/rocky/.willdeep/worktrees"
+        )
+
+        #expect(selected == [leaked.id])
+    }
+
+    @Test("有普通会话占用的 dispatch 名项目不会自动清理")
+    func workspaceOwnedDispatchProjectIsKept() {
+        let project = project(
+            name: "dispatch--12345678",
+            folders: ["/Users/rocky/.willdeep/worktrees/repo/dispatch--12345678"]
+        )
+        let ordinarySession = session(
+            workspacePath: project.primaryFolderPath,
+            projectID: project.id
+        )
+
+        #expect(AgentDispatchProjectLeakRepair.projectIDsToRemove(
+            projects: [project],
+            sessions: [ordinarySession],
+            managedWorktreeRoot: "/Users/rocky/.willdeep/worktrees"
         ).isEmpty)
     }
 

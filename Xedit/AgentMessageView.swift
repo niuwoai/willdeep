@@ -688,7 +688,7 @@ enum AgentAssistantMarkdownRenderer {
             case .orderedList:
                 appendSeparator()
                 let indent = String(repeating: "  ", count: block.indent)
-                var prefix = AttributedString("\(indent)1. ")
+                var prefix = AttributedString("\(indent)\(block.orderedListNumber ?? 1). ")
                 prefix.foregroundColor = .secondary
                 var body = inlineRendered(block.text, baseFontSize: baseFontSize, bodyFont: bodyFont)
                 body.foregroundColor = .primary

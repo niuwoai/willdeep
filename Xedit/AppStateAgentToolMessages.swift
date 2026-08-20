@@ -138,8 +138,8 @@ extension AppState {
         }()
         let runInBackground = arguments["run_in_background"]?.boolValue() ?? false
 
-        // Which trade to run. Unknown or absent → `deep`, whose bindings and
-        // budgets reproduce the pre-profile behaviour exactly.
+        // Which trade to run. An absent profile still means `deep`, which is
+        // what every pre-profile caller expects.
         let requestedProfileID = arguments["profile"]?.stringValue()
         var profile = AgentSubagentProfileStore.resolvedProfile(id: requestedProfileID)
         var profileNotices: [String] = []
@@ -153,9 +153,41 @@ extension AppState {
            !availableTradeIDs.contains(where: {
                $0.caseInsensitiveCompare(requestedProfileID.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
            }) {
-            profileNotices.append(
-                "Note: unknown profile `\(requestedProfileID)` — ran the `deep` trade instead. Valid trades: \(availableTradeIDs.joined(separator: ", "))."
+            // A typo used to be a free upgrade: unknown names fell through to
+            // `deep`, so `profile="scoutt"` quietly bought the 1M tier while
+            // reporting a note nobody acts on. Refuse instead — the retry
+            // costs one round and lands on the trade that was meant.
+            let message = "Unknown profile `\(requestedProfileID)`. Valid trades: \(availableTradeIDs.joined(separator: ", ")). Pick one and call spawn_agent again — this was not run as `deep`."
+            finishRecord(
+                status: .failed,
+                summary: "unknown profile",
+                payload: "Tool error: \(message)",
+                errorMessage: message
             )
+            return
+        }
+
+        // Admission for the scarce 1M tier. Checked before the write-set and
+        // approval machinery so a refused escalation costs nothing and never
+        // shows the user an approval card for a spawn that cannot run.
+        if profile.id == AgentSubagentProfileCatalog.deepID {
+            let ticket = AgentDeepAdmissionTicket.parse(arguments["escalation"])
+            switch AgentDeepAdmission.authorize(
+                ticket: ticket,
+                observation: runtime.deepAdmissionObservation,
+                budget: AgentSettingsStore.loadDeepAdmissionBudget()
+            ) {
+            case .success(let updated):
+                runtime.deepAdmissionObservation = updated
+            case .failure(let refusal):
+                finishRecord(
+                    status: .failed,
+                    summary: "deep escalation refused",
+                    payload: "Tool error: \(refusal.modelFacingMessage)",
+                    errorMessage: refusal.modelFacingMessage
+                )
+                return
+            }
         }
 
         // A goal-team role binds a trade and may only narrow it further
@@ -205,10 +237,10 @@ extension AppState {
         }
 
         // Parse the packet before the write scope: implementer/fixer trades
-        // may use `task.relevant_files` as the same declared set used by the
-        // Rust runtime. An explicit `target_files` remains authoritative for
-        // compatibility and for parents that want a narrower write set than
-        // the read context.
+        // may declare their write set as `task.write_files` (the same field
+        // the Rust runtime uses), with `task.relevant_files` still honored for
+        // older packets. An explicit `target_files` remains authoritative for
+        // parents that want a narrower write set than the read context.
         let taskPacket = AgentSubagentTaskPacket.parse(arguments["task"])
 
         // Writing trades need a bounded, locked target set before anything
@@ -222,14 +254,17 @@ extension AppState {
             } else if let single = arguments["target_file"]?.stringValue() {
                 rawTargets = [single]
             } else if profile.id != AgentSubagentProfileCatalog.editorID {
-                rawTargets = taskPacket?.relevantFiles ?? []
+                // `write_files` when the packet declares it, else the legacy
+                // combined set. Context in `read_files` never lands here —
+                // that is the whole point of the split.
+                rawTargets = taskPacket?.requestedWriteFiles ?? []
             }
             guard !rawTargets.isEmpty,
                   let access = AgentSubagentWriteAccess(targetRelativePaths: rawTargets) else {
                 finishRecord(
                     status: .failed,
                     summary: "missing target files",
-                    payload: "Tool error: `profile=\"\(profile.id)\"` requires 1–\(AgentSubagentWriteAccess.maxTargetCount) files it may create or edit: `target_file` (editor), `target_files`, or `task.relevant_files`. Paths are workspace-relative; absolute paths, `~`, and `..` are rejected.",
+                    payload: "Tool error: `profile=\"\(profile.id)\"` requires 1–\(AgentSubagentWriteAccess.maxTargetCount) files it may create or edit: `target_file` (editor), `target_files`, or `task.write_files`. Context-only paths belong in `task.read_files` and do not count. Paths are workspace-relative; absolute paths, `~`, and `..` are rejected.",
                     errorMessage: "Missing target files"
                 )
                 return
@@ -371,6 +406,14 @@ extension AppState {
             if writeAccess != nil {
                 AgentSubagentEditorLock.shared.release(runID: runID)
             }
+        }
+
+        // A lower-tier attempt counts as evidence only once its packet, write
+        // set and file locks have all passed. A spawn rejected for an
+        // undeclared path never ran, and must not become the thing that
+        // unlocks the 1M tier on the next call.
+        if profile.id != AgentSubagentProfileCatalog.deepID {
+            runtime.deepAdmissionObservation.recordProfileAttempt(profile.id)
         }
 
         func persist(

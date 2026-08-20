@@ -31,6 +31,19 @@ nonisolated enum L10n {
 
     enum AppUpdate {
         static let checkForUpdates = String(localized: "app-update.check-for-updates", defaultValue: "Check for Updates…")
+        static let diagnosticClose = String(localized: "app-update.diagnostic-close", defaultValue: "Close")
+        static let diagnosticCopy = String(localized: "app-update.diagnostic-copy", defaultValue: "Copy Details")
+        static let diagnosticInstallerLaunchHint = String(localized: "app-update.diagnostic-installer-launch-hint", defaultValue: "The installer could not obtain authorization or start. Reinstall a signed WillDeep release in Applications, then try again.")
+        static func diagnosticMessage(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "app-update.diagnostic-message", defaultValue: "Error: %1$@\n%2$@\n\nDetails were saved to the update log.")
+            return String(format: template, a1, a2)
+        }
+        static func diagnosticMessageWithoutLog(_ a1: String, _ a2: String) -> String {
+            let template = String(localized: "app-update.diagnostic-message-without-log", defaultValue: "Error: %1$@\n%2$@\n\nThe update log could not be written. Copy the details when reporting the problem.")
+            return String(format: template, a1, a2)
+        }
+        static let diagnosticShowLog = String(localized: "app-update.diagnostic-show-log", defaultValue: "Show Log")
+        static let diagnosticTitle = String(localized: "app-update.diagnostic-title", defaultValue: "Update Details")
         static let download = String(localized: "app-update.download", defaultValue: "Download")
         static let downloadFailedTitle = String(localized: "app-update.download-failed-title", defaultValue: "Download Failed")
         static func downloadedMessage(_ a1: String) -> String {
@@ -901,9 +914,15 @@ nonisolated enum L10n {
     }
 
     enum SessionSearch {
-        static let placeholder = String(localized: "session-search.placeholder", defaultValue: "Search chats by title…")
-        static let empty = String(localized: "session-search.empty", defaultValue: "No matching chats")
-        static let prompt = String(localized: "session-search.prompt", defaultValue: "Type to search your chats")
+        static let placeholder = String(localized: "session-search.placeholder", defaultValue: "Search chats and projects by title…")
+        static let empty = String(localized: "session-search.empty", defaultValue: "No matching chats or projects")
+        static let prompt = String(localized: "session-search.prompt", defaultValue: "Type to search chats and projects")
+        static let sessionResultKind = String(localized: "session-search.result-kind-session", defaultValue: "Chat")
+        static let projectResultKind = String(localized: "session-search.result-kind-project", defaultValue: "Project")
+        static func projectResultSubtitle(_ a1: String) -> String {
+            let template = String(localized: "session-search.project-result-subtitle", defaultValue: "%1$@ folders")
+            return String(format: template, a1)
+        }
         static func resultCount(_ a1: String) -> String {
             let template = String(localized: "session-search.result-count", defaultValue: "%@ results")
             return String(format: template, a1)
@@ -1373,6 +1392,8 @@ nonisolated enum L10n {
         static let someIMNotLoggedInTooltip = String(localized: "sidebar.some-im.not-logged-in-tooltip", defaultValue: "Open some.im integration settings")
         static let workspaceHeader = String(localized: "sidebar.workspace-header", defaultValue: "Workspaces")
         static let workspaceHeaderOpenTooltip = String(localized: "sidebar.workspace-header.open-tooltip", defaultValue: "Add a folder as a new project")
+        static let workspaceHeaderCollapseAllTooltip = String(localized: "sidebar.workspace-header.collapse-all-tooltip", defaultValue: "Collapse all projects")
+        static let workspaceHeaderExpandAllTooltip = String(localized: "sidebar.workspace-header.expand-all-tooltip", defaultValue: "Expand all projects")
         static let workspaceMenuNewChat = String(localized: "sidebar.workspace-menu.new-chat", defaultValue: "New Chat in this Workspace")
         static let workspaceMenuRemove = String(localized: "sidebar.workspace-menu.remove", defaultValue: "Remove from List")
         static let workspaceToggleCollapseTooltip = String(localized: "sidebar.workspace-toggle.collapse-tooltip", defaultValue: "Collapse session list")

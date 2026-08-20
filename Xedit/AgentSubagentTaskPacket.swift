@@ -24,11 +24,34 @@ nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
     /// every fetch round burns the window the fix itself needs — so the
     /// parent names the skill and the dispatcher does the reading.
     var skill: String?
-    /// Workspace-relative paths whose contents are inlined for the worker.
-    /// For read-only trades these are context only. For a non-editor writing
-    /// trade they also become its declared write set when `target_files` is
-    /// omitted; an explicit `target_files` always wins and may be narrower.
+    /// Context the worker may read. Inlined like every other declared file,
+    /// but never writable merely by being readable.
+    ///
+    /// This split exists because the combined field made "let the worker see
+    /// this file" and "let the worker change this file" the same request. The
+    /// cheapest way to give a worker enough context was to widen its write
+    /// authority, which is exactly backwards.
+    var readFiles: [String]
+    /// The exact set a writing trade may create or edit. When empty, the
+    /// legacy `relevantFiles` remains the write set so old packets keep their
+    /// original meaning.
+    var writeFiles: [String]
+    /// Legacy combined read/write set. Kept with its **original** semantics
+    /// for packets written against the old schema; new callers should send
+    /// `read_files` plus `write_files`.
     var relevantFiles: [String]
+
+    /// Everything inlined into the worker's opening message, de-duplicated
+    /// with declaration order preserved.
+    var inlineFiles: [String] {
+        var seen = Set<String>()
+        return (readFiles + writeFiles + relevantFiles).filter { seen.insert($0).inserted }
+    }
+
+    /// The paths this packet is asking write authority for.
+    var requestedWriteFiles: [String] {
+        writeFiles.isEmpty ? relevantFiles : writeFiles
+    }
     /// What the parent already established, so the worker does not re-derive
     /// it at its own expense.
     var knownFacts: [String]
@@ -50,6 +73,8 @@ nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
     init(
         goal: String,
         skill: String? = nil,
+        readFiles: [String] = [],
+        writeFiles: [String] = [],
         relevantFiles: [String] = [],
         knownFacts: [String] = [],
         constraints: [String] = [],
@@ -58,6 +83,8 @@ nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
     ) {
         self.goal = goal
         self.skill = skill
+        self.readFiles = readFiles
+        self.writeFiles = writeFiles
         self.relevantFiles = relevantFiles
         self.knownFacts = knownFacts
         self.constraints = constraints
@@ -108,6 +135,8 @@ nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
                     let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
                     return trimmed.isEmpty ? nil : trimmed
                 },
+            readFiles: stringList(fields["read_files"]),
+            writeFiles: stringList(fields["write_files"]),
             relevantFiles: stringList(fields["relevant_files"]),
             knownFacts: stringList(fields["known_facts"]),
             constraints: stringList(fields["constraints"]),
@@ -182,11 +211,12 @@ nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
     }
 
     private func inlinedFilesSection(readFile: (String) -> String?) -> String? {
-        guard !relevantFiles.isEmpty else { return nil }
+        let files = inlineFiles
+        guard !files.isEmpty else { return nil }
         var remaining = Self.inlineCharacterBudget
         var blocks: [String] = []
 
-        for path in relevantFiles {
+        for path in files {
             guard let contents = readFile(path) else {
                 blocks.append("### \(path)\n(could not be read — it may not exist at this path)")
                 continue

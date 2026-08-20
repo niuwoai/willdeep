@@ -119,9 +119,65 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentStatsDashboardLayout.profileAvatarSize == 80)
         #expect(AgentStatsDashboardLayout.summaryCornerRadius == 15)
         #expect(AgentStatsDashboardLayout.metricStripHeight == 61)
-        #expect(AgentStatsDashboardLayout.heatmapCellSize == 8)
-        #expect(AgentStatsDashboardLayout.heatmapCellSpacing == 3)
-        #expect(AgentStatsDashboardLayout.maximumHeatmapWeeks == 52)
+        #expect(AgentStatsDashboardLayout.heatmapCellSize == 12)
+        #expect(AgentStatsDashboardLayout.maximumHeatmapCellSize == 14)
+        #expect(AgentStatsDashboardLayout.heatmapCellSpacing == 4)
+        #expect(AgentStatsDashboardLayout.maximumHeatmapWeeks == 32)
+        #expect(AgentStatsDashboardLayout.visibleHeatmapMonths == 8)
+    }
+
+    @Test("Token activity heatmap fills common dashboard widths edge to edge")
+    func tokenActivityHeatmapFillsDashboardWidth() {
+        let metrics = AgentStatsDashboardLayout.heatmapMetrics(
+            availableWidth: 568,
+            availableWeekCount: AgentStatsDashboardLayout.maximumHeatmapWeeks
+        )
+
+        #expect(metrics.weekCount == 32)
+        #expect(abs(metrics.cellSize - 13.875) < 0.001)
+        #expect(abs(metrics.columnSpacing - 4) < 0.001)
+        #expect(abs(metrics.width - 568) < 0.001)
+    }
+
+    @Test("Token activity heatmap reduces weeks instead of overflowing narrow widths")
+    func tokenActivityHeatmapAdaptsToNarrowWidths() {
+        let metrics = AgentStatsDashboardLayout.heatmapMetrics(
+            availableWidth: 412,
+            availableWeekCount: AgentStatsDashboardLayout.maximumHeatmapWeeks
+        )
+
+        #expect(metrics.weekCount == 26)
+        #expect(abs(metrics.cellSize - 12) < 0.001)
+        #expect(abs(metrics.columnSpacing - 4) < 0.001)
+        #expect(abs(metrics.width - 412) < 0.001)
+    }
+
+    @Test("share image generation has an inline progress state")
+    @MainActor
+    func shareImageGenerationShowsInlineProgress() throws {
+        let size = NSSize(width: 150, height: 48)
+        let root = AgentShareImageButtonLabel(isGenerating: true)
+            .padding(12)
+            .frame(width: size.width, height: size.height)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        let outputPath = ProcessInfo.processInfo.environment["WILLDEEP_SHARE_LOADING_QA_OUTPUT"]
+            ?? "/tmp/Xedit-share-loading-design-qa.png"
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
+    @Test("no share preview control joins the keyboard focus chain on open")
+    func sharePreviewControlsAreNotFocusable() {
+        #expect(!AgentSharePreviewFocusPolicy.isCloseButtonFocusable)
+        // Save and Share together: excusing only one hands the focus ring to
+        // the other, which moves the blue outline rather than removing it.
+        #expect(!AgentSharePreviewFocusPolicy.isActionButtonFocusable)
     }
 
     @Test("longest task duration uses compact day, hour, and minute units")

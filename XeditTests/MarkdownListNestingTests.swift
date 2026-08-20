@@ -70,4 +70,40 @@ struct MarkdownListNestingTests {
         #expect(blocks[1].indent == 1)
         #expect(blocks[2].indent == 0)
     }
+
+    @Test
+    func repeatedOneMarkersRenderAsAContinuousListAcrossBlankLines() {
+        let md = "1. first\n\n1. second\n\n1. third"
+        let blocks = MarkdownPreviewParser.blocks(from: md)
+
+        #expect(blocks.map(\.orderedListNumber) == [1, 2, 3])
+    }
+
+    @Test
+    func orderedListPreservesItsStartAndResumesAfterNestedItems() {
+        let md = """
+        4. fourth
+          1. nested first
+          1. nested second
+        1. fifth
+        """
+        let blocks = MarkdownPreviewParser.blocks(from: md)
+
+        #expect(blocks.map(\.orderedListNumber) == [4, 1, 2, 5])
+    }
+
+    @Test
+    func paragraphStartsANewOrderedList() {
+        let md = """
+        1. first
+
+        A paragraph between lists.
+
+        1. first again
+        """
+        let blocks = MarkdownPreviewParser.blocks(from: md)
+        let numbers = blocks.compactMap(\.orderedListNumber)
+
+        #expect(numbers == [1, 1])
+    }
 }

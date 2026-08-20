@@ -51,7 +51,7 @@ enum AgentSkillCatalog {
 
 
                 <delegation-hint tier="worker">
-                These skills fit a small-context worker: \(workers.joined(separator: ", ")). Instead of running one inline, spawn_agent with a task packet — set task.skill to the skill name (the runtime inlines its body for the worker), task.goal to the outcome, and task.relevant_files to the inputs. Your window stays free and the worker starts warm.
+                These skills fit a small-context worker: \(workers.joined(separator: ", ")). Instead of running one inline, spawn_agent with a task packet — set task.skill to the skill name (the runtime inlines its body for the worker), task.goal to the outcome, task.read_files to the inputs, and task.write_files to whatever it may change. Your window stays free and the worker starts warm.
                 </delegation-hint>
                 """
             }

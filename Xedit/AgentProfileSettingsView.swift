@@ -149,9 +149,11 @@ struct AgentProfileSettingsView: View {
     private func detailLine(_ profile: AgentProfile) -> String {
         // A hosted trade must advertise the model it will actually run on,
         // not the binding it would use signed out — the list is where users
-        // check what a trade costs them.
-        if hostedModelIsLocked(profile),
-           let hosted = AgentSubagentJobPrompts.hostedModel(for: profile.id) {
+        // check what a trade costs them. An explicit override wins here too,
+        // otherwise the row would keep advertising a model the trade no
+        // longer calls.
+        if profile.runtime.modelBinding.model?.isEmpty != false,
+           let hosted = recommendedHostedModel(for: profile) {
             return "some.im · \(hosted)"
         }
         let model = profile.runtime.modelBinding.model ?? L10n.AgentProfiles.modelPlaceholder
@@ -223,26 +225,43 @@ struct AgentProfileSettingsView: View {
         }
 
         Section(L10n.AgentProfiles.sectionModel) {
-            // Managed trades run a relay-hosted model whose server-side prompt
-            // was tuned for it; letting the user swap one half of that pair
-            // would silently break the other. Shown disabled with the reason
-            // rather than hidden — a control that vanishes reads as a lost
-            // feature, and the state reverses the moment they sign out.
-            if hostedModelIsLocked(profile) {
-                LabeledContent(L10n.AgentProfiles.fieldModel) {
-                    Text(profile.runtime.modelBinding.model ?? L10n.AgentProfiles.modelPlaceholder)
-                        .foregroundStyle(.secondary)
+            // A managed trade recommends its relay-hosted model, and used to
+            // be locked to it on the theory that the server-side job prompt
+            // and the model it was tuned for must travel together. They still
+            // do — but that is enforced where it actually happens
+            // (`jobPromptIsHosted` is derived from the model being called, so
+            // pointing a trade elsewhere switches it to the client-side copy
+            // of the same prompt). Locking the row on top of that only took
+            // the choice away.
+            if let hostedModel = recommendedHostedModel(for: profile) {
+                HStack(spacing: 8) {
+                    TextField(
+                        hostedModel,
+                        text: modelBinding(index)
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    Menu {
+                        Button(L10n.AgentProfiles.hostedModelRecommended(hostedModel)) {
+                            modelBinding(index).wrappedValue = ""
+                        }
+                        Divider()
+                        ForEach(modelOptions(for: profile), id: \.self) { model in
+                            Button(model) { modelBinding(index).wrappedValue = model }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.down").frame(width: 16, height: 16)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
                 }
-                Label(
-                    L10n.AgentDelegation.profileHostedModelLocked,
-                    systemImage: "lock.fill"
+                Text(
+                    profile.runtime.modelBinding.model?.isEmpty == false
+                        ? L10n.AgentProfiles.hostedModelOverridden
+                        : L10n.AgentProfiles.hostedModelUsingRecommended(hostedModel)
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                Text(L10n.AgentDelegation.profileHostedModelLockedHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                .fixedSize(horizontal: false, vertical: true)
             } else {
                 Picker(L10n.AgentProfiles.fieldProvider, selection: providerBinding(index)) {
                     Text(L10n.AgentProfiles.modelPlaceholder).tag(Optional<UUID>.none)
@@ -528,11 +547,20 @@ struct AgentProfileSettingsView: View {
     /// dispatch profile stay user-configurable. Being signed in is not enough:
     /// a private/on-prem current provider must never be silently rerouted
     /// (docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3.8).
-    private func hostedModelIsLocked(_ profile: AgentProfile) -> Bool {
+    /// The hosted model this trade recommends right now, or nil when the
+    /// recommendation does not apply (not a managed trade, signed out, or the
+    /// session is on a private/on-prem provider that must never be silently
+    /// rerouted — docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3.8).
+    ///
+    /// Leaving the field empty means "use this"; typing a model overrides it.
+    private func recommendedHostedModel(for profile: AgentProfile) -> String? {
         guard profile.usages.contains(.subagent),
-              AgentSubagentJobPrompts.hostedTradeIDs.contains(profile.id) else { return false }
-        return appState.agentConfiguration.providerID == AgentProviderPreset.someIMID
-            && SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+              AgentSubagentJobPrompts.hostedTradeIDs.contains(profile.id),
+              appState.agentConfiguration.providerID == AgentProviderPreset.someIMID,
+              SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults() else {
+            return nil
+        }
+        return AgentSubagentJobPrompts.hostedModel(for: profile.id)
     }
 
     private func modelOptions(for profile: AgentProfile) -> [String] {

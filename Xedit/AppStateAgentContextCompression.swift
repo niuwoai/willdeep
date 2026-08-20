@@ -146,13 +146,30 @@ extension AppState {
         priorSummary: String? = nil,
         configurations: [AgentConfiguration]
     ) async {
+        var didReclaimWindow = false
         defer {
             runtime.isCompressingContext = false
             persistAgentSession(runtime: runtime)
+            // A message the user queued while compression ran outranks an
+            // automatic resume: they are redirecting, and both would be
+            // competing for the same runtime. Stand the resume down.
+            if !runtime.queuedMessages.isEmpty {
+                runtime.pendingContextRunwayResume = false
+                runtime.contextRunwayResumeCount = 0
+            }
             // Auto-compression can be racing with a queued message; resume
             // the queue once compression resolves so the user doesn't see
             // "queued" forever.
             consumeNextQueuedMessageIfNeeded(for: runtime)
+            if didReclaimWindow {
+                resumeAfterContextRunwayStopIfNeeded(for: runtime)
+            } else if runtime.pendingContextRunwayResume {
+                // Compression failed, so the window is still at 90%. Resuming
+                // would burn a request to hit the same ordered stop again.
+                // Park instead: the error banner already explains why, and
+                // the user can retry compression or start a fresh session.
+                runtime.pendingContextRunwayResume = false
+            }
             // A background job/media task/subagent finishing while
             // `isCompressingContext` was set had its auto-resume guarded
             // off — and auto-compression runs in the turn's defer BEFORE
@@ -192,6 +209,7 @@ extension AppState {
                 }
                 runtime.contextSummary = trimmed
                 runtime.contextSummaryThroughMessageID = head.last?.id
+                didReclaimWindow = true
                 return
             } catch {
                 lastError = error
@@ -233,23 +251,12 @@ extension AppState {
             let chunks = Self.compressionChunks(segments: current, tokenBudget: budget)
             guard !chunks.isEmpty else { return "" }
             do {
-                var summaries: [String] = []
-                for (index, chunk) in chunks.enumerated() {
-                    let summary = try await requestCompressionSummary(
-                        transcript: chunk,
-                        configuration: configuration,
-                        part: index + 1,
-                        partCount: chunks.count
-                    )
-                    if !summary.isEmpty {
-                        summaries.append(summary)
-                    }
-                }
+                let summaries = try await summarizeChunks(chunks, configuration: configuration)
                 if chunks.count == 1 || summaries.count <= 1 {
                     return summaries.first ?? ""
                 }
                 foldDepth += 1
-                guard foldDepth < 3 else {
+                guard foldDepth < Self.maximumCompressionFoldDepth else {
                     // Converging too slowly. Joined part summaries are still a
                     // large win over the raw transcript, and shipping them
                     // beats failing the compression outright.
@@ -264,6 +271,99 @@ extension AppState {
                 continue
             }
         }
+    }
+
+    /// Hand the interrupted work back to the model after a runway stop.
+    ///
+    /// Without this the 90% ordered stop was only half a mechanism: the model
+    /// wrote a careful handover, compression reclaimed the window — and then
+    /// the session just sat there until the user re-sent the NEXT PROMPT by
+    /// hand. The handover survives compression as part of the kept tail, so
+    /// resuming only needs to point the model back at what it already wrote.
+    ///
+    /// Every bail-out clears `pendingContextRunwayResume`, so a refused resume
+    /// parks the session rather than leaving a flag armed for a later,
+    /// unrelated turn to trip over.
+    func resumeAfterContextRunwayStopIfNeeded(for runtime: AgentRuntime) {
+        guard runtime.pendingContextRunwayResume else { return }
+        guard !runtime.isResponding, !runtime.isCompressingContext else { return }
+        // A queued user message already claimed the runtime in this same
+        // defer. Their turn owns the conversation now.
+        guard runtime.queuedMessages.isEmpty else {
+            runtime.pendingContextRunwayResume = false
+            return
+        }
+        runtime.pendingContextRunwayResume = false
+        guard runtime.contextRunwayResumeCount < AgentContextRunwayPolicy.maximumAutomaticResumes else {
+            return
+        }
+        runtime.contextRunwayResumeCount += 1
+
+        dispatchAgentMessageUsingSelectedExecutor(
+            runtime.executionAgent,
+            for: runtime,
+            text: AgentContextRunwayPolicy.resumePrompt(attempt: runtime.contextRunwayResumeCount),
+            images: [],
+            source: .hostInstruction
+        )
+    }
+
+    /// Summarize every chunk of one fold, concurrently, in transcript order.
+    ///
+    /// The chunk count scales with how full the session got, so walking them
+    /// one at a time made compression slowest exactly when the user was most
+    /// blocked on it: six chunks meant six generate-and-wait round trips back
+    /// to back, with the session frozen for the whole train. The requests are
+    /// independent — the only thing that has to survive is putting the part
+    /// summaries back in transcript order before the next fold reads them.
+    ///
+    /// Concurrency is capped: fanning a 40-chunk transcript out at once would
+    /// earn a 429 from the provider instead of a summary, and the retry storm
+    /// would be slower than the serial walk this replaces.
+    @MainActor
+    private func summarizeChunks(
+        _ chunks: [String],
+        configuration: AgentConfiguration
+    ) async throws -> [String] {
+        if chunks.count == 1 {
+            let summary = try await requestCompressionSummary(
+                transcript: chunks[0],
+                configuration: configuration,
+                part: 1,
+                partCount: 1
+            )
+            return summary.isEmpty ? [] : [summary]
+        }
+
+        var ordered = [String?](repeating: nil, count: chunks.count)
+        let partCount = chunks.count
+        try await withThrowingTaskGroup(of: (Int, String).self) { group in
+            var next = 0
+            func addTask(at index: Int) {
+                let transcript = chunks[index]
+                group.addTask {
+                    let summary = try await self.requestCompressionSummary(
+                        transcript: transcript,
+                        configuration: configuration,
+                        part: index + 1,
+                        partCount: partCount
+                    )
+                    return (index, summary)
+                }
+            }
+            while next < min(Self.maximumConcurrentCompressionRequests, chunks.count) {
+                addTask(at: next)
+                next += 1
+            }
+            while let (index, summary) = try await group.next() {
+                ordered[index] = summary
+                if next < chunks.count {
+                    addTask(at: next)
+                    next += 1
+                }
+            }
+        }
+        return ordered.compactMap { $0 }.filter { !$0.isEmpty }
     }
 
     @MainActor
@@ -374,12 +474,29 @@ extension AppState {
 
     nonisolated static let minimumCompressionChunkTokens = 2_000
 
-    /// Per-request token budget for the summariser. Deliberately a small
-    /// fraction of the window: it has to cover the instruction prompt and the
+    /// How many chunk summaries may be in flight at once. Four keeps a large
+    /// transcript moving without handing the provider a burst it will answer
+    /// with 429s.
+    nonisolated static let maximumConcurrentCompressionRequests = 4
+
+    /// How many times partial summaries may be folded again before shipping
+    /// them joined. Each extra fold is another full round of requests for a
+    /// diminishing gain — the parts are already summaries by then.
+    nonisolated static let maximumCompressionFoldDepth = 2
+
+    /// Per-request token budget for the summariser. A fraction of the window,
+    /// not the whole thing: it has to cover the instruction prompt and the
     /// generated summary, and absorb the gap between this character heuristic
     /// and the provider's real tokenizer.
+    ///
+    /// The fraction dominates wall-clock, because it sets the chunk count. At
+    /// 0.15 a nearly full 1M-token session needed six serial requests, and a
+    /// summariser with a smaller window needed dozens. Overshooting is cheap
+    /// insurance by comparison: `summarizeForCompression` catches an overflow
+    /// and refolds at half the budget, so a budget that turns out too large
+    /// costs one wasted round trip instead of a failed compression.
     nonisolated static func compressionChunkTokenBudget(contextWindow: Int) -> Int {
-        max(minimumCompressionChunkTokens, Int(Double(max(1, contextWindow)) * 0.15))
+        max(minimumCompressionChunkTokens, Int(Double(max(1, contextWindow)) * 0.35))
     }
 
     /// Greedily pack segments into chunks that fit `tokenBudget`. A segment
@@ -390,6 +507,11 @@ extension AppState {
         tokenBudget: Int
     ) -> [String] {
         let budget = max(500, tokenBudget)
+        // The joiner is part of what gets sent, so it has to be part of what
+        // gets budgeted. Summing the segments alone let a chunk of N segments
+        // overshoot by N separators' worth of tokens — invisible at small
+        // budgets, real once a chunk holds hundreds of segments.
+        let separatorTokens = estimateTextTokens(compressionChunkSeparator)
         var chunks: [String] = []
         var current: [String] = []
         var currentTokens = 0
@@ -397,19 +519,25 @@ extension AppState {
         for segment in segments where !segment.isEmpty {
             let fitted = truncateCompressionSegment(segment, tokenBudget: budget)
             let tokens = estimateTextTokens(fitted)
-            if !current.isEmpty, currentTokens + tokens > budget {
-                chunks.append(current.joined(separator: "\n\n---\n\n"))
+            let joinCost = current.isEmpty ? 0 : separatorTokens
+            if !current.isEmpty, currentTokens + joinCost + tokens > budget {
+                chunks.append(current.joined(separator: compressionChunkSeparator))
                 current = []
                 currentTokens = 0
+                current.append(fitted)
+                currentTokens = tokens
+                continue
             }
             current.append(fitted)
-            currentTokens += tokens
+            currentTokens += joinCost + tokens
         }
         if !current.isEmpty {
-            chunks.append(current.joined(separator: "\n\n---\n\n"))
+            chunks.append(current.joined(separator: compressionChunkSeparator))
         }
         return chunks
     }
+
+    nonisolated static let compressionChunkSeparator = "\n\n---\n\n"
 
     nonisolated private static func truncateCompressionSegment(
         _ segment: String,

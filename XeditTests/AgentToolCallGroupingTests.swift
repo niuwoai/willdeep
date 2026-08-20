@@ -41,8 +41,8 @@ struct AgentToolCallGroupingPresentationTests {
         )
     }
 
-    @Test("delegated agent activity uses the system accent color")
-    func delegatedAgentActivityUsesSystemAccentColor() throws {
+    @Test("delegated agent composer activity uses a neutral gray tint")
+    func delegatedAgentActivityUsesNeutralTint() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -57,6 +57,11 @@ struct AgentToolCallGroupingPresentationTests {
 
         #expect(
             monitorSource.contains(
+                #"AgentActivityPhase(label: label, systemImage: "person.2", tint: .secondary)"#
+            )
+        )
+        #expect(
+            !monitorSource.contains(
                 #"AgentActivityPhase(label: label, systemImage: "person.2", tint: .accentColor)"#
             )
         )

@@ -887,7 +887,11 @@ extension WillDeepTests {
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .paragraph, text: "A paragraph with **bold** text.")))
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .quote, text: "Quote")))
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .unorderedList, text: "Item")))
-        #expect(blocks.contains(MarkdownPreviewBlock(kind: .orderedList, text: "Ordered")))
+        #expect(blocks.contains(MarkdownPreviewBlock(
+            kind: .orderedList,
+            text: "Ordered",
+            orderedListNumber: 1
+        )))
         #expect(blocks.contains(MarkdownPreviewBlock(kind: .divider, text: "")))
         // Fenced code blocks carry the language hint after ``` as
         // `info`. Equatable on MarkdownPreviewBlock is memberwise so

@@ -803,6 +803,46 @@ struct AgentGoalTeamsTests {
         #expect(!runtime.isPlanGateActive)
     }
 
+    @Test("Goal Plan 卡片不会收进后续 roadmap phase 的步骤")
+    func goalPlanCaptureKeepsOnlyFirstPhaseSteps() throws {
+        let generationID = UUID()
+        let state = AgentGoalPlanningState(
+            generationID: generationID,
+            goalFingerprint: "Ship safely\u{1F}Verified",
+            phase: .readyForProposal,
+            members: [
+                .init(roleID: "requirements", displayName: "需求分析-目标边界质疑", status: .completed),
+                .init(roleID: "architecture", displayName: "架构-实现路径论证", status: .completed),
+                .init(roleID: "testing", displayName: "测试-失败路径审查", status: .completed),
+            ],
+            arbitration: .init(status: .completed, report: validArbitrationReport())
+        )
+        let (appState, runtime) = makeAppRuntime(planningState: state)
+        runtime.goalPlanningState = state
+        var proposal = validProposalContent()
+            .replacingOccurrences(
+                of: "```plan\n",
+                with: "```plan\n### Phase 1: 核心实现\n"
+            )
+        let closingFence = try #require(proposal.range(of: "```", options: .backwards))
+        proposal.replaceSubrange(
+            closingFence,
+            with: "### Phase 2: 后续发布\n6. GT-008 负责人发布-Goal Teams：部署后续产物\n```"
+        )
+        runtime.messages = [AgentMessage(
+            role: .assistant,
+            content: "<!-- goal-planning-generation:\(generationID.uuidString) -->\n" + proposal
+        )]
+
+        let outcome = appState.captureAgentPlanFromLatestMessage(for: runtime)
+
+        #expect(outcome == .captured)
+        #expect(runtime.currentPlan?.steps.count == 5)
+        #expect(runtime.currentPlan?.steps.contains { $0.text.contains("GT-008") } == false)
+        #expect(runtime.currentPlan?.summary.contains("Phase 1") == true)
+        #expect(runtime.currentPlan?.summary.contains("Phase 2") == false)
+    }
+
     @Test("revision 强制换代会释放旧并发槽并忽略迟到完成")
     func revisionGenerationCancelsOldRunsAndIgnoresStaleCompletion() {
         let (appState, runtime) = makeAppRuntime()

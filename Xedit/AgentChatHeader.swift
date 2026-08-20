@@ -16,21 +16,17 @@ struct AgentChatHeader: View {
     @ObservedObject private var detachedPanels = AgentDetachedPanelRegistry.shared
     @Binding var sidePanel: AgentSidePanelKind?
     @Binding var sessionsSidebarVisible: Bool
-    @Binding var isSessionSearchPresented: Bool
 
     /// When the session sidebar is hidden the chat column slides to the
     /// window's left edge, where the macOS traffic lights and their
-    /// companion sidebar toggle live. Pad the header so search/title
-    /// content clears that chrome; when the sidebar is visible it already
-    /// reserves that band, so 0.
+    /// companion sidebar/search controls live. Pad the header title clear of
+    /// that chrome; when the sidebar is visible it already reserves the band.
     private var leadingWindowChromeInset: CGFloat {
-        sessionsSidebarVisible ? 0 : 104
+        sessionsSidebarVisible ? 0 : AgentWindowChromeControlLayout.hiddenSidebarHeaderLeadingInset
     }
 
     var body: some View {
         HStack(spacing: 8) {
-            sessionSearchButton
-
             if let dispatchContext {
                 dispatchProjectBreadcrumb(dispatchContext)
                 Image(systemName: "chevron.right")
@@ -63,19 +59,6 @@ struct AgentChatHeader: View {
                         .frame(height: 1)
                 }
         )
-    }
-
-    private var sessionSearchButton: some View {
-        Button {
-            isSessionSearchPresented = true
-        } label: {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.plain)
-        .focusable(false)
-        .help(L10n.Header.searchSessions)
-        .keyboardShortcut("p", modifiers: [.command, .shift])
     }
 
     private var sidePanelShortcutStrip: some View {

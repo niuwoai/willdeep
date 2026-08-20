@@ -43,6 +43,22 @@ nonisolated enum AgentDispatchUnattendedRecoveryPolicy {
     }
 }
 
+/// Resolves the terminal node state from the two independent signals owned by
+/// the task Harness. A completed acceptance checklist is the authoritative
+/// delivery verdict: a later provider/plan-continuation warning must not turn
+/// already verified work back into a failed graph node.
+nonisolated enum AgentDispatchCompletionPolicy {
+    static func terminalState(
+        hasCompletedAcceptance: Bool,
+        hasRuntimeError: Bool
+    ) -> AgentDispatchTaskState? {
+        if hasCompletedAcceptance {
+            return .merged
+        }
+        return hasRuntimeError ? .failed : nil
+    }
+}
+
 extension AppState {
     /// Single entry point for projecting sessions onto the dispatch board.
     ///
@@ -134,12 +150,14 @@ extension AppState {
             return existingDraft
         }
 
-        let session = startNewAgentSession(inWorkspaceAt: nil)
+        let session = startNewAgentSession(
+            inWorkspaceAt: nil,
+            presentationScope: .dispatchBoard
+        )
         guard let runtime = runtime(for: session.id) else {
             agentPrimaryDestination = .dispatchBoard
             return session
         }
-        runtime.session.presentationScope = .dispatchBoard
         // Goal mode normally requires a workspace. A dispatch draft is the one
         // intentional exception: it is configuration-only and cannot create a
         // goal, plan, or task until the setup screen binds a directory.
@@ -249,13 +267,15 @@ extension AppState {
             return existingDraft
         }
 
-        let session = startNewAgentSession(inWorkspaceAt: normalizedPath)
+        let session = startNewAgentSession(
+            inWorkspaceAt: normalizedPath,
+            presentationScope: .dispatchBoard
+        )
         guard let runtime = runtime(for: session.id) else {
             agentPrimaryDestination = .dispatchBoard
             return session
         }
 
-        runtime.session.presentationScope = .dispatchBoard
         setAgentInteractionMode(.goal)
         applyDispatchModel(
             AgentDispatchModelRouting.costOptimized.planningModelID,
@@ -711,14 +731,15 @@ extension AppState {
             return .blocked(message: L10n.Dispatch.noExecutorOnTarget)
         }
 
-        guard let runtime = createDispatchTaskRuntime(workspaceLocation: workspaceLocation) else {
+        guard let runtime = createDispatchTaskRuntime(
+            workspaceLocation: workspaceLocation,
+            goalID: goal.id,
+            taskID: task.id
+        ) else {
             return .blocked(message: L10n.Dispatch.launchFailed)
         }
         runtime.session.title = "\(goal.title) · \(task.title)"
         runtime.session.titleIsUserSet = true
-        runtime.session.presentationScope = .dispatchBoard
-        runtime.session.dispatchParentProjectID = goal.id
-        runtime.session.dispatchTaskID = task.id
         runtime.interactionMode = .goal
         runtime.currentGoal = AgentGoal(
             statement: task.title,
@@ -809,6 +830,32 @@ extension AppState {
               !goal.isPaused else {
             return
         }
+
+        // Repair durable graph records written by older builds where a
+        // provider/continuation warning won over an already completed Goal
+        // checklist. This is deliberately limited to failed nodes: a user
+        // explicitly stopped (`cancelled`) node must stay stopped.
+        var didRepairCompletedFailure = false
+        for task in goal.tasks where task.state == .failed {
+            guard let runtimeSessionID = task.runtimeSessionID,
+                  let taskRuntime = runtime(for: runtimeSessionID),
+                  taskRuntime.currentGoal.map({
+                      !$0.checklist.isEmpty && $0.checklist.allSatisfy(\.done)
+                  }) == true else {
+                continue
+            }
+            dispatchMonitoredRuntimeIDsByTaskID[task.id] = nil
+            agentDispatchCoordinator.updateTaskState(
+                goalID: goalID,
+                taskID: task.id,
+                state: .merged
+            )
+            didRepairCompletedFailure = true
+        }
+        if didRepairCompletedFailure {
+            _ = launchReadyDispatchTasks(goalID: goalID)
+        }
+
         for task in goal.tasks where task.state == .running || task.state == .reviewing {
             guard let runtimeSessionID = task.runtimeSessionID,
                   let taskRuntime = runtime(for: runtimeSessionID) else {
@@ -870,6 +917,46 @@ extension AppState {
             taskID: taskID,
             state: .cancelled
         )
+        return true
+    }
+
+    /// Explicit operator override for a node whose automated verdict is
+    /// wrong. The action is only accepted while the node runtime is idle,
+    /// records the checklist as complete when one exists, unlocks dependent
+    /// nodes, and immediately asks the scheduler to continue the graph.
+    @discardableResult
+    func markDispatchTaskSuccessfulAndContinue(goalID: UUID, taskID: UUID) -> Bool {
+        guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
+              let task = goal.tasks.first(where: { $0.id == taskID }),
+              [.failed, .cancelled, .reviewing, .accepted].contains(task.state) else {
+            return false
+        }
+
+        let taskRuntime = task.runtimeSessionID.flatMap { runtime(for: $0) }
+        guard taskRuntime?.isResponding != true,
+              taskRuntime?.isAwaitingProviderSlot != true else {
+            return false
+        }
+
+        dispatchMonitoredRuntimeIDsByTaskID[taskID] = nil
+        if let taskRuntime, var completedGoal = taskRuntime.currentGoal {
+            for index in completedGoal.checklist.indices {
+                completedGoal.checklist[index].done = true
+            }
+            taskRuntime.currentGoal = completedGoal
+            taskRuntime.errorMessage = nil
+            taskRuntime.errorDetails = nil
+            persistAgentSession(runtime: taskRuntime)
+        }
+
+        agentDispatchCoordinator.updateTaskState(
+            goalID: goalID,
+            taskID: taskID,
+            state: .merged
+        )
+        if !goal.isPaused {
+            _ = launchReadyDispatchTasks(goalID: goalID)
+        }
         return true
     }
 
@@ -955,38 +1042,39 @@ extension AppState {
         }
     }
 
-    /// Keeps `body` from moving the operator to another primary destination.
-    ///
-    /// `startNewAgentSession(inWorkspaceAt:)` routes ordinary callers to the
-    /// conversation destination — right for "new chat", wrong for every node
-    /// the scheduler starts on its own. Without this restore, pressing Launch
-    /// on the board threw the operator into the plain chat transcript of
-    /// whichever node started last, and a multi-node launch did it per node.
-    func withPreservedAgentPrimaryDestination<T>(_ body: () -> T) -> T {
-        let previousDestination = agentPrimaryDestination
-        defer { agentPrimaryDestination = previousDestination }
-        return body()
-    }
-
     private func createDispatchTaskRuntime(
-        workspaceLocation: WorkspaceLocation
+        workspaceLocation: WorkspaceLocation,
+        goalID: UUID,
+        taskID: UUID
     ) -> AgentRuntime? {
-        withPreservedAgentPrimaryDestination {
-            switch workspaceLocation {
-            case .local(let path):
-                let session = startNewAgentSession(inWorkspaceAt: path)
-                return runtime(for: session.id)
-            case .remote(let runtimeID, let path):
-                guard AgentRuntimeStore.descriptor(id: runtimeID) != nil else { return nil }
-                let session = startNewAgentSession(inWorkspaceAt: nil)
-                guard let taskRuntime = runtime(for: session.id) else { return nil }
-                taskRuntime.rebindRemoteWorkspace(
-                    runtimeID: runtimeID,
-                    path: path
-                )
-                persistAgentSession(runtime: taskRuntime)
-                return taskRuntime
-            }
+        switch workspaceLocation {
+        case .local(let path):
+            let session = startNewAgentSession(
+                inWorkspaceAt: path,
+                makeActive: false,
+                presentationScope: .dispatchBoard,
+                dispatchParentProjectID: goalID,
+                dispatchTaskID: taskID,
+                isManagedBackgroundWorkspace: true
+            )
+            return runtime(for: session.id)
+        case .remote(let runtimeID, let path):
+            guard AgentRuntimeStore.descriptor(id: runtimeID) != nil else { return nil }
+            let session = startNewAgentSession(
+                inWorkspaceAt: nil,
+                makeActive: false,
+                presentationScope: .dispatchBoard,
+                dispatchParentProjectID: goalID,
+                dispatchTaskID: taskID,
+                isManagedBackgroundWorkspace: true
+            )
+            guard let taskRuntime = runtime(for: session.id) else { return nil }
+            taskRuntime.rebindRemoteWorkspace(
+                runtimeID: runtimeID,
+                path: path
+            )
+            persistAgentSession(runtime: taskRuntime)
+            return taskRuntime
         }
     }
 
@@ -1093,10 +1181,11 @@ extension AppState {
                 }
 
                 let state: AgentDispatchTaskState
-                if runtime.errorMessage != nil {
-                    state = .failed
-                } else if hasCompletedAcceptance {
-                    state = .merged
+                if let terminalState = AgentDispatchCompletionPolicy.terminalState(
+                    hasCompletedAcceptance: hasCompletedAcceptance,
+                    hasRuntimeError: runtime.errorMessage != nil
+                ) {
+                    state = terminalState
                 } else {
                     // `reviewing` is an active Harness phase, never an idle
                     // terminal state. Exhausting its bounded repair budget is

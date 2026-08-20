@@ -45,6 +45,26 @@ nonisolated enum SafeCommand {
         classify(command: command, commandSubstitutionDepth: 0)
     }
 
+    /// A single local `git commit` is a reversible workspace-history write.
+    /// It may run without an approval card, but still receives the
+    /// workspace-write sandbox so hooks cannot write outside the workspace or
+    /// reach the network. Chained commands and other Git mutations do not
+    /// inherit this exception.
+    static func isLocalGitCommit(command: String) -> Bool {
+        guard let expansionResolution = resolveProvablySafeShellExpansions(in: command),
+              !expansionResolution.requiresJudgment,
+              let chain = AgentShellCommandParser.parse(expansionResolution.command),
+              chain.segments.count == 1,
+              !chain.requiresBackgroundJudgment,
+              let segment = chain.segments.first,
+              let tokens = AgentCommandAuthorization.shellTokens(from: segment.text),
+              tokens.first?.lowercased() == "git",
+              let subcommandIndex = gitSubcommandIndex(tokens: tokens) else {
+            return false
+        }
+        return tokens[subcommandIndex].lowercased() == "commit"
+    }
+
     private static func classify(
         command: String,
         commandSubstitutionDepth: Int
@@ -707,6 +727,9 @@ nonisolated enum SafeCommand {
             return .needsJudgment
         }
         let sub = tokens[subcommandIndex].lowercased()
+        if sub == "commit" {
+            return .alwaysSafe
+        }
         if safeGitSubcommands.contains(sub) {
             if ["branch", "tag", "remote", "reflog", "symbolic-ref"].contains(sub) {
                 return classifyMutableGitInspector(

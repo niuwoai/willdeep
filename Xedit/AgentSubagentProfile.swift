@@ -130,6 +130,21 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         someIMAuthenticated && hostedVirtualModel != nil
     }
 
+    /// Whether this trade should actually be pinned to its hosted virtual
+    /// model, i.e. whether the recommendation still stands.
+    ///
+    /// An empty `modelBinding.model` means "take the recommendation"; anything
+    /// else is the user having chosen, and their choice wins. The hosted model
+    /// was never meant to be a lock — the job prompt follows whichever model
+    /// is actually called (`jobPromptIsHosted`), so overriding it swaps the
+    /// relay's copy for the client's rather than losing it.
+    func usesRecommendedHostedModel(someIMAuthenticated: Bool) -> Bool {
+        guard usesHostedJobPrompt(someIMAuthenticated: someIMAuthenticated) else { return false }
+        return modelBinding.model?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty ?? true
+    }
+
     /// The tools this trade may actually call.
     ///
     /// Intersection, never union: a profile can only take tools away from
@@ -227,6 +242,10 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let balancedContextWindowTokens = 49_152
     static let wideContextWindowTokens = 65_536
     static let implementerContextWindowTokens = 262_144
+    /// The L tier. Deliberately spelled out rather than left implicit: a
+    /// budget nobody can see is a budget nobody defends. `AgentDeepAdmission`
+    /// is what decides whether a spawn may spend it.
+    static let deepContextWindowTokens = 1_048_576
 
     /// Tools a built-in writing trade adds on top of the read-only set, and
     /// only while its exact file-set workspace grant is held.
@@ -241,24 +260,31 @@ nonisolated enum AgentSubagentProfileCatalog {
         "terminal_snapshot", "terminal_send_command",
     ]
 
-    /// Default binding for the cheap trades: some.im's GLM tier when the
-    /// user is signed in, otherwise inherit the parent (resolved at spawn
-    /// time, so signing in or out never requires a settings migration).
+    /// Default binding for the managed worker trades.
+    ///
+    /// `model` is **nil on purpose**: nil means "use the recommended default",
+    /// which for a managed trade resolves at spawn time to its hosted
+    /// `someim-32b-<trade>` model while signed in, and to the provider's own
+    /// primary model otherwise. A non-nil value here would be indistinguishable
+    /// from a user's explicit choice, and the settings row could no longer
+    /// offer "recommended" as a state — which is exactly the bug this replaces:
+    /// these bindings said `glm-5`, the hosted override ignored them entirely,
+    /// and the user had no say either way.
     private static let cheapBinding = AgentSubagentProfile.ModelBinding(
         preferredProviderID: AgentProviderPreset.someIMID,
-        model: "glm-5",
+        model: nil,
         contextWindowTokens: workerContextWindowTokens
     )
 
     private static let balancedBinding = AgentSubagentProfile.ModelBinding(
         preferredProviderID: AgentProviderPreset.someIMID,
-        model: "glm-5",
+        model: nil,
         contextWindowTokens: balancedContextWindowTokens
     )
 
     private static let wideBinding = AgentSubagentProfile.ModelBinding(
         preferredProviderID: AgentProviderPreset.someIMID,
-        model: "glm-5",
+        model: nil,
         contextWindowTokens: wideContextWindowTokens
     )
 
@@ -276,6 +302,20 @@ nonisolated enum AgentSubagentProfileCatalog {
         preferredProviderID: AgentProviderPreset.someIMID,
         model: nil,
         contextWindowTokens: nil
+    )
+
+    /// `deep` is the only trade that gets the 1M window, and now it says so.
+    ///
+    /// It used to share `automaticProviderBinding` with tester/reviewer, which
+    /// meant it silently adopted whatever the provider's primary model was.
+    /// That was fine while the primary model *was* the 1M one — but then the
+    /// L tier was simply the default, and "escalate to deep" bought nothing
+    /// the session did not already have. Pinning it makes the escalation real
+    /// and makes the tier visible in the trade settings row.
+    private static let deepBinding = AgentSubagentProfile.ModelBinding(
+        preferredProviderID: AgentProviderPreset.someIMID,
+        model: "deepseek-v4-flash",
+        contextWindowTokens: deepContextWindowTokens
     )
 
     static let scout = AgentSubagentProfile(
@@ -308,8 +348,8 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// routing shared by every subagent trade.
     static let deep = AgentSubagentProfile(
         id: deepID,
-        purpose: "Complex investigation: reasoning across many files, read-only shell commands, and git status.",
-        modelBinding: automaticProviderBinding,
+        purpose: "Complex investigation: reasoning across many files, read-only shell commands, and git status. Scarce 1M tier — requires an admission ticket.",
+        modelBinding: deepBinding,
         toolNames: AgentSubagentRunner.allowedToolNames,
         capabilityPromptSection: """
         Your trade is INVESTIGATION. Follow the evidence across files, verify claims before \
@@ -395,7 +435,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// its own: the verifier command decides, not the model.
     static let testFixer = AgentSubagentProfile(
         id: testFixerID,
-        purpose: "Fix a failing test to green within the files listed in the task. Requires a `task` with `relevant_files` and a `verifier` command; the verifier's exit code decides success, not the model.",
+        purpose: "Fix a failing test to green within the files listed in the task. Requires a `task` with `write_files` and a `verifier` command; the verifier's exit code decides success, not the model.",
         modelBinding: wideBinding,
         toolNames: ["read_file", "grep_files", "apply_patch", "run_command"],
         capabilityPromptSection: AgentSubagentJobPrompts.testFixer,
@@ -408,7 +448,7 @@ nonisolated enum AgentSubagentProfileCatalog {
 
     static let buildFixer = AgentSubagentProfile(
         id: buildFixerID,
-        purpose: "Fix compiler, type-check, or lint failures within the files listed in the task. Requires a `task` with `relevant_files` and a build/lint `verifier` command.",
+        purpose: "Fix compiler, type-check, or lint failures within the files listed in the task. Requires a `task` with `write_files` and a build/lint `verifier` command.",
         modelBinding: balancedBinding,
         toolNames: ["read_file", "grep_files", "apply_patch", "run_command"],
         capabilityPromptSection: AgentSubagentJobPrompts.buildFixer,

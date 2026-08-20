@@ -67,6 +67,7 @@ extension L10n {
         static let sectionImageUnderstanding = String(localized: "settings.section.image-understanding", defaultValue: "Image Understanding")
         static let sectionLocalModelAcceleration = String(localized: "settings.section.local-model-acceleration", defaultValue: "本地模型加速")
         static let sectionConversationTitle = String(localized: "settings.section.conversation-title", defaultValue: "Conversation Title")
+        static let sectionContextCompression = String(localized: "settings.section.context-compression", defaultValue: "Context Compression")
         static let sectionToolApproval = String(localized: "settings.section.tool-approval", defaultValue: "Tool approval")
         static let sectionConcurrency = String(localized: "settings.section.concurrency", defaultValue: "Concurrency")
         static let sectionAgentAppearance = String(localized: "settings.section.agent-appearance", defaultValue: "Appearance")
@@ -425,6 +426,9 @@ extension L10n {
             static let titleModelLabel = String(localized: "settings.agent-behavior.title-model", defaultValue: "Title Model")
             static let titleModelPlaceholder = String(localized: "settings.agent-behavior.title-model-placeholder", defaultValue: "(leave empty → use Flash model)")
             static let titleModelDescription = String(localized: "settings.agent-behavior.title-model-description", defaultValue: "A short one-shot completion summarizes each new chat into a ≤12-char title after the first assistant reply. Set a cheap/fast model here (e.g. `deepseek-chat`, `gpt-4o-mini`, `qwen-turbo`) to avoid burning Pro tokens on titling. Empty → falls back to the active provider's Flash model.")
+            static let compressionModelLabel = String(localized: "settings.agent-behavior.compression-model", defaultValue: "Compression Model")
+            static let compressionModelPlaceholder = String(localized: "settings.agent-behavior.compression-model-placeholder", defaultValue: "(leave empty → use Flash model)")
+            static let compressionModelDescription = String(localized: "settings.agent-behavior.compression-model-description", defaultValue: "Summarizes older turns when the context window fills up. Prefer a large context window over raw speed: the window sets how many chunks a long transcript is split into, and each chunk is a separate request. Avoid reasoning models — a truncated summary silently loses conversation state. Empty → falls back to the active provider's Flash model.")
             static let toolApprovalDescription = String(localized: "settings.agent-behavior.tool-approval-description", defaultValue: "Read-only shell commands in the built-in allowlist (cat, head, tail, ls, find without -delete/-exec, git diff/log/status/show, rg, grep, wc, file, stat, which, pwd, echo, …) run without asking. Commands outside the allowlist are passed to a one-shot LLM judge running on the active provider's **Flash** model (cheap & fast — never Pro), and only YES verdicts auto-run. Destructive patterns (rm, sudo, git push --force, git reset --hard, …) still require typing \"confirm\".")
             static let concurrencyDescription = String(localized: "settings.agent-behavior.concurrency-description", defaultValue: "Cap on simultaneous Agent turns per provider. Each provider has its own quota — running 3 DashScope sessions doesn't block OpenAI sessions. When the cap is hit, new dispatches queue (FIFO) and drain as turns finish. Raising the cap immediately promotes queued work; lowering it just stops promoting new ones (running turns are never aborted). Default 3 is conservative — bump up if your provider's rate limit comfortably allows.")
             static let anthropicMaxOutputTokens = String(localized: "settings.agent-behavior.anthropic-max-output-tokens", defaultValue: "Anthropic reply limit")
@@ -448,13 +452,13 @@ extension L10n {
                 let template = String(localized: "settings.tools.cli-needs-update", defaultValue: "A command exists at %@ and can be updated.")
                 return String(format: template, a1)
             }
-            static let notInstalled = String(localized: "settings.tools.cli-not-installed", defaultValue: "Install the willdeep command for Terminal.")
+            static let notInstalled = String(localized: "settings.tools.cli-not-installed", defaultValue: "Install the willdeep-app command for Terminal.")
             static let installingButton = String(localized: "settings.tools.cli-installing", defaultValue: "Installing...")
             static let reinstallButton = String(localized: "settings.tools.cli-reinstall", defaultValue: "Reinstall")
             static let updateButton = String(localized: "settings.tools.cli-update", defaultValue: "Update")
             static let installButton = String(localized: "settings.tools.cli-install", defaultValue: "Install")
             static let installingMessage = String(localized: "settings.tools.cli-installing-message", defaultValue: "Installing without administrator privileges.")
-            static let installedMessage = String(localized: "settings.tools.cli-installed-message", defaultValue: "Installed. Try: willdeep . Add ~/.local/bin to PATH if needed.")
+            static let installedMessage = String(localized: "settings.tools.cli-installed-message", defaultValue: "Installed. Try: willdeep-app . Add ~/.local/bin to PATH if needed.")
         }
 
         enum LocalAgents {

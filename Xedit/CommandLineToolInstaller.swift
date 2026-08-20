@@ -28,10 +28,20 @@ enum CommandLineToolInstaller {
         }
     }
 
-    nonisolated static var toolName: String { "willdeep" }
+    /// `willdeep-app`, not `willdeep`.
+    ///
+    /// The name belongs to the willdeep-rs CLI, which is a command-line
+    /// program end to end (TUI, daemon, headless runs). This launcher only
+    /// forwards a path to the Mac app — useful, but not enough to own the
+    /// bare name. While it did, `~/.local/bin` sat ahead of `~/.cargo/bin`
+    /// on PATH and this 600-byte script silently shadowed the entire CLI.
+    ///
+    /// Renaming does not remove a launcher installed under the old name;
+    /// that file has to be deleted separately, or it keeps shadowing.
+    nonisolated static var toolName: String { "willdeep-app" }
     nonisolated static var installURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".local/bin/willdeep")
+            .appendingPathComponent(".local/bin/\(toolName)")
     }
 
     nonisolated static func install(appBundleURL: URL = Bundle.main.bundleURL) throws {

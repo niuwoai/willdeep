@@ -12,6 +12,17 @@ struct AgentModelDiscovery: Codable, Equatable {
     var id: String
     var isHot: Bool
     var isNew: Bool
+    /// Context window as reported by the provider's own model catalog, when
+    /// it publishes one. nil means "not reported" — the caller falls back to
+    /// the built-in id-matching table in `agentContextWindow(model:)`.
+    ///
+    /// Worth having even though few providers fill it in: the matching table
+    /// guesses from the model id, and an id it does not recognise lands on
+    /// the conservative 128K default. some.im lists `kimi-k3` at 1M, so the
+    /// guess was reading 87% low — the gauge showed 78% used when the real
+    /// figure was 10%, which fires compression and the 90% ordered stop for
+    /// no reason.
+    var contextWindowTokens: Int?
 }
 
 enum AgentDefaultModelModePreference: String, Equatable {
@@ -44,6 +55,7 @@ enum AgentSettingsStore {
     private static let defaultModelModePreferenceKey = "com.willdeep.agentSettings.defaultModelModePreference.v1"
     private static let alwaysAllowedCommandsKey = "com.willdeep.agentSettings.alwaysAllowedCommands.v1"
     private static let perProviderConcurrencyKey = "com.willdeep.agentSettings.perProviderConcurrencyLimit.v1"
+    private static let deepAdmissionBudgetKey = "com.willdeep.agentSettings.deepAdmissionBudget.v1"
     private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v2"
     private static let legacyChatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
     private static let chatFontIDKey = "com.willdeep.agentSettings.chatFontID.v1"
@@ -206,7 +218,14 @@ enum AgentSettingsStore {
             guard !id.isEmpty else { continue }
             let key = id.lowercased()
             guard seen.insert(key).inserted else { continue }
-            result.append(AgentModelDiscovery(id: id, isHot: model.isHot, isNew: model.isNew))
+            result.append(
+                AgentModelDiscovery(
+                    id: id,
+                    isHot: model.isHot,
+                    isNew: model.isNew,
+                    contextWindowTokens: model.contextWindowTokens.flatMap { $0 > 0 ? $0 : nil }
+                )
+            )
         }
         return result.sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
     }
@@ -290,6 +309,31 @@ enum AgentSettingsStore {
     static func savePerProviderConcurrencyLimit(_ limit: Int) {
         let clamped = max(1, min(8, limit))
         defaults.set(clamped, forKey: perProviderConcurrencyKey)
+    }
+
+    /// How many `deep` (1M tier) spawns one session may be granted.
+    ///
+    /// `~/.willdeep/config.toml` wins when it names a value: that file is
+    /// shared with willdeep-rs, and someone who set `max_deep_calls_per_harness`
+    /// there meant it for the machine, not for whichever client they had open.
+    ///
+    /// Unlike the concurrency limit, **0 is a meaningful stored value** here —
+    /// it turns the scarce tier off entirely — so absence is detected via
+    /// `object(forKey:)` rather than by treating 0 as unset.
+    static func loadDeepAdmissionBudget(
+        sharedConfig: AgentSharedRuntimeConfig = .load()
+    ) -> Int {
+        if let shared = sharedConfig.maxDeepCallsPerHarness {
+            return AgentDeepAdmission.clampBudget(shared)
+        }
+        guard defaults.object(forKey: deepAdmissionBudgetKey) != nil else {
+            return AgentDeepAdmission.defaultBudgetPerSession
+        }
+        return AgentDeepAdmission.clampBudget(defaults.integer(forKey: deepAdmissionBudgetKey))
+    }
+
+    static func saveDeepAdmissionBudget(_ budget: Int) {
+        defaults.set(AgentDeepAdmission.clampBudget(budget), forKey: deepAdmissionBudgetKey)
     }
 
     /// Base font size (in points) for the Agent chat transcript body —
@@ -401,6 +445,11 @@ enum AgentSettingsStore {
         var imageProviderID: String?
         var imageBaseURL: String?
         var imageModel: String?
+        /// Auxiliary model slots. `titleModel` was documented as persisted
+        /// here from the start but never actually had a field, so a Title
+        /// Model typed into Settings survived only until the next launch.
+        var titleModel: String?
+        var compressionModel: String?
     }
 
     static func load() -> AgentConfiguration {
@@ -443,7 +492,9 @@ enum AgentSettingsStore {
             proModel: proModel,
             routingMode: stored.routingMode ?? .auto,
             imageDescription: imageDescription,
-            apiKey: loadAPIKey(account: keychainAccount)
+            apiKey: loadAPIKey(account: keychainAccount),
+            titleModel: stored.titleModel ?? "",
+            compressionModel: stored.compressionModel ?? ""
         ).normalized
     }
 
@@ -480,7 +531,9 @@ enum AgentSettingsStore {
             routingMode: normalized.routingMode,
             imageProviderID: normalized.imageDescription.providerID,
             imageBaseURL: normalized.imageDescription.baseURL,
-            imageModel: normalized.imageDescription.model
+            imageModel: normalized.imageDescription.model,
+            titleModel: normalized.titleModel,
+            compressionModel: normalized.compressionModel
         )
         if let data = try? JSONEncoder().encode(stored) {
             defaults.set(data, forKey: defaultsKey)
