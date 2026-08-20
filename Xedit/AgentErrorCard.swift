@@ -42,6 +42,7 @@ struct AgentErrorCard: View {
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)
+                    .foregroundStyle(.secondary)
                     .help("打开 some.im 登录页；登录后点「重试」重新发送")
                 }
                 if appState.canRetryLastAgentTurn {
@@ -70,6 +71,7 @@ struct AgentErrorCard: View {
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)
+                    .foregroundStyle(.secondary)
                     .help(isExpanded ? "隐藏详细错误信息" : "查看详细错误信息")
                 }
                 Button {

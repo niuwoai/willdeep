@@ -36840,6 +36840,17 @@
         }
       }
     },
+    "queued-message.adjust-direction" : {
+      "comment" : "visible action that immediately steers the running turn with this queued message",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Adjust direction" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Ajustar dirección" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ajuster la direction" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "方向を調整" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "调整方向" } }
+      }
+    },
     "queued-message.actions-button" : {
       "comment" : "accessibility label for queued message action menu",
       "extractionState" : "manual",
@@ -36984,6 +36995,17 @@
         }
       }
     },
+    "queued-message.close-queue" : {
+      "comment" : "menu item that clears and closes the queued-message list",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Close queue" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Cerrar cola" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Fermer la file" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "キューを閉じる" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭排队" } }
+      }
+    },
     "queued-message.drag.help" : {
       "comment" : "tooltip for the queued-message drag handle",
       "extractionState" : "manual",
@@ -37027,31 +37049,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Edit queued message"
+            "value" : "Edit message"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Editar mensaje en cola"
+            "value" : "Editar mensaje"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Modifier le message en file d'attente"
+            "value" : "Modifier le message"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "キュー内メッセージを編集"
+            "value" : "メッセージを編集"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "编辑排队消息"
+            "value" : "编辑消息"
           }
         }
       }
@@ -37198,6 +37220,17 @@
             "value" : "已排队"
           }
         }
+      }
+    },
+    "queued-message.open-in-side-chat" : {
+      "comment" : "menu item that moves a queued message into a fresh sidebar conversation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open in side chat" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Abrir en chat lateral" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ouvrir dans le chat latéral" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "サイドチャットで開く" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在侧边聊天中打开" } }
       }
     },
     "queued-message.send-now-button" : {
