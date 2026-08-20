@@ -1,0 +1,10 @@
+{
+  "name": "willdeep-project-overview-example",
+  "version": "1.0.0",
+  "description": "Reference plugin with a native project sidebar and a sandboxed React page.",
+  "interface": {
+    "displayName": "Project Overview",
+    "shortDescription": "A complete local Web App destination example.",
+    "composerIcon": "sf:square.grid.2x2"
+  }
+}

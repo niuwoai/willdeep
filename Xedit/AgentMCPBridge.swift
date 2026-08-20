@@ -9,6 +9,16 @@
 
 import Foundation
 
+extension Notification.Name {
+    static let agentMCPResourcesDidChange = Notification.Name("AgentMCPResourcesDidChange")
+}
+
+nonisolated enum AgentMCPResourceNotificationKey {
+    static let server = "server"
+    static let serverID = "serverID"
+    static let uri = "uri"
+}
+
 enum AgentMCPBridge {
     private static let stdioConnectionPool = MCPStdioConnectionPool()
 
@@ -55,6 +65,78 @@ enum AgentMCPBridge {
             ]
         )
         return AgentToolResult(summary: "\(server.name).\(toolName)", payload: result)
+    }
+
+    /// Read an MCP resource for a plugin sidebar or MCP App page. Keeping
+    /// resource traffic in the existing bridge means stdio connection reuse,
+    /// credential resolution and transport timeouts remain identical to tool
+    /// discovery/calls.
+    static func readResource(serverName: String, uri: String) async throws -> String {
+        let server = try AgentMCPServerDirectory.server(named: serverName)
+        return try await runRequest(
+            server: server,
+            method: "resources/read",
+            params: ["uri": uri]
+        )
+    }
+
+    static func readPluginResource(
+        pluginID: AgentPluginID,
+        serverName: String,
+        uri: String
+    ) async throws -> String {
+        let server = try AgentMCPServerDirectory.pluginServer(pluginID: pluginID, named: serverName)
+        return try await runRequest(
+            server: server,
+            method: "resources/read",
+            params: ["uri": uri]
+        )
+    }
+
+    static func listResources(serverName: String) async throws -> String {
+        let server = try AgentMCPServerDirectory.server(named: serverName)
+        return try await runRequest(server: server, method: "resources/list", params: [:])
+    }
+
+    static func subscribeResource(serverName: String, uri: String) async throws {
+        let server = try AgentMCPServerDirectory.server(named: serverName)
+        guard server.transport == .stdio else { return }
+        _ = try await runRequest(
+            server: server,
+            method: "resources/subscribe",
+            params: ["uri": uri]
+        )
+    }
+
+    static func subscribePluginResource(
+        pluginID: AgentPluginID,
+        serverName: String,
+        uri: String
+    ) async throws {
+        let server = try AgentMCPServerDirectory.pluginServer(pluginID: pluginID, named: serverName)
+        guard server.transport == .stdio else { return }
+        _ = try await runRequest(
+            server: server,
+            method: "resources/subscribe",
+            params: ["uri": uri]
+        )
+    }
+
+    /// Direct command entry used only after the plugin page host has shown a
+    /// user confirmation. It deliberately accepts a resolved server/tool pair
+    /// rather than arbitrary JSON-RPC methods.
+    static func callPluginTool(
+        pluginID: AgentPluginID,
+        serverName: String,
+        toolName: String,
+        arguments: [String: Any]
+    ) async throws -> String {
+        let server = try AgentMCPServerDirectory.pluginServer(pluginID: pluginID, named: serverName)
+        return try await runRequest(
+            server: server,
+            method: "tools/call",
+            params: ["name": toolName, "arguments": arguments]
+        )
     }
 
     static func parseToolCount(from listToolsPayload: String) -> Int? {
@@ -160,6 +242,7 @@ enum AgentMCPBridge {
         private var inbox: MCPLineInbox?
         private var stderrCollector: MCPDataCollector?
         private var nextRequestID = 1
+        private var supportsResourceSubscriptions = false
 
         init(server: AgentMCPServerConfig) {
             self.server = server
@@ -187,6 +270,9 @@ enum AgentMCPBridge {
 
         private func requestSync(method: String, paramsData: Data) throws -> String {
             try ensureStarted()
+            if method == "resources/subscribe", !supportsResourceSubscriptions {
+                return "{}"
+            }
             guard let process, let stdinPipe, let inbox, let stderrCollector else {
                 throw AgentToolError.commandFailed(-1, "MCP stdio server is not running.")
             }
@@ -231,7 +317,7 @@ enum AgentMCPBridge {
             let stdinPipe = Pipe()
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
-            let inbox = MCPLineInbox()
+            let inbox = MCPLineInbox(serverName: server.name, serverID: server.id)
             let stderrCollector = MCPDataCollector(limit: 32_000)
             process.standardInput = stdinPipe
             process.standardOutput = stdoutPipe
@@ -266,13 +352,18 @@ enum AgentMCPBridge {
                 "method": "initialize",
                 "params": AgentMCPBridge.initializeParams()
             ], to: stdinPipe)
-            _ = try AgentMCPBridge.waitForResponse(
+            let initializeResponse = try AgentMCPBridge.waitForResponse(
                 id: initializeID,
                 inbox: inbox,
                 timeout: server.startupTimeout,
                 stderr: stderrCollector,
                 process: process
             )
+            if let result = initializeResponse["result"] as? [String: Any],
+               let capabilities = result["capabilities"] as? [String: Any],
+               let resources = capabilities["resources"] as? [String: Any] {
+                supportsResourceSubscriptions = resources["subscribe"] as? Bool == true
+            }
 
             try AgentMCPBridge.send([
                 "jsonrpc": "2.0",
@@ -299,6 +390,7 @@ enum AgentMCPBridge {
             stderrPipe = nil
             inbox = nil
             stderrCollector = nil
+            supportsResourceSubscriptions = false
         }
     }
 
@@ -447,8 +539,14 @@ enum AgentMCPBridge {
 
     nonisolated private static func initializeParams() -> [String: Any] {
         [
-            "protocolVersion": "2025-03-26",
-            "capabilities": [:],
+            "protocolVersion": "2025-06-18",
+            "capabilities": [
+                "extensions": [
+                    "io.modelcontextprotocol/ui": [
+                        "mimeTypes": ["text/html;profile=mcp-app"]
+                    ]
+                ]
+            ],
             "clientInfo": ["name": "WillDeep", "version": "1"]
         ]
     }
@@ -515,9 +613,16 @@ enum AgentMCPBridge {
     }
 
     private nonisolated final class MCPLineInbox: @unchecked Sendable {
+        private let serverName: String
+        private let serverID: String
         private let condition = NSCondition()
         private var buffer = Data()
         private var lines: [String] = []
+
+        init(serverName: String, serverID: String) {
+            self.serverName = serverName
+            self.serverID = serverID
+        }
 
         func append(_ data: Data) {
             guard !data.isEmpty else { return }
@@ -529,6 +634,7 @@ enum AgentMCPBridge {
                 if let line = String(data: lineData, encoding: .utf8),
                    !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     lines.append(line)
+                    publishResourceNotificationIfNeeded(line)
                 }
             }
             condition.signal()
@@ -543,6 +649,30 @@ enum AgentMCPBridge {
                 guard condition.wait(until: deadline) else { return nil }
             }
             return lines.removeFirst()
+        }
+
+        private func publishResourceNotificationIfNeeded(_ line: String) {
+            guard let data = line.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data),
+                  let dictionary = object as? [String: Any],
+                  let method = dictionary["method"] as? String,
+                  method == "notifications/resources/updated"
+                    || method == "notifications/resources/list_changed" else { return }
+            let parameters = dictionary["params"] as? [String: Any]
+            var userInfo: [String: String] = [
+                AgentMCPResourceNotificationKey.server: serverName,
+                AgentMCPResourceNotificationKey.serverID: serverID,
+            ]
+            if let uri = parameters?["uri"] as? String, !uri.isEmpty {
+                userInfo[AgentMCPResourceNotificationKey.uri] = uri
+            }
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .agentMCPResourcesDidChange,
+                    object: nil,
+                    userInfo: userInfo
+                )
+            }
         }
     }
 

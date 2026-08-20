@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "id": "difficulty",
+      "kind": "section",
+      "titleKey": "sidebar.difficulty",
+      "children": [
+        {"id":"easy","kind":"row","titleKey":"difficulty.easy","subtitleKey":"difficulty.easy.detail","systemImage":"tortoise"},
+        {"id":"normal","kind":"row","titleKey":"difficulty.normal","subtitleKey":"difficulty.normal.detail","systemImage":"square.grid.3x3"},
+        {"id":"hard","kind":"row","titleKey":"difficulty.hard","subtitleKey":"difficulty.hard.detail","systemImage":"hare"}
+      ]
+    },
+    {"id":"divider","kind":"separator"},
+    {
+      "id": "controls",
+      "kind": "section",
+      "titleKey": "sidebar.controls",
+      "children": [
+        {"id":"move","kind":"label","titleKey":"sidebar.controls.move"},
+        {"id":"rotate","kind":"label","titleKey":"sidebar.controls.rotate"},
+        {"id":"drop","kind":"label","titleKey":"sidebar.controls.drop"},
+        {"id":"pause","kind":"label","titleKey":"sidebar.controls.pause"}
+      ]
+    }
+  ]
+}

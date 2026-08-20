@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-20 | Current version: v1.279.0-rc3
+> Last updated: 2026-08-21 | Current version: v1.280.0
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **可扩展插件目的地（1.280.0）** —— 插件以 `PluginDestination` 为核心，一次性声明一级入口、配套侧栏、中央页面、工具栏和命令；插件入口位于四个原生入口下方，最多固定 5 个并可排序。窄侧栏由 JSON/MCP Resource 驱动、接受同一套严格 Schema 校验并使用 SwiftUI 原生组件，复杂页面运行于隔离 WebView/MCP App。插件中心支持本地、ZIP、Git branch/tag/commit、Codex 缓存、AI 草案、来源绑定权限审批、启停、更新检查、多版本回滚和完整卸载；AI 只能创建不可执行草案，任何版本都需用户批准。仓库附带“项目概览”、“Issue 面板”和可直接游玩的“俄罗斯方块”三个样例，完整契约见 `docs/WILLDEEP_PLUGIN_SYSTEM_DESIGN.md`。
 - **Worktree 会话可恢复状态（1.279.0-rc1）** —— 会话持久化受管 worktree 的来源仓库、原路径与分支；进入已清理会话时在 Composer 上方主动提示，仅在仓库、分支和路径均可安全验证时允许一键恢复，否则引导选择工作区。会话列表的工作树图标跟随当前执行绑定实时增删。
 - **会话右键快捷操作（1.278.0-rc1）** —— 在会话列表直接置顶、重命名、归档、标记未读、定位会话文件、复制工作目录/会话 ID/深度链接，或把历史延续到新聊天与隔离 worktree；完整转录可在独立窗口打开。
 - **聊天区一键回到最新消息（1.277.0-rc3，1.279.0-rc2 清晰度升级）** —— 操作人向上滚动阅读历史时，聊天区右下方显示轻量 Q 版火箭按钮；点击后平滑回到底部，到达最新消息后自动隐藏，会话搜索期间不遮挡搜索结果。火箭使用方形构图的 1x、2x、3x Retina 素材，在 38 pt 展示尺寸下保持清晰轮廓。

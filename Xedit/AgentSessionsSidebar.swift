@@ -278,6 +278,7 @@ enum AgentSidebarSessionTrailingLayout {
 struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var pluginRegistry = AgentPluginRegistry.shared
     @State private var editingProject: AgentProjectEditorTarget?
     @State private var expandedWorkspaces = AgentSidebarWorkspaceStateStore.load(.expandedWorkspaces)
     /// Workspace keys the user has manually collapsed by clicking the
@@ -352,46 +353,35 @@ struct AgentSessionsSidebar: View {
                 // the bounded eager layout is the safer trade-off here.
                 VStack(alignment: .leading, spacing: 0) {
                     primaryActions
+                    AgentPluginPrimaryNavigationSection()
                     Spacer().frame(height: 18)
                     if appState.agentPrimaryDestination == .dispatchBoard {
                         AgentDispatchSidebarSections(
                             coordinator: appState.agentDispatchCoordinator
                         )
-                    } else {
-                        pinnedSessionsSection(visibleSessions: visibleSessions)
-                        workspacesHeader(groups: workspaceGroups)
-                        ForEach(workspaceGroups) { group in
-                            workspaceGroup(group)
-                                .id(group.id)
-                        }
-                        switch AgentSidebarCatalogPlaceholder.state(
-                            hasLoadedCatalog: appState.hasLoadedAgentSessionCatalog,
-                            isSessionListEmpty: appState.agentSessions.isEmpty && appState.agentProjects.isEmpty
-                        ) {
-                        case .loading:
-                            // 冷启动头几百毫秒磁盘目录还没读完，此时列表
-                            // 必然为空——显示加载占位而不是"暂无会话"，
-                            // 否则用户会以为数据丢了。高度钉在正常行高，
-                            // 首行会话落地时不发生布局跳动。
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text(L10n.Sidebar.loadingState)
-                                    .font(AgentDesign.secondaryFont)
-                                    .foregroundStyle(.secondary)
+                    } else if let destinationID = appState.agentPrimaryDestination.pluginDestinationID {
+                        if let destination = pluginRegistry.destination(id: destinationID) {
+                            switch destination.companionSidebar.mode {
+                            case .sessionList:
+                                sessionSidebarContent(
+                                    visibleSessions: visibleSessions,
+                                    workspaceGroups: workspaceGroups
+                                )
+                            case .declarative:
+                                AgentPluginDeclarativeSidebarHost(destination: destination)
+                            case .none:
+                                EmptyView()
                             }
-                            .frame(height: AgentDesign.sidebarRowHeight)
-                            .padding(.horizontal, 14)
-                            .padding(.top, 16)
-                        case .empty:
-                            Text(L10n.Sidebar.emptyState)
-                                .font(AgentDesign.secondaryFont)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 14)
-                                .padding(.top, 16)
-                        case .none:
+                        } else {
                             EmptyView()
                         }
+                    } else if appState.agentPrimaryDestination == .pluginCenter {
+                        EmptyView()
+                    } else {
+                        sessionSidebarContent(
+                            visibleSessions: visibleSessions,
+                            workspaceGroups: workspaceGroups
+                        )
                     }
                 }
                 // 30pt 交通灯安全区继续保留；顶部只补 3pt 呼吸感，
@@ -466,6 +456,43 @@ struct AgentSessionsSidebar: View {
             Text(L10n.Sidebar.sessionUnavailableAlertMessage(
                 appState.agentSessionLoadFailure?.title ?? L10n.Sidebar.defaultSessionTitle
             ))
+        }
+    }
+
+    @ViewBuilder
+    private func sessionSidebarContent(
+        visibleSessions: [AgentSession],
+        workspaceGroups: [SidebarWorkspaceGroup]
+    ) -> some View {
+        pinnedSessionsSection(visibleSessions: visibleSessions)
+        workspacesHeader(groups: workspaceGroups)
+        ForEach(workspaceGroups) { group in
+            workspaceGroup(group)
+                .id(group.id)
+        }
+        switch AgentSidebarCatalogPlaceholder.state(
+            hasLoadedCatalog: appState.hasLoadedAgentSessionCatalog,
+            isSessionListEmpty: appState.agentSessions.isEmpty && appState.agentProjects.isEmpty
+        ) {
+        case .loading:
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(L10n.Sidebar.loadingState)
+                    .font(AgentDesign.secondaryFont)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(height: AgentDesign.sidebarRowHeight)
+            .padding(.horizontal, 14)
+            .padding(.top, 16)
+        case .empty:
+            Text(L10n.Sidebar.emptyState)
+                .font(AgentDesign.secondaryFont)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 14)
+                .padding(.top, 16)
+        case .none:
+            EmptyView()
         }
     }
 
@@ -1015,9 +1042,40 @@ struct AgentSessionsSidebar: View {
                 appState.manuallySummarizeAgentSessionTitle(id: session.id)
             }
             .disabled(appState.agentRuntimes[session.id] == nil)
+            let pluginCommands = pluginRegistry.menuCommands(at: "session.context")
+            if !pluginCommands.isEmpty {
+                Divider()
+                Menu(L10n.Plugins.actions) {
+                    ForEach(pluginCommands) { resolved in
+                        Button(pluginRegistry.localizedString(
+                            resolved.command.titleKey,
+                            pluginID: resolved.pluginID
+                        )) {
+                            runPluginSessionCommand(resolved, session: session)
+                        }
+                    }
+                }
+            }
+            Divider()
             Button(L10n.Sidebar.sessionMenuDelete, role: .destructive) {
                 presentDeleteAlert(for: session)
             }
+        }
+    }
+
+    private func runPluginSessionCommand(_ resolved: AgentPluginResolvedCommand, session: AgentSession) {
+        var arguments = ["sessionID": session.id.uuidString]
+        if let workspace = session.workspaceLocation?.localPath ?? session.workspaceRootPath {
+            arguments["workspace"] = workspace
+        }
+        Task {
+            _ = try? await AgentPluginCommandExecutor.execute(
+                pluginID: resolved.pluginID,
+                commandID: resolved.command.id,
+                arguments: arguments,
+                destinationID: pluginRegistry.defaultDestinationID(for: resolved.pluginID),
+                appState: appState
+            )
         }
     }
 
@@ -1611,7 +1669,7 @@ struct SidebarActionRow: View {
                 Image(systemName: icon)
                     .font(.system(size: 12))
                     .frame(width: 14)
-                    .foregroundStyle(isDimmed ? .tertiary : .secondary)
+                    .foregroundStyle(iconColor)
                 Text(title)
                     .font(AgentDesign.scaledSidebarRowFont(
                         baseFontSize: appState.agentChatBaseFontSize
@@ -1658,5 +1716,11 @@ struct SidebarActionRow: View {
             return palette.hoverFill
         }
         return .clear
+    }
+
+    private var iconColor: Color {
+        if isDimmed { return .secondary.opacity(0.45) }
+        if isSelected { return .primary }
+        return isHovered ? .primary.opacity(0.72) : .secondary
     }
 }

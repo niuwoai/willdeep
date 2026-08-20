@@ -14,6 +14,22 @@ enum AgentPrimaryDestination: Equatable {
     case scheduledTasks
     case dispatchBoard
     case roundtable
+    case plugin(AgentPluginDestinationID)
+    case pluginCenter
+
+    var pluginDestinationID: AgentPluginDestinationID? {
+        guard case .plugin(let id) = self else { return nil }
+        return id
+    }
+
+    var hostsDedicatedCenterSurface: Bool {
+        switch self {
+        case .conversation:
+            return false
+        case .scheduledTasks, .dispatchBoard, .roundtable, .plugin, .pluginCenter:
+            return true
+        }
+    }
 }
 
 /// How one run outcome reads in the recent-runs list. Pure mapping so the
