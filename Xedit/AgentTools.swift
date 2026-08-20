@@ -436,6 +436,8 @@ enum AgentToolRunner {
                 result = try await activateExpert(arguments: activeArguments, context: activeContext)
             case "add_memory":
                 result = try AgentSelfLearning.addMemory(arguments: activeArguments, rootDirectory: activeContext.rootDirectory)
+            case "read_memory":
+                result = try AgentSelfLearning.readMemory(arguments: activeArguments, rootDirectory: activeContext.rootDirectory)
             case "create_user_skill":
                 result = try AgentSelfLearning.createUserSkill(arguments: activeArguments)
             case "create_user_skills":

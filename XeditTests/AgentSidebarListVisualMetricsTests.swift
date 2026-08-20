@@ -244,6 +244,30 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(tooltip.contains("10.3亿"))
     }
 
+    @Test("Token activity tooltip appears from direct hover state without native help delay")
+    func tokenActivityTooltipAvoidsNativeHelpDelay() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentStatusIndicators.swift"),
+            encoding: .utf8
+        )
+        let componentStart = try #require(
+            source.range(of: "private struct AgentTokenActivityHeatmapCell: View")
+        )
+        let componentSuffix = source[componentStart.lowerBound...]
+        let componentEnd = try #require(
+            componentSuffix.range(of: "private struct AgentDailySharePreview")
+        )
+        let componentSource = String(componentSuffix[..<componentEnd.lowerBound])
+
+        #expect(componentSource.contains(".onHover"))
+        #expect(componentSource.contains("if isHovering"))
+        #expect(componentSource.contains("Text(tooltip)"))
+        #expect(!componentSource.contains(".help(tooltip)"))
+    }
+
     @Test("truncated tooltip labels remain free of hover-driven layout work")
     func truncatedTooltipLabelsStayLayoutInert() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)

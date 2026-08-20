@@ -32,6 +32,15 @@ nonisolated enum AgentImageDescriptionRetryPolicy {
     }
 }
 
+nonisolated enum AgentImagePreparationPolicy {
+    static func requiresTextDescription(
+        mainModelSupportsImages: Bool,
+        usesManagedRouting: Bool
+    ) -> Bool {
+        usesManagedRouting || !mainModelSupportsImages
+    }
+}
+
 extension AppState {
     func prepareImagesForTextOnlyProvider(
         for runtime: AgentRuntime,
@@ -39,7 +48,10 @@ extension AppState {
         mainConfiguration: AgentConfiguration,
         imageDescriptionConfiguration: AgentConfiguration
     ) async throws {
-        guard !mainConfiguration.supportsImageInput else { return }
+        guard AgentImagePreparationPolicy.requiresTextDescription(
+            mainModelSupportsImages: mainConfiguration.supportsImageInput,
+            usesManagedRouting: runtime.managedRouting != nil
+        ) else { return }
         guard let index = runtime.messages.firstIndex(where: { $0.id == userMessageID }) else { return }
         let images = runtime.messages[index].images
         guard !images.isEmpty else { return }

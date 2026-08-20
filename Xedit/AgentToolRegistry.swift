@@ -306,6 +306,14 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "read_memory",
+            description: "Read the full text of one stored memory by the short id shown in the `Agent memory index` section of your context. The index gives one summary line per memory; call this when a line looks relevant to the current task and you need the detail behind it. Read-only.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "id", type: .string, description: "Short id from the memory index, e.g. `a1b2c3d4`. A full UUID is also accepted.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "create_user_skill",
             description: "Create exactly one local user Codex skill under ~/.willdeep/skills when a reusable workflow has emerged. When the user asks for multiple skills, do not call this repeatedly; call create_user_skills once so the user can review and approve the full batch in one confirmation. Include when to use it, steps, verification, and safety notes. Requires approval outside autonomous modes.",
             risk: .write,

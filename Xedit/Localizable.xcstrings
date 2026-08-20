@@ -14076,6 +14076,7 @@
       }
     },
     "agent-transcript-reader.load-earlier" : {
+    "agent-transcript-reader.scroll-to-latest" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Scroll to latest message" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Ir al mensaje más reciente" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aller au message le plus récent" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "最新のメッセージまでスクロール" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "滚动到最新消息" } } } },
       "comment" : "Link at the top of the transcript reader window that loads one more page of earlier messages; %1$lld = batch size to load, %2$lld = total earlier messages not shown yet",
       "extractionState" : "manual",
       "localizations" : {

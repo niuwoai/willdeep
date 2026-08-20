@@ -1,5 +1,43 @@
 # Design QA
 
+## 聊天“滚动到最新消息”火箭（1.277.0-rc3）
+
+- source visual truth path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/scroll-to-latest-1.277.0-rc3/reference.png`
+- implementation screenshot path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/scroll-to-latest-1.277.0-rc3/implementation-off-bottom.jpeg`
+- viewport: native macOS window `1359 × 768 px`; source image `1487 × 1058 px`
+- density normalization: compared by floating position, button footprint, contrast, icon character, and relationship to the composer rather than full-window pixel scale.
+- state: populated long conversation, transcript manually scrolled above the bottom, then returned to the latest message by clicking the rocket.
+
+### Full-view comparison evidence
+
+- The production button floats at the lower-right edge of the transcript, above the composer and clear of message content, matching the selected concept's placement.
+- The control is absent while the transcript is already at the bottom and appears only after the operator scrolls upward.
+- Clicking the control returns the transcript scroll bar to `1.0`; the accessibility node is removed immediately afterward.
+
+### Focused comparison evidence
+
+- Geometry: pass; the `44 pt` circular target is compact but comfortably clickable.
+- Visual treatment: pass; a near-white circular surface, restrained hairline, and soft shadow preserve the concept's lightweight floating treatment.
+- Icon character: pass after replacing a visually missing SF Symbol render with a dedicated blue-violet Q-style rocket asset.
+- Motion: pass; the control uses a short scale/fade entrance and a subtle hover enlargement without competing with chat content.
+- Accessibility and localization: pass; the control exposes `agent-chat-scroll-to-latest` and localized help/label resources for five supported languages.
+
+### Findings
+
+- No open P0/P1/P2 visual defects after the second pass.
+- The production button uses a dedicated transparent PNG rocket asset, preserving the concept's blue-violet mascot direction at native scale.
+
+### Comparison history
+
+- Pass 1: interaction and placement were correct, but the SF Symbol rocket was not visibly rendered in the live app capture.
+- Fix: generated and integrated a dedicated transparent Q-style rocket asset, then rebuilt.
+- Pass 2: Computer Use confirmed the rocket is visible above the composer, activates successfully, scrolls to `1.0`, and disappears at the bottom.
+- Verification: `AgentTranscriptScrollPolicyTests` passed all 21 tests; repository version and contract guards also passed.
+
+final result: passed
+
+---
+
 - source visual truth path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/agent-attention-1.267.0-rc3/reference.png`
 - implementation screenshot path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/agent-attention-1.267.0-rc3/settings-ai-agents.jpeg`
 - component implementation capture: Computer Use full-window capture emitted in the 2026-08-17 QA session (confirm and compact authorization states)

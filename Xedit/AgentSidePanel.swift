@@ -113,7 +113,12 @@ nonisolated enum AgentSidePanelKind: String, CaseIterable, Identifiable, Codable
         case .files: return "folder"
         case .terminal: return "terminal"
         case .devServer: return "server.rack"
-        case .backgroundTasks: return "list.bullet.rectangle"
+        // Not a list glyph: at rail size `list.bullet.rectangle` reads as
+        // "a document", indistinguishable from the transcript and saying
+        // nothing about work running on its own. Meshing gears carry the
+        // "something is turning in the background" meaning that this panel is
+        // actually about, and no other rail entry uses a gear.
+        case .backgroundTasks: return "gearshape.2"
         case .mediaTasks: return "photo.stack"
         case .shortDrama: return "rectangle.stack.badge.play"
         case .embeddedBrowser: return "globe"

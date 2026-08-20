@@ -218,13 +218,16 @@ extension AppState {
             )
         )
         let settings = AgentMemorySettingsStore.loadSettings()
+        // Loaded once: retrieval and the index below both need the full set,
+        // and this runs on every composer keystroke that refreshes the gauge.
+        let memoryRecords = AgentMemorySettingsStore.loadRecords()
         let memoryResults = AgentMemoryEngine.retrieve(
             query: Self.memoryRetrievalQuery(
                 messages: agentMessages,
                 openedFileURL: openedFileURL,
                 selectedText: selectedText
             ),
-            records: AgentMemorySettingsStore.loadRecords(),
+            records: memoryRecords,
             settings: settings,
             rootDirectory: rootDirectory,
             openedFileURL: openedFileURL,
@@ -232,6 +235,17 @@ extension AppState {
         )
         if let memoryContext = AgentMemoryEngine.contextBlock(for: memoryResults) {
             assembledPrompt += "\n\n\(memoryContext)"
+        }
+        // Kept in step with the real assembly in `runAgentLoop`; an estimate
+        // that omits a block the request actually sends under-reports the
+        // window and is how a "fits comfortably" preview turns into a 400.
+        if let memoryIndex = AgentMemoryEngine.indexBlock(
+            records: memoryRecords,
+            excluding: Set(memoryResults.map(\.record.id)),
+            settings: settings,
+            rootDirectory: rootDirectory
+        ) {
+            assembledPrompt += "\n\n\(memoryIndex)"
         }
         let components = AgentContextBuilder.requestComponents(from: assembledPrompt)
         var configuration = agentConfiguration.normalized

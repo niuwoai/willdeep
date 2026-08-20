@@ -29,6 +29,7 @@
 | `someim-32b-git-detective` | `someim-32b` | `["glm-5"]` | §3.7 | NULL | 回归定位与 commit 解释 |
 | `someim-32b-security-guard` | `someim-32b` | `["glm-5"]` | §3.9 | NULL | 判断单条命令是否可无人值守执行 |
 | `someim-32b-judge` | `someim-32b` | `["glm-5"]` | §3.10 | NULL | 路由/质检等有界裁决 |
+| `someim-32b-compressor` | `deepseek-v4-flash` | `["deepseek-v4-flash"]` | muchtoken `docs/someim-32b-compressor.md`（**replace 注入**，migration 206 落库） | NULL | 上下文压缩摘要 |
 
 要点：
 
@@ -229,7 +230,7 @@ Report contract:
 |---|---|
 | `deep` 工种 | 继承父会话模型，本来就不绑便宜档 |
 | `reviewer`（diff 风险审查改造） | 需要 64K 档 + findings schema 配合，二期再评估是否服务端化 |
-| 小活旁路 prompt（commit message / 标题 / 摘要 / 错误归类） | 调用形态是单次 side-call，prompt 短且随场景变，客户端拼装更合适；模型用裸 `someim-32b` |
+| 小活旁路 prompt（commit message / 标题 / 错误归类） | 调用形态是单次 side-call，prompt 短且随场景变，客户端拼装更合适；模型用裸 `someim-32b`。**上下文压缩摘要已从本行反转**：其 prompt 稳定、迭代收益高，1.276.0 起走 `someim-32b-compressor`（replace 注入，见 §2；客户端只发裸转录，分段标注随 user payload） |
 | 不变量段（只读/写边界、交付契约、不能问用户） | 安全规则不外置，永远由 Xedit runner 拼接 |
 | Task Packet（goal / relevant_files / known_facts / constraints / verifier） | 每次任务现编译，天然客户端 |
 | goal-teams 角色收窄段 | 依赖 workspace 的 roles.json，客户端语义 |

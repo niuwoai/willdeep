@@ -1252,6 +1252,64 @@ struct WillDeepTests {
         #expect(judge.usesServerManagedSafetyJudge)
     }
 
+    @Test("signed-in compression candidates prefer the hosted compressor")
+    @MainActor
+    func testSignedInCompressionCandidatesPreferHostedCompressor() async {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        SomeIMIntegrationStore._setTestSharedSessionOverride(
+            enabled: true,
+            session: SomeIMSharedSession(
+                apiKey: "sk-test-someim",
+                baseURL: SomeIMIntegrationSettings.defaultBaseURL
+            )
+        )
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        appState.agentConfiguration = AgentConfiguration(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: SomeIMIntegrationSettings.defaultBaseURL,
+            model: "glm-5",
+            apiKey: "sk-test-someim"
+        )
+
+        let candidates = appState.contextCompressionConfigurationCandidates()
+        #expect(candidates.first?.model == SomeIMManagedModel.contextCompressor)
+        #expect(candidates.first?.usesServerManagedCompressionPrompt == true)
+        // 会话压缩模型仍在队尾兜底，托管候选失败时压缩不落空。
+        #expect(candidates.count >= 2)
+    }
+
+    @Test("an explicit compression model outranks the hosted compressor")
+    @MainActor
+    func testExplicitCompressionModelSkipsHostedCompressor() async {
+        let sandbox = KeychainSandbox()
+        defer { withExtendedLifetime(sandbox) {} }
+        SomeIMIntegrationStore._setTestSharedSessionOverride(
+            enabled: true,
+            session: SomeIMSharedSession(
+                apiKey: "sk-test-someim",
+                baseURL: SomeIMIntegrationSettings.defaultBaseURL
+            )
+        )
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        var configuration = AgentConfiguration(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: SomeIMIntegrationSettings.defaultBaseURL,
+            model: "glm-5",
+            apiKey: "sk-test-someim"
+        )
+        configuration.compressionModel = "glm-5"
+        appState.agentConfiguration = configuration
+
+        let candidates = appState.contextCompressionConfigurationCandidates()
+        #expect(candidates.allSatisfy { $0.model != SomeIMManagedModel.contextCompressor })
+        #expect(candidates.first?.model == "glm-5")
+    }
+
     @Test("safety judge never donates a different provider's key")
     @MainActor
     func testSafetyJudgeDoesNotDonateCrossProviderKey() async {
