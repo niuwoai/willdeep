@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.275.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.275.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.275.0-rc6 - 2026-08-20
+
+### Fixed
+
+- **对话里行内代码中的中文不再隐形。** `` `runtime/枪机日志.log` `` 这类带中文的行内代码在 transcript 里渲染成 `runtime/ .log`——中文字符还在文本里（可复制），但拿到的是缺失/零宽字形。根因与 1.268.x 修过的路径 chip 掉字完全同款：行内代码 chip 把整段显式钉成 SF Mono，而 TextKit 对显式指定的 SF Mono run 在部分 macOS 上不合成 CJK fallback。路径 chip 当时补了 PingFang fallback，但 `.log` 不在路径识别的后缀白名单里，这类内容只走行内代码链路，恰好绕开了那次修复。现在行内代码 chip 与附件引用 chip（`[Source: 中文文件名.pdf; …]`，同样钉 SF Mono）也对 CJK 子段补同一个 fallback；ASCII 部分保持等宽与 chip 底色不变。
+
+### Tests
+
+- 新增回归：行内代码含中文时，中文子段字体不是等宽（已换 fallback）、同一 chip 内 ASCII 仍是等宽且 chip 底色仍在。
 
 ## 1.275.0-rc5 - 2026-08-20
 
