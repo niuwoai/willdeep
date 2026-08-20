@@ -18,15 +18,103 @@ nonisolated enum AgentBackgroundTaskScopeFilter: String, CaseIterable, Identifia
     var id: String { rawValue }
 }
 
-/// Neutral palette for the scope switch at the top of the panel. Mirrors the
+/// Neutral palette for every segmented switch in this panel. Mirrors the
 /// terminal tab strip's `TerminalTabChrome`: permanent chrome carries no
 /// accent colour, and selection is expressed through fill density, a border,
 /// and text weight instead.
-private enum BackgroundTaskScopeChrome {
+private enum BackgroundTaskSegmentChrome {
     static let trackFillOpacity: Double = 0.05
     static let selectedFillOpacity: Double = 0.10
     static let selectedStrokeOpacity: Double = 0.22
     static let selectedTextOpacity: Double = 0.88
+}
+
+/// Hand-drawn replacement for `.pickerStyle(.segmented)`.
+///
+/// The native control paints its selected segment with the system accent
+/// (blue under the `system` skin). Scope, log layout, and output stream are
+/// all permanent panel chrome — three accent-coloured strips stacked down one
+/// narrow panel, none of which is the thing the user came to look at. Shared
+/// rather than copied per call site so the three stay identical; a divergent
+/// fourth copy is how this kind of chrome drifts back apart.
+private struct BackgroundTaskSegmentedControl<Value: Hashable>: View {
+    struct Segment: Identifiable {
+        let value: Value
+        let title: String
+        var systemImage: String?
+
+        var id: Value { value }
+
+        init(value: Value, title: String, systemImage: String? = nil) {
+            self.value = value
+            self.title = title
+            self.systemImage = systemImage
+        }
+    }
+
+    let segments: [Segment]
+    @Binding var selection: Value
+    let palette: EditorInterfaceSkinPalette
+    let accessibilityLabel: String
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(segments) { segment in
+                button(for: segment)
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(palette.primaryText.opacity(BackgroundTaskSegmentChrome.trackFillOpacity))
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func button(for segment: Segment) -> some View {
+        let isSelected = selection == segment.value
+        return Button {
+            selection = segment.value
+        } label: {
+            HStack(spacing: 4) {
+                if let systemImage = segment.systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 10, weight: .medium))
+                }
+                Text(segment.title)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(
+                isSelected
+                    ? palette.primaryText.opacity(BackgroundTaskSegmentChrome.selectedTextOpacity)
+                    : palette.secondaryText
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: 21)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(
+                    isSelected
+                        ? palette.primaryText.opacity(BackgroundTaskSegmentChrome.selectedFillOpacity)
+                        : Color.clear
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .stroke(
+                    isSelected
+                        ? palette.primaryText.opacity(BackgroundTaskSegmentChrome.selectedStrokeOpacity)
+                        : Color.clear,
+                    lineWidth: 1
+                )
+        )
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
 }
 
 nonisolated enum AgentBackgroundTaskStatusFilter: String, CaseIterable, Identifiable {
@@ -233,64 +321,16 @@ struct AgentBackgroundTasksPanel: View {
         .padding(.vertical, 11)
     }
 
-    /// Hand-drawn instead of `.pickerStyle(.segmented)`: the native control
-    /// paints its selected segment with the system accent (blue under the
-    /// `system` skin), and this row is permanent panel chrome that has no
-    /// business holding a high-priority colour signal all day. Same neutral
-    /// treatment the terminal tab strip and the error banner already moved to
-    /// — selection reads through a denser fill, a border, and weight.
     private var scopeTabs: some View {
-        HStack(spacing: 2) {
-            scopeTab(.currentSession, title: L10n.AgentJobs.currentSession)
-            scopeTab(.allSessions, title: L10n.AgentJobs.allSessions)
-        }
-        .padding(2)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(palette.primaryText.opacity(BackgroundTaskScopeChrome.trackFillOpacity))
+        BackgroundTaskSegmentedControl(
+            segments: [
+                .init(value: AgentBackgroundTaskScopeFilter.currentSession, title: L10n.AgentJobs.currentSession),
+                .init(value: AgentBackgroundTaskScopeFilter.allSessions, title: L10n.AgentJobs.allSessions),
+            ],
+            selection: $scope,
+            palette: palette,
+            accessibilityLabel: L10n.AgentJobs.scope
         )
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(L10n.AgentJobs.scope)
-    }
-
-    private func scopeTab(
-        _ value: AgentBackgroundTaskScopeFilter,
-        title: String
-    ) -> some View {
-        let isSelected = scope == value
-        return Button {
-            scope = value
-        } label: {
-            Text(title)
-                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-                .foregroundStyle(
-                    isSelected
-                        ? palette.primaryText.opacity(BackgroundTaskScopeChrome.selectedTextOpacity)
-                        : palette.secondaryText
-                )
-                .frame(maxWidth: .infinity)
-                .frame(height: 21)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(
-                    isSelected
-                        ? palette.primaryText.opacity(BackgroundTaskScopeChrome.selectedFillOpacity)
-                        : Color.clear
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .stroke(
-                    isSelected
-                        ? palette.primaryText.opacity(BackgroundTaskScopeChrome.selectedStrokeOpacity)
-                        : Color.clear,
-                    lineWidth: 1
-                )
-        )
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     @ViewBuilder
@@ -538,14 +578,23 @@ struct AgentBackgroundTasksPanel: View {
 
     private var logControls: some View {
         HStack(spacing: 8) {
-            Picker(L10n.AgentJobs.logLayout, selection: $logLayout) {
-                Label(L10n.AgentJobs.tabbedLogs, systemImage: "rectangle.stack")
-                    .tag(AgentBackgroundTaskLogLayout.tabs)
-                Label(L10n.AgentJobs.splitLogs, systemImage: "rectangle.split.2x1")
-                    .tag(AgentBackgroundTaskLogLayout.split)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            BackgroundTaskSegmentedControl(
+                segments: [
+                    .init(
+                        value: AgentBackgroundTaskLogLayout.tabs,
+                        title: L10n.AgentJobs.tabbedLogs,
+                        systemImage: "rectangle.stack"
+                    ),
+                    .init(
+                        value: AgentBackgroundTaskLogLayout.split,
+                        title: L10n.AgentJobs.splitLogs,
+                        systemImage: "rectangle.split.2x1"
+                    ),
+                ],
+                selection: $logLayout,
+                palette: palette,
+                accessibilityLabel: L10n.AgentJobs.logLayout
+            )
             .frame(maxWidth: 220)
 
             Spacer(minLength: 4)
@@ -575,13 +624,16 @@ struct AgentBackgroundTasksPanel: View {
                 }
             }
         } else {
-            Picker(L10n.AgentJobs.outputStream, selection: $selectedStream) {
-                Text(L10n.AgentJobs.combined).tag(AgentJobOutputStream.combined)
-                Text(L10n.AgentJobs.stdout).tag(AgentJobOutputStream.stdout)
-                Text(L10n.AgentJobs.stderr).tag(AgentJobOutputStream.stderr)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            BackgroundTaskSegmentedControl(
+                segments: [
+                    .init(value: AgentJobOutputStream.combined, title: L10n.AgentJobs.combined),
+                    .init(value: AgentJobOutputStream.stdout, title: L10n.AgentJobs.stdout),
+                    .init(value: AgentJobOutputStream.stderr, title: L10n.AgentJobs.stderr),
+                ],
+                selection: $selectedStream,
+                palette: palette,
+                accessibilityLabel: L10n.AgentJobs.outputStream
+            )
             logConsole(job: job, stream: selectedStream)
         }
     }
