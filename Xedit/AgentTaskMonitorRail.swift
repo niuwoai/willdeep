@@ -696,6 +696,25 @@ enum AgentBackgroundTaskComposerCardVisibility {
     nonisolated static func shouldShow(runningJobCount: Int) -> Bool {
         runningJobCount > 0
     }
+
+    /// 调度台会话里点开后台任务面板只会看到一个空面板——节点各自跑在自己的
+    /// 运行时上,不挂在调度台这条会话名下,所以 1.272.0-rc14 摘掉了那个入口。
+    /// 但那次连普通会话的一起摘了:普通会话的后台任务就在本会话名下,面板有
+    /// 内容可看,入口必须留着。作用域是唯一的判据。
+    nonisolated static func allowsOpeningManager(
+        presentationScope: AgentSessionPresentationScope
+    ) -> Bool {
+        presentationScope != .dispatchBoard
+    }
+}
+
+/// 后台任务状态条的中性配色与尺寸。运行中是正常推进、不需要用户动手,
+/// 与 `AgentActivityPhase` 里「任务运行中」同样落在中性灰,不再整条染绿。
+private enum AgentBackgroundTaskComposerCardChrome {
+    static let height: CGFloat = 30
+    static let fillOpacity: Double = 0.10
+    static let strokeOpacity: Double = 0.16
+    static let iconOpacity: Double = 0.85
 }
 
 struct AgentSemanticActivityStatusLine: View {
@@ -766,13 +785,43 @@ struct AgentSemanticActivityStatusLine: View {
     /// so this card always describes work in flight. It therefore reports just
     /// the running count: finished jobs are history the user can go read in the
     /// panel, not a reason to keep a status bar on screen.
+    @ViewBuilder
     private var backgroundTaskComposerCard: some View {
         let runningJobs = currentSessionAliveJobs
+        if canOpenBackgroundTaskManager {
+            Button {
+                appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .backgroundTasks)
+            } label: {
+                backgroundTaskComposerCardContent(runningJobs: runningJobs, showsDisclosure: true)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .accessibilityLabel(Text(L10n.AgentJobs.managerTitle))
+            .accessibilityHint(Text(L10n.AgentJobs.openManagerHelp))
+        } else {
+            backgroundTaskComposerCardContent(runningJobs: runningJobs, showsDisclosure: false)
+                .accessibilityLabel(Text(L10n.AgentJobs.composerRunningSummary(runningJobs.count)))
+        }
+    }
+
+    /// 调度台会话没有可开的后台任务面板,状态条在那里退化成纯展示。
+    private var canOpenBackgroundTaskManager: Bool {
+        guard let scope = appState.activeRuntime?.session.presentationScope else { return false }
+        return AgentBackgroundTaskComposerCardVisibility.allowsOpeningManager(presentationScope: scope)
+    }
+
+    private func backgroundTaskComposerCardContent(
+        runningJobs: [AgentBackgroundJob],
+        showsDisclosure: Bool
+    ) -> some View {
         let leadJob = runningJobs.first
         return HStack(spacing: 7) {
             Image(systemName: "play.circle.fill")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.green)
+                .foregroundStyle(
+                    Color.secondary.opacity(AgentBackgroundTaskComposerCardChrome.iconOpacity)
+                )
             Text(L10n.AgentJobs.composerRunningSummary(runningJobs.count))
                 .font(.system(size: 12, weight: .semibold))
                 .lineLimit(1)
@@ -785,19 +834,26 @@ struct AgentSemanticActivityStatusLine: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 12)
-        .frame(height: 30)
+        .frame(height: AgentBackgroundTaskComposerCardChrome.height)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.green.opacity(0.09))
+                .fill(Color.secondary.opacity(AgentBackgroundTaskComposerCardChrome.fillOpacity))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.green.opacity(0.18), lineWidth: 1)
+                .stroke(
+                    Color.secondary.opacity(AgentBackgroundTaskComposerCardChrome.strokeOpacity),
+                    lineWidth: 1
+                )
         )
-        .accessibilityLabel(Text(L10n.AgentJobs.composerRunningSummary(runningJobs.count)))
     }
 
     private var currentSessionJobs: [AgentBackgroundJob] {
