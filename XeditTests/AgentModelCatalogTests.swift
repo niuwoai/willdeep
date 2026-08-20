@@ -61,4 +61,52 @@ struct AgentModelCatalogTests {
         #expect(AppState.agentContextWindow(model: "qwen-long", providerID: "dashscope") == 1_000_000)
         #expect(AppState.agentContextWindow(model: "qwen-plus", providerID: "dashscope") == 128_000)
     }
+
+    // MARK: - Provider-reported windows outrank the id-matching table
+
+    /// `kimi-k3` is the case that motivated this: some.im's catalog lists it
+    /// at 1M, while the matching table only knows the K2 line and drops it on
+    /// the 128K default — an 87% under-read, which makes the gauge show 78%
+    /// when the session is really at 10% and fires compression for nothing.
+    @Test("provider-reported window beats the guess")
+    func reportedWindowOverridesMatchingTable() {
+        AgentModelContextWindowCatalog._reset()
+        defer { AgentModelContextWindowCatalog._reset() }
+
+        #expect(AppState.agentContextWindow(model: "kimi-k3", providerID: "some-im") == 128_000)
+
+        AgentModelContextWindowCatalog.merge([
+            AgentModelDiscovery(id: "kimi-k3", isHot: false, isNew: false, contextWindowTokens: 1_000_000)
+        ])
+
+        #expect(AppState.agentContextWindow(model: "kimi-k3", providerID: "some-im") == 1_000_000)
+        // Case-insensitive: ids arrive from the catalog in whatever case the
+        // provider uses, and callers lowercase before asking.
+        #expect(AppState.agentContextWindow(model: "Kimi-K3", providerID: "some-im") == 1_000_000)
+        // Untouched models still go through the table.
+        #expect(AppState.agentContextWindow(model: "kimi-k2.6", providerID: "some-im") == 262_144)
+    }
+
+    /// Rows that report nothing must not overwrite a window already learned,
+    /// and must not register a bogus zero-width entry.
+    @Test("rows without a reported window leave the table alone")
+    func unreportedRowsDoNotDemote() {
+        AgentModelContextWindowCatalog._reset()
+        defer { AgentModelContextWindowCatalog._reset() }
+
+        AgentModelContextWindowCatalog.merge([
+            AgentModelDiscovery(id: "kimi-k3", isHot: false, isNew: false, contextWindowTokens: 1_000_000)
+        ])
+        AgentModelContextWindowCatalog.merge([
+            AgentModelDiscovery(id: "kimi-k3", isHot: false, isNew: false, contextWindowTokens: nil),
+            AgentModelDiscovery(id: "deepseek-v4-flash", isHot: false, isNew: false, contextWindowTokens: nil),
+            AgentModelDiscovery(id: "bogus-zero", isHot: false, isNew: false, contextWindowTokens: 0)
+        ])
+
+        #expect(AppState.agentContextWindow(model: "kimi-k3", providerID: "some-im") == 1_000_000)
+        // some.im reports no window for the DeepSeek defaults, so they must
+        // keep using the table rather than becoming unknown.
+        #expect(AppState.agentContextWindow(model: "deepseek-v4-flash", providerID: "some-im") == 1_000_000)
+        #expect(AppState.agentContextWindow(model: "bogus-zero", providerID: "some-im") == 128_000)
+    }
 }

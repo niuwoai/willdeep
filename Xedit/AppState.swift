@@ -689,6 +689,10 @@ final class AppState: ObservableObject {
         self.agentUsageSnapshots = []
         self.agentKnownModelIDs = AgentSettingsStore.loadKnownModelIDs()
         self.agentDiscoveredModelMetadata = AgentSettingsStore.loadDiscoveredModelMetadata()
+        // Seed reported context windows before any turn can ask for one, so a
+        // relaunch keeps the real window instead of falling back to the
+        // id-matching guess until the next model-list fetch.
+        AgentModelContextWindowCatalog.merge(self.agentDiscoveredModelMetadata)
         self.agentRecentlyUsedModelIDs = AgentSettingsStore.loadRecentlyUsedModelIDs()
         self.agentAlwaysAllowedCommands = AgentSettingsStore.loadAlwaysAllowedCommands()
         syncLocalModelComposerProvider(settings: AgentSettingsStore.loadLocalModelSettings())

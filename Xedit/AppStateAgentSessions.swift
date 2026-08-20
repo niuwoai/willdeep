@@ -2479,6 +2479,7 @@ extension AppState {
     func recordFetchedAgentModelDiscoveries(_ models: [AgentModelDiscovery]) {
         recordFetchedAgentModels(models.map(\.id))
         agentDiscoveredModelMetadata = models
+        AgentModelContextWindowCatalog.merge(models)
         AgentSettingsStore.saveDiscoveredModelMetadata(models)
     }
 

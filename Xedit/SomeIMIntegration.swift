@@ -68,11 +68,18 @@ struct SomeIMModel: Identifiable, Codable, Equatable {
     var kinds: [SomeIMGenerationKind]
     var isHot: Bool = false
     var isNew: Bool = false
+    /// Context window from some.im's pricing catalog, when it reports one.
+    var contextWindowTokens: Int?
 
     var supportsImageGeneration: Bool { kinds.contains(.image) || model.localizedCaseInsensitiveContains("image") }
     var supportsVideoGeneration: Bool { kinds.contains(.video) || model.localizedCaseInsensitiveContains("video") }
     var agentDiscovery: AgentModelDiscovery {
-        AgentModelDiscovery(id: model, isHot: isHot, isNew: isNew)
+        AgentModelDiscovery(
+            id: model,
+            isHot: isHot,
+            isNew: isNew,
+            contextWindowTokens: contextWindowTokens
+        )
     }
 }
 
@@ -1675,7 +1682,13 @@ enum SomeIMClient {
         }
         let decoded = try JSONDecoder().decode(PricingResponse.self, from: data)
         return decoded.items.map { item in
-            SomeIMModel(model: item.model, kinds: item.detectedKinds, isHot: item.is_hot ?? false, isNew: item.is_new ?? false)
+            SomeIMModel(
+                model: item.model,
+                kinds: item.detectedKinds,
+                isHot: item.is_hot ?? false,
+                isNew: item.is_new ?? false,
+                contextWindowTokens: item.context_tokens_max.flatMap { $0 > 0 ? $0 : nil }
+            )
         }
     }
 
@@ -1914,6 +1927,11 @@ enum SomeIMClient {
         let catalog_tags: [String]?
         let is_hot: Bool?
         let is_new: Bool?
+        /// some.im publishes the context window here. Only a minority of rows
+        /// fill it in today (9 of 47 at the time of writing, and notably not
+        /// the DeepSeek defaults), so this supplements the id-matching table
+        /// rather than replacing it.
+        let context_tokens_max: Int?
 
         var detectedKinds: [SomeIMGenerationKind] {
             detectKinds(model: model, words: [

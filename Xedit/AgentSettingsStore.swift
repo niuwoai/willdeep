@@ -12,6 +12,17 @@ struct AgentModelDiscovery: Codable, Equatable {
     var id: String
     var isHot: Bool
     var isNew: Bool
+    /// Context window as reported by the provider's own model catalog, when
+    /// it publishes one. nil means "not reported" — the caller falls back to
+    /// the built-in id-matching table in `agentContextWindow(model:)`.
+    ///
+    /// Worth having even though few providers fill it in: the matching table
+    /// guesses from the model id, and an id it does not recognise lands on
+    /// the conservative 128K default. some.im lists `kimi-k3` at 1M, so the
+    /// guess was reading 87% low — the gauge showed 78% used when the real
+    /// figure was 10%, which fires compression and the 90% ordered stop for
+    /// no reason.
+    var contextWindowTokens: Int?
 }
 
 enum AgentDefaultModelModePreference: String, Equatable {
@@ -207,7 +218,14 @@ enum AgentSettingsStore {
             guard !id.isEmpty else { continue }
             let key = id.lowercased()
             guard seen.insert(key).inserted else { continue }
-            result.append(AgentModelDiscovery(id: id, isHot: model.isHot, isNew: model.isNew))
+            result.append(
+                AgentModelDiscovery(
+                    id: id,
+                    isHot: model.isHot,
+                    isNew: model.isNew,
+                    contextWindowTokens: model.contextWindowTokens.flatMap { $0 > 0 ? $0 : nil }
+                )
+            )
         }
         return result.sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
     }
