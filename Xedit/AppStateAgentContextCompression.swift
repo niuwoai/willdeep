@@ -28,39 +28,51 @@ extension AppState {
 
     func compressAgentContext(for runtime: AgentRuntime, keepRecent: Int = 4) {
         guard !runtime.isCompressingContext, !runtime.isResponding else { return }
-        guard runtime.messages.count > 1 else { return }
-
-        // 第二次手动按 Compress 时,往往是因为上次 keepRecent=4 留下
-        // 的尾部里有 skill prelude / 长 tool result 等大块内容,光靠
-        // 头部摘要看不出来效果。再压时把尾部缩到 2,并把已有摘要
-        // 一起折进新 head,这样可压面就最大化。
-        let hasPriorSummary = (runtime.contextSummary?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
-            && runtime.contextSummaryThroughMessageID != nil
-        let effectiveKeepRecent = hasPriorSummary ? min(2, keepRecent) : keepRecent
-        guard runtime.messages.count > effectiveKeepRecent else { return }
-
-        let tailStart = Self.compressionTailStart(
-            messages: runtime.messages,
-            keepRecent: effectiveKeepRecent
-        )
-        guard tailStart > 0 else { return }
+        guard let plan = compressionPlan(for: runtime, keepRecent: keepRecent) else { return }
 
         runtime.isCompressingContext = true
         let configurations = contextCompressionConfigurationCandidates()
-        let head = Array(runtime.messages.prefix(tailStart))
-        let tail = Array(runtime.messages[tailStart...])
-        let priorSummary = hasPriorSummary ? runtime.contextSummary : nil
 
         Task { [weak self, weak runtime] in
             guard let self, let runtime else { return }
             await self.runContextCompression(
                 for: runtime,
-                head: head,
-                tail: tail,
-                priorSummary: priorSummary,
+                head: plan.head,
+                tail: plan.tail,
+                priorSummary: plan.priorSummary,
                 configurations: configurations
             )
         }
+    }
+
+    /// head/tail/priorSummary 切分方案；nil 表示当前没有可压内容。
+    /// 手动压缩与升档前压缩共用同一套语义：
+    /// 已有摘要时把尾部缩到 2 并把旧摘要折进新 head——上次 keepRecent=4
+    /// 留下的尾部往往含 skill prelude / 长 tool result 等大块内容，再压时
+    /// 这样可压面才最大化。
+    struct AgentCompressionPlan {
+        let head: [AgentMessage]
+        let tail: [AgentMessage]
+        let priorSummary: String?
+    }
+
+    func compressionPlan(for runtime: AgentRuntime, keepRecent: Int) -> AgentCompressionPlan? {
+        guard runtime.messages.count > 1 else { return nil }
+        let hasPriorSummary = (runtime.contextSummary?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            && runtime.contextSummaryThroughMessageID != nil
+        let effectiveKeepRecent = hasPriorSummary ? min(2, keepRecent) : keepRecent
+        guard runtime.messages.count > effectiveKeepRecent else { return nil }
+
+        let tailStart = Self.compressionTailStart(
+            messages: runtime.messages,
+            keepRecent: effectiveKeepRecent
+        )
+        guard tailStart > 0 else { return nil }
+        return AgentCompressionPlan(
+            head: Array(runtime.messages.prefix(tailStart)),
+            tail: Array(runtime.messages[tailStart...]),
+            priorSummary: hasPriorSummary ? runtime.contextSummary : nil
+        )
     }
 
     /// Where the kept tail starts, pairing-aware. Starts from the raw
@@ -180,9 +192,49 @@ extension AppState {
             resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
 
+        let outcome = await performCompression(
+            for: runtime,
+            head: head,
+            priorSummary: priorSummary,
+            configurations: configurations
+        )
+        if outcome.reclaimed {
+            didReclaimWindow = true
+            return
+        }
+
+        if let lastError = outcome.lastError {
+            runtime.errorMessage = "Context compression failed: \(lastError.localizedDescription)"
+            runtime.errorDetails = Self.details(for: lastError)
+        } else {
+            runtime.errorMessage = "Context compression failed: no usable summary provider is configured."
+            runtime.errorDetails = nil
+        }
+    }
+
+    /// 压缩核心：切块摘要并把结果写回 runtime 的 model-facing 摘要状态。
+    /// 不含 between-turns 的恢复机制（队列消费 / runway 恢复），供
+    /// runContextCompression（手动/自动压缩）与升档前压缩两条路径共用。
+    @MainActor
+    private func performCompression(
+        for runtime: AgentRuntime,
+        head: [AgentMessage],
+        priorSummary: String?,
+        configurations: [AgentConfiguration]
+    ) async -> (reclaimed: Bool, lastError: Error?) {
         let segments = Self.compressionTranscriptSegments(
             head: head,
             priorSummary: priorSummary
+        )
+
+        // some.im 归因头：压缩流量此前不带 session/workspace id，服务端
+        // 看不出这笔请求属于哪个会话。与主循环同一构造（AppStateAgentLoop），
+        // 发请求时仅对 some.im 配置附加。
+        let someIMContext = SomeIMRequestContext(
+            sessionID: runtime.id.uuidString,
+            workspaceID: AgentWorkspaceIdentityStore.workspaceID(
+                forWorkspaceKey: Self.managedWorkspaceKey(for: runtime)
+            )
         )
 
         var lastError: Error?
@@ -190,7 +242,8 @@ extension AppState {
             do {
                 let trimmed = try await summarizeForCompression(
                     segments: segments,
-                    configuration: configuration
+                    configuration: configuration,
+                    someIMContext: someIMContext
                 )
                 guard !trimmed.isEmpty else {
                     lastError = AgentClientError.serverStatus(
@@ -209,21 +262,79 @@ extension AppState {
                 }
                 runtime.contextSummary = trimmed
                 runtime.contextSummaryThroughMessageID = head.last?.id
-                didReclaimWindow = true
-                return
+                return (true, nil)
             } catch {
                 lastError = error
                 continue
             }
         }
+        return (false, lastError)
+    }
 
-        if let lastError {
-            runtime.errorMessage = "Context compression failed: \(lastError.localizedDescription)"
-            runtime.errorDetails = Self.details(for: lastError)
-        } else {
-            runtime.errorMessage = "Context compression failed: no usable summary provider is configured."
-            runtime.errorDetails = nil
+    /// 省心托管升档前压缩（设计见 muchtoken docs/someim-32b-compressor.md）。
+    ///
+    /// 升档时刻是压缩的最低成本时机：前缀缓存按模型隔离，切到高档模型
+    /// 本来就必然使缓存失效，此刻压缩不损失任何已有缓存价值；而高档位
+    /// 配额乘数更高、input 又是 agent 负载大头，压缩直接砍在最贵的地方。
+    /// 只压老历史（最近消息保留原文，切分语义与手动压缩一致），估算历史
+    /// 低于阈值时直接原文升档——为省小钱把细节喂进有损摘要，得不偿失。
+    ///
+    /// 与常规压缩不同：本方法在 turn 内同步 await（升档请求发出前完成），
+    /// 不走 runContextCompression 的 between-turns 恢复机制（队列消费 /
+    /// runway 恢复都以「不在响应中」为前提，turn 内触发会打架）。压缩失败
+    /// 不阻塞升档，原文照发，本次只是没省到钱。结果照常写回
+    /// contextSummary，本次升档请求与后续轮次（含降档回落）都受益。
+    @MainActor
+    func compressBeforeManagedEscalationIfNeeded(
+        for runtime: AgentRuntime,
+        escalatedModel: String,
+        providerID: String
+    ) async {
+        guard !runtime.isCompressingContext else { return }
+        let window = Self.agentContextWindow(model: escalatedModel, providerID: providerID)
+        let threshold = Self.escalationCompressionThresholdTokens(window: window)
+        let history = Self.modelFacingHistory(
+            messages: runtime.messages,
+            contextSummary: runtime.contextSummary,
+            contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
+        )
+        let collapsed = Self.collapseOldToolResults(in: history)
+        // 只算消息本身：工具 schema 是固定开销，压缩收不回来，不该参与
+        // 「值不值得压」的判断。
+        let estimated = Self.estimateAgentTokens(messages: collapsed, tools: [])
+        guard estimated >= threshold else { return }
+        guard let plan = compressionPlan(for: runtime, keepRecent: 4) else { return }
+
+        runtime.isCompressingContext = true
+        defer {
+            runtime.isCompressingContext = false
+            persistAgentSession(runtime: runtime)
         }
+        _ = await performCompression(
+            for: runtime,
+            head: plan.head,
+            priorSummary: plan.priorSummary,
+            configurations: contextCompressionConfigurationCandidates()
+        )
+    }
+
+    /// 升档前压缩的触发下限：min(32k, 目标窗口的 25%)。
+    nonisolated static func escalationCompressionThresholdTokens(window: Int) -> Int {
+        min(32_000, max(1, window / 4))
+    }
+
+    /// 本次省心托管路由是否构成「升档」：上一轮解析过的模型档位低于本轮
+    /// 档位。首个托管轮次（无上一轮记录）或上一轮模型不在档位表里时不算
+    /// 升档——没有「便宜模型攒下的历史」可言。输出质检的 mid-turn 升档
+    /// 重跑不走本判定（一轮之内不改写历史，避免 tool_call 配对漂移）。
+    nonisolated static func managedEscalationCrossesTier(
+        previousModel: String?,
+        newTier: AgentManagedCapabilityTier
+    ) -> Bool {
+        guard let previousTier = previousModel.flatMap(SomeIMManagedModel.tier(of:)) else {
+            return false
+        }
+        return newTier > previousTier
     }
 
     /// Fold the transcript in budget-sized chunks, then fold the partial
@@ -237,7 +348,8 @@ extension AppState {
     @MainActor
     private func summarizeForCompression(
         segments: [String],
-        configuration: AgentConfiguration
+        configuration: AgentConfiguration,
+        someIMContext: SomeIMRequestContext?
     ) async throws -> String {
         let window = Self.agentContextWindow(
             model: configuration.model,
@@ -251,7 +363,11 @@ extension AppState {
             let chunks = Self.compressionChunks(segments: current, tokenBudget: budget)
             guard !chunks.isEmpty else { return "" }
             do {
-                let summaries = try await summarizeChunks(chunks, configuration: configuration)
+                let summaries = try await summarizeChunks(
+                    chunks,
+                    configuration: configuration,
+                    someIMContext: someIMContext
+                )
                 if chunks.count == 1 || summaries.count <= 1 {
                     return summaries.first ?? ""
                 }
@@ -323,12 +439,14 @@ extension AppState {
     @MainActor
     private func summarizeChunks(
         _ chunks: [String],
-        configuration: AgentConfiguration
+        configuration: AgentConfiguration,
+        someIMContext: SomeIMRequestContext?
     ) async throws -> [String] {
         if chunks.count == 1 {
             let summary = try await requestCompressionSummary(
                 transcript: chunks[0],
                 configuration: configuration,
+                someIMContext: someIMContext,
                 part: 1,
                 partCount: 1
             )
@@ -345,6 +463,7 @@ extension AppState {
                     let summary = try await self.requestCompressionSummary(
                         transcript: transcript,
                         configuration: configuration,
+                        someIMContext: someIMContext,
                         part: index + 1,
                         partCount: partCount
                     )
@@ -370,17 +489,20 @@ extension AppState {
     private func requestCompressionSummary(
         transcript: String,
         configuration: AgentConfiguration,
+        someIMContext: SomeIMRequestContext?,
         part: Int,
         partCount: Int
     ) async throws -> String {
-        let client = AgentClient(configuration: configuration)
+        let context = configuration.providerID == AgentProviderPreset.someIMID
+            ? someIMContext
+            : nil
+        let client = AgentClient(configuration: configuration, someIMContext: context)
         let collector = CompressionSummaryCollector()
-        let messages = AgentLocalModelPrompting.messagesWithLanguageInstruction(
-            systemPrompt: Self.compressionSystemPrompt(part: part, partCount: partCount),
-            userMessages: [
-                AgentMessage(role: .user, content: "Transcript to compress:\n\n\(transcript)")
-            ],
-            configuration: configuration
+        let messages = Self.compressionRequestMessages(
+            transcript: transcript,
+            configuration: configuration,
+            part: part,
+            partCount: partCount
         )
         try await client.streamChat(messages: messages) { event in
             if case .textDelta(let delta) = event {
@@ -388,6 +510,36 @@ extension AppState {
             }
         }
         return await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The exact messages one compression request carries.
+    ///
+    /// Hosted mode (`someim-32b-compressor`): the fixed compression prompt is
+    /// injected by the some.im gateway in replace mode, so the client sends
+    /// only the bare transcript, and the multi-part label rides in the user
+    /// payload — the server prompt stays byte-stable and cache-friendly.
+    /// Every other configuration keeps the local system prompt below as the
+    /// signed-out / custom-provider mirror.
+    nonisolated static func compressionRequestMessages(
+        transcript: String,
+        configuration: AgentConfiguration,
+        part: Int,
+        partCount: Int
+    ) -> [AgentMessage] {
+        if configuration.usesServerManagedCompressionPrompt {
+            var content = "Transcript to compress:\n\n\(transcript)"
+            if partCount > 1 {
+                content = "第 \(part)/\(partCount) 部分（按顺序切分，后续合并）\n\n" + content
+            }
+            return [AgentMessage(role: .user, content: content)]
+        }
+        return AgentLocalModelPrompting.messagesWithLanguageInstruction(
+            systemPrompt: compressionSystemPrompt(part: part, partCount: partCount),
+            userMessages: [
+                AgentMessage(role: .user, content: "Transcript to compress:\n\n\(transcript)")
+            ],
+            configuration: configuration
+        )
     }
 
     nonisolated static func compressionSystemPrompt(part: Int, partCount: Int) -> String {

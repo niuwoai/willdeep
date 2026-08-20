@@ -1,6 +1,6 @@
 # Agent Project Memory Design
 
-> Last updated: 2026-08-20（1.275.0-rc10 起「Markdown 投影 + 每轮索引 + read_memory」已落地，见文末「实现现状」）
+> Last updated: 2026-08-20（1.277.0-rc1 起「Markdown 投影 + 每轮索引 + read_memory」已落地，见文末「实现现状」）
 
 ## 背景
 
@@ -274,7 +274,7 @@ Agent transcript 底部可以继续沿用 turn report：
 - 是否不泄露敏感信息。
 - 是否不把自动生成的经验误当成团队强规则。
 
-## 实现现状（1.275.0-rc10）
+## 实现现状（1.277.0-rc1）
 
 本节记录已落地的部分，以及**刻意没有**照搬 Claude Code 的地方和原因。
 

@@ -1,8 +1,8 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-20（1.275.0-rc10）
+> Last updated: 2026-08-20（1.277.0-rc1）
 
-## 1.275.0-rc10 — Agent 记忆的 Markdown 镜像与按需召回
+## 1.277.0-rc1 — Agent 记忆的 Markdown 镜像与按需召回
 
 - ⏳ 在设置里新增一条项目记忆，确认 `~/Library/Application Support/WillDeep/AgentMemory/projects/<fingerprint>/` 下出现 `MEMORY.md` 和对应的 `topics/*.md`，索引行能独立看懂。
 - ⏳ 新增一条全局记忆，确认它落在 `global/` 而不是项目树里，且项目索引里看不到它。
