@@ -92,6 +92,13 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
     var model: String?
     var prompt: String?
     var createdAt: Date?
+    /// Tool that produced this image, stamped when a tool result's images
+    /// are lifted onto the assistant message. While a turn runs, images sit
+    /// on their tool card and the origin is obvious; once the turn settles
+    /// the card collapses and the picture would otherwise float free of
+    /// whatever produced it. Nil for user uploads and for images recorded
+    /// before this field existed.
+    var originToolName: String?
 
     init(
         id: UUID = UUID(),
@@ -101,7 +108,8 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
         filePath: String? = nil,
         model: String? = nil,
         prompt: String? = nil,
-        createdAt: Date? = nil
+        createdAt: Date? = nil,
+        originToolName: String? = nil
     ) {
         self.id = id
         self.mimeType = mimeType
@@ -113,6 +121,7 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
         self.model = model
         self.prompt = prompt
         self.createdAt = createdAt
+        self.originToolName = originToolName
     }
 
     init(
@@ -124,7 +133,8 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
         source: AgentImageAttachmentSource? = nil,
         model: String? = nil,
         prompt: String? = nil,
-        createdAt: Date? = nil
+        createdAt: Date? = nil,
+        originToolName: String? = nil
     ) {
         self.id = id
         self.mimeType = mimeType
@@ -136,10 +146,12 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
         self.model = model
         self.prompt = prompt
         self.createdAt = createdAt
+        self.originToolName = originToolName
     }
 
     enum CodingKeys: String, CodingKey {
         case id, mimeType, dataBase64, filePath, byteCount, sha256, source, model, prompt, createdAt
+        case originToolName
     }
 
     init(from decoder: Decoder) throws {
@@ -155,6 +167,7 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
         model = try container.decodeIfPresent(String.self, forKey: .model)
         prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        originToolName = try container.decodeIfPresent(String.self, forKey: .originToolName)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -171,6 +184,7 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
         try container.encodeIfPresent(model, forKey: .model)
         try container.encodeIfPresent(prompt, forKey: .prompt)
         try container.encodeIfPresent(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(originToolName, forKey: .originToolName)
     }
 
     /// Decoded inline bytes, if any — nil for purely file-backed images.
@@ -211,6 +225,22 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
             return "file|\(filePath)|\(sha256 ?? "")"
         }
         return "inline|\(id.uuidString)|\(inlineDataBase64?.count ?? 0)"
+    }
+
+    /// One-line provenance shown under a content-sized image: which tool
+    /// took it, or which model generated it. Nil when there is nothing to
+    /// say beyond "the user attached this".
+    nonisolated var originCaption: String? {
+        if let toolName = originToolName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !toolName.isEmpty {
+            return "↳ \(toolName)"
+        }
+        if source == .generated,
+           let model = model?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !model.isEmpty {
+            return "↳ \(model)"
+        }
+        return nil
     }
 
     nonisolated var generatedReferenceMarker: String? {
