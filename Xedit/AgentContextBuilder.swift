@@ -295,7 +295,7 @@ enum AgentContextBuilder {
 
             Follow the user's latest message:
             - If it starts a different task, do that task directly. Do not resume the interrupted plan, do not treat its steps as pending work, and do not mention it unless relevant. For a genuinely multi-step new task, emit one complete numbered `plan` fenced block — it replaces the interrupted plan as the visible checklist.
-            - If it asks to continue or resume, pick the interrupted plan back up from its current step statuses and report progress with `progress` fenced blocks as usual.
+            - If it asks to continue or resume, pick the interrupted plan back up from its current step statuses. Emit a `progress` block marking the step you are resuming as in_progress BEFORE you start working on it — that block is what tells WillDeep the plan is live again and clears the paused badge the user is looking at. Keep reporting with `progress` blocks as usual after that.
             - If it is ambiguous about which of the two they mean, ask one concise question instead of guessing.
             """)
         } else if interactionMode == .normal, let plan = currentPlan,
@@ -1058,6 +1058,24 @@ nonisolated enum AgentPlanParser {
             next.status = .executing
         }
         return next
+    }
+
+    /// Lift a plan's paused badge as soon as the model commits to resuming it.
+    ///
+    /// Returns the un-paused plan when `content` carries a `progress` block
+    /// that parses against it, and nil when nothing should change — the plan
+    /// is not paused, or the model is doing something else entirely.
+    ///
+    /// Deliberately narrower than `applyProgress`: only `interruptedAt` is
+    /// cleared, step statuses are left alone. This runs against streaming
+    /// content, where a `progress` block can still be half-written, and the
+    /// end-of-turn capture owns the checklist itself.
+    static func liftingInterruption(of plan: AgentPlan, from content: String) -> AgentPlan? {
+        guard plan.isInterrupted else { return nil }
+        guard applyProgress(to: plan, from: content) != nil else { return nil }
+        var lifted = plan
+        lifted.interruptedAt = nil
+        return lifted
     }
 
     fileprivate static func fencedBody(in content: String, tag: String) -> String? {
