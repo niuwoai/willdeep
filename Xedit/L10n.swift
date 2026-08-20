@@ -1309,12 +1309,13 @@ nonisolated enum L10n {
     }
 
     enum QueuedMessage {
+        static let adjustDirection = String(localized: "queued-message.adjust-direction", defaultValue: "Adjust direction")
         static let actionsButton = String(localized: "queued-message.actions-button", defaultValue: "Queued message actions")
         static let actionsButtonHelp = String(localized: "queued-message.actions-button.help", defaultValue: "Show queued message actions")
         static let deleteButton = String(localized: "queued-message.delete-button", defaultValue: "Delete")
         static let deleteButtonHelp = String(localized: "queued-message.delete-button.help", defaultValue: "Delete this queued message")
         static let dragHelp = String(localized: "queued-message.drag.help", defaultValue: "Drag to reorder queued messages")
-        static let editButton = String(localized: "queued-message.edit-button", defaultValue: "Edit queued message")
+        static let editButton = String(localized: "queued-message.edit-button", defaultValue: "Edit message")
         static let editButtonHelp = String(localized: "queued-message.edit-button.help", defaultValue: "Edit this queued message in the composer")
         static let emptyPreview = String(localized: "queued-message.empty-preview", defaultValue: "Queued message")
         static func imageCount(_ a1: String) -> String {
@@ -1322,6 +1323,8 @@ nonisolated enum L10n {
             return String(format: template, a1)
         }
         static let label = String(localized: "queued-message.label", defaultValue: "Queued")
+        static let openInSideChat = String(localized: "queued-message.open-in-side-chat", defaultValue: "Open in side chat")
+        static let closeQueue = String(localized: "queued-message.close-queue", defaultValue: "Close queue")
         static let sendNowButton = String(localized: "queued-message.send-now-button", defaultValue: "Send queued message now")
         static let sendNowButtonHelp = String(localized: "queued-message.send-now-button.help", defaultValue: "Send this queued message now")
         static let sendNowCompact = String(localized: "queued-message.send-now-compact", defaultValue: "Send now")

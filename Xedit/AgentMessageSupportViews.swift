@@ -602,6 +602,8 @@ struct QueuedMessagesList: View {
     var onEdit: (AgentQueuedMessage) -> Void = { _ in }
     var onSendNow: (AgentQueuedMessage) -> Void = { _ in }
     var onRemove: (AgentQueuedMessage) -> Void = { _ in }
+    var onOpenInSideChat: (AgentQueuedMessage) -> Void = { _ in }
+    var onCloseQueue: () -> Void = {}
     var onMove: (AgentQueuedMessage.ID, AgentQueuedMessage.ID) -> Void = { _, _ in }
     @State private var draggedMessageID: AgentQueuedMessage.ID?
 
@@ -614,6 +616,8 @@ struct QueuedMessagesList: View {
                     onEdit: { onEdit(message) },
                     onSendNow: { onSendNow(message) },
                     onRemove: { onRemove(message) },
+                    onOpenInSideChat: { onOpenInSideChat(message) },
+                    onCloseQueue: onCloseQueue,
                     onDragStarted: { draggedMessageID = message.id }
                 )
                 .onDrop(
@@ -652,75 +656,67 @@ private struct QueuedMessageRow: View {
     var onEdit: () -> Void = {}
     var onSendNow: () -> Void = {}
     var onRemove: () -> Void = {}
+    var onOpenInSideChat: () -> Void = {}
+    var onCloseQueue: () -> Void = {}
     var onDragStarted: () -> Void = {}
+    @State private var isHovering = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 9, weight: .semibold))
+            sixDotDragHandle
                 .foregroundStyle(.tertiary)
                 .frame(width: 12, height: 24)
+                .opacity(isHovering ? 1 : 0)
                 .contentShape(Rectangle())
                 .onDrag {
                     onDragStarted()
                     return NSItemProvider(object: message.id.uuidString as NSString)
                 } preview: {
-                    Image(systemName: "line.3.horizontal")
-                        .padding(8)
+                    sixDotDragHandle.padding(8)
                 }
                 .help(L10n.QueuedMessage.dragHelp)
-            Image(systemName: "exclamationmark.circle")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(AgentComposerChrome.iconMuted)
-                .frame(width: 16)
             HStack(alignment: .center, spacing: 6) {
-                // The hourglass alone says "queued"; spelling it out cost a
-                // second line of height for a word the icon already carries.
-                // The label survives as the icon's accessibility text.
-                HStack(alignment: .center, spacing: 5) {
-                    Image(systemName: "hourglass")
-                        .font(.system(size: 10))
-                        .foregroundStyle(AgentComposerChrome.iconMuted)
-                        .accessibilityLabel(L10n.QueuedMessage.label)
-                    Text(previewText)
-                        .font(AgentDesign.chatSupportingFont(baseFontSize: baseFontSize))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
+                Text(previewText)
+                    .font(AgentDesign.chatSupportingFont(baseFontSize: baseFontSize))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .accessibilityLabel(L10n.QueuedMessage.label)
                 Spacer(minLength: 8)
-                // Send-now is the one action worth a permanent target: it is
-                // what the row exists for. Edit and delete are occasional and
-                // one of them is destructive, so they move behind the overflow
-                // menu where a stray click cannot reach them.
-                HStack(spacing: 2) {
+                HStack(spacing: 4) {
                     Button(action: onSendNow) {
                         HStack(spacing: 5) {
-                            Text(L10n.QueuedMessage.sendNowCompact)
-                            Image(systemName: "return")
-                                .font(.system(size: 10, weight: .semibold))
+                            Image(systemName: "arrow.turn.down.right")
+                            Text(L10n.QueuedMessage.adjustDirection)
                         }
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 9)
-                        .frame(minHeight: 28)
-                        .contentShape(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        )
+                        .foregroundStyle(.secondary)
+                        .frame(minHeight: 24)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .background(Color.primary.opacity(0.055))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.primary.opacity(0.10), lineWidth: 1)
-                    )
                     .focusable(false)
                     .accessibilityLabel(L10n.QueuedMessage.sendNowButton)
                     .help(L10n.QueuedMessage.sendNowButtonHelp)
+
+                    iconButton(
+                        systemName: "trash",
+                        accessibilityLabel: L10n.QueuedMessage.deleteButton,
+                        help: L10n.QueuedMessage.deleteButtonHelp,
+                        action: onRemove
+                    )
+
                     Menu {
-                        Button(L10n.QueuedMessage.editButton, action: onEdit)
-                        Button(L10n.QueuedMessage.deleteButton, role: .destructive, action: onRemove)
+                        Button(action: onEdit) {
+                            Label(L10n.QueuedMessage.editButton, systemImage: "pencil")
+                        }
+                        Button(action: onOpenInSideChat) {
+                            Label(L10n.QueuedMessage.openInSideChat, systemImage: "plus.bubble")
+                        }
+                        Divider()
+                        Button(action: onCloseQueue) {
+                            Label(L10n.QueuedMessage.closeQueue, systemImage: "arrow.turn.down.left")
+                        }
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 12, weight: .semibold))
@@ -741,6 +737,19 @@ private struct QueuedMessageRow: View {
         // Single-line row: 28pt send-now button plus 4pt breathing room
         // top and bottom, down from the 46pt the two-line layout needed.
         .frame(height: 36)
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+    }
+
+    private var sixDotDragHandle: some View {
+        VStack(spacing: 2) {
+            ForEach(0..<3, id: \.self) { _ in
+                HStack(spacing: 2) {
+                    Circle().frame(width: 2.5, height: 2.5)
+                    Circle().frame(width: 2.5, height: 2.5)
+                }
+            }
+        }
     }
 
     private var previewText: String {

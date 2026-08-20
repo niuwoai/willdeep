@@ -1491,7 +1491,7 @@ enum AgentChatHistoryRenderer {
                             ]))
                             result.append(AgentChatHistoryTableChrome.openInWindowIcon(
                                 pointSize: 12,
-                                color: NSColor.linkColor
+                                color: NSColor.secondaryLabelColor
                             ))
                             let linkRange = NSRange(location: linkStart, length: result.length - linkStart)
                             result.addAttributes(
@@ -1742,12 +1742,12 @@ enum AgentChatHistoryRenderer {
         }
     }
 
-    /// A deliberately understated link color: the system link blue pulled
-    /// part-way toward the body text color so links read as "tappable and
-    /// a little different" without the loud full-saturation blue. Adapts
-    /// to light/dark because both inputs are appearance-aware.
+    /// Chat links belong to the same quiet chrome as retry/copy actions.
+    /// Keep them grayscale so adjacent actions do not mix a blue link with
+    /// neutral controls; a slightly darker gray still signals interactivity.
     private static func webLinkColor(base: NSColor) -> NSColor {
-        NSColor.linkColor.blended(withFraction: 0.3, of: base) ?? NSColor.linkColor
+        NSColor.secondaryLabelColor.blended(withFraction: 0.24, of: base)
+            ?? NSColor.secondaryLabelColor
     }
 
     private static func headingFont(level: Int) -> NSFont {
