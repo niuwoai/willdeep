@@ -312,5 +312,27 @@ final class AgentStreamingMessageBuffer {
             updated.toolCalls = toolCalls
         }
         runtime.messages[index] = updated
+        liftPlanInterruptionIfResuming(content: snapshot.content, runtime: runtime)
+    }
+
+    /// Drop the "Interrupted" pill as soon as the model commits to resuming
+    /// the plan, instead of a whole turn later.
+    ///
+    /// `interruptedAt` was cleared only by the end-of-turn capture
+    /// (`applyAgentPlanProgressFromLatestMessage`). A resumed plan therefore
+    /// spent the entire turn — route edits, compiles, new files — with its
+    /// card still reading "已中断" while the transcript plainly showed work
+    /// happening. Watch the stream for the same `progress` block that capture
+    /// keys off and lift the pause the moment it parses.
+    ///
+    /// Only the flag is lifted here. Step statuses stay with the end-of-turn
+    /// capture: a `progress` block can still be mid-stream, and half-written
+    /// rows must not be written into the checklist.
+    private func liftPlanInterruptionIfResuming(content: String, runtime: AgentRuntime) {
+        guard let plan = runtime.currentPlan,
+              let lifted = AgentPlanParser.liftingInterruption(of: plan, from: content) else {
+            return
+        }
+        runtime.currentPlan = lifted
     }
 }
