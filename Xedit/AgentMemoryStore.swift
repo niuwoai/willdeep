@@ -398,6 +398,61 @@ nonisolated enum AgentMemoryEngine {
         return lines.joined(separator: "\n")
     }
 
+    /// Compact catalogue of every other memory that applies here.
+    ///
+    /// `contextBlock` above is the floor: it guarantees the few highest-scoring
+    /// memories reach the model whatever model this session routes to. This is
+    /// the complement — one hook line per remaining memory, so a memory that
+    /// keyword scoring failed to surface is still *visible*, and the model can
+    /// pull it with `read_memory` instead of never learning it existed.
+    ///
+    /// Deliberately hooks rather than titles: a routine may be running on a
+    /// small flash model that will not spend a tool call on a vague heading,
+    /// and a hook line is already useful on its own if it never does.
+    static func indexBlock(
+        records: [AgentMemoryRecord],
+        excluding excludedIDs: Set<UUID>,
+        settings: AgentMemorySettings,
+        rootDirectory: URL?,
+        entryLimit: Int = 24,
+        characterBudget: Int = 1_800
+    ) -> String? {
+        guard settings.isMemoryEnabled, settings.autoRetrievalEnabled else { return nil }
+        let projectID = projectFingerprint(for: rootDirectory)
+        let rootPath = rootDirectory?.standardizedFileURL.path
+        let candidates = records
+            .map(\.normalized)
+            .filter { !$0.isArchived }
+            .filter { !excludedIDs.contains($0.id) }
+            .filter { applies($0, projectID: projectID, rootPath: rootPath) }
+            .sorted { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+        guard !candidates.isEmpty else { return nil }
+
+        var lines = [
+            "Agent memory index (\(candidates.count) more stored):",
+            "One line per memory. Call read_memory with the id in backticks when a line looks relevant to the task at hand."
+        ]
+        var used = 0
+        var written = 0
+        for record in candidates {
+            guard written < entryLimit else { break }
+            let entry = AgentMemoryProjection.entry(for: record)
+            let line = "- `\(AgentMemoryProjection.shortID(record.id))` \(entry.hook)"
+            guard used + line.count <= characterBudget else { break }
+            lines.append(line)
+            used += line.count
+            written += 1
+        }
+        guard written > 0 else { return nil }
+        if written < candidates.count {
+            lines.append("- (\(candidates.count - written) older memories not listed)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private static func limitForPrompt(_ value: String, maxCharacters: Int) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > maxCharacters else { return trimmed }
@@ -621,8 +676,12 @@ nonisolated enum AgentMemorySettingsStore {
     }
 
     static func saveRecords(_ records: [AgentMemoryRecord]) {
-        guard let data = try? JSONEncoder().encode(clean(records)) else { return }
+        let cleaned = clean(records)
+        guard let data = try? JSONEncoder().encode(cleaned) else { return }
         UserDefaults.standard.set(data, forKey: recordsKey)
+        // Mirror to Markdown so memory is greppable, diffable, and reviewable.
+        // Async and change-only inside; UserDefaults stays authoritative.
+        AgentMemoryProjection.project(records: cleaned)
     }
 
     private static func clean(_ records: [AgentMemoryRecord]) -> [AgentMemoryRecord] {

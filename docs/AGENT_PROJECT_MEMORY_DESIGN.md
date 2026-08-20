@@ -1,6 +1,6 @@
 # Agent Project Memory Design
 
-> Last updated: 2026-07-06
+> Last updated: 2026-08-20（1.275.0-rc10 起「Markdown 投影 + 每轮索引 + read_memory」已落地，见文末「实现现状」）
 
 ## 背景
 
@@ -273,6 +273,58 @@ Agent transcript 底部可以继续沿用 turn report：
 - 是否能删除、改正、审计。
 - 是否不泄露敏感信息。
 - 是否不把自动生成的经验误当成团队强规则。
+
+## 实现现状（1.275.0-rc10）
+
+本节记录已落地的部分，以及**刻意没有**照搬 Claude Code 的地方和原因。
+
+### 已落地
+
+**1. Markdown 投影（`AgentMemoryProjection`）**
+
+记录本身仍存在 `UserDefaults`（`AgentMemorySettingsStore`）里——它是权威来源，但不可 grep、不可 diff、不可 review。现在每次 `saveRecords` 都会把同一批记录镜像到磁盘：
+
+```text
+~/Library/Application Support/WillDeep/AgentMemory/
+├── global/
+│   ├── MEMORY.md
+│   └── topics/<slug>.md
+└── projects/<fingerprint>/
+    ├── MEMORY.md
+    └── topics/<slug>.md
+```
+
+- **单向投影**。两份可写副本需要一套没人要求过的冲突解决，所以文件头写明「Generated … Edits here are overwritten」，store 保持唯一真源。
+- 写入走串行后台队列、且只写内容真正变化的文件——记忆保存是 `@Published` didSet 触发的，一轮可能触发多次，无条件重写会把 mtime 搅烂，目录就失去「Agent 什么时候学到这条」的记录价值。
+- 归档记忆不投影（召回本来也跳过），删除/归档会同步删掉对应文件——留在那儿的文件等于还在主张一件 Agent 已经不信的事。
+- slug 由关键词 + 短 id 组成。**id 后缀不是装饰**：关键词词干极易碰撞（三条关于 release 的记忆会归到同一个词干），碰撞就意味着一条文件覆盖另一条。
+
+**2. 每轮索引块（`AgentMemoryEngine.indexBlock`）**
+
+原来只有打分召回：宿主选 top-N 塞进 prompt，模型没有选择权。现在在它之后追加一段索引——每条剩余记忆一行钩子 + 短 id，带预算上限（默认 24 条 / 1800 字符）。
+
+**3. `read_memory` 工具**
+
+模型按索引里的短 id 拉取全文。读的是 store 不是投影文件：投影是单向镜像，漂移过的文件绝不能反过来喂给模型一个 store 已经不认的答案。
+
+### 与 Claude Code 的差异（刻意的）
+
+Claude Code 的 auto memory 是**纯模型驱动**：索引进 context，详情靠模型自觉去读。WillDeep 没有照搬，因为两边的模型假设不同——WillDeep 的会话模型可以是省心托管路由到的小模型（`deepseek-v4-flash`、`glm-5` 这类），定时任务尤其常跑在这上面。**「看索引、自己判断该读哪条」对小模型的执行度是不稳定的**，它很可能直接跳过，那条本来靠打分能保底拿到的上下文就丢了。
+
+所以这里是**两层并存**，不是替换：
+
+| 层 | 谁决定 | 保证 |
+| --- | --- | --- |
+| 打分召回（`contextBlock`） | 宿主 | 不管什么模型，top-N 一定送到 |
+| 索引 + `read_memory` | 模型 | 打分漏掉的条目至少**可见**，有能力的模型可以挖深 |
+
+同理，索引行写的是**钩子而不是标题**。标题式索引（只写「数据库迁移」）对不肯花一次工具调用的小模型等于零信息；钩子行即使模型永远不去读详情，本身已经可用。
+
+### 待办
+
+- 反向导入：目前编辑投影出来的 md 不会回写 store，下次保存就被覆盖。要做的话需要文件监听 + 冲突策略。
+- 跨仓库项目组：Xedit 与 willdeep-rs 是同一产品的两个仓库，`projectFingerprint` 由路径派生，两边各算一个项目，记忆不共享。需要显式的「项目组」概念才能合并。
+- 候选制（`status: candidate | approved`）与来源审计字段仍未实现，当前 `add_memory` 走的是「批准即写入」。
 
 ## 参考资料
 

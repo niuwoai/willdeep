@@ -1,6 +1,17 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-20（1.275.0-rc8）
+> Last updated: 2026-08-20（1.275.0-rc10）
+
+## 1.275.0-rc10 — Agent 记忆的 Markdown 镜像与按需召回
+
+- ⏳ 在设置里新增一条项目记忆，确认 `~/Library/Application Support/WillDeep/AgentMemory/projects/<fingerprint>/` 下出现 `MEMORY.md` 和对应的 `topics/*.md`，索引行能独立看懂。
+- ⏳ 新增一条全局记忆，确认它落在 `global/` 而不是项目树里，且项目索引里看不到它。
+- ⏳ 编辑该记忆的内容，确认 topic 文件跟着更新、索引行也跟着变。
+- ⏳ 删除或归档一条记忆，确认对应 topic 文件消失、索引里不再列它。
+- ⏳ 什么都不改再触发一次保存（比如改个无关设置），确认 `MEMORY.md` 的修改时间**没有**变。
+- ⏳ 在有多条记忆的工作区发一条消息，让 Agent 复述它看到的记忆索引，确认里面有短 id；再让它 `read_memory` 拉其中一条，确认返回全文。
+- ⏳ 关掉设置里的记忆开关（或自动召回），确认索引块不再出现在上下文里（可用 composer 的上下文占用估算对比）。
+- ⏳ 切到另一个工作区，确认上一个项目的记忆既不出现在索引里，`read_memory` 用它的 id 也取不到。
 
 ## 1.275.0-rc8 — 后台任务面板与自动化运行结果
 
