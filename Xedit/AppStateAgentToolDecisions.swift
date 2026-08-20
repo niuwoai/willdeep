@@ -88,6 +88,7 @@ extension AppState {
                 interactionMode: runtime.interactionMode,
                 approvalMode: runtime.approvalMode,
                 conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                environmentTrustDeclarations: runtime.environmentTrustDeclarations,
                 latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
             )
         } else {
@@ -311,10 +312,19 @@ extension AppState {
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
         conversationAllowedToolSignatures: Set<String> = [],
+        environmentTrustDeclarations: [AgentEnvironmentTrustDeclaration] = [],
         computerUseOwner: AgentComputerUseOwner? = nil,
         latestUserMessage: String = ""
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
+
+        // 环境信任声明本身永不自动通过——任何模式、任何 pin、Goal 免审都
+        // 够不到它。一次人工点击 = 一次授权仪式：注入文本骗 Agent 调这个
+        // 工具时，用户会在卡片上看到被逐字引用的"用户原话"，认出自己从未
+        // 说过而拒绝。这是整个特性防注入自授权的关键闸门。
+        if AgentEnvironmentTrust.neverAutoApprovedToolNames.contains(toolName) {
+            return nil
+        }
 
         // Renaming the originating session is a bounded, reversible local
         // metadata write. Keep it write-tier for ordering and auditability,
@@ -560,25 +570,38 @@ extension AppState {
                   !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return nil
             }
+            let trustDeclaration = AgentEnvironmentTrust.covers(
+                toolName: toolName,
+                command: command,
+                declarations: environmentTrustDeclarations
+            )
+            // 凭据类命中永不因声明放宽——哪怕用户声明"整台机器都是一次性的"。
+            // 凭据外读是注入攻击的终点站，这道门不接受来自模型侧的说服。
+            let trusted = trustDeclaration != nil && !sandboxDecision.credentialSensitive
             switch SafeCommand.classify(command: command) {
             case .alwaysSafe:
                 // Only context-independent reads are static in a visible
                 // terminal. SafeCommand also certifies bounded workspace
                 // builders/creators, but this terminal may currently point
                 // at a remote host or directory, so those still need review.
-                if sandboxDecision.mode == .readOnly
+                // 用户声明这个终端是一次性环境时，"不知道终端指向哪儿"这个
+                // 顾虑正好被补上，静态放行不再要求只读沙箱档。
+                if trusted
+                    || sandboxDecision.mode == .readOnly
                     || sandboxDecision.mode == .readOnlyNetwork {
                     return .staticAllowlist
                 }
             case .alwaysDangerous:
-                return nil
+                // 声明只把"直接人工"降为"送裁判"，绝不直接放行：裁判仍可否决。
+                guard trusted else { return nil }
             case .needsJudgment:
                 break
             }
             return await safetyJudgeApproval(
                 toolName: toolName,
                 command: command,
-                taskContext: latestUserMessage
+                taskContext: latestUserMessage,
+                trustDeclaration: trustDeclaration
             )
         }
 
@@ -619,11 +642,18 @@ extension AppState {
             }
         }
 
+        let trustDeclaration = AgentEnvironmentTrust.covers(
+            toolName: toolName,
+            command: command,
+            declarations: environmentTrustDeclarations
+        )
+        let trusted = trustDeclaration != nil && !sandboxDecision.credentialSensitive
         switch SafeCommand.classify(command: command) {
         case .alwaysSafe:
             return .staticAllowlist
         case .alwaysDangerous:
-            return nil
+            // 测试库声明把 DROP/TRUNCATE 这类降为"送裁判"，而不是直接放行。
+            guard trusted else { return nil }
         case .needsJudgment:
             break
         }
@@ -631,7 +661,8 @@ extension AppState {
         return await safetyJudgeApproval(
             toolName: toolName,
             command: command,
-            taskContext: latestUserMessage
+            taskContext: latestUserMessage,
+            trustDeclaration: trustDeclaration
         )
     }
 
@@ -725,9 +756,13 @@ extension AppState {
     func safetyJudgeApproval(
         toolName: String,
         command: String,
-        taskContext: String = ""
+        taskContext: String = "",
+        trustDeclaration: AgentEnvironmentTrustDeclaration? = nil
     ) async -> AgentToolApprovalSource? {
         let judgeTaskContext = AgentInjectionDefense.redactedTaskContextForSafetyJudge(taskContext)
+        let trustFingerprint = trustDeclaration.map {
+            AgentEnvironmentTrust.fingerprint([$0])
+        } ?? ""
         // A recent YES for this tool + exact normalized command skips the network
         // round trip entirely. Only allows are cached (a deny still falls
         // through to the user each time), and the static danger gates run
@@ -736,7 +771,8 @@ extension AppState {
         let cacheKey = AgentToolAuthorization.judgeVerdictCacheKey(
             toolName: toolName,
             command: command,
-            taskContext: judgeTaskContext
+            taskContext: judgeTaskContext,
+            environmentTrustFingerprint: trustFingerprint
         )
         if let grantedAt = cachedJudgeAllowedVerdicts[cacheKey],
            Date().timeIntervalSince(grantedAt) < Self.safetyJudgeVerdictCacheTTL {
@@ -755,6 +791,15 @@ extension AppState {
         // 发起一次注定失败的请求，且唯一替补 some.im 安全卫士恰恰在未登录时
         // 也是 nil——裁判必然缺席，全部回落人工。现在没钥匙的候选不占跳数，
         // 替补链还包括 provider 库里其它当下真正可用的入口。
+        // 声明文本逐字带上用户原话：裁判据此判断这条命令是否落在用户
+        // 亲口描述的那个环境里，而不是仅凭一个类别标签放宽。
+        let trustPayload = trustDeclaration.map { declaration in
+            """
+            kind: \(declaration.kind.rawValue)
+            target: \(declaration.target.isEmpty ? "(unspecified)" : declaration.target)
+            user statement: \(declaration.userStatement)
+            """
+        } ?? ""
         let candidates = safetyJudgeCandidateConfigurations()
         var effectiveConfiguration = candidates.first ?? configurationForSafetyJudge()
         var fallbackDetail = ""
@@ -766,7 +811,8 @@ extension AppState {
                 command: judgeCommand,
                 historyContext: safetyJudgeHistoryContext(),
                 toolName: toolName,
-                taskContext: judgeTaskContext
+                taskContext: judgeTaskContext,
+                environmentTrust: trustPayload
             )
             guard case .unavailable(let reason) = result else { break }
             if fallbackDetail.isEmpty {
@@ -1223,6 +1269,7 @@ extension AppState {
                     interactionMode: runtime.interactionMode,
                     approvalMode: runtime.approvalMode,
                     conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                    environmentTrustDeclarations: runtime.environmentTrustDeclarations,
                     computerUseOwner: runtime.computerUseOwner,
                     latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
                 )

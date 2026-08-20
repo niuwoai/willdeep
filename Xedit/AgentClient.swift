@@ -163,7 +163,8 @@ struct AgentClient {
         command: String,
         historyContext: String = "",
         toolName: String = "run_command",
-        taskContext: String = ""
+        taskContext: String = "",
+        environmentTrust: String = ""
     ) async -> AgentSafetyJudgeResult {
         switch configuration.inferenceProviderKind {
         case .openAIChat:
@@ -172,7 +173,8 @@ struct AgentClient {
                     command: command,
                     historyContext: historyContext,
                     toolName: toolName,
-                    taskContext: taskContext
+                    taskContext: taskContext,
+                    environmentTrust: environmentTrust
                 )
         case .anthropicMessages:
             return await AnthropicMessagesAdapter(configuration: configuration, session: session)
@@ -180,7 +182,8 @@ struct AgentClient {
                     command: command,
                     historyContext: historyContext,
                     toolName: toolName,
-                    taskContext: taskContext
+                    taskContext: taskContext,
+                    environmentTrust: environmentTrust
                 )
         case .geminiGenerateContent:
             return await GeminiAdapter(configuration: configuration, session: session)
@@ -188,7 +191,8 @@ struct AgentClient {
                     command: command,
                     historyContext: historyContext,
                     toolName: toolName,
-                    taskContext: taskContext
+                    taskContext: taskContext,
+                    environmentTrust: environmentTrust
                 )
         case .openAIResponses:
             return await OpenAIResponsesAdapter(
@@ -200,7 +204,8 @@ struct AgentClient {
                     command: command,
                     historyContext: historyContext,
                     toolName: toolName,
-                    taskContext: taskContext
+                    taskContext: taskContext,
+                    environmentTrust: environmentTrust
                 )
         }
     }

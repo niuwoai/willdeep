@@ -354,6 +354,12 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// conversation” action. These deliberately do not enter AgentSession or
     /// disk persistence: closing/reopening the conversation asks again.
     var conversationAllowedToolSignatures: Set<String> = []
+    /// 用户经 declare_environment_trust 工具 + 人工点卡确认建立的环境信任
+    /// 声明（“这个终端是一次性容器”“这个 mysql 是测试实例”）。与上面的
+    /// conversationAllowedToolSignatures 同待遇：只活在 runtime，不进
+    /// AgentSession、不落盘——声明的生命周期与用户“此刻知道环境是什么”
+    /// 的语境绑定，关会话即失效。设计文档：docs/ENVIRONMENT_TRUST_DECLARATIONS.md
+    var environmentTrustDeclarations: [AgentEnvironmentTrustDeclaration] = []
 
     // MARK: - Goal planning gate
 

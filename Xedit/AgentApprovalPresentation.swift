@@ -264,6 +264,8 @@ nonisolated enum AgentApprovalNoticeCopy {
                 approveTitle: "继续",
                 usesOutlinedApproveAction: false
             )
+        case "declare_environment_trust":
+            return environmentTrustDescriptor(arguments: arguments)
         case "terminal_send_command":
             return AgentApprovalNoticeDescriptor(
                 iconName: "rectangle.rightthird.inset.filled",
@@ -352,6 +354,60 @@ nonisolated enum AgentApprovalNoticeCopy {
             workspaceName.map { "在 \($0) 工作区运行" } ?? "在当前工作区运行",
             "可能更新工作区文件",
         ]
+    }
+
+    /// 环境信任声明的确认卡。这张卡是整个特性的防注入闸门：把 Agent 声称的
+    /// “用户原话”原样摆在最显眼处，用户一眼就能认出自己是否真的说过。注入
+    /// 文本骗 Agent 调这个工具时，用户看到的是一句自己从没说过的话。
+    private static func environmentTrustDescriptor(
+        arguments: [String: AgentJSONValue]
+    ) -> AgentApprovalNoticeDescriptor {
+        let kindRaw = (arguments["kind"]?.stringValue() ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if kindRaw == "revoke_all" {
+            return AgentApprovalNoticeDescriptor(
+                iconName: "lock.rotation",
+                title: "Agent 准备撤销环境信任声明",
+                subtitle: "撤销后，相关操作恢复为默认审批策略。",
+                detailTitle: "将要撤销",
+                metadata: ["仅影响当前会话"],
+                explanationTitle: nil,
+                decisionTitle: "撤销这些声明吗？",
+                decisionSubtitle: "之后同类操作会重新向你确认。",
+                declineTitle: "保持不变",
+                approveTitle: "撤销",
+                usesOutlinedApproveAction: true
+            )
+        }
+        let kind = AgentEnvironmentTrustKind(rawValue: kindRaw)
+        let target = (arguments["target"]?.stringValue() ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        var metadata = ["仅本次会话有效", "读取密钥仍需确认"]
+        switch kind {
+        case .disposableTerminal:
+            metadata.insert("放宽范围：侧边栏终端", at: 0)
+        case .testDatabase:
+            metadata.insert(
+                target.isEmpty ? "放宽范围：测试数据库" : "放宽范围：含 \(target) 的命令",
+                at: 0
+            )
+        case nil:
+            break
+        }
+        return AgentApprovalNoticeDescriptor(
+            iconName: "checkmark.shield",
+            title: "Agent 认为你声明了这个环境可以放宽审批",
+            subtitle: "确认前请核对下面这句话确实是你说过的。",
+            detailTitle: "Agent 引用的你的原话",
+            metadata: metadata,
+            explanationTitle: nil,
+            decisionTitle: "你说过这句话吗？",
+            decisionSubtitle: "确认后，该环境内的常规操作改由 AI 复核，不再逐条询问。",
+            declineTitle: "我没说过",
+            approveTitle: "确认，是我说的",
+            usesOutlinedApproveAction: true
+        )
     }
 
     private static func terminalMetadata(

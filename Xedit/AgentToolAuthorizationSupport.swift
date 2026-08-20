@@ -601,11 +601,15 @@ enum AgentToolAuthorization {
     nonisolated static func judgeVerdictCacheKey(
         toolName: String,
         command: String,
-        taskContext: String = ""
+        taskContext: String = "",
+        environmentTrustFingerprint: String = ""
     ) -> String {
         let exactCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
         let exactTaskContext = taskContext.trimmingCharacters(in: .whitespacesAndNewlines)
-        return "\(toolName)|\(exactCommand)|\(exactTaskContext)"
+        // 声明指纹进键：同一条命令在"有声明"与"无声明"两种语境下是两个键。
+        // 撤销声明后旧的 YES 不会被复用，跨会话共享的缓存也不会把 A 会话
+        // 声明下的判决泄给没有声明的 B 会话。
+        return "\(toolName)|\(exactCommand)|\(exactTaskContext)|\(environmentTrustFingerprint)"
     }
 
     static func interactiveSurfaceSignature(toolName: String) -> String? {
