@@ -214,6 +214,16 @@ struct AgentBackgroundJobsTests {
         #expect(AgentBackgroundTaskComposerCardVisibility.shouldShow(runningJobCount: 7))
     }
 
+    /// 1.272.0-rc14 摘掉了状态条上「打开后台任务面板」的入口,因为调度台
+    /// 会话点开只有空面板——但它把普通会话的入口一并摘了。入口是否存在只看
+    /// 会话作用域,与运行中任务数无关。
+    @Test
+    func composerCardOpensManagerOutsideDispatchBoard() {
+        #expect(AgentBackgroundTaskComposerCardVisibility.allowsOpeningManager(presentationScope: .workspace))
+        #expect(AgentBackgroundTaskComposerCardVisibility.allowsOpeningManager(presentationScope: .roundtable))
+        #expect(!AgentBackgroundTaskComposerCardVisibility.allowsOpeningManager(presentationScope: .dispatchBoard))
+    }
+
     /// The summary counts only running jobs. It used to lead with a total that
     /// folded in finished ones ("7 background tasks · 1 running").
     @Test
