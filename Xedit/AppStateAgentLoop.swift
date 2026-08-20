@@ -141,6 +141,9 @@ extension AppState {
             runtime.goalTurnRecoveryCheckpoint = nil
             setSomeIMLoginRequiredError(for: runtime)
             persistAgentSession(runtime: runtime)
+            // A routine that fires while logged out never starts a turn, so
+            // nothing downstream would ever settle its run record.
+            recordRoutineRunCompletionIfNeeded(for: runtime)
             return
         }
 
@@ -257,6 +260,12 @@ extension AppState {
                 }
                 runtime.goalTurnRecoveryCheckpoint = nil
                 self.persistAgentSession(runtime: runtime)
+                // This path dies before `runAgentLoop` is ever entered, so its
+                // defer — the usual place a routine run gets settled — never
+                // runs. Without this the record would sit at `running` until
+                // the next launch reconciled it into `interrupted`, hiding a
+                // real failure behind a vaguer one.
+                self.recordRoutineRunCompletionIfNeeded(for: runtime)
                 self.releaseProviderSlot(
                     for: runtime,
                     claimID: providerSlotClaim.id,
@@ -508,6 +517,10 @@ extension AppState {
             // evaluation capture and cycle advancement.
             startAgentGoalPlanningAfterCaptureIfNeeded(didDefineGoal, for: runtime)
             persistAgentSession(runtime: runtime)
+            // Runs after the persist so the record reads the same settled
+            // state the session file just captured. No-op for anything a
+            // human started.
+            recordRoutineRunCompletionIfNeeded(for: runtime)
             if !shouldConsumeQueueAfterStop {
                 // A runway stop means the window is already at 90%, well past
                 // the ordinary 75% trigger — but `shouldAutoCompressNow` can

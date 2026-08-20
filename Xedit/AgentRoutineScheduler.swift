@@ -123,14 +123,34 @@ final class AgentRoutineScheduler {
     }
 
     private func postNotificationIfAuthorized(routine: AgentRoutine, catchUp: Bool) {
+        post(
+            title: L10n.Automation.notificationTitle,
+            body: catchUp
+                ? L10n.Automation.notificationBodyCatchUp(routine.name)
+                : L10n.Automation.notificationBodyStarted(routine.name),
+            identifierSeed: routine.id.uuidString
+        )
+    }
+
+    /// Raised by `AppState.recordRoutineRunCompletionIfNeeded` when a run ends
+    /// badly. Success stays silent on purpose: a daily job that works is not
+    /// news, and a nightly "it worked" banner trains the user to ignore the
+    /// one that says it didn't.
+    func postFailureNotificationIfAuthorized(routineName: String, reason: String) {
+        post(
+            title: L10n.Automation.notificationFailedTitle,
+            body: L10n.Automation.notificationBodyFailed(routineName, reason),
+            identifierSeed: "failed.\(routineName)"
+        )
+    }
+
+    private func post(title: String, body: String, identifierSeed: String) {
         // Build the content (and read the app icon for the attachment) here on
         // the main actor — the getNotificationSettings completion runs on a
         // background queue where touching NSApp would be unsafe.
         let content = UNMutableNotificationContent()
-        content.title = L10n.Automation.notificationTitle
-        content.body = catchUp
-            ? L10n.Automation.notificationBodyCatchUp(routine.name)
-            : L10n.Automation.notificationBodyStarted(routine.name)
+        content.title = title
+        content.body = body
         if let attachment = AgentNotificationIcon.attachment() {
             content.attachments = [attachment]
         }
@@ -140,7 +160,7 @@ final class AgentRoutineScheduler {
                 return
             }
             let request = UNNotificationRequest(
-                identifier: "willdeep.routine.\(routine.id.uuidString).\(Int(Date().timeIntervalSince1970))",
+                identifier: "willdeep.routine.\(identifierSeed).\(Int(Date().timeIntervalSince1970))",
                 content: content,
                 trigger: nil
             )

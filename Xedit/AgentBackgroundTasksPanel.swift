@@ -18,6 +18,17 @@ nonisolated enum AgentBackgroundTaskScopeFilter: String, CaseIterable, Identifia
     var id: String { rawValue }
 }
 
+/// Neutral palette for the scope switch at the top of the panel. Mirrors the
+/// terminal tab strip's `TerminalTabChrome`: permanent chrome carries no
+/// accent colour, and selection is expressed through fill density, a border,
+/// and text weight instead.
+private enum BackgroundTaskScopeChrome {
+    static let trackFillOpacity: Double = 0.05
+    static let selectedFillOpacity: Double = 0.10
+    static let selectedStrokeOpacity: Double = 0.22
+    static let selectedTextOpacity: Double = 0.88
+}
+
 nonisolated enum AgentBackgroundTaskStatusFilter: String, CaseIterable, Identifiable {
     case all
     case running
@@ -203,12 +214,7 @@ struct AgentBackgroundTasksPanel: View {
 
     private var filters: some View {
         VStack(spacing: 9) {
-            Picker(L10n.AgentJobs.scope, selection: $scope) {
-                Text(L10n.AgentJobs.currentSession).tag(AgentBackgroundTaskScopeFilter.currentSession)
-                Text(L10n.AgentJobs.allSessions).tag(AgentBackgroundTaskScopeFilter.allSessions)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            scopeTabs
 
             HStack(spacing: 8) {
                 TextField(L10n.AgentJobs.searchPlaceholder, text: $query)
@@ -225,6 +231,66 @@ struct AgentBackgroundTasksPanel: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
+    }
+
+    /// Hand-drawn instead of `.pickerStyle(.segmented)`: the native control
+    /// paints its selected segment with the system accent (blue under the
+    /// `system` skin), and this row is permanent panel chrome that has no
+    /// business holding a high-priority colour signal all day. Same neutral
+    /// treatment the terminal tab strip and the error banner already moved to
+    /// — selection reads through a denser fill, a border, and weight.
+    private var scopeTabs: some View {
+        HStack(spacing: 2) {
+            scopeTab(.currentSession, title: L10n.AgentJobs.currentSession)
+            scopeTab(.allSessions, title: L10n.AgentJobs.allSessions)
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(palette.primaryText.opacity(BackgroundTaskScopeChrome.trackFillOpacity))
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(L10n.AgentJobs.scope)
+    }
+
+    private func scopeTab(
+        _ value: AgentBackgroundTaskScopeFilter,
+        title: String
+    ) -> some View {
+        let isSelected = scope == value
+        return Button {
+            scope = value
+        } label: {
+            Text(title)
+                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(
+                    isSelected
+                        ? palette.primaryText.opacity(BackgroundTaskScopeChrome.selectedTextOpacity)
+                        : palette.secondaryText
+                )
+                .frame(maxWidth: .infinity)
+                .frame(height: 21)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(
+                    isSelected
+                        ? palette.primaryText.opacity(BackgroundTaskScopeChrome.selectedFillOpacity)
+                        : Color.clear
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .stroke(
+                    isSelected
+                        ? palette.primaryText.opacity(BackgroundTaskScopeChrome.selectedStrokeOpacity)
+                        : Color.clear,
+                    lineWidth: 1
+                )
+        )
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     @ViewBuilder
@@ -536,6 +602,11 @@ struct AgentBackgroundTasksPanel: View {
         // HStack this makes the two panes share the panel evenly, and a floor
         // would let them overflow instead of shrinking.
         .frame(maxWidth: .infinity)
+        // One scroll position per (job, stream). Without a distinct identity
+        // SwiftUI reuses the same console across tab switches, so stdout
+        // inherited whatever offset combined/stderr was left at — including a
+        // horizontal one the user never chose for this stream.
+        .id("\(job.id.uuidString)-\(stream.rawValue)")
     }
 
     /// Builds each row once — `processName` included — then filters and sorts.
@@ -644,6 +715,21 @@ struct AgentBackgroundTaskDurationLabel: View {
     }
 }
 
+/// Scroll behaviour for the job log consoles. Pulled out of the view body so
+/// the anchor is a named value a test can pin rather than a literal nobody
+/// reviews.
+enum AgentBackgroundTaskLogScroll {
+    static let bottomSentinelID = "agent-background-task-log-bottom"
+
+    /// `ScrollViewProxy.scrollTo` applies its anchor to **both** axes, and
+    /// `.bottom` carries `x == 0.5`. Following the tail with that anchor also
+    /// told the scroll view to centre the content horizontally, so opening
+    /// stdout landed in the middle of the longest line instead of at its first
+    /// character. `.bottomLeading` keeps the vertical follow and pins x to the
+    /// start of the line.
+    static let followAnchor: UnitPoint = .bottomLeading
+}
+
 private struct AgentBackgroundTaskLogConsole: View {
     let title: String
     let tint: Color
@@ -651,7 +737,7 @@ private struct AgentBackgroundTaskLogConsole: View {
     let followsLatestOutput: Bool
     let copyOutput: () -> Void
 
-    private static let bottomID = "agent-background-task-log-bottom"
+    private static let bottomID = AgentBackgroundTaskLogScroll.bottomSentinelID
 
     var body: some View {
         VStack(spacing: 0) {
@@ -679,17 +765,24 @@ private struct AgentBackgroundTaskLogConsole: View {
 
             ScrollViewReader { proxy in
                 ScrollView([.horizontal, .vertical]) {
-                    Text(output.isEmpty ? L10n.AgentJobs.noOutput : output)
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(
-                            output.isEmpty
-                                ? Color.secondary
-                                : Color.primary.opacity(0.86)
-                        )
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(9)
-                    Color.clear.frame(width: 1, height: 1).id(Self.bottomID)
+                    // Explicit leading-aligned stack. The tail sentinel must
+                    // sit at the content's leading edge: `scrollTo` positions
+                    // the *target* view inside the viewport, so a sentinel
+                    // centred by the default VStack alignment would drag the
+                    // whole log to the middle even with a leading anchor.
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(output.isEmpty ? L10n.AgentJobs.noOutput : output)
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(
+                                output.isEmpty
+                                    ? Color.secondary
+                                    : Color.primary.opacity(0.86)
+                            )
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(9)
+                        Color.clear.frame(width: 1, height: 1).id(Self.bottomID)
+                    }
                 }
                 .frame(minHeight: 190, maxHeight: 320)
                 .onAppear {
@@ -716,7 +809,10 @@ private struct AgentBackgroundTaskLogConsole: View {
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         guard followsLatestOutput else { return }
         DispatchQueue.main.async {
-            proxy.scrollTo(Self.bottomID, anchor: .bottom)
+            proxy.scrollTo(
+                Self.bottomID,
+                anchor: AgentBackgroundTaskLogScroll.followAnchor
+            )
         }
     }
 }

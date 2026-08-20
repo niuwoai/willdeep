@@ -1,7 +1,27 @@
 # Changelog
 
-> 当前文件保留最新版本（1.275.0-rc7 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.275.0-rc8 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.275.0-rc8 - 2026-08-20
+
+### Fixed
+
+- **后台任务的 stdout 默认回到行首。** 切到 stdout / stderr 标签时，横向滚动经常停在半路，长行从中间某个字符开始显示。根因是「跟随最新输出」用 `proxy.scrollTo(bottomID, anchor: .bottom)`——`scrollTo` 的 anchor 是**双轴**生效的，`.bottom` 带着 `x = 0.5`，等于顺手命令滚动视图把内容水平居中。改用 `.bottomLeading` 把 x 钉到 0，并把日志内容换成显式 leading 对齐的 `VStack`（哨兵视图必须落在内容最左侧，否则 anchor 再怎么指定也白搭）。另外给每个（任务, 流）组合一个独立身份，切标签不再继承上一个流的滚动位置。
+- **「自动化」页面现在能看出哪次跑挂了。** run history 以前只记 `startedAt`，跑成功和跑失败长得一模一样，只能挨个点开会话。现在每条运行记录带 `finishedAt` + 结果（运行中 / 成功 / 失败 / 中断 / 未知），失败的还带一行原因，直接显示在列表里。App 启动时会把上一次进程遗留的「运行中」记录归置为「中断」——那个进程已经没了，不可能再有完成回调。旧记录解码为「未知」而不是编造一个成功。
+- **定时任务失败补系统通知。** 此前只在开始时响一声，跑挂了反而没动静，和跑成功完全无法区分。成功仍然保持安静：每天都成功的任务弹通知只会训练人忽略它。
+- **routine 数据在测试进程里不再落到真实目录。** `AgentRoutineStore` 补上和 `AgentSessionStore` 同款的测试沙箱——单测构造 `AppState` 会加载并可能回写 routine 与运行历史，此前直接写用户真实的 `~/Library/Application Support/WillDeep/agent-routines/`。
+
+### Changed
+
+- **侧边栏「后台任务」换图标。** `list.bullet.rectangle` 在导航条尺寸下就是一张「文档」，和文字稿看不出区别，也完全没表达出「有活在自己跑」。改成 `gearshape.2`（咬合的齿轮），导航条里没有第二个齿轮，不会撞。
+- **后台任务面板的「当前会话 / 全部会话」改灰度。** 原生 `.pickerStyle(.segmented)` 的选中段吃系统强调色（system 皮肤下就是蓝的），而这行是常驻 chrome，不该长期占着一个高优先级视觉信号。改为手绘的中性分段控件，选中靠更实的底色、描边和字重区分——和终端标签条、错误横幅同一套灰度思路。
+
+### Tests
+
+- 新增 `AgentRoutineRunOutcomeTests`：结果字段的 JSON 往返、旧记录解码为「未知」、遗留「运行中」记录的归置与幂等、失败 / 成功 / 静默三种收尾判定、同一会话后续轮次不改写已定的调度结果、人工发起的会话不进运行历史。
+- 新增 `AgentSidePanelIconTests`：所有侧边面板图标必须是 macOS 真实存在的 SF Symbol（拼错不会报错，只会渲染成空白），且后台任务不与其他项共用字形。
+- 新增 `AgentBackgroundTaskLogScrollTests`：跟随锚点的 x 必须为 0。
 
 ## 1.275.0-rc7 - 2026-08-20
 

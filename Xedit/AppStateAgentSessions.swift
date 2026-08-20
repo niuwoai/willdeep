@@ -2260,6 +2260,49 @@ extension AppState {
         return session.id
     }
 
+    /// Close out the run-history record for a scheduled-routine conversation.
+    ///
+    /// Every path that ends a routine turn calls this, so the Automations page
+    /// can answer "did the 22:00 job work?" instead of only "did it start?".
+    /// Failures additionally raise a system notification — the start-only
+    /// notice meant a routine announced itself and then went quiet whether it
+    /// succeeded or died.
+    ///
+    /// Deliberately once per run: a later manual 重试 in the same conversation
+    /// does not rewrite history, because what the page reports is how the
+    /// *scheduled* run went.
+    func recordRoutineRunCompletionIfNeeded(for runtime: AgentRuntime) {
+        guard runtime.session.originRoutineID != nil else { return }
+        guard let index = agentRoutineRuns.firstIndex(where: {
+            $0.sessionID == runtime.id && $0.finishedAt == nil && $0.outcome == .running
+        }) else { return }
+
+        let failure = runtime.lastTurnFailure
+        let outcome: AgentRoutineRunOutcome
+        if failure != nil {
+            outcome = .failed
+        } else if runtime.messages.last(where: { $0.role == .assistant })?.content.isEmpty == false {
+            outcome = .succeeded
+        } else {
+            // No error and no reply: a user Stop, or a turn that unwound
+            // without ever reaching the provider. Claiming success here is
+            // exactly the kind of flattering guess this record exists to stop.
+            outcome = .interrupted
+        }
+
+        agentRoutineRuns[index].finishedAt = Date()
+        agentRoutineRuns[index].outcome = outcome
+        agentRoutineRuns[index].failureMessage = failure?.message
+        AgentRoutineRunStore.save(agentRoutineRuns)
+
+        if let failure {
+            agentRoutineScheduler.postFailureNotificationIfAuthorized(
+                routineName: agentRoutineRuns[index].routineName,
+                reason: failure.message
+            )
+        }
+    }
+
     /// Toggle pin state. Pinned sessions move into the global pinned section
     /// above every workspace, sorted by `pinnedAt` (most recently pinned
     /// first). The timestamp doubles as both the on/off flag and the ordering
