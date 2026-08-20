@@ -591,6 +591,10 @@ extension AppState {
                     maxTokens: maxTokens
                 )
             }
+            // Captured BEFORE noteManagedSelectedModel overwrites it — the
+            // escalation check below compares against the tier the session
+            // actually ran on last turn.
+            let previousManagedModel = runtime.managedRouting?.lastSelectedModel
             turnConfiguration.model = resolution.model
             runtime.noteManagedSelectedModel(resolution.model)
             managedRouteDecision = AgentManagedRouteDecision(
@@ -608,6 +612,22 @@ extension AppState {
             if !resolution.usedFallback {
                 managedJudgeExplicitTier = resolution.persistedFloorTier
                 runtime.raiseManagedFloor(to: resolution.persistedFloorTier, reason: resolution.verdict.reason)
+            }
+            // 升档前压缩（见 muchtoken docs/someim-32b-compressor.md）：
+            // 切到高档模型本来就必然使前缀缓存失效，此刻压缩零缓存损失，
+            // 却直接削减高档模型要摄入的 input。只在 turn 开始的路由升档
+            // 处做；输出质检的 mid-turn 升档重跑不压——一轮之内不改写
+            // 历史，避免 tool_call 配对漂移。低于阈值或压缩失败都原文
+            // 照发，不阻塞本轮。
+            if Self.managedEscalationCrossesTier(
+                previousModel: previousManagedModel,
+                newTier: resolution.effectiveTier
+            ) {
+                await compressBeforeManagedEscalationIfNeeded(
+                    for: runtime,
+                    escalatedModel: resolution.model,
+                    providerID: turnConfiguration.providerID
+                )
             }
         }
         if runtime.activeTurnID == turnID {

@@ -577,6 +577,44 @@ struct AgentContextCompressionSplitTests {
         #expect(!sameIDElsewhere.usesServerManagedCompressionPrompt)
     }
 
+    /// 升档前压缩阈值：min(32k, 目标窗口 25%)。小窗口取窗口的 25%，
+    /// 大窗口封顶 32k；窗口再小也不许出 0（否则空历史都触发压缩）。
+    @Test
+    func escalationCompressionThresholdTruthTable() {
+        #expect(AppState.escalationCompressionThresholdTokens(window: 200_000) == 32_000)
+        #expect(AppState.escalationCompressionThresholdTokens(window: 128_000) == 32_000)
+        #expect(AppState.escalationCompressionThresholdTokens(window: 64_000) == 16_000)
+        #expect(AppState.escalationCompressionThresholdTokens(window: 2) == 1)
+    }
+
+    /// 「升档」判定：只有上一轮模型档位低于本轮档位才算；首个托管轮次
+    /// （无上一轮记录）与档位表外模型一律不算——没有「便宜模型攒下的
+    /// 历史」可言。
+    @Test
+    func managedEscalationCrossesTierTruthTable() {
+        #expect(AppState.managedEscalationCrossesTier(
+            previousModel: SomeIMManagedModel.autoFlash,
+            newTier: .high
+        ))
+        #expect(AppState.managedEscalationCrossesTier(
+            previousModel: SomeIMManagedModel.codingPlanLow,
+            newTier: .premium
+        ))
+        #expect(!AppState.managedEscalationCrossesTier(
+            previousModel: SomeIMManagedModel.autoPro,
+            newTier: .high
+        ))
+        #expect(!AppState.managedEscalationCrossesTier(
+            previousModel: SomeIMManagedModel.autoPremium,
+            newTier: .high
+        ))
+        #expect(!AppState.managedEscalationCrossesTier(previousModel: nil, newTier: .premium))
+        #expect(!AppState.managedEscalationCrossesTier(
+            previousModel: "glm-5",
+            newTier: .premium
+        ))
+    }
+
     /// The summary request must not carry more bytes than an ordinary chat
     /// request — tool results go through the same compaction.
     @Test
