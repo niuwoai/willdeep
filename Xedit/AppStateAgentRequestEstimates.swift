@@ -7,6 +7,59 @@
 
 import Foundation
 
+/// Context windows a provider reported for specific models, keyed by
+/// lowercased model id.
+///
+/// `agentContextWindow(model:providerID:)` otherwise infers the window from
+/// the model id, and an unrecognised id lands on a conservative 128K. That
+/// guess is wrong far more often than it looks: of the nine some.im models
+/// that publish a window, six did not match — every miss low, one of them
+/// (`kimi-k3`, really 1M) by 87%. Under-reading the window is not harmless,
+/// because the gauge, auto-compression at 75%, and the ordered stop at 90%
+/// all divide by it.
+///
+/// Populated from `AgentModelDiscovery` rows whenever a model list is fetched
+/// or restored from disk, so it survives launches without a network call.
+/// Deliberately a plain process-wide table: `agentContextWindow` is a
+/// nonisolated hot-path pure function called from token estimation, and
+/// routing it through the main actor or a UserDefaults read would be far more
+/// expensive than the lookup it guards.
+nonisolated enum AgentModelContextWindowCatalog {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var windows: [String: Int] = [:]
+
+    static func window(forModel lowercasedID: String) -> Int? {
+        lock.lock()
+        defer { lock.unlock() }
+        return windows[lowercasedID]
+    }
+
+    /// Merge in whatever the discoveries report. Rows without a window leave
+    /// any previously learned value alone — a provider that stops publishing
+    /// the field should not silently demote a model back to the guess.
+    static func merge(_ discoveries: [AgentModelDiscovery]) {
+        let reported = discoveries.compactMap { discovery -> (String, Int)? in
+            guard let window = discovery.contextWindowTokens, window > 0 else { return nil }
+            let key = discovery.id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty else { return nil }
+            return (key, window)
+        }
+        guard !reported.isEmpty else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        for (key, window) in reported {
+            windows[key] = window
+        }
+    }
+
+    /// Test-only: drop everything learned so a case can assert the fallback.
+    static func _reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        windows.removeAll()
+    }
+}
+
 nonisolated struct AgentContextTokenUsageSnapshot: Equatable, Sendable {
     static let placeholder = AgentContextTokenUsageSnapshot(
         usedTokens: 0,
@@ -441,6 +494,11 @@ extension AppState {
     nonisolated static func agentContextWindow(model rawModel: String, providerID rawProviderID: String = "") -> Int {
         let model = rawModel.lowercased()
         let providerID = rawProviderID.lowercased()
+        // A window the provider actually published beats anything guessed from
+        // the id. Everything below this line is inference.
+        if let reported = AgentModelContextWindowCatalog.window(forModel: model) {
+            return reported
+        }
         // Substring match — vendors include variants like `-32k`, `-128k` in the id.
         if model.contains("1m") || model.contains("-1m") || model.contains("1000k") { return 1_000_000 }
         if model.contains("512k") { return 512_000 }
