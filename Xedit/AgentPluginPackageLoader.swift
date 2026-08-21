@@ -574,7 +574,8 @@ nonisolated enum AgentPluginPackageLoader {
                 ),
                 companionSidebar: sidebar,
                 mainPage: page,
-                toolbarCommandIDs: contribution.toolbarCommandIDs
+                toolbarCommandIDs: contribution.toolbarCommandIDs,
+                defaultPinned: contribution.defaultPinned
             )
         }
     }

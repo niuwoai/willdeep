@@ -261,14 +261,20 @@ struct AgentPluginCenterPage: View {
             Text(registry.localizedTitle(for: destination))
                 .font(.system(size: 12, weight: .medium))
             Spacer(minLength: 8)
-            Button(pinned ? L10n.Plugins.unpin : L10n.Plugins.pin) {
-                if pinned {
-                    registry.unpin(destinationID: destination.qualifiedID)
-                } else {
-                    registry.pin(destinationID: destination.qualifiedID)
+            if destination.defaultPinned {
+                Image(systemName: "pin.fill")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(L10n.Plugins.pin)
+            } else {
+                Button(pinned ? L10n.Plugins.unpin : L10n.Plugins.pin) {
+                    if pinned {
+                        registry.unpin(destinationID: destination.qualifiedID)
+                    } else {
+                        registry.pin(destinationID: destination.qualifiedID)
+                    }
                 }
+                .disabled(!enabled || (!pinned && registry.snapshot.pinnedDestinationIDs.count >= AgentPluginRegistry.maximumPinnedDestinations))
             }
-            .disabled(!enabled || (!pinned && registry.snapshot.pinnedDestinationIDs.count >= AgentPluginRegistry.maximumPinnedDestinations))
             Button {
                 appState.agentPrimaryDestination = .plugin(destination.qualifiedID)
             } label: {

@@ -301,19 +301,22 @@ final class AgentPluginRegistry: ObservableObject {
 
     func pin(destinationID: AgentPluginDestinationID) {
         guard snapshot.activeDestinations.contains(where: { $0.qualifiedID == destinationID }),
-              !state.pinnedDestinationIDs.contains(destinationID),
-              state.pinnedDestinationIDs.count < Self.maximumPinnedDestinations else { return }
+              !snapshot.pinnedDestinationIDs.contains(destinationID),
+              snapshot.pinnedDestinationIDs.count < Self.maximumPinnedDestinations else { return }
         state.pinnedDestinationIDs.append(destinationID)
         persistAndRebuild()
     }
 
     func unpin(destinationID: AgentPluginDestinationID) {
+        guard destination(id: destinationID)?.defaultPinned != true else { return }
         state.pinnedDestinationIDs.removeAll { $0 == destinationID }
         persistAndRebuild()
     }
 
     func movePinned(destinationID: AgentPluginDestinationID, before targetID: AgentPluginDestinationID) {
         guard destinationID != targetID,
+              destination(id: destinationID)?.defaultPinned != true,
+              destination(id: targetID)?.defaultPinned != true,
               let sourceIndex = state.pinnedDestinationIDs.firstIndex(of: destinationID),
               let targetIndex = state.pinnedDestinationIDs.firstIndex(of: targetID) else { return }
         let moved = state.pinnedDestinationIDs.remove(at: sourceIndex)
@@ -371,6 +374,13 @@ final class AgentPluginRegistry: ObservableObject {
         let approvedInstallations = Set(normalized.approvedInstallations)
         let disabled = Set(normalized.disabledPluginIDs)
         let grouped = Dictionary(grouping: packages, by: \.pluginID)
+        let bundledFixedDestinationIDs = Set(
+            packages
+                .filter { $0.source == .bundled }
+                .flatMap(\.destinations)
+                .filter(\.defaultPinned)
+                .map(\.qualifiedID)
+        )
         var records: [AgentPluginRecord] = []
         var activeDestinations: [AgentPluginDestinationDescriptor] = []
 
@@ -400,7 +410,18 @@ final class AgentPluginRegistry: ObservableObject {
             )
             records.append(record)
             if isEnabled {
-                activeDestinations.append(contentsOf: active.destinations)
+                activeDestinations.append(contentsOf: active.destinations.map { destination in
+                    AgentPluginDestinationDescriptor(
+                        qualifiedID: destination.qualifiedID,
+                        pluginID: destination.pluginID,
+                        packageURL: destination.packageURL,
+                        navigation: destination.navigation,
+                        companionSidebar: destination.companionSidebar,
+                        mainPage: destination.mainPage,
+                        toolbarCommandIDs: destination.toolbarCommandIDs,
+                        defaultPinned: bundledFixedDestinationIDs.contains(destination.qualifiedID)
+                    )
+                })
             }
         }
         activeDestinations.sort {
@@ -408,13 +429,19 @@ final class AgentPluginRegistry: ObservableObject {
             return $0.qualifiedID < $1.qualifiedID
         }
         let validIDs = Set(activeDestinations.map(\.qualifiedID))
-        let pinned = normalized.pinnedDestinationIDs
-            .filter { validIDs.contains($0) }
+        let fixed = activeDestinations
+            .filter(\.defaultPinned)
+            .map(\.qualifiedID)
             .prefix(maximumPinnedDestinations)
+        let fixedIDs = Set(fixed)
+        let remainingCapacity = maximumPinnedDestinations - fixed.count
+        let userPinned = normalized.pinnedDestinationIDs
+            .filter { validIDs.contains($0) && !fixedIDs.contains($0) }
+            .prefix(remainingCapacity)
         return AgentPluginRegistrySnapshot(
             records: records,
             activeDestinations: activeDestinations,
-            pinnedDestinationIDs: Array(pinned),
+            pinnedDestinationIDs: Array(fixed) + Array(userPinned),
             issues: issues
         )
     }
