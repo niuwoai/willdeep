@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-21 | Current version: v1.280.0-rc3
+> Last updated: 2026-08-21 | Current version: v1.280.0-rc4
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **插件中心灰度交互规范（1.280.0-rc4）** —— 插件管理、安装预览和设置界面不再沿用 macOS 系统蓝色，高亮、开关、菜单与普通操作统一使用灰阶；安装、批准启用、检查安装源等主要操作固定为黑底白字。这条规则已写入插件系统设计文档，作为后续插件宿主界面的项目级视觉记忆。
 - **发行包内置俄罗斯方块（1.280.0-rc3）** —— macOS App 构建阶段把俄罗斯方块的清单、本地化、声明式侧栏与生产 Web 资源放入 `BundledPlugins`。注册表启动时自动发现、信任并启用内置版本；若用户另行安装同版本或更高版本，用户版本继续优先，发行包不会覆盖其选择。
 - **俄罗斯方块游戏区自适应高度（1.280.0-rc2）** —— 样例插件棋盘根据中央 WebView 的可用高度动态收缩，桌面窗口中最高控制为 310px 宽；统计卡、预览区和触控按钮同步紧凑化，主游戏区不再因 20 行棋盘撑出屏幕。
 - **XML 风格 progress 兼容（1.280.0-rc2）** —— Agent 聊天同时识别围栏式 `progress` 协议与 `<progress>...</progress>` 包装。机器可读的步骤状态继续更新 Plan 并渲染原生进度卡；自然语言清单保留 Markdown 正文、只移除协议标签；流式未闭合标签和代码块内字面示例均有独立保护。

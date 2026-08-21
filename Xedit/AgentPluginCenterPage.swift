@@ -41,6 +41,7 @@ struct AgentPluginCenterPage: View {
                 .frame(maxWidth: .infinity)
             }
         }
+        .tint(.primary)
         .sheet(item: $pendingProposal, onDismiss: cleanupPendingProposal) { proposal in
             AgentPluginApprovalSheet(
                 proposal: proposal,
@@ -82,11 +83,13 @@ struct AgentPluginCenterPage: View {
             } label: {
                 Label(L10n.Plugins.installLocal, systemImage: "plus")
             }
+            .buttonStyle(AgentPluginPrimaryActionButtonStyle())
             Button {
                 isGitSheetPresented = true
             } label: {
                 Label(L10n.Plugins.installGit, systemImage: "arrow.down.to.line")
             }
+            .buttonStyle(AgentPluginPrimaryActionButtonStyle())
             Button {
                 Task { await registry.refresh() }
             } label: {
@@ -110,6 +113,7 @@ struct AgentPluginCenterPage: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 440)
             Button(L10n.Plugins.installLocal) { chooseLocalSource() }
+                .buttonStyle(AgentPluginPrimaryActionButtonStyle())
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 70)
@@ -166,6 +170,7 @@ struct AgentPluginCenterPage: View {
                     Button(L10n.Plugins.approve) {
                         stage(.local(record.activePackage.packageURL))
                     }
+                    .buttonStyle(AgentPluginPrimaryActionButtonStyle())
                 }
                 Menu {
                     if let source = registry.installSource(for: record.activePackage) {
@@ -505,6 +510,7 @@ private struct AgentPluginApprovalSheet: View {
                 Button(L10n.Plugins.install) {
                     onInstall(pinnedDestinationIDs)
                 }
+                .buttonStyle(AgentPluginPrimaryActionButtonStyle())
                 .keyboardShortcut(.defaultAction)
             }
         }
@@ -531,12 +537,35 @@ private struct AgentPluginGitInstallSheet: View {
                 Button(L10n.Plugins.inspect) {
                     onSubmit(repository, reference.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : reference)
                 }
+                .buttonStyle(AgentPluginPrimaryActionButtonStyle())
                 .disabled(repository.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
         .frame(width: 480, height: 210)
+    }
+}
+
+private struct AgentPluginPrimaryActionButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.white.opacity(isEnabled ? 1 : 0.7))
+            .padding(.horizontal, 12)
+            .frame(minHeight: 30)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.black.opacity(backgroundOpacity(isPressed: configuration.isPressed)))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    private func backgroundOpacity(isPressed: Bool) -> Double {
+        guard isEnabled else { return 0.35 }
+        return isPressed ? 0.72 : 1
     }
 }
 

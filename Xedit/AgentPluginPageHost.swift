@@ -18,29 +18,32 @@ struct AgentPluginPageHost: View {
     let destinationID: AgentPluginDestinationID
 
     var body: some View {
-        if let destination = registry.destination(id: destinationID) {
-            VStack(spacing: 0) {
-                toolbar(destination)
-                Divider().opacity(0.5)
-                page(destination)
-            }
-        } else {
-            AgentPluginUnavailableView(
-                title: L10n.Plugins.pageUnavailable,
-                detail: L10n.Plugins.noPluginsDetail,
-                systemImage: "puzzlepiece.extension"
-            ) {
-                Button(L10n.Plugins.morePlugins) {
-                    appState.agentPrimaryDestination = .pluginCenter
+        Group {
+            if let destination = registry.destination(id: destinationID) {
+                VStack(spacing: 0) {
+                    toolbar(destination)
+                    Divider().opacity(0.5)
+                    page(destination)
                 }
-            }
-            .task(id: destinationID) {
-                await registry.refresh()
-                if registry.destination(id: destinationID) == nil {
-                    appState.agentPrimaryDestination = .pluginCenter
+            } else {
+                AgentPluginUnavailableView(
+                    title: L10n.Plugins.pageUnavailable,
+                    detail: L10n.Plugins.noPluginsDetail,
+                    systemImage: "puzzlepiece.extension"
+                ) {
+                    Button(L10n.Plugins.morePlugins) {
+                        appState.agentPrimaryDestination = .pluginCenter
+                    }
+                }
+                .task(id: destinationID) {
+                    await registry.refresh()
+                    if registry.destination(id: destinationID) == nil {
+                        appState.agentPrimaryDestination = .pluginCenter
+                    }
                 }
             }
         }
+        .tint(.primary)
     }
 
     private func toolbar(_ destination: AgentPluginDestinationDescriptor) -> some View {
@@ -252,6 +255,7 @@ private struct AgentPluginWebPage: View {
         let background = colorScheme == .dark ? "#1c1c1e" : "#ffffff"
         let foreground = colorScheme == .dark ? "#f2f2f4" : "#1a1a1c"
         let secondary = colorScheme == .dark ? "#a1a1a6" : "#6c6c70"
+        let accent = colorScheme == .dark ? "#f2f2f4" : "#111111"
         let csp = "default-src 'self' 'unsafe-inline' data: blob:; "
             + "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
             + "img-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; "
@@ -259,8 +263,10 @@ private struct AgentPluginWebPage: View {
         let bootstrap = """
         <meta http-equiv="Content-Security-Policy" content="\(csp)">
         <style>
-        :root { --willdeep-bg: \(background); --willdeep-fg: \(foreground); --willdeep-secondary: \(secondary); }
+        :root { --willdeep-bg: \(background); --willdeep-fg: \(foreground); --willdeep-secondary: \(secondary); --willdeep-accent: \(accent); color-scheme: \(colorScheme == .dark ? "dark" : "light"); }
         html, body { margin: 0; min-height: 100%; background: var(--willdeep-bg); color: var(--willdeep-fg); font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        input, button, select, textarea { accent-color: var(--willdeep-accent); }
+        a { color: var(--willdeep-accent); }
         </style>
         <script>
         (function() {
