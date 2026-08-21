@@ -1,0 +1,95 @@
+/* 记忆翻牌模块样式（并行节点交付；共享 styles.css 冻结，不得改动）。 */
+.memory {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.memory__bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.memory__moves {
+  font-size: 16px;
+  color: var(--fg);
+}
+
+.memory__moves [data-testid='memory-moves-value'] {
+  color: var(--accent-strong);
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.memory__status {
+  font-size: 15px;
+  color: var(--fg-muted);
+}
+
+.memory__pairs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: var(--fg-muted);
+}
+
+.memory__pairs .btn--pairs[aria-pressed='true'] {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent-strong);
+}
+
+.memory__board {
+  display: grid;
+  gap: 8px;
+  width: min(92vw, 420px);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.memory__card {
+  aspect-ratio: 1;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 120ms ease;
+}
+
+.memory__card:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.memory__card:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.memory__card--up {
+  border-color: var(--accent-strong);
+}
+
+.memory__card--pair-0 { background: #4f8cff; }
+.memory__card--pair-1 { background: #3d9b6e; }
+.memory__card--pair-2 { background: #ff5d73; }
+.memory__card--pair-3 { background: #e6a23c; }
+.memory__card--pair-4 { background: #9b59d0; }
+.memory__card--pair-5 { background: #2fb8c9; }
+
+.memory__hint {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 13px;
+  text-align: center;
+}

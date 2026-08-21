@@ -1,0 +1,233 @@
+/* 设计 token（冻结）：与 docs/design.md 保持一致。 */
+:root {
+  --bg: #0f1420;
+  --bg-panel: #171d2e;
+  --fg: #e8ecf4;
+  --fg-muted: #8b93a7;
+  --accent: #aab1bf;
+  --accent-strong: #eef1f6;
+  --color-accent: #d5d9e1;
+  --border: #262e44;
+  --radius: 10px;
+  --space: 16px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family:
+    system-ui,
+    -apple-system,
+    'PingFang SC',
+    'Microsoft YaHei',
+    'Segoe UI',
+    sans-serif;
+  line-height: 1.5;
+}
+
+#root {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--space);
+}
+
+h1,
+h2 {
+  margin: 0 0 8px;
+  line-height: 1.2;
+}
+
+.btn {
+  display: inline-block;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--fg);
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: none;
+  min-height: 40px;
+  line-height: 22px;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.btn--ghost {
+  background: transparent;
+}
+
+/* 大厅 */
+.lobby {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.lobby__header h1 {
+  font-size: 28px;
+}
+
+.lobby__subtitle {
+  color: var(--fg-muted);
+  margin: 0;
+}
+
+.lobby__toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.lobby__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--fg);
+  text-decoration: none;
+  min-height: 140px;
+  transition: transform 0.12s ease, border-color 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+}
+
+.card__title {
+  font-size: 20px;
+}
+
+.card__desc {
+  color: var(--fg-muted);
+  font-size: 14px;
+  margin: 0;
+  flex: 1;
+}
+
+.card__best {
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+
+/* 游戏外壳 */
+.shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.shell__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.shell__title {
+  flex: 1;
+  font-size: 24px;
+}
+
+.shell__meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.badge--seed {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+}
+
+.shell__body {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+}
+
+.shell__footer {
+  color: var(--fg-muted);
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+/* 占位游戏 */
+.game {
+  max-width: 560px;
+  text-align: center;
+}
+
+.game__hint {
+  color: var(--fg-muted);
+  font-size: 14px;
+}
+
+.dummy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.dummy__label {
+  font-size: 22px;
+}
+
+.dummy__best {
+  color: var(--fg-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* 触屏友好：可点目标最小 44px */
+button,
+a.btn,
+.card {
+  touch-action: manipulation;
+}
+
+@media (max-width: 560px) {
+  #root {
+    padding: 12px;
+  }
+  .shell__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

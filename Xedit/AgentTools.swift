@@ -405,6 +405,12 @@ enum AgentToolRunner {
                 result = try await editFile(arguments: activeArguments, context: activeContext)
             case "apply_patch":
                 result = try await applyPatch(arguments: activeArguments, context: activeContext)
+            case "create_plugin_draft":
+                result = try AgentPluginTools.createDraft(arguments: activeArguments)
+            case "write_plugin_draft_file":
+                result = try AgentPluginTools.writeDraftFile(arguments: activeArguments)
+            case "inspect_plugin_draft":
+                result = try AgentPluginTools.inspectDraft(arguments: activeArguments)
             case "claude_code":
                 result = try await claudeCode(arguments: activeArguments, context: activeContext)
             case "codex_cli":

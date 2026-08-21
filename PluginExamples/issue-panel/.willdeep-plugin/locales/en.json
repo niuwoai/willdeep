@@ -1,0 +1,14 @@
+{
+  "command.close": "Close Issue",
+  "command.create": "Create Issue",
+  "command.edit": "Edit Issue",
+  "command.refresh": "Refresh Issues",
+  "destination.issues": "Issue Panel",
+  "issue.first": "Plugin host integration",
+  "issue.first.detail": "Open",
+  "issue.second": "Document the bridge",
+  "issue.second.detail": "In progress",
+  "issue.created": "New plugin issue",
+  "issue.created.detail": "Created from the MCP App",
+  "issue.edited.detail": "Edited"
+}

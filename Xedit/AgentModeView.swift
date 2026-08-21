@@ -151,8 +151,7 @@ struct AgentModeView: View {
         let isResizingPanel = liveSidePanelWidth != nil
         let isResizingSidebar = liveSidebarWidth != nil
         let hasWallpaper = appState.editorSettings.hasConfiguredAgentWallpaper
-        let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination == .scheduledTasks
-            || appState.agentPrimaryDestination == .dispatchBoard {
+        let activeSidePanel: AgentSidePanelKind? = if appState.agentPrimaryDestination.hostsDedicatedCenterSurface {
             nil
         } else {
             appState.agentSidePanelKind
@@ -213,6 +212,10 @@ struct AgentModeView: View {
                     AgentDispatchBoardPage()
                 } else if appState.agentPrimaryDestination == .roundtable {
                     RoundtableEmbeddedView()
+                } else if let destinationID = appState.agentPrimaryDestination.pluginDestinationID {
+                    AgentPluginPageHost(destinationID: destinationID)
+                } else if appState.agentPrimaryDestination == .pluginCenter {
+                    AgentPluginCenterPage()
                 } else {
                     AgentChatHeader(
                         sidePanel: sidePanelBinding,

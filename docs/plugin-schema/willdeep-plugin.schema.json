@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://willdeep.com/schemas/plugin/v1/plugin.json",
+  "title": "WillDeep Plugin Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "contributes"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "minimumWillDeepVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "conversation.read",
+          "workspace.read",
+          "workspace.write",
+          "process.execute",
+          "network.access",
+          "credentials.use",
+          "clipboard.write",
+          "notifications"
+        ]
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mcpServers": { "$ref": "#/$defs/idArray" },
+        "skills": { "$ref": "#/$defs/idArray" }
+      }
+    },
+    "contributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "destinations": { "type": "array", "items": { "$ref": "#/$defs/destination" } },
+        "sidebars": { "type": "array", "items": { "$ref": "#/$defs/sidebar" } },
+        "pages": { "type": "array", "items": { "$ref": "#/$defs/page" } },
+        "commands": { "type": "array", "items": { "$ref": "#/$defs/command" } },
+        "menus": {
+          "type": "object",
+          "propertyNames": { "enum": ["commandPalette", "session.context", "composer.more", "plugin.page.toolbar", "plugin.sidebar.row.context"] },
+          "additionalProperties": { "$ref": "#/$defs/idArray" }
+        },
+        "settings": { "type": "array", "items": { "$ref": "#/$defs/setting" } }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,159}$" },
+    "key": { "type": "string", "minLength": 1, "pattern": "^\\S+$" },
+    "idArray": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server", "uri"],
+      "properties": {
+        "type": { "const": "mcpResource" },
+        "server": { "$ref": "#/$defs/id" },
+        "uri": { "type": "string", "minLength": 1 }
+      }
+    },
+    "destination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "titleKey", "mainPage"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "titleKey": { "$ref": "#/$defs/key" },
+        "icon": { "type": "string" },
+        "mainPage": { "$ref": "#/$defs/id" },
+        "companionSidebar": { "$ref": "#/$defs/id" },
+        "toolbarCommandIDs": { "$ref": "#/$defs/idArray" },
+        "defaultPinned": { "type": "boolean", "default": false }
+      }
+    },
+    "sidebar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "mode": { "enum": ["sessionList", "declarative", "none"] },
+        "schema": { "type": "string", "minLength": 1 },
+        "resource": { "$ref": "#/$defs/resource" }
+      }
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "runtime"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "runtime": { "enum": ["localWeb", "mcpApp", "declarative"] },
+        "entryPath": { "type": "string", "minLength": 1 },
+        "schema": { "type": "string", "minLength": 1 },
+        "server": { "$ref": "#/$defs/id" },
+        "resourceURI": { "type": "string", "pattern": "^ui://" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "runtime": { "const": "localWeb" } } },
+          "then": { "required": ["entryPath"] }
+        },
+        {
+          "if": { "properties": { "runtime": { "const": "mcpApp" } } },
+          "then": { "required": ["server", "resourceURI"] }
+        },
+        {
+          "if": { "properties": { "runtime": { "const": "declarative" } } },
+          "then": { "required": ["schema"] }
+        }
+      ]
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "titleKey", "handler"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "titleKey": { "$ref": "#/$defs/key" },
+        "icon": { "type": "string", "pattern": "^sf:.+" },
+        "handler": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "enum": ["host", "mcpTool", "navigate"] },
+            "action": { "type": "string" },
+            "server": { "$ref": "#/$defs/id" },
+            "tool": { "$ref": "#/$defs/id" },
+            "destination": { "$ref": "#/$defs/id" }
+          }
+        }
+      }
+    },
+    "setting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "titleKey"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "enum": ["string", "number", "boolean", "enum", "secret"] },
+        "titleKey": { "$ref": "#/$defs/key" },
+        "descriptionKey": { "$ref": "#/$defs/key" },
+        "defaultValue": { "type": "string" },
+        "options": { "type": "array", "items": { "$ref": "#/$defs/key" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "secret" } } },
+          "then": { "not": { "required": ["defaultValue"] } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "enum" } } },
+          "then": { "required": ["options"] }
+        }
+      ]
+    }
+  }
+}

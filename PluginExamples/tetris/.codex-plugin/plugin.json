@@ -1,0 +1,10 @@
+{
+  "name": "willdeep-tetris-example",
+  "version": "1.0.1",
+  "description": "A complete Tetris-style game destination for WillDeep.",
+  "interface": {
+    "displayName": "Tetris",
+    "shortDescription": "A playable sandboxed React game plugin.",
+    "composerIcon": "sf:square.grid.3x3.fill"
+  }
+}

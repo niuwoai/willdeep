@@ -337,6 +337,51 @@ struct AgentPlanProgressTests {
         #expect(next?.steps.map(\.status) == [.done, .done, .done])
     }
 
+    @Test("XML progress 状态按原顺序更新计划")
+    func xmlProgressUpdatesPlanInSourceOrder() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "Draft"),
+                AgentPlan.Step(text: "Verify"),
+            ],
+            summary: ""
+        )
+        let reply = """
+        <progress>
+        1: in_progress
+        </progress>
+
+        ```progress
+        1: done
+        2: in_progress
+        ```
+        """
+
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+
+        #expect(next?.status == .executing)
+        #expect(next?.steps.map(\.status) == [.done, .inProgress])
+    }
+
+    @Test("普通代码块中的 XML progress 不更新计划")
+    func xmlProgressInsideCodeFenceDoesNotUpdatePlan() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [AgentPlan.Step(text: "A")],
+            summary: ""
+        )
+        let reply = """
+        ```html
+        <progress>
+        1: done
+        </progress>
+        ```
+        """
+
+        #expect(AgentPlanParser.applyProgress(to: plan, from: reply) == nil)
+    }
+
     /// Unknown status tokens are dropped — the rest of the block still applies.
     @Test
     func unknownStatusTokensIgnored() {
