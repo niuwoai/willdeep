@@ -628,7 +628,14 @@ final class AgentChatHistoryNSTextView: NSTextView {
         }
         lastContentHash = hash
         currentBaseAttributedString = attr
-        applySearchHighlight()
+        // Re-paint the highlights, but do NOT jump. A transcript rebuild is
+        // not a search navigation: hover changes, streaming deltas, tool
+        // groups expanding, and width changes all land here, and each one
+        // used to yank the reader back to the active match. Scrolling to
+        // the bottom during a search was the worst case — every message
+        // the cursor crossed fired `mouseMoved`, rebuilt the body, and
+        // bounced the viewport back to match #1.
+        applySearchHighlight(scrollToActiveMatch: false)
         invalidateIntrinsicContentSize()
     }
 
@@ -642,10 +649,12 @@ final class AgentChatHistoryNSTextView: NSTextView {
         currentSearchQuery = normalizedQuery
         currentActiveSearchMatchIndex = activeMatchIndex
         currentSearchIsDark = isDark
-        applySearchHighlight()
+        // Only a real search navigation — a new query, next/previous, or a
+        // theme change that re-derives the ranges — moves the viewport.
+        applySearchHighlight(scrollToActiveMatch: true)
     }
 
-    private func applySearchHighlight() {
+    private func applySearchHighlight(scrollToActiveMatch: Bool) {
         let result = AgentTranscriptSearch.highlightedString(
             from: currentBaseAttributedString,
             query: currentSearchQuery,
@@ -654,7 +663,9 @@ final class AgentChatHistoryNSTextView: NSTextView {
         )
         replaceTranscriptStoragePreservingSelection(with: result.attributedString)
         reportSearchResultCountIfNeeded(result.matchCount)
-        scrollActiveSearchMatchIfNeeded(ranges: result.matchRanges)
+        if scrollToActiveMatch {
+            scrollActiveSearchMatchIfNeeded(ranges: result.matchRanges)
+        }
         invalidateIntrinsicContentSize()
     }
 
@@ -691,6 +702,11 @@ final class AgentChatHistoryNSTextView: NSTextView {
         onSearchResultCountChange?(count)
     }
 
+    /// Counts viewport jumps actually requested by a search navigation.
+    /// A live scroll view is hard to assert against in a unit test, so this
+    /// records the decision instead — see `AgentTranscriptSearchScrollTests`.
+    private(set) var searchScrollRequestCount = 0
+
     private func scrollActiveSearchMatchIfNeeded(ranges: [NSRange]) {
         guard let index = AgentTranscriptSearch.clampedActiveIndex(
             currentActiveSearchMatchIndex,
@@ -700,6 +716,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         guard range.location >= 0, NSMaxRange(range) <= (textStorage?.length ?? 0) else {
             return
         }
+        searchScrollRequestCount += 1
         DispatchQueue.main.async { [weak self] in
             self?.scrollRangeToVisible(range)
         }
