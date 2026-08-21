@@ -3,6 +3,19 @@
 > 当前文件保留最新版本（1.282.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.283.0-rc1 - 2026-08-21
+
+### Added
+
+- **Swift 侧开始能读 willdeep-rs Runtime 的公共协议（v1）。** 新增 `WillDeepRuntimeProtocol.swift`：统一响应信封 `{status, data, meta}` 加十一类公共对象（runtime / workspace / session / agent / turn / tool / task / approval / question / artifact / event）与四类控制结果（agent_command / interaction / runtime_status / object_mutation）的 Codable 解码器。这是 willdeep-rs `docs/CLI_TUI_RUNTIME_ROADMAP.md` §1.0 四阶段计划的第零步：**只解码，不连传输、不改行为、不依赖运行中的 daemon**，阶段一「只读观察 Runtime」可直接建在这批类型上。
+- 协议契约夹具 `XeditTests/Fixtures/willdeep-runtime-public-api-v1.json` 从 Rust 仓库逐字复制。线格式不归我们定义，改动一律以 Rust 侧 `willdeep-runtime-protocol` 为准：先刷新夹具、先让测试红，再改 Swift 类型。
+- 解码器放在 App target 而非测试 target——契约测试若只跑测试专用结构体，证明的仅仅是测试能编译。
+
+### Tests
+
+- 新增 `WillDeepRuntimeProtocolTests`（4 项）：夹具仍是 protocol v1 且十一类对象一个不少（少一类是单对象测试永远看不见的协议破坏）；十一类对象与四类控制结果逐个真解码；本地夹具副本与 Rust 源文件逐字节比对——两仓同时存在时比对，缺失时跳过而非失败（同事的 checkout 里没有兄弟仓库不是协议缺陷）。
+- 断言覆盖公共对象的**留白**：`workspace.root` 为 null、agent 不含 prompt/工具参数——脱敏是服务端承诺，Swift 类型里连放它们的位置都没有。
+
 ## 1.282.0-rc8 - 2026-08-21
 
 ### Fixed
