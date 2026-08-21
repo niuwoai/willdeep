@@ -1,0 +1,8 @@
+.pong { display: grid; gap: 1rem; max-width: 38rem; margin: auto; text-align: center; }
+.pong__court { position: relative; height: min(54vw, 22rem); min-height: 16rem; overflow: hidden; border: 3px solid var(--color-border, #334155); border-radius: .75rem; background: #0f172a; touch-action: manipulation; }
+.pong__court::before { content: ''; position: absolute; inset: 0 50%; border-left: 2px dashed #64748b; }
+.pong__paddle, .pong__ball { position: absolute; background: #f8fafc; border-radius: .2rem; }
+.pong__paddle { width: .85rem; height: 4rem; top: var(--paddle-y); }
+.pong__paddle--player { left: 1rem; }.pong__paddle--cpu { right: 1rem; }
+.pong__ball { width: 1rem; height: 1rem; left: var(--ball-x); top: var(--ball-y); border-radius: 50%; }
+.pong__controls { display: flex; justify-content: center; gap: .75rem; }

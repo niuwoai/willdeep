@@ -904,6 +904,7 @@ extension AppState {
                 executionAgent: runtime.executionAgent,
                 approvalMode: runtime.approvalMode,
                 currentPlan: runtime.currentPlan,
+                planProgressFormatViolation: latestTurnHasUnparsableProgressBlock(for: runtime),
                 currentGoal: runtime.currentGoal,
                 goalPlanningState: runtime.goalPlanningState,
                 goalRoadmap: runtime.goalRoadmap,

@@ -1,0 +1,1 @@
+:root { color-scheme: light dark; } body { padding: 32px; } main { max-width: 720px; margin: auto; } h1 { font-size: 28px; } section { display: flex; justify-content: space-between; margin-top: 16px; padding: 18px; border: 1px solid color-mix(in srgb, currentColor 14%, transparent); border-radius: 14px; }

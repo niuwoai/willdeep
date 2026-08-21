@@ -658,6 +658,7 @@ struct AgentPluginPickerPill: View {
         case .cursor: return "cursorarrow.rays"
         case .codex: return "terminal"
         case .user: return "server.rack"
+        case .plugin: return "puzzlepiece.extension"
         }
     }
 

@@ -1,0 +1,46 @@
+:root {
+  color-scheme: light dark;
+  --panel: color-mix(in srgb, currentColor 5%, transparent);
+  --line: color-mix(in srgb, currentColor 13%, transparent);
+  --muted: color-mix(in srgb, currentColor 58%, transparent);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 620px; background: transparent; }
+button { font: inherit; color: inherit; }
+main { width: min(880px, calc(100vw - 48px)); margin: 0 auto; padding: 16px 0 20px; }
+header { display: flex; align-items: end; justify-content: space-between; margin-bottom: 12px; }
+h1 { margin: 2px 0 0; font-size: 27px; letter-spacing: -0.04em; }
+.eyebrow { margin: 0; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.11em; }
+.primary, .secondary, .controls button { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); cursor: pointer; }
+.primary { padding: 9px 15px; background: currentColor; color: var(--willdeep-bg); font-weight: 700; }
+.game-layout { --board-width: min(310px, max(160px, calc((100vh - 140px) / 2))); display: grid; grid-template-columns: var(--board-width) 190px; justify-content: start; gap: 20px; align-items: start; }
+.board-wrap { position: relative; width: var(--board-width); padding: 8px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: 0 18px 50px color-mix(in srgb, black 13%, transparent); }
+.board { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; aspect-ratio: 1 / 2; padding: 5px; border-radius: 10px; background: color-mix(in srgb, currentColor 7%, transparent); overflow: hidden; }
+.cell { aspect-ratio: 1; border-radius: 3px; background: color-mix(in srgb, currentColor 4%, transparent); }
+.cell:not(.color-0), .preview-cell:not(:empty) { box-shadow: inset 0 0 0 1px color-mix(in srgb, white 25%, transparent), inset 0 -4px 8px color-mix(in srgb, black 14%, transparent); }
+.color-1 { background: #24b9d6; } .color-2 { background: #e5b82f; }
+.color-3 { background: #8b69d9; } .color-4 { background: #42b96c; }
+.color-5 { background: #e26363; } .color-6 { background: #497de1; }
+.color-7 { background: #e8893b; } .ghost { opacity: 0.22; box-shadow: inset 0 0 0 2px currentColor; }
+.overlay { position: absolute; inset: 8px; display: grid; place-content: center; gap: 5px; text-align: center; border-radius: 10px; background: color-mix(in srgb, var(--willdeep-bg) 82%, transparent); backdrop-filter: blur(8px); }
+.overlay strong { font-size: 27px; } .overlay span { color: var(--muted); }
+aside { display: grid; gap: 10px; }
+.metrics { display: grid; gap: 6px; }
+.metrics article, .next-card { display: flex; align-items: center; justify-content: space-between; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); }
+.metrics span, .next-card > span { color: var(--muted); font-size: 12px; font-weight: 650; }
+.metrics strong { font-variant-numeric: tabular-nums; font-size: 19px; }
+.next-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 62px); gap: 12px; min-height: 76px; overflow: hidden; }
+.next-grid { display: grid; justify-self: end; gap: 2px; width: 100%; max-width: 62px; min-width: 0; overflow: hidden; }
+.preview-cell { display: block; width: 100%; min-width: 0; aspect-ratio: 1; border-radius: 2px; }
+.secondary { width: 100%; padding: 9px; font-weight: 650; }
+.controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.controls button { height: 38px; font-size: 18px; }
+.controls button:nth-child(4) { grid-column: 1 / 2; }
+.controls .wide { grid-column: 2 / 4; }
+button:hover { filter: brightness(0.92); } button:active { transform: translateY(1px); }
+
+@media (max-width: 760px) {
+  body { min-width: 520px; }
+  .game-layout { --board-width: min(280px, max(160px, calc((100vh - 140px) / 2))); grid-template-columns: var(--board-width) 150px; gap: 12px; }
+}

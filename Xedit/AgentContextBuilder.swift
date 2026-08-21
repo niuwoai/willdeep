@@ -111,6 +111,25 @@ enum AgentContextBuilder {
     private static let maxSelectionCharacters = 6_000
     private static let maxRulesCharacters = 6_000
     private static let dynamicContextMarker = "=== Dynamic Turn Context ==="
+
+    /// `progress` 块的格式合同。中断分支与活跃分支**必须**共用同一份文本。
+    ///
+    /// 历史上只有活跃分支带格式说明和示例；用户按 Stop 之后，每回合注入的
+    /// 换成中断分支提示词，它只说"发一个 progress 块"却不给格式。模型于是
+    /// 按自己的审美发人类可读的 ✓ 清单，`applyProgress` 解析出 0 条更新，
+    /// `interruptedAt` 清不掉，下回合继续注入没有格式说明的中断提示词——
+    /// **一次中断就把会话锁进死循环，之后模型再尽责也出不来**。实测一个
+    /// 会话里模型连发 7 个 progress 块、无一条可解析，计划 11 步全程 pending。
+    private static let progressBlockFormatContract = """
+    Status tokens: `pending`, `in_progress`, `done`, `skipped`, `failed`. Every line inside the block is one step number, a separator, and one token — nothing else. Example:
+
+    ```progress
+    1: done
+    2: in_progress
+    ```
+
+    Only lines in exactly that shape update WillDeep's visible checklist. A `progress` block filled with prose, checkmarks, or service status text parses to zero updates and silently leaves the checklist frozen at its old state — the user then watches a stale step counter while you work. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they never update the checklist by themselves.
+    """
     static let stablePrefixVersion = "willdeep-agent-system-v29"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
@@ -140,6 +159,10 @@ enum AgentContextBuilder {
         executionAgent: AgentExecutionAgent = .willDeep,
         approvalMode: AgentApprovalMode = .smart,
         currentPlan: AgentPlan? = nil,
+        /// 上一回合发出过 `progress` 围栏、但其中没有一行可解析。为真时在
+        /// 计划分支追加一句纠偏——静默失败是这个 bug 最恶劣的地方，模型
+        /// 自认为已上报，宿主却什么也没登记，双方都不知道断在哪。
+        planProgressFormatViolation: Bool = false,
         currentGoal: AgentGoal? = nil,
         goalPlanningState: AgentGoalPlanningState? = nil,
         goalRoadmap: AgentGoalRoadmap? = nil,
@@ -279,6 +302,12 @@ enum AgentContextBuilder {
             sections.append(awareness)
         }
 
+        let progressFormatCorrection = planProgressFormatViolation ? """
+
+
+        CORRECTION — REQUIRED: your previous reply carried a `progress` block, but not one line inside it matched `<step number>: <status>`. WillDeep recorded nothing and the user is still looking at a stale step counter. Re-report every step you have actually advanced so far, in exactly the line format above, before doing anything else.
+        """ : ""
+
         if interactionMode == .normal, let plan = currentPlan, plan.isInterrupted,
            plan.status == .proposed
             || plan.status == .approved
@@ -296,7 +325,10 @@ enum AgentContextBuilder {
             Follow the user's latest message:
             - If it starts a different task, do that task directly. Do not resume the interrupted plan, do not treat its steps as pending work, and do not mention it unless relevant. For a genuinely multi-step new task, emit one complete numbered `plan` fenced block — it replaces the interrupted plan as the visible checklist.
             - If it asks to continue or resume, pick the interrupted plan back up from its current step statuses. Emit a `progress` block marking the step you are resuming as in_progress BEFORE you start working on it — that block is what tells WillDeep the plan is live again and clears the paused badge the user is looking at. Keep reporting with `progress` blocks as usual after that.
+            - Reconcile before you resume: if the conversation shows work that is already finished but the bracketed status above still says `pending`, an earlier report failed to register. Mark those steps `done` in your first `progress` block instead of redoing the work, then continue from the first genuinely unfinished step.
             - If it is ambiguous about which of the two they mean, ask one concise question instead of guessing.
+
+            \(progressBlockFormatContract)\(progressFormatCorrection)
             """)
         } else if interactionMode == .normal, let plan = currentPlan,
            plan.status == .proposed
@@ -315,14 +347,9 @@ enum AgentContextBuilder {
             \(stepsText)
 
             Progress reporting (REQUIRED):
-            At the end of EVERY reply where you advanced or finished a step, include exactly one fenced block tagged `progress` listing each step number you touched this turn and its new status. Use these status tokens: `pending`, `in_progress`, `done`, `skipped`, `failed`. Example:
+            At the end of EVERY reply where you advanced or finished a step, include exactly one fenced block tagged `progress` listing each step number you touched this turn and its new status.
 
-            ```progress
-            1: done
-            2: in_progress
-            ```
-
-            Only a valid `progress` fenced block changes WillDeep's visible checklist. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they do not update the checklist by themselves.
+            \(progressBlockFormatContract)\(progressFormatCorrection)
 
             Steps you didn't touch this turn can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once finished. After receiving tool results, report the resulting step statuses before issuing more tool calls so WillDeep can refresh the visible checklist immediately. Never mark a partial/sample deliverable as `done` when the step promises the complete artifact. If the response budget forces a pause, leave the current step `in_progress`; WillDeep can continue it automatically. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
             """)
@@ -1022,8 +1049,18 @@ nonisolated enum AgentPlanParser {
     /// `N` is the 1-based step index from the original plan. Unknown
     /// keys are ignored so a sloppy agent reply can't corrupt the
     /// whole plan. Returns nil when no progress block is present.
+    /// 内容里是否出现了 `progress` 围栏（不论其中的行能否解析）。用来把
+    /// "模型没上报进度"和"模型上报了但格式不对"区分开——后者需要纠偏，
+    /// 前者不需要打扰模型。
+    static func containsProgressBlock(_ content: String) -> Bool {
+        // 必须与 applyProgress 用同一个解析入口：`progressBodies` 除围栏式外
+        // 还认 XML 风格 `<progress>` 包装，并忽略普通代码块里的字面示例。
+        // 若这里退回只认围栏，XML 风格的不可解析块就检测不到，纠偏静默失效。
+        !progressBodies(in: content).isEmpty
+    }
+
     static func applyProgress(to plan: AgentPlan, from content: String) -> AgentPlan? {
-        let bodies = fencedBodies(in: content, tag: "progress")
+        let bodies = progressBodies(in: content)
         guard !bodies.isEmpty else { return nil }
         var updates: [Int: AgentPlan.StepStatus] = [:]
         for body in bodies {
@@ -1076,6 +1113,84 @@ nonisolated enum AgentPlanParser {
         var lifted = plan
         lifted.interruptedAt = nil
         return lifted
+    }
+
+    /// Extract progress bodies in source order from both WillDeep's fenced
+    /// protocol and the XML-style wrapper emitted by some providers. Literal
+    /// examples inside ordinary Markdown code fences are ignored.
+    private static func progressBodies(in content: String) -> [String] {
+        enum Container {
+            case fence
+            case element
+        }
+
+        let lines = content.components(separatedBy: .newlines)
+        var activeContainer: Container?
+        var isInsideOrdinaryFence = false
+        var currentBody: [String] = []
+        var bodies: [String] = []
+
+        func finishBody() {
+            if !currentBody.isEmpty {
+                bodies.append(currentBody.joined(separator: "\n"))
+            }
+            currentBody.removeAll(keepingCapacity: true)
+            activeContainer = nil
+        }
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if activeContainer == .fence {
+                if trimmed.hasPrefix("```") {
+                    finishBody()
+                } else {
+                    currentBody.append(line)
+                }
+                continue
+            }
+
+            if activeContainer == .element {
+                if trimmed.caseInsensitiveCompare("</progress>") == .orderedSame {
+                    finishBody()
+                } else {
+                    currentBody.append(line)
+                }
+                continue
+            }
+
+            if isInsideOrdinaryFence {
+                if trimmed.hasPrefix("```") {
+                    isInsideOrdinaryFence = false
+                }
+                continue
+            }
+
+            if trimmed.hasPrefix("```") {
+                let info = String(trimmed.dropFirst(3))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                if info == "progress" {
+                    activeContainer = .fence
+                    currentBody = []
+                } else {
+                    isInsideOrdinaryFence = true
+                }
+                continue
+            }
+
+            if trimmed.caseInsensitiveCompare("<progress>") == .orderedSame {
+                activeContainer = .element
+                currentBody = []
+            }
+        }
+
+        // Match the existing streaming behavior: status rows become useful as
+        // soon as they arrive, even before the closing delimiter.
+        if activeContainer != nil {
+            finishBody()
+        }
+        return bodies
     }
 
     fileprivate static func fencedBody(in content: String, tag: String) -> String? {
