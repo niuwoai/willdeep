@@ -76,6 +76,7 @@ struct AgentPluginPrimaryNavigationSection: View {
                 }
             }
         }
+        .tint(.primary)
     }
 }
 
@@ -221,6 +222,7 @@ struct AgentPluginDeclarativeSidebarHost: View {
                     .padding(.vertical, 8)
             }
         }
+        .tint(.primary)
         .task(id: taskIdentity) {
             await loadDocument()
         }
