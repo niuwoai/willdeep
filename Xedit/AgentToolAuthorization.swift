@@ -2025,6 +2025,7 @@ enum AgentSandboxPolicy {
               !sensitiveOptionNameLooksSensitive(lower) else {
             return false
         }
+        guard !hasBareCredentialComponent(lower) else { return false }
         // 豁免侧用自己的路径识别，比通用 looksLikePath 宽：通用检测器驱动
         // “升级”，把 `internal/auth/token.go` 这类裸相对路径当路径会过度
         // 打扰；这里驱动“豁免”，恰恰以多段相对路径为主形态。含 shell
@@ -2055,6 +2056,32 @@ enum AgentSandboxPolicy {
             rootDirectory: rootDirectory,
             additionalWorkspaceRoots: additionalWorkspaceRoots
         )
+    }
+
+    /// 目录段里只有这几个词能单独定性。`tokens/`、`token/` 不在其列：设计
+    /// token、API token 模型、分词器都常年占用这个目录名，把它算成凭据库会
+    /// 把 1.280.0-rc2 刚消掉的那类误伤原样请回来。
+    nonisolated private static let bareCredentialStoreNames: Set<String> = [
+        "secret", "secrets", "credential", "credentials"
+    ]
+
+    /// 词撞名豁免只该覆盖**恰好含凭据词的普通文件**（`internal/auth/token.go`、
+    /// `docs/secrets.md`），不该覆盖**本身就是凭据的文件**。分界有两条：
+    ///
+    /// - 末段没有扩展名且整段就是凭据词（`secrets/credentials`、`deploy/token`）
+    ///   ——这不是撞名，是自报家门；
+    /// - 途经的目录段整段叫 `secrets` / `credentials`（`config/secrets/db.yml`）
+    ///   ——目录本身声明了里面装什么。
+    ///
+    /// 豁免的立论是「`read_file` 本就免审可读同一文件」，对源码成立；把它推广
+    /// 到裸凭据名，等于用一致性论证把凭据读取一并放行了。
+    nonisolated private static func hasBareCredentialComponent(_ lower: String) -> Bool {
+        let components = lower.split(separator: "/").map(String.init)
+        guard let last = components.last else { return false }
+        if !last.contains("."), sensitiveCredentialMarkers.contains(last) {
+            return true
+        }
+        return components.dropLast().contains { bareCredentialStoreNames.contains($0) }
     }
 
     nonisolated private static func sensitiveOptionNameLooksSensitive(_ lower: String) -> Bool {
