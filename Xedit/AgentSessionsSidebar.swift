@@ -540,12 +540,14 @@ struct AgentSessionsSidebar: View {
         // estate, so they've been removed. Add them back when there's
         // a real feature to attach.
         VStack(spacing: 0) {
-            // This row is navigation, not creation. It used to be "New Chat",
-            // which made it the only way back to the conversation from a
-            // plugin or the dispatch board — and taking it abandoned whatever
-            // chat was open. Creating a chat still lives here, on the trailing
-            // button (and on ⌘N, which the menu owns; the "⌘N" label this row
-            // used to show never actually fired).
+            // Context-dependent: elsewhere it navigates back to the open
+            // conversation, on the conversation it starts a new one (see
+            // `activateAgentConversationEntry`). It used to be "New Chat",
+            // which made it the only way back from a plugin or the dispatch
+            // board — and taking it abandoned whatever chat was open. The
+            // trailing button is the unconditional "new chat", so that intent
+            // is still one click away from anywhere (as is ⌘N, which the menu
+            // owns; the "⌘N" label this row used to show never actually fired).
             SidebarActionRow(
                 icon: "bubble.left",
                 title: L10n.Sidebar.chatAction,
@@ -558,7 +560,7 @@ struct AgentSessionsSidebar: View {
                     appState.agentComposerFocusRevision += 1
                 }
             ) {
-                appState.returnToAgentConversation()
+                appState.activateAgentConversationEntry()
             }
             SidebarActionRow(
                 icon: "clock",

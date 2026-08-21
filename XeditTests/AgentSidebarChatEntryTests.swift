@@ -32,7 +32,7 @@ struct AgentSidebarChatEntryTests {
         let session = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
         appState.agentPrimaryDestination = .plugin("demo.panel")
 
-        appState.returnToAgentConversation()
+        appState.activateAgentConversationEntry()
 
         #expect(appState.agentPrimaryDestination == .conversation)
         #expect(appState.activeAgentSessionID == session.id)   // same chat, not a new one
@@ -50,7 +50,7 @@ struct AgentSidebarChatEntryTests {
 
         for destination in [AgentPrimaryDestination.dispatchBoard, .scheduledTasks, .roundtable, .pluginCenter] {
             appState.agentPrimaryDestination = destination
-            appState.returnToAgentConversation()
+            appState.activateAgentConversationEntry()
             #expect(appState.agentPrimaryDestination == .conversation)
             #expect(appState.activeAgentSessionID == session.id)
         }
@@ -66,7 +66,7 @@ struct AgentSidebarChatEntryTests {
         appState.agentPrimaryDestination = .pluginCenter
 
         #expect(!appState.hasResumableAgentConversation)
-        appState.returnToAgentConversation()
+        appState.activateAgentConversationEntry()
 
         #expect(appState.agentPrimaryDestination == .conversation)
         #expect(appState.activeAgentSessionID != nil)
@@ -89,7 +89,7 @@ struct AgentSidebarChatEntryTests {
         #expect(appState.activeAgentSessionID == session.id)
         #expect(!appState.hasResumableAgentConversation)
 
-        appState.returnToAgentConversation()
+        appState.activateAgentConversationEntry()
 
         #expect(appState.agentPrimaryDestination == .conversation)
         let resumed = try #require(appState.activeAgentSessionID)
@@ -109,10 +109,65 @@ struct AgentSidebarChatEntryTests {
         appState.agentSidePanelKind = .backgroundTasks
         appState.agentPrimaryDestination = .dispatchBoard
 
-        appState.returnToAgentConversation()
+        appState.activateAgentConversationEntry()
 
         #expect(appState.agentSidePanelKind == nil)
         #expect(appState.agentSidePanelRequest == nil)
+    }
+
+    /// Already on the conversation, navigating there is a no-op — so the click
+    /// can only mean "start a new one".
+    @Test("clicking while already in the chat starts a new one")
+    func clickingWhileAlreadyInTheChatStartsANewOne() throws {
+        let workspace = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        let first = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        appState.agentMessages = [AgentMessage(role: .user, content: "在用了")]
+        #expect(appState.agentPrimaryDestination == .conversation)
+
+        appState.activateAgentConversationEntry()
+
+        let current = try #require(appState.activeAgentSessionID)
+        #expect(current != first.id)
+        #expect(appState.agentSessions.count == 2)   // the old chat is still there
+        #expect(appState.agentPrimaryDestination == .conversation)
+    }
+
+    /// …unless the chat is untouched. Otherwise repeated clicks would pile up
+    /// empty sessions, each identical to the last.
+    @Test("clicking in an untouched chat does not pile up empty sessions")
+    func clickingInAnUntouchedChatDoesNotCreateMore() throws {
+        let workspace = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        let session = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        #expect(appState.activeAgentConversationIsUnused)
+
+        for _ in 0..<5 {
+            appState.activateAgentConversationEntry()
+        }
+
+        #expect(appState.activeAgentSessionID == session.id)
+        #expect(appState.agentSessions.count == 1)
+    }
+
+    /// A chat with messages is in use even when the stored session has not
+    /// caught up yet — the live runtime is the truth mid-conversation.
+    @Test("live messages count as in-use before the session is persisted")
+    func liveMessagesCountAsInUse() throws {
+        let workspace = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        let session = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        appState.agentMessages = [AgentMessage(role: .user, content: "刚发的")]
+
+        // The stored copy is still empty; the runtime is not.
+        #expect(appState.agentSessions.first(where: { $0.id == session.id })?.messages.isEmpty == true)
+        #expect(!appState.activeAgentConversationIsUnused)
     }
 
     /// The trailing button on the row keeps the old behavior, so "make a new

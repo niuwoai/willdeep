@@ -1662,23 +1662,57 @@ extension AppState {
         return agentSessions.contains { $0.id == id }
     }
 
-    /// Return to the chat surface, keeping whatever conversation is already
-    /// open. Only starts a fresh one when there is genuinely nothing to go back
-    /// to, so leaving for a plugin (or the dispatch board, or scheduled tasks)
-    /// and coming back is navigation rather than a new chat.
+    /// Whether the open conversation is still untouched — a chat that was
+    /// started but never used. Starting a "new" one from here would produce
+    /// something indistinguishable from what is already on screen.
     ///
-    /// Switching destinations never tore down the conversation; the sidebar
-    /// simply had no entry that meant "back to it", so the only way in was
-    /// "New Chat" — which did exactly what it said and left the previous
-    /// conversation behind.
-    func returnToAgentConversation() {
+    /// Deliberately ignores the composer draft: half-typed input means the
+    /// chat is in use even with no messages committed yet, and replacing it
+    /// would throw that text away.
+    /// Checks both the live runtime and the stored session. Live messages are
+    /// the truth for a chat in progress (`agentMessages` delegates to
+    /// `activeRuntime`, and the session's own copy only catches up when it is
+    /// persisted), while the stored copy covers a session whose runtime has not
+    /// replayed its history yet. Either one non-empty means "in use" — erring
+    /// toward creating a new chat rather than leaving the click doing nothing.
+    var activeAgentConversationIsUnused: Bool {
+        guard let id = activeAgentSessionID,
+              let session = agentSessions.first(where: { $0.id == id }) else { return false }
+        return agentMessages.isEmpty && session.messages.isEmpty
+    }
+
+    /// The sidebar's chat row. Context-dependent by design:
+    ///
+    /// - Away from the conversation, it means "take me back" — to the chat that
+    ///   is already open, not a new one. Switching destinations never tore the
+    ///   conversation down; the sidebar simply had no entry that meant "back to
+    ///   it", so the only way in used to be "New Chat", which did exactly what
+    ///   it said and left the previous conversation behind.
+    /// - Already on the conversation, going back is a no-op, so the only thing
+    ///   the click can mean is "start a new one".
+    ///
+    /// The one exception is an untouched chat: repeated clicks would otherwise
+    /// pile up empty sessions in the sidebar, each identical to the last. There
+    /// the click just returns focus to the composer, so it still does something.
+    func activateAgentConversationEntry() {
         agentSidePanelKind = nil
         agentSidePanelRequest = nil
+
         guard hasResumableAgentConversation else {
             startNewAgentSession()
+            agentComposerFocusRevision += 1
             return
         }
-        agentPrimaryDestination = .conversation
+        guard agentPrimaryDestination == .conversation else {
+            agentPrimaryDestination = .conversation
+            return
+        }
+        guard !activeAgentConversationIsUnused else {
+            agentComposerFocusRevision += 1
+            return
+        }
+        startNewAgentSession()
+        agentComposerFocusRevision += 1
     }
 
     @discardableResult
