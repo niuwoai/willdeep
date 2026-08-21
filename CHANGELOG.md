@@ -3,6 +3,22 @@
 > 当前文件保留最新版本（1.282.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.282.0-rc8 - 2026-08-21
+
+### Fixed
+
+- **`security_guard` / `judge` 两个工种不再声称由网关托管。** 二者在 `hostedTradeIDs` 里，于是 `spawn_agent` 会把它们解析到 `someim-32b-security-guard` / `someim-32b-judge`——而网关从未建这两条链，实测返回 `model_not_configured`。声明一个不存在的链比不声明更糟：客户端一旦相信服务端会 prepend 职能段就不再发自己那份，该工种既丢了提示词又直接失败。现在两者与 `ops_runner` / `terminal_operator` 同列，职能段由客户端自带，模型走 `cheapBinding`。
+- 逐档实弹探活（2026-08-21）：`scout` / `reader` / `editor` / `test-fixer` / `build-fixer` / `log-inspector` / `git-detective` 七档在线，`security-guard` / `judge` / `reviewer` / `ops-runner` 四档未建。托管名单与 willdeep-rs 的 `hosted_worker_model` 恢复一致——两端共用同一个网关和同一批账号，同一个工种必须从任一端解析到同一个模型。
+- **主循环的 `someim-security-guard` 与 `someim-judge` 均在线，不受影响。** 它们是 replace 模式、承担自动审批信任边界的独立模型，与 Worker 档的同名工种是两回事；代码注释已写明「同一主题、不同权限，不要合并」，避免下次有人看到工种缺席就去动主循环那两个。
+
+### Changed
+
+- `docs/SOMEIM_WORKER_VIRTUAL_MODELS.md` 新增 §2.1「实测状态」：该文档是规划稿而非清单，客户端名单只认探活通过的链；同时记录本次实测的实际上游（`editor` 已落在 poolside、`compressor` 落在 ling-3.0-flash），并声明客户端不应依赖具体上游——那正是虚拟模型的意义。
+
+### Tests
+
+- 新增「hosted trades match the chains the relay has actually provisioned」：直接锁定七项字面量名单，并断言四个未建工种解析为 `nil`。原有的目录派生断言无法发现这类漂移——`hostedVirtualModel` 本身就由 `hostedTradeIDs` 推导，两者永远自洽，哪怕同时错。
+
 ## 1.282.0-rc7 - 2026-08-21
 
 ### Fixed
