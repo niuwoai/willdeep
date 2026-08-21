@@ -119,6 +119,101 @@ struct AgentTurnProgressPresentationTests {
         #expect(extraction.presentation == nil)
     }
 
+    @Test("XML progress 普通清单保留正文但不泄漏标签")
+    func xmlProgressProseKeepsReadableBody() {
+        let content = """
+        前后端联通成功。
+
+        <progress>
+        - 后端 Phase 1（租户 CRUD）✅ 已通过端到端验证
+        - 前端 TS 构建修复 ✅ yarn build 通过
+        </progress>
+
+        可以开始验收。
+        """
+
+        let extraction = AgentTurnProgressPresentation.extract(from: content, plan: nil)
+
+        #expect(extraction.visibleContent == """
+        前后端联通成功。
+
+        - 后端 Phase 1（租户 CRUD）✅ 已通过端到端验证
+        - 前端 TS 构建修复 ✅ yarn build 通过
+
+        可以开始验收。
+        """)
+        #expect(!extraction.visibleContent.contains("<progress>"))
+        #expect(!extraction.visibleContent.contains("</progress>"))
+        #expect(extraction.presentation == nil)
+    }
+
+    @Test("XML progress 状态协议生成原生进度卡")
+    func xmlProgressStatusRowsUseNativePresentation() throws {
+        let plan = AgentPlan(
+            status: .executing,
+            steps: [
+                AgentPlan.Step(text: "读取工程"),
+                AgentPlan.Step(text: "运行验证"),
+            ],
+            summary: ""
+        )
+        let extraction = AgentTurnProgressPresentation.extract(
+            from: """
+            已开始验证。
+
+            <PrOgReSs>
+            1: done
+            2: in_progress
+            </PROGRESS>
+            """,
+            plan: plan
+        )
+        let presentation = try #require(extraction.presentation)
+
+        #expect(extraction.visibleContent == "已开始验证。")
+        #expect(presentation.items.map(\.status) == [.done, .inProgress])
+        #expect(presentation.items.map(\.title) == ["读取工程", "运行验证"])
+    }
+
+    @Test("代码示例中的 XML progress 标签保持原样")
+    func xmlProgressInsideCodeFenceIsNotProtocol() {
+        let content = """
+        ```html
+        <progress>
+        1: done
+        </progress>
+        ```
+        """
+
+        let extraction = AgentTurnProgressPresentation.extract(from: content, plan: nil)
+
+        #expect(extraction.visibleContent == content)
+        #expect(extraction.presentation == nil)
+    }
+
+    @Test("流式 XML progress 尚未闭合时不显示原始标签")
+    func unclosedStreamingXMLProgressDoesNotLeakWrapper() throws {
+        let prose = AgentTurnProgressPresentation.extract(
+            from: """
+            <progress>
+            - 正在联调接口
+            """,
+            plan: nil
+        )
+        #expect(prose.visibleContent == "- 正在联调接口")
+        #expect(prose.presentation == nil)
+
+        let status = AgentTurnProgressPresentation.extract(
+            from: """
+            <progress>
+            1: in_progress
+            """,
+            plan: nil
+        )
+        #expect(status.visibleContent.isEmpty)
+        #expect(try #require(status.presentation).items.map(\.status) == [.inProgress])
+    }
+
     @Test("Goal 自检协议不会作为聊天正文显示")
     func hidesGoalCheckProtocolWithOrWithoutProgress() {
         let goalOnly = AgentTurnProgressPresentation.extract(

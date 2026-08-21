@@ -156,6 +156,7 @@ struct AgentModePickerPill: View {
 /// Overflow control for composer actions that do not currently fit inline.
 struct ComposerOverflowPill: View {
     @EnvironmentObject var appState: AppState
+    @ObservedObject private var pluginRegistry = AgentPluginRegistry.shared
     let controls: [ComposerOverflowControl]
     @State private var isPresented = false
 
@@ -200,6 +201,38 @@ struct ComposerOverflowPill: View {
                 if controls.contains(.experts) {
                     AgentExpertActivationList()
                         .focusable(false)
+                }
+                let pluginCommands = pluginRegistry.menuCommands(at: "composer.more")
+                if !pluginCommands.isEmpty {
+                    Divider()
+                    Text(L10n.Plugins.actions)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(pluginCommands) { resolved in
+                        Button {
+                            isPresented = false
+                            Task {
+                                _ = try? await AgentPluginCommandExecutor.execute(
+                                    pluginID: resolved.pluginID,
+                                    commandID: resolved.command.id,
+                                    arguments: [:],
+                                    destinationID: pluginRegistry.defaultDestinationID(for: resolved.pluginID),
+                                    appState: appState
+                                )
+                            }
+                        } label: {
+                            Label(
+                                pluginRegistry.localizedString(
+                                    resolved.command.titleKey,
+                                    pluginID: resolved.pluginID
+                                ),
+                                systemImage: resolved.command.icon?.replacingOccurrences(of: "sf:", with: "")
+                                    ?? "puzzlepiece.extension"
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
             .padding(14)

@@ -224,13 +224,16 @@ nonisolated enum AgentMCPServerDirectory {
         servers.append(contentsOf: settings.userServers)
         servers.append(contentsOf: loadCursorServers())
         servers.append(contentsOf: loadCodexServers())
+        servers.append(contentsOf: loadPluginServers())
 
         var seenNames: Set<String> = []
         var deduped: [AgentMCPServerConfig] = []
         for var server in servers {
             server = server.normalized
             guard !server.name.isEmpty else { continue }
-            let key = server.name.lowercased()
+            let key = server.source == .plugin
+                ? server.id.lowercased()
+                : server.name.lowercased()
             guard !seenNames.contains(key) else { continue }
             seenNames.insert(key)
             server.isEnabled = !settings.disabledServerIDs.contains(server.id)
@@ -254,6 +257,14 @@ nonisolated enum AgentMCPServerDirectory {
     static func server(named name: String) throws -> AgentMCPServerConfig {
         guard let server = list().first(where: { $0.name == name }) else {
             throw AgentToolError.notFound("MCP server \(name)")
+        }
+        return server
+    }
+
+    static func pluginServer(pluginID: AgentPluginID, named name: String) throws -> AgentMCPServerConfig {
+        let serverID = "plugin:\(pluginID):\(name)"
+        guard let server = list().first(where: { $0.id == serverID }) else {
+            throw AgentToolError.notFound("MCP server \(name) for plugin \(pluginID)")
         }
         return server
     }
@@ -292,7 +303,7 @@ nonisolated enum AgentMCPServerDirectory {
         return parseTOMLServers(from: configText)
     }
 
-    private static func parseJSONServer(
+    static func parseJSONServer(
         name: String,
         source: AgentMCPServerSource,
         dict: [String: Any]
@@ -327,6 +338,124 @@ nonisolated enum AgentMCPServerDirectory {
             env: env,
             startupTimeout: timeout
         )
+    }
+
+    static func loadPluginServers() -> [AgentMCPServerConfig] {
+        AgentPluginRuntimeSnapshotStore.activePackages().flatMap { package -> [AgentMCPServerConfig] in
+            guard let definitions = pluginMCPDefinitions(for: package) else { return [] }
+            let declaredNames = package.manifest.map { Set($0.dependencies.mcpServers) }
+                ?? Set(definitions.keys)
+            guard !declaredNames.isEmpty else { return [] }
+            let permissions = Set(requiredPluginPermissions(for: package))
+            return definitions.compactMap { name, raw -> AgentMCPServerConfig? in
+                guard declaredNames.contains(name), let dictionary = raw as? [String: Any],
+                      var server = parseJSONServer(name: name, source: .plugin, dict: dictionary) else {
+                    return nil
+                }
+                switch server.transport {
+                case .stdio where !permissions.contains(.processExecute): return nil
+                case .streamableHTTP where !permissions.contains(.networkAccess): return nil
+                default: break
+                }
+                let pluginRoot = package.packageURL.path
+                server.command = resolvePluginRoot(server.command, pluginRoot: pluginRoot)
+                server.args = server.args.map { resolvePluginRoot($0, pluginRoot: pluginRoot) }
+                guard let env = resolvePluginConfigurationMap(
+                    server.env,
+                    package: package,
+                    pluginRoot: pluginRoot
+                ), let headers = resolvePluginConfigurationMap(
+                    server.headers,
+                    package: package,
+                    pluginRoot: pluginRoot
+                ) else { return nil }
+                server.env = env
+                server.headers = headers
+                server.id = "plugin:\(package.pluginID):\(name)"
+                return server
+            }
+        }
+    }
+
+    /// Codex-only packages have no WillDeep permission declaration. Preserve
+    /// compatibility by deriving the minimum transport permissions shown in
+    /// the installation proposal. Packages with a WillDeep manifest remain
+    /// strictly declaration-driven, including when their mcp.json contains
+    /// additional undeclared transports.
+    static func requiredPluginPermissions(for package: AgentPluginPackage) -> [AgentPluginPermission] {
+        if let manifest = package.manifest {
+            return manifest.permissions
+        }
+        guard let definitions = pluginMCPDefinitions(for: package) else { return [] }
+        var permissions: Set<AgentPluginPermission> = []
+        for (name, raw) in definitions {
+            guard let dictionary = raw as? [String: Any],
+                  let server = parseJSONServer(name: name, source: .plugin, dict: dictionary) else {
+                continue
+            }
+            switch server.transport {
+            case .stdio:
+                permissions.insert(.processExecute)
+            case .streamableHTTP:
+                permissions.insert(.networkAccess)
+            }
+        }
+        return permissions.sorted { $0.rawValue < $1.rawValue }
+    }
+
+    private static func pluginMCPDefinitions(for package: AgentPluginPackage) -> [String: Any]? {
+        let configURL = package.packageURL.appendingPathComponent("mcp.json")
+        guard let data = try? Data(contentsOf: configURL),
+              data.count <= AgentPluginPackageLoader.maximumManifestBytes,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return root["mcpServers"] as? [String: Any]
+    }
+
+    private static func resolvePluginRoot(_ value: String, pluginRoot: String) -> String {
+        value.replacingOccurrences(of: "${pluginRoot}", with: pluginRoot)
+    }
+
+    private static func resolvePluginConfigurationMap(
+        _ values: [String: String],
+        package: AgentPluginPackage,
+        pluginRoot: String
+    ) -> [String: String]? {
+        var result: [String: String] = [:]
+        let settings = package.manifest?.contributes.settings ?? []
+        for (key, value) in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if AgentMCPServerConfig.isSensitiveCredentialKey(key),
+               !AgentCredentialStore.isReference(trimmed),
+               !trimmed.contains("${setting:") {
+                // Plugin packages may reference credentials, but may never
+                // smuggle a plaintext token or password through mcp.json.
+                return nil
+            }
+            var resolved = resolvePluginRoot(value, pluginRoot: pluginRoot)
+            for setting in settings {
+                let placeholder = "${setting:\(setting.id)}"
+                guard resolved.contains(placeholder) else { continue }
+                let replacement: String
+                if setting.type == .secret {
+                    let account = AgentPluginSettingsStore.credentialAccount(
+                        pluginID: package.pluginID,
+                        settingID: setting.id
+                    )
+                    replacement = AgentCredentialStore.reference(account: account)
+                } else {
+                    replacement = AgentPluginSettingsStore.value(
+                        pluginID: package.pluginID,
+                        setting: setting
+                    )
+                }
+                resolved = resolved.replacingOccurrences(of: placeholder, with: replacement)
+            }
+            guard !resolved.contains("${setting:") else { return nil }
+            result[key] = resolved
+        }
+        return result
     }
 
     private static func parseTOMLServers(from text: String) -> [AgentMCPServerConfig] {
@@ -476,6 +605,8 @@ nonisolated enum AgentMCPServerDirectory {
             return 1
         case .codex:
             return 2
+        case .plugin:
+            return 3
         }
     }
 }

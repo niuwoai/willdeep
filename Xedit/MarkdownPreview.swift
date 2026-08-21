@@ -41,6 +41,10 @@ struct MarkdownPreviewBlock: Equatable {
         case code
         case divider
         case table
+        /// A line that is nothing but `![alt](source)`. `text` carries the
+        /// alt text; `imageSource` carries the raw source string. Only
+        /// local files actually render — see `MarkdownInlineImage`.
+        case image
     }
 
     let kind: Kind
@@ -64,6 +68,9 @@ struct MarkdownPreviewBlock: Equatable {
     /// literally, so the common `1. item` authoring style still appears as
     /// a continuous 1, 2, 3 sequence. Nil for non-ordered-list blocks.
     var orderedListNumber: Int? = nil
+    /// Raw source string for `.image` blocks — a path, `file://` URL, or
+    /// remote URL exactly as the author wrote it. Nil for every other kind.
+    var imageSource: String? = nil
 }
 
 enum MarkdownPreviewParser {
@@ -168,6 +175,20 @@ enum MarkdownPreviewParser {
                 flushParagraph()
                 endListContext()
                 blocks.append(heading)
+                i += 1; continue
+            }
+
+            // A line that is *only* an image becomes a picture block. An
+            // image inside a sentence stays in the paragraph and renders
+            // as alt text — a block attachment mid-line wrecks layout.
+            if let image = MarkdownInlineImage.parseStandaloneImageLine(trimmedLine) {
+                flushParagraph()
+                endListContext()
+                blocks.append(MarkdownPreviewBlock(
+                    kind: .image,
+                    text: image.alt,
+                    imageSource: image.source
+                ))
                 i += 1; continue
             }
 
@@ -582,6 +603,12 @@ struct MarkdownPreviewBlockView: View {
             MarkdownTableBlockView(
                 headers: block.tableHeaders ?? [],
                 rows: block.tableRows ?? [],
+                typography: typography
+            )
+        case .image:
+            MarkdownImageBlockView(
+                alt: block.text,
+                source: block.imageSource ?? "",
                 typography: typography
             )
         }

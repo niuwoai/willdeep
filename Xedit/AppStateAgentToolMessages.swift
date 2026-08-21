@@ -786,6 +786,7 @@ extension AppState {
         in messages: [AgentMessage]
     ) -> [AgentImageAttachment] {
         guard assistantIndex > 0 else { return [] }
+        let toolNamesByCallID = toolNameLookup(in: messages)
         var grouped: [[AgentImageAttachment]] = []
         var index = assistantIndex - 1
         while index >= 0 {
@@ -794,9 +795,19 @@ extension AppState {
                 break
             }
             if message.role == .tool {
-                let visible = message.images.filter {
-                    $0.source == .generated || $0.source == .capture
-                }
+                let toolName = message.toolCallID.flatMap { toolNamesByCallID[$0] }
+                let visible = message.images
+                    .filter { $0.source == .generated || $0.source == .capture }
+                    .map { image -> AgentImageAttachment in
+                        // Stamp provenance while the tool message is still
+                        // in reach. Once the image is lifted onto the
+                        // assistant message the settled transcript has no
+                        // way back to the call that produced it.
+                        guard image.originToolName == nil, let toolName else { return image }
+                        var stamped = image
+                        stamped.originToolName = toolName
+                        return stamped
+                    }
                 if !visible.isEmpty {
                     grouped.append(visible)
                 }
@@ -804,6 +815,19 @@ extension AppState {
             index -= 1
         }
         return grouped.reversed().flatMap { $0 }
+    }
+
+    /// Maps `tool_call_id` → tool name across the whole conversation. Tool
+    /// results carry only the call ID; the name lives on the assistant
+    /// message that requested the call.
+    private func toolNameLookup(in messages: [AgentMessage]) -> [String: String] {
+        var lookup: [String: String] = [:]
+        for message in messages where message.role == .assistant {
+            for call in message.toolCalls {
+                lookup[call.externalID] = call.toolName
+            }
+        }
+        return lookup
     }
 
     func diagnoseLocalWorkspaceIfNeeded(

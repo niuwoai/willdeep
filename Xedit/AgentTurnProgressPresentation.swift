@@ -54,7 +54,10 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
         var visibleLines: [String] = []
         var updates: [Int: AgentPlan.StepStatus] = [:]
         var progressBody: [String] = []
+        var progressElementBody: [String] = []
         var activeProtocolBlock: String?
+        var isInsideProgressElement = false
+        var isInsideOrdinaryFence = false
         var foundProgressBlock = false
         var foundGoalCheckBlock = false
 
@@ -64,6 +67,23 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
                 updates[index] = status
             }
             progressBody.removeAll(keepingCapacity: true)
+        }
+
+        func applyProgressElementBody() {
+            var parsedUpdate = false
+            for line in progressElementBody {
+                guard let (index, status) = parseUpdate(line) else { continue }
+                updates[index] = status
+                parsedUpdate = true
+            }
+            // XML-style progress tags are also emitted around ordinary
+            // human-readable bullet lists. Preserve that information when it
+            // is not the machine-readable plan protocol; only the wrapper is
+            // presentation metadata and must not leak into chat.
+            if !parsedUpdate {
+                visibleLines.append(contentsOf: progressElementBody)
+            }
+            progressElementBody.removeAll(keepingCapacity: true)
         }
 
         for line in lines {
@@ -80,6 +100,26 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
                 continue
             }
 
+            if isInsideProgressElement {
+                if isProgressElementEnd(trimmed) {
+                    applyProgressElementBody()
+                    isInsideProgressElement = false
+                } else {
+                    progressElementBody.append(line)
+                }
+                continue
+            }
+
+            // A literal <progress> example inside a Markdown code fence is
+            // code, not protocol. Keep the entire ordinary fence untouched.
+            if isInsideOrdinaryFence {
+                visibleLines.append(line)
+                if trimmed.hasPrefix("```") {
+                    isInsideOrdinaryFence = false
+                }
+                continue
+            }
+
             if isProgressFenceStart(trimmed) {
                 foundProgressBlock = true
                 activeProtocolBlock = "progress"
@@ -90,11 +130,27 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
                 activeProtocolBlock = "goal-check"
                 continue
             }
+            if trimmed.hasPrefix("```") {
+                isInsideOrdinaryFence = true
+                visibleLines.append(line)
+                continue
+            }
+            if isProgressElementStart(trimmed) {
+                foundProgressBlock = true
+                isInsideProgressElement = true
+                continue
+            }
             visibleLines.append(line)
         }
 
         if activeProtocolBlock == "progress" {
             applyProgressBody()
+        }
+        if isInsideProgressElement {
+            // Streaming providers may not have emitted the closing tag yet.
+            // Render prose immediately, or surface already complete status
+            // rows through the native progress card.
+            applyProgressElementBody()
         }
 
         guard foundProgressBlock || foundGoalCheckBlock else { return (content, nil) }
@@ -131,6 +187,14 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         return info == "goal-check"
+    }
+
+    private static func isProgressElementStart(_ trimmed: String) -> Bool {
+        trimmed.caseInsensitiveCompare("<progress>") == .orderedSame
+    }
+
+    private static func isProgressElementEnd(_ trimmed: String) -> Bool {
+        trimmed.caseInsensitiveCompare("</progress>") == .orderedSame
     }
 
     private static func parseUpdate(_ rawLine: String) -> (Int, AgentPlan.StepStatus)? {

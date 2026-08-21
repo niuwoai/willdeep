@@ -739,6 +739,22 @@ enum AgentAssistantMarkdownRenderer {
                 divider.foregroundColor = .secondary
                 result += divider
 
+            case .image:
+                // This whole renderer collapses a turn into one
+                // AttributedString — SwiftUI `Text` has no image
+                // attachment, and the per-block ForEach that would allow
+                // one froze long replies (rc9). So a streaming image
+                // shows its alt-text placeholder; the settled TextKit
+                // pass a moment later swaps in the real picture.
+                appendSeparator()
+                var placeholder = AttributedString(MarkdownInlineImage.fallbackLabel(
+                    alt: block.text,
+                    source: block.imageSource ?? ""
+                ))
+                placeholder.font = bodyFont
+                placeholder.foregroundColor = .secondary
+                result += placeholder
+
             case .table:
                 // GFM tables render as monospaced `cell │ cell` rows
                 // with a `─┼─` rule under the header — SwiftUI Text
