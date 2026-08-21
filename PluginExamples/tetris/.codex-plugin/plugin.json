@@ -1,6 +1,6 @@
 {
   "name": "willdeep-tetris-example",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A complete Tetris-style game destination for WillDeep.",
   "interface": {
     "displayName": "Tetris",

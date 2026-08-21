@@ -189,6 +189,7 @@
 				5CA6B05D2FC6D8F9006DFCCC /* Sources */,
 				5CA6B05E2FC6D8F9006DFCCC /* Frameworks */,
 				5CA6B05F2FC6D8F9006DFCCC /* Resources */,
+				7E2F8B7A2F9E4A1C9E0B1004 /* Bundle built-in plugins */,
 				5CA6B0B72FE10A01006DFCCC /* Build willdeep-agent */,
 				5CA6B0E12FE10A02006DFCCC /* Build WillDeep Computer Use Helper */,
 			);
@@ -331,6 +332,28 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		7E2F8B7A2F9E4A1C9E0B1004 /* Bundle built-in plugins */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/PluginExamples/tetris/.codex-plugin",
+				"$(SRCROOT)/PluginExamples/tetris/.willdeep-plugin",
+				"$(SRCROOT)/PluginExamples/tetris/ui/dist",
+			);
+			name = "Bundle built-in plugins";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/zsh;
+			shellScript = "set -euo pipefail\nsource_root=\"$SRCROOT/PluginExamples/tetris\"\ndestination_root=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/BundledPlugins/tetris\"\nrm -rf \"$destination_root\"\nmkdir -p \"$destination_root/ui\"\n/usr/bin/ditto \"$source_root/.codex-plugin\" \"$destination_root/.codex-plugin\"\n/usr/bin/ditto \"$source_root/.willdeep-plugin\" \"$destination_root/.willdeep-plugin\"\n/usr/bin/ditto \"$source_root/ui/dist\" \"$destination_root/ui/dist\"\n";
+		};
 		5CA6B0B72FE10A01006DFCCC /* Build willdeep-agent */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -445,7 +468,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 443;
+				CURRENT_PROJECT_VERSION = 445;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -466,7 +489,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.280.0-rc1;
+				MARKETING_VERSION = 1.280.0-rc3;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -490,7 +513,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 443;
+				CURRENT_PROJECT_VERSION = 445;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -511,7 +534,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.280.0-rc1;
+				MARKETING_VERSION = 1.280.0-rc3;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -651,11 +674,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 443;
+				CURRENT_PROJECT_VERSION = 445;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.280.0-rc1;
+				MARKETING_VERSION = 1.280.0-rc3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -672,11 +695,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 443;
+				CURRENT_PROJECT_VERSION = 445;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.280.0-rc1;
+				MARKETING_VERSION = 1.280.0-rc3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -692,10 +715,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 443;
+				CURRENT_PROJECT_VERSION = 445;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.280.0-rc1;
+				MARKETING_VERSION = 1.280.0-rc3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -711,10 +734,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 443;
+				CURRENT_PROJECT_VERSION = 445;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.280.0-rc1;
+				MARKETING_VERSION = 1.280.0-rc3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
