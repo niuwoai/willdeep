@@ -108,6 +108,62 @@ struct SomeIMSharedSessionMemoTests {
         #expect(SomeIMIntegrationStore.loadAPIKey() == "second")
     }
 
+    /// The empty answer is cacheable, but not forever. An empty read is either a
+    /// real sign-out or a read that raced a concurrent Keychain write, and this
+    /// layer cannot tell them apart — so the answer has to expire on its own.
+    @Test
+    func anEmptyAnswerStopsBeingServedAfterTheTTL() {
+        var clock = Date(timeIntervalSince1970: 0)
+        let memo = SomeIMSharedSessionMemo(emptyTTL: 1, now: { clock })
+        var loads = 0
+        let read = { memo.value { loads += 1; return nil } }
+
+        _ = read()
+        _ = read()
+        #expect(loads == 1)          // still inside the TTL
+
+        clock = clock.addingTimeInterval(1.5)
+        _ = read()
+        #expect(loads == 2)          // expired, so the loader runs again
+    }
+
+    /// The bug this TTL exists for. `persistSharedSession` invalidates *before*
+    /// it writes, and `SharedKeychain.write` can fall back to delete+add — so a
+    /// concurrent reader lands between the two and reads nothing. Before the
+    /// TTL, that answer stuck until the next invalidation and the entire app
+    /// looked signed out: an empty model picker for seconds at a time.
+    @Test
+    func anEmptyReadThatRacedAWriteHealsWithoutAnInvalidate() {
+        var clock = Date(timeIntervalSince1970: 0)
+        var stored: SomeIMSharedSession?          // mid delete+add: nothing there
+        let memo = SomeIMSharedSessionMemo(emptyTTL: 1, now: { clock })
+        let read = { memo.value { stored } }
+
+        #expect(read() == nil)
+        stored = session("restored")              // the write lands
+        #expect(read() == nil)                    // still serving the empty answer
+
+        clock = clock.addingTimeInterval(1.5)
+        #expect(read()?.apiKey == "restored")     // heals on its own
+    }
+
+    /// Only the *empty* answer expires. A real session stays memoized until
+    /// something invalidates it, which is what keeps the 400ms-interval readers
+    /// off the Keychain.
+    @Test
+    func aRealSessionStaysCachedPastTheEmptyTTL() {
+        var clock = Date(timeIntervalSince1970: 0)
+        let memo = SomeIMSharedSessionMemo(emptyTTL: 1, now: { clock })
+        var loads = 0
+        let read = { memo.value { loads += 1; return self.session("k") } }
+
+        _ = read()
+        clock = clock.addingTimeInterval(600)
+        _ = read()
+
+        #expect(loads == 1)
+    }
+
     /// Guards the trap that made this cache risky in the first place:
     /// `updateSharedSession` verifies its own write by reading the session back
     /// and comparing keys. If a write left a stale value memoized, that check

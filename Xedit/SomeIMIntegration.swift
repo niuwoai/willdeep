@@ -213,23 +213,59 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
 /// "Nobody is logged in" is a cacheable answer, hence `loaded` is tracked
 /// separately from the value rather than leaning on `value == nil`.
 final class SomeIMSharedSessionMemo {
+    /// How long an empty read stays cached.
+    ///
+    /// A *successful* read is memoized until something invalidates it. An empty
+    /// one only holds briefly, because at this layer the two ways to read
+    /// nothing are indistinguishable: the user really is signed out, or the
+    /// read lost a race with a write. That race is real — `SharedKeychain.write`
+    /// falls back to `SecItemDelete` + `SecItemAdd`, and every write path
+    /// invalidates this cache *before* it writes, so a concurrent reader can
+    /// land squarely between the two. Caching that answer indefinitely made the
+    /// whole app look signed out until the next notification happened along,
+    /// which is what emptied the model picker for seconds at a time.
+    ///
+    /// Still long enough to serve the polling readers this cache exists for
+    /// (the mobile gateway reads every 400ms), so a genuinely signed-out app
+    /// does not go back to hitting the Keychain on every access.
+    static let defaultEmptyTTL: TimeInterval = 1
+
+    private let emptyTTL: TimeInterval
+    private let now: () -> Date
     private var loaded = false
     private var cached: SomeIMSharedSession?
+    /// When the currently-cached *empty* answer stops being served. Nil whenever
+    /// the cache holds a real session.
+    private var emptyExpiresAt: Date?
     /// Number of times the loader actually ran. Exists for tests to assert the
     /// Keychain is not being re-read on every access.
     private(set) var loadCount = 0
 
+    init(
+        emptyTTL: TimeInterval = SomeIMSharedSessionMemo.defaultEmptyTTL,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.emptyTTL = emptyTTL
+        self.now = now
+    }
+
     func value(loading load: () -> SomeIMSharedSession?) -> SomeIMSharedSession? {
-        if loaded { return cached }
-        cached = load()
+        if loaded {
+            if cached != nil { return cached }
+            if let emptyExpiresAt, now() < emptyExpiresAt { return nil }
+        }
+        let value = load()
+        cached = value
         loaded = true
+        emptyExpiresAt = value == nil ? now().addingTimeInterval(emptyTTL) : nil
         loadCount += 1
-        return cached
+        return value
     }
 
     func invalidate() {
         loaded = false
         cached = nil
+        emptyExpiresAt = nil
     }
 }
 
@@ -242,6 +278,14 @@ enum SomeIMIntegrationStore {
     /// — including changes made by *another* app. AppState listens to reconcile
     /// its agent provider so a cross-app login/logout takes effect live.
     nonisolated static let sessionDidChangeNotification = Notification.Name("com.willdeep.someIM.sessionDidChange")
+
+    /// `userInfo` flag set to `true` only on the notification `logout()` posts.
+    ///
+    /// Observers must not infer a sign-out from an empty read alone: a read can
+    /// come back empty because the Keychain lost a race with a write, and the
+    /// reconcile that follows destroys the provider entry. This flag marks the
+    /// one case where empty is the *expected* answer and destroying it is right.
+    nonisolated static let signOutUserInfoKey = "com.willdeep.someIM.sessionDidChange.signOut"
 
     /// Shared Keychain access group (Team ZH2S7D6PL6). Must match the
     /// `keychain-access-groups` entitlement and every other participating app.
@@ -544,7 +588,13 @@ enum SomeIMIntegrationStore {
             saveSettings(settings)
         }
         NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
-        NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
+        // Tagged: this empty session is a real sign-out, so observers may drop
+        // the provider entry immediately instead of double-checking the read.
+        NotificationCenter.default.post(
+            name: sessionDidChangeNotification,
+            object: nil,
+            userInfo: [signOutUserInfoKey: true]
+        )
     }
 
     static func loadCodingPlanStatus() -> SomeIMCodingPlanStatus {

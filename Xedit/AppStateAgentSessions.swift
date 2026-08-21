@@ -36,7 +36,27 @@ struct AgentSessionLoadFailure: Identifiable, Equatable {
     let title: String
 }
 
+/// Why the some.im provider is being reconciled against the shared session.
+///
+/// Only matters when the shared session reads back empty: that is either a real
+/// sign-out or a read that raced a concurrent Keychain write, and the two are
+/// indistinguishable at the read itself.
+enum SomeIMReconcileTrigger {
+    /// Launch, panel open, turn start, or a cross-app session notification.
+    /// An empty read here is treated as suspect and re-checked before anything
+    /// is destroyed.
+    case routine
+    /// This app just signed the user out. An empty read is the expected result
+    /// and the provider entry is dropped immediately.
+    case signOut
+}
+
 extension AppState {
+
+    /// How long to wait before re-reading a shared session that came back empty.
+    /// Comfortably longer than a Keychain delete+add window, short enough that a
+    /// genuine sign-out still clears the provider promptly.
+    static let someIMSignOutConfirmationDelay: TimeInterval = 0.6
 
     // MARK: - Interactive session materialization
 
@@ -354,14 +374,31 @@ extension AppState {
     /// the Keychain access group). Login/key-change adopts the fresh key without
     /// hijacking the user's active provider; logout drops the some-im entry.
     @discardableResult
-    func reconcileSomeIMProviderFromSharedSession() -> Bool {
+    func reconcileSomeIMProviderFromSharedSession(
+        trigger: SomeIMReconcileTrigger = .routine
+    ) -> Bool {
         let apiKey = SomeIMIntegrationStore.loadAPIKey()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if apiKey.isEmpty {
-            clearSomeIMProvider()
-            ensureActiveProviderIsUsableForChatSelection()
+            switch trigger {
+            case .signOut:
+                // The user signed out here. Empty is the expected answer.
+                cancelSomeIMSignOutConfirmation()
+                clearSomeIMProvider()
+                ensureActiveProviderIsUsableForChatSelection()
+            case .routine:
+                // An empty read is NOT proof of a sign-out. `clearSomeIMProvider`
+                // deletes the library entry *and* its Keychain row, and the
+                // rebuild that follows draws a fresh UUID with default settings —
+                // losing the user's display name, tier models and routing mode,
+                // orphaning per-session provider overrides, and blanking the model
+                // picker in the meantime. Far too destructive to hang on one read
+                // that may have raced a concurrent Keychain write. Confirm first.
+                scheduleSomeIMSignOutConfirmation()
+            }
             return false
         } else {
+            cancelSomeIMSignOutConfirmation()
             syncSomeIMProvider(
                 settings: SomeIMIntegrationStore.loadSettings(),
                 apiKey: apiKey,
@@ -371,6 +408,48 @@ extension AppState {
             ensureActiveProviderIsUsableForChatSelection()
             return true
         }
+    }
+
+    /// Re-reads the shared session after a short delay and only then, if it is
+    /// still empty, drops the some.im provider. Bypasses the memo cache so the
+    /// re-read actually reaches the Keychain rather than being served the same
+    /// empty answer that got us here.
+    ///
+    /// A real sign-out stays empty and lands here a beat later; a read that
+    /// merely raced a write resolves itself and the entry is left untouched.
+    func scheduleSomeIMSignOutConfirmation() {
+        // Nothing to protect — no entry to lose.
+        guard agentProviderLibrary.entries.contains(where: {
+            $0.providerID == AgentProviderPreset.someIMID
+        }) else { return }
+        // A confirmation is already in flight; let it finish.
+        guard someIMSignOutConfirmationTask == nil else { return }
+
+        someIMSignOutConfirmationTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.someIMSignOutConfirmationDelay * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.someIMSignOutConfirmationTask = nil
+            SomeIMIntegrationStore.invalidateSharedSessionCache()
+            let confirmed = SomeIMIntegrationStore.loadAPIKey()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if confirmed.isEmpty {
+                self.clearSomeIMProvider()
+                self.ensureActiveProviderIsUsableForChatSelection()
+            } else {
+                self.syncSomeIMProvider(
+                    settings: SomeIMIntegrationStore.loadSettings(),
+                    apiKey: confirmed,
+                    activate: false
+                )
+                self.syncSomeIMImageUnderstanding(apiKey: confirmed)
+                self.ensureActiveProviderIsUsableForChatSelection()
+            }
+        }
+    }
+
+    func cancelSomeIMSignOutConfirmation() {
+        someIMSignOutConfirmationTask?.cancel()
+        someIMSignOutConfirmationTask = nil
     }
 
     /// Last-chance repair for the exact split-brain state where the shared
