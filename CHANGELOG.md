@@ -3,6 +3,20 @@
 > 当前文件保留最新版本（1.282.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.284.0-rc1 - 2026-08-21
+
+### Added
+
+- **Swift 侧能真的连上 willdeep-rs Runtime 了（只读观察）。** 1.283.0-rc1 落地的是解码器，这一版补上底下的线：`WillDeepRuntimeTransport` 负责发现与传输，`WillDeepRuntimeClient` 提供只读操作。四阶段计划（rs `docs/CLI_TUI_RUNTIME_ROADMAP.md` §1.0）的**阶段一**。
+- **优先走 Unix socket，回环 TCP 仅作回退。** 协议明写本机客户端应优先连 Runtime 目录内权限 `0600` 的 socket，而 `URLSession` 拨不了 unix socket——于是这里手写了一个极小的 HTTP/1.1 客户端（一个 POST、一个 JSON body、`Content-Length` 响应）。socket 的文件权限是真实的访问边界，不是风格问题；为了省事改用 TCP，等于本 App 成为唯一无视协议传输偏好的客户端。Runtime 不会发的东西（chunked、keep-alive 复用、重定向）一律**明确报错而不是半懂**。
+- **发现文件被当作不可信输入。** `daemon.json` 里的 `address` 只接受回环地址：被篡改的状态文件不能把本 App 的 token 引向另一台主机。缺失/空文件表示"本机没有 Runtime"，不是崩溃。
+- **「只读」是代码强制，不是口头约定。** Runtime 有 54 个操作，其中不乏提交轮次、派生 Agent、解决审批、删除会话。这一阶段只看不动，而代价是不对称的——读漏了是面板空白，写错了是别人的会话没了。`send` 拒绝 `readOnlyOperations` 之外的任何操作，且该名单是**字面量而非命名规则**：靠"凡是 .list 结尾"推导的白名单，早晚会放进下一个长得像读、实则有副作用的操作。
+
+### Tests
+
+- 新增 `WillDeepRuntimeClientTests`（12 项）：两端都发布时 socket 优先、缺 socket 回退回环、非回环地址一律拒绝、状态文件缺失不崩；请求体符合 Rust `ApiRequest` 契约（含 `request_id` 必须小写——Foundation 会大写而 Rust `uuid` 不会，该字段会在 `meta` 里原样回显用于日志对账）；HTTP 分帧、错误状态保留信封、无法诚实解析的响应（chunked、垃圾数据）明确失败；七个写操作在**任何字节发出之前**被拒。
+- **含一条真打本机 daemon 的端到端测试**（无 daemon 时跳过）：能力协商、十一类对象、真实 workspace 列表解码。已用临时诊断版验证过它确实走通了发现与连接两步，而不是被跳过分支静默放行——一条永远在跳过的端到端测试比没有更糟。
+
 ## 1.283.0-rc2 - 2026-08-21
 
 ### Added
