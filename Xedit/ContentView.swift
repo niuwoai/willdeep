@@ -513,13 +513,14 @@ struct ContentView: View {
 private struct CommandPalettePanel: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var pluginRegistry = AgentPluginRegistry.shared
     @FocusState private var queryFocused: Bool
     @State private var selectedCommandIndex = 0
     @State private var ignoredHoverSelectionUntil = Date.distantPast
     @State private var lastHoverMouseLocation: CGPoint?
 
     private var commands: [PaletteCommand] {
-        [
+        let nativeCommands = [
             PaletteCommand(title: L10n.Command.quickOpenTitle, subtitle: L10n.Command.quickOpenSubtitle, icon: "doc.text.magnifyingglass", isEnabled: appState.rootDirectory != nil, keywords: ["file", "folder", "project"], shortcut: "⌘P") {
                 appState.hideCommandPalette()
                 appState.showQuickOpen()
@@ -623,6 +624,34 @@ private struct CommandPalettePanel: View {
                 appState.closeActiveTab()
             },
         ]
+        return nativeCommands + pluginPaletteCommands
+    }
+
+    private var pluginPaletteCommands: [PaletteCommand] {
+        pluginRegistry.menuCommands(at: "commandPalette").map { resolved in
+            let command = resolved.command
+            let title = pluginRegistry.localizedString(command.titleKey, pluginID: resolved.pluginID)
+            let pluginName = pluginRegistry.record(pluginID: resolved.pluginID)?.activePackage.displayName
+                ?? resolved.pluginID
+            return PaletteCommand(
+                title: title,
+                subtitle: L10n.Plugins.commandPaletteSubtitle(pluginName),
+                icon: command.icon?.replacingOccurrences(of: "sf:", with: "") ?? "puzzlepiece.extension",
+                isEnabled: true,
+                keywords: [pluginName, resolved.pluginID]
+            ) {
+                appState.hideCommandPalette()
+                Task {
+                    _ = try? await AgentPluginCommandExecutor.execute(
+                        pluginID: resolved.pluginID,
+                        commandID: command.id,
+                        arguments: [:],
+                        destinationID: pluginRegistry.defaultDestinationID(for: resolved.pluginID),
+                        appState: appState
+                    )
+                }
+            }
+        }
     }
 
     private var filteredCommands: [PaletteCommand] {

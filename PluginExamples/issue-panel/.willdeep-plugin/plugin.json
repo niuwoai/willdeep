@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "minimumWillDeepVersion": "1.280.0",
+  "contributes": {
+    "destinations": [{
+      "id": "issues",
+      "titleKey": "destination.issues",
+      "icon": "sf:checklist",
+      "mainPage": "issues.main",
+      "companionSidebar": "issues.sidebar",
+      "toolbarCommandIDs": ["issues.refresh", "issues.create", "issues.edit", "issues.close"]
+    }],
+    "sidebars": [{
+      "id": "issues.sidebar",
+      "mode": "declarative",
+      "schema": ".willdeep-plugin/schemas/issues-sidebar.json",
+      "resource": {"type":"mcpResource","server":"issue-manager","uri":"willdeep-plugin://issues/sidebar"}
+    }],
+    "pages": [{"id":"issues.main","runtime":"mcpApp","server":"issue-manager","resourceURI":"ui://issues/main"}],
+    "commands": [
+      {"id":"issues.refresh","titleKey":"command.refresh","icon":"sf:arrow.clockwise","handler":{"type":"host","action":"plugin.refresh"}},
+      {"id":"issues.create","titleKey":"command.create","icon":"sf:plus.circle","handler":{"type":"mcpTool","server":"issue-manager","tool":"issues.create"}},
+      {"id":"issues.edit","titleKey":"command.edit","icon":"sf:pencil","handler":{"type":"mcpTool","server":"issue-manager","tool":"issues.edit"}},
+      {"id":"issues.close","titleKey":"command.close","icon":"sf:checkmark.circle","handler":{"type":"mcpTool","server":"issue-manager","tool":"issues.close"}}
+    ],
+    "menus": {
+      "commandPalette": ["issues.refresh", "issues.create"],
+      "session.context": ["issues.refresh"],
+      "plugin.page.toolbar": ["issues.create"],
+      "plugin.sidebar.row.context": ["issues.edit", "issues.close"]
+    },
+    "settings": []
+  },
+  "permissions": ["process.execute", "workspace.read"],
+  "dependencies": {"mcpServers":["issue-manager"],"skills":[]}
+}

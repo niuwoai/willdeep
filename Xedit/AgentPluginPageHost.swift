@@ -1,0 +1,865 @@
+//
+//  AgentPluginPageHost.swift
+//  WillDeep
+//
+//  Full-center plugin destination host. Rich pages run in an isolated,
+//  non-persistent WKWebView; simple declarative pages remain native SwiftUI.
+//
+
+import AppKit
+import SwiftUI
+import UniformTypeIdentifiers
+import WebKit
+
+struct AgentPluginPageHost: View {
+    @EnvironmentObject private var appState: AppState
+    @ObservedObject private var registry = AgentPluginRegistry.shared
+    @ObservedObject private var sessionState = AgentPluginDestinationSessionState.shared
+    let destinationID: AgentPluginDestinationID
+
+    var body: some View {
+        if let destination = registry.destination(id: destinationID) {
+            VStack(spacing: 0) {
+                toolbar(destination)
+                Divider().opacity(0.5)
+                page(destination)
+            }
+        } else {
+            AgentPluginUnavailableView(
+                title: L10n.Plugins.pageUnavailable,
+                detail: L10n.Plugins.noPluginsDetail,
+                systemImage: "puzzlepiece.extension"
+            ) {
+                Button(L10n.Plugins.morePlugins) {
+                    appState.agentPrimaryDestination = .pluginCenter
+                }
+            }
+            .task(id: destinationID) {
+                await registry.refresh()
+                if registry.destination(id: destinationID) == nil {
+                    appState.agentPrimaryDestination = .pluginCenter
+                }
+            }
+        }
+    }
+
+    private func toolbar(_ destination: AgentPluginDestinationDescriptor) -> some View {
+        HStack(spacing: 10) {
+            AgentPluginIcon(icon: destination.navigation.icon, packageURL: destination.packageURL)
+                .frame(width: 16, height: 16)
+                .foregroundStyle(.primary)
+            Text(registry.localizedTitle(for: destination))
+                .font(.system(size: 14, weight: .semibold))
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            ForEach(registry.pageToolbarCommands(for: destination)) { command in
+                Button {
+                    run(command.id, destination: destination)
+                } label: {
+                    Label(
+                        registry.localizedString(command.titleKey, pluginID: destination.pluginID),
+                        systemImage: command.icon?.replacingOccurrences(of: "sf:", with: "") ?? "bolt"
+                    )
+                }
+                .buttonStyle(.borderless)
+            }
+            Button {
+                sessionState.requestRefresh(destinationID: destination.qualifiedID)
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .help(L10n.Plugins.refresh)
+            Menu {
+                Button(L10n.Plugins.settings) {
+                    appState.agentPrimaryDestination = .pluginCenter
+                }
+                Button(L10n.Plugins.openInFinder) {
+                    NSWorkspace.shared.activateFileViewerSelecting([destination.packageURL])
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+        .padding(.horizontal, 16)
+        .frame(height: AgentDesign.headerHeight)
+    }
+
+    @ViewBuilder
+    private func page(_ destination: AgentPluginDestinationDescriptor) -> some View {
+        switch destination.mainPage.runtime {
+        case .localWeb, .mcpApp:
+            AgentPluginWebPage(destination: destination)
+        case .declarative:
+            AgentPluginDeclarativePage(destination: destination)
+        }
+    }
+
+    private func run(_ commandID: String, destination: AgentPluginDestinationDescriptor) {
+        Task {
+            _ = try? await AgentPluginCommandExecutor.execute(
+                pluginID: destination.pluginID,
+                commandID: commandID,
+                arguments: [:],
+                destinationID: destination.qualifiedID,
+                appState: appState
+            )
+        }
+    }
+}
+
+private struct AgentPluginWebPage: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var sessionState = AgentPluginDestinationSessionState.shared
+    let destination: AgentPluginDestinationDescriptor
+
+    @State private var html: String?
+    @State private var baseURL: URL?
+    @State private var errorMessage: String?
+    @State private var isLoading = false
+
+    var body: some View {
+        Group {
+            if let html {
+                AgentPluginWebView(
+                    html: composedHTML(html),
+                    baseURL: baseURL,
+                    destination: destination,
+                    context: destinationContext,
+                    appState: appState
+                )
+            } else if isLoading {
+                VStack(spacing: 10) {
+                    ProgressView()
+                    Text(L10n.Plugins.pageLoading).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                AgentPluginUnavailableView(
+                    title: L10n.Plugins.pageUnavailable,
+                    detail: errorMessage ?? L10n.Plugins.pageUnavailable,
+                    systemImage: "exclamationmark.triangle"
+                ) {
+                    Button(L10n.Plugins.retry) {
+                        sessionState.requestRefresh(destinationID: destination.qualifiedID)
+                    }
+                    Button(L10n.Plugins.openMCPSettings) {
+                        EditorSettingsNavigation.shared.open(.mcp, appState: appState)
+                    }
+                }
+            }
+        }
+        .task(id: taskIdentity) {
+            await loadPage()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .agentMCPResourcesDidChange)) { notification in
+            guard destination.mainPage.runtime == .mcpApp,
+                  let server = destination.mainPage.server,
+                  let uri = destination.mainPage.resourceURI,
+                  notification.userInfo?[AgentMCPResourceNotificationKey.serverID] as? String
+                    == "plugin:\(destination.pluginID):\(server)" else {
+                return
+            }
+            let changedURI = notification.userInfo?[AgentMCPResourceNotificationKey.uri] as? String
+            if changedURI == nil || changedURI == uri {
+                sessionState.requestRefresh(destinationID: destination.qualifiedID)
+            }
+        }
+    }
+
+    private var taskIdentity: String {
+        let generation = sessionState.refreshGenerations[destination.qualifiedID, default: 0]
+        return "\(destination.qualifiedID):\(generation)"
+    }
+
+    private var destinationContext: AgentPluginDestinationContext {
+        let manifest = AgentPluginRegistry.shared.record(pluginID: destination.pluginID)?.activePackage.manifest
+        let permissions = Set(manifest?.permissions ?? [])
+        let workspace = permissions.contains(.workspaceRead) || permissions.contains(.workspaceWrite)
+            ? (appState.activeRuntime?.workspaceLocation?.localPath
+                ?? appState.activeRuntime?.workspaceRootPath
+                ?? appState.rootDirectory?.path)
+            : nil
+        let session = permissions.contains(.conversationRead)
+            ? appState.activeAgentSessionID?.uuidString
+            : nil
+        return AgentPluginDestinationContext(
+            destinationID: destination.qualifiedID,
+            selectedItemID: sessionState.selectedItemID(for: destination.qualifiedID),
+            workspaceReference: workspace,
+            sessionReference: session,
+            locale: Locale.current.identifier,
+            colorScheme: colorScheme == .dark ? "dark" : "light"
+        )
+    }
+
+    private func loadPage() async {
+        isLoading = true
+        html = nil
+        errorMessage = nil
+        do {
+            switch destination.mainPage.runtime {
+            case .localWeb:
+                guard let path = destination.mainPage.entryPath else {
+                    throw AgentPluginPackageError.invalidContribution(destination.mainPage.id)
+                }
+                let url = try AgentPluginPackageLoader.safeResourceURL(
+                    relativePath: path,
+                    packageURL: destination.packageURL
+                )
+                let data = try Data(contentsOf: url)
+                guard let source = String(data: data, encoding: .utf8), !source.isEmpty else {
+                    throw AgentPluginPackageError.unreadableManifest(path)
+                }
+                baseURL = url.deletingLastPathComponent()
+                html = source
+            case .mcpApp:
+                guard let server = destination.mainPage.server,
+                      let uri = destination.mainPage.resourceURI else {
+                    throw AgentPluginPackageError.invalidContribution(destination.mainPage.id)
+                }
+                let payload = try await AgentMCPBridge.readPluginResource(
+                    pluginID: destination.pluginID,
+                    serverName: server,
+                    uri: uri
+                )
+                Task {
+                    try? await AgentMCPBridge.subscribePluginResource(
+                        pluginID: destination.pluginID,
+                        serverName: server,
+                        uri: uri
+                    )
+                }
+                let resource = try AgentPluginMCPResourcePayload.mcpAppDocument(
+                    from: payload,
+                    expectedURI: uri
+                )
+                html = resource.text
+                baseURL = nil
+            case .declarative:
+                break
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
+
+    private func composedHTML(_ source: String) -> String {
+        let background = colorScheme == .dark ? "#1c1c1e" : "#ffffff"
+        let foreground = colorScheme == .dark ? "#f2f2f4" : "#1a1a1c"
+        let secondary = colorScheme == .dark ? "#a1a1a6" : "#6c6c70"
+        let csp = "default-src 'self' 'unsafe-inline' data: blob:; "
+            + "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+            + "img-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; "
+            + "object-src 'none'; base-uri 'none'; form-action 'none';"
+        let bootstrap = """
+        <meta http-equiv="Content-Security-Policy" content="\(csp)">
+        <style>
+        :root { --willdeep-bg: \(background); --willdeep-fg: \(foreground); --willdeep-secondary: \(secondary); }
+        html, body { margin: 0; min-height: 100%; background: var(--willdeep-bg); color: var(--willdeep-fg); font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        </style>
+        <script>
+        (function() {
+          var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.willdeepPlugin;
+          window.willdeep = window.willdeep || {};
+          window.willdeep.getContext = function() { return window.__WILLDEEP_CONTEXT__ || {}; };
+          window.willdeep.selectItem = function(itemID) { if (handler) handler.postMessage({type:'selectItem', itemID:itemID}); };
+          window.willdeep.refresh = function() { if (handler) handler.postMessage({type:'refresh'}); };
+          window.willdeep.executeCommand = function(commandID, args) {
+            var requestID = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random();
+            if (handler) handler.postMessage({type:'executeCommand', requestID:requestID, commandID:commandID, arguments:args || {}});
+            return new Promise(function(resolve, reject) {
+              function listener(event) {
+                if (!event.detail || event.detail.requestID !== requestID) return;
+                window.removeEventListener('willdeep:command-result', listener);
+                if (event.detail.error) reject(new Error(event.detail.error)); else resolve(event.detail.result);
+              }
+              window.addEventListener('willdeep:command-result', listener);
+            });
+          };
+          window.__willdeepDeliverMCPMessage = function(message) {
+            window.dispatchEvent(new MessageEvent('message', {data:message, source:null}));
+          };
+          window.addEventListener('message', function(event) {
+            var data = event.data;
+            if (event.source !== window || !data || data.jsonrpc !== '2.0' || typeof data.method !== 'string') return;
+            if (handler) handler.postMessage({type:'mcpMessage', message:data});
+          });
+        })();
+        </script>
+        """
+        if let range = source.range(of: "<head", options: .caseInsensitive),
+           let close = source[range.lowerBound...].firstIndex(of: ">") {
+            var copy = source
+            copy.insert(contentsOf: bootstrap, at: copy.index(after: close))
+            return copy
+        }
+        return "<!doctype html><html><head>\(bootstrap)</head><body>\(source)</body></html>"
+    }
+}
+
+private struct AgentPluginDeclarativePage: View {
+    let destination: AgentPluginDestinationDescriptor
+    @State private var document: AgentPluginSidebarDocument?
+    @State private var error: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                if let document {
+                    ForEach(document.components) { component in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(localized(component.titleKey))
+                                .font(component.kind == .section ? .headline : .body)
+                            if let subtitle = component.subtitleKey {
+                                Text(localized(subtitle)).foregroundStyle(.secondary)
+                            }
+                            if let progress = component.progress {
+                                ProgressView(value: max(0, min(progress, 1)))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.04)))
+                    }
+                } else if let error {
+                    AgentPluginUnavailableView(
+                        title: L10n.Plugins.pageUnavailable,
+                        detail: error,
+                        systemImage: "exclamationmark.triangle"
+                    ) { EmptyView() }
+                } else {
+                    ProgressView().frame(maxWidth: .infinity)
+                }
+            }
+            .padding(20)
+        }
+        .task { await load() }
+    }
+
+    private func localized(_ key: String?) -> String {
+        guard let key else { return "" }
+        return AgentPluginRegistry.shared.localizedString(key, pluginID: destination.pluginID)
+    }
+
+    private func load() async {
+        guard let schema = destination.mainPage.schema else {
+            error = L10n.Plugins.pageUnavailable
+            return
+        }
+        do {
+            let url = try AgentPluginPackageLoader.safeResourceURL(relativePath: schema, packageURL: destination.packageURL)
+            let data = try Data(contentsOf: url)
+            document = try JSONDecoder().decode(AgentPluginSidebarDocument.self, from: data)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+private struct AgentPluginUnavailableView<Actions: View>: View {
+    let title: String
+    let detail: String
+    let systemImage: String
+    @ViewBuilder let actions: () -> Actions
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 28, weight: .regular))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.system(size: 16, weight: .semibold))
+            Text(detail)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+            HStack(spacing: 8) { actions() }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct AgentPluginWebView: NSViewRepresentable {
+    let html: String
+    let baseURL: URL?
+    let destination: AgentPluginDestinationDescriptor
+    let context: AgentPluginDestinationContext
+    let appState: AppState
+
+    func makeNSView(context coordinatorContext: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        let schemeHandler = AgentPluginSchemeHandler(packageURL: destination.packageURL)
+        configuration.setURLSchemeHandler(schemeHandler, forURLScheme: AgentPluginSchemeHandler.scheme)
+        coordinatorContext.coordinator.schemeHandler = schemeHandler
+        let preferences = WKWebpagePreferences()
+        preferences.allowsContentJavaScript = true
+        configuration.defaultWebpagePreferences = preferences
+        configuration.userContentController.add(coordinatorContext.coordinator, name: "willdeepPlugin")
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = coordinatorContext.coordinator
+        webView.uiDelegate = coordinatorContext.coordinator
+        webView.setValue(false, forKey: "drawsBackground")
+        coordinatorContext.coordinator.webView = webView
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context coordinatorContext: Context) {
+        let coordinator = coordinatorContext.coordinator
+        coordinator.destination = destination
+        coordinator.destinationContext = context
+        coordinator.appState = appState
+        if coordinator.loadedHTML != html || coordinator.baseURL != baseURL {
+            coordinator.prepareForReload()
+            coordinator.loadedHTML = html
+            coordinator.baseURL = baseURL
+            webView.loadHTMLString(html, baseURL: coordinator.pluginBaseURL(for: baseURL))
+        } else {
+            coordinator.pushContext()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(destination: destination, destinationContext: context, appState: appState)
+    }
+
+    static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
+        coordinator.sendMCPRequest(
+            method: "ui/resource-teardown",
+            params: ["reason": "destination-closed"]
+        )
+        nsView.configuration.userContentController.removeScriptMessageHandler(forName: "willdeepPlugin")
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+        var destination: AgentPluginDestinationDescriptor
+        var destinationContext: AgentPluginDestinationContext
+        weak var appState: AppState?
+        weak var webView: WKWebView?
+        var loadedHTML: String?
+        var baseURL: URL?
+        var schemeHandler: AgentPluginSchemeHandler?
+        var consecutiveProcessCrashes = 0
+        var mcpAppInitialized = false
+        var nextHostRequestID = 1
+        var crashResetWorkItem: DispatchWorkItem?
+
+        init(
+            destination: AgentPluginDestinationDescriptor,
+            destinationContext: AgentPluginDestinationContext,
+            appState: AppState
+        ) {
+            self.destination = destination
+            self.destinationContext = destinationContext
+            self.appState = appState
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            pushContext()
+            crashResetWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.consecutiveProcessCrashes = 0
+            }
+            crashResetWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: workItem)
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            crashResetWorkItem?.cancel()
+            mcpAppInitialized = false
+            consecutiveProcessCrashes += 1
+            guard consecutiveProcessCrashes >= 3 else {
+                webView.reload()
+                return
+            }
+            let pluginName = destination.pluginID
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "\(pluginName): \(L10n.Plugins.pageUnavailable)"
+                alert.informativeText = L10n.Plugins.pageCrashedRepeatedly
+                alert.addButton(withTitle: L10n.Plugins.morePlugins)
+                alert.addButton(withTitle: L10n.Plugins.cancel)
+                if alert.runModal() == .alertFirstButtonReturn {
+                    self.appState?.agentPrimaryDestination = .pluginCenter
+                }
+            }
+        }
+
+        func prepareForReload() {
+            crashResetWorkItem?.cancel()
+            mcpAppInitialized = false
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let url = navigationAction.request.url else {
+                decisionHandler(.cancel)
+                return
+            }
+            let scheme = url.scheme?.lowercased() ?? ""
+            if scheme == "about" || scheme == "data" {
+                decisionHandler(.allow)
+                return
+            }
+            if scheme == AgentPluginSchemeHandler.scheme, url.host == AgentPluginSchemeHandler.host {
+                decisionHandler(.allow)
+                return
+            }
+            decisionHandler(.cancel)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            nil
+        }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard let body = message.body as? [String: Any],
+                  let type = body["type"] as? String else { return }
+            switch type {
+            case "selectItem":
+                let itemID = (body["itemID"] as? String).map { String($0.prefix(512)) }
+                Task { @MainActor in
+                    AgentPluginDestinationSessionState.shared.select(
+                        itemID: itemID,
+                        destinationID: destination.qualifiedID
+                    )
+                }
+            case "refresh":
+                Task { @MainActor in
+                    AgentPluginDestinationSessionState.shared.requestRefresh(
+                        destinationID: destination.qualifiedID
+                    )
+                }
+            case "executeCommand":
+                executeCommand(body)
+            case "mcpMessage":
+                handleMCPMessage(body["message"])
+            default:
+                break
+            }
+        }
+
+        func pushContext() {
+            guard let webView,
+                  let data = try? JSONEncoder().encode(destinationContext),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            let script = "window.__WILLDEEP_CONTEXT__ = \(json); window.dispatchEvent(new CustomEvent('willdeep:context-changed', {detail: window.__WILLDEEP_CONTEXT__}));"
+            webView.evaluateJavaScript(script)
+            if destination.mainPage.runtime == .mcpApp, mcpAppInitialized,
+               let contextObject = try? JSONSerialization.jsonObject(with: data) {
+                sendMCPMessage([
+                    "jsonrpc": "2.0",
+                    "method": "ui/notifications/host-context-changed",
+                    "params": [
+                        "theme": destinationContext.colorScheme,
+                        "locale": destinationContext.locale,
+                        "willdeep": contextObject,
+                    ],
+                ])
+            }
+        }
+
+        func pluginBaseURL(for localBaseURL: URL?) -> URL? {
+            guard let localBaseURL else { return nil }
+            let packagePath = destination.packageURL.standardizedFileURL.path
+            let localPath = localBaseURL.standardizedFileURL.path
+            let prefix = packagePath.hasSuffix("/") ? packagePath : packagePath + "/"
+            guard localPath == packagePath || localPath.hasPrefix(prefix) else { return nil }
+            let relative = localPath == packagePath ? "" : String(localPath.dropFirst(prefix.count))
+            let encoded = relative
+                .split(separator: "/", omittingEmptySubsequences: true)
+                .map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }
+                .joined(separator: "/")
+            return URL(string: "\(AgentPluginSchemeHandler.scheme)://\(AgentPluginSchemeHandler.host)/\(encoded)/")
+        }
+
+        private func executeCommand(_ body: [String: Any]) {
+            guard let commandID = body["commandID"] as? String,
+                  commandID.count <= 160 else { return }
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let rawArguments = body["arguments"] as? [String: Any] ?? [:]
+            guard rawArguments.count <= 64,
+                  JSONSerialization.isValidJSONObject(rawArguments),
+                  let encodedArguments = try? JSONSerialization.data(withJSONObject: rawArguments),
+                  encodedArguments.count <= 65_536 else { return }
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                do {
+                    let result = try await AgentPluginCommandExecutor.executeJSON(
+                        pluginID: self.destination.pluginID,
+                        commandID: commandID,
+                        arguments: rawArguments,
+                        destinationID: self.destination.qualifiedID,
+                        appState: appState
+                    )
+                    self.sendCommandResult(requestID: requestID, result: result, error: nil)
+                } catch {
+                    self.sendCommandResult(requestID: requestID, result: nil, error: error.localizedDescription)
+                }
+            }
+        }
+
+        private func handleMCPMessage(_ rawMessage: Any?) {
+            guard destination.mainPage.runtime == .mcpApp,
+                  let message = rawMessage as? [String: Any],
+                  JSONSerialization.isValidJSONObject(message),
+                  let encoded = try? JSONSerialization.data(withJSONObject: message),
+                  encoded.count <= 65_536,
+                  message["jsonrpc"] as? String == "2.0",
+                  let method = message["method"] as? String,
+                  method.count <= 160 else { return }
+
+            let requestID = validRPCID(message["id"])
+            switch method {
+            case "ui/initialize":
+                guard let requestID else { return }
+                mcpAppInitialized = false
+                sendMCPResult(
+                    id: requestID,
+                    result: [
+                        "protocolVersion": "2026-01-26",
+                        "hostInfo": ["name": "WillDeep", "version": appVersion],
+                        "hostCapabilities": [
+                            "serverTools": [:],
+                            "serverResources": [:],
+                        ],
+                        "hostContext": hostContextObject,
+                    ]
+                )
+            case "ui/notifications/initialized":
+                mcpAppInitialized = true
+                pushContext()
+            case "ping":
+                if let requestID { sendMCPResult(id: requestID, result: [:]) }
+            case "tools/call":
+                guard mcpAppInitialized, let requestID else {
+                    sendMCPErrorIfPossible(id: requestID, code: -32002, message: "MCP App is not initialized")
+                    return
+                }
+                callMCPAppTool(message: message, requestID: requestID)
+            case "resources/read":
+                guard mcpAppInitialized, let requestID else {
+                    sendMCPErrorIfPossible(id: requestID, code: -32002, message: "MCP App is not initialized")
+                    return
+                }
+                readMCPAppResource(message: message, requestID: requestID)
+            case "notifications/message", "ui/notifications/size-changed":
+                break
+            default:
+                sendMCPErrorIfPossible(id: requestID, code: -32601, message: "Unsupported MCP App method: \(method)")
+            }
+        }
+
+        private func callMCPAppTool(message: [String: Any], requestID: Any) {
+            guard let params = message["params"] as? [String: Any],
+                  let toolName = params["name"] as? String,
+                  toolName.count <= 160,
+                  let serverName = destination.mainPage.server,
+                  let command = AgentPluginRegistry.shared.commands(for: destination.pluginID).first(where: {
+                      $0.handler.type == .mcpTool
+                        && $0.handler.server == serverName
+                        && $0.handler.tool == toolName
+                  }) else {
+                sendMCPErrorIfPossible(id: requestID, code: -32602, message: "Tool is not declared for this MCP App")
+                return
+            }
+            let rawArguments = params["arguments"] as? [String: Any] ?? [:]
+            guard rawArguments.count <= 64,
+                  JSONSerialization.isValidJSONObject(rawArguments),
+                  let encoded = try? JSONSerialization.data(withJSONObject: rawArguments),
+                  encoded.count <= 65_536 else {
+                sendMCPErrorIfPossible(id: requestID, code: -32602, message: "Invalid tool arguments")
+                return
+            }
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                do {
+                    let result = try await AgentPluginCommandExecutor.executeJSON(
+                        pluginID: self.destination.pluginID,
+                        commandID: command.id,
+                        arguments: rawArguments,
+                        destinationID: self.destination.qualifiedID,
+                        appState: appState
+                    )
+                    self.sendMCPResult(id: requestID, result: self.jsonValue(from: result) ?? [:])
+                } catch {
+                    self.sendMCPErrorIfPossible(id: requestID, code: -32000, message: error.localizedDescription)
+                }
+            }
+        }
+
+        private func readMCPAppResource(message: [String: Any], requestID: Any) {
+            guard let params = message["params"] as? [String: Any],
+                  let uri = params["uri"] as? String,
+                  !uri.isEmpty, uri.count <= 2_048,
+                  let serverName = destination.mainPage.server else {
+                sendMCPErrorIfPossible(id: requestID, code: -32602, message: "Invalid resource URI")
+                return
+            }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    let result = try await AgentMCPBridge.readPluginResource(
+                        pluginID: self.destination.pluginID,
+                        serverName: serverName,
+                        uri: uri
+                    )
+                    self.sendMCPResult(id: requestID, result: self.jsonValue(from: result) ?? [:])
+                } catch {
+                    self.sendMCPErrorIfPossible(id: requestID, code: -32000, message: error.localizedDescription)
+                }
+            }
+        }
+
+        private var hostContextObject: [String: Any] {
+            var context: [String: Any] = [
+                "destinationID": destinationContext.destinationID,
+                "locale": destinationContext.locale,
+                "colorScheme": destinationContext.colorScheme,
+            ]
+            context["selectedItemID"] = destinationContext.selectedItemID
+            context["workspaceReference"] = destinationContext.workspaceReference
+            context["sessionReference"] = destinationContext.sessionReference
+            return [
+                "theme": destinationContext.colorScheme,
+                "locale": destinationContext.locale,
+                "displayMode": "fullscreen",
+                "availableDisplayModes": ["fullscreen"],
+                "willdeep": context,
+            ]
+        }
+
+        private var appVersion: String {
+            (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.0.0"
+        }
+
+        private func validRPCID(_ value: Any?) -> Any? {
+            switch value {
+            case let value as String where value.count <= 160:
+                return value
+            case let value as NSNumber:
+                return value
+            default:
+                return nil
+            }
+        }
+
+        private func jsonValue(from raw: String?) -> Any? {
+            guard let raw, let data = raw.data(using: .utf8) else { return nil }
+            return try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        }
+
+        private func sendMCPResult(id: Any, result: Any) {
+            sendMCPMessage(["jsonrpc": "2.0", "id": id, "result": result])
+        }
+
+        private func sendMCPErrorIfPossible(id: Any?, code: Int, message: String) {
+            guard let id else { return }
+            sendMCPMessage([
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": ["code": code, "message": String(message.prefix(2_000))],
+            ])
+        }
+
+        fileprivate func sendMCPRequest(method: String, params: [String: Any]) {
+            guard destination.mainPage.runtime == .mcpApp, mcpAppInitialized else { return }
+            let id = nextHostRequestID
+            nextHostRequestID += 1
+            sendMCPMessage(["jsonrpc": "2.0", "id": id, "method": method, "params": params])
+        }
+
+        private func sendMCPMessage(_ message: [String: Any]) {
+            guard let webView,
+                  JSONSerialization.isValidJSONObject(message),
+                  let data = try? JSONSerialization.data(withJSONObject: message),
+                  data.count <= 65_536,
+                  let json = String(data: data, encoding: .utf8) else { return }
+            webView.evaluateJavaScript("window.__willdeepDeliverMCPMessage && window.__willdeepDeliverMCPMessage(\(json));")
+        }
+
+        private func sendCommandResult(requestID: String, result: String?, error: String?) {
+            guard let webView else { return }
+            let payload: [String: Any?] = [
+                "requestID": requestID,
+                "result": result,
+                "error": error,
+            ]
+            guard let data = try? JSONSerialization.data(
+                withJSONObject: payload.compactMapValues { $0 },
+                options: []
+            ), let json = String(data: data, encoding: .utf8) else { return }
+            webView.evaluateJavaScript(
+                "window.dispatchEvent(new CustomEvent('willdeep:command-result', {detail: \(json)}));"
+            )
+        }
+    }
+}
+
+private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
+    nonisolated static let scheme = "willdeep-plugin"
+    nonisolated static let host = "bundle"
+    private let packageURL: URL
+    private let maximumResourceBytes = 8 * 1024 * 1024
+
+    init(packageURL: URL) {
+        self.packageURL = packageURL
+    }
+
+    func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        do {
+            guard let requestURL = urlSchemeTask.request.url,
+                  requestURL.scheme == Self.scheme,
+                  requestURL.host == Self.host else {
+                throw AgentPluginPackageError.resourceOutsidePackage(urlSchemeTask.request.url?.absoluteString ?? "")
+            }
+            let relativePath = requestURL.path.removingPercentEncoding?
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
+            guard !relativePath.isEmpty else {
+                throw AgentPluginPackageError.unreadableManifest(requestURL.absoluteString)
+            }
+            let resourceURL = try AgentPluginPackageLoader.safeResourceURL(
+                relativePath: relativePath,
+                packageURL: packageURL
+            )
+            let values = try resourceURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true,
+                  (values.fileSize ?? 0) <= maximumResourceBytes else {
+                throw AgentPluginPackageError.oversizedManifest(relativePath)
+            }
+            let data = try Data(contentsOf: resourceURL, options: [.mappedIfSafe])
+            let mimeType = UTType(filenameExtension: resourceURL.pathExtension)?.preferredMIMEType
+                ?? "application/octet-stream"
+            let response = URLResponse(
+                url: requestURL,
+                mimeType: mimeType,
+                expectedContentLength: data.count,
+                textEncodingName: mimeType.hasPrefix("text/") || mimeType.contains("javascript") ? "utf-8" : nil
+            )
+            urlSchemeTask.didReceive(response)
+            urlSchemeTask.didReceive(data)
+            urlSchemeTask.didFinish()
+        } catch {
+            urlSchemeTask.didFailWithError(error)
+        }
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
+}

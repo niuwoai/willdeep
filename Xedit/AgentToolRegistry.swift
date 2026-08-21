@@ -245,6 +245,35 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "create_plugin_draft",
+            description: "Create an inert WillDeep/Codex plugin draft after user approval. Writes only under ~/.willdeep/plugin-drafts, validates both manifests, and never installs, approves, or enables the plugin. Use write_plugin_draft_file for additional schemas/assets, then inspect_plugin_draft. The user must complete activation in Plugin Center.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "plugin_id", type: .string, description: "Stable plugin identifier using letters, digits, dash, underscore, or dot.", required: true),
+                AgentToolParameter(name: "version", type: .string, description: "Semantic plugin version.", required: true),
+                AgentToolParameter(name: "codex_manifest_json", type: .string, description: "Complete JSON for .codex-plugin/plugin.json.", required: true),
+                AgentToolParameter(name: "willdeep_manifest_json", type: .string, description: "Complete JSON for .willdeep-plugin/plugin.json.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "write_plugin_draft_file",
+            description: "Write one UTF-8 file inside a draft previously created by create_plugin_draft. Path traversal and writes outside ~/.willdeep/plugin-drafts are rejected. Does not execute package scripts or enable the plugin.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "draft_path", type: .string, description: "Exact draft directory returned by create_plugin_draft.", required: true),
+                AgentToolParameter(name: "relative_path", type: .string, description: "Draft-relative file path such as schemas/sidebar.json or ui/dist/index.html.", required: true),
+                AgentToolParameter(name: "content", type: .string, description: "Complete UTF-8 file content.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
+            name: "inspect_plugin_draft",
+            description: "Validate an inert plugin draft and report its destinations, permissions, and content digest. Read-only and never installs or enables it.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "draft_path", type: .string, description: "Exact draft directory returned by create_plugin_draft.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "list_jobs",
             description: "List background shell jobs spawned via `run_command` with `run_in_background: true` in this session, including their status and short handles. Read-only.",
             risk: .read,

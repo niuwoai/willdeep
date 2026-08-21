@@ -28,6 +28,7 @@ nonisolated enum AgentMCPServerSource: String, Codable, CaseIterable, Identifiab
     case user
     case cursor
     case codex
+    case plugin
 
     var id: String { rawValue }
 
@@ -39,6 +40,8 @@ nonisolated enum AgentMCPServerSource: String, Codable, CaseIterable, Identifiab
             return "Cursor"
         case .codex:
             return "Codex"
+        case .plugin:
+            return "WillDeep Plugin"
         }
     }
 }
