@@ -3,6 +3,18 @@
 > 当前文件保留最新版本（1.282.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.282.0-rc7 - 2026-08-21
+
+### Fixed
+
+- **`cat secrets/credentials` 不再免掉输入确认。** 1.280.0-rc2 的「工作区内词撞名路径豁免」立论是「`read_file` 本就免审可读同一文件」，对 `internal/auth/token.go` 这类源码成立，但它按整串匹配，顺带把**本身就是凭据的文件**也豁免了。豁免现在有两条边界：末段没有扩展名且整段就是凭据词（`secrets/credentials`、`deploy/token`）不豁免——那不是撞名，是自报家门；途经目录段整段叫 `secrets` / `credentials` 的（`config/secrets/db.yml`）也不豁免，目录名已经声明了里面装什么。
+- 目录段只认 `secret(s)` / `credential(s)` 四个强凭据词，**不认 `token(s)`**：设计 token、API token 模型、分词器都常年占用这个目录名，把 `pkg/tokens/registry.ts` 算成凭据读取等于把 rc2 刚消掉的那类误伤原样请回来。rc2 的误伤修正全部保持有效。
+
+### Tests
+
+- 修复 `AgentToolsCoreTests` 中自 1.280.0-rc2 起一直失败的「real credential markers still require typed confirmation」（`cat secrets/credentials` 分支）。
+- 新增「workspace word-collision paths stay exempt, bare credential names do not」：两个方向各钉三例，防止豁免边界向任一侧回摆。
+
 ## 1.282.0-rc6 - 2026-08-21
 
 ### Changed
