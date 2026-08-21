@@ -189,6 +189,7 @@ nonisolated enum AgentToolDisplay {
         "spawn_agent": "派生子代理",
         "ask_user": "询问你",
         "run_workflow": "运行工作流",
+        "declare_environment_trust": "登记环境信任",
         "show_widget": "展示组件",
     ]
 }

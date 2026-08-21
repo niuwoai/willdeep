@@ -125,6 +125,7 @@ extension AppState {
             interactionMode: runtime.interactionMode,
             approvalMode: runtime.approvalMode,
             conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+            environmentTrustDeclarations: runtime.environmentTrustDeclarations,
             computerUseOwner: runtime.computerUseOwner,
             latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
         )

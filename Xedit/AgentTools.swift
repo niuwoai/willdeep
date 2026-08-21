@@ -678,7 +678,9 @@ enum AgentToolRunner {
                 result = try await runWorkflow(arguments: activeArguments, context: activeContext)
             case "schedule_task":
                 result = try await scheduleTask(arguments: activeArguments, context: activeContext)
-            case "complete_scheduled_task":
+            case "declare_environment_trust":
+            result = try await declareEnvironmentTrust(arguments: arguments, context: context)
+        case "complete_scheduled_task":
                 result = try await completeScheduledTask(arguments: activeArguments, context: activeContext)
             default:
                 throw AgentToolError.unknownTool(name)

@@ -50,6 +50,11 @@ struct AgentSandboxDecision: Equatable {
     let requiresTypedConfirmation: Bool
     let reason: String
     let prefixRule: [String]?
+    /// typed confirmation 的成因是否含凭据/敏感路径命中（`.env`、`~/.ssh`、
+    /// 凭据词）。环境信任声明可以把 destructive 类降为“送 AI 裁判”，但带
+    /// 此标记的命令在任何声明下仍然只认人工——凭据外读是注入攻击的终点站，
+    /// 这道门不接受任何来自模型侧的说服。
+    var credentialSensitive: Bool = false
 
     var risk: AgentToolRisk {
         if requiresTypedConfirmation { return .danger }
@@ -612,6 +617,7 @@ enum AgentSandboxPolicy {
         var needsReadOnlyNetwork = false
         var needsEscalation = expansionResolution.requiresJudgment
         var needsConfirmation = false
+        var credentialSensitive = false
         var reasons: [String] = expansionResolution.requiresJudgment
             ? ["A bounded read-only command substitution requires intelligent review of the complete command."]
             : []
@@ -635,11 +641,13 @@ enum AgentSandboxPolicy {
                 if rawTokens.contains(where: environmentAssignmentKeyLooksSensitive) {
                     needsEscalation = true
                     needsConfirmation = true
+                    credentialSensitive = true
                     reasons.append("Environment assignment uses a credential-like variable name.")
                 }
                 if assignmentValues.contains(where: referencesSensitivePath) {
                     needsEscalation = true
                     needsConfirmation = true
+                    credentialSensitive = true
                     reasons.append("Environment assignment references a sensitive path or credential-like value.")
                 }
                 if assignmentValues.contains(where: referencesSandboxRemappedHome) {
@@ -673,6 +681,7 @@ enum AgentSandboxPolicy {
                     if !permitsRedactedCredentialJudge {
                         needsConfirmation = true
                     }
+                    credentialSensitive = true
                     reasons.append(
                         permitsRedactedCredentialJudge
                             ? "Credential assignment will be redacted locally before intelligent review."
@@ -682,6 +691,7 @@ enum AgentSandboxPolicy {
                 if assignmentValues.contains(where: referencesSensitivePath) {
                     needsEscalation = true
                     needsConfirmation = true
+                    credentialSensitive = true
                     reasons.append("Environment assignment references a sensitive path or credential-like value.")
                 }
                 if assignmentValues.contains(where: referencesSandboxRemappedHome) {
@@ -717,6 +727,7 @@ enum AgentSandboxPolicy {
                 if !permitsRedactedCredentialJudge {
                     needsConfirmation = true
                 }
+                credentialSensitive = true
                 reasons.append(
                     permitsRedactedCredentialJudge
                         ? "Credential assignment will be redacted locally before intelligent review."
@@ -727,6 +738,7 @@ enum AgentSandboxPolicy {
             if assignmentValues.contains(where: referencesSensitivePath) {
                 needsEscalation = true
                 needsConfirmation = true
+                credentialSensitive = true
                 reasons.append("Environment assignment references a sensitive path or credential-like value.")
             }
 
@@ -901,6 +913,7 @@ enum AgentSandboxPolicy {
                ) {
                 needsEscalation = true
                 needsConfirmation = true
+                credentialSensitive = true
                 reasons.append("Command references a sensitive path or credential-like value.")
             }
 
@@ -926,7 +939,8 @@ enum AgentSandboxPolicy {
                 requiresUserApproval: true,
                 requiresTypedConfirmation: needsConfirmation,
                 reason: reasons.uniqued().joined(separator: " "),
-                prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed)
+                prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed),
+                credentialSensitive: credentialSensitive
             )
         }
 

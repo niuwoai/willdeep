@@ -166,7 +166,8 @@ struct AnthropicMessagesAdapter {
         command: String,
         historyContext: String = "",
         toolName: String = "run_command",
-        taskContext: String = ""
+        taskContext: String = "",
+        environmentTrust: String = ""
     ) async -> AgentSafetyJudgeResult {
         guard !configuration.apiKey.isEmpty else {
             return .unavailable("missing api key")
@@ -186,7 +187,8 @@ struct AnthropicMessagesAdapter {
         let userPayload = AgentInjectionDefense.judgeUserPayload(
             command: command,
             toolName: toolName,
-            taskContext: taskContext
+            taskContext: taskContext,
+            environmentTrust: environmentTrust
         )
 
         // System block carries the fixed rules + the caller's stable history
