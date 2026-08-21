@@ -1049,6 +1049,38 @@ struct AgentToolsCoreTests {
         }
     }
 
+    /// 1.280.0-rc2 的工作区内词撞名豁免（审计驱动，消掉最大一类误伤）必须继续
+    /// 生效，但它的分界是扩展名：带扩展名的是源码/文档，裸段就叫 `credentials`
+    /// 或 `secrets` 的是凭据本身。两个方向各钉一半，防止任一侧回摆。
+    @Test("workspace word-collision paths stay exempt, bare credential names do not")
+    func workspaceExemptionStopsAtBareCredentialNames() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
+
+        for exempt in [
+            "cat internal/auth/token.go",
+            "cat docs/secrets.md",
+            "cat pkg/tokens/registry.ts",
+        ] {
+            let decision = AgentSandboxPolicy.commandDecision(command: exempt, rootDirectory: root)
+            #expect(
+                decision.requiresTypedConfirmation == false,
+                "workspace word-collision path must stay exempt: \(exempt)"
+            )
+        }
+
+        for gated in [
+            "cat secrets/credentials",
+            "cat config/secrets/db.yml",
+            "cat deploy/token",
+        ] {
+            let decision = AgentSandboxPolicy.commandDecision(command: gated, rootDirectory: root)
+            #expect(
+                decision.requiresTypedConfirmation == true,
+                "a bare credential path segment is not a word collision: \(gated)"
+            )
+        }
+    }
+
     @Test("visible terminal commands keep full path and credential preflight")
     func terminalCommandPolicyDoesNotBypassSensitiveChecks() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
