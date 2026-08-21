@@ -82,9 +82,18 @@ struct AgentTerminalForegroundOwnershipIntegrationTests {
         )
         defer { tab.terminate() }
 
-        #expect(await waitForInputState(.shellReady, tab: tab))
-        tab.terminalView.send(txt: "sleep 10\n")
-        #expect(await waitForInputState(.foregroundTask, tab: tab))
+        // The two waits below are preconditions, not the thing under test, so
+        // they use `#require`: if the PTY never reaches the state this test is
+        // *about*, stop here. The old `#expect` let the run continue into the
+        // injection assertions, which then failed too — a setup timeout
+        // presented itself as "command injection was not rejected", the single
+        // most alarming way this test could possibly lie.
+        let shellReady = await waitForInputState(.shellReady, tab: tab)
+        try #require(shellReady.matched, "the PTY never handed its foreground group to the shell — \(shellReady.diagnosis)")
+
+        tab.terminalView.send(txt: "sleep \(Self.foregroundJobSeconds)\n")
+        let foregroundOwned = await waitForInputState(.foregroundTask, tab: tab)
+        try #require(foregroundOwned.matched, "`sleep` never took the PTY's foreground process group — \(foregroundOwned.diagnosis)")
 
         do {
             _ = try tab.sendApprovedCommand("printf 'must-not-run\\n'")
@@ -103,34 +112,103 @@ struct AgentTerminalForegroundOwnershipIntegrationTests {
         #expect(tab.recentCommands.isEmpty)
 
         tab.sendUserControl(.ctrlC)
-        #expect(await waitForInputState(.shellReady, tab: tab))
+        let backToShell = await waitForInputState(.shellReady, tab: tab)
+        #expect(backToShell.matched, "ctrl-C did not return the PTY to the shell — \(backToShell.diagnosis)")
     }
 
-    /// Budget for a state this test cannot make happen faster: a real login
-    /// shell has to spawn, run its profile, and hand the PTY's foreground
-    /// process group over to `sleep`.
+    /// How long the foreground job stays observable.
     ///
-    /// Was 3s, which spawning zsh with a user profile can eat on its own — the
-    /// test then failed whenever suite scheduling shifted (adding an unrelated
-    /// suite anywhere in the target was enough). Widening the budget does not
-    /// weaken the assertion: a genuine regression never reaches the expected
-    /// state at all, so it still fails, just later.
-    private static let inputStateTimeout = Duration.seconds(10)
+    /// This is the number that actually made the test flaky, and it is not a
+    /// budget — it is a *window*. The observer polls on the main actor, and in
+    /// a full-target run hundreds of other `@MainActor` tests are queued on
+    /// that same actor, so the poll loop can be frozen out for many seconds at
+    /// a stretch. Measured under emulated contention: **one single poll in 18
+    /// seconds**. With `sleep 10` the job had already exited and the shell was
+    /// back at its prompt before the observer got its first look, so
+    /// `.foregroundTask` was missed even though the product had produced it
+    /// perfectly. Widening the *timeout* alone could never fix that — the
+    /// evidence itself expires.
+    ///
+    /// 600s is ~33x the worst gap measured, and still bounded so a hard-killed
+    /// test run cannot leak a `sleep` for the rest of the day. ctrl-C ends it
+    /// in the happy path; `tab.terminate()` kills the process tree regardless.
+    private static let foregroundJobSeconds = 600
+
+    /// Budget for a state this test cannot make happen faster: the shell has
+    /// to spawn, take the controlling terminal, read the typed line, and hand
+    /// the PTY's foreground process group to `sleep`.
+    ///
+    /// Was 3s, then 10s — both were sized against how long the *PTY* takes,
+    /// not against how long the main actor can be held away from the poll
+    /// loop, which is the real variable (18s measured, and it scales with how
+    /// many main-actor tests the run schedules alongside this one). At 10s the
+    /// first wait alone already blew through its budget on a loaded machine.
+    ///
+    /// Widening this does not weaken the assertion: a genuine regression never
+    /// reaches the expected state at all, so it still fails, just later. It
+    /// stays an order of magnitude below `foregroundJobSeconds` so the state
+    /// being waited for is still there when a starved poll finally runs.
+    private static let inputStateTimeout = Duration.seconds(60)
     private static let inputStatePollInterval = Duration.milliseconds(50)
+
+    /// What a wait saw, so a failure reports the actual PTY story instead of a
+    /// bare `false`. The state sequence separates "never got there" from
+    /// "got there and moved on", and the mirrored screen shows whether the
+    /// shell ever read the line — the mirror is fed on its own queue, so it
+    /// stays readable exactly when the main actor is too busy to be trusted.
+    private struct InputStateWatch {
+        let matched: Bool
+        let elapsed: Duration
+        let polls: Int
+        let observed: [AgentTerminalInputState]
+        let screen: String
+
+        var diagnosis: String {
+            let trail = observed.map { String(describing: $0) }.joined(separator: " → ")
+            return """
+            waited \(elapsed) across \(polls) poll(s), states: \(trail.isEmpty ? "none" : trail), \
+            terminal showed \(screen.debugDescription)
+            """
+        }
+    }
 
     @MainActor
     private func waitForInputState(
         _ expected: AgentTerminalInputState,
         tab: AgentTerminalTab
-    ) async -> Bool {
-        let deadline = ContinuousClock.now + Self.inputStateTimeout
-        while ContinuousClock.now < deadline {
+    ) async -> InputStateWatch {
+        let started = ContinuousClock.now
+        let deadline = started + Self.inputStateTimeout
+        var polls = 0
+        var observed: [AgentTerminalInputState] = []
+
+        func sample() -> Bool {
             tab.refreshInputState()
-            if tab.inputState == expected { return true }
+            polls += 1
+            if observed.last != tab.inputState { observed.append(tab.inputState) }
+            return tab.inputState == expected
+        }
+
+        func result(matched: Bool) -> InputStateWatch {
+            InputStateWatch(
+                matched: matched,
+                elapsed: started.duration(to: .now),
+                polls: polls,
+                observed: observed,
+                screen: matched ? "" : tab.terminalView.snapshotMirror.capture().viewport
+            )
+        }
+
+        while ContinuousClock.now < deadline {
+            if sample() { return result(matched: true) }
             try? await Task.sleep(for: Self.inputStatePollInterval)
         }
-        tab.refreshInputState()
-        return tab.inputState == expected
+        // One last look after the budget. Under main-actor starvation the loop
+        // above can be frozen out entirely, and the state we are waiting for
+        // may have arrived while it was — with a 600s window it is still there
+        // to be seen. Losing that check is how a merely slow machine turns
+        // into a red build.
+        return result(matched: sample())
     }
 }
 
