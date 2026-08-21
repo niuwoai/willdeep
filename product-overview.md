@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-20 | Current version: v1.280.0-rc1
+> Last updated: 2026-08-21 | Current version: v1.280.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **XML 风格 progress 兼容（1.280.0-rc2）** —— Agent 聊天同时识别围栏式 `progress` 协议与 `<progress>...</progress>` 包装。机器可读的步骤状态继续更新 Plan 并渲染原生进度卡；自然语言清单保留 Markdown 正文、只移除协议标签；流式未闭合标签和代码块内字面示例均有独立保护。
 - **Worktree 会话可恢复状态（1.279.0-rc1）** —— 会话持久化受管 worktree 的来源仓库、原路径与分支；进入已清理会话时在 Composer 上方主动提示，仅在仓库、分支和路径均可安全验证时允许一键恢复，否则引导选择工作区。会话列表的工作树图标跟随当前执行绑定实时增删。
 - **会话右键快捷操作（1.278.0-rc1）** —— 在会话列表直接置顶、重命名、归档、标记未读、定位会话文件、复制工作目录/会话 ID/深度链接，或把历史延续到新聊天与隔离 worktree；完整转录可在独立窗口打开。
 - **聊天区一键回到最新消息（1.277.0-rc3）** —— 操作人向上滚动阅读历史时，聊天区右下方显示轻量 Q 版火箭按钮；点击后平滑回到底部，到达最新消息后自动隐藏，会话搜索期间不遮挡搜索结果。
