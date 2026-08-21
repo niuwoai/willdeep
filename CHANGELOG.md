@@ -1,7 +1,13 @@
 # Changelog
 
-> 当前文件保留最新版本（1.282.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.282.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.282.0-rc4 - 2026-08-21
+
+### Added
+
+- **新增「会话体检中心」正式样例插件（`PluginExamples/session-vitality/`）。** 与 `issue-panel` 同构的声明式侧栏 + MCP App 仪表盘 + Ruby stdio MCP 服务，命名空间 `session-vitality`；扫描本地会话 JSON 产出会话统计与项目活跃度，含 `vitality.snapshot` / `vitality.export` 工具、工具栏命令与中英本地化。仓库样例清单与 `AgentPluginSystemTests.repositoryExamplesPassTheProductionLoader` 同步登记。
 
 ## 1.282.0-rc3 - 2026-08-21
 

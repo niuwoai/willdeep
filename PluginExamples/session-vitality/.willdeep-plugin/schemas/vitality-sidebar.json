@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "id": "overview",
+      "kind": "section",
+      "titleKey": "section.overview",
+      "children": [
+        {
+          "id": "ov-sessions",
+          "kind": "row",
+          "children": [
+            {"id": "ov-sessions-label", "kind": "label", "titleKey": "overview.sessions"},
+            {"id": "ov-sessions-value", "kind": "badge", "value": "—"}
+          ]
+        },
+        {
+          "id": "ov-messages",
+          "kind": "row",
+          "children": [
+            {"id": "ov-messages-label", "kind": "label", "titleKey": "overview.messages"},
+            {"id": "ov-messages-value", "kind": "badge", "value": "—"}
+          ]
+        },
+        {
+          "id": "ov-tokens-today",
+          "kind": "row",
+          "children": [
+            {"id": "ov-tokens-today-label", "kind": "label", "titleKey": "overview.tokensToday"},
+            {"id": "ov-tokens-today-value", "kind": "badge", "value": "—"}
+          ]
+        },
+        {
+          "id": "ov-tokens-week",
+          "kind": "row",
+          "children": [
+            {"id": "ov-tokens-week-label", "kind": "label", "titleKey": "overview.tokensWeek"},
+            {"id": "ov-tokens-week-value", "kind": "badge", "value": "—"}
+          ]
+        },
+        {
+          "id": "ov-edited",
+          "kind": "row",
+          "children": [
+            {"id": "ov-edited-label", "kind": "label", "titleKey": "overview.edited"},
+            {"id": "ov-edited-value", "kind": "badge", "value": "—"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "projects",
+      "kind": "section",
+      "titleKey": "section.projects",
+      "children": [
+        {"id": "projects-empty", "kind": "emptyState", "titleKey": "projects.empty"}
+      ]
+    }
+  ]
+}
