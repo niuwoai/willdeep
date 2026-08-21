@@ -164,6 +164,7 @@ extension AppState {
         if let rule = alwaysAllowedCommand(for: call) {
             addAgentAlwaysAllowedCommand(rule)
         }
+        publishSharedAlwaysAllowRule(for: call)
         approveQueuedSerialToolCalls(
             for: runtime,
             source: .alwaysAllowList
@@ -269,6 +270,20 @@ extension AppState {
         AgentSettingsStore.saveAlwaysAllowedCommands(agentAlwaysAllowedCommands)
     }
 
+    /// Publish the *exact* command alongside the local family rule, so the
+    /// willdeep-rs CLI stops asking for the one command the user just approved.
+    /// Only `run_command` qualifies: the CLI's store speaks shell commands, and
+    /// this app's other signature kinds (`shell_category:`, `terminal_command:`,
+    /// tool-level pins) have no counterpart there. The store itself refuses
+    /// credential-bearing commands and anything the CLI could not match.
+    func publishSharedAlwaysAllowRule(for call: AgentToolCall) {
+        guard call.toolName == "run_command",
+              let command = call.arguments["command"]?.stringValue() else {
+            return
+        }
+        AgentSharedAlwaysAllowStore.publish(command: command)
+    }
+
     func alwaysAllowedCommand(for call: AgentToolCall) -> AgentAlwaysAllowedCommand? {
         guard let signature = AgentToolAuthorization.suggestedPersistentSignature(
             toolName: call.toolName,
@@ -290,10 +305,16 @@ extension AppState {
         guard !toolName.hasPrefix("computer_use_") else {
             return false
         }
-        guard risk == .write,
-              !agentAlwaysAllowedCommands.isEmpty else {
-            return false
+        guard risk == .write else { return false }
+        // A rule the operator pinned in the CLI counts here too. It is an
+        // exact command rather than a family, so honoring it never grants
+        // more than the one command they already approved once.
+        if toolName == "run_command",
+           let command = arguments["command"]?.stringValue(),
+           AgentSharedAlwaysAllowStore.allows(command: command) {
+            return true
         }
+        guard !agentAlwaysAllowedCommands.isEmpty else { return false }
         let signatures = Set(AgentToolAuthorization.matchingSignatures(toolName: toolName, arguments: arguments))
         guard !signatures.isEmpty else { return false }
         return agentAlwaysAllowedCommands.contains { signatures.contains($0.commandSignature) }
