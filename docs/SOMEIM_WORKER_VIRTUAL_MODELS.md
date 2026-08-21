@@ -31,6 +31,35 @@
 | `someim-32b-judge` | `someim-32b` | `["glm-5"]` | §3.10 | NULL | 路由/质检等有界裁决 |
 | `someim-32b-compressor` | `deepseek-v4-flash` | `["deepseek-v4-flash"]` | muchtoken `docs/someim-32b-compressor.md`（**replace 注入**，migration 206 落库） | NULL | 上下文压缩摘要 |
 
+### 2.1 实测状态（这张表是规划，不是清单）
+
+上表是「照此配置」的目标态。**客户端的 `hostedTradeIDs` 只认实测通过的链**——
+声明一个尚未建成的链比不声明更糟：客户端一旦相信服务端会 prepend 职能段，
+就不再发自己那份，于是该工种既丢了提示词、又拿 `model_not_configured` 直接
+失败。
+
+最近一次逐档实弹探活（2026-08-21，`POST /v1/chat/completions` 最小请求）：
+
+| 虚拟模型 | 状态 | 实测上游 |
+|---|---|---|
+| `someim-32b` | ✅ 在线 | glm-5 |
+| `someim-32b-scout` / `-reader` / `-test-fixer` / `-build-fixer` / `-log-inspector` / `-git-detective` | ✅ 在线 | glm-5 |
+| `someim-32b-editor` | ✅ 在线 | poolside/laguna-xs-2.1:free |
+| `someim-32b-compressor` | ✅ 在线 | inclusionai/ling-3.0-flash |
+| `someim-32b-security-guard` | ❌ `model_not_configured` | 未建 |
+| `someim-32b-judge` | ❌ `model_not_configured` | 未建 |
+| `someim-32b-reviewer` / `-ops-runner` | ❌ `model_not_configured` | 未建 |
+
+参考：主循环档的 `someim-security-guard`（replace 模式）与 `someim-judge`
+**均在线**（实测上游 `stealth/ox-alpha`），与上面缺席的 Worker 档是两回事，
+不要因为后者未建就动前者。
+
+上游模型由服务端 `target_models` 决定且会变（本次探活的上游就已与本文档
+初版记载不同）——**客户端不应依赖具体上游**，这正是虚拟模型的意义；本表只
+用于回答「这个链建了没有」。后台补建任一档后，先探活再把工种加回
+`AgentSubagentJobPrompts.hostedTradeIDs` 与 willdeep-rs 的
+`hosted_worker_model`，两端必须同时改。
+
 要点：
 
 - **`billing_logical_model` 全部指向 `someim-32b`** → `model_pricing` 只需要建**一行**（`someim-32b`），八个链共用计价；用量统计仍按 `request_model`（各自的虚拟名）天然分组，露脸/成功指标不受影响。

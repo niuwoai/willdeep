@@ -332,6 +332,38 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentJobPrompts.hostedModel(for: "deep") == nil)
     }
 
+    /// The catalog-derived check above cannot catch this: `hostedVirtualModel`
+    /// is itself derived from `hostedTradeIDs`, so the two always agree even
+    /// when both are wrong. Only a literal list compares the client's belief
+    /// against what the gateway actually serves.
+    ///
+    /// Live probe 2026-08-21: these seven answer; `someim-32b-security-guard`,
+    /// `someim-32b-judge`, `someim-32b-reviewer` and `someim-32b-ops-runner`
+    /// return `model_not_configured`. Same table as willdeep-rs
+    /// `hosted_worker_model` — the two clients share one gateway and one set
+    /// of accounts, so a trade must resolve identically from either app.
+    @Test("hosted trades match the chains the relay has actually provisioned")
+    func hostedTradesMatchProvisionedRelayChains() {
+        #expect(
+            AgentSubagentJobPrompts.hostedTradeIDs == [
+                "scout", "reader", "editor", "test_fixer",
+                "build_fixer", "log_inspector", "git_detective",
+            ]
+        )
+        // Claiming hosting for an unbuilt chain is worse than not claiming it:
+        // the client suppresses its own job prompt when it believes the server
+        // supplies one, so the trade loses its prompt *and* fails to resolve.
+        for unprovisioned in ["security_guard", "judge", "reviewer", "ops_runner"] {
+            #expect(
+                AgentSubagentJobPrompts.hostedModel(for: unprovisioned) == nil,
+                "\(unprovisioned) has no relay chain; hosting it resolves to model_not_configured"
+            )
+        }
+        // The main loop's judge is a different model with a different trust
+        // boundary and is unaffected by the worker-tier chain being absent.
+        #expect(SomeIMManagedModel.securityGuard == "someim-security-guard")
+    }
+
     @Test("managed trades ship with no pinned model, so 'recommended' is a real state")
     func managedTradesDefaultToTheRecommendation() {
         // These used to say `glm-5` while the hosted override ignored them
