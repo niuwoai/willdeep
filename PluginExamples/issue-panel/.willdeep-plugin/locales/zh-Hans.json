@@ -1,0 +1,14 @@
+{
+  "command.close": "关闭 Issue",
+  "command.create": "创建 Issue",
+  "command.edit": "编辑 Issue",
+  "command.refresh": "刷新 Issue",
+  "destination.issues": "Issue 面板",
+  "issue.first": "接入插件宿主",
+  "issue.first.detail": "待处理",
+  "issue.second": "补齐 Bridge 文档",
+  "issue.second.detail": "进行中",
+  "issue.created": "新的插件 Issue",
+  "issue.created.detail": "由 MCP App 创建",
+  "issue.edited.detail": "已编辑"
+}

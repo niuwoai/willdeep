@@ -1053,11 +1053,14 @@ nonisolated enum AgentPlanParser {
     /// "模型没上报进度"和"模型上报了但格式不对"区分开——后者需要纠偏，
     /// 前者不需要打扰模型。
     static func containsProgressBlock(_ content: String) -> Bool {
-        !fencedBodies(in: content, tag: "progress").isEmpty
+        // 必须与 applyProgress 用同一个解析入口：`progressBodies` 除围栏式外
+        // 还认 XML 风格 `<progress>` 包装，并忽略普通代码块里的字面示例。
+        // 若这里退回只认围栏，XML 风格的不可解析块就检测不到，纠偏静默失效。
+        !progressBodies(in: content).isEmpty
     }
 
     static func applyProgress(to plan: AgentPlan, from content: String) -> AgentPlan? {
-        let bodies = fencedBodies(in: content, tag: "progress")
+        let bodies = progressBodies(in: content)
         guard !bodies.isEmpty else { return nil }
         var updates: [Int: AgentPlan.StepStatus] = [:]
         for body in bodies {
@@ -1110,6 +1113,84 @@ nonisolated enum AgentPlanParser {
         var lifted = plan
         lifted.interruptedAt = nil
         return lifted
+    }
+
+    /// Extract progress bodies in source order from both WillDeep's fenced
+    /// protocol and the XML-style wrapper emitted by some providers. Literal
+    /// examples inside ordinary Markdown code fences are ignored.
+    private static func progressBodies(in content: String) -> [String] {
+        enum Container {
+            case fence
+            case element
+        }
+
+        let lines = content.components(separatedBy: .newlines)
+        var activeContainer: Container?
+        var isInsideOrdinaryFence = false
+        var currentBody: [String] = []
+        var bodies: [String] = []
+
+        func finishBody() {
+            if !currentBody.isEmpty {
+                bodies.append(currentBody.joined(separator: "\n"))
+            }
+            currentBody.removeAll(keepingCapacity: true)
+            activeContainer = nil
+        }
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if activeContainer == .fence {
+                if trimmed.hasPrefix("```") {
+                    finishBody()
+                } else {
+                    currentBody.append(line)
+                }
+                continue
+            }
+
+            if activeContainer == .element {
+                if trimmed.caseInsensitiveCompare("</progress>") == .orderedSame {
+                    finishBody()
+                } else {
+                    currentBody.append(line)
+                }
+                continue
+            }
+
+            if isInsideOrdinaryFence {
+                if trimmed.hasPrefix("```") {
+                    isInsideOrdinaryFence = false
+                }
+                continue
+            }
+
+            if trimmed.hasPrefix("```") {
+                let info = String(trimmed.dropFirst(3))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                if info == "progress" {
+                    activeContainer = .fence
+                    currentBody = []
+                } else {
+                    isInsideOrdinaryFence = true
+                }
+                continue
+            }
+
+            if trimmed.caseInsensitiveCompare("<progress>") == .orderedSame {
+                activeContainer = .element
+                currentBody = []
+            }
+        }
+
+        // Match the existing streaming behavior: status rows become useful as
+        // soon as they arrive, even before the closing delimiter.
+        if activeContainer != nil {
+            finishBody()
+        }
+        return bodies
     }
 
     fileprivate static func fencedBody(in content: String, tag: String) -> String? {

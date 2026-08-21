@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "minimumWillDeepVersion": "1.281.0-rc1",
+  "contributes": {
+    "destinations": [{
+      "id": "arcade",
+      "titleKey": "destination.arcade",
+      "icon": "sf:gamecontroller.fill",
+      "mainPage": "arcade.main",
+      "companionSidebar": "arcade.sidebar",
+      "defaultPinned": true
+    }],
+    "sidebars": [{
+      "id": "arcade.sidebar",
+      "mode": "none"
+    }],
+    "pages": [{
+      "id": "arcade.main",
+      "runtime": "localWeb",
+      "entryPath": "ui/dist/index.html"
+    }],
+    "commands": [],
+    "menus": {},
+    "settings": []
+  },
+  "permissions": [],
+  "dependencies": {"mcpServers": [], "skills": []}
+}

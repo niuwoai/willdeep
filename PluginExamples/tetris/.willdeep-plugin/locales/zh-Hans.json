@@ -1,0 +1,16 @@
+{
+  "command.newGame": "新游戏",
+  "destination.tetris": "俄罗斯方块",
+  "difficulty.easy": "轻松",
+  "difficulty.easy.detail": "较慢的初始下落速度",
+  "difficulty.normal": "经典",
+  "difficulty.normal.detail": "标准下落速度",
+  "difficulty.hard": "挑战",
+  "difficulty.hard.detail": "开局即高速",
+  "sidebar.controls": "操作方式",
+  "sidebar.controls.move": "移动：← →",
+  "sidebar.controls.rotate": "旋转：↑",
+  "sidebar.controls.drop": "直落：空格",
+  "sidebar.controls.pause": "暂停：P",
+  "sidebar.difficulty": "难度"
+}

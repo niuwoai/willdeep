@@ -363,6 +363,12 @@ nonisolated enum AgentSkillDirectory {
         // 不大,且两边创建的 skill 行为完全等价。
         roots.append(SkillRoot(url: AgentSkillFileManager.userSkillsRoot, source: .user))
         roots.append(SkillRoot(url: AgentSkillFileManager.legacyCodexSkillsRoot, source: .user))
+        for package in AgentPluginRuntimeSnapshotStore.activePackages() {
+            let skills = package.packageURL.appendingPathComponent("skills", isDirectory: true)
+            if FileManager.default.fileExists(atPath: skills.path) {
+                roots.append(SkillRoot(url: skills, source: .plugin))
+            }
+        }
         roots.append(SkillRoot(url: home.appendingPathComponent(".codex/plugins/cache"), source: .plugin))
         return roots
     }

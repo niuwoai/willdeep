@@ -1,0 +1,10 @@
+{
+  "name": "willdeep-classic-arcade",
+  "version": "1.0.0",
+  "description": "Five classic games in one bundled WillDeep destination.",
+  "interface": {
+    "displayName": "Classic Arcade",
+    "shortDescription": "Snake, Tetris, Pong, Minesweeper, and Memory.",
+    "composerIcon": "sf:gamecontroller.fill"
+  }
+}
