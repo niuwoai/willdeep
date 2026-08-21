@@ -208,6 +208,9 @@ extension AppState {
             executionAgent: agentExecutionAgent,
             approvalMode: agentApprovalMode,
             currentPlan: agentCurrentPlan,
+            planProgressFormatViolation: activeRuntime.map {
+                latestTurnHasUnparsableProgressBlock(for: $0)
+            } ?? false,
             currentGoal: agentCurrentGoal,
             promptProfile: promptProfile,
             // Mirror the real request assembly so the estimate matches what
