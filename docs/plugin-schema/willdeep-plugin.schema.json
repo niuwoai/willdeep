@@ -73,7 +73,8 @@
         "icon": { "type": "string" },
         "mainPage": { "$ref": "#/$defs/id" },
         "companionSidebar": { "$ref": "#/$defs/id" },
-        "toolbarCommandIDs": { "$ref": "#/$defs/idArray" }
+        "toolbarCommandIDs": { "$ref": "#/$defs/idArray" },
+        "defaultPinned": { "type": "boolean", "default": false }
       }
     },
     "sidebar": {

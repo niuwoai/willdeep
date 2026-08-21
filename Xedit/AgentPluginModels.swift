@@ -95,6 +95,7 @@ nonisolated struct AgentPluginDestinationContribution: Codable, Equatable, Ident
     var mainPage: String
     var companionSidebar: String?
     var toolbarCommandIDs: [String]
+    var defaultPinned: Bool
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -103,6 +104,7 @@ nonisolated struct AgentPluginDestinationContribution: Codable, Equatable, Ident
         case mainPage
         case companionSidebar
         case toolbarCommandIDs
+        case defaultPinned
     }
 
     init(
@@ -111,7 +113,8 @@ nonisolated struct AgentPluginDestinationContribution: Codable, Equatable, Ident
         icon: String? = nil,
         mainPage: String,
         companionSidebar: String? = nil,
-        toolbarCommandIDs: [String] = []
+        toolbarCommandIDs: [String] = [],
+        defaultPinned: Bool = false
     ) {
         self.id = id
         self.titleKey = titleKey
@@ -119,6 +122,7 @@ nonisolated struct AgentPluginDestinationContribution: Codable, Equatable, Ident
         self.mainPage = mainPage
         self.companionSidebar = companionSidebar
         self.toolbarCommandIDs = toolbarCommandIDs
+        self.defaultPinned = defaultPinned
     }
 
     init(from decoder: Decoder) throws {
@@ -129,6 +133,7 @@ nonisolated struct AgentPluginDestinationContribution: Codable, Equatable, Ident
         mainPage = try container.decode(String.self, forKey: .mainPage)
         companionSidebar = try container.decodeIfPresent(String.self, forKey: .companionSidebar)
         toolbarCommandIDs = try container.decodeIfPresent([String].self, forKey: .toolbarCommandIDs) ?? []
+        defaultPinned = try container.decodeIfPresent(Bool.self, forKey: .defaultPinned) ?? false
     }
 }
 
@@ -483,6 +488,7 @@ nonisolated struct AgentPluginDestinationDescriptor: Equatable, Identifiable, Se
     let companionSidebar: AgentPluginSidebarContribution
     let mainPage: AgentPluginPageContribution
     let toolbarCommandIDs: [AgentPluginCommandID]
+    let defaultPinned: Bool
 }
 
 nonisolated struct AgentPluginPackage: Equatable, Identifiable, Sendable {

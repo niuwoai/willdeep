@@ -606,14 +606,71 @@ struct AgentPluginSystemTests {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        for name in ["project-overview", "issue-panel", "tetris"] {
+        let arcadeRuntimePackage = try makeRuntimePackage(
+            from: repositoryRoot.appendingPathComponent("PluginExamples/arcade")
+        )
+        defer { try? FileManager.default.removeItem(at: arcadeRuntimePackage) }
+        for name in ["project-overview", "issue-panel", "tetris", "arcade"] {
+            let packageURL = name == "arcade"
+                ? arcadeRuntimePackage
+                : repositoryRoot.appendingPathComponent("PluginExamples/\(name)")
             let package = try AgentPluginPackageLoader.load(
-                packageURL: repositoryRoot.appendingPathComponent("PluginExamples/\(name)"),
+                packageURL: packageURL,
                 source: .installed,
-                currentWillDeepVersion: "1.280.0"
+                currentWillDeepVersion: "1.281.0-rc1"
             )
             #expect(package.destinations.count == 1)
         }
+    }
+
+    @Test
+    func bundledDefaultPinnedDestinationOccupiesTheFirstFixedSlot() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let runtimePackage = try makeRuntimePackage(
+            from: repositoryRoot.appendingPathComponent("PluginExamples/arcade")
+        )
+        defer { try? FileManager.default.removeItem(at: runtimePackage) }
+        let package = try AgentPluginPackageLoader.load(
+            packageURL: runtimePackage,
+            source: .bundled,
+            currentWillDeepVersion: "1.281.0-rc1"
+        )
+        let destination = try #require(package.destinations.first)
+        #expect(destination.defaultPinned)
+
+        let snapshot = AgentPluginRegistry.makeSnapshot(
+            packages: [package],
+            issues: [],
+            state: .empty
+        )
+        #expect(snapshot.pinnedDestinationIDs == [destination.qualifiedID])
+
+        let installedPackage = try AgentPluginPackageLoader.load(
+            packageURL: runtimePackage,
+            source: .installed,
+            currentWillDeepVersion: "1.281.0-rc1"
+        )
+        let installedOnlySnapshot = AgentPluginRegistry.makeSnapshot(
+            packages: [installedPackage],
+            issues: [],
+            state: .empty
+        )
+        #expect(installedOnlySnapshot.pinnedDestinationIDs.isEmpty)
+
+        let updatedSnapshot = AgentPluginRegistry.makeSnapshot(
+            packages: [package, installedPackage],
+            issues: [],
+            state: AgentPluginRegistryState(
+                activeVersions: [:],
+                disabledPluginIDs: [],
+                approvedDigests: [installedPackage.digest],
+                pinnedDestinationIDs: []
+            )
+        )
+        #expect(updatedSnapshot.records.first?.activePackage.source == .installed)
+        #expect(updatedSnapshot.pinnedDestinationIDs == [destination.qualifiedID])
     }
 
     @Test
@@ -696,6 +753,25 @@ struct AgentPluginSystemTests {
         try FileManager.default.createDirectory(at: pageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("<!doctype html><title>test</title>".utf8).write(to: pageURL)
         return root
+    }
+
+    private func makeRuntimePackage(from source: URL) throws -> URL {
+        let root = try temporaryDirectory()
+        do {
+            for relativePath in [".codex-plugin", ".willdeep-plugin", "ui/dist"] {
+                let sourceURL = source.appendingPathComponent(relativePath)
+                let destinationURL = root.appendingPathComponent(relativePath)
+                try FileManager.default.createDirectory(
+                    at: destinationURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            }
+            return root
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            throw error
+        }
     }
 
     private func temporaryDirectory() throws -> URL {
