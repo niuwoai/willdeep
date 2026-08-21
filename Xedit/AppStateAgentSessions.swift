@@ -1652,6 +1652,35 @@ extension AppState {
         agentUsageSnapshots.removeAll { $0.id == id }
     }
 
+    /// Whether there is an open conversation to go back to.
+    ///
+    /// `activeAgentSessionID` alone is not enough — it can outlive the session
+    /// it names (deleted from the sidebar, dropped by a catalog reload), and
+    /// navigating to a conversation that no longer exists shows an empty shell.
+    var hasResumableAgentConversation: Bool {
+        guard let id = activeAgentSessionID else { return false }
+        return agentSessions.contains { $0.id == id }
+    }
+
+    /// Return to the chat surface, keeping whatever conversation is already
+    /// open. Only starts a fresh one when there is genuinely nothing to go back
+    /// to, so leaving for a plugin (or the dispatch board, or scheduled tasks)
+    /// and coming back is navigation rather than a new chat.
+    ///
+    /// Switching destinations never tore down the conversation; the sidebar
+    /// simply had no entry that meant "back to it", so the only way in was
+    /// "New Chat" — which did exactly what it said and left the previous
+    /// conversation behind.
+    func returnToAgentConversation() {
+        agentSidePanelKind = nil
+        agentSidePanelRequest = nil
+        guard hasResumableAgentConversation else {
+            startNewAgentSession()
+            return
+        }
+        agentPrimaryDestination = .conversation
+    }
+
     @discardableResult
     func startNewAgentSession() -> AgentSession {
         agentPrimaryDestination = .conversation
