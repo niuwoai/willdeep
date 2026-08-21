@@ -377,9 +377,15 @@ extension AppState {
     func reconcileSomeIMProviderFromSharedSession(
         trigger: SomeIMReconcileTrigger = .routine
     ) -> Bool {
-        let apiKey = SomeIMIntegrationStore.loadAPIKey()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let outcome = SomeIMIntegrationStore.currentSessionOutcome()
+        let apiKey = outcome.apiKey
         if apiKey.isEmpty {
+            // The read never landed — missing entitlement, locked Keychain, busy
+            // securityd, a payload from a newer schema. It says nothing about
+            // whether the user is signed in, so it may not drive anything
+            // destructive. Leave everything alone and let the next read decide.
+            guard outcome != .unavailable else { return false }
+
             switch trigger {
             case .signOut:
                 // The user signed out here. Empty is the expected answer.
@@ -387,13 +393,14 @@ extension AppState {
                 clearSomeIMProvider()
                 ensureActiveProviderIsUsableForChatSelection()
             case .routine:
-                // An empty read is NOT proof of a sign-out. `clearSomeIMProvider`
-                // deletes the library entry *and* its Keychain row, and the
-                // rebuild that follows draws a fresh UUID with default settings —
-                // losing the user's display name, tier models and routing mode,
-                // orphaning per-session provider overrides, and blanking the model
-                // picker in the meantime. Far too destructive to hang on one read
-                // that may have raced a concurrent Keychain write. Confirm first.
+                // Confirmed-absent still is not proof of a sign-out: writes fall
+                // back to `SecItemDelete` + `SecItemAdd`, and a reader landing
+                // between the two sees a genuine "no such item". Meanwhile
+                // `clearSomeIMProvider` deletes the library entry *and* its
+                // Keychain row, and the rebuild draws a fresh UUID with default
+                // settings — losing the user's tier models and routing mode,
+                // orphaning per-session provider overrides, and blanking the
+                // model picker. Too destructive to hang on one read. Confirm.
                 scheduleSomeIMSignOutConfirmation()
             }
             return false
@@ -430,9 +437,12 @@ extension AppState {
             guard let self, !Task.isCancelled else { return }
             self.someIMSignOutConfirmationTask = nil
             SomeIMIntegrationStore.invalidateSharedSessionCache()
-            let confirmed = SomeIMIntegrationStore.loadAPIKey()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let outcome = SomeIMIntegrationStore.currentSessionOutcome()
+            let confirmed = outcome.apiKey
             if confirmed.isEmpty {
+                // Still nothing — but only a confirmed absence may destroy the
+                // entry. An unavailable re-read leaves it standing.
+                guard outcome == .signedOut else { return }
                 self.clearSomeIMProvider()
                 self.ensureActiveProviderIsUsableForChatSelection()
             } else {

@@ -24,9 +24,9 @@ struct SomeIMSharedSessionMemoTests {
         for _ in 0..<10 {
             let value = memo.value {
                 loads += 1
-                return stored
+                return .session(stored)
             }
-            #expect(value?.apiKey == "key-1")
+            #expect(value.session?.apiKey == "key-1")
         }
 
         #expect(loads == 1)
@@ -44,9 +44,9 @@ struct SomeIMSharedSessionMemoTests {
         for _ in 0..<5 {
             let value = memo.value {
                 loads += 1
-                return nil
+                return .signedOut
             }
-            #expect(value == nil)
+            #expect(value == .signedOut)
         }
 
         #expect(loads == 1)
@@ -57,15 +57,15 @@ struct SomeIMSharedSessionMemoTests {
         let memo = SomeIMSharedSessionMemo()
         var current = session("old")
         var loads = 0
-        let read = { memo.value { loads += 1; return current } }
+        let read = { memo.value { loads += 1; return .session(current) } }
 
-        #expect(read()?.apiKey == "old")
+        #expect(read().session?.apiKey == "old")
         current = session("new")
-        #expect(read()?.apiKey == "old")   // still memoized
+        #expect(read().session?.apiKey == "old")   // still memoized
 
         memo.invalidate()
 
-        #expect(read()?.apiKey == "new")
+        #expect(read().session?.apiKey == "new")
         #expect(loads == 2)
     }
 
@@ -75,7 +75,7 @@ struct SomeIMSharedSessionMemoTests {
     func repeatedInvalidationIsIdempotent() {
         let memo = SomeIMSharedSessionMemo()
         var loads = 0
-        let read = { memo.value { loads += 1; return self.session("k") } }
+        let read = { memo.value { loads += 1; return .session(self.session("k")) } }
 
         _ = read()
         memo.invalidate()
@@ -108,15 +108,15 @@ struct SomeIMSharedSessionMemoTests {
         #expect(SomeIMIntegrationStore.loadAPIKey() == "second")
     }
 
-    /// The empty answer is cacheable, but not forever. An empty read is either a
-    /// real sign-out or a read that raced a concurrent Keychain write, and this
-    /// layer cannot tell them apart — so the answer has to expire on its own.
+    /// A failed read is not an answer, so it must not stick. Before this, one
+    /// unreadable moment left the whole app believing it was signed out until
+    /// some notification happened along — an empty model picker for seconds.
     @Test
-    func anEmptyAnswerStopsBeingServedAfterTheTTL() {
+    func anUnavailableReadStopsBeingServedAfterTheTTL() {
         var clock = Date(timeIntervalSince1970: 0)
-        let memo = SomeIMSharedSessionMemo(emptyTTL: 1, now: { clock })
+        let memo = SomeIMSharedSessionMemo(unavailableTTL: 1, now: { clock })
         var loads = 0
-        let read = { memo.value { loads += 1; return nil } }
+        let read = { memo.value { loads += 1; return .unavailable } }
 
         _ = read()
         _ = read()
@@ -127,41 +127,46 @@ struct SomeIMSharedSessionMemoTests {
         #expect(loads == 2)          // expired, so the loader runs again
     }
 
-    /// The bug this TTL exists for. `persistSharedSession` invalidates *before*
-    /// it writes, and `SharedKeychain.write` can fall back to delete+add — so a
-    /// concurrent reader lands between the two and reads nothing. Before the
-    /// TTL, that answer stuck until the next invalidation and the entire app
-    /// looked signed out: an empty model picker for seconds at a time.
+    /// A read that could not complete heals on its own once the underlying
+    /// condition clears — no invalidation required.
     @Test
-    func anEmptyReadThatRacedAWriteHealsWithoutAnInvalidate() {
+    func anUnavailableReadHealsWithoutAnInvalidate() {
         var clock = Date(timeIntervalSince1970: 0)
-        var stored: SomeIMSharedSession?          // mid delete+add: nothing there
-        let memo = SomeIMSharedSessionMemo(emptyTTL: 1, now: { clock })
-        let read = { memo.value { stored } }
+        var outcome = SomeIMSessionReadOutcome.unavailable
+        let memo = SomeIMSharedSessionMemo(unavailableTTL: 1, now: { clock })
+        let read = { memo.value { outcome } }
 
-        #expect(read() == nil)
-        stored = session("restored")              // the write lands
-        #expect(read() == nil)                    // still serving the empty answer
+        #expect(read() == .unavailable)
+        outcome = .session(session("restored"))   // the condition clears
+        #expect(read() == .unavailable)           // still inside the TTL
 
         clock = clock.addingTimeInterval(1.5)
-        #expect(read()?.apiKey == "restored")     // heals on its own
+        #expect(read().session?.apiKey == "restored")
     }
 
-    /// Only the *empty* answer expires. A real session stays memoized until
-    /// something invalidates it, which is what keeps the 400ms-interval readers
-    /// off the Keychain.
+    /// Only `unavailable` expires. Both real answers — a session and a
+    /// confirmed sign-out — stay memoized, which is what keeps the
+    /// 400ms-interval readers off the Keychain.
     @Test
-    func aRealSessionStaysCachedPastTheEmptyTTL() {
+    func realAnswersStayCachedPastTheUnavailableTTL() {
         var clock = Date(timeIntervalSince1970: 0)
-        let memo = SomeIMSharedSessionMemo(emptyTTL: 1, now: { clock })
         var loads = 0
-        let read = { memo.value { loads += 1; return self.session("k") } }
 
-        _ = read()
+        let live = SomeIMSharedSessionMemo(unavailableTTL: 1, now: { clock })
+        let readLive = { live.value { loads += 1; return .session(self.session("k")) } }
+        _ = readLive()
         clock = clock.addingTimeInterval(600)
-        _ = read()
-
+        _ = readLive()
         #expect(loads == 1)
+
+        var signedOutClock = Date(timeIntervalSince1970: 0)
+        var signedOutLoads = 0
+        let out = SomeIMSharedSessionMemo(unavailableTTL: 1, now: { signedOutClock })
+        let readOut = { out.value { signedOutLoads += 1; return .signedOut } }
+        _ = readOut()
+        signedOutClock = signedOutClock.addingTimeInterval(600)
+        _ = readOut()
+        #expect(signedOutLoads == 1)
     }
 
     /// Guards the trap that made this cache risky in the first place:
@@ -174,14 +179,14 @@ struct SomeIMSharedSessionMemoTests {
     func invalidatingBeforeAWriteMakesTheReadbackObserveIt() {
         let memo = SomeIMSharedSessionMemo()
         var persisted = session("before")
-        let read = { memo.value { persisted } }
+        let read = { memo.value { .session(persisted) } }
 
-        #expect(read()?.apiKey == "before")
+        #expect(read().session?.apiKey == "before")
 
         // Simulate persistSharedSession: invalidate, then write.
         memo.invalidate()
         persisted = session("after")
 
-        #expect(read()?.apiKey == "after")
+        #expect(read().session?.apiKey == "after")
     }
 }

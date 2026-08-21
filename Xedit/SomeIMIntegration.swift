@@ -212,60 +212,78 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
 ///
 /// "Nobody is logged in" is a cacheable answer, hence `loaded` is tracked
 /// separately from the value rather than leaning on `value == nil`.
-final class SomeIMSharedSessionMemo {
-    /// How long an empty read stays cached.
-    ///
-    /// A *successful* read is memoized until something invalidates it. An empty
-    /// one only holds briefly, because at this layer the two ways to read
-    /// nothing are indistinguishable: the user really is signed out, or the
-    /// read lost a race with a write. That race is real — `SharedKeychain.write`
-    /// falls back to `SecItemDelete` + `SecItemAdd`, and every write path
-    /// invalidates this cache *before* it writes, so a concurrent reader can
-    /// land squarely between the two. Caching that answer indefinitely made the
-    /// whole app look signed out until the next notification happened along,
-    /// which is what emptied the model picker for seconds at a time.
-    ///
-    /// Still long enough to serve the polling readers this cache exists for
-    /// (the mobile gateway reads every 400ms), so a genuinely signed-out app
-    /// does not go back to hitting the Keychain on every access.
-    static let defaultEmptyTTL: TimeInterval = 1
+/// What a shared-session read established, once the fallback store has had its
+/// say. Distinguishing the last two is the whole point: only one of them is a
+/// statement about the user, and only one of them may drive a sign-out.
+enum SomeIMSessionReadOutcome: Equatable {
+    case session(SomeIMSharedSession)
+    /// Confirmed: no session is stored anywhere we look.
+    case signedOut
+    /// The read did not complete (missing entitlement, locked Keychain, busy
+    /// securityd, unreadable or newer-schema payload). Says nothing about the
+    /// user; the only correct response is to try again later.
+    case unavailable
 
-    private let emptyTTL: TimeInterval
+    var session: SomeIMSharedSession? {
+        if case .session(let session) = self { return session }
+        return nil
+    }
+
+    /// Trimmed API key, empty for both empty cases. Lets callers read the key
+    /// without importing `SomeIMSharedSession` — and, because it is empty for
+    /// `.unavailable` too, without accidentally treating a failed read as
+    /// credentials worth using.
+    var apiKey: String {
+        session?.apiKey.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+}
+
+final class SomeIMSharedSessionMemo {
+    /// How long an `unavailable` outcome stays cached.
+    ///
+    /// A real session and a confirmed sign-out are both *answers* and are
+    /// memoized until something invalidates them — that is what keeps the
+    /// polling readers (the mobile gateway re-reads every 400ms) off the
+    /// Keychain. A failed read is not an answer, so it expires on its own and
+    /// the next reader retries. Without this, one unreadable moment left the
+    /// whole app believing it was signed out until a notification happened
+    /// along, which is what emptied the model picker for seconds at a time.
+    static let defaultUnavailableTTL: TimeInterval = 1
+
+    private let unavailableTTL: TimeInterval
     private let now: () -> Date
-    private var loaded = false
-    private var cached: SomeIMSharedSession?
-    /// When the currently-cached *empty* answer stops being served. Nil whenever
-    /// the cache holds a real session.
-    private var emptyExpiresAt: Date?
+    private var cached: SomeIMSessionReadOutcome?
+    /// When a cached `unavailable` stops being served. Nil for real answers.
+    private var unavailableExpiresAt: Date?
     /// Number of times the loader actually ran. Exists for tests to assert the
     /// Keychain is not being re-read on every access.
     private(set) var loadCount = 0
 
     init(
-        emptyTTL: TimeInterval = SomeIMSharedSessionMemo.defaultEmptyTTL,
+        unavailableTTL: TimeInterval = SomeIMSharedSessionMemo.defaultUnavailableTTL,
         now: @escaping () -> Date = Date.init
     ) {
-        self.emptyTTL = emptyTTL
+        self.unavailableTTL = unavailableTTL
         self.now = now
     }
 
-    func value(loading load: () -> SomeIMSharedSession?) -> SomeIMSharedSession? {
-        if loaded {
-            if cached != nil { return cached }
-            if let emptyExpiresAt, now() < emptyExpiresAt { return nil }
+    func value(loading load: () -> SomeIMSessionReadOutcome) -> SomeIMSessionReadOutcome {
+        if let cached {
+            if cached != .unavailable { return cached }
+            if let unavailableExpiresAt, now() < unavailableExpiresAt { return cached }
         }
-        let value = load()
-        cached = value
-        loaded = true
-        emptyExpiresAt = value == nil ? now().addingTimeInterval(emptyTTL) : nil
+        let outcome = load()
+        cached = outcome
+        unavailableExpiresAt = outcome == .unavailable
+            ? now().addingTimeInterval(unavailableTTL)
+            : nil
         loadCount += 1
-        return value
+        return outcome
     }
 
     func invalidate() {
-        loaded = false
         cached = nil
-        emptyExpiresAt = nil
+        unavailableExpiresAt = nil
     }
 }
 
@@ -323,6 +341,7 @@ enum SomeIMIntegrationStore {
     private nonisolated(unsafe) static var testSharedSessionOverrideEnabled = false
     private nonisolated(unsafe) static var testSharedSessionOverride: SomeIMSharedSession?
     private nonisolated(unsafe) static var testSharedSessionPersistFailureEnabled = false
+    private nonisolated(unsafe) static var testSessionReadOutcome: SomeIMSessionReadOutcome?
     private nonisolated(unsafe) static var testPrivateFallbackPersistFailureEnabled = false
     #endif
 
@@ -676,15 +695,37 @@ enum SomeIMIntegrationStore {
     }
 
     private static func currentSharedSession() -> SomeIMSharedSession? {
+        currentSessionOutcome().session
+    }
+
+    /// The shared session *and why it is missing* when it is.
+    ///
+    /// Callers that destroy state on an empty result must use this rather than
+    /// `currentSharedSession()`: only `.signedOut` is a statement about the
+    /// user. `.unavailable` means the read itself did not land, and acting on
+    /// it as a sign-out is what deleted configured providers.
+    static func currentSessionOutcome() -> SomeIMSessionReadOutcome {
         #if DEBUG
+        if let testSessionReadOutcome { return testSessionReadOutcome }
         // The test override is deliberately never cached: unit tests set it
         // directly and expect the very next read to see the new value.
         if testSharedSessionOverrideEnabled {
-            return testSharedSessionOverride ?? privateKeychainFallbackSession()
+            if let session = testSharedSessionOverride ?? privateKeychainFallbackSession() {
+                return .session(session)
+            }
+            return .signedOut
         }
         #endif
         return sharedSessionMemo.value {
-            SomeIMSharedSessionStore.shared.current() ?? privateKeychainFallbackSession()
+            let result = SomeIMSharedSessionStore.shared.read()
+            if let session = result.session { return .session(session) }
+            // The shared group has nothing usable. This app's own Keychain
+            // namespace is the fallback (ad-hoc signed builds never reach the
+            // shared group at all), and a hit there is a real session.
+            if let fallback = privateKeychainFallbackSession() { return .session(fallback) }
+            // Nothing anywhere. Only call it a sign-out if the shared store
+            // actually confirmed the item is absent.
+            return result.isConfirmedSignedOut ? .signedOut : .unavailable
         }
     }
 
@@ -771,6 +812,13 @@ enum SomeIMIntegrationStore {
         testSharedSessionOverride = trimmed.isEmpty
             ? nil
             : SomeIMSharedSession(apiKey: trimmed, baseURL: loadSettings().baseURL)
+    }
+
+    /// Forces `currentSessionOutcome()` to a fixed answer, so tests can exercise
+    /// the `.unavailable` path — a Keychain that will not read is not something
+    /// a test can arrange for real. Pass nil to restore normal resolution.
+    static func _setTestSessionReadOutcome(_ outcome: SomeIMSessionReadOutcome?) {
+        testSessionReadOutcome = outcome
     }
 
     static func _setTestSharedSessionPersistFailure(_ enabled: Bool) {

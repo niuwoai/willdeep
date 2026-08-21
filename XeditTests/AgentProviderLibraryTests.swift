@@ -918,6 +918,29 @@ struct AgentProviderLibraryTests {
         #expect(appState.agentProviderLibrary.entries.isEmpty)
     }
 
+    /// An unreadable shared store must not even *schedule* a sign-out. Missing
+    /// entitlement, locked Keychain, busy securityd, a payload from a newer
+    /// schema — none of them say anything about whether the user is signed in.
+    @MainActor
+    @Test("an unavailable shared-session read schedules nothing at all")
+    func unavailableReadDoesNotScheduleASignOut() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        let entry = installCustomizedSomeIMProvider(in: appState)
+        defer { appState.cancelSomeIMSignOutConfirmation() }
+
+        SomeIMIntegrationStore._setTestSessionReadOutcome(.unavailable)
+        defer { SomeIMIntegrationStore._setTestSessionReadOutcome(nil) }
+
+        #expect(appState.reconcileSomeIMProviderFromSharedSession() == false)
+        #expect(appState.someIMSignOutConfirmationTask == nil)   // nothing scheduled
+        #expect(appState.agentProviderLibrary.entries.first?.id == entry.id)
+    }
+
     /// A shared session that reads back fine must cancel any pending
     /// confirmation, or a sign-out scheduled a moment earlier would fire after
     /// the user is already signed back in.

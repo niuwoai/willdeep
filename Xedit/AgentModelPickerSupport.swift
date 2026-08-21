@@ -38,6 +38,26 @@ enum AgentModelPickerPresentation {
     }
 }
 
+/// Identity of the picker's detail scroll view.
+///
+/// The detail column is one `ScrollView` reused by every source, and its scroll
+/// offset does not reset when the content underneath changes. Scroll deep into
+/// "All models" (dozens of entries), switch to "Coding picks" (a handful), and
+/// the offset stays put — now past the end of the new, much shorter content.
+/// The `LazyVStack` inside then has no visible range to populate and builds
+/// nothing at all, so the panel goes blank: not even the section header, which
+/// is itself just another lazy row.
+///
+/// Making the scroll view's identity depend on what it is showing rebuilds it
+/// on every switch, which puts the offset back at the top where the content is.
+struct AgentModelDetailScrollIdentity: Hashable {
+    let source: AgentModelPickerSource
+    /// Entering or leaving search swaps the whole content set, same as a source
+    /// switch. Keystrokes *within* a search do not rebuild — results only get
+    /// shorter from an already-topped-out scroll position.
+    let isSearching: Bool
+}
+
 enum AgentModelPickerTierFilter: String, CaseIterable, Identifiable {
     case all
     case flash
