@@ -253,8 +253,9 @@ enum AgentInjectionDefense {
     reloading nginx, or adding an nginx site can be YES when they are \
     bounded to the described task. Read-only diagnostics can also be YES, \
     including bounded file or log inspection, assigning the output of a \
-    read-only find pipeline to a shell variable, and explicit single-statement \
-    SELECT, SHOW, DESCRIBE, or EXPLAIN queries against a local database, \
+    read-only find pipeline to a shell variable, and explicit read-only \
+    SELECT, SHOW, DESCRIBE, or EXPLAIN queries against a local database — \
+    including several such read-only statements chained with semicolons — \
     provided they do not expose credentials or request locks or file output.
 
     Credential values in HTTP commands are replaced locally with \

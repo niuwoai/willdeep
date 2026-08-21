@@ -884,7 +884,16 @@ enum AgentSandboxPolicy {
                 }
             }
 
-            if tokens.dropFirst().contains(where: referencesSensitivePath),
+            if credentialScanTokens(head: head, tokens: tokens)
+                .contains(where: { token in
+                    referencesSensitivePath(token)
+                        && !isWorkspaceLocalMarkerOnlyPath(
+                            token,
+                            workingDirectory: workingDirectory,
+                            rootDirectory: rootDirectory,
+                            additionalWorkspaceRoots: additionalWorkspaceRoots
+                        )
+                }),
                !isPipedTextFilterUsingOnlyPattern(
                    head: head,
                    tokens: tokens,
@@ -1948,6 +1957,92 @@ enum AgentSandboxPolicy {
         return positionalArguments.count == 1
     }
 
+    /// 参与凭据词扫描的参数集合。`git commit` 的提交信息是惰性文本：一段
+    /// “支持 Bearer Token 双认证”的说明不读取任何凭据，却会因 message 里出现
+    /// token/secret 字样被升到人工确认（审计日志实锤的高频误伤）。这里只剔除
+    /// message 参数本身——`-m`/`--message` 的取值、`--message=…`/`-m…` 的黏连
+    /// 形态；路径、flag 与其余参数照常扫描，非 `git commit` 命令原样返回。
+    nonisolated private static func credentialScanTokens(
+        head: String,
+        tokens: [String]
+    ) -> [String] {
+        let rest = Array(tokens.dropFirst())
+        guard head == "git" || head.hasSuffix("/git"),
+              rest.contains(where: { $0.lowercased() == "commit" }) else {
+            return rest
+        }
+        var scanned: [String] = []
+        var index = 0
+        while index < rest.count {
+            let token = rest[index]
+            let lower = token.lowercased()
+            let isShortMessageFlagCluster = lower.hasPrefix("-")
+                && !lower.hasPrefix("--")
+                && lower.hasSuffix("m")
+            if lower == "--message" || isShortMessageFlagCluster {
+                scanned.append(token)
+                index += 2
+                continue
+            }
+            if lower.hasPrefix("--message=")
+                || (lower.hasPrefix("-m") && !lower.hasPrefix("--") && lower.count > 2) {
+                index += 1
+                continue
+            }
+            scanned.append(token)
+            index += 1
+        }
+        return scanned
+    }
+
+    /// 工作区内“词撞名”路径豁免。`internal/auth/token.go`、`docs/secrets.md`
+    /// 这类工作区内文件，`read_file` 工具本就免审可读，命令行读它却要人工点，
+    /// 纯粹是同一份数据走两条门的不一致。豁免只覆盖**凭据词命中**且 token
+    /// 能解析为工作区内路径的情况：`.env`、`~/.ssh` 等 sensitivePathFragments
+    /// 与敏感选项名（`--token=…`）永不豁免，工作区外路径也不豁免。
+    nonisolated private static func isWorkspaceLocalMarkerOnlyPath(
+        _ token: String,
+        workingDirectory: URL?,
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL]
+    ) -> Bool {
+        let lower = token.lowercased()
+        guard !sensitivePathFragments.contains(where: { lower.contains($0) }),
+              !sensitiveOptionNameLooksSensitive(lower) else {
+            return false
+        }
+        // 豁免侧用自己的路径识别，比通用 looksLikePath 宽：通用检测器驱动
+        // “升级”，把 `internal/auth/token.go` 这类裸相对路径当路径会过度
+        // 打扰；这里驱动“豁免”，恰恰以多段相对路径为主形态。含 shell
+        // 元字符 / URL / 赋值形态的 token 一律不认，flag 不认，单段裸词
+        //（如 `kubectl get secret` 的资源词）因为不含 `/` 也不认。
+        let cleaned = token.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        guard !cleaned.isEmpty, !cleaned.hasPrefix("-") else { return false }
+        guard !cleaned.contains(where: { ":=*?$`(){}[]<>|&;".contains($0) }) else {
+            return false
+        }
+        let resolved: URL
+        if let viaGeneralDetector = resolvePath(
+            cleaned,
+            workingDirectory: workingDirectory,
+            rootDirectory: rootDirectory
+        ) {
+            resolved = viaGeneralDetector
+        } else if cleaned.contains("/"), !cleaned.hasPrefix("~") {
+            guard let base = workingDirectory ?? rootDirectory?.standardizedFileURL else {
+                return false
+            }
+            resolved = base.appendingPathComponent(cleaned).standardizedFileURL
+        } else {
+            return false
+        }
+        return isInsideWorkspace(
+            resolved,
+            rootDirectory: rootDirectory,
+            additionalWorkspaceRoots: additionalWorkspaceRoots
+        )
+    }
+
     nonisolated private static func sensitiveOptionNameLooksSensitive(_ lower: String) -> Bool {
         guard lower.hasPrefix("-") else { return false }
         let optionName = lower.split(separator: "=", maxSplits: 1).first.map(String.init) ?? lower
@@ -1957,6 +2052,10 @@ enum AgentSandboxPolicy {
         }
     }
 
+    /// 下划线算标识符字符，不算边界：`token_plan_quota.go`、`secret_santa.rb`
+    /// 这类 snake_case 名字里的 token/secret 是普通标识符片段，不是凭据引用。
+    /// 审计日志实测这是敏感词升级里最大的误伤源（读工作区源码文件也要人工点）。
+    /// 连字符仍然是边界——`tokenhub-secret` 是 k8s secret 对象名，必须继续命中。
     nonisolated private static func containsIdentifierBoundedMarker(
         _ marker: String,
         in value: String
@@ -1965,9 +2064,9 @@ enum AgentSandboxPolicy {
         while searchStart < value.endIndex,
               let range = value.range(of: marker, range: searchStart..<value.endIndex) {
             let isLeadingBoundary = range.lowerBound == value.startIndex
-                || !isASCIIAlphaNumeric(value[value.index(before: range.lowerBound)])
+                || !isIdentifierCharacter(value[value.index(before: range.lowerBound)])
             let isTrailingBoundary = range.upperBound == value.endIndex
-                || !isASCIIAlphaNumeric(value[range.upperBound])
+                || !isIdentifierCharacter(value[range.upperBound])
             if isLeadingBoundary && isTrailingBoundary {
                 return true
             }
@@ -1978,6 +2077,10 @@ enum AgentSandboxPolicy {
 
     nonisolated private static func isASCIIAlphaNumeric(_ character: Character) -> Bool {
         character.isASCII && (character.isLetter || character.isNumber)
+    }
+
+    nonisolated private static func isIdentifierCharacter(_ character: Character) -> Bool {
+        character == "_" || isASCIIAlphaNumeric(character)
     }
 
     nonisolated private static func keyLooksSensitive(_ key: String) -> Bool {
