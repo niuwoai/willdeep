@@ -2298,444 +2298,120 @@ extension AppState {
         }
     }
 
-    // MARK: - Routines
+    // MARK: - some.im managed routing ("省心托管") selection
 
-    /// Insert or replace a routine, then persist + notify the scheduler.
-    /// Used by both "create" (id not in list) and "edit" (id already
-    /// present) paths from the routine editor sheet.
-    func saveAgentRoutine(_ routine: AgentRoutine) {
-        var updated = routine
-        updated.updatedAt = Date()
-        if let index = agentRoutines.firstIndex(where: { $0.id == updated.id }) {
-            agentRoutines[index] = updated
-        } else {
-            agentRoutines.insert(updated, at: 0)
-        }
-        AgentRoutineStore.save(updated)
-        agentRoutines.sort { $0.updatedAt > $1.updatedAt }
-        agentRoutineScheduler.routinesChanged(agentRoutines)
-        if updated.isEnabled {
-            agentRoutineScheduler.requestNotificationAuthorizationIfNeeded()
-        }
-    }
-
-    func deleteAgentRoutine(id: AgentRoutine.ID) {
-        AgentRoutineStore.delete(id: id)
-        agentRoutines.removeAll { $0.id == id }
-        agentRoutineScheduler.routinesChanged(agentRoutines)
-    }
-
-    /// Flip enabled on/off in place. Cheaper than going through the
-    /// editor sheet for the sidebar inline toggle.
-    func toggleAgentRoutineEnabled(id: AgentRoutine.ID) {
-        guard let index = agentRoutines.firstIndex(where: { $0.id == id }) else { return }
-        agentRoutines[index].isEnabled.toggle()
-        agentRoutines[index].updatedAt = Date()
-        AgentRoutineStore.save(agentRoutines[index])
-        agentRoutineScheduler.routinesChanged(agentRoutines)
-        if agentRoutines[index].isEnabled {
-            agentRoutineScheduler.requestNotificationAuthorizationIfNeeded()
-        }
-    }
-
-    /// User-driven manual fire ("Run now" button in editor or sidebar).
-    /// Ignores `isEnabled` — a disabled routine can still be run on demand.
-    ///
-    /// 1.96.0-rc2:点完"立即运行"以后立刻把活动会话切到新建的 routine
-    /// 会话 —— 否则用户什么反馈都看不到,体感是"按了没反应"。
-    /// 调度器自动触发(`force == false`)不走这条路,继续保持后台运行。
-    func runAgentRoutineNow(id: AgentRoutine.ID) {
-        guard let newSessionID = fireRoutine(id: id, force: true) else { return }
-        if appMode != .agent {
-            setAppMode(.agent)
-        }
-        selectAgentSession(id: newSessionID)
-    }
-
-    /// Scheduler entry point. Returns the new session ID when the routine
-    /// actually started a session; nil if the routine was empty / missing
-    /// (the scheduler will retry next tick if appropriate).
-    ///
-    /// Concurrency model (rc3+): scheduler-driven fires spawn a background
-    /// runtime rather than yanking the user's UI — they do NOT change
-    /// `activeAgentSessionID` and do NOT flip `appMode`. The user keeps
-    /// working in whatever session they had on screen; the routine's
-    /// session shows up in the sidebar and they can click into it later.
-    /// Manual "Run now" (`runAgentRoutineNow`) does switch the active
-    /// session — that path is handled by the wrapper above.
-    @discardableResult
-    func fireRoutine(id: AgentRoutine.ID, force: Bool = false) -> AgentSession.ID? {
-        _ = force // The per-provider concurrency cap replaces the old
-                  // "is anyone responding?" gate; manual "Run now"
-                  // doesn't need to bypass anything different.
-
-        guard let index = agentRoutines.firstIndex(where: { $0.id == id }) else { return nil }
-        let routine = agentRoutines[index]
-        let prompt = routine.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty else { return nil }
-
-        // Build the session and its runtime, but DO NOT touch
-        // activeAgentSessionID or appMode — that would yank the user
-        // out of whatever they're reading.
-        let routineProvider = agentProviderLibrary.active
-        // `forRoutineRun` stamps `originRoutineID`, which marks the run
-        // unattended for the rest of its life: nobody is watching this
-        // conversation at 22:00, so its turn loop gets the minutes-long
-        // transient-network recovery window instead of the interactive "show
-        // the error card and wait for a click" path.
-        let session = AgentSession.forRoutineRun(
-            routineID: routine.id,
-            workspaceRootPath: routine.workspaceRootPath,
-            modelID: routine.modelID?.isEmpty == false
-                ? routine.modelID
-                : agentConfiguration.normalized.model(for: .interactive),
-            providerEntryID: routineProvider?.id,
-            providerID: routineProvider?.providerID,
-            providerDisplayName: routineProvider?.displayName
-        )
-        agentSessions.insert(session, at: 0)
-        // saveAsync, not save: sync save can beachball behind another
-        // instance's NSFileCoordinator hold on the session directory.
-        AgentSessionStore.saveAsync(session)
-        upsertAgentUsageSnapshot(for: session)
-        let runtime = AgentRuntime(session: session)
-        agentRuntimes[session.id] = runtime
-        // Routine session stays a background runtime — no activeRuntime
-        // forward subscription. Sidebar status dot observes it directly.
-        if let modelID = routine.modelID, !modelID.isEmpty {
-            runtime.sessionModelOverride = modelID
-        }
-
-        let startedAt = Date()
-        agentRoutines[index].lastRunAt = startedAt
-        agentRoutines[index].lastSessionID = session.id
-        agentRoutines[index].updatedAt = startedAt
-        AgentRoutineStore.save(agentRoutines[index])
-        agentRoutineScheduler.routinesChanged(agentRoutines)
-        agentRoutineRuns.insert(
-            AgentRoutineRunRecord(
-                routineID: routine.id,
-                routineName: routine.name,
-                sessionID: session.id,
-                startedAt: startedAt
-            ),
-            at: 0
-        )
-        agentRoutineRuns = AgentRoutineRunHistory.recent(
-            agentRoutineRuns,
-            limit: AgentRoutineRunHistory.maximumStoredRuns
-        )
-        AgentRoutineRunStore.save(agentRoutineRuns)
-
-        // Scheduled runs have no operator watching their terminal. Give the
-        // model a durable least-side-effect execution contract so diagnostic
-        // routines naturally choose the statically approvable path (for
-        // example, stream journalctl output over SSH instead of creating
-        // remote /tmp files). Explicitly requested mutations still go through
-        // the normal approval boundary.
-        let unattendedGuidance = """
-        [周期任务 · 无人值守执行边界]
-        本次运行来自后台周期任务。优先使用只读工具和只读命令完成分析；远程日志巡检应直接读取并流式筛选 journalctl/systemctl 输出，不要为了分析创建远端临时文件，也不要重启服务、修改配置、改变权限或删除数据。只有原任务明确要求产生外部副作用时才可提出相应操作；无法在安全边界内完成时，请在结果中说明具体阻塞原因，不要等待无人值守的交互确认。
-        """
-
-        // Goal-bearing tasks self-complete: tell this run to evaluate the goal
-        // and, if met, call complete_scheduled_task with its own id so the task
-        // (and its card) disappears. Plain routines receive the same unattended
-        // execution boundary after their saved prompt.
-        let dispatchText: String
-        if let goal = routine.goal?.trimmingCharacters(in: .whitespacesAndNewlines), !goal.isEmpty {
-            dispatchText = """
-            \(prompt)
-
-            \(unattendedGuidance)
-
-            [定时任务 · 自完成判定] 本次运行来自定时任务「\(routine.name)」(task_id: \(routine.id.uuidString))。
-            目标:\(goal)
-            完成上述工作后,判断该目标是否已达成:
-            - 已达成 → 调用 complete_scheduled_task 工具(task_id 传 \(routine.id.uuidString)),移除这个定时任务;它将不再运行,卡片也会消失。
-            - 未达成 → 正常简短汇报当前进展即可,不要调用 complete_scheduled_task。
-            """
-        } else {
-            dispatchText = """
-            \(prompt)
-
-            \(unattendedGuidance)
-            """
-        }
-
-        // dispatchAgentMessage handles the per-provider concurrency
-        // cap — if the cap is hit, the dispatch queues and drains
-        // FIFO as slots free. So even a fleet of 10 routines hitting
-        // the same provider all at 09:00 won't stomp on each other.
-        dispatchAgentMessage(for: runtime, text: dispatchText, images: [])
-
-        // Sidebar hides sessions whose persisted `session.messages` is
-        // still empty (the "empty New Chat" filter in AgentSessionsSidebar
-        // groupedSessions). For interactive chats the activeID branch
-        // keeps the row visible, but a routine-spawned session is NEVER
-        // active by design (rc3+ keeps the user on whatever they were
-        // reading). The first message only lands on `session.messages`
-        // when runAgentLoop's defer calls persistAgentSession — which is
-        // way after the click, and never if the provider call hangs. So
-        // here, right after the dispatch synchronously appended the user
-        // message to `runtime.messages`, push that state to the session
-        // so the row pops into the sidebar immediately. Provider-queue
-        // path (cap full → PendingDispatch) leaves runtime.messages
-        // empty, which is fine: persist is a no-op-cheap copy in that
-        // case and the drain will re-trigger this path soon.
-        persistAgentSession(runtime: runtime)
-        return session.id
-    }
-
-    /// Close out the run-history record for a scheduled-routine conversation.
-    ///
-    /// Every path that ends a routine turn calls this, so the Automations page
-    /// can answer "did the 22:00 job work?" instead of only "did it start?".
-    /// Failures additionally raise a system notification — the start-only
-    /// notice meant a routine announced itself and then went quiet whether it
-    /// succeeded or died.
-    ///
-    /// Deliberately once per run: a later manual 重试 in the same conversation
-    /// does not rewrite history, because what the page reports is how the
-    /// *scheduled* run went.
-    func recordRoutineRunCompletionIfNeeded(for runtime: AgentRuntime) {
-        guard runtime.session.originRoutineID != nil else { return }
-        guard let index = agentRoutineRuns.firstIndex(where: {
-            $0.sessionID == runtime.id && $0.finishedAt == nil && $0.outcome == .running
+    /// Composer entry point for "省心托管". Only valid when the active
+    /// provider is some.im. Sets a fresh `.low` managed-routing floor and
+    /// clears any explicit model override so the three session-selection
+    /// states stay mutually exclusive.
+    func selectSomeIMManagedRouting() {
+        let previousModel = activeAgentModelSelectionLabel
+        guard let someIMEntry = agentProviderLibrary.entries.first(where: {
+            $0.providerID == AgentProviderPreset.someIMID
         }) else { return }
-
-        let failure = runtime.lastTurnFailure
-        let outcome: AgentRoutineRunOutcome
-        if failure != nil {
-            outcome = .failed
-        } else if runtime.messages.last(where: { $0.role == .assistant })?.content.isEmpty == false {
-            outcome = .succeeded
-        } else {
-            // No error and no reply: a user Stop, or a turn that unwound
-            // without ever reaching the provider. Claiming success here is
-            // exactly the kind of flattering guess this record exists to stop.
-            outcome = .interrupted
+        // Model choice comes before workspace choice in the composer. Keep that
+        // order valid by creating an empty, workspace-less conversation now;
+        // moveActiveAgentSessionToWorkspace will preserve it when a folder is
+        // selected later.
+        if activeRuntime == nil {
+            startNewAgentSession(inWorkspaceAt: nil)
         }
-
-        agentRoutineRuns[index].finishedAt = Date()
-        agentRoutineRuns[index].outcome = outcome
-        agentRoutineRuns[index].failureMessage = failure?.message
-        AgentRoutineRunStore.save(agentRoutineRuns)
-
-        if let failure {
-            agentRoutineScheduler.postFailureNotificationIfAuthorized(
-                routineName: agentRoutineRuns[index].routineName,
-                reason: failure.message
+        guard let runtime = activeRuntime else { return }
+        runtime.sessionProviderEntryID = someIMEntry.id
+        runtime.sessionProviderIDOverride = someIMEntry.providerID
+        runtime.session.providerEntryID = someIMEntry.id
+        runtime.session.providerID = someIMEntry.providerID
+        runtime.session.providerDisplayName = someIMEntry.displayName
+        let wasUsingManagedRouting = runtime.managedRouting != nil
+        runtime.sessionModelOverride = nil
+        if runtime.managedRouting == nil {
+            runtime.managedRouting = AgentManagedRoutingState()
+        }
+        persistActiveAgentSession()
+        if !wasUsingManagedRouting {
+            appendModelChangeNoticeIfNeeded(
+                from: previousModel,
+                to: L10n.AgentModelPicker.managed
             )
         }
     }
 
-    /// Toggle pin state. Pinned sessions move into the global pinned section
-    /// above every workspace, sorted by `pinnedAt` (most recently pinned
-    /// first). The timestamp doubles as both the on/off flag and the ordering
-    /// key, so re-pinning sends the row back to the top.
-    func toggleAgentSessionPinned(id: AgentSession.ID) {
-        _ = materializeAgentSessionIfNeeded(id: id)
-        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
-        agentSessions[index].pinnedAt = agentSessions[index].pinnedAt == nil ? Date() : nil
-        // Mirror onto the live runtime's session copy (rename already
-        // does) — otherwise the runtime's next persist() writes its own
-        // stale copy back and silently un-pins the row.
-        if let runtime = agentRuntimes[id] {
-            runtime.session.pinnedAt = agentSessions[index].pinnedAt
+    /// Signed-in some.im users start new chats in managed routing until they
+    /// explicitly choose a concrete model for the current conversation.
+    /// Existing historical conversations are never rewritten; login
+    /// reconciliation may only adopt an empty chat.
+    func defaultSomeIMManagedRoutingState() -> AgentManagedRoutingState? {
+        guard SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),
+              agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID,
+              AgentSettingsStore.loadDefaultModelModePreference().usesManagedRoutingForNewSessions else {
+            return nil
         }
-        AgentSessionStore.saveAsync(agentSessions[index])
-        upsertAgentUsageSnapshot(for: agentSessions[index])
+        return AgentManagedRoutingState()
     }
 
-    /// Toggle archive state. Archived sessions disappear from the main
-    /// workspace list and instead live under a collapsed "已归档" row
-    /// at the bottom of each workspace group. Unarchiving puts them
-    /// back into the active set with their original `updatedAt` intact
-    /// so they sort back into their natural recency position.
-    func toggleAgentSessionArchived(id: AgentSession.ID) {
-        _ = materializeAgentSessionIfNeeded(id: id)
-        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
-        let willArchive = agentSessions[index].archivedAt == nil
-        agentSessions[index].archivedAt = willArchive ? Date() : nil
-        // Mirror onto the live runtime's session copy (rename already
-        // does) — otherwise the runtime's next persist() writes its own
-        // stale copy back and silently un-archives the row.
-        if let runtime = agentRuntimes[id] {
-            runtime.session.archivedAt = agentSessions[index].archivedAt
+    func defaultAgentModelIDForNewSession(
+        managedRouting: AgentManagedRoutingState?
+    ) -> String? {
+        if managedRouting != nil {
+            return nil
         }
-        // Archiving the currently-active session shouldn't kick the
-        // user out — the chat stays selected. They can pick another
-        // session whenever they want; in the meantime the row simply
-        // vanishes from the visible list, which is exactly what every
-        // other chat app (Cursor, Slack, Linear) does.
-        AgentSessionStore.saveAsync(agentSessions[index])
-        upsertAgentUsageSnapshot(for: agentSessions[index])
+        let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
+        guard agentProviderLibrary.active?.isUsableForChatSelection(
+            isSomeIMAuthenticated: authenticated
+        ) == true else {
+            return nil
+        }
+        if SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),
+           agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID,
+           !AgentSettingsStore.loadDefaultModelModePreference().usesManagedRoutingForNewSessions {
+            return SomeIMIntegrationSettings.defaultTextModel
+        }
+        return agentConfiguration.normalized.model(for: .interactive)
     }
 
-    /// Rename a session to a user-provided title. Sets `titleIsUserSet`
-    /// so neither the per-persist deriveTitle nor the LLM summarizer
-    /// will overwrite it later. Empty/whitespace-only input is treated
-    /// as "cancel" (no-op) — clearing a session title to "" would just
-    /// confuse the sidebar.
-    func renameAgentSession(id: AgentSession.ID, to newTitle: String) {
-        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        _ = materializeAgentSessionIfNeeded(id: id)
-        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
-        agentSessions[index].title = trimmed
-        agentSessions[index].titleIsUserSet = true
-        if let runtime = agentRuntimes[id] {
-            runtime.session.title = trimmed
-            runtime.session.titleIsUserSet = true
+    /// Rebuild the runtime-only model override from the persisted session.
+    /// Launch recovery uses the same path as an explicit sidebar selection so
+    /// a background-resumed Goal continues on its original concrete model.
+    func seedPersistedSessionModelOverride(for runtime: AgentRuntime) {
+        guard runtime.managedRouting == nil else {
+            runtime.sessionModelOverride = nil
+            return
         }
-        // Async: rename must not stall the main thread behind a backlog
-        // of large session writes (the caller discards the result anyway).
-        AgentSessionStore.saveAsync(agentSessions[index])
-        upsertAgentUsageSnapshot(for: agentSessions[index])
+        let routedModel = configurationForCurrentTurn(for: runtime).model(for: .interactive)
+        runtime.sessionModelOverride = runtime.session.modelID == routedModel
+            ? nil
+            : runtime.session.modelID
     }
 
-    func renameAgentSessionFromTool(
-        runtimeID: AgentSession.ID,
-        to newTitle: String
-    ) throws -> String {
-        guard agentRuntimes[runtimeID] != nil else {
-            throw AgentToolError.invalidArgument("the originating session is no longer available")
+    private func adoptSomeIMManagedRoutingForEmptySessionIfNeeded() {
+        guard let runtime = activeRuntime,
+              runtime.isEmpty,
+              !runtime.isResponding,
+              runtime.managedRouting == nil,
+              runtime.sessionProviderIDOverride == nil,
+              runtime.sessionModelOverride == nil,
+              defaultSomeIMManagedRoutingState() != nil else {
+            return
         }
-        renameAgentSession(id: runtimeID, to: newTitle)
-        guard let title = agentSessions.first(where: { $0.id == runtimeID })?.title else {
-            throw AgentToolError.invalidArgument("the originating session could not be renamed")
-        }
-        return title
+        runtime.sessionModelOverride = nil
+        runtime.managedRouting = AgentManagedRoutingState()
+        persistActiveAgentSession()
     }
 
-    /// Manually request an LLM title summary for a session. Bypasses
-    /// the "only on first assistant turn" gate so the user can refresh
-    /// the title at any point. Clears `titleIsUserSet` so the
-    /// summarizer is allowed to run, then defers to the shared
-    /// summarizer path; the summarizer itself re-sets the flag on
-    /// success.
-    func manuallySummarizeAgentSessionTitle(id: AgentSession.ID) {
-        guard let runtime = agentRuntimes[id] else { return }
-        // Temporarily unlock so the summarizer doesn't bail at rule (1).
-        runtime.session.titleIsUserSet = false
-        if let index = agentSessions.firstIndex(where: { $0.id == id }) {
-            agentSessions[index].titleIsUserSet = false
-        }
-        summarizeAgentSessionTitleIfNeeded(runtime: runtime, force: true)
-    }
-
-    func workspaceSessionSnapshots(for runtime: AgentRuntime) -> [AgentWorkspaceSessionSnapshot] {
-        let workspaceKey = runtime.session.workspaceSidebarGroupKey
-        return agentSessions
-            .filter { $0.workspaceSidebarGroupKey == workspaceKey }
-            .map { session in
-                let live = agentRuntimes[session.id]
-                let source = live?.session ?? session
-                let goal = live?.currentGoal ?? source.currentGoal
-                let completedGoalItems = goal?.checklist.filter(\.done).count ?? 0
-                let totalGoalItems = goal?.checklist.count ?? 0
-                let dispatchProject = agentDispatchCoordinator.goals.first {
-                    $0.sessionID == source.id
-                }
-                return AgentWorkspaceSessionSnapshot(
-                    id: source.id,
-                    title: source.title,
-                    workspaceRootPath: source.workspaceLocation?.localPath ?? source.workspaceRootPath,
-                    workspaceDisplayName: source.workspaceName,
-                    presentationScope: source.presentationScope,
-                    isActive: source.id == runtime.id,
-                    isPinned: source.isPinned,
-                    isArchived: source.isArchived,
-                    isResponding: live?.isResponding ?? false,
-                    isAwaitingProviderSlot: live?.isAwaitingProviderSlot ?? false,
-                    queuedMessageCount: live?.queuedMessages.count ?? 0,
-                    updatedAt: source.updatedAt,
-                    lastActivityAt: source.lastActivityAt,
-                    interactionMode: live?.interactionMode ?? source.interactionMode,
-                    approvalMode: live?.approvalMode ?? source.approvalMode,
-                    executionAgent: live?.executionAgent ?? source.executionAgent,
-                    titleIsUserSet: source.titleIsUserSet,
-                    goalStatement: goal?.statement,
-                    goalCompletedItemCount: completedGoalItems,
-                    goalTotalItemCount: totalGoalItems,
-                    goalIsComplete: totalGoalItems > 0 && completedGoalItems == totalGoalItems,
-                    goalPlanningPhase: live?.goalPlanningState?.phase
-                        ?? source.goalPlanningState?.phase,
-                    dispatchParentProjectID: source.dispatchParentProjectID,
-                    dispatchTaskID: source.dispatchTaskID,
-                    isDispatchProject: source.presentationScope == .dispatchBoard
-                        && source.dispatchParentProjectID == nil
-                        && goal != nil,
-                    isDispatchPaused: dispatchProject?.isPaused ?? false
-                )
-            }
-    }
-
-    /// Write the active session back to disk. No-op if no session is
-    /// active (Editor-mode chats aren't persisted). Convenience wrapper
-    /// that targets `activeRuntime`; concurrent code paths that need to
-    /// persist a specific (potentially background) runtime should call
-    /// `persistAgentSession(runtime:)` directly.
-    func persistActiveAgentSession() {
+    /// User selected a managed-routing floor in the composer menu.
+    func setManagedRoutingFloor(_ tier: AgentManagedCapabilityTier) {
         guard let runtime = activeRuntime else { return }
-        persistAgentSession(runtime: runtime)
+        guard runtime.managedRouting != nil else { return }
+        runtime.setManagedFloor(to: tier)
+        persistActiveAgentSession()
     }
 
-    /// Persist a specific runtime's session. Used by the turn loop's
-    /// defer so background runtimes that finish while the user is on a
-    /// different session still write their final state to disk.
-    func persistAgentSession(
-        runtime: AgentRuntime,
-        touchUpdatedAt: Bool = true,
-        moveToFront: Bool = true
-    ) {
-        guard let index = agentSessions.firstIndex(where: { $0.id == runtime.id }) else { return }
-        if runtime.managedRouting != nil {
-            // Managed routing resolves a model per-turn; there is no single
-            // session model. Keep modelID clear so nothing downstream mistakes
-            // a route-default snapshot for an explicit user choice.
-            runtime.session.modelID = nil
-        } else if let override = runtime.sessionModelOverride, !override.isEmpty {
-            runtime.session.modelID = override
-        } else {
-            runtime.session.modelID = configurationForCurrentTurn(for: runtime)
-                .model(for: .interactive)
-        }
-        let sessionProvider = providerEntry(for: runtime)
-        runtime.session.providerEntryID = runtime.sessionProviderEntryID ?? sessionProvider?.id
-        runtime.session.providerID = runtime.sessionProviderIDOverride
-            ?? sessionProvider?.providerID
-            ?? runtime.session.providerID
-            ?? agentConfiguration.normalized.providerID
-        runtime.session.providerDisplayName = AgentProviderPreset.normalizedDisplayName(
-            providerID: runtime.session.providerID,
-            storedDisplayName: sessionProvider?.displayName ?? runtime.session.providerDisplayName
-        )
-        runtime.persist(touchUpdatedAt: touchUpdatedAt)
-        agentSessions[index] = runtime.session
-        clearAgentSessionMetadataOnlyFlag(runtime.id)
-        // `persist()` just stamped `updatedAt = now`, so this session is
-        // the newest — a single move-to-front keeps the list sorted.
-        // The previous full `sort` here ran on EVERY persist (several
-        // times per turn, for every concurrent runtime), re-comparing
-        // hundreds of already-ordered sessions each time; and because
-        // `agentSessions` is @Published, the wholesale reorder also
-        // invalidated the sidebar more than needed.
-        if moveToFront, index > 0 {
-            let updated = agentSessions.remove(at: index)
-            agentSessions.insert(updated, at: 0)
-        }
-        upsertAgentUsageSnapshot(for: runtime.session)
-
-        // After every persist, give the LLM summarizer a chance to
-        // upgrade the auto-derived first-message-prefix title to a
-        // polished one. The method is no-op-cheap on hot paths
-        // (returns immediately when there's no first user→assistant
-        // exchange yet, or the title is already locked, or a request
-        // is in flight), so it's safe to fire unconditionally here.
-        summarizeAgentSessionTitleIfNeeded(runtime: runtime)
+    /// User selected the base managed tier.
+    func resetManagedRoutingFloor() {
+        setManagedRoutingFloor(.low)
     }
+
+    // MARK: - Model selection
 
     func recordFetchedAgentModels(_ ids: [String]) {
         let merged = Array(Set(agentKnownModelIDs + ids))
@@ -2882,119 +2558,6 @@ extension AppState {
             setAgentSessionModel(trimmed, previousModelForNotice: previousModel)
         }
     }
-
-    // MARK: - some.im managed routing ("省心托管") selection
-
-    /// Composer entry point for "省心托管". Only valid when the active
-    /// provider is some.im. Sets a fresh `.low` managed-routing floor and
-    /// clears any explicit model override so the three session-selection
-    /// states stay mutually exclusive.
-    func selectSomeIMManagedRouting() {
-        let previousModel = activeAgentModelSelectionLabel
-        guard let someIMEntry = agentProviderLibrary.entries.first(where: {
-            $0.providerID == AgentProviderPreset.someIMID
-        }) else { return }
-        // Model choice comes before workspace choice in the composer. Keep that
-        // order valid by creating an empty, workspace-less conversation now;
-        // moveActiveAgentSessionToWorkspace will preserve it when a folder is
-        // selected later.
-        if activeRuntime == nil {
-            startNewAgentSession(inWorkspaceAt: nil)
-        }
-        guard let runtime = activeRuntime else { return }
-        runtime.sessionProviderEntryID = someIMEntry.id
-        runtime.sessionProviderIDOverride = someIMEntry.providerID
-        runtime.session.providerEntryID = someIMEntry.id
-        runtime.session.providerID = someIMEntry.providerID
-        runtime.session.providerDisplayName = someIMEntry.displayName
-        let wasUsingManagedRouting = runtime.managedRouting != nil
-        runtime.sessionModelOverride = nil
-        if runtime.managedRouting == nil {
-            runtime.managedRouting = AgentManagedRoutingState()
-        }
-        persistActiveAgentSession()
-        if !wasUsingManagedRouting {
-            appendModelChangeNoticeIfNeeded(
-                from: previousModel,
-                to: L10n.AgentModelPicker.managed
-            )
-        }
-    }
-
-    /// Signed-in some.im users start new chats in managed routing until they
-    /// explicitly choose a concrete model for the current conversation.
-    /// Existing historical conversations are never rewritten; login
-    /// reconciliation may only adopt an empty chat.
-    func defaultSomeIMManagedRoutingState() -> AgentManagedRoutingState? {
-        guard SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),
-              agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID,
-              AgentSettingsStore.loadDefaultModelModePreference().usesManagedRoutingForNewSessions else {
-            return nil
-        }
-        return AgentManagedRoutingState()
-    }
-
-    func defaultAgentModelIDForNewSession(
-        managedRouting: AgentManagedRoutingState?
-    ) -> String? {
-        if managedRouting != nil {
-            return nil
-        }
-        let authenticated = SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-        guard agentProviderLibrary.active?.isUsableForChatSelection(
-            isSomeIMAuthenticated: authenticated
-        ) == true else {
-            return nil
-        }
-        if SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults(),
-           agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID,
-           !AgentSettingsStore.loadDefaultModelModePreference().usesManagedRoutingForNewSessions {
-            return SomeIMIntegrationSettings.defaultTextModel
-        }
-        return agentConfiguration.normalized.model(for: .interactive)
-    }
-
-    /// Rebuild the runtime-only model override from the persisted session.
-    /// Launch recovery uses the same path as an explicit sidebar selection so
-    /// a background-resumed Goal continues on its original concrete model.
-    func seedPersistedSessionModelOverride(for runtime: AgentRuntime) {
-        guard runtime.managedRouting == nil else {
-            runtime.sessionModelOverride = nil
-            return
-        }
-        let routedModel = configurationForCurrentTurn(for: runtime).model(for: .interactive)
-        runtime.sessionModelOverride = runtime.session.modelID == routedModel
-            ? nil
-            : runtime.session.modelID
-    }
-
-    private func adoptSomeIMManagedRoutingForEmptySessionIfNeeded() {
-        guard let runtime = activeRuntime,
-              runtime.isEmpty,
-              !runtime.isResponding,
-              runtime.managedRouting == nil,
-              runtime.sessionProviderIDOverride == nil,
-              runtime.sessionModelOverride == nil,
-              defaultSomeIMManagedRoutingState() != nil else {
-            return
-        }
-        runtime.sessionModelOverride = nil
-        runtime.managedRouting = AgentManagedRoutingState()
-        persistActiveAgentSession()
-    }
-
-    /// User selected a managed-routing floor in the composer menu.
-    func setManagedRoutingFloor(_ tier: AgentManagedCapabilityTier) {
-        guard let runtime = activeRuntime else { return }
-        guard runtime.managedRouting != nil else { return }
-        runtime.setManagedFloor(to: tier)
-        persistActiveAgentSession()
-    }
-
-    /// User selected the base managed tier.
-    func resetManagedRoutingFloor() {
-        setManagedRoutingFloor(.low)
-    }
 }
 
 private extension String {
@@ -3019,171 +2582,3 @@ private struct DevProviderSeedConfig: Decodable {
     var setActive: Bool?
 }
 #endif
-
-// MARK: - Import providers from other CLI agents' config files
-
-/// Other local CLI agents whose provider config WillDeep can import, so a
-/// dev/debug session can reuse an existing key without re-entering it.
-enum ProviderImportSource: String, CaseIterable, Identifiable {
-    case claudeCode
-    case openclaw
-    case hermes
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .claudeCode: return "Claude Code"
-        case .openclaw: return "openclaw"
-        case .hermes: return "hermes"
-        }
-    }
-}
-
-/// One provider parsed out of an external tool's config, ready to upsert.
-private struct ImportedProviderDraft {
-    var displayName: String
-    var providerID: String
-    var baseURL: String
-    var apiKey: String
-    var flashModel: String
-    var proModel: String
-    var extraModels: [String] = []
-    /// Optional caveat surfaced to the user (e.g. openclaw's ambiguous key).
-    var note: String?
-}
-
-extension AppState {
-    /// Import provider(s) from another CLI agent's local config into the library
-    /// and activate the first one. Returns a short human summary for the UI.
-    /// Never logs API keys.
-    @discardableResult
-    func importProviders(from source: ProviderImportSource) -> String {
-        let drafts: [ImportedProviderDraft]
-        switch source {
-        case .claudeCode: drafts = Self.importDraftsFromClaudeCode()
-        case .openclaw: drafts = Self.importDraftsFromOpenclaw()
-        case .hermes: drafts = Self.importDraftsFromHermes()
-        }
-        guard !drafts.isEmpty else {
-            return "\(source.displayName)：未找到可导入的 provider（配置缺失 base/key，或走 OAuth 登录）"
-        }
-
-        var activatedFirst = false
-        for draft in drafts {
-            let existing = agentProviderLibrary.entries.first {
-                $0.providerID == draft.providerID
-                    && $0.baseURL.trimmingCharacters(in: .whitespacesAndNewlines) == draft.baseURL
-            }
-            let entryID = existing?.id ?? UUID()
-            let entry = AgentProviderEntry(
-                id: entryID,
-                providerID: draft.providerID,
-                displayName: draft.displayName,
-                baseURL: draft.baseURL,
-                apiKey: draft.apiKey,
-                flashPrimary: draft.flashModel,
-                flashAlternates: draft.extraModels,
-                proPrimary: draft.proModel.nonEmptyOrNil ?? draft.flashModel,
-                proAlternates: [],
-                routingMode: existing?.routingMode ?? .auto
-            )
-            agentProviderLibrary.upsert(entry)
-            if !activatedFirst {
-                agentProviderLibrary.setActive(entryID)
-                if agentProviderLibrary.activeID == entryID {
-                    applyActiveProviderLibraryEntry()
-                }
-                activatedFirst = true
-            }
-        }
-        let note = drafts.compactMap(\.note).first.map { "（\($0)）" } ?? ""
-        return "\(source.displayName)：已导入 \(drafts.count) 个 provider" + note
-    }
-
-    // MARK: parsers (each returns [] when the config is absent/unusable)
-
-    private static func importDraftsFromHermes() -> [ImportedProviderDraft] {
-        let env = parseDotenv(("~/.hermes/.env" as NSString).expandingTildeInPath)
-        guard let key = env["ANTHROPIC_API_KEY"]?.nonEmptyOrNil else { return [] }
-        let preset = AgentProviderPreset.preset(id: "claude")
-        return [ImportedProviderDraft(
-            displayName: "hermes · Claude",
-            providerID: "claude",
-            baseURL: env["ANTHROPIC_BASE_URL"]?.nonEmptyOrNil ?? preset?.baseURL ?? "",
-            apiKey: key,
-            flashModel: env["ANTHROPIC_SMALL_FAST_MODEL"]?.nonEmptyOrNil ?? preset?.defaultFlashModel ?? "",
-            proModel: env["ANTHROPIC_MODEL"]?.nonEmptyOrNil ?? preset?.defaultProModel ?? ""
-        )]
-    }
-
-    private static func importDraftsFromClaudeCode() -> [ImportedProviderDraft] {
-        let path = ("~/.claude/settings.json" as NSString).expandingTildeInPath
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let env = root["env"] as? [String: Any] else { return [] }
-        func value(_ name: String) -> String? { (env[name] as? String)?.nonEmptyOrNil }
-        guard let key = value("ANTHROPIC_API_KEY") ?? value("ANTHROPIC_AUTH_TOKEN") else { return [] }
-        let preset = AgentProviderPreset.preset(id: "claude")
-        return [ImportedProviderDraft(
-            displayName: "Claude Code",
-            providerID: "claude",
-            baseURL: value("ANTHROPIC_BASE_URL") ?? preset?.baseURL ?? "",
-            apiKey: key,
-            flashModel: value("ANTHROPIC_SMALL_FAST_MODEL") ?? preset?.defaultFlashModel ?? "",
-            proModel: value("ANTHROPIC_MODEL") ?? preset?.defaultProModel ?? ""
-        )]
-    }
-
-    private static func importDraftsFromOpenclaw() -> [ImportedProviderDraft] {
-        let jsonPath = ("~/.openclaw/openclaw.json" as NSString).expandingTildeInPath
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: jsonPath)),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let models = root["models"] as? [String: Any],
-              let providers = models["providers"] as? [String: Any] else { return [] }
-        // openclaw stores no per-provider key in the JSON; keys live in .env.
-        // Best-effort: reuse the single .env key and flag it for the user.
-        let env = parseDotenv(("~/.openclaw/.env" as NSString).expandingTildeInPath)
-        let fallbackKey = env.values.compactMap(\.nonEmptyOrNil).first ?? ""
-
-        return providers.sorted { $0.key < $1.key }.compactMap { name, raw -> ImportedProviderDraft? in
-            guard let provider = raw as? [String: Any],
-                  let base = (provider["baseUrl"] as? String)?.nonEmptyOrNil else { return nil }
-            let modelIDs = ((provider["models"] as? [[String: Any]]) ?? [])
-                .compactMap { ($0["id"] as? String)?.nonEmptyOrNil }
-            let flash = modelIDs.first ?? ""
-            return ImportedProviderDraft(
-                displayName: "openclaw · \(name)",
-                providerID: AgentProviderPreset.customID,
-                baseURL: base,
-                apiKey: fallbackKey,
-                flashModel: flash,
-                proModel: modelIDs.count > 1 ? modelIDs[1] : flash,
-                extraModels: Array(modelIDs.dropFirst()),
-                note: fallbackKey.isEmpty
-                    ? "openclaw 未存 key，请手动填写"
-                    : "openclaw key 取自 .env，请核对是否匹配该 provider"
-            )
-        }
-    }
-
-    /// Minimal dotenv reader: `KEY=VALUE` per line, `#` comments, optional
-    /// surrounding quotes stripped. Missing file → empty map.
-    private static func parseDotenv(_ path: String) -> [String: String] {
-        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { return [:] }
-        var result: [String: String] = [:]
-        for rawLine in content.split(whereSeparator: { $0 == "\n" || $0 == "\r\n" }) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty || line.hasPrefix("#") { continue }
-            guard let eq = line.firstIndex(of: "=") else { continue }
-            let key = String(line[..<eq]).trimmingCharacters(in: .whitespaces)
-            var value = String(line[line.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
-            if value.count >= 2,
-               (value.hasPrefix("\"") && value.hasSuffix("\"")) || (value.hasPrefix("'") && value.hasSuffix("'")) {
-                value = String(value.dropFirst().dropLast())
-            }
-            if !key.isEmpty { result[key] = value }
-        }
-        return result
-    }
-}
