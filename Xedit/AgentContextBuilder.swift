@@ -1067,18 +1067,10 @@ nonisolated enum AgentPlanParser {
             for raw in body.components(separatedBy: .newlines) {
                 let trimmed = raw.trimmingCharacters(in: .whitespaces)
                 guard !trimmed.isEmpty else { continue }
-                // Accept "1: done", "1) done", "step 1: done", "- 1. done"
-                // Walk to the first run of digits, then to the separator.
-                guard let (index, after) = leadingNumber(in: trimmed),
-                      index >= 1, index <= plan.steps.count else { continue }
-                // Skip a single separator char (: . ) -) after the number.
-                let rest = trimmed[after...].drop { $0 == ":" || $0 == "." || $0 == ")" || $0 == "-" || $0 == " " || $0 == "\t" }
-                let token = rest.split(separator: " ", maxSplits: 1).first.map(String.init)?
-                    .lowercased() ?? ""
-                if let parsed = parseStepStatus(token) {
+                if let row = stepStatusRow(in: trimmed, plan: plan) {
                     // Models sometimes emit one progress block per section.
                     // Apply every block in order so the latest status wins.
-                    updates[index - 1] = parsed
+                    updates[row.index] = row.status
                 }
             }
         }
@@ -1278,6 +1270,115 @@ nonisolated enum AgentPlanParser {
         return rest.isEmpty ? nil : rest
     }
 
+    /// 一行进度上报的解析结果：`(0-based 步骤下标, 状态)`。
+    ///
+    /// 历史合同只认 `1: done`——序号后**紧挨着**状态词。实测落盘会话里
+    /// 模型发出的 539 个 progress 块有 55% 一条都解析不出，而失败样本几乎
+    /// 都是信息齐全、只是排列不同的自然写法：`1. 实现扫雷模块 —— done`
+    /// （状态词落到行尾）、`- 实现记忆翻牌模块: done`（用步骤名代替序号）。
+    /// 宿主读不出就等于没干活：计划全程停在 pending，续跑策略随后按「无
+    /// 进展」把会话硬停，用户看到的就是一个再也推不动的死任务。
+    ///
+    /// 所以按三层回退解析。每一层都要求状态词出现在**不可能是叙述**的
+    /// 位置，免得把「1. 修好 failed 的用例」误读成「第 1 步 failed」。
+    private static func stepStatusRow(
+        in line: String,
+        plan: AgentPlan
+    ) -> (index: Int, status: AgentPlan.StepStatus)? {
+        // 层 1：`1: done` / `step 1: done` / `- 1. done` —— 原有严格合同。
+        if let (number, after) = leadingNumber(in: line),
+           number >= 1, number <= plan.steps.count {
+            let rest = line[after...].drop {
+                $0 == ":" || $0 == "." || $0 == ")" || $0 == "-" || $0 == " " || $0 == "\t"
+            }
+            // 方括号要剥：prompt 里给模型看的活跃计划正是
+            // `1. [in_progress] 步骤名` 这个形状（见 goalBlock / ACTIVE PLAN
+            // 两处注入），模型照抄它上报天经地义，而旧解析器在这里读到的是
+            // `[done]` 带括号，一律不认——我们自己教的格式自己不收。
+            let token = rest.split(separator: " ", maxSplits: 1).first.map(String.init)?
+                .trimmingCharacters(in: statusTokenWrappers)
+                .lowercased() ?? ""
+            if let parsed = parseStepStatus(token) {
+                return (number - 1, parsed)
+            }
+            // 层 2：`1. 实现扫雷模块及回归用例 —— done`。序号已经对上，
+            // 行尾的状态词同样是明确声明，不是叙述的一部分。
+            if let parsed = trailingStepStatus(in: line) ?? statusGlyph(in: line) {
+                return (number - 1, parsed)
+            }
+        }
+        // 层 3：`- 实现记忆翻牌模块及回归用例: done` —— 不给序号，用步骤名
+        // 指代。只有唯一命中一个步骤才采信；命中零个或多个一律放弃。
+        guard let parsed = trailingStepStatus(in: line) ?? statusGlyph(in: line),
+              let index = uniqueStepIndex(matching: line, in: plan) else { return nil }
+        return (index, parsed)
+    }
+
+    /// 行尾的状态词。按空白与常见分隔符（破折号、冒号、竖线、箭头）切出
+    /// 最后一段，中英文都覆盖。行尾是状态声明最稳的位置——叙述句不会以一个
+    /// 孤立的 `done` / `完成` 收尾。连字符与下划线**不做**分隔符，否则
+    /// `in_progress` / `in-progress` 会被切碎。
+    private static func trailingStepStatus(in line: String) -> AgentPlan.StepStatus? {
+        let fields = line
+            .components(separatedBy: progressFieldSeparators)
+            .filter { !$0.isEmpty }
+        guard let last = fields.last else { return nil }
+        return parseStepStatus(last.lowercased())
+    }
+
+    private static let progressFieldSeparators = CharacterSet(
+        charactersIn: " \t:：.。,，;；、|/\\—–~～=>＞→←·*«»\"'`()（）[]【】《》"
+    )
+
+    /// 包裹状态词的成对符号：`[done]`、`(done)`、`「完成」`。
+    private static let statusTokenWrappers = CharacterSet(
+        charactersIn: "[]（）()【】「」《》<>*_`\"'"
+    )
+
+    /// 行内的状态记号。`✅` 这类符号语义单一，不会混进叙述，所以即使不在
+    /// 行尾也可以采信——模型极爱用它，而旧词表只认 `✓` 和 `✔`。
+    private static func statusGlyph(in line: String) -> AgentPlan.StepStatus? {
+        if line.contains("✅") || line.contains("☑") || line.contains("🟢") {
+            return .done
+        }
+        if line.contains("❌") || line.contains("✗") || line.contains("✘") {
+            return .failed
+        }
+        return nil
+    }
+
+    /// 行文本唯一命中的步骤下标。归一化后做双向包含判断：模型既可能完整
+    /// 复述步骤名，也可能只写一个可辨认的短名。命中多个步骤时返回 nil——
+    /// 宁可漏记一条，也不能把状态写到别的步骤头上。
+    private static func uniqueStepIndex(matching line: String, in plan: AgentPlan) -> Int? {
+        let haystack = normalizedProgressText(line)
+        guard haystack.count >= minimumProgressMatchLength else { return nil }
+        var matched: Int?
+        for (index, step) in plan.steps.enumerated() {
+            let needle = normalizedProgressText(step.text)
+            guard needle.count >= minimumProgressMatchLength,
+                  haystack.contains(needle) || needle.contains(haystack) else { continue }
+            guard matched == nil else { return nil }
+            matched = index
+        }
+        return matched
+    }
+
+    /// 归一化：去掉空白、标点与符号，只留可比对的正文。
+    private static func normalizedProgressText(_ text: String) -> String {
+        let dropped = CharacterSet.whitespacesAndNewlines
+            .union(.punctuationCharacters)
+            .union(.symbols)
+        var scalars = String.UnicodeScalarView()
+        for scalar in text.lowercased().unicodeScalars where !dropped.contains(scalar) {
+            scalars.append(scalar)
+        }
+        return String(scalars)
+    }
+
+    /// 短于这个长度的名字太容易撞车（「改代码」「跑测试」），不做文本匹配。
+    private static let minimumProgressMatchLength = 4
+
     /// Returns the leading integer and the index right after it. Walks
     /// past any non-digit prefix (e.g. `"- "`, `"step "`) up to ~6 chars
     /// to forgive small formatting variations.
@@ -1294,17 +1395,26 @@ nonisolated enum AgentPlanParser {
         return (Int(s[numStart..<i]) ?? 0, i)
     }
 
+    /// 状态词表。中文条目不是锦上添花：用户用中文提问时模型就用中文回话，
+    /// 一句「1. 迁移脚本 —— 完成」在旧词表下是彻底的哑弹。
     private static func parseStepStatus(_ token: String) -> AgentPlan.StepStatus? {
         switch token {
-        case "done", "complete", "completed", "finished", "ok", "✓", "✔":
+        case "done", "complete", "completed", "finished", "ok", "closed", "resolved",
+             "verified", "passed", "✓", "✔", "✅", "☑",
+             "完成", "已完成", "完毕", "已验证", "通过", "已通过":
             return .done
-        case "in_progress", "in-progress", "inprogress", "running", "active", "wip", "doing":
+        case "in_progress", "in-progress", "inprogress", "running", "active", "wip",
+             "doing", "ongoing",
+             "进行中", "执行中", "处理中", "进行":
             return .inProgress
-        case "pending", "todo", "queued", "waiting":
+        case "pending", "todo", "queued", "waiting", "not_started", "not-started",
+             "待办", "未开始", "待处理", "排队中":
             return .pending
-        case "skipped", "skip":
+        case "skipped", "skip", "omitted",
+             "跳过", "已跳过", "略过":
             return .skipped
-        case "failed", "fail", "error", "blocked":
+        case "failed", "fail", "error", "blocked", "blocker", "❌", "✗", "✘",
+             "失败", "已失败", "受阻", "阻塞", "出错":
             return .failed
         default:
             return nil
