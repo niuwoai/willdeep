@@ -1111,4 +1111,178 @@ struct AgentPlanProgressTests {
         // 没有围栏就不该报“违规”，避免打扰只写散文的回合。
         #expect(!AgentPlanParser.containsProgressBlock("已完成租户管理，继续下一项。"))
     }
+
+    // MARK: - 宽容解析（取自落盘会话的真实哑弹样本）
+
+    /// 序号对、状态词对，只是状态词落在了行尾——旧解析器读到的是步骤名，
+    /// 于是整块作废。这是实测占比最大的一类失败。
+    @Test("序号在前、状态词在行尾的自然写法也能记账")
+    func trailingStatusTokenAfterStepNameApplies() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "实现扫雷模块及回归用例"),
+                AgentPlan.Step(text: "接入大厅导航")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        1. 实现扫雷模块及回归用例 —— done
+        2. 接入大厅导航：in_progress
+        ```
+        """
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+        #expect(next?.steps[0].status == .done)
+        #expect(next?.steps[1].status == .inProgress)
+        #expect(next?.status == .executing)
+    }
+
+    /// 模型用步骤名代替序号。只要唯一命中一个步骤就该采信——用户看到的
+    /// 是同一件事被标记完成，没有任何歧义。
+    @Test("用步骤名代替序号，唯一命中时照常记账")
+    func stepNameWithoutIndexResolvesUniquely() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "实现记忆翻牌模块及回归用例"),
+                AgentPlan.Step(text: "补充部署脚本")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        - 实现记忆翻牌模块及回归用例: done
+        ```
+        """
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+        #expect(next?.steps[0].status == .done)
+        #expect(next?.steps[1].status == .pending)
+    }
+
+    /// 一行同时命中两个步骤名时无法判断指的是哪一个。宁可漏记，也不能把
+    /// 状态写到别的步骤头上。
+    @Test("步骤名有歧义时放弃该行，不猜")
+    func ambiguousStepNameIsSkipped() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "实现登录接口"),
+                AgentPlan.Step(text: "实现登录接口与页面")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        - 实现登录接口与页面: done
+        ```
+        """
+        // 两个步骤名都是这一行的子串，指代不明——整行跳过。
+        #expect(AgentPlanParser.applyProgress(to: plan, from: reply) == nil)
+    }
+
+    /// 中文状态词与 `✅`。用户说中文，模型就回中文；旧词表只认 `✓`/`✔`，
+    /// 模型最爱用的 `✅` 反而是哑弹。
+    @Test("中文状态词与 ✅ 记号都能识别")
+    func chineseTokensAndEmojiGlyphApply() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "迁移脚本"),
+                AgentPlan.Step(text: "灰度发布"),
+                AgentPlan.Step(text: "回归验收")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        1. 迁移脚本 —— 完成
+        2. 灰度发布 进行中
+        3. 回归验收 ✅
+        ```
+        """
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+        #expect(next?.steps[0].status == .done)
+        #expect(next?.steps[1].status == .inProgress)
+        #expect(next?.steps[2].status == .done)
+    }
+
+    /// `closed` 这类同义收口词不在旧词表里，一句 `step 1: closed` 就白写。
+    @Test("closed 等同义收口词计为完成")
+    func synonymClosingTokensApply() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [AgentPlan.Step(text: "冻结共享契约")],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        step 1: closed — 共享契约、大厅骨架与自动化回归均已完成
+        ```
+        """
+        #expect(AgentPlanParser.applyProgress(to: plan, from: reply)?.steps[0].status == .done)
+    }
+
+    /// prompt 注入活跃计划时用的就是 `1. [status] 步骤名`，模型照着回抄
+    /// 是最自然的反应——宿主必须认自己教出来的格式。
+    @Test("方括号包裹的状态词（正是 prompt 展示计划的格式）能记账")
+    func bracketWrappedStatusFromPromptShapeApplies() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "冻结共享契约与可运行大厅骨架"),
+                AgentPlan.Step(text: "实现扫雷模块及回归用例")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        1. [done] 冻结共享契约与可运行大厅骨架
+        2. [failed] 实现扫雷模块及回归用例：Playwright 安装超时，E2E 无法完成
+        ```
+        """
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+        #expect(next?.steps[0].status == .done)
+        #expect(next?.steps[1].status == .failed)
+        // 两步都终态 → 整个计划收口。
+        #expect(next?.status == .done)
+    }
+
+    /// 宽容不能变成瞎猜：状态词出现在句子中间时是叙述，不是状态声明。
+    @Test("叙述里的状态词不改状态")
+    func statusWordInsideProseIsNotAStatement() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "修好 CI 上的用例"),
+                AgentPlan.Step(text: "发布补丁")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        1. 修好 CI 上 failed 的那几个用例后再继续
+        ```
+        """
+        // 行尾是「再继续」而不是状态词，整行应当被跳过。
+        #expect(AgentPlanParser.applyProgress(to: plan, from: reply) == nil)
+    }
+
+    /// 严格格式仍然优先：同一行既有合规写法又有行尾干扰词时，以合规的为准。
+    @Test("严格格式优先于行尾回退")
+    func strictFormatWinsOverTrailingFallback() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [AgentPlan.Step(text: "跑通端到端用例")],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        1: in_progress 之后再确认是否 done
+        ```
+        """
+        #expect(
+            AgentPlanParser.applyProgress(to: plan, from: reply)?.steps[0].status == .inProgress
+        )
+    }
 }
