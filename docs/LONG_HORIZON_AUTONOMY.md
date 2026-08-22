@@ -1,7 +1,8 @@
 # 长程自主执行设计（long-horizon.v1）
 
-> Last updated: 2026-08-13 | 状态：设计草案（§7 默认假设待确认，确认前不进入编码）
-> 适用范围：Xedit（WillDeep macOS App，本仓库，1.250.0-rc5）与 willdeep-rs（CLI/Runtime，`~/Sites/willdeep-rs`，0.22.0-rc5）
+> Last updated: 2026-08-22 | 状态：**部分落地**（XA1/XA2 与 RA1 已进代码，其余仍为设计草案；§7 假设 1–3 已按默认值实现）
+> 适用范围：Xedit（WillDeep macOS App，本仓库，1.284.0-rc4）与 willdeep-rs（CLI/Runtime，`~/Sites/willdeep-rs`，0.39.0-rc3）
+> 落地进度见 §6.1 / §6.2 的「状态」列；实测摩擦数据见 [AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md](AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md)。
 > 本文件是双端共享的 canonical 规范；willdeep-rs 侧的引用与落地映射见其 `docs/LONG_HORIZON_AUTONOMY.md`。
 > 与 `docs/GOAL_TEAMS_ROLES_DESIGN.md`（goal-teams.v1）是**互补关系**：那份解决「谁来做、做完谁验收」，本份解决「怎么一直做下去、按什么清单做」。两份可并行推进，无相互阻塞（§6.3）。
 
@@ -17,7 +18,7 @@
 
 **核心判断：两端的差距不在「有没有 goal」，而在「模型想停的时候，harness 站在哪一边」。** Xedit 站在暂停一边（连续 2 轮无进展就交还控制权），willdeep-rs 干脆没有立场（模型不调工具即视为完成）。
 
-两端现状（2026-08-13 探查结论，代码锚点见 §6）：
+两端现状（2026-08-13 探查结论，代码锚点见 §6。**2026-08-22 复查修订见表后的补充**）：
 
 | 构件 | Xedit 1.250.0-rc5 | willdeep-rs 0.22.0-rc5 |
 |---|---|---|
@@ -29,6 +30,18 @@
 | 计划接口 | **文本围栏块**：` ```plan ` / ` ```progress ` / ` ```goal-check `，无 plan 类工具 | **完全没有计划态**：20 个内置工具全是执行类 |
 
 核心缺口四件：**续推策略与长程目标背道而驰**、**没有任何预算维度因而无法软停**、**计划接口是脆弱的文本围栏而非工具**、**多天运行的工程保障缺位**。本设计只补这四件。
+
+### 2026-08-22 复查修订
+
+上表的前两行已经不准，第三行则被实测坐实：
+
+| 构件 | 修订后的现状 |
+|---|---|
+| continuation 注入 | **Xedit 已改为退避阶梯**（`AgentGoalContinuationBudget.swift` / `AgentGoalContinuationPolicy`）：无进展只升级话术，不再硬暂停。**但入口卡在 `prepareNextAgentGoalPlanningCycleIfNeeded` 的 `guard currentPlan?.status == .done`**——计划没被标成完成就进不了退避，仍会落回 `AgentPlanAutoContinuationPolicy` 的 `pauseAfterNoProgress`。**rs 侧 RA1 已落地**（`crates/willdeep-core/src/goal.rs`）：只认 `<goal-status>complete</goal-status>` 显式收口，退避三档、wall-clock 软停齐备 |
+| 预算软停 | **Xedit 已有** `AgentGoalContinuationBudget`（wall-clock + 续推次数兜底 + `wrapUpDispatched` 有序收尾），随 Goal 落盘、跨重启存活。token / 成本两维仍未接 |
+| 计划接口 | 仍是文本围栏块，`update_plan` 未做。**实测代价已量化：539 个 `progress` 块里 58% 宿主一条状态都读不出，115 个带计划的会话中 69% 计划 0 步标记完成。** 1.284.0-rc3 给解析器加了三层回退止血（42% → 84%），但这只是止血，§4 的工具化仍是根治方案 |
+
+**因此 XA1 的剩余部分不再是"实现退避阶梯"，而是"把退避阶梯的入口从计划完成态上解绑"**——机制已经在了，只是被一道 guard 挡在门外。
 
 ## 1. 设计原则
 
