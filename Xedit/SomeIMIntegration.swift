@@ -450,7 +450,7 @@ enum SomeIMIntegrationStore {
         migrateLegacyIfNeeded()
         let outcome = currentSessionOutcome()
         if case .unavailable = outcome {
-            return sharedSessionMemo.lastKnownGoodSession?.apiKey
+            return sharedSessionMemo.usableLastKnownGoodSession?.apiKey
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         }
         return outcome.apiKey

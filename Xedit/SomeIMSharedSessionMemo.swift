@@ -67,6 +67,13 @@ final class SomeIMSharedSessionMemo {
     private var cached: SomeIMSessionReadOutcome?
     /// When a cached `unavailable` stops being served. Nil for real answers.
     private var unavailableExpiresAt: Date?
+    /// How long a remembered session may bridge failed reads. Transient
+    /// Keychain hiccups resolve in seconds; a *persistent* failure after a
+    /// cross-app sign-out is the one scenario where bridging would keep an
+    /// already-signed-out key alive, so the bridge expires rather than
+    /// lasting forever.
+    static let lastKnownGoodSessionMaxAge: TimeInterval = 10 * 60
+
     /// The most recent session an actual read produced.
     ///
     /// `.unavailable` says the read did not land — it says nothing about the
@@ -76,6 +83,16 @@ final class SomeIMSharedSessionMemo {
     /// sign-out clears it; `invalidate()` deliberately does not, because
     /// invalidation only means "re-read", never "signed out".
     private(set) var lastKnownGoodSession: SomeIMSharedSession?
+    private var lastKnownGoodSessionAt: Date?
+
+    /// The remembered session, but only while it is fresh enough to trust.
+    var usableLastKnownGoodSession: SomeIMSharedSession? {
+        guard let at = lastKnownGoodSessionAt,
+              now().timeIntervalSince(at) < Self.lastKnownGoodSessionMaxAge else {
+            return nil
+        }
+        return lastKnownGoodSession
+    }
     /// Number of times the loader actually ran. Exists for tests to assert the
     /// Keychain is not being re-read on every access.
     private(set) var loadCount = 0
@@ -101,9 +118,11 @@ final class SomeIMSharedSessionMemo {
         switch outcome {
         case .session(let session):
             lastKnownGoodSession = session
+            lastKnownGoodSessionAt = now()
         case .signedOut:
             // The only outcome that is a statement about the user.
             lastKnownGoodSession = nil
+            lastKnownGoodSessionAt = nil
         case .unavailable:
             // A failed read must not erase what we already know.
             break
@@ -120,5 +139,6 @@ final class SomeIMSharedSessionMemo {
     /// Drop the remembered session. Only sign-out should call this.
     func forgetLastKnownGoodSession() {
         lastKnownGoodSession = nil
+        lastKnownGoodSessionAt = nil
     }
 }

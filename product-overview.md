@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-21 | Current version: v1.284.0-rc11
+> Last updated: 2026-08-22 | Current version: v1.284.0-rc12
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Harness 审计收口与只读插件统计（1.284.0-rc12）** —— Goal 执行、交接和自动续跑统一服从 wall-clock 预算；计划进度解析拒绝符号、自然语言计数和否定状态误判；延迟派发保留消息来源，some.im 最近有效会话设置 10 分钟使用窗口。稳定提示词契约升级至 v31。Session Vitality 仪表盘通过只读 MCP 统计资源加载数据，不再触发工具确认或读取错误。
 - **随 App 发行的经典游戏厅（1.281.0-rc1）** —— 将 WillDeep 调度台并行完成的贪吃蛇、俄罗斯方块、Pong、扫雷和记忆翻牌整合为一个沙箱 Web 游戏厅插件；macOS 发行包仅携带清单、本地化与生产资源。新增只对第一方 bundled 插件生效的 `defaultPinned` 目的地能力，使“经典游戏厅”稳定固定在左侧插件分组顶部，第三方插件不能借该字段抢占导航。
 - **插件中心灰度交互规范（1.280.0-rc4）** —— 插件管理、安装预览和设置界面不再沿用 macOS 系统蓝色，高亮、开关、菜单与普通操作统一使用灰阶；安装、批准启用、检查安装源等主要操作固定为黑底白字。这条规则已写入插件系统设计文档，作为后续插件宿主界面的项目级视觉记忆。
 - **发行包内置俄罗斯方块（1.280.0-rc3）** —— macOS App 构建阶段把俄罗斯方块的清单、本地化、声明式侧栏与生产 Web 资源放入 `BundledPlugins`。注册表启动时自动发现、信任并启用内置版本；若用户另行安装同版本或更高版本，用户版本继续优先，发行包不会覆盖其选择。

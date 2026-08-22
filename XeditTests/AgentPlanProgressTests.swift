@@ -1268,6 +1268,74 @@ struct AgentPlanProgressTests {
         #expect(AgentPlanParser.applyProgress(to: plan, from: reply) == nil)
     }
 
+    /// 行首数字要有分隔符才算序号。`2 tests failed` / `3 个用例 failed` 的
+    /// 行首是数量词，放进层 2 会把它们记成第 2/3 步失败。
+    @Test("行首数量词不是步骤序号")
+    func leadingQuantityIsNotAStepIndex() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "修复登录接口"),
+                AgentPlan.Step(text: "补齐回归用例"),
+                AgentPlan.Step(text: "部署到预发")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        2 tests failed
+        3 个用例 failed
+        ```
+        """
+        #expect(AgentPlanParser.applyProgress(to: plan, from: reply) == nil)
+    }
+
+    /// 被否定的状态词说的是相反的事实：`2. not done` 绝不能记成 done。
+    @Test("否定词紧邻状态词时整行弃权")
+    func negatedTrailingStatusIsRejected() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "修复登录接口"),
+                AgentPlan.Step(text: "补齐回归用例")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        1. 修复登录接口 — 尚未 完成
+        2. not done
+        ```
+        """
+        #expect(AgentPlanParser.applyProgress(to: plan, from: reply) == nil)
+    }
+
+    /// ❌ 在模型输出里表「未完成」比表「失败」更常见，而 failed 是终态——
+    /// 一张 ✅/❌ 混用的清单把未完成步骤全标 failed，会把整个计划推成 done，
+    /// Goal 模式下随之收口相位、终止后台任务。所以记号只认完成侧。
+    @Test("❌ 不再被解读为 failed，✅/❌ 混用清单只记完成侧")
+    func crossGlyphNoLongerMeansFailed() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [
+                AgentPlan.Step(text: "实现扫雷模块"),
+                AgentPlan.Step(text: "接入大厅导航")
+            ],
+            summary: ""
+        )
+        let reply = """
+        ```progress
+        1. 实现扫雷模块 ✅
+        2. 接入大厅导航 ❌
+        ```
+        """
+        let next = AgentPlanParser.applyProgress(to: plan, from: reply)
+        #expect(next?.steps[0].status == .done)
+        // 第 2 步保持 pending：计划绝不能因为一个歧义记号被推成整体完成。
+        #expect(next?.steps[1].status == .pending)
+        #expect(next?.status == .executing)
+    }
+
     /// 严格格式仍然优先：同一行既有合规写法又有行尾干扰词时，以合规的为准。
     @Test("严格格式优先于行尾回退")
     func strictFormatWinsOverTrailingFallback() {

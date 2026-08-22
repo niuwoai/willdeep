@@ -8,7 +8,7 @@ WillDeep 样例插件：在插件中心选择本目录即可进入权限预览�
 - `.willdeep-plugin/schemas/vitality-sidebar.json` — 侧栏 fallback Schema（MCP 资源不可用时显示）
 - `.willdeep-plugin/locales/` — en / zh-Hans 本地化
 - `mcp.json` — 启动 `session-vitality` MCP 服务（`/usr/bin/ruby`）
-- `server/session_vitality.rb` — stdio MCP server：侧栏资源、`ui://vitality/main` 页面资源、`vitality.snapshot` / `vitality.export` 两个工具
+- `server/session_vitality.rb` — stdio MCP server：侧栏资源、`ui://vitality/main` 页面资源、`willdeep-plugin://vitality/stats` 统计资源、`vitality.snapshot` / `vitality.export` 两个工具
 - `server/app.html` — MCP App 仪表盘（会话统计卡片 + 项目活跃度进度条）
 
 ## 权限

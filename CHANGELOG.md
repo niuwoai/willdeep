@@ -1,7 +1,25 @@
 # Changelog
 
-> 当前文件保留最新版本（1.284.0-rc11 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.284.0-rc12 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.284.0-rc12 - 2026-08-22
+
+### Fixed
+
+- **Goal 长任务统一由预算收口。** 空验收清单也进入预算续跑；预算耗尽时展示正确的交接横幅，交接请求发出后不再被计划自动续跑重新拉起；本地化安全上限文案不再硬编码轮数。
+- **计划进度解析不再把普通文本误判成步骤或失败。** `2 tests failed` 不再被识别为第 2 步，`❌` / `✗` / `✘` 不再自动等价于失败状态，`not done` / `尚未完成` 等否定表达不会被尾部状态词翻转成已完成。
+- **排队派发与 some.im 会话回退保留完整语义。** 延迟派发会携带原始 `source`；最近一次有效 some.im 会话只允许在 10 分钟内用于瞬时 Keychain 读取失败，明确登出仍立即清空。
+- **Session Vitality 仪表盘改用只读 MCP 资源取统计数据。** 页面从 `tools/call` 切换到 `resources/read` 的 `willdeep-plugin://vitality/stats`，避免确认流程导致 `res.content is undefined`；服务端同步公开 JSON 资源并补充契约测试。
+
+### Changed
+
+- Agent 稳定提示词契约升级至 v31，恢复计划、进度、交接与工具调用的既有语义，并重录 standard / compact / extended 三档快照哈希。
+
+### Tests
+
+- 三档旧快照哈希按实际提示词重录后，定向复跑覆盖 Goal 预算、计划解析、停止处理、提示词与 some.im 会话缓存：158 tests / 8 suites 全绿，原始日志 `** TEST SUCCEEDED **`。
+- `session_vitality_server_test: pass checks=8`；Ruby 语法检查通过；`complexity_guard: pass scanned=785 soft=19 hard=0`；`git diff --check` 通过。
 
 ## 1.284.0-rc11 - 2026-08-22
 

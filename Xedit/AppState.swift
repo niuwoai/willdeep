@@ -631,6 +631,13 @@ final class AppState: ObservableObject {
         let attachedSkills: [AgentSkillEntry]
         let providerID: String
         let enqueuedAt: Date
+        /// The dispatch's message source must survive the slot queue. Without
+        /// it, a host instruction (a Goal continuation, a wrap-up request)
+        /// that queued behind a full provider slot was re-dispatched as
+        /// `.operatorInput` — the transcript message kept its true source,
+        /// but the re-dispatch ran user-only steps such as the read-only
+        /// preflight against an instruction no user wrote.
+        let source: AgentMessageSource
     }
 
     init(
