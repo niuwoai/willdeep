@@ -825,7 +825,18 @@ extension AppState {
         var effectiveConfiguration = candidates.first ?? configurationForSafetyJudge()
         var fallbackDetail = ""
         let judgeCommand = AgentInjectionDefense.redactedCommandForSafetyJudge(command)
-        var result = AgentSafetyJudgeResult.unavailable("missing api key")
+        // An empty candidate list means no judge was ever contacted. Saying
+        // `missing api key` here reads like a request that failed, and that
+        // misdirected the audit for weeks — the requests were never sent.
+        var result = AgentSafetyJudgeResult.unavailable(
+            candidates.isEmpty ? Self.judgeUnconfiguredReason : "missing api key"
+        )
+        if candidates.isEmpty {
+            // The user is about to be asked to approve something the judge was
+            // supposed to settle. That is worth surfacing once per runtime
+            // rather than silently degrading forever.
+            noteSafetyJudgeUnconfigured()
+        }
         for candidate in candidates {
             effectiveConfiguration = candidate
             result = await AgentClient(configuration: candidate).judgeCommandSafety(
@@ -1120,10 +1131,14 @@ extension AppState {
     /// it activates only when a test explicitly installs a shared-session
     /// override, so a developer's real login never affects test behavior.
     private func someIMSecurityGuardConfiguration() -> AgentConfiguration? {
-        guard SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults() else {
+        // Unattended variants on purpose: a Keychain read that does not land
+        // is not a sign-out, and treating it as one is exactly how the judge
+        // ended up falling through to a key-less provider and handing the
+        // decision back to the user. See `apiKeyForUnattendedUse()`.
+        guard SomeIMIntegrationStore.hasSessionForUnattendedUse() else {
             return nil
         }
-        let key = SomeIMIntegrationStore.loadAPIKey()
+        let key = SomeIMIntegrationStore.apiKeyForUnattendedUse()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return nil }
 
@@ -1325,6 +1340,30 @@ extension AppState {
             }
         }
         return nil
+    }
+
+    /// Audit reason recorded when no judge was contacted at all. Deliberately
+    /// distinct from `missing api key`, which describes a request that was
+    /// actually sent and rejected: telling those apart is the difference
+    /// between "the provider refused us" and "we never had a judge".
+    static let judgeUnconfiguredReason = "no judge configured"
+
+    /// Tell the user once per conversation that manual approvals are a
+    /// configuration gap, not the design.
+    ///
+    /// Without this the degradation is invisible: every command quietly turns
+    /// into a confirmation dialog and the user concludes the product simply
+    /// works that way. August 2026 audit data: 211 such approvals, none of
+    /// which the user could have known were avoidable.
+    private func noteSafetyJudgeUnconfigured() {
+        guard let runtime = activeRuntime,
+              !runtime.didNoticeSafetyJudgeUnconfigured else { return }
+        runtime.didNoticeSafetyJudgeUnconfigured = true
+        // Never displace a real error the user still needs to read.
+        guard runtime.errorMessage == nil else { return }
+        runtime.errorMessage = L10n.Approval.safetyJudgeUnconfigured
+        runtime.errorDetails = nil
+        runtime.errorSeverity = .notice
     }
 
     nonisolated static func goalPlanningCanAutoApprove(

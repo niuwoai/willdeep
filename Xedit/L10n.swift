@@ -181,6 +181,15 @@ nonisolated enum L10n {
         )
     }
 
+    enum Approval {
+        /// 裁判缺席时的一次性提示。用户看到的现象是「每条命令都要点」，
+        /// 而这其实是可以消除的配置问题——不说出来，他只会以为产品就这样。
+        static let safetyJudgeUnconfigured = String(
+            localized: "approval.safety-judge-unconfigured",
+            defaultValue: "No safety judge is available, so every command needs your confirmation. Add an API key for the current model provider in Settings, or sign in to some.im, to restore automatic review."
+        )
+    }
+
     enum ApprovalMode {
         static let pickerHelp = String(localized: "approval-mode.picker-help", defaultValue: "Choose how this session approves Agent tool calls.")
         static let requestEveryTime = String(localized: "approval-mode.request-every-time", defaultValue: "Strict mode")

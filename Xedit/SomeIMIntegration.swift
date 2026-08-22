@@ -255,6 +255,15 @@ final class SomeIMSharedSessionMemo {
     private var cached: SomeIMSessionReadOutcome?
     /// When a cached `unavailable` stops being served. Nil for real answers.
     private var unavailableExpiresAt: Date?
+    /// The most recent session an actual read produced.
+    ///
+    /// `.unavailable` says the read did not land — it says nothing about the
+    /// user, so a caller that must keep working (the safety judge, which
+    /// otherwise falls back to a provider with no key and hands the decision
+    /// to the user) can keep using the credentials it already saw. A confirmed
+    /// sign-out clears it; `invalidate()` deliberately does not, because
+    /// invalidation only means "re-read", never "signed out".
+    private(set) var lastKnownGoodSession: SomeIMSharedSession?
     /// Number of times the loader actually ran. Exists for tests to assert the
     /// Keychain is not being re-read on every access.
     private(set) var loadCount = 0
@@ -277,6 +286,16 @@ final class SomeIMSharedSessionMemo {
         unavailableExpiresAt = outcome == .unavailable
             ? now().addingTimeInterval(unavailableTTL)
             : nil
+        switch outcome {
+        case .session(let session):
+            lastKnownGoodSession = session
+        case .signedOut:
+            // The only outcome that is a statement about the user.
+            lastKnownGoodSession = nil
+        case .unavailable:
+            // A failed read must not erase what we already know.
+            break
+        }
         loadCount += 1
         return outcome
     }
@@ -284,6 +303,11 @@ final class SomeIMSharedSessionMemo {
     func invalidate() {
         cached = nil
         unavailableExpiresAt = nil
+    }
+
+    /// Drop the remembered session. Only sign-out should call this.
+    func forgetLastKnownGoodSession() {
+        lastKnownGoodSession = nil
     }
 }
 
@@ -502,6 +526,55 @@ enum SomeIMIntegrationStore {
         return currentSharedSession()?.apiKey ?? ""
     }
 
+    /// The API key for unattended paths that must not stall on a transient
+    /// Keychain read failure — today the tool-approval safety judge.
+    ///
+    /// `loadAPIKey()` returns "" for both `.signedOut` and `.unavailable`, and
+    /// the judge cannot tell them apart. That cost real user friction: one
+    /// unreadable moment made the judge conclude "not signed in", fall through
+    /// to the session provider (which had no key of its own), find no usable
+    /// candidate at all, and hand the command to the user for manual approval.
+    /// Audit data for August 2026 shows 211 such calls logged as
+    /// `missing api key` — every one of them a confirmation dialog the user
+    /// should never have seen, interleaved with successful guard verdicts
+    /// minutes apart on the same day.
+    ///
+    /// So this reads through the same memo, and only when the read itself did
+    /// not land does it fall back to the last session an actual read produced.
+    /// A confirmed sign-out still returns "" — being signed out is an answer,
+    /// and this must never keep a logged-out user authenticated.
+    static func apiKeyForUnattendedUse() -> String {
+        #if DEBUG
+        // Same gate as `hasAuthenticatedSessionForAutomaticDefaults()`: a
+        // developer's real some.im login must never leak into a test run.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil,
+           !testSharedSessionOverrideEnabled {
+            return ""
+        }
+        if testSharedSessionOverrideEnabled {
+            return loadAPIKey()
+        }
+        #endif
+        migrateLegacyIfNeeded()
+        let outcome = currentSessionOutcome()
+        if case .unavailable = outcome {
+            return sharedSessionMemo.lastKnownGoodSession?.apiKey
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        return outcome.apiKey
+    }
+
+    /// Login gate for those same unattended paths. See `apiKeyForUnattendedUse()`.
+    static func hasSessionForUnattendedUse() -> Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil,
+           !testSharedSessionOverrideEnabled {
+            return false
+        }
+        #endif
+        return !apiKeyForUnattendedUse().isEmpty
+    }
+
     /// Deterministic login gate for automatic UI defaults. Unit tests must
     /// explicitly opt into the shared-session override so a developer's real
     /// some.im login can never influence session-default tests.
@@ -597,8 +670,11 @@ enum SomeIMIntegrationStore {
         AgentCredentialStore.save("", account: legacyAPIKeyAccount)
         AgentCredentialStore.save("", account: legacySessionTokenAccount)
         // Both credential stores are now empty; a cache still holding the old
-        // session would keep this app looking signed in.
+        // session would keep this app looking signed in. The remembered
+        // last-good session goes too — it exists to survive failed reads, not
+        // to outlive an actual sign-out.
         invalidateSharedSessionCache()
+        sharedSessionMemo.forgetLastKnownGoodSession()
         UserDefaults.standard.removeObject(forKey: accountKey)
         UserDefaults.standard.removeObject(forKey: codingPlanStatusKey)
         var settings = loadSettings()
