@@ -1033,7 +1033,8 @@ extension AppState {
                 activeExperts: activeExperts,
                 interactionMode: runtime.interactionMode,
                 executionAgent: runtime.executionAgent,
-                delegationPolicy: runtime.currentTurnDelegationPolicy
+                delegationPolicy: runtime.currentTurnDelegationPolicy,
+                loadedPacks: runtime.loadedToolPacks
             )
             let requestWithoutRunwayHandoff = [AgentMessage(role: .system, content: systemPrompt)]
                 + collapsedHistory
@@ -1976,7 +1977,11 @@ extension AppState {
                         changedWorkspacePath = appliedPath
                         return appliedPath
                     },
-                    delegatedApprovalHandler: delegatedApprovalHandler
+                    delegatedApprovalHandler: delegatedApprovalHandler,
+                    toolPackActivationSink: { requested in
+                        runtime.loadedToolPacks.formUnion(requested)
+                        return runtime.loadedToolPacks
+                    }
                 )
             }
             for (stagedIndex, staged) in stagedCalls.enumerated() {

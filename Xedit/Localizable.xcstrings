@@ -43026,6 +43026,9 @@
         }
       }
     },
+    "settings.global-rules.bundled-index-loaded" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Built-in compact index loaded. Save to apply it." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Índice compacto integrado cargado. Guarda para aplicarlo." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Index compact intégré chargé. Enregistrez pour l’appliquer." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "内蔵の簡潔な索引を読み込みました。適用するには保存してください。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已载入内置精简索引，保存后生效。" } } } },
+    "settings.global-rules.bundled-library" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Built-in rule library" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Biblioteca de reglas integrada" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Bibliothèque de règles intégrée" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "内蔵ルールライブラリ" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "内置规则库" } } } },
+    "settings.global-rules.bundled-library-version" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Rules %@" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Reglas %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Règles %@" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "ルール %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "规则 %@" } } } },
     "settings.global-rules.choose-title" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -43202,6 +43205,8 @@
       }
     },
     "settings.global-rules.file-section" : {
+    "settings.global-rules.index-description" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep reads this small Markdown index before every Agent turn. Detailed rules ship with the app and are loaded only when a task needs them." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep lee este pequeño índice Markdown antes de cada turno del Agent. Las reglas detalladas se incluyen con la aplicación y solo se cargan cuando una tarea las necesita." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep lit ce petit index Markdown avant chaque tour de l’Agent. Les règles détaillées sont fournies avec l’app et chargées uniquement lorsqu’une tâche en a besoin." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep は各 Agent ターンの前にこの小さな Markdown 索引を読みます。詳細なルールはアプリに同梱され、タスクで必要な場合にのみ読み込まれます。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 会在每个 Agent 回合前读取这份精简 Markdown 索引；详细规则随 App 提供，仅在任务需要时加载。" } } } },
+    "settings.global-rules.load-bundled-index" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Load built-in index" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Cargar índice integrado" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Charger l’index intégré" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "内蔵索引を読み込む" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "载入内置索引" } } } },
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {

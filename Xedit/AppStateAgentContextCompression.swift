@@ -120,7 +120,8 @@ extension AppState {
             activeExperts: runtime.activeExperts,
             interactionMode: runtime.interactionMode,
             executionAgent: runtime.executionAgent,
-            delegationPolicy: runtime.currentTurnDelegationPolicy
+            delegationPolicy: runtime.currentTurnDelegationPolicy,
+            loadedPacks: runtime.loadedToolPacks
         )
         let estimated = Self.estimateAgentTokens(messages: collapsed, tools: tools)
         // Prefer the provider's own reading when it is higher — the local

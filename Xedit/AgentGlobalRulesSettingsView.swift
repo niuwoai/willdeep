@@ -47,6 +47,22 @@ struct AgentGlobalRulesSettingsView: View {
                 Text(L10n.Settings.GlobalRules.description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if let rulesRoot = AgentBundledRules.rootURL() {
+                    LabeledContent(L10n.Settings.GlobalRules.bundledLibraryLabel) {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(AgentGlobalRulesStore.displayPath(for: rulesRoot))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                            if let version = AgentBundledRules.manifest(rootURL: rulesRoot)?.rulesVersion {
+                                Text(L10n.Settings.GlobalRules.bundledLibraryVersion(version))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
             }
 
             Section(L10n.Settings.GlobalRules.editorSection) {
@@ -59,6 +75,10 @@ struct AgentGlobalRulesSettingsView: View {
                     )
 
                 HStack {
+                    Button(L10n.Settings.GlobalRules.loadBundledIndexButton) {
+                        loadBundledIndex()
+                    }
+
                     Button(L10n.Settings.buttonSave) {
                         saveRulesText()
                     }
@@ -135,6 +155,11 @@ struct AgentGlobalRulesSettingsView: View {
         } catch {
             statusMessage = L10n.Settings.GlobalRules.saveFailed(error.localizedDescription)
         }
+    }
+
+    private func loadBundledIndex() {
+        rulesText = AgentGlobalRulesStore.defaultRulesTemplate
+        statusMessage = L10n.Settings.GlobalRules.bundledIndexLoadedStatus
     }
 
     private func chooseRulesFile() {

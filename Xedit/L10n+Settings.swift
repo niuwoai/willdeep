@@ -1259,8 +1259,15 @@ extension L10n {
             static let enableToggle = String(localized: "settings.global-rules.enable", defaultValue: "Enable global rules")
             static let filePathLabel = String(localized: "settings.global-rules.file-path", defaultValue: "File")
             static let reloadButton = String(localized: "settings.global-rules.reload", defaultValue: "Reload")
-            static let description = String(localized: "settings.global-rules.description", defaultValue: "WillDeep reads this Markdown file before every Agent turn. The default is ~/.willdeep/CLAUDE.md, but you can point it at any personal rules file.")
+            static let description = String(localized: "settings.global-rules.index-description", defaultValue: "WillDeep reads this small Markdown index before every Agent turn. Detailed rules ship with the app and are loaded only when a task needs them.")
+            static let bundledLibraryLabel = String(localized: "settings.global-rules.bundled-library", defaultValue: "Built-in rule library")
+            static func bundledLibraryVersion(_ a1: String) -> String {
+                let template = String(localized: "settings.global-rules.bundled-library-version", defaultValue: "Rules %@")
+                return String(format: template, a1)
+            }
             static let editorSection = String(localized: "settings.global-rules.editor-section", defaultValue: "Rules Content")
+            static let loadBundledIndexButton = String(localized: "settings.global-rules.load-bundled-index", defaultValue: "Load built-in index")
+            static let bundledIndexLoadedStatus = String(localized: "settings.global-rules.bundled-index-loaded", defaultValue: "Built-in compact index loaded. Save to apply it.")
             static let precedenceNote = String(localized: "settings.global-rules.precedence-note", defaultValue: "Global rules apply across workspaces. Repository AGENTS.md or CLAUDE.md files are still included as project-specific instructions.")
             static let choosePanelTitle = String(localized: "settings.global-rules.choose-title", defaultValue: "Choose Global Rules File")
             static func loadedStatus(_ a1: String) -> String {

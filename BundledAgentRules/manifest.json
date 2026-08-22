@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "rules_version": "0.20.0",
+  "source_repository": "https://github.com/xurenlu/agentrules",
+  "source_revision": "8521395e65e1c4f5538cd38d10dd99a7caa367e5",
+  "content_sha256": "58458b0063f3f637cc6214e0dca75078fe5721d47f412f52415a66d09675d261",
+  "files": [
+    "AGENTS.md",
+    "ARCHITECTURE.md",
+    "CHANGELOG.md",
+    "PRODUCT_OVERVIEW.md",
+    "README.md",
+    "ai-guardrails.md",
+    "database-migrations.md",
+    "database-queries.md",
+    "database-sync.md",
+    "deployment.md",
+    "design.md",
+    "frontend.md",
+    "go.md",
+    "linux-server.md",
+    "programming.md",
+    "python.md",
+    "version-control.md"
+  ]
+}

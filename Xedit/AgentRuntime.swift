@@ -319,6 +319,12 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// `spawn_agent` invocations observed during the current turn. Only used
     /// to audit whether a `.required` policy was actually honored.
     var currentTurnSpawnAgentCallCount: Int = 0
+    /// Optional native tool schemas activated through `load_tool_pack`.
+    /// Packs are intentionally runtime-only and monotonic: a newly loaded
+    /// pack may invalidate the provider prompt cache once, but ordinary later
+    /// turns retain byte-stable tool order. Reopening the app starts a fresh
+    /// provider cache and therefore safely starts from the compact core again.
+    var loadedToolPacks: Set<AgentToolPackID> = []
     /// Commands this turn already handed to a worker automatically. A worker
     /// re-runs the failing command as its own verifier, so a second automatic
     /// dispatch for the same command would repeat a fight it already lost —
