@@ -1,7 +1,15 @@
 # Changelog
 
-> 当前文件保留最新版本（1.284.0-rc9 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.284.0-rc10 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.284.0-rc10 - 2026-08-22
+
+### Docs
+
+- **`AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md` 更新到三条摩擦全部落地，并订正其中一条的根因。** 审批裁判那条原本写的是"没配 key 就不该被选作裁判"，深挖后这个描述本身是错的：**用户配好了，是宿主把一次 Keychain 读取失败当成了登出。** 决定性证据是审计里 guard 的正常裁决与 deepseek 的掉线在同一天反复交错、最短间隔 1 分钟——持续性的配置缺失不会长这样，瞬时读取失败才会。
+- 同时订正 §1.5 里一处不准确的推断：原文说"计划标不成完成就落回 `pauseAfterNoProgress`"，这对**普通模式**成立，对 Goal 模式并不成立（`requiresGoalCompletion` 为真时策略已经返回继续）。Goal 的硬停实际来自第 24 轮的 `pauseAfterLimit`，真正的问题是同一个 Goal 活在两套边界下——已于 rc9 修复。
+- `missing api key` 那行审计说明补上警告：**这条日志的措辞会误导人**，请求其实从未发出。这正是 rc8 把它改名成 `no judge configured` 的原因。
 
 ## 1.284.0-rc9 - 2026-08-22
 

@@ -1,6 +1,6 @@
 # Agent 执行摩擦审计（2026-08）
 
-> 审计时间：2026-08-22 | 代码基线：1.284.0-rc2（审计起点）→ 1.284.0-rc6（三项修复落地后）
+> 审计时间：2026-08-22 | 代码基线：1.284.0-rc2（审计起点）→ 1.284.0-rc9（全部修复落地后）
 > 数据来源：本机 `~/Library/Application Support/WillDeep/` 下 459 个落盘会话与 `AgentAudit/judge.jsonl`
 > 姊妹文档：[SYSTEM_PROMPT_AUDIT_2026_07.md](SYSTEM_PROMPT_AUDIT_2026_07.md)（缓存命中率）、[LONG_HORIZON_AUTONOMY.md](LONG_HORIZON_AUTONOMY.md)（续推契约）
 > 本文只记录**用户能感觉到的三处摩擦**：证据、根因、已落地的修复、以及还没做的部分。
@@ -13,7 +13,7 @@
 2. **"等待宿主放行"**——产品里没有"宿主"这个角色，是提示词写了 `host-coordinated` / `host-owned`，模型直译后转述给用户，于是用户去找一个不存在的按钮。
 3. **"规划完成后还要点"**——Goal 模式设计上确实不用点，但命令类工具要过 AI 安全裁判，而**裁判有 24% 的时候不在岗**（八月以来 826 次裁决中 204 次 `unavailable`），一掉线就静默回落人工审批。
 
-前两条已修（1.284.0-rc3 / rc4），第三条只完成了取证，修复方案见 §3.4。
+三条都已落地（rc3 / rc4 / rc8）。第三条深挖后推翻了最初的判断：不是「用户没配 key」，而是一次 Keychain 读取失败被当成了登出，详见 §3.4。
 
 ---
 
@@ -71,7 +71,9 @@
 
 `LONG_HORIZON_AUTONOMY.md` §4 的 `update_plan` 工具化是根治方案（provider 侧 schema 校验 + 失败回灌重试，比宿主解析自由文本可靠一个数量级）。本轮只做了解析器止血，围栏块仍是唯一写入通道。
 
-**另一件独立的事**：退避阶梯的入口条件（§1.3 那个 `guard`）应当放开，让计划未标完成时也走退避而不是硬停。它属于 `LONG_HORIZON_AUTONOMY.md` 的 XA1，改动面比解析器大，本轮未动。
+**另一件独立的事（已于 1.284.0-rc9 落地，但边界与这里最初的描述不同）**：§1.3 说"计划标不成完成就落回 `pauseAfterNoProgress`"——这对**普通模式**成立，对 Goal 模式并不成立：`requiresGoalCompletion` 为真时策略已经返回继续，Goal 的硬停实际来自**第 24 轮的 `pauseAfterLimit`**。
+
+于是真正的问题是同一个 Goal 活在两套边界下：验收阶段按 wall-clock 预算永不硬停，执行阶段却被轮次切断。现在轮次上限交给 `AgentGoalContinuationPolicy` 裁决（`continueGoalOnBudgetInsteadOfRoundLimit`），有余量就带退避阶梯话术继续，预算耗尽则请求交接快照。普通模式的 8 轮上限保持不变——它没有预算这条边界，取消轮次限制就等于没有边界。
 
 ---
 
@@ -104,7 +106,7 @@ Goal 模式在计划验证完成前锁写类工具（`goalPlanningGateBlocks`：
 
 ---
 
-## 3. 审批裁判：24% 的时间不在岗
+## 3. 审批裁判：24% 的时间不在岗（根因是读取失败被误判为登出）
 
 ### 3.1 客户反馈
 
@@ -134,7 +136,7 @@ Goal 模式已经相当自主（`autoApprovalSource`）：
 
 | 原因 | 次数 | 说明 |
 |---|---|---|
-| `missing api key` | **211（69%）** | 裁判模型（`deepseek-v4-flash`）根本没配 key |
+| `missing api key` | **211（69%）** | 掉到了会话自身的 provider，而它没有独立的 key。**注意这条日志的措辞会误导人**：请求其实从未发出，见 §3.4 |
 | `no verdict tag` | 30 | 裁决被截断成半截（见 §3.5） |
 | `empty reply` | 20 | |
 | `network error` | 19 | |
@@ -145,11 +147,21 @@ Goal 模式已经相当自主（`autoApprovalSource`）：
 
 **结论：客户说的"还要点"完全属实，但根因不是产品设计要他点，而是裁判有四分之一的时间不在岗，一掉线就静默回落人工。** 其中 86%（261/305）是纯工程问题，与安全判断本身无关。
 
-### 3.4 建议修复（未做）
+### 3.4 已落地（1.284.0-rc8）——而且根因不是"没配 key"
 
-1. **没配 key 就不该被选作裁判。** 保存设置时校验凭据，缺失即在设置页显式报错，并自动回落到已配置的 provider——而不是等到用户干活时才静默降级。
-2. **掉线要说出来。** 审批卡上写明"因为安全裁判不可用才需要你确认"，附一个跳到裁判配置的入口。用户现在完全不知道自己多点的这些是可以消除的。
-3. **`no verdict tag` / `empty reply` 是输出预算问题**，见 §3.5。
+原本的建议是"没配 key 就不该被选作裁判"。深挖之后，这个描述本身是错的：**用户配好了，是宿主把一次读取失败当成了登出。**
+
+`SomeIMSessionReadOutcome` 明确区分三态，注释也写着「`.unavailable` 表示读取本身没落地，把它当成登出正是删掉用户 provider 的原因」。但裁判走的 `loadAPIKey()` 用的是 `currentSharedSession()`，它把 `.unavailable` 和 `.signedOut` 一起压成 `nil`。于是共享 Keychain 一次瞬时读不到（另一个 App 改动 session 触发缓存失效后紧接着的那次读取），裁判就断定"没登录"，掉到会话自身的 provider，而它没有自己的 key，候选链因此空手而归。
+
+**决定性证据**：审计里 `someim-security-guard` 的正常裁决与 `deepseek-v4-flash` 的掉线在同一天反复交错，**最短间隔 1 分钟**。持续性的配置缺失不会长这样，瞬时读取失败才会。
+
+落地的三件：
+
+1. `SomeIMSharedSessionMemo` 记住最近一次真正读到的会话，只在 `.unavailable` 时供无人值守路径使用（新增 `apiKeyForUnattendedUse()` / `hasSessionForUnattendedUse()`）。**确认登出仍立刻清除**——登出是关于用户的明确回答；而 `invalidate()` 刻意不清，它只表示"下次去重读"。
+2. 候选链空手时审计记 `no judge configured` 而不是 `missing api key`。「我们根本没有裁判」和「provider 拒绝了我们」是两件事，记成同一句话让这次取证白白绕了几周。
+3. 每个会话第一次遇到无裁判可用时给一条通知横幅，告诉用户这是可消除的配置问题（五语齐全）。此前用户只能观察到"什么都要点"，并合理地以为产品就是这么设计的。
+
+**`no verdict tag` / `empty reply` 仍未处理**，那是输出预算问题，见 §3.5。
 
 ### 3.5 与已知问题的关系
 
