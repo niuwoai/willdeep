@@ -727,6 +727,90 @@ extension AppState {
         }
     }
 
+    /// A Goal that hit the ordinary round limit is judged by its budget instead.
+    ///
+    /// The same Goal used to live under two different boundaries. Once its Plan
+    /// reached terminal statuses, acceptance ran on the wall-clock budget and a
+    /// backoff ladder that never hard-stops
+    /// (`prepareNextAgentGoalPlanningCycleIfNeeded`). But while the Plan was
+    /// still executing, continuation was capped at
+    /// `maximumGoalAutomaticContinuations` rounds and simply stopped there —
+    /// so the long tasks that most need to keep going were the ones cut off,
+    /// and by a proxy metric rather than by anything the user can reason about.
+    /// The design contract is that budget is the only hard boundary
+    /// (`docs/LONG_HORIZON_AUTONOMY.md` §1.2, §2.1: there is no `hard_pause`
+    /// exit), so the round limit hands over here rather than ending the run.
+    ///
+    /// This goes through the same `evaluate` as the acceptance ladder, so the
+    /// segment clock and the continuation counter actually advance — a read-only
+    /// probe would leave `segmentStartedAt` nil forever and turn the round limit
+    /// into no limit at all.
+    ///
+    /// Returns true when it has taken over (a continuation or an orderly
+    /// wrap-up was dispatched) and the caller should keep looping.
+    @discardableResult
+    func continueGoalOnBudgetInsteadOfRoundLimit(for runtime: AgentRuntime) -> Bool {
+        guard runtime.interactionMode == .goal,
+              let goal = runtime.currentGoal,
+              !goal.isEmpty,
+              // Nothing left to push toward: let the ordinary path settle it.
+              goal.checklist.contains(where: { !$0.done }) else { return false }
+
+        let evaluation = AgentGoalContinuationPolicy.evaluate(
+            budget: goal.continuationBudget ?? .standard,
+            now: Date(),
+            consecutiveRoundsWithoutProgress: runtime.consecutiveGoalRoundsWithoutChecklistProgress
+        )
+        var budgetedGoal = goal
+        budgetedGoal.continuationBudget = evaluation.budget
+        runtime.currentGoal = budgetedGoal
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+
+        let remainingAcceptance = goal.checklist.filter { !$0.done }.map(\.text)
+        let prompt: String
+        switch evaluation.outcome {
+        case .halt:
+            // The handover was already asked for; stop without nagging again.
+            return false
+        case .wrapUp:
+            runtime.errorMessage = L10n.GoalPlanning.budgetExhausted
+            runtime.errorDetails = nil
+            runtime.errorSeverity = .notice
+            prompt = AgentGoalContinuationPolicy.wrapUpPrompt(
+                remainingAcceptance: remainingAcceptance
+            )
+        case .continueExecution(let rung):
+            let escalation = AgentGoalContinuationPolicy.escalation(for: rung)
+                .map { "\n\n\($0)" } ?? ""
+            prompt = """
+            Automatic Goal continuation: this Goal still has unchecked acceptance items and its execution budget has runway left. Keep executing the active plan — do not replace it, do not restart Goal Teams, and do not summarize completed work instead of advancing. Pick the next unfinished step and do it.
+
+            Unchecked acceptance items:
+            - \(remainingAcceptance.joined(separator: "\n- "))
+
+            End the reply with exactly one `progress` block for the steps you touched.\(escalation)
+            """
+        }
+
+        if runtime.isResponding {
+            let dedupPrefix = String(prompt.prefix(while: { !$0.isNewline }))
+            guard !runtime.queuedMessages.contains(where: {
+                $0.source == .hostInstruction && $0.text.hasPrefix(dedupPrefix)
+            }) else { return true }
+            runtime.queuedMessages.append(
+                AgentQueuedMessage(text: prompt, images: [], source: .hostInstruction)
+            )
+        } else {
+            dispatchAgentMessage(
+                for: runtime,
+                text: prompt,
+                images: [],
+                source: .hostInstruction
+            )
+        }
+        return true
+    }
+
     /// Close the active Goal phase and start a fresh bounded planning round
     /// for the next one. Returns true when the completion was consumed by a
     /// phase transition; final-phase completion falls through to the ordinary
