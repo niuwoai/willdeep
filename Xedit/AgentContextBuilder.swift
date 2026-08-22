@@ -426,10 +426,16 @@ enum AgentContextBuilder {
             } else if currentPlan?.status == .done, goalPlanningState?.phase == .completed {
                 goalBlock += "The Goal and its Plan are complete. Do not create another Plan or restart Goal Teams unless the user explicitly changes or extends the Goal.\n"
             } else {
-                goalBlock += "Goal Teams planning is host-coordinated and write-tier tools are locked. Do not implement and do not manually spawn planning members. The host starts exactly three independent read-only members, waits until all are terminal, then runs read-only evidence arbitration when at least two reports are valid. Only after arbitration succeeds may the parent emit a proposal.\n"
+                goalBlock += "Goal Teams planning is already running automatically in the background and write-tier tools are locked until it finishes. Nobody has to approve anything for it to proceed, and there is no external party to wait on: WillDeep starts exactly three independent read-only members, waits until all are terminal, then runs read-only evidence arbitration when at least two reports are valid. Only after arbitration succeeds may the parent emit a proposal. Do not implement and do not manually spawn planning members.\n"
+                // 模型此前把 “host-coordinated / host-owned flow” 直译成“等待宿主
+                // 放行”，用户读到这句只会一脸问号——他既不知道“宿主”是谁，也不知道
+                // 要点哪里。空转的回合本身也是成本，所以这里把“该干什么”写死。
+                goalBlock += "Never tell the user you are waiting to be unblocked, released, approved, or authorized — that is false, and it leaves them looking for a button that does not exist. Keep gathering read-only evidence for the proposal instead, and if a blocked write tool is genuinely the only way forward, say plainly which evidence you still need and why.\n"
                 goalBlock += "A valid proposal must include the exact ten-column Teams table (Member, Skill/Subagent, Goal Slice, Claimed Tasks, Locked Scope, Deliverable, Done Criteria, Docs/Tasklist Updates, Test Owner, Validator), one coarse fenced `goal-roadmap`, and one numbered fenced `plan` for only the first phase with no more than \(AgentGoalRoadmap.maximumStepsPerPhase) steps. The host validates it and execution continues automatically without a plan-approval pause.\n"
                 if goalPlanningState?.phase == .blocked {
-                    goalBlock += "Independent planning is blocked. Explain the visible evidence gap; do not synthesize a proposed Plan or offer execution approval.\n"
+                    // 卡在这里而不说清楚，会话就废了：模型不许出计划、不许执行，
+                    // 用户又不知道 Goal 卡片上那个「重试规划」按钮就是出路。
+                    goalBlock += "Independent planning is blocked. Do not synthesize a proposed Plan and do not offer execution approval. State the concrete evidence gap in one or two sentences — which member failed or what could not be inspected — and tell the user they can press Retry planning on the Goal card, or narrow the goal, to move forward. Do not describe this as waiting for permission.\n"
                 }
             }
             if !goal.statement.isEmpty {

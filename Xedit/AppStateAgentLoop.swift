@@ -1770,15 +1770,15 @@ extension AppState {
                     anyDenied = true
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .denied
-                        runtime.toolCalls[index].errorMessage = "Goal planning validation required"
+                        runtime.toolCalls[index].errorMessage = L10n.GoalPlanning.gateBlockedTool
                     }
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Blocked: Goal evidence planning has not produced a validated execution plan yet. Finish the host-owned planning flow without asking for user approval.",
+                        payload: AgentGoalGateNotice.blockedToolPayload,
                         source: .systemNotice,
                         outcomeStatus: .denied,
-                        errorMessage: "Goal planning validation required"
+                        errorMessage: L10n.GoalPlanning.gateBlockedTool
                     )
                     continue
                 }
