@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.284.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.284.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.284.0-rc4 - 2026-08-22
+
+### Fixed
+
+- **「等待宿主放行」这句话是我们自己写出来的。** Goal 模式在计划验证完成前会锁掉写类工具（`goalPlanningGateBlocks`），而拦截时回灌给模型的原话是 "Finish the **host-owned** planning flow"，系统提示词里则是 "Goal Teams planning is **host-coordinated**"。模型把 host 直译成"宿主"，于是对用户说「等待宿主放行后立即执行」——可现实里既没有这个放行动作，也没有对应的按钮。用户读完只会去找一个不存在的控件，而模型在原地空转，一个回合什么也没干成。
+- 门禁措辞整体去 host 化，并且把「该干什么」写死：明确告诉模型这是后台自动流程、没有任何人需要批准、催也不会更快，与其空等不如继续用只读工具取证；同时**明令禁止**它宣称自己在等待放行/批准/授权。相关文案集中到新的 `AgentGoalGateNotice`，不散落在拦截点里。
+- **规划被阻断时，把出路直接说出来。** `blocked` 阶段旧提示词只让模型"解释证据缺口"，于是它反复解释、反复被拒，而 Goal 卡片上那个「重试规划」按钮从来没人提过一句。现在提示词要求它说清具体是哪个成员失败、缺什么证据，并指向重试或收窄目标——按既有约定，正规通道已经存在时只把话讲清楚，不再加专属 UI。
+- 被拦下的工具卡文案从英文的 "Goal planning validation required" 换成本地化的「Goal 规划进行中，工具暂时锁定——你不需要做任何操作」（en/zh-Hans/ja/es/fr 五语齐全）。旧文案既没说是谁在 validate，也没说用户要不要动手，而正确答案恰恰是「什么都不用做」。
+
+### Tests
+
+- `AgentGoalChecklistParserTests` 新增 3 个用例：规划阶段提示词不含 `host-coordinated`/`host-owned` 且带有"不许说在等放行"的禁令、`blocked` 阶段指向「重试规划」、两条门禁回灌文案里 `host` 一词零出现。否定式断言是刻意的——换说法可以，把"宿主"这个不存在的角色放回去不行。
+- 该文件 21 tests 全绿；`AgentContextBuilderPromptTests` 18 tests 全绿（v29 稳定前缀哈希快照未变，本次改的都是动态段）；`AgentPlanProgressTests`/`AgentGoalLaunchRecoveryTests` 未受影响。
+- `AgentGoalTeamsTests` 有一条「恢复执行会续期预算」在本机红，已在 develop 基线（5de6f176）复现同样失败，根因是该用例依赖开发机的 some.im 登录态，与本次改动无关，另行处理。
 
 ## 1.284.0-rc3 - 2026-08-22
 

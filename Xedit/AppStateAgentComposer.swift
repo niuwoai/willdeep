@@ -562,7 +562,7 @@ extension AppState {
             updateDelegatedTaskRun(id: delegatedRunID, runtime: runtime) { run in
                 run.phase = .cancelled
                 run.finishedAt = Date()
-                run.lastError = "Goal planning validation required"
+                run.lastError = L10n.GoalPlanning.gateBlockedTool
             }
             finishDelegatedAgentRecord(
                 runtime: runtime,
@@ -571,8 +571,8 @@ extension AppState {
                 executionAgent: executionAgent,
                 status: .denied,
                 result: nil,
-                errorMessage: "Goal planning validation required",
-                toolPayload: "Blocked: Goal evidence planning has not produced a validated execution plan yet."
+                errorMessage: L10n.GoalPlanning.gateBlockedTool,
+                toolPayload: AgentGoalGateNotice.blockedDelegationPayload
             )
             return
         }

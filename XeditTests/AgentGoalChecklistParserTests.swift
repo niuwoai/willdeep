@@ -270,6 +270,69 @@ struct AgentGoalChecklistParserTests {
         #expect(prompt.contains("Do not repeat command transcripts, failed attempts, raw tool output"))
     }
 
+    /// 规划阶段的提示词里出现过 “host-coordinated / host-owned flow”，模型把它
+    /// 直译成「等待宿主放行」回给用户——而根本没有这么一个放行动作，用户只能
+    /// 对着屏幕找一个不存在的按钮。措辞本身就是这个 bug。
+    @Test("Goal 规划阶段不把自己描述成在等谁放行")
+    func goalPlanningPromptNeverClaimsToAwaitRelease() {
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: URL(fileURLWithPath: "/tmp/project"),
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .goal,
+            currentGoal: goal(2)
+        )
+
+        // 这段是规划阶段（还没有已验证的 Plan）才会注入的。
+        #expect(prompt.contains("Goal Teams planning is already running automatically"))
+        #expect(prompt.contains("Nobody has to approve anything"))
+        #expect(prompt.contains("Never tell the user you are waiting to be unblocked"))
+        // 否定式断言：等价重构可以换说法，但不该把“宿主”这个概念放回去。
+        #expect(!prompt.contains("host-coordinated"))
+        #expect(!prompt.contains("host-owned"))
+    }
+
+    /// planning 卡住时旧提示词只让模型「解释证据缺口」，于是它反复解释、
+    /// 反复被拒，用户不知道那张 Goal 卡片上的「重试规划」才是出路。
+    @Test("Goal 规划被阻断时把出路说给用户听")
+    func blockedGoalPlanningPointsAtRetry() {
+        let prompt = AgentContextBuilder.systemPrompt(
+            rootDirectory: URL(fileURLWithPath: "/tmp/project"),
+            openedFileURL: nil,
+            fileContent: "",
+            selectedText: "",
+            language: nil,
+            interactionMode: .goal,
+            currentGoal: goal(2),
+            goalPlanningState: AgentGoalPlanningState(
+                goalFingerprint: "goal",
+                phase: .blocked,
+                members: []
+            )
+        )
+
+        #expect(prompt.contains("Independent planning is blocked"))
+        #expect(prompt.contains("Retry planning"))
+        #expect(prompt.contains("Do not describe this as waiting for permission"))
+    }
+
+    /// 被门禁拦下的工具回灌给模型的那段话。它决定了用户读到的那句解释。
+    @Test("门禁回灌文案不留下“等人放行”的暗示")
+    func goalGateNoticeLeavesNoPermissionNarrative() {
+        for payload in [
+            AgentGoalGateNotice.blockedToolPayload,
+            AgentGoalGateNotice.blockedDelegationPayload,
+        ] {
+            #expect(payload.contains("This is automatic"))
+            #expect(payload.contains("no user approval, release, or authorization is involved"))
+            #expect(payload.contains("Never tell the user you are waiting to be unblocked"))
+            // 模型此前正是从 “host” 推断出「宿主」这个不存在的角色。
+            #expect(!payload.lowercased().contains("host"))
+        }
+    }
+
     @Test
     func activeGoalPlanRunsUnattendedAndSelfRecoversOrdinaryFailures() {
         let prompt = AgentContextBuilder.systemPrompt(
