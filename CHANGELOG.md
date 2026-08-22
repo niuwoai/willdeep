@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.284.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.284.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.284.0-rc5 - 2026-08-22
+
+### Tests
+
+- **一条用例的成败取决于跑测试的人有没有登录 some.im。** `AgentGoalTeamsTests` 的「恢复执行会续期预算，软停过的 Goal 不会立刻再停」断言 `runtime.errorMessage == nil`，可 `resumePinnedAgentGoalExecution()` 真的会走一次派发，而派发路径上有 some.im 登录门禁（`someIMLoginRequiredForTurn` → `setSomeIMLoginRequiredError`）：没登录的机器上 `errorMessage` 会被改写成「some.im 未登录……」，用例稳定变红。已在 develop 基线（f8465865）复现：36 tests / 1 failed，失败原文就是那句登录提示。
+- 断言从笼统的 `errorMessage == nil` 收窄到这条用例真正关心的东西：**不是预算耗尽的软停横幅**（`errorMessage != L10n.GoalPlanning.budgetExhausted` 且 `errorSeverity != .notice`）。登录门禁写什么与本用例无关，那是登录门禁自己的用例该管的事。
+- 顺手把前置状态补真：原来的 runtime 一开始 `errorMessage` 就是 nil，所谓"resume 会清掉软停横幅"其实一次也没被验证过。现在恢复前先挂上 `budgetExhausted` / `.notice`，这两条断言才真正压住 `clearTurnError()`。
+- 同一文件里其余 35 个用例都不碰这条路径（`makeAppRuntime` 默认 `isResponding: true`，续推提示只入队不派发；`autoApprovalSource` 那条走的是 `.danger`，`guard risk == .write` 直接返回 nil），逐条复核后确认没有第二处依赖真实登录态。
+- 派发出去的续跑请求在用例结尾 `cancel()`，不再把一个在途请求漏到测试之外（登录的机器上它会真的发出去）。
+- 该文件 36 tests 全绿：退出码 0、原始日志 `** TEST SUCCEEDED **`、`report.json` passed=36/failed=0 三者一致。
 
 ## 1.284.0-rc4 - 2026-08-22
 
