@@ -1490,9 +1490,17 @@ extension AppState {
                     runtime.errorDetails = nil
                     runtime.errorSeverity = .notice
                 case .pauseAfterLimit:
-                    runtime.errorMessage = L10n.PlanContinuation.safetyLimitPaused
-                    runtime.errorDetails = nil
-                    runtime.errorSeverity = .notice
+                    // A Goal with budget left is not out of runway just because
+                    // the round counter ran out — budget is the only hard
+                    // boundary. It queues its own continuation (or an orderly
+                    // wrap-up) as a host instruction, which starts the next
+                    // turn on its own; this turn still ends here, so the
+                    // banner is simply skipped rather than the loop extended.
+                    if !continueGoalOnBudgetInsteadOfRoundLimit(for: runtime) {
+                        runtime.errorMessage = L10n.PlanContinuation.safetyLimitPaused
+                        runtime.errorDetails = nil
+                        runtime.errorSeverity = .notice
+                    }
                 case .stop:
                     break
                 }
