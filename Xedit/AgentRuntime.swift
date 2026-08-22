@@ -354,6 +354,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// conversation” action. These deliberately do not enter AgentSession or
     /// disk persistence: closing/reopening the conversation asks again.
     var conversationAllowedToolSignatures: Set<String> = []
+    /// 本会话是否已经提示过「安全裁判没配置，所以每条命令都要你点」。
+    /// 裁判缺席是配置问题，值得说一次，但不该每条命令刷一次横幅。
+    var didNoticeSafetyJudgeUnconfigured = false
+
     /// 用户经 declare_environment_trust 工具 + 人工点卡确认建立的环境信任
     /// 声明（“这个终端是一次性容器”“这个 mysql 是测试实例”）。与上面的
     /// conversationAllowedToolSignatures 同待遇：只活在 runtime，不进

@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.284.0-rc7 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.284.0-rc8 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.284.0-rc8 - 2026-08-22
+
+### Fixed
+
+- **「规划完成后还是什么都要点」的真凶找到了：安全裁判有四分之一的时间不在岗，而它缺席的原因是一次 Keychain 抖动被误判成「用户没登录」。** Goal 模式本来就让裁判放行的命令自动执行，可 `judge.jsonl` 显示八月以来 826 次裁决里 204 次 `unavailable`（24%），其中 `missing api key` 211 次、全部落在没有自己 key 的 `deepseek-v4-flash` 上。每一次都是一张本可以不弹的审批卡。
+- 根因是 `.unavailable` 与 `.signedOut` 被压成了同一个空值。`SomeIMSessionReadOutcome` 明确区分三态，注释也写着「`.unavailable` 表示读取本身没落地，把它当成登出正是删掉用户 provider 的原因」——但裁判走的 `loadAPIKey()` 用的是 `currentSharedSession()`，两者一起返回 nil。于是共享 Keychain 一次瞬时读不到（另一个 App 改动 session 触发缓存失效后紧接着的那次读取），裁判就断定没登录、掉到会话自身的 provider，而它没有自己的 key，候选链因此空手而归。审计里 guard 正常裁决与 deepseek 掉线在同一天交错、**最短间隔 1 分钟**，正是这个瞬时窗口的形状——而不是任何"配置没做好"。
+- `SomeIMSharedSessionMemo` 现在记住最近一次真正读到的会话，只在 `.unavailable` 时供无人值守路径使用（新增 `apiKeyForUnattendedUse()` / `hasSessionForUnattendedUse()`，裁判改走这条路）。**确认登出仍然立刻清除它**——登出是关于用户的明确回答，绝不能靠"上次读到的"继续用下去；而 `invalidate()` 刻意不清，因为它只表示"下次去重读"，从来不表示"登出了"。
+- **候选链空手时不再伪装成请求失败。** 审计记 `no judge configured` 而不是 `missing api key`：前者是"我们根本没有裁判"，后者是"provider 拒绝了我们"，把两件事记成同一句话，让这次取证白白绕了好几周。
+- **而且这件事现在会告诉用户。** 每个会话第一次遇到无裁判可用时给一条通知横幅：「当前没有可用的安全裁判，所以每条命令都要你确认。在设置里为当前模型服务商填入 API Key，或登录 some.im，即可恢复自动审批。」（en/zh-Hans/ja/es/fr 五语齐全）。此前用户只能观察到"什么都要点"，并合理地以为产品就是这么设计的。
+
+### Tests
+
+- `SomeIMSharedSessionMemoTests` 新增 4 例锁住三态语义：读取失败保留上次会话、确认登出清除、`invalidate()` 不等于登出、显式遗忘只走登出路径。
+- `apiKeyForUnattendedUse()` 补上与 `hasAuthenticatedSessionForAutomaticDefaults()` 一致的 XCTest 门禁，开发机上的真实 some.im 登录态不会渗进测试。
 
 ## 1.284.0-rc7 - 2026-08-22
 
@@ -495,7 +510,6 @@
 ### Tests
 
 - 新增 `AgentUnattendedTurnFailureTests`：失败快照的 JSON 往返、缺字段的旧会话仍能解码、坏快照不连累整个会话、重开会话恢复错误卡片与 some.im 登录入口、详情按上限截断、四种重试分档的选择、空 turn 才可重放、重试次数上限、退避单调递增且总时长落在 4–7 分钟。
-
 
 ## 1.275.0-rc6 - 2026-08-20
 
@@ -1321,7 +1335,6 @@
 ### Meta
 
 - 属缺陷修复，版本从 **1.257.0-rc1** 递增为 **1.257.0-rc2**；App、Go agent、Help、Helper、浏览器扩展与产品文档保持一致。
-
 
 ## 1.257.0-rc1 - 2026-08-14
 

@@ -16314,6 +16314,7 @@
         }
       }
     },
+    "approval.safety-judge-unconfigured" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No safety judge is available, so every command needs your confirmation. Add an API key for the current model provider in Settings, or sign in to some.im, to restore automatic review." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "No hay ningún juez de seguridad disponible, así que cada comando necesita tu confirmación. Añade una clave de API para el proveedor de modelos actual en Ajustes, o inicia sesión en some.im, para restaurar la revisión automática." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun juge de sécurité n'est disponible, chaque commande requiert donc votre confirmation. Ajoutez une clé API pour le fournisseur de modèles actuel dans les Réglages, ou connectez-vous à some.im, pour rétablir la validation automatique." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "セキュリティ審査モデルが利用できないため、すべてのコマンドに確認が必要です。設定で現在のモデルプロバイダの API キーを追加するか、some.im にサインインすると自動審査が復帰します。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前没有可用的安全裁判，所以每条命令都要你确认。在设置里为当前模型服务商填入 API Key，或登录 some.im，即可恢复自动审批。" } } } },
     "automation.cancel" : {
       "extractionState" : "manual",
       "localizations" : {

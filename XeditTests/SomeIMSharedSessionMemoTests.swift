@@ -189,4 +189,63 @@ struct SomeIMSharedSessionMemoTests {
 
         #expect(read().session?.apiKey == "after")
     }
+
+    // MARK: - 最近一次成功读到的会话
+
+    /// 一次读不到不等于用户登出了。安全裁判正是栽在这上面：Keychain 抖动
+    /// 一下，裁判就断定「没登录」，掉到一个没配 key 的 provider，最后把命令
+    /// 丢回给用户确认——审计里 211 次 `missing api key` 就是这么来的。
+    @Test("读取失败不会抹掉已经读到过的会话")
+    func failedReadKeepsTheLastKnownSession() {
+        let memo = SomeIMSharedSessionMemo(unavailableTTL: 0)
+        var outcome = SomeIMSessionReadOutcome.session(session("key-1"))
+        let read = { memo.value { outcome } }
+
+        #expect(read().session?.apiKey == "key-1")
+        #expect(memo.lastKnownGoodSession?.apiKey == "key-1")
+
+        memo.invalidate()
+        outcome = .unavailable
+        #expect(read() == .unavailable)
+        // 读取没落地，但我们仍然知道刚才那把钥匙。
+        #expect(memo.lastKnownGoodSession?.apiKey == "key-1")
+    }
+
+    /// 登出是关于用户的明确回答，必须清干净——绝不能让退出登录的用户
+    /// 靠着「上次读到的」继续用下去。
+    @Test("确认登出会清掉记住的会话")
+    func confirmedSignOutForgetsTheSession() {
+        let memo = SomeIMSharedSessionMemo(unavailableTTL: 0)
+        var outcome = SomeIMSessionReadOutcome.session(session("key-1"))
+        let read = { memo.value { outcome } }
+
+        #expect(read().session?.apiKey == "key-1")
+        memo.invalidate()
+        outcome = .signedOut
+
+        #expect(read() == .signedOut)
+        #expect(memo.lastKnownGoodSession == nil)
+    }
+
+    /// `invalidate()` 只表示「下次去重读」，从来不表示「登出了」。
+    @Test("invalidate 不等于登出，记住的会话要留着")
+    func invalidateKeepsTheLastKnownSession() {
+        let memo = SomeIMSharedSessionMemo()
+        _ = memo.value { .session(session("key-1")) }
+
+        memo.invalidate()
+
+        #expect(memo.lastKnownGoodSession?.apiKey == "key-1")
+    }
+
+    @Test("显式遗忘只在登出路径上使用")
+    func forgettingIsExplicit() {
+        let memo = SomeIMSharedSessionMemo()
+        _ = memo.value { .session(session("key-1")) }
+        #expect(memo.lastKnownGoodSession != nil)
+
+        memo.forgetLastKnownGoodSession()
+
+        #expect(memo.lastKnownGoodSession == nil)
+    }
 }
