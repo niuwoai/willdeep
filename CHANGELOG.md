@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.284.0-rc10 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.284.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.284.0-rc11 - 2026-08-22
+
+### Changed
+
+- **两个越过 3000 行硬上限的文件拆开，`complexity_guard` 从 hard=2 回到 hard=0。** CI 的 `Ruby guards (quality)` 因此一直是红的。两个文件的成因不同：`SomeIMIntegration.swift` 是 rc8 那 76 行把它从 2944 推过了线（本轮引入）；`AppStateAgentSessions.swift` 的 3189 行则是此前 1.282.0 那批 sidebar 改动留下的（`main` 上是 2997）。
+- **四个新文件，代码一行未改，只是整块搬运加文件头**：`SomeIMSharedSessionMemo.swift`（124 行，会话读取三态与其缓存）、`AppStateAgentRoutines.swift`（249 行，例行任务的保存/删除/启停/立即运行/到点触发）、`AppStateAgentSessionOperations.swift`（223 行，置顶/归档/重命名/工作区快照/落盘）、`AppStateProviderImport.swift`（191 行，从其他 CLI 导入 provider）。主文件 3189 → 2584。
+- **第一刀切错了，值得记下来。** 按 `// MARK: - Routines` 那条注释切下去，编译立刻报出两个 private 方法跨文件不可见——因为那段 MARK 底下其实混着三簇互不相干的代码：例行任务、会话操作、模型选择。**这条注释早就名不副实**，而这大概正是文件长到 3189 行还没人察觉的原因之一。第二刀按真实边界切，模型选择那簇因为被 some.im 路由段依赖（`activeAgentModelSelectionLabel` / `appendModelChangeNoticeIfNeeded`），放回了主文件。
+- `nonEmptyOrNil` 在拆出去的 `AppStateProviderImport.swift` 里补了一份 `private extension String`。这是本仓库既有做法（另有 5 个文件各自带一份）；提升成 internal 反而会和 `AgentComposerPickers.swift` 里那个非 private 的 `extension String` 抢命名空间，为一个三行的纯函数不值得。
+
+### Tests
+
+- `complexity_guard: pass scanned=785 soft=19 hard=0`；`Ruby guards (quality)` 整组本地通过。
+- 拆分后编译并复跑 109 tests / 4 suites 全绿（`AgentGoalBudgetedContinuationTests` / `SomeIMSharedSessionMemoTests` / `AgentGoalTeamsTests` / `AgentPlanProgressTests`），退出码 0、原始日志 `** TEST SUCCEEDED **`；隔一轮以干净指纹二次确认命中缓存。
 
 ## 1.284.0-rc10 - 2026-08-22
 
