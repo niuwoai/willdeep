@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.284.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.284.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.284.0-rc5 - 2026-08-22
+
+### Changed
+
+- **系统提示词稳定核心压缩（契约升级为 `willdeep-agent-system-v30`，三档哈希重录）。** 对标 willdeep-rs 的 `prompt.rs`——那边整份 `STABLE_CONTRACT` 约 4,600 字符，没有超过 400 字符的条目；本仓库的 `Stable tool contract` 单块就有 15,677 字符 / 32 条，最长一条 **2,010 字符**（终端路由，一条里塞了 12 种边界情况）。**实测 standard 稳定前缀 18,555 → 16,582（−10.6%），extended 20,441 → 18,468（−9.7%），compact 4,531 不变**（它本来就和 rs 同一量级）。
+- 逐条重写、合并同类项，原则是**压缩表达而不删语义**：终端三条 2,861 → 1,730（拆成"路由与主机身份"、"dispatch 确认不是命令输出"、"别在终端里用 heredoc 造文件"三条各司其职）；`create_file`/`edit_file` 那条 1,656 拆成三条共 1,230（工具用法 / 字面文本 / 补丁卡去向）；MCP + Lark + DingTalk 五条 1,241 合成三条；图片生成两条 763 合成一条；失败调试、后台任务、front-load 沟通各压 20–30%。
+- **守卫断言一条都没有为了省字数而改动。** `result stale`、`Never edit source code, build configuration`、`${{ secrets.NAME }} reference is not the secret value`、`Diagnose, repair, retry, and continue` 这些精确字符串在重写时被逐一调了回去——它们守的是真实语义，不是字面洁癖。唯一失效的是三个快照哈希，这正是快照守卫该有的行为。
+- ⚠️ 与 `v26` 那轮"按能力门控瘦身"不同（那次刻意保证核心字节序不变、前缀缓存不破），本轮改的是**稳定核心本身**，所有用户的 provider 前缀缓存会一次性失效并在下一轮重建。这是版本升级的正常代价。
+- **顺带记下一个值得警惕的事实**：v26 那轮把 standard 压到 17,494，而本轮开工前它已经涨回 18,555——半个月沉积了 1,000 字符。提示词会自然生长，每处理一次事故就追加一段，没有人回头删。后续应优先走"下沉到能力附录 / 工具报错文案"（v26 那条路收益 −16.5% 且不破缓存），而不是反复重写核心。详见 `docs/AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md` §4。
+
+### Tests
+
+- `AgentContextBuilderPromptTests` 18 tests 全绿，三档快照哈希（standard / compact / extended）与 `stablePrefixVersion == "willdeep-agent-system-v30"` 同步重录。
+- 语义断言在改哈希之前先单独验证过一轮：只剩哈希失败、语义断言全过，才动的哈希常量。
 
 ## 1.284.0-rc4 - 2026-08-22
 
