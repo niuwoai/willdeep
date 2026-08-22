@@ -32,6 +32,7 @@ $stderr.set_encoding(Encoding::UTF_8)
 
 SIDEBAR_URI = "willdeep-plugin://vitality/sidebar"
 MAIN_URI = "ui://vitality/main"
+STATS_URI = "willdeep-plugin://vitality/stats"
 MAX_FILE_BYTES = 8 * 1024 * 1024
 
 def app_support_dir
@@ -267,6 +268,9 @@ ARGF.each_line do |line|
              uri = request.dig("params", "uri")
              if uri == MAIN_URI
                { contents: [{ uri: uri, mimeType: "text/html;profile=mcp-app", text: app_html }] }
+             elsif uri == STATS_URI
+               { contents: [{ uri: uri, mimeType: "application/json",
+                              text: snapshot_text(collect_stats) }] }
              else
                { contents: [{ uri: uri, mimeType: "application/json",
                               text: JSON.generate(sidebar_document(collect_stats)) }] }

@@ -78,8 +78,8 @@ function render(stats){
 }
 async function load(){
   try{
-    const res=await request("tools/call",{name:"vitality.snapshot",arguments:{}});
-    render(JSON.parse(res.content[0].text));
+    const res=await request("resources/read",{uri:"willdeep-plugin://vitality/stats"});
+    render(JSON.parse(res.contents[0].text));
   }catch(err){
     $("empty").hidden=false;$("empty").textContent=String(err.message||err);
   }

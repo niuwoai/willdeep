@@ -115,7 +115,8 @@ struct AgentStopHandlingTests {
                 textAttachments: [],
                 attachedSkills: [],
                 providerID: "test-provider",
-                enqueuedAt: Date()
+                enqueuedAt: Date(),
+                source: .operatorInput
             )
         ]
 

@@ -86,7 +86,8 @@ extension AppState {
                 images: entry.images,
                 textAttachments: entry.textAttachments,
                 attachedSkills: entry.attachedSkills,
-                existingUserMessageID: entry.userMessageID
+                existingUserMessageID: entry.userMessageID,
+                source: entry.source
             )
         }
         pendingDispatchQueue = remaining

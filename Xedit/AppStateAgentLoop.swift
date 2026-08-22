@@ -163,7 +163,8 @@ extension AppState {
                     textAttachments: textAttachments,
                     attachedSkills: attachedSkills,
                     providerID: providerID,
-                    enqueuedAt: Date()
+                    enqueuedAt: Date(),
+                    source: source
                 )
             )
             return
@@ -1449,13 +1450,21 @@ extension AppState {
                         $0.checklist.isEmpty
                             || $0.checklist.contains(where: { !$0.done })
                     } == true
+                // A spent Goal budget already asked the model for an orderly
+                // handover snapshot. Auto-continuing the handover turn would
+                // contradict that instruction round after round — "stop all
+                // substantive work" followed by an injected "keep executing".
+                // The budget banner and Play (which resets wrapUpDispatched)
+                // own resumption from here.
+                let goalBudgetSpent = runtime.interactionMode == .goal
+                    && runtime.currentGoal?.continuationBudget?.wrapUpDispatched == true
 
                 switch AgentPlanAutoContinuationPolicy.decision(
                     for: runtime.currentPlan,
                     automaticContinuationCount: planAutomaticContinuationCount,
                     consecutiveNoProgressReplies: consecutivePlanRepliesWithoutProgress,
                     hasQueuedUserMessages: !runtime.queuedMessages.isEmpty,
-                    allowsAutomaticExecution: !runtime.currentTurnPlanningOnly,
+                    allowsAutomaticExecution: !runtime.currentTurnPlanningOnly && !goalBudgetSpent,
                     requiresGoalCompletion: requiresGoalCompletion,
                     evidence: progressEvidence
                 ) {

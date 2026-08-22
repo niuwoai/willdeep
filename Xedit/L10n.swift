@@ -1271,7 +1271,9 @@ nonisolated enum L10n {
 
     enum PlanContinuation {
         static let missingProgressPaused = String(localized: "plan-continuation.missing-progress-paused", defaultValue: "Plan status sync paused: no valid step statuses arrived after reconciliation. This does not mean execution failed. Review the plan and mark it complete, or add guidance to continue.")
-        static let safetyLimitPaused = String(localized: "plan-continuation.safety-limit-paused", defaultValue: "Plan auto-continuation reached its 8-round safety limit. Review the current deliverables and step statuses before continuing.")
+        // 不写具体轮数：普通模式 8 轮、Goal 模式 24 轮，写死任何一个都会
+        // 在另一个模式下说谎。
+        static let safetyLimitPaused = String(localized: "plan-continuation.safety-limit-paused", defaultValue: "Plan auto-continuation reached its safety limit for this turn. Review the current deliverables and step statuses before continuing.")
     }
 
     enum PlanRevision {
