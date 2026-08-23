@@ -175,7 +175,8 @@ struct OpenAIChatAdapter {
         historyContext: String = "",
         toolName: String = "run_command",
         taskContext: String = "",
-        environmentTrust: String = ""
+        environmentTrust: String = "",
+        kind: AgentSafetyJudgeKind = .developerOperations
     ) async -> AgentSafetyJudgeResult {
         guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
             return .unavailable("missing api key")
@@ -191,7 +192,7 @@ struct OpenAIChatAdapter {
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let systemPrompt = AgentInjectionDefense.judgeSystemPromptText(historyContext: historyContext)
+        let systemPrompt = AgentInjectionDefense.judgeSystemPromptText(historyContext: historyContext, kind: kind)
         let userPayload = AgentInjectionDefense.judgeUserPayload(
             command: command,
             toolName: toolName,

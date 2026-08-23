@@ -1,13 +1,13 @@
 # Changelog
 
-> 当前文件保留最新版本（1.286.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.287.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.286.0-rc2 - 2026-08-23
+## 1.287.0-rc2 - 2026-08-23
 
 ### Fixed
 
-- **`scripts/i18n_add_keys.rb` 不再把新 key 插进邻居条目的肚子里。** 插入点原本取「字母序前驱条目的**首行** + 1」，前驱是多行条目时这一行落在它的对象**体内**。2026-08-23 加 `approval-mode.silent` 时就这么翻了车：脚本报「新增 key: 1」，文件仍是合法 JSON，`git diff --numstat` 仍是 1 增 0 删——「解析得动」「零删除」两道常规体检**双绿**，可新 key 根本不在 `strings.<key>` 上（UI 静默回落 Swift 的 defaultValue），`approval-mode.request-every-time.summary` 还平白多出一个成员。现在先用带字符串/转义感知的花括号深度做一遍结构化扫描，拿到每个顶层条目的 `[首行, 末行]`，插入点只允许落在某条目的**末行之后**或首行之前；追加到最后一条之后时顺带把尾逗号归位。
+- **`scripts/i18n_add_keys.rb` 不再把新 key 插进邻居条目的肚子里。** 插入点原本取「字母序前驱条目的**首行** + 1」，前驱是多行条目时这一行落在它的对象**体内**。1.287.0-rc1 加 `approval-mode.silent` 时就这么翻了车：脚本报「新增 key: 1」，文件仍是合法 JSON，`git diff --numstat` 仍是 1 增 0 删——「解析得动」「零删除」两道常规体检**双绿**，可新 key 根本不在 `strings.<key>` 上（UI 静默回落 Swift 的 defaultValue），`approval-mode.request-every-time.summary` 还平白多出一个成员。现在先用带字符串/转义感知的花括号深度做一遍结构化扫描，拿到每个顶层条目的 `[首行, 末行]`，插入点只允许落在某条目的**末行之后**或首行之前；追加到最后一条之后时顺带把尾逗号归位。
 - **同命名空间没有兄弟不再直接 abort。** `approval-mode.silent.summary` 在 `approval-mode.silent` 是独苗时会被判定「找不到同命名空间的兄弟条目」而拒绝放置——正是新增一组 key 时的常态。现在命名空间自内向外逐级回退（`a.b.c` → `a.b.` → `a.` → 全局字母序），并把最终落点打印出来（「插在 X 之后」）供人工过目。
 - **紧凑条目就地合并不再丢成员。** 旧逻辑把条目整个重写成 `{ extractionState, localizations }`，会顺手抹掉 `comment` 一类其他成员，并给本来没有 `extractionState` 的条目硬塞一个。现在只覆盖被请求的 locale，其余字节原样保留。
 
@@ -22,10 +22,38 @@
 - `i18n_add_keys_contract` 12 checks 全绿；quality 守卫组 8 步全过（complexity / version / i18n / i18n-locale / **i18n-add-keys** / fast-test-entry / bundled-agent-rules / project-build-guard）。
 - 这份守卫做过变异验证，不是摆设：把落点改回 `predecessor["start"] + 1` → 5 项红；再把校验层短路（完整复刻事故当天那个「脚本报成功、零删除、JSON 合法」的世界）→ 6 项红，其中第一条正是「新 key 在 `strings.<key>` 上读不出来」。还原后重新全绿。
 - 另在真 catalog 上手工验过四种落点：多行前驱之后、父命名空间回退、紧凑条目合并 locale、多行条目跳过并报告；验完 `git checkout` 还原，仓库里那份 catalog 一个字节没动（测试自身也有一条检查守这个）。
+- 全量单测：develop 基线（448c5190）本来就是 17 红 / exit 65；本次改动后 5 红，其中 4 条在基线红名单内，剩下 1 条（`AgentTerminalDisplayRefreshTests` 的 winsize）在基线和本分支**单独跑均全绿**，属满载互扰型 flaky。本次改动不含任何编译进 App 的代码。
 
 ### Notes
 
 - 1.287.0-rc1 里手工补进 catalog 的 `approval-mode.silent`、`approval-mode.silent.summary`、`transcript.turn-report.approval.silent` 三条**保持原样**，本次只修工具，不碰词条。
+
+## 1.287.0-rc1 - 2026-08-23
+
+### Added
+
+- **第四种审批档位：静默模式。** 前三档（智能审核 / 工作区可写 / 严格模式）都是**白名单式**——默认要问，凑够理由才放行。静默模式反过来，是**黑名单式**：默认放行，需要理由的是拦截。菜单里排在智能审核之后（最放得开的档位摆在第一行等于请人误点，沉到底部又会让想用的人找不到），严格模式仍然压轴。
+- **恶意命令黑名单**（`AgentMaliciousCommandDenylist`）是这一档的硬地板：确定性、不依赖网络、AI 裁判推翻不了。四类——不可逆的大范围破坏（抹根目录/家目录/整卷、格式化、`dd` 写裸设备、fork bomb、对系统根递归改权限）、主机接管（`authorized_keys` 植入、反弹 shell）、反取证（清 shell 历史、抹系统日志、关 SIP/Gatekeeper）、外泄（凭据/私钥**与**网络出口同时出现在一条命令里）。按 shell 分段判定，`npm test || rm -rf /` 里的第二支不会因为第一支大概率成功而豁免；引号里的同样文本是数据不是命令。
+- **和既有的 `SafeCommand.dangerousTokens` 是两件不同的事，刻意不合并**：那份问「这条命令危险吗」——`rm`、`mv`、`chmod` 全在里面，因为它们值得在常规档位确认一次；这份问「这条命令是不是在干坏事」。一个写代码的 Agent 每天要删几十次 `node_modules`，把那些也拦下来，静默模式就成了改名版的智能审核。所以 `rm -rf node_modules`、`git reset --hard`、`git push --force` 到功能分支、`docker compose down -v`、本地库 `DROP TABLE`、`cat .env` 一律放行——它们可能让人心跳一下，但都不是恶意。
+- **方向相反的 AI 裁判**（`AgentSafetyJudgeKind.maliciousIntent`）。既有裁判问「这是正常的开发/运维操作吗」，拿不准判 NO（fail-closed）；新裁判只问「这条命令是不是在干坏事」，**拿不准判 YES**，且必须能一句话说出恶意效果才判拦。把 fail-closed 的裁判塞进这一档，结果只会是一个改了名字的智能审核。裁判种类进了判决缓存的 key——两个方向相反的问题，一个 YES 绝不能顶另一个用。
+
+### Notes
+
+- **必须知道的失败方向：裁判缺席时静默模式放行。** 没配 key、网络抖动、推理模型把输出截断——其余三档在这些情况下一律回落人工，静默模式**放行**，因为「没发现恶意」就是没发现恶意，这是这一档的语义。**所以这一档的真实保护强度等于那份黑名单，AI 裁判是加分项不是地基。** 审计里分得清两种放行：`judge.jsonl` 的 `detail` 会带 `silent mode: allowed without a verdict`。考虑到 1.284.0-rc7 之前裁判掉线率曾有 24%，这条不是理论风险。
+- **静默模式不放松沙箱**：seatbelt 档位仍按命令实际需要计算（与 `.llmJudge` 同组，而不是像工作区可写那样统一抬到 workspace-write）。真被 seatbelt 拦下时走既有的「拒绝 → 无沙箱重跑」路径，并且和智能审核一样自动重跑——否则刚放行的决定会被一张「允许无沙箱重跑吗」的卡推翻重问，正是用户选这一档要躲的东西。
+- **够不到的仍然够不到**：环境信任声明工具（`neverAutoApprovedToolNames`）、`change_workspace`、`ask_user` 这类要人回答的工具，以及用户在 MCP 设置里明确标为「不信任」的服务器——静默模式表达的是「少问我」，不是「推翻我说过的话」。**凭据读取也照样问**，哪怕不带网络出口：这条边界连用户显式的环境信任声明都不放宽（"凭据外读是注入攻击的终点站"），选一个审批档位是更弱的信号，不该反而把它掀了；何况在 Agent 语境里，私钥被读进回复就已经离开这台机器去了模型服务商，"读"和"外泄"不是两件事。前者是防注入自授权的关键闸门——它挪到了 `guard risk == .write` **之前**，因为静默模式要处理 danger 档，而那道 guard 会把 danger 档直接判成"要人工"。
+- 转录里的徽标单列一档 `SILENT` 而不是复用 `AUTO`：这不是"命中了安全白名单"，是"没找到不放行的理由"，徽标得说实话。
+- 系统提示词里的档位描述明确写了「审批提示变少不等于后果变少」，要求模型仍然优先可逆步骤、破坏性操作前先备份、动手前说清楚要做什么。
+- 完整设计与边界见 `docs/STARTUP_AND_SANDBOX.md` §3.5。
+
+### Fixed
+
+- **`AgentApprovalMode` 现在容忍未知取值**（降级为智能审核）。此前是合成的 Codable：旧版本读到新档位的 rawValue 会 throw，而这个 throw 会顺着 `AgentSession` 的 decode 一路冒上去——用户看到的不是"降级成默认档"，是**整个会话从列表里消失**。加档位之前先把这个坑填了。
+
+### Tests
+
+- `AgentApprovalModePolicyTests` 新增 4 条：档位顺序契约、未知取值降级、黑名单区分恶意与日常破坏性操作（12 条必拦 + 12 条必放）、按 shell 分段判定且引号内文本不算命令。
+- 首轮就抓到黑名单的两个真 bug，都是"看着对、实际漏"的类型：① `sudo rm -rf /System` 漏网——按 head 匹配的规则只认 `rm` 开头，提权前缀没剥；现在 `sudo`/`doas`/`env FOO=1`/`nice` 这类包装前缀会先剥到第一个真命令。② fork 炸弹 `:(){:|:&};:` 漏网——它本身由 `|` 和 `;` 组成，shell 分段器会把它切成几段碎片，没有任何一段还认得出来；现在它和外泄规则一样在**整条命令**层面先判一次。这两条正是"名单写了不等于名单管用"的注脚。
 
 ## 1.286.0-rc1 - 2026-08-23
 

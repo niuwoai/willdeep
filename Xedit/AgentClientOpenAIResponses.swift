@@ -416,7 +416,8 @@ struct OpenAIResponsesAdapter {
         historyContext: String = "",
         toolName: String = "run_command",
         taskContext: String = "",
-        environmentTrust: String = ""
+        environmentTrust: String = "",
+        kind: AgentSafetyJudgeKind = .developerOperations
     ) async -> AgentSafetyJudgeResult {
         guard !configuration.apiKey.isEmpty else {
             return .unavailable("missing api key")
@@ -456,9 +457,15 @@ struct OpenAIResponsesAdapter {
             "stream": false,
             "store": false
         ]
-        if !configuration.usesServerManagedSafetyJudge {
+        // 服务端托管的安全裁判别名自带固定策略，正常情况下客户端不再发
+        // instructions。但静默模式问的是**另一个问题**（恶意与否，且拿不准
+        // 判放行），网关那套按「正常开发操作」写的策略答不了它——所以这一档
+        // 无论如何都要把自己的提示词发出去。网关若忽略它，我们拿到的是更严
+        // 的那份裁决：静默模式偶尔多问一次，而不是少拦一次。
+        if !configuration.usesServerManagedSafetyJudge || kind == .maliciousIntent {
             body["instructions"] = AgentInjectionDefense.judgeSystemPromptText(
-                historyContext: historyContext
+                historyContext: historyContext,
+                kind: kind
             )
         }
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
