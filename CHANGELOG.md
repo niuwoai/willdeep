@@ -1,7 +1,31 @@
 # Changelog
 
-> 当前文件保留最新版本（1.286.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.286.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.286.0-rc2 - 2026-08-23
+
+### Fixed
+
+- **`scripts/i18n_add_keys.rb` 不再把新 key 插进邻居条目的肚子里。** 插入点原本取「字母序前驱条目的**首行** + 1」，前驱是多行条目时这一行落在它的对象**体内**。2026-08-23 加 `approval-mode.silent` 时就这么翻了车：脚本报「新增 key: 1」，文件仍是合法 JSON，`git diff --numstat` 仍是 1 增 0 删——「解析得动」「零删除」两道常规体检**双绿**，可新 key 根本不在 `strings.<key>` 上（UI 静默回落 Swift 的 defaultValue），`approval-mode.request-every-time.summary` 还平白多出一个成员。现在先用带字符串/转义感知的花括号深度做一遍结构化扫描，拿到每个顶层条目的 `[首行, 末行]`，插入点只允许落在某条目的**末行之后**或首行之前；追加到最后一条之后时顺带把尾逗号归位。
+- **同命名空间没有兄弟不再直接 abort。** `approval-mode.silent.summary` 在 `approval-mode.silent` 是独苗时会被判定「找不到同命名空间的兄弟条目」而拒绝放置——正是新增一组 key 时的常态。现在命名空间自内向外逐级回退（`a.b.c` → `a.b.` → `a.` → 全局字母序），并把最终落点打印出来（「插在 X 之后」）供人工过目。
+- **紧凑条目就地合并不再丢成员。** 旧逻辑把条目整个重写成 `{ extractionState, localizations }`，会顺手抹掉 `comment` 一类其他成员，并给本来没有 `extractionState` 的条目硬塞一个。现在只覆盖被请求的 locale，其余字节原样保留。
+
+### Added
+
+- **落盘后复验，不过就还原。** 写盘后把文件重新读回来解析：请求的每个 key 必须能在 `strings.<key>` 上按请求的**每个 locale** 读出，未涉及的条目必须逐条深度相等，结构扫描到的条目数必须和 JSON 解析出的对得上。任一条不满足就把原文件按字节还原并以非零码退出（还原本身也复验一遍，失败会明说「立即 git checkout」）。`--dry-run` 同样跑这套校验，只是不落盘。
+- **`--catalog PATH`**：让脚本可以指向任意 catalog，测试因此能拿真脚本去改临时目录里的 fixture，而不是对源码做字符串断言。
+- **`scripts/i18n_add_keys_contract_test.rb`**（12 项检查），已挂进 `run_tests.sh` 与 CI 的 quality 守卫组。
+
+### Tests
+
+- `i18n_add_keys_contract` 12 checks 全绿；quality 守卫组 8 步全过（complexity / version / i18n / i18n-locale / **i18n-add-keys** / fast-test-entry / bundled-agent-rules / project-build-guard）。
+- 这份守卫做过变异验证，不是摆设：把落点改回 `predecessor["start"] + 1` → 5 项红；再把校验层短路（完整复刻事故当天那个「脚本报成功、零删除、JSON 合法」的世界）→ 6 项红，其中第一条正是「新 key 在 `strings.<key>` 上读不出来」。还原后重新全绿。
+- 另在真 catalog 上手工验过四种落点：多行前驱之后、父命名空间回退、紧凑条目合并 locale、多行条目跳过并报告；验完 `git checkout` 还原，仓库里那份 catalog 一个字节没动（测试自身也有一条检查守这个）。
+
+### Notes
+
+- 1.287.0-rc1 里手工补进 catalog 的 `approval-mode.silent`、`approval-mode.silent.summary`、`transcript.turn-report.approval.silent` 三条**保持原样**，本次只修工具，不碰词条。
 
 ## 1.286.0-rc1 - 2026-08-23
 

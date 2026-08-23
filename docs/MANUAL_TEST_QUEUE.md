@@ -1,6 +1,15 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-23（1.286.0-rc1）
+> Last updated: 2026-08-23（1.286.0-rc2）
+
+## 1.286.0-rc2 — i18n 加词条脚本的落点
+
+> 纯工具链改动，App 里没有新界面。这一条要验的是「加完词条，界面上真的看得见」。
+
+- ⏳ 用 `ruby scripts/i18n_add_keys.rb <keys.json>` 加一条新 key（挑一个前后都是**多行条目**的命名空间，比如 `approval-mode.*`），确认输出里的「落点」写的是「插在 X 之后」，且 `git diff` 里新行的**上一行是 `},`、下一行是另一个顶层条目**。
+- ⏳ 在 Swift 里把这条 key 用起来，跑起 App 看界面上显示的是 catalog 里的文案，而**不是** `defaultValue`——这正是上次事故唯一能被人眼发现的症状。
+- ⏳ 加一条自己命名空间里没有兄弟的 key（如 `foo.bar.summary`，而 `foo.bar` 是独苗），确认脚本不再拒绝放置。
+- ⏳ 故意把 catalog 改坏一点（比如手工删掉某条目的一个花括号）再跑脚本，确认它拒绝下笔并明说原因，且文件一字未动。
 
 ## 1.286.0-rc1 — `update_plan` 工具化的进度上报
 

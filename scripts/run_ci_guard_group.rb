@@ -26,6 +26,7 @@ def guard_groups(output_dir)
   version_md, version_json = report_paths(output_dir, "version")
   i18n_md, i18n_json = report_paths(output_dir, "i18n")
   i18n_locale_md, i18n_locale_json = report_paths(output_dir, "i18n_locale")
+  i18n_add_keys_md, i18n_add_keys_json = report_paths(output_dir, "i18n_add_keys_contract")
   fast_entry_md, fast_entry_json = report_paths(output_dir, "fast_test_entry_contract")
   bundled_rules_md, bundled_rules_json = report_paths(output_dir, "bundled_agent_rules_contract")
 
@@ -62,6 +63,10 @@ def guard_groups(output_dir)
       [
         "i18n-locale",
         command("i18n_locale_registration_guard.rb", i18n_locale_md, i18n_locale_json)
+      ],
+      [
+        "i18n-add-keys",
+        command("i18n_add_keys_contract_test.rb", i18n_add_keys_md, i18n_add_keys_json)
       ],
       [
         "fast-test-entry",

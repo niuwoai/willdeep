@@ -56,6 +56,7 @@ rm -f "${REPORT_JSON}" "${REPORT_MD}"
 
 ruby "${ROOT_DIR}/scripts/complexity_guard.rb" "${OUT_DIR}/complexity_report.md" "${OUT_DIR}/complexity_report.json"
 ruby "${ROOT_DIR}/scripts/version_consistency.rb" "${OUT_DIR}/version_report.md" "${OUT_DIR}/version_report.json"
+ruby "${ROOT_DIR}/scripts/i18n_add_keys_contract_test.rb" "${OUT_DIR}/i18n_add_keys_contract_report.md" "${OUT_DIR}/i18n_add_keys_contract_report.json"
 ruby "${ROOT_DIR}/scripts/computer_use_helper_contract_test.rb" "${OUT_DIR}/computer_use_helper_contract_report.md" "${OUT_DIR}/computer_use_helper_contract_report.json"
 ruby "${ROOT_DIR}/scripts/chrome_extension_contract_test.rb" "${OUT_DIR}/chrome_extension_contract_report.md" "${OUT_DIR}/chrome_extension_contract_report.json"
 ruby "${ROOT_DIR}/scripts/short_drama_media_contract_test.rb" "${OUT_DIR}/short_drama_media_report.md" "${OUT_DIR}/short_drama_media_report.json"
