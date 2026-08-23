@@ -1,7 +1,19 @@
 # Changelog
 
-> 当前文件保留最新版本（1.285.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.285.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.285.0-rc3 - 2026-08-23
+
+### Fixed
+
+- **修复 develop 上红着的提示词快照守卫。** rc2 往三档 `stableSystemPromptPrefix` 各加了一行 `load_tool_pack` 说明，但没有重录快照哈希、也没有提升 `stablePrefixVersion`——而 `AgentContextBuilder` 那段常量注释本身就写着「改动提示词必须两者都做」。结果 `AgentContextBuilderPromptTests` 的 3 条断言持续失败（standard / compact / extended 各一），稳定契约进入「文本已变、版本号仍称 v31」的自相矛盾状态。现按协议把契约提升到 **v32** 并重录三档哈希（standard `2dacb057…`、compact `4475685d…`、extended `ab172e40…`）。
+- **`AgentGlobalRulesTests` 里 15 条终端条款断言重新挂上锚点。** 这批断言守的是「终端条款别被合并吃掉半句」，而 1.284.0-rc5 压缩稳定契约时改写了措辞：约束逐条仍在（路由到 ACTIVE tab、主机身份记忆、SSH 与本地不互串、dispatch 确认不是输出、heredoc 禁令、ZMODEM 先读 skill……逐条核对过），但字面锚点全变了。**当时的验证带了 `--without-building`，跑的是没编译进改动的旧二进制，拿到假全绿**，于是这 15 条红了整整一天无人察觉。现按 v32 措辞重挂锚点，并在测试里留下这段来龙去脉，避免下次被当成「断言没跟上」随手删掉。
+- **`xcresult_report.rb` 不再在解析失败结果时自己崩掉。** 第 189 行用了 `filter_map`（Ruby 2.7+），而 macOS 自带的 `/usr/bin/ruby` 仍是 2.6；CI 固定 3.3 所以从未暴露。这条路径**只在有测试失败时才走到**，于是本地每次真出问题，看到的都是一段 `NoMethodError` 解析器栈，真正的失败用例反而被埋掉——恰恰是最需要看清的时候。改用等价的 `map { }.compact`。
+
+### Notes
+
+- 提示词稳定核心（`AgentContextBuilder.stableSystemPromptPrefix`）的守卫目前**只在本地生效**：CI 的 `XeditTests (macOS)` 依赖自托管 runner，而仓库与组织两级当前都没有注册可用 runner，该 job 会一直排队到超时。在此期间，任何改动稳定前缀的提交都必须在本地手动跑一次 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/AgentContextBuilderPromptTests`，否则漂移会静默进入 develop（rc2 即为一例）。
 
 ## 1.285.0-rc2 - 2026-08-23
 

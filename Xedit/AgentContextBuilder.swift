@@ -130,16 +130,16 @@ enum AgentContextBuilder {
 
     Only lines in exactly that shape update WillDeep's visible checklist. A `progress` block filled with prose, checkmarks, or service status text parses to zero updates and silently leaves the checklist frozen at its old state — the user then watches a stale step counter while you work. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they never update the checklist by themselves.
     """
-    static let stablePrefixVersion = "willdeep-agent-system-v31"
+    static let stablePrefixVersion = "willdeep-agent-system-v32"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "9bf19968c87ea7b7"
-    static let compactPrefixSnapshotHash = "8ada2e3d58bb7c55"
-    static let extendedPrefixSnapshotHash = "7129f8276640d906"
+    static let stablePrefixSnapshotHash = "2dacb0573639119f"
+    static let compactPrefixSnapshotHash = "4475685d87725c4d"
+    static let extendedPrefixSnapshotHash = "ab172e404a879c13"
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
