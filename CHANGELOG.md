@@ -1,7 +1,40 @@
 # Changelog
 
-> 当前文件保留最新版本（1.287.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.287.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.287.0-rc5 - 2026-08-23
+
+### Fixed
+
+- **`scripts/bump_version.rb` 不再把散文文档里"描述过去"的句子改写成假话。** `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 和 `docs/MOBILE_GATEWAY_REQUIREMENTS.md` 原本挂在 `plain_files` 里走整文件盲替换。前者正文有两句是在陈述历史：「`AgentModels.swift` … 于 1.287.0-rc3 再拆七个模型域」和「1.287.0-rc3 拆完后请对着 `AgentPlanGoalModels.swift` … 放新模型」。1.287.0-rc3 → rc4 那次 bump 正好踩中：旧脚本会把这两处 rc3 一并改成 rc4，于是"rc3 干的事"被记成"rc4 干的事"，而且只能靠人肉发现、人肉回滚。
+- **这脏 `scripts/version_consistency.rb` 抓不到。** 它对这两个文档只读 `Current version:` / `Target version:` 那一行（外加 mobile 文档的三个 header/health 字段），正文被改脏它照样报绿。所以修的是替换侧，不是校验侧。
+
+### Changed
+
+- **两个文档改走 `product-overview.md` 同款的定点替换。** 原来只服务 `product-overview.md` 的 `bump_current_version_line` 泛化成 `targeted_docs` 登记表 + `count_targeted_sites` / `bump_targeted_sites`：只重写显式登记的行——`Current version:` / `Target version:` 标识行，以及 mobile 文档的 `X-App-Version`、`X-Server-Version` 和 health 响应里的 `"version"` 字段——正文一行不碰。登记表与 `version_consistency.rb` 校验的位点一一对应，新增位点时两边一起改。
+- **逐位点打印命中处数**，某个位点掉到 0 一眼可见：`docs/MOBILE_GATEWAY_REQUIREMENTS.md: 4 处 (只改登记位点: Target version 行 1 处, X-App-Version 1 处, X-Server-Version 1 处, health 响应 version 字段 1 处)`。
+- **前置扫描改成 fail-closed。** 任何一个登记位点匹配不到 old（文档改了写法而登记没跟上），在写第一个文件之前就 abort 并列出漏配位点，不留一个改到一半的仓库。
+
+### Added
+
+- **新增 `scripts/bump_version_contract_test.rb`，把上面这条修复钉死成自动化守卫。** 修完之后仍然没有任何东西拦着以后有人再把某个散文文档加回 `plain_files`——正文被改脏 `version_consistency.rb` 照旧报绿，下一次还是只能靠人肉发现。这份守卫补的就是那道拦：在临时目录里按真实相对路径搭一个最小仓库骨架（bump 会碰的 11 个文件 + 复制进去的 `bump_version.rb` / `version_consistency.rb`），往三个散文文档正文里种下人造的"历史版本"句子，跑一次真脚本，再逐行 diff。10 条断言覆盖：登记位点被改成新版本号、正文里描述过去的句子原样保留、逐位点命中处数三方对齐（文件内容 / 剩余旧版本号 / 脚本自报）、构建号 +1 与 chrome manifest 双字段同步、bump 之后在同一骨架上跑 `version_consistency.rb` 必须报绿（两份脚本的登记表谁先漂移谁先红），以及两轮故障注入——把每个登记位点的**标识写法**改坏、把每个登记位点上的**版本号**改得对不上，各要求脚本非零退出且骨架里一个文件都不落盘。
+- **全部写成行为测试，不做源码字符串断言。** 教训来自 `*_contract_test.rb` 那批按源码文本断言的守卫：等价重构会让它们静默变红或变绿，潜伏数月。骨架里的版本号刻意用 `9.9.0-rc7 → 9.9.0-rc8` 这种与仓库真版本无关的号，免得每次 bump 都得回头改测试。
+- **挂进 `scripts/run_ci_guard_group.rb` 的 `quality` 组**（步名 `bump-version`，排在 `i18n-add-keys` 之后），CI 的 ruby-guards job 每次都跑。
+
+### Tests
+
+- 反向验证守卫确实能抓住事故：把 develop 上未修复的 `bump_version.rb` 换回去再跑，10 条里红 4 条，头一条直接指名「以下本该一字不动的行被改了（把过去的事实改成了假话）」并逐行打印改前改后；换回修复版后 10 条全绿。
+- 另注入一次「把 mobile 文档补回 `plain_files` 但 `targeted_docs` 里也还留着」的手滑写法，守卫同样报红并点名被改脏的两行——这正是这份守卫要拦的那类未来改动。
+- 用修复后的脚本真跑 `1.287.0-rc4 → 1.287.0-rc5`：`docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 只动了第 3 行标识行，第 15、22 行那两句历史陈述仍是 rc1 / rc3；`product-overview.md` 里描述 rc3 的历史条目同样原样保留。
+- `ruby scripts/run_ci_guard_group.rb quality build/ci`：9 步全过。
+- `ruby scripts/run_tests_fast.rb`：见下方「已知存量红」。
+
+### Known issues
+
+- 本次单测**没有全绿**：2861 个用例红 5 个。归属已核对，与本次改动无关——本次 diff 里 Swift 文件数为 0，且并行会话在同一份 develop Swift 上跑出的失败集与本次逐条一致。
+  - `AgentToolIntegrationTests.swift:588,589`（"apply_patch is advertised in extended prompt and tool registry"）：断言的两句提示词原文在 `e21bfdec`（v30 压缩，1.284.0-rc5）被改写/删除，断言文本没跟上——又一例源码字符串断言随等价重构烂掉。
+  - `AgentQueueModeTests` 两条 + `AgentMobileGatewayBridgeTests.appStateMessageSendDispatchesIntoAgentRuntime()`：`sendAgentMessage()` 给消息前置了 `AgentComposerAttachmentSupport.preludeHeader` 附件序言，而序言里带着**本机真实安装的 skill 路由候选**（`male-web-novel`、`muchtoken-deploy` 等），用例按裸文本断言必红。这是宿主环境泄漏进单测，本机才复现，CI 上大概率看不见。
 
 ## 1.287.0-rc4 - 2026-08-23
 

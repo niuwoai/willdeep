@@ -15,30 +15,67 @@ plain_files = [
   "willdeep-agent/internal/agent/version.go",
   "Help/WillDeep.help/Contents/Info.plist",
   "ComputerUseHelper/Info.plist",
-  "docs/MOBILE_GATEWAY_REQUIREMENTS.md",
-  "docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md",
 ]
 
-# product-overview.md 正文有「历史版本」条目(如「…（1.108.0-rc26）」),整文件盲替换
-# 会把历史也改掉。只动开头的「Current version:」标识行。
-def bump_current_version_line(path, old, new)
+# 散文类文档:正文里「当前版本」和「历史版本」两种语义的版本号混在一起,整文件盲
+# 替换会把描述过去的句子改写成假话。1.287.0-rc3 → rc4 这次就正好踩中:
+# AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md 里「…于 1.287.0-rc3 再拆七个模型域」和
+# 「1.287.0-rc3 拆完后请对着…」两句会被一并改成 rc4,把 rc3 干的事记成 rc4 干的;而
+# version_consistency.rb 对这两个文档只校验下面枚举的这些位点,正文被改脏它照样
+# 报绿。所以这里只重写显式登记的「当前版本」位点,正文一律不碰。
+# 新增位点时:先在这里登记,再到 version_consistency.rb 把对应 expected_count 调齐。
+targeted_docs = {
+  "product-overview.md" => [
+    ["Current version 行", /Current version:/]
+  ],
+  "docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md" => [
+    ["Current version 行", /Current version:/]
+  ],
+  "docs/MOBILE_GATEWAY_REQUIREMENTS.md" => [
+    ["Target version 行", /Target version:/],
+    ["X-App-Version", /X-App-Version:/],
+    ["X-Server-Version", /X-Server-Version:/],
+    ["health 响应 version 字段", /^\s*"version":\s*"/]
+  ]
+}
+
+# 逐位点数命中处数。同一行被多条规则命中时只算第一条,和下面的重写保持一致。
+def count_targeted_sites(text, old, rules)
+  counts = Hash.new(0)
+  text.each_line do |line|
+    rule = rules.find { |(_, pattern)| line.match?(pattern) }
+    counts[rule.first] += line.scan(old).size if rule
+  end
+  counts
+end
+
+# 只重写命中 rules 的行,其余行(正文)原样保留。
+def bump_targeted_sites(path, old, new, rules)
   text = File.read(path, encoding: "UTF-8")
-  count = 0
   out = text.lines.map do |line|
-    if line =~ /Current version:/ && line.include?(old)
-      count += line.scan(old).size
-      line.gsub(old, new)
-    else
-      line
-    end
+    rules.any? { |(_, pattern)| line.match?(pattern) } ? line.gsub(old, new) : line
   end.join
   File.write(path, out)
-  count
 end
 
 # README 的 shields.io badge 用双横线写法: 1.108.0--rc25
 badge_old = old.sub("-rc", "--rc")
 badge_new = new.sub("-rc", "--rc")
+
+# 先只扫描不落盘:任何一个登记位点匹配不到 old,都说明文档改了写法而这里没跟上,
+# 在动第一个文件之前就停下,免得留一个改到一半的仓库。
+targeted_counts = targeted_docs.to_h do |rel, rules|
+  [rel, count_targeted_sites(File.read(File.join(root, rel), encoding: "UTF-8"), old, rules)]
+end
+missing_sites = targeted_docs.flat_map do |rel, rules|
+  rules.filter_map { |(name, _)| "#{rel} 的「#{name}」" if targeted_counts[rel][name].zero? }
+end
+unless missing_sites.empty?
+  abort <<~MESSAGE
+    以下「当前版本」位点没有匹配到 #{old},文档写法可能变了,先确认再 bump(未改动任何文件):
+    #{missing_sites.map { |site| "  - #{site}" }.join("\n")}
+  MESSAGE
+end
 
 total = 0
 plain_files.each do |rel|
@@ -51,10 +88,13 @@ plain_files.each do |rel|
   puts "#{rel}: #{count} 处"
 end
 
-po_count = bump_current_version_line(File.join(root, "product-overview.md"), old, new)
-if po_count.positive?
-  total += po_count
-  puts "product-overview.md: #{po_count} 处 (仅 Current version 行)"
+targeted_docs.each do |rel, rules|
+  counts = targeted_counts[rel]
+  bump_targeted_sites(File.join(root, rel), old, new, rules)
+  matched = rules.sum { |(name, _)| counts[name] }
+  total += matched
+  breakdown = rules.map { |(name, _)| "#{name} #{counts[name]} 处" }.join(", ")
+  puts "#{rel}: #{matched} 处 (只改登记位点: #{breakdown})"
 end
 
 chrome_manifest_path = File.join(root, "chrome-extension/willdeep-browser/manifest.json")
