@@ -26,7 +26,7 @@ Manual picker selections and the dedicated Figma/Design-to-Code router are autho
 
 Native tools are split into a compact core plus deterministic capability packs:
 
-1. Core: workspace search/read/write, shell, jobs, Skill routing, expert activation, subagents, user input, and `load_tool_pack`.
+1. Core: workspace search/read/write, shell, jobs, Skill routing, expert activation, subagents, user input, plan progress reporting (`update_plan`), and `load_tool_pack`.
 2. `terminal`: visible terminal tabs and saved terminal shortcuts.
 3. `session_automation`: session navigation, workspace rebinding, workflows, scheduled tasks, and environment declarations.
 4. `knowledge`: memory and user-authored Skill management.
@@ -37,7 +37,7 @@ Native tools are split into a compact core plus deterministic capability packs:
 9. `plugins`: plugin drafting and inspection.
 10. `short_drama`: the short-drama production domain, implicitly activated with its expert.
 
-Pack membership and descriptor ordering are deterministic. A session starts with the 20-tool core and may add packs through `load_tool_pack`; `AgentRuntime.loadedToolPacks` is monotonic for the runtime lifetime. Request estimation and context-compression accounting use the same filtered descriptor set as the actual provider request. Expert activation implicitly adds its matching domain pack because it already changes the tool prefix.
+Pack membership and descriptor ordering are deterministic. A session starts with the 21-tool core and may add packs through `load_tool_pack`; `AgentRuntime.loadedToolPacks` is monotonic for the runtime lifetime. Request estimation and context-compression accounting use the same filtered descriptor set as the actual provider request. Expert activation implicitly adds its matching domain pack because it already changes the tool prefix.
 
 ## Cache rules
 
@@ -54,7 +54,7 @@ The context UI should eventually report separate estimates for system text, glob
 
 Acceptance criteria:
 
-- A normal coding session starts with 20 native tool schemas (and must remain below 24 as the core evolves).
+- A normal coding session starts with 21 native tool schemas (and must remain below 24 as the core evolves). `update_plan` joined the core in 1.286.0-rc1: a progress reporter behind on-demand loading would not be present at the moment a plan starts.
 - Skill and MCP catalogs do not appear in the stable prompt body.
 - Adding one capability pack changes the tool prefix once; later rounds are byte-stable.
 - Full-registry fallback remains available for compatibility and debugging.

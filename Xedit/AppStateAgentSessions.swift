@@ -857,11 +857,20 @@ extension AppState {
         // 一个会话里 7 个 progress 块有 2 个正是这样被丢掉的。
         var next = existingPlan
         var didApply = false
+        let settledByTool = runtime.planStepsSettledByToolThisTurn
         for message in assistantMessagesInLatestTurn(of: runtime) {
-            guard let updated = AgentPlanParser.applyProgress(to: next, from: message.content) else {
-                continue
+            var updates = AgentPlanParser.progressUpdates(in: message.content, plan: next)
+            // `update_plan` reports made earlier in this turn win over a
+            // fence that arrives later (LONG_HORIZON_AUTONOMY.md §4.3). The
+            // realistic conflict is a closing recap assembled from a stale
+            // mental model reverting a step the tool already closed. Steps
+            // the tool never touched are untouched by this filter, so the
+            // recap can still contribute everything else.
+            if !settledByTool.isEmpty {
+                updates = updates.filter { !settledByTool.contains($0.key) }
             }
-            next = updated
+            guard !updates.isEmpty else { continue }
+            next = AgentPlanProgressApplier.apply(updates, to: next)
             didApply = true
         }
         guard didApply else { return }

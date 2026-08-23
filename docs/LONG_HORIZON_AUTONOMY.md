@@ -39,7 +39,7 @@
 |---|---|
 | continuation 注入 | **Xedit 已改为退避阶梯**（`AgentGoalContinuationBudget.swift` / `AgentGoalContinuationPolicy`）：无进展只升级话术，不再硬暂停。**但入口卡在 `prepareNextAgentGoalPlanningCycleIfNeeded` 的 `guard currentPlan?.status == .done`**——计划没被标成完成就进不了退避，仍会落回 `AgentPlanAutoContinuationPolicy` 的 `pauseAfterNoProgress`。**rs 侧 RA1 已落地**（`crates/willdeep-core/src/goal.rs`）：只认 `<goal-status>complete</goal-status>` 显式收口，退避三档、wall-clock 软停齐备 |
 | 预算软停 | **Xedit 已有** `AgentGoalContinuationBudget`（wall-clock + 续推次数兜底 + `wrapUpDispatched` 有序收尾），随 Goal 落盘、跨重启存活。token / 成本两维仍未接 |
-| 计划接口 | 仍是文本围栏块，`update_plan` 未做。**实测代价已量化：539 个 `progress` 块里 58% 宿主一条状态都读不出，115 个带计划的会话中 69% 计划 0 步标记完成。** 1.284.0-rc3 给解析器加了三层回退止血（42% → 84%），但这只是止血，§4 的工具化仍是根治方案 |
+| 计划接口 | **`update_plan` 已于 1.286.0-rc1 落地**（见 §4.5 的偏差表）；围栏块降为兼容路径。此前：**实测代价已量化：539 个 `progress` 块里 58% 宿主一条状态都读不出，115 个带计划的会话中 69% 计划 0 步标记完成。** 1.284.0-rc3 给解析器加了三层回退止血（42% → 84%），但这只是止血，§4 的工具化仍是根治方案 |
 
 **因此 XA1 的剩余部分不再是"实现退避阶梯"，而是"把退避阶梯的入口从计划完成态上解绑"**——机制已经在了，只是被一道 guard 挡在门外。
 
@@ -126,6 +126,8 @@
 
 ## 4. 计划工具化（`update_plan`）
 
+> **状态：已落地（Xedit 1.286.0-rc1）**，schema 与本节原稿有两处刻意的偏差，见 §4.5。
+
 ### 4.1 现状问题
 
 模型必须正确产出 ` ```plan ` / ` ```progress ` / ` ```goal-check ` 围栏块，宿主才能推进状态机。整套 `ProgressEvidence`、对账轮次、校验失败重发逻辑，本质都在补「模型忘了发块 / 发错格式」的洞。围栏块还有一个隐性代价：它占用模型的自然语言输出通道，与「给用户看的解释」抢位置。
@@ -155,7 +157,24 @@
 
 ### 4.3 迁移
 
-围栏块解析保留为兼容路径，优先级低于工具调用（同 turn 内两者都出现时以工具为准）。保留期见 §7 假设 4。迁移期埋一个计数：统计「仅用围栏块」的 turn 占比，降到阈值以下再摘除解析器。
+围栏块解析保留为兼容路径，优先级低于工具调用（同 turn 内两者都出现时以工具为准）。保留期见 §7 假设 4。
+
+**落地时的精确规则**：优先级是**按步骤**而不是按 turn 判定的。工具在本 turn 已经结掉的步骤，随后的围栏块改不动（台账在 `AgentRuntime.planStepsSettledByToolThisTurn`）；工具没提过的步骤，围栏块照常生效。整 turn 一刀切会丢信息——收尾那条围栏块常常是个超集，里面有工具从没报过的步骤。台账在新 turn 开始、以及计划被替换/增删步骤（按 step id 判定）时清空。
+
+**迁移计数不另建管线**：原稿要求「埋一个计数」，但落盘会话 JSON 里两条通道都已经在了——围栏块在 assistant 消息正文里，工具调用在 `toolCalls` 里。数「仅用围栏块的 turn」用的还是审计那份只读脚本（`AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md` §5），再加一套计数器只会多一份会漂的真相。
+
+### 4.5 落地与原稿的偏差
+
+| 原稿 | 落地 | 为什么 |
+|---|---|---|
+| `steps: [{id, title, status, note}]` 嵌套对象 | `updates: ["1: done", "2: in_progress"]`（`stringArray`） | `AgentToolParameter.ParameterType` 只有 string / integer / boolean / stringArray 四种，没有对象类型；加一种要同时改四个 provider 编码器（Anthropic / OpenAI Chat / OpenAI Responses / Gemini）。而 `1: done` 正是提示词教了一年、模型已经会写的形状，换成 JSON 对象等于重新赌一次格式。宽进严出兜底：`step 2 - in_progress`、`3.skipped`、`4：完成` 都收，读不出的条目**带原因回灌给模型**（围栏块的致命伤正是读不出就静默丢） |
+| `merge: true` 局部更新 | 恒为局部更新，无全量模式 | 建计划仍由 ` ```plan ` 围栏块负责——它不是失效源（提取本来就好使），失效的是**上报**。工具只改已有计划的步骤状态 |
+| `checklist` + `evidence`（无证据的勾选视为未勾选） | **未做** | 那半边属于 Goal 验收（`goal-check` 通道），与本轮要治的「进度不及时」是两件事，且会动到 Goal 相位收口逻辑。留作 fast-follow |
+| `blocked_reason` | `note`（可选，一行） | 不落进 `AgentPlan`（模型没有存放处），只回显给用户与模型，用于说明 failed / blocked 的缘由 |
+
+工具的 risk 定为 `.read`：`autoApprovalSource` 第一行就是 `guard risk == .write`，`.write` 会让上报动作有机会弹审批卡，把「让执行更顺」变成「多一次打断」。它不碰工作区、不碰 shell，只写会话内的清单状态。
+
+一并修掉的两处配套：① 上报落地即 `persistAgentSession`，不再等回合结束的 defer——一个 52 分钟的单回合此前把全部状态变化攒在内存里，崩一次全丢；② 续推策略新增 `planAdvancedByToolSinceLastContinuationDecision`，否则「只用工具上报」的回合在 `AgentPlanAutoContinuationPolicy` 眼里等于零进展，会被判无进展硬停。
 
 ### 4.4 顺带统一三套清单
 
@@ -186,7 +205,7 @@ Xedit 目前有三个互不相通的「清单」，长程运行中会让用户�
 |---|---|---|
 | XA1 | 续推契约：硬暂停降级为退避阶梯；四出口判定；continuation steering 四段内容契约。**新逻辑落独立文件**（如 `AgentGoalContinuationBudget.swift`），不回塞 loop / planning 主文件 | `AgentContextBuilder.swift:1333-1440`（现策略）、`AppStateAgentGoalPlanning.swift:663`（硬暂停）、`AppStateAgentLoop.swift:649`（turn 局部计数）、`:1301-1345`（续推决策点） |
 | XA2 | `AgentGoalExecutionBudget`：wall-clock + token 两维先行；软停状态与状态快照；后台完成事件自动续期；Composer 补「续期并继续」动作 | `AppStateAgentLoop.swift:305-362`（后台唤醒链路）、`AgentModeComposerView.swift`（恢复入口）、`AppStateAgentContextCompression.swift:92`（真实 usage 锚定惯例） |
-| XA3 | `update_plan` 工具；围栏块降级为兼容路径；三套清单归一 | `AgentToolRegistry.swift`（工具注册）、`AgentContextBuilder.swift:951`（现解析器）、`AppStateAgentSessions.swift:619/779/804`（捕获入口）、`BundledSkills/todo/SKILL.md` |
+| XA3 **（已落地 1.286.0-rc1，`checklist`/`evidence` 除外）** | `update_plan` 工具；围栏块降级为兼容路径；三套清单归一 | `AgentToolRegistry.swift`（工具注册）、`AgentContextBuilder.swift:951`（现解析器）、`AppStateAgentSessions.swift:619/779/804`（捕获入口）、`BundledSkills/todo/SKILL.md` |
 | XA4 | 多天工程包：睡眠抑制 + 唤醒 catch-up；roadmap 续接；256 轮撞顶改为可续；成本维度接 COST_ENGINE 最小版 | `AgentModels.swift:1085-1086`（roadmap 上限）、`AppState.swift:17`（轮上限）、`AgentRoutineScheduler.swift`（catch-up 参照）、`docs/COST_ENGINE_DESIGN.md` |
 
 ### 6.2 willdeep-rs
