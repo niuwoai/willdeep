@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-23 | Current version: v1.287.0-rc3
+> Last updated: 2026-08-23 | Current version: v1.287.0-rc4
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **贴硬线文件的预防性拆分（1.287.0-rc4）** —— 把三个离 `scripts/complexity_guard.rb` 3000 行硬阈值只剩几行的文件按主题拆开，不等它们再把 CI 的 quality 守卫组整条 break 掉：`scripts/short_drama_media_contract_test.rb`（2995 → 1170，1891 行的 `plan_import_contract` 按规划导入 / 媒体任务 / 媒体工具三个主题拆成同前缀兄弟脚本）、`Xedit/AgentShortDramaProductionExporter.swift`（2973 → 1120，析出组件预览 HTML 与内嵌 env / Ruby 模板两个 extension 文件）、`Xedit/SomeIMIntegration.swift`（2912 → 1717，析出存储层与设置界面；`SomeIMClient` 与值类型共用同一个 fileprivate `String.nonEmpty`，刻意留在一起）。纯等价重构，逐行原样搬运，`complexity_guard` 的 soft 计数 18 → 15、hard 保持 0。
 - **Agent 模型域复杂度治理（1.287.0-rc3）** —— `AgentModels.swift` 被 1.287.0-rc1 推过 3000 行硬阈值后按主题拆成 7 个兄弟文件：`AgentManagedRoutingModels.swift`（省心托管路由）、`AgentPlanGoalModels.swift`（交互模式 / 审批档位 / Plan & Goal）、`AgentConfigurationModels.swift`（provider 配置）、`AgentProviderPresetModels.swift`（provider kind 与 preset 目录）、`AgentPatchModels.swift`（patch / worktree 变更）、`AgentErrorModels.swift`（错误模型）、`AgentAttachmentModels.swift`（附件与知识文件夹）。主模型文件从 3013 行降到 580 行，只留 `AgentSession` 持久化图；纯等价重构，逐行原样搬运。
 - **静默审批档位（1.287.0-rc1）** —— 新增第四种审批档位「静默模式」。前三档都是白名单式（默认要问，凑够理由才放行），静默模式是黑名单式：默认放行，需要理由的是拦截。地基是一份确定性的恶意命令黑名单（不可逆的大范围破坏、主机接管、反取证、凭据外泄四类，按 shell 分段判定），AI 裁判换成方向相反的「恶意与否」分类器且拿不准判放行。日常破坏性操作（清 node_modules、`git reset --hard`、`docker compose down -v`）不再打断。裁判缺席时按用户语义放行，审计日志单独标注「未裁而放」；沙箱档位不放宽，环境信任声明工具仍然任何档位都够不到。
 - **`update_plan` 工具化的进度上报（1.286.0-rc1）** —— 计划进度从 ` ```progress ` 围栏块改为常驻核心工具上报。落盘复盘显示 80% 的围栏块只在回合收尾出现，长回合的清单在结束前一格不动；工具调用是模型在回合中段唯一稳定使用的通道。工具会把读不出的条目带原因回灌，围栏块降为兼容路径并按步骤让位于工具。上报即落盘，续推策略同步识别工具通道。

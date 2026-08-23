@@ -1,6 +1,15 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-23（1.287.0-rc3）
+> Last updated: 2026-08-23（1.287.0-rc4）
+
+## 1.287.0-rc4 — 三个贴硬线文件的拆分
+
+> 纯等价重构，逐行原样搬运，没有新界面也没有新行为。制作包导出器在 Swift 单测里没有直接覆盖（回归保护来自 292 条 Ruby 契约测试），所以这一节盯的是**导出产物和 some.im 设置页这两块「只有跑起来才看得见」的东西**。全部符合预期就整节划掉。
+
+- ⏳ 在短剧侧边栏导出一次剧集制作包，确认包目录里 `production-timeline.json`、`production-gap-report.json`、分镜 CSV、检查项 CSV、`media-import-manifest-template.json`、`ruby-media-script-template.rb`、`private-media-api.env.example` 和 `widget-preview.html` 一个不少（Ruby 模板与 env 示例这次搬去了 `AgentShortDramaProductionExporterHandoffTemplates.swift`）。
+- ⏳ 用 `show_widget` 打开刚才那份 `widget-preview.html`，确认时间线 / 分集 / 素材三个小节都在，素材行里的「交给聊天处理」「继续生成视频」「选为主图」这些按钮点下去能把 prompt 送回聊天（这批 HTML 与 prompt 搬去了 `AgentShortDramaProductionExporterWidgetHTML.swift`）。
+- ⏳ 打开设置页的 some.im 面板：确认已登录账号的昵称、头像、余额和套餐照常显示；退出登录再用浏览器授权重新登录一次，确认状态轮询、模型下拉刷新都正常（界面搬去了 `SomeIMIntegrationSettingsView.swift`，存储搬去了 `SomeIMIntegrationStore.swift`）。
+- ⏳ 重启 App，确认 some.im 的 API key、账号快照和偏好模型仍然在（Keychain / UserDefaults 读写现在住在 `SomeIMIntegrationStore.swift`）。
 
 ## 1.287.0-rc3 — `AgentModels.swift` 拆分
 

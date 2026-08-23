@@ -1,7 +1,37 @@
 # Changelog
 
-> 当前文件保留最新版本（1.287.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.287.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.287.0-rc4 - 2026-08-23
+
+### Changed
+
+- **把三个贴着 3000 行硬线的文件按主题拆开，`complexity_guard` 的 soft 计数 18 → 15，hard 保持 0。** 上个版本刚因为 `AgentModels.swift` 涨到 3013 行踩过一次同样的坑：quality 守卫组顺序执行且遇错即停，第一步 complexity 一红，后面 7 步（version / i18n / i18n-locale / i18n-add-keys / fast-test-entry / bundled-agent-rules / project-build-guard）根本没机会跑。这次是提前把三个「离硬线只剩几行」的文件挪开，不等它们把 CI 再炸一次——`scripts/short_drama_media_contract_test.rb` 当时是 2995 行，离硬线只差 5 行。
+- **`scripts/short_drama_media_contract_test.rb` 2995 → 1170 行。** `plan_import_contract` 那个 1891 行的哈希字面量按主题拆成三个兄弟脚本：`short_drama_media_contract_plan_import_checks.rb`（338 行断言：规划 JSON 导入 / 模板导出 / 检查项 CSV 回导 / 结构增删改工具）、`short_drama_media_contract_media_task_checks.rb`（669 行：媒体任务徽标、任务面板过滤与批量操作、任务注册表落盘、任务监视栏、组件接力、图片编辑器蒙版）、`short_drama_media_contract_media_tool_checks.rb`（884 行：结构交给聊天的接力块、短剧图片 / 批量媒体工具、任务重试与蒙版接力、通用生图 / 蒙版 / 放大 / 选图工具）。每个兄弟脚本是一个顶层方法（沿用该脚本已有的 `read_file` / `extract_ruby_template` 写法），只声明自己真正用到的 `*_source` 关键字参数；入口脚本用三次 `merge!` 按原顺序拼回去。
+- **`Xedit/AgentShortDramaProductionExporter.swift` 2973 → 1120 行。** 析出 `AgentShortDramaProductionExporterWidgetHTML.swift`（599 行搬运：组件预览 HTML 的时间线 / 分集 / 素材小节与按钮里的聊天接力 prompt）和 `AgentShortDramaProductionExporterHandoffTemplates.swift`（1252 行搬运：制作包里内嵌的媒体 API env 示例与 Ruby 脚本模板）。两个新文件都是 `extension AgentShortDramaProductionExporter`，嵌套层级不变，所以搬过去的行连缩进都没动。
+- **`Xedit/SomeIMIntegration.swift` 2912 → 1717 行。** 析出 `SomeIMIntegrationStore.swift`（663 行：UserDefaults 设置、Keychain 凭据、跨 App 共享会话的读写与观察）和 `SomeIMIntegrationSettingsView.swift`（530 行：设置界面）。**`SomeIMClient` 刻意没有拆出去**：文件底部的 `private extension String { var nonEmpty }` 同时被上半段的值类型（`SomeIMIntegrationSettings.normalized`、`SomeIMAccount` 合并）和 `SomeIMClient` 用，把客户端拆走就得把 `String.nonEmpty` 放宽成整模块可见的 internal——为一次拆分往全模块的 `String` 上挂一个通用扩展不划算，宁可让主文件停在 1717 行。
+- **跨文件访问只放宽了 5 处，全在制作包导出器，且都是「调用方留在原文件」逼出来的。** `widgetPreviewHTML` / `mediaAPIEnvExampleTemplate` / `rubyMediaScriptTemplate` 的唯一调用方是留在主文件的 `export(...)`，`isImagePath` / `isVideoPath` 则是被搬走的组件 HTML 用到——这 5 个从 `private` 放宽为 internal，其余成员的 `private` 一个没动。`SomeIMIntegration.swift` 那次拆分是零访问权限改动。
+- **Xcode 工程无需手工登记。** `Xedit/` 目录走 `PBXFileSystemSynchronizedRootGroup`，新增 `.swift` 由文件系统同步进 target。
+
+### Fixed
+
+- **`scripts/short_drama_media_contract_test.rb` 的两处断言跟上新的文件边界，避免它变成又一条「等价重构把守卫改红」的假红。** 一是 `production_exporter_source` 现在拼接 5 个同前缀文件（原来 3 个），否则 `private static func timelineSummaryHTML` 这类断言会因为符号搬了家而扑空；二是抽取 Ruby 模板的 marker 从 `private static func rubyMediaScriptTemplate() -> String {` 去掉 `private ` 前缀——新写法是 internal，而去掉前缀后的 marker 对两种写法都命中，往后再动这个可见性也不会带红。
+
+### Tests
+
+- `ruby scripts/complexity_guard.rb`：`pass scanned=808 soft=15 hard=0`（拆分前 `scanned=801 soft=18 hard=0`，三个目标文件全部退出 soft 榜）。
+- `ruby scripts/run_ci_guard_group.rb quality build/ci`：8 步全过。
+- `ruby scripts/short_drama_media_contract_test.rb`：`checks=292 failures=0`，并与 develop 基线的报告逐条比对——**292 条检查的名字、状态和顺序完全一致**，不是只比对了总数。
+- 逐字节等价校验（三次拆分各跑一次，脚本对每条都断言）：新文件去掉文件头 / 容器行后，与原文件对应行区间**逐行相同**；导出器 2973 行里 2971 行有映射、丢弃 2 行全是块间空行；`SomeIMIntegration.swift` 2912 行里 2910 行有映射、丢弃 2 行同样全是空行；契约脚本 2997 行里 2995 行有映射，丢弃的 2 行是被兄弟文件里的 `{` / `}` 顶替的哈希字面量首尾行。5 处 `private` 放宽在校验时被反向还原后必须逐行相等，且每条只允许命中一次。
+- 定向单测：`SomeIMBrowserLoginStatusTests` / `SomeIMSharedSessionMemoTests` / `SomeIMSessionExchangeTests` / `SomeIMAccountProfileTests` / `SomeIMCreditsSnapshotTests` / `AgentModelPickerCatalogTests` 六个 suite 共 60 个用例全绿，App target 与 XeditTests 正常编译。制作包导出器在 `XeditTests` 里没有直接覆盖，它的回归保护来自上面那份 292 条的 Ruby 契约测试。
+- 全量 `ruby scripts/run_tests_fast.rb`：`passed=2863 failed=4 skipped=1 total=2868`。**这 4 条红在 develop 基线上一字不差地同样红**（同一台机器上把 develop 也跑了一遍全量，计数与失败名单完全一致）：`appStateMessageSendDispatchesIntoAgentRuntime()` / `sendingNewMessageDuringNonBlockingResponseOnlyQueuesIt()` / `sendingNewMessageWhileAwaitingUserDecisionClosesBlockingCall()` 三条是本机安装的 skill 目录被注入成「Skill routing candidates」前缀，把断言里的裸消息文本顶掉；`apply_patch is advertised in extended prompt and tool registry` 是提示词快照契约。都与本次拆分无关，本次没有修它们。
+- 顺带记一个反复踩的坑：验基线时先按**文件名**写了 `-only-testing:XeditTests/AgentToolsCoreTests` / `AgentToolIntegrationTests`，两个都选中 0 个用例（前者的类型名是 `AgentQueueModeTests`，后者是 `extension WillDeepTests`），报告还显示 111 passed 像是绿的。选 suite 一律按**类型名**。
+
+### Docs
+
+- `docs/SHORT_DRAMA_AI_MVP_CUTOFF.md` 的两条「接近 3000 行硬线」风险改成已拆分的现状，并写清后续新增检查该落进哪个兄弟文件、以及再拆导出器时必须同步 `production_exporter_source` 那份文件清单。
+- `docs/SOME_IM_MAC_APP_INTEGRATION.md` 的核心文件表拆成三行，标注存储层与设置界面在 1.287.0-rc4 前都在 `Xedit/SomeIMIntegration.swift`。
 
 ## 1.287.0-rc3 - 2026-08-23
 

@@ -35,7 +35,9 @@
 
 | 文件 | 职责 |
 | --- | --- |
-| `Xedit/SomeIMIntegration.swift` | some.im 设置、账号存储、浏览器登录请求、状态轮询、账号余额、模型拉取、图片生成客户端 |
+| `Xedit/SomeIMIntegration.swift` | some.im 设置与账号的值类型、浏览器登录请求、`SomeIMClient`（状态轮询、账号余额、模型拉取、图片生成） |
+| `Xedit/SomeIMIntegrationStore.swift` | 设置与凭据的存储层：UserDefaults、Keychain、跨 App 共享会话（1.287.0-rc4 前在 `Xedit/SomeIMIntegration.swift`） |
+| `Xedit/SomeIMIntegrationSettingsView.swift` | some.im 设置界面：登录与浏览器授权、模型选择、余额与套餐展示（1.287.0-rc4 前在 `Xedit/SomeIMIntegration.swift`） |
 | `Xedit/SomeIMAsyncMediaIntegration.swift` | some.im 图片/视频异步媒体任务适配 |
 | `Xedit/AppStateAgentSessions.swift` | 将 some.im 同步到 Agent provider library 和 image understanding |
 | `Xedit/Onboarding/OnboardingView.swift` | 首启 provider / some.im / VL fallback 配置 |
