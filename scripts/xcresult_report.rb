@@ -186,7 +186,12 @@ def parse_xcresult(path, reasons)
         name = node["name"] || node["nodeIdentifier"]
         result = node["result"] || node["testResult"]
         if result == "Failed" || result == "failed"
-          details = Array(node["children"]).filter_map do |child|
+          # `map { }.compact`, not `filter_map`: the latter needs Ruby 2.7+ and
+          # macOS still ships 2.6 as `/usr/bin/ruby`. CI pins 3.3 so this never
+          # showed up there — but locally it raised NoMethodError on the one
+          # path that only runs when a test FAILS, burying the actual failure
+          # under a parser stack trace exactly when it was needed.
+          details = Array(node["children"]).map do |child|
             next unless child.is_a?(Hash)
             next unless (child["nodeType"] || "").downcase.include?("failure")
 

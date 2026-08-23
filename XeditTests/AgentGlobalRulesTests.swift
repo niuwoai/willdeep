@@ -201,25 +201,29 @@ struct AgentGlobalRulesTests {
             globalRules: nil
         )
 
-        #expect(prompt.contains("Treat the visible side-panel terminal as a separate, stateful machine context."))
-        #expect(prompt.contains("route to the ACTIVE side-panel tab"))
-        #expect(prompt.contains("terminal_list_tabs enumerates every open tab"))
-        #expect(prompt.contains("terminal_select_tab makes a tab active"))
-        #expect(prompt.contains("local macOS shell or an SSH session"))
-        #expect(prompt.contains("do not send commands meant for the local Mac"))
-        #expect(prompt.contains("If the active tab is SSH'd into a server"))
-        #expect(prompt.contains("instead of claiming the terminal was routed successfully"))
-        #expect(prompt.contains("implicit command routing is blocked"))
-        #expect(prompt.contains("terminal_send_command may open a local shell automatically"))
-        #expect(prompt.contains("dispatch confirmation does not contain command output"))
-        #expect(prompt.contains("bounded automatic follow-up snapshot"))
+        // 这些断言守的是「终端条款别被合并吃掉半句」。1.284.0-rc5 压缩稳定
+        // 契约时改写了措辞，约束逐条仍在，但字面锚点全变了——当时用
+        // `--without-building` 验证，跑的是没编译进改动的旧二进制，拿到假
+        // 全绿，红了整整一天没人看见。锚点已按 v32 措辞重挂。
+        #expect(prompt.contains("separate, stateful machine that may be a remote SSH host"))
+        #expect(prompt.contains("route to the ACTIVE tab unless terminal_tab_id"))
+        #expect(prompt.contains("terminal_list_tabs enumerates tabs"))
+        #expect(prompt.contains("terminal_select_tab switches visibly"))
+        #expect(prompt.contains("a local shell or which host/user/directory the SSH session shows"))
+        #expect(prompt.contains("Never send local Mac or workspace commands into an SSH tab"))
+        #expect(prompt.contains("If the host is unclear, snapshot or ask one concrete question"))
+        #expect(prompt.contains("rather than claiming the terminal was routed"))
+        #expect(prompt.contains("implicit routing stays blocked"))
+        #expect(prompt.contains("terminal_send_command may open a local shell itself"))
+        #expect(prompt.contains("dispatch confirmation is not command output"))
+        #expect(prompt.contains("one bounded follow-up snapshot"))
         #expect(prompt.contains("never call the terminal unstable"))
-        #expect(prompt.contains("avoid creating or overwriting files with heredoc"))
-        #expect(prompt.contains("small auditable heredoc or patch-style shell fallback is acceptable"))
+        #expect(prompt.contains("do not create or overwrite files with heredoc"))
+        #expect(prompt.contains("A small auditable heredoc is acceptable only when the terminal is the only path"))
         // ZMODEM 细则外迁到 bundled skill,提示词只留强制指针 —— 细节改
         // 在 SKILL.md 里断言,提示词契约只保证模型会先去读它。
         #expect(prompt.contains("read_skill \"zmodem-terminal-transfers\""))
-        #expect(prompt.contains("Do not improvise the flow from memory"))
+        #expect(prompt.contains("do not improvise the flow"))
         let skillURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
