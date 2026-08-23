@@ -1,6 +1,6 @@
 # Agent Harness Improvement Priorities
 
-> Last updated: 2026-08-21 | Current version: v1.287.0-rc2
+> Last updated: 2026-08-21 | Current version: v1.287.0-rc3
 
 这份文档用于回答一个核心问题：一个 harness 级 Agent 要继续变强，哪些问题必须优先解决。
 
@@ -12,14 +12,14 @@
 
 当前状态：已经从多个 2000-3000 行热点拆出 AppState companion、Agent composer、Agent composer palette/chips/badges、Agent message support views、Agent learning event views、Agent learning review store/view、Agent runtime accessors、remote runtime models、Agent tool models、panel cards、file tools、self-learning、turn-end learning、streaming buffer、mobile gateway models、mobile desktop peer、AppState mobile gateway controller、chat history chrome renderer、provider library models、Agent dispatch queue、request estimate helper、tool authorization support、MCP models 和 MCP server directory 等文件；截至 rc90，`scripts/complexity_guard.rb` 扫描 193 个源代码/自动化文件，没有文件超过 2000 行软阈值或 3000 行硬阈值，本地 `scripts/run_tests.sh` 与 GitHub Actions `Tests` workflow 都会生成 Markdown/JSON 复杂度报告。
 
-仍然不好：`AgentMobileGatewayBridge.swift` 已从约 1332 行降到约 593 行，`AgentChatHistoryFormatter.swift` 已从约 1330 行降到约 825 行，`AgentModels.swift` 已从约 1307 行降到约 1090 行，`AppStateAgentLoop.swift` 已从约 1251 行降到约 986 行，`AgentToolAuthorization.swift` 已从约 1177 行降到约 869 行，`AgentMCPBridge.swift` 已从约 1130 行降到约 440 行，`AgentModeComposerView.swift` 已从约 1103 行降到约 687 行，`AgentMessageView.swift` 已从约 1080 行降到约 527 行；`AppStateAgentSessions.swift` 和 `AppState.swift` 仍是 Agent harness 的关键路径。它们暂时没超线，但都是 session lifecycle、routine、provider library 和窗口级状态聚合区，继续叠功能会很快反弹。复杂度守门目前只看行数，还不能发现职责耦合、循环依赖或横切状态扩散。
+仍然不好：`AgentMobileGatewayBridge.swift` 已从约 1332 行降到约 593 行，`AgentChatHistoryFormatter.swift` 已从约 1330 行降到约 825 行，`AgentModels.swift` 在 1.287.0-rc1 涨回 3013 行、越过 3000 行硬阈值后于 1.287.0-rc3 再拆七个模型域，已降到约 580 行，`AppStateAgentLoop.swift` 已从约 1251 行降到约 986 行，`AgentToolAuthorization.swift` 已从约 1177 行降到约 869 行，`AgentMCPBridge.swift` 已从约 1130 行降到约 440 行，`AgentModeComposerView.swift` 已从约 1103 行降到约 687 行，`AgentMessageView.swift` 已从约 1080 行降到约 527 行；`AppStateAgentSessions.swift` 和 `AppState.swift` 仍是 Agent harness 的关键路径。它们暂时没超线，但都是 session lifecycle、routine、provider library 和窗口级状态聚合区，继续叠功能会很快反弹。复杂度守门目前只看行数，还不能发现职责耦合、循环依赖或横切状态扩散。
 
 下一步顺序：
 
 1. `AppStateAgentSessions.swift` / `AppState.swift`：继续观察 session lifecycle、routine、provider library 和窗口级状态聚合。
 2. 自学习 review 队列后续动作：继续保持独立 store/view 边界，候选编辑和 MCP 安装确认不要回塞消息主文件。
 3. `AppStateAgentLoop.swift`：后续如新增 provider round、tool execution、turn finalization 逻辑，优先落入独立执行阶段文件。
-4. `AgentModels.swift`：后续如新增模型域，优先落入独立文件，不再回塞主模型文件。
+4. `AgentModels.swift`：后续如新增模型域，优先落入独立文件，不再回塞主模型文件。这条在 1.287.0-rc1 被违反过一次（静默模式的档位模型回塞主文件，直接把它推过硬阈值），1.287.0-rc3 拆完后请对着 `AgentPlanGoalModels.swift` / `AgentConfigurationModels.swift` 等兄弟文件放新模型。
 
 ## P0：执行自主性
 

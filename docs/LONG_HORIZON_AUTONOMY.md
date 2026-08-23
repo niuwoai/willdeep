@@ -193,7 +193,7 @@ Xedit 目前有三个互不相通的「清单」，长程运行中会让用户�
 | 项 | 现状 | 措施 |
 |---|---|---|
 | 睡眠抑制 | **完全没有**（`beginActivity` / `IOPMAssertion` 在 `Xedit/*.swift` 中零命中），Mac 一睡循环停摆，且主循环没有 `AgentRoutineScheduler` 那样的 catch-up | Goal 执行期间持有 `ProcessInfo.beginActivity(.idleSystemSleepDisabled)`，暂停 / 软停即释放；唤醒后补一次 catch-up 扫描 |
-| roadmap 续接 | 封顶 6 phase × 6 步 = 36 步（`AgentModels.swift:1085-1086`），跑满即无路可走，只能用户改 Goal | phase 全部完成但清单未尽时，归档已完成 phase 到 goal-teams 归档目录，追加下一批 phase；Goal 不因 roadmap 满而失败 |
+| roadmap 续接 | 封顶 6 phase × 6 步 = 36 步（`AgentPlanGoalModels.swift` 的 `AgentGoalRoadmap.maximumPhaseCount` / `maximumStepsPerPhase`），跑满即无路可走，只能用户改 Goal | phase 全部完成但清单未尽时，归档已完成 phase 到 goal-teams 归档目录，追加下一批 phase；Goal 不因 roadmap 满而失败 |
 | 工具轮上限 | 单 turn 256 轮（`AppState.swift:17`），撞顶给 banner 后停 | 撞顶不再是终态：走 §2 续推判定，预算未尽则开新 turn 继续 |
 | 重启可续 | Xedit 有 checkpoint 五态恢复；**rs 侧动过工具的任务一律 `Interrupted`** | rs 侧改为由计划态驱动恢复（§6.2 RA4），而非 turn 重放 |
 
@@ -206,7 +206,7 @@ Xedit 目前有三个互不相通的「清单」，长程运行中会让用户�
 | XA1 | 续推契约：硬暂停降级为退避阶梯；四出口判定；continuation steering 四段内容契约。**新逻辑落独立文件**（如 `AgentGoalContinuationBudget.swift`），不回塞 loop / planning 主文件 | `AgentContextBuilder.swift:1333-1440`（现策略）、`AppStateAgentGoalPlanning.swift:663`（硬暂停）、`AppStateAgentLoop.swift:649`（turn 局部计数）、`:1301-1345`（续推决策点） |
 | XA2 | `AgentGoalExecutionBudget`：wall-clock + token 两维先行；软停状态与状态快照；后台完成事件自动续期；Composer 补「续期并继续」动作 | `AppStateAgentLoop.swift:305-362`（后台唤醒链路）、`AgentModeComposerView.swift`（恢复入口）、`AppStateAgentContextCompression.swift:92`（真实 usage 锚定惯例） |
 | XA3 **（已落地 1.286.0-rc1，`checklist`/`evidence` 除外）** | `update_plan` 工具；围栏块降级为兼容路径；三套清单归一 | `AgentToolRegistry.swift`（工具注册）、`AgentContextBuilder.swift:951`（现解析器）、`AppStateAgentSessions.swift:619/779/804`（捕获入口）、`BundledSkills/todo/SKILL.md` |
-| XA4 | 多天工程包：睡眠抑制 + 唤醒 catch-up；roadmap 续接；256 轮撞顶改为可续；成本维度接 COST_ENGINE 最小版 | `AgentModels.swift:1085-1086`（roadmap 上限）、`AppState.swift:17`（轮上限）、`AgentRoutineScheduler.swift`（catch-up 参照）、`docs/COST_ENGINE_DESIGN.md` |
+| XA4 | 多天工程包：睡眠抑制 + 唤醒 catch-up；roadmap 续接；256 轮撞顶改为可续；成本维度接 COST_ENGINE 最小版 | `AgentPlanGoalModels.swift`（roadmap 上限）、`AppState.swift:17`（轮上限）、`AgentRoutineScheduler.swift`（catch-up 参照）、`docs/COST_ENGINE_DESIGN.md` |
 
 ### 6.2 willdeep-rs
 

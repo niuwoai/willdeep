@@ -46,7 +46,7 @@ rs 侧把「优先用小模型」从系统提示词里的劝告，搬进了 Runt
 | 未知 profile 不回落 deep | `AgentSubagentProfileStore.resolvedProfile(id:)` 明确回落 deep（`AgentSubagentProfile.swift:657`） | 小改 |
 | read/write 分离 | `AgentSubagentTaskPacket.relevantFiles` 读写合一；无 `target_files` 时它就是写集 | 中等 |
 | 窄工种真跑小模型 | 七个工种 `modelBinding` 全是显式 `glm-5`；`someim-32b-*` 只在「父会话用 some.im **且**已登录」时由 `resolvedHostedConfiguration` 钉上 | 需实测核对 |
-| **Root 默认模型** | some.im preset `defaultModel = "deepseek-v4-flash"`（`AgentModels.swift:2130`）——主会话默认就坐在 L 档 1M 上 | 与「默认 M、向上申请」直接冲突 |
+| **Root 默认模型** | some.im preset `defaultModel = "deepseek-v4-flash"`（`AgentProviderPresetModels.swift`）——主会话默认就坐在 L 档 1M 上 | 与「默认 M、向上申请」直接冲突 |
 | 技能索引 / MCP 上下文税 | 已是 `list_skills` / `list_mcp_tools` 按需加载 | **已具备，不搬** |
 | 派工 KPI | `AgentSkillWorkerKPIs` 已有 `skillCoverage` / `verifiedSuccessRate` / `escalationRate` / `citationAccuracy`，且已统计 `deepRunCount` | 补一个展示口径即可 |
 

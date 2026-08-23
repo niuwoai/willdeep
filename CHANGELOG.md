@@ -1,7 +1,27 @@
 # Changelog
 
-> 当前文件保留最新版本（1.287.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.287.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.287.0-rc3 - 2026-08-23
+
+### Changed
+
+- **`Xedit/AgentModels.swift` 按主题拆成 7 个兄弟文件，复杂度守卫的 hard 计数回到 0。** 这不是 i18n 那次修复带进来的：448c5190 时该文件还是 2993 行，1.287.0-rc1（静默模式 / 黑名单式审批）把它推到 3013 行，越过 `scripts/complexity_guard.rb` 的 `hard_limit = 3000`。CI 的 quality 守卫组是顺序执行 + 遇错即停，第一步 complexity 一红，后面 7 步（version / i18n / i18n-locale / i18n-add-keys / fast-test-entry / bundled-agent-rules / project-build-guard）根本没机会跑——CI 那片红里只有一条是真的，其余是被 break 掉的。
+- **拆分为纯等价重构，逐行原样搬运，没有顺手改任何行为。** 新增文件与行数：`AgentManagedRoutingModels.swift`（313，some.im 省心托管的能力档位 / 路由状态 / 决策记录 / 虚拟模型目录 + `AgentSidePanelState`）、`AgentPlanGoalModels.swift`（699，交互模式 / 审批档位 / expert / 执行后端 / Roadmap / Goal Teams 台账 / Plan / Goal）、`AgentConfigurationModels.swift`（459，路由模式 / 模型用途 / 图片描述配置 / `AgentConfiguration`）、`AgentProviderPresetModels.swift`（310，`AgentProviderKind` 与 preset 目录）、`AgentPatchModels.swift`（133，patch proposal 与 worktree 变更摘要）、`AgentErrorModels.swift`（319，patch / client / provider 错误、`/v1` 探测、`AgentErrorDetails`、`AgentTurnFailure`）、`AgentAttachmentModels.swift`（257，附件解析状态 / 段落 / 分析结果 / 知识文件夹）。`AgentModels.swift` 从 3013 行降到 580 行，只留 `AgentSession` 持久化图与它的附件外部化扩展。
+- **无需手工登记进 Xcode 工程。** `Xedit.xcodeproj` 的 `Xedit/` 目录走 `PBXFileSystemSynchronizedRootGroup`，`membershipExceptions` 里只有 `Info.plist`，新增的 `.swift` 文件由文件系统同步自动进 target。
+
+### Tests
+
+- `ruby scripts/complexity_guard.rb`：`over_hard_count` 从 1 回到 0（`soft=18` 不变，本次不动软阈值那批）。
+- `ruby scripts/run_ci_guard_group.rb quality build/ci`：8 步全过。
+- 拆分前后做了逐字节等价校验：7 个新文件去掉各自 9 行文件头后，必须与原文件对应行区间**逐行相同**；`AgentModels.swift` 必须等于原文件 `[1,564] + [2999,3013]`；被丢弃的 7 行全部是块间空行。校验脚本对每一条都做了断言，全绿。
+- 编译与单测：`AgentApprovalModePolicyTests`(7) / `AgentSessionPersistenceTests`(5) / `AgentGoalTeamsTests`(36) / `AgentAttachmentContentStoreTests`(5) / `SomeIMManagedModelMappingTests` 等 4 个省心托管 suite(15) 全绿，App target 正常编译。选 suite 时按**类型名**而不是文件名——`-only-testing:XeditTests/SomeIMManagedRoutingTests` 是文件名，会静默跑 0 个用例还报 `TEST SUCCEEDED`。
+
+### Docs
+
+- 把指向已迁移符号的文档指针改到新文件：`docs/SOME_IM_DEPENDENT_MODELS.md`、`docs/SOME_IM_MANAGED_ROUTING_DESIGN.md`、`docs/SOME_IM_MAC_APP_INTEGRATION.md`、`docs/LONG_HORIZON_AUTONOMY.md`、`docs/GOAL_TEAMS_ROLES_DESIGN.md`、`docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md` 和 `BundledSkills/some-im-mac-integration/SKILL.md`。顺带把其中已经腐烂的行号（`AgentModels.swift:404` / `:1085-1086` / `:1084-1147` / `:2130` 早就指不到对应代码了）换成符号名。`docs/MULTI_FOLDER_PROJECTS_DESIGN.md` 引的 `:83` / `:340` 仍在 `AgentModels.swift` 原位，未动。
+- `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 记下这次反弹：「新增模型域优先落入独立文件」这条在 1.287.0-rc1 被违反过一次。
 
 ## 1.287.0-rc2 - 2026-08-23
 

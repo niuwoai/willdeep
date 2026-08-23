@@ -1,6 +1,15 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-23（1.287.0-rc2）
+> Last updated: 2026-08-23（1.287.0-rc3）
+
+## 1.287.0-rc3 — `AgentModels.swift` 拆分
+
+> 纯等价重构，逐行原样搬运，没有任何新界面或新行为。这一节要验的只有一件事：**持久化模型没被搬散架**。全部符合预期就整节划掉，不必逐条追问 UI。
+
+- ⏳ 用**拆分前**的版本建一个会话（带 Goal + Plan + 附件 + 省心托管路由），再用本版本打开，确认会话还在列表里、Goal 横幅 / Plan 卡 / 附件 / 页脚的托管路由徽标都在。反过来（本版本建、旧版本打开）也走一遍。
+- ⏳ 打开设置页的 provider library，确认 preset 列表、模型下拉和「是否支持图片输入」的判断跟拆分前一致（这批是从 `AgentProviderPresetModels.swift` / `AgentConfigurationModels.swift` 读的）。
+- ⏳ 让 Agent 改一个文件产生 patch，确认 diff 预览、行数统计和 worktree 变更摘要正常（`AgentPatchModels.swift`）。
+- ⏳ 故意让一次请求失败（比如把 base URL 改错），确认错误卡片、可展开的「详情」和重试按钮都在，重启 App 后这张卡还能重新出现（`AgentErrorModels.swift` 的 `AgentTurnFailure`）。
 
 ## 1.287.0-rc2 — i18n 加词条脚本的落点
 

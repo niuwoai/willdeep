@@ -39,7 +39,7 @@
 | `Xedit/SomeIMAsyncMediaIntegration.swift` | some.im 图片/视频异步媒体任务适配 |
 | `Xedit/AppStateAgentSessions.swift` | 将 some.im 同步到 Agent provider library 和 image understanding |
 | `Xedit/Onboarding/OnboardingView.swift` | 首启 provider / some.im / VL fallback 配置 |
-| `Xedit/AgentModels.swift` | Provider preset、Agent 配置、模型是否支持图片输入的判断 |
+| `Xedit/AgentProviderPresetModels.swift` / `Xedit/AgentConfigurationModels.swift` | Provider preset、Agent 配置、模型是否支持图片输入的判断（1.287.0-rc3 前都在 `Xedit/AgentModels.swift`） |
 | `Xedit/AgentSettingsStore.swift` | Agent 配置、provider library、Keychain 读写 |
 | `Xedit/Localizable.xcstrings` / `Xedit/L10n.swift` | 设置页和 onboarding 的可见文案 |
 

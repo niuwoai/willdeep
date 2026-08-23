@@ -184,7 +184,7 @@ Xedit 现有的目标收敛性诊断（1.223.0-rc1）输出并入此表，作为
 |---|---|---|
 | X1 | 本设计文档评审定稿；`.willdeep/goal-teams/` 目录规范以 bundled skill 或宿主逻辑落地 | `.codex/goal-teams/`（现有惯例）、`BundledSkills/` |
 | X2 | 新增 `tester` / `reviewer` 工种；角色注册表与 Teams 表打通；**新逻辑落独立文件**（复杂度 P0 约束，不回塞 `AppStateAgentGoalPlanning.swift`） | `AgentSubagentProfile.swift:145-247`（catalog）、`AgentSubagentProfileSettingsSection.swift` |
-| X3 | 任务契约的只读复核挂到 `reviewer` 名下；`qa-notes.md` 注入链路；Roadmap Phase 增加 `version` / `git_contract` | `AgentModels.swift:1084-1147`（Roadmap）、任务契约链路（1.195.0-rc1 起） |
+| X3 | 任务契约的只读复核挂到 `reviewer` 名下；`qa-notes.md` 注入链路；Roadmap Phase 增加 `version` / `git_contract` | `AgentPlanGoalModels.swift`（Roadmap）、任务契约链路（1.195.0-rc1 起） |
 | X4 | `spawn_agent` 默认 capsule schema；评估从 willdeep-rs 移植 `instruct` 主→子指令 | `AgentSubagents.swift:507,611-623`（structured_output） |
 
 ### 6.2 willdeep-rs

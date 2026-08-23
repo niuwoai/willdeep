@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-23 | Current version: v1.287.0-rc2
+> Last updated: 2026-08-23 | Current version: v1.287.0-rc3
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **Agent 模型域复杂度治理（1.287.0-rc3）** —— `AgentModels.swift` 被 1.287.0-rc1 推过 3000 行硬阈值后按主题拆成 7 个兄弟文件：`AgentManagedRoutingModels.swift`（省心托管路由）、`AgentPlanGoalModels.swift`（交互模式 / 审批档位 / Plan & Goal）、`AgentConfigurationModels.swift`（provider 配置）、`AgentProviderPresetModels.swift`（provider kind 与 preset 目录）、`AgentPatchModels.swift`（patch / worktree 变更）、`AgentErrorModels.swift`（错误模型）、`AgentAttachmentModels.swift`（附件与知识文件夹）。主模型文件从 3013 行降到 580 行，只留 `AgentSession` 持久化图；纯等价重构，逐行原样搬运。
 - **静默审批档位（1.287.0-rc1）** —— 新增第四种审批档位「静默模式」。前三档都是白名单式（默认要问，凑够理由才放行），静默模式是黑名单式：默认放行，需要理由的是拦截。地基是一份确定性的恶意命令黑名单（不可逆的大范围破坏、主机接管、反取证、凭据外泄四类，按 shell 分段判定），AI 裁判换成方向相反的「恶意与否」分类器且拿不准判放行。日常破坏性操作（清 node_modules、`git reset --hard`、`docker compose down -v`）不再打断。裁判缺席时按用户语义放行，审计日志单独标注「未裁而放」；沙箱档位不放宽，环境信任声明工具仍然任何档位都够不到。
 - **`update_plan` 工具化的进度上报（1.286.0-rc1）** —— 计划进度从 ` ```progress ` 围栏块改为常驻核心工具上报。落盘复盘显示 80% 的围栏块只在回合收尾出现，长回合的清单在结束前一格不动；工具调用是模型在回合中段唯一稳定使用的通道。工具会把读不出的条目带原因回灌，围栏块降为兼容路径并按步骤让位于工具。上报即落盘，续推策略同步识别工具通道。
 - **上下文能力索引与离线规则库（1.285.0-rc2）** —— Alma 完整规则文档以 172KB 的 `BundledAgentRules` 资源目录随 App 发行，常驻全局规则入口压缩为约 3KB 的任务路由索引；Prompt 注入时动态解析 App 内规则根路径，只在任务命中时读取具体规范。设置页展示规则库版本/位置，并允许在不自动覆盖用户文件的前提下载入精简索引。Skill 使用缓存元数据由宿主主动路由：高置信度最多挂载一份正文，模糊匹配仅给三个短候选；MCP 沿用固定网关。164 个既有原生工具加上新路由后只常驻 20 个编码核心 Schema，其余通过 `load_tool_pack` 分类加载。工具包会话内只增不减，以一次扩包缓存失效换取后续稳定命中。
@@ -1560,7 +1561,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 | `L10n.swift` | ~1327 | String Catalog 访问入口与本地化 key |
 | `ContentView.swift` | ~1225 | 主窗口外壳；rc56 已将 editor chrome 叶子视图拆到 `ContentViewEditorChrome.swift` |
 | `AppState.swift` | ~1182 | 全局状态枢纽 + manager 伴生文件聚合；rc69 拆展示状态，rc76 拆 AgentRuntime 兼容访问器 |
-| `AgentModels.swift` | ~1097 | `AgentSession` / Plan & Goal / provider configuration / patch / worktree / error / attachment / learning event 模型；rc65 已拆消息模型，rc80 已拆 provider library |
+| `AgentModels.swift` | ~580 | `AgentSession` 持久化图与它的附件外部化扩展；rc65 拆消息模型，rc80 拆 provider library，1.287.0-rc3 再拆出省心托管路由 / Plan & Goal / provider 配置 / preset 目录 / patch / error / attachment 七个模型域 |
 | `AppStateAgentSessions.swift` | ~1076 | Provider library、Plan & Goal、worktree review、queue、session lifecycle、routine 和模型选择；rc74 已拆 composer 附件上下文 |
 | `AgentMobileGatewayBridgeTests.swift` | ~1006 | Mobile Gateway 桌面桥接安全边界与消息流回归测试 |
 | `AppStateAgentLoop.swift` | ~986 | `dispatchAgentMessage` / `runAgentLoop` / `awaitToolDecision` / subagent 执行；rc45/rc51/rc62/rc73/rc81 持续拆出错误、压缩、patch、审批、streaming buffer、turn-end learning、dispatch queue 和 request estimates |
