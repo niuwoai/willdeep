@@ -31,7 +31,8 @@ nonisolated enum AgentGlobalRulesStore {
     private static let settingsKey = "com.willdeep.agentGlobalRules.settings.v1"
     private static let rulesCache = NSCache<NSString, NSString>()
     static let maxRulesCharacters = 8_000
-    static let defaultRulesTemplate = """
+    static let defaultRulesTemplate = AgentBundledRules.defaultGlobalRulesTemplate
+    private static let legacyDefaultRulesTemplate = """
     # 全局规则（严格条款）
 
     本文件用于约束 AI 编程助手在本仓库中的行为与输出风格。条款分级如下：
@@ -233,7 +234,7 @@ nonisolated enum AgentGlobalRulesStore {
               !trimmed.isEmpty else {
             return nil
         }
-        return limit(trimmed, to: maxRulesCharacters)
+        return limit(AgentBundledRules.resolvingRootPlaceholder(in: trimmed), to: maxRulesCharacters)
     }
 
     static func readRulesFileText(at url: URL) -> String? {
@@ -271,9 +272,11 @@ nonisolated enum AgentGlobalRulesStore {
     static func ensureDefaultRulesFileIfNeeded(settings: AgentGlobalRulesSettings = loadSettings()) {
         let settings = settings.normalized
         let url = resolvedURL(for: settings.filePath)
-        guard shouldSeedDefaultRulesFile(settings: settings, fileExists: FileManager.default.fileExists(atPath: url.path)) else {
-            return
-        }
+        let fileExists = FileManager.default.fileExists(atPath: url.path)
+        let shouldSeed = shouldSeedDefaultRulesFile(settings: settings, fileExists: fileExists)
+        let existingText = fileExists ? readRulesFileText(at: url) : nil
+        let shouldMigrate = shouldMigrateLegacyDefaultRulesFile(settings: settings, fileText: existingText)
+        guard shouldSeed || shouldMigrate else { return }
         do {
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
@@ -288,6 +291,14 @@ nonisolated enum AgentGlobalRulesStore {
 
     static func shouldSeedDefaultRulesFile(settings: AgentGlobalRulesSettings, fileExists: Bool) -> Bool {
         settings.normalized.filePath == AgentGlobalRulesSettings.defaultFilePath && !fileExists
+    }
+
+    static func shouldMigrateLegacyDefaultRulesFile(
+        settings: AgentGlobalRulesSettings,
+        fileText: String?
+    ) -> Bool {
+        settings.normalized.filePath == AgentGlobalRulesSettings.defaultFilePath
+            && fileText == legacyDefaultRulesTemplate
     }
 
     private static func rulesCacheKey(for url: URL) -> NSString {

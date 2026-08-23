@@ -367,6 +367,13 @@ enum AgentToolRunner {
                 result = try await AgentFileTools.glob(arguments: activeArguments, context: activeContext)
             case "git_status":
                 result = try await AgentFileTools.gitStatus(context: activeContext)
+            case "load_tool_pack":
+                let requested = try AgentToolPackCatalog.requestedPackIDs(from: activeArguments)
+                guard let activationSink = activeContext.toolPackActivationSink else {
+                    throw AgentToolError.invalidArgument("load_tool_pack is available only in the main WillDeep conversation")
+                }
+                let loaded = activationSink(requested)
+                result = AgentToolPackCatalog.activationResult(requested: requested, loaded: loaded)
             case "list_workspace_sessions":
                 result = try await AgentSessionTools.listWorkspaceSessions(arguments: activeArguments, context: activeContext)
             case "search_sessions":

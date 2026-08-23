@@ -108,9 +108,12 @@ struct AgentGoalBudgetedContinuationTests {
         #expect(runtime.currentGoal?.continuationBudget?.wrapUpDispatched == true)
     }
 
-    /// 交接已经要过一次，就不再纠缠——此时让原本的暂停生效才是对的。
-    @Test("交接请求过之后不再接管，把控制权交还给普通暂停")
-    func alreadyHandedOverDoesNotTakeOverAgain() {
+    /// 交接已经要过一次，就不再向模型纠缠——但要把「为什么停」说给用户听。
+    /// 交接那一轮自己的横幅活不下来（派发交接指令的 dispatch 会清掉上一轮
+    /// 错误态），这里的安静停机是用户唯一可靠的知情机会；落回轮次上限的
+    /// 旧文案则连停机原因都是错的。
+    @Test("交接请求过之后不再发消息，但挂上预算横幅而非轮次横幅")
+    func alreadyHandedOverClaimsTheBudgetBanner() {
         let done = AgentGoalContinuationBudget(
             wallClockLimit: 4 * 60 * 60,
             maximumContinuations: 64,
@@ -120,8 +123,11 @@ struct AgentGoalBudgetedContinuationTests {
         )
         let (appState, runtime) = makeAppRuntime(goal: goal(budget: done))
 
-        #expect(!appState.continueGoalOnBudgetInsteadOfRoundLimit(for: runtime))
+        // 返回 true：接管的是「结局的呈现」，调用方不得再弹轮次上限横幅。
+        #expect(appState.continueGoalOnBudgetInsteadOfRoundLimit(for: runtime))
         #expect(runtime.queuedMessages.isEmpty)
+        #expect(runtime.errorMessage == L10n.GoalPlanning.budgetExhausted)
+        #expect(runtime.errorSeverity == .notice)
     }
 
     @Test("验收清单已经全勾时不接管")

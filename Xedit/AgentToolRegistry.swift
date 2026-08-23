@@ -21,6 +21,7 @@ import Foundation
 
 enum AgentToolRegistry {
     static let all: [AgentToolDescriptor] = [
+        AgentToolPackCatalog.loaderDescriptor,
         AgentToolDescriptor(
             name: "search_files",
             description: "Search workspace files for a literal text query and return matching lines with paths and line numbers. Read-only.",
@@ -1881,9 +1882,17 @@ enum AgentToolRegistry {
         activeExperts: Set<AgentExpert>,
         interactionMode: AgentInteractionMode = .normal,
         executionAgent: AgentExecutionAgent = .willDeep,
-        delegationPolicy: AgentDelegationPolicy = .automatic
+        delegationPolicy: AgentDelegationPolicy = .automatic,
+        loadedPacks: Set<AgentToolPackID>? = nil
     ) -> [AgentToolDescriptor] {
-        all.filter { descriptor in
+        let effectiveLoadedPacks = loadedPacks.map {
+            AgentToolPackCatalog.effectiveLoadedPacks(
+                explicit: $0,
+                activeExperts: activeExperts,
+                delegationPolicy: delegationPolicy
+            )
+        }
+        return all.filter { descriptor in
             // `/no-subagent` is enforced here rather than by prompt, so a
             // model that ignores the instruction still cannot delegate.
             if !delegationPolicy.allowsTool(named: descriptor.name) {
@@ -1900,10 +1909,22 @@ enum AgentToolRegistry {
             if interactionMode == .goal, descriptor.name == "change_workspace" {
                 return false
             }
+            if let effectiveLoadedPacks,
+               !AgentToolPackCatalog.coreToolNames.contains(descriptor.name) {
+                guard let packID = AgentToolPackCatalog.packID(for: descriptor.name),
+                      effectiveLoadedPacks.contains(packID) else {
+                    return false
+                }
+            }
             if descriptor.name.hasPrefix("short_drama_") {
+                // In lazy-registry mode, loading the pack is itself the
+                // explicit domain activation. Legacy callers that request
+                // the full registry still retain the older expert gate.
+                if effectiveLoadedPacks != nil { return true }
                 return activeExperts.contains(.shortDrama)
             }
             if descriptor.name.hasPrefix("embedded_browser_") || descriptor.name.hasPrefix("chrome_") {
+                if effectiveLoadedPacks != nil { return true }
                 return activeExperts.contains(.browserOps) || activeExperts.contains(.webCoding)
             }
             return true

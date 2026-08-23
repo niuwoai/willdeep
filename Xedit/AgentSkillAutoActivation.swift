@@ -9,15 +9,87 @@
 
 import Foundation
 
+nonisolated struct AgentSkillRoutingCandidate: Equatable, Sendable {
+    let skill: AgentSkillEntry
+    let score: Double
+    let matchedTerms: [String]
+}
+
+nonisolated struct AgentSkillRoutingDecision: Equatable, Sendable {
+    let attachedSkills: [AgentSkillEntry]
+    let candidateSkills: [AgentSkillRoutingCandidate]
+}
+
 nonisolated enum AgentSkillAutoActivation {
     static let figmaSwiftUIIdentifier = "figma-swiftui"
     static let designToCodeIdentifier = "design-to-code"
+
+    /// Host-side routing keeps obvious skills deterministic while leaving
+    /// ambiguous matches as a tiny metadata hint for `read_skill`. At most one
+    /// generic skill body is auto-attached, which bounds prompt growth even
+    /// when hundreds of installed skills are indexed locally.
+    static func routingDecision(
+        userText: String,
+        workspaceRootPath: String?,
+        manuallySelectedSkills: [AgentSkillEntry],
+        hasVisualTargetAttachment: Bool = false,
+        availableSkills: [AgentSkillEntry]? = nil
+    ) -> AgentSkillRoutingDecision {
+        var attached = visualSkills(
+            userText: userText,
+            workspaceRootPath: workspaceRootPath,
+            manuallySelectedSkills: manuallySelectedSkills,
+            hasVisualTargetAttachment: hasVisualTargetAttachment
+        )
+        // An explicit picker choice or the dedicated visual router is already
+        // authoritative. Do not surprise the user by stacking a second body;
+        // multi-skill requests can still attach several skills explicitly.
+        if !attached.isEmpty {
+            return AgentSkillRoutingDecision(attachedSkills: attached, candidateSkills: [])
+        }
+        let excludedIdentifiers = Set(attached.map(\.identifier)).union([
+            figmaSwiftUIIdentifier,
+            designToCodeIdentifier,
+        ])
+        let catalog = availableSkills ?? AgentSkillDirectory.list(includeDisabled: false)
+        let generic = AgentSkillRouter.route(
+            userText: userText,
+            availableSkills: catalog,
+            excluding: excludedIdentifiers
+        )
+        if let automatic = generic.autoAttach,
+           !attached.contains(where: { $0.identifier == automatic.identifier }) {
+            attached.append(automatic)
+        }
+        let attachedIdentifiers = Set(attached.map(\.identifier))
+        let candidates = generic.candidates.filter {
+            !attachedIdentifiers.contains($0.skill.identifier)
+        }
+        return AgentSkillRoutingDecision(
+            attachedSkills: attached,
+            candidateSkills: candidates
+        )
+    }
 
     static func mergedSkills(
         userText: String,
         workspaceRootPath: String?,
         manuallySelectedSkills: [AgentSkillEntry],
         hasVisualTargetAttachment: Bool = false
+    ) -> [AgentSkillEntry] {
+        routingDecision(
+            userText: userText,
+            workspaceRootPath: workspaceRootPath,
+            manuallySelectedSkills: manuallySelectedSkills,
+            hasVisualTargetAttachment: hasVisualTargetAttachment
+        ).attachedSkills
+    }
+
+    private static func visualSkills(
+        userText: String,
+        workspaceRootPath: String?,
+        manuallySelectedSkills: [AgentSkillEntry],
+        hasVisualTargetAttachment: Bool
     ) -> [AgentSkillEntry] {
         var result = manuallySelectedSkills
         let hasManualVisualImplementationSkill = result.contains {
@@ -155,4 +227,240 @@ nonisolated enum AgentSkillAutoActivation {
                 || name.hasPrefix("next.config.")
         }
     }
+}
+
+/// A deterministic, cached-metadata router for the general skill catalog.
+/// It never reads SKILL.md bodies: exact/high-confidence matches may attach
+/// one body through the normal composer path, while weaker matches only give
+/// the model a short `read_skill` candidate list.
+nonisolated enum AgentSkillRouter {
+    struct Route: Equatable, Sendable {
+        let autoAttach: AgentSkillEntry?
+        let candidates: [AgentSkillRoutingCandidate]
+    }
+
+    private struct ScoredSkill {
+        let skill: AgentSkillEntry
+        let score: Double
+        let matchedTerms: [String]
+        let hasExplicitInvocation: Bool
+        let hasLiteralNameMatch: Bool
+    }
+
+    static let maximumCandidateCount = 3
+    static let automaticScoreThreshold = 7.0
+    static let automaticMargin = 1.5
+    static let candidateScoreThreshold = 1.0
+
+    static func route(
+        userText: String,
+        availableSkills: [AgentSkillEntry],
+        excluding excludedIdentifiers: Set<String> = []
+    ) -> Route {
+        let normalizedText = normalize(userText)
+        guard !normalizedText.isEmpty else {
+            return Route(autoAttach: nil, candidates: [])
+        }
+        let skills = availableSkills.filter {
+            $0.isEnabled && !excludedIdentifiers.contains($0.identifier)
+        }
+        guard !skills.isEmpty else {
+            return Route(autoAttach: nil, candidates: [])
+        }
+
+        let queryTerms = terms(in: normalizedText, includeAliases: true)
+        let indexed = skills.map { skill in
+            terms(
+                in: "\(skill.identifier) \(skill.name) \(skill.description)",
+                includeAliases: false
+            )
+        }
+        var documentFrequency: [String: Int] = [:]
+        for terms in indexed {
+            for term in terms {
+                documentFrequency[term, default: 0] += 1
+            }
+        }
+
+        let scored = zip(skills, indexed).compactMap { skill, skillTerms -> ScoredSkill? in
+            let identifier = normalize(skill.identifier)
+            let name = normalize(skill.name)
+            let explicit = normalizedText.contains("$\(identifier)")
+            let literalName = phraseAppears(identifier, in: normalizedText)
+                || (name.count >= 4 && phraseAppears(name, in: normalizedText))
+            let matched = queryTerms.intersection(skillTerms).sorted()
+            var score = matched.reduce(0.0) { partial, term in
+                let frequency = Double(documentFrequency[term, default: skills.count])
+                let rarity = log((Double(skills.count) + 1.0) / (frequency + 1.0)) + 1.0
+                return partial + rarity
+            }
+            if explicit { score += 100.0 }
+            if literalName { score += 12.0 }
+            guard score >= candidateScoreThreshold || explicit || literalName else { return nil }
+            return ScoredSkill(
+                skill: skill,
+                score: score,
+                matchedTerms: matched,
+                hasExplicitInvocation: explicit,
+                hasLiteralNameMatch: literalName
+            )
+        }.sorted { lhs, rhs in
+            if lhs.score != rhs.score { return lhs.score > rhs.score }
+            return lhs.skill.identifier < rhs.skill.identifier
+        }
+
+        guard let first = scored.first else {
+            return Route(autoAttach: nil, candidates: [])
+        }
+        let secondScore = scored.dropFirst().first?.score ?? 0
+        let rareSingleTermMatch = first.matchedTerms.count == 1
+            && first.matchedTerms.first.map { documentFrequency[$0] == 1 && $0.count >= 6 } == true
+        let shouldAttach = first.hasExplicitInvocation
+            || first.hasLiteralNameMatch
+            || (first.score >= automaticScoreThreshold
+                && first.score - secondScore >= automaticMargin
+                && (first.matchedTerms.count >= 2 || rareSingleTermMatch))
+        let autoAttach = shouldAttach ? first.skill : nil
+        let candidates = scored
+            .filter { $0.skill.identifier != autoAttach?.identifier }
+            .prefix(maximumCandidateCount)
+            .map {
+                AgentSkillRoutingCandidate(
+                    skill: $0.skill,
+                    score: $0.score,
+                    matchedTerms: $0.matchedTerms
+                )
+            }
+        return Route(autoAttach: autoAttach, candidates: candidates)
+    }
+
+    private static func phraseAppears(_ phrase: String, in text: String) -> Bool {
+        guard !phrase.isEmpty else { return false }
+        if text.contains(phrase) { return true }
+        let words = phrase.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        return words.count >= 2 && words.allSatisfy { text.contains($0) }
+    }
+
+    private static func normalize(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func terms(in rawText: String, includeAliases: Bool) -> Set<String> {
+        let text = normalize(rawText)
+        var result = Set<String>()
+        var current = ""
+        var currentIsCJK: Bool?
+
+        func flush() {
+            guard !current.isEmpty else { return }
+            if currentIsCJK == true {
+                let characters = Array(current)
+                if characters.count == 1 {
+                    result.insert(current)
+                } else {
+                    for width in 2...min(4, characters.count) {
+                        for start in 0...(characters.count - width) {
+                            result.insert(String(characters[start..<(start + width)]))
+                        }
+                    }
+                }
+            } else {
+                let canonical = canonicalEnglishTerm(current)
+                if canonical.count >= 2 && !stopTerms.contains(canonical) {
+                    result.insert(canonical)
+                }
+            }
+            current = ""
+            currentIsCJK = nil
+        }
+
+        for scalar in text.unicodeScalars {
+            let isCJK = isCJKScalar(scalar)
+            let isWord = CharacterSet.alphanumerics.contains(scalar) || isCJK
+            guard isWord else {
+                flush()
+                continue
+            }
+            if let currentIsCJK, currentIsCJK != isCJK {
+                flush()
+            }
+            currentIsCJK = isCJK
+            current.unicodeScalars.append(scalar)
+        }
+        flush()
+
+        if includeAliases {
+            for (phrase, aliases) in queryAliases where text.contains(phrase) {
+                result.formUnion(aliases)
+            }
+        }
+        return result
+    }
+
+    private static func canonicalEnglishTerm(_ term: String) -> String {
+        switch term {
+        case "macos", "osx": return "mac"
+        case "images", "pictures", "photos": return "image"
+        case "videos": return "video"
+        case "websites", "pages": return "web"
+        case "schedules", "scheduled", "scheduling": return "schedule"
+        case "releases", "released", "releasing": return "release"
+        default: return term
+        }
+    }
+
+    private static func isCJKScalar(_ scalar: UnicodeScalar) -> Bool {
+        switch scalar.value {
+        case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static let stopTerms: Set<String> = [
+        "about", "after", "also", "and", "any", "app", "asks", "available", "built", "can",
+        "current", "exact", "for", "from", "into", "local", "only", "other", "otherwise",
+        "should", "skill", "supported", "task", "that", "the", "their", "then", "this", "through",
+        "tool", "tools", "use", "user", "when", "where", "willdeep", "with",
+    ]
+
+    private static let queryAliases: [String: Set<String>] = [
+        "发布": ["release", "deploy", "publish"],
+        "发版": ["release", "deploy"],
+        "部署": ["deploy"],
+        "签名": ["signing", "codesign"],
+        "公证": ["notarization", "notarize"],
+        "系统": ["system"],
+        "磁盘": ["disk"],
+        "内存": ["memory"],
+        "进程": ["process"],
+        "网络": ["network"],
+        "浏览器": ["browser"],
+        "网页": ["web"],
+        "网站": ["web"],
+        "截图": ["screenshot"],
+        "图片": ["image"],
+        "图像": ["image"],
+        "视频": ["video"],
+        "音乐": ["music"],
+        "歌曲": ["music"],
+        "音频": ["audio"],
+        "语音": ["voice", "speech"],
+        "朗读": ["voice", "speech"],
+        "旅行": ["travel", "trip"],
+        "行程": ["itinerary", "travel"],
+        "酒店": ["hotel", "travel"],
+        "记住": ["remember", "memory"],
+        "定时": ["schedule"],
+        "提醒": ["reminder", "schedule"],
+        "小红书": ["xiaohongshu", "rednote"],
+        "待办": ["todo"],
+        "复盘": ["reflection", "retrospective"],
+        "日报": ["daily", "report"],
+        "周报": ["weekly", "report"],
+        "今天做了什么": ["daily", "report"],
+    ]
 }

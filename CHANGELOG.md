@@ -1,20 +1,59 @@
 # Changelog
 
-> 当前文件保留最新版本（1.284.0-rc12 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.285.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.284.0-rc12 - 2026-08-23
+## 1.285.0-rc3 - 2026-08-23
 
 ### Removed
 
 - **删掉 `AppStateAgentSessions.swift` 里零调用的 `clearIncompatibleAgentSessionModelOverride()`（10 行）。** 全仓库 grep（`*.swift` / `*.rb` / `*.md` / `*.json` / `*.yml`）只命中定义处这一行，没有任何调用点，也没有 CI 守卫按名字断言它。它想做的事——会话级模型覆盖与当前 provider 不兼容时清空覆盖并落盘——从来没有被触发过。
 - **不是上一轮拆分造成的。** 在 `develop` 上 `git grep` 拆分前的版本，同样只有定义处一处命中，说明这个方法在 1.284.0-rc11 拆文件之前就已经是死代码。
-- 它依赖的 `agentModelIsCompatibleWithActiveProvider(_:)` 仍有两处活调用（`AppStateAgentSessions.swift:2462`、`AppStateAgentRequestEstimates.swift:178`），保留不动。主文件 2584 → 2574 行。
+- 它依赖的 `agentModelIsCompatibleWithActiveProvider(_:)` 仍有两处活调用（`AppStateAgentSessions.swift`、`AppStateAgentRequestEstimates.swift`），保留不动。主文件 2584 → 2574 行。
 
 ### Tests
 
-- 编译并复跑 109 tests / 4 suites 全绿（`AgentGoalTeamsTests` / `AgentGoalBudgetedContinuationTests` / `SomeIMSharedSessionMemoTests` / `AgentPlanProgressTests`）。三项证据一致：退出码 0、原始日志 `** TEST SUCCEEDED **`、`report.json` 的 `passed=109 failed=0 total_mismatch=false`。
-- `version_consistency: pass version=1.284.0-rc12 failures=0`。
+- 删除后编译并复跑 109 tests / 4 suites 全绿（`AgentGoalTeamsTests` / `AgentGoalBudgetedContinuationTests` / `SomeIMSharedSessionMemoTests` / `AgentPlanProgressTests`）。三项证据一致：退出码 0、原始日志 `** TEST SUCCEEDED **`、`report.json` 的 `passed=109 failed=0 total_mismatch=false`。
+- 合并 `develop`（1.285.0-rc2）后版本位点一律取更高侧再统一 bump；`version_consistency: pass version=1.285.0-rc3 failures=0`。
+
+## 1.285.0-rc2 - 2026-08-23
+
+### Added
+
+- **Alma 规则库随 WillDeep 离线发行。** `BundledAgentRules` 携带完整的工程规则文档、相对链接索引和带版本/内容哈希的 manifest；Xcode 将整个只读目录复制进 App Resources。新增同步脚本与 CI 契约守卫，确保规则快照、索引、manifest 和资源构建配置一致。
+- **规则设置页可载入内置精简索引。** 页面展示内置规则库路径与规则版本；“载入内置索引”只替换编辑区草稿，用户保存后才生效，不会静默覆盖自定义规则。
+- **164 个既有原生工具改为分类索引与按需加载。** 新增 `load_tool_pack` 后，普通编码回合常驻 20 个核心工具，其余按终端、会话自动化、知识、集成、浏览器、Computer Use、媒体、插件与短剧分包；一次可加载多个包。
+- **通用 Skill 增加宿主侧主动路由。** 发送前只用缓存中的名称、描述和跨语言关键词进行确定性匹配；明确或高置信度命中最多自动挂载一份完整 `SKILL.md`，模糊命中最多注入三个短候选并要求模型先调用 `read_skill`，手动选择与专用视觉路由始终优先。
+
+### Changed
+
+- **默认全局规则从长正文改为按需路由。** 新用户的 `~/.willdeep/CLAUDE.md` 只保留语言、安全、优先级和任务到规则文件的映射；Prompt 注入时把占位符解析为当前 App 内的绝对规则目录。旧版原厂模板会安全迁移，自定义文件保持不变。
+- **上下文能力索引落实缓存边界。** Skill 沿用 `list_skills` / `read_skill` 按需加载，MCP 沿用固定网关；原生工具包在会话内只增不减，并按注册表顺序稳定输出。首次扩包只承担一次 `[tools, system, history]` 前缀缓存失效，后续回合继续复用。
+
+### Tests
+
+- `bundled_agent_rules_contract_test` 覆盖规则版本、文件清单、内容 SHA-256、索引体积/相对链接、Xcode Resources、默认模板和占位符解析；agentrules `v0.20.0` 自身规则校验通过。
+- `AgentToolPackTests` 覆盖全部描述符完整归类、核心工具数上限、扩包单调性、稳定顺序、多包加载与专家隐式激活。
+- `AgentSkillAutoActivationTests` 覆盖显式技能、中文到英文元数据路由、模糊候选、禁用/手动优先级与紧凑候选 Prompt；连同工具包共 19 项定向测试通过。
+- `CURRENT_PROJECT_VERSION` 从 463 递增至 465；全仓库版本同步到 `1.285.0-rc2`。
+
+## 1.284.0-rc12 - 2026-08-22
+
+### Fixed
+
+- **Goal 长任务统一由预算收口。** 空验收清单也进入预算续跑；预算耗尽时展示正确的交接横幅，交接请求发出后不再被计划自动续跑重新拉起；本地化安全上限文案不再硬编码轮数。
+- **计划进度解析不再把普通文本误判成步骤或失败。** `2 tests failed` 不再被识别为第 2 步，`❌` / `✗` / `✘` 不再自动等价于失败状态，`not done` / `尚未完成` 等否定表达不会被尾部状态词翻转成已完成。
+- **排队派发与 some.im 会话回退保留完整语义。** 延迟派发会携带原始 `source`；最近一次有效 some.im 会话只允许在 10 分钟内用于瞬时 Keychain 读取失败，明确登出仍立即清空。
+- **Session Vitality 仪表盘改用只读 MCP 资源取统计数据。** 页面从 `tools/call` 切换到 `resources/read` 的 `willdeep-plugin://vitality/stats`，避免确认流程导致 `res.content is undefined`；服务端同步公开 JSON 资源并补充契约测试。
+
+### Changed
+
+- Agent 稳定提示词契约升级至 v31，恢复计划、进度、交接与工具调用的既有语义，并重录 standard / compact / extended 三档快照哈希。
+
+### Tests
+
+- 三档旧快照哈希按实际提示词重录后，定向复跑覆盖 Goal 预算、计划解析、停止处理、提示词与 some.im 会话缓存：158 tests / 8 suites 全绿，原始日志 `** TEST SUCCEEDED **`。
+- `session_vitality_server_test: pass checks=8`；Ruby 语法检查通过；`complexity_guard: pass scanned=785 soft=19 hard=0`；`git diff --check` 通过。
 
 ## 1.284.0-rc11 - 2026-08-22
 

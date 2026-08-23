@@ -31,17 +31,41 @@ struct AgentGlobalRulesTests {
     }
 
     @Test
-    func defaultRulesTemplateContainsCodexStrictRules() {
-        // The template constrains "this AI assistant", never a named third
-        // party — a model reading "these rules bind Codex" can reasonably
-        // conclude they do not bind WillDeep Agent.
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("# 全局规则（严格条款）"))
-        #expect(!AgentGlobalRulesStore.defaultRulesTemplate.contains("Codex"))
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("所有对用户的回复一律使用**简体中文**"))
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("前端与后端版本号必须保持一致"))
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("默认避免使用管道"))
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("远程环境无法安装/使用传输工具"))
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("<!-- BEGIN ALMA AGENTRULES SYNC -->"))
+    func defaultRulesTemplateIsACompactBundledLibraryIndex() {
+        let template = AgentGlobalRulesStore.defaultRulesTemplate
+
+        #expect(template.contains("# WillDeep 全局规则（精简索引）"))
+        #expect(template.contains(AgentBundledRules.rootPlaceholder))
+        #expect(template.contains("ai-guardrails.md"))
+        #expect(template.contains("version-control.md"))
+        #expect(template.contains("不要一次性读取整个目录"))
+        #expect(!template.contains("<!-- BEGIN ALMA AGENTRULES SYNC -->"))
+        #expect(template.count < 2_000)
+    }
+
+    @Test
+    func bundledRulesResolveAStableLocalDirectoryAndManifest() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let rulesRoot = try #require(AgentBundledRules.rootURL(sourceRoot: repositoryRoot))
+        let manifest = try #require(AgentBundledRules.manifest(rootURL: rulesRoot))
+
+        #expect(rulesRoot.lastPathComponent == AgentBundledRules.directoryName)
+        #expect(manifest.rulesVersion == "0.20.0")
+        #expect(manifest.files.contains("AGENTS.md"))
+        #expect(manifest.files.contains("programming.md"))
+    }
+
+    @Test
+    func bundledRulesPlaceholderResolvesOnlyAtPromptLoadTime() {
+        let root = URL(fileURLWithPath: "/Applications/WillDeep.app/Contents/Resources/BundledAgentRules")
+        let raw = "Rules: `\(AgentBundledRules.rootPlaceholder)`"
+        let resolved = AgentBundledRules.resolvingRootPlaceholder(in: raw, rootURL: root)
+
+        #expect(raw.contains(AgentBundledRules.rootPlaceholder))
+        #expect(resolved.contains(root.path))
+        #expect(!resolved.contains(AgentBundledRules.rootPlaceholder))
     }
 
     @Test
@@ -90,6 +114,10 @@ struct AgentGlobalRulesTests {
         #expect(!AgentGlobalRulesStore.shouldSeedDefaultRulesFile(
             settings: AgentGlobalRulesSettings(isEnabled: true, filePath: "/tmp/custom-rules.md"),
             fileExists: false
+        ))
+        #expect(!AgentGlobalRulesStore.shouldMigrateLegacyDefaultRulesFile(
+            settings: AgentGlobalRulesSettings.default,
+            fileText: "user customized rules"
         ))
     }
 

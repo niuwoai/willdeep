@@ -238,6 +238,26 @@ struct SomeIMSharedSessionMemoTests {
         #expect(memo.lastKnownGoodSession?.apiKey == "key-1")
     }
 
+    /// 桥接的意义是渡过秒级的 Keychain 抖动，不是永生。跨 App 登出后若
+    /// Keychain 持续不可读，无限期沿用旧 key 等于让登出失效——所以桥接
+    /// 有陈旧上限，过期后无人值守路径拿到的是空。
+    @Test("桥接会话有陈旧上限，过期后不再供无人值守路径使用")
+    func lastKnownGoodSessionExpires() {
+        var clock = Date(timeIntervalSince1970: 0)
+        let memo = SomeIMSharedSessionMemo(unavailableTTL: 0, now: { clock })
+        _ = memo.value { .session(session("key-1")) }
+        memo.invalidate()
+        _ = memo.value { .unavailable }
+        #expect(memo.usableLastKnownGoodSession?.apiKey == "key-1")
+
+        clock = Date(
+            timeIntervalSince1970: SomeIMSharedSessionMemo.lastKnownGoodSessionMaxAge + 1
+        )
+        #expect(memo.usableLastKnownGoodSession == nil)
+        // 原始记录保留，供诊断观察；只有新鲜度门禁拒绝供货。
+        #expect(memo.lastKnownGoodSession?.apiKey == "key-1")
+    }
+
     @Test("显式遗忘只在登出路径上使用")
     func forgettingIsExplicit() {
         let memo = SomeIMSharedSessionMemo()
