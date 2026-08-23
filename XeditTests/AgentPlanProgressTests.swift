@@ -797,7 +797,9 @@ struct AgentPlanProgressTests {
         #expect(notice.contains("minimum necessary read-only status or inspection tools"))
         #expect(notice.contains("write, danger, and user-input tools are blocked"))
         #expect(notice.contains("repeat the plan"))
-        #expect(notice.contains("exactly one closed `progress` fenced block"))
+        // 1.286.0：对账也改走 update_plan。守的约束没变——必须一次覆盖所有
+        // 未终态步骤，而不是挑着报。
+        #expect(notice.contains("call `update_plan` once, covering every still non-terminal step"))
         #expect(notice.contains("Do not infer completion without evidence"))
         #expect(AgentPlanAutoContinuationPolicy.allowsToolRiskDuringProgressReconciliation(.read))
         #expect(!AgentPlanAutoContinuationPolicy.allowsToolRiskDuringProgressReconciliation(.write))
@@ -880,7 +882,9 @@ struct AgentPlanProgressTests {
         )
         #expect(prompt.contains("Do not restart Goal Teams"))
         #expect(prompt.contains("实现剩余目标"))
-        #expect(prompt.contains("`progress`"))
+        // 恢复提示词要同时点名两条状态通道：步骤进度走 update_plan，
+        // 目标验收仍走 goal-check 围栏块。
+        #expect(prompt.contains("`update_plan`"))
         #expect(prompt.contains("`goal-check`"))
         #expect(AgentGoalExecutionControlPolicy.resumePrompt(
             remainingAcceptance: []
@@ -911,7 +915,7 @@ struct AgentPlanProgressTests {
         #expect(notice.contains("background job started by this conversation is still running"))
         #expect(notice.contains("keep that step `in_progress`"))
         // Still the full reconciliation contract, not a weaker variant.
-        #expect(notice.contains("exactly one closed `progress` fenced block"))
+        #expect(notice.contains("call `update_plan` once, covering every still non-terminal step"))
         #expect(notice.contains("write, danger, and user-input tools are blocked"))
     }
 
@@ -1018,8 +1022,13 @@ struct AgentPlanProgressTests {
             )
         )
         #expect(executionPrompt.contains("=== ACTIVE PLAN — CONTINUE, DO NOT RE-PLAN ==="))
-        #expect(executionPrompt.contains("refresh the visible checklist immediately"))
-        #expect(executionPrompt.contains("Only lines in exactly that shape update WillDeep's visible checklist"))
+        // 1.286.0 起主上报通道从围栏块换成 update_plan 工具，这两条锚点跟着
+        // 换措辞——守的约束没变：① 收到工具结果后、发下一批工具调用之前先
+        // 上报；② 合同必须点名通道与条目形状。围栏块降级为兼容路径，仍在
+        // 合同里出现，但不再是"唯一写入通道"。
+        #expect(executionPrompt.contains("before issuing more tool calls"))
+        #expect(executionPrompt.contains("Report with the `update_plan` tool"))
+        #expect(executionPrompt.contains("<step number>: <status>"))
         #expect(executionPrompt.contains("Do not emit a replacement `plan` block"))
         #expect(executionPrompt.contains("The plan is now in unattended execution"))
         #expect(executionPrompt.contains("ordinary Git/worktree conflicts"))
@@ -1051,7 +1060,9 @@ struct AgentPlanProgressTests {
         #expect(prompt.contains("1: done"))
         #expect(prompt.contains("2: in_progress"))
         #expect(prompt.contains("Status tokens:"))
-        #expect(prompt.contains("Only lines in exactly that shape update WillDeep's visible checklist"))
+        // 同上：合同文本随 update_plan 落地改写，中断分支与活跃分支仍共用
+        // 同一份常量，所以这里断言的是同一段文字。
+        #expect(prompt.contains("Report with the `update_plan` tool"))
         // 恢复前先对账：历史显示做完、状态却仍是 pending 的步骤应补登记而非重做。
         #expect(prompt.contains("Reconcile before you resume"))
         // 没有违规时不得出现纠偏段落。
@@ -1357,5 +1368,168 @@ struct AgentPlanProgressTests {
         #expect(
             AgentPlanParser.applyProgress(to: plan, from: reply)?.steps[0].status == .inProgress
         )
+    }
+
+    // MARK: - update_plan 工具（1.286.0）
+
+    /// 工具的解析层。围栏块的教训是"读不出就静默丢弃"，工具的合同反过来：
+    /// 每一条读不出的 entry 都要带着原因回给模型。
+    @Test("update_plan 解析条目：宽进严出，坏条目带原因回灌")
+    func updatePlanParsesEntriesAndReportsRejections() {
+        let parsed = AgentPlanProgressApplier.parse(
+            entries: [
+                "1: done",
+                "step 2 - in_progress",
+                "3.skipped",
+                "4：完成",          // 中文状态词与全角冒号
+                "5: done — tests pass",  // 状态词后带说明
+                "",                 // 空条目直接忽略，不算拒绝
+                "9: done",          // 越界
+                "6: halfway",       // 状态词不认识
+                "finish the thing"  // 没有序号
+            ],
+            stepCount: 6
+        )
+        #expect(parsed.updates.count == 5)
+        #expect(parsed.updates.map(\.stepNumber) == [1, 2, 3, 4, 5])
+        #expect(parsed.updates.map(\.status) == [.done, .inProgress, .skipped, .done, .done])
+        #expect(parsed.rejections.count == 3)
+        #expect(parsed.rejections[0].entry == "9: done")
+        #expect(parsed.rejections[0].reason.contains("outside the active plan"))
+        #expect(parsed.rejections[1].reason.contains("not a status"))
+        #expect(parsed.rejections[2].reason.contains("step number"))
+    }
+
+    /// 同一步骤重复上报时后者覆盖前者——与围栏块的规则一致。
+    @Test("update_plan 同步骤重复上报以最后一条为准")
+    func updatePlanLastEntryWinsForRepeatedStep() {
+        let parsed = AgentPlanProgressApplier.parse(
+            entries: ["1: in_progress", "1: done"],
+            stepCount: 1
+        )
+        #expect(parsed.updates.count == 1)
+        #expect(parsed.updates[0].status == .done)
+    }
+
+    /// 生命周期推进必须和围栏块走同一段代码：碰一步就 approved → executing，
+    /// 全终态则 done。两条通道在这件事上分叉过一次就再也对不上账。
+    @Test("update_plan 与围栏块共用同一套状态推进")
+    func updatePlanSharesLifecyclePromotionWithFence() {
+        let plan = AgentPlan(
+            status: .approved,
+            steps: [AgentPlan.Step(text: "A"), AgentPlan.Step(text: "B")],
+            summary: ""
+        )
+        let touched = AgentPlanProgressApplier.apply([0: .inProgress], to: plan)
+        #expect(touched.status == .executing)
+
+        let allTerminal = AgentPlanProgressApplier.apply([0: .done, 1: .skipped], to: plan)
+        #expect(allTerminal.status == .done)
+
+        // 未获批准的计划不能被一条上报推着走。
+        var proposed = plan
+        proposed.status = .proposed
+        #expect(AgentPlanProgressApplier.apply([0: .done], to: proposed).status == .proposed)
+
+        // 与围栏块逐字节等价。
+        let viaFence = AgentPlanParser.applyProgress(
+            to: plan,
+            from: """
+            ```progress
+            1: in_progress
+            ```
+            """
+        )
+        #expect(viaFence == touched)
+    }
+
+    /// §4.3：同一回合里工具已经结掉的步骤，收尾那条围栏块不能把它改回去；
+    /// 工具没提过的步骤，围栏块照常生效。
+    @MainActor
+    @Test("同回合内 update_plan 结掉的步骤不被随后的围栏块回退")
+    func toolReportsOutrankLaterFenceInSameTurn() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        appState.agentInteractionMode = .normal
+        appState.agentCurrentPlan = AgentPlan(
+            status: .executing,
+            steps: [
+                AgentPlan.Step(text: "迁移数据", status: .done),
+                AgentPlan.Step(text: "切换连接", status: .pending)
+            ],
+            summary: ""
+        )
+        // 工具在本回合把第 1 步结成 done。
+        appState.activeRuntime?.planStepsSettledByToolThisTurn = [0]
+        appState.agentMessages = [
+            AgentMessage(role: .user, content: "继续"),
+            AgentMessage(
+                role: .assistant,
+                content: """
+                收尾汇报。
+                ```progress
+                1: in_progress
+                2: done
+                ```
+                """
+            )
+        ]
+
+        appState.captureAgentPlanFromLatestMessage()
+
+        // 第 1 步保持 done（围栏块的回退被挡下），第 2 步照常记上。
+        #expect(appState.agentCurrentPlan?.steps[0].status == .done)
+        #expect(appState.agentCurrentPlan?.steps[1].status == .done)
+        #expect(appState.agentCurrentPlan?.status == .done)
+    }
+
+    /// 换了计划（或增删步骤）之后，旧的位序台账必须作废——否则第 1 步的
+    /// 保护会盖到一个完全不同的步骤上。
+    @MainActor
+    @Test("计划被替换后工具台账立即作废")
+    func toolLedgerResetsWhenPlanIsReplaced() {
+        let appState = AppState()
+        appState.startNewAgentSession()
+        guard let runtime = appState.activeRuntime else {
+            Issue.record("no runtime")
+            return
+        }
+        runtime.currentPlan = AgentPlan(
+            status: .executing,
+            steps: [AgentPlan.Step(text: "旧步骤")],
+            summary: ""
+        )
+        runtime.planStepsSettledByToolThisTurn = [0]
+
+        // 纯状态更新保留台账（步骤 id 不变）。
+        runtime.currentPlan = AgentPlanProgressApplier.apply([0: .done], to: runtime.currentPlan!)
+        #expect(runtime.planStepsSettledByToolThisTurn == [0])
+
+        // 换成一份新计划则清空。
+        runtime.currentPlan = AgentPlan(
+            status: .approved,
+            steps: [AgentPlan.Step(text: "新步骤")],
+            summary: ""
+        )
+        #expect(runtime.planStepsSettledByToolThisTurn.isEmpty)
+    }
+
+    /// 工具必须常驻核心包：藏在 load_tool_pack 后面的进度上报，等模型想
+    /// 起来加载时该报的进度早就过去了。
+    @Test("update_plan 常驻核心工具集且不需要审批")
+    func updatePlanIsAlwaysAdvertisedAndNeverGated() {
+        #expect(AgentToolPackCatalog.coreToolNames.contains("update_plan"))
+        #expect(AgentToolPackCatalog.packID(for: "update_plan") == nil)
+
+        guard let descriptor = AgentToolRegistry.all.first(where: { $0.name == "update_plan" }) else {
+            Issue.record("update_plan descriptor missing")
+            return
+        }
+        // .read 在 autoApprovalSource 的第一行就被放行；写清单是会话内状态，
+        // 不碰工作区也不碰 shell，绝不该弹审批卡打断执行。
+        #expect(descriptor.risk == .read)
+        #expect(descriptor.parameters.first?.name == "updates")
+        #expect(descriptor.parameters.first?.type == .stringArray)
+        #expect(descriptor.parameters.first?.required == true)
     }
 }

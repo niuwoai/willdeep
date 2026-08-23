@@ -1,7 +1,32 @@
 # Changelog
 
-> 当前文件保留最新版本（1.285.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.286.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.286.0-rc1 - 2026-08-23
+
+### Added
+
+- **`update_plan` 工具：进度上报从围栏块换成工具调用。** 这是「做了好几步、清单还停在第 1 步」的根治，而不是又一次给解析器加回退。1.284.0-rc3 那轮把解析成功率从 42% 提到 84%，用户在 rc2 上仍然看到卡住的清单——因为剩下的失效源根本不是格式：对全部落盘会话的只读复盘（21 个带计划的会话、243 个 `progress` 块）显示 **80% 的块落在回合收尾的纯叙述回复里**，回合中段只有 20%；从 `plan` 出现到第一个 `progress` 块，中位隔 **20 个工具回合 / 22 分钟**，P90 76 个回合。一个真实样本：52 分钟、34 个工具回合、其中 33 个都带了文字叙述，**中段 0 个 progress 块**，收尾一次性把 7 步全标完。宿主每个工具回合都在扫（`AppStateAgentLoop` 第 1215 行），提示词也写着「收到工具结果先上报再发下一批工具调用」，模型就是不照做——**它们在回合中段唯一稳定使用的通道是工具调用**。现在进度就挂在那条通道上。
+- **工具会回话，这是围栏块结构上做不到的。** `updates` 收 `["1: done", "2: in_progress"]`，宽进严出：`step 2 - in_progress`、`3.skipped`、`4：完成`、`5: done — tests pass` 都认（复用围栏块那张中英文状态词表，模型在哪条通道学会的说法换一条不该被判错）；读不出的条目**带原因回灌**——「`"9: done"` — step 9 is outside the active plan (it has 6 steps)」。围栏块失败时没有回信通道，只能静默冻结清单。
+- **常驻核心工具集**（20 → 21 个，仍在 24 的上限内）。藏在 `load_tool_pack` 后面的进度上报，等模型想起来加载时该报的进度早就过去了。risk 定为 `.read`：它不碰工作区也不碰 shell，只写会话内的清单状态，不该有机会弹审批卡把执行打断。
+
+### Changed
+
+- **围栏块降级为兼容路径，按步骤让位于工具**（`docs/LONG_HORIZON_AUTONOMY.md` §4.3）。同一回合里工具已经结掉的步骤，随后的围栏块改不动——真实冲突是收尾那条按旧心智拼出来的汇报，把工具刚关掉的步骤又打回 `in_progress`。工具没提过的步骤仍然照收，因为收尾汇报常常是个超集。台账（`AgentRuntime.planStepsSettledByToolThisTurn`）在新回合开始、以及计划被替换或增删步骤时清空——后者按 step id 判定，插一步就会让位序失效。
+- **提示词四处分支与两处对账通知改为教工具**：ACTIVE PLAN、INTERRUPTED PLAN、ORDINARY MODE、GOAL 执行段，加上进度对账通知与 Goal 计划同步指令。**全部在动态段，未触碰稳定前缀**——`stablePrefixVersion` 仍是 v32，三档快照哈希一个没动，用户的 provider prompt cache 不会因为这次改动失效一次（`AgentPromptSnapshotGuardTests` 全绿即为证据）。
+- **上报落地即持久化**（`persistAgentSession`，不 touch `updatedAt`），不再等回合结束的 defer。此前一个 52 分钟的单回合把全部状态变化攒在内存里，中途崩溃全丢。
+- **续推策略认工具通道**：新增 `planAdvancedByToolSinceLastContinuationDecision`。工具调用发生在续推快照对比之后，不接这根线的话，「只用工具上报」的回合在 `AgentPlanAutoContinuationPolicy` 眼里等于零进展，会被当成停滞硬停——正好把新通道的用户推回老问题里。
+
+### Notes
+
+- 与 `LONG_HORIZON_AUTONOMY.md` §4.2 原稿有四处刻意偏差，逐条理由见新增的 §4.5：`stringArray` 而非嵌套对象（参数类型系统只有四种，加对象要同时改四个 provider 编码器，而 `1: done` 是模型已经会写的形状）；只做局部更新（建计划的 ` ```plan ` 块本来就好使，失效的是上报）；`checklist` + `evidence` **未做**（属 Goal 验收通道，会动到相位收口，留作 fast-follow）；`blocked_reason` 落为一行 `note`。
+- 迁移计数不另建管线：两条通道在落盘会话 JSON 里都有（围栏块在正文、工具调用在 `toolCalls`），数「仅用围栏块的回合」用审计那份只读脚本即可，再加一套计数器只会多一份会漂的真相。
+
+### Tests
+
+- `AgentPlanProgressTests` 63 tests 全绿（新增 6 条：条目解析与拒绝回灌、同步骤重复上报、与围栏块共用生命周期推进且逐字节等价、同回合工具优先于围栏块、换计划后台账作废、常驻核心且免审批）。另跑 `AgentToolPackTests` / `AgentPromptSnapshotGuardTests` / `AgentToolsCoreTests` / `AgentPlanContinuationTests` 共 112 tests 全绿。两轮均三项证据一致：退出码 0、`** TEST SUCCEEDED **`、`report.md` failed=0。
+- `AgentPlanProgressTests` 里两条提示词锚点跟着改了措辞（`refresh the visible checklist immediately` → `before issuing more tool calls`、`Only lines in exactly that shape…` → `Report with the \`update_plan\` tool`）。守的约束没变，测试里留了来龙去脉——按既往教训，这类锚点红了要先确认是措辞变了还是约束丢了。
 
 ## 1.285.0-rc5 - 2026-08-23
 

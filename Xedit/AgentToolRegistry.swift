@@ -1846,6 +1846,15 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "update_plan",
+            description: "Record checklist progress for the active plan. Call this the moment a step's status changes — in the SAME round as your other tool calls, not at the end of the reply. WillDeep's visible step counter only moves when this lands, so a long tool-heavy turn that reports nothing until it finishes leaves the user watching \"step 1 of 7\" for an hour. Mark a step in_progress before you start its tool calls and done (or failed / skipped) once its evidence is in. Steps you did not touch can be omitted; unknown step numbers and unreadable statuses are reported back to you rather than silently dropped. This tool only updates an EXISTING plan — create one with a numbered ```plan block first.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "updates", type: .stringArray, description: "One entry per step you are updating, each `<step number>: <status>` — e.g. [\"1: done\", \"2: in_progress\"]. The number is the 1-based position in the active plan. Status is one of pending, in_progress, done, skipped, failed.", required: true),
+                AgentToolParameter(name: "note", type: .string, description: "Optional one-line context shown to the user next to the update, e.g. why a step is failed or blocked. Do not restate the step text.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "complete_scheduled_task",
             description: "Remove a scheduled task by id, so it stops running and its card/sidebar entry disappears. The primary use is self-completion: when a scheduled run (see schedule_task with a goal) determines its goal is met, it calls this with its own task_id. Also usable to cancel a task the user no longer wants.",
             risk: .write,

@@ -155,7 +155,29 @@ final class AgentRuntime: ObservableObject, Identifiable {
     @Published var executionAgent: AgentExecutionAgent = .willDeep
     @Published var delegatedTaskRuns: [AgentDelegatedTaskRun] = []
     @Published var activeExperts: Set<AgentExpert> = []
-    @Published var currentPlan: AgentPlan?
+    @Published var currentPlan: AgentPlan? {
+        didSet {
+            // Step ids are minted per plan, so different ids mean a different
+            // plan (or an inserted/removed step) — either way the tool ledger's
+            // positional indices no longer point at what they did. A pure
+            // status update keeps every id and must NOT clear it.
+            guard oldValue?.steps.map(\.id) != currentPlan?.steps.map(\.id) else { return }
+            planStepsSettledByToolThisTurn.removeAll()
+        }
+    }
+    /// 0-based step indices that `update_plan` already settled during the
+    /// current turn. A ```progress fence later in the SAME turn does not get
+    /// to overwrite them (LONG_HORIZON_AUTONOMY.md §4.3 — 工具优先), which
+    /// stops a stale end-of-turn recap from reverting a step the tool already
+    /// closed. Steps the tool never mentioned stay open to the fence, so the
+    /// recap can still add what the tool missed. Cleared on each new user
+    /// dispatch and whenever a fresh plan replaces this one — indices are
+    /// meaningless across plans.
+    var planStepsSettledByToolThisTurn: Set<Int> = []
+    /// Set by `update_plan`; consumed by the turn loop's continuation
+    /// decision. Without it a turn that reported progress only through the
+    /// tool looks like "no progress" to `AgentPlanAutoContinuationPolicy`.
+    var planAdvancedByToolSinceLastContinuationDecision = false
     @Published var currentGoal: AgentGoal?
     @Published var goalPlanningState: AgentGoalPlanningState?
     @Published var goalRoadmap: AgentGoalRoadmap?
