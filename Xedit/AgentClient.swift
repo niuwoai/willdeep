@@ -109,6 +109,17 @@ enum AgentSafetyJudgeResult: Equatable {
     case unavailable(String)
 }
 
+/// 裁判问的是哪个问题。两者的**失败方向相反**，所以调用方必须显式选，
+/// 不能靠默认值蒙混：
+///  - `.developerOperations`：「这是正常的开发/运维操作吗」，拿不准判 NO
+///    （智能审核与 Goal 用它，宁可多问一次）；
+///  - `.maliciousIntent`：「这条命令是不是在干坏事」，拿不准判 YES
+///    （静默模式用它，用户要的就是少问）。
+enum AgentSafetyJudgeKind: Equatable, Sendable {
+    case developerOperations
+    case maliciousIntent
+}
+
 struct AgentClient {
     private let configuration: AgentConfiguration
     private let session: URLSession?
@@ -164,7 +175,8 @@ struct AgentClient {
         historyContext: String = "",
         toolName: String = "run_command",
         taskContext: String = "",
-        environmentTrust: String = ""
+        environmentTrust: String = "",
+        kind: AgentSafetyJudgeKind = .developerOperations
     ) async -> AgentSafetyJudgeResult {
         switch configuration.inferenceProviderKind {
         case .openAIChat:
@@ -174,7 +186,8 @@ struct AgentClient {
                     historyContext: historyContext,
                     toolName: toolName,
                     taskContext: taskContext,
-                    environmentTrust: environmentTrust
+                    environmentTrust: environmentTrust,
+                    kind: kind
                 )
         case .anthropicMessages:
             return await AnthropicMessagesAdapter(configuration: configuration, session: session)
@@ -183,7 +196,8 @@ struct AgentClient {
                     historyContext: historyContext,
                     toolName: toolName,
                     taskContext: taskContext,
-                    environmentTrust: environmentTrust
+                    environmentTrust: environmentTrust,
+                    kind: kind
                 )
         case .geminiGenerateContent:
             return await GeminiAdapter(configuration: configuration, session: session)
@@ -192,7 +206,8 @@ struct AgentClient {
                     historyContext: historyContext,
                     toolName: toolName,
                     taskContext: taskContext,
-                    environmentTrust: environmentTrust
+                    environmentTrust: environmentTrust,
+                    kind: kind
                 )
         case .openAIResponses:
             return await OpenAIResponsesAdapter(
@@ -205,7 +220,8 @@ struct AgentClient {
                     historyContext: historyContext,
                     toolName: toolName,
                     taskContext: taskContext,
-                    environmentTrust: environmentTrust
+                    environmentTrust: environmentTrust,
+                    kind: kind
                 )
         }
     }

@@ -337,15 +337,29 @@ extension AppState {
         computerUseOwner: AgentComputerUseOwner? = nil,
         latestUserMessage: String = ""
     ) async -> AgentToolApprovalSource? {
-        guard risk == .write else { return nil }
-
         // 环境信任声明本身永不自动通过——任何模式、任何 pin、Goal 免审都
-        // 够不到它。一次人工点击 = 一次授权仪式：注入文本骗 Agent 调这个
-        // 工具时，用户会在卡片上看到被逐字引用的"用户原话"，认出自己从未
-        // 说过而拒绝。这是整个特性防注入自授权的关键闸门。
+        // 够不到它，静默模式也一样。一次人工点击 = 一次授权仪式：注入文本
+        // 骗 Agent 调这个工具时，用户会在卡片上看到被逐字引用的"用户原话"，
+        // 认出自己从未说过而拒绝。这是整个特性防注入自授权的关键闸门。
+        //
+        // 这一段提到 `guard risk == .write` 之前：静默模式要处理 danger 档，
+        // 而那道 guard 会把 danger 档直接判成"要人工"。
         if AgentEnvironmentTrust.neverAutoApprovedToolNames.contains(toolName) {
             return nil
         }
+
+        if approvalMode == .silent {
+            return await silentModeApprovalSource(
+                toolName: toolName,
+                arguments: arguments,
+                risk: risk,
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: additionalWorkspaceRoots,
+                latestUserMessage: latestUserMessage
+            )
+        }
+
+        guard risk == .write else { return nil }
 
         // Renaming the originating session is a bounded, reversible local
         // metadata write. Keep it write-tier for ordering and auditability,
@@ -768,6 +782,126 @@ extension AppState {
         return context
     }
 
+    /// 静默模式的放行判定：**黑名单式**，与其他三档的白名单式相反。
+    ///
+    /// 用户选这一档表达的是「少问我，除非真有恶意」，所以这里的默认答案是
+    /// 放行，需要理由的是**拦截**。两道闸，顺序不能换：
+    ///
+    ///  1. `AgentMaliciousCommandDenylist` —— 确定性、不依赖网络、裁判推翻
+    ///     不了。抹根目录、格式化、反弹 shell、清历史、凭据外泄这几类，
+    ///     命中即回落人工审批卡（该打字确认的照样打字）。
+    ///  2. AI 裁判（`.maliciousIntent`）—— 只有它能**指名道姓说出恶意效果**
+    ///     时才拦。裁判缺席（没配 key、网络抖动、输出被截断）按用户的语义
+    ///     放行：没发现恶意就是没发现恶意。这条是刻意的，也是这一档最该被
+    ///     用户知道的性质，所以审计日志会把「未裁而放」单独标出来。
+    ///
+    /// 永不放行的仍然永不放行：`neverAutoApprovedToolNames`（调用方已先拦）、
+    /// `change_workspace`、`ask_user` 这类要人回答的工具。
+    func silentModeApprovalSource(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        risk: AgentToolRisk,
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL],
+        latestUserMessage: String
+    ) async -> AgentToolApprovalSource? {
+        // 读工具本就不过这道门，和其他档位一样返回 nil（"纯读，从不设卡"），
+        // 而不是给它盖一个"静默模式放行"的戳——那会在回合报告里凭空多出
+        // 一堆本来就不需要审批的记录。`userInput` 是"要用户回答"，不是
+        // "要用户批准"，静默模式不该也不能替他回答。
+        switch risk {
+        case .read, .userInput:
+            return nil
+        case .write, .danger:
+            break
+        }
+        // 工作区重绑会把后续所有工具指向别处，任何档位都不自动通过。
+        if toolName == "change_workspace" {
+            return nil
+        }
+        if toolName == "rename_session" {
+            return .staticAllowlist
+        }
+        // 用户在 MCP 设置里把某个服务器标成"不信任"，是一次明确的、针对
+        // 具体对象的表态。静默模式表达的是"少问我"，不是"推翻我说过的话"。
+        if toolName == "call_mcp_tool",
+           let server = arguments["server"]?.stringValue(),
+           AgentMCPSettingsStore.trustLevel(name: server) == .untrusted {
+            return nil
+        }
+
+        guard let command = Self.silentModeCommandPayload(toolName: toolName, arguments: arguments) else {
+            // 非命令型写工具（改文件、web_fetch 之类）：沙箱边界仍在，
+            // 没有可分类的命令文本，直接放行。
+            return .silentMode
+        }
+        if let match = AgentMaliciousCommandDenylist.match(command: command) {
+            noteSilentModeDenylistHit(match, toolName: toolName)
+            return nil
+        }
+        // 凭据读取即使不带网络出口也照样问。这不是给静默模式加戏：仓库里
+        // 这条边界连用户**显式**的环境信任声明都不放宽（"凭据外读是注入
+        // 攻击的终点站，这道门不接受来自模型侧的说服"），而选一个审批档位
+        // 是比那次声明更弱的信号，不该反而把它掀了。
+        //
+        // 另一层理由是 Agent 语境特有的：私钥一旦被读进回复，它就已经离开
+        // 这台机器去了模型服务商——"读"和"外泄"在这里不是两件事。
+        let sandboxDecision = AgentSandboxPolicy.decision(
+            toolName: toolName,
+            arguments: arguments,
+            rootDirectory: rootDirectory,
+            additionalWorkspaceRoots: additionalWorkspaceRoots
+        )
+        if sandboxDecision.credentialSensitive {
+            return nil
+        }
+        return await safetyJudgeApproval(
+            toolName: toolName,
+            command: command,
+            taskContext: latestUserMessage,
+            kind: .maliciousIntent,
+            approvedSource: .silentMode,
+            approvesWhenUnavailable: true
+        )
+    }
+
+    /// 静默模式要送去分类的命令文本。命令型工具取真实命令；`call_mcp_tool`
+    /// 复用既有的伪命令表示，让 MCP 调用也能过同一套判定。
+    nonisolated static func silentModeCommandPayload(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> String? {
+        if toolName == "call_mcp_tool" {
+            guard let server = arguments["server"]?.stringValue(),
+                  let tool = arguments["tool"]?.stringValue() else { return nil }
+            return AgentToolAuthorization.mcpJudgePseudoCommand(
+                server: server,
+                tool: tool,
+                argumentsJSON: arguments["arguments_json"]?.stringValue() ?? "{}"
+            )
+        }
+        guard isCommandShapedTool(toolName) else { return nil }
+        guard let command = arguments["command"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !command.isEmpty else { return nil }
+        return command
+    }
+
+    /// 黑名单命中要留痕：静默模式下用户几乎看不到审批卡，突然冒出来一张
+    /// 必须能解释清楚"为什么偏偏是这条"。
+    func noteSilentModeDenylistHit(
+        _ match: AgentMaliciousCommandDenylist.Match,
+        toolName: String
+    ) {
+        AgentSandboxAuditLog.recordJudge(
+            toolName: toolName,
+            command: match.segment,
+            model: "silent-mode-denylist",
+            verdict: "deny",
+            detail: "\(match.ruleID): \(match.reason)"
+        )
+    }
+
     /// Run the auto-approve safety judge for a command-shaped candidate,
     /// threading the operator's cached decision history in as few-shot
     /// context and logging the outcome to judge.jsonl. Returns `.llmJudge`
@@ -778,7 +912,10 @@ extension AppState {
         toolName: String,
         command: String,
         taskContext: String = "",
-        trustDeclaration: AgentEnvironmentTrustDeclaration? = nil
+        trustDeclaration: AgentEnvironmentTrustDeclaration? = nil,
+        kind: AgentSafetyJudgeKind = .developerOperations,
+        approvedSource: AgentToolApprovalSource = .llmJudge,
+        approvesWhenUnavailable: Bool = false
     ) async -> AgentToolApprovalSource? {
         let judgeTaskContext = AgentInjectionDefense.redactedTaskContextForSafetyJudge(taskContext)
         let trustFingerprint = trustDeclaration.map {
@@ -793,7 +930,8 @@ extension AppState {
             toolName: toolName,
             command: command,
             taskContext: judgeTaskContext,
-            environmentTrustFingerprint: trustFingerprint
+            environmentTrustFingerprint: trustFingerprint,
+            judgeKind: kind
         )
         if let grantedAt = cachedJudgeAllowedVerdicts[cacheKey],
            Date().timeIntervalSince(grantedAt) < Self.safetyJudgeVerdictCacheTTL {
@@ -841,10 +979,11 @@ extension AppState {
             effectiveConfiguration = candidate
             result = await AgentClient(configuration: candidate).judgeCommandSafety(
                 command: judgeCommand,
-                historyContext: safetyJudgeHistoryContext(),
+                historyContext: kind == .maliciousIntent ? "" : safetyJudgeHistoryContext(),
                 toolName: toolName,
                 taskContext: judgeTaskContext,
-                environmentTrust: trustPayload
+                environmentTrust: trustPayload,
+                kind: kind
             )
             guard case .unavailable(let reason) = result else { break }
             if fallbackDetail.isEmpty {
@@ -864,12 +1003,21 @@ extension AppState {
             verdict = "unavailable"
             detail = fallbackDetail.isEmpty ? reason : "\(fallbackDetail); \(reason)"
         }
+        // 静默模式在裁判缺席时也放行——这是用户明确要的语义（"没发现恶意
+        // 就放行"），但审计里必须看得出来是"没裁到"而不是"裁过并通过"，
+        // 否则事后复盘会把两件事混成一件。
+        let allowedWithoutVerdict = approvesWhenUnavailable && {
+            if case .unavailable = result { return true }
+            return false
+        }()
         AgentSandboxAuditLog.recordJudge(
             toolName: toolName,
             command: command,
             model: effectiveConfiguration.model,
             verdict: verdict,
-            detail: detail
+            detail: allowedWithoutVerdict
+                ? (detail.isEmpty ? "silent mode: allowed without a verdict" : "\(detail); silent mode: allowed without a verdict")
+                : detail
         )
         if result == .allow {
             if cachedJudgeAllowedVerdicts.count >= Self.safetyJudgeVerdictCacheLimit {
@@ -881,7 +1029,9 @@ extension AppState {
             }
             cachedJudgeAllowedVerdicts[cacheKey] = Date()
         }
-        return result == .allow ? .llmJudge : nil
+        // 只缓存真正的 allow：裁判缺席是瞬时状态，缓存它等于把一次网络
+        // 抖动变成 30 分钟的免检期。
+        return (result == .allow || allowedWithoutVerdict) ? approvedSource : nil
     }
 
     /// Tools whose side effects the workspace sandbox alone can't contain —
@@ -1015,7 +1165,11 @@ extension AppState {
             }
         case .escalated:
             return .escalated
-        case .staticAllowlist, .llmJudge, .none:
+        // `.silentMode` 与 `.llmJudge` 同组：按命令**实际需要**的档位跑，
+        // 而不是像 workspaceAccess 那样统一抬到 workspace-write。放行理由
+        // 宽松不等于沙箱要跟着放宽——真需要越界时，走下面的 seatbelt 拒绝
+        // 重跑路径，那条路在静默模式下同样自动。
+        case .staticAllowlist, .llmJudge, .silentMode, .none:
             return sandboxDecision.mode
         }
     }

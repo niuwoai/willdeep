@@ -1,6 +1,16 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-23（1.286.0-rc1）
+> Last updated: 2026-08-23（1.287.0-rc1）
+
+## 1.287.0-rc1 — 静默模式（黑名单式审批）
+
+- ⏳ composer 的审批档位菜单里确认有四项，顺序是 智能审核 / 静默模式 / 工作区可写 / 严格模式，静默模式那行的说明能让人看懂它是"除恶意外都放行"。
+- ⏳ 切到静默模式，让 Agent 做一串日常但破坏性的操作（`rm -rf node_modules`、`git reset --hard`、`docker compose down -v`），确认**一张审批卡都不弹**，工具行上的徽标是 `SILENT`。
+- ⏳ 让 Agent 执行一条黑名单命令（安全的做法：在一个可丢弃的容器/虚拟机里试 `rm -rf /`，或直接观察它是否弹卡后**点拒绝**），确认弹出审批卡且卡上说得清是哪条规则；`~/Library/Application Support/WillDeep/AgentAudit/judge.jsonl` 里能看到 `model` 为 `silent-mode-denylist` 的记录。
+- ⏳ 断网（或临时清掉裁判可用的 API key）后在静默模式下跑一条普通命令，确认**照常放行**，并且 judge.jsonl 里那条记录的 detail 带 `silent mode: allowed without a verdict`。这是这一档最需要用户知道的性质。
+- ⏳ 静默模式下让 Agent 调 `declare_environment_trust`（可以直接说「记住这个终端是一次性的」），确认**仍然弹审批卡**——这条闸门任何档位都够不到。
+- ⏳ 切回智能审核，确认之前的行为一切照旧（静默模式的判定不该渗到别的档位）。
+- ⏳ 用旧版本 WillDeep 打开一个在静默模式下创建的会话，确认它**还在会话列表里**（降级成智能审核），而不是整条消失。
 
 ## 1.286.0-rc1 — `update_plan` 工具化的进度上报
 

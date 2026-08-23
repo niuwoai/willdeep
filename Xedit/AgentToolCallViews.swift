@@ -1748,6 +1748,7 @@ struct AgentToolCallCard: View {
         case .goalMode: return "GOAL"
         case .dispatchTask: return "UNATTENDED"
         case .workspaceAccess: return "WORKSPACE"
+        case .silentMode: return "SILENT"
         case .controlLease: return L10n.ToolCard.approvalControlLeaseBadge
         case .escalated: return "ESCALATED"
         case .trustedServer: return "TRUSTED"
@@ -1765,6 +1766,7 @@ struct AgentToolCallCard: View {
         case .goalMode: return "Auto-approved because this session is in Goal mode. Danger-tier commands still ask."
         case .dispatchTask: return "Auto-approved because this scheduler-owned task is running unattended."
         case .workspaceAccess: return "Auto-approved by this session's Workspace Access approval mode. Danger-tier commands still ask."
+        case .silentMode: return "Ran under Silent mode: it did not match the malicious-command denylist, and the AI reviewer named no malicious effect. Silent mode allows the call when that reviewer is unavailable."
         case .controlLease: return L10n.ToolCard.approvalControlLeaseTooltip
         case .escalated: return "You approved this call to run outside the default sandbox boundary."
         case .trustedServer: return "You marked this MCP server as fully trusted — all its calls auto-run."
