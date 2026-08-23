@@ -635,10 +635,15 @@ struct AgentPlanProgressTests {
         #expect(blocks.contains { $0.text.contains("without truncating it") })
     }
 
-    @Test("plan card opens for newly planned work and collapses during execution")
+    @Test("plan card opens only for a plan awaiting a decision; approved plans stay folded while executing")
     func planCardInitialExpansionFollowsExecutionState() {
         #expect(AgentPlanCardExpansionPolicy.initiallyExpanded(for: .proposed))
-        #expect(AgentPlanCardExpansionPolicy.initiallyExpanded(for: .approved))
+        // `.approved` is already executing (normal mode approves and keeps
+        // working in the same turn) and stays `.approved` until the first
+        // progress block parses — usually the end of the turn. The composer
+        // progress pill owns live progress, so the floating card must not
+        // open and duplicate the checklist for the whole execution.
+        #expect(!AgentPlanCardExpansionPolicy.initiallyExpanded(for: .approved))
         #expect(!AgentPlanCardExpansionPolicy.initiallyExpanded(for: .executing))
         #expect(!AgentPlanCardExpansionPolicy.initiallyExpanded(for: .done))
         #expect(!AgentPlanCardExpansionPolicy.showsStatus(.approved, isInterrupted: false))

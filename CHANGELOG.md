@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.285.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.285.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.285.0-rc5 - 2026-08-23
+
+### Fixed
+
+- **执行中的计划不再被展示两遍。** 同一份 `currentPlan` 此前会同时出现在两个面上：composer 上方的紧凑进度胶囊（`AgentComposerTaskProgress`）和右上角浮动的「计划」卡（`AgentConversationActivityOverlay` + `AgentPlanCard`）。浮动卡本该只在「刚提出、等你看」时自动展开、执行一开始就折叠，但它的展开条件是 `status == .proposed || .approved`，而普通模式下计划被捕获即 `.approved`、并在同一回合直接开工，`.approved` 要等到**第一个 `progress` 块解析成功**才会变成 `.executing`——多数模型只在回合收尾才上报，于是整个执行期卡片都以「刚批准」的姿态展开着，每次切回会话（overlay 重挂载 `onAppear`）还会再展开一次。现在 `AgentPlanCardExpansionPolicy.initiallyExpanded` 只对 `.proposed` 返回真：composer 进度胶囊是执行期唯一的活进度面，浮动卡缩成一行 chip，需要改步骤 / 重新规划 / 标记完成时再点开。
+- 顺手核实：`.proposed` 在当前代码里已没有任何活路径会产生（所有捕获路径直接置 `.approved`，旧落盘的 `.proposed` 在恢复时也会转成 `.approved`），保留它只为兼容。
+
+### Notes
+
+- **1.285.0-rc2 上「进度没及时标记」的根因不在解析器，rc3/rc4 也没有碰它。** rc2 已包含 1.284.0-rc3 的三层回退解析（历史块回放 84%）；rc2→rc4 的改动只有稳定前缀 v32 重录哈希与两处测试锚点。对全部落盘会话的只读取证（21 个带 `plan` 围栏的会话、243 个 `progress` 块）：**193 个（80%）落在回合收尾的纯叙述回复里，只有 50 个落在带工具调用的回合中段**；从 `plan` 出现到第一个 `progress` 块，中位间隔 20 个工具回合 / 22.5 分钟，P90 76 个回合 / 6 小时以上；7 个会话从未上报。本次截图的 `someim-auto-flash`（deepseek-v4-flash）历史上 6 个 progress 块全部在回合收尾，回合中段 0 个。也就是说，一个 50 分钟、几十次工具调用的单回合，清单在回合结束前一格都不会动——这是模型上报时机问题，宿主侧每个工具回合都会扫一次（`AppStateAgentLoop` 第 1215 行），只是没有东西可扫。根治仍是 `docs/LONG_HORIZON_AUTONOMY.md` §4 的 `update_plan` 工具化：工具调用是这些模型在回合中段**唯一稳定使用**的通道。取证细节见 `docs/AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md` §1.6。
 
 ## 1.285.0-rc4 - 2026-08-23
 
