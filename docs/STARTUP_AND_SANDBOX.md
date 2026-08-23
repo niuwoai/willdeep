@@ -108,6 +108,25 @@
 2. **LLM 评委**（`.needsJudgment` 时，[AgentInjectionDefense.swift](../Xedit/AgentInjectionDefense.swift)）：把命令裹进 `<command>…</command>` 当**惰性数据**问模型「这是只读吗」，只认严格的 `<verdict>YES</verdict>`；模型不守格式一律判 NO（安全失败）。
 3. **破坏性命令**（`rm`、`git push --force`、`git reset --hard`、`git clean -f` 等）→ `requiresTypedConfirmation`，用户必须**手敲 confirm**，不能一键放行。
 
+### 3.5 静默模式：反过来的那一档（1.287.0-rc1）
+
+前三档（智能审核 / 工作区可写 / 严格模式）都是**白名单式**——默认要问，凑够理由才放行。**静默模式（`AgentApprovalMode.silent`）是黑名单式**：默认放行，需要理由的是拦截。用户选它表达的是「少问我，除非真有恶意」。
+
+两道闸，顺序不能换：
+
+1. **恶意命令黑名单**（[AgentMaliciousCommandDenylist.swift](../Xedit/AgentMaliciousCommandDenylist.swift)）——确定性、不依赖网络、AI 裁判推翻不了。四类：不可逆的大范围破坏（抹根目录/家目录/整卷、格式化、`dd` 写裸设备、fork bomb、对系统根递归改权限）、主机接管（authorized_keys 植入、反弹 shell）、反取证（清 shell 历史、抹系统日志、关 SIP/Gatekeeper）、外泄（凭据/私钥**与**网络出口同时出现在一条命令里）。命中即回落人工审批卡，该打字确认的照样打字。
+2. **AI 裁判**（`AgentSafetyJudgeKind.maliciousIntent`）——问的是和 `judgeSystemPrompt` **方向相反**的问题。那个问「这是正常开发运维操作吗」，拿不准判 NO（fail-closed）；这个问「这条命令是不是在干坏事」，**拿不准判 YES**。把 fail-closed 的裁判塞进这一档，结果只是一个改了名字的智能审核。
+
+> ⚠️ **必须知道的失败方向**：裁判缺席（没配 key、网络抖动、输出被截断）时，静默模式**放行**——「没发现恶意」就是没发现恶意，这是用户明确要的语义。其余三档在同样情况下回落人工。所以这一档的真实保护强度 = **黑名单**，AI 裁判是加分项不是地基。审计里能分辨这两种放行：`judge.jsonl` 的 `detail` 会带 `silent mode: allowed without a verdict`。
+>
+> ⚠️ 静默模式**不放松沙箱**：seatbelt 档位仍按命令实际需要计算（与 `.llmJudge` 同组）。真被 seatbelt 拦下时走既有的「拒绝→无沙箱重跑」路径，且和智能审核一样自动重跑（否则刚放行的决定会被一张卡推翻重问）。
+>
+> ⚠️ 够不到的东西仍然够不到：`AgentEnvironmentTrust.neverAutoApprovedToolNames`（环境信任声明本身）、`change_workspace`、`ask_user` 这类要人回答的工具，以及用户在 MCP 设置里明确标为"不信任"的服务器——静默模式表达的是「少问我」，不是「推翻我说过的话」。
+>
+> ⚠️ **凭据读取即使不带网络出口也照样问**（`sandboxDecision.credentialSensitive`）。这不是给静默模式加戏：仓库里这条边界连用户**显式**的环境信任声明都不放宽（"凭据外读是注入攻击的终点站，这道门不接受来自模型侧的说服"），而选一个审批档位是比那次声明更弱的信号，不该反而把它掀了。另一层理由是 Agent 语境特有的：私钥一旦被读进回复，它就已经离开这台机器去了模型服务商——"读"和"外泄"在这里不是两件事。
+
+刻意**不**收进黑名单的（这一档存在的意义就是让它们别再问）：`rm -rf node_modules`、`git reset --hard`、`git push --force` 到功能分支、`docker compose down -v`、本地库 `DROP TABLE`、`cat .env`。它们可能让人心跳一下，但都不是恶意，而且都在用户自己的工作区语义里。
+
 **Always-allow**：只对 write 级生效，按命令**签名**（如 `git push`、`mcp:server:tool`）pin；文件写工具故意**不可 pin**（blast radius 依赖路径）。见 [AgentToolAuthorizationSupport.swift](../Xedit/AgentToolAuthorizationSupport.swift)。
 
 ### 4. 文件写入边界（写不出 workspace）
@@ -146,4 +165,4 @@ guard url.path == rootPath || url.path.hasPrefix(rootPath + "/") else {
 ## 一句话总结
 
 - **启动**：入口 `WillDeepApp` → AppDelegate 装监听 → 每窗口一个 `AppState`，同步读几份小 JSON、会话只加载 metadata（懒物化）、空草稿清理，其余活后台化；退出前 flush 会话写队列。
-- **沙箱**：四档模式 + macOS seatbelt（**限写/限网、不限读**）+ 环境剥敏；命令走「白名单 → LLM 评委 → 手敲 confirm」三层，写文件严格锁在 workspace 内，输出脱敏，子 Agent 只读且不能嵌套。
+- **沙箱**：四档沙箱模式 + macOS seatbelt（**限写/限网、不限读**）+ 环境剥敏；命令走「白名单 → LLM 评委 → 手敲 confirm」三层，写文件严格锁在 workspace 内，输出脱敏，子 Agent 只读且不能嵌套。**审批档位有四种**，其中静默模式是唯一黑名单式的一档，保护强度以恶意命令黑名单为地基（§3.5）。

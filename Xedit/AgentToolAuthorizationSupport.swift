@@ -602,14 +602,17 @@ enum AgentToolAuthorization {
         toolName: String,
         command: String,
         taskContext: String = "",
-        environmentTrustFingerprint: String = ""
+        environmentTrustFingerprint: String = "",
+        judgeKind: AgentSafetyJudgeKind = .developerOperations
     ) -> String {
         let exactCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
         let exactTaskContext = taskContext.trimmingCharacters(in: .whitespacesAndNewlines)
         // 声明指纹进键：同一条命令在"有声明"与"无声明"两种语境下是两个键。
         // 撤销声明后旧的 YES 不会被复用，跨会话共享的缓存也不会把 A 会话
         // 声明下的判决泄给没有声明的 B 会话。
-        return "\(toolName)|\(exactCommand)|\(exactTaskContext)|\(environmentTrustFingerprint)"
+        // 裁判种类进键：两种裁判问的是方向相反的问题，一个 YES 绝不能
+        // 顶另一个的 YES 用。
+        return "\(judgeKind)|\(toolName)|\(exactCommand)|\(exactTaskContext)|\(environmentTrustFingerprint)"
     }
 
     static func interactiveSurfaceSignature(toolName: String) -> String? {
