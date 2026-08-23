@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "minimumWillDeepVersion": "1.280.0",
+  "contributes": {
+    "destinations": [{
+      "id": "vitality",
+      "titleKey": "destination.vitality",
+      "icon": "sf:waveform.path.ecg",
+      "mainPage": "vitality.main",
+      "companionSidebar": "vitality.sidebar",
+      "toolbarCommandIDs": ["vitality.refresh", "vitality.snapshot"]
+    }],
+    "sidebars": [{
+      "id": "vitality.sidebar",
+      "mode": "declarative",
+      "schema": ".willdeep-plugin/schemas/vitality-sidebar.json",
+      "resource": {"type":"mcpResource","server":"session-vitality","uri":"willdeep-plugin://vitality/sidebar"}
+    }],
+    "pages": [{"id":"vitality.main","runtime":"mcpApp","server":"session-vitality","resourceURI":"ui://vitality/main"}],
+    "commands": [
+      {"id":"vitality.refresh","titleKey":"command.refresh","icon":"sf:arrow.clockwise","handler":{"type":"host","action":"plugin.refresh"}},
+      {"id":"vitality.snapshot","titleKey":"command.snapshot","icon":"sf:chart.bar","handler":{"type":"mcpTool","server":"session-vitality","tool":"vitality.snapshot"}}
+    ],
+    "menus": {
+      "commandPalette": ["vitality.refresh", "vitality.snapshot"],
+      "plugin.page.toolbar": ["vitality.refresh"]
+    },
+    "settings": []
+  },
+  "permissions": ["conversation.read", "process.execute"],
+  "dependencies": {"mcpServers":["session-vitality"],"skills":[]}
+}

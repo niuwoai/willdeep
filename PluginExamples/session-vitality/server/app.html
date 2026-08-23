@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Vitality</title>
+<style>
+:root{--bg:#f5f5f7;--card:#ffffff;--fg:#1d1d1f;--muted:#6e6e73;--border:#d2d2d7;--accent:#000000;--warn-bg:#fff8e6;--warn-fg:#8a6d1a}
+@media (prefers-color-scheme:dark){:root{--bg:#1e1e20;--card:#2a2a2c;--fg:#f5f5f7;--muted:#a1a1a6;--border:#3a3a3c;--accent:#f5f5f7;--warn-bg:#3a3420;--warn-fg:#e6c86a}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",sans-serif;background:var(--bg);color:var(--fg);padding:20px;line-height:1.5}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px}
+h1{font-size:20px;font-weight:600}
+#source{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
+.banner{background:var(--warn-bg);color:var(--warn-fg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px}
+.card .num{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.card .lbl{font-size:11px;color:var(--muted);margin-top:2px}
+h2{font-size:13px;font-weight:600;margin:0 0 8px;color:var(--muted)}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;color:var(--muted);text-align:left;padding:4px 6px;border-bottom:1px solid var(--border);font-weight:500}
+td{padding:8px 6px;border-bottom:1px solid var(--border);font-size:13px}
+td.name{font-weight:600}
+.progress{height:5px;background:var(--border);border-radius:3px;overflow:hidden;min-width:90px}
+.progress>span{display:block;height:100%;background:var(--accent);border-radius:3px}
+.muted{color:var(--muted);font-size:12px}
+button{font:inherit;font-size:12px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;padding:5px 12px;cursor:pointer}
+button:active{opacity:.8}
+footer{margin-top:18px;font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header><h1 id="title">Session Vitality</h1><button id="refresh">刷新</button></header>
+<div id="banner" class="banner" hidden></div>
+<div id="grid" class="grid"></div>
+<h2 id="projects-title">项目</h2>
+<div id="table-wrap"></div>
+<div id="empty" class="muted" hidden>暂无会话数据</div>
+<footer id="foot"></footer>
+<script>
+const M={
+  en:{title:"Session Vitality",refresh:"Refresh",sessions:"Sessions",messages:"Messages",tokensToday:"Tokens today",tokensWeek:"Tokens 7d",edited:"Edited sessions",artifacts:"Artifacts",projects:"Projects",empty:"No session data yet.",demo:"Demo data — real session store not found.",foot:"Tokens are estimates. Numbers refresh on demand."},
+  zh:{title:"会话体检中心",refresh:"刷新",sessions:"会话数",messages:"消息数",tokensToday:"今日 Token",tokensWeek:"近 7 天 Token",edited:"已编辑会话",artifacts:"产物文件",projects:"项目",empty:"暂无会话数据。",demo:"演示数据 — 未找到真实会话存储。",foot:"Token 为估算值，按需刷新。"}
+};
+let nextID=1,ctx={};const pending=new Map();
+function request(method,params){const id=nextID++;parent.postMessage({jsonrpc:"2.0",id,method,params},"*");return new Promise((resolve,reject)=>pending.set(id,{resolve,reject}))}
+function notify(method,params){parent.postMessage({jsonrpc:"2.0",method,params},"*")}
+addEventListener("message",e=>{const m=e.data;if(!m||m.jsonrpc!=="2.0")return;if(m.id&&pending.has(m.id)){const w=pending.get(m.id);pending.delete(m.id);m.error?w.reject(new Error(m.error.message)):w.resolve(m.result);return}if(m.method==="ui/notifications/host-context-changed"){ctx={...ctx,...(m.params?.willdeep||{})};renderLang()}});
+const $=id=>document.getElementById(id);
+const nf=new Intl.NumberFormat();
+function lang(){return (ctx.locale||navigator.language||"en").startsWith("zh")?"zh":"en"}
+function t(key){return M[lang()][key]}
+function renderLang(){$("title").textContent=t("title");$("refresh").textContent=t("refresh");$("projects-title").textContent=t("projects");$("empty").textContent=t("empty");$("foot").textContent=t("foot")}
+function card(key,num){const d=document.createElement("div");d.className="card";d.innerHTML=`<div class="num">${nf.format(num)}</div><div class="lbl">${t(key)}</div>`;return d}
+function render(stats){
+  renderLang();
+  const banner=$("banner");
+  if(stats.demo){banner.hidden=false;banner.textContent=t("demo")}else{banner.hidden=true}
+  const grid=$("grid");grid.innerHTML="";
+  [["sessions","sessions"],["messages","messages"],["tokensToday","tokensToday"],["tokensWeek","tokensWeek"],["editedSessions","edited"],["artifacts","artifacts"]].forEach(([k,label])=>grid.appendChild(card(label,stats[k]||0)));
+  const wrap=$("table-wrap");wrap.innerHTML="";
+  if(stats.projects&&stats.projects.length){
+    const tbl=document.createElement("table");
+    tbl.innerHTML=`<thead><tr><th>${t("projects")}</th><th style="width:34%"></th><th></th></tr></thead><tbody></tbody>`;
+    const body=tbl.querySelector("tbody");
+    stats.projects.forEach(p=>{
+      const tr=document.createElement("tr");
+      const share=Math.max(0,Math.min(1,p.share||0));
+      tr.innerHTML=`<td class="name"></td><td><div class="progress"><span style="width:${share*100}%"></span></div></td><td class="muted"></td>`;
+      tr.querySelector(".name").textContent=p.name;
+      tr.querySelector(".muted").textContent=`${nf.format(p.sessions)} · ${nf.format(p.messages)}`;
+      body.appendChild(tr);
+    });
+    wrap.appendChild(tbl);
+    $("empty").hidden=true;
+  }else{$("empty").hidden=false}
+}
+async function load(){
+  try{
+    const res=await request("resources/read",{uri:"willdeep-plugin://vitality/stats"});
+    render(JSON.parse(res.contents[0].text));
+  }catch(err){
+    $("empty").hidden=false;$("empty").textContent=String(err.message||err);
+  }
+}
+$("refresh").onclick=load;
+request("ui/initialize",{protocolVersion:"2026-01-26",appCapabilities:{},clientInfo:{name:"willdeep-session-vitality",version:"1.0.0"}}).then(res=>{ctx=res.hostContext?.willdeep||{};renderLang();load();notify("ui/notifications/initialized",{})});
+</script>
+</body>
+</html>

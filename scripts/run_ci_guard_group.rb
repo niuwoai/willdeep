@@ -27,6 +27,7 @@ def guard_groups(output_dir)
   i18n_md, i18n_json = report_paths(output_dir, "i18n")
   i18n_locale_md, i18n_locale_json = report_paths(output_dir, "i18n_locale")
   fast_entry_md, fast_entry_json = report_paths(output_dir, "fast_test_entry_contract")
+  bundled_rules_md, bundled_rules_json = report_paths(output_dir, "bundled_agent_rules_contract")
 
   computer_use_md, computer_use_json = report_paths(output_dir, "computer_use_helper_contract")
   chrome_md, chrome_json = report_paths(output_dir, "chrome_extension_contract")
@@ -65,6 +66,10 @@ def guard_groups(output_dir)
       [
         "fast-test-entry",
         command("fast_test_entry_contract_test.rb", fast_entry_json, fast_entry_md)
+      ],
+      [
+        "bundled-agent-rules",
+        command("bundled_agent_rules_contract_test.rb", bundled_rules_md, bundled_rules_json)
       ],
       ["project-build-guard", command("project_build_guard_contract_test.rb")]
     ],

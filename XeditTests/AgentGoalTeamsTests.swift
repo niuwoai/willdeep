@@ -1040,6 +1040,10 @@ struct AgentGoalTeamsTests {
             wrapUpDispatched: true
         )
         let (appState, runtime) = makeAppRuntime(goal: goal, isResponding: false)
+        // 软停过的 Goal 恢复前，横幅上挂着「预算耗尽」这条 notice。
+        // resume 的第一件事就是 clearTurnError()，把它抹掉。
+        runtime.errorMessage = L10n.GoalPlanning.budgetExhausted
+        runtime.errorSeverity = .notice
 
         appState.resumePinnedAgentGoalExecution()
 
@@ -1048,7 +1052,17 @@ struct AgentGoalTeamsTests {
         #expect(budget?.wrapUpDispatched == false)
         #expect(budget?.segmentStartedAt == nil)
         #expect(budget?.maximumContinuations == 1)
-        #expect(runtime.errorMessage == nil)
+        // 断言只收在「预算横幅」上，不是笼统的 errorMessage == nil：resume 真的
+        // 会走一次派发，而派发路径上还有 some.im 登录门禁
+        // （AppState.someIMLoginRequiredForTurn / setSomeIMLoginRequiredError，
+        // 见 docs/SOME_IM_MANAGED_ROUTING_DESIGN.md）。没登录 some.im 的开发机
+        // 会被它把 errorMessage 改写成登录提示，于是这条用例的成败取决于跑测试
+        // 的人有没有登录过——那是登录门禁自己的用例该管的事，不是这里。
+        // 这里只认一件事：预算续期之后，Goal 不会立刻被再次软停。
+        #expect(runtime.errorMessage != L10n.GoalPlanning.budgetExhausted)
+        #expect(runtime.errorSeverity != .notice)
+        // 派发出去的续跑请求不在本用例的验收范围内，别把它漏到测试之外。
+        runtime.requestTask?.cancel()
     }
 
     @Test("额度中断后保留已完成 Plan，续跑只做 Goal 验收")

@@ -687,7 +687,17 @@ extension AppState {
         let prompt: String
         switch evaluation.outcome {
         case .halt:
-            // The handover was already requested and delivered; stay stopped.
+            // The handover was already requested and delivered; stay stopped —
+            // but say why. The wrap-up round's own banner does not survive:
+            // dispatching the handover instruction begins a turn, and every
+            // dispatch clears the previous turn's error state, so this later
+            // quiet stop is the user's one reliable chance to learn that the
+            // budget ran out and that Play grants a new segment.
+            if runtime.errorMessage == nil {
+                runtime.errorMessage = L10n.GoalPlanning.budgetExhausted
+                runtime.errorDetails = nil
+                runtime.errorSeverity = .notice
+            }
             return
         case .wrapUp:
             runtime.errorMessage = L10n.GoalPlanning.budgetExhausted
@@ -725,6 +735,106 @@ extension AppState {
                 source: .hostInstruction
             )
         }
+    }
+
+    /// A Goal that hit the ordinary round limit is judged by its budget instead.
+    ///
+    /// The same Goal used to live under two different boundaries. Once its Plan
+    /// reached terminal statuses, acceptance ran on the wall-clock budget and a
+    /// backoff ladder that never hard-stops
+    /// (`prepareNextAgentGoalPlanningCycleIfNeeded`). But while the Plan was
+    /// still executing, continuation was capped at
+    /// `maximumGoalAutomaticContinuations` rounds and simply stopped there —
+    /// so the long tasks that most need to keep going were the ones cut off,
+    /// and by a proxy metric rather than by anything the user can reason about.
+    /// The design contract is that budget is the only hard boundary
+    /// (`docs/LONG_HORIZON_AUTONOMY.md` §1.2, §2.1: there is no `hard_pause`
+    /// exit), so the round limit hands over here rather than ending the run.
+    ///
+    /// This goes through the same `evaluate` as the acceptance ladder, so the
+    /// segment clock and the continuation counter actually advance — a read-only
+    /// probe would leave `segmentStartedAt` nil forever and turn the round limit
+    /// into no limit at all.
+    ///
+    /// Returns true when it has taken over the outcome — a continuation or an
+    /// orderly wrap-up was dispatched, or (post-handover) the budget banner
+    /// was claimed — and the caller must not show the round-limit banner.
+    @discardableResult
+    func continueGoalOnBudgetInsteadOfRoundLimit(for runtime: AgentRuntime) -> Bool {
+        guard runtime.interactionMode == .goal,
+              let goal = runtime.currentGoal,
+              !goal.isEmpty,
+              // Aligned with `requiresGoalCompletion` in the loop: an empty
+              // checklist is an *unestablished* acceptance contract, not a
+              // completed one — those Goals get the 24-round limit, so they
+              // must get the budget takeover too. Only a fully checked-off
+              // list means there is nothing left to push toward.
+              goal.checklist.isEmpty
+                || goal.checklist.contains(where: { !$0.done }) else { return false }
+
+        let evaluation = AgentGoalContinuationPolicy.evaluate(
+            budget: goal.continuationBudget ?? .standard,
+            now: Date(),
+            consecutiveRoundsWithoutProgress: runtime.consecutiveGoalRoundsWithoutChecklistProgress
+        )
+        var budgetedGoal = goal
+        budgetedGoal.continuationBudget = evaluation.budget
+        runtime.currentGoal = budgetedGoal
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+
+        let remainingAcceptance = goal.checklist.filter { !$0.done }.map(\.text)
+        let prompt: String
+        switch evaluation.outcome {
+        case .halt:
+            // The handover was already asked for; stop without nagging the
+            // model again — but claim the banner. Returning false here would
+            // fall back to the round-limit copy ("8-round safety limit"),
+            // which is wrong on both counts: the number is 24 in Goal mode
+            // and the actual reason is a spent budget with a delivered
+            // handover. The budget banner also carries the one actionable
+            // instruction: press Play to grant a new segment.
+            runtime.errorMessage = L10n.GoalPlanning.budgetExhausted
+            runtime.errorDetails = nil
+            runtime.errorSeverity = .notice
+            return true
+        case .wrapUp:
+            runtime.errorMessage = L10n.GoalPlanning.budgetExhausted
+            runtime.errorDetails = nil
+            runtime.errorSeverity = .notice
+            prompt = AgentGoalContinuationPolicy.wrapUpPrompt(
+                remainingAcceptance: remainingAcceptance
+            )
+        case .continueExecution(let rung):
+            let escalation = AgentGoalContinuationPolicy.escalation(for: rung)
+                .map { "\n\n\($0)" } ?? ""
+            prompt = """
+            Automatic Goal continuation: this Goal is not complete and its execution budget has runway left. Keep executing the active plan — do not replace it, do not restart Goal Teams, and do not summarize completed work instead of advancing. Pick the next unfinished step and do it.
+
+            \(remainingAcceptance.isEmpty
+                ? "The acceptance checklist has not been established yet. Derive it from the Goal statement and report it with one `goal-check` block before or alongside your next concrete step."
+                : "Unchecked acceptance items:\n- \(remainingAcceptance.joined(separator: "\n- "))")
+
+            End the reply with exactly one `progress` block for the steps you touched.\(escalation)
+            """
+        }
+
+        if runtime.isResponding {
+            let dedupPrefix = String(prompt.prefix(while: { !$0.isNewline }))
+            guard !runtime.queuedMessages.contains(where: {
+                $0.source == .hostInstruction && $0.text.hasPrefix(dedupPrefix)
+            }) else { return true }
+            runtime.queuedMessages.append(
+                AgentQueuedMessage(text: prompt, images: [], source: .hostInstruction)
+            )
+        } else {
+            dispatchAgentMessage(
+                for: runtime,
+                text: prompt,
+                images: [],
+                source: .hostInstruction
+            )
+        }
+        return true
     }
 
     /// Close the active Goal phase and start a fresh bounded planning round

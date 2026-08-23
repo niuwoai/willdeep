@@ -1572,6 +1572,22 @@ struct AgentToolCallCard: View {
            let raw = call.arguments["control"]?.stringValue() {
             return ("控制键", AgentToolDisplay.controlLabel(for: raw))
         }
+        if call.toolName == "declare_environment_trust" {
+            // 用户原话必须原样出现在卡片正文里——这是用户识破“注入文本
+            // 冒充我说过的话”的唯一凭据，不能只显示类别标签。
+            let statement = call.arguments["user_statement"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let kindRaw = (call.arguments["kind"]?.stringValue() ?? "").lowercased()
+            if kindRaw == "revoke_all" {
+                return ("将要撤销", statement.isEmpty ? "撤销本会话的全部环境信任声明" : statement)
+            }
+            var body = statement.isEmpty ? "(Agent 没有引用你的原话)" : "「\(statement)」"
+            if let target = call.arguments["target"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines), !target.isEmpty {
+                body += "\n\n匹配目标：\(target)"
+            }
+            return ("Agent 引用的你的原话", body)
+        }
         if call.toolName == "web_fetch",
            let url = call.arguments["url"]?.stringValue(),
            !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

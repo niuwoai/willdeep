@@ -181,6 +181,15 @@ nonisolated enum L10n {
         )
     }
 
+    enum Approval {
+        /// 裁判缺席时的一次性提示。用户看到的现象是「每条命令都要点」，
+        /// 而这其实是可以消除的配置问题——不说出来，他只会以为产品就这样。
+        static let safetyJudgeUnconfigured = String(
+            localized: "approval.safety-judge-unconfigured",
+            defaultValue: "No safety judge is available, so every command needs your confirmation. Add an API key for the current model provider in Settings, or sign in to some.im, to restore automatic review."
+        )
+    }
+
     enum ApprovalMode {
         static let pickerHelp = String(localized: "approval-mode.picker-help", defaultValue: "Choose how this session approves Agent tool calls.")
         static let requestEveryTime = String(localized: "approval-mode.request-every-time", defaultValue: "Strict mode")
@@ -1262,7 +1271,9 @@ nonisolated enum L10n {
 
     enum PlanContinuation {
         static let missingProgressPaused = String(localized: "plan-continuation.missing-progress-paused", defaultValue: "Plan status sync paused: no valid step statuses arrived after reconciliation. This does not mean execution failed. Review the plan and mark it complete, or add guidance to continue.")
-        static let safetyLimitPaused = String(localized: "plan-continuation.safety-limit-paused", defaultValue: "Plan auto-continuation reached its 8-round safety limit. Review the current deliverables and step statuses before continuing.")
+        // 不写具体轮数：普通模式 8 轮、Goal 模式 24 轮，写死任何一个都会
+        // 在另一个模式下说谎。
+        static let safetyLimitPaused = String(localized: "plan-continuation.safety-limit-paused", defaultValue: "Plan auto-continuation reached its safety limit for this turn. Review the current deliverables and step statuses before continuing.")
     }
 
     enum PlanRevision {
@@ -1351,6 +1362,9 @@ nonisolated enum L10n {
         static let chatsHeader = String(localized: "sidebar.chats-header", defaultValue: "Chats")
         static let emptyState = String(localized: "sidebar.empty-state", defaultValue: "Sessions you start will appear here.")
         static let loadingState = String(localized: "sidebar.loading-state", defaultValue: "Loading sessions…")
+        /// Navigates to the conversation surface. Distinct from
+        /// `newChatAction`, which starts a fresh one.
+        static let chatAction = String(localized: "sidebar.chat-action", defaultValue: "Chat")
         static let newChatAction = String(localized: "sidebar.new-chat-action", defaultValue: "New Chat")
         static let pinnedHeader = String(localized: "sidebar.pinned-header", defaultValue: "Pinned")
         static let defaultSessionTitle = String(localized: "sidebar.default-session-title", defaultValue: "New Chat")

@@ -88,6 +88,7 @@ extension AppState {
                 interactionMode: runtime.interactionMode,
                 approvalMode: runtime.approvalMode,
                 conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                environmentTrustDeclarations: runtime.environmentTrustDeclarations,
                 latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
             )
         } else {
@@ -163,6 +164,7 @@ extension AppState {
         if let rule = alwaysAllowedCommand(for: call) {
             addAgentAlwaysAllowedCommand(rule)
         }
+        publishSharedAlwaysAllowRule(for: call)
         approveQueuedSerialToolCalls(
             for: runtime,
             source: .alwaysAllowList
@@ -268,6 +270,20 @@ extension AppState {
         AgentSettingsStore.saveAlwaysAllowedCommands(agentAlwaysAllowedCommands)
     }
 
+    /// Publish the *exact* command alongside the local family rule, so the
+    /// willdeep-rs CLI stops asking for the one command the user just approved.
+    /// Only `run_command` qualifies: the CLI's store speaks shell commands, and
+    /// this app's other signature kinds (`shell_category:`, `terminal_command:`,
+    /// tool-level pins) have no counterpart there. The store itself refuses
+    /// credential-bearing commands and anything the CLI could not match.
+    func publishSharedAlwaysAllowRule(for call: AgentToolCall) {
+        guard call.toolName == "run_command",
+              let command = call.arguments["command"]?.stringValue() else {
+            return
+        }
+        AgentSharedAlwaysAllowStore.publish(command: command)
+    }
+
     func alwaysAllowedCommand(for call: AgentToolCall) -> AgentAlwaysAllowedCommand? {
         guard let signature = AgentToolAuthorization.suggestedPersistentSignature(
             toolName: call.toolName,
@@ -289,10 +305,16 @@ extension AppState {
         guard !toolName.hasPrefix("computer_use_") else {
             return false
         }
-        guard risk == .write,
-              !agentAlwaysAllowedCommands.isEmpty else {
-            return false
+        guard risk == .write else { return false }
+        // A rule the operator pinned in the CLI counts here too. It is an
+        // exact command rather than a family, so honoring it never grants
+        // more than the one command they already approved once.
+        if toolName == "run_command",
+           let command = arguments["command"]?.stringValue(),
+           AgentSharedAlwaysAllowStore.allows(command: command) {
+            return true
         }
+        guard !agentAlwaysAllowedCommands.isEmpty else { return false }
         let signatures = Set(AgentToolAuthorization.matchingSignatures(toolName: toolName, arguments: arguments))
         guard !signatures.isEmpty else { return false }
         return agentAlwaysAllowedCommands.contains { signatures.contains($0.commandSignature) }
@@ -311,10 +333,19 @@ extension AppState {
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
         conversationAllowedToolSignatures: Set<String> = [],
+        environmentTrustDeclarations: [AgentEnvironmentTrustDeclaration] = [],
         computerUseOwner: AgentComputerUseOwner? = nil,
         latestUserMessage: String = ""
     ) async -> AgentToolApprovalSource? {
         guard risk == .write else { return nil }
+
+        // 环境信任声明本身永不自动通过——任何模式、任何 pin、Goal 免审都
+        // 够不到它。一次人工点击 = 一次授权仪式：注入文本骗 Agent 调这个
+        // 工具时，用户会在卡片上看到被逐字引用的"用户原话"，认出自己从未
+        // 说过而拒绝。这是整个特性防注入自授权的关键闸门。
+        if AgentEnvironmentTrust.neverAutoApprovedToolNames.contains(toolName) {
+            return nil
+        }
 
         // Renaming the originating session is a bounded, reversible local
         // metadata write. Keep it write-tier for ordering and auditability,
@@ -560,25 +591,38 @@ extension AppState {
                   !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 return nil
             }
+            let trustDeclaration = AgentEnvironmentTrust.covers(
+                toolName: toolName,
+                command: command,
+                declarations: environmentTrustDeclarations
+            )
+            // 凭据类命中永不因声明放宽——哪怕用户声明"整台机器都是一次性的"。
+            // 凭据外读是注入攻击的终点站，这道门不接受来自模型侧的说服。
+            let trusted = trustDeclaration != nil && !sandboxDecision.credentialSensitive
             switch SafeCommand.classify(command: command) {
             case .alwaysSafe:
                 // Only context-independent reads are static in a visible
                 // terminal. SafeCommand also certifies bounded workspace
                 // builders/creators, but this terminal may currently point
                 // at a remote host or directory, so those still need review.
-                if sandboxDecision.mode == .readOnly
+                // 用户声明这个终端是一次性环境时，"不知道终端指向哪儿"这个
+                // 顾虑正好被补上，静态放行不再要求只读沙箱档。
+                if trusted
+                    || sandboxDecision.mode == .readOnly
                     || sandboxDecision.mode == .readOnlyNetwork {
                     return .staticAllowlist
                 }
             case .alwaysDangerous:
-                return nil
+                // 声明只把"直接人工"降为"送裁判"，绝不直接放行：裁判仍可否决。
+                guard trusted else { return nil }
             case .needsJudgment:
                 break
             }
             return await safetyJudgeApproval(
                 toolName: toolName,
                 command: command,
-                taskContext: latestUserMessage
+                taskContext: latestUserMessage,
+                trustDeclaration: trustDeclaration
             )
         }
 
@@ -619,11 +663,18 @@ extension AppState {
             }
         }
 
+        let trustDeclaration = AgentEnvironmentTrust.covers(
+            toolName: toolName,
+            command: command,
+            declarations: environmentTrustDeclarations
+        )
+        let trusted = trustDeclaration != nil && !sandboxDecision.credentialSensitive
         switch SafeCommand.classify(command: command) {
         case .alwaysSafe:
             return .staticAllowlist
         case .alwaysDangerous:
-            return nil
+            // 测试库声明把 DROP/TRUNCATE 这类降为"送裁判"，而不是直接放行。
+            guard trusted else { return nil }
         case .needsJudgment:
             break
         }
@@ -631,7 +682,8 @@ extension AppState {
         return await safetyJudgeApproval(
             toolName: toolName,
             command: command,
-            taskContext: latestUserMessage
+            taskContext: latestUserMessage,
+            trustDeclaration: trustDeclaration
         )
     }
 
@@ -725,9 +777,13 @@ extension AppState {
     func safetyJudgeApproval(
         toolName: String,
         command: String,
-        taskContext: String = ""
+        taskContext: String = "",
+        trustDeclaration: AgentEnvironmentTrustDeclaration? = nil
     ) async -> AgentToolApprovalSource? {
         let judgeTaskContext = AgentInjectionDefense.redactedTaskContextForSafetyJudge(taskContext)
+        let trustFingerprint = trustDeclaration.map {
+            AgentEnvironmentTrust.fingerprint([$0])
+        } ?? ""
         // A recent YES for this tool + exact normalized command skips the network
         // round trip entirely. Only allows are cached (a deny still falls
         // through to the user each time), and the static danger gates run
@@ -736,7 +792,8 @@ extension AppState {
         let cacheKey = AgentToolAuthorization.judgeVerdictCacheKey(
             toolName: toolName,
             command: command,
-            taskContext: judgeTaskContext
+            taskContext: judgeTaskContext,
+            environmentTrustFingerprint: trustFingerprint
         )
         if let grantedAt = cachedJudgeAllowedVerdicts[cacheKey],
            Date().timeIntervalSince(grantedAt) < Self.safetyJudgeVerdictCacheTTL {
@@ -750,27 +807,49 @@ extension AppState {
             return .llmJudge
         }
 
-        let configuration = configurationForSafetyJudge()
-        var effectiveConfiguration = configuration
+        // 候选链依次尝试，直到拿到明确判决。修复审计里成批的「missing api
+        // key」死局：主选落到会话自身 provider 而它没配钥匙时，旧逻辑仍然
+        // 发起一次注定失败的请求，且唯一替补 some.im 安全卫士恰恰在未登录时
+        // 也是 nil——裁判必然缺席，全部回落人工。现在没钥匙的候选不占跳数，
+        // 替补链还包括 provider 库里其它当下真正可用的入口。
+        // 声明文本逐字带上用户原话：裁判据此判断这条命令是否落在用户
+        // 亲口描述的那个环境里，而不是仅凭一个类别标签放宽。
+        let trustPayload = trustDeclaration.map { declaration in
+            """
+            kind: \(declaration.kind.rawValue)
+            target: \(declaration.target.isEmpty ? "(unspecified)" : declaration.target)
+            user statement: \(declaration.userStatement)
+            """
+        } ?? ""
+        let candidates = safetyJudgeCandidateConfigurations()
+        var effectiveConfiguration = candidates.first ?? configurationForSafetyJudge()
         var fallbackDetail = ""
         let judgeCommand = AgentInjectionDefense.redactedCommandForSafetyJudge(command)
-        var result = await AgentClient(configuration: configuration).judgeCommandSafety(
-            command: judgeCommand,
-            historyContext: safetyJudgeHistoryContext(),
-            toolName: toolName,
-            taskContext: judgeTaskContext
+        // An empty candidate list means no judge was ever contacted. Saying
+        // `missing api key` here reads like a request that failed, and that
+        // misdirected the audit for weeks — the requests were never sent.
+        var result = AgentSafetyJudgeResult.unavailable(
+            candidates.isEmpty ? Self.judgeUnconfiguredReason : "missing api key"
         )
-        if case .unavailable(let primaryReason) = result,
-           let fallback = someIMSecurityGuardConfiguration(),
-           fallback != configuration {
-            effectiveConfiguration = fallback
-            fallbackDetail = "managed fallback after \(primaryReason)"
-            result = await AgentClient(configuration: fallback).judgeCommandSafety(
+        if candidates.isEmpty {
+            // The user is about to be asked to approve something the judge was
+            // supposed to settle. That is worth surfacing once per runtime
+            // rather than silently degrading forever.
+            noteSafetyJudgeUnconfigured()
+        }
+        for candidate in candidates {
+            effectiveConfiguration = candidate
+            result = await AgentClient(configuration: candidate).judgeCommandSafety(
                 command: judgeCommand,
                 historyContext: safetyJudgeHistoryContext(),
                 toolName: toolName,
-                taskContext: judgeTaskContext
+                taskContext: judgeTaskContext,
+                environmentTrust: trustPayload
             )
+            guard case .unavailable(let reason) = result else { break }
+            if fallbackDetail.isEmpty {
+                fallbackDetail = "fallback after \(reason)"
+            }
         }
         let verdict: String
         let detail: String
@@ -1008,6 +1087,41 @@ extension AppState {
         return ""
     }
 
+    /// 裁判候选链，按“当下真正可用”排序、去重、封顶 3 家：
+    /// 1. `configurationForSafetyJudge()` 的主选——但没配钥匙就不占第一跳
+    ///    （requiresAPIKey 且 key 为空的候选必然 unavailable，发请求纯烧超时）；
+    /// 2. some.im 安全卫士（已登录时通常就是主选，去重兜住）；
+    /// 3. provider 库里其它有可用钥匙（或不需要钥匙）的入口，flash 档。
+    /// 空数组意味着当前一台裁判都请不来，调用方按 unavailable 回落人工。
+    func safetyJudgeCandidateConfigurations() -> [AgentConfiguration] {
+        var candidates: [AgentConfiguration] = []
+        func append(_ configuration: AgentConfiguration) {
+            guard candidates.count < 3, !candidates.contains(configuration) else { return }
+            candidates.append(configuration)
+        }
+        let primary = configurationForSafetyJudge()
+        if !primary.requiresAPIKey || !primary.apiKey.isEmpty {
+            append(primary)
+        }
+        if let managed = someIMSecurityGuardConfiguration() {
+            append(managed)
+        }
+        for entry in agentProviderLibrary.entries {
+            guard candidates.count < 3 else { break }
+            // some.im 入口只走上面的安全卫士路径：普通 entry 的 per-entry
+            // key 槽位与共享会话 key 不同，绕开卫士构造会拿到空钥匙配置。
+            guard entry.providerID != AgentProviderPreset.someIMID else { continue }
+            var configuration = entry.makeConfiguration(routingMode: .flash).normalized
+            if configuration.requiresAPIKey, configuration.apiKey.isEmpty {
+                let key = providerLibraryAPIKey(forProviderID: entry.providerID)
+                guard !key.isEmpty else { continue }
+                configuration.apiKey = key
+            }
+            append(configuration.normalized)
+        }
+        return candidates
+    }
+
     /// A some.im security-guard configuration, or `nil` when the user is not
     /// signed into some.im. Built from the some.im library entry when one
     /// exists (so base URL / models track the user's setup) and always carries
@@ -1017,10 +1131,14 @@ extension AppState {
     /// it activates only when a test explicitly installs a shared-session
     /// override, so a developer's real login never affects test behavior.
     private func someIMSecurityGuardConfiguration() -> AgentConfiguration? {
-        guard SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults() else {
+        // Unattended variants on purpose: a Keychain read that does not land
+        // is not a sign-out, and treating it as one is exactly how the judge
+        // ended up falling through to a key-less provider and handing the
+        // decision back to the user. See `apiKeyForUnattendedUse()`.
+        guard SomeIMIntegrationStore.hasSessionForUnattendedUse() else {
             return nil
         }
-        let key = SomeIMIntegrationStore.loadAPIKey()
+        let key = SomeIMIntegrationStore.apiKeyForUnattendedUse()
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return nil }
 
@@ -1187,6 +1305,7 @@ extension AppState {
                     interactionMode: runtime.interactionMode,
                     approvalMode: runtime.approvalMode,
                     conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                    environmentTrustDeclarations: runtime.environmentTrustDeclarations,
                     computerUseOwner: runtime.computerUseOwner,
                     latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
                 )
@@ -1221,6 +1340,30 @@ extension AppState {
             }
         }
         return nil
+    }
+
+    /// Audit reason recorded when no judge was contacted at all. Deliberately
+    /// distinct from `missing api key`, which describes a request that was
+    /// actually sent and rejected: telling those apart is the difference
+    /// between "the provider refused us" and "we never had a judge".
+    static let judgeUnconfiguredReason = "no judge configured"
+
+    /// Tell the user once per conversation that manual approvals are a
+    /// configuration gap, not the design.
+    ///
+    /// Without this the degradation is invisible: every command quietly turns
+    /// into a confirmation dialog and the user concludes the product simply
+    /// works that way. August 2026 audit data: 211 such approvals, none of
+    /// which the user could have known were avoidable.
+    private func noteSafetyJudgeUnconfigured() {
+        guard let runtime = activeRuntime,
+              !runtime.didNoticeSafetyJudgeUnconfigured else { return }
+        runtime.didNoticeSafetyJudgeUnconfigured = true
+        // Never displace a real error the user still needs to read.
+        guard runtime.errorMessage == nil else { return }
+        runtime.errorMessage = L10n.Approval.safetyJudgeUnconfigured
+        runtime.errorDetails = nil
+        runtime.errorSeverity = .notice
     }
 
     nonisolated static func goalPlanningCanAutoApprove(

@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/xurenlu/SomeIMSharedSession.git",
       "state" : {
-        "revision" : "96a91092dbb68ac8fafa98761ee36940131422b7",
-        "version" : "0.1.0"
+        "revision" : "fc0988c0193a29aeef409fc1284a302d3623fe63",
+        "version" : "0.2.0"
       }
     },
     {

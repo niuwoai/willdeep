@@ -943,6 +943,14 @@ struct ModelPickerPill: View {
             .padding(14)
             .focusable(false)
         }
+        // Rebuilds the scroll view whenever the content set changes, so the
+        // offset returns to the top instead of pointing past the end of shorter
+        // content — where the LazyVStack would render nothing at all. See
+        // `AgentModelDetailScrollIdentity`.
+        .id(AgentModelDetailScrollIdentity(
+            source: selectedSource,
+            isSearching: !normalizedSearchText.isEmpty
+        ))
         .focusable(false)
     }
 

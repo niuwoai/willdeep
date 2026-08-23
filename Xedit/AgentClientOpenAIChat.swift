@@ -174,7 +174,8 @@ struct OpenAIChatAdapter {
         command: String,
         historyContext: String = "",
         toolName: String = "run_command",
-        taskContext: String = ""
+        taskContext: String = "",
+        environmentTrust: String = ""
     ) async -> AgentSafetyJudgeResult {
         guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
             return .unavailable("missing api key")
@@ -194,7 +195,8 @@ struct OpenAIChatAdapter {
         let userPayload = AgentInjectionDefense.judgeUserPayload(
             command: command,
             toolName: toolName,
-            taskContext: taskContext
+            taskContext: taskContext,
+            environmentTrust: environmentTrust
         )
 
         let body: [String: Any] = [

@@ -163,7 +163,8 @@ extension AppState {
                     textAttachments: textAttachments,
                     attachedSkills: attachedSkills,
                     providerID: providerID,
-                    enqueuedAt: Date()
+                    enqueuedAt: Date(),
+                    source: source
                 )
             )
             return
@@ -904,6 +905,7 @@ extension AppState {
                 executionAgent: runtime.executionAgent,
                 approvalMode: runtime.approvalMode,
                 currentPlan: runtime.currentPlan,
+                planProgressFormatViolation: latestTurnHasUnparsableProgressBlock(for: runtime),
                 currentGoal: runtime.currentGoal,
                 goalPlanningState: runtime.goalPlanningState,
                 goalRoadmap: runtime.goalRoadmap,
@@ -1031,7 +1033,8 @@ extension AppState {
                 activeExperts: activeExperts,
                 interactionMode: runtime.interactionMode,
                 executionAgent: runtime.executionAgent,
-                delegationPolicy: runtime.currentTurnDelegationPolicy
+                delegationPolicy: runtime.currentTurnDelegationPolicy,
+                loadedPacks: runtime.loadedToolPacks
             )
             let requestWithoutRunwayHandoff = [AgentMessage(role: .system, content: systemPrompt)]
                 + collapsedHistory
@@ -1448,13 +1451,21 @@ extension AppState {
                         $0.checklist.isEmpty
                             || $0.checklist.contains(where: { !$0.done })
                     } == true
+                // A spent Goal budget already asked the model for an orderly
+                // handover snapshot. Auto-continuing the handover turn would
+                // contradict that instruction round after round — "stop all
+                // substantive work" followed by an injected "keep executing".
+                // The budget banner and Play (which resets wrapUpDispatched)
+                // own resumption from here.
+                let goalBudgetSpent = runtime.interactionMode == .goal
+                    && runtime.currentGoal?.continuationBudget?.wrapUpDispatched == true
 
                 switch AgentPlanAutoContinuationPolicy.decision(
                     for: runtime.currentPlan,
                     automaticContinuationCount: planAutomaticContinuationCount,
                     consecutiveNoProgressReplies: consecutivePlanRepliesWithoutProgress,
                     hasQueuedUserMessages: !runtime.queuedMessages.isEmpty,
-                    allowsAutomaticExecution: !runtime.currentTurnPlanningOnly,
+                    allowsAutomaticExecution: !runtime.currentTurnPlanningOnly && !goalBudgetSpent,
                     requiresGoalCompletion: requiresGoalCompletion,
                     evidence: progressEvidence
                 ) {
@@ -1489,9 +1500,17 @@ extension AppState {
                     runtime.errorDetails = nil
                     runtime.errorSeverity = .notice
                 case .pauseAfterLimit:
-                    runtime.errorMessage = L10n.PlanContinuation.safetyLimitPaused
-                    runtime.errorDetails = nil
-                    runtime.errorSeverity = .notice
+                    // A Goal with budget left is not out of runway just because
+                    // the round counter ran out — budget is the only hard
+                    // boundary. It queues its own continuation (or an orderly
+                    // wrap-up) as a host instruction, which starts the next
+                    // turn on its own; this turn still ends here, so the
+                    // banner is simply skipped rather than the loop extended.
+                    if !continueGoalOnBudgetInsteadOfRoundLimit(for: runtime) {
+                        runtime.errorMessage = L10n.PlanContinuation.safetyLimitPaused
+                        runtime.errorDetails = nil
+                        runtime.errorSeverity = .notice
+                    }
                 case .stop:
                     break
                 }
@@ -1691,6 +1710,7 @@ extension AppState {
                         interactionMode: runtime.interactionMode,
                         approvalMode: runtime.approvalMode,
                         conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                        environmentTrustDeclarations: runtime.environmentTrustDeclarations,
                         computerUseOwner: runtime.computerUseOwner, latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
                     )
                 }
@@ -1768,15 +1788,15 @@ extension AppState {
                     anyDenied = true
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .denied
-                        runtime.toolCalls[index].errorMessage = "Goal planning validation required"
+                        runtime.toolCalls[index].errorMessage = L10n.GoalPlanning.gateBlockedTool
                     }
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: "Blocked: Goal evidence planning has not produced a validated execution plan yet. Finish the host-owned planning flow without asking for user approval.",
+                        payload: AgentGoalGateNotice.blockedToolPayload,
                         source: .systemNotice,
                         outcomeStatus: .denied,
-                        errorMessage: "Goal planning validation required"
+                        errorMessage: L10n.GoalPlanning.gateBlockedTool
                     )
                     continue
                 }
@@ -1957,7 +1977,11 @@ extension AppState {
                         changedWorkspacePath = appliedPath
                         return appliedPath
                     },
-                    delegatedApprovalHandler: delegatedApprovalHandler
+                    delegatedApprovalHandler: delegatedApprovalHandler,
+                    toolPackActivationSink: { requested in
+                        runtime.loadedToolPacks.formUnion(requested)
+                        return runtime.loadedToolPacks
+                    }
                 )
             }
             for (stagedIndex, staged) in stagedCalls.enumerated() {

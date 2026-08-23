@@ -1,0 +1,10 @@
+{
+  "name": "willdeep-session-vitality",
+  "version": "1.0.0",
+  "description": "Session health dashboard aggregating conversation stats, token estimates and per-project activity.",
+  "interface": {
+    "displayName": "Session Vitality",
+    "shortDescription": "会话体检中心：聚合会话热度、Token 用量与项目活跃度。",
+    "composerIcon": "sf:waveform.path.ecg"
+  }
+}

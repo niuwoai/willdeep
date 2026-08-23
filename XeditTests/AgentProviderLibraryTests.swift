@@ -849,6 +849,122 @@ struct AgentProviderLibraryTests {
     }
 
     @MainActor
+    /// Installs a some.im entry carrying the kind of state a user accumulates:
+    /// a chosen pro model, alternates, a routing mode. All of it is lost if the
+    /// entry is destroyed and rebuilt, because the rebuild finds no existing
+    /// entry to inherit from — it draws a fresh UUID and falls back to preset
+    /// defaults. (`displayName` is deliberately not part of this: some.im's is
+    /// force-normalized to the preset name and was never the user's to keep.)
+    @discardableResult
+    private func installCustomizedSomeIMProvider(in appState: AppState) -> AgentProviderEntry {
+        let entry = AgentProviderEntry(
+            providerID: AgentProviderPreset.someIMID,
+            baseURL: SomeIMRelayRegion.internationalBaseURL,
+            apiKey: "entry-key",
+            flashPrimary: SomeIMIntegrationSettings.defaultTextModel,
+            flashAlternates: ["deepseek-v4-flash"],
+            proPrimary: "glm-5",
+            routingMode: .pro
+        )
+        appState.agentProviderLibrary = AgentProviderLibrary(entries: [entry], activeID: entry.id)
+        return entry
+    }
+
+    /// The reported bug: the model picker would empty out for a few seconds and
+    /// then refill. A routine reconcile read the shared session, got nothing
+    /// back, and treated that as a sign-out — deleting the provider entry and
+    /// its Keychain row. An empty read is not proof of a sign-out; it is also
+    /// what a reader sees when it races a concurrent Keychain write.
+    @MainActor
+    @Test("a routine empty shared-session read leaves the some.im provider intact")
+    func routineReconcileDoesNotDestroyProviderOnEmptyRead() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        let entry = installCustomizedSomeIMProvider(in: appState)
+        defer { appState.cancelSomeIMSignOutConfirmation() }
+
+        // Shared session reads empty — no key was ever put in the override.
+        #expect(appState.reconcileSomeIMProviderFromSharedSession() == false)
+
+        let survivor = appState.agentProviderLibrary.entries.first
+        #expect(appState.agentProviderLibrary.entries.count == 1)
+        #expect(survivor?.id == entry.id)              // same UUID: overrides still resolve
+        #expect(survivor?.proPrimary == "glm-5")
+        #expect(survivor?.flashAlternates == ["deepseek-v4-flash"])
+        #expect(survivor?.routingMode == .pro)
+        // The entry carries its own key, so the picker still lists its models.
+        #expect(survivor?.isUsableForChatSelection(isSomeIMAuthenticated: false) == true)
+    }
+
+    /// The counterpart: an actual sign-out must still take effect immediately,
+    /// which is why the trigger is explicit rather than inferred from the read.
+    @MainActor
+    @Test("an explicit sign-out drops the some.im provider right away")
+    func signOutTriggerClearsProviderImmediately() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        installCustomizedSomeIMProvider(in: appState)
+        defer { appState.cancelSomeIMSignOutConfirmation() }
+
+        #expect(appState.reconcileSomeIMProviderFromSharedSession(trigger: .signOut) == false)
+        #expect(appState.agentProviderLibrary.entries.isEmpty)
+    }
+
+    /// An unreadable shared store must not even *schedule* a sign-out. Missing
+    /// entitlement, locked Keychain, busy securityd, a payload from a newer
+    /// schema — none of them say anything about whether the user is signed in.
+    @MainActor
+    @Test("an unavailable shared-session read schedules nothing at all")
+    func unavailableReadDoesNotScheduleASignOut() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        let entry = installCustomizedSomeIMProvider(in: appState)
+        defer { appState.cancelSomeIMSignOutConfirmation() }
+
+        SomeIMIntegrationStore._setTestSessionReadOutcome(.unavailable)
+        defer { SomeIMIntegrationStore._setTestSessionReadOutcome(nil) }
+
+        #expect(appState.reconcileSomeIMProviderFromSharedSession() == false)
+        #expect(appState.someIMSignOutConfirmationTask == nil)   // nothing scheduled
+        #expect(appState.agentProviderLibrary.entries.first?.id == entry.id)
+    }
+
+    /// A shared session that reads back fine must cancel any pending
+    /// confirmation, or a sign-out scheduled a moment earlier would fire after
+    /// the user is already signed back in.
+    @MainActor
+    @Test("a successful read cancels a pending sign-out confirmation")
+    func successfulReadCancelsPendingSignOutConfirmation() {
+        let sandbox = KeychainSandbox()
+        _ = sandbox
+        SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: true)
+        defer { SomeIMIntegrationStore._setTestSharedSessionOverride(enabled: false) }
+
+        let appState = AppState()
+        installCustomizedSomeIMProvider(in: appState)
+        defer { appState.cancelSomeIMSignOutConfirmation() }
+
+        #expect(appState.reconcileSomeIMProviderFromSharedSession() == false)
+        #expect(appState.someIMSignOutConfirmationTask != nil)
+
+        SomeIMIntegrationStore._setTestSharedAPIKeyWithoutNotification("back-again-key")
+        #expect(appState.reconcileSomeIMProviderFromSharedSession())
+        #expect(appState.someIMSignOutConfirmationTask == nil)
+        #expect(appState.agentProviderLibrary.entries.count == 1)
+    }
+
     private func installEmptyActiveSomeIMProvider(in appState: AppState) {
         let entry = AgentProviderEntry(
             providerID: AgentProviderPreset.someIMID,

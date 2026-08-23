@@ -23,8 +23,9 @@ nonisolated enum AgentSubagentJobPrompts {
     /// whose prompt the client supplies itself.
     static let hostedModelPrefix = "someim-32b"
 
-    /// Virtual model that hosts `tradeID`'s job prompt, or nil for trades that
-    /// are not relay-hosted (`deep` / `tester` / `reviewer`).
+    /// Virtual model that hosts `tradeID`'s job prompt, or nil for trades the
+    /// relay does not host (`deep` / `tester` / `reviewer`, plus everything
+    /// absent from `hostedTradeIDs`).
     static func hostedModel(for tradeID: String) -> String? {
         guard hostedTradeIDs.contains(tradeID) else { return nil }
         // `test_fixer` → `someim-32b-test-fixer`: the catalog uses snake_case
@@ -32,6 +33,17 @@ nonisolated enum AgentSubagentJobPrompts {
         return "\(hostedModelPrefix)-\(tradeID.replacingOccurrences(of: "_", with: "-"))"
     }
 
+    /// Only trades the relay has actually provisioned belong here. A trade
+    /// listed before its chain exists resolves to a virtual model the gateway
+    /// answers with `model_not_configured`, which fails the spawn outright —
+    /// worse than never claiming hosting, because the client also suppresses
+    /// its own job prompt whenever it believes the server supplies one.
+    ///
+    /// `docs/SOMEIM_WORKER_VIRTUAL_MODELS.md` is a plan, not an inventory:
+    /// keep this list on measured reality. Live probe 2026-08-21 (matching
+    /// willdeep-rs `hosted_worker_model`): these seven answer; the planned
+    /// `security-guard` / `judge` / `reviewer` / `ops-runner` chains all
+    /// return `model_not_configured`. Add one back only after probing it.
     static let hostedTradeIDs: Set<String> = [
         AgentSubagentProfileCatalog.scoutID,
         AgentSubagentProfileCatalog.readerID,
@@ -40,8 +52,6 @@ nonisolated enum AgentSubagentJobPrompts {
         AgentSubagentProfileCatalog.buildFixerID,
         AgentSubagentProfileCatalog.logInspectorID,
         AgentSubagentProfileCatalog.gitDetectiveID,
-        AgentSubagentProfileCatalog.securityGuardID,
-        AgentSubagentProfileCatalog.judgeID,
     ]
 
     static let scout = """
@@ -156,6 +166,14 @@ nonisolated enum AgentSubagentJobPrompts {
     /// Judgement trades. Both answer a bounded question about material they
     /// are handed, which is exactly the shape a 32B model does reliably: no
     /// searching, no multi-file reasoning, one verdict with a stated reason.
+    ///
+    /// Neither is in `hostedTradeIDs`: the relay has no `someim-32b-judge` or
+    /// `someim-32b-security-guard` chain yet, so these strings are the only
+    /// copy and the model falls back to `cheapBinding`. Note this trade is
+    /// *not* the main loop's `someim-security-guard` (AgentModels), which is
+    /// live, gateway-hosted, and deliberately kept separate — that one owns
+    /// the auto-approval trust boundary in replace mode, this one is a worker
+    /// answering on request. Same subject, different authority; do not merge.
     ///
     /// The hard-won rule for both: give the verdict its own tokens. The
     /// managed-routing judge once shipped with a 16-token ceiling and every

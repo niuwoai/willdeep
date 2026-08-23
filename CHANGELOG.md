@@ -1,7 +1,378 @@
 # Changelog
 
-> 当前文件保留最新版本（1.280.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.285.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.285.0-rc4 - 2026-08-23
+
+### Fixed
+
+- **修复 develop 上红着的提示词快照守卫。** rc2 往三档 `stableSystemPromptPrefix` 各加了一行 `load_tool_pack` 说明，但没有重录快照哈希、也没有提升 `stablePrefixVersion`——而 `AgentContextBuilder` 那段常量注释本身就写着「改动提示词必须两者都做」。结果 `AgentContextBuilderPromptTests` 的 3 条断言持续失败（standard / compact / extended 各一），稳定契约进入「文本已变、版本号仍称 v31」的自相矛盾状态。现按协议把契约提升到 **v32** 并重录三档哈希（standard `2dacb057…`、compact `4475685d…`、extended `ab172e40…`）。
+- **`AgentGlobalRulesTests` 里 15 条终端条款断言重新挂上锚点。** 这批断言守的是「终端条款别被合并吃掉半句」，而 1.284.0-rc5 压缩稳定契约时改写了措辞：约束逐条仍在（路由到 ACTIVE tab、主机身份记忆、SSH 与本地不互串、dispatch 确认不是输出、heredoc 禁令、ZMODEM 先读 skill……逐条核对过），但字面锚点全变了。**当时的验证带了 `--without-building`，跑的是没编译进改动的旧二进制，拿到假全绿**，于是这 15 条红了整整一天无人察觉。现按 v32 措辞重挂锚点，并在测试里留下这段来龙去脉，避免下次被当成「断言没跟上」随手删掉。
+- **`xcresult_report.rb` 不再在解析失败结果时自己崩掉。** 第 189 行用了 `filter_map`（Ruby 2.7+），而 macOS 自带的 `/usr/bin/ruby` 仍是 2.6；CI 固定 3.3 所以从未暴露。这条路径**只在有测试失败时才走到**，于是本地每次真出问题，看到的都是一段 `NoMethodError` 解析器栈，真正的失败用例反而被埋掉——恰恰是最需要看清的时候。改用等价的 `map { }.compact`。
+
+### Notes
+
+- 提示词稳定核心（`AgentContextBuilder.stableSystemPromptPrefix`）的守卫目前**只在本地生效**：CI 的 `XeditTests (macOS)` 依赖自托管 runner，而仓库与组织两级当前都没有注册可用 runner，该 job 会一直排队到超时。在此期间，任何改动稳定前缀的提交都必须在本地手动跑一次 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/AgentContextBuilderPromptTests`，否则漂移会静默进入 develop（rc2 即为一例）。
+
+## 1.285.0-rc3 - 2026-08-23
+
+### Removed
+
+- **删掉 `AppStateAgentSessions.swift` 里零调用的 `clearIncompatibleAgentSessionModelOverride()`（10 行）。** 全仓库 grep（`*.swift` / `*.rb` / `*.md` / `*.json` / `*.yml`）只命中定义处这一行，没有任何调用点，也没有 CI 守卫按名字断言它。它想做的事——会话级模型覆盖与当前 provider 不兼容时清空覆盖并落盘——从来没有被触发过。
+- **不是上一轮拆分造成的。** 在 `develop` 上 `git grep` 拆分前的版本，同样只有定义处一处命中，说明这个方法在 1.284.0-rc11 拆文件之前就已经是死代码。
+- 它依赖的 `agentModelIsCompatibleWithActiveProvider(_:)` 仍有两处活调用（`AppStateAgentSessions.swift`、`AppStateAgentRequestEstimates.swift`），保留不动。主文件 2584 → 2574 行。
+
+### Tests
+
+- 删除后编译并复跑 109 tests / 4 suites 全绿（`AgentGoalTeamsTests` / `AgentGoalBudgetedContinuationTests` / `SomeIMSharedSessionMemoTests` / `AgentPlanProgressTests`）。三项证据一致：退出码 0、原始日志 `** TEST SUCCEEDED **`、`report.json` 的 `passed=109 failed=0 total_mismatch=false`。
+- 合并 `develop`（1.285.0-rc2）后版本位点一律取更高侧再统一 bump；`version_consistency: pass version=1.285.0-rc3 failures=0`。
+
+## 1.285.0-rc2 - 2026-08-23
+
+### Added
+
+- **Alma 规则库随 WillDeep 离线发行。** `BundledAgentRules` 携带完整的工程规则文档、相对链接索引和带版本/内容哈希的 manifest；Xcode 将整个只读目录复制进 App Resources。新增同步脚本与 CI 契约守卫，确保规则快照、索引、manifest 和资源构建配置一致。
+- **规则设置页可载入内置精简索引。** 页面展示内置规则库路径与规则版本；“载入内置索引”只替换编辑区草稿，用户保存后才生效，不会静默覆盖自定义规则。
+- **164 个既有原生工具改为分类索引与按需加载。** 新增 `load_tool_pack` 后，普通编码回合常驻 20 个核心工具，其余按终端、会话自动化、知识、集成、浏览器、Computer Use、媒体、插件与短剧分包；一次可加载多个包。
+- **通用 Skill 增加宿主侧主动路由。** 发送前只用缓存中的名称、描述和跨语言关键词进行确定性匹配；明确或高置信度命中最多自动挂载一份完整 `SKILL.md`，模糊命中最多注入三个短候选并要求模型先调用 `read_skill`，手动选择与专用视觉路由始终优先。
+
+### Changed
+
+- **默认全局规则从长正文改为按需路由。** 新用户的 `~/.willdeep/CLAUDE.md` 只保留语言、安全、优先级和任务到规则文件的映射；Prompt 注入时把占位符解析为当前 App 内的绝对规则目录。旧版原厂模板会安全迁移，自定义文件保持不变。
+- **上下文能力索引落实缓存边界。** Skill 沿用 `list_skills` / `read_skill` 按需加载，MCP 沿用固定网关；原生工具包在会话内只增不减，并按注册表顺序稳定输出。首次扩包只承担一次 `[tools, system, history]` 前缀缓存失效，后续回合继续复用。
+
+### Tests
+
+- `bundled_agent_rules_contract_test` 覆盖规则版本、文件清单、内容 SHA-256、索引体积/相对链接、Xcode Resources、默认模板和占位符解析；agentrules `v0.20.0` 自身规则校验通过。
+- `AgentToolPackTests` 覆盖全部描述符完整归类、核心工具数上限、扩包单调性、稳定顺序、多包加载与专家隐式激活。
+- `AgentSkillAutoActivationTests` 覆盖显式技能、中文到英文元数据路由、模糊候选、禁用/手动优先级与紧凑候选 Prompt；连同工具包共 19 项定向测试通过。
+- `CURRENT_PROJECT_VERSION` 从 463 递增至 465；全仓库版本同步到 `1.285.0-rc2`。
+
+## 1.284.0-rc12 - 2026-08-22
+
+### Fixed
+
+- **Goal 长任务统一由预算收口。** 空验收清单也进入预算续跑；预算耗尽时展示正确的交接横幅，交接请求发出后不再被计划自动续跑重新拉起；本地化安全上限文案不再硬编码轮数。
+- **计划进度解析不再把普通文本误判成步骤或失败。** `2 tests failed` 不再被识别为第 2 步，`❌` / `✗` / `✘` 不再自动等价于失败状态，`not done` / `尚未完成` 等否定表达不会被尾部状态词翻转成已完成。
+- **排队派发与 some.im 会话回退保留完整语义。** 延迟派发会携带原始 `source`；最近一次有效 some.im 会话只允许在 10 分钟内用于瞬时 Keychain 读取失败，明确登出仍立即清空。
+- **Session Vitality 仪表盘改用只读 MCP 资源取统计数据。** 页面从 `tools/call` 切换到 `resources/read` 的 `willdeep-plugin://vitality/stats`，避免确认流程导致 `res.content is undefined`；服务端同步公开 JSON 资源并补充契约测试。
+
+### Changed
+
+- Agent 稳定提示词契约升级至 v31，恢复计划、进度、交接与工具调用的既有语义，并重录 standard / compact / extended 三档快照哈希。
+
+### Tests
+
+- 三档旧快照哈希按实际提示词重录后，定向复跑覆盖 Goal 预算、计划解析、停止处理、提示词与 some.im 会话缓存：158 tests / 8 suites 全绿，原始日志 `** TEST SUCCEEDED **`。
+- `session_vitality_server_test: pass checks=8`；Ruby 语法检查通过；`complexity_guard: pass scanned=785 soft=19 hard=0`；`git diff --check` 通过。
+
+## 1.284.0-rc11 - 2026-08-22
+
+### Changed
+
+- **两个越过 3000 行硬上限的文件拆开，`complexity_guard` 从 hard=2 回到 hard=0。** CI 的 `Ruby guards (quality)` 因此一直是红的。两个文件的成因不同：`SomeIMIntegration.swift` 是 rc8 那 76 行把它从 2944 推过了线（本轮引入）；`AppStateAgentSessions.swift` 的 3189 行则是此前 1.282.0 那批 sidebar 改动留下的（`main` 上是 2997）。
+- **四个新文件，代码一行未改，只是整块搬运加文件头**：`SomeIMSharedSessionMemo.swift`（124 行，会话读取三态与其缓存）、`AppStateAgentRoutines.swift`（249 行，例行任务的保存/删除/启停/立即运行/到点触发）、`AppStateAgentSessionOperations.swift`（223 行，置顶/归档/重命名/工作区快照/落盘）、`AppStateProviderImport.swift`（191 行，从其他 CLI 导入 provider）。主文件 3189 → 2584。
+- **第一刀切错了，值得记下来。** 按 `// MARK: - Routines` 那条注释切下去，编译立刻报出两个 private 方法跨文件不可见——因为那段 MARK 底下其实混着三簇互不相干的代码：例行任务、会话操作、模型选择。**这条注释早就名不副实**，而这大概正是文件长到 3189 行还没人察觉的原因之一。第二刀按真实边界切，模型选择那簇因为被 some.im 路由段依赖（`activeAgentModelSelectionLabel` / `appendModelChangeNoticeIfNeeded`），放回了主文件。
+- `nonEmptyOrNil` 在拆出去的 `AppStateProviderImport.swift` 里补了一份 `private extension String`。这是本仓库既有做法（另有 5 个文件各自带一份）；提升成 internal 反而会和 `AgentComposerPickers.swift` 里那个非 private 的 `extension String` 抢命名空间，为一个三行的纯函数不值得。
+
+### Tests
+
+- `complexity_guard: pass scanned=785 soft=19 hard=0`；`Ruby guards (quality)` 整组本地通过。
+- 拆分后编译并复跑 109 tests / 4 suites 全绿（`AgentGoalBudgetedContinuationTests` / `SomeIMSharedSessionMemoTests` / `AgentGoalTeamsTests` / `AgentPlanProgressTests`），退出码 0、原始日志 `** TEST SUCCEEDED **`；隔一轮以干净指纹二次确认命中缓存。
+
+## 1.284.0-rc10 - 2026-08-22
+
+### Docs
+
+- **`AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md` 更新到三条摩擦全部落地，并订正其中一条的根因。** 审批裁判那条原本写的是"没配 key 就不该被选作裁判"，深挖后这个描述本身是错的：**用户配好了，是宿主把一次 Keychain 读取失败当成了登出。** 决定性证据是审计里 guard 的正常裁决与 deepseek 的掉线在同一天反复交错、最短间隔 1 分钟——持续性的配置缺失不会长这样，瞬时读取失败才会。
+- 同时订正 §1.5 里一处不准确的推断：原文说"计划标不成完成就落回 `pauseAfterNoProgress`"，这对**普通模式**成立，对 Goal 模式并不成立（`requiresGoalCompletion` 为真时策略已经返回继续）。Goal 的硬停实际来自第 24 轮的 `pauseAfterLimit`，真正的问题是同一个 Goal 活在两套边界下——已于 rc9 修复。
+- `missing api key` 那行审计说明补上警告：**这条日志的措辞会误导人**，请求其实从未发出。这正是 rc8 把它改名成 `no judge configured` 的原因。
+
+## 1.284.0-rc9 - 2026-08-22
+
+### Fixed
+
+- **Goal 的执行阶段不再被轮次上限切断。** 同一个 Goal 过去活在两套边界下：计划标记完成之后，验收阶段按 wall-clock 预算走退避阶梯、永不硬停；而计划**还在执行**时，续跑在第 24 轮直接停下并弹出「达到安全上限」。于是最需要长跑的任务恰恰是被切断的那些，切断它的还是一个用户完全无从理解的代理指标——「第 24 轮」既不代表花了多少时间，也不代表花了多少钱。
+- 轮次上限现在交给 `AgentGoalContinuationPolicy` 裁决（新增 `continueGoalOnBudgetInsteadOfRoundLimit`）：预算有余量就注入一条续推指令，并带上退避阶梯对应档位的话术（引导 / 只读对账 / 退避）；预算耗尽则请求交接快照并给出通知横幅；只有交接已经请求过之后，才让原本的暂停生效。这正是 `docs/LONG_HORIZON_AUTONOMY.md` §1.2 / §2.1 写下的契约：预算是唯一的硬边界，没有 `hard_pause` 出口。
+- **刻意走与验收阶段同一个 `evaluate`，让段计时和续推计数真的推进。** 换成一个只读探测会让 `segmentStartedAt` 永远是 nil，那等于把轮次上限直接换成"没有上限"——这是这次改动里最容易埋下的坑，也是它没有被写成纯查询的原因。
+- 接管走的是宿主指令队列而不是当前回合内追加 system 消息：后者是 `AgentPlanAutoContinuationPolicy` 那条路径的写法，两种混用会让同一轮被执行两次。
+- 续推指令只展开**未勾选**的验收项，已完成项不重复占用上下文；提示词明确禁止"用一段总结冒充进展"，并要求以一个 `progress` 块收尾。
+- 普通模式不受影响：它没有 Goal 预算这条边界，8 轮上限仍然是它的终态。
+
+### Tests
+
+- 新增 `AgentGoalBudgetedContinuationTests`（6 例）：预算有余量时接管并注入续推、接管会开窗计时并累计次数、预算耗尽转为请求交接快照并置通知横幅、交接请求过之后不再接管、验收清单全勾时不接管、普通模式不受影响。
+- 断言刻意避开 `errorMessage == nil`：`AppState()` 会读真实 Keychain，派发路径在未登录的机器上会写入 some.im 登录提示，拿 nil 当判据等于把本机登录态混进测试。改为锁「不是达到上限的那条文案」。
+- 与并发会话同期修复的 `AgentGoalTeamsTests` 一起复跑：53 tests / 3 suites 全绿，两边的 Goal 改动互不干扰。
+
+## 1.284.0-rc8 - 2026-08-22
+
+### Fixed
+
+- **「规划完成后还是什么都要点」的真凶找到了：安全裁判有四分之一的时间不在岗，而它缺席的原因是一次 Keychain 抖动被误判成「用户没登录」。** Goal 模式本来就让裁判放行的命令自动执行，可 `judge.jsonl` 显示八月以来 826 次裁决里 204 次 `unavailable`（24%），其中 `missing api key` 211 次、全部落在没有自己 key 的 `deepseek-v4-flash` 上。每一次都是一张本可以不弹的审批卡。
+- 根因是 `.unavailable` 与 `.signedOut` 被压成了同一个空值。`SomeIMSessionReadOutcome` 明确区分三态，注释也写着「`.unavailable` 表示读取本身没落地，把它当成登出正是删掉用户 provider 的原因」——但裁判走的 `loadAPIKey()` 用的是 `currentSharedSession()`，两者一起返回 nil。于是共享 Keychain 一次瞬时读不到（另一个 App 改动 session 触发缓存失效后紧接着的那次读取），裁判就断定没登录、掉到会话自身的 provider，而它没有自己的 key，候选链因此空手而归。审计里 guard 正常裁决与 deepseek 掉线在同一天交错、**最短间隔 1 分钟**，正是这个瞬时窗口的形状——而不是任何"配置没做好"。
+- `SomeIMSharedSessionMemo` 现在记住最近一次真正读到的会话，只在 `.unavailable` 时供无人值守路径使用（新增 `apiKeyForUnattendedUse()` / `hasSessionForUnattendedUse()`，裁判改走这条路）。**确认登出仍然立刻清除它**——登出是关于用户的明确回答，绝不能靠"上次读到的"继续用下去；而 `invalidate()` 刻意不清，因为它只表示"下次去重读"，从来不表示"登出了"。
+- **候选链空手时不再伪装成请求失败。** 审计记 `no judge configured` 而不是 `missing api key`：前者是"我们根本没有裁判"，后者是"provider 拒绝了我们"，把两件事记成同一句话，让这次取证白白绕了好几周。
+- **而且这件事现在会告诉用户。** 每个会话第一次遇到无裁判可用时给一条通知横幅：「当前没有可用的安全裁判，所以每条命令都要你确认。在设置里为当前模型服务商填入 API Key，或登录 some.im，即可恢复自动审批。」（en/zh-Hans/ja/es/fr 五语齐全）。此前用户只能观察到"什么都要点"，并合理地以为产品就是这么设计的。
+
+### Tests
+
+- `SomeIMSharedSessionMemoTests` 新增 4 例锁住三态语义：读取失败保留上次会话、确认登出清除、`invalidate()` 不等于登出、显式遗忘只走登出路径。
+- `apiKeyForUnattendedUse()` 补上与 `hasAuthenticatedSessionForAutomaticDefaults()` 一致的 XCTest 门禁，开发机上的真实 some.im 登录态不会渗进测试。
+
+## 1.284.0-rc7 - 2026-08-22
+
+### Tests
+
+- **一条用例的成败取决于跑测试的人有没有登录 some.im。** `AgentGoalTeamsTests` 的「恢复执行会续期预算，软停过的 Goal 不会立刻再停」断言 `runtime.errorMessage == nil`，可 `resumePinnedAgentGoalExecution()` 真的会走一次派发，而派发路径上有 some.im 登录门禁（`someIMLoginRequiredForTurn` → `setSomeIMLoginRequiredError`）：没登录的机器上 `errorMessage` 会被改写成「some.im 未登录……」，用例稳定变红。已在 develop 基线（f8465865）复现：36 tests / 1 failed，失败原文就是那句登录提示。
+- 断言从笼统的 `errorMessage == nil` 收窄到这条用例真正关心的东西：**不是预算耗尽的软停横幅**（`errorMessage != L10n.GoalPlanning.budgetExhausted` 且 `errorSeverity != .notice`）。登录门禁写什么与本用例无关，那是登录门禁自己的用例该管的事。
+- 顺手把前置状态补真：原来的 runtime 一开始 `errorMessage` 就是 nil，所谓"resume 会清掉软停横幅"其实一次也没被验证过。现在恢复前先挂上 `budgetExhausted` / `.notice`，这两条断言才真正压住 `clearTurnError()`。
+- 同一文件里其余 35 个用例都不碰这条路径（`makeAppRuntime` 默认 `isResponding: true`，续推提示只入队不派发；`autoApprovalSource` 那条走的是 `.danger`，`guard risk == .write` 直接返回 nil），逐条复核后确认没有第二处依赖真实登录态。
+- 派发出去的续跑请求在用例结尾 `cancel()`，不再把一个在途请求漏到测试之外（登录的机器上它会真的发出去）。
+- 该文件 36 tests 全绿：退出码 0、原始日志 `** TEST SUCCEEDED **`、`report.json` passed=36/failed=0 三者一致。
+
+## 1.284.0-rc6 - 2026-08-22
+
+### Docs
+
+- **新增 `docs/AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md`**，把这一轮三处用户体感摩擦的证据、根因与修复固定下来，附可复现的取证方法（三份只读脚本的思路）。三处分别是：进度记账 58% 读不出（rc3 已修）、Goal 门禁的"等待宿主放行"（rc4 已修）、**审批裁判 24% 掉线（尚未修，只完成取证）**。
+- **审批裁判取证是这份文档里唯一还没动手的一件**：`judge.jsonl` 全量 1967 条中 `unavailable` 305 条，八月以来更是达到 24%（826 条里 204 条）。掉线原因 `missing api key` 占 69%（211 次，全部落在 `deepseek-v4-flash` 上），其次是 `no verdict tag` 30、`empty reply` 20、`network error` 19、`http 404` 17。**每一次掉线都是一张本可以不弹的审批卡**——客户"规划完成后还要点"的体感由此而来，而 Goal 模式设计上早已让裁判 allow 的命令自动执行。86%（261/305）属于纯工程问题，与安全判断无关。建议见该文档 §3.4。
+- **更新 `docs/LONG_HORIZON_AUTONOMY.md` 的过时现状表**（原文停留在 2026-08-13 / 1.250.0-rc5，且标着"确认前不进入编码"，而 XA1/XA2 与 rs 侧 RA1 其实都已进代码）：补入 2026-08-22 复查修订，指出**退避阶梯的机制已经就位，却被 `guard currentPlan?.status == .done` 挡在门外**——计划标不成完成就进不了退避，仍会落回 `pauseAfterNoProgress`。XA1 的剩余工作因此不是"实现退避阶梯"，而是"把它的入口从计划完成态上解绑"。
+- 修正 1.284.0-rc5 条目里两个凭估算写下的分条字数（终端组 1,730 → 实测 2,012，`create_file`/`edit_file` 组 1,230 → 实测 1,361），并补上整块 15,677 → 14,121 的口径。总体百分比（standard −10.6%、extended −9.7%）是实测值，未受影响。
+
+## 1.284.0-rc5 - 2026-08-22
+
+### Changed
+
+- **系统提示词稳定核心压缩（契约升级为 `willdeep-agent-system-v30`，三档哈希重录）。** 对标 willdeep-rs 的 `prompt.rs`——那边整份 `STABLE_CONTRACT` 约 4,600 字符，没有超过 400 字符的条目；本仓库的 `Stable tool contract` 单块就有 15,677 字符 / 32 条，最长一条 **2,010 字符**（终端路由，一条里塞了 12 种边界情况）。**实测 standard 稳定前缀 18,555 → 16,582（−10.6%），extended 20,441 → 18,468（−9.7%），compact 4,531 不变**（它本来就和 rs 同一量级）。
+- 逐条重写、合并同类项，原则是**压缩表达而不删语义**。整块 `Stable tool contract` 从 15,677 字符 / 32 条降到 **14,121 字符 / 31 条**：终端三条 2,861 → 2,012（拆成"路由与主机身份"、"dispatch 确认不是命令输出"、"别在终端里用 heredoc 造文件"三条各司其职，最长一条 2,010 → 1,071）；`create_file`/`edit_file` 那条 1,656 拆成三条共 1,361（工具用法 / 字面文本 / 补丁卡去向）；MCP + Lark + DingTalk 五条 1,241 合成三条 1,134；图片生成两条 763 合成一条 523；失败调试、后台任务、front-load 沟通各压 20–30%。
+- **守卫断言一条都没有为了省字数而改动。** `result stale`、`Never edit source code, build configuration`、`${{ secrets.NAME }} reference is not the secret value`、`Diagnose, repair, retry, and continue` 这些精确字符串在重写时被逐一调了回去——它们守的是真实语义，不是字面洁癖。唯一失效的是三个快照哈希，这正是快照守卫该有的行为。
+- ⚠️ 与 `v26` 那轮"按能力门控瘦身"不同（那次刻意保证核心字节序不变、前缀缓存不破），本轮改的是**稳定核心本身**，所有用户的 provider 前缀缓存会一次性失效并在下一轮重建。这是版本升级的正常代价。
+- **顺带记下一个值得警惕的事实**：v26 那轮把 standard 压到 17,494，而本轮开工前它已经涨回 18,555——半个月沉积了 1,000 字符。提示词会自然生长，每处理一次事故就追加一段，没有人回头删。后续应优先走"下沉到能力附录 / 工具报错文案"（v26 那条路收益 −16.5% 且不破缓存），而不是反复重写核心。详见 `docs/AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md` §4。
+
+### Tests
+
+- `AgentContextBuilderPromptTests` 18 tests 全绿，三档快照哈希（standard / compact / extended）与 `stablePrefixVersion == "willdeep-agent-system-v30"` 同步重录。
+- 语义断言在改哈希之前先单独验证过一轮：只剩哈希失败、语义断言全过，才动的哈希常量。
+
+## 1.284.0-rc4 - 2026-08-22
+
+### Fixed
+
+- **「等待宿主放行」这句话是我们自己写出来的。** Goal 模式在计划验证完成前会锁掉写类工具（`goalPlanningGateBlocks`），而拦截时回灌给模型的原话是 "Finish the **host-owned** planning flow"，系统提示词里则是 "Goal Teams planning is **host-coordinated**"。模型把 host 直译成"宿主"，于是对用户说「等待宿主放行后立即执行」——可现实里既没有这个放行动作，也没有对应的按钮。用户读完只会去找一个不存在的控件，而模型在原地空转，一个回合什么也没干成。
+- 门禁措辞整体去 host 化，并且把「该干什么」写死：明确告诉模型这是后台自动流程、没有任何人需要批准、催也不会更快，与其空等不如继续用只读工具取证；同时**明令禁止**它宣称自己在等待放行/批准/授权。相关文案集中到新的 `AgentGoalGateNotice`，不散落在拦截点里。
+- **规划被阻断时，把出路直接说出来。** `blocked` 阶段旧提示词只让模型"解释证据缺口"，于是它反复解释、反复被拒，而 Goal 卡片上那个「重试规划」按钮从来没人提过一句。现在提示词要求它说清具体是哪个成员失败、缺什么证据，并指向重试或收窄目标——按既有约定，正规通道已经存在时只把话讲清楚，不再加专属 UI。
+- 被拦下的工具卡文案从英文的 "Goal planning validation required" 换成本地化的「Goal 规划进行中，工具暂时锁定——你不需要做任何操作」（en/zh-Hans/ja/es/fr 五语齐全）。旧文案既没说是谁在 validate，也没说用户要不要动手，而正确答案恰恰是「什么都不用做」。
+
+### Tests
+
+- `AgentGoalChecklistParserTests` 新增 3 个用例：规划阶段提示词不含 `host-coordinated`/`host-owned` 且带有"不许说在等放行"的禁令、`blocked` 阶段指向「重试规划」、两条门禁回灌文案里 `host` 一词零出现。否定式断言是刻意的——换说法可以，把"宿主"这个不存在的角色放回去不行。
+- 该文件 21 tests 全绿；`AgentContextBuilderPromptTests` 18 tests 全绿（v29 稳定前缀哈希快照未变，本次改的都是动态段）；`AgentPlanProgressTests`/`AgentGoalLaunchRecoveryTests` 未受影响。
+- `AgentGoalTeamsTests` 有一条「恢复执行会续期预算」在本机红，已在 develop 基线（5de6f176）复现同样失败，根因是该用例依赖开发机的 some.im 登录态，与本次改动无关，另行处理。
+
+## 1.284.0-rc3 - 2026-08-22
+
+### Fixed
+
+- **「计划做得很积极，却经常标不上完成」的根因是宿主读不懂模型的进度上报。** 把本机 459 个落盘会话全量扫了一遍：模型一共发出 **539 个 `progress` 块，其中 312 个（58%）宿主一条状态都解析不出来**；115 个带计划的会话里，**79 个（69%）计划停在"已就绪/执行中"却 0 步被标记完成**。最刺眼的样本是一个跑了 1284 条消息、622 次工具调用、模型明确宣布"端到端验证完成"的会话——**11 个步骤全程 pending**。宿主读不出就等于没干活，续跑策略随后按"无进展"把会话硬停，用户看到的就是一个再也推不动的死任务。
+- **最大的一类哑弹是我们自己教出来的。** prompt 注入活跃计划时用的是 `1. [in_progress] 步骤名`（`goalBlock` 与 `ACTIVE PLAN` 两处），模型照着这个形状回抄天经地义，而旧解析器在这里读到的是带方括号的 `[done]`，一律不认。仅这一条就占了修复收益的三分之二。
+- `AgentPlanParser` 改为三层回退解析，每层都要求状态词落在**不可能是叙述**的位置：层一是原有的 `1: done` 严格合同（并剥掉 `[]`/`()`/`「」` 等包裹符）；层二认序号对、状态词落在行尾的自然写法（`1. 实现扫雷模块及回归用例 —— done`）；层三认用步骤名代替序号的写法（`- 实现记忆翻牌模块: done`），且**只有唯一命中一个步骤时才采信**，同时命中两个一律整行跳过。
+- 状态词表补齐两类长期哑弹：`closed`/`resolved`/`verified`/`passed` 这些同义收口词，以及**中文状态词**（完成/进行中/跳过/失败/待办等）。用户说中文，模型就回中文，而旧词表只有英文加 `✓`/`✔`——模型最爱用的 `✅` 反倒一直是哑弹。
+- 宽容没有变成瞎猜：`1. 修好 CI 上 failed 的那几个用例后再继续` 仍然整行跳过（状态词在句中是叙述），`99: done` 这类越界序号不会被文本匹配捡回来，`1: in_progress 之后再确认是否 done` 仍以严格格式为准。
+- **实测收益（同一批 539 个真实 `progress` 块回放）：解析成功率 42% → 84%，白写块 312 → 81，救回 231 个（白写降幅 74%）。**
+
+### Tests
+
+- `AgentPlanProgressTests` 新增 8 个用例，样本全部取自落盘会话里的真实哑弹：行尾状态词、步骤名代替序号、方括号包裹（prompt 展示格式）、中文与 `✅`、`closed` 同义词，以及三个防误判用例（叙述中的状态词、歧义步骤名、严格格式优先）。
+- 该文件 54 tests 全绿；相邻的 `AgentPlanContinuationTests`/`AgentContextRunwayPolicyTests`/`AgentComposerTaskProgressTests`/`AgentChatHistoryRendererGoalTests` 共 71 tests / 4 suites 全绿。三处期望"解析失败"的历史断言（普通代码块中的 XML、未知状态词、越界序号）逐条复核仍然成立。退出码、原始日志 `** TEST SUCCEEDED **` 与报告三者一致。未跑全量 XeditTests，交给 CI。
+
+## 1.284.0-rc2 - 2026-08-22
+
+### Fixed
+
+- **PTY 前台归属那条集成测试不再在满载全量下假红。** `AgentTerminalForegroundOwnershipIntegrationTests`「a live foreground job is detected and rejects command injection」隔离单跑 0.335s 稳过，满载时卡到 19s 才失败，还连带报出三条最吓人的断言——"命令注入没被拒绝"、`recentCommands` 非空。用一组占住主 actor 的临时用例把现场复现出来后，真相与产品无关：**等待循环跑在 `@MainActor` 上，实测 18 秒里只轮询到 1 次**，而它要找的证据是 `sleep 10`——第一次轮询轮到时，前台任务早就退出、shell 已回到提示符（镜像抓到的屏幕就是 `"sh-3.2$ sleep 10\nsh-3.2$ "`）。10 秒从来不是"等得不够久"，是**证据只存活 10 秒**。
+- 所以主修的是窗口而不是超时：被观测的前台任务 `sleep 10 → sleep 600`，约为实测最坏轮询间隔的 33 倍；仍然有界，硬杀测试进程也不会留下一整天的僵尸 `sleep`，而正常路径由 ctrl-C 结束、异常路径由 `tab.terminate()` 连同进程树一起收掉。顺带堵掉第二个同源竞态：旧写法哪怕在第 9.9 秒侥幸看到前台任务，紧接着那几条注入断言仍可能落在 `sleep` 退出之后执行，于是"拒绝注入"变成"允许注入"。
+- 等待预算 10s → 60s，且预算耗尽后仍补一次采样：主 actor 被饿死时循环压根没机会跑，那一次补采往往正好落在窗口内——旧代码里这行是隐式的，现在写明它承担的正是"机器只是慢"与"构建红了"之间的那道分界。放宽不削弱判据：真出了回归，那个状态根本不会出现，测试照红不误，只是晚一点。
+- 两处前置等待从 `#expect` 改成 `#require`：前置条件没满足就停在原地，不让"环境超时"继续往下伪装成"命令注入未被拒绝"。失败信息现在自带实测耗时、轮询次数、观察到的状态序列，以及**快照镜像里的屏幕内容**——镜像跑在自己的队列上，正好在主线程忙到不可信时仍然可读，下次红了能一眼分清"没到达"还是"到达后又走了"。
+- **顺带把版本位点对回同一个值。** develop 上 `project.pbxproj` 与 CHANGELOG 已是 1.284.0-rc1，其余八处仍停在 1.282.0-rc6，`scripts/version_consistency.rb` failures=3。本版统一 bump 到 1.284.0-rc2，failures=0。
+
+### Tests
+
+- 断言集合与安全语义逐条未动：命令注入必须被拒绝、自动化命令必须抛错、`recentCommands` 必须为空、ctrl-C 必须把 PTY 交还给 shell。没有删断言、没有加 `.disabled`、没有放宽任何判据——改的全部是"什么时候看"和"证据留多久"。
+- 复现与验证都在同一套人造负载下做（六个 `@MainActor` 用例各自阻塞主线程 60s，模拟全量并发对主 actor 的争抢）：**修前 ✘ 51.594s / 4 issues，修后 ✔ 66.557s**。同一组负载下修前那次的诊断输出为 `wait(foregroundTask) TIMEOUT polls=1 seen=[shellReady]`——一次都没轮到窗口内。
+- 干净复跑该文件全部六个 Suite：11 tests / 6 suites 全绿 0.875s，其中本用例 0.546s（退出码、原始日志 `** TEST SUCCEEDED **`、`report.json status=passed` 三者一致）。未跑全量 XeditTests——本次改动只落在这一个测试文件里，全量交给 CI。
+
+## 1.284.0-rc1 - 2026-08-21
+
+### Added
+
+- **Swift 侧能真的连上 willdeep-rs Runtime 了（只读观察）。** 1.283.0-rc1 落地的是解码器，这一版补上底下的线：`WillDeepRuntimeTransport` 负责发现与传输，`WillDeepRuntimeClient` 提供只读操作。四阶段计划（rs `docs/CLI_TUI_RUNTIME_ROADMAP.md` §1.0）的**阶段一**。
+- **优先走 Unix socket，回环 TCP 仅作回退。** 协议明写本机客户端应优先连 Runtime 目录内权限 `0600` 的 socket，而 `URLSession` 拨不了 unix socket——于是这里手写了一个极小的 HTTP/1.1 客户端（一个 POST、一个 JSON body、`Content-Length` 响应）。socket 的文件权限是真实的访问边界，不是风格问题；为了省事改用 TCP，等于本 App 成为唯一无视协议传输偏好的客户端。Runtime 不会发的东西（chunked、keep-alive 复用、重定向）一律**明确报错而不是半懂**。
+- **发现文件被当作不可信输入。** `daemon.json` 里的 `address` 只接受回环地址：被篡改的状态文件不能把本 App 的 token 引向另一台主机。缺失/空文件表示"本机没有 Runtime"，不是崩溃。
+- **「只读」是代码强制，不是口头约定。** Runtime 有 54 个操作，其中不乏提交轮次、派生 Agent、解决审批、删除会话。这一阶段只看不动，而代价是不对称的——读漏了是面板空白，写错了是别人的会话没了。`send` 拒绝 `readOnlyOperations` 之外的任何操作，且该名单是**字面量而非命名规则**：靠"凡是 .list 结尾"推导的白名单，早晚会放进下一个长得像读、实则有副作用的操作。
+
+### Tests
+
+- 新增 `WillDeepRuntimeClientTests`（12 项）：两端都发布时 socket 优先、缺 socket 回退回环、非回环地址一律拒绝、状态文件缺失不崩；请求体符合 Rust `ApiRequest` 契约（含 `request_id` 必须小写——Foundation 会大写而 Rust `uuid` 不会，该字段会在 `meta` 里原样回显用于日志对账）；HTTP 分帧、错误状态保留信封、无法诚实解析的响应（chunked、垃圾数据）明确失败；七个写操作在**任何字节发出之前**被拒。
+- **含一条真打本机 daemon 的端到端测试**（无 daemon 时跳过）：能力协商、十一类对象、真实 workspace 列表解码。已用临时诊断版验证过它确实走通了发现与连接两步，而不是被跳过分支静默放行——一条永远在跳过的端到端测试比没有更糟。
+
+## 1.283.0-rc2 - 2026-08-21
+
+### Added
+
+- **「始终允许」开始与 willdeep-rs CLI 互认。** 此前两端各存各的：App 存 UserDefaults，CLI 存 `~/.willdeep/always-allow.json`，互相看不见——在 App 里点过「始终允许」的命令，换到 CLI 还要再点一次。现在 App 读写同一个文件（`$WILLDEEP_HOME` 同样生效，与配置读取器同一套路径约定）。
+- **共享的是「人真正看过并批准的那条精确命令」，不是命令族。** 两端的规则模型本来就不同：App 钉的是命令族（`git push` 一次点击覆盖整族），CLI 钉的是精确命令并按字符串相等匹配。把宽的那种共享过去等于偷改政策——CLI 用户只被问过「记住这一条命令」，不该因此自动放行整族。所以点「始终允许」时，App 仍照旧存自己的族规则，**另外**发布一条 `command-exact:git push origin main`；CLI 从此不再问这一条，且仅此一条。反向同理：CLI 钉的精确命令 App 也认，精确命令是任何包含它的族的子集，两侧权限模型都不放宽。
+- 三条对另一侧的硬承诺写进实现：**文件必须保持 0600**（CLI 的 `with_always_allow_store` 见到 group/other 位会拒绝整个存储，那会弄坏每一次 CLI 运行，而不只是这个特性）；**带凭据的命令永不发布**（CLI 0.39.0-rc2 已停止记录并清理存量，若这边照发，泄漏只会换个进程重现）；**只铸 CLI 也会铸的签名**（同样拒绝 shell 组合、同样的空白规范化，否则写进去的是两个程序都要读的死规则）。
+- 写入前先重读合并：两个进程共用这个文件，盲写会丢掉 CLI 新增的规则。看不懂的规则形态原样保留而非丢弃——那些属于 CLI，丢掉等于悄悄取消对方的决定。
+
+### Tests
+
+- 新增 `AgentSharedAlwaysAllowStoreTests`（8 项）：签名前缀与规范化对齐 CLI 契约；四种凭据形态一律不发布而 `grep -r api_key src` 这类普通命令不受影响；CLI 钉的规则被认可且仅限该条（同族更宽的命令仍要审批）；发布时合并保留 CLI 既有规则且文件仍为 0600；重复发布幂等、shell 组合与凭据命令被拒；未知规则形态往返不丢；存储缺失是空规则集而非失败；路径约定与配置读取器一致。
+- willdeep-rs 侧同步新增反向契约（0.39.0-rc3）：本 App 的 `JSONEncoder` 输出（两空格缩进、正斜杠转义成 `\/`）必须能在 Rust 侧加载并命中，且两侧铸出的规则串必须相等。
+
+## 1.283.0-rc1 - 2026-08-21
+
+### Added
+
+- **Swift 侧开始能读 willdeep-rs Runtime 的公共协议（v1）。** 新增 `WillDeepRuntimeProtocol.swift`：统一响应信封 `{status, data, meta}` 加十一类公共对象（runtime / workspace / session / agent / turn / tool / task / approval / question / artifact / event）与四类控制结果（agent_command / interaction / runtime_status / object_mutation）的 Codable 解码器。这是 willdeep-rs `docs/CLI_TUI_RUNTIME_ROADMAP.md` §1.0 四阶段计划的第零步：**只解码，不连传输、不改行为、不依赖运行中的 daemon**，阶段一「只读观察 Runtime」可直接建在这批类型上。
+- 协议契约夹具 `XeditTests/Fixtures/willdeep-runtime-public-api-v1.json` 从 Rust 仓库逐字复制。线格式不归我们定义，改动一律以 Rust 侧 `willdeep-runtime-protocol` 为准：先刷新夹具、先让测试红，再改 Swift 类型。
+- 解码器放在 App target 而非测试 target——契约测试若只跑测试专用结构体，证明的仅仅是测试能编译。
+
+### Tests
+
+- 新增 `WillDeepRuntimeProtocolTests`（4 项）：夹具仍是 protocol v1 且十一类对象一个不少（少一类是单对象测试永远看不见的协议破坏）；十一类对象与四类控制结果逐个真解码；本地夹具副本与 Rust 源文件逐字节比对——两仓同时存在时比对，缺失时跳过而非失败（同事的 checkout 里没有兄弟仓库不是协议缺陷）。
+- 断言覆盖公共对象的**留白**：`workspace.root` 为 null、agent 不含 prompt/工具参数——脱敏是服务端承诺，Swift 类型里连放它们的位置都没有。
+
+## 1.282.0-rc8 - 2026-08-21
+
+### Fixed
+
+- **`security_guard` / `judge` 两个工种不再声称由网关托管。** 二者在 `hostedTradeIDs` 里，于是 `spawn_agent` 会把它们解析到 `someim-32b-security-guard` / `someim-32b-judge`——而网关从未建这两条链，实测返回 `model_not_configured`。声明一个不存在的链比不声明更糟：客户端一旦相信服务端会 prepend 职能段就不再发自己那份，该工种既丢了提示词又直接失败。现在两者与 `ops_runner` / `terminal_operator` 同列，职能段由客户端自带，模型走 `cheapBinding`。
+- 逐档实弹探活（2026-08-21）：`scout` / `reader` / `editor` / `test-fixer` / `build-fixer` / `log-inspector` / `git-detective` 七档在线，`security-guard` / `judge` / `reviewer` / `ops-runner` 四档未建。托管名单与 willdeep-rs 的 `hosted_worker_model` 恢复一致——两端共用同一个网关和同一批账号，同一个工种必须从任一端解析到同一个模型。
+- **主循环的 `someim-security-guard` 与 `someim-judge` 均在线，不受影响。** 它们是 replace 模式、承担自动审批信任边界的独立模型，与 Worker 档的同名工种是两回事；代码注释已写明「同一主题、不同权限，不要合并」，避免下次有人看到工种缺席就去动主循环那两个。
+
+### Changed
+
+- `docs/SOMEIM_WORKER_VIRTUAL_MODELS.md` 新增 §2.1「实测状态」：该文档是规划稿而非清单，客户端名单只认探活通过的链；同时记录本次实测的实际上游（`editor` 已落在 poolside、`compressor` 落在 ling-3.0-flash），并声明客户端不应依赖具体上游——那正是虚拟模型的意义。
+
+### Tests
+
+- 新增「hosted trades match the chains the relay has actually provisioned」：直接锁定七项字面量名单，并断言四个未建工种解析为 `nil`。原有的目录派生断言无法发现这类漂移——`hostedVirtualModel` 本身就由 `hostedTradeIDs` 推导，两者永远自洽，哪怕同时错。
+
+## 1.282.0-rc7 - 2026-08-21
+
+### Fixed
+
+- **`cat secrets/credentials` 不再免掉输入确认。** 1.280.0-rc2 的「工作区内词撞名路径豁免」立论是「`read_file` 本就免审可读同一文件」，对 `internal/auth/token.go` 这类源码成立，但它按整串匹配，顺带把**本身就是凭据的文件**也豁免了。豁免现在有两条边界：末段没有扩展名且整段就是凭据词（`secrets/credentials`、`deploy/token`）不豁免——那不是撞名，是自报家门；途经目录段整段叫 `secrets` / `credentials` 的（`config/secrets/db.yml`）也不豁免，目录名已经声明了里面装什么。
+- 目录段只认 `secret(s)` / `credential(s)` 四个强凭据词，**不认 `token(s)`**：设计 token、API token 模型、分词器都常年占用这个目录名，把 `pkg/tokens/registry.ts` 算成凭据读取等于把 rc2 刚消掉的那类误伤原样请回来。rc2 的误伤修正全部保持有效。
+
+### Tests
+
+- 修复 `AgentToolsCoreTests` 中自 1.280.0-rc2 起一直失败的「real credential markers still require typed confirmation」（`cat secrets/credentials` 分支）。
+- 新增「workspace word-collision paths stay exempt, bare credential names do not」：两个方向各钉三例，防止豁免边界向任一侧回摆。
+
+## 1.282.0-rc6 - 2026-08-21
+
+### Changed
+
+- **侧边栏「聊天」行在已经处于聊天页时改为新建。** rc5 把这一行定成纯导航，但人已经在聊天页时导航是空操作——那次点击除了"想新建"没有别的意思，让它什么都不做等于留了个死点击。现在这一行随上下文变化：不在聊天页就回到原会话，已在聊天页就开新的。行尾的新建按钮保留，从任何页面都能一步新建。
+- 例外是当前会话还没用过（一条消息都没有）：此时"新建"出来的东西和眼前这个一模一样，连点几下只会在侧边栏堆出一串空会话。这种情况下点击只把焦点交回输入框，仍然有反馈，草稿也不受影响——半句没发的输入算"在用"，不会被顶掉。
+- "会话是否用过"同时看运行时和落盘副本。对话进行中真值在运行时（`agentMessages` 委托给 `activeRuntime`，会话自己那份要等持久化才跟上），而刚打开的旧会话可能运行时还没回放历史；任一处有消息就算在用，宁可多开一个新会话，也不让点击看起来失灵。
+
+### Tests
+
+- `AgentSidebarChatEntryTests` 增至 9 项：已在聊天页点击新建且旧会话仍在、未使用的会话连点 5 次不堆积、运行时有消息而落盘副本尚空时判定为"在用"。
+
+## 1.282.0-rc5 - 2026-08-21
+
+### Fixed
+
+- **从插件、调度台这些页面回聊天，只能点「新聊天」——而它名副其实，把你正在进行的会话丢在身后。** 侧边栏首行的语义一直是"新建"，却同时兼任"回到聊天"的唯一入口，两件事只有一个按钮。现在这一行改名「聊天」，点击是导航：回到本来就开着的那个会话，并像其它导航项一样显示选中态。切换页面从来没有销毁会话，只是侧边栏没有一个入口表达"回到它"。
+- 新建聊天没有消失，挪到了这一行尾部的按钮上（图标仍是原来的方框铅笔，悬停提示「新聊天」）。菜单 ⌘N 照旧新建——顺带一提，这一行过去显示的那个「⌘N」标签只是画着看的，从不真的触发，真正的快捷键一直在菜单里；标签已移除，不再误导。
+- 只有在确实没有会话可回时（首次启动，或活动会话已被删除、`activeAgentSessionID` 悬空），点「聊天」才新建一个，避免落进一个空壳界面。
+
+### Tests
+
+- 新增 `AgentSidebarChatEntryTests`（6 项）：从插件/调度台/已安排/圆桌/插件中心返回都保留原会话、无会话可回时新建、悬空会话 ID 不算可恢复、返回时清空侧面板、新建仍然另起一个会话。
+
+## 1.282.0-rc4 - 2026-08-21
+
+### Added
+
+- **新增「会话体检中心」正式样例插件（`PluginExamples/session-vitality/`）。** 与 `issue-panel` 同构的声明式侧栏 + MCP App 仪表盘 + Ruby stdio MCP 服务，命名空间 `session-vitality`；扫描本地会话 JSON 产出会话统计与项目活跃度，含 `vitality.snapshot` / `vitality.export` 工具、工具栏命令与中英本地化。仓库样例清单与 `AgentPluginSystemTests.repositoryExamplesPassTheProductionLoader` 同步登记。
+
+## 1.282.0-rc3 - 2026-08-21
+
+### Fixed
+
+- **共享登录态现在能说清"为什么读到空"。** 上一版把"读不到"当成登出的后果堵住了，但根子在依赖包：`current()` 把"钥匙串里没有"和"钥匙串读不了"一律压成 `nil`，调用方无从分辨。`SomeIMSharedSession` 升到 0.2.0，新增 `read()` 返回三态；WillDeep 侧新增 `SomeIMIntegrationStore.currentSessionOutcome()`，把结果分成"有会话 / 确认未登录 / 这次没读成"。
+- 读失败（未签名构建缺 entitlement、钥匙串锁定、securityd 繁忙、payload 损坏）不再触发任何登出动作——连 0.6 秒的确认都不排，直接原地不动等下次。只有"确认未登录"才进入确认流程。两道闸互补：三态挡的是读失败被误判，确认重读挡的是 `SecItemDelete` + `SecItemAdd` 之间那个窗口——那个窗口里条目**确实**不存在，读回来的正是"确认未登录"，光靠三态挡不住。
+- **更高 schemaVersion 的 payload 不再被当成未登录。** 那是更新版本的 App 写的活会话，旧 App 读不懂而已；按未登录处理会让旧 App 反过来把它清掉。现在归入"没读成"。
+- 缓存口径跟着收窄：真实会话和确认未登录都是答案，照旧长期缓存（每 400ms 轮询的读者不必打钥匙串）；只有"没读成"带 1 秒过期。上一版为了保险给所有空结果都加了 TTL，登出用户因此每秒多读一次钥匙串，现在这笔开销还回去了。
+- **模型选择器右侧偶发一片空白**（连分组标题都没有）。详情列是所有分组共用的一个 `ScrollView`，切换分组时滚动位置不重置：在「全部模型」滚到深处再切到「编程推荐」，偏移量还停在旧位置，早已越过新内容的末尾，里面的 `LazyVStack` 没有可见区间可填就一行都不建——标题本身也是一行懒加载内容，于是整片空白。现在滚动视图的身份跟随当前分组与搜索态，切换即重建，偏移量回到顶部。
+
+### Tests
+
+- 依赖包新增 6 条：确认登出、读到会话、`logout()` 属确认登出、损坏 payload 报"没读成"、更高 schema 报"没读成"、`current()` 仍把两种空压成 `nil`（13 项全过）。
+- WillDeep 侧新增「读失败连确认都不排」回归；缓存测试改按三态断言，并补上"确认未登录也长期缓存"。
+
+## 1.282.0-rc2 - 2026-08-21
+
+### Fixed
+
+- **模型列表会突然空掉几秒，然后自己回来。** 「全部模型」「编程推荐」「最近使用」同时归零，过一会儿又都回来了。根因不在选择器，在登录态：共享会话读一次读空，就被当成用户登出了。而"登出"的处理是 `clearSomeIMProvider()`——把 some.im 供应商条目从库里删掉，连同它的 Keychain 行。等下一次读成功再重建时，`existing` 已经不在，于是 `existing?.id ?? UUID()` 拿到一个全新 UUID 和一套默认配置：用户选的 Pro 模型、备选模型、路由模式全部回默认，会话级的 provider 覆盖成了悬空引用，模型目录缓存作废要重拉。空列表只是它最显眼的症状，不是最贵的那个。
+- 一次空读并不能证明用户登出了，它也可能是读撞上了并发写：`SharedKeychain.write` 在兜底分支走 `SecItemDelete` + `SecItemAdd`，而每条写路径都在写*之前*就让缓存失效，读者正好落在两者中间就什么也读不到。现在常规对账遇到空读不再直接销毁，而是先隔 0.6 秒绕过缓存重读一次确认；真登出照样清掉，读撞写则自行恢复，条目一动不动。
+- 共享会话的空结果不再被无限期缓存。缓存把"没人登录"当成可缓存答案（本意是对的，省掉每 400ms 一次的钥匙串往返），但这也意味着一次撞车读到的空会一直挂着，直到下一个通知碰巧路过——全 App 在这期间都认为未登录。现在只有真实会话长期驻留缓存，空结果 1 秒后自动过期重读。
+- 登出信号显式化：`logout()` 发出的通知带上标记，观察者据此立即清理；跨 App 传来的会话变更只说明"变了"，不代表"登出了"，走确认路径。两个本地登出入口本来就直接调 `clearSomeIMProvider()`，即时性不受影响。
+
+### Tests
+
+- 新增 6 条回归：常规空读保住条目（UUID、Pro 模型、备选模型、路由模式逐项断言）、显式登出仍立即清除、读回成功会取消待定的登出确认，以及缓存层的空结果过期、撞车读自愈、真实会话不受空结果 TTL 影响。
+
+## 1.282.0-rc1 - 2026-08-21
+
+### Added
+
+- 新增「环境信任声明」：当你在对话里说明当前环境的性质——例如"这个终端是 docker 一次性容器，写文件删文件都不用问"或"这个 mysql 是测试专用实例，随便操作"——Agent 可以调用 `declare_environment_trust` 把这句话登记下来，该环境内的常规操作从"逐条人工确认"降为"AI 复核"，不再反复打断。
+- 声明的建立必须经你在审批卡上亲自确认，且卡片会把 Agent 引用的**你的原话逐字显示**出来，按钮是「我没说过」与「确认，是我说的」。这条通道在任何审批模式、Goal 免审、以及"以后允许同类操作"的规则下都不会被自动放行——注入到文件或网页里的文字骗 Agent 调用它时，你看到的会是一句自己从未说过的话。
+- 声明的作用范围受限且不外溢：终端声明只覆盖侧边栏可见终端，不影响本机 `run_command`；数据库声明要求命令文本包含你指定的实例标识（容器名/主机名/库名，至少 3 个字符）。声明只在当前会话有效，关闭会话即失效，也可以随时让 Agent 撤销。
+- 读取或导出凭据（`.env`、`~/.ssh`、API Key 等）**永远不在任何声明的豁免范围内**，即使你声明"整台机器都是一次性的"也一样——凭据外读是提示词注入攻击的终点，这道门不接受来自模型侧的说服。
+- 声明只把"直接弹人工确认"降为"送 AI 裁判"，从不直接放行；裁判仍可否决。裁判判决缓存以声明指纹为键，撤销声明后旧的放行判决不会被复用。
+
+## 1.281.0-rc4 - 2026-08-21
+
+### Fixed
+
+- 修复计划进度在用户按过「停止」之后永久卡住的死循环：`progress` 块的格式合同此前只写在活跃计划的提示词里，计划一旦中断，之后每回合注入的中断提示词只要求"发一个 progress 块"却不给格式与示例，模型于是发出人类可读的清单，宿主解析出零条更新，中断标记永远清不掉——下一回合继续注入没有格式说明的提示词，自锁成环。两个分支现在共用同一份格式合同。
+- 回合末的进度捕获改为扫描本回合的每一条助手消息：模型常在两轮工具调用之间上报进度、收尾那条却是纯叙述，此前这类上报会被整条丢弃。
+- `progress` 块存在但一行都解析不出时，下一轮系统提示词追加纠偏说明，把原本对双方都不可见的静默失败变成可自愈的显式反馈；检测同时覆盖围栏式与 XML 风格两种协议。
+- 中断计划恢复前先对账：历史显示已完成、状态却仍是 `pending` 的步骤应补登记而非重做，避免恢复时重复已完成的工作。
+
+## 1.281.0-rc3 - 2026-08-21
+
+### Fixed
+
+- 智能审批的凭据词扫描不再把下划线当词边界：`token_plan_quota.go` 这类 snake_case 标识符/文件名不再被误判为凭据引用（审计日志中人工确认的最大误伤源）；连字符仍是边界，`tokenhub-secret` 等 k8s secret 对象名照常拦截。
+- `git commit -m` 的提交信息文本不再参与凭据词扫描——提交一段"支持 Bearer Token 认证"的说明不是凭据访问；message 之外的参数（含 pathspec）照常扫描。
+- 工作区内"词撞名"路径（如 `internal/auth/token.go`）豁免凭据词升级：`read_file` 工具本就免审可读同一文件；`.env`、`~/.ssh` 等敏感路径片段与工作区外路径永不豁免。
+- AI 安全裁判改为按"当下真正可用"的候选链依次尝试：没配 API Key 的候选不再占用请求（此前会话 provider 无钥匙且未登录 some.im 时裁判必然缺席、全部回落人工，八月审计中此类死局 127 次）；替补链新增 provider 库中其它可用入口。
+- 裁判提示词与多语句只读 SQL 分类器对齐：分号串联的全只读 SELECT/SHOW 链不再因"single-statement"措辞被裁判否决。
+
+## 1.281.0-rc2 - 2026-08-21
+
+### Added
+
+- 将 WillDeep 调度台并行开发并通过验收的经典游戏厅封装为第一方内置插件，随 macOS App 发行贪吃蛇、俄罗斯方块、Pong、扫雷和记忆翻牌；发行包只包含插件清单、本地化和生产 Web 资源。
+- 插件目的地清单新增 `defaultPinned`，仅对随 App 签名发行的 `bundled` 插件生效；默认固定入口稳定显示在左侧插件分组顶部并占用固定名额，第三方插件不能借此抢占导航。
+
+### Changed
+
+- 经典游戏厅的大厅链接、卡片 hover 和游戏强调色改为灰阶，继续遵循插件界面不使用系统蓝色的项目视觉规范。
+
+### Fixed
+
+- 俄罗斯方块页面扩大内容容器并将棋盘与控制区左对齐，减少大窗口左侧空置；“下一个”预览改用受宽度约束的网格，所有方块形态都保持在卡片内部。
 
 ## 1.280.0-rc4 - 2026-08-21
 
@@ -242,7 +613,6 @@
 ### Tests
 
 - 新增 `AgentUnattendedTurnFailureTests`：失败快照的 JSON 往返、缺字段的旧会话仍能解码、坏快照不连累整个会话、重开会话恢复错误卡片与 some.im 登录入口、详情按上限截断、四种重试分档的选择、空 turn 才可重放、重试次数上限、退避单调递增且总时长落在 4–7 分钟。
-
 
 ## 1.275.0-rc6 - 2026-08-20
 
@@ -1068,7 +1438,6 @@
 ### Meta
 
 - 属缺陷修复，版本从 **1.257.0-rc1** 递增为 **1.257.0-rc2**；App、Go agent、Help、Helper、浏览器扩展与产品文档保持一致。
-
 
 ## 1.257.0-rc1 - 2026-08-14
 

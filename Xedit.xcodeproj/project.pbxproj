@@ -11,6 +11,7 @@
 		4D535041524B4C4530303031 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 4D535041524B4C4530303033 /* Sparkle */; };
 		5CA6B0922FC70A00006DFCCC /* WillDeep.help in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0912FC70A00006DFCCC /* WillDeep.help */; };
 		5CA6B0A22FD0C9E0006DFCCC /* BundledSkills in Resources */ = {isa = PBXBuildFile; fileRef = 5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */; };
+		7A6E745D30A8000100A6E745 /* BundledAgentRules in Resources */ = {isa = PBXBuildFile; fileRef = 7A6E745D30A8000200A6E745 /* BundledAgentRules */; };
 		5CA6B0B42FDDF001006DFCCC /* AIPipe.m in Sources */ = {isa = PBXBuildFile; fileRef = 5CA6B0AE2FDDF001006DFCCC /* AIPipe.m */; };
 		5CA6B0B52FDDF001006DFCCC /* AIPipeConfig.m in Sources */ = {isa = PBXBuildFile; fileRef = 5CA6B0B02FDDF001006DFCCC /* AIPipeConfig.m */; };
 		5CA6B0B62FDDF001006DFCCC /* AIPipeLogItem.m in Sources */ = {isa = PBXBuildFile; fileRef = 5CA6B0B22FDDF001006DFCCC /* AIPipeLogItem.m */; };
@@ -41,6 +42,7 @@
 		5CA6B07B2FC6D8FA006DFCCC /* XeditUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XeditUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5CA6B0912FC70A00006DFCCC /* WillDeep.help */ = {isa = PBXFileReference; lastKnownFileType = wrapper.help; path = WillDeep.help; sourceTree = "<group>"; };
 		5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */ = {isa = PBXFileReference; lastKnownFileType = folder; path = BundledSkills; sourceTree = "<group>"; };
+		7A6E745D30A8000200A6E745 /* BundledAgentRules */ = {isa = PBXFileReference; lastKnownFileType = folder; path = BundledAgentRules; sourceTree = "<group>"; };
 		5CA6B0AD2FDDF001006DFCCC /* AIPipe.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AIPipe.h; sourceTree = "<group>"; };
 		5CA6B0AE2FDDF001006DFCCC /* AIPipe.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AIPipe.m; sourceTree = "<group>"; };
 		5CA6B0AF2FDDF001006DFCCC /* AIPipeConfig.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AIPipeConfig.h; sourceTree = "<group>"; };
@@ -123,6 +125,7 @@
 				5CA6B0632FC6D8F9006DFCCC /* Xedit */,
 				5CA6B0A92FDDF001006DFCCC /* Vendor */,
 				5CA6B0A12FD0C9E0006DFCCC /* BundledSkills */,
+				7A6E745D30A8000200A6E745 /* BundledAgentRules */,
 				5CA6B0902FC70A00006DFCCC /* Help */,
 				5CA6B0742FC6D8FA006DFCCC /* XeditTests */,
 				5CA6B07E2FC6D8FA006DFCCC /* XeditUITests */,
@@ -311,6 +314,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5CA6B0A22FD0C9E0006DFCCC /* BundledSkills in Resources */,
+				7A6E745D30A8000100A6E745 /* BundledAgentRules in Resources */,
 				5CA6B0922FC70A00006DFCCC /* WillDeep.help in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -344,6 +348,9 @@
 				"$(SRCROOT)/PluginExamples/tetris/.codex-plugin",
 				"$(SRCROOT)/PluginExamples/tetris/.willdeep-plugin",
 				"$(SRCROOT)/PluginExamples/tetris/ui/dist",
+				"$(SRCROOT)/PluginExamples/arcade/.codex-plugin",
+				"$(SRCROOT)/PluginExamples/arcade/.willdeep-plugin",
+				"$(SRCROOT)/PluginExamples/arcade/ui/dist",
 			);
 			name = "Bundle built-in plugins";
 			outputFileListPaths = (
@@ -352,7 +359,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "set -euo pipefail\nsource_root=\"$SRCROOT/PluginExamples/tetris\"\ndestination_root=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/BundledPlugins/tetris\"\nrm -rf \"$destination_root\"\nmkdir -p \"$destination_root/ui\"\n/usr/bin/ditto \"$source_root/.codex-plugin\" \"$destination_root/.codex-plugin\"\n/usr/bin/ditto \"$source_root/.willdeep-plugin\" \"$destination_root/.willdeep-plugin\"\n/usr/bin/ditto \"$source_root/ui/dist\" \"$destination_root/ui/dist\"\n";
+			shellScript = "set -euo pipefail\nbundled_root=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/BundledPlugins\"\nfor plugin_id in tetris arcade; do\n  source_root=\"$SRCROOT/PluginExamples/$plugin_id\"\n  destination_root=\"$bundled_root/$plugin_id\"\n  rm -rf \"$destination_root\"\n  mkdir -p \"$destination_root/ui\"\n  /usr/bin/ditto \"$source_root/.codex-plugin\" \"$destination_root/.codex-plugin\"\n  /usr/bin/ditto \"$source_root/.willdeep-plugin\" \"$destination_root/.willdeep-plugin\"\n  /usr/bin/ditto \"$source_root/ui/dist\" \"$destination_root/ui/dist\"\ndone\n";
 		};
 		5CA6B0B72FE10A01006DFCCC /* Build willdeep-agent */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -468,7 +475,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 446;
+				CURRENT_PROJECT_VERSION = 467;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -489,7 +496,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.280.0-rc4;
+				MARKETING_VERSION = 1.285.0-rc4;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -513,7 +520,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 446;
+				CURRENT_PROJECT_VERSION = 467;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -534,7 +541,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.280.0-rc4;
+				MARKETING_VERSION = 1.285.0-rc4;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -674,11 +681,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 446;
+				CURRENT_PROJECT_VERSION = 467;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.280.0-rc4;
+				MARKETING_VERSION = 1.285.0-rc4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -695,11 +702,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 446;
+				CURRENT_PROJECT_VERSION = 467;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.280.0-rc4;
+				MARKETING_VERSION = 1.285.0-rc4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -715,10 +722,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 446;
+				CURRENT_PROJECT_VERSION = 467;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.280.0-rc4;
+				MARKETING_VERSION = 1.285.0-rc4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -734,10 +741,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 446;
+				CURRENT_PROJECT_VERSION = 467;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.280.0-rc4;
+				MARKETING_VERSION = 1.285.0-rc4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -812,7 +819,7 @@
 			repositoryURL = "https://github.com/xurenlu/SomeIMSharedSession.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.1.0;
+				version = 0.2.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

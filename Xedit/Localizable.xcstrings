@@ -16314,6 +16314,7 @@
         }
       }
     },
+    "approval.safety-judge-unconfigured" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "No safety judge is available, so every command needs your confirmation. Add an API key for the current model provider in Settings, or sign in to some.im, to restore automatic review." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "No hay ningún juez de seguridad disponible, así que cada comando necesita tu confirmación. Añade una clave de API para el proveedor de modelos actual en Ajustes, o inicia sesión en some.im, para restaurar la revisión automática." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun juge de sécurité n'est disponible, chaque commande requiert donc votre confirmation. Ajoutez une clé API pour le fournisseur de modèles actuel dans les Réglages, ou connectez-vous à some.im, pour rétablir la validation automatique." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "セキュリティ審査モデルが利用できないため、すべてのコマンドに確認が必要です。設定で現在のモデルプロバイダの API キーを追加するか、some.im にサインインすると自動審査が復帰します。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前没有可用的安全裁判，所以每条命令都要你确认。在设置里为当前模型服务商填入 API Key，或登录 some.im，即可恢复自动审批。" } } } },
     "automation.cancel" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -27992,6 +27993,7 @@
     },
     "goal-planning.arbitration" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Evidence arbitration" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Arbitraje de evidencia" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Arbitrage des preuves" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "証拠の仲裁" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "证据仲裁" } } } },
     "goal-planning.budget-exhausted" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Goal paused: this execution segment ran out of budget. WillDeep asked for a handover snapshot. Press play to grant a new segment and continue." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Goal en pausa: este segmento de ejecución agotó su presupuesto. WillDeep solicitó una instantánea de traspaso. Pulsa reproducir para renovar el segmento y continuar." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Objectif en pause : ce segment d'exécution a épuisé son budget. WillDeep a demandé un instantané de passation. Appuyez sur lecture pour accorder un nouveau segment et continuer." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "目標は一時停止しました：この実行セグメントの予算を使い切りました。WillDeep は引き継ぎスナップショットの出力を要求しています。再生ボタンを押すと新しいセグメントを付与して続行できます。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Goal 已暂停：本段执行预算已用尽，WillDeep 已要求输出交接快照。点播放键可续期并继续。" } } } },
+    "goal-planning.gate-blocked-tool" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Locked while Goal planning runs — no action needed from you" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Bloqueado mientras se ejecuta la planificación del Goal: no necesitas hacer nada" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Verrouillé pendant la planification de l'objectif — aucune action de votre part" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "Goal プランニングの実行中はロックされます — 操作は不要です" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Goal 规划进行中，工具暂时锁定——你不需要做任何操作" } } } },
     "goal-planning.header" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Goal Teams planning" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Planificación de Goal Teams" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Planification Goal Teams" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "Goal Teams 計画" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Goal Teams 规划" } } } },
     "goal-planning.phase.arbitrating" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Arbitrating" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Arbitrando" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Arbitrage en cours" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "仲裁中" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仲裁中" } } } },
     "goal-planning.phase.awaiting-approval" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Awaiting approval" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Esperando aprobación" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "En attente d'approbation" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "承認待ち" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等待批准" } } } },
@@ -35675,31 +35677,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Plan auto-continuation reached its 8-round safety limit. Review the current deliverables and step statuses before continuing."
+            "value" : "Plan auto-continuation reached its safety limit for this turn. Review the current deliverables and step statuses before continuing."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La continuación automática del plan alcanzó su límite de seguridad de 8 rondas. Revisa los entregables actuales y los estados de los pasos antes de continuar."
+            "value" : "La continuación automática del plan alcanzó su límite de seguridad para este turno. Revisa los entregables actuales y los estados de los pasos antes de continuar."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La poursuite automatique du plan a atteint sa limite de sécurité de 8 tours. Vérifiez les livrables actuels et l'état des étapes avant de continuer."
+            "value" : "La poursuite automatique du plan a atteint sa limite de sécurité pour ce tour. Vérifiez les livrables actuels et l'état des étapes avant de continuer."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "計画の自動継続が8ラウンドの安全上限に達しました。続行する前に、現在の成果物とステップステータスを確認してください。"
+            "value" : "計画の自動継続がこのターンの安全上限に達しました。続行する前に、現在の成果物とステップステータスを確認してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "计划自动续跑已达到 8 轮安全上限。请检查当前产物与步骤状态后继续。"
+            "value" : "计划自动续跑已达到本回合的安全上限。请检查当前产物与步骤状态后继续。"
           }
         }
       }
@@ -43024,6 +43026,9 @@
         }
       }
     },
+    "settings.global-rules.bundled-index-loaded" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Built-in compact index loaded. Save to apply it." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Índice compacto integrado cargado. Guarda para aplicarlo." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Index compact intégré chargé. Enregistrez pour l’appliquer." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "内蔵の簡潔な索引を読み込みました。適用するには保存してください。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已载入内置精简索引，保存后生效。" } } } },
+    "settings.global-rules.bundled-library" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Built-in rule library" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Biblioteca de reglas integrada" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Bibliothèque de règles intégrée" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "内蔵ルールライブラリ" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "内置规则库" } } } },
+    "settings.global-rules.bundled-library-version" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Rules %@" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Reglas %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Règles %@" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "ルール %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "规则 %@" } } } },
     "settings.global-rules.choose-title" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -43200,6 +43205,8 @@
       }
     },
     "settings.global-rules.file-section" : {
+    "settings.global-rules.index-description" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep reads this small Markdown index before every Agent turn. Detailed rules ship with the app and are loaded only when a task needs them." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep lee este pequeño índice Markdown antes de cada turno del Agent. Las reglas detalladas se incluyen con la aplicación y solo se cargan cuando una tarea las necesita." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep lit ce petit index Markdown avant chaque tour de l’Agent. Les règles détaillées sont fournies avec l’app et chargées uniquement lorsqu’une tâche en a besoin." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep は各 Agent ターンの前にこの小さな Markdown 索引を読みます。詳細なルールはアプリに同梱され、タスクで必要な場合にのみ読み込まれます。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep 会在每个 Agent 回合前读取这份精简 Markdown 索引；详细规则随 App 提供，仅在任务需要时加载。" } } } },
+    "settings.global-rules.load-bundled-index" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Load built-in index" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Cargar índice integrado" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Charger l’index intégré" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "内蔵索引を読み込む" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "载入内置索引" } } } },
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
@@ -67963,6 +67970,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已归档数"
+          }
+        }
+      }
+    },
+    "sidebar.chat-action" : {
+      "comment" : "sidebar row that navigates back to the conversation",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discussion"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "チャット"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聊天"
           }
         }
       }

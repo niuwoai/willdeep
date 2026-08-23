@@ -1,0 +1,69 @@
+# Alma 规则库
+
+这些是我日常工作中积累的最佳实践，写代码/做技术决策时可以参考。
+
+每个主题文档顶部有「**硬约束**」小节——只含 MUST / MUST NOT 的 AI 必守清单；正文是背景、模板和细节，按需阅读。项目级规则可用 `--compact` 只取硬约束层；全局 `AGENTS.md` 推荐用 `--index` 只生成路由索引，避免每轮注入全部正文。
+
+## 通用
+| 文件 | 内容 |
+|------|------|
+| [ai-guardrails.md](ai-guardrails.md) | AI 协作红线：文件编辑方式、破坏性操作确认、共享分支保护、如实汇报、需求文本与产品文案边界 |
+| [programming.md](programming.md) | 编程：代码风格、错误处理、测试、设计原则、安全、日志 |
+| [design.md](design.md) | 多端设计：新项目启动门禁、第一轮确认清单、启动文档模板、UI 体系、多端规范 |
+| [version-control.md](version-control.md) | 版本管理：分支策略、语义化版本、CHANGELOG、Product Overview、Architecture 文档、Git 工作流 |
+| [deployment.md](deployment.md) | 服务部署：发布检查、迁移、产物备份、健康检查、回滚、CI/CD |
+| [database-migrations.md](database-migrations.md) | 数据库迁移：版本管理、执行规范、回滚、工具选择、CI/CD 集成 |
+| [database-queries.md](database-queries.md) | 数据库查询：SQL 规范、索引设计、查询优化、EXPLAIN、ORM |
+| [database-sync.md](database-sync.md) | 数据库同步：同步策略、增量设计、一致性、冲突解决、工具选型 |
+| [linux-server.md](linux-server.md) | Linux 服务器：安全基线、监控、备份、日志、性能调优、Docker、应急响应 |
+
+## 语言/平台
+| 文件 | 内容 |
+|------|------|
+| [go.md](go.md) | Go：项目结构、命名、错误处理、并发、DI、测试、性能、常用库 |
+| [python.md](python.md) | Python：环境、风格、类型注解、异步、SQLAlchemy、FastAPI、测试 |
+| [frontend.md](frontend.md) | 前端：TypeScript、React、状态管理、CSS、性能、Vite、安全 |
+
+## 项目文档
+| 文件 | 内容 |
+|------|------|
+| [CHANGELOG.md](CHANGELOG.md) | 规则库变更记录 |
+| [PRODUCT_OVERVIEW.md](PRODUCT_OVERVIEW.md) | 规则库当前状态、适用范围和维护说明 |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 规则库架构、文档边界和维护方式 |
+
+## 工具脚本
+| 文件 | 内容 |
+|------|------|
+| [scripts/generate_claude_md.rb](scripts/generate_claude_md.rb) | 交互选择规则文档并生成 AI 协作规则；`--compact` 输出硬约束精简版，`--index` 输出不含主题正文的按需索引版 |
+| [scripts/generate_project_agents.rb](scripts/generate_project_agents.rb) | 扫描目标项目并生成分层 `AGENTS.md`：支持通用、React、Go API、Go + React 模板；已有文件一律跳过，不覆盖人工规则 |
+| [templates/agents/](templates/agents/) | 根目录与模块级 `AGENTS.md` 的可维护 ERB 模板 |
+| [scripts/verify_rules.rb](scripts/verify_rules.rb) | 校验规则结构、必选规则、版本一致性、生成产物和嵌套 AGENTS 上溯链，并集成测试项目脚手架的重复执行安全性；输出 JSON + Markdown 报告 |
+| [.github/workflows/verify-rules.yml](.github/workflows/verify-rules.yml) | 在 PR 与分支推送时执行规则校验，并上传报告 |
+| [.github/workflows/release-claude.yml](.github/workflows/release-claude.yml) | 仅对主分支上的版本 tag 自动生成硬约束版 `CLAUDE.md` 与索引版 `AGENTS.md`，并作为 GitHub Release 附件发布 |
+
+## 生成全局精简索引
+
+```bash
+ruby scripts/generate_claude_md.rb --all --index --output AGENTS.md --force
+```
+
+索引版只保留使用说明、优先级和主题链接。AI 应按任务读取直接相关的源规则，不应在开工时批量加载整个规则库。
+需要生成离线目录内的相对链接时，增加 `--index-base .`。
+
+## 为项目生成分层 AGENTS.md
+
+先预览生成计划：
+
+```bash
+ruby scripts/generate_project_agents.rb --target /path/to/project --dry-run
+```
+
+确认后生成：
+
+```bash
+ruby scripts/generate_project_agents.rb --target /path/to/project
+```
+
+脚本会自动识别通用、React、Go API 或 Go + React 项目，也可用 `--template` 明确指定。它只创建缺失的 `AGENTS.md`，已有文件会报告为 `skipped`；可通过 `--json-output` 和 `--markdown-output` 保存审计报告。
+
+> 这些不是教条，是我踩过坑之后总结的。有不同意见随时改。

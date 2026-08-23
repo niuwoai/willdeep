@@ -567,6 +567,9 @@ final class AppState: ObservableObject {
     /// changes — including logins/logouts made by another app sharing the
     /// Keychain access group. Login adopts the fresh key; logout drops the entry.
     private var someIMSessionSubscription: AnyCancellable?
+    /// Pending re-check of an empty shared-session read before the provider
+    /// entry is destroyed. See `reconcileSomeIMProviderFromSharedSession`.
+    var someIMSignOutConfirmationTask: Task<Void, Never>?
     var someIMCodingPlanRefreshTimer: Timer?
     var someIMCodingPlanRefreshTask: Task<Void, Never>?
     @Published var availableAppUpdate: AppUpdateMeta?
@@ -628,6 +631,13 @@ final class AppState: ObservableObject {
         let attachedSkills: [AgentSkillEntry]
         let providerID: String
         let enqueuedAt: Date
+        /// The dispatch's message source must survive the slot queue. Without
+        /// it, a host instruction (a Goal continuation, a wrap-up request)
+        /// that queued behind a full provider slot was re-dispatched as
+        /// `.operatorInput` — the transcript message kept its true source,
+        /// but the re-dispatch ran user-only steps such as the read-only
+        /// preflight against an instruction no user wrote.
+        let source: AgentMessageSource
     }
 
     init(
@@ -751,8 +761,16 @@ final class AppState: ObservableObject {
         someIMSessionSubscription = NotificationCenter.default
             .publisher(for: SomeIMIntegrationStore.sessionDidChangeNotification)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.reconcileSomeIMProviderFromSharedSession()
+            .sink { [weak self] note in
+                // Only this app's own `logout()` tags the notification. A
+                // cross-app notification says "something changed", not "signed
+                // out" — reconcile treats an empty read there as suspect.
+                let signedOut = note.userInfo?[
+                    SomeIMIntegrationStore.signOutUserInfoKey
+                ] as? Bool == true
+                self?.reconcileSomeIMProviderFromSharedSession(
+                    trigger: signedOut ? .signOut : .routine
+                )
                 self?.refreshSomeIMCodingPlanStatus(force: true)
             }
         // Session observers only report future cross-app changes. Reconcile the

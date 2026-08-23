@@ -44,8 +44,10 @@ struct AgentPluginPrimaryNavigationSection: View {
                     )
                 )
                 .contextMenu {
-                    Button(L10n.Plugins.unpin) {
-                        registry.unpin(destinationID: destination.qualifiedID)
+                    if !destination.defaultPinned {
+                        Button(L10n.Plugins.unpin) {
+                            registry.unpin(destinationID: destination.qualifiedID)
+                        }
                     }
                     Button(L10n.Plugins.settings) {
                         appState.agentPrimaryDestination = .pluginCenter

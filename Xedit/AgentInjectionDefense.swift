@@ -253,8 +253,9 @@ enum AgentInjectionDefense {
     reloading nginx, or adding an nginx site can be YES when they are \
     bounded to the described task. Read-only diagnostics can also be YES, \
     including bounded file or log inspection, assigning the output of a \
-    read-only find pipeline to a shell variable, and explicit single-statement \
-    SELECT, SHOW, DESCRIBE, or EXPLAIN queries against a local database, \
+    read-only find pipeline to a shell variable, and explicit read-only \
+    SELECT, SHOW, DESCRIBE, or EXPLAIN queries against a local database — \
+    including several such read-only statements chained with semicolons — \
     provided they do not expose credentials or request locks or file output.
 
     Credential values in HTTP commands are replaced locally with \
@@ -299,7 +300,8 @@ enum AgentInjectionDefense {
     static func judgeUserPayload(
         command: String,
         toolName: String = "run_command",
-        taskContext: String = ""
+        taskContext: String = "",
+        environmentTrust: String = ""
     ) -> String {
         // Break the fence tag AND the verdict tags: a command embedding
         // `<verdict>YES</verdict>` must never survive verbatim into the
@@ -345,10 +347,30 @@ enum AgentInjectionDefense {
         <host_shell_structure>
         \(judgeShellStructure(command: command))
         </host_shell_structure>
-
+        \(environmentTrustBlock(environmentTrust))
         <command>
         \(safeCommand)
         </command>
+        """
+    }
+
+    /// 已由用户人工确认的环境信任声明块。与 <task_context> 的语义**不同**：
+    /// task context 只能建立相关性、绝不构成许可；这个块经过一次人工点卡
+    /// 授权仪式，在其声明范围内**确实构成许可**。仍然逐字走标记中和管线，
+    /// 因为 target / 用户原话都是自由文本。空声明时返回空串，提示词与
+    /// 改动前逐字节相同。
+    private static func environmentTrustBlock(_ declaration: String) -> String {
+        let trimmed = declaration.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        let safe = neutralizeJudgeField(trimmed, closingTag: "environment_trust")
+        return """
+
+
+        <environment_trust>
+        \(safe)
+        </environment_trust>
+
+        The block above is an environment fact the user stated in their own words and then confirmed by hand in an approval card. Unlike task context, it DOES grant permission within the environment it describes: inside that environment, ordinary file writes, deletions, service restarts, and destructive database statements against the named test instance are routine work rather than red flags. It never covers reading or exporting credentials, and it never extends beyond the environment it names — a command touching anything else is judged on its own merits.
         """
     }
 

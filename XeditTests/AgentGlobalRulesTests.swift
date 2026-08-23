@@ -31,17 +31,41 @@ struct AgentGlobalRulesTests {
     }
 
     @Test
-    func defaultRulesTemplateContainsCodexStrictRules() {
-        // The template constrains "this AI assistant", never a named third
-        // party — a model reading "these rules bind Codex" can reasonably
-        // conclude they do not bind WillDeep Agent.
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("# 全局规则（严格条款）"))
-        #expect(!AgentGlobalRulesStore.defaultRulesTemplate.contains("Codex"))
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("所有对用户的回复一律使用**简体中文**"))
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("前端与后端版本号必须保持一致"))
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("默认避免使用管道"))
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("远程环境无法安装/使用传输工具"))
-        #expect(AgentGlobalRulesStore.defaultRulesTemplate.contains("<!-- BEGIN ALMA AGENTRULES SYNC -->"))
+    func defaultRulesTemplateIsACompactBundledLibraryIndex() {
+        let template = AgentGlobalRulesStore.defaultRulesTemplate
+
+        #expect(template.contains("# WillDeep 全局规则（精简索引）"))
+        #expect(template.contains(AgentBundledRules.rootPlaceholder))
+        #expect(template.contains("ai-guardrails.md"))
+        #expect(template.contains("version-control.md"))
+        #expect(template.contains("不要一次性读取整个目录"))
+        #expect(!template.contains("<!-- BEGIN ALMA AGENTRULES SYNC -->"))
+        #expect(template.count < 2_000)
+    }
+
+    @Test
+    func bundledRulesResolveAStableLocalDirectoryAndManifest() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let rulesRoot = try #require(AgentBundledRules.rootURL(sourceRoot: repositoryRoot))
+        let manifest = try #require(AgentBundledRules.manifest(rootURL: rulesRoot))
+
+        #expect(rulesRoot.lastPathComponent == AgentBundledRules.directoryName)
+        #expect(manifest.rulesVersion == "0.20.0")
+        #expect(manifest.files.contains("AGENTS.md"))
+        #expect(manifest.files.contains("programming.md"))
+    }
+
+    @Test
+    func bundledRulesPlaceholderResolvesOnlyAtPromptLoadTime() {
+        let root = URL(fileURLWithPath: "/Applications/WillDeep.app/Contents/Resources/BundledAgentRules")
+        let raw = "Rules: `\(AgentBundledRules.rootPlaceholder)`"
+        let resolved = AgentBundledRules.resolvingRootPlaceholder(in: raw, rootURL: root)
+
+        #expect(raw.contains(AgentBundledRules.rootPlaceholder))
+        #expect(resolved.contains(root.path))
+        #expect(!resolved.contains(AgentBundledRules.rootPlaceholder))
     }
 
     @Test
@@ -90,6 +114,10 @@ struct AgentGlobalRulesTests {
         #expect(!AgentGlobalRulesStore.shouldSeedDefaultRulesFile(
             settings: AgentGlobalRulesSettings(isEnabled: true, filePath: "/tmp/custom-rules.md"),
             fileExists: false
+        ))
+        #expect(!AgentGlobalRulesStore.shouldMigrateLegacyDefaultRulesFile(
+            settings: AgentGlobalRulesSettings.default,
+            fileText: "user customized rules"
         ))
     }
 
@@ -173,25 +201,29 @@ struct AgentGlobalRulesTests {
             globalRules: nil
         )
 
-        #expect(prompt.contains("Treat the visible side-panel terminal as a separate, stateful machine context."))
-        #expect(prompt.contains("route to the ACTIVE side-panel tab"))
-        #expect(prompt.contains("terminal_list_tabs enumerates every open tab"))
-        #expect(prompt.contains("terminal_select_tab makes a tab active"))
-        #expect(prompt.contains("local macOS shell or an SSH session"))
-        #expect(prompt.contains("do not send commands meant for the local Mac"))
-        #expect(prompt.contains("If the active tab is SSH'd into a server"))
-        #expect(prompt.contains("instead of claiming the terminal was routed successfully"))
-        #expect(prompt.contains("implicit command routing is blocked"))
-        #expect(prompt.contains("terminal_send_command may open a local shell automatically"))
-        #expect(prompt.contains("dispatch confirmation does not contain command output"))
-        #expect(prompt.contains("bounded automatic follow-up snapshot"))
+        // 这些断言守的是「终端条款别被合并吃掉半句」。1.284.0-rc5 压缩稳定
+        // 契约时改写了措辞，约束逐条仍在，但字面锚点全变了——当时用
+        // `--without-building` 验证，跑的是没编译进改动的旧二进制，拿到假
+        // 全绿，红了整整一天没人看见。锚点已按 v32 措辞重挂。
+        #expect(prompt.contains("separate, stateful machine that may be a remote SSH host"))
+        #expect(prompt.contains("route to the ACTIVE tab unless terminal_tab_id"))
+        #expect(prompt.contains("terminal_list_tabs enumerates tabs"))
+        #expect(prompt.contains("terminal_select_tab switches visibly"))
+        #expect(prompt.contains("a local shell or which host/user/directory the SSH session shows"))
+        #expect(prompt.contains("Never send local Mac or workspace commands into an SSH tab"))
+        #expect(prompt.contains("If the host is unclear, snapshot or ask one concrete question"))
+        #expect(prompt.contains("rather than claiming the terminal was routed"))
+        #expect(prompt.contains("implicit routing stays blocked"))
+        #expect(prompt.contains("terminal_send_command may open a local shell itself"))
+        #expect(prompt.contains("dispatch confirmation is not command output"))
+        #expect(prompt.contains("one bounded follow-up snapshot"))
         #expect(prompt.contains("never call the terminal unstable"))
-        #expect(prompt.contains("avoid creating or overwriting files with heredoc"))
-        #expect(prompt.contains("small auditable heredoc or patch-style shell fallback is acceptable"))
+        #expect(prompt.contains("do not create or overwrite files with heredoc"))
+        #expect(prompt.contains("A small auditable heredoc is acceptable only when the terminal is the only path"))
         // ZMODEM 细则外迁到 bundled skill,提示词只留强制指针 —— 细节改
         // 在 SKILL.md 里断言,提示词契约只保证模型会先去读它。
         #expect(prompt.contains("read_skill \"zmodem-terminal-transfers\""))
-        #expect(prompt.contains("Do not improvise the flow from memory"))
+        #expect(prompt.contains("do not improvise the flow"))
         let skillURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()

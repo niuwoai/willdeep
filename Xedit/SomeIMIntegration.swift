@@ -203,36 +203,6 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
     }
 }
 
-/// Holds one lazily-loaded shared session until something explicitly drops it.
-///
-/// Split out of `SomeIMIntegrationStore` so the caching rules are testable
-/// without a Keychain: the real loader is a synchronous `securityd` round trip
-/// that unit tests must never touch (it would read the developer's actual
-/// some.im login), so tests exercise this type with a counting stub instead.
-///
-/// "Nobody is logged in" is a cacheable answer, hence `loaded` is tracked
-/// separately from the value rather than leaning on `value == nil`.
-final class SomeIMSharedSessionMemo {
-    private var loaded = false
-    private var cached: SomeIMSharedSession?
-    /// Number of times the loader actually ran. Exists for tests to assert the
-    /// Keychain is not being re-read on every access.
-    private(set) var loadCount = 0
-
-    func value(loading load: () -> SomeIMSharedSession?) -> SomeIMSharedSession? {
-        if loaded { return cached }
-        cached = load()
-        loaded = true
-        loadCount += 1
-        return cached
-    }
-
-    func invalidate() {
-        loaded = false
-        cached = nil
-    }
-}
-
 enum SomeIMIntegrationStore {
     // Plain immutable constants — `nonisolated` so they can be referenced from
     // the Sendable cross-app session-observer closure below without hopping
@@ -242,6 +212,14 @@ enum SomeIMIntegrationStore {
     /// — including changes made by *another* app. AppState listens to reconcile
     /// its agent provider so a cross-app login/logout takes effect live.
     nonisolated static let sessionDidChangeNotification = Notification.Name("com.willdeep.someIM.sessionDidChange")
+
+    /// `userInfo` flag set to `true` only on the notification `logout()` posts.
+    ///
+    /// Observers must not infer a sign-out from an empty read alone: a read can
+    /// come back empty because the Keychain lost a race with a write, and the
+    /// reconcile that follows destroys the provider entry. This flag marks the
+    /// one case where empty is the *expected* answer and destroying it is right.
+    nonisolated static let signOutUserInfoKey = "com.willdeep.someIM.sessionDidChange.signOut"
 
     /// Shared Keychain access group (Team ZH2S7D6PL6). Must match the
     /// `keychain-access-groups` entitlement and every other participating app.
@@ -279,6 +257,7 @@ enum SomeIMIntegrationStore {
     private nonisolated(unsafe) static var testSharedSessionOverrideEnabled = false
     private nonisolated(unsafe) static var testSharedSessionOverride: SomeIMSharedSession?
     private nonisolated(unsafe) static var testSharedSessionPersistFailureEnabled = false
+    private nonisolated(unsafe) static var testSessionReadOutcome: SomeIMSessionReadOutcome?
     private nonisolated(unsafe) static var testPrivateFallbackPersistFailureEnabled = false
     #endif
 
@@ -439,6 +418,55 @@ enum SomeIMIntegrationStore {
         return currentSharedSession()?.apiKey ?? ""
     }
 
+    /// The API key for unattended paths that must not stall on a transient
+    /// Keychain read failure — today the tool-approval safety judge.
+    ///
+    /// `loadAPIKey()` returns "" for both `.signedOut` and `.unavailable`, and
+    /// the judge cannot tell them apart. That cost real user friction: one
+    /// unreadable moment made the judge conclude "not signed in", fall through
+    /// to the session provider (which had no key of its own), find no usable
+    /// candidate at all, and hand the command to the user for manual approval.
+    /// Audit data for August 2026 shows 211 such calls logged as
+    /// `missing api key` — every one of them a confirmation dialog the user
+    /// should never have seen, interleaved with successful guard verdicts
+    /// minutes apart on the same day.
+    ///
+    /// So this reads through the same memo, and only when the read itself did
+    /// not land does it fall back to the last session an actual read produced.
+    /// A confirmed sign-out still returns "" — being signed out is an answer,
+    /// and this must never keep a logged-out user authenticated.
+    static func apiKeyForUnattendedUse() -> String {
+        #if DEBUG
+        // Same gate as `hasAuthenticatedSessionForAutomaticDefaults()`: a
+        // developer's real some.im login must never leak into a test run.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil,
+           !testSharedSessionOverrideEnabled {
+            return ""
+        }
+        if testSharedSessionOverrideEnabled {
+            return loadAPIKey()
+        }
+        #endif
+        migrateLegacyIfNeeded()
+        let outcome = currentSessionOutcome()
+        if case .unavailable = outcome {
+            return sharedSessionMemo.usableLastKnownGoodSession?.apiKey
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        return outcome.apiKey
+    }
+
+    /// Login gate for those same unattended paths. See `apiKeyForUnattendedUse()`.
+    static func hasSessionForUnattendedUse() -> Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil,
+           !testSharedSessionOverrideEnabled {
+            return false
+        }
+        #endif
+        return !apiKeyForUnattendedUse().isEmpty
+    }
+
     /// Deterministic login gate for automatic UI defaults. Unit tests must
     /// explicitly opt into the shared-session override so a developer's real
     /// some.im login can never influence session-default tests.
@@ -534,8 +562,11 @@ enum SomeIMIntegrationStore {
         AgentCredentialStore.save("", account: legacyAPIKeyAccount)
         AgentCredentialStore.save("", account: legacySessionTokenAccount)
         // Both credential stores are now empty; a cache still holding the old
-        // session would keep this app looking signed in.
+        // session would keep this app looking signed in. The remembered
+        // last-good session goes too — it exists to survive failed reads, not
+        // to outlive an actual sign-out.
         invalidateSharedSessionCache()
+        sharedSessionMemo.forgetLastKnownGoodSession()
         UserDefaults.standard.removeObject(forKey: accountKey)
         UserDefaults.standard.removeObject(forKey: codingPlanStatusKey)
         var settings = loadSettings()
@@ -544,7 +575,13 @@ enum SomeIMIntegrationStore {
             saveSettings(settings)
         }
         NotificationCenter.default.post(name: accountDidChangeNotification, object: nil)
-        NotificationCenter.default.post(name: sessionDidChangeNotification, object: nil)
+        // Tagged: this empty session is a real sign-out, so observers may drop
+        // the provider entry immediately instead of double-checking the read.
+        NotificationCenter.default.post(
+            name: sessionDidChangeNotification,
+            object: nil,
+            userInfo: [signOutUserInfoKey: true]
+        )
     }
 
     static func loadCodingPlanStatus() -> SomeIMCodingPlanStatus {
@@ -626,15 +663,37 @@ enum SomeIMIntegrationStore {
     }
 
     private static func currentSharedSession() -> SomeIMSharedSession? {
+        currentSessionOutcome().session
+    }
+
+    /// The shared session *and why it is missing* when it is.
+    ///
+    /// Callers that destroy state on an empty result must use this rather than
+    /// `currentSharedSession()`: only `.signedOut` is a statement about the
+    /// user. `.unavailable` means the read itself did not land, and acting on
+    /// it as a sign-out is what deleted configured providers.
+    static func currentSessionOutcome() -> SomeIMSessionReadOutcome {
         #if DEBUG
+        if let testSessionReadOutcome { return testSessionReadOutcome }
         // The test override is deliberately never cached: unit tests set it
         // directly and expect the very next read to see the new value.
         if testSharedSessionOverrideEnabled {
-            return testSharedSessionOverride ?? privateKeychainFallbackSession()
+            if let session = testSharedSessionOverride ?? privateKeychainFallbackSession() {
+                return .session(session)
+            }
+            return .signedOut
         }
         #endif
         return sharedSessionMemo.value {
-            SomeIMSharedSessionStore.shared.current() ?? privateKeychainFallbackSession()
+            let result = SomeIMSharedSessionStore.shared.read()
+            if let session = result.session { return .session(session) }
+            // The shared group has nothing usable. This app's own Keychain
+            // namespace is the fallback (ad-hoc signed builds never reach the
+            // shared group at all), and a hit there is a real session.
+            if let fallback = privateKeychainFallbackSession() { return .session(fallback) }
+            // Nothing anywhere. Only call it a sign-out if the shared store
+            // actually confirmed the item is absent.
+            return result.isConfirmedSignedOut ? .signedOut : .unavailable
         }
     }
 
@@ -721,6 +780,13 @@ enum SomeIMIntegrationStore {
         testSharedSessionOverride = trimmed.isEmpty
             ? nil
             : SomeIMSharedSession(apiKey: trimmed, baseURL: loadSettings().baseURL)
+    }
+
+    /// Forces `currentSessionOutcome()` to a fixed answer, so tests can exercise
+    /// the `.unavailable` path — a Keychain that will not read is not something
+    /// a test can arrange for real. Pass nil to restore normal resolution.
+    static func _setTestSessionReadOutcome(_ outcome: SomeIMSessionReadOutcome?) {
+        testSessionReadOutcome = outcome
     }
 
     static func _setTestSharedSessionPersistFailure(_ enabled: Bool) {

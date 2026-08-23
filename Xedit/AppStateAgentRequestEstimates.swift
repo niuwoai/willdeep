@@ -157,7 +157,8 @@ extension AppState {
             activeExperts: runtime.activeExperts,
             interactionMode: runtime.interactionMode,
             executionAgent: runtime.executionAgent,
-            delegationPolicy: runtime.currentTurnDelegationPolicy
+            delegationPolicy: runtime.currentTurnDelegationPolicy,
+            loadedPacks: runtime.loadedToolPacks
         )
     }
 
@@ -208,6 +209,9 @@ extension AppState {
             executionAgent: agentExecutionAgent,
             approvalMode: agentApprovalMode,
             currentPlan: agentCurrentPlan,
+            planProgressFormatViolation: activeRuntime.map {
+                latestTurnHasUnparsableProgressBlock(for: $0)
+            } ?? false,
             currentGoal: agentCurrentGoal,
             promptProfile: promptProfile,
             // Mirror the real request assembly so the estimate matches what

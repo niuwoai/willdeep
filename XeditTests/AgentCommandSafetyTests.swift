@@ -477,6 +477,72 @@ extension WillDeepTests {
         }
     }
 
+    @Test("snake_case 标识符里的凭据词不触发人工确认，连字符与真实凭据仍拦截")
+    func credentialMarkerBoundaryRespectsSnakeCase() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-cred-marker-workspace")
+        // 审计日志实锤的误伤：读工作区源码文件，只因文件名是 snake_case
+        // 且含 token/secret 字样就要人工点。下划线是标识符字符，不是边界。
+        let benign = [
+            "sed -n '100,240p' internal/gateway/token_plan_quota.go",
+            "grep -rn \"loadPlan\" internal/gateway/token_plan_quota.go",
+            "wc -l internal/auth/secret_rotation_helper.go",
+        ]
+        for command in benign {
+            let decision = AgentSandboxPolicy.commandDecision(command: command, rootDirectory: root)
+            #expect(!decision.requiresTypedConfirmation, "误伤: \(command)")
+        }
+        // 连字符仍是边界：k8s secret 对象名是真实凭据引用，必须继续命中。
+        let kubeSecret = AgentSandboxPolicy.commandDecision(
+            command: "kubectl -n tokenhub get secret tokenhub-secret -o yaml",
+            rootDirectory: root
+        )
+        #expect(kubeSecret.requiresTypedConfirmation)
+    }
+
+    @Test("git commit 提交信息不参与凭据词扫描，路径参数照常扫描")
+    func gitCommitMessageExemptFromCredentialScan() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-cred-marker-workspace")
+        // 提交一段“支持 Bearer Token 认证”的说明不读取任何凭据。
+        let benign = [
+            "git commit -m \"feat(subscription): support Bearer Token and Basic Auth\"",
+            "git commit --message=\"rotate token handling in gateway\"",
+            "git commit -am \"docs: describe secret scanning rules\"",
+        ]
+        for command in benign {
+            let decision = AgentSandboxPolicy.commandDecision(command: command, rootDirectory: root)
+            #expect(!decision.requiresTypedConfirmation, "误伤: \(command)")
+        }
+        // message 之外的参数不豁免：pathspec 指向 ~/.ssh 仍然人工。
+        let flagged = AgentSandboxPolicy.commandDecision(
+            command: "git commit -m fix ~/.ssh/config",
+            rootDirectory: root
+        )
+        #expect(flagged.requiresTypedConfirmation)
+    }
+
+    @Test("工作区内词撞名路径豁免凭据扫描；工作区外与 .env 永不豁免")
+    func workspaceLocalMarkerPathExemption() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-cred-marker-workspace")
+        // read_file 工具本就免审可读工作区文件；命令行读同一份文件不该另立门槛。
+        let benign = AgentSandboxPolicy.commandDecision(
+            command: "cat internal/auth/token.go",
+            rootDirectory: root
+        )
+        #expect(!benign.requiresTypedConfirmation)
+        // 工作区外的同名路径保持人工。
+        let outside = AgentSandboxPolicy.commandDecision(
+            command: "cat /etc/pki/token.pem",
+            rootDirectory: root
+        )
+        #expect(outside.requiresTypedConfirmation)
+        // sensitivePathFragments（.env、~/.ssh …）不吃这个豁免。
+        let dotenv = AgentSandboxPolicy.commandDecision(
+            command: "cat .env",
+            rootDirectory: root
+        )
+        #expect(dotenv.requiresTypedConfirmation)
+    }
+
     @Test("SafeCommand: shell 控制流 + whois 等只读网络命令自动放行")
     func testSafeCommandShellControlFlow() {
         // 用户实测案例：纯只读 whois 循环此前落到 LLM judge 又被拒，

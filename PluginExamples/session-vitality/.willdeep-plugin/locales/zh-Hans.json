@@ -1,0 +1,15 @@
+{
+  "destination.vitality": "会话体检中心",
+  "command.refresh": "刷新",
+  "command.snapshot": "数据快照",
+  "section.overview": "概览",
+  "section.projects": "项目",
+  "overview.sessions": "会话数",
+  "overview.messages": "消息数",
+  "overview.tokensToday": "今日 Token",
+  "overview.tokensWeek": "近 7 天 Token",
+  "overview.edited": "已编辑会话",
+  "overview.artifacts": "产物文件",
+  "projects.empty": "暂无会话数据",
+  "status.demo": "演示数据 — 未找到会话存储"
+}

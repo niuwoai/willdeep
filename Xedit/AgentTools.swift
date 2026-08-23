@@ -367,6 +367,13 @@ enum AgentToolRunner {
                 result = try await AgentFileTools.glob(arguments: activeArguments, context: activeContext)
             case "git_status":
                 result = try await AgentFileTools.gitStatus(context: activeContext)
+            case "load_tool_pack":
+                let requested = try AgentToolPackCatalog.requestedPackIDs(from: activeArguments)
+                guard let activationSink = activeContext.toolPackActivationSink else {
+                    throw AgentToolError.invalidArgument("load_tool_pack is available only in the main WillDeep conversation")
+                }
+                let loaded = activationSink(requested)
+                result = AgentToolPackCatalog.activationResult(requested: requested, loaded: loaded)
             case "list_workspace_sessions":
                 result = try await AgentSessionTools.listWorkspaceSessions(arguments: activeArguments, context: activeContext)
             case "search_sessions":
@@ -678,7 +685,9 @@ enum AgentToolRunner {
                 result = try await runWorkflow(arguments: activeArguments, context: activeContext)
             case "schedule_task":
                 result = try await scheduleTask(arguments: activeArguments, context: activeContext)
-            case "complete_scheduled_task":
+            case "declare_environment_trust":
+            result = try await declareEnvironmentTrust(arguments: arguments, context: context)
+        case "complete_scheduled_task":
                 result = try await completeScheduledTask(arguments: activeArguments, context: activeContext)
             default:
                 throw AgentToolError.unknownTool(name)

@@ -274,6 +274,10 @@ struct AgentToolContext {
     /// Interactive AppState contexts route these through the same cards and
     /// decision waiter as first-party WillDeep tools.
     let delegatedApprovalHandler: (@MainActor (AgentDelegatedApprovalRequest) async -> AgentDelegatedApprovalDecision)?
+    /// Main-session bridge for the read-only `load_tool_pack` router. Ad-hoc
+    /// harnesses and child agents leave this nil and cannot mutate a parent
+    /// conversation's prompt surface.
+    let toolPackActivationSink: (@MainActor ([AgentToolPackID]) -> Set<AgentToolPackID>)?
     /// When set, apply_patch should ask the host to immediately apply the
     /// queued proposal using the existing patch applier and audit status.
     let patchAutoApplySource: AgentToolApprovalSource?
@@ -313,6 +317,7 @@ struct AgentToolContext {
         sessionRenameSink: (@MainActor (String) throws -> String)? = nil,
         workspaceChangeSink: (@MainActor (String) throws -> String)? = nil,
         delegatedApprovalHandler: (@MainActor (AgentDelegatedApprovalRequest) async -> AgentDelegatedApprovalDecision)? = nil,
+        toolPackActivationSink: (@MainActor ([AgentToolPackID]) -> Set<AgentToolPackID>)? = nil,
         secretRedactionValues: [String] = []
     ) {
         self.rootDirectory = rootDirectory
@@ -347,6 +352,7 @@ struct AgentToolContext {
         self.sessionRenameSink = sessionRenameSink
         self.workspaceChangeSink = workspaceChangeSink
         self.delegatedApprovalHandler = delegatedApprovalHandler
+        self.toolPackActivationSink = toolPackActivationSink
         self.secretRedactionValues = Self.uniqueNonEmpty(secretRedactionValues)
     }
 
@@ -406,6 +412,7 @@ struct AgentToolContext {
             sessionRenameSink: sessionRenameSink,
             workspaceChangeSink: workspaceChangeSink,
             delegatedApprovalHandler: delegatedApprovalHandler,
+            toolPackActivationSink: toolPackActivationSink,
             secretRedactionValues: secretRedactionValues + values
         )
     }
@@ -442,6 +449,7 @@ struct AgentToolContext {
             sessionRenameSink: sessionRenameSink,
             workspaceChangeSink: workspaceChangeSink,
             delegatedApprovalHandler: delegatedApprovalHandler,
+            toolPackActivationSink: toolPackActivationSink,
             secretRedactionValues: secretRedactionValues
         )
     }

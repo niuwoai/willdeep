@@ -540,8 +540,27 @@ struct AgentSessionsSidebar: View {
         // estate, so they've been removed. Add them back when there's
         // a real feature to attach.
         VStack(spacing: 0) {
-            SidebarActionRow(icon: "square.and.pencil", title: L10n.Sidebar.newChatAction, shortcut: "⌘N") {
-                appState.startNewAgentSession()
+            // Context-dependent: elsewhere it navigates back to the open
+            // conversation, on the conversation it starts a new one (see
+            // `activateAgentConversationEntry`). It used to be "New Chat",
+            // which made it the only way back from a plugin or the dispatch
+            // board — and taking it abandoned whatever chat was open. The
+            // trailing button is the unconditional "new chat", so that intent
+            // is still one click away from anywhere (as is ⌘N, which the menu
+            // owns; the "⌘N" label this row used to show never actually fired).
+            SidebarActionRow(
+                icon: "bubble.left",
+                title: L10n.Sidebar.chatAction,
+                shortcut: nil,
+                isSelected: appState.agentPrimaryDestination == .conversation,
+                trailingIcon: "square.and.pencil",
+                trailingHelp: L10n.Sidebar.newChatAction,
+                trailingAction: {
+                    appState.startNewAgentSession()
+                    appState.agentComposerFocusRevision += 1
+                }
+            ) {
+                appState.activateAgentConversationEntry()
             }
             SidebarActionRow(
                 icon: "clock",
@@ -1659,9 +1678,15 @@ struct SidebarActionRow: View {
     let shortcut: String?
     var isDimmed: Bool = false
     var isSelected: Bool = false
+    /// Optional secondary action pinned to the row's trailing edge, for rows
+    /// whose navigation and whose "make a new one" are different intents.
+    var trailingIcon: String? = nil
+    var trailingHelp: String? = nil
+    var trailingAction: (() -> Void)? = nil
     let action: () -> Void
 
     @State private var isHovered = false
+    @State private var isTrailingHovered = false
 
     var body: some View {
         Button(action: action) {
@@ -1699,8 +1724,27 @@ struct SidebarActionRow: View {
             )
         }
         .buttonStyle(.plain)
+        // Overlay rather than a Button nested in the row's label: the row sets
+        // `contentShape(Rectangle())` across its full width, which would
+        // swallow the inner button's clicks. An overlay hit-tests first.
+        .overlay(alignment: .trailing) {
+            if let trailingIcon, let trailingAction {
+                Button(action: trailingAction) {
+                    Image(systemName: trailingIcon)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(isTrailingHovered ? .primary : .secondary)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .onHover { isTrailingHovered = $0 }
+                .help(trailingHelp ?? "")
+                .padding(.trailing, 10)
+            }
+        }
         // 侧边栏导航行只用 selectionFill 表达"当前在哪儿"。留着可聚焦时,
-        // 首个 Button(「新聊天」)会在窗口打开时拿到 first responder 并画出
+        // 首个 Button(「聊天」)会在窗口打开时拿到 first responder 并画出
         // 蓝色焦点环,和实际选中的「调度台」打架,看着像选了两行。
         .focusable(false)
         .onHover { isHovered = $0 }
