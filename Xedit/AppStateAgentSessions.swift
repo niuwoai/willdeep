@@ -2509,16 +2509,6 @@ extension AppState {
         return preset.recognizesModelID(trimmed)
     }
 
-    private func clearIncompatibleAgentSessionModelOverride() {
-        guard let override = agentSessionModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !override.isEmpty,
-              !agentModelIsCompatibleWithActiveProvider(override) else {
-            return
-        }
-        agentSessionModelOverride = nil
-        persistActiveAgentSession()
-    }
-
     /// Chat-mode picker entry point — pick a (library entry, model)
     /// pair in one shot. The provider is pinned only to the current
     /// conversation, leaving the Settings-wide default and other sessions
