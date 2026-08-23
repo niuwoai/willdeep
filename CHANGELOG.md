@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.285.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.285.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.285.0-rc3 - 2026-08-23
+
+### Removed
+
+- **删掉 `AppStateAgentSessions.swift` 里零调用的 `clearIncompatibleAgentSessionModelOverride()`（10 行）。** 全仓库 grep（`*.swift` / `*.rb` / `*.md` / `*.json` / `*.yml`）只命中定义处这一行，没有任何调用点，也没有 CI 守卫按名字断言它。它想做的事——会话级模型覆盖与当前 provider 不兼容时清空覆盖并落盘——从来没有被触发过。
+- **不是上一轮拆分造成的。** 在 `develop` 上 `git grep` 拆分前的版本，同样只有定义处一处命中，说明这个方法在 1.284.0-rc11 拆文件之前就已经是死代码。
+- 它依赖的 `agentModelIsCompatibleWithActiveProvider(_:)` 仍有两处活调用（`AppStateAgentSessions.swift`、`AppStateAgentRequestEstimates.swift`），保留不动。主文件 2584 → 2574 行。
+
+### Tests
+
+- 删除后编译并复跑 109 tests / 4 suites 全绿（`AgentGoalTeamsTests` / `AgentGoalBudgetedContinuationTests` / `SomeIMSharedSessionMemoTests` / `AgentPlanProgressTests`）。三项证据一致：退出码 0、原始日志 `** TEST SUCCEEDED **`、`report.json` 的 `passed=109 failed=0 total_mismatch=false`。
+- 合并 `develop`（1.285.0-rc2）后版本位点一律取更高侧再统一 bump；`version_consistency: pass version=1.285.0-rc3 failures=0`。
 
 ## 1.285.0-rc2 - 2026-08-23
 
