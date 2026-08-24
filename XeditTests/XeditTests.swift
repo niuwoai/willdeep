@@ -700,12 +700,25 @@ struct WillDeepTests {
         #expect(risk == .read)
     }
 
-    @Test("ask_user exposes optional options and multi_select parameters")
+    @Test("ask_user exposes structured prompt, options and multi_select parameters")
     func testAskUserExposesChoiceParameters() {
         let descriptor = AgentToolRegistry.descriptor(for: "ask_user")
+        let title = descriptor?.parameters.first { $0.name == "title" }
+        let requestedInformation = descriptor?.parameters.first {
+            $0.name == "requested_information"
+        }
+        let defaultAssumptions = descriptor?.parameters.first {
+            $0.name == "default_assumptions"
+        }
         let options = descriptor?.parameters.first { $0.name == "options" }
         let multi = descriptor?.parameters.first { $0.name == "multi_select" }
 
+        #expect(title?.type == .string)
+        #expect(title?.required == false)
+        #expect(requestedInformation?.type == .stringArray)
+        #expect(requestedInformation?.required == false)
+        #expect(defaultAssumptions?.type == .stringArray)
+        #expect(defaultAssumptions?.required == false)
         #expect(options?.type == .stringArray)
         #expect(options?.required == false)
         #expect(multi?.type == .boolean)

@@ -129,6 +129,64 @@ nonisolated enum AgentConfirmationReviewMetrics {
     }
 }
 
+struct AgentAskUserPromptPresentation: Equatable {
+    let title: String
+    let body: String?
+    let requestedInformation: [String]
+    let defaultAssumptions: [String]
+
+    var hasStructuredSections: Bool {
+        !requestedInformation.isEmpty || !defaultAssumptions.isEmpty
+    }
+}
+
+enum AgentAskUserPromptPresentationBuilder {
+    static let longQuestionThreshold = 72
+
+    static func make(
+        arguments: [String: AgentJSONValue]
+    ) -> AgentAskUserPromptPresentation? {
+        guard let question = sanitizedLine(
+            arguments["question"]?.stringValue(),
+            maxLength: 2_000
+        ) else {
+            return nil
+        }
+
+        let explicitTitle = sanitizedLine(
+            arguments["title"]?.stringValue(),
+            maxLength: 120
+        )
+        let requestedInformation = sanitizedItems(
+            arguments["requested_information"]?.stringArrayValue() ?? []
+        )
+        let defaultAssumptions = sanitizedItems(
+            arguments["default_assumptions"]?.stringArrayValue() ?? []
+        )
+        let needsBody = explicitTitle != nil
+            || !requestedInformation.isEmpty
+            || !defaultAssumptions.isEmpty
+            || question.count > longQuestionThreshold
+            || question.contains("\n")
+
+        return AgentAskUserPromptPresentation(
+            title: explicitTitle ?? (needsBody ? L10n.ToolCard.askUserDefaultTitle : question),
+            body: needsBody ? question : nil,
+            requestedInformation: requestedInformation,
+            defaultAssumptions: defaultAssumptions
+        )
+    }
+
+    private static func sanitizedItems(_ values: [String]) -> [String] {
+        values.compactMap { sanitizedLine($0, maxLength: 500) }
+    }
+
+    private static func sanitizedLine(_ value: String?, maxLength: Int) -> String? {
+        guard let value else { return nil }
+        return AgentInjectionDefense.sanitizeAskUserOption(value, maxLength: maxLength)
+    }
+}
+
 nonisolated enum AgentCompactAuthorizationMetrics {
     static let horizontalPadding: CGFloat = 14
     static let verticalPadding: CGFloat = 15
@@ -427,4 +485,3 @@ nonisolated enum AgentApprovalNoticeCopy {
         return ["仅发送 GET 请求", "公开网页", "最多读取 \(formattedCount) 字符"]
     }
 }
-
