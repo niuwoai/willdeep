@@ -1,7 +1,29 @@
 # Changelog
 
-> 当前文件保留最新版本（1.289.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.289.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.289.0-rc5 - 2026-08-25
+
+### Fixed
+
+- **内嵌浏览器分离成独立窗口后一片空白、输网址也没反应：迟到的拆卸把 webView 从新窗口手里抠走了。** 用户报「本来显示的好好的，我分离成单独的窗体，就不工作了，之前显示的内容没有了，再输入网址，也不进到这个网址了」。
+
+  一个 controller 只有一个 `WKWebView`，侧栏宿主和分离窗口宿主是把它**传来传去**，不是各造一个。而 SwiftUI 不保证旧宿主先于新宿主销毁，实际时序是：
+
+  1. 侧栏 `detach(kind)` 把 `kind = nil`，但视图卸载是异步的，旧宿主还活着
+  2. 新窗口先起来，`makeNSView` → `attach(W)`，把 webView 从侧栏移交到窗口 ✓
+  3. **之后**侧栏宿主才轮到 `dismantleNSView` → `detach()`，而它无条件执行 `removeFromSuperview()`，记着的 `hostedWebView` 仍是 W——于是把已经交给新窗口的 webView 从新窗口身上摘了下来
+
+  webView 就此不在任何视图层级里：窗口一片空白，地址栏输入其实**导航成功了**，只是没有任何宿主能显示它——「输了网址不进去」是这么来的。
+
+  修法是让 `detach()` 只交还仍挂在自己身上的 webView。同一个口子还堵住了反方向：点「放回侧栏」时，窗口宿主的拆卸同样会把刚交还给侧栏的 webView 摘走。
+
+  另外两处 `WKWebView`（插件页宿主、widget 卡片）各自在 `makeNSView` 里新建，不共享实例，没有这个问题。
+
+### Tests
+
+- 新增 [AgentEmbeddedBrowserHostTests](XeditTests/AgentEmbeddedBrowserHostTests.swift) 4 例：迟到的拆卸不夺走新宿主的 webView、仍持有时照常交还、重复 attach 幂等、放回侧栏方向同样成立。**反验过**：把 `detach()` 改回无条件 `removeFromSuperview()`，其中 2 例立刻变红，报错正是 `webView.superview → nil`。
 
 ## 1.289.0-rc4 - 2026-08-25
 
