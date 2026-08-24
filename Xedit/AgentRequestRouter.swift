@@ -22,10 +22,13 @@
 //  the user already expects a pause. In a GUI it doubles time-to-first-token
 //  on questions as ordinary as "where is this function", and a Chinese
 //  false positive is visible rather than merely wasteful. So the eligibility
-//  is computed and recorded here, gated behind a setting that ships off,
-//  and the decision to turn it on belongs to the Deep Share numbers rather
-//  than to anyone's taste. See docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md §4
-//  step 4 and §5.
+//  is computed and recorded here, behind a setting that the Deep Share
+//  numbers were meant to decide. They decided: the read-only trades scored
+//  zero runs while the setting was off, because the note above is the only
+//  other way to reach them and the model follows it selectively. The setting
+//  now defaults on (see AppStateAgentReadOnlyPreflight), so a high-confidence
+//  read-only classification is executed rather than merely mentioned.
+//  See docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md §4 step 4 and §5.
 //
 
 import Foundation
@@ -99,6 +102,23 @@ nonisolated enum AgentRequestRouter {
         "traceback", "stack trace", "panic", "crash log", "error log",
     ]
 
+    /// Running the gates, as opposed to explaining or repairing a failure.
+    /// Kept separate from `testFailureMarkers`, which is about a failure that
+    /// already happened.
+    private static let testRunMarkers = [
+        "跑测试", "跑一下测试", "跑单测", "运行测试", "跑一遍测试", "验证一下",
+        "run the test", "run tests", "run the suite", "verify this", "check it passes",
+    ]
+
+    /// Reviewing a *change* — which is `reviewer`'s trade — rather than
+    /// reading code in general, which is `reader`'s. Checked before the read
+    /// markers because "审查" matches both and the narrower one should win.
+    private static let reviewMarkers = [
+        "审查这个改动", "审查改动", "审查这次", "代码审查", "评审这个改动", "看下这个改动",
+        "检查这次提交", "检查这个改动", "review the change", "review this change",
+        "review the diff", "review this diff", "code review", "review my changes",
+    ]
+
     private static let locateMarkers = [
         "在哪里", "在哪个文件", "在哪儿", "定位", "找一下", "找到",
         "locate", "where is", "where are", "find where", "which file",
@@ -137,6 +157,17 @@ nonisolated enum AgentRequestRouter {
             return worker("log_inspector", 92, autoDispatch: true,
                           reason: "failure output can be inspected in a small window")
         }
+        if !mutating, contains(sample, testRunMarkers) {
+            // Named but never pre-run: a test suite takes minutes and touches
+            // build state. Pre-running one as a "preflight" would be the
+            // opposite of cheap.
+            return worker("tester", 90, autoDispatch: false,
+                          reason: "running gates and reporting evidence is the tester trade")
+        }
+        if !mutating, contains(sample, reviewMarkers) {
+            return worker("reviewer", 90, autoDispatch: true,
+                          reason: "reviewing a change is bounded and read-only")
+        }
         if !mutating, contains(sample, locateMarkers) {
             return worker("scout", 90, autoDispatch: true,
                           reason: "locating symbols and files is bounded read-only work")
@@ -146,6 +177,14 @@ nonisolated enum AgentRequestRouter {
                           reason: "reading can be isolated from the parent context")
         }
         if mutating {
+            // A change that names exactly one source file is what `editor`
+            // exists for — one declared path, nothing else touchable. Without
+            // this branch every mutating request became `implementer`, and
+            // `editor` was never so much as suggested.
+            if namedSourceFiles(sample).count == 1 {
+                return worker("editor", 88, autoDispatch: false,
+                              reason: "the request names a single file to change")
+            }
             return Decision(
                 tier: .standard,
                 profileID: "implementer",
@@ -198,5 +237,24 @@ nonisolated enum AgentRequestRouter {
 
     private static func contains(_ haystack: String, _ needles: [String]) -> Bool {
         needles.contains { haystack.contains($0) }
+    }
+
+    /// Distinct source files the request names. Deliberately literal: a path
+    /// the user typed is evidence about scope, while a guess at which files a
+    /// vague request implies is exactly the kind of thing this classifier
+    /// must not do. Extensions come from the repair set so "a source file"
+    /// means one thing across the runtime — `.o` / `.json` / `.lock` paths in
+    /// a pasted log never count as an edit target.
+    static func namedSourceFiles(_ sample: String) -> Set<String> {
+        let separators = CharacterSet(charactersIn: " \t\n\r,;:()[]{}<>\"'`，。、；：（）【】「」")
+        var files: Set<String> = []
+        for token in sample.components(separatedBy: separators) {
+            let trimmed = token.trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?"))
+            guard let dot = trimmed.lastIndex(of: "."), dot != trimmed.startIndex else { continue }
+            let ext = String(trimmed[trimmed.index(after: dot)...])
+            guard AgentWorkerAutoDispatch.repairableExtensions.contains(ext) else { continue }
+            files.insert(trimmed)
+        }
+        return files
     }
 }

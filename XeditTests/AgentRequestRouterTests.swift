@@ -107,6 +107,59 @@ struct AgentRequestRouterTests {
         ) != nil)
     }
 
+    @Test("running the gates names tester but is never pre-run")
+    func testRunRoutesToTesterWithoutPreflight() {
+        let decision = AgentRequestRouter.classify("跑一下测试看看现在什么情况")
+
+        #expect(decision.profileID == "tester")
+        // A suite takes minutes and touches build state — pre-running one as
+        // a "preflight" would be the opposite of cheap.
+        #expect(!decision.autoDispatchEligible)
+
+        // A failure that already happened is a different trade.
+        #expect(AgentRequestRouter.classify("测试失败了，修复这个断言").profileID == "test_fixer")
+    }
+
+    @Test("reviewing a change routes to reviewer, reading code to reader")
+    func reviewOfAChangeRoutesToReviewer() {
+        let review = AgentRequestRouter.classify("审查这个改动有没有超出范围")
+
+        #expect(review.profileID == "reviewer")
+        #expect(review.autoDispatchEligible)
+
+        // "审查" alone must not steal every reading request from `reader`.
+        #expect(AgentRequestRouter.classify("解释一下这个模块").profileID == "reader")
+    }
+
+    @Test("a change naming one file routes to editor, several to implementer")
+    func singleNamedFileRoutesToEditor() {
+        // `editor` had no branch at all before this: every mutating request
+        // became `implementer`, so the single-file trade was never suggested.
+        let single = AgentRequestRouter.classify("把 Xedit/AppState.swift 里的超时改成 30 秒")
+
+        #expect(single.profileID == "editor")
+        #expect(single.tier == .worker)
+        // Writing work is never pre-run — a preflight that edits is not a
+        // preflight.
+        #expect(!single.autoDispatchEligible)
+
+        let several = AgentRequestRouter.classify(
+            "修改 Xedit/AppState.swift 和 Xedit/AgentRuntime.swift 的超时"
+        )
+        #expect(several.profileID == "implementer")
+
+        // No file named at all stays with the wider trade.
+        #expect(AgentRequestRouter.classify("实现重试退避").profileID == "implementer")
+    }
+
+    @Test("only source files count as a named edit target")
+    func namedFileScanIgnoresNonSourcePaths() {
+        // A build log is full of `.o` / `.json` / `.lock` paths; treating one
+        // as an edit target is how a vague request becomes a wrong write set.
+        #expect(AgentRequestRouter.namedSourceFiles("修改 build/output.o 和 package.lock").isEmpty)
+        #expect(AgentRequestRouter.namedSourceFiles("改 a.swift 和 b.swift 再改 a.swift").count == 2)
+    }
+
     @Test("only the head of a long paste is classified")
     func longPasteDoesNotVoteWithItsBody() {
         // A pasted stack trace at the end of an implementation request must

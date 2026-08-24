@@ -5,11 +5,13 @@ import Testing
 @Suite
 @MainActor
 struct AgentReadOnlyPreflightTests {
-    @Test("preflight ships off and is turned on by the shared config")
-    func preflightDefaultsOff() {
-        // Deliberately opt-in: it costs visible time-to-first-token in a GUI,
-        // and the classifier that gates it is keyword matching.
-        #expect(!AppState.readOnlyPreflightEnabled(sharedConfig: AgentSharedRuntimeConfig()))
+    @Test("preflight ships on and is turned off by the shared config")
+    func preflightDefaultsOn() {
+        // It shipped opt-in and the read-only trades then recorded zero runs,
+        // because the only other route to them is the parent model choosing
+        // to delegate. Absent config now means on; the cost is a slower first
+        // token on matching requests.
+        #expect(AppState.readOnlyPreflightEnabled(sharedConfig: AgentSharedRuntimeConfig()))
 
         var shared = AgentSharedRuntimeConfig()
         shared.autoDispatchReadOnly = true
