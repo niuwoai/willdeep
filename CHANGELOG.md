@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.287.0-rc6 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.287.0-rc8 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.287.0-rc8 - 2026-08-24
+
+### Fixed
+
+- **上下文占用四套口径统一为裸 used/window，圆环显示的数字与模型被告知的一致。** 实际事故：状态栏圆环显示 30%，同一时刻 runway 暂停指令却告诉模型「92% used」——用户面对两个都自称"上下文占用"的百分比无从对齐。根因是同一份 usage 快照上并存四套算法：圆环用 `(used−baseline)/(window−baseline)` 双向扣减（baseline=系统提示+工具 schema）；Compress 按钮门槛用裸 `used/window`；自动压缩判定先扣 `fixedToolOverhead` 再除全窗口（双重打折，红圈了还不自动压）；runway 用裸 `used/window`。现在四处全部收敛到裸 `used/window`，算式落在 `AgentContextTokenUsageSnapshot.usedFraction` 单点；对话净占用/系统+工具基线的细分只进圆环 tooltip（新 5 参数文案 `context-ring.tooltip-breakdown`，5 语言），不再进任何分子分母。
+- **自动压缩分母不再错借前台会话的窗口。** `shouldAutoCompressNow(for:)` 此前用 `agentContextWindow`（按 active 会话的模型解析），后台会话触发判定时拿前台模型的窗口当分母——前台挂着 1M 模型时，16k 后台会话永远到不了 75% 触发线。新增 `agentContextWindow(for: runtime)` 按该会话自己钉住的 provider entry + 模型 override 解析窗口。
+- **圆环侧窗口解析的 providerID 改用会话绑定 provider。** `agentContextWindow` 原来把全局默认配置的 `providerID` 传进 catalog 兜底，会话绑了别的 provider 时口径不干净。
+- 删除 `estimateTextTokens` 注释里指向已不存在的 `calibratedTokenScale` 的陈旧句（真实机制是 `providerAnchoredUsedTokens` 锚定 provider 实报用量）。
+
+### Tests
+
+- 新增 `AgentContextUsageSnapshotTests`（圆环/按钮口径此前零覆盖）：裸口径不扣 baseline、圆环百分比与 `AgentContextRunwayPolicy.Snapshot.usedPercent` 同数、clamp 与零窗口、tooltip 细分自洽（baseline 超过 used 时夹紧）、Compress 门槛同口径、后台 runtime 用自己 16k 窗口触发自动压缩（分母错借前台 1M 窗口时该用例红）。
 
 ## 1.287.0-rc6 - 2026-08-24
 

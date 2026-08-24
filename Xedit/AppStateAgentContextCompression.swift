@@ -104,7 +104,9 @@ extension AppState {
     func shouldAutoCompressNow(for runtime: AgentRuntime) -> Bool {
         guard !runtime.isCompressingContext, !runtime.isResponding else { return false }
         guard runtime.messages.count > 6 else { return false }
-        let window = max(1, agentContextWindow)
+        // This runtime's own window: a background session must not borrow
+        // the frontmost session's model as its denominator.
+        let window = max(1, agentContextWindow(for: runtime))
         // Estimate the model-facing window, not the local transcript. Once a
         // summary exists, the user can still see every old message locally
         // while the provider request sees only the summary + newer tail.
@@ -132,9 +134,12 @@ extension AppState {
             contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
         )
         let used = max(estimated, anchored ?? 0)
-        let fixedToolOverhead = Self.estimateAgentTokens(messages: [], tools: tools)
-        let compressibleUsed = max(0, used - fixedToolOverhead)
-        let usedFraction = Double(compressibleUsed) / Double(window)
+        // Bare used/window — the same ratio the status-bar ring shows and
+        // the runway handoff reports to the model. Subtracting the fixed
+        // tool-schema overhead here made this trigger read lower than every
+        // other gauge over the same snapshot, so a session could sit at a
+        // red ring with auto-compression still asleep.
+        let usedFraction = Double(used) / Double(window)
         return usedFraction > 0.75
     }
 

@@ -942,14 +942,16 @@ nonisolated enum L10n {
     }
 
     enum ContextRing {
-        /// %1 conversation tokens used · %2 usable window · %3 reserved for
-        /// system+tools · %4 total remaining.
-        static func tooltip(_ a1: String, _ a2: String, _ a3: String, _ a4: String) -> String {
+        /// %1 total used · %2 window · %3 conversation share · %4 system +
+        /// tools baseline · %5 remaining. The leading pair matches the bare
+        /// used/window fraction the ring, compression trigger, and runway
+        /// handoff all report; %3/%4 are the tooltip-only breakdown.
+        static func tooltip(_ a1: String, _ a2: String, _ a3: String, _ a4: String, _ a5: String) -> String {
             let template = String(
-                localized: "context-ring.tooltip",
-                defaultValue: "Conversation: ~%1$@ / %2$@ usable · %3$@ reserved for system + tools · %4$@ total remaining (estimate)."
+                localized: "context-ring.tooltip-breakdown",
+                defaultValue: "~%1$@ of %2$@ used · conversation ~%3$@ · system + tools ~%4$@ · %5$@ remaining (estimate)."
             )
-            return String(format: template, a1, a2, a3, a4)
+            return String(format: template, a1, a2, a3, a4, a5)
         }
     }
 
