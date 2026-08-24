@@ -1,7 +1,19 @@
 # Changelog
 
-> 当前文件保留最新版本（1.288.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.288.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.288.0-rc3 - 2026-08-24
+
+### Fixed
+
+- **一次收掉 202 个未进目录的 i18n key：设置页两行英文只是冰山一角。** 用户在中文界面的「软件更新」区看到 "Download and install updates automatically" 与其说明文案漏翻。排查发现不是缺翻译，是 `settings.software-update.automatic` / `automatic-help` 两个 key 压根没进 `Localizable.xcstrings`，`String(localized:defaultValue:)` 直接落英文兜底。全仓审计（代码引用 key 对照目录）挖出**同类缺失共 202 个**，且是双向的：英文 defaultValue 的 key 在中文界面漏中文，中文 defaultValue 的 key（本地模型设置区、圆桌区）在英/日/西/法界面反漏英文。涉及面：软件更新、some.im 账户区、本地模型加速整区、上下文压缩设置、编辑器 LSP 右键菜单与全部浮层（悬停/补全/签名/代码操作/引用/调用层次/重命名）、内嵌浏览器、自动化任务、子代理委派检查器、圆桌、SSH 终端。修复：202 条 × 5 语（en/es/fr/ja/zh-Hans）全量补齐进目录（[Localizable.xcstrings](Xedit/Localizable.xcstrings)，+7070 行纯新增、零删除、文本级插入不重排）；占位符（`%@`/`%1$@`/`%d`）做了跨语言一致性校验；插入后重跑审计残余缺失为 0。
+
+### Tests
+
+- 插入自查三件套：整文件 `json.loads` 合法、202 个 key 逐个在 `strings` 顶层可查且逐语言值一致、`git diff --numstat` 零删除（防 json.dump 重排与插错位置两个已知坑）。
+- **[AgentRoutineDeletionPromptTests](XeditTests/AgentRoutineDeletionPromptTests.swift) 一处断言从钉英文原文改为按语言关键词集合断言。** `automation.delete.alert-message` 进目录后，中文宿主上 `String(localized:)` 真的返回中文了，钉 "cannot be undone"/"stop running" 英文原文的断言立刻炸红——本地化生效反而打红测试。改为在 en/es/fr/ja/zh-Hans 五语的「不可撤销」「停止运行」关键词集合中命中任一即通过：守住测试意图（确认文案必须警告后果），不再依赖测试宿主的语言。另全仓扫描 202 个新 key 的英文原文在测试里的其他钉点：仅此一处真断言（另一处命中是注释撞子串）。
+- 全量 `ruby scripts/run_tests_fast.rb`：2909 例 / 0 失败 / 1 skip（惯常那条），退出码、日志、report.json 三方一致。
 
 ## 1.288.0-rc2 - 2026-08-24
 

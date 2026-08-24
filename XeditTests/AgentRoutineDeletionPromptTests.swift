@@ -32,8 +32,20 @@ struct AgentRoutineDeletionPromptTests {
         let message = L10n.Automation.deleteAlertMessage("Nightly build")
 
         // The point of the gate: the user learns the cost before confirming.
-        #expect(message.lowercased().contains("cannot be undone"))
-        #expect(message.contains("stop running"))
+        // The key is localized (en/es/fr/ja/zh-Hans), and the test host's
+        // locale decides which value comes back — so assert the warning via
+        // per-language markers instead of pinning the English source text.
+        let permanentMarkers = [
+            "cannot be undone", "no se puede deshacer", "irréversible",
+            "取り消せません", "无法撤销",
+        ]
+        let stopMarkers = [
+            "stop running", "dejará de ejecutarse", "cessera de s'exécuter",
+            "実行を停止", "将停止运行",
+        ]
+        let lowered = message.lowercased()
+        #expect(permanentMarkers.contains { lowered.contains($0.lowercased()) })
+        #expect(stopMarkers.contains { lowered.contains($0.lowercased()) })
     }
 
     @Test("confirm and cancel are distinct labels")
