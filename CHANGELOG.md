@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.287.0-rc9 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.287.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.287.0-rc11 - 2026-08-24
+
+> 与 1.287.0-rc10（apply_patch 断言漂移修复）并行开发、合并时升号：两个并发会话不约而同各修了一部分 rc5 登记的本机存量红，且都自 bump 成 rc10 撞号。apply_patch 断言两边都改到——本条弃用自己的 `contains` 版本、整段采纳 rc10 已合入 develop 的 `caseInsensitive` 版本（更抗大小写漂移），代码零差异；本条净增量是其余三条派发红的修复与登记收口。
+
+### Fixed
+
+- **收掉 rc5 起登记的最后 3 条本机存量红：派发类用例与宿主技能目录解耦。** 根因 rc5/rc6 已记录：`sendAgentMessage()` 派发链里 `AgentSkillAutoActivation.routingDecision` 的 catalog 落到 `AgentSkillDirectory.list` 读宿主真实技能根（本机 60+ 技能），候选降级链路把 "Skill routing candidates" 段拼进消息文本，三条用例——`AgentQueueModeTests` 的 `sendingNewMessageWhileAwaitingUserDecisionClosesBlockingCall` / `sendingNewMessageDuringNonBlockingResponseOnlyQueuesIt`、`AgentMobileGatewayBridgeTests.appStateMessageSendDispatchesIntoAgentRuntime`——对消息文本的裸相等断言必红；CI 空目录不复现，属宿主环境泄漏进单测。修法：`AppState` 新增 test seam `skillRoutingCatalogForTesting: [AgentSkillEntry]?`，派发处原样传给 `routingDecision(availableSkills:)`——这个注入口正是 `AgentSkillAutoActivationTests` 一直在用的隔离参数，本次只是把它接到 AppState 派发链上；nil 时仍读真实目录，生产行为零变化。三条用例注入 `[]`，裸相等断言从此不看宿主装了什么技能。
+
+### Tests
+
+- 定向 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/AgentQueueModeTests -only-testing:XeditTests/AgentMobileGatewayBridgeTests`：36/36 绿，三条原红用例逐条有 passed 日志。
+- 全量 `ruby scripts/run_tests_fast.rb`（含 apply_patch 断言修复的合并形态）：**2884 例 / 0 失败 / 1 skip（惯常那条），rc5 以来本机首次全绿**。4 条原红用例在 xcresult 里逐条核对为 Passed；退出码、日志汇总、xcresult 三方一致（`testApplyPatchPromptAndRegistrySurface` 属 `WillDeepTests` 聚合 suite，函数级 `-only-testing` 会假绿选不中，故只认全量证据）。
+- **rc5 登记、rc6 细化、rc7/rc8 维持、rc10 减到 3 条的「本机存量红」登记自本条起收口作废**：后续全量若再见红即为新问题，不得再引用该登记归档。
 
 ## 1.287.0-rc9 - 2026-08-24
 

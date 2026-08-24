@@ -96,7 +96,8 @@ extension AppState {
             userText: userText,
             workspaceRootPath: runtime.workspaceRootPath ?? rootDirectory?.standardizedFileURL.path,
             manuallySelectedSkills: runtime.pendingSkills,
-            hasVisualTargetAttachment: !images.isEmpty
+            hasVisualTargetAttachment: !images.isEmpty,
+            availableSkills: skillRoutingCatalogForTesting
         )
         let skills = skillRouting.attachedSkills
         let pendingFiles = runtime.pendingFiles

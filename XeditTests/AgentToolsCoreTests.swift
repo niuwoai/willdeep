@@ -2346,6 +2346,10 @@ struct AgentQueueModeTests {
     @MainActor
     func sendingNewMessageWhileAwaitingUserDecisionClosesBlockingCall() {
         let state = AppState()
+        // The queued text is asserted verbatim below; without this the send
+        // path routes against the host's real skill catalog and splices a
+        // "Skill routing candidates" prelude into the message text.
+        state.skillRoutingCatalogForTesting = []
         _ = state.startNewAgentSession()
         guard let runtime = state.activeRuntime else {
             Issue.record("Expected active runtime")
@@ -2377,6 +2381,9 @@ struct AgentQueueModeTests {
     @MainActor
     func sendingNewMessageDuringNonBlockingResponseOnlyQueuesIt() {
         let state = AppState()
+        // Same hermetic seam as above: the verbatim queued-text assertion
+        // must not see host-installed skill routing candidates.
+        state.skillRoutingCatalogForTesting = []
         _ = state.startNewAgentSession()
         guard let runtime = state.activeRuntime else {
             Issue.record("Expected active runtime")
