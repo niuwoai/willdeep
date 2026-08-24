@@ -1305,6 +1305,137 @@ struct AgentSelfLearningTests {
         #expect(AgentSelfLearning.suggestionItemCount([]) == 0)
     }
 
+    // MARK: - Shared skill sanitation funnel (tool path ↔ automatic capture)
+
+    @Test
+    func sanitizedSkillDraftRedactsSecretsAndCapsEveryField() {
+        let body = String(repeating: "a", count: AgentSelfLearning.maxSkillBodyCharacters - 10)
+            + " token:abcdefghijklmn"
+        let draft = AgentSelfLearning.sanitizedSkillDraft(
+            name: "deploy helper password=supersecret99 " + String(repeating: "n", count: 200),
+            description: "Use with Bearer abcdefghijklmnop123456 " + String(repeating: "d", count: 400),
+            body: body
+        )
+
+        #expect(draft.name.count <= AgentSelfLearning.maxSkillNameCharacters)
+        #expect(draft.description.count <= AgentSelfLearning.maxSkillDescriptionCharacters)
+        #expect(draft.body.count <= AgentSelfLearning.maxSkillBodyCharacters)
+        #expect(draft.name.contains("[REDACTED_SECRET]"))
+        #expect(!draft.name.contains("supersecret99"))
+        #expect(!draft.description.contains("abcdefghijklmnop123456"))
+        // Sanitize-before-clamp: a secret straddling the length cap must not
+        // survive as a truncated, pattern-evading fragment. If someone swaps
+        // the order to clamp-first, "token:abc..." survives and this goes red.
+        #expect(!draft.body.contains("token:abc"))
+        #expect(!draft.body.contains("abcdefghijklmn"))
+    }
+
+    @Test
+    func automaticSkillCaptureSharesToolPathSanitizationAndCaps() throws {
+        let root = try temporarySkillRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+
+        let started = Date(timeIntervalSince1970: 1_800_000_400)
+        let user = AgentMessage(
+            role: .user,
+            content: "Create a reusable skill for this deploy workflow that uses token:hunter2secret99 every time.",
+            createdAt: started
+        )
+        let assistant = AgentMessage(
+            role: .assistant,
+            content: "I deployed with api_key=sk-abcdefghijklmnopqrst and verified the workflow.",
+            createdAt: started.addingTimeInterval(10)
+        )
+        let runtime = AgentRuntime(session: AgentSession(messages: [user, assistant]))
+        let oversizedSummary = "run output sk-abcdefghijklmnopqrst " + String(repeating: "s", count: 20_000)
+        runtime.toolCalls = (0..<5).map { index in
+            AgentToolCall(
+                messageID: assistant.id,
+                externalID: "sanitize-tool-\(index)",
+                toolName: "run_command",
+                arguments: [:],
+                risk: .write,
+                status: .succeeded,
+                result: AgentToolResult(
+                    summary: index == 0 ? oversizedSummary : "step \(index)",
+                    payload: ""
+                )
+            )
+        }
+
+        let events = AgentSelfLearning.captureAutomaticSkillCandidate(
+            for: runtime,
+            workspaceURL: URL(fileURLWithPath: "/tmp/WillDeepProject"),
+            skillSettings: .default,
+            root: root
+        )
+
+        // The automatically written draft obeys the exact tool-path caps.
+        let skillEvent = try #require(events.first { $0.kind == .skill && $0.status == .created })
+        let draft = try #require(skillEvent.action?.skillDraft)
+        #expect(draft.name.count <= AgentSelfLearning.maxSkillNameCharacters)
+        #expect(draft.description.count <= AgentSelfLearning.maxSkillDescriptionCharacters)
+        #expect(draft.body.count <= AgentSelfLearning.maxSkillBodyCharacters)
+        #expect(!draft.name.contains("hunter2secret99"))
+        #expect(!draft.description.contains("hunter2secret99"))
+
+        // And nothing that reached disk carries a raw secret from the user
+        // text, the assistant text, or an oversized tool summary.
+        let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
+        let skillFile = try #require(
+            (enumerator?.compactMap { $0 as? URL } ?? [])
+                .first { $0.lastPathComponent == "SKILL.md" }
+        )
+        let markdown = try String(contentsOf: skillFile, encoding: .utf8)
+        #expect(!markdown.contains("hunter2secret99"))
+        #expect(!markdown.contains("sk-abcdefghijklmnopqrst"))
+        #expect(markdown.contains("[REDACTED_SECRET]"))
+        let slug = skillFile.deletingLastPathComponent().lastPathComponent
+        #expect(slug.count <= AgentSkillFileManager.maxSkillSlugLength)
+        #expect(!slug.contains("hunter2secret99"))
+    }
+
+    @Test
+    func createUserSkillToolSanitizesSkillNameToo() throws {
+        let root = try temporarySkillRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+
+        let result = try AgentSelfLearning.createUserSkill(
+            arguments: [
+                "name": .string("deploy password=topsecret1234 helper"),
+                "description": .string("Use when deploying."),
+                "body": .string("Run the deploy pipeline and verify health checks.")
+            ],
+            root: root
+        )
+
+        let skillURL = root
+            .appendingPathComponent("deploy-redacted-secret-helper")
+            .appendingPathComponent("SKILL.md")
+        let markdown = try String(contentsOf: skillURL, encoding: .utf8)
+        #expect(markdown.contains("name: deploy [REDACTED_SECRET] helper"))
+        #expect(!markdown.contains("topsecret1234"))
+        #expect(!result.payload.contains("topsecret1234"))
+    }
+
+    @Test
+    func skillSlugCapsLengthAndTrimsTruncationDash() {
+        let overlong = String(repeating: "workflow ", count: 40)
+        let slug = AgentSkillFileManager.skillSlug(from: overlong)
+        #expect(slug.count <= AgentSkillFileManager.maxSkillSlugLength)
+        #expect(slug.hasPrefix("workflow-workflow"))
+        #expect(!slug.hasSuffix("-"))
+
+        // Truncation landing exactly on a separator must not leave a
+        // dangling dash behind.
+        let boundary = String(repeating: "a", count: AgentSkillFileManager.maxSkillSlugLength - 1) + " tail"
+        let boundarySlug = AgentSkillFileManager.skillSlug(from: boundary)
+        #expect(boundarySlug == String(repeating: "a", count: AgentSkillFileManager.maxSkillSlugLength - 1))
+
+        // Short names keep their historical slugs.
+        #expect(AgentSkillFileManager.skillSlug(from: "Release Checklist") == "release-checklist")
+    }
+
     private func temporarySkillRoot() throws -> URL {
         let container = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep-self-learning-\(UUID().uuidString)")
