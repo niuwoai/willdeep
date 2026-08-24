@@ -935,6 +935,13 @@ enum AgentSelfLearning {
         workspaceURL: URL?,
         settings: AgentSkillSettings
     ) -> AgentSelfLearningSkillCandidate? {
+        // 质量门禁(纵深防御):候选的 name/description/body 全部从 userText
+        // 机械截取,host 拼接模板一旦混入,产出的就是以前导文案开头、名字
+        // 是截断句子的垃圾技能(auto-the-user-attached-the 事故)。capture
+        // 源已在 `operatorAuthoredContent` 反拼接,这里再兜一层:老会话落盘
+        // 的 content、未来任何反拼接不认识的新拼接形态,只要触发文本仍带
+        // composer 前导头或用户文本边界标记,一律不生成技能候选。
+        guard !containsHostComposedTemplate(userText) else { return nil }
         let lowerUserText = userText.lowercased()
         let explicitSkillDirective = containsExplicitSkillCreationSignal(userText)
         let hasImplicitReusableIntent = hasStrongDurableIntent(in: lowerUserText)
@@ -1011,6 +1018,15 @@ enum AgentSelfLearning {
         // sanitizedSkillDraft, the shared sanitation + length-cap funnel, which
         // also covers tool-call summaries embedded above.
         return workflow
+    }
+
+    /// Host-composed prompt chrome that must never be mistaken for the
+    /// operator's own words. `preludeHeader` opens every composer attachment
+    /// splice; `userTextBoundary` is the marker separating it from typed
+    /// text. Internal (not private) so regression tests can pin the gate.
+    static func containsHostComposedTemplate(_ text: String) -> Bool {
+        text.contains(AgentAttachedPromptProtocol.preludeHeader)
+            || text.contains(AgentAttachedPromptProtocol.userTextBoundary)
     }
 
     private static func containsReusableWorkflowSignal(_ text: String) -> Bool {
