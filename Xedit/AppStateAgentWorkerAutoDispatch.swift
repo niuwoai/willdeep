@@ -59,6 +59,7 @@ extension AppState {
             delegationPolicy: runtime.currentTurnDelegationPolicy,
             alreadyDispatchedCommands: runtime.currentTurnAutoDispatchedCommands,
             isEnabled: Self.autoDispatchWorkersEnabled,
+            workspaceRootPath: workspaceURL.path,
             existingWorkspacePaths: { relative in
                 FileManager.default.fileExists(
                     atPath: workspaceURL.appendingPathComponent(relative).path

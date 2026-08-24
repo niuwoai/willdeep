@@ -2781,7 +2781,8 @@ extension AppState {
                     let dispatchHint = autoDispatched ?? AgentWorkerDispatchHint.hint(
                         toolName: call.toolName,
                         arguments: argsDict,
-                        exitCode: exitCode
+                        exitCode: exitCode,
+                        failureOutput: errorMessage
                     ) ?? ""
                     appendToolMessage(
                         for: runtime,

@@ -51,7 +51,10 @@ nonisolated enum AgentWorkerDispatchHint {
     static func hint(
         toolName: String,
         arguments: [String: AgentJSONValue],
-        exitCode: Int32?
+        exitCode: Int32?,
+        /// Used only to correct a test-shaped command whose log shows a build
+        /// failure. Absent leaves the command-shape verdict as-is.
+        failureOutput: String = ""
     ) -> String? {
         guard toolName == "run_command" else { return nil }
         // No exit code means the command never produced a verdict: it failed
@@ -60,7 +63,8 @@ nonisolated enum AgentWorkerDispatchHint {
         guard let exitCode, exitCode != 0 else { return nil }
         guard let command = arguments["command"]?.stringValue()?
             .trimmingCharacters(in: .whitespacesAndNewlines), !command.isEmpty else { return nil }
-        guard let kind = classify(command: command) else { return nil }
+        guard let commandKind = classify(command: command) else { return nil }
+        let kind = refinedKind(for: commandKind, failureOutput: failureOutput)
 
         let quoted = command.count <= quotedCommandLimit ? "`\(command)`" : "the command above"
         switch kind {
@@ -108,6 +112,49 @@ nonisolated enum AgentWorkerDispatchHint {
         return nil
     }
 
+    /// Correct the trade using what the log actually shows.
+    ///
+    /// `classify` reads the command's shape, and a test command builds before
+    /// it runs anything — so a compile error surfaced by `swift test` or by a
+    /// repo's own `run_tests` script arrives labelled `test_fixer`, whose
+    /// brief points it at test files it has no business changing. When the log
+    /// shows the build never got far enough to execute a test, the trade is
+    /// `build_fixer`.
+    ///
+    /// Deliberately one-directional and conservative: only a `testFixer`
+    /// verdict is revisited, and only when compiler failure markers are
+    /// present *and* nothing in the log looks like a test that ran. A test
+    /// that genuinely failed always leaves one of those traces, so the
+    /// ambiguous middle stays with `test_fixer`.
+    static func refinedKind(for kind: Kind, failureOutput: String) -> Kind {
+        guard kind == .testFixer else { return kind }
+        let lowered = failureOutput.lowercased()
+        guard compileFailureMarkers.contains(where: { lowered.contains($0) }) else { return kind }
+        guard !testExecutionMarkers.contains(where: { lowered.contains($0) }) else { return kind }
+        return .buildFixer
+    }
+
+    /// Markers specific enough that a *test* failure would not print them.
+    /// A bare "error:" is deliberately absent — test output is full of it.
+    private static let compileFailureMarkers: [String] = [
+        "compilation failed", "compile error", "** build failed **",
+        "command swiftcompile failed", "command compileswift failed",
+        "error: cannot find", "error: value of type", "error: no such module",
+        "does not conform to protocol", "use of unresolved identifier",
+        "clang: error", "linker command failed", "ld: symbol",
+        "error ts", "error[e0", "cannot borrow", "undefined reference to",
+        "syntaxerror:", "indentationerror:",
+    ]
+
+    /// Anything that means a test actually executed. One of these present
+    /// keeps the failure with `test_fixer`.
+    private static let testExecutionMarkers: [String] = [
+        "test run with", "recorded an issue", "✘ test", "test case '",
+        "** test failed **", "--- fail:", "=== failures ===", "== failures ==",
+        "assertionerror", "assertion failed", "expected:", "tests failed",
+        "test suites:", "examples,", "failures:", "● ",
+    ]
+
     /// Substrings that identify a test run across the stacks this app is used
     /// on. Matched against the command's head segment, so a bare `test` inside
     /// a path (`src/testing/build.sh`) does not qualify on its own.
@@ -132,6 +179,11 @@ nonisolated enum AgentWorkerDispatchHint {
 
     private static let buildMarkers: [String] = [
         "swift build", "xcodebuild", "make", "cmake",
+        // A repo's own build wrapper is how most of these projects are
+        // actually compiled; without this a `ruby scripts/build_fast.rb`
+        // failure matched nothing and no trade was ever named. Release
+        // markers are checked first, so `scripts/release.rb` still wins.
+        "scripts/build", "build.sh", "build.rb",
         "npm run build", "yarn build", "pnpm build", "tsc", "vite build",
         "go build", "go vet", "cargo build", "cargo check", "cargo clippy",
         "gradle build", "mvn compile", "dotnet build",

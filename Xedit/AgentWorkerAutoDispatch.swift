@@ -108,6 +108,10 @@ nonisolated enum AgentWorkerAutoDispatch {
         delegationPolicy: AgentDelegationPolicy,
         alreadyDispatchedCommands: Set<String>,
         isEnabled: Bool,
+        /// Absolute paths in the log are rebased onto this before they can
+        /// enter a write set. Nil keeps the old behaviour: absolute paths are
+        /// dropped entirely.
+        workspaceRootPath: String? = nil,
         existingWorkspacePaths: (String) -> Bool
     ) -> Result<Plan, Refusal> {
         guard isEnabled else { return .failure(.disabledBySetting) }
@@ -125,9 +129,13 @@ nonisolated enum AgentWorkerAutoDispatch {
             return .failure(.alreadyDispatchedThisTurn)
         }
 
-        guard let kind = AgentWorkerDispatchHint.classify(command: command) else {
+        guard let commandKind = AgentWorkerDispatchHint.classify(command: command) else {
             return .failure(.notACommandFailure)
         }
+        // The command's shape says "test"; the log may say the build never got
+        // that far. A compile error must not be handed to the trade whose
+        // brief is about test files.
+        let kind = AgentWorkerDispatchHint.refinedKind(for: commandKind, failureOutput: failureOutput)
         switch kind {
         case .testFixer, .buildFixer:
             break
@@ -139,6 +147,7 @@ nonisolated enum AgentWorkerAutoDispatch {
 
         let targets = deriveWriteSet(
             from: failureOutput,
+            workspaceRootPath: workspaceRootPath,
             existingWorkspacePaths: existingWorkspacePaths
         )
         guard !targets.isEmpty else { return .failure(.noDerivableWriteSet) }
@@ -164,12 +173,14 @@ nonisolated enum AgentWorkerAutoDispatch {
     /// should be authorized to write.
     static func deriveWriteSet(
         from failureOutput: String,
+        workspaceRootPath: String? = nil,
         existingWorkspacePaths: (String) -> Bool
     ) -> [String] {
         var ordered: [String] = []
         var seen = Set<String>()
         for candidate in pathCandidates(in: failureOutput) {
-            guard let normalized = AgentSubagentWriteAccess.normalizedTargetPath(candidate) else {
+            guard let relative = workspaceRelativePath(candidate, workspaceRootPath: workspaceRootPath),
+                  let normalized = AgentSubagentWriteAccess.normalizedTargetPath(relative) else {
                 continue
             }
             guard let ext = normalized.split(separator: ".").last.map(String.init)?.lowercased(),
@@ -181,6 +192,36 @@ nonisolated enum AgentWorkerAutoDispatch {
             }
         }
         return ordered.sorted()
+    }
+
+    /// Rebase a logged path onto the workspace, or reject it.
+    ///
+    /// This is why `build_fixer` never received work: Swift, xcodebuild,
+    /// clang and rustc cite **absolute** paths, and
+    /// `AgentSubagentWriteAccess.normalizedTargetPath` refuses those outright
+    /// — correctly, since the approval card shows a relative path and
+    /// resolving one could quietly land outside the workspace. So every
+    /// compiler log derived an empty write set and the dispatch refused
+    /// itself with `noDerivableWriteSet`. The fix is to rebase here, where
+    /// the workspace root is known, and keep the refusal downstream intact:
+    /// an absolute path that is not under this workspace (a toolchain header,
+    /// a SwiftPM checkout in DerivedData) is still dropped, and with no root
+    /// to compare against every absolute path is dropped as before.
+    static func workspaceRelativePath(_ candidate: String, workspaceRootPath: String?) -> String? {
+        guard candidate.hasPrefix("/") else { return candidate }
+        guard let workspaceRootPath, !workspaceRootPath.isEmpty else { return nil }
+        // `/tmp` vs `/private/tmp` and trailing slashes: compare standardized
+        // forms so a workspace under a symlinked root still matches.
+        let roots = [workspaceRootPath, URL(fileURLWithPath: workspaceRootPath).standardized.path]
+        let paths = [candidate, URL(fileURLWithPath: candidate).standardized.path]
+        for root in roots {
+            let prefix = root.hasSuffix("/") ? root : root + "/"
+            for path in paths where path.hasPrefix(prefix) {
+                let relative = String(path.dropFirst(prefix.count))
+                return relative.isEmpty ? nil : relative
+            }
+        }
+        return nil
     }
 
     /// Path-shaped tokens, in the order the log mentions them.

@@ -21,6 +21,7 @@ struct AgentWorkerAutoDispatchTests {
         policy: AgentDelegationPolicy = .automatic,
         dispatched: Set<String> = [],
         enabled: Bool = true,
+        workspaceRootPath: String? = nil,
         exists: @escaping (String) -> Bool = { _ in true }
     ) -> Result<AgentWorkerAutoDispatch.Plan, AgentWorkerAutoDispatch.Refusal> {
         AgentWorkerAutoDispatch.plan(
@@ -31,6 +32,7 @@ struct AgentWorkerAutoDispatchTests {
             delegationPolicy: policy,
             alreadyDispatchedCommands: dispatched,
             isEnabled: enabled,
+            workspaceRootPath: workspaceRootPath,
             existingWorkspacePaths: exists
         )
     }
@@ -150,6 +152,68 @@ struct AgentWorkerAutoDispatchTests {
             existingWorkspacePaths: { !$0.hasPrefix("node_modules/") }
         )
         #expect(derived == ["Xedit/Real.swift"])
+    }
+
+    // MARK: - Absolute paths (why build_fixer never received work)
+
+    @Test("absolute paths inside the workspace are rebased instead of dropped")
+    func testWriteSetRebasesAbsolutePathsOntoTheWorkspace() {
+        // Swift, xcodebuild, clang and rustc all cite absolute paths. Write
+        // access refuses those outright, so before this every compiler log
+        // derived an empty write set and the dispatch refused itself.
+        let derived = AgentWorkerAutoDispatch.deriveWriteSet(
+            from: "/Users/dev/proj/Xedit/AppState.swift:120:15: error: cannot find 'foo' in scope",
+            workspaceRootPath: "/Users/dev/proj",
+            existingWorkspacePaths: { _ in true }
+        )
+
+        #expect(derived == ["Xedit/AppState.swift"])
+    }
+
+    @Test("absolute paths outside the workspace are still refused")
+    func testWriteSetStillRefusesPathsOutsideTheWorkspace() {
+        let output = """
+        /Applications/Xcode.app/Contents/Developer/SDK/Foo.swift:1:1: note: from here
+        /Users/dev/other-repo/Escape.swift:2:2: error: nope
+        /Users/dev/proj/Xedit/Real.swift:9:1: error: the actual defect
+        """
+        let derived = AgentWorkerAutoDispatch.deriveWriteSet(
+            from: output,
+            workspaceRootPath: "/Users/dev/proj",
+            existingWorkspacePaths: { _ in true }
+        )
+
+        #expect(derived == ["Xedit/Real.swift"])
+    }
+
+    @Test("with no workspace root every absolute path is dropped as before")
+    func testWriteSetWithoutARootKeepsTheOldRefusal() {
+        let derived = AgentWorkerAutoDispatch.deriveWriteSet(
+            from: "/Users/dev/proj/Xedit/AppState.swift:1:1: error: boom",
+            workspaceRootPath: nil,
+            existingWorkspacePaths: { _ in true }
+        )
+
+        #expect(derived.isEmpty)
+    }
+
+    @Test("a compiler failure with absolute paths now dispatches build_fixer end to end")
+    func testCompilerFailureDispatchesBuildFixer() {
+        // The whole chain that used to dead-end: a test-shaped command, a log
+        // that shows the build never ran a test, and absolute paths.
+        let result = plan(
+            command: "ruby scripts/run_tests_fast.rb",
+            output: "/Users/dev/proj/Xedit/AppState.swift:120:15: error: cannot find 'foo' in scope\n** BUILD FAILED **",
+            workspaceRootPath: "/Users/dev/proj"
+        )
+
+        guard case .success(let dispatch) = result else {
+            Issue.record("expected a dispatch, got \(result)")
+            return
+        }
+        #expect(dispatch.tradeID == AgentSubagentProfileCatalog.buildFixerID)
+        #expect(dispatch.targetRelativePaths == ["Xedit/AppState.swift"])
+        #expect(dispatch.verifierCommand == "ruby scripts/run_tests_fast.rb")
     }
 
     @Test("a path the workspace does not have is dropped rather than authorized")
