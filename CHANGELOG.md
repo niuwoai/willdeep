@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.287.0-rc9 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.287.0-rc10 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.287.0-rc10 - 2026-08-24
+
+### Tests
+
+- **修复 rc5 登记的本机存量红 `WillDeepTests.testApplyPatchPromptAndRegistrySurface`（提示词源码断言漂移），存量红从 4 条降到 3 条。** 两处 `prompt.contains` 断言还在核对 v30 之前的提示词原文，属「CI 守卫的源码字符串断言没跟上等价重构」，修断言不改提示词：
+  - `"Do NOT hand-craft unified diffs with apply_patch unless edit_file genuinely cannot express the change"`：该句在 e21bfdec（v30 压缩，standard −10.6%）已被改写，断言由 06b86cb6 引入后没跟上。同一约束（优先 edit_file、apply_patch 仅兜底）的现行句子是 `"Hand-written apply_patch hunks frequently fail to match: use it only when edit_file genuinely cannot express the change"`，断言换锚到这句。
+  - `"Never tell the user to look in a \"right-side review panel\""`：现行原文为小写 `never …`，纯大小写漂移。
+  - 两处一并从 `contains` 改为 `range(of:options:.caseInsensitive)`，下次压缩若只动大小写不再烂断言。提示词源码零改动，三档快照契约（prompt snapshot contract）不受影响、无需重录。
+- 定向 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/WillDeepTests`：308 例全绿、零失败；目标用例在 xcodebuild.log 逐行核对为 passed（该 suite 此前唯一的登记红即本条），`** TEST SUCCEEDED **` + guard exit=0 + report.json passed 三者一致。
+
+### Known issues
+
+- 其余 3 条本机存量红维持 rc5/rc6 登记原样，本次未处理：`AgentToolsCoreTests.swift:2372/2402` 两条队列用例与 `AgentMobileGatewayBridgeTests.appStateMessageSendDispatchesIntoAgentRuntime`（宿主真实技能目录经真实派发链泄漏进裸文本断言，均不在 `WillDeepTests` suite 内）。
 
 ## 1.287.0-rc9 - 2026-08-24
 
