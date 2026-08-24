@@ -1,7 +1,31 @@
 # Changelog
 
-> 当前文件保留最新版本（1.287.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.287.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.287.0-rc6 - 2026-08-24
+
+### Fixed
+
+- **技能自动附加不再按打分"自作主张"。** 实际事故：用户在 sso 工作区问「当前没有设计租户管理员的角色吗?」，composer 自动附加了 `hongguo-drama`（红果短剧）技能并显示「已附加技能」，用户完全没选过它。用真实技能目录（66 个）复算 `AgentSkillRouter` 打分坐实根因：命中的不是"角色"，是 **"没有"（+4.51）和"设计"（+3.60）** 两个日常词，合计 8.11 分越过 7.0 自动附加线——
+  - CJK 按 2~4 字 n-gram 切词但**没有停用词表**（英文有 `stopTerms`），"没有""当前"全是索引词；
+  - IDF 稀有度是**目录内相对值**：全目录只有这一个技能描述含"没有"，它就被当成黄金关键词——而这个"没有"恰恰来自描述里那句**防误触发的否定守卫**「…且没有短剧语境，不要优先触发」，防误触发的句子本身成了误触发元凶；
+  - 误附加的代价是整段 SKILL.md 正文进 prompt（上下文污染、答疑可能带上短剧腔）+ 用户困惑，而它省下的只是模型一次 `read_skill` 调用，性价比倒挂。
+- **修法：通用目录的确定性附加只认两个强用户意图信号**——`$skill-name` 显式调用、字面技能名命中（用户真打出技能名）。按分数的第三条分支整体删除（`automaticScoreThreshold` / `automaticMargin` / `rareSingleTermMatch` 一并退役），所有打分命中一律降级为 `read_skill` 候选元数据提示，由模型判断是否真的相关再加载正文——候选提示链路（`candidateSkills` → composer 的 "Skill routing candidates" 段）本就存在，本次只是把误伤面收进它。`figma-swiftui` / `design-to-code` 的视觉路由是独立多信号门（figma 链接/图片 + 意图 + 工程形态），不受影响。
+
+### Tests
+
+- `chineseReleaseRequestMatchesEnglishSkillMetadata` 改名 `strongMetadataMatchStaysACandidateWithoutExplicitIntent`：原正例「帮我发布这个 macOS App，完成签名和公证」现在断言**不**自动附加、`release-macos-app` 落在候选第一位。
+- 新增回归 `everydayCJKBigramOverlapDoesNotAutoAttach`：复刻事故原文 +（含守卫句的）短剧技能描述，断言 `autoAttach == nil`。
+- 新增 `literalChineseSkillNameMentionStillAutoAttaches`：用户真打出「红果短剧」四个字时仍确定性附加，钉住保留的字面名通道。
+- 定向 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/AgentSkillAutoActivationTests -only-testing:XeditTests/AgentSkillDirectoryTests`：30/30 绿。
+- 全量 `ruby scripts/run_tests_fast.rb`：2870 例，2865 绿 / 4 红 / 1 skip。
+
+### Known issues
+
+- 全量的 4 条红全部命中 rc5「Known issues」登记的本机存量红，与本次改动无关（技能路由相关 suite 零失败）：
+  - `AgentToolIntegrationTests`「apply_patch is advertised in extended prompt and tool registry」：断言的提示词原文早已在 v30 压缩时改写，源码字符串断言没跟上（rc5 已记录）。
+  - `AgentToolsCoreTests.swift:2372,2402` 两条队列用例 + `AgentMobileGatewayBridgeTests.appStateMessageSendDispatchesIntoAgentRuntime()`：`sendAgentMessage()` 前置的附件序言携带**本机真实安装技能的路由候选**（`male-web-novel`、`muchtoken-deploy`、`artifact-template-*` 等），裸文本断言必红——宿主环境泄漏进单测，本机才复现（rc5 已记录）。顺带说明：这三条的失败输出恰好证明候选降级链路（"Skill routing candidates" 段）在新行为下工作正常。
 
 ## 1.287.0-rc5 - 2026-08-23
 
