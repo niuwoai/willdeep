@@ -168,7 +168,9 @@ struct AgentDesignToCodeTests {
         #expect(AgentDesignToCode.preferredSkillIdentifier(workspaceRootPath: native.path) == "figma-swiftui")
         #expect(AgentDesignToCode.preferredSkillIdentifier(workspaceRootPath: nil) == "design-to-code")
         #expect(AgentDesignToCode.webExperts == [.webCoding, .browserOps])
-        #expect(AgentSidePanelKind.embeddedBrowser.requiredExpert == .browserOps)
+        // Browser Ops gates the browser tools, not the panel: the user can
+        // open a page without activating an expert.
+        #expect(AgentSidePanelKind.embeddedBrowser.requiredExpert == nil)
     }
 
     private func call(

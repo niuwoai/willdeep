@@ -365,7 +365,9 @@ struct WillDeepTests {
         #expect(browserTools.contains { $0.name == "chrome_capture_tab" })
         #expect(!AgentSidePanelKind.shortDrama.isAvailable(activeExperts: []))
         #expect(AgentSidePanelKind.shortDrama.isAvailable(activeExperts: [.shortDrama]))
-        #expect(!AgentSidePanelKind.embeddedBrowser.isAvailable(activeExperts: []))
+        // The panel is open to everyone — browsing a LAN address is not an
+        // agent capability. Browser Ops still gates the tools asserted above.
+        #expect(AgentSidePanelKind.embeddedBrowser.isAvailable(activeExperts: []))
         #expect(AgentSidePanelKind.embeddedBrowser.isAvailable(activeExperts: [.browserOps]))
 
         let appState = AppState()

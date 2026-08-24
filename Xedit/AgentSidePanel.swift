@@ -73,11 +73,16 @@ nonisolated enum AgentSidePanelKind: String, CaseIterable, Identifiable, Codable
         switch self {
         case .shortDrama:
             return .shortDrama
-        case .embeddedBrowser:
-            return .browserOps
         case .devServer:
             return .webCoding
         default:
+            // The embedded browser is deliberately NOT gated. Opening a LAN
+            // address that came up in the chat is plain browsing, and making
+            // the user activate Browser Ops first only hid the panel behind
+            // a switch they had no reason to look for. The expert still
+            // gates the browser *tools* (screenshot, click, fill, Chrome
+            // tabs) — that is agent capability, which is a different thing
+            // from the user opening a page.
             return nil
         }
     }
