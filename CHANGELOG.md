@@ -1,7 +1,36 @@
 # Changelog
 
-> 当前文件保留最新版本（1.289.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.289.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.289.0-rc2 - 2026-08-25
+
+### Fixed
+
+- **`build_fixer` 从来收不到活的真正原因：编译器报的是绝对路径，而写集合只认相对路径。** 上一版（rc1）把 `build_fixer` 记进 Known issues，说它「只能靠命令失败自动派发，三个条件叠三层」。真查下去，卡死它的是其中一条里的一行代码。
+
+  [AgentSubagentWriteAccess.normalizedTargetPath](Xedit/AgentSubagentWriteAccess.swift) 一律拒绝绝对路径，这个设计是对的——审批卡给用户看的是相对路径，就地解析可能悄悄落到工作区外。问题出在 `deriveWriteSet` 直接把编译日志里的 token 喂给它，而 **Swift、xcodebuild、clang、rustc 报错清一色是绝对路径**：
+
+  ```
+  /Users/rocky/Sites/Xedit/Xedit/AppState.swift:120:15: error: cannot find 'foo' in scope
+  ```
+
+  以 `/` 开头 → 归一化返回 nil → 写集合空 → `noDerivableWriteSet` → 派发拒绝自己。**每一次编译失败都走到这里为止**，`build_fixer` 的 0 次调用在这一行就注定了。同一条路上的 `test_fixer` 在 Swift 项目里也一起遭殃，只是 jest / pytest / go test 报相对路径，让它在别的栈上看着还能用。
+
+  这个洞能潜伏这么久，是因为[现有测试全部用相对路径喂日志](XeditTests/AgentWorkerAutoDispatchTests.swift)（`Xedit/Foo.swift:12:5: error: boom`），日志形状和现实对不上，测试一直是绿的。
+
+  修法是在知道工作区根的地方重新落地：工作区内的绝对路径剥成相对路径，工作区外的（`/Applications/Xcode.app/...`、隔壁仓库、DerivedData 里的 SwiftPM checkout）继续丢弃，没有工作区根时维持原样全丢。安全边界一点没松，只是不再把自己人也挡在门外。
+
+- **测试命令下的编译失败不再被派给 `test_fixer`。** 测试命令会先编译，所以 `swift test` 或本仓库的 `ruby scripts/run_tests_fast.rb`（命中 `run_tests`）暴露出来的 Swift 编译错误，一路带着 `test_fixer` 的标签往下走——而那个 trade 的 brief 是让它去改测试文件。
+
+  新增 `AgentWorkerDispatchHint.refinedKind`：命令形状定完，再看日志里到底发生了什么。日志有编译器失败特征、且没有任何测试跑过的痕迹，才改判 `build_fixer`。刻意保守且单向——只复核 `testFixer` 这一种判定，真跑过的测试总会留下痕迹（`✘ Test`、`--- FAIL:`、`AssertionError` 之类），含糊的中间地带一律留给 `test_fixer`。
+
+- **仓库自带的构建脚本现在能被识别。** `buildMarkers` 里没有任何一条能匹配 `ruby scripts/build_fast.rb`，这类失败连 trade 都点不出来。补上 `scripts/build` / `build.sh` / `build.rb`；发布检测仍然优先，`scripts/release.rb` 照旧归 `ops_runner`。
+
+### Tests
+
+- [AgentWorkerAutoDispatchTests](XeditTests/AgentWorkerAutoDispatchTests.swift) 新增 4 例：工作区内绝对路径被剥成相对路径、工作区外的（Xcode SDK、隔壁仓库）仍然拒收、没有工作区根时维持旧的全丢行为、以及一条端到端——测试形状的命令 + 编译失败日志 + 绝对路径，最终派出 `build_fixer` 且写集合正确。
+- [AgentWorkerDispatchHintTests](XeditTests/AgentWorkerDispatchHintTests.swift) 新增 4 例：编译失败改判 `build_fixer`、真跑过的测试保持 `test_fixer`（三种框架的输出各测一遍）、改判单向不影响 `build_fixer` / `ops_runner` 且空日志不改判、仓库构建脚本的识别与发布优先级。
 
 ## 1.289.0-rc1 - 2026-08-24
 
