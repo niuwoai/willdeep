@@ -24,10 +24,13 @@ nonisolated enum AgentSkillAutoActivation {
     static let figmaSwiftUIIdentifier = "figma-swiftui"
     static let designToCodeIdentifier = "design-to-code"
 
-    /// Host-side routing keeps obvious skills deterministic while leaving
-    /// ambiguous matches as a tiny metadata hint for `read_skill`. At most one
-    /// generic skill body is auto-attached, which bounds prompt growth even
-    /// when hundreds of installed skills are indexed locally.
+    /// Host-side routing stays deterministic only where user intent is
+    /// unambiguous: explicit `$skill-name` invocation or a literal skill-name
+    /// mention. Every score-based metadata match is demoted to a tiny
+    /// `read_skill` hint so the model judges relevance before any body is
+    /// loaded. At most one generic skill body is auto-attached, which bounds
+    /// prompt growth even when hundreds of installed skills are indexed
+    /// locally.
     static func routingDecision(
         userText: String,
         workspaceRootPath: String?,
@@ -230,9 +233,10 @@ nonisolated enum AgentSkillAutoActivation {
 }
 
 /// A deterministic, cached-metadata router for the general skill catalog.
-/// It never reads SKILL.md bodies: exact/high-confidence matches may attach
-/// one body through the normal composer path, while weaker matches only give
-/// the model a short `read_skill` candidate list.
+/// It never reads SKILL.md bodies: explicit `$name` invocations and literal
+/// skill-name mentions may attach one body through the normal composer path,
+/// while every score-based match only gives the model a short `read_skill`
+/// candidate list to judge.
 nonisolated enum AgentSkillRouter {
     struct Route: Equatable, Sendable {
         let autoAttach: AgentSkillEntry?
@@ -248,8 +252,6 @@ nonisolated enum AgentSkillRouter {
     }
 
     static let maximumCandidateCount = 3
-    static let automaticScoreThreshold = 7.0
-    static let automaticMargin = 1.5
     static let candidateScoreThreshold = 1.0
 
     static func route(
@@ -312,14 +314,16 @@ nonisolated enum AgentSkillRouter {
         guard let first = scored.first else {
             return Route(autoAttach: nil, candidates: [])
         }
-        let secondScore = scored.dropFirst().first?.score ?? 0
-        let rareSingleTermMatch = first.matchedTerms.count == 1
-            && first.matchedTerms.first.map { documentFrequency[$0] == 1 && $0.count >= 6 } == true
-        let shouldAttach = first.hasExplicitInvocation
-            || first.hasLiteralNameMatch
-            || (first.score >= automaticScoreThreshold
-                && first.score - secondScore >= automaticMargin
-                && (first.matchedTerms.count >= 2 || rareSingleTermMatch))
+        // Score-based auto-attach is intentionally gone (1.287.0-rc6). CJK
+        // bigram indexing has no stop list, and IDF rarity is catalog-relative,
+        // so everyday words unique to one description look like golden
+        // keywords: "没有" + "设计" in a drama skill's description once
+        // outscored the whole catalog on a tenant-permission question and
+        // attached that skill's full body. Deterministic attach now requires
+        // explicit user intent — `$skill-name` or the skill's literal name —
+        // and every scored match stays a `read_skill` candidate the model can
+        // judge for one cheap tool call.
+        let shouldAttach = first.hasExplicitInvocation || first.hasLiteralNameMatch
         let autoAttach = shouldAttach ? first.skill : nil
         let candidates = scored
             .filter { $0.skill.identifier != autoAttach?.identifier }
