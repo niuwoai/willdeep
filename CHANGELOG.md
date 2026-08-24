@@ -1,7 +1,56 @@
 # Changelog
 
-> 当前文件保留最新版本（1.288.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.289.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.289.0-rc1 - 2026-08-24
+
+### Added
+
+- **Dock 徽标上的数字终于能点进去：双击 Dock 图标直达最新一条待确认会话，右键菜单列出清单，侧边栏底部常驻最多 3 条。** 用户原话：「当有待用户确认的会话（或是说是需要用户来检查的）或是 Dock 图标上有数字徽标的，我希望可以双击数字，直接进最新一条待用户确认的会话，另外在截图的位置里最上方，我希望列出这种待用户查看或确认的最新 3 条」。
+
+  在此之前徽标只是个计数。它告诉你有 3 个会话在等你，但不说是哪三个，从这个数字也走不到会话本身——只能自己切回窗口，沿侧边栏往下翻找那个绿色的「等待批准」小标。
+
+  三处新出口：
+  - **侧边栏底部常驻条**（[AgentSidebarPendingApprovalStrip.swift](Xedit/AgentSidebarPendingApprovalStrip.swift)）：坐在更新提示条上方的固定区，最多列 3 条，点一条跳一条。header 右侧显示的是**总数**而非显示条数，第 4 条以后不会被悄悄瞒掉。占位标题（「新对话」）的会话回落到「等待批准」，避免三行长得一模一样。
+  - **Dock 图标双击**（[AgentDockAttention.swift](Xedit/AgentDockAttention.swift)）：macOS 不给徽标本身任何点击事件，系统只有「点了 Dock 图标」这一个信号，所以「双击数字」落成双击图标。第一次点击保持原样（激活、恢复窗口），0.6 秒内的第二次点击才跳转；三连击不会被读成两次跳转。
+  - **Dock 图标右键菜单**：直接列出最多 5 条，标题过长按 44 字截断（Dock 菜单不能滚动，长标题会把菜单拉过整屏）。
+
+  三处与 Dock 徽标计数共用同一个 `needsUserApproval`（工具待批准/待确认/等回答、补丁待批、计划待批），徽标显示 3 而列表只列 2 条这种自相矛盾在结构上就不会发生。[AgentDockBadgeCoordinator](Xedit/AgentSessionApprovalBadge.swift) 本来就订阅着所有 runtime，这轮让它在同一次遍历里顺带产出清单，没有新增订阅或轮询；发布前比对旧值，免得每次 runtime 事件都重绘侧边栏。
+
+  **顺带修好一处旧的不精确**：`AgentNotificationResponder.reveal` 原先只按 runtime 查 AppState，查不到就退化成「扫一个待确认的会话」。从磁盘恢复、还没建 runtime 的会话（待批计划就是这种）会跳到错的地方。补上 [EditorAppStateRegistry.appState(containingSession:)](Xedit/EditorAppStateRegistry.swift) 这一层之后，系统通知点击的落点也跟着变准了。
+
+### Changed
+
+- **内嵌浏览器不再需要先激活 Browser Ops 专家。** 用户报「现在侧边栏的组件中，只有『网页组件』，而且不能当内嵌浏览器用吗」。内嵌浏览器一直都在（地址栏、前进后退、刷新、截图、console 与网络采集齐全），只是 `AgentSidePanelKind.requiredExpert` 把面板挡住了，而「网页组件」没有门槛，于是看起来就只剩它一个。
+
+  这道门放错了地方：打开聊天里出现的局域网地址属于用户自己看网页，跟 agent 能力是两码事。Browser Ops 继续门控浏览器**工具**（截图、点击、填表、Chrome 标签页），面板本身对所有人开放。
+
+- **只读预执行默认打开，小模型 trade 终于拿得到活。** 用户报「我们设计了不少种 profile，想着用小模型来执行相对独立的任务，实际上却没怎么被执行」，附使用统计截图：`build_fixer` / `editor` / `git_detective` / `judge` 全是 0 次调用。
+
+  查下来能把活派给小模型的三条路，塌了两条：
+  - **只读预执行**是唯一能不问主模型、直接跑 worker 的只读通道，而 `auto_dispatch_read_only` 默认关着（[AppStateAgentReadOnlyPreflight.swift](Xedit/AppStateAgentReadOnlyPreflight.swift) 的 `?? false`）。`scout` / `reader` / `git_detective` / `log_inspector` 全指着它，git_detective 的 0 次在结构上就是必然。
+  - **模型自愿委派**这条路走不通是代码注释自己承认的：[AgentRequestRouter.swift](Xedit/AgentRequestRouter.swift) 开头写着 "Advice loses to momentum"，[AgentWorkerAutoDispatch.swift](Xedit/AgentWorkerAutoDispatch.swift) 开头写得更直白——提示发了，父模型读了，然后照样自己动手，因为文件都已经打开，编个任务包反而像绕远路。
+
+  原本的设计是让 Deep Share 的数字来决定要不要打开这个开关。数字给出结论了，全是 0。收不到活的便宜档位等于没有，所以缺省改成开；`config.toml` 里显式写 `auto_dispatch_read_only = false` 仍然关得掉。代价是命中的请求首字延迟变长，这个交换从设计之初就写在注释里。
+
+- **分类器补上 `editor` / `tester` / `reviewer` 三个从没被提名过的 trade。**
+  - `editor`（只改一个已声明文件）过去**连分支都没有**，所有带修改意图的请求一律落到 `implementer`。现在请求里恰好点名一个源文件时路由到它。
+  - `tester`（跑测试报证据、不改代码）新增触发词，但**刻意不预跑**：一个 suite 要跑几分钟还动构建状态，拿它当 preflight 是反着来的。
+  - `reviewer`（审查改动范围、版本一致性、git 卫生）工具集是纯只读的 `read_file` / `git_status`，适合预跑。跟 `reader` 按「审查的是改动还是代码」分工，更具体的先匹配。
+
+  文件名识别刻意保守：只认用户真打出来的路径，扩展名必须落在源码集合里，构建日志里的 `.o` / `.json` / `.lock` 永远不会被当成编辑目标。
+
+### Known issues
+
+- `judge` 本轮未动。它全仓只有目录定义、显示名、图标三处，没有任何机制会派它，而用户请求几乎不会长成「给我一个裁决」的形状，加分类分支并不对症。要让它有用得让机制内部去调（审批裁决、路由二选一），属于另一件事。
+- `build_fixer` 仍然难触发。它只能靠命令失败自动派发，要求同时满足 `run_command` 非零退出、失败输出能解析出源码路径、每回合每命令一次。只读预执行救不了它，放宽那三个条件是单独一轮的工作。
+
+### Tests
+
+- 新增 [AgentPendingApprovalQuickJumpTests](XeditTests/AgentPendingApprovalQuickJumpTests.swift) 10 例：只收真正被用户挡住的会话、无 runtime 的待批计划照样收、跳过归档、条目数与 Dock 徽标计数一致（防两个面各说各话）、最近优先且按上限截断、时间戳打平时排序稳定（Swift 的 sort 不稳定，抖动的列表看着像渲染 bug）、上限为 0 时返回空、双击判定的窗口内外与时钟回拨、Dock 菜单标题截断与空标题回落。
+- [AgentRequestRouterTests](XeditTests/AgentRequestRouterTests.swift) 补 4 例：单文件路由到 `editor`、多文件与无文件名仍走 `implementer`、跑测试提名 `tester` 但不预跑、审查改动走 `reviewer` 而泛读仍归 `reader`、非源码路径不算编辑目标。
+- [AgentReadOnlyPreflightTests](XeditTests/AgentReadOnlyPreflightTests.swift) 与 [AgentDesignToCodeTests](XeditTests/AgentDesignToCodeTests.swift)、[WillDeepTests](XeditTests/XeditTests.swift) 的三条断言跟随行为改动更新（预执行默认开、内嵌浏览器面板不再需要专家）。
 
 ## 1.288.0-rc5 - 2026-08-24
 
