@@ -1,7 +1,33 @@
 # Changelog
 
-> 当前文件保留最新版本（1.289.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.289.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.289.0-rc4 - 2026-08-25
+
+### Added
+
+- **`judge` 有活干了：report-only 的 worker 交回报告后，先过一道语义检查。** rc1 把 `judge` 记进 Known issues 时的说法是「全仓只有目录定义、显示名、图标三处，没有任何机制会派它」。这轮给它接上第一根线。
+
+  接哪一格是想过的。系统里需要做判断的位置——命令能否免审批（`security_guard`）、省心托管路由到哪个模型（`someim-judge`）、请求该派给哪个 trade（`classify()` 的关键词表，确定性代码，不花钱不延迟）——都已经有人在做，动它们是推翻现役机制。只有一格是空的：**worker 说自己做完了，凭什么信**。
+
+  [AgentSubagentCitationAudit](Xedit/AgentSubagentCitationAudit.swift) 的文件头自己划了这条线：它检查报告引用的路径、行号、commit 是否真实存在，然后明说「a worker can cite ten real files and still miss the question entirely」。确定性检查管得了"位置存不存在"，管不了"这份报告答没答所问、结论有没有被它自己展示的证据撑住"。
+
+  [AgentSubagentReportVerdict](Xedit/AgentSubagentReportVerdict.swift) 补的就是这半边：把任务、报告（已内嵌 citation-check 结果）交给 `judge`，拿回 `supported` / `unsupported` / `off_topic` 加一句具体理由，作为 `<report-check>` 跟在报告后面给主模型。
+
+  **刻意收窄的地方**：
+  - 只对 report-only 的 run 做。有 verifier 的跑完有退出码，那是比任何模型都强的裁判。
+  - **绝不裁判 `judge` 自己**——它自己的 run 也是 report-only，不挡就是无限递归。
+  - 纯咨询性质。裁决只是附在报告后面，不拦截、不重跑、不改变任何结论。判错了代价是一行上下文，而不是丢掉一个答案。
+  - 报告短于 120 字符不叫模型；`unsupported` 却给不出理由的裁决直接丢弃——没有依据的指控比沉默更糟。
+  - 整条链路失败静默：worker 的答案才是交付物，为一次咨询性检查把它弄丢是更坏的结果。
+  - 可关：`willdeep.agent.judgeReportVerdicts` 设 false 即停。
+
+  提示词里专门写了一条：**如实报告"我做不到"以及原因的报告算 `supported`**。不写这条，每一次诚实的受阻汇报都会被判成没答题。
+
+### Tests
+
+- 新增 [AgentSubagentReportVerdictTests](XeditTests/AgentSubagentReportVerdictTests.swift) 7 例：只裁判 report-only（有 verifier 的两种结果都跳过）、**绝不裁判 judge 自己**（无限递归就藏在这个条件后面）、关掉/报告过短/空白都不叫模型、通过的裁决只占一行、不通过的裁决带上理由且声明「没有打开任何文件」、无理由的指控与畸形 JSON 一律丢弃、提示词两头都截断且写明诚实受阻算通过。
 
 ## 1.289.0-rc3 - 2026-08-25
 
