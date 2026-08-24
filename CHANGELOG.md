@@ -17,6 +17,20 @@
 - 全量 `ruby scripts/run_tests_fast.rb`（含 apply_patch 断言修复的合并形态）：**2884 例 / 0 失败 / 1 skip（惯常那条），rc5 以来本机首次全绿**。4 条原红用例在 xcresult 里逐条核对为 Passed；退出码、日志汇总、xcresult 三方一致（`testApplyPatchPromptAndRegistrySurface` 属 `WillDeepTests` 聚合 suite，函数级 `-only-testing` 会假绿选不中，故只认全量证据）。
 - **rc5 登记、rc6 细化、rc7/rc8 维持、rc10 减到 3 条的「本机存量红」登记自本条起收口作废**：后续全量若再见红即为新问题，不得再引用该登记归档。
 
+## 1.287.0-rc10 - 2026-08-24
+
+### Tests
+
+- **修复 rc5 登记的本机存量红 `WillDeepTests.testApplyPatchPromptAndRegistrySurface`（提示词源码断言漂移），存量红从 4 条降到 3 条。** 两处 `prompt.contains` 断言还在核对 v30 之前的提示词原文，属「CI 守卫的源码字符串断言没跟上等价重构」，修断言不改提示词：
+  - `"Do NOT hand-craft unified diffs with apply_patch unless edit_file genuinely cannot express the change"`：该句在 e21bfdec（v30 压缩，standard −10.6%）已被改写，断言由 06b86cb6 引入后没跟上。同一约束（优先 edit_file、apply_patch 仅兜底）的现行句子是 `"Hand-written apply_patch hunks frequently fail to match: use it only when edit_file genuinely cannot express the change"`，断言换锚到这句。
+  - `"Never tell the user to look in a \"right-side review panel\""`：现行原文为小写 `never …`，纯大小写漂移。
+  - 两处一并从 `contains` 改为 `range(of:options:.caseInsensitive)`，下次压缩若只动大小写不再烂断言。提示词源码零改动，三档快照契约（prompt snapshot contract）不受影响、无需重录。
+- 定向 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/WillDeepTests`：308 例全绿、零失败；目标用例在 xcodebuild.log 逐行核对为 passed（该 suite 此前唯一的登记红即本条），`** TEST SUCCEEDED **` + guard exit=0 + report.json passed 三者一致。
+
+### Known issues
+
+- 其余 3 条本机存量红维持 rc5/rc6 登记原样，本次未处理：`AgentToolsCoreTests.swift:2372/2402` 两条队列用例与 `AgentMobileGatewayBridgeTests.appStateMessageSendDispatchesIntoAgentRuntime`（宿主真实技能目录经真实派发链泄漏进裸文本断言，均不在 `WillDeepTests` suite 内）。（已在 1.287.0-rc11 收口。）
+
 ## 1.287.0-rc9 - 2026-08-24
 
 > 与 1.287.0-rc8（自动捕获净化漏斗）并行开发、合并时升号：本条改 usage 口径侧，与 rc8 的技能捕获侧无代码交集。
