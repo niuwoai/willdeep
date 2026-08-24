@@ -42,9 +42,11 @@ struct AgentChatHistoryRendererTests {
     func agentTypographyUsesReadableDefaultsAndClampsLineHeight() {
         #expect(AgentSettingsStore.chatBaseFontSizeDefault == 15)
         #expect(AgentSettingsStore.chatFontIDDefault == "system")
-        #expect(AgentSettingsStore.chatLineHeightMultipleDefault == 1.5)
-        #expect(AgentChatTypography.lineSpacing(fontSize: 15, lineHeightMultiple: 1.5) == 7.5)
-        #expect(AgentChatTypography.lineHeight(fontSize: 15, lineHeightMultiple: 1.5) == 22.5)
+        #expect(AgentSettingsStore.chatLineHeightMultipleDefault == 1.4)
+        // 1.4 has no exact binary representation, so these are the one place
+        // in this file that compares with a tolerance rather than `==`.
+        #expect(abs(AgentChatTypography.lineSpacing(fontSize: 15, lineHeightMultiple: 1.4) - 6) < 0.0001)
+        #expect(abs(AgentChatTypography.lineHeight(fontSize: 15, lineHeightMultiple: 1.4) - 21) < 0.0001)
         #expect(AgentSettingsStore.clampChatLineHeightMultiple(0.5) == 1.2)
         #expect(AgentSettingsStore.clampChatLineHeightMultiple(3) == 2)
         #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: nil) == 15)

@@ -75,7 +75,7 @@ enum AgentSettingsStore {
     static let chatFontIDDefault = "system"
     static let chatLineHeightMultipleMin: CGFloat = 1.2
     static let chatLineHeightMultipleMax: CGFloat = 2.0
-    static let chatLineHeightMultipleDefault: CGFloat = 1.5
+    static let chatLineHeightMultipleDefault: CGFloat = 1.4
     /// JSON-encoded `AgentProviderLibrary` minus the API keys, which
     /// live in Keychain under the entry's UUID.
     private static let providerLibraryKey = "com.willdeep.agentSettings.providerLibrary.v1"
