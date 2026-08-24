@@ -1,9 +1,11 @@
 # Changelog
 
-> 当前文件保留最新版本（1.287.0-rc8 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.287.0-rc9 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.287.0-rc8 - 2026-08-24
+## 1.287.0-rc9 - 2026-08-24
+
+> 与 1.287.0-rc8（自动捕获净化漏斗）并行开发、合并时升号：本条改 usage 口径侧，与 rc8 的技能捕获侧无代码交集。
 
 ### Fixed
 
@@ -15,6 +17,30 @@
 ### Tests
 
 - 新增 `AgentContextUsageSnapshotTests`（圆环/按钮口径此前零覆盖）：裸口径不扣 baseline、圆环百分比与 `AgentContextRunwayPolicy.Snapshot.usedPercent` 同数、clamp 与零窗口、tooltip 细分自洽（baseline 超过 used 时夹紧）、Compress 门槛同口径、后台 runtime 用自己 16k 窗口触发自动压缩（分母错借前台 1M 窗口时该用例红）。
+## 1.287.0-rc8 - 2026-08-24
+
+> 与 1.287.0-rc7（附件前导反拼接）并行开发、合并时升号：两个修复都落在自动技能捕获链上但互相独立——rc7 管"什么文本允许触发捕获"，本条管"允许捕获后写出去的内容必须净化和限长"。
+
+### Fixed
+
+- **自动技能捕获绕过了净化与长度上限。** `AgentSelfLearning.automaticSkillCandidate` 生成的 name/description 直接调用 `AgentSkillFileManager.createUserSkill` 落盘，绕过了 `create_user_skill` 工具路径的 `AgentMemorySanitizer` 密钥净化与 80/240/12000 字符 `limitedRequiredString` 上限；`AgentMemorySanitizer.sanitize` 只盖住了自动生成的 body。后果：用户原话里的密钥（`token:...`、`Bearer ...`、`sk-...` 等）会原样写进 SKILL.md 的 name/description、乃至目录名 slug；超长 tool summary 能把 body 撑到无上限。
+- **修法：三条写技能的路径收敛到同一个漏斗。** 新增 `AgentSelfLearning.sanitizedSkillDraft(name:description:body:)`，对 name/description/body **全覆盖**做密钥净化 + 80/240/12000 截断，且刻意**先净化后截断**——反过来的话，骑在截断边界上的密钥会被切成正则认不出的碎片存活。`create_user_skill`、`create_user_skills`、自动捕获三条路径统一走它；工具路径顺带补齐 name 的净化（原先只净化 description/body）。自动路径在拼装任何字段之前先对 userText/assistantText 整体净化，堵住 `oneLine` 截断把密钥切半的缝；`automaticSkillBody` 里的孤立 sanitize 移除，净化入口只此一个。
+- **`AgentSkillFileManager.skillSlug` 加长度上限。** 新增 `maxSkillSlugLength = 64`：slug 截断后重新去尾部 `-`，目录名保持可读并稳在文件系统 255 字节文件名限制之内（多字节文种也安全）；64 字符内的既有 slug 不受影响。
+
+### Tests
+
+- 新增 4 条回归（`AgentSelfLearningTests`）：
+  - `sanitizedSkillDraftRedactsSecretsAndCapsEveryField`：漏斗三字段净化 + 截断，含"先净化后截断"顺序陷阱断言（若有人换成先截断，`token:abc...` 碎片存活即红）。
+  - `automaticSkillCaptureSharesToolPathSanitizationAndCaps`：自动捕获端到端——draft 与落盘 SKILL.md 均无裸密钥、三字段与 slug 全部落在工具路径上限内。
+  - `createUserSkillToolSanitizesSkillNameToo`：工具路径 name 也被净化（frontmatter 与 slug 均为 `[REDACTED_SECRET]` 形态）。
+  - `skillSlugCapsLengthAndTrimsTruncationDash`：slug 上限、截断落在分隔符上不留尾部 `-`、短名字 slug 不变。
+- 定向 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/AgentSelfLearningTests`：合并 rc7 后整 suite 51 例（43 原有 + rc7 的 4 + 本条的 4）全绿。
+- 全量 `ruby scripts/run_tests_fast.rb`（rc7 合并后复跑）：2871 例，4 条唯一红（5 issues）与本次改动零交集，全部命中 rc5/rc6「Known issues」登记的本机存量红，失败原文核对过与登记根因一致：`WillDeepTests.testApplyPatchPromptAndRegistrySurface`（提示词源码断言漂移）、`AgentToolsCoreTests.swift:2372/2402` 两条队列用例与 `AgentMobileGatewayBridgeTests.appStateMessageSendDispatchesIntoAgentRuntime`（宿主真实技能的 "Skill routing candidates" 段泄漏进裸文本断言）。`AgentSelfLearningTests` 零失败。
+
+### Known issues
+
+- 上述 4 条本机存量红维持 rc5/rc6 登记原样，本次未处理。
+
 ## 1.287.0-rc7 - 2026-08-24
 
 ### Fixed

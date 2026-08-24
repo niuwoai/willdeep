@@ -215,6 +215,12 @@ nonisolated enum AgentSkillFileManager {
         AgentSkillDirectory.invalidateCache()
     }
 
+    /// Hard cap for generated skill-directory slugs. Skill names are capped
+    /// at 80 characters upstream, but `skillSlug` is also fed by legacy and
+    /// automatic callers — the cap keeps directory names readable and safely
+    /// below the filesystem's 255-byte filename limit for multi-byte scripts.
+    static let maxSkillSlugLength = 64
+
     static func skillSlug(from name: String) -> String {
         let lowercased = name.lowercased()
         var slug = ""
@@ -228,7 +234,12 @@ nonisolated enum AgentSkillFileManager {
                 previousWasDash = true
             }
         }
-        return slug.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        let trimmed = slug.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        guard trimmed.count > maxSkillSlugLength else { return trimmed }
+        // Truncation may land on a separator; trim again so a slug never
+        // ends with a dangling dash.
+        return String(trimmed.prefix(maxSkillSlugLength))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
     }
 
     private static func isSkillDirectory(_ directory: URL, inside allowedRoots: [URL]) -> Bool {

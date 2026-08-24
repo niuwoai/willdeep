@@ -239,7 +239,9 @@ struct AgentSelfLearningAudit: Equatable {
 
 enum AgentSelfLearning {
     private static let maxMemoryCharacters = 1_200
-    private static let maxSkillBodyCharacters = 12_000
+    static let maxSkillNameCharacters = 80
+    static let maxSkillDescriptionCharacters = 240
+    static let maxSkillBodyCharacters = 12_000
     static let maxSkillBatchCount = 10
     private static let maxSkillBatchJSONCharacters = 128_000
     private static let maxMCPNoteCharacters = 1_200
@@ -340,19 +342,47 @@ enum AgentSelfLearning {
         )
     }
 
+    /// Shared sanitation funnel for every path that writes a user skill —
+    /// the `create_user_skill` / `create_user_skills` tool calls and the
+    /// automatic turn-end capture alike. Applies secret redaction plus the
+    /// hard character caps to name / description / body. Order matters:
+    /// sanitize BEFORE clamping, so a secret straddling the cut can never
+    /// survive as a truncated, pattern-evading fragment.
+    static func sanitizedSkillDraft(
+        name: String,
+        description: String,
+        body: String
+    ) -> AgentLearningSkillDraft {
+        func normalize(_ text: String, maxCharacters: Int) -> String {
+            let sanitized = AgentMemorySanitizer.sanitize(text).text
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard sanitized.count > maxCharacters else { return sanitized }
+            return String(sanitized.prefix(maxCharacters))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return AgentLearningSkillDraft(
+            name: normalize(name, maxCharacters: maxSkillNameCharacters),
+            description: normalize(description, maxCharacters: maxSkillDescriptionCharacters),
+            body: normalize(body, maxCharacters: maxSkillBodyCharacters)
+        )
+    }
+
     static func createUserSkill(
         arguments: [String: AgentJSONValue],
         root: URL = AgentSkillFileManager.userSkillsRoot
     ) throws -> AgentToolResult {
-        let name = try limitedRequiredString("name", in: arguments, maxCharacters: 80)
-        let description = try limitedRequiredString("description", in: arguments, maxCharacters: 240)
+        let name = try limitedRequiredString("name", in: arguments, maxCharacters: maxSkillNameCharacters)
+        let description = try limitedRequiredString(
+            "description",
+            in: arguments,
+            maxCharacters: maxSkillDescriptionCharacters
+        )
         let body = try limitedRequiredString("body", in: arguments, maxCharacters: maxSkillBodyCharacters)
-        let sanitizedDescription = AgentMemorySanitizer.sanitize(description).text
-        let sanitizedBody = AgentMemorySanitizer.sanitize(body).text
+        let draft = sanitizedSkillDraft(name: name, description: description, body: body)
         let url = try AgentSkillFileManager.createUserSkill(
-            name: name,
-            description: sanitizedDescription,
-            body: sanitizedBody,
+            name: draft.name,
+            description: draft.description,
+            body: draft.body,
             root: root
         )
         return AgentToolResult(
@@ -377,14 +407,19 @@ enum AgentSelfLearning {
                 "description": .string(draft.description),
                 "body": .string(draft.body),
             ]
+            let sanitized = sanitizedSkillDraft(
+                name: try limitedRequiredString("name", in: values, maxCharacters: maxSkillNameCharacters),
+                description: try limitedRequiredString(
+                    "description",
+                    in: values,
+                    maxCharacters: maxSkillDescriptionCharacters
+                ),
+                body: try limitedRequiredString("body", in: values, maxCharacters: maxSkillBodyCharacters)
+            )
             return AgentUserSkillBatchDraft(
-                name: try limitedRequiredString("name", in: values, maxCharacters: 80),
-                description: AgentMemorySanitizer.sanitize(
-                    try limitedRequiredString("description", in: values, maxCharacters: 240)
-                ).text,
-                body: AgentMemorySanitizer.sanitize(
-                    try limitedRequiredString("body", in: values, maxCharacters: maxSkillBodyCharacters)
-                ).text
+                name: sanitized.name,
+                description: sanitized.description,
+                body: sanitized.body
             )
         }
 
@@ -918,15 +953,28 @@ enum AgentSelfLearning {
             : settings.minimumToolCallCount
         guard calls.count >= requiredToolCalls else { return nil }
 
-        return AgentSelfLearningSkillCandidate(
-            name: skillName(from: userText),
-            description: "Use when repeating this workflow: \(oneLine(userText, limit: 160))",
+        // Sanitize the raw transcript BEFORE any field is assembled, so a
+        // secret can never straddle a oneLine truncation boundary and slip
+        // through as a fragment the redaction patterns no longer recognize.
+        let safeUserText = AgentMemorySanitizer.sanitize(userText).text
+        let safeAssistantText = AgentMemorySanitizer.sanitize(assistantText).text
+        // The automatic path funnels through the exact same sanitation and
+        // length caps as the create_user_skill tool path — name, description,
+        // and body are all covered.
+        let draft = sanitizedSkillDraft(
+            name: skillName(from: safeUserText),
+            description: "Use when repeating this workflow: \(oneLine(safeUserText, limit: 160))",
             body: automaticSkillBody(
-                userText: userText,
-                assistantText: assistantText,
+                userText: safeUserText,
+                assistantText: safeAssistantText,
                 calls: calls,
                 workspaceURL: workspaceURL
-            ),
+            )
+        )
+        return AgentSelfLearningSkillCandidate(
+            name: draft.name,
+            description: draft.description,
+            body: draft.body,
             reason: explicitSkillDirective
                 ? "The user explicitly asked to create or save a reusable skill."
                 : "The turn contains a reusable workflow signal and enough tool evidence."
@@ -966,7 +1014,10 @@ enum AgentSelfLearning {
         Last assistant summary:
         \(oneLine(assistantText, limit: 1_200))
         """
-        return AgentMemorySanitizer.sanitize(workflow).text
+        // No local sanitize here: the single caller routes the result through
+        // sanitizedSkillDraft, the shared sanitation + length-cap funnel, which
+        // also covers tool-call summaries embedded above.
+        return workflow
     }
 
     /// Host-composed prompt chrome that must never be mistaken for the
