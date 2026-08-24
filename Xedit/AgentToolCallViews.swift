@@ -1097,7 +1097,7 @@ struct AgentToolCallCard: View {
 
     @ViewBuilder
     private var askUserBody: some View {
-        let question = call.arguments["question"]?.stringValue() ?? ""
+        let prompt = AgentAskUserPromptPresentationBuilder.make(arguments: call.arguments)
         // rc3: option labels are LLM-authored. Defang first so the button
         // the user clicks shows the same string the model gets back as the
         // user's answer — and so options can't smuggle control characters
@@ -1125,15 +1125,41 @@ struct AgentToolCallCard: View {
                         height: AgentConfirmationReviewMetrics.iconTileSize
                     )
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(L10n.ToolCard.askUserEyebrow)
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(palette.secondaryText)
-                        if !question.isEmpty {
-                            Text(question)
+                        if let prompt {
+                            Text(prompt.title)
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundStyle(palette.primaryText)
                                 .fixedSize(horizontal: false, vertical: true)
+                            if let body = prompt.body {
+                                Text(
+                                    MarkdownInline.attributedString(
+                                        from: body,
+                                        inlineCodeFontSize: 13
+                                    )
+                                )
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(palette.primaryText.opacity(0.82))
+                                    .lineSpacing(2)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            if !prompt.requestedInformation.isEmpty {
+                                askUserPromptSection(
+                                    title: L10n.ToolCard.askUserRequestedInformation,
+                                    items: prompt.requestedInformation,
+                                    palette: palette
+                                )
+                            }
+                            if !prompt.defaultAssumptions.isEmpty {
+                                askUserPromptSection(
+                                    title: L10n.ToolCard.askUserDefaultAssumptions,
+                                    items: prompt.defaultAssumptions,
+                                    palette: palette
+                                )
+                            }
                         }
                         Text(
                             isMultiSelect
@@ -1231,6 +1257,32 @@ struct AgentToolCallCard: View {
             .font(.system(size: 13, weight: .semibold))
             .padding(AgentConfirmationReviewMetrics.contentPadding)
         }
+    }
+
+    @ViewBuilder
+    private func askUserPromptSection(
+        title: String,
+        items: [String],
+        palette: EditorInterfaceSkinPalette
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(palette.primaryText)
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                Text(
+                    MarkdownInline.attributedString(
+                        from: item,
+                        inlineCodeFontSize: 13
+                    )
+                )
+                    .font(.system(size: 13))
+                    .foregroundStyle(palette.primaryText.opacity(0.78))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.top, 4)
     }
 
     // After the question resolves the interactive card is gone, but the

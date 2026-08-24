@@ -1,5 +1,39 @@
 # Design QA
 
+## 结构化长提问卡片（1.288.0-rc1）
+
+- source visual truth path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/ask-user-1.288.0-rc1/reference-option-2.png`
+- implementation screenshot path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/ask-user-1.288.0-rc1/implementation-narrow.png`
+- combined full-view comparison: `/Users/rocky/Sites/Xedit/artifacts/design-qa/ask-user-1.288.0-rc1/comparison-full.png`
+- combined focused comparison: `/Users/rocky/Sites/Xedit/artifacts/design-qa/ask-user-1.288.0-rc1/comparison-prompt.png`
+- viewport: native SwiftUI component at `520 pt` width, rendered at `2×` as `1040 × 784 px`; source normalized to the same `1040 px` width.
+- state: pending `ask_user`, structured title/context/requested information/default assumptions, free-form answer field, skip and send actions.
+
+### Full-view comparison evidence
+
+- The production card preserves the selected composition: icon rail on the left; eyebrow, bold action title, regular context, and two labeled information groups on the right.
+- The answer field remains directly below the prompt, followed by the existing divider and submit footer; no extra preset-answer row appears in this state.
+- Skip and send retain the selected secondary-outline / primary-black hierarchy and remain fully visible at the narrow target width.
+- The implementation keeps WillDeep's existing Rice Paper surface instead of replacing the product theme with the concept image's plain white canvas.
+
+### Focused comparison evidence
+
+- Typography hierarchy passes: the action title is the strongest line, context is regular weight, section labels are semibold, and technical values are quieter body text.
+- Spacing passes: the two information groups are visibly separate without turning the prompt into stacked cards or adding new borders.
+- Wrapping passes: the Secret placeholder wraps within the content column at `520 pt`; no text is clipped or pushed under the icon.
+- Legacy compatibility passes: short unstructured questions keep the original compact single-title treatment; long legacy questions receive a localized fallback title and regular body automatically.
+
+### Findings
+
+- Pass 1: the first fixture still included three preset options, which were absent from the selected reference and made the card materially taller.
+- Fix: removed preset options from the reference state while retaining the existing `options` schema and interaction behavior for questions that genuinely need choices.
+- Pass 2: the combined full and focused comparisons show matching hierarchy, grouping, action contrast, and responsive wrapping; no open P0/P1/P2 visual defects remain.
+- Verification: 17 targeted Swift tests passed, including structured/legacy prompt parsing, wide/narrow component rendering, registry coverage, and the local `#1983#` preview path.
+
+final result: passed
+
+---
+
 ## 聊天“滚动到最新消息”火箭放大（1.279.0-rc1）
 
 - source visual truth: 用户选定的 1 号概念图，以及“接近填满整个圆形”的本轮反馈。

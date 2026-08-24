@@ -1806,10 +1806,13 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "ask_user",
-            description: "Ask the user a clarifying question and wait for their answer before continuing. Use this whenever a required piece of information is missing or ambiguous; do not guess. Returns the user's answer as the tool result. When the question has a small, well-defined set of valid answers, pass them as `options` so the user can click instead of type.",
+            description: "Ask the user a clarifying question and wait for their answer before continuing. Use this whenever a required piece of information is missing or ambiguous; do not guess. Returns the user's answer as the tool result. For a long or bundled question, pass a concise `title`, keep `question` to one short context sentence, and separate the requested facts from assumptions with `requested_information` and `default_assumptions`. When the question has a small, well-defined set of valid answers, pass them as `options` so the user can click instead of type.",
             risk: .userInput,
             parameters: [
-                AgentToolParameter(name: "question", type: .string, description: "The clarifying question to show the user.", required: true),
+                AgentToolParameter(name: "question", type: .string, description: "The question or short context sentence shown below the optional title.", required: true),
+                AgentToolParameter(name: "title", type: .string, description: "Optional concise heading for a long or bundled question. Prefer a specific action-oriented title under 60 characters.", required: false),
+                AgentToolParameter(name: "requested_information", type: .stringArray, description: "Optional list of facts or decisions the user must provide. Keep each item concise and do not repeat the context sentence.", required: false),
+                AgentToolParameter(name: "default_assumptions", type: .stringArray, description: "Optional list of defaults the Agent will use unless the user corrects them.", required: false),
                 AgentToolParameter(name: "options", type: .stringArray, description: "Optional list of preset answers. When provided, the UI renders them as buttons (single-choice) or checkboxes (multi-choice). The user can still type a free-form answer.", required: false),
                 AgentToolParameter(name: "multi_select", type: .boolean, description: "When true, the user can pick multiple options; the tool result is a comma-separated list. Defaults to false (single choice).", required: false)
             ]
