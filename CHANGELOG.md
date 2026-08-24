@@ -1,7 +1,19 @@
 # Changelog
 
-> 当前文件保留最新版本（1.289.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.289.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.289.0-rc3 - 2026-08-25
+
+### Changed
+
+- **Agent 聊天行高默认值 1.5 → 1.4。** 字号默认本来就是 15pt（`chatBaseFontSizeDefault`），这次只动行高。
+
+  注意这只影响**没调过这两项的用户**：`loadAgentChatLineHeightMultiple` 一旦发现 UserDefaults 里存过值就照存量走，改默认值对他们没有作用，需要在「外观」里自己调，或清掉 `com.willdeep.agentSettings.chatLineHeightMultiple.v1`。
+
+### Tests
+
+- [AgentChatHistoryRendererTests](XeditTests/AgentChatHistoryRendererTests.swift) 的排版默认值断言跟随更新。1.4 没有精确的二进制表示（`15 * (1.4 - 1)` 落在 5.999999999999999），所以这两条改用容差比较，是这个文件里唯一不用 `==` 的地方。
 
 ## 1.289.0-rc2 - 2026-08-25
 
