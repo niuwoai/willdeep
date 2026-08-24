@@ -215,11 +215,27 @@ nonisolated enum AgentAttachedPromptDisplay {
         let files: [String]
         /// True when the prelude carried the workspace overview block.
         let hasWorkspace: Bool
+        /// The verbatim text the operator typed this turn: the segment after
+        /// the user-text boundary for spliced preludes (empty when the user
+        /// sent attachments without prose), or the whole content for plain
+        /// messages. Unlike `visibleContent` it carries NO host-synthesized
+        /// chrome — no "[已附加技能: …]" tag line — so learning/audit mining
+        /// must read this field, never `visibleContent`: the tag's own words
+        /// ("技能") would re-trigger the skill-capture matchers this field
+        /// exists to protect.
+        let userAuthoredText: String
     }
 
     static func transform(_ content: String) -> Display {
         guard content.hasPrefix(preludeHeader) else {
-            return Display(isSplicedPrelude: false, visibleContent: content, skills: [], files: [], hasWorkspace: false)
+            return Display(
+                isSplicedPrelude: false,
+                visibleContent: content,
+                skills: [],
+                files: [],
+                hasWorkspace: false,
+                userAuthoredText: content
+            )
         }
 
         var skills: [String] = []
@@ -265,7 +281,8 @@ nonisolated enum AgentAttachedPromptDisplay {
             visibleContent: visible,
             skills: skills,
             files: files,
-            hasWorkspace: hasWorkspace
+            hasWorkspace: hasWorkspace,
+            userAuthoredText: userText
         )
     }
 
