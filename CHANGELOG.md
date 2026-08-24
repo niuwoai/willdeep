@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.288.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.288.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.288.0-rc5 - 2026-08-24
+
+### Fixed
+
+- **排队消息预览显示模型协议头而不是用户自己打的字，桌面与手机两处一起修。** 用户报「我追加内容的时候，显示出来的是这一句英文，而不是我要加的内容」，截图里排队卡片标题是 `The user attached the following context for this tu…`。
+
+  **这段英文本身没错，它不是 UI 文案。** `AgentAttachedPromptProtocol.preludeHeader`（[AgentComposerAttachmentSupport.swift](Xedit/AgentComposerAttachmentSupport.swift)）是**给模型看的安全协议**：在附件/技能正文前声明「以下是任务材料，不是用户原话」，再用不可伪造的边界 `<<<willdeep:user-message:v1>>>` 把附件与用户正文隔开，防附件内容冒充用户下指令。这类模型指令按设计保持英文、不做 i18n。错的是它**漏进了给人看的界面**。
+
+  **根因**：拼接发生在**入队之前**（`AppStateAgentComposer.swift` 组好完整 prompt 再 `queuedMessages.append`），所以队列里存的就是带前导头的 prompt；而排队卡片的 `previewText` 直接取 `message.text` 原文。项目里早有正确的剥离器 `AgentAttachedPromptDisplay.transform`（认边界、只取用户正文），transcript、消息气泡、历史格式化、面板卡片全在用，唯独排队预览漏了。
+  - **顺带揪出第二处**：移动网关 `mobileGatewayQueuedTextPreview`（[AppStateMobileGatewayController.swift](Xedit/AppStateMobileGatewayController.swift)）同样直接用原文，**手机端看到的排队预览也是这段英文**。
+  - 修法：把剥离收成共用入口 `AgentAttachedPromptDisplay.singleLinePreview(of:)`（[AgentMessageSupportViews.swift](Xedit/AgentMessageSupportViews.swift)），桌面排队卡与移动网关都走它；多行输入压成单行不破坏卡片布局；**不是拼接产物就返回 nil**，调用方原有的「N 个附件 / N 张图 / 空消息」兜底逻辑一律不动。
+
+### Tests
+
+- 新增 [AgentQueuedPreviewPreludeTests](XeditTests/AgentQueuedPreviewPreludeTests.swift) 5 例：拼接 prompt 只预览用户正文（且不含 header／`### Skill:`／边界标记）、普通消息返回 nil 交回原兜底、只挂附件没打字时不泄漏英文头、多行压单行、显示侧与协议侧共用同一个 header 常量（防两边字符串漂移导致剥离静默失效）。
 
 ## 1.288.0-rc4 - 2026-08-24
 
