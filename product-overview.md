@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-24 | Current version: v1.288.0-rc1
+> Last updated: 2026-08-24 | Current version: v1.288.0-rc2
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **按需计划：宿主测量取代模型预测（1.288.0-rc2）** —— 普通模式不再要求模型前置判断"是否 multi-step 并建计划"（该自判被实测证伪：模型宁滥勿缺，小任务被计划块与逐轮上报拖慢）。新契约：默认直接干；`AgentPlanOnDemandPolicy` 在无活跃计划的回合实跑满 4 个工具轮或落地 ≥3 次写级成功调用时，注入一次 `PLAN REQUESTED` 指令，要求当轮补一个只含剩余工作的 plan 块并继续执行。Goal 模式与无人值守派发任务保持各自的强制计划契约；`plan == nil` 时既有续推/纠偏机器天然静默，小任务零开销。stable prompt v33。
 - **结构化长提问卡片（1.288.0-rc1）** —— `ask_user` 新增可选标题、待提供信息和默认假设三个结构化字段；长问题按“加粗标题 → 常规说明 → 分组信息”展示，字段名与占位符支持行内代码样式，避免整段正文一起加粗。旧版短问题保持原有紧凑样式，旧版长问题自动使用本地化通用标题，输入、选项、跳过与发送交互均向后兼容。
 - **贴硬线文件的预防性拆分（1.287.0-rc4）** —— 把三个离 `scripts/complexity_guard.rb` 3000 行硬阈值只剩几行的文件按主题拆开，不等它们再把 CI 的 quality 守卫组整条 break 掉：`scripts/short_drama_media_contract_test.rb`（2995 → 1170，1891 行的 `plan_import_contract` 按规划导入 / 媒体任务 / 媒体工具三个主题拆成同前缀兄弟脚本）、`Xedit/AgentShortDramaProductionExporter.swift`（2973 → 1120，析出组件预览 HTML 与内嵌 env / Ruby 模板两个 extension 文件）、`Xedit/SomeIMIntegration.swift`（2912 → 1717，析出存储层与设置界面；`SomeIMClient` 与值类型共用同一个 fileprivate `String.nonEmpty`，刻意留在一起）。纯等价重构，逐行原样搬运，`complexity_guard` 的 soft 计数 18 → 15、hard 保持 0。
 - **Agent 模型域复杂度治理（1.287.0-rc3）** —— `AgentModels.swift` 被 1.287.0-rc1 推过 3000 行硬阈值后按主题拆成 7 个兄弟文件：`AgentManagedRoutingModels.swift`（省心托管路由）、`AgentPlanGoalModels.swift`（交互模式 / 审批档位 / Plan & Goal）、`AgentConfigurationModels.swift`（provider 配置）、`AgentProviderPresetModels.swift`（provider kind 与 preset 目录）、`AgentPatchModels.swift`（patch / worktree 变更）、`AgentErrorModels.swift`（错误模型）、`AgentAttachmentModels.swift`（附件与知识文件夹）。主模型文件从 3013 行降到 580 行，只留 `AgentSession` 持久化图；纯等价重构，逐行原样搬运。

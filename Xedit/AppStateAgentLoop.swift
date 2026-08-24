@@ -773,6 +773,10 @@ extension AppState {
         /// Rounds already spent making the model answer the handoff with prose
         /// instead of a tool call. Bounded by `maximumHandoverRetries`.
         var contextRunwayHandoverRetryCount = 0
+        /// Plan-on-demand asks once per turn; crossing the threshold again
+        /// after the model ignored the first request must not nag every round.
+        var didRequestPlanOnDemand = false
+        let planOnDemandToolCallBaseline = runtime.toolCalls.count
 
         for toolRound in 0..<Self.maxAgentToolRounds {
             // `run_workflow` is asynchronous, but unlike the workflow card its
@@ -1107,6 +1111,36 @@ extension AppState {
                 // handover it protects is a few hundred tokens) and refusal
                 // moves to where it can answer back: this loop, below.
                 didRequestContextRunwayHandoff = true
+            }
+            // Plans on demand: ordinary turns start without a checklist, and
+            // this is where a long turn earns one. Evaluated after the runway
+            // decision because a handoff round may do no new work at all,
+            // plan included.
+            if !didRequestContextRunwayHandoff, !didRequestPlanOnDemand {
+                let succeededWriteCalls = runtime.toolCalls
+                    .dropFirst(planOnDemandToolCallBaseline)
+                    .filter { $0.status == .succeeded && $0.risk != .read }
+                    .count
+                let hasActivePlan = runtime.currentPlan.map {
+                    $0.status == .proposed || $0.status == .approved || $0.status == .executing
+                } ?? false
+                if AgentPlanOnDemandPolicy.shouldRequestPlan(
+                    toolRound: toolRound,
+                    succeededWriteCalls: succeededWriteCalls,
+                    hasActivePlan: hasActivePlan,
+                    interactionMode: runtime.interactionMode,
+                    isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
+                ) {
+                    let notice = AgentMessage(
+                        role: .system,
+                        content: AgentPlanOnDemandPolicy.requestNotice(toolRound: toolRound)
+                    )
+                    if let assistantIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
+                        runtime.messages.insert(notice, at: assistantIndex)
+                    }
+                    collapsedHistory.append(notice)
+                    didRequestPlanOnDemand = true
+                }
             }
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
 

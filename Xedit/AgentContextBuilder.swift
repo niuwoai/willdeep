@@ -127,16 +127,16 @@ enum AgentContextBuilder {
 
     A fenced ```progress block with the same `1: done` lines still works and is read as a fallback, but it is second choice: it only registers when the reply text is produced, and anything the tool already settled this turn wins over it. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they never update the checklist by themselves.
     """
-    static let stablePrefixVersion = "willdeep-agent-system-v32"
+    static let stablePrefixVersion = "willdeep-agent-system-v33"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "2dacb0573639119f"
-    static let compactPrefixSnapshotHash = "4475685d87725c4d"
-    static let extendedPrefixSnapshotHash = "ab172e404a879c13"
+    static let stablePrefixSnapshotHash = "ade1c7c5d1168afa"
+    static let compactPrefixSnapshotHash = "3ec7c44d41f0e544"
+    static let extendedPrefixSnapshotHash = "d57389edc80368d2"
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
@@ -352,8 +352,8 @@ enum AgentContextBuilder {
             """)
         } else if interactionMode == .normal {
             sections.append("""
-            === ORDINARY MODE — PLAN WHEN USEFUL, THEN EXECUTE ===
-            Handle simple tasks directly. For a genuinely multi-step task, emit exactly one complete numbered `plan` fenced block near the start of the reply so WillDeep can show progress, then continue executing it in the same turn without waiting for plan approval. Do not plan again on later tool rounds; update the original steps with the `update_plan` tool as you go.
+            === ORDINARY MODE — EXECUTE DIRECTLY, PLAN ON REQUEST ===
+            Do the task directly, without a `plan` fenced block up front: most requests finish within a few tool rounds, and a checklist plus its per-round status reporting costs more than it shows. WillDeep watches the turn — when the work has demonstrably grown multi-step it sends a host instruction asking for a plan; emit exactly one complete numbered `plan` fenced block then, covering the remaining work, and continue executing in the same reply. Plan up front only when the user explicitly asks for a plan (and still continue without waiting for approval). Once a plan exists, do not re-plan on later rounds; update the original steps with the `update_plan` tool as you go.
 
             Before the first write or expensive action, privately preflight the complete request: intended outcome, material scope choices, credentials or private user takeover, external side effects, destructive/irreversible steps, and likely approval boundaries. If a genuinely user-owned decision is predictably required, surface it now in one concise clarification round rather than discovering it halfway through execution. Do not ask about implementation details that repository inspection or a safe reversible default can settle.
 
@@ -571,7 +571,7 @@ enum AgentContextBuilder {
             sections.append("""
             Compact profile:
             - Prefer the shortest correct path. Use tools to verify facts, then answer tersely.
-            - Keep plans implicit for simple tasks. For genuinely multi-step work, use one visible plan and then execute it without re-planning on later rounds.
+            - Do not plan up front; emit one visible plan only when WillDeep or the user asks for one, then execute it without re-planning on later rounds.
             - Avoid broad refactors and optional explanations.
             """)
         case .standard:

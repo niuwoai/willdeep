@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.288.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.288.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.288.0-rc2 - 2026-08-24
+
+### Changed
+
+- **按需计划（plan on demand）：普通模式不再前置建计划，"复杂任务"由触发线实测认定。** 用户实测反馈：不论任务大小一律先建计划、再逐格更新，小任务被计划块 + `update_plan` 逐轮上报 + 纠偏/对账轮拖慢明显。而"简单任务直接干"的自判指令其实一直在提示词里（ORDINARY MODE 段），模型对 "genuinely multi-step" 的判断系统性偏严——建计划显得尽责，宁滥勿缺，提示词层已被现实证伪。本次把判断权从"模型预测"收归"宿主测量"：
+  - **提示词契约反转**（[AgentContextBuilder.swift](Xedit/AgentContextBuilder.swift)，stable prompt v32 → v33，三档哈希重录）：ORDINARY MODE 段从「multi-step 就先建计划」改为「默认直接干、不前置建计划；WillDeep 观察本回合，实测变大时会下发补计划指令；用户显式要计划除外」。compact profile 的计划条目同步改写。
+  - **触发线**（新增 [AgentPlanOnDemandPolicy](Xedit/AgentPlanOnDemandPolicy.swift)，接入 [AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift) 工具轮循环）：无活跃计划的普通回合，实跑满 **4 个工具轮**、或本回合落地 **≥3 次写级（write/danger）成功调用**时，宿主注入一次 `PLAN REQUESTED` 指令——要求当轮补一个只含**剩余工作**的 plan 块并继续执行，不停顿不等审批，此后照常 `update_plan`。每回合最多注入一次；runway handoff 回合让位（交接轮不开新活，计划也算）。
+  - **刻意不动的边界**：Goal 模式（计划是验收循环骨架）、无人值守派发任务（调度台节点状态投影自计划）不走触发线，保持各自的强制计划契约；定时任务（routine）回合正常享受触发线。设计讨论中的"起后台任务即触发"信号 v1 刻意不做——小验证流（后台跑个测试）会误触发，长后台任务靠轮询轮次自然够到轮数阈值。
+  - **零兼容成本**：`AgentPlanAutoContinuationPolicy.decision` 对 `plan == nil` 本就 guard-stop，无计划的小任务不会启动任何计划跟班机器（上报要求、CORRECTION、reconciliation、auto-continuation 全部天然静默）。
+
+### Tests
+
+- 新增 [AgentPlanOnDemandPolicyTests](XeditTests/AgentPlanOnDemandPolicyTests.swift) 8 例：双阈值触发/不触发、活跃计划抑制、Goal/派发任务排除、通知三要素（plan 块 + 当轮继续 + update_plan）、阈值区间守卫。
+- [AgentPlanProgressTests](XeditTests/AgentPlanProgressTests.swift) 4 处断言换锚到新契约句子（标题、up-front 禁令、同回合继续、不重复规划），[AgentPromptSnapshotGuardTests.swift](XeditTests/AgentPromptSnapshotGuardTests.swift) 版本断言 v32 → v33。
+- 排查注：`-only-testing:XeditTests/AgentPromptSnapshotGuardTests` 按文件名选 suite 会静默跑 0 个且整体 TEST SUCCEEDED（suite 类型名是 `AgentContextBuilderPromptTests`，文件名 ≠ suite 名假绿坑再次应验）；重录哈希走的是正确 suite 名的红输出。
 
 ## 1.288.0-rc1 - 2026-08-24
 
