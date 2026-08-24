@@ -847,10 +847,22 @@ extension AgentMessage {
     /// (a bare "hello" turn once suggested two "memories" quoting the
     /// session-title and unattended-run guidance verbatim).
     nonisolated var operatorAuthoredContent: String {
-        guard !textAttachments.isEmpty else { return content }
+        // 1.287.0-rc6:host 合成文本不止 modelContext 一处 —— composer 附件
+        // 会把 preludeHeader + skill/file 块直接拼进 `content` 本体(spliced
+        // prelude),图片理解也会往 content 末尾追加生成的描述块。1.238.1
+        // 只挡了 modelContext,于是「The user attached the following
+        // context…」连同附件技能的 description 被当成用户工作流捕获,
+        // 落盘成 ~/.willdeep/skills/auto-the-user-attached-the。这里统一
+        // 反拼接:spliced prelude 只认边界标记之后用户真正敲的字(注意读
+        // `userAuthoredText`,不是带附件标签行的 `visibleContent`),图片
+        // 描述块同样剥掉;用户粘贴的 textAttachments 仍按 1.238.1 口径保留。
+        let display = AgentAttachedPromptDisplay.transform(content)
+        let splicedFree = display.isSplicedPrelude ? display.userAuthoredText : content
+        let authoredBody = AgentUserContentSplitter.split(splicedFree).visible
+        guard !textAttachments.isEmpty else { return authoredBody }
         var blocks: [String] = []
-        if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            blocks.append(content)
+        if !authoredBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            blocks.append(authoredBody)
         }
         blocks.append(contentsOf: textAttachments.map(\.modelBlock))
         return blocks.joined(separator: "\n\n")
