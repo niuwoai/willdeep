@@ -476,6 +476,118 @@ struct AgentSelfLearningTests {
     }
 
     @Test
+    func composerAttachmentPreludeCannotBecomeAutomaticSkill() throws {
+        let root = try temporarySkillRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+
+        // 复刻 auto-the-user-attached-the 事故:composer 把前导头 + 附件
+        // 技能的 description(自带 "Skill"/"自动"/"沉淀" 等触发词)拼进
+        // content 本体,用户真正敲的只是一句和技能毫无关系的普通请求。
+        // 修复前:整段拼接体被当成用户原话,explicit 信号命中,直接落盘
+        // 一个名字取自前导文案前四个词的技能。
+        let started = Date(timeIntervalSince1970: 1_800_000_000)
+        let splicedContent = """
+        \(AgentAttachedPromptProtocol.preludeHeader)
+
+        ### Skill: swiftui-hang-diagnose
+        > 诊断并修复 macOS/iOS 原生 Swift App 的主线程卡死、转圈,自动采样定位热点,沉淀成可复用技能流程。
+
+        (skill body here)
+
+        \(AgentAttachedPromptProtocol.userTextBoundary)
+        帮我清理 q3 服务器的磁盘空间
+        """
+        let user = AgentMessage(role: .user, content: splicedContent, createdAt: started)
+        let assistant = AgentMessage(
+            role: .assistant,
+            content: "确认磁盘已满,完成了占用画像与备份目录盘点。",
+            createdAt: started.addingTimeInterval(10)
+        )
+        let runtime = AgentRuntime(session: AgentSession(messages: [user, assistant]))
+        runtime.toolCalls = (0..<8).map { index in
+            AgentToolCall(
+                messageID: assistant.id,
+                externalID: "tool-\(index)",
+                toolName: "terminal_send_command",
+                arguments: [:],
+                risk: .write,
+                status: .succeeded,
+                result: AgentToolResult(summary: "step \(index)", payload: "")
+            )
+        }
+
+        let events = AgentSelfLearning.captureAutomaticSkillCandidate(
+            for: runtime,
+            workspaceURL: URL(fileURLWithPath: "/tmp/WillDeepProject"),
+            skillSettings: .default,
+            root: root
+        )
+
+        // 用户原话没有任何技能意图:不许产出任何技能事件,更不许落盘。
+        #expect(events.isEmpty)
+        let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
+        let skillFiles = (enumerator?.compactMap { $0 as? URL } ?? [])
+            .filter { $0.lastPathComponent == "SKILL.md" }
+        #expect(skillFiles.isEmpty)
+    }
+
+    @Test
+    func hostComposedTemplateGateBlocksContaminatedSkillCandidate() throws {
+        let root = try temporarySkillRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+
+        // 兜底层:模板混在正文中段(不以前导头开头)时,反拼接不命中,
+        // 门禁必须仍然拦住技能候选 —— 覆盖老会话落盘的 content 和未来
+        // 反拼接不认识的新拼接形态。用户文本本身带显式技能意图 + 8 次
+        // 工具调用,没有门禁就会直接落盘。
+        let started = Date(timeIntervalSince1970: 1_800_000_000)
+        let contaminated = """
+        以后这类发布流程帮我自动沉淀成技能。
+        \(AgentAttachedPromptProtocol.preludeHeader)
+        ### Skill: legacy-attachment
+        """
+        let user = AgentMessage(role: .user, content: contaminated, createdAt: started)
+        let assistant = AgentMessage(
+            role: .assistant,
+            content: "已按发布流程执行完毕。",
+            createdAt: started.addingTimeInterval(10)
+        )
+        let runtime = AgentRuntime(session: AgentSession(messages: [user, assistant]))
+        runtime.toolCalls = (0..<8).map { index in
+            AgentToolCall(
+                messageID: assistant.id,
+                externalID: "tool-\(index)",
+                toolName: "run_command",
+                arguments: [:],
+                risk: .write,
+                status: .succeeded,
+                result: AgentToolResult(summary: "step \(index)", payload: "")
+            )
+        }
+
+        let events = AgentSelfLearning.captureAutomaticSkillCandidate(
+            for: runtime,
+            workspaceURL: nil,
+            skillSettings: .default,
+            root: root
+        )
+
+        // 允许出现 skipped/suggested 级别的提示事件,但绝不许创建技能文件。
+        #expect(!events.contains { $0.status == .created })
+        let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
+        let skillFiles = (enumerator?.compactMap { $0 as? URL } ?? [])
+            .filter { $0.lastPathComponent == "SKILL.md" }
+        #expect(skillFiles.isEmpty)
+
+        // 门禁谓词本身:命中前导头或边界标记即拒绝;干净文本放行。
+        #expect(AgentSelfLearning.containsHostComposedTemplate(contaminated))
+        #expect(AgentSelfLearning.containsHostComposedTemplate(
+            "text\n\(AgentAttachedPromptProtocol.userTextBoundary)\nmore"
+        ))
+        #expect(!AgentSelfLearning.containsHostComposedTemplate("帮我清理磁盘,以后沉淀成技能"))
+    }
+
+    @Test
     func explicitSkillDirectiveRequiresFourToolWorkflow() throws {
         let root = try temporarySkillRoot()
         defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
@@ -1228,6 +1340,62 @@ struct AgentSelfLearningTests {
     }
 
     @Test
+    func operatorAuthoredContentUnsplicesComposerPrelude() {
+        // composer 附件把 host 模板拼进 content 本体;学习口径只认边界
+        // 标记之后用户真正敲的字。附件技能的 description、前导头、
+        // "[已附加技能: …]" 标签行一个字都不许出现。
+        let spliced = """
+        \(AgentAttachedPromptProtocol.preludeHeader)
+
+        ### Skill: swiftui-hang-diagnose
+        > 诊断并修复主线程卡死的技能
+
+        \(AgentAttachedPromptProtocol.userTextBoundary)
+        帮我清理磁盘
+        """
+        let message = AgentMessage(role: .user, content: spliced)
+        #expect(message.operatorAuthoredContent == "帮我清理磁盘")
+
+        // 用户粘贴的 textAttachments 仍按 1.238.1 口径保留。
+        let withPaste = AgentMessage(
+            role: .user,
+            content: spliced,
+            textAttachments: [AgentTextAttachment(content: "pasted log line")]
+        )
+        let authored = withPaste.operatorAuthoredContent
+        #expect(authored.contains("帮我清理磁盘"))
+        #expect(authored.contains("pasted log line"))
+        #expect(!authored.contains(AgentAttachedPromptProtocol.preludeHeader))
+        #expect(!authored.contains("swiftui-hang-diagnose"))
+        #expect(!authored.contains("已附加技能"))
+
+        // 只有附件、用户没敲字:学习口径应得到空串,而不是模板文案。
+        let attachmentOnly = """
+        \(AgentAttachedPromptProtocol.preludeHeader)
+
+        ### Skill: swiftui-hang-diagnose
+        > 诊断并修复主线程卡死的技能
+        """
+        let silent = AgentMessage(role: .user, content: attachmentOnly)
+        #expect(silent.operatorAuthoredContent.isEmpty)
+    }
+
+    @Test
+    func operatorAuthoredContentDropsGeneratedImageDescription() {
+        // 图片理解会往用户 content 末尾追加 host 生成的描述块;那是
+        // AI 文本,不是用户的话,学习口径必须剥离。
+        let content = """
+        把这张截图里的问题修一下
+
+        [Image description generated by some.im/gpt-image for 1 attached image]
+
+        The screenshot shows a spinning beachball over the main window.
+        """
+        let message = AgentMessage(role: .user, content: content)
+        #expect(message.operatorAuthoredContent == "把这张截图里的问题修一下")
+    }
+
+    @Test
     func memoryCandidatesIgnoreHostScaffoldingOnGreeting() {
         let message = AgentMessage(
             role: .user,
@@ -1303,6 +1471,137 @@ struct AgentSelfLearningTests {
         saved.memoryDrafts = nil
         #expect(AgentSelfLearning.suggestionItemCount([saved]) == 1)
         #expect(AgentSelfLearning.suggestionItemCount([]) == 0)
+    }
+
+    // MARK: - Shared skill sanitation funnel (tool path ↔ automatic capture)
+
+    @Test
+    func sanitizedSkillDraftRedactsSecretsAndCapsEveryField() {
+        let body = String(repeating: "a", count: AgentSelfLearning.maxSkillBodyCharacters - 10)
+            + " token:abcdefghijklmn"
+        let draft = AgentSelfLearning.sanitizedSkillDraft(
+            name: "deploy helper password=supersecret99 " + String(repeating: "n", count: 200),
+            description: "Use with Bearer abcdefghijklmnop123456 " + String(repeating: "d", count: 400),
+            body: body
+        )
+
+        #expect(draft.name.count <= AgentSelfLearning.maxSkillNameCharacters)
+        #expect(draft.description.count <= AgentSelfLearning.maxSkillDescriptionCharacters)
+        #expect(draft.body.count <= AgentSelfLearning.maxSkillBodyCharacters)
+        #expect(draft.name.contains("[REDACTED_SECRET]"))
+        #expect(!draft.name.contains("supersecret99"))
+        #expect(!draft.description.contains("abcdefghijklmnop123456"))
+        // Sanitize-before-clamp: a secret straddling the length cap must not
+        // survive as a truncated, pattern-evading fragment. If someone swaps
+        // the order to clamp-first, "token:abc..." survives and this goes red.
+        #expect(!draft.body.contains("token:abc"))
+        #expect(!draft.body.contains("abcdefghijklmn"))
+    }
+
+    @Test
+    func automaticSkillCaptureSharesToolPathSanitizationAndCaps() throws {
+        let root = try temporarySkillRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+
+        let started = Date(timeIntervalSince1970: 1_800_000_400)
+        let user = AgentMessage(
+            role: .user,
+            content: "Create a reusable skill for this deploy workflow that uses token:hunter2secret99 every time.",
+            createdAt: started
+        )
+        let assistant = AgentMessage(
+            role: .assistant,
+            content: "I deployed with api_key=sk-abcdefghijklmnopqrst and verified the workflow.",
+            createdAt: started.addingTimeInterval(10)
+        )
+        let runtime = AgentRuntime(session: AgentSession(messages: [user, assistant]))
+        let oversizedSummary = "run output sk-abcdefghijklmnopqrst " + String(repeating: "s", count: 20_000)
+        runtime.toolCalls = (0..<5).map { index in
+            AgentToolCall(
+                messageID: assistant.id,
+                externalID: "sanitize-tool-\(index)",
+                toolName: "run_command",
+                arguments: [:],
+                risk: .write,
+                status: .succeeded,
+                result: AgentToolResult(
+                    summary: index == 0 ? oversizedSummary : "step \(index)",
+                    payload: ""
+                )
+            )
+        }
+
+        let events = AgentSelfLearning.captureAutomaticSkillCandidate(
+            for: runtime,
+            workspaceURL: URL(fileURLWithPath: "/tmp/WillDeepProject"),
+            skillSettings: .default,
+            root: root
+        )
+
+        // The automatically written draft obeys the exact tool-path caps.
+        let skillEvent = try #require(events.first { $0.kind == .skill && $0.status == .created })
+        let draft = try #require(skillEvent.action?.skillDraft)
+        #expect(draft.name.count <= AgentSelfLearning.maxSkillNameCharacters)
+        #expect(draft.description.count <= AgentSelfLearning.maxSkillDescriptionCharacters)
+        #expect(draft.body.count <= AgentSelfLearning.maxSkillBodyCharacters)
+        #expect(!draft.name.contains("hunter2secret99"))
+        #expect(!draft.description.contains("hunter2secret99"))
+
+        // And nothing that reached disk carries a raw secret from the user
+        // text, the assistant text, or an oversized tool summary.
+        let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
+        let skillFile = try #require(
+            (enumerator?.compactMap { $0 as? URL } ?? [])
+                .first { $0.lastPathComponent == "SKILL.md" }
+        )
+        let markdown = try String(contentsOf: skillFile, encoding: .utf8)
+        #expect(!markdown.contains("hunter2secret99"))
+        #expect(!markdown.contains("sk-abcdefghijklmnopqrst"))
+        #expect(markdown.contains("[REDACTED_SECRET]"))
+        let slug = skillFile.deletingLastPathComponent().lastPathComponent
+        #expect(slug.count <= AgentSkillFileManager.maxSkillSlugLength)
+        #expect(!slug.contains("hunter2secret99"))
+    }
+
+    @Test
+    func createUserSkillToolSanitizesSkillNameToo() throws {
+        let root = try temporarySkillRoot()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+
+        let result = try AgentSelfLearning.createUserSkill(
+            arguments: [
+                "name": .string("deploy password=topsecret1234 helper"),
+                "description": .string("Use when deploying."),
+                "body": .string("Run the deploy pipeline and verify health checks.")
+            ],
+            root: root
+        )
+
+        let skillURL = root
+            .appendingPathComponent("deploy-redacted-secret-helper")
+            .appendingPathComponent("SKILL.md")
+        let markdown = try String(contentsOf: skillURL, encoding: .utf8)
+        #expect(markdown.contains("name: deploy [REDACTED_SECRET] helper"))
+        #expect(!markdown.contains("topsecret1234"))
+        #expect(!result.payload.contains("topsecret1234"))
+    }
+
+    @Test
+    func skillSlugCapsLengthAndTrimsTruncationDash() {
+        let overlong = String(repeating: "workflow ", count: 40)
+        let slug = AgentSkillFileManager.skillSlug(from: overlong)
+        #expect(slug.count <= AgentSkillFileManager.maxSkillSlugLength)
+        #expect(slug.hasPrefix("workflow-workflow"))
+        #expect(!slug.hasSuffix("-"))
+
+        // Truncation landing exactly on a separator must not leave a
+        // dangling dash behind.
+        let boundary = String(repeating: "a", count: AgentSkillFileManager.maxSkillSlugLength - 1) + " tail"
+        let boundarySlug = AgentSkillFileManager.skillSlug(from: boundary)
+        #expect(boundarySlug == String(repeating: "a", count: AgentSkillFileManager.maxSkillSlugLength - 1))
+
+        // Short names keep their historical slugs.
+        #expect(AgentSkillFileManager.skillSlug(from: "Release Checklist") == "release-checklist")
     }
 
     private func temporarySkillRoot() throws -> URL {

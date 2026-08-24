@@ -16118,6 +16118,76 @@
         }
       }
     },
+    "approval-mode.silent" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Silent mode"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modo silencioso"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode silencieux"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サイレントモード"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静默模式"
+          }
+        }
+      }
+    },
+    "approval-mode.silent.summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runs everything except denylisted or AI-flagged malicious actions."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ejecuta todo salvo las acciones en la lista de bloqueo o marcadas como maliciosas por la IA."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exécute tout, sauf les actions figurant sur la liste de blocage ou signalées comme malveillantes par l'IA."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拒否リストと AI が悪意ありと判断した操作以外はすべて実行します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除黑名单与 AI 判定的恶意操作外一律直接执行。"
+          }
+        }
+      }
+    },
     "approval-mode.smart" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -24922,37 +24992,37 @@
         }
       }
     },
-    "context-ring.tooltip" : {
+    "context-ring.tooltip-breakdown" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Conversation: ~%1$@ / %2$@ usable · %3$@ reserved for system + tools · %4$@ total remaining (estimate)."
+            "value" : "~%1$@ of %2$@ used · conversation ~%3$@ · system + tools ~%4$@ · %5$@ remaining (estimate)."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conversación: ~%1$@ / %2$@ disponible · %3$@ reservado para sistema + herramientas · %4$@ restante en total (estimado)."
+            "value" : "~%1$@ de %2$@ usado · conversación ~%3$@ · sistema + herramientas ~%4$@ · %5$@ restante (estimado)."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conversation : ~%1$@ / %2$@ utilisable · %3$@ réservé au système + outils · %4$@ restant au total (estimation)."
+            "value" : "~%1$@ sur %2$@ utilisés · conversation ~%3$@ · système + outils ~%4$@ · %5$@ restants (estimation)."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "会話：約%1$@ / 利用可能%2$@ · システム＋ツール予約%3$@ · 残り合計%4$@（推定）。"
+            "value" : "使用中：約%1$@ / %2$@ · 会話 約%3$@ · システム＋ツール 約%4$@ · 残り%5$@（推定）。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "对话：约 %1$@ / 可用 %2$@ · 系统 + 工具保留 %3$@ · 总剩余 %4$@（估算）。"
+            "value" : "已用约 %1$@ / %2$@ · 其中对话约 %3$@、系统 + 工具约 %4$@ · 剩余 %5$@（估算）。"
           }
         }
       }
@@ -77311,6 +77381,41 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用户已批准"
+          }
+        }
+      }
+    },
+    "transcript.turn-report.approval.silent" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Silent mode"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modo silencioso"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mode silencieux"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サイレントモード"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静默模式"
           }
         }
       }

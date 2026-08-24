@@ -1,6 +1,52 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-20（1.277.0-rc2）
+> Last updated: 2026-08-23（1.287.0-rc4）
+
+## 1.287.0-rc4 — 三个贴硬线文件的拆分
+
+> 纯等价重构，逐行原样搬运，没有新界面也没有新行为。制作包导出器在 Swift 单测里没有直接覆盖（回归保护来自 292 条 Ruby 契约测试），所以这一节盯的是**导出产物和 some.im 设置页这两块「只有跑起来才看得见」的东西**。全部符合预期就整节划掉。
+
+- ⏳ 在短剧侧边栏导出一次剧集制作包，确认包目录里 `production-timeline.json`、`production-gap-report.json`、分镜 CSV、检查项 CSV、`media-import-manifest-template.json`、`ruby-media-script-template.rb`、`private-media-api.env.example` 和 `widget-preview.html` 一个不少（Ruby 模板与 env 示例这次搬去了 `AgentShortDramaProductionExporterHandoffTemplates.swift`）。
+- ⏳ 用 `show_widget` 打开刚才那份 `widget-preview.html`，确认时间线 / 分集 / 素材三个小节都在，素材行里的「交给聊天处理」「继续生成视频」「选为主图」这些按钮点下去能把 prompt 送回聊天（这批 HTML 与 prompt 搬去了 `AgentShortDramaProductionExporterWidgetHTML.swift`）。
+- ⏳ 打开设置页的 some.im 面板：确认已登录账号的昵称、头像、余额和套餐照常显示；退出登录再用浏览器授权重新登录一次，确认状态轮询、模型下拉刷新都正常（界面搬去了 `SomeIMIntegrationSettingsView.swift`，存储搬去了 `SomeIMIntegrationStore.swift`）。
+- ⏳ 重启 App，确认 some.im 的 API key、账号快照和偏好模型仍然在（Keychain / UserDefaults 读写现在住在 `SomeIMIntegrationStore.swift`）。
+
+## 1.287.0-rc3 — `AgentModels.swift` 拆分
+
+> 纯等价重构，逐行原样搬运，没有任何新界面或新行为。这一节要验的只有一件事：**持久化模型没被搬散架**。全部符合预期就整节划掉，不必逐条追问 UI。
+
+- ⏳ 用**拆分前**的版本建一个会话（带 Goal + Plan + 附件 + 省心托管路由），再用本版本打开，确认会话还在列表里、Goal 横幅 / Plan 卡 / 附件 / 页脚的托管路由徽标都在。反过来（本版本建、旧版本打开）也走一遍。
+- ⏳ 打开设置页的 provider library，确认 preset 列表、模型下拉和「是否支持图片输入」的判断跟拆分前一致（这批是从 `AgentProviderPresetModels.swift` / `AgentConfigurationModels.swift` 读的）。
+- ⏳ 让 Agent 改一个文件产生 patch，确认 diff 预览、行数统计和 worktree 变更摘要正常（`AgentPatchModels.swift`）。
+- ⏳ 故意让一次请求失败（比如把 base URL 改错），确认错误卡片、可展开的「详情」和重试按钮都在，重启 App 后这张卡还能重新出现（`AgentErrorModels.swift` 的 `AgentTurnFailure`）。
+
+## 1.287.0-rc2 — i18n 加词条脚本的落点
+
+> 纯工具链改动，App 里没有新界面。这一条要验的是「加完词条，界面上真的看得见」。
+
+- ⏳ 用 `ruby scripts/i18n_add_keys.rb <keys.json>` 加一条新 key（挑一个前后都是**多行条目**的命名空间，比如 `approval-mode.*`），确认输出里的「落点」写的是「插在 X 之后」，且 `git diff` 里新行的**上一行是 `},`、下一行是另一个顶层条目**。
+- ⏳ 在 Swift 里把这条 key 用起来，跑起 App 看界面上显示的是 catalog 里的文案，而**不是** `defaultValue`——这正是上次事故唯一能被人眼发现的症状。
+- ⏳ 加一条自己命名空间里没有兄弟的 key（如 `foo.bar.summary`，而 `foo.bar` 是独苗），确认脚本不再拒绝放置。
+- ⏳ 故意把 catalog 改坏一点（比如手工删掉某条目的一个花括号）再跑脚本，确认它拒绝下笔并明说原因，且文件一字未动。
+
+## 1.287.0-rc1 — 静默模式（黑名单式审批）
+
+- ⏳ composer 的审批档位菜单里确认有四项，顺序是 智能审核 / 静默模式 / 工作区可写 / 严格模式，静默模式那行的说明能让人看懂它是"除恶意外都放行"。
+- ⏳ 切到静默模式，让 Agent 做一串日常但破坏性的操作（`rm -rf node_modules`、`git reset --hard`、`docker compose down -v`），确认**一张审批卡都不弹**，工具行上的徽标是 `SILENT`。
+- ⏳ 让 Agent 执行一条黑名单命令（安全的做法：在一个可丢弃的容器/虚拟机里试 `rm -rf /`，或直接观察它是否弹卡后**点拒绝**），确认弹出审批卡且卡上说得清是哪条规则；`~/Library/Application Support/WillDeep/AgentAudit/judge.jsonl` 里能看到 `model` 为 `silent-mode-denylist` 的记录。
+- ⏳ 断网（或临时清掉裁判可用的 API key）后在静默模式下跑一条普通命令，确认**照常放行**，并且 judge.jsonl 里那条记录的 detail 带 `silent mode: allowed without a verdict`。这是这一档最需要用户知道的性质。
+- ⏳ 静默模式下让 Agent 调 `declare_environment_trust`（可以直接说「记住这个终端是一次性的」），确认**仍然弹审批卡**——这条闸门任何档位都够不到。
+- ⏳ 切回智能审核，确认之前的行为一切照旧（静默模式的判定不该渗到别的档位）。
+- ⏳ 用旧版本 WillDeep 打开一个在静默模式下创建的会话，确认它**还在会话列表里**（降级成智能审核），而不是整条消失。
+
+## 1.286.0-rc1 — `update_plan` 工具化的进度上报
+
+- ⏳ 给一个需要多步的任务（能跑十几分钟、有若干次工具调用的那种），确认模型先发 ` ```plan ` 块，然后**在执行过程中**清单就开始逐格推进——不再是回合结束才一次性跳完。
+- ⏳ 盯着 composer 上方的进度胶囊：每次 `update_plan` 落地后「第 N 步」应立刻变；转录里能看到「更新计划进度」这行工具调用，且**不弹审批卡**（严格模式下也不弹）。
+- ⏳ 执行中途强制退出 App（活动监视器里 kill），重开后确认已完成的步骤状态还在——上报是即时落盘的，不再等回合结束。
+- ⏳ 让模型报一个不存在的步骤号（可以直接说「把第 99 步标成完成」），确认工具回给它一句带原因的拒绝，而不是静默无事发生。
+- ⏳ 中断一个执行中的计划（按 Stop），再让它继续，确认第一次上报就把暂停徽标清掉。
+- ⏳ 兼容路径：如果模型仍然发 ` ```progress ` 围栏块，确认清单照样更新；同一回合里工具已经标完成的步骤，不会被收尾那条围栏块打回去。
 
 ## 1.277.0-rc2 — 会话正文不再被滚到顶部
 

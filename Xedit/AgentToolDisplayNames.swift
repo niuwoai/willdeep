@@ -127,6 +127,7 @@ nonisolated enum AgentToolDisplay {
         "list_skills": "查看技能",
         "read_skill": "读取技能",
         "activate_expert": "激活技能包",
+        "update_plan": "更新计划进度",
         "add_memory": "记忆要点",
         "create_user_skill": "新建技能",
         "create_user_skills": "批量新建技能",

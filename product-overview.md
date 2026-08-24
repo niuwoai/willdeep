@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-23 | Current version: v1.285.0-rc4
+> Last updated: 2026-08-23 | Current version: v1.287.0-rc11
 
 ## Positioning
 
@@ -12,6 +12,10 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **贴硬线文件的预防性拆分（1.287.0-rc4）** —— 把三个离 `scripts/complexity_guard.rb` 3000 行硬阈值只剩几行的文件按主题拆开，不等它们再把 CI 的 quality 守卫组整条 break 掉：`scripts/short_drama_media_contract_test.rb`（2995 → 1170，1891 行的 `plan_import_contract` 按规划导入 / 媒体任务 / 媒体工具三个主题拆成同前缀兄弟脚本）、`Xedit/AgentShortDramaProductionExporter.swift`（2973 → 1120，析出组件预览 HTML 与内嵌 env / Ruby 模板两个 extension 文件）、`Xedit/SomeIMIntegration.swift`（2912 → 1717，析出存储层与设置界面；`SomeIMClient` 与值类型共用同一个 fileprivate `String.nonEmpty`，刻意留在一起）。纯等价重构，逐行原样搬运，`complexity_guard` 的 soft 计数 18 → 15、hard 保持 0。
+- **Agent 模型域复杂度治理（1.287.0-rc3）** —— `AgentModels.swift` 被 1.287.0-rc1 推过 3000 行硬阈值后按主题拆成 7 个兄弟文件：`AgentManagedRoutingModels.swift`（省心托管路由）、`AgentPlanGoalModels.swift`（交互模式 / 审批档位 / Plan & Goal）、`AgentConfigurationModels.swift`（provider 配置）、`AgentProviderPresetModels.swift`（provider kind 与 preset 目录）、`AgentPatchModels.swift`（patch / worktree 变更）、`AgentErrorModels.swift`（错误模型）、`AgentAttachmentModels.swift`（附件与知识文件夹）。主模型文件从 3013 行降到 580 行，只留 `AgentSession` 持久化图；纯等价重构，逐行原样搬运。
+- **静默审批档位（1.287.0-rc1）** —— 新增第四种审批档位「静默模式」。前三档都是白名单式（默认要问，凑够理由才放行），静默模式是黑名单式：默认放行，需要理由的是拦截。地基是一份确定性的恶意命令黑名单（不可逆的大范围破坏、主机接管、反取证、凭据外泄四类，按 shell 分段判定），AI 裁判换成方向相反的「恶意与否」分类器且拿不准判放行。日常破坏性操作（清 node_modules、`git reset --hard`、`docker compose down -v`）不再打断。裁判缺席时按用户语义放行，审计日志单独标注「未裁而放」；沙箱档位不放宽，环境信任声明工具仍然任何档位都够不到。
+- **`update_plan` 工具化的进度上报（1.286.0-rc1）** —— 计划进度从 ` ```progress ` 围栏块改为常驻核心工具上报。落盘复盘显示 80% 的围栏块只在回合收尾出现，长回合的清单在结束前一格不动；工具调用是模型在回合中段唯一稳定使用的通道。工具会把读不出的条目带原因回灌，围栏块降为兼容路径并按步骤让位于工具。上报即落盘，续推策略同步识别工具通道。
 - **上下文能力索引与离线规则库（1.285.0-rc2）** —— Alma 完整规则文档以 172KB 的 `BundledAgentRules` 资源目录随 App 发行，常驻全局规则入口压缩为约 3KB 的任务路由索引；Prompt 注入时动态解析 App 内规则根路径，只在任务命中时读取具体规范。设置页展示规则库版本/位置，并允许在不自动覆盖用户文件的前提下载入精简索引。Skill 使用缓存元数据由宿主主动路由：高置信度最多挂载一份正文，模糊匹配仅给三个短候选；MCP 沿用固定网关。164 个既有原生工具加上新路由后只常驻 20 个编码核心 Schema，其余通过 `load_tool_pack` 分类加载。工具包会话内只增不减，以一次扩包缓存失效换取后续稳定命中。
 - **Harness 审计收口与只读插件统计（1.284.0-rc12）** —— Goal 执行、交接和自动续跑统一服从 wall-clock 预算；计划进度解析拒绝符号、自然语言计数和否定状态误判；延迟派发保留消息来源，some.im 最近有效会话设置 10 分钟使用窗口。稳定提示词契约升级至 v31。Session Vitality 仪表盘通过只读 MCP 统计资源加载数据，不再触发工具确认或读取错误。
 - **随 App 发行的经典游戏厅（1.281.0-rc1）** —— 将 WillDeep 调度台并行完成的贪吃蛇、俄罗斯方块、Pong、扫雷和记忆翻牌整合为一个沙箱 Web 游戏厅插件；macOS 发行包仅携带清单、本地化与生产资源。新增只对第一方 bundled 插件生效的 `defaultPinned` 目的地能力，使“经典游戏厅”稳定固定在左侧插件分组顶部，第三方插件不能借该字段抢占导航。
@@ -1558,7 +1562,7 @@ WillDeep 是 SwiftUI + AppKit 桥接的 macOS 应用，单进程多窗口。代�
 | `L10n.swift` | ~1327 | String Catalog 访问入口与本地化 key |
 | `ContentView.swift` | ~1225 | 主窗口外壳；rc56 已将 editor chrome 叶子视图拆到 `ContentViewEditorChrome.swift` |
 | `AppState.swift` | ~1182 | 全局状态枢纽 + manager 伴生文件聚合；rc69 拆展示状态，rc76 拆 AgentRuntime 兼容访问器 |
-| `AgentModels.swift` | ~1097 | `AgentSession` / Plan & Goal / provider configuration / patch / worktree / error / attachment / learning event 模型；rc65 已拆消息模型，rc80 已拆 provider library |
+| `AgentModels.swift` | ~580 | `AgentSession` 持久化图与它的附件外部化扩展；rc65 拆消息模型，rc80 拆 provider library，1.287.0-rc3 再拆出省心托管路由 / Plan & Goal / provider 配置 / preset 目录 / patch / error / attachment 七个模型域 |
 | `AppStateAgentSessions.swift` | ~1076 | Provider library、Plan & Goal、worktree review、queue、session lifecycle、routine 和模型选择；rc74 已拆 composer 附件上下文 |
 | `AgentMobileGatewayBridgeTests.swift` | ~1006 | Mobile Gateway 桌面桥接安全边界与消息流回归测试 |
 | `AppStateAgentLoop.swift` | ~986 | `dispatchAgentMessage` / `runAgentLoop` / `awaitToolDecision` / subagent 执行；rc45/rc51/rc62/rc73/rc81 持续拆出错误、压缩、patch、审批、streaming buffer、turn-end learning、dispatch queue 和 request estimates |

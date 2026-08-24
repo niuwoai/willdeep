@@ -125,6 +125,9 @@ extension AppState {
             )
             runtime.messages.append(userMessage)
             runtime.latestTurnRecall = nil
+            // A new user turn starts a fresh reporting window: last turn's
+            // `update_plan` calls no longer outrank this turn's fences.
+            runtime.planStepsSettledByToolThisTurn.removeAll()
             persistAgentSession(runtime: runtime)
         }
 
@@ -1422,7 +1425,12 @@ extension AppState {
                     )
                 }
                 let planStatusesAfterReply = runtime.currentPlan?.steps.map(\.status)
+                // `update_plan` lands during tool execution, i.e. after the
+                // before/after snapshot pair above was taken, so a turn that
+                // reported only through the tool would otherwise be counted
+                // as "no progress" and eventually hard-paused.
                 if didAdvancePlanSinceLastContinuationDecision
+                    || runtime.planAdvancedByToolSinceLastContinuationDecision
                     || planStatusesBeforeReply != planStatusesAfterReply {
                     consecutivePlanRepliesWithoutProgress = 0
                     isPlanProgressReconciliationActive = false
@@ -1430,6 +1438,7 @@ extension AppState {
                     consecutivePlanRepliesWithoutProgress += 1
                 }
                 didAdvancePlanSinceLastContinuationDecision = false
+                runtime.planAdvancedByToolSinceLastContinuationDecision = false
 
                 // A missing status block is not the same as a stalled run.
                 // Count the tool calls that actually succeeded since the last

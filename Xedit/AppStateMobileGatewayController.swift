@@ -635,6 +635,8 @@ extension AppState: AgentMobileGatewayControlling {
             return .requestEveryTime
         case "smart", "smart_approval":
             return .smart
+        case "silent", "silent_mode", "silentmode":
+            return .silent
         case "workspace_access", "workspace_writable", "workspaceaccess":
             return .workspaceAccess
         default:

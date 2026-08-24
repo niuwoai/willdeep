@@ -158,7 +158,10 @@ struct AgentSkillAutoActivationTests {
     }
 
     @Test
-    func chineseReleaseRequestMatchesEnglishSkillMetadata() {
+    func strongMetadataMatchStaysACandidateWithoutExplicitIntent() {
+        // 1.287.0-rc6: even a high-scoring metadata match no longer attaches a
+        // body on its own — the model judges it via the `read_skill` hint. Only
+        // `$name` invocation or a literal name mention is deterministic.
         let release = skill(
             "release-macos-app",
             description: "Release, build, sign, codesign, notarize, and publish a Swift macOS application."
@@ -172,7 +175,48 @@ struct AgentSkillAutoActivationTests {
             availableSkills: [release, unrelated]
         )
 
-        #expect(route.autoAttach?.identifier == "release-macos-app")
+        #expect(route.autoAttach == nil)
+        #expect(route.candidates.first?.skill.identifier == "release-macos-app")
+    }
+
+    @Test
+    func everydayCJKBigramOverlapDoesNotAutoAttach() {
+        // Regression: "当前没有设计租户管理员的角色吗?" once auto-attached a
+        // drama-writing skill because "没有" (from the description's own
+        // "don't trigger" guard sentence) and "设计" were treated as rare,
+        // high-value terms by catalog-relative IDF.
+        let drama = skill(
+            "hongguo-drama",
+            description: "红果短剧/微短剧/竖屏爽剧创作技能。用于用户要求创作短剧剧本、分集大纲、爽点设计、钩子设计时。若用户只说普通电影剧本且没有短剧语境，不要优先触发。"
+        )
+        let unrelated = skill(
+            "system-info",
+            description: "Inspect system memory, disk, network, and running processes."
+        )
+        let route = AgentSkillRouter.route(
+            userText: "当前没有设计租户管理员的角色吗?",
+            availableSkills: [drama, unrelated]
+        )
+
+        #expect(route.autoAttach == nil)
+    }
+
+    @Test
+    func literalChineseSkillNameMentionStillAutoAttaches() {
+        let drama = AgentSkillEntry(
+            identifier: "hongguo-drama",
+            name: "红果短剧",
+            description: "红果短剧/微短剧/竖屏爽剧创作技能。",
+            url: URL(fileURLWithPath: "/tmp/hongguo-drama/SKILL.md"),
+            source: .user,
+            isEnabled: true
+        )
+        let route = AgentSkillRouter.route(
+            userText: "帮我写一个红果短剧的分集大纲",
+            availableSkills: [drama]
+        )
+
+        #expect(route.autoAttach?.identifier == "hongguo-drama")
     }
 
     @Test

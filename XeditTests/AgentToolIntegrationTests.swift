@@ -585,8 +585,17 @@ extension WillDeepTests {
             promptProfile: .extended
         )
         #expect(prompt.contains("Extended operating model"))
-        #expect(prompt.contains("Do NOT hand-craft unified diffs with apply_patch unless edit_file genuinely cannot express the change"))
-        #expect(prompt.contains("Never tell the user to look in a \"right-side review panel\""))
+        // v30 提示词压缩（e21bfdec）改写了 apply_patch 兜底句、并把 "Never…" 改成小写：
+        // 断言跟随现行原文（AgentContextBuilder.swift 的 edit_file/apply_patch 段），
+        // 并用大小写不敏感匹配，降低下次等价重构再次烂断言的概率。
+        #expect(prompt.range(
+            of: "Hand-written apply_patch hunks frequently fail to match: use it only when edit_file genuinely cannot express the change",
+            options: .caseInsensitive
+        ) != nil)
+        #expect(prompt.range(
+            of: "never tell the user to look in a \"right-side review panel\"",
+            options: .caseInsensitive
+        ) != nil)
     }
 
     // MARK: - Dependency directory skipping

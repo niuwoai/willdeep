@@ -686,7 +686,7 @@ struct AgentManagedQualityDecision: Codable, Equatable {
 
 ## 关键实现落点
 
-### `AgentModels.swift`
+### `AgentManagedRoutingModels.swift`（1.287.0-rc3 前在 `AgentModels.swift`）
 
 可能需要新增：
 

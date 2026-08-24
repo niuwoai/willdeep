@@ -305,6 +305,12 @@ final class AppState: ObservableObject {
         hasLoadedAgentSessionCatalog = true
     }
 #endif
+    /// Test seam for the send path's generic skill routing. Production keeps
+    /// this nil and `sendAgentMessage()` routes against the real on-disk skill
+    /// catalog; dispatch-path tests inject `[]` so a host full of installed
+    /// skills cannot splice a "Skill routing candidates" prelude into the
+    /// message text they assert on verbatim.
+    var skillRoutingCatalogForTesting: [AgentSkillEntry]?
     /// Ids whose entry in `agentSessions` is still the catalog skeleton
     /// (messages stripped) and must be materialized from disk before it
     /// can be read or persisted. Owned per instance: several AppState

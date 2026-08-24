@@ -70,5 +70,5 @@
 
 - 未在本轮收口中调用真实 some.im / Replicate 外网 API，只验证本地工具链、上下文接力、任务登记、构建和合约。
 - 本地试用包只验证 manifest/Widget/review queue 形态，不能替代真实 provider 账号、额度、网络和 API 行为验证。
-- `scripts/short_drama_media_contract_test.rb` 接近 3000 行硬线，后续不要继续往里追加检查。
-- `Xedit/AgentShortDramaProductionExporter.swift` 接近 3000 行硬线，后续只修 bug，不继续扩展。
+- ~~`scripts/short_drama_media_contract_test.rb` 接近 3000 行硬线~~ 1.287.0-rc4 已按主题拆成 `short_drama_media_contract_plan_import_checks.rb` / `_media_task_checks.rb` / `_media_tool_checks.rb` 三个兄弟文件（入口脚本降到 1170 行）。新增检查请落进对应主题的兄弟文件，别再堆回入口脚本。
+- ~~`Xedit/AgentShortDramaProductionExporter.swift` 接近 3000 行硬线~~ 1.287.0-rc4 已析出 `AgentShortDramaProductionExporterWidgetHTML.swift`（组件预览 HTML）与 `AgentShortDramaProductionExporterHandoffTemplates.swift`（env 示例与 Ruby 脚本模板），主文件降到 1120 行。注意 `scripts/short_drama_media_contract_test.rb` 的 `production_exporter_source` 是这三个文件拼接取材的，再拆要同步那份清单。

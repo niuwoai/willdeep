@@ -70,6 +70,41 @@ nonisolated struct AgentContextTokenUsageSnapshot: Equatable, Sendable {
     let usedTokens: Int
     let baselineTokens: Int
     let contextWindow: Int
+
+    // 状态栏圆环、Compress 按钮、自动压缩判定与 runway 暂停指令消费的是
+    // 同一份快照，也必须共用同一个比值：裸 used / window。历史事故：圆环
+    // 按 (used−baseline)/(window−baseline) 双向扣减显示 30%，runway 同时
+    // 按裸口径告诉模型 92%，两套百分比无从对齐。对话/基线的细分只进
+    // tooltip，不再进任何分子或分母。
+
+    /// Fraction of the model window the next request occupies, clamped to
+    /// [0, 1]. Same arithmetic as `AgentContextRunwayPolicy.Snapshot.usedPercent`.
+    var usedFraction: Double {
+        min(1, max(0, Double(usedTokens) / Double(max(1, contextWindow))))
+    }
+
+    /// Baseline clamped to `usedTokens` for display: both are priced from
+    /// the same content, but a provider-anchored `usedTokens` can lag a
+    /// baseline just recomputed against a larger system prompt.
+    var displayBaselineTokens: Int {
+        min(max(0, baselineTokens), usedTokens)
+    }
+
+    /// Conversation-only share of `usedTokens` (history minus the stable
+    /// system prompt + tool schemas). Tooltip detail, never a gauge input.
+    var conversationTokens: Int {
+        max(0, usedTokens - displayBaselineTokens)
+    }
+
+    var remainingTokens: Int {
+        max(0, contextWindow - usedTokens)
+    }
+
+    /// Manual "Compress" affordance: the same bare fraction as the ring,
+    /// plus enough turns for a summary to be worth writing.
+    func shouldOfferManualCompression(messageCount: Int) -> Bool {
+        usedFraction > 0.5 && messageCount > 6
+    }
 }
 
 private nonisolated struct AgentTokenEstimateWorkload: Sendable {
@@ -453,8 +488,8 @@ extension AppState {
     /// indentation/newlines that dominate code and logs were priced at zero.
     /// A 1M-window session read as 54% full while the provider rejected the
     /// request at 1.62M tokens. Whitespace is now billed and ASCII is split
-    /// into prose-like letters vs dense symbols; `calibratedTokenScale` still
-    /// corrects the remainder against real provider usage.
+    /// into prose-like letters vs dense symbols; `providerAnchoredUsedTokens`
+    /// still corrects the remainder against real provider usage.
     nonisolated static func estimateTextTokens(_ text: String) -> Int {
         guard !text.isEmpty else { return 0 }
 
@@ -499,13 +534,35 @@ extension AppState {
             || (0xAC00...0xD7AF).contains(value)
     }
 
-    /// Heuristic context-window budget for the active model. Falls back to
+    /// Heuristic context-window budget for the active session. Falls back to
     /// a modern 128k window for unknown models so custom OpenAI-compatible
     /// models don't look full after one ordinary turn.
     var agentContextWindow: Int {
-        Self.agentContextWindow(
-            model: activeAgentModelID,
-            providerID: agentConfiguration.providerID
+        guard let runtime = activeRuntime else {
+            let configuration = agentConfiguration.normalized
+            return Self.agentContextWindow(
+                model: configuration.model(for: .interactive),
+                providerID: configuration.providerID
+            )
+        }
+        return agentContextWindow(for: runtime)
+    }
+
+    /// Window for one specific runtime, resolved from the provider entry and
+    /// model override pinned to that session — not from the Settings-wide
+    /// default provider and never from whichever session happens to be
+    /// frontmost. Background sessions previously borrowed the active
+    /// session's window as their auto-compression denominator.
+    func agentContextWindow(for runtime: AgentRuntime) -> Int {
+        let configuration = configurationForCurrentTurn(for: runtime)
+        // `.model`, not `model(for:)`: the property is the fully resolved
+        // per-turn model — session override included — and is exactly what
+        // the runway policy divides by (`turnConfiguration.model`). The
+        // routing accessor reads flash/pro fields and would ignore
+        // `sessionModelOverride`.
+        return Self.agentContextWindow(
+            model: configuration.model,
+            providerID: configuration.providerID
         )
     }
 

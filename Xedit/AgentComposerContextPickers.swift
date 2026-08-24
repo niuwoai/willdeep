@@ -222,6 +222,9 @@ struct AgentApprovalModePickerPill: View {
         switch appState.agentApprovalMode {
         case .requestEveryTime: return AgentComposerChrome.controlFill
         case .smart: return AgentComposerChrome.selectedControlFill
+        // 静默模式用最重的一档底色：它是唯一一个「几乎不会再拦你」的档位，
+        // 用户扫一眼 composer 就该看出自己正处在哪种姿态里。
+        case .silent: return AgentComposerChrome.strongControlFill
         case .workspaceAccess: return AgentComposerChrome.strongControlFill
         }
     }
@@ -230,6 +233,7 @@ struct AgentApprovalModePickerPill: View {
         switch appState.agentApprovalMode {
         case .requestEveryTime: return AgentComposerChrome.border
         case .smart: return AgentComposerChrome.selectedBorder
+        case .silent: return AgentComposerChrome.strongBorder
         case .workspaceAccess: return AgentComposerChrome.strongBorder
         }
     }

@@ -1,7 +1,281 @@
 # Changelog
 
-> 当前文件保留最新版本（1.285.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.287.0-rc11 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.287.0-rc11 - 2026-08-24
+
+> 与 1.287.0-rc10（apply_patch 断言漂移修复）并行开发、合并时升号：两个并发会话不约而同各修了一部分 rc5 登记的本机存量红，且都自 bump 成 rc10 撞号。apply_patch 断言两边都改到——本条弃用自己的 `contains` 版本、整段采纳 rc10 已合入 develop 的 `caseInsensitive` 版本（更抗大小写漂移），代码零差异；本条净增量是其余三条派发红的修复与登记收口。
+
+### Fixed
+
+- **收掉 rc5 起登记的最后 3 条本机存量红：派发类用例与宿主技能目录解耦。** 根因 rc5/rc6 已记录：`sendAgentMessage()` 派发链里 `AgentSkillAutoActivation.routingDecision` 的 catalog 落到 `AgentSkillDirectory.list` 读宿主真实技能根（本机 60+ 技能），候选降级链路把 "Skill routing candidates" 段拼进消息文本，三条用例——`AgentQueueModeTests` 的 `sendingNewMessageWhileAwaitingUserDecisionClosesBlockingCall` / `sendingNewMessageDuringNonBlockingResponseOnlyQueuesIt`、`AgentMobileGatewayBridgeTests.appStateMessageSendDispatchesIntoAgentRuntime`——对消息文本的裸相等断言必红；CI 空目录不复现，属宿主环境泄漏进单测。修法：`AppState` 新增 test seam `skillRoutingCatalogForTesting: [AgentSkillEntry]?`，派发处原样传给 `routingDecision(availableSkills:)`——这个注入口正是 `AgentSkillAutoActivationTests` 一直在用的隔离参数，本次只是把它接到 AppState 派发链上；nil 时仍读真实目录，生产行为零变化。三条用例注入 `[]`，裸相等断言从此不看宿主装了什么技能。
+
+### Tests
+
+- 定向 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/AgentQueueModeTests -only-testing:XeditTests/AgentMobileGatewayBridgeTests`：36/36 绿，三条原红用例逐条有 passed 日志。
+- 全量 `ruby scripts/run_tests_fast.rb`（含 apply_patch 断言修复的合并形态）：**2884 例 / 0 失败 / 1 skip（惯常那条），rc5 以来本机首次全绿**。4 条原红用例在 xcresult 里逐条核对为 Passed；退出码、日志汇总、xcresult 三方一致（`testApplyPatchPromptAndRegistrySurface` 属 `WillDeepTests` 聚合 suite，函数级 `-only-testing` 会假绿选不中，故只认全量证据）。
+- **rc5 登记、rc6 细化、rc7/rc8 维持、rc10 减到 3 条的「本机存量红」登记自本条起收口作废**：后续全量若再见红即为新问题，不得再引用该登记归档。
+
+## 1.287.0-rc10 - 2026-08-24
+
+### Tests
+
+- **修复 rc5 登记的本机存量红 `WillDeepTests.testApplyPatchPromptAndRegistrySurface`（提示词源码断言漂移），存量红从 4 条降到 3 条。** 两处 `prompt.contains` 断言还在核对 v30 之前的提示词原文，属「CI 守卫的源码字符串断言没跟上等价重构」，修断言不改提示词：
+  - `"Do NOT hand-craft unified diffs with apply_patch unless edit_file genuinely cannot express the change"`：该句在 e21bfdec（v30 压缩，standard −10.6%）已被改写，断言由 06b86cb6 引入后没跟上。同一约束（优先 edit_file、apply_patch 仅兜底）的现行句子是 `"Hand-written apply_patch hunks frequently fail to match: use it only when edit_file genuinely cannot express the change"`，断言换锚到这句。
+  - `"Never tell the user to look in a \"right-side review panel\""`：现行原文为小写 `never …`，纯大小写漂移。
+  - 两处一并从 `contains` 改为 `range(of:options:.caseInsensitive)`，下次压缩若只动大小写不再烂断言。提示词源码零改动，三档快照契约（prompt snapshot contract）不受影响、无需重录。
+- 定向 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/WillDeepTests`：308 例全绿、零失败；目标用例在 xcodebuild.log 逐行核对为 passed（该 suite 此前唯一的登记红即本条），`** TEST SUCCEEDED **` + guard exit=0 + report.json passed 三者一致。
+
+### Known issues
+
+- 其余 3 条本机存量红维持 rc5/rc6 登记原样，本次未处理：`AgentToolsCoreTests.swift:2372/2402` 两条队列用例与 `AgentMobileGatewayBridgeTests.appStateMessageSendDispatchesIntoAgentRuntime`（宿主真实技能目录经真实派发链泄漏进裸文本断言，均不在 `WillDeepTests` suite 内）。（已在 1.287.0-rc11 收口。）
+
+## 1.287.0-rc9 - 2026-08-24
+
+> 与 1.287.0-rc8（自动捕获净化漏斗）并行开发、合并时升号：本条改 usage 口径侧，与 rc8 的技能捕获侧无代码交集。
+
+### Fixed
+
+- **上下文占用四套口径统一为裸 used/window，圆环显示的数字与模型被告知的一致。** 实际事故：状态栏圆环显示 30%，同一时刻 runway 暂停指令却告诉模型「92% used」——用户面对两个都自称"上下文占用"的百分比无从对齐。根因是同一份 usage 快照上并存四套算法：圆环用 `(used−baseline)/(window−baseline)` 双向扣减（baseline=系统提示+工具 schema）；Compress 按钮门槛用裸 `used/window`；自动压缩判定先扣 `fixedToolOverhead` 再除全窗口（双重打折，红圈了还不自动压）；runway 用裸 `used/window`。现在四处全部收敛到裸 `used/window`，算式落在 `AgentContextTokenUsageSnapshot.usedFraction` 单点；对话净占用/系统+工具基线的细分只进圆环 tooltip（新 5 参数文案 `context-ring.tooltip-breakdown`，5 语言），不再进任何分子分母。
+- **自动压缩分母不再错借前台会话的窗口。** `shouldAutoCompressNow(for:)` 此前用 `agentContextWindow`（按 active 会话的模型解析），后台会话触发判定时拿前台模型的窗口当分母——前台挂着 1M 模型时，16k 后台会话永远到不了 75% 触发线。新增 `agentContextWindow(for: runtime)` 按该会话自己钉住的 provider entry + 模型 override 解析窗口。
+- **圆环侧窗口解析的 providerID 改用会话绑定 provider。** `agentContextWindow` 原来把全局默认配置的 `providerID` 传进 catalog 兜底，会话绑了别的 provider 时口径不干净。
+- 删除 `estimateTextTokens` 注释里指向已不存在的 `calibratedTokenScale` 的陈旧句（真实机制是 `providerAnchoredUsedTokens` 锚定 provider 实报用量）。
+
+### Tests
+
+- 新增 `AgentContextUsageSnapshotTests`（圆环/按钮口径此前零覆盖）：裸口径不扣 baseline、圆环百分比与 `AgentContextRunwayPolicy.Snapshot.usedPercent` 同数、clamp 与零窗口、tooltip 细分自洽（baseline 超过 used 时夹紧）、Compress 门槛同口径、后台 runtime 用自己 16k 窗口触发自动压缩（分母错借前台 1M 窗口时该用例红）。
+## 1.287.0-rc8 - 2026-08-24
+
+> 与 1.287.0-rc7（附件前导反拼接）并行开发、合并时升号：两个修复都落在自动技能捕获链上但互相独立——rc7 管"什么文本允许触发捕获"，本条管"允许捕获后写出去的内容必须净化和限长"。
+
+### Fixed
+
+- **自动技能捕获绕过了净化与长度上限。** `AgentSelfLearning.automaticSkillCandidate` 生成的 name/description 直接调用 `AgentSkillFileManager.createUserSkill` 落盘，绕过了 `create_user_skill` 工具路径的 `AgentMemorySanitizer` 密钥净化与 80/240/12000 字符 `limitedRequiredString` 上限；`AgentMemorySanitizer.sanitize` 只盖住了自动生成的 body。后果：用户原话里的密钥（`token:...`、`Bearer ...`、`sk-...` 等）会原样写进 SKILL.md 的 name/description、乃至目录名 slug；超长 tool summary 能把 body 撑到无上限。
+- **修法：三条写技能的路径收敛到同一个漏斗。** 新增 `AgentSelfLearning.sanitizedSkillDraft(name:description:body:)`，对 name/description/body **全覆盖**做密钥净化 + 80/240/12000 截断，且刻意**先净化后截断**——反过来的话，骑在截断边界上的密钥会被切成正则认不出的碎片存活。`create_user_skill`、`create_user_skills`、自动捕获三条路径统一走它；工具路径顺带补齐 name 的净化（原先只净化 description/body）。自动路径在拼装任何字段之前先对 userText/assistantText 整体净化，堵住 `oneLine` 截断把密钥切半的缝；`automaticSkillBody` 里的孤立 sanitize 移除，净化入口只此一个。
+- **`AgentSkillFileManager.skillSlug` 加长度上限。** 新增 `maxSkillSlugLength = 64`：slug 截断后重新去尾部 `-`，目录名保持可读并稳在文件系统 255 字节文件名限制之内（多字节文种也安全）；64 字符内的既有 slug 不受影响。
+
+### Tests
+
+- 新增 4 条回归（`AgentSelfLearningTests`）：
+  - `sanitizedSkillDraftRedactsSecretsAndCapsEveryField`：漏斗三字段净化 + 截断，含"先净化后截断"顺序陷阱断言（若有人换成先截断，`token:abc...` 碎片存活即红）。
+  - `automaticSkillCaptureSharesToolPathSanitizationAndCaps`：自动捕获端到端——draft 与落盘 SKILL.md 均无裸密钥、三字段与 slug 全部落在工具路径上限内。
+  - `createUserSkillToolSanitizesSkillNameToo`：工具路径 name 也被净化（frontmatter 与 slug 均为 `[REDACTED_SECRET]` 形态）。
+  - `skillSlugCapsLengthAndTrimsTruncationDash`：slug 上限、截断落在分隔符上不留尾部 `-`、短名字 slug 不变。
+- 定向 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/AgentSelfLearningTests`：合并 rc7 后整 suite 51 例（43 原有 + rc7 的 4 + 本条的 4）全绿。
+- 全量 `ruby scripts/run_tests_fast.rb`（rc7 合并后复跑）：2871 例，4 条唯一红（5 issues）与本次改动零交集，全部命中 rc5/rc6「Known issues」登记的本机存量红，失败原文核对过与登记根因一致：`WillDeepTests.testApplyPatchPromptAndRegistrySurface`（提示词源码断言漂移）、`AgentToolsCoreTests.swift:2372/2402` 两条队列用例与 `AgentMobileGatewayBridgeTests.appStateMessageSendDispatchesIntoAgentRuntime`（宿主真实技能的 "Skill routing candidates" 段泄漏进裸文本断言）。`AgentSelfLearningTests` 零失败。
+
+### Known issues
+
+- 上述 4 条本机存量红维持 rc5/rc6 登记原样，本次未处理。
+
+## 1.287.0-rc7 - 2026-08-24
+
+### Fixed
+
+- **自动技能捕获不再把 composer 注入的附件前导当成用户工作流。** 实际事故：一次带附件技能的会话在回合末被自动学习捕获，落盘成 `~/.willdeep/skills/auto-the-user-attached-the` —— 名字是 "The user attached the…" 前四个词的 kebab-case 截断，description 以 "Use when repeating this workflow: The user attached the following context for this turn…" 开头，正文 "Captured trigger" 整段是前导模板 + 附件技能（swiftui-hang-diagnose）的 description。根因：composer 会把 `preludeHeader` + `### Skill:`/`### File:` 块 + 用户文本边界标记拼进用户消息的 `content` 本体（spliced prelude），而 1.238.1 引入的 `operatorAuthoredContent` 只排除了 `modelContext`，没排除这层拼接；附件技能的 description 自带 "skill"/"自动"/"沉淀" 等词，恰好命中 `containsExplicitSkillCreationSignal`，让每个"附了技能 + 出现一个创建类动词"的回合都可能直接写盘一个垃圾技能。
+- **修法一（捕获源）：`AgentMessage.operatorAuthoredContent` 统一反拼接。** spliced prelude 只取边界标记之后用户真正敲的字——复用 `AgentAttachedPromptDisplay.transform`，新增 `userAuthoredText` 字段；刻意不用带 "[已附加技能: …]" 标签行的 `visibleContent`，标签里"技能"两字本身就是触发词。图片理解追加的 "[Image description generated by …]" 块也一并剥离（`AgentUserContentSplitter`）；用户粘贴的 `textAttachments` 仍按 1.238.1 口径保留。受益方是整条学习链：memory 候选、MCP 建议、技能候选、检索 query。
+- **修法二（质量门禁，纵深防御）：`automaticSkillCandidate` 入口新增 `containsHostComposedTemplate` 闸。** 技能候选的 name/description/body 全部从 userText 机械截取，只要触发文本仍含 composer 前导头或用户文本边界标记（老会话落盘的 content、未来反拼接不认识的新拼接形态），一律拒绝生成候选。
+
+### Tests
+
+- 新增 4 例回归（`AgentSelfLearningTests`，48 例全绿）：事故复刻（附件技能 description 携带触发词 + 8 次工具调用 + 用户只说普通请求 → 零技能事件、零落盘）、spliced prelude 反拼接（含"只有附件没敲字 → 空串"）、图片描述块剥离、门禁兜底（模板混在正文中段仍拦截 + 谓词双向断言）。
+- 全量 2865 例：除 5 个 issue 外全绿；该 5 个 issue 在不含本次改动的 develop 基线上逐一复现（3 例是排队/网关测试经真实派发链读到本机真实技能目录的隔离泄漏，1 例双断言是 v32 扩展提示词契约），与本次改动无关。
+
+## 1.287.0-rc6 - 2026-08-24
+
+### Fixed
+
+- **技能自动附加不再按打分"自作主张"。** 实际事故：用户在 sso 工作区问「当前没有设计租户管理员的角色吗?」，composer 自动附加了 `hongguo-drama`（红果短剧）技能并显示「已附加技能」，用户完全没选过它。用真实技能目录（66 个）复算 `AgentSkillRouter` 打分坐实根因：命中的不是"角色"，是 **"没有"（+4.51）和"设计"（+3.60）** 两个日常词，合计 8.11 分越过 7.0 自动附加线——
+  - CJK 按 2~4 字 n-gram 切词但**没有停用词表**（英文有 `stopTerms`），"没有""当前"全是索引词；
+  - IDF 稀有度是**目录内相对值**：全目录只有这一个技能描述含"没有"，它就被当成黄金关键词——而这个"没有"恰恰来自描述里那句**防误触发的否定守卫**「…且没有短剧语境，不要优先触发」，防误触发的句子本身成了误触发元凶；
+  - 误附加的代价是整段 SKILL.md 正文进 prompt（上下文污染、答疑可能带上短剧腔）+ 用户困惑，而它省下的只是模型一次 `read_skill` 调用，性价比倒挂。
+- **修法：通用目录的确定性附加只认两个强用户意图信号**——`$skill-name` 显式调用、字面技能名命中（用户真打出技能名）。按分数的第三条分支整体删除（`automaticScoreThreshold` / `automaticMargin` / `rareSingleTermMatch` 一并退役），所有打分命中一律降级为 `read_skill` 候选元数据提示，由模型判断是否真的相关再加载正文——候选提示链路（`candidateSkills` → composer 的 "Skill routing candidates" 段）本就存在，本次只是把误伤面收进它。`figma-swiftui` / `design-to-code` 的视觉路由是独立多信号门（figma 链接/图片 + 意图 + 工程形态），不受影响。
+
+### Tests
+
+- `chineseReleaseRequestMatchesEnglishSkillMetadata` 改名 `strongMetadataMatchStaysACandidateWithoutExplicitIntent`：原正例「帮我发布这个 macOS App，完成签名和公证」现在断言**不**自动附加、`release-macos-app` 落在候选第一位。
+- 新增回归 `everydayCJKBigramOverlapDoesNotAutoAttach`：复刻事故原文 +（含守卫句的）短剧技能描述，断言 `autoAttach == nil`。
+- 新增 `literalChineseSkillNameMentionStillAutoAttaches`：用户真打出「红果短剧」四个字时仍确定性附加，钉住保留的字面名通道。
+- 定向 `ruby scripts/run_tests_fast.rb -only-testing:XeditTests/AgentSkillAutoActivationTests -only-testing:XeditTests/AgentSkillDirectoryTests`：30/30 绿。
+- 全量 `ruby scripts/run_tests_fast.rb`：2870 例，2865 绿 / 4 红 / 1 skip。
+
+### Known issues
+
+- 全量的 4 条红全部命中 rc5「Known issues」登记的本机存量红，与本次改动无关（技能路由相关 suite 零失败）：
+  - `AgentToolIntegrationTests`「apply_patch is advertised in extended prompt and tool registry」：断言的提示词原文早已在 v30 压缩时改写，源码字符串断言没跟上（rc5 已记录）。
+  - `AgentToolsCoreTests.swift:2372,2402` 两条队列用例 + `AgentMobileGatewayBridgeTests.appStateMessageSendDispatchesIntoAgentRuntime()`：`sendAgentMessage()` 前置的附件序言携带**本机真实安装技能的路由候选**（`male-web-novel`、`muchtoken-deploy`、`artifact-template-*` 等），裸文本断言必红——宿主环境泄漏进单测，本机才复现（rc5 已记录）。顺带说明：这三条的失败输出恰好证明候选降级链路（"Skill routing candidates" 段）在新行为下工作正常。
+
+## 1.287.0-rc5 - 2026-08-23
+
+### Fixed
+
+- **`scripts/bump_version.rb` 不再把散文文档里"描述过去"的句子改写成假话。** `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 和 `docs/MOBILE_GATEWAY_REQUIREMENTS.md` 原本挂在 `plain_files` 里走整文件盲替换。前者正文有两句是在陈述历史：「`AgentModels.swift` … 于 1.287.0-rc3 再拆七个模型域」和「1.287.0-rc3 拆完后请对着 `AgentPlanGoalModels.swift` … 放新模型」。1.287.0-rc3 → rc4 那次 bump 正好踩中：旧脚本会把这两处 rc3 一并改成 rc4，于是"rc3 干的事"被记成"rc4 干的事"，而且只能靠人肉发现、人肉回滚。
+- **这脏 `scripts/version_consistency.rb` 抓不到。** 它对这两个文档只读 `Current version:` / `Target version:` 那一行（外加 mobile 文档的三个 header/health 字段），正文被改脏它照样报绿。所以修的是替换侧，不是校验侧。
+
+### Changed
+
+- **两个文档改走 `product-overview.md` 同款的定点替换。** 原来只服务 `product-overview.md` 的 `bump_current_version_line` 泛化成 `targeted_docs` 登记表 + `count_targeted_sites` / `bump_targeted_sites`：只重写显式登记的行——`Current version:` / `Target version:` 标识行，以及 mobile 文档的 `X-App-Version`、`X-Server-Version` 和 health 响应里的 `"version"` 字段——正文一行不碰。登记表与 `version_consistency.rb` 校验的位点一一对应，新增位点时两边一起改。
+- **逐位点打印命中处数**，某个位点掉到 0 一眼可见：`docs/MOBILE_GATEWAY_REQUIREMENTS.md: 4 处 (只改登记位点: Target version 行 1 处, X-App-Version 1 处, X-Server-Version 1 处, health 响应 version 字段 1 处)`。
+- **前置扫描改成 fail-closed。** 任何一个登记位点匹配不到 old（文档改了写法而登记没跟上），在写第一个文件之前就 abort 并列出漏配位点，不留一个改到一半的仓库。
+
+### Added
+
+- **新增 `scripts/bump_version_contract_test.rb`，把上面这条修复钉死成自动化守卫。** 修完之后仍然没有任何东西拦着以后有人再把某个散文文档加回 `plain_files`——正文被改脏 `version_consistency.rb` 照旧报绿，下一次还是只能靠人肉发现。这份守卫补的就是那道拦：在临时目录里按真实相对路径搭一个最小仓库骨架（bump 会碰的 11 个文件 + 复制进去的 `bump_version.rb` / `version_consistency.rb`），往三个散文文档正文里种下人造的"历史版本"句子，跑一次真脚本，再逐行 diff。10 条断言覆盖：登记位点被改成新版本号、正文里描述过去的句子原样保留、逐位点命中处数三方对齐（文件内容 / 剩余旧版本号 / 脚本自报）、构建号 +1 与 chrome manifest 双字段同步、bump 之后在同一骨架上跑 `version_consistency.rb` 必须报绿（两份脚本的登记表谁先漂移谁先红），以及两轮故障注入——把每个登记位点的**标识写法**改坏、把每个登记位点上的**版本号**改得对不上，各要求脚本非零退出且骨架里一个文件都不落盘。
+- **全部写成行为测试，不做源码字符串断言。** 教训来自 `*_contract_test.rb` 那批按源码文本断言的守卫：等价重构会让它们静默变红或变绿，潜伏数月。骨架里的版本号刻意用 `9.9.0-rc7 → 9.9.0-rc8` 这种与仓库真版本无关的号，免得每次 bump 都得回头改测试。
+- **挂进 `scripts/run_ci_guard_group.rb` 的 `quality` 组**（步名 `bump-version`，排在 `i18n-add-keys` 之后），CI 的 ruby-guards job 每次都跑。
+
+### Tests
+
+- 反向验证守卫确实能抓住事故：把 develop 上未修复的 `bump_version.rb` 换回去再跑，10 条里红 4 条，头一条直接指名「以下本该一字不动的行被改了（把过去的事实改成了假话）」并逐行打印改前改后；换回修复版后 10 条全绿。
+- 另注入一次「把 mobile 文档补回 `plain_files` 但 `targeted_docs` 里也还留着」的手滑写法，守卫同样报红并点名被改脏的两行——这正是这份守卫要拦的那类未来改动。
+- 用修复后的脚本真跑 `1.287.0-rc4 → 1.287.0-rc5`：`docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 只动了第 3 行标识行，第 15、22 行那两句历史陈述仍是 rc1 / rc3；`product-overview.md` 里描述 rc3 的历史条目同样原样保留。
+- `ruby scripts/run_ci_guard_group.rb quality build/ci`：9 步全过。
+- `ruby scripts/run_tests_fast.rb`：见下方「已知存量红」。
+
+### Known issues
+
+- 本次单测**没有全绿**：2861 个用例红 5 个。归属已核对，与本次改动无关——本次 diff 里 Swift 文件数为 0，且并行会话在同一份 develop Swift 上跑出的失败集与本次逐条一致。
+  - `AgentToolIntegrationTests.swift:588,589`（"apply_patch is advertised in extended prompt and tool registry"）：断言的两句提示词原文在 `e21bfdec`（v30 压缩，1.284.0-rc5）被改写/删除，断言文本没跟上——又一例源码字符串断言随等价重构烂掉。
+  - `AgentQueueModeTests` 两条 + `AgentMobileGatewayBridgeTests.appStateMessageSendDispatchesIntoAgentRuntime()`：`sendAgentMessage()` 给消息前置了 `AgentComposerAttachmentSupport.preludeHeader` 附件序言，而序言里带着**本机真实安装的 skill 路由候选**（`male-web-novel`、`muchtoken-deploy` 等），用例按裸文本断言必红。这是宿主环境泄漏进单测，本机才复现，CI 上大概率看不见。
+
+## 1.287.0-rc4 - 2026-08-23
+
+### Changed
+
+- **把三个贴着 3000 行硬线的文件按主题拆开，`complexity_guard` 的 soft 计数 18 → 15，hard 保持 0。** 上个版本刚因为 `AgentModels.swift` 涨到 3013 行踩过一次同样的坑：quality 守卫组顺序执行且遇错即停，第一步 complexity 一红，后面 7 步（version / i18n / i18n-locale / i18n-add-keys / fast-test-entry / bundled-agent-rules / project-build-guard）根本没机会跑。这次是提前把三个「离硬线只剩几行」的文件挪开，不等它们把 CI 再炸一次——`scripts/short_drama_media_contract_test.rb` 当时是 2995 行，离硬线只差 5 行。
+- **`scripts/short_drama_media_contract_test.rb` 2995 → 1170 行。** `plan_import_contract` 那个 1891 行的哈希字面量按主题拆成三个兄弟脚本：`short_drama_media_contract_plan_import_checks.rb`（338 行断言：规划 JSON 导入 / 模板导出 / 检查项 CSV 回导 / 结构增删改工具）、`short_drama_media_contract_media_task_checks.rb`（669 行：媒体任务徽标、任务面板过滤与批量操作、任务注册表落盘、任务监视栏、组件接力、图片编辑器蒙版）、`short_drama_media_contract_media_tool_checks.rb`（884 行：结构交给聊天的接力块、短剧图片 / 批量媒体工具、任务重试与蒙版接力、通用生图 / 蒙版 / 放大 / 选图工具）。每个兄弟脚本是一个顶层方法（沿用该脚本已有的 `read_file` / `extract_ruby_template` 写法），只声明自己真正用到的 `*_source` 关键字参数；入口脚本用三次 `merge!` 按原顺序拼回去。
+- **`Xedit/AgentShortDramaProductionExporter.swift` 2973 → 1120 行。** 析出 `AgentShortDramaProductionExporterWidgetHTML.swift`（599 行搬运：组件预览 HTML 的时间线 / 分集 / 素材小节与按钮里的聊天接力 prompt）和 `AgentShortDramaProductionExporterHandoffTemplates.swift`（1252 行搬运：制作包里内嵌的媒体 API env 示例与 Ruby 脚本模板）。两个新文件都是 `extension AgentShortDramaProductionExporter`，嵌套层级不变，所以搬过去的行连缩进都没动。
+- **`Xedit/SomeIMIntegration.swift` 2912 → 1717 行。** 析出 `SomeIMIntegrationStore.swift`（663 行：UserDefaults 设置、Keychain 凭据、跨 App 共享会话的读写与观察）和 `SomeIMIntegrationSettingsView.swift`（530 行：设置界面）。**`SomeIMClient` 刻意没有拆出去**：文件底部的 `private extension String { var nonEmpty }` 同时被上半段的值类型（`SomeIMIntegrationSettings.normalized`、`SomeIMAccount` 合并）和 `SomeIMClient` 用，把客户端拆走就得把 `String.nonEmpty` 放宽成整模块可见的 internal——为一次拆分往全模块的 `String` 上挂一个通用扩展不划算，宁可让主文件停在 1717 行。
+- **跨文件访问只放宽了 5 处，全在制作包导出器，且都是「调用方留在原文件」逼出来的。** `widgetPreviewHTML` / `mediaAPIEnvExampleTemplate` / `rubyMediaScriptTemplate` 的唯一调用方是留在主文件的 `export(...)`，`isImagePath` / `isVideoPath` 则是被搬走的组件 HTML 用到——这 5 个从 `private` 放宽为 internal，其余成员的 `private` 一个没动。`SomeIMIntegration.swift` 那次拆分是零访问权限改动。
+- **Xcode 工程无需手工登记。** `Xedit/` 目录走 `PBXFileSystemSynchronizedRootGroup`，新增 `.swift` 由文件系统同步进 target。
+
+### Fixed
+
+- **`scripts/short_drama_media_contract_test.rb` 的两处断言跟上新的文件边界，避免它变成又一条「等价重构把守卫改红」的假红。** 一是 `production_exporter_source` 现在拼接 5 个同前缀文件（原来 3 个），否则 `private static func timelineSummaryHTML` 这类断言会因为符号搬了家而扑空；二是抽取 Ruby 模板的 marker 从 `private static func rubyMediaScriptTemplate() -> String {` 去掉 `private ` 前缀——新写法是 internal，而去掉前缀后的 marker 对两种写法都命中，往后再动这个可见性也不会带红。
+
+### Tests
+
+- `ruby scripts/complexity_guard.rb`：`pass scanned=808 soft=15 hard=0`（拆分前 `scanned=801 soft=18 hard=0`，三个目标文件全部退出 soft 榜）。
+- `ruby scripts/run_ci_guard_group.rb quality build/ci`：8 步全过。
+- `ruby scripts/short_drama_media_contract_test.rb`：`checks=292 failures=0`，并与 develop 基线的报告逐条比对——**292 条检查的名字、状态和顺序完全一致**，不是只比对了总数。
+- 逐字节等价校验（三次拆分各跑一次，脚本对每条都断言）：新文件去掉文件头 / 容器行后，与原文件对应行区间**逐行相同**；导出器 2973 行里 2971 行有映射、丢弃 2 行全是块间空行；`SomeIMIntegration.swift` 2912 行里 2910 行有映射、丢弃 2 行同样全是空行；契约脚本 2997 行里 2995 行有映射，丢弃的 2 行是被兄弟文件里的 `{` / `}` 顶替的哈希字面量首尾行。5 处 `private` 放宽在校验时被反向还原后必须逐行相等，且每条只允许命中一次。
+- 定向单测：`SomeIMBrowserLoginStatusTests` / `SomeIMSharedSessionMemoTests` / `SomeIMSessionExchangeTests` / `SomeIMAccountProfileTests` / `SomeIMCreditsSnapshotTests` / `AgentModelPickerCatalogTests` 六个 suite 共 60 个用例全绿，App target 与 XeditTests 正常编译。制作包导出器在 `XeditTests` 里没有直接覆盖，它的回归保护来自上面那份 292 条的 Ruby 契约测试。
+- 全量 `ruby scripts/run_tests_fast.rb`：`passed=2863 failed=4 skipped=1 total=2868`。**这 4 条红在 develop 基线上一字不差地同样红**（同一台机器上把 develop 也跑了一遍全量，计数与失败名单完全一致）：`appStateMessageSendDispatchesIntoAgentRuntime()` / `sendingNewMessageDuringNonBlockingResponseOnlyQueuesIt()` / `sendingNewMessageWhileAwaitingUserDecisionClosesBlockingCall()` 三条是本机安装的 skill 目录被注入成「Skill routing candidates」前缀，把断言里的裸消息文本顶掉；`apply_patch is advertised in extended prompt and tool registry` 是提示词快照契约。都与本次拆分无关，本次没有修它们。
+- 顺带记一个反复踩的坑：验基线时先按**文件名**写了 `-only-testing:XeditTests/AgentToolsCoreTests` / `AgentToolIntegrationTests`，两个都选中 0 个用例（前者的类型名是 `AgentQueueModeTests`，后者是 `extension WillDeepTests`），报告还显示 111 passed 像是绿的。选 suite 一律按**类型名**。
+
+### Docs
+
+- `docs/SHORT_DRAMA_AI_MVP_CUTOFF.md` 的两条「接近 3000 行硬线」风险改成已拆分的现状，并写清后续新增检查该落进哪个兄弟文件、以及再拆导出器时必须同步 `production_exporter_source` 那份文件清单。
+- `docs/SOME_IM_MAC_APP_INTEGRATION.md` 的核心文件表拆成三行，标注存储层与设置界面在 1.287.0-rc4 前都在 `Xedit/SomeIMIntegration.swift`。
+
+## 1.287.0-rc3 - 2026-08-23
+
+### Changed
+
+- **`Xedit/AgentModels.swift` 按主题拆成 7 个兄弟文件，复杂度守卫的 hard 计数回到 0。** 这不是 i18n 那次修复带进来的：448c5190 时该文件还是 2993 行，1.287.0-rc1（静默模式 / 黑名单式审批）把它推到 3013 行，越过 `scripts/complexity_guard.rb` 的 `hard_limit = 3000`。CI 的 quality 守卫组是顺序执行 + 遇错即停，第一步 complexity 一红，后面 7 步（version / i18n / i18n-locale / i18n-add-keys / fast-test-entry / bundled-agent-rules / project-build-guard）根本没机会跑——CI 那片红里只有一条是真的，其余是被 break 掉的。
+- **拆分为纯等价重构，逐行原样搬运，没有顺手改任何行为。** 新增文件与行数：`AgentManagedRoutingModels.swift`（313，some.im 省心托管的能力档位 / 路由状态 / 决策记录 / 虚拟模型目录 + `AgentSidePanelState`）、`AgentPlanGoalModels.swift`（699，交互模式 / 审批档位 / expert / 执行后端 / Roadmap / Goal Teams 台账 / Plan / Goal）、`AgentConfigurationModels.swift`（459，路由模式 / 模型用途 / 图片描述配置 / `AgentConfiguration`）、`AgentProviderPresetModels.swift`（310，`AgentProviderKind` 与 preset 目录）、`AgentPatchModels.swift`（133，patch proposal 与 worktree 变更摘要）、`AgentErrorModels.swift`（319，patch / client / provider 错误、`/v1` 探测、`AgentErrorDetails`、`AgentTurnFailure`）、`AgentAttachmentModels.swift`（257，附件解析状态 / 段落 / 分析结果 / 知识文件夹）。`AgentModels.swift` 从 3013 行降到 580 行，只留 `AgentSession` 持久化图与它的附件外部化扩展。
+- **无需手工登记进 Xcode 工程。** `Xedit.xcodeproj` 的 `Xedit/` 目录走 `PBXFileSystemSynchronizedRootGroup`，`membershipExceptions` 里只有 `Info.plist`，新增的 `.swift` 文件由文件系统同步自动进 target。
+
+### Tests
+
+- `ruby scripts/complexity_guard.rb`：`over_hard_count` 从 1 回到 0（`soft=18` 不变，本次不动软阈值那批）。
+- `ruby scripts/run_ci_guard_group.rb quality build/ci`：8 步全过。
+- 拆分前后做了逐字节等价校验：7 个新文件去掉各自 9 行文件头后，必须与原文件对应行区间**逐行相同**；`AgentModels.swift` 必须等于原文件 `[1,564] + [2999,3013]`；被丢弃的 7 行全部是块间空行。校验脚本对每一条都做了断言，全绿。
+- 编译与单测：`AgentApprovalModePolicyTests`(7) / `AgentSessionPersistenceTests`(5) / `AgentGoalTeamsTests`(36) / `AgentAttachmentContentStoreTests`(5) / `SomeIMManagedModelMappingTests` 等 4 个省心托管 suite(15) 全绿，App target 正常编译。选 suite 时按**类型名**而不是文件名——`-only-testing:XeditTests/SomeIMManagedRoutingTests` 是文件名，会静默跑 0 个用例还报 `TEST SUCCEEDED`。
+
+### Docs
+
+- 把指向已迁移符号的文档指针改到新文件：`docs/SOME_IM_DEPENDENT_MODELS.md`、`docs/SOME_IM_MANAGED_ROUTING_DESIGN.md`、`docs/SOME_IM_MAC_APP_INTEGRATION.md`、`docs/LONG_HORIZON_AUTONOMY.md`、`docs/GOAL_TEAMS_ROLES_DESIGN.md`、`docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md` 和 `BundledSkills/some-im-mac-integration/SKILL.md`。顺带把其中已经腐烂的行号（`AgentModels.swift:404` / `:1085-1086` / `:1084-1147` / `:2130` 早就指不到对应代码了）换成符号名。`docs/MULTI_FOLDER_PROJECTS_DESIGN.md` 引的 `:83` / `:340` 仍在 `AgentModels.swift` 原位，未动。
+- `docs/AGENT_HARNESS_IMPROVEMENT_PRIORITIES.md` 记下这次反弹：「新增模型域优先落入独立文件」这条在 1.287.0-rc1 被违反过一次。
+
+## 1.287.0-rc2 - 2026-08-23
+
+### Fixed
+
+- **`scripts/i18n_add_keys.rb` 不再把新 key 插进邻居条目的肚子里。** 插入点原本取「字母序前驱条目的**首行** + 1」，前驱是多行条目时这一行落在它的对象**体内**。1.287.0-rc1 加 `approval-mode.silent` 时就这么翻了车：脚本报「新增 key: 1」，文件仍是合法 JSON，`git diff --numstat` 仍是 1 增 0 删——「解析得动」「零删除」两道常规体检**双绿**，可新 key 根本不在 `strings.<key>` 上（UI 静默回落 Swift 的 defaultValue），`approval-mode.request-every-time.summary` 还平白多出一个成员。现在先用带字符串/转义感知的花括号深度做一遍结构化扫描，拿到每个顶层条目的 `[首行, 末行]`，插入点只允许落在某条目的**末行之后**或首行之前；追加到最后一条之后时顺带把尾逗号归位。
+- **同命名空间没有兄弟不再直接 abort。** `approval-mode.silent.summary` 在 `approval-mode.silent` 是独苗时会被判定「找不到同命名空间的兄弟条目」而拒绝放置——正是新增一组 key 时的常态。现在命名空间自内向外逐级回退（`a.b.c` → `a.b.` → `a.` → 全局字母序），并把最终落点打印出来（「插在 X 之后」）供人工过目。
+- **紧凑条目就地合并不再丢成员。** 旧逻辑把条目整个重写成 `{ extractionState, localizations }`，会顺手抹掉 `comment` 一类其他成员，并给本来没有 `extractionState` 的条目硬塞一个。现在只覆盖被请求的 locale，其余字节原样保留。
+
+### Added
+
+- **落盘后复验，不过就还原。** 写盘后把文件重新读回来解析：请求的每个 key 必须能在 `strings.<key>` 上按请求的**每个 locale** 读出，未涉及的条目必须逐条深度相等，结构扫描到的条目数必须和 JSON 解析出的对得上。任一条不满足就把原文件按字节还原并以非零码退出（还原本身也复验一遍，失败会明说「立即 git checkout」）。`--dry-run` 同样跑这套校验，只是不落盘。
+- **`--catalog PATH`**：让脚本可以指向任意 catalog，测试因此能拿真脚本去改临时目录里的 fixture，而不是对源码做字符串断言。
+- **`scripts/i18n_add_keys_contract_test.rb`**（12 项检查），已挂进 `run_tests.sh` 与 CI 的 quality 守卫组。
+
+### Tests
+
+- `i18n_add_keys_contract` 12 checks 全绿；quality 守卫组 8 步全过（complexity / version / i18n / i18n-locale / **i18n-add-keys** / fast-test-entry / bundled-agent-rules / project-build-guard）。
+- 这份守卫做过变异验证，不是摆设：把落点改回 `predecessor["start"] + 1` → 5 项红；再把校验层短路（完整复刻事故当天那个「脚本报成功、零删除、JSON 合法」的世界）→ 6 项红，其中第一条正是「新 key 在 `strings.<key>` 上读不出来」。还原后重新全绿。
+- 另在真 catalog 上手工验过四种落点：多行前驱之后、父命名空间回退、紧凑条目合并 locale、多行条目跳过并报告；验完 `git checkout` 还原，仓库里那份 catalog 一个字节没动（测试自身也有一条检查守这个）。
+- 全量单测：develop 基线（448c5190）本来就是 17 红 / exit 65；本次改动后 5 红，其中 4 条在基线红名单内，剩下 1 条（`AgentTerminalDisplayRefreshTests` 的 winsize）在基线和本分支**单独跑均全绿**，属满载互扰型 flaky。本次改动不含任何编译进 App 的代码。
+
+### Notes
+
+- 1.287.0-rc1 里手工补进 catalog 的 `approval-mode.silent`、`approval-mode.silent.summary`、`transcript.turn-report.approval.silent` 三条**保持原样**，本次只修工具，不碰词条。
+
+## 1.287.0-rc1 - 2026-08-23
+
+### Added
+
+- **第四种审批档位：静默模式。** 前三档（智能审核 / 工作区可写 / 严格模式）都是**白名单式**——默认要问，凑够理由才放行。静默模式反过来，是**黑名单式**：默认放行，需要理由的是拦截。菜单里排在智能审核之后（最放得开的档位摆在第一行等于请人误点，沉到底部又会让想用的人找不到），严格模式仍然压轴。
+- **恶意命令黑名单**（`AgentMaliciousCommandDenylist`）是这一档的硬地板：确定性、不依赖网络、AI 裁判推翻不了。四类——不可逆的大范围破坏（抹根目录/家目录/整卷、格式化、`dd` 写裸设备、fork bomb、对系统根递归改权限）、主机接管（`authorized_keys` 植入、反弹 shell）、反取证（清 shell 历史、抹系统日志、关 SIP/Gatekeeper）、外泄（凭据/私钥**与**网络出口同时出现在一条命令里）。按 shell 分段判定，`npm test || rm -rf /` 里的第二支不会因为第一支大概率成功而豁免；引号里的同样文本是数据不是命令。
+- **和既有的 `SafeCommand.dangerousTokens` 是两件不同的事，刻意不合并**：那份问「这条命令危险吗」——`rm`、`mv`、`chmod` 全在里面，因为它们值得在常规档位确认一次；这份问「这条命令是不是在干坏事」。一个写代码的 Agent 每天要删几十次 `node_modules`，把那些也拦下来，静默模式就成了改名版的智能审核。所以 `rm -rf node_modules`、`git reset --hard`、`git push --force` 到功能分支、`docker compose down -v`、本地库 `DROP TABLE`、`cat .env` 一律放行——它们可能让人心跳一下，但都不是恶意。
+- **方向相反的 AI 裁判**（`AgentSafetyJudgeKind.maliciousIntent`）。既有裁判问「这是正常的开发/运维操作吗」，拿不准判 NO（fail-closed）；新裁判只问「这条命令是不是在干坏事」，**拿不准判 YES**，且必须能一句话说出恶意效果才判拦。把 fail-closed 的裁判塞进这一档，结果只会是一个改了名字的智能审核。裁判种类进了判决缓存的 key——两个方向相反的问题，一个 YES 绝不能顶另一个用。
+
+### Notes
+
+- **必须知道的失败方向：裁判缺席时静默模式放行。** 没配 key、网络抖动、推理模型把输出截断——其余三档在这些情况下一律回落人工，静默模式**放行**，因为「没发现恶意」就是没发现恶意，这是这一档的语义。**所以这一档的真实保护强度等于那份黑名单，AI 裁判是加分项不是地基。** 审计里分得清两种放行：`judge.jsonl` 的 `detail` 会带 `silent mode: allowed without a verdict`。考虑到 1.284.0-rc7 之前裁判掉线率曾有 24%，这条不是理论风险。
+- **静默模式不放松沙箱**：seatbelt 档位仍按命令实际需要计算（与 `.llmJudge` 同组，而不是像工作区可写那样统一抬到 workspace-write）。真被 seatbelt 拦下时走既有的「拒绝 → 无沙箱重跑」路径，并且和智能审核一样自动重跑——否则刚放行的决定会被一张「允许无沙箱重跑吗」的卡推翻重问，正是用户选这一档要躲的东西。
+- **够不到的仍然够不到**：环境信任声明工具（`neverAutoApprovedToolNames`）、`change_workspace`、`ask_user` 这类要人回答的工具，以及用户在 MCP 设置里明确标为「不信任」的服务器——静默模式表达的是「少问我」，不是「推翻我说过的话」。**凭据读取也照样问**，哪怕不带网络出口：这条边界连用户显式的环境信任声明都不放宽（"凭据外读是注入攻击的终点站"），选一个审批档位是更弱的信号，不该反而把它掀了；何况在 Agent 语境里，私钥被读进回复就已经离开这台机器去了模型服务商，"读"和"外泄"不是两件事。前者是防注入自授权的关键闸门——它挪到了 `guard risk == .write` **之前**，因为静默模式要处理 danger 档，而那道 guard 会把 danger 档直接判成"要人工"。
+- 转录里的徽标单列一档 `SILENT` 而不是复用 `AUTO`：这不是"命中了安全白名单"，是"没找到不放行的理由"，徽标得说实话。
+- 系统提示词里的档位描述明确写了「审批提示变少不等于后果变少」，要求模型仍然优先可逆步骤、破坏性操作前先备份、动手前说清楚要做什么。
+- 完整设计与边界见 `docs/STARTUP_AND_SANDBOX.md` §3.5。
+
+### Fixed
+
+- **`AgentApprovalMode` 现在容忍未知取值**（降级为智能审核）。此前是合成的 Codable：旧版本读到新档位的 rawValue 会 throw，而这个 throw 会顺着 `AgentSession` 的 decode 一路冒上去——用户看到的不是"降级成默认档"，是**整个会话从列表里消失**。加档位之前先把这个坑填了。
+
+### Tests
+
+- `AgentApprovalModePolicyTests` 新增 4 条：档位顺序契约、未知取值降级、黑名单区分恶意与日常破坏性操作（12 条必拦 + 12 条必放）、按 shell 分段判定且引号内文本不算命令。
+- 首轮就抓到黑名单的两个真 bug，都是"看着对、实际漏"的类型：① `sudo rm -rf /System` 漏网——按 head 匹配的规则只认 `rm` 开头，提权前缀没剥；现在 `sudo`/`doas`/`env FOO=1`/`nice` 这类包装前缀会先剥到第一个真命令。② fork 炸弹 `:(){:|:&};:` 漏网——它本身由 `|` 和 `;` 组成，shell 分段器会把它切成几段碎片，没有任何一段还认得出来；现在它和外泄规则一样在**整条命令**层面先判一次。这两条正是"名单写了不等于名单管用"的注脚。
+
+## 1.286.0-rc1 - 2026-08-23
+
+### Added
+
+- **`update_plan` 工具：进度上报从围栏块换成工具调用。** 这是「做了好几步、清单还停在第 1 步」的根治，而不是又一次给解析器加回退。1.284.0-rc3 那轮把解析成功率从 42% 提到 84%，用户在 rc2 上仍然看到卡住的清单——因为剩下的失效源根本不是格式：对全部落盘会话的只读复盘（21 个带计划的会话、243 个 `progress` 块）显示 **80% 的块落在回合收尾的纯叙述回复里**，回合中段只有 20%；从 `plan` 出现到第一个 `progress` 块，中位隔 **20 个工具回合 / 22 分钟**，P90 76 个回合。一个真实样本：52 分钟、34 个工具回合、其中 33 个都带了文字叙述，**中段 0 个 progress 块**，收尾一次性把 7 步全标完。宿主每个工具回合都在扫（`AppStateAgentLoop` 第 1215 行），提示词也写着「收到工具结果先上报再发下一批工具调用」，模型就是不照做——**它们在回合中段唯一稳定使用的通道是工具调用**。现在进度就挂在那条通道上。
+- **工具会回话，这是围栏块结构上做不到的。** `updates` 收 `["1: done", "2: in_progress"]`，宽进严出：`step 2 - in_progress`、`3.skipped`、`4：完成`、`5: done — tests pass` 都认（复用围栏块那张中英文状态词表，模型在哪条通道学会的说法换一条不该被判错）；读不出的条目**带原因回灌**——「`"9: done"` — step 9 is outside the active plan (it has 6 steps)」。围栏块失败时没有回信通道，只能静默冻结清单。
+- **常驻核心工具集**（20 → 21 个，仍在 24 的上限内）。藏在 `load_tool_pack` 后面的进度上报，等模型想起来加载时该报的进度早就过去了。risk 定为 `.read`：它不碰工作区也不碰 shell，只写会话内的清单状态，不该有机会弹审批卡把执行打断。
+
+### Changed
+
+- **围栏块降级为兼容路径，按步骤让位于工具**（`docs/LONG_HORIZON_AUTONOMY.md` §4.3）。同一回合里工具已经结掉的步骤，随后的围栏块改不动——真实冲突是收尾那条按旧心智拼出来的汇报，把工具刚关掉的步骤又打回 `in_progress`。工具没提过的步骤仍然照收，因为收尾汇报常常是个超集。台账（`AgentRuntime.planStepsSettledByToolThisTurn`）在新回合开始、以及计划被替换或增删步骤时清空——后者按 step id 判定，插一步就会让位序失效。
+- **提示词四处分支与两处对账通知改为教工具**：ACTIVE PLAN、INTERRUPTED PLAN、ORDINARY MODE、GOAL 执行段，加上进度对账通知与 Goal 计划同步指令。**全部在动态段，未触碰稳定前缀**——`stablePrefixVersion` 仍是 v32，三档快照哈希一个没动，用户的 provider prompt cache 不会因为这次改动失效一次（`AgentPromptSnapshotGuardTests` 全绿即为证据）。
+- **上报落地即持久化**（`persistAgentSession`，不 touch `updatedAt`），不再等回合结束的 defer。此前一个 52 分钟的单回合把全部状态变化攒在内存里，中途崩溃全丢。
+- **续推策略认工具通道**：新增 `planAdvancedByToolSinceLastContinuationDecision`。工具调用发生在续推快照对比之后，不接这根线的话，「只用工具上报」的回合在 `AgentPlanAutoContinuationPolicy` 眼里等于零进展，会被当成停滞硬停——正好把新通道的用户推回老问题里。
+
+### Notes
+
+- 与 `LONG_HORIZON_AUTONOMY.md` §4.2 原稿有四处刻意偏差，逐条理由见新增的 §4.5：`stringArray` 而非嵌套对象（参数类型系统只有四种，加对象要同时改四个 provider 编码器，而 `1: done` 是模型已经会写的形状）；只做局部更新（建计划的 ` ```plan ` 块本来就好使，失效的是上报）；`checklist` + `evidence` **未做**（属 Goal 验收通道，会动到相位收口，留作 fast-follow）；`blocked_reason` 落为一行 `note`。
+- 迁移计数不另建管线：两条通道在落盘会话 JSON 里都有（围栏块在正文、工具调用在 `toolCalls`），数「仅用围栏块的回合」用审计那份只读脚本即可，再加一套计数器只会多一份会漂的真相。
+
+### Tests
+
+- `AgentPlanProgressTests` 63 tests 全绿（新增 6 条：条目解析与拒绝回灌、同步骤重复上报、与围栏块共用生命周期推进且逐字节等价、同回合工具优先于围栏块、换计划后台账作废、常驻核心且免审批）。另跑 `AgentToolPackTests` / `AgentPromptSnapshotGuardTests` / `AgentToolsCoreTests` / `AgentPlanContinuationTests` 共 112 tests 全绿。两轮均三项证据一致：退出码 0、`** TEST SUCCEEDED **`、`report.md` failed=0。
+- `AgentPlanProgressTests` 里两条提示词锚点跟着改了措辞（`refresh the visible checklist immediately` → `before issuing more tool calls`、`Only lines in exactly that shape…` → `Report with the \`update_plan\` tool`）。守的约束没变，测试里留了来龙去脉——按既往教训，这类锚点红了要先确认是措辞变了还是约束丢了。
+
+## 1.285.0-rc5 - 2026-08-23
+
+### Fixed
+
+- **执行中的计划不再被展示两遍。** 同一份 `currentPlan` 此前会同时出现在两个面上：composer 上方的紧凑进度胶囊（`AgentComposerTaskProgress`）和右上角浮动的「计划」卡（`AgentConversationActivityOverlay` + `AgentPlanCard`）。浮动卡本该只在「刚提出、等你看」时自动展开、执行一开始就折叠，但它的展开条件是 `status == .proposed || .approved`，而普通模式下计划被捕获即 `.approved`、并在同一回合直接开工，`.approved` 要等到**第一个 `progress` 块解析成功**才会变成 `.executing`——多数模型只在回合收尾才上报，于是整个执行期卡片都以「刚批准」的姿态展开着，每次切回会话（overlay 重挂载 `onAppear`）还会再展开一次。现在 `AgentPlanCardExpansionPolicy.initiallyExpanded` 只对 `.proposed` 返回真：composer 进度胶囊是执行期唯一的活进度面，浮动卡缩成一行 chip，需要改步骤 / 重新规划 / 标记完成时再点开。
+- 顺手核实：`.proposed` 在当前代码里已没有任何活路径会产生（所有捕获路径直接置 `.approved`，旧落盘的 `.proposed` 在恢复时也会转成 `.approved`），保留它只为兼容。
+
+### Notes
+
+- **1.285.0-rc2 上「进度没及时标记」的根因不在解析器，rc3/rc4 也没有碰它。** rc2 已包含 1.284.0-rc3 的三层回退解析（历史块回放 84%）；rc2→rc4 的改动只有稳定前缀 v32 重录哈希与两处测试锚点。对全部落盘会话的只读取证（21 个带 `plan` 围栏的会话、243 个 `progress` 块）：**193 个（80%）落在回合收尾的纯叙述回复里，只有 50 个落在带工具调用的回合中段**；从 `plan` 出现到第一个 `progress` 块，中位间隔 20 个工具回合 / 22.5 分钟，P90 76 个回合 / 6 小时以上；7 个会话从未上报。本次截图的 `someim-auto-flash`（deepseek-v4-flash）历史上 6 个 progress 块全部在回合收尾，回合中段 0 个。也就是说，一个 50 分钟、几十次工具调用的单回合，清单在回合结束前一格都不会动——这是模型上报时机问题，宿主侧每个工具回合都会扫一次（`AppStateAgentLoop` 第 1215 行），只是没有东西可扫。根治仍是 `docs/LONG_HORIZON_AUTONOMY.md` §4 的 `update_plan` 工具化：工具调用是这些模型在回合中段**唯一稳定使用**的通道。取证细节见 `docs/AGENT_EXECUTION_FRICTION_AUDIT_2026_08.md` §1.6。
 
 ## 1.285.0-rc4 - 2026-08-23
 

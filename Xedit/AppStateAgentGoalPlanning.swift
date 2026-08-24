@@ -26,7 +26,7 @@ enum AgentGoalExecutionControlPolicy {
         \(remaining)
         </remaining_goal_acceptance>
 
-        Keep the active plan statuses synchronized with one closed `progress` block whenever a plan is active. When a plan is terminal, continue the Goal acceptance loop with one closed `goal-check` block instead of stopping early.
+        Keep the active plan statuses synchronized by calling `update_plan` whenever a step's status changes. When a plan is terminal, continue the Goal acceptance loop with one closed `goal-check` block instead of stopping early.
         """
     }
 }

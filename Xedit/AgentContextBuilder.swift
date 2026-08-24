@@ -121,14 +121,11 @@ enum AgentContextBuilder {
     /// **一次中断就把会话锁进死循环，之后模型再尽责也出不来**。实测一个
     /// 会话里模型连发 7 个 progress 块、无一条可解析，计划 11 步全程 pending。
     private static let progressBlockFormatContract = """
-    Status tokens: `pending`, `in_progress`, `done`, `skipped`, `failed`. Every line inside the block is one step number, a separator, and one token — nothing else. Example:
+    Report with the `update_plan` tool: `updates` is one entry per touched step, each `<step number>: <status>`, e.g. ["1: done", "2: in_progress"]. Status tokens: `pending`, `in_progress`, `done`, `skipped`, `failed`.
 
-    ```progress
-    1: done
-    2: in_progress
-    ```
+    Call it in the SAME round as your other tool calls, the moment a status changes — not at the end of the reply. WillDeep's visible step counter only moves when a report lands, so a long tool-heavy turn that saves its reporting for the closing message leaves the user watching a stale "step 1 of N" for as long as the turn runs. The tool answers back with what it recorded and what it rejected, so a malformed entry is never lost in silence.
 
-    Only lines in exactly that shape update WillDeep's visible checklist. A `progress` block filled with prose, checkmarks, or service status text parses to zero updates and silently leaves the checklist frozen at its old state — the user then watches a stale step counter while you work. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they never update the checklist by themselves.
+    A fenced ```progress block with the same `1: done` lines still works and is read as a fallback, but it is second choice: it only registers when the reply text is produced, and anything the tool already settled this turn wins over it. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they never update the checklist by themselves.
     """
     static let stablePrefixVersion = "willdeep-agent-system-v32"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
@@ -305,7 +302,7 @@ enum AgentContextBuilder {
         let progressFormatCorrection = planProgressFormatViolation ? """
 
 
-        CORRECTION — REQUIRED: your previous reply carried a `progress` block, but not one line inside it matched `<step number>: <status>`. WillDeep recorded nothing and the user is still looking at a stale step counter. Re-report every step you have actually advanced so far, in exactly the line format above, before doing anything else.
+        CORRECTION — REQUIRED: your previous reply carried a `progress` block, but not one line inside it matched `<step number>: <status>`. WillDeep recorded nothing and the user is still looking at a stale step counter. Re-report every step you have actually advanced so far with the `update_plan` tool before doing anything else — it validates each entry and tells you exactly what it recorded.
         """ : ""
 
         if interactionMode == .normal, let plan = currentPlan, plan.isInterrupted,
@@ -324,8 +321,8 @@ enum AgentContextBuilder {
 
             Follow the user's latest message:
             - If it starts a different task, do that task directly. Do not resume the interrupted plan, do not treat its steps as pending work, and do not mention it unless relevant. For a genuinely multi-step new task, emit one complete numbered `plan` fenced block — it replaces the interrupted plan as the visible checklist.
-            - If it asks to continue or resume, pick the interrupted plan back up from its current step statuses. Emit a `progress` block marking the step you are resuming as in_progress BEFORE you start working on it — that block is what tells WillDeep the plan is live again and clears the paused badge the user is looking at. Keep reporting with `progress` blocks as usual after that.
-            - Reconcile before you resume: if the conversation shows work that is already finished but the bracketed status above still says `pending`, an earlier report failed to register. Mark those steps `done` in your first `progress` block instead of redoing the work, then continue from the first genuinely unfinished step.
+            - If it asks to continue or resume, pick the interrupted plan back up from its current step statuses. Call `update_plan` marking the step you are resuming as in_progress BEFORE you start working on it — that report is what tells WillDeep the plan is live again and clears the paused badge the user is looking at. Keep reporting the same way after that.
+            - Reconcile before you resume: if the conversation shows work that is already finished but the bracketed status above still says `pending`, an earlier report failed to register. Mark those steps `done` in your first `update_plan` call instead of redoing the work, then continue from the first genuinely unfinished step.
             - If it is ambiguous about which of the two they mean, ask one concise question instead of guessing.
 
             \(progressBlockFormatContract)\(progressFormatCorrection)
@@ -347,16 +344,16 @@ enum AgentContextBuilder {
             \(stepsText)
 
             Progress reporting (REQUIRED):
-            At the end of EVERY reply where you advanced or finished a step, include exactly one fenced block tagged `progress` listing each step number you touched this turn and its new status.
+            Call `update_plan` every time a step's status changes — as it happens, batched alongside the tool calls of that same round.
 
             \(progressBlockFormatContract)\(progressFormatCorrection)
 
-            Steps you didn't touch this turn can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once finished. After receiving tool results, report the resulting step statuses before issuing more tool calls so WillDeep can refresh the visible checklist immediately. Never mark a partial/sample deliverable as `done` when the step promises the complete artifact. If the response budget forces a pause, leave the current step `in_progress`; WillDeep can continue it automatically. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
+            Steps you didn't touch can be omitted. Mark a step `in_progress` before you start its tool calls; flip it to `done` (or `failed`) once its evidence is in. After receiving tool results, report the resulting statuses in the very next round, before issuing more tool calls. Never mark a partial/sample deliverable as `done` when the step promises the complete artifact. If the response budget forces a pause, leave the current step `in_progress`; WillDeep can continue it automatically. Once every step is `done`/`skipped`/`failed`, summarize what was accomplished.
             """)
         } else if interactionMode == .normal {
             sections.append("""
             === ORDINARY MODE — PLAN WHEN USEFUL, THEN EXECUTE ===
-            Handle simple tasks directly. For a genuinely multi-step task, emit exactly one complete numbered `plan` fenced block near the start of the reply so WillDeep can show progress, then continue executing it in the same turn without waiting for plan approval. Do not plan again on later tool rounds; update the original steps with `progress` blocks.
+            Handle simple tasks directly. For a genuinely multi-step task, emit exactly one complete numbered `plan` fenced block near the start of the reply so WillDeep can show progress, then continue executing it in the same turn without waiting for plan approval. Do not plan again on later tool rounds; update the original steps with the `update_plan` tool as you go.
 
             Before the first write or expensive action, privately preflight the complete request: intended outcome, material scope choices, credentials or private user takeover, external side effects, destructive/irreversible steps, and likely approval boundaries. If a genuinely user-owned decision is predictably required, surface it now in one concise clarification round rather than discovering it halfway through execution. Do not ask about implementation details that repository inspection or a safe reversible default can settle.
 
@@ -421,7 +418,7 @@ enum AgentContextBuilder {
                     for (index, step) in plan.steps.enumerated() {
                         goalBlock += "  \(index + 1). [\(step.status.rawValue)] \(step.text)\n"
                     }
-                    goalBlock += "At the end of each execution reply, emit exactly one `progress` fenced block for touched steps.\n"
+                    goalBlock += "Report touched steps with the `update_plan` tool as their status changes, in the same round as your other tool calls.\n"
                 }
             } else if currentPlan?.status == .done, goalPlanningState?.phase == .completed {
                 goalBlock += "The Goal and its Plan are complete. Do not create another Plan or restart Goal Teams unless the user explicitly changes or extends the Goal.\n"
@@ -1068,8 +1065,21 @@ nonisolated enum AgentPlanParser {
     }
 
     static func applyProgress(to plan: AgentPlan, from content: String) -> AgentPlan? {
+        let updates = progressUpdates(in: content, plan: plan)
+        guard !updates.isEmpty else { return nil }
+        return AgentPlanProgressApplier.apply(updates, to: plan)
+    }
+
+    /// The step updates a fenced block carries, keyed by 0-based step index.
+    ///
+    /// Split out of `applyProgress` so the caller can see WHICH steps a
+    /// block claims before anything is written. `update_plan` reports made
+    /// earlier in the same turn take precedence over a stale fence at the
+    /// end of it (LONG_HORIZON_AUTONOMY.md §4.3), and that filter needs the
+    /// indices, not the finished plan.
+    static func progressUpdates(in content: String, plan: AgentPlan) -> [Int: AgentPlan.StepStatus] {
         let bodies = progressBodies(in: content)
-        guard !bodies.isEmpty else { return nil }
+        guard !bodies.isEmpty else { return [:] }
         var updates: [Int: AgentPlan.StepStatus] = [:]
         for body in bodies {
             for raw in body.components(separatedBy: .newlines) {
@@ -1082,19 +1092,7 @@ nonisolated enum AgentPlanParser {
                 }
             }
         }
-        guard !updates.isEmpty else { return nil }
-        var next = plan
-        for (i, newStatus) in updates {
-            next.steps[i].status = newStatus
-        }
-        // Promote the whole plan to .executing the moment any step is
-        // touched, and .done when every step is in a terminal state.
-        if next.steps.allSatisfy({ [.done, .skipped, .failed].contains($0.status) }) {
-            next.status = .done
-        } else if next.status == .approved {
-            next.status = .executing
-        }
-        return next
+        return updates
     }
 
     /// Lift a plan's paused badge as soon as the model commits to resuming it.
@@ -1434,7 +1432,11 @@ nonisolated enum AgentPlanParser {
 
     /// 状态词表。中文条目不是锦上添花：用户用中文提问时模型就用中文回话，
     /// 一句「1. 迁移脚本 —— 完成」在旧词表下是彻底的哑弹。
-    private static func parseStepStatus(_ token: String) -> AgentPlan.StepStatus? {
+    ///
+    /// 非 private：`update_plan` 工具复用同一张表（`AgentPlanProgressApplier`），
+    /// 两条上报通道认的状态词必须一模一样——模型在哪条通道学会的说法，换到
+    /// 另一条不该被判错。
+    static func parseStepStatus(_ token: String) -> AgentPlan.StepStatus? {
         switch token {
         case "done", "complete", "completed", "finished", "ok", "closed", "resolved",
              "verified", "passed", "✓", "✔", "✅", "☑",
@@ -1727,7 +1729,7 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
         let reason = finishReason.map { " The provider ended the previous reply with finish reason '\($0)'." } ?? ""
         return """
         Automatic plan continuation: the active plan still has non-terminal steps.\(reason)
-        Continue from the current step statuses without restating completed work. Do not stop after a partial or sample deliverable. If the response budget forces another pause, leave the current step in_progress. If genuinely blocked, mark the step failed and explain why. End the reply with exactly one progress block containing the latest statuses touched in that reply.
+        Continue from the current step statuses without restating completed work. Do not stop after a partial or sample deliverable. If the response budget forces another pause, leave the current step in_progress. If genuinely blocked, mark the step failed and explain why. Report the statuses you touched with the `update_plan` tool as they change, rather than saving them for the end of the reply.
         """
     }
 
@@ -1744,7 +1746,7 @@ nonisolated enum AgentPlanAutoContinuationPolicy {
             : ""
         return """
         Plan status reconciliation: the last replies did not update WillDeep's machine-readable step statuses.\(reason)\(backgroundJobs)
-        First compare the active plan with the host-recorded tool results and completion evidence already in the conversation. If that evidence is insufficient, use only the minimum necessary read-only status or inspection tools; write, danger, and user-input tools are blocked during reconciliation. Do not repeat the plan, redo completed work, deploy again, or change external state. Then return exactly one closed `progress` fenced block covering every still non-terminal step: mark verified completed work `done`, genuine blockers `failed`, intentionally omitted work `skipped`, and work that still remains `in_progress` or `pending`. Do not infer completion without evidence. You may add one concise blocker sentence after the block only when needed.
+        First compare the active plan with the host-recorded tool results and completion evidence already in the conversation. If that evidence is insufficient, use only the minimum necessary read-only status or inspection tools; write, danger, and user-input tools are blocked during reconciliation. Do not repeat the plan, redo completed work, deploy again, or change external state. Then call `update_plan` once, covering every still non-terminal step: mark verified completed work `done`, genuine blockers `failed`, intentionally omitted work `skipped`, and work that still remains `in_progress` or `pending`. Do not infer completion without evidence. You may add one concise blocker sentence after the block only when needed.
         """
     }
 

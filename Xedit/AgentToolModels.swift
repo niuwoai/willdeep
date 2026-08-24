@@ -687,6 +687,10 @@ enum AgentToolApprovalSource: String, Equatable, Codable {
     /// operator, so its tool call bypassed interactive approval.
     case dispatchTask
     case workspaceAccess
+    /// 静默模式：命令没命中恶意黑名单，AI 裁判也说不出具体的恶意效果，
+    /// 于是直接放行。刻意单列一档而不是借用 `.staticAllowlist` —— 转录里
+    /// 的徽标得说实话：这不是"命中了安全白名单"，是"没找到不放行的理由"。
+    case silentMode
     /// A reversible Computer Use action was authorized by the current
     /// runtime- and target-bound in-memory control lease.
     case controlLease

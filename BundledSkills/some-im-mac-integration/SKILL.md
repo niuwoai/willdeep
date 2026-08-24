@@ -14,7 +14,7 @@ Use this skill when working on WillDeep's macOS some.im integration. Keep the us
    - `Xedit/SomeIMIntegration.swift`
    - `Xedit/Onboarding/OnboardingView.swift`
    - `Xedit/AppStateAgentSessions.swift`
-   - `Xedit/AgentModels.swift`
+   - `Xedit/AgentProviderPresetModels.swift` and `Xedit/AgentConfigurationModels.swift`
    - `Xedit/SomeIMAsyncMediaIntegration.swift`
    - `Xedit/Localizable.xcstrings` and `Xedit/L10n.swift`
 3. Preserve Keychain boundaries. API keys, customer session tokens, and any client-login secret must never be logged, shown in UI, committed, or embedded in examples.

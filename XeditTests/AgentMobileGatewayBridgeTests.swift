@@ -99,6 +99,10 @@ struct AgentMobileGatewayBridgeTests {
     @Test @MainActor
     func appStateMessageSendDispatchesIntoAgentRuntime() throws {
         let appState = AppState()
+        // The message content is asserted verbatim below; keep the send path
+        // off the host's real skill catalog so no "Skill routing candidates"
+        // prelude is spliced into the dispatched text.
+        appState.skillRoutingCatalogForTesting = []
         let session = appState.startNewAgentSession()
         defer {
             appState.stopAgentResponse()

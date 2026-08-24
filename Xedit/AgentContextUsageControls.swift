@@ -131,13 +131,10 @@ private struct CompressButton: View {
         }
     }
 
-    private var usedFraction: Double {
-        let window = max(1, usage.contextWindow)
-        return min(1, Double(usage.usedTokens) / Double(window))
-    }
+    private var usedFraction: Double { usage.usedFraction }
 
     private var shouldOffer: Bool {
-        usedFraction > 0.5 && messageCount > 6
+        usage.shouldOfferManualCompression(messageCount: messageCount)
     }
 
     private var tint: Color {
@@ -166,23 +163,19 @@ private struct ContextRingIndicator: View {
                 .monospacedDigit()
         }
         .help(L10n.ContextRing.tooltip(
-            formatTokens(conversationUsed),
-            formatTokens(usableWindow),
-            formatTokens(baseline),
-            formatTokens(remaining)
+            formatTokens(usage.usedTokens),
+            formatTokens(max(1, usage.contextWindow)),
+            formatTokens(usage.conversationTokens),
+            formatTokens(usage.displayBaselineTokens),
+            formatTokens(usage.remainingTokens)
         ))
     }
 
-    private var window: Int { max(1, usage.contextWindow) }
-    private var used: Int { usage.usedTokens }
-    private var baseline: Int { min(usage.baselineTokens, used) }
-    private var usableWindow: Int { max(1, window - baseline) }
-    private var conversationUsed: Int { max(0, used - baseline) }
-    private var usedFraction: CGFloat {
-        min(1, max(0, CGFloat(conversationUsed) / CGFloat(usableWindow)))
-    }
-    private var remaining: Int { max(0, window - used) }
-    private var percent: Int { Int(usedFraction * 100) }
+    // Bare used/window — the same ratio the Compress threshold, the
+    // auto-compression trigger, and the runway handoff report. The
+    // conversation/baseline breakdown lives in the tooltip only.
+    private var usedFraction: CGFloat { CGFloat(usage.usedFraction) }
+    private var percent: Int { Int(usage.usedFraction * 100) }
 
     private var barColor: Color {
         if usedFraction > 0.9 { return .red }

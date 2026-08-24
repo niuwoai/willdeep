@@ -43,8 +43,16 @@ nonisolated enum AgentPlanCardExpansionPolicy {
         plan.status != .done
     }
 
+    /// Only a plan that is still waiting on a decision opens itself. An
+    /// `.approved` plan is already executing — normal mode approves the
+    /// captured plan and keeps working in the same turn — and the composer
+    /// progress pill is the live progress surface for that phase. `.approved`
+    /// also persists until the first `progress` block parses, which with
+    /// most models is the end of the turn: opening on it used to show the
+    /// same checklist twice (floating card + composer pill) for the entire
+    /// execution, and re-opened it on every re-mount of the overlay.
     static func initiallyExpanded(for status: AgentPlan.Status) -> Bool {
-        status == .proposed || status == .approved
+        status == .proposed
     }
 
     static func shouldCollapseForAssistantRound(
