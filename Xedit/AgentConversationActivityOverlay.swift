@@ -23,10 +23,26 @@ struct AgentConversationActivityOverlay: View {
         AgentConversationActivitySnapshot.capture(from: appState)
     }
 
+    /// Whether the composer is already showing this task's progress.
+    ///
+    /// Built from the same inputs as the composer pill itself
+    /// (`AgentModeComposerView.taskProgressSnapshot`) so the two surfaces
+    /// cannot disagree about which one is on screen.
+    private var isComposerProgressVisible: Bool {
+        AgentComposerTaskProgressSnapshot.preferred(
+            plan: appState.agentCurrentPlan,
+            goal: appState.agentCurrentGoal,
+            isResponding: appState.isAgentResponding
+        ) != nil
+    }
+
     /// The current plan is task progress, independent of conversation mode.
     private var visiblePlan: AgentPlan? {
         guard let plan = appState.agentCurrentPlan,
-              AgentPlanCardExpansionPolicy.shouldDisplay(plan) else {
+              AgentPlanCardExpansionPolicy.shouldDisplayFloatingCard(
+                  plan,
+                  isComposerProgressVisible: isComposerProgressVisible
+              ) else {
             return nil
         }
         return plan
@@ -64,6 +80,12 @@ struct AgentConversationActivityOverlay: View {
                         .onCompatibleChange(of: plan.status) { _, newStatus in
                             if AgentPlanCardExpansionPolicy.initiallyExpanded(for: newStatus) {
                                 isPlanExpanded = true
+                            } else if AgentPlanCardExpansionPolicy
+                                .shouldCollapse(onStatusChangeTo: newStatus) {
+                                // Leaving `.proposed` means the decision is
+                                // made and execution owns the screen; fold up
+                                // instead of latching open for the whole run.
+                                withAnimation(.easeInOut(duration: 0.18)) { isPlanExpanded = false }
                             }
                         }
                         .onCompatibleChange(of: appState.agentPlanOverlayCollapseRequestToken) { _, _ in

@@ -1,7 +1,24 @@
 # Changelog
 
-> 当前文件保留最新版本（1.288.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.288.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.288.0-rc4 - 2026-08-24
+
+### Fixed
+
+- **同一份计划清单不再同时出现在两个地方：浮动计划卡在 composer 进度条在场时让位。** 用户报「还存在 2 处计划卡片，之前不是要去掉重复吗」，并附执行中截图：右侧浮动计划卡 7 步全展开，同时 composer 上方「第 2 / 7 步」进度条展开着同一份清单。
+
+  **这次修的是上一轮修了一半的口子。** [AgentPlanGoalCards.swift](Xedit/AgentPlanGoalCards.swift) 里 `initiallyExpanded` 的注释就是上轮留下的记录（原话："opening on it used to show the same checklist twice (floating card + composer pill) for the entire execution"）——但那轮只改了**是否自动展开**（`.approved` 不再自动开），没改**是否显示**：`shouldDisplay` 至今仍是 `plan.status != .done`。两个面的显示条件彼此独立——浮动卡看「计划没做完」，composer 进度条看「回合在跑且有计划」——**执行期间两条同时为真**，同一份 `agentCurrentPlan` 必然渲染两次。上轮的效果只是把重复的那份变小了，没让它消失。
+
+  修法按注释里已写明的设计意图落地（"the composer progress pill is the live progress surface for that phase"）：
+  - 新增 `shouldDisplayFloatingCard(_:isComposerProgressVisible:)`，浮动卡在 composer 进度条在场期间整体让位；回合结束进度条撤走后卡片回来，计划照旧可查看、修订、标记完成。
+  - [AgentConversationActivityOverlay.swift](Xedit/AgentConversationActivityOverlay.swift) 判断进度条是否在场时，复用与 composer 完全相同的输入（`AgentComposerTaskProgressSnapshot.preferred(plan:goal:isResponding:)`），两个面不可能对「谁在场」各说各话。
+  - **顺带修掉展开单向锁**：`onCompatibleChange` 原先只把 `isPlanExpanded` 设 `true`、从不设回 `false`。计划在 `.proposed` 时展开过，转 `.approved`／执行中也收不回去，整轮撑开——正是截图里 7 步全展开的成因。新增 `shouldCollapse(onStatusChangeTo:)`，离开待决策状态即折叠。
+
+### Tests
+
+- 新增 [AgentPlanSurfaceExclusivityTests](XeditTests/AgentPlanSurfaceExclusivityTests.swift) 6 例：执行中浮动卡让位、回合结束卡片回归（三种进行中状态）、`done` 计划两种情况都不显示、只有 `.proposed` 自动展开、离开待决策即折叠，以及一条**跨状态×响应态的穷举不变量**——用 composer 进度条自己的判定函数算出在场与否，断言「两个面在任一时刻至多显示一个」，把这次的重复钉死为回归。
 
 ## 1.288.0-rc3 - 2026-08-24
 

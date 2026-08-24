@@ -39,6 +39,28 @@ nonisolated enum AgentPlanCardExpansionPolicy {
         plan.status != .done
     }
 
+    /// Whether the floating card should yield to the composer progress pill.
+    ///
+    /// Both surfaces render the same checklist from the same
+    /// `agentCurrentPlan`, and their visibility conditions used to be
+    /// independent: the card showed for any non-`done` plan while the pill
+    /// showed for any plan during a live turn. Every execution therefore
+    /// displayed the checklist twice. An earlier pass stopped the card from
+    /// auto-*expanding* on `.approved`, which made the duplicate smaller
+    /// without removing it.
+    ///
+    /// The pill is the live-progress surface — it sits with the composer, it
+    /// tracks the current step, and it is where the user is already looking
+    /// while work runs. So the card steps aside for exactly as long as the
+    /// pill is up, and comes back when the turn ends so the plan stays
+    /// reviewable and actionable (revise, mark complete) between turns.
+    static func shouldDisplayFloatingCard(
+        _ plan: AgentPlan,
+        isComposerProgressVisible: Bool
+    ) -> Bool {
+        shouldDisplay(plan) && !isComposerProgressVisible
+    }
+
     static func allowsRevision(_ plan: AgentPlan) -> Bool {
         plan.status != .done
     }
@@ -51,6 +73,17 @@ nonisolated enum AgentPlanCardExpansionPolicy {
     /// most models is the end of the turn: opening on it used to show the
     /// same checklist twice (floating card + composer pill) for the entire
     /// execution, and re-opened it on every re-mount of the overlay.
+    /// Whether a status change should fold an already-open card back up.
+    ///
+    /// `initiallyExpanded` only ever opens the card; without this the
+    /// expansion was a one-way latch. A plan that was `.proposed` when the
+    /// overlay mounted stayed fully expanded for the rest of the run, so the
+    /// moment execution started the user had a full open checklist floating
+    /// over the transcript *and* the composer pill tracking the same steps.
+    static func shouldCollapse(onStatusChangeTo status: AgentPlan.Status) -> Bool {
+        !initiallyExpanded(for: status)
+    }
+
     static func initiallyExpanded(for status: AgentPlan.Status) -> Bool {
         status == .proposed
     }
