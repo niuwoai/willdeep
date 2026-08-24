@@ -1,7 +1,31 @@
 # Changelog
 
-> 当前文件保留最新版本（1.287.0-rc11 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.287.0-rc12 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.287.0-rc12 - 2026-08-24
+
+### Fixed
+
+- **上下文跑道交接轮不再自废工具声明，交接不会再变成一坨裸标记。** 现场取证：本机 475 个会话里 handoff 一共触发 10 次，其中 **3 次的交接被模型吐出来的原始工具调用语法整段毁掉**（失败率 30%），跨 `someim-code-high`、`someim-auto-flash`、`nemotron-3-ultra` 三个模型、两种互不相干的语法：
+  - `<｜｜DSML｜｜tool_calls>…` —— DeepSeek 家族的 DSML（全角竖线 U+FF5C，且被模型写成双写，说明是在"默写"语法而不是吐真 special token）；
+  - `<tool_call><function=get_job_output>…` —— 开放权重家族的写法。
+  三次模型想调的都是 `get_job_output`，三次 `toolCalls` 都是空数组，调用全丢。
+
+  根因不在网关也不在上游解析器，在 [AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift) 自己：handoff 触发时会 `requestTools = []`，而 OpenAI-Chat 适配器在 tools 为空时**直接不发 `tools` 键**（[AgentClientOpenAIChat.swift](Xedit/AgentClientOpenAIChat.swift)）。上游只在请求声明了工具时才打开工具调用解析器，于是模型照发的调用没人解析，原样落进 `content`。原注释里"移除工具 schema 能把『不许开新活』变成传输层事实"的假设被现场证伪——**去掉声明只能阻止调用被解析，阻止不了模型发出调用**；`3CF7B3BB` 那条的 `reasoningContent` 白纸黑字绕过了指令：「指令说 Do not call tools……但 job_8a9548 的输出是已经存在的证据，属于收尾验证，不算开新工作」。
+
+  代价不只是一条脏消息：`7DB4EF68` 那次模型是把交接正文当工具参数值在写，PAUSE/DONE 写到一半被截断，ANCHORS / REMAINING / NEXT PROMPT 三段全丢，而压缩照常执行——本该保命的状态胶囊在它唯一该生效的时刻空转。
+
+  修法分两层：
+  - **治根**：handoff 轮**保留工具声明**（窗口代价是 schema 大小，换回来的是一份几百 token 的交接），拒绝改在能回话的地方执行——工具调用在本轮一律不执行、从消息上清掉（顺带避免 assistant 带 `tool_calls` 却没有对应 tool 结果导致下一次请求 400），并回一条点名被拒工具的系统提示，告诉模型该把这次请求写进 REMAINING、在 NEXT PROMPT 里点名。交接提示词也补了一句"工具调用会被宿主拒绝"，把模型自我说服的空间堵掉（保留原 `Do not call tools` 断言锚点）。
+  - **兜底**：新增 [AgentLeakedToolCallText](Xedit/AgentLeakedToolCallText.swift)，识别落进 `content` 的裸工具调用标记（DSML 单/双竖线、`<tool_call>` / `</tool_calls>` / `<function=`），从**最早**一个标记处切开——保住标记之前的正文（这正是 `7DB4EF68` 丢掉的那半段），丢掉标记本身，不再渲染、不再落盘、不再作为历史回放。
+  - 两条路径共用 `maximumHandoverRetries = 2` 的重试预算；预算耗尽就按普通交接收尾，不跟模型在满窗口里对峙。
+  - 刻意**不做**的：泄漏识别只在 handoff 轮生效。全局剥离会误伤正常讨论工具语法的正文（本条 CHANGELOG 自己就会中招），而现场 3/3 都发生在 handoff 轮。
+
+### Tests
+
+- 新增 [AgentLeakedToolCallTextTests](XeditTests/AgentLeakedToolCallTextTests.swift)：样本直接抄自落盘现场（含模型真写出来的双竖线），覆盖整条全是标记、正文在闭合标签之前必须保住、canonical 单竖线、`<tool_call>` 家族、最早标记决定切点，以及三条防误伤（正常交接文本、孤立全角竖线、正文里提到 "DSML"/"tool_calls" 字样）。
+- [AgentContextRunwayPolicyTests](XeditTests/AgentContextRunwayPolicyTests.swift) 补 5 条：交接提示声明工具会被拒、拒绝通知点名工具并指向 REMAINING/NEXT PROMPT、空工具名时通知仍成句、markup 丢弃通知说明没有工具运行、重试预算有上限且不为零。
 
 ## 1.287.0-rc11 - 2026-08-24
 

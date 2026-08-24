@@ -108,4 +108,56 @@ struct AgentContextRunwayPolicyTests {
         #expect(AgentContextRunwayPolicy.maximumAutomaticResumes >= 1)
         #expect(AgentContextRunwayPolicy.maximumAutomaticResumes <= 5)
     }
+
+    /// Observed failure: the model reasons its way past "do not call tools"
+    /// ("reading an already finished job is not new work"). Saying the host
+    /// refuses the call removes the argument.
+    @Test("交接提示声明工具调用会被宿主拒绝")
+    func handoffPromptDeclaresToolCallsAreRefused() {
+        let prompt = AgentContextRunwayPolicy.handoffPrompt(
+            snapshot: .init(usedTokens: 95_000, contextWindow: 100_000)
+        )
+
+        #expect(prompt.contains("Do not call tools"))
+        #expect(prompt.contains("refused by the host"))
+    }
+
+    @Test("拒绝通知点名被拒工具，并指明该写去哪儿")
+    func refusalNoticeNamesTheToolAndRedirectsIt() {
+        let notice = AgentContextRunwayPolicy.refusedToolCallNotice(
+            toolNames: ["get_job_output"]
+        )
+
+        #expect(notice.contains("get_job_output"))
+        #expect(notice.contains("did not run"))
+        #expect(notice.contains("REMAINING"))
+        #expect(notice.contains("NEXT PROMPT"))
+    }
+
+    /// The refusal is dispatched from the same round that parsed the calls, so
+    /// an empty name list means the round produced calls we could not name —
+    /// the notice still has to read as a complete sentence.
+    @Test("没有工具名时拒绝通知仍然成句")
+    func refusalNoticeReadsWithoutToolNames() {
+        let notice = AgentContextRunwayPolicy.refusedToolCallNotice(toolNames: [])
+
+        #expect(notice.contains("The tool call did not run"))
+    }
+
+    @Test("markup 丢弃通知说明没有工具运行")
+    func discardedMarkupNoticeExplainsNothingRan() {
+        let notice = AgentContextRunwayPolicy.discardedMarkupNotice()
+
+        #expect(notice.contains("Nothing ran"))
+        #expect(notice.contains("NEXT PROMPT"))
+    }
+
+    /// Refusing costs a round out of an already-full window, so the budget has
+    /// to be small — but it must exist, or one stubborn model ends the turn
+    /// with no handover at all.
+    @Test("交接重试次数有上限且不为零")
+    func handoverRetriesAreBoundedButPresent() {
+        #expect(AgentContextRunwayPolicy.maximumHandoverRetries >= 1)
+        #expect(AgentContextRunwayPolicy.maximumHandoverRetries <= 3)
+    }
 }

@@ -29,6 +29,16 @@ nonisolated enum AgentContextRunwayPolicy {
     /// and waits for a human.
     static let maximumAutomaticResumes = 3
 
+    /// How many extra rounds one handoff turn may spend recovering from a
+    /// model that answered with a tool call instead of the handover.
+    ///
+    /// The instruction already says not to call tools. The observed failure is
+    /// that a model reasons its way around it — "reading an already finished
+    /// job is not new work" — so the host has to refuse the call and ask
+    /// again. That costs a round; this ceiling stops a model that will not
+    /// take no for an answer from spending the rest of the window arguing.
+    static let maximumHandoverRetries = 2
+
     nonisolated struct Snapshot: Equatable, Sendable {
         let usedTokens: Int
         let contextWindow: Int
@@ -76,7 +86,7 @@ nonisolated enum AgentContextRunwayPolicy {
         === CONTEXT RUNWAY HANDOFF ===
         Host-observed context usage is approximately \(snapshot.usedTokens) of \(snapshot.contextWindow) tokens (\(snapshot.usedPercent)% used, about \(snapshot.remainingTokens) remaining). This estimate is a safety signal, not evidence that the task is complete.
 
-        Stop opening new substantive work now. Do not call tools, edit files, start background work, or claim unverified completion. Use only evidence already present in this conversation and produce a compact handover in the user's language with exactly these sections:
+        Stop opening new substantive work now. Do not call tools, edit files, start background work, or claim unverified completion. Tool calls are refused by the host for the rest of this turn and will not run, so a reply spent on one is a reply thrown away. Use only evidence already present in this conversation and produce a compact handover in the user's language with exactly these sections:
         - PAUSE: say that context runway, not task completion, caused this ordered stop
         - DONE: only work actually completed and the evidence that verified it
         - ANCHORS: current branch/version when known, modified files, important paths/symbols, commands and test results needed to resume without guessing
@@ -88,6 +98,37 @@ nonisolated enum AgentContextRunwayPolicy {
         - Compression replaces the older turns with a summary, so anything only you can still see must be written into ANCHORS now or it is gone by the time work resumes.
         - A brand-new session does not automatically inherit this conversation. The NEXT PROMPT must therefore point to durable workspace state instead of saying only "continue".
         - Preserve any required machine-readable `progress` or `goal-check` block, using no changes when nothing became newly verified.
+        """
+    }
+
+    /// Handed to the model after the host refused a tool call it made during
+    /// the handoff round.
+    ///
+    /// Naming the refused call matters: the model asked for it on purpose and
+    /// will otherwise ask again. Telling it where the request belongs instead
+    /// — REMAINING now, NEXT PROMPT for the resumed turn — turns the refusal
+    /// into part of the handover rather than a wall.
+    static func refusedToolCallNotice(toolNames: [String]) -> String {
+        let named = toolNames.isEmpty
+            ? "The tool call"
+            : "The call to \(toolNames.joined(separator: ", "))"
+        return """
+        === CONTEXT RUNWAY HANDOFF — TOOL CALL REFUSED ===
+        \(named) did not run, and no tool will run for the rest of this turn. The context window is nearly full; the written handover is the only thing this turn can still produce.
+
+        Reply now with plain text only, using the PAUSE / DONE / ANCHORS / REMAINING / NEXT PROMPT sections from the handoff instruction above. Whatever you wanted that call for belongs under REMAINING, and NEXT PROMPT should name it so the resumed turn runs it first.
+        """
+    }
+
+    /// Handed to the model after raw tool-call markup was stripped out of its
+    /// handover reply. The call was already lost before it reached WillDeep —
+    /// this only tells the model why its own text came back shorter.
+    static func discardedMarkupNotice() -> String {
+        """
+        === CONTEXT RUNWAY HANDOFF — MALFORMED TOOL CALL DISCARDED ===
+        Your last reply carried raw tool-call markup as plain text instead of a real call. Nothing ran, and the markup was removed from the transcript.
+
+        Reply now with plain text only, using the PAUSE / DONE / ANCHORS / REMAINING / NEXT PROMPT sections from the handoff instruction above. Do not emit tool-call syntax of any kind.
         """
     }
 
