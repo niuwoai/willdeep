@@ -64,6 +64,9 @@ struct AgentSidebarAccountFooter: View {
         VStack(spacing: 0) {
             Divider()
             VStack(spacing: 0) {
+                // Sessions blocked on the user come first: the update banner
+                // can wait, a stalled agent cannot.
+                AgentSidebarPendingApprovalStrip()
                 if let update = appState.availableAppUpdate {
                     appUpdateBanner(update)
                 }

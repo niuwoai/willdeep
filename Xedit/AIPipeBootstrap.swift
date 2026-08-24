@@ -43,6 +43,22 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// A single Dock click keeps its stock behavior (activate, restore
+    /// windows) — returning true below is what performs it. A second click
+    /// inside the double-click window jumps to the session behind the badge.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        MainActor.assumeIsolated {
+            AgentDockAttentionController.shared.handleDockIconClick()
+        }
+        return true
+    }
+
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        MainActor.assumeIsolated {
+            AgentDockAttentionController.shared.makeDockMenu()
+        }
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
             guard let fileURL = WillDeepExternalURLParser.fileURL(fromOpenURL: url) else { continue }

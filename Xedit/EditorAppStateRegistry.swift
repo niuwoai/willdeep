@@ -146,6 +146,19 @@ final class EditorAppStateRegistry: ObservableObject {
         return nil
     }
 
+    /// Find the AppState whose sidebar owns a session, whether or not it has
+    /// a live runtime. A session blocked on a proposed plan or a pending
+    /// patch can be restored from disk with no runtime attached, and Dock
+    /// navigation still has to land on it.
+    func appState(containingSession sessionID: AgentSession.ID) -> AppState? {
+        for appState in appStatesForTerminationCheck {
+            if appState.agentSessions.contains(where: { $0.id == sessionID }) {
+                return appState
+            }
+        }
+        return nil
+    }
+
     /// Find the (AppState, sessionID) of a runtime that currently has a
     /// tool call waiting on the user (approval / confirm / answer). Used
     /// by the notification responder to deep-link the user straight to

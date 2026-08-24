@@ -63,7 +63,8 @@ final class AgentNotificationResponder: NSObject, UNUserNotificationCenterDelega
 
         let registry = EditorAppStateRegistry.shared
         let target: (appState: AppState, sessionID: AgentSession.ID)?
-        if let runtimeID, let appState = registry.appState(forRuntime: runtimeID) {
+        if let runtimeID, let appState = registry.appState(forRuntime: runtimeID)
+            ?? registry.appState(containingSession: runtimeID) {
             target = (appState, runtimeID)
         } else {
             target = registry.appStateWithPendingAttention()
