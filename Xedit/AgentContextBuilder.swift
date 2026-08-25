@@ -127,16 +127,16 @@ enum AgentContextBuilder {
 
     A fenced ```progress block with the same `1: done` lines still works and is read as a fallback, but it is second choice: it only registers when the reply text is produced, and anything the tool already settled this turn wins over it. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they never update the checklist by themselves.
     """
-    static let stablePrefixVersion = "willdeep-agent-system-v33"
+    static let stablePrefixVersion = "willdeep-agent-system-v34"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "ade1c7c5d1168afa"
-    static let compactPrefixSnapshotHash = "3ec7c44d41f0e544"
-    static let extendedPrefixSnapshotHash = "d57389edc80368d2"
+    static let stablePrefixSnapshotHash = "251b3501c7b416a5"
+    static let compactPrefixSnapshotHash = "a7c33f8482e85435"
+    static let extendedPrefixSnapshotHash = "825cdd9d41c59c9d"
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
@@ -614,6 +614,7 @@ enum AgentContextBuilder {
                 - Use run_command for practical build/test verification and debug a failed call before reporting a blocker.
                 - Put test/build/server commands expected to take at least 30 seconds in the background (recognized commands are promoted automatically when the flag is omitted), give them a concise `label`, and continue independent documentation or metadata work. Never change source/build inputs under an active verification job; if you do, treat its result as stale and rerun it. Inspect the automatic completion notice before claiming success.
                 - Terminal tools follow the ACTIVE side-panel terminal tab; treat it as a separate stateful local-or-SSH context and inspect terminal_snapshot before location-sensitive commands. terminal_send_command confirms dispatch and appends a bounded automatic snapshot for ordinary commands; if expected output is not visible yet, wait briefly and call terminal_snapshot again before concluding the terminal is unstable.
+                - \(AgentTerminalAutomationPolicy.userOnlyShortcutPlaybackRule)
                 - Respect the active approval mode, keep paths workspace-relative, protect secrets, and verify changed artifacts before answering.
                 """)
             } else {
@@ -624,6 +625,7 @@ enum AgentContextBuilder {
             - Use list_workspace_sessions when the user asks which sessions exist in the current workspace. Use change_workspace only when the current workspace is missing/wrong and the task clearly identifies another known absolute local directory; change_workspace always requires explicit per-call approval and is unavailable in Goal mode. After change_workspace succeeds, stop the turn and wait for the user's next message before calling any workspace, file, terminal, or command tool.
             - The visible side-panel terminal is a separate, stateful machine that may be a remote SSH host. Commands route to the ACTIVE tab unless terminal_tab_id says otherwise; terminal_list_tabs enumerates tabs and terminal_select_tab switches visibly, so select first when the user names a tab. Before any command whose meaning depends on where it runs, confirm the active tab with terminal_snapshot (it reports the tab id it read) and remember whether it is a local shell or which host/user/directory the SSH session shows. Never send local Mac or workspace commands into an SSH tab — use run_command. If the host is unclear, snapshot or ask one concrete question. If a previously active SSH tab was closed, a newly visible or auto-created local shell is NOT that remote context: implicit routing stays blocked until the intended tab is explicitly opened or selected and verified with terminal_snapshot. With no prior remote context terminal_send_command may open a local shell itself; otherwise follow the tool error and terminal_list_tabs rather than claiming the terminal was routed.
             - terminal_send_command's dispatch confirmation is not command output. Ordinary commands get one bounded follow-up snapshot, but slow, long-running, or interactive ones may still be producing output: wait briefly and snapshot the same tab again before drawing conclusions, and never call the terminal unstable merely because the confirmation or first snapshot lacked output.
+            - \(AgentTerminalAutomationPolicy.userOnlyShortcutPlaybackRule)
             - In that terminal, do not create or overwrite files with heredoc, here-string, `cat > file`, `echo > file`, or similar pasted multi-line shell techniques. Use create_file/edit_file/apply_patch for workspace files, run_command for ordinary execution, and explicit transfer tools between hosts. A small auditable heredoc is acceptable only when the terminal is the only path to a remote host and transfer tools are unavailable; verify the result afterwards. For rz/sz ZMODEM transfers, call read_skill "zmodem-terminal-transfers" first — it covers the terminal_send_command preselect arguments, lrzsz installation on both ends, and the scp/rsync fallbacks; do not improvise the flow.
             - CREATE files with create_file (path plus full content, straight to disk) — never a `/dev/null` diff. EDIT existing files with edit_file: old_string must be copied verbatim from the file (same whitespace/indentation, WITHOUT read_file line-number prefixes) and be unique, so include a few surrounding lines or set replace_all=true for bulk renames. The host locates the match and builds the diff itself. Hand-written apply_patch hunks frequently fail to match: use it only when edit_file genuinely cannot express the change. If edit_file is unavailable or the edit needs unsupported deletion/binary changes, explain that limit and give the diff or next step instead.
             - File arguments are literal text. `${{ ... }}` in GitHub Actions YAML is fully supported, and a `${{ secrets.NAME }}` reference is not the secret value — never claim the file tools reject that syntax, and never switch to shell/Python merely because it is present.

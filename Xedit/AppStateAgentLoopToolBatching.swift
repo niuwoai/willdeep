@@ -235,6 +235,9 @@ extension AppState {
         if runtime.interactionMode == .goal {
             return .goalMode
         }
+        if runtime.approvalMode == .fullAccess {
+            return .fullAccess
+        }
         if runtime.approvalMode == .workspaceAccess {
             return .workspaceAccess
         }

@@ -293,6 +293,18 @@ struct AgentTurnProgressPresentationTests {
         }
         #expect(foundBlock)
         #expect(foundToggle)
+
+        var nonGrayscaleTextColors: [NSColor] = []
+        rendered.enumerateAttribute(.foregroundColor, in: fullRange) { value, _, _ in
+            guard let color = value as? NSColor,
+                  let rgb = color.usingColorSpace(.sRGB) else { return }
+            let isGrayscale = abs(rgb.redComponent - rgb.greenComponent) < 0.001
+                && abs(rgb.greenComponent - rgb.blueComponent) < 0.001
+            if !isGrayscale {
+                nonGrayscaleTextColors.append(color)
+            }
+        }
+        #expect(nonGrayscaleTextColors.isEmpty)
     }
 
     @Test("渲染第 3 案的收起与展开状态供视觉验收")

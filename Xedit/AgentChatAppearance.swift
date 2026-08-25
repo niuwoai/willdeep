@@ -87,4 +87,17 @@ enum AgentChatTypography {
     static func lineHeight(fontSize: CGFloat, lineHeightMultiple: CGFloat) -> CGFloat {
         fontSize + lineSpacing(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
     }
+
+    /// Markdown headings scale from the user's chat body size instead of
+    /// switching to a second, fixed typography system. The previous fixed
+    /// 22/18/16/14 ladder made H4 smaller than 15 pt body copy and stopped
+    /// responding when the user enlarged the transcript.
+    static func headingFontSize(level: Int, baseFontSize: CGFloat) -> CGFloat {
+        switch level {
+        case 1: return baseFontSize + 7
+        case 2: return baseFontSize + 4
+        case 3: return baseFontSize + 2
+        default: return baseFontSize + 1
+        }
+    }
 }

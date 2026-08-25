@@ -351,21 +351,25 @@ enum AgentChatHistoryRenderer {
         // Message prose follows the user's body-size setting. Tool summaries
         // and section labels keep their compact AppKit scale so metadata does
         // not visually compete with the conversation itself.
-        let bodyFont = (AgentChatFontChoice.byID(fontID) ?? .system).nsFont(size: baseFontSize)
+        let fontChoice = AgentChatFontChoice.byID(fontID) ?? .system
+        let bodyFont = fontChoice.nsFont(size: baseFontSize)
         let bodyLineSpacing = AgentChatTypography.lineSpacing(
             fontSize: baseFontSize,
             lineHeightMultiple: AgentSettingsStore.clampChatLineHeightMultiple(lineHeightMultiple)
         )
+        let supportingFontSize = AgentDesign.chatSupportingFontSize(baseFontSize: baseFontSize)
+        let supportingFont = fontChoice.nsFont(size: supportingFontSize)
+        let supportingLineSpacing = AgentChatTypography.lineSpacing(
+            fontSize: supportingFontSize,
+            lineHeightMultiple: AgentSettingsStore.clampChatLineHeightMultiple(lineHeightMultiple)
+        )
         let monoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
-        let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: supportingFontSize, weight: .regular)
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        // Follows the user's body typography rather than the compact AppKit
-        // scale used by section labels. The status line ("已处理 · 1m 7s") sits
-        // directly beneath the prose of the turn it closes, with only a hairline
-        // divider between them, so a size or family of its own reads as a
-        // different document rather than as metadata. This is the same rule the
-        // token / managed-route statistics follow.
-        let assistantStatusFont = bodyFont
+        // Status, process commentary, tool activity, and footer statistics are
+        // supporting information. Keeping them two points below the answer body
+        // creates a stable hierarchy without adding color or decorative cards.
+        let assistantStatusFont = supportingFont
         let bodyColor = NSColor.labelColor
         let assistantStatusColor = NSColor.secondaryLabelColor
         let assistantStatusDividerColor = AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(
@@ -391,7 +395,7 @@ enum AgentChatHistoryRenderer {
                     .map(\.id)
             )
         )
-        let settledTurnToolAggregation = assistantTurnToolCallAggregation(
+        let settledMessageToolGrouping = assistantMessageToolCallGrouping(
             messages: messages,
             latestAssistantTerminalSummaryMessageID: latestAssistantTerminalSummaryMessageID
         )
@@ -427,9 +431,9 @@ enum AgentChatHistoryRenderer {
             }
 
             if isToolCallOnly(message) {
-                // This call is already represented by the single aggregate
-                // attached to the final prose message of its assistant turn.
-                if settledTurnToolAggregation.absorbedToolOnlyMessageIDs.contains(message.id) {
+                // Consecutive tool-only messages immediately after prose
+                // belong to that prose goal and are rendered with it.
+                if settledMessageToolGrouping.absorbedToolOnlyMessageIDs.contains(message.id) {
                     index += 1
                     continue
                 }
@@ -468,9 +472,9 @@ enum AgentChatHistoryRenderer {
                     group,
                     isExpanded: expandedToolGroupIDs.contains(group.id),
                     to: result,
-                    bodyFont: bodyFont,
+                    bodyFont: supportingFont,
                     monoFont: chromeMonoFont,
-                    lineSpacing: bodyLineSpacing,
+                    lineSpacing: supportingLineSpacing,
                     secondaryColor: secondaryColor
                 )
                 continue
@@ -572,6 +576,18 @@ enum AgentChatHistoryRenderer {
             let activityHeadline = message.role == .assistant
                 ? AgentActivityHeadlinePresentation.make(from: body)
                 : nil
+            let isInterimAssistantMessage = message.role == .assistant
+                && turnPresentation != nil
+                && turnPresentation?.isLastVisibleMessage(message) == false
+            let messageBodyFont = isInterimAssistantMessage ? supportingFont : bodyFont
+            let messageMonoFont = isInterimAssistantMessage ? chromeMonoFont : monoFont
+            let messageBodyColor = isInterimAssistantMessage ? secondaryColor : bodyColor
+            let messageLineSpacing = isInterimAssistantMessage ? supportingLineSpacing : bodyLineSpacing
+            let messageParagraphStyle = bodyParagraphStyle(
+                for: message.role,
+                layoutWidth: layoutWidth,
+                lineSpacing: messageLineSpacing
+            )
 
             let hasUserTextBubbleContent = message.role == .user
                 && (!message.textAttachments.isEmpty || !body.isEmpty)
@@ -647,7 +663,7 @@ enum AgentChatHistoryRenderer {
                 let bodyStart = result.length
                 if !body.isEmpty {
                     if useMono {
-                        appendPlainBody(body, to: result, font: monoFont, color: bodyColor)
+                        appendPlainBody(body, to: result, font: messageMonoFont, color: messageBodyColor)
                     } else if message.role == .user {
                         appendPlainBody(
                             AgentLongTokenBreaker.inject(into: body),
@@ -659,7 +675,7 @@ enum AgentChatHistoryRenderer {
                         appendActivityHeadline(
                             activityHeadline,
                             to: result,
-                            font: bodyFont,
+                            font: messageBodyFont,
                             color: secondaryColor
                         )
                     } else {
@@ -667,9 +683,9 @@ enum AgentChatHistoryRenderer {
                             body,
                             to: result,
                             role: message.role,
-                            bodyFont: bodyFont,
-                            monoFont: monoFont,
-                            bodyColor: bodyColor,
+                            bodyFont: messageBodyFont,
+                            monoFont: messageMonoFont,
+                            bodyColor: messageBodyColor,
                             secondaryColor: secondaryColor,
                             codeBackgroundColor: codeBackgroundColor,
                             isDark: isDark,
@@ -702,7 +718,7 @@ enum AgentChatHistoryRenderer {
                     kind: bubbleKind(for: message.role),
                     to: result,
                     range: bodyRange,
-                    paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth, lineSpacing: bodyLineSpacing),
+                    paragraphStyle: messageParagraphStyle,
                     userMessageID: message.role == .user ? message.id : nil,
                     foregroundColor: nil
                 )
@@ -732,13 +748,14 @@ enum AgentChatHistoryRenderer {
                 hasMessageBubbleContent = true
             }
 
-            // A provider may emit many prose→tool→prose cycles during one
-            // assistant turn. While running, SwiftUI owns one activity row at
-            // the bottom. Once the turn settles, keep that same visual model:
-            // attach one aggregate to the final prose message instead of
-            // backfilling one tool row between every earlier progress line.
+            // Keep settled activity beside the prose that initiated it. A
+            // provider may emit many prose→tool→prose cycles in one turn; if
+            // all tool rows are moved behind the final prose, the transcript
+            // reads as “goal, goal, goal, every result”. Preserving each
+            // message-local group gives the chronological “goal, result,
+            // goal, result” rhythm users actually followed while it ran.
             let inlineGroup = message.role == .assistant
-                ? settledTurnToolAggregation.groupsByAnchorMessageID[message.id]
+                ? settledMessageToolGrouping.groupsByAnchorMessageID[message.id]
                 : nil
             let inlineToolCalls = inlineGroup?.calls ?? []
             if let inlineGroup, !inlineToolCalls.isEmpty {
@@ -757,9 +774,9 @@ enum AgentChatHistoryRenderer {
                     inlineGroup,
                     isExpanded: expandedToolGroupIDs.contains(inlineGroup.id),
                     to: result,
-                    bodyFont: bodyFont,
+                    bodyFont: supportingFont,
                     monoFont: chromeMonoFont,
-                    lineSpacing: bodyLineSpacing,
+                    lineSpacing: supportingLineSpacing,
                     secondaryColor: secondaryColor
                 )
             }
@@ -805,8 +822,7 @@ enum AgentChatHistoryRenderer {
                     turnReportToolCount: latestTurnReportToolCount,
                     layoutWidth: layoutWidth,
                     baseFontSize: baseFontSize,
-                    bodyFont: bodyFont,
-                    lineSpacing: bodyLineSpacing,
+                    lineSpacing: supportingLineSpacing,
                     to: result
                 )
                 if hasMessageBubbleContent && inlineToolCalls.isEmpty {
@@ -840,7 +856,7 @@ enum AgentChatHistoryRenderer {
                         value: footerParagraphStyle(
                             for: message.role,
                             layoutWidth: layoutWidth,
-                            lineSpacing: bodyLineSpacing
+                            lineSpacing: supportingLineSpacing
                         ),
                         range: footerRange
                     )
@@ -1033,30 +1049,35 @@ enum AgentChatHistoryRenderer {
         return calls.filter { !AgentTerminalToolNames.isVisibleTerminalOperation($0.toolName) }
     }
 
-    private struct AssistantTurnToolCallAggregation {
+    private struct AssistantMessageToolCallGrouping {
         var groupsByAnchorMessageID: [AgentMessage.ID: ToolCallHistoryGroup] = [:]
         var absorbedToolOnlyMessageIDs: Set<AgentMessage.ID> = []
     }
 
-    /// Collapse every prose/tool cycle between two user messages into one
-    /// settled activity group anchored after that turn's final prose message.
-    /// This mirrors the live activity timeline and prevents tools from
-    /// jumping back into the middle of the transcript when execution stops.
-    private static func assistantTurnToolCallAggregation(
+    /// Build one settled activity group for each prose goal. A provider may
+    /// put some calls on the prose message and the rest in immediately
+    /// following tool-only messages, so those adjacent records stay together.
+    /// The next prose message starts a new goal/result segment.
+    private static func assistantMessageToolCallGrouping(
         messages: [AgentMessage],
         latestAssistantTerminalSummaryMessageID: AgentMessage.ID?
-    ) -> AssistantTurnToolCallAggregation {
-        var result = AssistantTurnToolCallAggregation()
-
-        func appendTurn(_ turn: ArraySlice<AgentMessage>) {
-            let assistantMessages = turn.filter { $0.role == .assistant }
-            guard let anchor = assistantMessages.last(where: {
-                $0.hasRenderableTextContent || !$0.images.isEmpty
-            }) else {
-                return
+    ) -> AssistantMessageToolCallGrouping {
+        var result = AssistantMessageToolCallGrouping()
+        for index in messages.indices {
+            let message = messages[index]
+            guard message.role == .assistant,
+                  message.hasRenderableTextContent || !message.images.isEmpty else {
+                continue
             }
-            let toolMessages = assistantMessages.filter { !$0.toolCalls.isEmpty }
-            guard !toolMessages.isEmpty else { return }
+
+            var toolMessages = message.toolCalls.isEmpty ? [] : [message]
+            var nextIndex = messages.index(after: index)
+            while nextIndex < messages.endIndex, isToolCallOnly(messages[nextIndex]) {
+                toolMessages.append(messages[nextIndex])
+                result.absorbedToolOnlyMessageIDs.insert(messages[nextIndex].id)
+                nextIndex = messages.index(after: nextIndex)
+            }
+            guard !toolMessages.isEmpty else { continue }
 
             let calls = toolMessages.flatMap { toolMessage in
                 visibleToolCalls(
@@ -1064,34 +1085,19 @@ enum AgentChatHistoryRenderer {
                     keepTerminalCalls: toolMessage.id == latestAssistantTerminalSummaryMessageID
                 )
             }
-            guard !calls.isEmpty else { return }
+            guard !calls.isEmpty else { continue }
 
             let receipts = toolMessages.reduce(
                 into: [String: AgentToolCallStatus]()
-            ) { acc, toolMessage in
+            ) { accumulated, toolMessage in
                 guard let settled = toolMessage.settledToolReceipts else { return }
-                acc.merge(settled) { _, new in new }
+                accumulated.merge(settled) { _, new in new }
             }
-            let messageIDs = toolMessages.map(\.id)
-            result.groupsByAnchorMessageID[anchor.id] = ToolCallHistoryGroup(
-                inlineMessageIDs: messageIDs,
+            result.groupsByAnchorMessageID[message.id] = ToolCallHistoryGroup(
+                inlineMessageIDs: toolMessages.map(\.id),
                 calls: calls,
                 receipts: receipts
             )
-            result.absorbedToolOnlyMessageIDs.formUnion(
-                toolMessages.lazy.filter(isToolCallOnly).map(\.id)
-            )
-        }
-
-        var turnStart = messages.startIndex
-        for index in messages.indices where messages[index].role == .user {
-            if turnStart < index {
-                appendTurn(messages[turnStart..<index])
-            }
-            turnStart = messages.index(after: index)
-        }
-        if turnStart < messages.endIndex {
-            appendTurn(messages[turnStart..<messages.endIndex])
         }
         return result
     }
@@ -1262,7 +1268,7 @@ enum AgentChatHistoryRenderer {
                 let headingStart = result.length
                 result.append(inlineMarkdownAttributedString(
                     block.text,
-                    baseFont: headingFont(level: level),
+                    baseFont: headingFont(level: level, baseFont: bodyFont),
                     color: bodyColor
                 ))
                 // Tag the heading range so `applyBubbleChrome` can
@@ -1301,9 +1307,9 @@ enum AgentChatHistoryRenderer {
 
             case .unorderedList:
                 appendBlockSeparator()
-                let indent = String(repeating: "  ", count: min(block.indent, 4))
+                let listStart = result.length
                 result.append(NSAttributedString(
-                    string: "\(indent)\(bulletGlyph(for: block.indent)) ",
+                    string: "\(bulletGlyph(for: block.indent)) ",
                     attributes: [
                         .font: bodyFont,
                         .foregroundColor: secondaryColor,
@@ -1314,12 +1320,17 @@ enum AgentChatHistoryRenderer {
                     baseFont: bodyFont,
                     color: bodyColor
                 ))
+                result.addAttribute(
+                    .agentChatHistoryListDepth,
+                    value: NSNumber(value: block.indent),
+                    range: NSRange(location: listStart, length: result.length - listStart)
+                )
 
             case .orderedList:
                 appendBlockSeparator()
-                let indent = String(repeating: "  ", count: min(block.indent, 4))
+                let listStart = result.length
                 result.append(NSAttributedString(
-                    string: "\(indent)\(block.orderedListNumber ?? 1). ",
+                    string: "\(block.orderedListNumber ?? 1). ",
                     attributes: [
                         .font: bodyFont,
                         .foregroundColor: secondaryColor,
@@ -1330,6 +1341,11 @@ enum AgentChatHistoryRenderer {
                     baseFont: bodyFont,
                     color: bodyColor
                 ))
+                result.addAttribute(
+                    .agentChatHistoryListDepth,
+                    value: NSNumber(value: block.indent),
+                    range: NSRange(location: listStart, length: result.length - listStart)
+                )
 
             case .code:
                 let hadPreviousBlock = didAppendBlock
@@ -1764,17 +1780,14 @@ enum AgentChatHistoryRenderer {
             ?? NSColor.secondaryLabelColor
     }
 
-    private static func headingFont(level: Int) -> NSFont {
-        switch level {
-        case 1:
-            return NSFont.systemFont(ofSize: 22, weight: .semibold)
-        case 2:
-            return NSFont.systemFont(ofSize: 18, weight: .semibold)
-        case 3:
-            return NSFont.systemFont(ofSize: 16, weight: .semibold)
-        default:
-            return NSFont.systemFont(ofSize: 14, weight: .semibold)
-        }
+    private static func headingFont(level: Int, baseFont: NSFont) -> NSFont {
+        let size = AgentChatTypography.headingFontSize(
+            level: level,
+            baseFontSize: baseFont.pointSize
+        )
+        let resized = NSFont(descriptor: baseFont.fontDescriptor, size: size)
+            ?? NSFont.systemFont(ofSize: size)
+        return NSFontManager.shared.convert(resized, toHaveTrait: .boldFontMask)
     }
 
     private static func bulletGlyph(for indent: Int) -> String {

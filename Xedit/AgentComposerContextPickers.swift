@@ -18,6 +18,9 @@ enum AgentComposerChrome {
     static let iconSecondary = Color.secondary
     static let iconMuted = Color.secondary.opacity(0.58)
     static let iconDisabled = Color.secondary.opacity(0.34)
+    /// 完全访问是唯一跳出灰度的审批姿态。橙色不是装饰色，而是持续提醒：
+    /// 当前会话可以访问互联网、任意本机文件与凭据。
+    static let fullAccessAccent = Color.orange
 
     // MARK: - Bottom action row metrics
     //
@@ -166,27 +169,11 @@ struct AgentRunLocationPickerPill: View {
 
 struct AgentApprovalModePickerPill: View {
     @EnvironmentObject var appState: AppState
+    @State private var isPickerPresented = false
 
     var body: some View {
-        Menu {
-            ForEach(AgentApprovalMode.allCases) { mode in
-                Button {
-                    appState.setAgentApprovalMode(mode)
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: mode.symbol)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(mode.displayName)
-                            Text(mode.summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        if appState.agentApprovalMode == mode {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
+        Button {
+            isPickerPresented.toggle()
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: appState.agentApprovalMode.symbol)
@@ -207,24 +194,30 @@ struct AgentApprovalModePickerPill: View {
             .background(Capsule(style: .continuous).fill(pillBackground))
             .overlay(Capsule(style: .continuous).stroke(pillBorder, lineWidth: 1))
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPickerPresented, arrowEdge: .bottom) {
+            approvalModePicker
+        }
         .focusable(false)
         .fixedSize()
         .help(L10n.ApprovalMode.pickerHelp)
     }
 
     private var pillForeground: Color {
-        appState.agentApprovalMode == .requestEveryTime ? Color.secondary : Color.primary
+        switch appState.agentApprovalMode {
+        case .fullAccess: return AgentComposerChrome.fullAccessAccent
+        case .requestEveryTime: return Color.secondary
+        case .smart, .workspaceAccess: return Color.primary
+        }
     }
 
     private var pillBackground: Color {
         switch appState.agentApprovalMode {
         case .requestEveryTime: return AgentComposerChrome.controlFill
         case .smart: return AgentComposerChrome.selectedControlFill
-        // 静默模式用最重的一档底色：它是唯一一个「几乎不会再拦你」的档位，
-        // 用户扫一眼 composer 就该看出自己正处在哪种姿态里。
-        case .silent: return AgentComposerChrome.strongControlFill
+        // 与 Codex 的完全访问入口一致：橙色图标和文字承担警示，底色保持
+        // 克制，避免把 composer 变成一块常驻告警横幅。
+        case .fullAccess: return Color.clear
         case .workspaceAccess: return AgentComposerChrome.strongControlFill
         }
     }
@@ -233,8 +226,84 @@ struct AgentApprovalModePickerPill: View {
         switch appState.agentApprovalMode {
         case .requestEveryTime: return AgentComposerChrome.border
         case .smart: return AgentComposerChrome.selectedBorder
-        case .silent: return AgentComposerChrome.strongBorder
+        case .fullAccess: return Color.clear
         case .workspaceAccess: return AgentComposerChrome.strongBorder
         }
+    }
+
+    private var approvalModePicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.ApprovalMode.pickerHelp)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.top, 4)
+
+            ForEach(AgentApprovalMode.allCases) { mode in
+                approvalModeRow(mode)
+            }
+        }
+        .padding(8)
+        .frame(width: 390)
+    }
+
+    private func approvalModeRow(_ mode: AgentApprovalMode) -> some View {
+        let isSelected = appState.agentApprovalMode == mode
+        let isFullAccess = mode == .fullAccess
+        let accent = isFullAccess ? AgentComposerChrome.fullAccessAccent : Color.primary
+
+        return Button {
+            appState.setAgentApprovalMode(mode)
+            isPickerPresented = false
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: mode.symbol)
+                    .font(.system(size: 17, weight: .medium))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(isFullAccess ? accent : AgentComposerChrome.iconSecondary)
+                    .frame(width: 22, height: 24)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mode.displayName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(accent)
+                    Text(mode.summary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(isFullAccess ? accent : Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 10)
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(accent)
+                        .padding(.top, 5)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(rowBackground(isSelected: isSelected, isFullAccess: isFullAccess))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        // macOS 的默认键盘焦点环是系统蓝色；这个项目的模式菜单使用灰阶，
+        // 只有“完全访问”保留橙色风险语义，避免弹出时凭空多出蓝色选中态。
+        .focusable(false)
+        .accessibilityLabel("\(mode.displayName)，\(mode.summary)")
+        .accessibilityRemoveTraits(.isSelected)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func rowBackground(isSelected: Bool, isFullAccess: Bool) -> Color {
+        guard isSelected else { return Color.clear }
+        return isFullAccess
+            ? AgentComposerChrome.fullAccessAccent.opacity(0.09)
+            : AgentComposerChrome.selectedControlFill
     }
 }

@@ -19,11 +19,6 @@ enum AgentSidebarAccountMetrics {
     static let menuWidth: CGFloat = 344
     static let menuHeaderHeight: CGFloat = 34
     static let menuRowHeight: CGFloat = 34
-    /// 用户卡片不能直接退化为纯白：以皮肤控件底色为基底，再叠少量强调色和
-    /// 前景色，既保留当前皮肤的色相，也让浅色/深色皮肤都有克制的层级差。
-    static let accountBaseFillOpacity = 0.68
-    static let accountSkinTintOpacity = 0.055
-    static let accountDepthOpacity = 0.035
     /// 低余额是温和提醒而非错误。浅色外观使用低饱和赭石棕保证小字号对比度，
     /// 深色外观提升亮度；两者都比系统红更安静。
     static let lowCreditsTextColor = Color(nsColor: NSColor(name: nil) { appearance in
@@ -213,16 +208,11 @@ struct AgentSidebarAccountFooter: View {
     }
 
     private var accountControlBackground: some View {
-        let palette = appState.editorSettings.interfaceSkin.palette
-        let shape = RoundedRectangle(
+        RoundedRectangle(
             cornerRadius: AgentSidebarAccountMetrics.accountCornerRadius,
             style: .continuous
         )
-        return shape
-            .fill(palette.controlFill.opacity(AgentSidebarAccountMetrics.accountBaseFillOpacity))
-            .overlay(shape.fill(palette.accent.opacity(AgentSidebarAccountMetrics.accountSkinTintOpacity)))
-            .overlay(shape.fill(palette.primaryText.opacity(AgentSidebarAccountMetrics.accountDepthOpacity)))
-            .overlay(shape.fill(accountInteractionFill))
+        .fill(accountInteractionFill)
     }
 
     private var accountInteractionFill: Color {

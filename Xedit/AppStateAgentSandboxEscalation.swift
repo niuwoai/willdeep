@@ -125,14 +125,13 @@ extension AppState {
         }
     }
 
-    /// 静默模式和智能审核一样自动重跑：一条命令能走到"被 seatbelt 拒绝"
-    /// 这一步，说明它已经过了本档位的放行判定（静默模式=没命中黑名单、
-    /// 裁判也说不出恶意）。此时再弹一张"允许无沙箱重跑吗"的卡，等于把
-    /// 刚刚放行的决定推翻重问一遍——用户选静默模式要躲的正是这个。
+    /// 完全访问和智能审核一样自动重跑：一条命令能走到"被 seatbelt 拒绝"
+    /// 这一步，说明它已经过了本档位的放行判定。此时再弹一张"允许无沙箱
+    /// 重跑吗"的卡，等于把刚刚放行的决定推翻重问一遍。
     nonisolated static func smartApprovalAutomaticallyRetriesSandboxDenial(
         approvalMode: AgentApprovalMode
     ) -> Bool {
-        approvalMode == .smart || approvalMode == .silent
+        approvalMode == .smart || approvalMode == .fullAccess
     }
 
     /// Background commands finish after their originating tool call has

@@ -1,277 +1,58 @@
-# Design QA
+# 补丁审批黑白操作与正文对齐 Design QA
 
-## 结构化长提问卡片（1.288.0-rc1）
+**Findings**
 
-- source visual truth path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/ask-user-1.288.0-rc1/reference-option-2.png`
-- implementation screenshot path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/ask-user-1.288.0-rc1/implementation-narrow.png`
-- combined full-view comparison: `/Users/rocky/Sites/Xedit/artifacts/design-qa/ask-user-1.288.0-rc1/comparison-full.png`
-- combined focused comparison: `/Users/rocky/Sites/Xedit/artifacts/design-qa/ask-user-1.288.0-rc1/comparison-prompt.png`
-- viewport: native SwiftUI component at `520 pt` width, rendered at `2×` as `1040 × 784 px`; source normalized to the same `1040 px` width.
-- state: pending `ask_user`, structured title/context/requested information/default assumptions, free-form answer field, skip and send actions.
+- 最终对比未发现仍需处理的 P0、P1 或 P2 问题。
+- [P3] 用户参考图与测试夹具的正文内容、背景皮肤不同，因此本次只对需要修复的三个稳定表面做精确比较：按钮语义色、卡片左边缘、展开图标；不对背景色和文案换行做像素级匹配。
 
-### Full-view comparison evidence
+**Open Questions**
 
-- The production card preserves the selected composition: icon rail on the left; eyebrow, bold action title, regular context, and two labeled information groups on the right.
-- The answer field remains directly below the prompt, followed by the existing divider and submit footer; no extra preset-answer row appears in this state.
-- Skip and send retain the selected secondary-outline / primary-black hierarchy and remain fully visible at the narrow target width.
-- The implementation keeps WillDeep's existing Rice Paper surface instead of replacing the product theme with the concept image's plain white canvas.
+- 无阻塞问题。
 
-### Focused comparison evidence
+**Implementation Checklist**
 
-- Typography hierarchy passes: the action title is the strongest line, context is regular weight, section labels are semibold, and technical values are quieter body text.
-- Spacing passes: the two information groups are visibly separate without turning the prompt into stacked cards or adding new borders.
-- Wrapping passes: the Secret placeholder wraps within the content column at `520 pt`; no text is clipped or pushed under the icon.
-- Legacy compatibility passes: short unstructured questions keep the original compact single-title treatment; long legacy questions receive a localized fallback title and regular body automatically.
+- [x] “拒绝”从系统蓝色按钮改为中性灰描边。
+- [x] “应用”改为黑底白字主操作。
+- [x] 展开箭头、批量操作条与所有补丁审批入口移除 accent 蓝。
+- [x] 聊天区审批卡整体与助手正文左边缘对齐。
+- [x] 紧凑侧栏继续使用原有无额外正文 inset 的布局。
+- [x] 原生 SwiftUI 渲染截图和自动化契约测试通过。
 
-### Findings
+**Follow-up Polish**
 
-- Pass 1: the first fixture still included three preset options, which were absent from the selected reference and made the card materially taller.
-- Fix: removed preset options from the reference state while retaining the existing `options` schema and interaction behavior for questions that genuinely need choices.
-- Pass 2: the combined full and focused comparisons show matching hierarchy, grouping, action contrast, and responsive wrapping; no open P0/P1/P2 visual defects remain.
-- Verification: 17 targeted Swift tests passed, including structured/legacy prompt parsing, wide/narrow component rendering, registry coverage, and the local `#1983#` preview path.
+- 无必须跟进项。
 
-final result: passed
+## Evidence
 
----
+- Source visual truth:
+  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-935c87d1-31b4-472b-963a-759f928fe035.png`
+  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-5bfcec2a-17e7-4498-bbee-e5509cda1169.png`
+- Implementation screenshot:
+  - `/tmp/Xedit-confirmation-design-qa/patch-approval-monochrome-aligned.png`
+- Same-input comparison board:
+  - `/tmp/Xedit-confirmation-design-qa/patch-approval-reference-vs-implementation.png`
+- Viewport: 原生 SwiftUI 测试夹具 `760 × 168 pt`，轻色 Rice Paper 界面皮肤。
+- Source pixels: 聚焦组件 `1013 × 237 px`；完整聊天问题图 `1136 × 1034 px`。
+- Implementation pixels: 原始截图 `1520 × 336 px`；归一化对照 `1072 × 237 px`。
+- CSS size: 不适用；这是原生 SwiftUI macOS 界面。
+- Density normalization: 来源保持 `1013 × 237 px`；实现按比例缩放到 `1072 × 237 px`，未拉伸，使用 24 px 白色间隔横向拼接。
+- State: 单个文件编辑补丁处于 Pending，diff 收起，拒绝与应用均可操作。
+- Full-view evidence: 实现截图同时包含助手正文和完整审批卡，可检查卡片外边缘、正文列与操作区布局。
+- Focused-region evidence: 同屏对照板聚焦按钮、图标和 Pending 卡片；无需进一步裁切，目标细节在 237 px 高度下清晰可读。
 
-## 聊天“滚动到最新消息”火箭放大（1.279.0-rc1）
+## Required Fidelity Surfaces
 
-- source visual truth: 用户选定的 1 号概念图，以及“接近填满整个圆形”的本轮反馈。
-- implementation screenshot path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/worktree-recovery-1.279.0-rc1/rocket-off-bottom.jpeg`
-- viewport: native macOS window `1359 × 768 px`
-- state: 长会话已滚离底部，浮动按钮可见；回到底部后按钮仍由既有滚动策略自动隐藏。
+- Fonts and typography: 标题、Pending 状态及按钮沿用现有原生字体层级；按钮使用 12 pt medium，未因自定义样式改变文案权重或截断。
+- Spacing and layout rhythm: 卡片与正文共同从 `assistantContentHeadIndent` 起排；按钮高度 26 pt、圆角 7 pt、间距 8 pt，单文件和批量入口一致。
+- Colors and visual tokens: 主操作严格使用轻色模式黑底白字；次操作为透明底中性灰描边；卡片内未残留 accent 蓝、彩色批量背景或彩色展开图标。
+- Image quality and asset fidelity: 界面只使用系统 SF Symbols 与原生矢量文字，不涉及新增位图资产；截图为原生渲染 PNG，无压缩模糊或拉伸。
+- Copy and content: 所有产品文案继续来自既有 `L10n.AgentPatch` 资源，本次没有新增或硬编码用户可见字符串。
 
-### Full-view comparison evidence
+## Comparison History
 
-- 按钮仍吸附在聊天区右下方、composer 上方，没有遮挡输入区或会话正文。
-- 圆形点击热区保持 `44 pt`，只放大内部火箭，不改变布局占位。
-- 实机辅助功能树确认 `agent-chat-scroll-to-latest` 节点仅在离底状态出现。
-
-### Focused comparison evidence
-
-- 原始透明图的空白边被裁去，资源画布由大面积留白改为紧贴火箭主体。
-- SwiftUI 图像框由 `30 pt` 提升到 `38 pt`，火箭主体现在接近填满圆形，同时保留少量呼吸边距。
-- 蓝紫配色、Q 版造型、白色圆面、描边与阴影均沿用选定概念，没有引入新的视觉语言。
-
-### Findings
-
-- Pass 1: 单纯放大 SwiftUI frame 后，透明资源留白导致实机观感仍偏小。
-- Fix: 机械裁切透明边并保留原始透明 PNG 质量，再重新构建。
-- Pass 2: Computer Use 在新 Debug 构建中确认火箭显著放大、无裁切，位置和交互状态正确。
-- Asset Catalog 重新编译无未分配资源警告；相关 51 项测试全部通过。
-
-final result: passed
-
----
-
-## 聊天“滚动到最新消息”火箭（1.277.0-rc3）
-
-- source visual truth path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/scroll-to-latest-1.277.0-rc3/reference.png`
-- implementation screenshot path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/scroll-to-latest-1.277.0-rc3/implementation-off-bottom.jpeg`
-- viewport: native macOS window `1359 × 768 px`; source image `1487 × 1058 px`
-- density normalization: compared by floating position, button footprint, contrast, icon character, and relationship to the composer rather than full-window pixel scale.
-- state: populated long conversation, transcript manually scrolled above the bottom, then returned to the latest message by clicking the rocket.
-
-### Full-view comparison evidence
-
-- The production button floats at the lower-right edge of the transcript, above the composer and clear of message content, matching the selected concept's placement.
-- The control is absent while the transcript is already at the bottom and appears only after the operator scrolls upward.
-- Clicking the control returns the transcript scroll bar to `1.0`; the accessibility node is removed immediately afterward.
-
-### Focused comparison evidence
-
-- Geometry: pass; the `44 pt` circular target is compact but comfortably clickable.
-- Visual treatment: pass; a near-white circular surface, restrained hairline, and soft shadow preserve the concept's lightweight floating treatment.
-- Icon character: pass after replacing a visually missing SF Symbol render with a dedicated blue-violet Q-style rocket asset.
-- Motion: pass; the control uses a short scale/fade entrance and a subtle hover enlargement without competing with chat content.
-- Accessibility and localization: pass; the control exposes `agent-chat-scroll-to-latest` and localized help/label resources for five supported languages.
-
-### Findings
-
-- No open P0/P1/P2 visual defects after the second pass.
-- The production button uses a dedicated transparent PNG rocket asset, preserving the concept's blue-violet mascot direction at native scale.
-
-### Comparison history
-
-- Pass 1: interaction and placement were correct, but the SF Symbol rocket was not visibly rendered in the live app capture.
-- Fix: generated and integrated a dedicated transparent Q-style rocket asset, then rebuilt.
-- Pass 2: Computer Use confirmed the rocket is visible above the composer, activates successfully, scrolls to `1.0`, and disappears at the bottom.
-- Verification: `AgentTranscriptScrollPolicyTests` passed all 21 tests; repository version and contract guards also passed.
-
-final result: passed
-
----
-
-- source visual truth path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/agent-attention-1.267.0-rc3/reference.png`
-- implementation screenshot path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/agent-attention-1.267.0-rc3/settings-ai-agents.jpeg`
-- component implementation capture: Computer Use full-window capture emitted in the 2026-08-17 QA session (confirm and compact authorization states)
-- viewport: native macOS window `1256 × 768 px`; source image `1536 × 1024 px`
-- density normalization: compared by hierarchy, component proportions, typography weight, action contrast, and neutral-color usage rather than pixel scale
-- state: confirm, batch confirm, browser authorization, Computer Use authorization, and AI Agents settings navigation
-
-## Full-view comparison evidence
-
-- The selected monochrome concept was used as the source of truth.
-- A freshly built Debug app was launched and the `#1983#` local component fixture rendered the confirmation and authorization states without contacting an AI provider.
-- The rendered view preserved the selected direction: black primary actions, white/gray secondary actions, light neutral surfaces, restrained borders, and no system-blue action emphasis.
-- The settings capture confirms the new `通知` destination is present inside AI Agents settings.
-
-## Focused comparison evidence
-
-- Primary buttons: black fill, white text, rounded neutral treatment; pass.
-- Secondary/destructive buttons: white or translucent neutral surface with gray border/text; pass.
-- Confirmation metadata chips and explanatory actions: gray hierarchy; pass.
-- Compact browser/Computer Use authorization icon: the first capture exposed a theme-blue icon; changed to secondary gray and rebuilt successfully.
-- `ask_user`: shares the same icon tile, eyebrow, option-card, footer, and black-primary-button system; compiled and covered by the local fixture regression test.
-
-## Findings
-
-- No open P0/P1/P2 visual defects after the second pass.
-- Existing global settings selection tint remains the app's current navigation convention and is outside the confirm/ask_user/authorization surfaces changed here.
-
-## Required fidelity surfaces
-
-- Fonts and typography: pass; question hierarchy is stronger than supporting copy.
-- Spacing and layout rhythm: pass; action groups retain large click targets and consistent gaps.
-- Colors and visual tokens: pass after replacing the remaining compact-authorization accent icon with secondary gray.
-- Image quality and asset fidelity: pass; the component uses SF Symbols and vector SwiftUI surfaces only.
-- Copy and content: pass; all newly exposed component/settings copy is localized.
-
-## Comparison history
-
-- Pass 1: build succeeded and the live component fixture was captured; found one compact authorization icon still using the theme accent.
-- Fix: changed the compact authorization icon from `palette.accent` to `palette.secondaryText`.
-- Pass 2: Debug build and 12 targeted tests passed; no further blocking visual differences found.
-
-final result: passed
-
----
-
-## 原生标题栏会话搜索入口（1.274.0-rc3，随当前 1.274.0-rc4 验证）
-
-- source visual truth path: `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/reference.png`
-- implementation screenshot paths:
-  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/implementation-default.png`
-  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/implementation-search-open.png`
-  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/header-session-search-1.274.0-rc4/implementation-sidebar-hidden.png`
-- viewport: native macOS window `1359 × 768 px`; search sheet `520 × 440 px`
-- source size: Claude Code reference `1748 × 1274 px`
-- density normalization: the reference and implementation were inspected together in one comparison input; comparison scope is the macOS window-control cluster and search-entry placement rather than unrelated application content.
-- state: populated light-mode session sidebar, native titlebar controls, search sheet open, and sidebar hidden.
-
-### Full-view comparison evidence
-
-- The native titlebar now preserves the reference ordering: macOS traffic lights, sidebar toggle, then search magnifier.
-- The former search row below “新聊天” is absent; “已安排” now immediately follows the primary new-chat action.
-- The duplicate magnifier in the chat header is also absent, leaving one stable visible search entry for every Agent destination.
-
-### Focused comparison evidence
-
-- Control geometry: pass; the sidebar and search buttons share a `26 pt` footprint with a `3 pt` inter-button gap and align on the same titlebar baseline.
-- Sidebar-visible state: pass; the controls remain visually grouped with the traffic lights and do not consume sidebar menu height.
-- Sidebar-hidden state: pass; the chat title begins after the complete native control cluster, with no overlap or clipping.
-- Search presentation: pass; clicking the magnifier opens the existing localized search sheet with focus in the search field.
-- Keyboard behavior: pass; `⌘⇧P` opens the same search sheet from the native titlebar command.
-- Assets and localization: pass; the implementation uses the system `magnifyingglass` SF Symbol and the existing localized `header.search-sessions` string.
-
-### Findings
-
-- No open P0/P1/P2 visual defects in the changed titlebar/sidebar surfaces.
-- The production search sheet remains intentionally compact and follows WillDeep’s existing visual system; the Claude Code screenshot is used for entry placement and control ordering, not as a request to clone its full search-results layout.
-
-### Comparison history
-
-- Pass 1: combined reference/implementation review confirmed the requested control order and removal of the sidebar row.
-- Interaction pass: Computer Use verified click-to-open, `⌘⇧P`, close behavior, and sidebar hide/show behavior in the freshly built Debug app.
-- Verification: 22 targeted tests passed across `AgentConfirmationVisualTests`, `AgentHeaderEditorEntryTests`, and `AgentSessionSearchTests`.
-
-final result: passed
-
----
-
-## Token 单日详情与分享卡（1.272.0-rc7）
-
-- source visual truth paths:
-  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/daily-reference.png`
-  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/share-reference.png`
-- implementation screenshot paths:
-  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/daily-implementation.jpeg`
-  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-daily-1.272.0-rc7/share-implementation.jpeg`
-- viewport: native macOS window `1402 × 768 px`; share preview sheet `430 × 562 px`
-- source sizes: daily reference `1536 × 1024 px`; share reference `1124 × 1402 px`
-- density normalization: the single-day page was compared inside the real chat/composer shell; the share card was compared by its exported 4:5 composition, hierarchy, contrast, grid proportions, and data density.
-- state: populated 2026-08-18 calendar day with real local usage snapshots; share preview generated from the same day.
-
-### Full-view comparison evidence
-
-- The selected option-2 daily hierarchy is preserved: date and share action, five-metric strip, model efficiency on the left, achievements and capability usage on the right.
-- The selected option-3 share direction is preserved: near-black background, blue activity accents, monospaced developer styling, dominant Token total, bordered metric grid, and compact model/skill/streak footer.
-- Initial live navigation exposed inherited transcript scroll position when changing dashboard pages. The implementation now posts a page-change request and scrolls the transcript to its top anchor; the second live capture starts at the daily header as intended.
-
-### Focused comparison evidence
-
-- Typography and hierarchy: pass; the day title, hero Token count, metric values, and supporting labels retain the selected emphasis order.
-- Spacing and layout rhythm: pass; the production page is intentionally denser than the concept so it fits the existing 568pt dashboard column without introducing a new window.
-- Model bars: pass after separating uncached input, output, and cached input so the rendered segments sum to the model total instead of overflowing 100%.
-- Share card: pass; all selected information is visible without clipping, and the preview exposes working Save and Share actions.
-- Localization and assets: pass; visible copy comes from the string catalog and icons use native SF Symbols consistent with the existing product.
-
-### Findings
-
-- No open P0/P1/P2 visual defects after the scroll-position and model-segment corrections.
-- The app shell and composer remain visible around the daily detail by design; the concept image represented only the content surface.
-
-final result: passed
-
----
-
-## Token 活动填宽、分享图加载态与预览焦点（1.272.0-rc11）
-
-- source visual truth paths:
-  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-heatmap-1.272.0-rc11/reference.png`
-  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-3b67a02d-609e-455e-bb49-f9b59d6afe7d.png`
-  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-3ff6542e-0e93-434b-a691-db203506a31b.png`
-- implementation screenshot paths:
-  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-heatmap-1.272.0-rc11/implementation.png`
-  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-heatmap-1.272.0-rc11/reference-vs-implementation.png`
-  - `/Users/rocky/Sites/Xedit/artifacts/design-qa/token-heatmap-1.272.0-rc11/share-loading.png`
-- viewport: production statistics dashboard `608 × 740 pt` at `@2x`; focused heatmap comparison normalized to `700 px` width; loading control captured at `300 × 96 px`.
-- source sizes: focused heatmap `700 × 208 px`; implementation heatmap `700 × 298 px`; side-by-side comparison `1400 × 298 px`.
-- state: populated light-mode statistics overview, up to 32 visible weeks with 8 month labels, active share-image generation, and share-preview close action.
-
-### Full-view comparison evidence
-
-- The production dashboard render preserves the existing title, range switcher, summary metrics, insight hierarchy, and surrounding content while extending only the activity visualization.
-- At the common 568 pt content width, the heatmap fills the available row from its first column to its last column with 32 recent weeks instead of leaving an empty right-hand region.
-- Narrow content widths reduce the number of visible weeks before reducing legibility, so the grid remains inside the same content boundaries without horizontal scrolling.
-
-### Focused comparison evidence
-
-- Heatmap geometry: pass; cells resolve within the 12–14 pt target and distribute the remaining width as inter-column spacing, keeping the first and last columns aligned to the content edges.
-- Month coverage: pass; the focused implementation shows eight labels covering the recent 32-week window while preserving chronological order.
-- Share generation feedback: pass; the initiating button stays visible and changes to a spinner plus localized “生成中…” label until the rendered image payload exists.
-- Sheet presentation: pass; the preview sheet is driven by a completed image payload and therefore no longer presents an empty white surface during rendering.
-- Keyboard focus: pass; the top-right close button remains clickable but is explicitly excluded from the focus chain, preventing the default blue focus ring seen in the source report.
-
-### Findings
-
-- No open P0/P1/P2 visual defects after the second pass.
-- The implementation heatmap capture is taller than the cropped source because it includes the complete section rhythm and eight month labels; width was normalized for the alignment judgment.
-
-### Required fidelity surfaces
-
-- Fonts and typography: pass; existing dashboard text styles and weights are unchanged.
-- Spacing and layout rhythm: pass; grid boundaries align with the section header and range controls, and the longer month range does not crowd adjacent sections.
-- Colors and visual tokens: pass; activity intensity continues to use the established neutral-to-blue scale and the loading state uses the existing secondary button treatment.
-- Image quality and asset fidelity: pass; comparison and loading evidence are captured directly from production SwiftUI components at Retina density.
-- Copy and content: pass; the loading label is sourced from all five localization resources and the close-button behavior changes no visible copy.
-
-### Comparison history
-
-- Pass 1: the source crop exposed a fixed 26-week grid anchored to the left with unused space on the right.
-- Fix: introduced width-derived cell metrics, expanded the recent window to 32 weeks/eight labels, and reduced visible weeks only when the available width requires it.
-- Pass 2: the share flow exposed a blank-sheet interval and a blue focus ring on “关闭”.
-- Fix: delayed item-based sheet presentation until rendering completes, added inline generation progress, and marked the close action non-focusable.
-- Verification: 27 targeted statistics-dashboard and visual-metrics tests passed, including common-width edge alignment, narrow-width reduction, loading-state rendering, and close-button focus policy.
+1. 初始截图中“拒绝”“应用”和展开箭头继承系统蓝色；补丁卡整体从可读列左侧起排，与助手正文错列。
+2. 单文件、同回合批量和全部待处理操作统一接入既有 `AgentApprovalSecondaryButtonStyle` / `AgentApprovalPrimaryButtonStyle`；批量容器和展开图标改为灰度。
+3. 聊天中的 `AgentPatchProposalList` 增加助手正文同款水平 inset，侧栏调用不变。
+4. 重新生成原生实现截图并与问题截图同屏检查：主操作为黑底白字、次操作无蓝色，卡片外边缘与正文左边缘重合。
 
 final result: passed

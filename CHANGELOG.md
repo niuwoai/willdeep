@@ -1,7 +1,106 @@
 # Changelog
 
-> 当前文件保留最新版本（1.290.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.293.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.293.0-rc5 - 2026-08-25
+
+### Fixed
+
+- **历史输出恢复“目标—结果—目标—结果”的时间顺序。** 同一助手回合中的过程说明不再全部堆到工具结果之前；每段目标会就地携带自身及其紧邻的工具调用摘要，下一段目标从新的时间片继续，最终答案仍保持在最后。同一目标拆成“正文内调用 + 后续纯工具消息”时继续合并为一个活动层，不产生重复结果卡。
+
+### Tests
+
+- [AgentChatHistoryRendererTests](XeditTests/AgentChatHistoryRendererTests.swift) 新增多段目标与工具结果交替顺序守卫，并保留同一目标下相邻工具消息聚合、展开内容和排版间距回归。
+
+## 1.293.0-rc4 - 2026-08-25
+
+### Fixed
+
+- **同步终端快捷录制边界的系统提示词快照。** `1.293.0-rc3` 为标准、紧凑和扩展提示词新增“录制快捷只能由用户播放”的明确约束，但遗漏了三套确定性哈希与提示词协议版本更新，导致完整发布测试门禁失败；本版将协议提升为 v34，并按实际文本重新锁定三套快照。
+
+### Tests
+
+- 完整 `XeditTests` 首次运行 2987 项时仅三项提示词哈希守卫失败、其余通过；更新快照后重新执行发布测试门禁，确保标准、紧凑与扩展提示词文本一致受保护。
+
+## 1.293.0-rc3 - 2026-08-25
+
+### Changed
+
+- **侧边栏账户行移除常驻背景。** 左下角账户信息不再叠加控件底色、皮肤强调色和前景色形成浅色胶囊，静止时直接融入侧栏底色；头像、账户名、点数与帮助入口保持不变，悬停和菜单展开时仍提供临时交互反馈。
+- **记录 CPU 短时尖峰的诊断证据与优化路线。** 新增 SwiftUI 布局、会话侧栏派生数据、长会话指纹和自动滚动链的现场采样结论，明确 P0 量化、P1 缓存与增量失效、P2 绘制验证的实施顺序和验收阈值；本版只提交诊断文档，不把尚未复现的尖峰伪装成已经修复。
+
+### Tests
+
+- [AgentSidebarAccountFooterTests](XeditTests/AgentSidebarAccountFooterTests.swift) 锁定账户行只绘制交互态背景，并生成原生 SwiftUI 视觉回归截图。
+
+## 1.293.0-rc2 - 2026-08-25
+
+### Fixed
+
+- **补丁审批操作回归黑白灰。** 单文件、同回合批量及跨回合全部处理三种补丁审批入口不再继承 macOS accent 蓝色；“拒绝”使用中性描边，“应用”使用黑底白字，展开箭头和批量操作容器同步改为灰度。
+- **补丁审批卡与助手正文左边缘对齐。** 聊天区中的卡片整体复用 `assistantContentHeadIndent` / `assistantContentTailInset`，不再从可读列最左侧单独起排；紧凑侧栏仍保留原有布局。
+
+### Tests
+
+- [AgentInteractionTargetMetricsTests](XeditTests/AgentInteractionTargetMetricsTests.swift) 锁定补丁操作无 accent 色及聊天正文 inset；[AgentConfirmationVisualTests](XeditTests/AgentConfirmationVisualTests.swift) 生成原生 SwiftUI 对齐截图。两个套件共 19 项回归通过。
+
+## 1.293.0-rc1 - 2026-08-25
+
+### Changed
+
+- **聊天输出建立主次分明的原生 TextKit 层级。** 同一用户回合中，过程性说明、运行状态、工具活动与 Token 元信息统一降为系统次级灰和辅助字号，最终交付正文保留主黑与正文尺寸；不依赖 WebView 或 CSS，也能让用户先看到结论，再按需扫读过程。
+- **工具活动从横向挤压改为逐行摘要。** 读取、浏览、搜索、Git 与命令等操作各占一行，允许自然换行，不再用中点串成长句后截断；运行中 SwiftUI 时间线与历史 TextKit 输出使用相同的字号、行距和灰度层级。
+- **Markdown 标题与列表更适合长文阅读。** 标题字号相对用户配置的正文字号分级放大；无序和有序列表使用随嵌套深度递增的悬挂缩进，换行内容持续对齐正文而不是退回项目符号左侧。
+- **进度与状态回归黑白灰。** Goal 本轮进度、完成／进行中／失败计数和运行状态不再注入蓝、绿、红强调色，仅通过图标、字重、明暗和容器边界表达状态；真正的风险操作仍由既有审批设计单独强调。
+
+### Tests
+
+- [AgentChatHistoryRendererTests](XeditTests/AgentChatHistoryRendererTests.swift)、[AgentChatHistoryRendererGoalTests](XeditTests/AgentChatHistoryRendererGoalTests.swift) 与 [AgentTurnProgressPresentationTests](XeditTests/AgentTurnProgressPresentationTests.swift) 共 105 项回归通过，覆盖过程／最终正文层级、工具逐行摘要、标题缩放、列表悬挂缩进及进度区域全灰度约束。
+
+## 1.292.0-rc2 - 2026-08-25
+
+### Changed
+
+- **完全访问可自动操作侧边栏终端，但操作过程必须可见。** `terminal_send_command`、`terminal_send_control`、`terminal_select_tab` 以及终端快捷的创建/编辑在获准执行后，会先把共享 Terminal 侧边面板调出，再向 PTY 或终端状态发送变更；后台会话执行时也会在用户当前界面显示 Terminal，但不会切换用户正在查看的会话。
+
+### Security
+
+- **终端录制快捷只能由用户亲自播放。** Agent 继续可以列出、创建和编辑快捷录制，但不存在可播放录制的工具；潜在的 `terminal_play_shortcut` / `terminal_replay_shortcut` / `terminal_run_shortcut` 调用在完全访问审批层与工具执行层都会拒绝，模型契约也明确要求用户在可见 Terminal 面板中点击“运行”。
+
+### Tests
+
+- [AgentApprovalModePolicyTests](XeditTests/AgentApprovalModePolicyTests.swift) 覆盖完全访问终端原语免审、录制回放拒绝和执行前面板可见状态；[XeditTests+TerminalShortcuts](XeditTests/XeditTests+TerminalShortcuts.swift) 锁定终端工具分组与执行层硬拒绝；[AgentGlobalRulesTests](XeditTests/AgentGlobalRulesTests.swift) 保证用户专属回放规则持续进入模型提示词。
+
+## 1.292.0-rc1 - 2026-08-25
+
+### Added
+
+- **Composer 图片支持点击核对大图。** 粘贴或附加图片后，64 pt 缩略图现在是明确的可访问按钮；点击即复用聊天图片既有的原生预览窗口，以适应窗口显示完整图片，并支持缩放、双击放大、滚动查看和 `Esc` 关闭。右上角删除按钮保持独立，不会误触预览。
+
+### Changed
+
+- **会话行“等待批准”改为黑底白字。** 徽章从轻灰辅助态升级为稳定的黑色胶囊与白色 semibold 文案，让真正需要用户处理的会话在标题旁获得足够权重，同时不引入新的彩色状态。
+- **严格模式说明删掉“标题更新”例外。** 模式菜单只说明“安全相关写入或外部操作前询问”，不再用实现级例外挤占用户决策文案；五种语言同步更新。
+
+### Tests
+
+- [AgentInteractionTargetMetricsTests](XeditTests/AgentInteractionTargetMetricsTests.swift) 锁定等待批准徽章的黑白层级、composer 缩略图的预览按钮与大图窗口入口；[AgentApprovalModePolicyTests](XeditTests/AgentApprovalModePolicyTests.swift) 保证严格模式菜单说明不再出现标题更新例外。
+
+## 1.291.0-rc1 - 2026-08-25
+
+### Changed
+
+- **“静默模式”更名为“完全访问”，语义也真正完整。** 选中后，命令执行、互联网访问、本机任意文件与凭据访问不再请求审批；`create_file`、`edit_file`、`apply_patch` 走独立补丁流水线时同样直接落盘，不再出现“工具已经放行，文件卡还等 Apply”的半截权限。
+- **审批模式菜单按 Codex 的信息结构重做。** Composer 入口使用带感叹号的盾牌；“完全访问”以克制的橙色作为唯一风险强调，其余模式继续遵守黑白灰。弹出菜单为每个模式同时展示图标、名称和一行作用说明，并在当前模式右侧显示勾选状态。
+
+### Security
+
+- 完全访问不再调用 AI 安全裁判，也不再为 `credentialSensitive` 回退人工审批；仍保留宿主侧确定性恶意命令黑名单，以及环境信任声明、切换工作区、用户问答和显式不受信任 MCP 等必须由人参与的边界。持久化 raw value 继续使用旧值 `silent`，旧会话升级后无需迁移。
+
+### Tests
+
+- [AgentApprovalModePolicyTests](XeditTests/AgentApprovalModePolicyTests.swift) 锁定旧会话解码、凭据读取免审及凭据外泄黑名单；[AgentToolIntegrationTests](XeditTests/AgentToolIntegrationTests.swift) 新增完全访问即时应用文件编辑、自动收口历史待处理补丁的真实落盘回归。
 
 ## 1.290.0-rc2 - 2026-08-25
 

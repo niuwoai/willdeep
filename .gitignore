@@ -29,6 +29,7 @@ xcuserdata/
 # 日志 / 临时
 *.log
 .tmp/
+.artifacts/
 .gocache/
 /dist/chrome-extension/
 

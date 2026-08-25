@@ -318,17 +318,17 @@ struct AgentTurnProgressView: View {
 
             statusMetric(
                 icon: "checkmark.circle",
-                color: .green,
+                color: .secondary,
                 text: L10n.AgentTurnProgress.completed(presentation.completedCount)
             )
             statusMetric(
                 icon: "minus.circle",
-                color: .blue,
+                color: .primary,
                 text: L10n.AgentTurnProgress.inProgress(presentation.inProgressCount)
             )
             statusMetric(
                 icon: "xmark.circle",
-                color: .red,
+                color: .primary,
                 text: L10n.AgentTurnProgress.failed(presentation.failedCount)
             )
             if presentation.completedCount == 0,
@@ -398,9 +398,8 @@ struct AgentTurnProgressView: View {
 
     private func detailColor(for status: AgentPlan.StepStatus) -> Color {
         switch status {
-        case .inProgress: return .blue
-        case .failed: return .red
-        case .done: return .green
+        case .inProgress, .failed: return .primary
+        case .done: return .secondary
         case .skipped, .pending: return .secondary
         }
     }
@@ -497,21 +496,21 @@ enum AgentTurnProgressHistoryRenderer {
         appendMetric(
             icon: "checkmark.circle",
             text: L10n.AgentTurnProgress.completed(presentation.completedCount),
-            color: .systemGreen,
+            color: secondary,
             font: font,
             to: result
         )
         appendMetric(
             icon: "minus.circle",
             text: L10n.AgentTurnProgress.inProgress(presentation.inProgressCount),
-                color: .systemBlue,
+            color: NSColor.labelColor,
             font: font,
             to: result
         )
         appendMetric(
             icon: "xmark.circle",
             text: L10n.AgentTurnProgress.failed(presentation.failedCount),
-            color: .systemRed,
+            color: NSColor.labelColor,
             font: font,
             to: result
         )
@@ -538,6 +537,10 @@ enum AgentTurnProgressHistoryRenderer {
             .agentChatHistoryProgressToggleID: id,
             .underlineStyle: 0,
         ], range: range)
+        // Link behavior is conveyed by pointer and disclosure chevron. Keep
+        // the entire control grayscale even in NSTextView configurations that
+        // would otherwise inject the platform's default blue link color.
+        result.addAttribute(.foregroundColor, value: secondary, range: range)
     }
 
     private static func appendMetric(
@@ -561,7 +564,7 @@ enum AgentTurnProgressHistoryRenderer {
         textFontSize: CGFloat,
         to result: NSMutableAttributedString
     ) {
-        let color: NSColor = item.status == .failed ? .systemRed : .systemBlue
+        let color = NSColor.labelColor
         let icon = item.status == .failed ? "xmark.circle" : "arrow.right.circle"
         result.append(symbolAttachmentString(
             named: icon,

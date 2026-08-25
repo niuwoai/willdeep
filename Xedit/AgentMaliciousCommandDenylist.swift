@@ -2,12 +2,12 @@
 //  AgentMaliciousCommandDenylist.swift
 //  WillDeep
 //
-//  静默模式（`AgentApprovalMode.silent`）的硬地板。
+//  完全访问（`AgentApprovalMode.fullAccess`）的硬地板。
 //
 //  这份名单和 `SafeCommand.dangerousTokens` 是**两件不同的事**，别合并：
 //  那份问「这条命令危险吗」——`rm`、`mv`、`chmod` 全在里面，因为它们值得
 //  在常规模式下确认一次；这份问「这条命令是不是在干坏事」。一个写代码的
-//  Agent 每天要删几十次 `node_modules`，把那些也拦下来，静默模式就成了
+//  Agent 每天要删几十次 `node_modules`，把那些也拦下来，完全访问就成了
 //  改名版的智能审核，等于没做。
 //
 //  收录标准（四类，缺一不可地窄）：
@@ -18,13 +18,13 @@
 //   3. **反取证**：清历史、抹系统日志、关审计——正经排障不需要毁证据；
 //   4. **外泄**：凭据/私钥/keychain 与网络出口在同一条命令里同时出现。
 //
-//  刻意不收的（静默模式下一律放行，这是这个模式存在的意义）：
+//  刻意不收的（完全访问下一律放行，这是这个模式存在的意义）：
 //  `rm -rf ./node_modules`、`git reset --hard`、`git push --force` 到功能
 //  分支、`docker compose down -v`、`DROP TABLE` 在本地库、`cat .env`。
 //  它们可能让人心跳一下，但都不是恶意，而且都在用户自己的工作区语义里。
 //
 //  命中即**不自动放行**——回落到人工审批卡（该打字确认的仍要打字），
-//  不是静默拒绝。名单是地板，不是天花板：没命中的还要过一遍 AI 裁判。
+//  不是静默拒绝。完全访问中，没命中的命令直接执行，不再经过 AI 裁判。
 //
 
 import Foundation
@@ -244,7 +244,7 @@ nonisolated enum AgentMaliciousCommandDenylist {
 
     // MARK: 4. 外泄（整条命令级别）
 
-    /// 凭据来源与网络出口**同时**出现才算。单独 `cat .env` 在静默模式下
+    /// 凭据来源与网络出口**同时**出现才算。单独 `cat .env` 在完全访问下
     /// 放行——那是排配置，不是外泄；单独 `curl https://api…` 也放行。
     private static func exfiltrationMatch(in command: String) -> Match? {
         let lowered = command.lowercased()

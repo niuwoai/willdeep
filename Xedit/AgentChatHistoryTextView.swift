@@ -1259,6 +1259,12 @@ enum AgentChatHistoryLayoutMetrics {
     static let bodyLineSpacing: CGFloat = 5
     static let assistantContentHeadIndent: CGFloat = 32
     static let assistantContentTailInset: CGFloat = 18
+    /// Nested lists advance by one compact text column. Continuation lines
+    /// start after the marker so wrapped bullets scan like real lists rather
+    /// than falling back underneath the dash/number.
+    static let listNestingIndent: CGFloat = 18
+    static let listHangingIndent: CGFloat = 22
+    static let listParagraphSpacing: CGFloat = 3
     /// Measured from the Codex reference at 1x: 9 pt from the status line
     /// box to the divider, then 18 pt from the divider to the body line box.
     static let assistantStatusDividerTopSpacing: CGFloat = 9
