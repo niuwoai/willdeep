@@ -40,6 +40,7 @@ enum AgentSessionDeepLink {
 
 enum AgentSessionUnreadStore {
     private static let key = "com.willdeep.sidebar.unreadSessionIDs.v1"
+    static let didChangeNotification = Notification.Name("willdeep.sessionUnreadStore.didChange")
 
     static func load() -> Set<AgentSession.ID> {
         Set((UserDefaults.standard.stringArray(forKey: key) ?? []).compactMap(UUID.init(uuidString:)))
@@ -47,6 +48,17 @@ enum AgentSessionUnreadStore {
 
     static func save(_ ids: Set<AgentSession.ID>) {
         UserDefaults.standard.set(ids.map(\.uuidString).sorted(), forKey: key)
+        NotificationCenter.default.post(name: didChangeNotification, object: nil)
+    }
+
+    static func setUnread(_ id: AgentSession.ID, unread: Bool) {
+        var ids = load()
+        if unread {
+            ids.insert(id)
+        } else {
+            ids.remove(id)
+        }
+        save(ids)
     }
 }
 
@@ -429,6 +441,9 @@ struct AgentSessionsSidebar: View {
         }
         .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
             focusedWorkspaceGroupKey = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AgentSessionUnreadStore.didChangeNotification)) { _ in
+            unreadSessionIDs = AgentSessionUnreadStore.load()
         }
         .onReceive(NotificationCenter.default.publisher(for: SomeIMIntegrationStore.accountDidChangeNotification)) { _ in
             reloadSomeIMAuthenticationState()

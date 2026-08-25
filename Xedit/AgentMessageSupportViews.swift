@@ -248,7 +248,7 @@ nonisolated enum AgentAttachedPromptDisplay {
     }
 
     static func transform(_ content: String) -> Display {
-        guard content.hasPrefix(preludeHeader) else {
+        guard beginsWithAttachmentPrelude(content) else {
             return Display(
                 isSplicedPrelude: false,
                 visibleContent: content,
@@ -305,6 +305,21 @@ nonisolated enum AgentAttachedPromptDisplay {
             hasWorkspace: hasWorkspace,
             userAuthoredText: userText
         )
+    }
+
+    /// Some sessions arrive through another host that uses the same English
+    /// attachment preamble but not WillDeep's exact punctuation or suffix.
+    /// Treat the stable opening phrase as generated chrome too. If that host
+    /// did not preserve our user-text boundary, returning no authored text is
+    /// safer than presenting prompt scaffolding as something the user typed.
+    private static func beginsWithAttachmentPrelude(_ content: String) -> Bool {
+        let firstLine = content
+            .components(separatedBy: .newlines)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        return firstLine.hasPrefix(preludeHeader.lowercased())
+            || firstLine.hasPrefix("the user attached the following")
     }
 
     private static func legacyUserTextSeparatorIndex(in lines: [String], hasFiles: Bool) -> Int? {
