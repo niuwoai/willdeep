@@ -127,16 +127,16 @@ enum AgentContextBuilder {
 
     A fenced ```progress block with the same `1: done` lines still works and is read as a fallback, but it is second choice: it only registers when the reply text is produced, and anything the tool already settled this turn wins over it. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they never update the checklist by themselves.
     """
-    static let stablePrefixVersion = "willdeep-agent-system-v33"
+    static let stablePrefixVersion = "willdeep-agent-system-v34"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "ade1c7c5d1168afa"
-    static let compactPrefixSnapshotHash = "3ec7c44d41f0e544"
-    static let extendedPrefixSnapshotHash = "d57389edc80368d2"
+    static let stablePrefixSnapshotHash = "251b3501c7b416a5"
+    static let compactPrefixSnapshotHash = "a7c33f8482e85435"
+    static let extendedPrefixSnapshotHash = "825cdd9d41c59c9d"
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
