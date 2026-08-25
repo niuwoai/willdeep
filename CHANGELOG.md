@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.290.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.290.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.290.0-rc2 - 2026-08-25
+
+### Changed
+
+- **所有纯网页读取不再打断用户。** 内置 `web_fetch` 从写级审批工具降为只读网络工具；和既有的网页搜索、Chrome 正文/选区/DOM 快照、内嵌浏览器读取与截图一样，在普通、严格、Workspace Access、Goal 模式中都直接执行，不再出现“Agent 想读取一个网页”的确认卡。只读子 Agent 也可以直接跟进搜索结果读取原网页。
+
+### Security
+
+- 免确认只覆盖受限 GET 读取，不覆盖导航可见标签页、点击、输入、表单提交、脚本执行或其他网页状态修改。`web_fetch` 继续限制文本响应与下载大小，并在初始请求和每次重定向时拒绝回环、RFC1918、链路本地、内网后缀；新增拒绝带账号密码的 URL 与容易落到局域网搜索域的单标签主机。
+
+### Tests
+
+- [AgentWebToolsTests](XeditTests/AgentWebToolsTests.swift) 更新为 23 条通过：锁定 `web_fetch` 的 read 风险、只读网络沙箱、零审批记录、父/子 Agent 同口径，以及凭据 URL、单标签内网主机和既有 SSRF 地址拒绝规则。
 
 ## 1.290.0-rc1 - 2026-08-25
 

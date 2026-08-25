@@ -429,7 +429,7 @@ extension AppState {
 
         // Goal mode runs with high autonomy but no longer blanket-approves
         // every write-tier call. Sandbox-contained, non-command work (file
-        // writes, validated public `web_fetch`) is fast-pathed here so the
+        // writes and local metadata changes) is fast-pathed here so the
         // agent isn't babysat; command-shaped calls (run_command, terminal_*,
         // call_mcp_tool) fall through to the same static-classify → LLM-judge
         // gate as smart mode. That way a judge-flagged-dangerous command, an
@@ -831,7 +831,7 @@ extension AppState {
         }
 
         guard let command = Self.silentModeCommandPayload(toolName: toolName, arguments: arguments) else {
-            // 非命令型写工具（改文件、web_fetch 之类）：沙箱边界仍在，
+            // 非命令型写工具（改文件、本地元数据等）：沙箱边界仍在，
             // 没有可分类的命令文本，直接放行。
             return .silentMode
         }
@@ -1038,7 +1038,7 @@ extension AppState {
     /// they run shell commands or reach an MCP server, so even in goal mode
     /// they must clear the static-classify → LLM-judge gate rather than being
     /// blanket-approved. Non-command write tools (file edits within the
-    /// sandbox root, validated public `web_fetch`) are fast-pathed by goal
+    /// sandbox root) are fast-pathed by goal
     /// mode instead. Keep in sync with the command branches in
     /// `autoApprovalSource`.
     nonisolated static let commandShapedToolNames: Set<String> = [
@@ -1525,8 +1525,6 @@ extension AppState {
         arguments: [String: AgentJSONValue]
     ) -> Bool {
         switch toolName {
-        case "web_fetch":
-            return arguments["url"]?.stringValue().flatMap(AgentWebTools.validatedPublicURL(_:)) != nil
         case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
             return arguments["permission_mode"]?.stringValue() == "plan"
         default:

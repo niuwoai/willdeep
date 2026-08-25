@@ -790,13 +790,6 @@ enum AgentToolAuthorization {
             let mode = arguments["permission_mode"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "act"
             return "cline_cli:\(mode == "default" ? "act" : mode)"
-        case "web_fetch":
-            guard let raw = arguments["url"]?.stringValue(),
-                  let host = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines))?.host,
-                  !host.isEmpty else {
-                return nil
-            }
-            return "web_fetch:\(host.lowercased())"
         default:
             return nil
         }

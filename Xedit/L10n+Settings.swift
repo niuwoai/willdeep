@@ -247,7 +247,7 @@ extension L10n {
             static let providerBrave = String(localized: "settings.web-tools.provider.brave", defaultValue: "Brave")
             static let exaKeyLabel = String(localized: "settings.web-tools.exa-api-key", defaultValue: "Exa API Key")
             static let braveKeyLabel = String(localized: "settings.web-tools.brave-api-key", defaultValue: "Brave Search API Key")
-            static let description = String(localized: "settings.web-tools.description", defaultValue: "Enables the built-in web_search tool. Auto tries local Exa first, then Brave; if both keys are empty and some.im is signed in, it uses some.im managed search. API keys are stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain.")
+            static let description = String(localized: "settings.web-tools.description", defaultValue: "Enables the built-in web_search tool. Auto tries local Exa first, then Brave; if both keys are empty and some.im is signed in, it uses some.im managed search. API keys are stored in the macOS Keychain. web_fetch needs no key and reads locally validated public pages without approval prompts.")
 
             static func providerName(_ provider: AgentWebSearchProvider) -> String {
                 switch provider {
