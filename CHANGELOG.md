@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.291.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.292.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.292.0-rc1 - 2026-08-25
+
+### Added
+
+- **Composer 图片支持点击核对大图。** 粘贴或附加图片后，64 pt 缩略图现在是明确的可访问按钮；点击即复用聊天图片既有的原生预览窗口，以适应窗口显示完整图片，并支持缩放、双击放大、滚动查看和 `Esc` 关闭。右上角删除按钮保持独立，不会误触预览。
+
+### Changed
+
+- **会话行“等待批准”改为黑底白字。** 徽章从轻灰辅助态升级为稳定的黑色胶囊与白色 semibold 文案，让真正需要用户处理的会话在标题旁获得足够权重，同时不引入新的彩色状态。
+- **严格模式说明删掉“标题更新”例外。** 模式菜单只说明“安全相关写入或外部操作前询问”，不再用实现级例外挤占用户决策文案；五种语言同步更新。
+
+### Tests
+
+- [AgentInteractionTargetMetricsTests](XeditTests/AgentInteractionTargetMetricsTests.swift) 锁定等待批准徽章的黑白层级、composer 缩略图的预览按钮与大图窗口入口；[AgentApprovalModePolicyTests](XeditTests/AgentApprovalModePolicyTests.swift) 保证严格模式菜单说明不再出现标题更新例外。
 
 ## 1.291.0-rc1 - 2026-08-25
 

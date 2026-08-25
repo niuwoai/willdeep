@@ -23267,31 +23267,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ask before security-relevant writes or external actions; harmless title updates auto-run."
+            "value" : "Ask before security-relevant writes or external actions."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pregunta antes de escrituras relevantes para la seguridad o acciones externas; las actualizaciones de título inofensivas se ejecutan automáticamente."
+            "value" : "Pregunta antes de escrituras relevantes para la seguridad o acciones externas."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Demande avant les écritures sensibles ou les actions externes ; les mises à jour de titre sans risque s'exécutent automatiquement."
+            "value" : "Demande avant les écritures sensibles ou les actions externes."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "セキュリティに関わる書き込みや外部操作の前に確認します。無害なタイトル更新は自動実行されます。"
+            "value" : "セキュリティに関わる書き込みや外部操作の前に確認します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安全相关写入或外部操作前询问；无害的标题更新自动执行。"
+            "value" : "安全相关写入或外部操作前询问。"
           }
         }
       }

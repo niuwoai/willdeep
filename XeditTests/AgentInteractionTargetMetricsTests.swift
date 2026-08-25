@@ -101,4 +101,38 @@ struct AgentInteractionTargetMetricsTests {
         // instead of requiring the deleted purchase button to come back.
         #expect(!source.contains("buyCodingPlan"))
     }
+
+    @Test("waiting-approval badge is an emphasized black capsule")
+    func waitingApprovalBadgeUsesBlackAndWhiteHierarchy() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Xedit/AgentSessionApprovalBadge.swift"
+            ),
+            encoding: .utf8
+        )
+
+        #expect(source.contains(".foregroundStyle(Color.white)"))
+        #expect(source.contains(".background(Color.black, in: Capsule())"))
+        #expect(!source.contains(".background(Color.primary.opacity(0.05), in: Capsule())"))
+    }
+
+    @Test("composer image thumbnails expose the existing large-image preview")
+    func composerImageThumbnailOpensPreviewWindow() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Xedit/AgentImageViews.swift"
+            ),
+            encoding: .utf8
+        )
+
+        #expect(source.contains("Button(action: onPreview)"))
+        #expect(source.contains("AgentImagePreviewWindowRegistry.shared.open(image: image)"))
+        #expect(source.contains(".accessibilityLabel(L10n.ImagePreview.openButton)"))
+    }
 }

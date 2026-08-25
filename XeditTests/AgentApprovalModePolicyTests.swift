@@ -334,4 +334,11 @@ struct AgentApprovalModePolicyTests {
         // 引号里的同样文本是数据不是命令。
         #expect(AgentMaliciousCommandDenylist.match(command: "echo 'rm -rf /'") == nil)
     }
+
+    @Test("严格模式菜单说明只陈述需要询问的边界")
+    func strictModeSummaryOmitsTitleUpdateException() {
+        let summary = AgentApprovalMode.requestEveryTime.summary
+        #expect(!summary.localizedCaseInsensitiveContains("title"))
+        #expect(!summary.contains("标题"))
+    }
 }

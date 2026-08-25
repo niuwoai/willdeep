@@ -1,22 +1,22 @@
-# 完全访问审批菜单 Design QA
+# 会话审批徽章与 Composer 图片预览 Design QA
 
 **Findings**
 
 - 最终对比未发现仍需处理的 P0、P1 或 P2 问题。
-- [P3] 实现保留了 WillDeep 现有的“工作区可写”第四档，因而菜单比 Codex 参考图多一行；这是产品能力差异，不影响层级、选中态或核心操作。
+- [P3] 本次实机数据里没有仍处于待审批状态的会话，因此无法在不篡改用户会话数据、不额外发起模型请求的前提下捕获黑底徽章的真实侧栏截图。该表面改用用户参考图、实际组件源码与自动化契约测试交叉验收；颜色、字重、圆角与文案均为精确值，不依赖近似推断。
 
 **Open Questions**
 
-- 无阻塞问题。参考图只提供了菜单与底部入口局部，没有可运行的 Codex 原始界面，因此按用户指定的视觉语言与 WillDeep 原生 SwiftUI 约束验收，而不是逐像素复制菜单尺寸。
+- 无阻塞问题。
 
 **Implementation Checklist**
 
-- [x] 将“静默模式”展示名称替换为“完全访问”。
-- [x] 使用 `exclamationmark.shield`，并把橙色限定为完全访问的风险语义色。
-- [x] 为四种审批模式提供标题与说明，并显示明确的当前选中态。
-- [x] 保持其余界面为黑白灰体系。
-- [x] 去除 macOS 默认蓝色键盘焦点环造成的伪选中态。
-- [x] 通过真实 App 交互验证模式切换、菜单展开和辅助功能选中态。
+- [x] 会话标题旁“等待批准”改为黑底、白字、semibold 的胶囊徽章。
+- [x] 严格模式说明删去“无害的标题更新自动执行”，五种语言同步收口。
+- [x] Composer 图片缩略图成为独立、可访问的预览按钮。
+- [x] 点击缩略图复用原生大图窗口，支持缩放、适应窗口、滚动、双击放大与 `Esc` 关闭。
+- [x] 删除按钮保持独立，点击删除不会触发预览。
+- [x] 通过真实 App 完成粘贴图片、打开大图与展开审批模式菜单的交互验收。
 
 **Follow-up Polish**
 
@@ -25,34 +25,36 @@
 ## Evidence
 
 - Source visual truth:
-  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-f53de1b6-bd1c-42da-a741-337e5f286705.png`
-  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-0317458c-1acf-403c-a0a8-cd72e68e87e6.png`
+  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-7f5d310b-b501-4e7d-a6ba-f53e1a22aa3d.png`
+  - `/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-1594cc40-d8ec-4475-ad79-486ea5398f8e.png`
 - Implementation screenshots:
-  - `/Users/rocky/Sites/Xedit/.artifacts/full-access-mode-menu-selected-final.png`
-  - `/Users/rocky/Sites/Xedit/.artifacts/full-access-final-state.png`
+  - `/Users/rocky/Sites/Xedit/.artifacts/strict-mode-summary-final.png`
+  - `/Users/rocky/Sites/Xedit/.artifacts/composer-image-thumbnail-final.png`
+  - `/Users/rocky/Sites/Xedit/.artifacts/composer-image-preview-final.png`
 - Same-input comparison board:
-  - `/Users/rocky/Sites/Xedit/.artifacts/full-access-design-comparison.png`
-- Viewport: WillDeep macOS window `1150 × 768 px`。
-- Source pixels: menu reference `830 × 432 px`；pill reference `233 × 124 px`。
-- Implementation pixels: full-window captures `1150 × 768 px`。
+  - `/Users/rocky/Sites/Xedit/.artifacts/strict-mode-reference-vs-implementation.png`
+- Viewport: WillDeep 主窗口 `1150 × 768 px`；图片预览窗口 `960 × 752 px`。
+- Source pixels: 会话徽章参考 `508 × 465 px`；严格模式参考 `669 × 138 px`。
+- Implementation pixels: 主窗口截图 `1150 × 768 px`；图片预览截图 `960 × 752 px`。
 - CSS size: 不适用；这是原生 SwiftUI macOS 界面。
-- Density normalization: 来源均为固定像素截图，未提供原始 points/deviceScaleFactor。比较板将对应局部置于等宽白色画布中，并仅对 pill 局部做等比例放大，未拉伸菜单内容。
-- State: “完全访问”已选中，审批模式菜单展开；另验证菜单关闭后的 composer pill。
-- Full-view evidence: `full-access-mode-menu-selected-final.png` 显示弹层未遮挡或挤出 composer，四种模式均完整可读，底部常驻入口未溢出。
-- Focused-region evidence: `full-access-design-comparison.png` 同时放置 Codex 参考菜单/入口与 WillDeep 实现菜单/入口，核对风险盾牌、橙色语义、标题/说明层级、勾选位置和灰度背景。
+- Density normalization: 来源与实机证据均为固定像素 PNG。严格模式对照板只裁出对应行并居中拼接，没有拉伸内容。
+- State: 审批模式菜单展开；Composer 已附加图片；缩略图点击后原生预览窗打开，AX 树确认窗口标题、图片尺寸、缩小、放大与适应窗口控件全部存在。
+- Full-view evidence: `strict-mode-summary-final.png` 与 `composer-image-thumbnail-final.png` 证明菜单和附件在完整主窗口中未遮挡、未溢出。
+- Focused-region evidence: `strict-mode-reference-vs-implementation.png` 同屏核对严格模式说明；`composer-image-preview-final.png` 验证大图显示与工具栏。
 
 ## Required Fidelity Surfaces
 
-- Fonts and typography: 使用系统字体；标题采用 semibold，说明采用更小的 regular/secondary，字重、行高和换行层级清楚。中文长说明保持两行内完整显示，无截断。
-- Spacing and layout rhythm: 图标、标题、说明和尾部勾选对齐稳定；行间距、内边距、圆角与 macOS popover 体系一致；四行内容无溢出。
-- Colors and visual tokens: 普通档位保持黑白灰；完全访问使用单一橙色语义，选中底色为低透明橙色，没有多余蓝色状态。
-- Image quality and asset fidelity: 全部使用 SF Symbols 原生矢量图标；没有 emoji、手绘 SVG、占位图或模糊栅格资产。
-- Copy and content: 每种模式均有本地化标题与行为说明；“完全访问”说明明确包含互联网与任意本机文件访问能力。
+- Fonts and typography: 徽章使用现有 sidebar supporting font，字重由 medium 提升至 semibold；严格模式标题与说明沿用现有菜单层级。
+- Spacing and layout rhythm: 徽章保留 7 pt 横向、2 pt 纵向内边距；缩略图维持 64 pt 与既有 6 pt 间距，未改变 Composer 高度节奏。
+- Colors and visual tokens: 徽章严格使用 `Color.black` 与 `Color.white`，符合用户指定的黑白灰体系；没有引入新的彩色状态。
+- Image quality and asset fidelity: Composer 与预览窗显示同一原图数据；预览默认适应窗口，图像未拉伸，工具栏显示真实 `334 × 69` 尺寸。
+- Copy and content: 严格模式中文仅保留“安全相关写入或外部操作前询问。”；英文、西语、法语、日语同步删除标题更新例外。
 
 ## Comparison History
 
-1. 初次真实 App 对比发现 [P2] 智能审核行出现系统蓝色焦点环，与灰度体系及橙色唯一风险色冲突。
-2. 在审批行按钮上禁用默认焦点绘制，并显式清理/重设辅助功能选中 trait。
-3. 重新编译并再次打开真实 App：蓝色焦点环已消失；AX 树仅将当前模式标记为 selected；最终证据见 `full-access-mode-menu-selected-final.png` 与比较板。
+1. 初始实现中 Composer 缩略图依赖整块 `onTapGesture`，删除按钮与预览点击区域存在事件语义混叠风险。
+2. 将预览目标改为明确的 `Button(action: onPreview)`，删除按钮继续作为独立按钮，并补齐本地化帮助与辅助功能标签。
+3. 在真实 App 中附加用户提供的 PNG：AX 树出现“放大查看图片”按钮；点击后打开 `image.png` 原生窗口，显示 `334 × 69`、100%、缩小、放大和适应窗口。
+4. 同屏对比严格模式参考与实机菜单，确认“标题更新”句子已经消失，菜单布局未因文案缩短发生异常。
 
 final result: passed

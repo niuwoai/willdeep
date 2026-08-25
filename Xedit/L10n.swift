@@ -193,7 +193,7 @@ nonisolated enum L10n {
     enum ApprovalMode {
         static let pickerHelp = String(localized: "approval-mode.picker-help", defaultValue: "Choose how this session approves Agent tool calls.")
         static let requestEveryTime = String(localized: "approval-mode.request-every-time", defaultValue: "Strict mode")
-        static let requestEveryTimeSummary = String(localized: "approval-mode.request-every-time.summary", defaultValue: "Ask before security-relevant writes or external actions; harmless title updates auto-run.")
+        static let requestEveryTimeSummary = String(localized: "approval-mode.request-every-time.summary", defaultValue: "Ask before security-relevant writes or external actions.")
         static let fullAccess = String(localized: "approval-mode.silent", defaultValue: "Full access")
         static let fullAccessSummary = String(localized: "approval-mode.silent.summary", defaultValue: "Access the internet and any file on this Mac without asking.")
         static let smart = String(localized: "approval-mode.smart", defaultValue: "Smart review")
