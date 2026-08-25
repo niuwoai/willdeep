@@ -839,6 +839,20 @@ extension AgentMessage {
         role == .user && !isHostInstruction
     }
 
+    /// Verbatim prose the operator typed, with every host-generated wrapper
+    /// removed. Human-facing summaries (session titles, approval rows, pet
+    /// bubbles) must use this instead of raw `content`: composer attachments
+    /// splice their security prelude into `content`, and image analysis adds
+    /// another generated block after the prose.
+    nonisolated var userAuthoredText: String {
+        guard isOperatorInput else { return "" }
+        let display = AgentAttachedPromptDisplay.transform(content)
+        let withoutAttachmentPrelude = display.isSplicedPrelude
+            ? display.userAuthoredText
+            : content
+        return AgentUserContentSplitter.split(withoutAttachmentPrelude).visible
+    }
+
     /// The text the operator actually authored this turn: visible content
     /// plus pasted-text attachments, WITHOUT the hidden per-turn host
     /// context (`modelContext`). Turn-end learning/audit must mine this,
@@ -856,9 +870,7 @@ extension AgentMessage {
         // 反拼接:spliced prelude 只认边界标记之后用户真正敲的字(注意读
         // `userAuthoredText`,不是带附件标签行的 `visibleContent`),图片
         // 描述块同样剥掉;用户粘贴的 textAttachments 仍按 1.238.1 口径保留。
-        let display = AgentAttachedPromptDisplay.transform(content)
-        let splicedFree = display.isSplicedPrelude ? display.userAuthoredText : content
-        let authoredBody = AgentUserContentSplitter.split(splicedFree).visible
+        let authoredBody = userAuthoredText
         guard !textAttachments.isEmpty else { return authoredBody }
         var blocks: [String] = []
         if !authoredBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -920,6 +932,27 @@ extension AgentMessage {
             """)
         }
         return blocks.joined(separator: "\n\n")
+    }
+}
+
+/// A single UI-safe line taken only from text the operator typed. Keeping the
+/// extraction here prevents small secondary surfaces from accidentally using
+/// raw model-facing prompts or auto-derived session titles.
+nonisolated enum AgentUserInputPreview {
+    static func first(in messages: [AgentMessage]) -> String? {
+        preview(from: messages.first(where: \.isOperatorInput))
+    }
+
+    static func latest(in messages: [AgentMessage]) -> String? {
+        preview(from: messages.last(where: \.isOperatorInput))
+    }
+
+    static func preview(from message: AgentMessage?) -> String? {
+        guard let message else { return nil }
+        let compact = message.userAuthoredText
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+        return compact.isEmpty ? nil : compact
     }
 }
 

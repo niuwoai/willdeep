@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-23 | Current version: v1.287.0-rc11
+> Last updated: 2026-08-25 | Current version: v1.289.0-rc8
 
 ## Positioning
 
@@ -12,6 +12,12 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **等待态回归黑白灰层级（1.289.0-rc8）** —— 左侧“等你确认”是辅助导航，不是成功提示或风险警报：容器使用动态中性灰，标题与数量降为次级灰，用户正文保持主黑，定位圆点进一步缩小；会话行内等待徽章同步去掉绿色。普通等待、进度、辅助状态默认遵守黑白灰与透明度层级，彩色只保留给确有必要的错误或强风险。跨宿主附件提示词识别扩大到稳定英文前缀；缺少可信用户正文边界时宁可展示本地化等待空态，也不把协议文字冒充用户输入。
+- **二级展示面只读用户真实输入（1.289.0-rc7）** —— 待确认条目、Dock 待处理菜单和桌面宠物气泡副标题不再复用可能受合成 prompt 污染的会话标题，而是统一从对应回合提取用户真正输入的文字：剥离附件安全前导、边界标记与图片理解生成块后压成单行。自动会话标题与 AI 标题摘要也使用同一净化入口，从源头阻止 `The user attached the following context…` 等模型协议文本进入可见标题；已存在的旧会话在展示时实时重算，无需数据迁移。
+- **Codex 式 Dock 任务菜单（1.289.0-rc6）** —— Dock 图标右键菜单从“仅有待审批时临时出现一段清单”扩成常驻任务入口：待审批与手动未读会话合并为「待你处理」，随后展示 3 条最近会话，其余收入有界的「更多」子菜单；跨窗口同一会话按 ID 去重并保留最新副本，最近列表复用侧栏的归档、隐藏工作区和真实用户消息筛选。点击任一会话直接激活 WillDeep、定位聊天并清除手动未读标记；系统继续在下方原生追加选项、窗口、隐藏与退出命令。
+- **计划的两个显示面互斥（1.288.0-rc4）** —— 浮动计划卡与 composer「第 N / M 步」进度条渲染同一份 `agentCurrentPlan`，此前显示条件彼此独立，执行期间同时在场导致同一清单出现两次。现由 `shouldDisplayFloatingCard(_:isComposerProgressVisible:)` 统一裁决：执行期进度条是唯一进度面，浮动卡让位；回合结束卡片回归，保留查看／修订／标记完成。展开状态改为双向（离开待决策状态即折叠），不再单向latch。
+- **按需计划：宿主测量取代模型预测（1.288.0-rc2）** —— 普通模式不再要求模型前置判断"是否 multi-step 并建计划"（该自判被实测证伪：模型宁滥勿缺，小任务被计划块与逐轮上报拖慢）。新契约：默认直接干；`AgentPlanOnDemandPolicy` 在无活跃计划的回合实跑满 4 个工具轮或落地 ≥3 次写级成功调用时，注入一次 `PLAN REQUESTED` 指令，要求当轮补一个只含剩余工作的 plan 块并继续执行。Goal 模式与无人值守派发任务保持各自的强制计划契约；`plan == nil` 时既有续推/纠偏机器天然静默，小任务零开销。stable prompt v33。
+- **结构化长提问卡片（1.288.0-rc1）** —— `ask_user` 新增可选标题、待提供信息和默认假设三个结构化字段；长问题按“加粗标题 → 常规说明 → 分组信息”展示，字段名与占位符支持行内代码样式，避免整段正文一起加粗。旧版短问题保持原有紧凑样式，旧版长问题自动使用本地化通用标题，输入、选项、跳过与发送交互均向后兼容。
 - **贴硬线文件的预防性拆分（1.287.0-rc4）** —— 把三个离 `scripts/complexity_guard.rb` 3000 行硬阈值只剩几行的文件按主题拆开，不等它们再把 CI 的 quality 守卫组整条 break 掉：`scripts/short_drama_media_contract_test.rb`（2995 → 1170，1891 行的 `plan_import_contract` 按规划导入 / 媒体任务 / 媒体工具三个主题拆成同前缀兄弟脚本）、`Xedit/AgentShortDramaProductionExporter.swift`（2973 → 1120，析出组件预览 HTML 与内嵌 env / Ruby 模板两个 extension 文件）、`Xedit/SomeIMIntegration.swift`（2912 → 1717，析出存储层与设置界面；`SomeIMClient` 与值类型共用同一个 fileprivate `String.nonEmpty`，刻意留在一起）。纯等价重构，逐行原样搬运，`complexity_guard` 的 soft 计数 18 → 15、hard 保持 0。
 - **Agent 模型域复杂度治理（1.287.0-rc3）** —— `AgentModels.swift` 被 1.287.0-rc1 推过 3000 行硬阈值后按主题拆成 7 个兄弟文件：`AgentManagedRoutingModels.swift`（省心托管路由）、`AgentPlanGoalModels.swift`（交互模式 / 审批档位 / Plan & Goal）、`AgentConfigurationModels.swift`（provider 配置）、`AgentProviderPresetModels.swift`（provider kind 与 preset 目录）、`AgentPatchModels.swift`（patch / worktree 变更）、`AgentErrorModels.swift`（错误模型）、`AgentAttachmentModels.swift`（附件与知识文件夹）。主模型文件从 3013 行降到 580 行，只留 `AgentSession` 持久化图；纯等价重构，逐行原样搬运。
 - **静默审批档位（1.287.0-rc1）** —— 新增第四种审批档位「静默模式」。前三档都是白名单式（默认要问，凑够理由才放行），静默模式是黑名单式：默认放行，需要理由的是拦截。地基是一份确定性的恶意命令黑名单（不可逆的大范围破坏、主机接管、反取证、凭据外泄四类，按 shell 分段判定），AI 裁判换成方向相反的「恶意与否」分类器且拿不准判放行。日常破坏性操作（清 node_modules、`git reset --hard`、`docker compose down -v`）不再打断。裁判缺席时按用户语义放行，审计日志单独标注「未裁而放」；沙箱档位不放宽，环境信任声明工具仍然任何档位都够不到。

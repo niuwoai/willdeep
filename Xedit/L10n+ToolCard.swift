@@ -21,6 +21,18 @@ extension L10n.ToolCard {
         localized: "tool-card.ask-user.multiple-hint",
         defaultValue: "Choose one or more answers, or add your own."
     )
+    static let askUserDefaultTitle = String(
+        localized: "tool-card.ask-user.default-title",
+        defaultValue: "Information needed"
+    )
+    static let askUserRequestedInformation = String(
+        localized: "tool-card.ask-user.requested-information",
+        defaultValue: "Please provide"
+    )
+    static let askUserDefaultAssumptions = String(
+        localized: "tool-card.ask-user.default-assumptions",
+        defaultValue: "Continue with these defaults"
+    )
     static let askUserFooterTitle = String(
         localized: "tool-card.ask-user.footer-title",
         defaultValue: "Submit answer"

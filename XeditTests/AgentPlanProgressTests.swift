@@ -458,7 +458,7 @@ struct AgentPlanProgressTests {
             interactionMode: .normal,
             currentPlan: plan
         )
-        #expect(prompt.contains("=== ORDINARY MODE — PLAN WHEN USEFUL, THEN EXECUTE ==="))
+        #expect(prompt.contains("=== ORDINARY MODE — EXECUTE DIRECTLY, PLAN ON REQUEST ==="))
         #expect(!prompt.contains("=== ACTIVE PLAN — CONTINUE, DO NOT RE-PLAN ==="))
     }
 
@@ -987,7 +987,7 @@ struct AgentPlanProgressTests {
         #expect(decision == .pauseAfterLimit)
     }
 
-    @Test("ordinary prompt creates one plan and immediately executes it")
+    @Test("ordinary prompt executes directly and plans on request")
     func ordinaryPromptDoesNotPauseAtPlanning() {
         let prompt = AgentContextBuilder.systemPrompt(
             rootDirectory: nil,
@@ -999,10 +999,11 @@ struct AgentPlanProgressTests {
             currentPlan: nil
         )
 
-        #expect(prompt.contains("=== ORDINARY MODE — PLAN WHEN USEFUL, THEN EXECUTE ==="))
+        #expect(prompt.contains("=== ORDINARY MODE — EXECUTE DIRECTLY, PLAN ON REQUEST ==="))
+        #expect(prompt.contains("without a `plan` fenced block up front"))
         #expect(prompt.contains("emit exactly one complete numbered `plan` fenced block"))
-        #expect(prompt.contains("continue executing it in the same turn"))
-        #expect(prompt.contains("Do not plan again on later tool rounds"))
+        #expect(prompt.contains("continue executing in the same reply"))
+        #expect(prompt.contains("do not re-plan on later rounds"))
         #expect(prompt.contains("explicitly asks only for analysis or a plan"))
         #expect(prompt.contains("privately preflight the complete request"))
         #expect(prompt.contains("Once execution starts, continue as an unattended run"))

@@ -32,11 +32,22 @@ import Foundation
 
 extension AppState {
     /// Whether request-level preflight may run at all. The shared config.toml
-    /// wins; absent, it stays off.
+    /// wins; absent, it is on.
+    ///
+    /// It shipped off, on the theory that the Deep Share numbers should
+    /// decide. They did: the read-only trades this path feeds — `scout`,
+    /// `reader`, `git_detective`, `log_inspector` — recorded no runs at all,
+    /// because the only other way to reach them is the parent model choosing
+    /// to delegate, and the parent reliably does the work itself instead
+    /// (see the note at the top of AgentRequestRouter). A cheap tier that
+    /// never receives work is not a cheap tier. The cost is a slower first
+    /// token on the requests that match, which is the trade this was always
+    /// going to be; `auto_dispatch_read_only = false` in config.toml turns it
+    /// back off for both clients.
     static func readOnlyPreflightEnabled(
         sharedConfig: AgentSharedRuntimeConfig = .load()
     ) -> Bool {
-        sharedConfig.autoDispatchReadOnly ?? false
+        sharedConfig.autoDispatchReadOnly ?? true
     }
 
     /// Run the preflight for this turn if it applies, and fold the report into

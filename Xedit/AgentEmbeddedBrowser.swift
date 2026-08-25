@@ -1545,7 +1545,10 @@ private struct AgentEmbeddedBrowserWebView: NSViewRepresentable {
     }
 }
 
-private final class AgentEmbeddedBrowserHostView: NSView {
+/// Hosts the controller's single `WKWebView`. There is exactly one per
+/// controller, so hosts hand it between themselves rather than each owning
+/// one — and the handover is what makes teardown order matter.
+final class AgentEmbeddedBrowserHostView: NSView {
     private weak var hostedWebView: WKWebView?
 
     func attach(_ webView: WKWebView) {
@@ -1558,8 +1561,19 @@ private final class AgentEmbeddedBrowserHostView: NSView {
         hostedWebView = webView
     }
 
+    /// Give up the web view only if it is still ours.
+    ///
+    /// Detaching a panel into its own window tears the sidebar host down
+    /// *after* the window's host has already taken the web view: SwiftUI
+    /// clears the sidebar's `kind` and opens the window, but the dismantle
+    /// arrives later. An unconditional `removeFromSuperview()` here then
+    /// reached into the new window and pulled the web view back out of it,
+    /// leaving the detached panel blank — and since the view was no longer in
+    /// any hierarchy, typing an address still navigated, just nowhere visible.
     func detach() {
-        hostedWebView?.removeFromSuperview()
+        if hostedWebView?.superview === self {
+            hostedWebView?.removeFromSuperview()
+        }
         hostedWebView = nil
     }
 }

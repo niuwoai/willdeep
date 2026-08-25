@@ -251,11 +251,14 @@ extension AppState {
                 externalID: "local-confirmation-preview-ask-user",
                 toolName: "ask_user",
                 arguments: [
-                    "question": .string("接下来优先处理哪一部分？"),
-                    "options": .array([
-                        .string("先完成界面细节"),
-                        .string("先验证通知与 Webhook"),
-                        .string("两部分一起收口"),
+                    "title": .string("配置 SSO 数据库连接"),
+                    "question": .string("当前集群无法解析密码，请补充缺失信息，并确认其余默认配置。"),
+                    "requested_information": .array([
+                        .string("MySQL 用户 `m_u_1_5` 的 `DB_PASSWORD`"),
+                    ]),
+                    "default_assumptions": .array([
+                        .string("节点 k8s-worker-05 · 镜像 0.2.0-rc1 · 域名 sso.vibapp.net"),
+                        .string("`${secret:online-sso-password}` 当前未绑定 Secret"),
                     ]),
                 ],
                 risk: .userInput,

@@ -460,6 +460,29 @@ extension AppState {
         }
     }
 
+    /// Ends a turn that stopped for context runway.
+    ///
+    /// Plan/Goal auto-continuation must not immediately undo the ordered stop,
+    /// but any honest status block the handover carried is still ingested. The
+    /// turn-level defer then force-compresses and, if the resume ceiling
+    /// allows, hands the work back to the model on its own.
+    @MainActor
+    private func concludeContextRunwayHandoff(
+        for runtime: AgentRuntime,
+        finishReason: String?
+    ) {
+        if runtime.contextRunwayResumeCount < AgentContextRunwayPolicy.maximumAutomaticResumes {
+            runtime.pendingContextRunwayResume = true
+        }
+        _ = captureAgentPlanFromLatestMessage(for: runtime)
+        if runtime.interactionMode == .goal {
+            _ = captureAgentGoalEvaluationFromLatestMessage(
+                for: runtime,
+                finishReason: finishReason
+            )
+        }
+    }
+
     @MainActor
     func runAgentLoop(
         for runtime: AgentRuntime,
@@ -747,6 +770,13 @@ extension AppState {
         )
         var designToCodeGateContinuationCount = 0
         var didRequestContextRunwayHandoff = false
+        /// Rounds already spent making the model answer the handoff with prose
+        /// instead of a tool call. Bounded by `maximumHandoverRetries`.
+        var contextRunwayHandoverRetryCount = 0
+        /// Plan-on-demand asks once per turn; crossing the threshold again
+        /// after the model ignored the first request must not nag every round.
+        var didRequestPlanOnDemand = false
+        let planOnDemandToolCallBaseline = runtime.toolCalls.count
 
         for toolRound in 0..<Self.maxAgentToolRounds {
             // `run_workflow` is asynchronous, but unlike the workflow card its
@@ -1032,7 +1062,7 @@ extension AppState {
             // hidden host carrier on notification-only wake-ups), so the
             // model-facing history and the next turn's replay share bytes.
             var collapsedHistory = Self.collapseOldToolResults(in: history)
-            var requestTools = AgentToolRegistry.tools(
+            let requestTools = AgentToolRegistry.tools(
                 activeExperts: activeExperts,
                 interactionMode: runtime.interactionMode,
                 executionAgent: runtime.executionAgent,
@@ -1069,12 +1099,48 @@ extension AppState {
                     runtime.messages.insert(handoffInstruction, at: assistantIndex)
                 }
                 collapsedHistory.append(handoffInstruction)
-                // The final slice of runway is reserved for a useful state
-                // capsule. Removing tool schemas both frees input space and
-                // makes "no new work" a transport fact rather than a polite
-                // request the model can accidentally ignore.
-                requestTools = []
+                // Tool schemas deliberately stay declared. Dropping them used
+                // to look like the strongest possible "no new work" — a
+                // transport fact rather than a request the model could ignore
+                // — but a model that decides to call a tool anyway calls it
+                // anyway, and a provider whose tool-call parser is off because
+                // the request declared no tools hands that call back as raw
+                // markup inside `content`. The call is lost, the handover
+                // never gets written, and compression runs regardless. So the
+                // schemas stay (the window cost is schema-sized, while the
+                // handover it protects is a few hundred tokens) and refusal
+                // moves to where it can answer back: this loop, below.
                 didRequestContextRunwayHandoff = true
+            }
+            // Plans on demand: ordinary turns start without a checklist, and
+            // this is where a long turn earns one. Evaluated after the runway
+            // decision because a handoff round may do no new work at all,
+            // plan included.
+            if !didRequestContextRunwayHandoff, !didRequestPlanOnDemand {
+                let succeededWriteCalls = runtime.toolCalls
+                    .dropFirst(planOnDemandToolCallBaseline)
+                    .filter { $0.status == .succeeded && $0.risk != .read }
+                    .count
+                let hasActivePlan = runtime.currentPlan.map {
+                    $0.status == .proposed || $0.status == .approved || $0.status == .executing
+                } ?? false
+                if AgentPlanOnDemandPolicy.shouldRequestPlan(
+                    toolRound: toolRound,
+                    succeededWriteCalls: succeededWriteCalls,
+                    hasActivePlan: hasActivePlan,
+                    interactionMode: runtime.interactionMode,
+                    isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
+                ) {
+                    let notice = AgentMessage(
+                        role: .system,
+                        content: AgentPlanOnDemandPolicy.requestNotice(toolRound: toolRound)
+                    )
+                    if let assistantIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
+                        runtime.messages.insert(notice, at: assistantIndex)
+                    }
+                    collapsedHistory.append(notice)
+                    didRequestPlanOnDemand = true
+                }
             }
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
 
@@ -1345,21 +1411,36 @@ extension AppState {
                 }
 
                 if didRequestContextRunwayHandoff {
-                    // Do not let Plan/Goal auto-continuation immediately undo
-                    // the ordered stop. We still ingest any honest status
-                    // blocks the handover supplied; the turn-level defer then
-                    // force-compresses and, if the resume ceiling allows,
-                    // hands the work back to the model on its own.
-                    if runtime.contextRunwayResumeCount < AgentContextRunwayPolicy.maximumAutomaticResumes {
-                        runtime.pendingContextRunwayResume = true
+                    // Second line of defence for the same failure: a provider
+                    // that never parsed the call hands its raw syntax back as
+                    // text. The call is already gone by the time it gets here,
+                    // so keep whatever prose preceded it, drop the markup
+                    // rather than persist and replay it, and — while the retry
+                    // budget lasts — ask for the handover again.
+                    if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
+                       let leak = AgentLeakedToolCallText.detect(in: runtime.messages[index].content) {
+                        runtime.messages[index].content = leak.cleanedText
+                        if leak.cleanedText.isEmpty,
+                           runtime.messages[index].images.isEmpty,
+                           runtime.messages[index].toolCalls.isEmpty,
+                           (runtime.messages[index].reasoningContent ?? "").isEmpty {
+                            // Never leave a bare {"role":"assistant"} behind:
+                            // the next request would be rejected with a 400.
+                            runtime.messages.remove(at: index)
+                            AgentContextBuilder.removeDanglingTurnContextCarrier(from: &runtime.messages)
+                        }
+                        if contextRunwayHandoverRetryCount < AgentContextRunwayPolicy.maximumHandoverRetries {
+                            contextRunwayHandoverRetryCount += 1
+                            runtime.messages.append(
+                                AgentMessage(
+                                    role: .system,
+                                    content: AgentContextRunwayPolicy.discardedMarkupNotice()
+                                )
+                            )
+                            continue
+                        }
                     }
-                    _ = captureAgentPlanFromLatestMessage(for: runtime)
-                    if runtime.interactionMode == .goal {
-                        _ = captureAgentGoalEvaluationFromLatestMessage(
-                            for: runtime,
-                            finishReason: finishReason
-                        )
-                    }
+                    concludeContextRunwayHandoff(for: runtime, finishReason: finishReason)
                     return
                 }
 
@@ -1523,6 +1604,45 @@ extension AppState {
                 case .stop:
                     break
                 }
+                return
+            }
+
+            // A handoff round keeps its tool schemas so the provider still
+            // parses calls into structure, but nothing may actually run: the
+            // window has no room left for tool output, and the turn exists
+            // only to produce the handover. Refuse here, tell the model where
+            // its request belongs instead, and give it a bounded number of
+            // rounds to come back with prose.
+            if didRequestContextRunwayHandoff {
+                let refusedToolNames = latestToolCalls.map(\.toolName)
+                latestToolCalls = []
+                if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
+                    // Clearing the calls also keeps history replayable: an
+                    // assistant message with tool_calls and no matching tool
+                    // results is a 400 on every OpenAI-compatible provider.
+                    runtime.messages[index].toolCalls = []
+                    if runtime.messages[index].content.isEmpty,
+                       runtime.messages[index].images.isEmpty,
+                       (runtime.messages[index].reasoningContent ?? "").isEmpty {
+                        runtime.messages.remove(at: index)
+                        AgentContextBuilder.removeDanglingTurnContextCarrier(from: &runtime.messages)
+                    }
+                }
+                if contextRunwayHandoverRetryCount < AgentContextRunwayPolicy.maximumHandoverRetries {
+                    contextRunwayHandoverRetryCount += 1
+                    runtime.messages.append(
+                        AgentMessage(
+                            role: .system,
+                            content: AgentContextRunwayPolicy.refusedToolCallNotice(
+                                toolNames: refusedToolNames
+                            )
+                        )
+                    )
+                    continue
+                }
+                // Out of retries. End the turn the way a prose handover does
+                // rather than spending the rest of the window on the argument.
+                concludeContextRunwayHandoff(for: runtime, finishReason: finishReason)
                 return
             }
 
@@ -2661,7 +2781,8 @@ extension AppState {
                     let dispatchHint = autoDispatched ?? AgentWorkerDispatchHint.hint(
                         toolName: call.toolName,
                         arguments: argsDict,
-                        exitCode: exitCode
+                        exitCode: exitCode,
+                        failureOutput: errorMessage
                     ) ?? ""
                     appendToolMessage(
                         for: runtime,

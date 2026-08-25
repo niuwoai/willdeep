@@ -114,4 +114,53 @@ struct AgentWorkerDispatchHintTests {
         let text = try #require(hint("npm test"))
         #expect(text.count < 600)
     }
+
+    // MARK: - Trade correction from the log
+
+    @Test("a compile failure under a test command is corrected to build_fixer")
+    func compileFailureUnderATestCommandBecomesBuildFixer() {
+        // A test command compiles first. `run_tests_fast.rb` matching
+        // "run_tests" is how a Swift compile error arrived labelled
+        // `test_fixer`, whose brief points it at test files.
+        let corrected = AgentWorkerDispatchHint.refinedKind(
+            for: .testFixer,
+            failureOutput: "Xedit/AppState.swift:12:5: error: cannot find 'foo' in scope\n** BUILD FAILED **"
+        )
+
+        #expect(corrected == .buildFixer)
+    }
+
+    @Test("a test that actually ran stays with test_fixer")
+    func realTestFailureKeepsTestFixer() {
+        // Ambiguity stays with the command-shape verdict: any trace of a test
+        // having executed keeps the trade, even alongside compiler wording.
+        for output in [
+            "✘ Test foo() recorded an issue at Foo.swift:9:1: error: expected 3",
+            "--- FAIL: TestThing (0.01s)\n\terror: cannot find match",
+            "AssertionError: 1 != 2",
+        ] {
+            #expect(
+                AgentWorkerDispatchHint.refinedKind(for: .testFixer, failureOutput: output) == .testFixer,
+                "output: \(output)"
+            )
+        }
+    }
+
+    @Test("correction is one-directional and never touches the other trades")
+    func correctionLeavesBuildAndOpsAlone() {
+        let compileLog = "** BUILD FAILED **\nerror: cannot find 'x'"
+
+        #expect(AgentWorkerDispatchHint.refinedKind(for: .buildFixer, failureOutput: compileLog) == .buildFixer)
+        #expect(AgentWorkerDispatchHint.refinedKind(for: .opsRunner, failureOutput: compileLog) == .opsRunner)
+        // No log to judge by leaves the verdict alone.
+        #expect(AgentWorkerDispatchHint.refinedKind(for: .testFixer, failureOutput: "") == .testFixer)
+    }
+
+    @Test("a repo's own build wrapper is recognised as a build command")
+    func repoBuildWrapperIsClassified() {
+        #expect(AgentWorkerDispatchHint.classify(command: "ruby scripts/build_fast.rb") == .buildFixer)
+        #expect(AgentWorkerDispatchHint.classify(command: "./build.sh --release") == .buildFixer)
+        // Release detection still wins over the build wrapper.
+        #expect(AgentWorkerDispatchHint.classify(command: "ruby scripts/release.rb") == .opsRunner)
+    }
 }

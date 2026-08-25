@@ -982,6 +982,12 @@ extension AppState: AgentMobileGatewayControlling {
     }
 
     private static func mobileGatewayQueuedTextPreview(_ message: AgentQueuedMessage) -> String {
+        // Same rule as the desktop queue card: the queue stores the composed
+        // prompt, so an attached turn would otherwise ship the English
+        // model-facing prelude to the phone instead of the user's sentence.
+        if let spliced = AgentAttachedPromptDisplay.singleLinePreview(of: message.text) {
+            return mobileGatewayTruncated(spliced)
+        }
         let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             return mobileGatewayTruncated(trimmed)

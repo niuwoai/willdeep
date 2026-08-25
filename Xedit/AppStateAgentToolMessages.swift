@@ -579,10 +579,20 @@ extension AppState {
                 escalatedFrom: escalatedFrom
             )
             let notices = profileNotices.isEmpty ? "" : "\n\n" + profileNotices.joined(separator: "\n")
+            // A report-only run has no exit code to judge it. The citation
+            // audit inside the runner already checked that its locations
+            // exist; this checks the half a program cannot — whether the
+            // report answers the task and rests on what it showed.
+            let verdict = await reportVerdictNote(
+                profile: profile,
+                task: prompt,
+                outcome: outcome,
+                parentConfiguration: configuration
+            )
             finishRecord(
                 status: .succeeded,
                 summary: stats,
-                payload: "\(outcome.report)\n\n\(stats)\(notices)"
+                payload: "\(outcome.report)\(verdict)\n\n\(stats)\(notices)"
             )
         } catch is CancellationError {
             // No outcome to record, but the prompt/model/timing still explain

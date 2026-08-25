@@ -146,6 +146,82 @@ struct AgentConfirmationVisualTests {
         #expect(!AgentCompactAuthorizationMetrics.usesHorizontalActions(availableWidth: 480))
     }
 
+    @Test("结构化长问题使用标题、正文与分组信息")
+    @MainActor
+    func structuredAskUserPromptPresentation() throws {
+        let presentation = try #require(
+            AgentAskUserPromptPresentationBuilder.make(arguments: structuredAskUserArguments())
+        )
+
+        #expect(presentation.title == "配置 SSO 数据库连接")
+        #expect(presentation.body == "当前集群无法解析密码，请补充缺失信息，并确认其余默认配置。")
+        #expect(presentation.requestedInformation == [
+            "MySQL 用户 `m_u_1_5` 的 `DB_PASSWORD`",
+        ])
+        #expect(presentation.defaultAssumptions.count == 2)
+        #expect(presentation.hasStructuredSections)
+    }
+
+    @Test("旧版长问题降级为通用标题和常规正文")
+    @MainActor
+    func legacyLongAskUserPromptUsesReadableFallback() throws {
+        let longQuestion = String(repeating: "请确认这项配置。", count: 10)
+        let presentation = try #require(
+            AgentAskUserPromptPresentationBuilder.make(arguments: [
+                "question": .string(longQuestion),
+            ])
+        )
+
+        #expect(presentation.title == L10n.ToolCard.askUserDefaultTitle)
+        #expect(presentation.body == longQuestion)
+        #expect(!presentation.hasStructuredSections)
+    }
+
+    @Test("短问题保持原有单标题层级")
+    @MainActor
+    func shortAskUserPromptRemainsCompact() throws {
+        let presentation = try #require(
+            AgentAskUserPromptPresentationBuilder.make(arguments: [
+                "question": .string("要继续吗？"),
+            ])
+        )
+
+        #expect(presentation.title == "要继续吗？")
+        #expect(presentation.body == nil)
+    }
+
+    @Test("渲染结构化 ask_user 供设计 QA")
+    @MainActor
+    func renderStructuredAskUserForDesignQA() throws {
+        let outputDirectory = try designQAOutputDirectory()
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        let wideSize = try render(
+            call: structuredAskUserCall(),
+            appState: appState,
+            width: 1_040,
+            outputURL: outputDirectory.appendingPathComponent(
+                "ask-user-structured-option-2.png"
+            )
+        )
+        let narrowSize = try render(
+            call: structuredAskUserCall(),
+            appState: appState,
+            width: 520,
+            outputURL: outputDirectory.appendingPathComponent(
+                "ask-user-structured-option-2-narrow.png"
+            )
+        )
+
+        #expect(wideSize.width == 1_040)
+        #expect(wideSize.height > 320)
+        #expect(wideSize.height < 720)
+        #expect(narrowSize.width == 520)
+        #expect(narrowSize.height > wideSize.height)
+        #expect(narrowSize.height < 900)
+    }
+
     /// 扫光是给「正在看」的人的装饰性反馈，而它会持续整个回合——一条跑十
     /// 分钟的 run_command 就是十分钟的动画。一次 CA transaction flush 会把
     /// 所有待布局窗口一起过一遍，所以每一帧扫光都要付一次主窗口整棵视图树
@@ -277,6 +353,31 @@ struct AgentConfirmationVisualTests {
             arguments: arguments,
             risk: .write,
             status: .pendingApproval
+        )
+    }
+
+    private func structuredAskUserArguments() -> [String: AgentJSONValue] {
+        [
+            "title": .string("配置 SSO 数据库连接"),
+            "question": .string("当前集群无法解析密码，请补充缺失信息，并确认其余默认配置。"),
+            "requested_information": .array([
+                .string("MySQL 用户 `m_u_1_5` 的 `DB_PASSWORD`"),
+            ]),
+            "default_assumptions": .array([
+                .string("节点 k8s-worker-05 · 镜像 0.2.0-rc1 · 域名 sso.vibapp.net"),
+                .string("`${secret:online-sso-password}` 当前未绑定 Secret"),
+            ]),
+        ]
+    }
+
+    private func structuredAskUserCall() -> AgentToolCall {
+        AgentToolCall(
+            messageID: UUID(),
+            externalID: "ask-user-structured-design-qa",
+            toolName: "ask_user",
+            arguments: structuredAskUserArguments(),
+            risk: .userInput,
+            status: .awaitingUserAnswer
         )
     }
 

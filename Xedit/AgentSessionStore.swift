@@ -1429,16 +1429,15 @@ nonisolated enum AgentSessionStore {
 
     /// Derive a short, human-readable title from the first user message.
     static func deriveTitle(from messages: [AgentMessage]) -> String {
-        guard let firstUser = messages.first(where: { $0.role == .user }) else {
+        guard let firstUser = messages.first(where: \.isOperatorInput) else {
             return defaultTitle
         }
-        let text = firstUser.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = AgentUserInputPreview.preview(from: firstUser) ?? ""
         if text.isEmpty, let firstAttachment = firstUser.textAttachments.first {
             return firstAttachment.displayName
         }
         guard !text.isEmpty else { return defaultTitle }
-        let oneLine = text.replacingOccurrences(of: "\n", with: " ")
-        if oneLine.count <= 40 { return oneLine }
-        return String(oneLine.prefix(40)) + "…"
+        if text.count <= 40 { return text }
+        return String(text.prefix(40)) + "…"
     }
 }

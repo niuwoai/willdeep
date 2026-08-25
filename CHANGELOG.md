@@ -1,7 +1,278 @@
 # Changelog
 
-> 当前文件保留最新版本（1.287.0-rc11 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.289.0-rc8 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.289.0-rc8 - 2026-08-25
+
+### Fixed
+
+- **左侧“等你确认”从绿色警报块收回到黑白灰辅助层级。** 去掉整块浅绿底、高饱和绿标题、绿色数量和绿色圆点；改为动态中性灰容器与细描边，标题/数量使用次级灰，用户输入保持主黑，圆点缩小且降权。会话行内“等你确认”胶囊同步改为轻灰，等待态不再和成功态抢同一种颜色。
+- 附件协议清洗不再只匹配 WillDeep 自己那一整句固定标点，也识别其他宿主以 `The user attached the following…` 开头的变体。存在可信用户边界时只显示边界后的原文；没有边界时回退到本地化等待文案，不再泄漏英文系统提示。
+
+### Tests
+
+- [AgentPendingApprovalQuickJumpTests](XeditTests/AgentPendingApprovalQuickJumpTests.swift) 新增跨宿主附件前导的 2 条回归：无用户边界时必须隐藏协议文本，有边界时必须只保留用户原文。
+
+## 1.289.0-rc7 - 2026-08-25
+
+### Fixed
+
+- **“等你确认”和桌面宠物不再泄漏附件协议头。** 两处此前直接显示自动会话标题，而标题又从原始 `content` 截前 40 字；带文件、图片或 skill 的回合会把给模型看的 `The user attached the following context…` 安全前导拼进 `content`，于是协议文字一路漏到左下角待确认条目、Dock 待处理菜单和宠物气泡副标题。
+- 新增统一的“用户真实输入”摘要入口：先剥离附件安全前导与边界标记，再剥离图片理解生成块，最后压成单行。待确认条目固定显示当前回合最新的用户输入；宠物气泡副标题固定显示对应会话最新的用户输入；没有文字、只有附件时使用既有本地化空态，不再拿协议文本或附件标签凑数。
+- 会话标题生成与 AI 标题摘要的输入也改走同一净化口径。新会话不会再把协议头存成标题；已落盘旧会话无需迁移，待确认条目与宠物展示时会直接从消息正文重新提取，因此立即生效。
+
+### Tests
+
+- [AgentSessionStoreTests](XeditTests/AgentSessionStoreTests.swift)、[AgentPendingApprovalQuickJumpTests](XeditTests/AgentPendingApprovalQuickJumpTests.swift) 与 [DesktopPetTests](XeditTests/DesktopPetTests.swift) 新增 3 条针对性回归：自动标题、待确认条目、宠物标签均只保留边界后的用户文字，并明确断言不含英文协议头或 `### File:` / `### Skill:`。三组共 86 例通过。
+
+## 1.289.0-rc6 - 2026-08-25
+
+### Added
+
+- **Dock 图标右键终于像一个任务入口，不再只在“有人等审批”时露一下脸。** 对照 Codex 的原生菜单结构，WillDeep 现在按「待你处理 → 最近 → 更多」组织会话：待审批与手动未读合并展示，最近 3 条直接可点，其余放进最多 20 条的子菜单；macOS 自带的「选项 / 显示所有窗口 / 隐藏 / 退出」继续原生追加在后面。
+- 最近会话复用侧栏既有筛选：归档会话、隐藏工作区、没有真实用户消息的空占位不会混进 Dock。多个窗口持有同一会话时按 ID 去重，时间相同时再按 ID 稳定排序，避免菜单每次打开都换座位。
+- 从 Dock 选择会话会激活 WillDeep、定位到对应聊天，并清除手动未读标记；侧栏通过同一份未读存储的变更通知即时刷新，不再出现 Dock 已读、侧栏还挂蓝点的“两本账”。
+
+### Tests
+
+- [AgentPendingApprovalQuickJumpTests](XeditTests/AgentPendingApprovalQuickJumpTests.swift) 新增 3 例：待处理 / 最近 / 更多的分段和重复展示符合 Codex 的信息结构、跨窗口同会话保留最新副本、所有分段上限为 0 时安全返回空菜单快照。
+
+## 1.289.0-rc5 - 2026-08-25
+
+### Fixed
+
+- **内嵌浏览器分离成独立窗口后一片空白、输网址也没反应：迟到的拆卸把 webView 从新窗口手里抠走了。** 用户报「本来显示的好好的，我分离成单独的窗体，就不工作了，之前显示的内容没有了，再输入网址，也不进到这个网址了」。
+
+  一个 controller 只有一个 `WKWebView`，侧栏宿主和分离窗口宿主是把它**传来传去**，不是各造一个。而 SwiftUI 不保证旧宿主先于新宿主销毁，实际时序是：
+
+  1. 侧栏 `detach(kind)` 把 `kind = nil`，但视图卸载是异步的，旧宿主还活着
+  2. 新窗口先起来，`makeNSView` → `attach(W)`，把 webView 从侧栏移交到窗口 ✓
+  3. **之后**侧栏宿主才轮到 `dismantleNSView` → `detach()`，而它无条件执行 `removeFromSuperview()`，记着的 `hostedWebView` 仍是 W——于是把已经交给新窗口的 webView 从新窗口身上摘了下来
+
+  webView 就此不在任何视图层级里：窗口一片空白，地址栏输入其实**导航成功了**，只是没有任何宿主能显示它——「输了网址不进去」是这么来的。
+
+  修法是让 `detach()` 只交还仍挂在自己身上的 webView。同一个口子还堵住了反方向：点「放回侧栏」时，窗口宿主的拆卸同样会把刚交还给侧栏的 webView 摘走。
+
+  另外两处 `WKWebView`（插件页宿主、widget 卡片）各自在 `makeNSView` 里新建，不共享实例，没有这个问题。
+
+### Tests
+
+- 新增 [AgentEmbeddedBrowserHostTests](XeditTests/AgentEmbeddedBrowserHostTests.swift) 4 例：迟到的拆卸不夺走新宿主的 webView、仍持有时照常交还、重复 attach 幂等、放回侧栏方向同样成立。**反验过**：把 `detach()` 改回无条件 `removeFromSuperview()`，其中 2 例立刻变红，报错正是 `webView.superview → nil`。
+
+## 1.289.0-rc4 - 2026-08-25
+
+### Added
+
+- **`judge` 有活干了：report-only 的 worker 交回报告后，先过一道语义检查。** rc1 把 `judge` 记进 Known issues 时的说法是「全仓只有目录定义、显示名、图标三处，没有任何机制会派它」。这轮给它接上第一根线。
+
+  接哪一格是想过的。系统里需要做判断的位置——命令能否免审批（`security_guard`）、省心托管路由到哪个模型（`someim-judge`）、请求该派给哪个 trade（`classify()` 的关键词表，确定性代码，不花钱不延迟）——都已经有人在做，动它们是推翻现役机制。只有一格是空的：**worker 说自己做完了，凭什么信**。
+
+  [AgentSubagentCitationAudit](Xedit/AgentSubagentCitationAudit.swift) 的文件头自己划了这条线：它检查报告引用的路径、行号、commit 是否真实存在，然后明说「a worker can cite ten real files and still miss the question entirely」。确定性检查管得了"位置存不存在"，管不了"这份报告答没答所问、结论有没有被它自己展示的证据撑住"。
+
+  [AgentSubagentReportVerdict](Xedit/AgentSubagentReportVerdict.swift) 补的就是这半边：把任务、报告（已内嵌 citation-check 结果）交给 `judge`，拿回 `supported` / `unsupported` / `off_topic` 加一句具体理由，作为 `<report-check>` 跟在报告后面给主模型。
+
+  **刻意收窄的地方**：
+  - 只对 report-only 的 run 做。有 verifier 的跑完有退出码，那是比任何模型都强的裁判。
+  - **绝不裁判 `judge` 自己**——它自己的 run 也是 report-only，不挡就是无限递归。
+  - 纯咨询性质。裁决只是附在报告后面，不拦截、不重跑、不改变任何结论。判错了代价是一行上下文，而不是丢掉一个答案。
+  - 报告短于 120 字符不叫模型；`unsupported` 却给不出理由的裁决直接丢弃——没有依据的指控比沉默更糟。
+  - 整条链路失败静默：worker 的答案才是交付物，为一次咨询性检查把它弄丢是更坏的结果。
+  - 可关：`willdeep.agent.judgeReportVerdicts` 设 false 即停。
+
+  提示词里专门写了一条：**如实报告"我做不到"以及原因的报告算 `supported`**。不写这条，每一次诚实的受阻汇报都会被判成没答题。
+
+### Tests
+
+- 新增 [AgentSubagentReportVerdictTests](XeditTests/AgentSubagentReportVerdictTests.swift) 7 例：只裁判 report-only（有 verifier 的两种结果都跳过）、**绝不裁判 judge 自己**（无限递归就藏在这个条件后面）、关掉/报告过短/空白都不叫模型、通过的裁决只占一行、不通过的裁决带上理由且声明「没有打开任何文件」、无理由的指控与畸形 JSON 一律丢弃、提示词两头都截断且写明诚实受阻算通过。
+
+## 1.289.0-rc3 - 2026-08-25
+
+### Changed
+
+- **Agent 聊天行高默认值 1.5 → 1.4。** 字号默认本来就是 15pt（`chatBaseFontSizeDefault`），这次只动行高。
+
+  注意这只影响**没调过这两项的用户**：`loadAgentChatLineHeightMultiple` 一旦发现 UserDefaults 里存过值就照存量走，改默认值对他们没有作用，需要在「外观」里自己调，或清掉 `com.willdeep.agentSettings.chatLineHeightMultiple.v1`。
+
+### Tests
+
+- [AgentChatHistoryRendererTests](XeditTests/AgentChatHistoryRendererTests.swift) 的排版默认值断言跟随更新。1.4 没有精确的二进制表示（`15 * (1.4 - 1)` 落在 5.999999999999999），所以这两条改用容差比较，是这个文件里唯一不用 `==` 的地方。
+
+## 1.289.0-rc2 - 2026-08-25
+
+### Fixed
+
+- **`build_fixer` 从来收不到活的真正原因：编译器报的是绝对路径，而写集合只认相对路径。** 上一版（rc1）把 `build_fixer` 记进 Known issues，说它「只能靠命令失败自动派发，三个条件叠三层」。真查下去，卡死它的是其中一条里的一行代码。
+
+  [AgentSubagentWriteAccess.normalizedTargetPath](Xedit/AgentSubagentWriteAccess.swift) 一律拒绝绝对路径，这个设计是对的——审批卡给用户看的是相对路径，就地解析可能悄悄落到工作区外。问题出在 `deriveWriteSet` 直接把编译日志里的 token 喂给它，而 **Swift、xcodebuild、clang、rustc 报错清一色是绝对路径**：
+
+  ```
+  /Users/rocky/Sites/Xedit/Xedit/AppState.swift:120:15: error: cannot find 'foo' in scope
+  ```
+
+  以 `/` 开头 → 归一化返回 nil → 写集合空 → `noDerivableWriteSet` → 派发拒绝自己。**每一次编译失败都走到这里为止**，`build_fixer` 的 0 次调用在这一行就注定了。同一条路上的 `test_fixer` 在 Swift 项目里也一起遭殃，只是 jest / pytest / go test 报相对路径，让它在别的栈上看着还能用。
+
+  这个洞能潜伏这么久，是因为[现有测试全部用相对路径喂日志](XeditTests/AgentWorkerAutoDispatchTests.swift)（`Xedit/Foo.swift:12:5: error: boom`），日志形状和现实对不上，测试一直是绿的。
+
+  修法是在知道工作区根的地方重新落地：工作区内的绝对路径剥成相对路径，工作区外的（`/Applications/Xcode.app/...`、隔壁仓库、DerivedData 里的 SwiftPM checkout）继续丢弃，没有工作区根时维持原样全丢。安全边界一点没松，只是不再把自己人也挡在门外。
+
+- **测试命令下的编译失败不再被派给 `test_fixer`。** 测试命令会先编译，所以 `swift test` 或本仓库的 `ruby scripts/run_tests_fast.rb`（命中 `run_tests`）暴露出来的 Swift 编译错误，一路带着 `test_fixer` 的标签往下走——而那个 trade 的 brief 是让它去改测试文件。
+
+  新增 `AgentWorkerDispatchHint.refinedKind`：命令形状定完，再看日志里到底发生了什么。日志有编译器失败特征、且没有任何测试跑过的痕迹，才改判 `build_fixer`。刻意保守且单向——只复核 `testFixer` 这一种判定，真跑过的测试总会留下痕迹（`✘ Test`、`--- FAIL:`、`AssertionError` 之类），含糊的中间地带一律留给 `test_fixer`。
+
+- **仓库自带的构建脚本现在能被识别。** `buildMarkers` 里没有任何一条能匹配 `ruby scripts/build_fast.rb`，这类失败连 trade 都点不出来。补上 `scripts/build` / `build.sh` / `build.rb`；发布检测仍然优先，`scripts/release.rb` 照旧归 `ops_runner`。
+
+### Tests
+
+- [AgentWorkerAutoDispatchTests](XeditTests/AgentWorkerAutoDispatchTests.swift) 新增 4 例：工作区内绝对路径被剥成相对路径、工作区外的（Xcode SDK、隔壁仓库）仍然拒收、没有工作区根时维持旧的全丢行为、以及一条端到端——测试形状的命令 + 编译失败日志 + 绝对路径，最终派出 `build_fixer` 且写集合正确。
+- [AgentWorkerDispatchHintTests](XeditTests/AgentWorkerDispatchHintTests.swift) 新增 4 例：编译失败改判 `build_fixer`、真跑过的测试保持 `test_fixer`（三种框架的输出各测一遍）、改判单向不影响 `build_fixer` / `ops_runner` 且空日志不改判、仓库构建脚本的识别与发布优先级。
+
+## 1.289.0-rc1 - 2026-08-24
+
+### Added
+
+- **Dock 徽标上的数字终于能点进去：双击 Dock 图标直达最新一条待确认会话，右键菜单列出清单，侧边栏底部常驻最多 3 条。** 用户原话：「当有待用户确认的会话（或是说是需要用户来检查的）或是 Dock 图标上有数字徽标的，我希望可以双击数字，直接进最新一条待用户确认的会话，另外在截图的位置里最上方，我希望列出这种待用户查看或确认的最新 3 条」。
+
+  在此之前徽标只是个计数。它告诉你有 3 个会话在等你，但不说是哪三个，从这个数字也走不到会话本身——只能自己切回窗口，沿侧边栏往下翻找那个绿色的「等待批准」小标。
+
+  三处新出口：
+  - **侧边栏底部常驻条**（[AgentSidebarPendingApprovalStrip.swift](Xedit/AgentSidebarPendingApprovalStrip.swift)）：坐在更新提示条上方的固定区，最多列 3 条，点一条跳一条。header 右侧显示的是**总数**而非显示条数，第 4 条以后不会被悄悄瞒掉。占位标题（「新对话」）的会话回落到「等待批准」，避免三行长得一模一样。
+  - **Dock 图标双击**（[AgentDockAttention.swift](Xedit/AgentDockAttention.swift)）：macOS 不给徽标本身任何点击事件，系统只有「点了 Dock 图标」这一个信号，所以「双击数字」落成双击图标。第一次点击保持原样（激活、恢复窗口），0.6 秒内的第二次点击才跳转；三连击不会被读成两次跳转。
+  - **Dock 图标右键菜单**：直接列出最多 5 条，标题过长按 44 字截断（Dock 菜单不能滚动，长标题会把菜单拉过整屏）。
+
+  三处与 Dock 徽标计数共用同一个 `needsUserApproval`（工具待批准/待确认/等回答、补丁待批、计划待批），徽标显示 3 而列表只列 2 条这种自相矛盾在结构上就不会发生。[AgentDockBadgeCoordinator](Xedit/AgentSessionApprovalBadge.swift) 本来就订阅着所有 runtime，这轮让它在同一次遍历里顺带产出清单，没有新增订阅或轮询；发布前比对旧值，免得每次 runtime 事件都重绘侧边栏。
+
+  **顺带修好一处旧的不精确**：`AgentNotificationResponder.reveal` 原先只按 runtime 查 AppState，查不到就退化成「扫一个待确认的会话」。从磁盘恢复、还没建 runtime 的会话（待批计划就是这种）会跳到错的地方。补上 [EditorAppStateRegistry.appState(containingSession:)](Xedit/EditorAppStateRegistry.swift) 这一层之后，系统通知点击的落点也跟着变准了。
+
+### Changed
+
+- **内嵌浏览器不再需要先激活 Browser Ops 专家。** 用户报「现在侧边栏的组件中，只有『网页组件』，而且不能当内嵌浏览器用吗」。内嵌浏览器一直都在（地址栏、前进后退、刷新、截图、console 与网络采集齐全），只是 `AgentSidePanelKind.requiredExpert` 把面板挡住了，而「网页组件」没有门槛，于是看起来就只剩它一个。
+
+  这道门放错了地方：打开聊天里出现的局域网地址属于用户自己看网页，跟 agent 能力是两码事。Browser Ops 继续门控浏览器**工具**（截图、点击、填表、Chrome 标签页），面板本身对所有人开放。
+
+- **只读预执行默认打开，小模型 trade 终于拿得到活。** 用户报「我们设计了不少种 profile，想着用小模型来执行相对独立的任务，实际上却没怎么被执行」，附使用统计截图：`build_fixer` / `editor` / `git_detective` / `judge` 全是 0 次调用。
+
+  查下来能把活派给小模型的三条路，塌了两条：
+  - **只读预执行**是唯一能不问主模型、直接跑 worker 的只读通道，而 `auto_dispatch_read_only` 默认关着（[AppStateAgentReadOnlyPreflight.swift](Xedit/AppStateAgentReadOnlyPreflight.swift) 的 `?? false`）。`scout` / `reader` / `git_detective` / `log_inspector` 全指着它，git_detective 的 0 次在结构上就是必然。
+  - **模型自愿委派**这条路走不通是代码注释自己承认的：[AgentRequestRouter.swift](Xedit/AgentRequestRouter.swift) 开头写着 "Advice loses to momentum"，[AgentWorkerAutoDispatch.swift](Xedit/AgentWorkerAutoDispatch.swift) 开头写得更直白——提示发了，父模型读了，然后照样自己动手，因为文件都已经打开，编个任务包反而像绕远路。
+
+  原本的设计是让 Deep Share 的数字来决定要不要打开这个开关。数字给出结论了，全是 0。收不到活的便宜档位等于没有，所以缺省改成开；`config.toml` 里显式写 `auto_dispatch_read_only = false` 仍然关得掉。代价是命中的请求首字延迟变长，这个交换从设计之初就写在注释里。
+
+- **分类器补上 `editor` / `tester` / `reviewer` 三个从没被提名过的 trade。**
+  - `editor`（只改一个已声明文件）过去**连分支都没有**，所有带修改意图的请求一律落到 `implementer`。现在请求里恰好点名一个源文件时路由到它。
+  - `tester`（跑测试报证据、不改代码）新增触发词，但**刻意不预跑**：一个 suite 要跑几分钟还动构建状态，拿它当 preflight 是反着来的。
+  - `reviewer`（审查改动范围、版本一致性、git 卫生）工具集是纯只读的 `read_file` / `git_status`，适合预跑。跟 `reader` 按「审查的是改动还是代码」分工，更具体的先匹配。
+
+  文件名识别刻意保守：只认用户真打出来的路径，扩展名必须落在源码集合里，构建日志里的 `.o` / `.json` / `.lock` 永远不会被当成编辑目标。
+
+### Known issues
+
+- `judge` 本轮未动。它全仓只有目录定义、显示名、图标三处，没有任何机制会派它，而用户请求几乎不会长成「给我一个裁决」的形状，加分类分支并不对症。要让它有用得让机制内部去调（审批裁决、路由二选一），属于另一件事。
+- `build_fixer` 仍然难触发。它只能靠命令失败自动派发，要求同时满足 `run_command` 非零退出、失败输出能解析出源码路径、每回合每命令一次。只读预执行救不了它，放宽那三个条件是单独一轮的工作。
+
+### Tests
+
+- 新增 [AgentPendingApprovalQuickJumpTests](XeditTests/AgentPendingApprovalQuickJumpTests.swift) 10 例：只收真正被用户挡住的会话、无 runtime 的待批计划照样收、跳过归档、条目数与 Dock 徽标计数一致（防两个面各说各话）、最近优先且按上限截断、时间戳打平时排序稳定（Swift 的 sort 不稳定，抖动的列表看着像渲染 bug）、上限为 0 时返回空、双击判定的窗口内外与时钟回拨、Dock 菜单标题截断与空标题回落。
+- [AgentRequestRouterTests](XeditTests/AgentRequestRouterTests.swift) 补 4 例：单文件路由到 `editor`、多文件与无文件名仍走 `implementer`、跑测试提名 `tester` 但不预跑、审查改动走 `reviewer` 而泛读仍归 `reader`、非源码路径不算编辑目标。
+- [AgentReadOnlyPreflightTests](XeditTests/AgentReadOnlyPreflightTests.swift) 与 [AgentDesignToCodeTests](XeditTests/AgentDesignToCodeTests.swift)、[WillDeepTests](XeditTests/XeditTests.swift) 的三条断言跟随行为改动更新（预执行默认开、内嵌浏览器面板不再需要专家）。
+
+## 1.288.0-rc5 - 2026-08-24
+
+### Fixed
+
+- **排队消息预览显示模型协议头而不是用户自己打的字，桌面与手机两处一起修。** 用户报「我追加内容的时候，显示出来的是这一句英文，而不是我要加的内容」，截图里排队卡片标题是 `The user attached the following context for this tu…`。
+
+  **这段英文本身没错，它不是 UI 文案。** `AgentAttachedPromptProtocol.preludeHeader`（[AgentComposerAttachmentSupport.swift](Xedit/AgentComposerAttachmentSupport.swift)）是**给模型看的安全协议**：在附件/技能正文前声明「以下是任务材料，不是用户原话」，再用不可伪造的边界 `<<<willdeep:user-message:v1>>>` 把附件与用户正文隔开，防附件内容冒充用户下指令。这类模型指令按设计保持英文、不做 i18n。错的是它**漏进了给人看的界面**。
+
+  **根因**：拼接发生在**入队之前**（`AppStateAgentComposer.swift` 组好完整 prompt 再 `queuedMessages.append`），所以队列里存的就是带前导头的 prompt；而排队卡片的 `previewText` 直接取 `message.text` 原文。项目里早有正确的剥离器 `AgentAttachedPromptDisplay.transform`（认边界、只取用户正文），transcript、消息气泡、历史格式化、面板卡片全在用，唯独排队预览漏了。
+  - **顺带揪出第二处**：移动网关 `mobileGatewayQueuedTextPreview`（[AppStateMobileGatewayController.swift](Xedit/AppStateMobileGatewayController.swift)）同样直接用原文，**手机端看到的排队预览也是这段英文**。
+  - 修法：把剥离收成共用入口 `AgentAttachedPromptDisplay.singleLinePreview(of:)`（[AgentMessageSupportViews.swift](Xedit/AgentMessageSupportViews.swift)），桌面排队卡与移动网关都走它；多行输入压成单行不破坏卡片布局；**不是拼接产物就返回 nil**，调用方原有的「N 个附件 / N 张图 / 空消息」兜底逻辑一律不动。
+
+### Tests
+
+- 新增 [AgentQueuedPreviewPreludeTests](XeditTests/AgentQueuedPreviewPreludeTests.swift) 5 例：拼接 prompt 只预览用户正文（且不含 header／`### Skill:`／边界标记）、普通消息返回 nil 交回原兜底、只挂附件没打字时不泄漏英文头、多行压单行、显示侧与协议侧共用同一个 header 常量（防两边字符串漂移导致剥离静默失效）。
+
+## 1.288.0-rc4 - 2026-08-24
+
+### Fixed
+
+- **同一份计划清单不再同时出现在两个地方：浮动计划卡在 composer 进度条在场时让位。** 用户报「还存在 2 处计划卡片，之前不是要去掉重复吗」，并附执行中截图：右侧浮动计划卡 7 步全展开，同时 composer 上方「第 2 / 7 步」进度条展开着同一份清单。
+
+  **这次修的是上一轮修了一半的口子。** [AgentPlanGoalCards.swift](Xedit/AgentPlanGoalCards.swift) 里 `initiallyExpanded` 的注释就是上轮留下的记录（原话："opening on it used to show the same checklist twice (floating card + composer pill) for the entire execution"）——但那轮只改了**是否自动展开**（`.approved` 不再自动开），没改**是否显示**：`shouldDisplay` 至今仍是 `plan.status != .done`。两个面的显示条件彼此独立——浮动卡看「计划没做完」，composer 进度条看「回合在跑且有计划」——**执行期间两条同时为真**，同一份 `agentCurrentPlan` 必然渲染两次。上轮的效果只是把重复的那份变小了，没让它消失。
+
+  修法按注释里已写明的设计意图落地（"the composer progress pill is the live progress surface for that phase"）：
+  - 新增 `shouldDisplayFloatingCard(_:isComposerProgressVisible:)`，浮动卡在 composer 进度条在场期间整体让位；回合结束进度条撤走后卡片回来，计划照旧可查看、修订、标记完成。
+  - [AgentConversationActivityOverlay.swift](Xedit/AgentConversationActivityOverlay.swift) 判断进度条是否在场时，复用与 composer 完全相同的输入（`AgentComposerTaskProgressSnapshot.preferred(plan:goal:isResponding:)`），两个面不可能对「谁在场」各说各话。
+  - **顺带修掉展开单向锁**：`onCompatibleChange` 原先只把 `isPlanExpanded` 设 `true`、从不设回 `false`。计划在 `.proposed` 时展开过，转 `.approved`／执行中也收不回去，整轮撑开——正是截图里 7 步全展开的成因。新增 `shouldCollapse(onStatusChangeTo:)`，离开待决策状态即折叠。
+
+### Tests
+
+- 新增 [AgentPlanSurfaceExclusivityTests](XeditTests/AgentPlanSurfaceExclusivityTests.swift) 6 例：执行中浮动卡让位、回合结束卡片回归（三种进行中状态）、`done` 计划两种情况都不显示、只有 `.proposed` 自动展开、离开待决策即折叠，以及一条**跨状态×响应态的穷举不变量**——用 composer 进度条自己的判定函数算出在场与否，断言「两个面在任一时刻至多显示一个」，把这次的重复钉死为回归。
+
+## 1.288.0-rc3 - 2026-08-24
+
+### Fixed
+
+- **一次收掉 202 个未进目录的 i18n key：设置页两行英文只是冰山一角。** 用户在中文界面的「软件更新」区看到 "Download and install updates automatically" 与其说明文案漏翻。排查发现不是缺翻译，是 `settings.software-update.automatic` / `automatic-help` 两个 key 压根没进 `Localizable.xcstrings`，`String(localized:defaultValue:)` 直接落英文兜底。全仓审计（代码引用 key 对照目录）挖出**同类缺失共 202 个**，且是双向的：英文 defaultValue 的 key 在中文界面漏中文，中文 defaultValue 的 key（本地模型设置区、圆桌区）在英/日/西/法界面反漏英文。涉及面：软件更新、some.im 账户区、本地模型加速整区、上下文压缩设置、编辑器 LSP 右键菜单与全部浮层（悬停/补全/签名/代码操作/引用/调用层次/重命名）、内嵌浏览器、自动化任务、子代理委派检查器、圆桌、SSH 终端。修复：202 条 × 5 语（en/es/fr/ja/zh-Hans）全量补齐进目录（[Localizable.xcstrings](Xedit/Localizable.xcstrings)，+7070 行纯新增、零删除、文本级插入不重排）；占位符（`%@`/`%1$@`/`%d`）做了跨语言一致性校验；插入后重跑审计残余缺失为 0。
+
+### Tests
+
+- 插入自查三件套：整文件 `json.loads` 合法、202 个 key 逐个在 `strings` 顶层可查且逐语言值一致、`git diff --numstat` 零删除（防 json.dump 重排与插错位置两个已知坑）。
+- **[AgentRoutineDeletionPromptTests](XeditTests/AgentRoutineDeletionPromptTests.swift) 一处断言从钉英文原文改为按语言关键词集合断言。** `automation.delete.alert-message` 进目录后，中文宿主上 `String(localized:)` 真的返回中文了，钉 "cannot be undone"/"stop running" 英文原文的断言立刻炸红——本地化生效反而打红测试。改为在 en/es/fr/ja/zh-Hans 五语的「不可撤销」「停止运行」关键词集合中命中任一即通过：守住测试意图（确认文案必须警告后果），不再依赖测试宿主的语言。另全仓扫描 202 个新 key 的英文原文在测试里的其他钉点：仅此一处真断言（另一处命中是注释撞子串）。
+- 全量 `ruby scripts/run_tests_fast.rb`：2909 例 / 0 失败 / 1 skip（惯常那条），退出码、日志、report.json 三方一致。
+
+## 1.288.0-rc2 - 2026-08-24
+
+### Changed
+
+- **按需计划（plan on demand）：普通模式不再前置建计划，"复杂任务"由触发线实测认定。** 用户实测反馈：不论任务大小一律先建计划、再逐格更新，小任务被计划块 + `update_plan` 逐轮上报 + 纠偏/对账轮拖慢明显。而"简单任务直接干"的自判指令其实一直在提示词里（ORDINARY MODE 段），模型对 "genuinely multi-step" 的判断系统性偏严——建计划显得尽责，宁滥勿缺，提示词层已被现实证伪。本次把判断权从"模型预测"收归"宿主测量"：
+  - **提示词契约反转**（[AgentContextBuilder.swift](Xedit/AgentContextBuilder.swift)，stable prompt v32 → v33，三档哈希重录）：ORDINARY MODE 段从「multi-step 就先建计划」改为「默认直接干、不前置建计划；WillDeep 观察本回合，实测变大时会下发补计划指令；用户显式要计划除外」。compact profile 的计划条目同步改写。
+  - **触发线**（新增 [AgentPlanOnDemandPolicy](Xedit/AgentPlanOnDemandPolicy.swift)，接入 [AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift) 工具轮循环）：无活跃计划的普通回合，实跑满 **4 个工具轮**、或本回合落地 **≥3 次写级（write/danger）成功调用**时，宿主注入一次 `PLAN REQUESTED` 指令——要求当轮补一个只含**剩余工作**的 plan 块并继续执行，不停顿不等审批，此后照常 `update_plan`。每回合最多注入一次；runway handoff 回合让位（交接轮不开新活，计划也算）。
+  - **刻意不动的边界**：Goal 模式（计划是验收循环骨架）、无人值守派发任务（调度台节点状态投影自计划）不走触发线，保持各自的强制计划契约；定时任务（routine）回合正常享受触发线。设计讨论中的"起后台任务即触发"信号 v1 刻意不做——小验证流（后台跑个测试）会误触发，长后台任务靠轮询轮次自然够到轮数阈值。
+  - **零兼容成本**：`AgentPlanAutoContinuationPolicy.decision` 对 `plan == nil` 本就 guard-stop，无计划的小任务不会启动任何计划跟班机器（上报要求、CORRECTION、reconciliation、auto-continuation 全部天然静默）。
+
+### Tests
+
+- 新增 [AgentPlanOnDemandPolicyTests](XeditTests/AgentPlanOnDemandPolicyTests.swift) 8 例：双阈值触发/不触发、活跃计划抑制、Goal/派发任务排除、通知三要素（plan 块 + 当轮继续 + update_plan）、阈值区间守卫。
+- [AgentPlanProgressTests](XeditTests/AgentPlanProgressTests.swift) 4 处断言换锚到新契约句子（标题、up-front 禁令、同回合继续、不重复规划），[AgentPromptSnapshotGuardTests.swift](XeditTests/AgentPromptSnapshotGuardTests.swift) 版本断言 v32 → v33。
+- 排查注：`-only-testing:XeditTests/AgentPromptSnapshotGuardTests` 按文件名选 suite 会静默跑 0 个且整体 TEST SUCCEEDED（suite 类型名是 `AgentContextBuilderPromptTests`，文件名 ≠ suite 名假绿坑再次应验）；重录哈希走的是正确 suite 名的红输出。
+
+## 1.288.0-rc1 - 2026-08-24
+
+### Added
+
+- **长提问支持清晰的信息层级。** `ask_user` 新增可选的 `title`、`requested_information` 和 `default_assumptions` 参数；Agent 可把一个复杂问题拆成加粗标题、常规说明、“需要你提供”和“将按默认值继续”两个信息组，不再把整段技术正文全部加粗，反引号包裹的字段名与占位符按行内代码显示。
+- **兼容旧调用。** 既有短问题仍显示为单行加粗标题；没有结构化字段的长问题自动使用本地化通用标题并把原问题降为常规正文。选项、多选、自由输入、跳过和发送行为保持不变。
+- 新增英、西、法、日、简中五种结构化分组文案，并更新本地 `#1983#` 确认面板预览为本次选定的 SSO 配置场景。
+
+### Tests
+
+- 新增结构化、旧版长问题和短问题三类解析回归，以及 `1040 pt` / `520 pt` 宽度的 SwiftUI 渲染验证；定向测试 17/17 通过。
+- 完成参考图与实装截图的同屏全局/局部对照，结论记录于 `design-qa.md`，最终无 P0/P1/P2 视觉缺陷。
+
+## 1.287.0-rc12 - 2026-08-24
+
+### Fixed
+
+- **上下文跑道交接轮不再自废工具声明，交接不会再变成一坨裸标记。** 现场取证：本机 475 个会话里 handoff 一共触发 10 次，其中 **3 次的交接被模型吐出来的原始工具调用语法整段毁掉**（失败率 30%），跨 `someim-code-high`、`someim-auto-flash`、`nemotron-3-ultra` 三个模型、两种互不相干的语法：
+  - `<｜｜DSML｜｜tool_calls>…` —— DeepSeek 家族的 DSML（全角竖线 U+FF5C，且被模型写成双写，说明是在"默写"语法而不是吐真 special token）；
+  - `<tool_call><function=get_job_output>…` —— 开放权重家族的写法。
+  三次模型想调的都是 `get_job_output`，三次 `toolCalls` 都是空数组，调用全丢。
+
+  根因不在网关也不在上游解析器，在 [AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift) 自己：handoff 触发时会 `requestTools = []`，而 OpenAI-Chat 适配器在 tools 为空时**直接不发 `tools` 键**（[AgentClientOpenAIChat.swift](Xedit/AgentClientOpenAIChat.swift)）。上游只在请求声明了工具时才打开工具调用解析器，于是模型照发的调用没人解析，原样落进 `content`。原注释里"移除工具 schema 能把『不许开新活』变成传输层事实"的假设被现场证伪——**去掉声明只能阻止调用被解析，阻止不了模型发出调用**；`3CF7B3BB` 那条的 `reasoningContent` 白纸黑字绕过了指令：「指令说 Do not call tools……但 job_8a9548 的输出是已经存在的证据，属于收尾验证，不算开新工作」。
+
+  代价不只是一条脏消息：`7DB4EF68` 那次模型是把交接正文当工具参数值在写，PAUSE/DONE 写到一半被截断，ANCHORS / REMAINING / NEXT PROMPT 三段全丢，而压缩照常执行——本该保命的状态胶囊在它唯一该生效的时刻空转。
+
+  修法分两层：
+  - **治根**：handoff 轮**保留工具声明**（窗口代价是 schema 大小，换回来的是一份几百 token 的交接），拒绝改在能回话的地方执行——工具调用在本轮一律不执行、从消息上清掉（顺带避免 assistant 带 `tool_calls` 却没有对应 tool 结果导致下一次请求 400），并回一条点名被拒工具的系统提示，告诉模型该把这次请求写进 REMAINING、在 NEXT PROMPT 里点名。交接提示词也补了一句"工具调用会被宿主拒绝"，把模型自我说服的空间堵掉（保留原 `Do not call tools` 断言锚点）。
+  - **兜底**：新增 [AgentLeakedToolCallText](Xedit/AgentLeakedToolCallText.swift)，识别落进 `content` 的裸工具调用标记（DSML 单/双竖线、`<tool_call>` / `</tool_calls>` / `<function=`），从**最早**一个标记处切开——保住标记之前的正文（这正是 `7DB4EF68` 丢掉的那半段），丢掉标记本身，不再渲染、不再落盘、不再作为历史回放。
+  - 两条路径共用 `maximumHandoverRetries = 2` 的重试预算；预算耗尽就按普通交接收尾，不跟模型在满窗口里对峙。
+  - 刻意**不做**的：泄漏识别只在 handoff 轮生效。全局剥离会误伤正常讨论工具语法的正文（本条 CHANGELOG 自己就会中招），而现场 3/3 都发生在 handoff 轮。
+
+### Tests
+
+- 新增 [AgentLeakedToolCallTextTests](XeditTests/AgentLeakedToolCallTextTests.swift)：样本直接抄自落盘现场（含模型真写出来的双竖线），覆盖整条全是标记、正文在闭合标签之前必须保住、canonical 单竖线、`<tool_call>` 家族、最早标记决定切点，以及三条防误伤（正常交接文本、孤立全角竖线、正文里提到 "DSML"/"tool_calls" 字样）。
+- [AgentContextRunwayPolicyTests](XeditTests/AgentContextRunwayPolicyTests.swift) 补 5 条：交接提示声明工具会被拒、拒绝通知点名工具并指向 REMAINING/NEXT PROMPT、空工具名时通知仍成句、markup 丢弃通知说明没有工具运行、重试预算有上限且不为零。
 
 ## 1.287.0-rc11 - 2026-08-24
 

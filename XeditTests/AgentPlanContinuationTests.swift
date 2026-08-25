@@ -32,7 +32,7 @@ struct AgentPlanContinuationTests {
         #expect(!AgentExecutionIntentPolicy.requestsPlanningOnly(text))
     }
 
-    @Test("ordinary prompt plans once and executes without approval")
+    @Test("ordinary prompt defers planning until WillDeep or the user asks")
     func ordinaryPromptPlansAndExecutes() {
         let prompt = AgentContextBuilder.systemPrompt(
             rootDirectory: nil,
@@ -45,9 +45,9 @@ struct AgentPlanContinuationTests {
             globalRules: nil
         )
 
-        #expect(prompt.contains("emit exactly one complete numbered `plan` fenced block near the start"))
-        #expect(prompt.contains("continue executing it in the same turn without waiting for plan approval"))
-        #expect(prompt.contains("Do not plan again on later tool rounds"))
+        #expect(prompt.contains("without a `plan` fenced block up front"))
+        #expect(prompt.contains("continue executing in the same reply"))
+        #expect(prompt.contains("do not re-plan on later rounds"))
         #expect(!prompt.contains("PLAN MODE"))
     }
 

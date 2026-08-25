@@ -685,6 +685,12 @@ nonisolated enum L10n {
         static let placeholder = String(localized: "command-palette.placeholder", defaultValue: "Command Palette")
     }
 
+    enum Dock {
+        static let pendingApprovalHeader = String(localized: "dock.pending-approval.header", defaultValue: "Needs Attention")
+        static let recentHeader = String(localized: "dock.recent.header", defaultValue: "Recent")
+        static let more = String(localized: "dock.more", defaultValue: "More")
+    }
+
     enum EditorStatusBar {
         static func cursorPosition(_ a1: String, _ a2: String) -> String {
             let template = String(localized: "editor-status-bar.cursor-position", defaultValue: "Ln")
@@ -1425,6 +1431,8 @@ nonisolated enum L10n {
         static let sessionRowPinTooltip = String(localized: "sidebar.session-row.pin-tooltip", defaultValue: "Pin")
         static let sessionRowUnarchiveTooltip = String(localized: "sidebar.session-row.unarchive-tooltip", defaultValue: "Unarchive")
         static let sessionRowUnpinTooltip = String(localized: "sidebar.session-row.unpin-tooltip", defaultValue: "Unpin")
+        static let pendingApprovalHeader = String(localized: "sidebar.pending-approval.header", defaultValue: "Waiting for you")
+        static let pendingApprovalRowTooltip = String(localized: "sidebar.pending-approval.row-tooltip", defaultValue: "Jump to this session")
         static let sessionRowWaitingApproval = String(localized: "sidebar.session-row.waiting-approval", defaultValue: "Waiting approval")
         static let sessionRowWaitingApprovalTooltip = String(localized: "sidebar.session-row.waiting-approval-tooltip", defaultValue: "This session is waiting for your approval or answer.")
         static let sessionUnreadIndicator = String(localized: "sidebar.session-row.unread-indicator", defaultValue: "Unread chat")

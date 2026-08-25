@@ -200,6 +200,27 @@ nonisolated enum AgentAttachedPromptDisplay {
     /// Header emitted by `AppState.composeAttachedPrompt`. Keep in sync.
     static let preludeHeader = AgentAttachedPromptProtocol.preludeHeader
 
+    /// One-line, human-shaped preview of a prompt that may be spliced.
+    ///
+    /// Splicing happens at *send* time, so anything holding a composed
+    /// prompt — a queued message, a gateway snapshot — holds the model-facing
+    /// prelude, English protocol header and all. Any surface that shows such
+    /// a prompt to a person must go through here: the queue card and the
+    /// mobile gateway both used the raw text and displayed
+    /// "The user attached the following context for this turn…" where the
+    /// operator expected to see their own sentence.
+    ///
+    /// Returns nil when the prompt is not spliced, so callers keep their own
+    /// empty/attachment-count fallbacks for a genuinely empty message.
+    static func singleLinePreview(of prompt: String) -> String? {
+        let display = transform(prompt)
+        guard display.isSplicedPrelude else { return nil }
+        let visible = display.visibleContent
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return visible.isEmpty ? nil : visible
+    }
+
     struct Display {
         /// `true` when the content was actually a spliced prelude and we
         /// rewrote it into a compact form. False when this is plain text.
@@ -227,7 +248,7 @@ nonisolated enum AgentAttachedPromptDisplay {
     }
 
     static func transform(_ content: String) -> Display {
-        guard content.hasPrefix(preludeHeader) else {
+        guard beginsWithAttachmentPrelude(content) else {
             return Display(
                 isSplicedPrelude: false,
                 visibleContent: content,
@@ -284,6 +305,21 @@ nonisolated enum AgentAttachedPromptDisplay {
             hasWorkspace: hasWorkspace,
             userAuthoredText: userText
         )
+    }
+
+    /// Some sessions arrive through another host that uses the same English
+    /// attachment preamble but not WillDeep's exact punctuation or suffix.
+    /// Treat the stable opening phrase as generated chrome too. If that host
+    /// did not preserve our user-text boundary, returning no authored text is
+    /// safer than presenting prompt scaffolding as something the user typed.
+    private static func beginsWithAttachmentPrelude(_ content: String) -> Bool {
+        let firstLine = content
+            .components(separatedBy: .newlines)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+        return firstLine.hasPrefix(preludeHeader.lowercased())
+            || firstLine.hasPrefix("the user attached the following")
     }
 
     private static func legacyUserTextSeparatorIndex(in lines: [String], hasFiles: Bool) -> Int? {
@@ -770,6 +806,12 @@ private struct QueuedMessageRow: View {
     }
 
     private var previewText: String {
+        // A queued message holds the already-composed prompt, so an attached
+        // turn starts with the model-facing prelude rather than the operator's
+        // own words. Show what they typed.
+        if let spliced = AgentAttachedPromptDisplay.singleLinePreview(of: message.text) {
+            return spliced
+        }
         let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty { return text.replacingOccurrences(of: "\n", with: " ") }
         if !message.textAttachments.isEmpty {
