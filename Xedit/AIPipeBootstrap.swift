@@ -40,6 +40,9 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
             // 保证配对过的手机在任何网络下都能连上桌面。全局单点，多窗口只
             // 维持一份中继连接。
             MobileGatewayAutostart.shared.startIfNeeded()
+            // 产品遥测：一次启动一条。开关关闭时 `record` 直接丢弃，
+            // 不入队也不落盘（见 TelemetryReporter）。
+            AgentTelemetry.recordAppSessionStarted()
         }
     }
 
@@ -75,6 +78,9 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         AIPipe.flush()
+        MainActor.assumeIsolated {
+            AgentTelemetry.flushBeforeTermination()
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

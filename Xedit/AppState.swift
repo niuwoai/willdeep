@@ -1592,6 +1592,8 @@ final class AppState: ObservableObject {
         let targetURL = terminalTargetURL(for: url)
         editorTerminalSession.setWorkingDirectory(targetURL)
         isEditorTerminalVisible = true
+        // 只记「终端被打开了一次」——工作目录、命令、输出都不上报。
+        AgentTelemetry.recordFeatureUsed(.terminal)
     }
 
     func toggleEditorTerminal(_ url: URL? = nil) {

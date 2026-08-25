@@ -31,6 +31,7 @@ extension AppState {
         guard let plan = compressionPlan(for: runtime, keepRecent: keepRecent) else { return }
 
         runtime.isCompressingContext = true
+        AgentTelemetry.recordFeatureUsed(.contextCompression, surface: .automatic)
         let configurations = contextCompressionConfigurationCandidates()
 
         Task { [weak self, weak runtime] in

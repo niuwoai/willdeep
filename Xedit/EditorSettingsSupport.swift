@@ -73,6 +73,7 @@ private struct CompatibleChangeModifier<Value: Equatable>: ViewModifier {
 
 enum EditorSettingsTab: Hashable {
     case updates
+    case privacy
     case editing
     case typography
     case appearance
@@ -105,7 +106,7 @@ extension EditorSettingsTab {
     /// (e.g. `selectedTab = .mobileGateway`) still resolve to the right group.
     var group: SettingsGroup {
         switch self {
-        case .updates: return .general
+        case .updates, .privacy: return .general
         // Everything that shapes the editor itself lives under one Editor
         // tab. Workspace wallpaper is Agent-owned and therefore no longer
         // appears as a duplicate Editor pane.
@@ -128,6 +129,7 @@ extension EditorSettingsTab {
     var shortTitle: String {
         switch self {
         case .updates: return L10n.Settings.tabUpdates
+        case .privacy: return L10n.Telemetry.tabTitle
         case .editing: return L10n.Settings.tabEditing
         case .typography: return L10n.Settings.tabTypography
         case .appearance: return L10n.Settings.tabAppearance
@@ -186,7 +188,7 @@ enum SettingsGroup: Hashable, Identifiable {
     /// pane a freshly-selected group falls back to.
     var tabs: [EditorSettingsTab] {
         switch self {
-        case .general: return [.updates]
+        case .general: return [.updates, .privacy]
         // Wallpaper is configured exclusively under Agent Appearance.
         case .editor: return [.editing, .appearance, .typography, .workspace]
         case .agentAppearance: return [.agentAppearance]

@@ -495,7 +495,21 @@ extension AppState {
         // reflects a background session now working in its directory.
         refreshAgentWorkspaceCollision()
         _ = startAgentGoalPlanningIfNeeded(for: runtime)
+        // 本回合的遥测累计。回合内可能跑多轮 provider 请求（工具调用循环），
+        // token 累加、降级次数累加；下面的 defer 在每条退出路径上提交一次。
+        // 只记供应商、模型、耗时、token 和结构化错误码——不碰任何消息内容。
+        let turnTelemetry = AgentTurnTelemetry(
+            providerID: configuration.providerID,
+            requestedModel: configuration.model,
+            resolvedModel: configuration.model,
+            credentialSource: AgentTelemetry.credentialSource(
+                providerID: configuration.providerID,
+                baseURL: configuration.baseURL,
+                hasAPIKey: !configuration.apiKey.isEmpty
+            )
+        )
         defer {
+            AgentTelemetry.recordTurnFinished(turnTelemetry)
             let computerUseLeaseID: AgentComputerUseLease.ID? = {
                 guard let lease = AgentComputerUseCoordinator.shared.state.lease,
                       lease.owner.runtimeID == runtime.id,
@@ -675,6 +689,10 @@ extension AppState {
         if runtime.activeTurnID == turnID {
             runtime.activeTurnConfiguration = turnConfiguration
         }
+        // 省心托管路由（以及后面的质检升档）会改掉实际执行的模型；
+        // 遥测记的是「最后真正跑的那个」，与 requested 不同即计一次改派。
+        turnTelemetry.providerID = turnConfiguration.providerID
+        turnTelemetry.noteResolvedModel(turnConfiguration.model)
 
         // `var` so a managed output-quality failure can swap in an escalated
         // client and re-run the round (see the no-tool-call guard below).
@@ -1150,6 +1168,7 @@ extension AppState {
 
             do {
                 var retryCount = 0
+                turnTelemetry.noteRequestStarted()
                 while true {
                     do {
                         try await client.streamChat(
@@ -1181,6 +1200,7 @@ extension AppState {
                                     finishReason = reason
                                 case .usageReported(let prompt, let completion, let total, let cachedPrompt, let cacheWritePrompt, let reasoning):
                                     streamBuffer.flushPending()
+                                    turnTelemetry.addUsage(promptTokens: prompt, completionTokens: completion)
                                     runtime.messages[index].usageTokens = total
                                     runtime.messages[index].promptTokens = prompt > 0 ? prompt : nil
                                     runtime.messages[index].completionTokens = completion > 0 ? completion : nil
@@ -1220,6 +1240,7 @@ extension AppState {
                 streamBuffer.flushPending()
             } catch is CancellationError {
                 streamBuffer.flushPending()
+                turnTelemetry.noteCancelled()
                 finalizeInterruptedAssistantMessage(
                     id: assistantID,
                     in: runtime,
@@ -1229,6 +1250,7 @@ extension AppState {
             } catch {
                 streamBuffer.flushPending()
                 if Self.isStoppedTurnCancellation(error, runtime: runtime, turnID: turnID) {
+                    turnTelemetry.noteCancelled()
                     finalizeInterruptedAssistantMessage(
                         id: assistantID,
                         in: runtime,
@@ -1236,6 +1258,7 @@ extension AppState {
                     )
                     return
                 }
+                turnTelemetry.noteFailure(error)
                 setAgentError(error, for: runtime)
                 if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
                    runtime.messages[index].content.isEmpty,
@@ -1332,6 +1355,7 @@ extension AppState {
                             runtime.messages.remove(at: dropIndex)
                         }
                         turnConfiguration.model = escalatedModel
+                        turnTelemetry.noteResolvedModel(escalatedModel)
                         client = AgentClient(
                             configuration: turnConfiguration,
                             someIMContext: someIMContext,

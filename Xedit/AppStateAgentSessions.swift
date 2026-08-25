@@ -2499,6 +2499,13 @@ extension AppState {
             )
         )
         persistActiveAgentSession()
+        // 上报的是模型标识，不是界面上那个已本地化的名字——「省心托管」四个字
+        // 进不了标识符字符集，也没法跨语言聚合。
+        AgentTelemetry.recordModelSelected(
+            providerID: runtime.sessionProviderIDOverride ?? agentConfiguration.providerID,
+            model: runtime.managedRouting == nil ? new : "managed",
+            surface: .picker
+        )
     }
 
     private var activeAgentModelSelectionLabel: String {

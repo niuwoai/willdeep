@@ -397,6 +397,7 @@ struct SomeIMIntegrationSettingsView: View {
                             browserLoginRequest = nil
                             isWatchingBrowserLogin = false
                             status = L10n.Settings.SomeIM.browserLoginConnected
+                            AgentTelemetry.recordLoginFinished(status: .succeeded, surface: .settings)
                         }
                         return
                     }
@@ -405,6 +406,11 @@ struct SomeIMIntegrationSettingsView: View {
                             browserLoginRequest = nil
                             isWatchingBrowserLogin = false
                             status = L10n.Settings.SomeIM.browserLoginCredentialSaveFailed
+                            AgentTelemetry.recordLoginFinished(
+                                status: .failed,
+                                surface: .settings,
+                                errorCode: "credential_save_failed"
+                            )
                         }
                         return
                     }
@@ -416,6 +422,11 @@ struct SomeIMIntegrationSettingsView: View {
                             browserLoginRequest = nil
                             isWatchingBrowserLogin = false
                             status = L10n.Settings.SomeIM.browserLoginMissingCredentials
+                            AgentTelemetry.recordLoginFinished(
+                                status: .failed,
+                                surface: .settings,
+                                errorCode: "missing_credentials"
+                            )
                         }
                         return
                     }

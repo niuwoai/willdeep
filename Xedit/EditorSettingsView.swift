@@ -286,6 +286,7 @@ struct EditorSettingsView: View {
     private func settingsPage(for tab: EditorSettingsTab) -> some View {
         switch tab {
         case .updates: updatesSettings
+        case .privacy: TelemetrySettingsView()
         case .editing: editingSettings
         case .typography: typographySettings
         case .appearance: appearanceSettings
