@@ -20,6 +20,31 @@ struct DesktopPetTests {
         #expect(preview.hasSuffix("…"))
     }
 
+    @Test @MainActor
+    func petLabelShowsOnlyTheLatestUserAuthoredText() {
+        let attachedPrompt = [
+            AgentAttachedPromptProtocol.preludeHeader,
+            "",
+            "### Skill: swiftui-hang-diagnose",
+            "host generated skill body",
+            "",
+            AgentAttachedPromptProtocol.userTextBoundary,
+            "只显示我打的这句话",
+        ].joined(separator: "\n")
+        let messages = [
+            AgentMessage(role: .user, content: "更早的问题"),
+            AgentMessage(role: .assistant, content: "更早的回答"),
+            AgentMessage(role: .user, content: attachedPrompt),
+            AgentMessage(role: .assistant, content: "最新回答"),
+        ]
+
+        let label = DesktopPetMessageFormatter.userInputLabel(for: messages)
+
+        #expect(label == "只显示我打的这句话")
+        #expect(!label.contains("The user attached"))
+        #expect(!label.contains("### Skill:"))
+    }
+
     @Test
     func petAppearancesHaveStableAssetNames() {
         #expect(DesktopPetAppearance.allCases.first == .bearGirl)

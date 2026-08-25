@@ -12,11 +12,90 @@
 import AppKit
 import Foundation
 
+struct AgentDockSessionEntry: Identifiable, Equatable {
+    let sessionID: AgentSession.ID
+    let title: String
+    let lastActivityAt: Date
+
+    var id: AgentSession.ID { sessionID }
+}
+
+struct AgentDockMenuSnapshot: Equatable {
+    let attention: [AgentDockSessionEntry]
+    let recent: [AgentDockSessionEntry]
+    let more: [AgentDockSessionEntry]
+
+    var isEmpty: Bool {
+        attention.isEmpty && recent.isEmpty && more.isEmpty
+    }
+}
+
+enum AgentDockMenuLogic {
+    nonisolated static let attentionLimit = 5
+    nonisolated static let recentLimit = 3
+    nonisolated static let moreLimit = 20
+
+    nonisolated static func snapshot(
+        recentEntries: [AgentDockSessionEntry],
+        pendingEntries: [AgentPendingApprovalEntry],
+        unreadSessionIDs: Set<AgentSession.ID>,
+        attentionLimit: Int = attentionLimit,
+        recentLimit: Int = recentLimit,
+        moreLimit: Int = moreLimit
+    ) -> AgentDockMenuSnapshot {
+        let recent = rankAndDeduplicate(recentEntries)
+        let pending = pendingEntries.map {
+            AgentDockSessionEntry(
+                sessionID: $0.sessionID,
+                title: $0.title,
+                lastActivityAt: $0.waitingSince
+            )
+        }
+        let unread = recent.filter { unreadSessionIDs.contains($0.sessionID) }
+        let attention = rankAndDeduplicate(pending + unread)
+
+        return AgentDockMenuSnapshot(
+            attention: positivePrefix(attention, limit: attentionLimit),
+            recent: positivePrefix(recent, limit: recentLimit),
+            more: positivePrefix(Array(recent.dropFirst(max(0, recentLimit))), limit: moreLimit)
+        )
+    }
+
+    nonisolated static func rankAndDeduplicate(
+        _ entries: [AgentDockSessionEntry]
+    ) -> [AgentDockSessionEntry] {
+        var newestBySessionID: [AgentSession.ID: AgentDockSessionEntry] = [:]
+        for entry in entries {
+            guard let existing = newestBySessionID[entry.sessionID] else {
+                newestBySessionID[entry.sessionID] = entry
+                continue
+            }
+            if entry.lastActivityAt > existing.lastActivityAt {
+                newestBySessionID[entry.sessionID] = entry
+            }
+        }
+        return newestBySessionID.values.sorted { lhs, rhs in
+            if lhs.lastActivityAt != rhs.lastActivityAt {
+                return lhs.lastActivityAt > rhs.lastActivityAt
+            }
+            return lhs.sessionID.uuidString < rhs.sessionID.uuidString
+        }
+    }
+
+    nonisolated private static func positivePrefix(
+        _ entries: [AgentDockSessionEntry],
+        limit: Int
+    ) -> [AgentDockSessionEntry] {
+        guard limit > 0 else { return [] }
+        return Array(entries.prefix(limit))
+    }
+}
+
 enum AgentDockReopenGesture {
     /// Matches the system double-click threshold closely enough without
     /// reading the user's mouse preferences on every Dock click. Anything
     /// slower is two separate "bring the app forward" clicks.
-    static let doubleClickInterval: TimeInterval = 0.6
+    nonisolated static let doubleClickInterval: TimeInterval = 0.6
 
     /// Two Dock clicks inside the window count as a double-click. The first
     /// click keeps its normal meaning (activate / restore windows); only the
@@ -59,28 +138,78 @@ final class AgentDockAttentionController: NSObject {
         return true
     }
 
-    /// The Dock icon's right-click menu. Nil when nothing is waiting, so the
-    /// menu stays empty instead of showing a dead header.
+    /// Native Dock menu sections mirror the task-oriented structure used by
+    /// Codex: sessions needing attention first, then recent chats and a
+    /// bounded More submenu. macOS appends its own Options / Show All Windows
+    /// / Hide / Quit items below this custom menu.
     func makeDockMenu() -> NSMenu? {
-        let entries = AgentDockBadgeCoordinator.shared.allPendingEntries
-        guard !entries.isEmpty else { return nil }
+        let snapshot = Self.menuSnapshot()
+        guard !snapshot.isEmpty else { return nil }
 
         let menu = NSMenu()
-        let header = NSMenuItem(title: L10n.Dock.pendingApprovalHeader, action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        menu.addItem(header)
-        for entry in entries.prefix(AgentSessionApprovalBadgeLogic.dockMenuLimit) {
-            let item = NSMenuItem(
-                title: Self.menuTitle(for: entry),
-                action: #selector(selectPendingSession(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.representedObject = entry.sessionID
-            item.indentationLevel = 1
-            menu.addItem(item)
+        if !snapshot.attention.isEmpty {
+            addHeader(L10n.Dock.pendingApprovalHeader, to: menu)
+            snapshot.attention.forEach { addSessionItem($0, to: menu) }
+        }
+        if !snapshot.recent.isEmpty {
+            if !menu.items.isEmpty {
+                menu.addItem(.separator())
+            }
+            addHeader(L10n.Dock.recentHeader, to: menu)
+            snapshot.recent.forEach { addSessionItem($0, to: menu) }
+        }
+        if !snapshot.more.isEmpty {
+            let moreMenu = NSMenu()
+            snapshot.more.forEach { addSessionItem($0, to: moreMenu) }
+            let moreItem = NSMenuItem(title: L10n.Dock.more, action: nil, keyEquivalent: "")
+            moreItem.submenu = moreMenu
+            menu.addItem(moreItem)
         }
         return menu
+    }
+
+    private static func menuSnapshot() -> AgentDockMenuSnapshot {
+        var recentEntries: [AgentDockSessionEntry] = []
+        for appState in EditorAppStateRegistry.shared.appStatesForTerminationCheck {
+            let items = AgentRecentSessionEdgeRailLogic.recentItems(
+                from: appState.agentSessions,
+                hiddenWorkspaceKeys: appState.hiddenWorkspaceKeys,
+                limit: .max,
+                projects: appState.agentProjects,
+                isMetadataOnly: appState.agentSessionIsMetadataOnly,
+                metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
+            )
+            recentEntries.append(contentsOf: items.map { item in
+                let session = appState.agentRuntimes[item.session.id]?.session ?? item.session
+                return AgentDockSessionEntry(
+                    sessionID: session.id,
+                    title: session.title,
+                    lastActivityAt: session.lastActivityAt
+                )
+            })
+        }
+        return AgentDockMenuLogic.snapshot(
+            recentEntries: recentEntries,
+            pendingEntries: AgentDockBadgeCoordinator.shared.allPendingEntries,
+            unreadSessionIDs: AgentSessionUnreadStore.load()
+        )
+    }
+
+    private func addHeader(_ title: String, to menu: NSMenu) {
+        let header = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+    }
+
+    private func addSessionItem(_ entry: AgentDockSessionEntry, to menu: NSMenu) {
+        let item = NSMenuItem(
+            title: Self.menuTitle(for: entry),
+            action: #selector(selectSession(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        item.representedObject = entry.sessionID
+        menu.addItem(item)
     }
 
     /// Dock menus are narrow and unscrollable; a long session title would
@@ -91,12 +220,29 @@ final class AgentDockAttentionController: NSObject {
     ) -> String {
         let trimmed = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = trimmed.isEmpty ? L10n.Sidebar.sessionRowWaitingApproval : trimmed
+        return truncatedMenuTitle(title, maximumLength: maximumLength)
+    }
+
+    nonisolated static func menuTitle(
+        for entry: AgentDockSessionEntry,
+        maximumLength: Int = 44
+    ) -> String {
+        let trimmed = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = trimmed.isEmpty ? L10n.Sidebar.defaultSessionTitle : trimmed
+        return truncatedMenuTitle(title, maximumLength: maximumLength)
+    }
+
+    nonisolated private static func truncatedMenuTitle(
+        _ title: String,
+        maximumLength: Int
+    ) -> String {
         guard title.count > maximumLength else { return title }
         return title.prefix(maximumLength - 1).trimmingCharacters(in: .whitespaces) + "…"
     }
 
-    @objc private func selectPendingSession(_ sender: NSMenuItem) {
+    @objc private func selectSession(_ sender: NSMenuItem) {
         guard let sessionID = sender.representedObject as? UUID else { return }
+        AgentSessionUnreadStore.setUnread(sessionID, unread: false)
         AgentNotificationResponder.reveal(runtimeID: sessionID)
     }
 }

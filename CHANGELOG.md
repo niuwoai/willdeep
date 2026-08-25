@@ -1,7 +1,42 @@
 # Changelog
 
-> 当前文件保留最新版本（1.289.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.289.0-rc8 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.289.0-rc8 - 2026-08-25
+
+### Fixed
+
+- **左侧“等你确认”从绿色警报块收回到黑白灰辅助层级。** 去掉整块浅绿底、高饱和绿标题、绿色数量和绿色圆点；改为动态中性灰容器与细描边，标题/数量使用次级灰，用户输入保持主黑，圆点缩小且降权。会话行内“等你确认”胶囊同步改为轻灰，等待态不再和成功态抢同一种颜色。
+- 附件协议清洗不再只匹配 WillDeep 自己那一整句固定标点，也识别其他宿主以 `The user attached the following…` 开头的变体。存在可信用户边界时只显示边界后的原文；没有边界时回退到本地化等待文案，不再泄漏英文系统提示。
+
+### Tests
+
+- [AgentPendingApprovalQuickJumpTests](XeditTests/AgentPendingApprovalQuickJumpTests.swift) 新增跨宿主附件前导的 2 条回归：无用户边界时必须隐藏协议文本，有边界时必须只保留用户原文。
+
+## 1.289.0-rc7 - 2026-08-25
+
+### Fixed
+
+- **“等你确认”和桌面宠物不再泄漏附件协议头。** 两处此前直接显示自动会话标题，而标题又从原始 `content` 截前 40 字；带文件、图片或 skill 的回合会把给模型看的 `The user attached the following context…` 安全前导拼进 `content`，于是协议文字一路漏到左下角待确认条目、Dock 待处理菜单和宠物气泡副标题。
+- 新增统一的“用户真实输入”摘要入口：先剥离附件安全前导与边界标记，再剥离图片理解生成块，最后压成单行。待确认条目固定显示当前回合最新的用户输入；宠物气泡副标题固定显示对应会话最新的用户输入；没有文字、只有附件时使用既有本地化空态，不再拿协议文本或附件标签凑数。
+- 会话标题生成与 AI 标题摘要的输入也改走同一净化口径。新会话不会再把协议头存成标题；已落盘旧会话无需迁移，待确认条目与宠物展示时会直接从消息正文重新提取，因此立即生效。
+
+### Tests
+
+- [AgentSessionStoreTests](XeditTests/AgentSessionStoreTests.swift)、[AgentPendingApprovalQuickJumpTests](XeditTests/AgentPendingApprovalQuickJumpTests.swift) 与 [DesktopPetTests](XeditTests/DesktopPetTests.swift) 新增 3 条针对性回归：自动标题、待确认条目、宠物标签均只保留边界后的用户文字，并明确断言不含英文协议头或 `### File:` / `### Skill:`。三组共 86 例通过。
+
+## 1.289.0-rc6 - 2026-08-25
+
+### Added
+
+- **Dock 图标右键终于像一个任务入口，不再只在“有人等审批”时露一下脸。** 对照 Codex 的原生菜单结构，WillDeep 现在按「待你处理 → 最近 → 更多」组织会话：待审批与手动未读合并展示，最近 3 条直接可点，其余放进最多 20 条的子菜单；macOS 自带的「选项 / 显示所有窗口 / 隐藏 / 退出」继续原生追加在后面。
+- 最近会话复用侧栏既有筛选：归档会话、隐藏工作区、没有真实用户消息的空占位不会混进 Dock。多个窗口持有同一会话时按 ID 去重，时间相同时再按 ID 稳定排序，避免菜单每次打开都换座位。
+- 从 Dock 选择会话会激活 WillDeep、定位到对应聊天，并清除手动未读标记；侧栏通过同一份未读存储的变更通知即时刷新，不再出现 Dock 已读、侧栏还挂蓝点的“两本账”。
+
+### Tests
+
+- [AgentPendingApprovalQuickJumpTests](XeditTests/AgentPendingApprovalQuickJumpTests.swift) 新增 3 例：待处理 / 最近 / 更多的分段和重复展示符合 Codex 的信息结构、跨窗口同会话保留最新副本、所有分段上限为 0 时安全返回空菜单快照。
 
 ## 1.289.0-rc5 - 2026-08-25
 

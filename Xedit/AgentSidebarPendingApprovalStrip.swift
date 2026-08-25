@@ -17,7 +17,7 @@ struct AgentSidebarPendingApprovalStrip: View {
     var body: some View {
         let entries = coordinator.pendingEntries(for: appState)
         if !entries.isEmpty {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: AgentSidebarPendingApprovalStyle.contentSpacing) {
                 header(total: entries.count)
                 ForEach(entries.prefix(AgentSessionApprovalBadgeLogic.quickJumpLimit)) { entry in
                     AgentSidebarPendingApprovalRow(entry: entry) {
@@ -25,11 +25,18 @@ struct AgentSidebarPendingApprovalStrip: View {
                     }
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.horizontal, AgentSidebarPendingApprovalStyle.horizontalPadding)
+            .padding(.vertical, AgentSidebarPendingApprovalStyle.verticalPadding)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.green.opacity(0.11))
+                AgentSidebarPendingApprovalStyle.containerShape
+                    .fill(AgentSidebarPendingApprovalStyle.containerFill)
+            )
+            .overlay(
+                AgentSidebarPendingApprovalStyle.containerShape
+                    .stroke(
+                        AgentSidebarPendingApprovalStyle.containerStroke,
+                        lineWidth: AgentSidebarPendingApprovalStyle.containerStrokeWidth
+                    )
             )
             .padding(.bottom, 6)
         }
@@ -37,17 +44,57 @@ struct AgentSidebarPendingApprovalStrip: View {
 
     private func header(total: Int) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: "hand.raised.fill")
-                .font(.system(size: 9, weight: .semibold))
+            Image(systemName: "hand.raised")
+                .font(.system(size: 9, weight: .medium))
             Text(L10n.Sidebar.pendingApprovalHeader)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10, weight: .medium))
             Spacer(minLength: 0)
             Text("\(total)")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10, weight: .regular))
                 .monospacedDigit()
         }
-        .foregroundStyle(Color.green)
+        .foregroundStyle(AgentSidebarPendingApprovalStyle.headerForeground)
         .padding(.horizontal, 2)
+    }
+}
+
+/// Waiting is an informational state, not success or danger. Keep this strip
+/// monochrome so it sits behind the user's actual words instead of reading as
+/// a large status alert. The dynamic system colors preserve the same grayscale
+/// hierarchy in light and dark appearances.
+private enum AgentSidebarPendingApprovalStyle {
+    static let contentSpacing: CGFloat = 3
+    static let horizontalPadding: CGFloat = 8
+    static let verticalPadding: CGFloat = 7
+    static let containerCornerRadius: CGFloat = 9
+    static let containerStrokeWidth: CGFloat = 0.5
+
+    static var containerShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: containerCornerRadius, style: .continuous)
+    }
+
+    static var containerFill: Color {
+        Color(nsColor: .controlBackgroundColor).opacity(0.66)
+    }
+
+    static var containerStroke: Color {
+        Color.primary.opacity(0.08)
+    }
+
+    static var headerForeground: Color {
+        Color.secondary.opacity(0.82)
+    }
+
+    static var rowForeground: Color {
+        Color.primary.opacity(0.88)
+    }
+
+    static var markerForeground: Color {
+        Color.secondary.opacity(0.68)
+    }
+
+    static var hoverFill: Color {
+        Color.primary.opacity(0.055)
     }
 }
 
@@ -55,18 +102,17 @@ private struct AgentSidebarPendingApprovalRow: View {
     let entry: AgentPendingApprovalEntry
     let onSelect: () -> Void
 
-    @EnvironmentObject private var appState: AppState
     @State private var isHovered = false
 
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 6) {
                 Circle()
-                    .fill(Color.green)
-                    .frame(width: 5, height: 5)
+                    .fill(AgentSidebarPendingApprovalStyle.markerForeground)
+                    .frame(width: 4, height: 4)
                 Text(displayTitle)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundStyle(AgentSidebarPendingApprovalStyle.rowForeground)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 0)
@@ -80,7 +126,7 @@ private struct AgentSidebarPendingApprovalRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(isHovered ? appState.editorSettings.interfaceSkin.palette.hoverFill : .clear)
+                    .fill(isHovered ? AgentSidebarPendingApprovalStyle.hoverFill : .clear)
             )
             .contentShape(RoundedRectangle(cornerRadius: 6))
         }

@@ -686,7 +686,9 @@ nonisolated enum L10n {
     }
 
     enum Dock {
-        static let pendingApprovalHeader = String(localized: "dock.pending-approval.header", defaultValue: "Waiting for you")
+        static let pendingApprovalHeader = String(localized: "dock.pending-approval.header", defaultValue: "Needs Attention")
+        static let recentHeader = String(localized: "dock.recent.header", defaultValue: "Recent")
+        static let more = String(localized: "dock.more", defaultValue: "More")
     }
 
     enum EditorStatusBar {

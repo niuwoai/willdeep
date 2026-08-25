@@ -109,7 +109,9 @@ enum AgentSessionApprovalBadgeLogic {
             entries.append(
                 AgentPendingApprovalEntry(
                     sessionID: session.id,
-                    title: session.title,
+                    title: AgentUserInputPreview.latest(
+                        in: runtime?.messages ?? session.messages
+                    ) ?? "",
                     waitingSince: runtime?.turnStartedAt ?? session.updatedAt
                 )
             )
@@ -229,7 +231,9 @@ final class AgentDockBadgeCoordinator: ObservableObject {
                     blocked.append(
                         AgentPendingApprovalEntry(
                             sessionID: session.id,
-                            title: session.title,
+                            title: AgentUserInputPreview.latest(
+                                in: runtime?.messages ?? session.messages
+                            ) ?? "",
                             waitingSince: runtime?.turnStartedAt ?? session.updatedAt
                         )
                     )
@@ -347,14 +351,18 @@ private struct Badge: View {
             .font(AgentDesign.chatSupportingFont(
                 baseFontSize: baseFontSize,
                 visualMinimum: 10,
-                weight: .semibold
+                weight: .medium
             ))
-            .foregroundStyle(Color.green)
+            .foregroundStyle(Color.secondary.opacity(0.86))
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background(Color.green.opacity(0.14), in: Capsule())
+            .background(Color.primary.opacity(0.05), in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.primary.opacity(0.075), lineWidth: 0.5)
+            )
             .help(L10n.Sidebar.sessionRowWaitingApprovalTooltip)
             .accessibilityLabel(Text(L10n.Sidebar.sessionRowWaitingApprovalTooltip))
     }

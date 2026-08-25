@@ -223,6 +223,10 @@ enum DesktopPetMessageFormatter {
         guard compact.count > maximumCharacters else { return compact }
         return String(compact.prefix(maximumCharacters)) + "…"
     }
+
+    static func userInputLabel(for messages: [AgentMessage]) -> String {
+        AgentUserInputPreview.latest(in: messages) ?? L10n.DesktopPet.emptySessionTitle
+    }
 }
 
 enum DesktopPetOutputFreshness {
@@ -701,7 +705,9 @@ final class DesktopPetWindowManager: ObservableObject {
 
         let next = DesktopPetPresentation(
             sessionID: latestPreview?.sessionID ?? runtime?.id,
-            sessionTitle: latestPreview?.sessionTitle ?? runtime?.session.title ?? L10n.DesktopPet.emptySessionTitle,
+            sessionTitle: latestPreview?.sessionTitle
+                ?? runtime.map { DesktopPetMessageFormatter.userInputLabel(for: $0.messages) }
+                ?? L10n.DesktopPet.emptySessionTitle,
             message: latestPreview?.message ?? L10n.DesktopPet.emptyMessage,
             messagePreviews: visiblePreviews,
             outputSessionCount: outputPreviews.count,
@@ -806,7 +812,7 @@ final class DesktopPetWindowManager: ObservableObject {
             guard !preview.isEmpty else { continue }
             return DesktopPetMessagePreview(
                 sessionID: session.id,
-                sessionTitle: session.title,
+                sessionTitle: DesktopPetMessageFormatter.userInputLabel(for: messages),
                 message: preview,
                 updatedAt: message.createdAt
             )

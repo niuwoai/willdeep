@@ -296,6 +296,26 @@ struct AgentSessionStoreTests {
         #expect(!title.contains("\n"))
     }
 
+    @Test
+    func deriveTitleUsesOnlyUserTextFromAnAttachedPrompt() {
+        let prompt = [
+            AgentAttachedPromptProtocol.preludeHeader,
+            "",
+            "### File: crash.png",
+            "host generated attachment body",
+            "",
+            AgentAttachedPromptProtocol.userTextBoundary,
+            "帮我修掉这个泄漏",
+        ].joined(separator: "\n")
+
+        let title = AgentSessionStore.deriveTitle(from: [
+            AgentMessage(role: .user, content: prompt)
+        ])
+
+        #expect(title == "帮我修掉这个泄漏")
+        #expect(!title.contains("The user attached"))
+    }
+
     // MARK: - Decode tolerance (mirrors loadAll's "skip-corrupt" intent)
 
     /// Round-trip a session through the same encoder/decoder pair the

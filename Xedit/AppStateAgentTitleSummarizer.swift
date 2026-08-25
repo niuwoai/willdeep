@@ -51,7 +51,7 @@ extension AppState {
         // runtime's messages (not session.messages — runtime is the
         // live source of truth during a turn).
         let messages = runtime.messages
-        guard messages.contains(where: { $0.role == .user && !$0.content.isEmpty }) else { return }
+        guard messages.contains(where: { !$0.userAuthoredText.isEmpty }) else { return }
         guard let lastAssistant = messages.last(where: { $0.role == .assistant }) else { return }
         let assistantText = lastAssistant.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !assistantText.isEmpty else { return }
@@ -79,7 +79,7 @@ extension AppState {
         // the title call stays cheap even if the conversation runs
         // long later (defensive — we only fire on turn 1, but if the
         // gate logic ever loosens, this keeps the prompt tight).
-        let firstUser = messages.first(where: { $0.role == .user })?.content ?? ""
+        let firstUser = messages.first(where: \.isOperatorInput)?.userAuthoredText ?? ""
         let firstAssistant = assistantText
 
         let runtimeID = runtime.id
@@ -149,10 +149,10 @@ extension AppState {
         }
 
         let messages = runtime.messages.filter { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        guard let latestUserIndex = messages.lastIndex(where: { $0.role == .user }) else {
+        guard let latestUserIndex = messages.lastIndex(where: \.isOperatorInput) else {
             return AgentSessionTitleSuggestionSnapshot(currentTitle: currentTitle, suggestedTitle: nil, modelID: modelID)
         }
-        let latestUser = messages[latestUserIndex].content
+        let latestUser = messages[latestUserIndex].userAuthoredText
         let nearbyAssistant = messages[..<latestUserIndex]
             .last(where: { $0.role == .assistant })?
             .content ?? messages.last(where: { $0.role == .assistant })?.content ?? ""
