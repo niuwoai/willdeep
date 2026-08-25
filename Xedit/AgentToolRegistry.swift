@@ -132,7 +132,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "terminal_list_shortcuts",
-            description: "List saved visible Agent Terminal recording shortcuts and their editable event structure. Read-only. Protected echo-off/password input is never exposed; it is shown only as a protected event with metadata.",
+            description: "List saved visible Agent Terminal recording shortcuts and their editable event structure. Read-only. Protected echo-off/password input is never exposed; it is shown only as a protected event with metadata. Saved recordings are user-run only: never attempt to run or replay one for the user, and ask the user to press Run in the visible Terminal panel when playback is needed.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "shortcut_id", type: .string, description: "Optional shortcut UUID to inspect. Omit to list all terminal shortcuts.", required: false),

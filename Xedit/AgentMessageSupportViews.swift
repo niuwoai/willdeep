@@ -539,7 +539,6 @@ struct AgentMessageFooter: View {
     var baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
 
     @State private var didJustCopy = false
-    @Environment(\.agentChatFontID) private var agentChatFontID
     @Environment(\.agentChatLineHeightMultiple) private var agentChatLineHeightMultiple
 
     var body: some View {
@@ -581,11 +580,11 @@ struct AgentMessageFooter: View {
     }
 
     private var footerIconFont: Font {
-        .system(size: 19, weight: .semibold)
+        .system(size: 13, weight: .semibold)
     }
 
     private var copyIconFont: Font {
-        .system(size: 14, weight: .regular)
+        .system(size: 13, weight: .regular)
     }
 
     private var footerTextFont: Font {
@@ -593,13 +592,13 @@ struct AgentMessageFooter: View {
     }
 
     private var metadataFont: Font {
-        let choice = AgentChatFontChoice.byID(agentChatFontID) ?? .system
-        return choice.swiftUIFont(size: baseFontSize)
+        AgentDesign.chatSupportingFont(baseFontSize: baseFontSize, weight: .medium)
     }
 
     private var metadataLineSpacing: CGFloat {
-        AgentChatTypography.lineSpacing(
-            fontSize: baseFontSize,
+        let fontSize = AgentDesign.chatSupportingFontSize(baseFontSize: baseFontSize)
+        return AgentChatTypography.lineSpacing(
+            fontSize: fontSize,
             lineHeightMultiple: agentChatLineHeightMultiple
         )
     }

@@ -308,6 +308,14 @@ extension AgentChatHistoryRenderer {
             guard value != nil else { return }
             attributed.addAttribute(.paragraphStyle, value: headingStyle, range: subrange)
         }
+        attributed.enumerateAttribute(.agentChatHistoryListDepth, in: range, options: []) { value, subrange, _ in
+            guard let depth = (value as? NSNumber)?.intValue else { return }
+            attributed.addAttribute(
+                .paragraphStyle,
+                value: listParagraphStyle(from: paragraphStyle, depth: depth),
+                range: subrange
+            )
+        }
         guard let foregroundColor else { return }
         attributed.enumerateAttributes(in: range, options: []) { attributes, subrange, _ in
             if attributes[.link] == nil {
@@ -358,6 +366,14 @@ extension AgentChatHistoryRenderer {
             guard value != nil else { return }
             attributed.addAttribute(.paragraphStyle, value: headingStyle, range: subrange)
         }
+        attributed.enumerateAttribute(.agentChatHistoryListDepth, in: range, options: []) { value, subrange, _ in
+            guard let depth = (value as? NSNumber)?.intValue else { return }
+            attributed.addAttribute(
+                .paragraphStyle,
+                value: listParagraphStyle(from: paragraphStyle, depth: depth),
+                range: subrange
+            )
+        }
     }
 
     static func appendToolCallGroup(
@@ -383,7 +399,7 @@ extension AgentChatHistoryRenderer {
         for (index, item) in displayItems.enumerated() {
             if index > 0 {
                 result.append(NSAttributedString(
-                    string: " · ",
+                    string: "\n",
                     attributes: [
                         .font: bodyFont,
                         .foregroundColor: secondaryColor,
@@ -716,7 +732,7 @@ extension AgentChatHistoryRenderer {
         lineSpacing: CGFloat = MarkdownSpacing.bodyLine,
         to result: NSMutableAttributedString
     ) {
-        let metadataFont = bodyFont ?? NSFont.systemFont(ofSize: baseFontSize)
+        let metadataFont = bodyFont ?? AgentChatHistoryFooterChrome.footerFont(baseFontSize: baseFontSize)
         let start = result.length
         // Keep the complete footer in the attributed string so its height is
         // reserved at rest. User metadata and actions are made transparent
@@ -1020,6 +1036,20 @@ extension AgentChatHistoryRenderer {
         return style
     }
 
+    private static func listParagraphStyle(
+        from baseStyle: NSParagraphStyle,
+        depth: Int
+    ) -> NSParagraphStyle {
+        let style = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        let nesting = CGFloat(min(max(depth, 0), 4))
+            * AgentChatHistoryLayoutMetrics.listNestingIndent
+        let leading = baseStyle.firstLineHeadIndent + nesting
+        style.firstLineHeadIndent = leading
+        style.headIndent = leading + AgentChatHistoryLayoutMetrics.listHangingIndent
+        style.paragraphSpacing = AgentChatHistoryLayoutMetrics.listParagraphSpacing
+        return style
+    }
+
     private static func toolSummaryParagraphStyle(lineSpacing: CGFloat) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.alignment = .left
@@ -1036,11 +1066,11 @@ extension AgentChatHistoryRenderer {
         style.alignment = .left
         style.lineSpacing = lineSpacing
         style.paragraphSpacingBefore = 0
-        style.paragraphSpacing = 0
-        style.lineBreakMode = .byTruncatingTail
-        // Keep the compact activity summary on the same content column as
-        // the assistant prose above it. A bespoke 22 pt inset used to place
-        // this label 10 pt left of the 32 pt assistant body edge.
+        style.paragraphSpacing = 3
+        style.lineBreakMode = .byWordWrapping
+        // Activity is a compact vertical checklist on the same content column
+        // as the answer. One semantic operation per row is far easier to scan
+        // than a single long, truncated sentence separated by middle dots.
         style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
         style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
         style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset

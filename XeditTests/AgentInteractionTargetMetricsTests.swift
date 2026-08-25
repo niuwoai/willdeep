@@ -135,4 +135,37 @@ struct AgentInteractionTargetMetricsTests {
         #expect(source.contains("AgentImagePreviewWindowRegistry.shared.open(image: image)"))
         #expect(source.contains(".accessibilityLabel(L10n.ImagePreview.openButton)"))
     }
+
+    @Test("patch review actions stay monochrome and align with assistant prose")
+    func patchReviewActionsUseMonochromeHierarchyAndTranscriptInsets() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let panelCardsSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Xedit/AgentPanelCards.swift"
+            ),
+            encoding: .utf8
+        )
+        let transcriptSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Xedit/AgentChatTranscript.swift"
+            ),
+            encoding: .utf8
+        )
+
+        #expect(panelCardsSource.contains("AgentApprovalPrimaryButtonStyle("))
+        #expect(panelCardsSource.contains("AgentApprovalSecondaryButtonStyle("))
+        #expect(!panelCardsSource.contains("Color.accentColor"))
+        #expect(panelCardsSource.contains(".symbolRenderingMode(.monochrome)"))
+        #expect(transcriptSource.contains(
+            "AgentPatchProposalList(\n                        proposals: appState.agentPatchProposals"
+        ))
+        #expect(transcriptSource.contains(
+            ".padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)"
+        ))
+        #expect(transcriptSource.contains(
+            ".padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)"
+        ))
+    }
 }

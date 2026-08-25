@@ -14,9 +14,25 @@ struct AgentSidebarAccountFooterTests {
         #expect(AgentSidebarAccountMetrics.menuWidth == 344)
         #expect(AgentSidebarAccountMetrics.menuHeaderHeight == 34)
         #expect(AgentSidebarAccountMetrics.menuRowHeight == 34)
-        #expect(AgentSidebarAccountMetrics.accountBaseFillOpacity == 0.68)
-        #expect(AgentSidebarAccountMetrics.accountSkinTintOpacity == 0.055)
-        #expect(AgentSidebarAccountMetrics.accountDepthOpacity == 0.035)
+    }
+
+    @Test("account row has no permanent background fill")
+    func accountRowHasNoPermanentBackgroundFill() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURL = repositoryRoot
+            .appendingPathComponent("Xedit", isDirectory: true)
+            .appendingPathComponent("AgentSidebarAccountFooter.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let background = try #require(source.range(of: "private var accountControlBackground"))
+        let interactionFill = try #require(source.range(of: "private var accountInteractionFill"))
+        let backgroundSource = source[background.lowerBound..<interactionFill.lowerBound]
+
+        #expect(backgroundSource.contains(".fill(accountInteractionFill)"))
+        #expect(!backgroundSource.contains("palette.controlFill"))
+        #expect(!backgroundSource.contains("palette.accent"))
+        #expect(!backgroundSource.contains("palette.primaryText"))
     }
 
     @Test("help link uses a localized some.im WillDeep page")

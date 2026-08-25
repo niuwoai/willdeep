@@ -510,6 +510,9 @@ struct AgentChatTranscript: View {
                         proposals: appState.agentPatchProposals,
                         maxContentWidth: AgentDesign.chatMaxContentWidth
                     )
+                    .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
+                    .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)
+                    .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
 
                     // Only show the worktree-change card once the Agent has
                     // actually applied a patch in this session — otherwise a

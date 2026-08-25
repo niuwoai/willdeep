@@ -120,6 +120,10 @@ struct AgentChatHistoryRendererGoalTests {
         let view = AgentChatHistoryNSTextView()
         view.drawsBackground = true
         view.backgroundColor = .white
+        view.linkTextAttributes = [
+            .underlineStyle: 0,
+            .cursor: NSCursor.arrow,
+        ]
         view.textContainerInset = NSSize(width: 32, height: 24)
         view.frame = NSRect(x: 0, y: 0, width: 773, height: 578)
         view.textContainer?.size = NSSize(width: 709, height: CGFloat.greatestFiniteMagnitude)
@@ -568,8 +572,8 @@ struct AgentChatHistoryRendererGoalTests {
             location: firstRange.location,
             length: NSMaxRange(lastRange) - firstRange.location
         ))
-        #expect(summaryLine.components(separatedBy: " · ").count == expectedRows.count)
-        #expect(!summaryLine.contains("\n"))
+        #expect(!summaryLine.contains(" · "))
+        #expect(summaryLine.components(separatedBy: "\n").count == expectedRows.count)
         let summaryCharacterRange = NSRange(
             location: firstRange.location,
             length: NSMaxRange(lastRange) - firstRange.location
@@ -583,7 +587,7 @@ struct AgentChatHistoryRendererGoalTests {
             _, _, _, _, _ in
             summaryLineFragmentCount += 1
         }
-        #expect(summaryLineFragmentCount == 1)
+        #expect(summaryLineFragmentCount == expectedRows.count)
 
         let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -913,8 +917,10 @@ struct AgentChatHistoryRendererGoalTests {
             at: bodyRange.location,
             effectiveRange: nil
         ) as? NSFont)
-        #expect(processedFont.pointSize == bodyFont.pointSize)
-        #expect(processedFont.fontDescriptor == bodyFont.fontDescriptor)
+        #expect(processedFont.pointSize == AgentDesign.chatSupportingFontSize(
+            baseFontSize: bodyFont.pointSize
+        ))
+        #expect(processedFont.pointSize < bodyFont.pointSize)
         let dividerRange = NSRange(location: NSMaxRange(processedRange) + 1, length: 1)
 
         let processedGlyphRange = layoutManager.glyphRange(

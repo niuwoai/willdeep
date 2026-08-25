@@ -7,6 +7,40 @@
 
 import Foundation
 
+/// Host-side boundary for Agent-driven terminal automation.
+///
+/// Saved recordings deliberately have no runnable Agent tool. Playback may
+/// contain protected input and can represent a long sequence of side effects,
+/// so only the human-facing play button may start it. Ordinary audited
+/// terminal primitives remain automatable, but their panel must be visible
+/// while they mutate terminal state.
+nonisolated enum AgentTerminalAutomationPolicy {
+    private static let visibleMutationToolNames: Set<String> = [
+        "terminal_send_command",
+        "terminal_send_control",
+        "terminal_select_tab",
+        "terminal_create_shortcut",
+        "terminal_edit_shortcut",
+    ]
+
+    private static let forbiddenShortcutReplayToolNames: Set<String> = [
+        "terminal_play_shortcut",
+        "terminal_replay_shortcut",
+        "terminal_run_shortcut",
+    ]
+
+    static let userOnlyShortcutPlaybackRule =
+        "Never run or replay a saved Terminal recording shortcut for the user. Only the user may start saved shortcut playback from the visible Terminal UI."
+
+    static func requiresVisiblePanel(toolName: String) -> Bool {
+        visibleMutationToolNames.contains(toolName)
+    }
+
+    static func forbidsShortcutReplay(toolName: String) -> Bool {
+        forbiddenShortcutReplayToolNames.contains(toolName)
+    }
+}
+
 enum AgentTerminalTools {
     /// Ordinary visible-terminal commands receive a bounded, best-effort
     /// follow-up screen read. This is long enough for quick shell commands to

@@ -325,6 +325,104 @@ struct AgentApprovalModePolicyTests {
         #expect(blocked == nil)
     }
 
+    @Test("完全访问自动操作可见终端，但不取得录制快捷回放权")
+    @MainActor
+    func fullAccessAutomatesTerminalPrimitivesNotRecordedShortcutPlayback() async {
+        let appState = AppState()
+        let workspace = URL(fileURLWithPath: "/tmp/willdeep-full-access-terminal")
+        let calls: [(String, [String: AgentJSONValue])] = [
+            ("terminal_send_command", ["command": .string("pwd")]),
+            ("terminal_send_control", ["control": .string("ctrl_c")]),
+            ("terminal_select_tab", ["terminal_tab_id": .string(UUID().uuidString)]),
+            ("terminal_create_shortcut", ["title": .string("检查"), "events_json": .string("[]")]),
+            ("terminal_edit_shortcut", ["shortcut_id": .string(UUID().uuidString)]),
+        ]
+
+        for (toolName, arguments) in calls {
+            let source = await appState.autoApprovalSource(
+                toolName: toolName,
+                arguments: arguments,
+                risk: .write,
+                rootDirectory: workspace,
+                approvalMode: .fullAccess
+            )
+            #expect(source == .fullAccess, "完全访问应自动放行终端原语：\(toolName)")
+        }
+
+        for forbiddenName in [
+            "terminal_play_shortcut",
+            "terminal_replay_shortcut",
+            "terminal_run_shortcut",
+        ] {
+            let source = await appState.autoApprovalSource(
+                toolName: forbiddenName,
+                arguments: ["shortcut_id": .string(UUID().uuidString)],
+                risk: .write,
+                rootDirectory: workspace,
+                approvalMode: .fullAccess
+            )
+            #expect(source == nil)
+        }
+    }
+
+    @Test("终端变更工具执行前先把当前会话终端面板调到可见")
+    @MainActor
+    func terminalMutationRevealsVisiblePanelBeforeDispatch() throws {
+        let appState = AppState()
+        let session = appState.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(appState.agentRuntimes[session.id])
+
+        runtime.sidePanelState.kind = .files
+        #expect(
+            !appState.revealTerminalPanelForToolExecution(
+                toolName: "terminal_snapshot",
+                runtime: runtime
+            )
+        )
+        #expect(runtime.sidePanelState.kind == .files)
+
+        let now = Date(timeIntervalSince1970: 1_777_777_777)
+        #expect(
+            appState.revealTerminalPanelForToolExecution(
+                toolName: "terminal_send_command",
+                runtime: runtime,
+                now: now
+            )
+        )
+        #expect(runtime.sidePanelState.kind == .terminal)
+        #expect(runtime.sidePanelState.lastViewedAt == now)
+        #expect(appState.agentSidePanelKind == .terminal)
+        #expect(appState.agentSidePanelRequest?.kind == .terminal)
+    }
+
+    @Test("后台会话操作终端时也把共享终端面板调到当前界面")
+    @MainActor
+    func backgroundTerminalMutationStillRevealsSharedPanel() throws {
+        let appState = AppState()
+        let backgroundSession = appState.startNewAgentSession()
+        let visibleSession = appState.startNewAgentSession()
+        defer {
+            AgentSessionStore.delete(id: backgroundSession.id)
+            AgentSessionStore.delete(id: visibleSession.id)
+        }
+        let backgroundRuntime = try #require(appState.agentRuntimes[backgroundSession.id])
+        let visibleRuntime = try #require(appState.agentRuntimes[visibleSession.id])
+        backgroundRuntime.sidePanelState.kind = .files
+        visibleRuntime.sidePanelState.kind = .files
+
+        #expect(
+            appState.revealTerminalPanelForToolExecution(
+                toolName: "terminal_send_control",
+                runtime: backgroundRuntime
+            )
+        )
+        #expect(appState.activeAgentSessionID == visibleSession.id)
+        #expect(backgroundRuntime.sidePanelState.kind == .terminal)
+        #expect(visibleRuntime.sidePanelState.kind == .terminal)
+        #expect(appState.agentSidePanelRequest?.kind == .terminal)
+    }
+
     /// 分段判定：条件分支里的任何一支恶意都算，`||` 后面那支不会因为前面
     /// 大概率成功就获得豁免。
     @Test("黑名单按 shell 分段判定，条件分支不豁免")

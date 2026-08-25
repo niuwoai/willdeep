@@ -351,21 +351,25 @@ enum AgentChatHistoryRenderer {
         // Message prose follows the user's body-size setting. Tool summaries
         // and section labels keep their compact AppKit scale so metadata does
         // not visually compete with the conversation itself.
-        let bodyFont = (AgentChatFontChoice.byID(fontID) ?? .system).nsFont(size: baseFontSize)
+        let fontChoice = AgentChatFontChoice.byID(fontID) ?? .system
+        let bodyFont = fontChoice.nsFont(size: baseFontSize)
         let bodyLineSpacing = AgentChatTypography.lineSpacing(
             fontSize: baseFontSize,
             lineHeightMultiple: AgentSettingsStore.clampChatLineHeightMultiple(lineHeightMultiple)
         )
+        let supportingFontSize = AgentDesign.chatSupportingFontSize(baseFontSize: baseFontSize)
+        let supportingFont = fontChoice.nsFont(size: supportingFontSize)
+        let supportingLineSpacing = AgentChatTypography.lineSpacing(
+            fontSize: supportingFontSize,
+            lineHeightMultiple: AgentSettingsStore.clampChatLineHeightMultiple(lineHeightMultiple)
+        )
         let monoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
-        let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: supportingFontSize, weight: .regular)
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        // Follows the user's body typography rather than the compact AppKit
-        // scale used by section labels. The status line ("已处理 · 1m 7s") sits
-        // directly beneath the prose of the turn it closes, with only a hairline
-        // divider between them, so a size or family of its own reads as a
-        // different document rather than as metadata. This is the same rule the
-        // token / managed-route statistics follow.
-        let assistantStatusFont = bodyFont
+        // Status, process commentary, tool activity, and footer statistics are
+        // supporting information. Keeping them two points below the answer body
+        // creates a stable hierarchy without adding color or decorative cards.
+        let assistantStatusFont = supportingFont
         let bodyColor = NSColor.labelColor
         let assistantStatusColor = NSColor.secondaryLabelColor
         let assistantStatusDividerColor = AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(
@@ -468,9 +472,9 @@ enum AgentChatHistoryRenderer {
                     group,
                     isExpanded: expandedToolGroupIDs.contains(group.id),
                     to: result,
-                    bodyFont: bodyFont,
+                    bodyFont: supportingFont,
                     monoFont: chromeMonoFont,
-                    lineSpacing: bodyLineSpacing,
+                    lineSpacing: supportingLineSpacing,
                     secondaryColor: secondaryColor
                 )
                 continue
@@ -572,6 +576,18 @@ enum AgentChatHistoryRenderer {
             let activityHeadline = message.role == .assistant
                 ? AgentActivityHeadlinePresentation.make(from: body)
                 : nil
+            let isInterimAssistantMessage = message.role == .assistant
+                && turnPresentation != nil
+                && turnPresentation?.isLastVisibleMessage(message) == false
+            let messageBodyFont = isInterimAssistantMessage ? supportingFont : bodyFont
+            let messageMonoFont = isInterimAssistantMessage ? chromeMonoFont : monoFont
+            let messageBodyColor = isInterimAssistantMessage ? secondaryColor : bodyColor
+            let messageLineSpacing = isInterimAssistantMessage ? supportingLineSpacing : bodyLineSpacing
+            let messageParagraphStyle = bodyParagraphStyle(
+                for: message.role,
+                layoutWidth: layoutWidth,
+                lineSpacing: messageLineSpacing
+            )
 
             let hasUserTextBubbleContent = message.role == .user
                 && (!message.textAttachments.isEmpty || !body.isEmpty)
@@ -647,7 +663,7 @@ enum AgentChatHistoryRenderer {
                 let bodyStart = result.length
                 if !body.isEmpty {
                     if useMono {
-                        appendPlainBody(body, to: result, font: monoFont, color: bodyColor)
+                        appendPlainBody(body, to: result, font: messageMonoFont, color: messageBodyColor)
                     } else if message.role == .user {
                         appendPlainBody(
                             AgentLongTokenBreaker.inject(into: body),
@@ -659,7 +675,7 @@ enum AgentChatHistoryRenderer {
                         appendActivityHeadline(
                             activityHeadline,
                             to: result,
-                            font: bodyFont,
+                            font: messageBodyFont,
                             color: secondaryColor
                         )
                     } else {
@@ -667,9 +683,9 @@ enum AgentChatHistoryRenderer {
                             body,
                             to: result,
                             role: message.role,
-                            bodyFont: bodyFont,
-                            monoFont: monoFont,
-                            bodyColor: bodyColor,
+                            bodyFont: messageBodyFont,
+                            monoFont: messageMonoFont,
+                            bodyColor: messageBodyColor,
                             secondaryColor: secondaryColor,
                             codeBackgroundColor: codeBackgroundColor,
                             isDark: isDark,
@@ -702,7 +718,7 @@ enum AgentChatHistoryRenderer {
                     kind: bubbleKind(for: message.role),
                     to: result,
                     range: bodyRange,
-                    paragraphStyle: bodyParagraphStyle(for: message.role, layoutWidth: layoutWidth, lineSpacing: bodyLineSpacing),
+                    paragraphStyle: messageParagraphStyle,
                     userMessageID: message.role == .user ? message.id : nil,
                     foregroundColor: nil
                 )
@@ -757,9 +773,9 @@ enum AgentChatHistoryRenderer {
                     inlineGroup,
                     isExpanded: expandedToolGroupIDs.contains(inlineGroup.id),
                     to: result,
-                    bodyFont: bodyFont,
+                    bodyFont: supportingFont,
                     monoFont: chromeMonoFont,
-                    lineSpacing: bodyLineSpacing,
+                    lineSpacing: supportingLineSpacing,
                     secondaryColor: secondaryColor
                 )
             }
@@ -805,8 +821,7 @@ enum AgentChatHistoryRenderer {
                     turnReportToolCount: latestTurnReportToolCount,
                     layoutWidth: layoutWidth,
                     baseFontSize: baseFontSize,
-                    bodyFont: bodyFont,
-                    lineSpacing: bodyLineSpacing,
+                    lineSpacing: supportingLineSpacing,
                     to: result
                 )
                 if hasMessageBubbleContent && inlineToolCalls.isEmpty {
@@ -840,7 +855,7 @@ enum AgentChatHistoryRenderer {
                         value: footerParagraphStyle(
                             for: message.role,
                             layoutWidth: layoutWidth,
-                            lineSpacing: bodyLineSpacing
+                            lineSpacing: supportingLineSpacing
                         ),
                         range: footerRange
                     )
@@ -1262,7 +1277,7 @@ enum AgentChatHistoryRenderer {
                 let headingStart = result.length
                 result.append(inlineMarkdownAttributedString(
                     block.text,
-                    baseFont: headingFont(level: level),
+                    baseFont: headingFont(level: level, baseFont: bodyFont),
                     color: bodyColor
                 ))
                 // Tag the heading range so `applyBubbleChrome` can
@@ -1301,9 +1316,9 @@ enum AgentChatHistoryRenderer {
 
             case .unorderedList:
                 appendBlockSeparator()
-                let indent = String(repeating: "  ", count: min(block.indent, 4))
+                let listStart = result.length
                 result.append(NSAttributedString(
-                    string: "\(indent)\(bulletGlyph(for: block.indent)) ",
+                    string: "\(bulletGlyph(for: block.indent)) ",
                     attributes: [
                         .font: bodyFont,
                         .foregroundColor: secondaryColor,
@@ -1314,12 +1329,17 @@ enum AgentChatHistoryRenderer {
                     baseFont: bodyFont,
                     color: bodyColor
                 ))
+                result.addAttribute(
+                    .agentChatHistoryListDepth,
+                    value: NSNumber(value: block.indent),
+                    range: NSRange(location: listStart, length: result.length - listStart)
+                )
 
             case .orderedList:
                 appendBlockSeparator()
-                let indent = String(repeating: "  ", count: min(block.indent, 4))
+                let listStart = result.length
                 result.append(NSAttributedString(
-                    string: "\(indent)\(block.orderedListNumber ?? 1). ",
+                    string: "\(block.orderedListNumber ?? 1). ",
                     attributes: [
                         .font: bodyFont,
                         .foregroundColor: secondaryColor,
@@ -1330,6 +1350,11 @@ enum AgentChatHistoryRenderer {
                     baseFont: bodyFont,
                     color: bodyColor
                 ))
+                result.addAttribute(
+                    .agentChatHistoryListDepth,
+                    value: NSNumber(value: block.indent),
+                    range: NSRange(location: listStart, length: result.length - listStart)
+                )
 
             case .code:
                 let hadPreviousBlock = didAppendBlock
@@ -1764,17 +1789,14 @@ enum AgentChatHistoryRenderer {
             ?? NSColor.secondaryLabelColor
     }
 
-    private static func headingFont(level: Int) -> NSFont {
-        switch level {
-        case 1:
-            return NSFont.systemFont(ofSize: 22, weight: .semibold)
-        case 2:
-            return NSFont.systemFont(ofSize: 18, weight: .semibold)
-        case 3:
-            return NSFont.systemFont(ofSize: 16, weight: .semibold)
-        default:
-            return NSFont.systemFont(ofSize: 14, weight: .semibold)
-        }
+    private static func headingFont(level: Int, baseFont: NSFont) -> NSFont {
+        let size = AgentChatTypography.headingFontSize(
+            level: level,
+            baseFontSize: baseFont.pointSize
+        )
+        let resized = NSFont(descriptor: baseFont.fontDescriptor, size: size)
+            ?? NSFont.systemFont(ofSize: size)
+        return NSFontManager.shared.convert(resized, toHaveTrait: .boldFontMask)
     }
 
     private static func bulletGlyph(for indent: Int) -> String {

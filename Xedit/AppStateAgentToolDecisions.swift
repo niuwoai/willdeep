@@ -808,6 +808,13 @@ extension AppState {
         if toolName == "change_workspace" {
             return nil
         }
+        // Saved Terminal recordings may contain protected input and a long
+        // chain of side effects. Full Access automates the audited primitive
+        // terminal tools, but never turns recording playback into an Agent
+        // action; only the user-facing Run button may start it.
+        if AgentTerminalAutomationPolicy.forbidsShortcutReplay(toolName: toolName) {
+            return nil
+        }
         if toolName == "rename_session" {
             return .staticAllowlist
         }

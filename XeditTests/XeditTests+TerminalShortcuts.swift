@@ -17,6 +17,48 @@ import Foundation
 @testable import WillDeep
 
 extension WillDeepTests {
+    @Test("Agent terminal mutations stay visible and saved shortcut playback stays user-only")
+    func testAgentTerminalAutomationBoundary() async throws {
+        for toolName in [
+            "terminal_send_command",
+            "terminal_send_control",
+            "terminal_select_tab",
+            "terminal_create_shortcut",
+            "terminal_edit_shortcut",
+        ] {
+            #expect(AgentTerminalAutomationPolicy.requiresVisiblePanel(toolName: toolName))
+        }
+        for toolName in [
+            "terminal_snapshot",
+            "terminal_list_tabs",
+            "terminal_list_shortcuts",
+        ] {
+            #expect(!AgentTerminalAutomationPolicy.requiresVisiblePanel(toolName: toolName))
+        }
+
+        for forbiddenName in [
+            "terminal_play_shortcut",
+            "terminal_replay_shortcut",
+            "terminal_run_shortcut",
+        ] {
+            #expect(AgentTerminalAutomationPolicy.forbidsShortcutReplay(toolName: forbiddenName))
+            #expect(AgentToolRegistry.descriptor(for: forbiddenName) == nil)
+            await #expect(throws: AgentToolError.self) {
+                _ = try await AgentToolRunner.run(
+                    name: forbiddenName,
+                    arguments: [:],
+                    context: AgentToolContext(rootDirectory: nil)
+                )
+            }
+        }
+
+        let listDescriptor = try #require(
+            AgentToolRegistry.descriptor(for: "terminal_list_shortcuts")
+        )
+        #expect(listDescriptor.description.contains("user-run only"))
+        #expect(listDescriptor.description.contains("press Run"))
+    }
+
     @Test("terminal shortcut recorder coalesces per-character password input into one protected event")
     func testTerminalShortcutRecorderCoalescesPasswordKeystrokes() throws {
         let service = AgentCredentialStore._setTestKeychainServiceOverride("terminal-shortcuts-\(UUID().uuidString)")

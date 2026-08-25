@@ -1,7 +1,56 @@
 # Changelog
 
-> 当前文件保留最新版本（1.292.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.293.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.293.0-rc3 - 2026-08-25
+
+### Changed
+
+- **侧边栏账户行移除常驻背景。** 左下角账户信息不再叠加控件底色、皮肤强调色和前景色形成浅色胶囊，静止时直接融入侧栏底色；头像、账户名、点数与帮助入口保持不变，悬停和菜单展开时仍提供临时交互反馈。
+- **记录 CPU 短时尖峰的诊断证据与优化路线。** 新增 SwiftUI 布局、会话侧栏派生数据、长会话指纹和自动滚动链的现场采样结论，明确 P0 量化、P1 缓存与增量失效、P2 绘制验证的实施顺序和验收阈值；本版只提交诊断文档，不把尚未复现的尖峰伪装成已经修复。
+
+### Tests
+
+- [AgentSidebarAccountFooterTests](XeditTests/AgentSidebarAccountFooterTests.swift) 锁定账户行只绘制交互态背景，并生成原生 SwiftUI 视觉回归截图。
+
+## 1.293.0-rc2 - 2026-08-25
+
+### Fixed
+
+- **补丁审批操作回归黑白灰。** 单文件、同回合批量及跨回合全部处理三种补丁审批入口不再继承 macOS accent 蓝色；“拒绝”使用中性描边，“应用”使用黑底白字，展开箭头和批量操作容器同步改为灰度。
+- **补丁审批卡与助手正文左边缘对齐。** 聊天区中的卡片整体复用 `assistantContentHeadIndent` / `assistantContentTailInset`，不再从可读列最左侧单独起排；紧凑侧栏仍保留原有布局。
+
+### Tests
+
+- [AgentInteractionTargetMetricsTests](XeditTests/AgentInteractionTargetMetricsTests.swift) 锁定补丁操作无 accent 色及聊天正文 inset；[AgentConfirmationVisualTests](XeditTests/AgentConfirmationVisualTests.swift) 生成原生 SwiftUI 对齐截图。两个套件共 19 项回归通过。
+
+## 1.293.0-rc1 - 2026-08-25
+
+### Changed
+
+- **聊天输出建立主次分明的原生 TextKit 层级。** 同一用户回合中，过程性说明、运行状态、工具活动与 Token 元信息统一降为系统次级灰和辅助字号，最终交付正文保留主黑与正文尺寸；不依赖 WebView 或 CSS，也能让用户先看到结论，再按需扫读过程。
+- **工具活动从横向挤压改为逐行摘要。** 读取、浏览、搜索、Git 与命令等操作各占一行，允许自然换行，不再用中点串成长句后截断；运行中 SwiftUI 时间线与历史 TextKit 输出使用相同的字号、行距和灰度层级。
+- **Markdown 标题与列表更适合长文阅读。** 标题字号相对用户配置的正文字号分级放大；无序和有序列表使用随嵌套深度递增的悬挂缩进，换行内容持续对齐正文而不是退回项目符号左侧。
+- **进度与状态回归黑白灰。** Goal 本轮进度、完成／进行中／失败计数和运行状态不再注入蓝、绿、红强调色，仅通过图标、字重、明暗和容器边界表达状态；真正的风险操作仍由既有审批设计单独强调。
+
+### Tests
+
+- [AgentChatHistoryRendererTests](XeditTests/AgentChatHistoryRendererTests.swift)、[AgentChatHistoryRendererGoalTests](XeditTests/AgentChatHistoryRendererGoalTests.swift) 与 [AgentTurnProgressPresentationTests](XeditTests/AgentTurnProgressPresentationTests.swift) 共 105 项回归通过，覆盖过程／最终正文层级、工具逐行摘要、标题缩放、列表悬挂缩进及进度区域全灰度约束。
+
+## 1.292.0-rc2 - 2026-08-25
+
+### Changed
+
+- **完全访问可自动操作侧边栏终端，但操作过程必须可见。** `terminal_send_command`、`terminal_send_control`、`terminal_select_tab` 以及终端快捷的创建/编辑在获准执行后，会先把共享 Terminal 侧边面板调出，再向 PTY 或终端状态发送变更；后台会话执行时也会在用户当前界面显示 Terminal，但不会切换用户正在查看的会话。
+
+### Security
+
+- **终端录制快捷只能由用户亲自播放。** Agent 继续可以列出、创建和编辑快捷录制，但不存在可播放录制的工具；潜在的 `terminal_play_shortcut` / `terminal_replay_shortcut` / `terminal_run_shortcut` 调用在完全访问审批层与工具执行层都会拒绝，模型契约也明确要求用户在可见 Terminal 面板中点击“运行”。
+
+### Tests
+
+- [AgentApprovalModePolicyTests](XeditTests/AgentApprovalModePolicyTests.swift) 覆盖完全访问终端原语免审、录制回放拒绝和执行前面板可见状态；[XeditTests+TerminalShortcuts](XeditTests/XeditTests+TerminalShortcuts.swift) 锁定终端工具分组与执行层硬拒绝；[AgentGlobalRulesTests](XeditTests/AgentGlobalRulesTests.swift) 保证用户专属回放规则持续进入模型提示词。
 
 ## 1.292.0-rc1 - 2026-08-25
 

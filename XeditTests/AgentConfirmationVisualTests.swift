@@ -222,6 +222,72 @@ struct AgentConfirmationVisualTests {
         #expect(narrowSize.height < 900)
     }
 
+    @Test("渲染与正文对齐的黑白补丁审批供设计 QA")
+    @MainActor
+    func renderMonochromeAlignedPatchApprovalForDesignQA() throws {
+        let outputDirectory = try designQAOutputDirectory()
+        var settings = EditorSettings.default
+        settings.interfaceSkinID = EditorInterfaceSkin.ricePaper.id
+        let appState = AppState(editorSettings: settings)
+        let proposal = AgentPatchProposal(
+            messageID: UUID(),
+            title: "编辑文件: internal/handler/mysql.go",
+            diff: """
+            *** Begin Patch
+            *** Update File: internal/handler/mysql.go
+            @@
+            -return oldValue
+            +return newValue
+            *** End Patch
+            """
+        )
+        let width: CGFloat = 760
+        let root = VStack(alignment: .leading, spacing: 18) {
+            Text("创建 guides 文档索引，并复制文档到前端静态目录。")
+                .font(.system(size: 15))
+                .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
+                .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)
+
+            AgentPatchProposalList(
+                proposals: [proposal],
+                maxContentWidth: AgentDesign.chatMaxContentWidth
+            )
+            .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
+            .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)
+            .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
+        }
+        .environmentObject(appState)
+        .padding(.vertical, 24)
+        .frame(width: width, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(appState.editorSettings.interfaceSkin.windowBackground)
+        .preferredColorScheme(.light)
+
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.frame = NSRect(x: 0, y: 0, width: width, height: 1)
+        hostingView.layoutSubtreeIfNeeded()
+        let size = NSSize(width: width, height: max(1, hostingView.fittingSize.height))
+        hostingView.frame = NSRect(origin: .zero, size: size)
+        hostingView.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        hostingView.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(
+            hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+        )
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(
+            to: outputDirectory.appendingPathComponent("patch-approval-monochrome-aligned.png"),
+            options: .atomic
+        )
+
+        #expect(size.width == width)
+        #expect(size.height > 130)
+        #expect(AgentPatchDecisionMetrics.buttonHeight == 26)
+        #expect(AgentPatchDecisionMetrics.cornerRadius == 7)
+    }
+
     /// 扫光是给「正在看」的人的装饰性反馈，而它会持续整个回合——一条跑十
     /// 分钟的 run_command 就是十分钟的动画。一次 CA transaction flush 会把
     /// 所有待布局窗口一起过一遍，所以每一帧扫光都要付一次主窗口整棵视图树

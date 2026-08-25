@@ -256,7 +256,7 @@ struct AgentModeMessageView: View {
                             for: assistantTurnPresentation?.summaryMessage ?? message,
                             isStreaming: isStreamingThisMessage
                         ))
-                            .font(.system(size: NSFont.systemFontSize, weight: .regular))
+                            .font(AgentDesign.chatSupportingFont(baseFontSize: baseFontSize))
                             .foregroundStyle(Color(nsColor: .secondaryLabelColor))
 
                         Rectangle()
@@ -658,7 +658,11 @@ enum AgentAssistantMarkdownRenderer {
             case .heading(let level):
                 appendSeparator()
                 var heading = AttributedString(block.text)
-                heading.font = headingFont(level: level)
+                heading.font = headingFont(
+                    level: level,
+                    baseFontSize: baseFontSize,
+                    fontID: fontID
+                )
                 heading.foregroundColor = .primary
                 result += heading
 
@@ -856,12 +860,18 @@ enum AgentAssistantMarkdownRenderer {
         return rendered
     }
 
-    private static func headingFont(level: Int) -> Font {
-        switch level {
-        case 1: return .system(size: 22, weight: .semibold)
-        case 2: return .system(size: 18, weight: .semibold)
-        case 3: return .system(size: 16, weight: .semibold)
-        default: return .system(size: 14, weight: .semibold)
-        }
+    private static func headingFont(
+        level: Int,
+        baseFontSize: CGFloat,
+        fontID: String
+    ) -> Font {
+        let choice = AgentChatFontChoice.byID(fontID) ?? .system
+        return choice.swiftUIFont(
+            size: AgentChatTypography.headingFontSize(
+                level: level,
+                baseFontSize: baseFontSize
+            ),
+            weight: .semibold
+        )
     }
 }

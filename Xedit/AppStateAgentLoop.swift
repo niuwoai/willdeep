@@ -996,6 +996,7 @@ extension AppState {
                 RUN ON THE LOCAL MAC, NOT the remote box — do NOT use these to change or inspect the remote workspace:
                 - create_file / edit_file / apply_patch — create or edit LOCAL files; they do NOT touch remote files. For remote file creation or edits use run_command.
                 - terminal_snapshot / terminal_send_command / terminal_send_control / terminal_list_tabs / terminal_select_tab — drive the ACTIVE side-panel terminal tab, the one the user currently sees. It is a LOCAL shell by default (unless an SSH tab is active)\(remoteRuntimeDescriptor.transport == .daemon ? "; for a daemon runtime it can never reach the remote box" : ""). To run something on the remote box, use run_command, not the terminal tools.
+                - \(AgentTerminalAutomationPolicy.userOnlyShortcutPlaybackRule)
                 - skills / memory / MCP management (list_skills, read_skill, add_memory, create_user_skill, create_user_skills, update_user_skill, delete_user_skill, search_mcp_servers, suggest_mcp_server, configure_mcp_server), chrome_*, computer_use_*, web_search, web_fetch, generate_image, visual_qa_screenshot, capture_screenshot — these are about the local WillDeep install / this Mac, not the remote host. web_fetch also can't reach the remote box's private/loopback services.
 
                 Tell the user when an action is local vs remote if it matters.
@@ -2459,6 +2460,17 @@ extension AppState {
                     automaticBackgroundSandboxRetryApprovalSource: automaticBackgroundSandboxRetrySource,
                     delegatedProgressSink: liveProgressSink
                 )
+                let didRevealTerminal = revealTerminalPanelForToolExecution(
+                    toolName: call.toolName,
+                    runtime: runtime
+                )
+                if didRevealTerminal {
+                    // Let SwiftUI commit the side-panel transition before the
+                    // command/control mutation reaches the PTY. The terminal
+                    // operation remains audited and automatic in Full Access,
+                    // but it never happens behind a hidden panel.
+                    await Task.yield()
+                }
                 // Only tabs absent from this snapshot can have been created by
                 // the AI tool below. If one appears, surface Terminal even when
                 // the operator had closed the panel in the meantime.
@@ -2868,6 +2880,35 @@ extension AppState {
 
         runtime.errorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
         runtime.errorDetails = nil
+    }
+
+    /// Make Agent-driven terminal mutations observable before dispatch.
+    /// Background conversations also reveal the shared Terminal panel in the
+    /// conversation the user is currently viewing, without switching chats,
+    /// so no command/control activity runs behind a hidden panel.
+    @discardableResult
+    func revealTerminalPanelForToolExecution(
+        toolName: String,
+        runtime: AgentRuntime,
+        now: Date = Date()
+    ) -> Bool {
+        guard AgentTerminalAutomationPolicy.requiresVisiblePanel(toolName: toolName) else {
+            return false
+        }
+
+        let canRevealPanel = activeRuntime != nil
+        if canRevealPanel {
+            agentSidePanelKind = .terminal
+            agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .terminal)
+        }
+
+        var sidePanelState = runtime.sidePanelState
+        sidePanelState.kind = .terminal
+        sidePanelState.lastViewedAt = now
+        runtime.sidePanelState = sidePanelState
+        persistAgentSidePanelState(runtime: runtime)
+
+        return canRevealPanel
     }
 
 }
