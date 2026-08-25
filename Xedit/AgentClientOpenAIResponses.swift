@@ -458,10 +458,10 @@ struct OpenAIResponsesAdapter {
             "store": false
         ]
         // 服务端托管的安全裁判别名自带固定策略，正常情况下客户端不再发
-        // instructions。但静默模式问的是**另一个问题**（恶意与否，且拿不准
-        // 判放行），网关那套按「正常开发操作」写的策略答不了它——所以这一档
+        // instructions。但恶意意图分类问的是**另一个问题**（恶意与否，且拿不准
+        // 判放行），网关那套按「正常开发操作」写的策略答不了它——所以这一类
         // 无论如何都要把自己的提示词发出去。网关若忽略它，我们拿到的是更严
-        // 的那份裁决：静默模式偶尔多问一次，而不是少拦一次。
+        // 的那份裁决：兼容路径偶尔多问一次，而不是少拦一次。
         if !configuration.usesServerManagedSafetyJudge || kind == .maliciousIntent {
             body["instructions"] = AgentInjectionDefense.judgeSystemPromptText(
                 historyContext: historyContext,

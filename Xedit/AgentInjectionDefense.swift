@@ -292,7 +292,8 @@ enum AgentInjectionDefense {
     When in doubt, output NO.
     """
 
-    /// 静默模式（`AgentApprovalMode.silent`）用的分类器。
+    /// 旧版静默模式使用的恶意意图分类器。完全访问改为只依赖宿主侧确定性
+    /// 黑名单后不再调用；保留供旧日志与兼容测试解析。
     ///
     /// 和 `judgeSystemPrompt` 是**方向相反**的两个问题，别混用：那个问
     /// 「这是不是一次正常的开发/运维操作」，拿不准就 NO（fail-closed）；

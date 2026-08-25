@@ -65,10 +65,11 @@ nonisolated enum AgentInteractionMode: String, Codable, CaseIterable, Identifiab
 /// Goal's host-owned evidence phase remains read-only until validation.
 nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable {
     case smart
-    /// 黑名单式放行：只拦住能指名道姓说出恶意效果的操作，其余一律直接跑。
+    /// 完全访问：允许访问互联网、任意本机文件与凭据，不再经过 AI 审核。
+    /// 仅保留确定性恶意命令黑名单，以及必须由用户本人回答的交互边界。
     /// 顺序上紧挨 smart 而不是排在最前——最放得开的档位摆在菜单第一行，
     /// 等于请人误点；但它也不该沉到底部让人找不到。严格模式仍然压轴。
-    case silent
+    case fullAccess = "silent"
     case workspaceAccess
     case requestEveryTime
 
@@ -86,7 +87,7 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
     var displayName: String {
         switch self {
         case .requestEveryTime: return L10n.ApprovalMode.requestEveryTime
-        case .silent: return L10n.ApprovalMode.silent
+        case .fullAccess: return L10n.ApprovalMode.fullAccess
         case .smart: return L10n.ApprovalMode.smart
         case .workspaceAccess: return L10n.ApprovalMode.workspaceAccess
         }
@@ -95,7 +96,7 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
     var summary: String {
         switch self {
         case .requestEveryTime: return L10n.ApprovalMode.requestEveryTimeSummary
-        case .silent: return L10n.ApprovalMode.silentSummary
+        case .fullAccess: return L10n.ApprovalMode.fullAccessSummary
         case .smart: return L10n.ApprovalMode.smartSummary
         case .workspaceAccess: return L10n.ApprovalMode.workspaceAccessSummary
         }
@@ -105,8 +106,8 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
         switch self {
         case .requestEveryTime:
             return "Strict mode: ask before security-relevant writes or external actions. Read-only tools and bounded harmless metadata changes such as the current session title may run automatically. Danger-tier tools still require typed confirmation."
-        case .silent:
-            return "Silent mode: the user asked for minimal interruptions. Everything runs automatically unless it is on WillDeep's malicious-command denylist or an AI reviewer names a concrete malicious effect. This is a policy about approval prompts, NOT a licence to be reckless: you are still responsible for the consequences of what you run, and you should still prefer reversible steps, keep backups before destructive operations, and say what you are about to do."
+        case .fullAccess:
+            return "Full Access: the user explicitly allows internet access and access to any file or credential on this Mac without approval prompts. Run tool calls automatically unless they hit WillDeep's deterministic malicious-command denylist or require the user's own answer. This is broad authority, not a licence to be reckless: prefer reversible steps, keep backups before destructive operations, and say what you are about to do."
         case .smart:
             return "Use WillDeep's smart review policy: read-only tools and workspace-scoped writes run automatically; safe external actions may be AI-approved; uncertain or risky external actions ask the user."
         case .workspaceAccess:
@@ -118,8 +119,8 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
         switch self {
         case .requestEveryTime:
             return "Strict: reads and bounded harmless title metadata auto-run; security-relevant writes or external actions ask; danger-tier commands require typed confirmation."
-        case .silent:
-            return "Silent: nearly everything auto-runs; only denylisted or AI-flagged malicious actions ask. Fewer prompts does not mean fewer consequences — prefer reversible steps and back up before destructive work."
+        case .fullAccess:
+            return "Full Access: internet, any local file, and credentials auto-run without approval prompts; only deterministic malicious-command rules and user-answer boundaries stop execution."
         case .smart:
             return "Reads and workspace-scoped writes auto-run; safe external actions may pass intelligent review; uncertain external actions ask; danger-tier commands require typed confirmation."
         case .workspaceAccess:
@@ -130,7 +131,7 @@ nonisolated enum AgentApprovalMode: String, Codable, CaseIterable, Identifiable 
     var symbol: String {
         switch self {
         case .requestEveryTime: return "hand.raised"
-        case .silent: return "bolt.shield"
+        case .fullAccess: return "exclamationmark.shield"
         case .smart: return "checkmark.shield"
         case .workspaceAccess: return "shield.lefthalf.filled"
         }

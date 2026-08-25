@@ -156,7 +156,7 @@ extension WillDeepTests {
         #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 1\n")
     }
 
-    @Test("apply_patch auto-applies through existing patch applier in Goal and workspace access modes")
+    @Test("apply_patch auto-applies in Goal, Workspace Access, and Full Access modes")
     @MainActor
     func testApplyPatchAutoAppliesInGoalAndWorkspaceAccessModes() throws {
         let workspace = FileManager.default.temporaryDirectory
@@ -210,6 +210,24 @@ extension WillDeepTests {
         #expect(workspaceAccessProposal.status == .applied)
         #expect(workspaceAccessProposal.statusMessage == "Auto-applied by workspace access approval")
         #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 3\n")
+
+        runtime.approvalMode = .fullAccess
+        let fullAccessProposal = try appState.enqueueAgentPatchProposal(
+            for: runtime,
+            messageID: UUID(),
+            title: "Full access update",
+            diff: """
+            --- a/Sample.swift
+            +++ b/Sample.swift
+            @@ -1 +1 @@
+            -let value = 3
+            +let value = 4
+            """
+        )
+
+        #expect(fullAccessProposal.status == .applied)
+        #expect(fullAccessProposal.statusMessage == "Auto-applied by Full Access")
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == "let value = 4\n")
     }
 
     @Test("Smart review auto-applies clean and dirty workspace files")
@@ -352,9 +370,11 @@ extension WillDeepTests {
         let goalFileURL = workspace.appendingPathComponent("Goal.swift")
         let workspaceFileURL = workspace.appendingPathComponent("Workspace.swift")
         let smartFileURL = workspace.appendingPathComponent("Smart.swift")
+        let fullAccessFileURL = workspace.appendingPathComponent("FullAccess.swift")
         try "let value = 1\n".write(to: goalFileURL, atomically: true, encoding: .utf8)
         try "let value = 1\n".write(to: workspaceFileURL, atomically: true, encoding: .utf8)
         try "let value = 1\n".write(to: smartFileURL, atomically: true, encoding: .utf8)
+        try "let value = 1\n".write(to: fullAccessFileURL, atomically: true, encoding: .utf8)
 
         let appState = AppState(rootDirectory: workspace)
         let session = appState.startNewAgentSession()
@@ -424,6 +444,26 @@ extension WillDeepTests {
         #expect(runtime.patchProposals.last?.status == .applied)
         #expect(runtime.patchProposals.last?.statusMessage == "Auto-applied by Smart review")
         #expect(try String(contentsOf: smartFileURL, encoding: .utf8) == "let value = 2\n")
+
+        runtime.approvalMode = .fullAccess
+        runtime.patchProposals.append(
+            AgentPatchProposal(
+                messageID: UUID(),
+                title: "Full access pending",
+                diff: """
+                --- a/FullAccess.swift
+                +++ b/FullAccess.swift
+                @@ -1 +1 @@
+                -let value = 1
+                +let value = 2
+                """
+            )
+        )
+
+        #expect(appState.resolvePendingAgentPatchProposalsBeforeNewMessage(for: runtime) == 1)
+        #expect(runtime.patchProposals.last?.status == .applied)
+        #expect(runtime.patchProposals.last?.statusMessage == "Auto-applied by Full Access")
+        #expect(try String(contentsOf: fullAccessFileURL, encoding: .utf8) == "let value = 2\n")
     }
 
     @Test("manual patch Apply resumes the tool and rewrites stale pending feedback")

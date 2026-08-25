@@ -23197,31 +23197,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose how this session approves Agent tool calls."
+            "value" : "How should Agent actions be approved?"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Elige cómo esta sesión aprueba las llamadas a herramientas del Agent."
+            "value" : "¿Cómo deben aprobarse las acciones del Agent?"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choisissez comment cette session approuve les appels d'outils de l'Agent."
+            "value" : "Comment approuver les actions de l’Agent ?"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このセッションで Agent のツール呼び出しをどう承認するか選択します。"
+            "value" : "Agent の操作をどのように承認しますか？"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择此会话如何审批 Agent 工具调用。"
+            "value" : "如何批准 Agent 操作？"
           }
         }
       }
@@ -23302,31 +23302,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Silent mode"
+            "value" : "Full access"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Modo silencioso"
+            "value" : "Acceso completo"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mode silencieux"
+            "value" : "Accès complet"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "サイレントモード"
+            "value" : "フルアクセス"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "静默模式"
+            "value" : "完全访问"
           }
         }
       }
@@ -23337,31 +23337,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Runs everything except denylisted or AI-flagged malicious actions."
+            "value" : "Access the internet and any file on this Mac without asking."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ejecuta todo salvo las acciones en la lista de bloqueo o marcadas como maliciosas por la IA."
+            "value" : "Accede a Internet y a cualquier archivo de este Mac sin preguntar."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Exécute tout, sauf les actions figurant sur la liste de blocage ou signalées comme malveillantes par l'IA."
+            "value" : "Accède à Internet et à tous les fichiers de ce Mac sans demander."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "拒否リストと AI が悪意ありと判断した操作以外はすべて実行します。"
+            "value" : "確認せずにインターネットとこの Mac 上のすべてのファイルへアクセスします。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "除黑名单与 AI 判定的恶意操作外一律直接执行。"
+            "value" : "无需询问即可访问互联网和这台 Mac 上的任何文件。"
           }
         }
       }
@@ -84663,31 +84663,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Silent mode"
+            "value" : "Full access"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Modo silencioso"
+            "value" : "Acceso completo"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mode silencieux"
+            "value" : "Accès complet"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "サイレントモード"
+            "value" : "フルアクセス"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "静默模式"
+            "value" : "完全访问"
           }
         }
       }

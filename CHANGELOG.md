@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.290.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.291.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.291.0-rc1 - 2026-08-25
+
+### Changed
+
+- **“静默模式”更名为“完全访问”，语义也真正完整。** 选中后，命令执行、互联网访问、本机任意文件与凭据访问不再请求审批；`create_file`、`edit_file`、`apply_patch` 走独立补丁流水线时同样直接落盘，不再出现“工具已经放行，文件卡还等 Apply”的半截权限。
+- **审批模式菜单按 Codex 的信息结构重做。** Composer 入口使用带感叹号的盾牌；“完全访问”以克制的橙色作为唯一风险强调，其余模式继续遵守黑白灰。弹出菜单为每个模式同时展示图标、名称和一行作用说明，并在当前模式右侧显示勾选状态。
+
+### Security
+
+- 完全访问不再调用 AI 安全裁判，也不再为 `credentialSensitive` 回退人工审批；仍保留宿主侧确定性恶意命令黑名单，以及环境信任声明、切换工作区、用户问答和显式不受信任 MCP 等必须由人参与的边界。持久化 raw value 继续使用旧值 `silent`，旧会话升级后无需迁移。
+
+### Tests
+
+- [AgentApprovalModePolicyTests](XeditTests/AgentApprovalModePolicyTests.swift) 锁定旧会话解码、凭据读取免审及凭据外泄黑名单；[AgentToolIntegrationTests](XeditTests/AgentToolIntegrationTests.swift) 新增完全访问即时应用文件编辑、自动收口历史待处理补丁的真实落盘回归。
 
 ## 1.290.0-rc2 - 2026-08-25
 
