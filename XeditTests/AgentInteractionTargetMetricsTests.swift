@@ -101,4 +101,71 @@ struct AgentInteractionTargetMetricsTests {
         // instead of requiring the deleted purchase button to come back.
         #expect(!source.contains("buyCodingPlan"))
     }
+
+    @Test("waiting-approval badge is an emphasized black capsule")
+    func waitingApprovalBadgeUsesBlackAndWhiteHierarchy() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Xedit/AgentSessionApprovalBadge.swift"
+            ),
+            encoding: .utf8
+        )
+
+        #expect(source.contains(".foregroundStyle(Color.white)"))
+        #expect(source.contains(".background(Color.black, in: Capsule())"))
+        #expect(!source.contains(".background(Color.primary.opacity(0.05), in: Capsule())"))
+    }
+
+    @Test("composer image thumbnails expose the existing large-image preview")
+    func composerImageThumbnailOpensPreviewWindow() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Xedit/AgentImageViews.swift"
+            ),
+            encoding: .utf8
+        )
+
+        #expect(source.contains("Button(action: onPreview)"))
+        #expect(source.contains("AgentImagePreviewWindowRegistry.shared.open(image: image)"))
+        #expect(source.contains(".accessibilityLabel(L10n.ImagePreview.openButton)"))
+    }
+
+    @Test("patch review actions stay monochrome and align with assistant prose")
+    func patchReviewActionsUseMonochromeHierarchyAndTranscriptInsets() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let panelCardsSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Xedit/AgentPanelCards.swift"
+            ),
+            encoding: .utf8
+        )
+        let transcriptSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Xedit/AgentChatTranscript.swift"
+            ),
+            encoding: .utf8
+        )
+
+        #expect(panelCardsSource.contains("AgentApprovalPrimaryButtonStyle("))
+        #expect(panelCardsSource.contains("AgentApprovalSecondaryButtonStyle("))
+        #expect(!panelCardsSource.contains("Color.accentColor"))
+        #expect(panelCardsSource.contains(".symbolRenderingMode(.monochrome)"))
+        #expect(transcriptSource.contains(
+            "AgentPatchProposalList(\n                        proposals: appState.agentPatchProposals"
+        ))
+        #expect(transcriptSource.contains(
+            ".padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)"
+        ))
+        #expect(transcriptSource.contains(
+            ".padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)"
+        ))
+    }
 }

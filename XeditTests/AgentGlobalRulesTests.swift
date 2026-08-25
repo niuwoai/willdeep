@@ -218,6 +218,7 @@ struct AgentGlobalRulesTests {
         #expect(prompt.contains("dispatch confirmation is not command output"))
         #expect(prompt.contains("one bounded follow-up snapshot"))
         #expect(prompt.contains("never call the terminal unstable"))
+        #expect(prompt.contains("Only the user may start saved shortcut playback"))
         #expect(prompt.contains("do not create or overwrite files with heredoc"))
         #expect(prompt.contains("A small auditable heredoc is acceptable only when the terminal is the only path"))
         // ZMODEM 细则外迁到 bundled skill,提示词只留强制指针 —— 细节改

@@ -590,11 +590,11 @@ extension AppState {
         }
 
         let effectiveAutoApplySource = autoApplySource
-            ?? (runtime.approvalMode == .smart ? AgentToolApprovalSource.staticAllowlist : nil)
+            ?? pendingPatchAutoApplySource(for: runtime)
 
-        // Goal, Smart review, and Workspace Access apply validated
-        // workspace-contained patches immediately. Strict mode is the only
-        // posture that leaves every file change pending for explicit review.
+        // Goal, Smart review, Workspace Access, and Full Access apply
+        // validated workspace-contained patches immediately. Strict mode is
+        // the only posture that leaves every file change pending for review.
         if let effectiveAutoApplySource,
            runtime.patchProposals[proposalIndex].status == .pending {
             let outcome = resolveAgentPatchApplication(
@@ -619,6 +619,8 @@ extension AppState {
             return "Auto-applied by unattended dispatch task"
         case .workspaceAccess:
             return "Auto-applied by workspace access approval"
+        case .fullAccess:
+            return "Auto-applied by Full Access"
         case .staticAllowlist:
             return "Auto-applied by Smart review"
         default:
@@ -632,6 +634,9 @@ extension AppState {
         }
         if runtime.interactionMode == .goal {
             return .goalMode
+        }
+        if runtime.approvalMode == .fullAccess {
+            return .fullAccess
         }
         if runtime.approvalMode == .workspaceAccess {
             return .workspaceAccess

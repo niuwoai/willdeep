@@ -9,8 +9,29 @@
 import AppKit
 import SwiftUI
 
+nonisolated enum AgentPatchDecisionMetrics {
+    static let spacing: CGFloat = 8
+    static let buttonHeight: CGFloat = 26
+    static let horizontalPadding: CGFloat = 11
+    static let cornerRadius: CGFloat = 7
+}
+
+private struct AgentPatchDecisionLabel: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .symbolRenderingMode(.monochrome)
+            .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, AgentPatchDecisionMetrics.horizontalPadding)
+            .frame(height: AgentPatchDecisionMetrics.buttonHeight)
+    }
+}
+
 struct AgentPatchProposalCard: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
     let proposal: AgentPatchProposal
     @State private var isExpanded = false
 
@@ -32,8 +53,12 @@ struct AgentPatchProposalCard: View {
                     isExpanded.toggle()
                 } label: {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .symbolRenderingMode(.monochrome)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help(isExpanded ? L10n.AgentPatch.hideDiff : L10n.AgentPatch.showDiff)
             }
 
@@ -58,25 +83,41 @@ struct AgentPatchProposalCard: View {
 
             // rc16:Reject 放最左,Apply 放右,Spacer 留在右侧把它们顶到左边
             // 簇集 —— 仍然按「负 → 正」从左到右,误触概率低于「正 → 负」。
-            HStack {
+            HStack(spacing: AgentPatchDecisionMetrics.spacing) {
                 Button {
                     appState.rejectAgentPatchProposal(id: proposal.id)
                 } label: {
-                    Label(L10n.AgentPatch.reject, systemImage: "xmark.circle")
+                    AgentPatchDecisionLabel(
+                        title: L10n.AgentPatch.reject,
+                        systemImage: "xmark.circle"
+                    )
                 }
+                .buttonStyle(
+                    AgentApprovalSecondaryButtonStyle(
+                        colorScheme: colorScheme,
+                        cornerRadius: AgentPatchDecisionMetrics.cornerRadius
+                    )
+                )
                 .disabled(proposal.status != .pending || isCollectingReviewBatch)
 
                 Button {
                     appState.applyAgentPatchProposal(id: proposal.id)
                 } label: {
-                    Label(L10n.AgentPatch.apply, systemImage: "checkmark.circle")
+                    AgentPatchDecisionLabel(
+                        title: L10n.AgentPatch.apply,
+                        systemImage: "checkmark.circle"
+                    )
                 }
+                .buttonStyle(
+                    AgentApprovalPrimaryButtonStyle(
+                        colorScheme: colorScheme,
+                        cornerRadius: AgentPatchDecisionMetrics.cornerRadius
+                    )
+                )
                 .disabled(proposal.status != .pending || isCollectingReviewBatch)
 
                 Spacer(minLength: 0)
             }
-            .labelStyle(.titleAndIcon)
-            .font(.caption)
         }
         .padding(9)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
@@ -126,6 +167,7 @@ struct AgentPatchProposalCard: View {
 /// its own.
 struct AgentPatchProposalGroup: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
     let proposals: [AgentPatchProposal]
     @State private var isExpanded = false
 
@@ -147,8 +189,12 @@ struct AgentPatchProposalGroup: View {
                     isExpanded.toggle()
                 } label: {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .symbolRenderingMode(.monochrome)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help(isExpanded ? L10n.AgentPatch.hideAll : L10n.AgentPatch.showAll)
             }
 
@@ -161,22 +207,38 @@ struct AgentPatchProposalGroup: View {
             }
 
             if pendingCount > 0 {
-                HStack {
+                HStack(spacing: AgentPatchDecisionMetrics.spacing) {
                     Button {
                         appState.rejectAgentPatchProposals(forMessageID: messageID)
                     } label: {
-                        Label(L10n.AgentPatch.rejectAll, systemImage: "xmark.circle")
+                        AgentPatchDecisionLabel(
+                            title: L10n.AgentPatch.rejectAll,
+                            systemImage: "xmark.circle"
+                        )
                     }
+                    .buttonStyle(
+                        AgentApprovalSecondaryButtonStyle(
+                            colorScheme: colorScheme,
+                            cornerRadius: AgentPatchDecisionMetrics.cornerRadius
+                        )
+                    )
                     Button {
                         appState.applyAgentPatchProposals(forMessageID: messageID)
                     } label: {
-                        Label(L10n.AgentPatch.applyAll, systemImage: "checkmark.circle")
+                        AgentPatchDecisionLabel(
+                            title: L10n.AgentPatch.applyAll,
+                            systemImage: "checkmark.circle"
+                        )
                     }
+                    .buttonStyle(
+                        AgentApprovalPrimaryButtonStyle(
+                            colorScheme: colorScheme,
+                            cornerRadius: AgentPatchDecisionMetrics.cornerRadius
+                        )
+                    )
                     Spacer(minLength: 0)
                 }
                 .disabled(isCollectingReviewBatch)
-                .labelStyle(.titleAndIcon)
-                .font(.caption)
             }
         }
         .padding(9)
@@ -221,6 +283,7 @@ struct AgentPatchProposalGroup: View {
 /// `messageID`; original ordering is preserved by first appearance.
 struct AgentPatchProposalList: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
     let proposals: [AgentPatchProposal]
     /// Transcript constrains card width; the compact side panel does not.
     var maxContentWidth: CGFloat? = nil
@@ -269,22 +332,38 @@ struct AgentPatchProposalList: View {
             Button {
                 appState.rejectAllPendingAgentPatchProposals()
             } label: {
-                Label(L10n.AgentPatch.rejectAll, systemImage: "xmark.circle")
+                AgentPatchDecisionLabel(
+                    title: L10n.AgentPatch.rejectAll,
+                    systemImage: "xmark.circle"
+                )
             }
+            .buttonStyle(
+                AgentApprovalSecondaryButtonStyle(
+                    colorScheme: colorScheme,
+                    cornerRadius: AgentPatchDecisionMetrics.cornerRadius
+                )
+            )
             Button {
                 appState.applyAllPendingAgentPatchProposals()
             } label: {
-                Label(L10n.AgentPatch.applyAll, systemImage: "checkmark.circle")
+                AgentPatchDecisionLabel(
+                    title: L10n.AgentPatch.applyAll,
+                    systemImage: "checkmark.circle"
+                )
             }
+            .buttonStyle(
+                AgentApprovalPrimaryButtonStyle(
+                    colorScheme: colorScheme,
+                    cornerRadius: AgentPatchDecisionMetrics.cornerRadius
+                )
+            )
         }
-        .labelStyle(.titleAndIcon)
-        .font(.caption)
         .padding(9)
-        .background(Color.accentColor.opacity(0.10))
+        .background(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.045))
         .clipShape(RoundedRectangle(cornerRadius: 7))
         .overlay(
             RoundedRectangle(cornerRadius: 7)
-                .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
         )
         .disabled(hasCollectingPendingBatch)
     }

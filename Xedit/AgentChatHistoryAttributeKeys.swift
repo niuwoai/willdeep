@@ -31,6 +31,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
     static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
     static let agentChatHistoryHeadingLevel = NSAttributedString.Key("AgentChatHistoryHeadingLevel")
+    static let agentChatHistoryListDepth = NSAttributedString.Key("AgentChatHistoryListDepth")
     static let agentChatHistoryProgressBlockID = NSAttributedString.Key("AgentChatHistoryProgressBlockID")
     static let agentChatHistoryProgressToggleID = NSAttributedString.Key("AgentChatHistoryProgressToggleID")
     static let agentChatHistoryProgressShowPlan = NSAttributedString.Key("AgentChatHistoryProgressShowPlan")

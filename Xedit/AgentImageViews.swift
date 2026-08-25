@@ -185,36 +185,7 @@ struct AgentImageThumbnail: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Group {
-                if let nsImage = decodedImage {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } else {
-                    Image(systemName: "photo")
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
-            )
-            .task(id: "\(image.thumbnailCacheKey)-\(Int(size.rounded(.up)))") {
-                if let fileURL = image.fileURL {
-                    decodedImage = await AgentThumbnailImageCache.image(
-                        forFileURL: fileURL,
-                        targetPixels: size * 2
-                    )
-                } else {
-                    decodedImage = await AgentThumbnailImageCache.image(
-                        forBase64: image.dataBase64,
-                        cacheKey: image.thumbnailCacheKey,
-                        targetPixels: size * 2
-                    )
-                }
-            }
+            previewTarget
 
             if allowsRemoval, let onRemove {
                 Button(action: onRemove) {
@@ -225,14 +196,57 @@ struct AgentImageThumbnail: View {
                 }
                 .buttonStyle(.plain)
                 .padding(3)
-                .help("Remove image")
+                .help(L10n.Composer.removeAttachmentHelp)
             }
         }
-        .contentShape(RoundedRectangle(cornerRadius: 6))
-        .onTapGesture {
-            onPreview?()
+    }
+
+    @ViewBuilder
+    private var previewTarget: some View {
+        if let onPreview {
+            Button(action: onPreview) {
+                thumbnailContent
+            }
+            .buttonStyle(.plain)
+            .help(L10n.ImagePreview.openButton)
+            .accessibilityLabel(L10n.ImagePreview.openButton)
+        } else {
+            thumbnailContent
         }
-        .help(onPreview == nil ? "" : L10n.ImagePreview.openButton)
+    }
+
+    private var thumbnailContent: some View {
+        Group {
+            if let nsImage = decodedImage {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Image(systemName: "photo")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 6))
+        .task(id: "\(image.thumbnailCacheKey)-\(Int(size.rounded(.up)))") {
+            if let fileURL = image.fileURL {
+                decodedImage = await AgentThumbnailImageCache.image(
+                    forFileURL: fileURL,
+                    targetPixels: size * 2
+                )
+            } else {
+                decodedImage = await AgentThumbnailImageCache.image(
+                    forBase64: image.dataBase64,
+                    cacheKey: image.thumbnailCacheKey,
+                    targetPixels: size * 2
+                )
+            }
+        }
     }
 }
 
@@ -475,9 +489,15 @@ struct AgentComposerImageStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(images) { image in
-                        AgentImageThumbnail(image: image, size: 64, allowsRemoval: true) {
-                            onRemove(image.id)
-                        }
+                        AgentImageThumbnail(
+                            image: image,
+                            size: 64,
+                            allowsRemoval: true,
+                            onRemove: { onRemove(image.id) },
+                            onPreview: {
+                                AgentImagePreviewWindowRegistry.shared.open(image: image)
+                            }
+                        )
                     }
                 }
                 .padding(.vertical, 2)

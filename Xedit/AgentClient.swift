@@ -114,7 +114,7 @@ enum AgentSafetyJudgeResult: Equatable {
 ///  - `.developerOperations`：「这是正常的开发/运维操作吗」，拿不准判 NO
 ///    （智能审核与 Goal 用它，宁可多问一次）；
 ///  - `.maliciousIntent`：「这条命令是不是在干坏事」，拿不准判 YES
-///    （静默模式用它，用户要的就是少问）。
+///    （保留给恶意意图分类兼容路径）。
 enum AgentSafetyJudgeKind: Equatable, Sendable {
     case developerOperations
     case maliciousIntent

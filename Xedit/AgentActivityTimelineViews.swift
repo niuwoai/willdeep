@@ -187,13 +187,15 @@ private struct AgentActivityTimelineSummaryRow: View {
     }
 
     private var agentMetadataFont: Font {
-        (AgentChatFontChoice.byID(appState.agentChatFontID) ?? .system)
-            .swiftUIFont(size: appState.agentChatBaseFontSize)
+        AgentDesign.chatSupportingFont(baseFontSize: appState.agentChatBaseFontSize)
     }
 
     private var agentMetadataLineSpacing: CGFloat {
-        AgentChatTypography.lineSpacing(
-            fontSize: appState.agentChatBaseFontSize,
+        let fontSize = AgentDesign.chatSupportingFontSize(
+            baseFontSize: appState.agentChatBaseFontSize
+        )
+        return AgentChatTypography.lineSpacing(
+            fontSize: fontSize,
             lineHeightMultiple: appState.agentChatLineHeightMultiple
         )
     }
@@ -233,7 +235,9 @@ private struct AgentToolActivityTimelineRow: View {
             Spacer(minLength: 0)
         }
         .frame(minHeight: AgentChatTypography.lineHeight(
-            fontSize: appState.agentChatBaseFontSize,
+            fontSize: AgentDesign.chatSupportingFontSize(
+                baseFontSize: appState.agentChatBaseFontSize
+            ),
             lineHeightMultiple: appState.agentChatLineHeightMultiple
         ))
         .help(errorDetail ?? presentation.title)
@@ -246,7 +250,7 @@ private struct AgentToolActivityTimelineRow: View {
         }
         switch presentation.status {
         case .running, .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
-            return appState.editorSettings.interfaceSkin.palette.accent
+            return Color(nsColor: .labelColor)
         case .failed:
             // Command failures are usually intermediate retry signals. Keep
             // them visible without giving a recoverable state alarm styling.
@@ -266,20 +270,22 @@ private struct AgentToolActivityTimelineRow: View {
         case .failed:
             return Color(nsColor: .secondaryLabelColor)
         case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
-            return appState.editorSettings.interfaceSkin.palette.accent
+            return .primary
         case .succeeded, .denied:
             return Color(nsColor: .secondaryLabelColor)
         }
     }
 
     private var agentMetadataFont: Font {
-        (AgentChatFontChoice.byID(appState.agentChatFontID) ?? .system)
-            .swiftUIFont(size: appState.agentChatBaseFontSize)
+        AgentDesign.chatSupportingFont(baseFontSize: appState.agentChatBaseFontSize)
     }
 
     private var agentMetadataLineSpacing: CGFloat {
-        AgentChatTypography.lineSpacing(
-            fontSize: appState.agentChatBaseFontSize,
+        let fontSize = AgentDesign.chatSupportingFontSize(
+            baseFontSize: appState.agentChatBaseFontSize
+        )
+        return AgentChatTypography.lineSpacing(
+            fontSize: fontSize,
             lineHeightMultiple: appState.agentChatLineHeightMultiple
         )
     }

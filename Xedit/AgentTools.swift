@@ -309,6 +309,11 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
+        guard !AgentTerminalAutomationPolicy.forbidsShortcutReplay(toolName: name) else {
+            throw AgentToolError.invalidArgument(
+                "Saved Terminal recording shortcuts are user-run only. Ask the user to press Run in the visible Terminal panel."
+            )
+        }
         let resolution = resolvesSecretsForTool(name)
             ? AgentSecretStore.resolve(arguments)
             : AgentSecretResolution(value: .object(arguments), secretValues: [])

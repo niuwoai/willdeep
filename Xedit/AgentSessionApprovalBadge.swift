@@ -351,18 +351,14 @@ private struct Badge: View {
             .font(AgentDesign.chatSupportingFont(
                 baseFontSize: baseFontSize,
                 visualMinimum: 10,
-                weight: .medium
+                weight: .semibold
             ))
-            .foregroundStyle(Color.secondary.opacity(0.86))
+            .foregroundStyle(Color.white)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background(Color.primary.opacity(0.05), in: Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(Color.primary.opacity(0.075), lineWidth: 0.5)
-            )
+            .background(Color.black, in: Capsule())
             .help(L10n.Sidebar.sessionRowWaitingApprovalTooltip)
             .accessibilityLabel(Text(L10n.Sidebar.sessionRowWaitingApprovalTooltip))
     }
