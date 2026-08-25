@@ -427,10 +427,10 @@ enum AgentSandboxPolicy {
             )
         case "web_fetch":
             return AgentSandboxDecision(
-                mode: .escalated,
-                requiresUserApproval: true,
+                mode: .readOnlyNetwork,
+                requiresUserApproval: false,
                 requiresTypedConfirmation: false,
-                reason: "Network access to an arbitrary URL requires approval.",
+                reason: "GET-only public webpage read; URL and redirects are validated locally before access.",
                 prefixRule: nil
             )
         case "lark_cli":

@@ -1089,11 +1089,14 @@ struct WillDeepTests {
         let fetchApproval = await appState.autoApprovalSource(
             toolName: "web_fetch",
             arguments: ["url": .string("https://example.com/docs")],
-            risk: .write,
+            risk: .read,
             rootDirectory: root,
-            interactionMode: .goal
+            interactionMode: .goal,
+            approvalMode: .requestEveryTime
         )
-        #expect(fetchApproval == .goalMode)
+        // Read-tier web access never creates an approval record, even under
+        // the strictest policy. URL validation remains inside web_fetch.
+        #expect(fetchApproval == nil)
 
         let curlApproval = await appState.autoApprovalSource(
             toolName: "run_command",
@@ -1486,12 +1489,12 @@ struct WillDeepTests {
         )
         #expect(untrustedMCP == nil)
 
-        // Workspace Access authorizes workspace writes, not external network
-        // effects. Smart review is responsible for judging web/curl actions.
+        // GET-only webpage reads are read-tier in every mode; general curl
+        // remains a command-shaped external network effect.
         let workspaceFetch = await appState.autoApprovalSource(
             toolName: "web_fetch",
             arguments: ["url": .string("https://docs.example.com/guide")],
-            risk: .write,
+            risk: .read,
             rootDirectory: gitRoot,
             approvalMode: .workspaceAccess
         )

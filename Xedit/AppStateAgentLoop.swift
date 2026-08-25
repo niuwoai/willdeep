@@ -1925,8 +1925,8 @@ extension AppState {
                 }
 
                 // Goal evidence planning blocks writes until the host validates
-                // a plan, while still allowing validated public web GETs needed
-                // for research. Resolved during
+                // a plan, while all read-tier research tools remain available.
+                // Resolved during
                 // staging (synchronously, right after the record is appended)
                 // so a gated call never sits on screen as an approvable card.
                 // `ask_user` is exempt exactly as in the old serial flow,

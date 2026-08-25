@@ -6,15 +6,11 @@
 //  provider, with some.im managed fallback) and `web_fetch` (GET a
 //  public URL, reduce HTML to readable text).
 //
-//  Risk posture mirrors the run_command classifier's stance on
-//  curl/wget (both are flagged dangerous there): arbitrary fetching is
-//  an exfiltration channel once hostile instructions are in context,
-//  so `web_fetch` stays write-tier — per-call Allow, pinnable per
-//  domain via the `web_fetch:<host>` signature, auto-approved for
-//  validated public URLs during Plan research and in Goal mode.
-//  `web_search` only ships the query string to one configured
-//  search provider endpoint, so it rides the read tier like
-//  search_files.
+//  Both tools are read-tier and run without an approval card. `web_fetch`
+//  is deliberately narrower than general curl/wget: it sends only GET,
+//  caps the response, accepts text content, and locally refuses private,
+//  loopback, link-local, single-label, or credential-bearing URLs on the
+//  initial request and every redirect hop.
 //
 //  Both tools refuse loopback / RFC1918 / link-local hosts (and
 //  redirects onto them) so the agent can't probe the user's LAN or
@@ -583,14 +579,16 @@ enum AgentWebTools {
 
     // MARK: - URL validation / SSRF guard
 
-    /// Parse + validate: http(s) scheme, non-empty host, host not in a
-    /// private / loopback / link-local range. Returns nil when any
-    /// check fails. Re-run on every redirect hop by RedirectGuard.
+    /// Parse + validate: http(s) scheme, non-empty public host, and no URL
+    /// credentials. Returns nil when any check fails. Re-run on every
+    /// redirect hop by RedirectGuard.
     nonisolated static func validatedPublicURL(_ raw: String) -> URL? {
         guard let url = URL(string: raw),
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               let host = url.host, !host.isEmpty,
+              url.user == nil,
+              url.password == nil,
               !isBlockedHost(host) else {
             return nil
         }
@@ -611,6 +609,13 @@ enum AgentWebTools {
 
         if host == "localhost" || host.hasSuffix(".localhost") { return true }
         if host.hasSuffix(".local") || host.hasSuffix(".internal") || host.hasSuffix(".home.arpa") {
+            return true
+        }
+
+        // A single-label hostname normally resolves through the user's local
+        // search domain (printer, nas, staging). It is not a public webpage
+        // target and must not become an approval-free LAN probe.
+        if !host.contains(".") && !host.contains(":") {
             return true
         }
 

@@ -669,7 +669,7 @@ enum AgentToolDecision {
 /// per-call Allow button and the legacy auto-allow path. `.alwaysAllowList`
 /// means the user previously pinned this command signature. `.staticAllowlist`
 /// means a static safety policy flagged it as low-risk, including bounded
-/// local metadata changes and validated public web fetches. `.llmJudge`
+/// local metadata changes. `.llmJudge`
 /// means the LLM judge classifier approved it as non-malicious work. `.goalMode` means the
 /// session was in Goal mode, which auto-approves write-tier calls
 /// (danger-tier still gates on the user). `.workspaceAccess` means the

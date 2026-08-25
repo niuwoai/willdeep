@@ -484,16 +484,14 @@ enum AgentSubagentRunner {
 
     /// The only tools a subagent may call. Deliberately excludes:
     /// `spawn_agent` (no nesting), `ask_user` (nobody to ask),
-    /// MCP tools (server side effects unknowable), background-job
-    /// tools (a child shouldn't leave processes behind), and
-    /// `web_fetch` (write-tier: arbitrary fetches need the parent
-    /// session's approval UI, which a child doesn't have).
-    /// `web_search` is in: read-tier, single well-known endpoint,
-    /// and research subagents are its main customer.
+    /// MCP tools (server side effects unknowable) and background-job tools
+    /// (a child shouldn't leave processes behind). `web_search` and the
+    /// locally validated, GET-only `web_fetch` are read-tier so research
+    /// children can follow an exact public result without an approval UI.
     static let allowedToolNames: Set<String> = [
         "search_files", "grep_files", "read_file", "list_directory",
         "git_status", "run_command", "list_skills", "read_skill",
-        "web_search",
+        "web_search", "web_fetch",
     ]
 
     static var toolDescriptors: [AgentToolDescriptor] {
@@ -632,7 +630,7 @@ enum AgentSubagentRunner {
         if outputSchema == nil {
             lines.append("""
             Rules:
-            - You have READ-ONLY access: search/grep/read/list tools, read-only shell commands, and `web_search` for public web lookups. Write operations are denied — do not attempt them; report what should be changed instead.
+            - You have READ-ONLY access: search/grep/read/list tools, read-only shell commands, `web_search`, and GET-only `web_fetch` for public web lookups. Write operations are denied — do not attempt them; report what should be changed instead.
             - You cannot ask the user anything. Make reasonable assumptions and note them.
             - Work autonomously until the task is done, then STOP calling tools and write your final report as a normal message.
             - Your final message IS the deliverable returned to the parent agent. Make it self-contained, specific (file paths, line numbers, code excerpts), and free of filler.
@@ -642,7 +640,7 @@ enum AgentSubagentRunner {
             // 工具把最终结果作为 JSON 交付。schema 同步贴出来作 contract。
             lines.append("""
             Rules:
-            - You have READ-ONLY access: search/grep/read/list tools, read-only shell commands, and `web_search` for public web lookups. Write operations are denied — do not attempt them; report what should be changed instead.
+            - You have READ-ONLY access: search/grep/read/list tools, read-only shell commands, `web_search`, and GET-only `web_fetch` for public web lookups. Write operations are denied — do not attempt them; report what should be changed instead.
             - You cannot ask the user anything. Make reasonable assumptions and note them.
             - Work autonomously until you have the answer. Then STOP calling the read-only tools.
             - **Structured output required**: prefer delivering the final answer by calling the `\(structuredOutputToolName)` tool. Its `data` argument MUST be a JSON STRING that parses into a value satisfying the schema below.
@@ -1100,7 +1098,7 @@ enum AgentSubagentRunner {
                 )
             }
 
-            // 普通工具(read-only / web_search 等)走原路径。schema 模式
+            // 普通工具(read-only / web_search / web_fetch 等)走原路径。schema 模式
             // 下,structured_output 已经在前面拎走处理,这里只剩别的。
             for call in toolCalls where call.toolName != structuredOutputToolName {
                 try Task.checkCancellation()

@@ -74528,31 +74528,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enables the built-in web_search tool. Auto tries local Exa first, then Brave; if both keys are empty and some.im is signed in, it uses some.im managed search. API keys are stored in the macOS Keychain. web_fetch needs no key and asks for approval per domain."
+            "value" : "Enables the built-in web_search tool. Auto tries local Exa first, then Brave; if both keys are empty and some.im is signed in, it uses some.im managed search. API keys are stored in the macOS Keychain. web_fetch needs no key and reads locally validated public pages without approval prompts."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Activa la herramienta integrada web_search. El modo automático prueba primero con Exa local y luego con Brave; si ambas claves están vacías y has iniciado sesión en some.im, usa la búsqueda gestionada de some.im. Las claves de API se guardan en el llavero de macOS. web_fetch no necesita clave y pide aprobación por dominio."
+            "value" : "Activa la herramienta integrada web_search. El modo automático prueba primero con Exa local y luego con Brave; si ambas claves están vacías y has iniciado sesión en some.im, usa la búsqueda gestionada de some.im. Las claves de API se guardan en el llavero de macOS. web_fetch no necesita clave y lee páginas públicas validadas localmente sin pedir aprobación."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Active l'outil intégré web_search. Le mode automatique essaie d'abord Exa en local, puis Brave ; si les deux clés sont vides et que vous êtes connecté à some.im, il utilise la recherche gérée par some.im. Les clés API sont stockées dans le trousseau macOS. web_fetch ne nécessite aucune clé et demande une approbation par domaine."
+            "value" : "Active l'outil intégré web_search. Le mode automatique essaie d'abord Exa en local, puis Brave ; si les deux clés sont vides et que vous êtes connecté à some.im, il utilise la recherche gérée par some.im. Les clés API sont stockées dans le trousseau macOS. web_fetch ne nécessite aucune clé et lit les pages publiques validées localement sans demander d'approbation."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "組み込みの web_search ツールを有効にします。自動モードではまずローカルの Exa を試し、次に Brave にフォールバックします。両方のキーが空で some.im にサインインしている場合は、some.im の管理検索を使用します。API キーは macOS キーチェーンに保存されます。web_fetch にはキーが不要で、ドメインごとに承認を求めます。"
+            "value" : "組み込みの web_search ツールを有効にします。自動モードではまずローカルの Exa を試し、次に Brave にフォールバックします。両方のキーが空で some.im にサインインしている場合は、some.im の管理検索を使用します。API キーは macOS キーチェーンに保存されます。web_fetch にはキーが不要で、ローカル検証済みの公開ページを承認なしで読み取ります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用于启用内置 web_search 搜索工具。自动模式优先使用本地 Exa，然后回退到 Brave；如果两个密钥都为空且已登录 some.im，则使用 some.im 托管搜索。密钥保存在 macOS 钥匙串中。web_fetch 抓取网页无需密钥，按域名逐次授权。"
+            "value" : "用于启用内置 web_search 搜索工具。自动模式优先使用本地 Exa，然后回退到 Brave；如果两个密钥都为空且已登录 some.im，则使用 some.im 托管搜索。密钥保存在 macOS 钥匙串中。web_fetch 抓取网页无需密钥，本地校验为公开网页后直接读取，不再询问。"
           }
         }
       }
