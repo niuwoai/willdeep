@@ -37,6 +37,7 @@ enum TestDefaultsHygiene {
         "willdeep-mobile-gateway-room-",
         "willdeep-profiles-",
         "willdeep-runtime-store-",
+        "willdeep-telemetry-",
     ]
 
     /// once 语义：进程内首次访问时扫一遍 ~/Library/Preferences，删掉
