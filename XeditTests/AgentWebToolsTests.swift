@@ -3,8 +3,8 @@
 //  XeditTests
 //
 //  Network-free coverage for the web_search / web_fetch tool layer:
-//  SSRF host denylist, URL validation, the HTML→text reducer, Exa /
-//  Brave response formatting, and the registry / authorization /
+//  SSRF host denylist, approval-free read classification, URL validation,
+//  the HTML→text reducer, Exa / Brave response formatting, and registry /
 //  subagent wiring invariants.
 //
 
@@ -28,36 +28,40 @@ struct AgentWebToolsTests {
         #expect(search.description.contains("some.im managed search"))
 
         let fetch = try #require(AgentToolRegistry.descriptor(for: "web_fetch"))
-        #expect(fetch.risk == .write)
+        #expect(fetch.risk == .read)
+        #expect(fetch.description.contains("without an approval prompt"))
         #expect(fetch.parameters.contains { $0.name == "url" && $0.required })
     }
 
-    /// Subagents may search (read tier) but must not fetch arbitrary
-    /// URLs — there is no approval UI in the child loop.
+    /// Both web tools are locally bounded reads, so a headless research child
+    /// can follow an exact result without needing an approval UI.
     @Test
-    func subagentAllowlistIncludesSearchButNotFetch() {
+    func subagentAllowlistIncludesSearchAndFetch() {
         #expect(AgentSubagentRunner.allowedToolNames.contains("web_search"))
-        #expect(!AgentSubagentRunner.allowedToolNames.contains("web_fetch"))
+        #expect(AgentSubagentRunner.allowedToolNames.contains("web_fetch"))
+        #expect(AgentSubagentProfileCatalog.reader.toolNames.contains("web_fetch"))
     }
 
-    // MARK: - Always-allow signature
+    // MARK: - Approval-free read policy
 
     @Test
-    func webFetchSignatureScopesByLowercasedHost() {
-        let signature = AgentToolAuthorization.signature(
-            toolName: "web_fetch",
-            arguments: ["url": .string("https://Docs.Example.COM/guide/page?x=1")]
-        )
-        #expect(signature == "web_fetch:docs.example.com")
-    }
-
-    @Test
-    func webFetchSignatureNilWithoutHost() {
-        #expect(AgentToolAuthorization.signature(toolName: "web_fetch", arguments: [:]) == nil)
+    func webFetchDoesNotCreateAnObsoletePersistentApprovalRule() {
         #expect(AgentToolAuthorization.signature(
             toolName: "web_fetch",
-            arguments: ["url": .string("not a url")]
+            arguments: ["url": .string("https://Docs.Example.COM/guide/page?x=1")]
         ) == nil)
+    }
+
+    @Test
+    func webFetchUsesReadOnlyNetworkSandboxWithoutApproval() {
+        let decision = AgentSandboxPolicy.decision(
+            toolName: "web_fetch",
+            arguments: ["url": .string("https://docs.example.com/guide")],
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-test-workspace")
+        )
+        #expect(decision.mode == .readOnlyNetwork)
+        #expect(!decision.requiresUserApproval)
+        #expect(!decision.requiresTypedConfirmation)
     }
 
     // MARK: - SSRF guard
@@ -95,27 +99,29 @@ struct AgentWebToolsTests {
         #expect(AgentWebTools.validatedPublicURL("http://example.com") != nil)
         #expect(AgentWebTools.validatedPublicURL("ftp://example.com") == nil)
         #expect(AgentWebTools.validatedPublicURL("file:///etc/passwd") == nil)
+        #expect(AgentWebTools.validatedPublicURL("https://user:secret@example.com/docs") == nil)
+        #expect(AgentWebTools.validatedPublicURL("http://printer/status") == nil)
         #expect(AgentWebTools.validatedPublicURL("https://localhost/admin") == nil)
         #expect(AgentWebTools.validatedPublicURL("http://169.254.169.254/latest/meta-data/") == nil)
         #expect(AgentWebTools.validatedPublicURL("not a url") == nil)
     }
 
     @Test
-    func goalPlanningGateAllowsOnlyValidatedPublicWebFetchResearch() {
+    func goalPlanningGateTreatsWebFetchAsOrdinaryRead() {
         let publicFetch = ["url": AgentJSONValue.string("https://developer.apple.com/documentation")]
         let privateFetch = ["url": AgentJSONValue.string("http://127.0.0.1/admin")]
 
-        #expect(AppState.goalPlanningCanAutoApprove(toolName: "web_fetch", arguments: publicFetch))
+        #expect(!AppState.goalPlanningCanAutoApprove(toolName: "web_fetch", arguments: publicFetch))
         #expect(!AppState.goalPlanningGateBlocks(
             toolName: "web_fetch",
             arguments: publicFetch,
-            risk: .write,
+            risk: .read,
             isActive: true
         ))
-        #expect(AppState.goalPlanningGateBlocks(
+        #expect(!AppState.goalPlanningGateBlocks(
             toolName: "web_fetch",
             arguments: privateFetch,
-            risk: .write,
+            risk: .read,
             isActive: true
         ))
         #expect(AppState.goalPlanningGateBlocks(
@@ -127,7 +133,7 @@ struct AgentWebToolsTests {
     }
 
     @Test
-    func goalPlanningAutoApprovesValidatedPublicWebResearchOnly() async {
+    func webpageReadsNeverCreateApprovalRecordsInAnyMode() async {
         let sandbox = KeychainSandbox()
         defer { withExtendedLifetime(sandbox) {} }
         let appState = AppState()
@@ -136,17 +142,17 @@ struct AgentWebToolsTests {
         let publicFetch = await appState.autoApprovalSource(
             toolName: "web_fetch",
             arguments: ["url": .string("https://developer.apple.com/documentation")],
-            risk: .write,
+            risk: .read,
             rootDirectory: root,
             interactionMode: .goal,
             approvalMode: .requestEveryTime
         )
-        #expect(publicFetch == .goalMode)
+        #expect(publicFetch == nil)
 
         let privateFetch = await appState.autoApprovalSource(
             toolName: "web_fetch",
             arguments: ["url": .string("http://127.0.0.1/admin")],
-            risk: .write,
+            risk: .read,
             rootDirectory: root,
             interactionMode: .goal
         )
@@ -165,9 +171,10 @@ struct AgentWebToolsTests {
         let normalFetch = await appState.autoApprovalSource(
             toolName: "web_fetch",
             arguments: ["url": .string("https://developer.apple.com/documentation")],
-            risk: .write,
+            risk: .read,
             rootDirectory: root,
-            interactionMode: .normal
+            interactionMode: .normal,
+            approvalMode: .requestEveryTime
         )
         #expect(normalFetch == nil)
     }

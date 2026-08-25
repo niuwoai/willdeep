@@ -334,7 +334,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         id: readerID,
         purpose: "Read and summarize: digest long files, docs, or public web pages and answer questions about their content. No shell.",
         modelBinding: balancedBinding,
-        toolNames: ["read_file", "list_directory", "web_search"],
+        toolNames: ["read_file", "list_directory", "web_search", "web_fetch"],
         capabilityPromptSection: AgentSubagentJobPrompts.reader,
         maxRounds: 8,
         toolPayloadCharacterLimit: balancedPayloadCharacterLimit,
