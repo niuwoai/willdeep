@@ -1583,7 +1583,7 @@ struct AgentChatHistoryRendererTests {
     }
 
     @Test
-    func settledTurnKeepsOneToolSummaryAfterFinalAssistantProgress() throws {
+    func settledTurnInterleavesEachToolResultWithItsOwningGoal() throws {
         let user = AgentMessage(role: .user, content: "逐个测试模型")
         var first = AgentMessage(
             role: .assistant,
@@ -1619,13 +1619,20 @@ struct AgentChatHistoryRendererTests {
             isDark: false
         ).string
 
-        #expect(rendered.components(separatedBy: "已运行2条命令").count - 1 == 1)
+        #expect(rendered.components(separatedBy: "已运行1条命令").count - 1 == 2)
         #expect(rendered.contains("1条失败"))
+        let firstRange = try #require(rendered.range(of: first.content))
+        let firstToolRange = try #require(rendered.range(of: "已运行1条命令(1条失败)"))
+        let secondRange = try #require(rendered.range(of: second.content))
+        let secondToolRange = try #require(rendered.range(
+            of: "已运行1条命令",
+            range: firstToolRange.upperBound..<rendered.endIndex
+        ))
         let finalRange = try #require(rendered.range(of: final.content))
-        let toolRange = try #require(rendered.range(of: "已运行2条命令"))
-        #expect(finalRange.upperBound < toolRange.lowerBound)
-        #expect(!rendered.contains("我先获取模型列表。\n已运行1条命令"))
-        #expect(!rendered.contains("共有 9 个模型，现在逐个测试。\n已运行1条命令"))
+        #expect(firstRange.upperBound < firstToolRange.lowerBound)
+        #expect(firstToolRange.upperBound < secondRange.lowerBound)
+        #expect(secondRange.upperBound < secondToolRange.lowerBound)
+        #expect(secondToolRange.upperBound < finalRange.lowerBound)
     }
 
     @Test
