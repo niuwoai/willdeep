@@ -1205,8 +1205,11 @@ struct AgentChatHistoryRendererTests {
             at: summaryRange.location,
             effectiveRange: nil
         ) as? NSFont)
-        let supportingFontSize = AgentDesign.chatSupportingFontSize(baseFontSize: baseFontSize)
-        #expect(summaryFont.pointSize == supportingFontSize)
+        // 活动行跟随聊天正文字号,不降到 supporting 档。
+        #expect(summaryFont.pointSize == baseFontSize)
+        #expect(summaryFont.pointSize > AgentDesign.chatSupportingFontSize(
+            baseFontSize: baseFontSize
+        ))
         let summaryStyle = try #require(collapsed.attribute(
             .paragraphStyle,
             at: summaryRange.location,
@@ -1214,7 +1217,7 @@ struct AgentChatHistoryRendererTests {
         ) as? NSParagraphStyle)
         #expect(summaryStyle.lineBreakMode == .byWordWrapping)
         #expect(summaryStyle.lineSpacing == AgentChatTypography.lineSpacing(
-            fontSize: supportingFontSize,
+            fontSize: baseFontSize,
             lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
         ))
 
@@ -1275,7 +1278,6 @@ struct AgentChatHistoryRendererTests {
         ))
         #expect(!summaryLine.contains(" · "))
         #expect(summaryLine.contains("\n"))
-        #expect(collapsed.string.contains("我先检查工程状态。\n\n"))
 
         let bodyRange = collapsedText.range(of: "我先检查工程状态。")
         let bodyFont = try #require(collapsed.attribute(
@@ -1303,13 +1305,17 @@ struct AgentChatHistoryRendererTests {
             at: copyRange.location,
             effectiveRange: nil
         ) as? NSParagraphStyle)
+        // 活动行跟正文同字号同行距;回合末尾的统计 footer 仍是降一档的
+        // supporting 字号,两者不能再被同一个断言绑在一起。
         let supportingFontSize = AgentDesign.chatSupportingFontSize(
             baseFontSize: bodyFont.pointSize
         )
-        #expect(toolFont.pointSize == supportingFontSize)
-        #expect(toolFont.pointSize < bodyFont.pointSize)
-        #expect(toolStyle.lineSpacing == footerStyle.lineSpacing)
+        #expect(toolFont.pointSize == bodyFont.pointSize)
         #expect(toolStyle.lineSpacing == AgentChatTypography.lineSpacing(
+            fontSize: bodyFont.pointSize,
+            lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
+        ))
+        #expect(footerStyle.lineSpacing == AgentChatTypography.lineSpacing(
             fontSize: supportingFontSize,
             lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
         ))
@@ -1324,23 +1330,49 @@ struct AgentChatHistoryRendererTests {
             location: bodyEnd,
             length: readRange.location - bodyEnd
         )
-        #expect(collapsedText.substring(with: bodyToToolRange).hasPrefix("\n\n"))
-        let metadataSpacerFont = try #require(collapsed.attribute(
-            .font,
-            at: bodyEnd + 1,
-            effectiveRange: nil
-        ) as? NSFont)
-        let metadataSpacerStyle = try #require(collapsed.attribute(
+        // 活动行紧跟发起它的那段正文,中间只有一个普通换行(没有额外的
+        // spacer 行);上下间距的差别由活动组自己的段落 margin 承担。
+        let bodyToToolText = collapsedText.substring(with: bodyToToolRange)
+        #expect(bodyToToolText.hasPrefix("\n"))
+        #expect(!bodyToToolText.hasPrefix("\n\n"))
+        let separatorStyle = try #require(collapsed.attribute(
             .paragraphStyle,
-            at: bodyEnd + 1,
+            at: bodyEnd,
             effectiveRange: nil
         ) as? NSParagraphStyle)
-        let expectedMetadataSpacing = AgentDesign.assistantMetadataTopSpacing(
+        let proseStyle = try #require(collapsed.attribute(
+            .paragraphStyle,
+            at: bodyRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(separatorStyle.lineSpacing == proseStyle.lineSpacing)
+        #expect(separatorStyle.minimumLineHeight == 0)
+        #expect(separatorStyle.maximumLineHeight == 0)
+
+        // 上小下大:活动组紧跟发起它的正文,和下一段正文之间拉开。
+        let expectedBefore = AgentChatHistoryLayoutMetrics.toolActivityGroupSpacingBefore(
             baseFontSize: bodyFont.pointSize
         )
-        #expect(abs(metadataSpacerFont.pointSize - expectedMetadataSpacing) < 0.001)
-        #expect(abs(metadataSpacerStyle.minimumLineHeight - expectedMetadataSpacing) < 0.001)
-        #expect(abs(metadataSpacerStyle.maximumLineHeight - expectedMetadataSpacing) < 0.001)
+        let expectedAfter = AgentChatHistoryLayoutMetrics.toolActivityGroupSpacingAfter(
+            baseFontSize: bodyFont.pointSize
+        )
+        #expect(expectedBefore > 0)
+        #expect(expectedAfter > expectedBefore)
+        let firstActivityStyle = try #require(collapsed.attribute(
+            .paragraphStyle,
+            at: readRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let lastActivityStyle = try #require(collapsed.attribute(
+            .paragraphStyle,
+            at: commandRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(abs(firstActivityStyle.paragraphSpacingBefore - expectedBefore) < 0.001)
+        #expect(abs(lastActivityStyle.paragraphSpacing - expectedAfter) < 0.001)
+        // 中间行不能带 margin,否则组内行距被一起撑开。
+        #expect(firstActivityStyle.paragraphSpacing < expectedAfter)
+        #expect(lastActivityStyle.paragraphSpacingBefore < expectedBefore)
 
         let groupID = "inline:\(proseID.uuidString):\(followupID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
@@ -1938,9 +1970,8 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSColor)
         #expect(interimFont.pointSize == finalFont.pointSize)
-        #expect(interimColor == AgentChatHistoryLayoutMetrics.assistantProcessTextColor(
-            isDark: false
-        ))
+        // 过程叙述和最终答案都用正文黑；灰色只留给工具活动行这类 chrome。
+        #expect(interimColor == NSColor.labelColor)
         #expect(finalColor == NSColor.labelColor)
 
         let transitionRange = NSRange(

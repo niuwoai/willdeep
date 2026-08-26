@@ -1265,14 +1265,20 @@ enum AgentChatHistoryLayoutMetrics {
     static let listNestingIndent: CGFloat = 18
     static let listHangingIndent: CGFloat = 22
     static let listParagraphSpacing: CGFloat = 3
-    /// Variant A: process prose shares the configured body size with the
-    /// answer, so grayscale — not a second type scale — carries hierarchy.
-    /// The dark-mode value is lifted enough to retain the same readable role
-    /// on a near-black transcript surface.
-    static func assistantProcessTextColor(isDark: Bool) -> NSColor {
-        let white: CGFloat = isDark ? 0.68 : 0.52
-        return NSColor(srgbRed: white, green: white, blue: white, alpha: 1)
+    /// 工具活动行归属于发起它的那段正文：上间距只给一点点空气，下间距
+    /// 明显更大，「正文 + 活动行」于是读成一个块。两边等距时(rc9)整串
+    /// 正文和活动行排成一列，看不出谁跟着谁。
+    static let toolActivityGroupSpacingBeforeScale: CGFloat = 0.25
+    static let toolActivityGroupSpacingAfterScale: CGFloat = 0.75
+
+    static func toolActivityGroupSpacingBefore(baseFontSize: CGFloat) -> CGFloat {
+        max(0, baseFontSize * toolActivityGroupSpacingBeforeScale)
     }
+
+    static func toolActivityGroupSpacingAfter(baseFontSize: CGFloat) -> CGFloat {
+        max(0, baseFontSize * toolActivityGroupSpacingAfterScale)
+    }
+
     /// Measured from the Codex reference at 1x: 9 pt from the status line
     /// box to the divider, then 18 pt from the divider to the body line box.
     static let assistantStatusDividerTopSpacing: CGFloat = 9

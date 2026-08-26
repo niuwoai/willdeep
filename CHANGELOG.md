@@ -1,7 +1,56 @@
 # Changelog
 
-> 当前文件保留最新版本（1.293.0-rc7 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.294.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.294.0-rc1 - 2026-08-26
+
+> 背景：本机落盘取证显示 15 个工种里只有 `deep`(26 次) / `implementer`(5 次) / `scout`(3 次) 真正跑过，`ops_runner`、`git_detective`、`log_inspector`、`test_fixer`、`build_fixer` 等 12 个工种自上线以来 0 次调用。本版针对"活到不了工种手里"的四处断点。
+
+### Added
+
+- **托管工种的模型链缺失时回落重跑一次。** `hostedTradeIDs` 是手工维护的 relay 快照，链一旦下线、改名或没铺完，网关返回 `model_not_configured`，spawn 直接失败——工种在界面上还列着，用户看到的却是"subagent failed"。现在这一种错误会用 `deepseek-v4-flash` 重跑一次，并在报告里写明哪条链失效、实际跑在哪个模型上，让过期的名单可见而不是被抹平。只覆盖工种自己声明的托管虚拟模型和这一种错误；用户显式选定的模型、工种自身失败都不会被悄悄换掉。
+- **只读工种拿到第一个确定性触发点：工具输出被截断。** 工具结果超过 24000 字符会被砍尾，父模型此后是在一份只看了开头的材料上推理——这正是交给有独立窗口的 worker 最划算的时刻。被砍掉超过 4000 字符时按来源点名工种：`git log` / `blame` / `diff` → `git_detective`，`log show` / `journalctl` / `docker logs` → `log_inspector`，`grep_files` / `search_files` → `scout`，`read_file` → `reader`。每回合最多提示一次，扫大目录时不会刷屏。
+
+### Fixed
+
+- **失败分类不再只看命令长什么样。** 此前只按命令形状匹配 test/build/release 标记，命令形状不像就直接放弃。实测漏网案例：`gofmt -w internal/perftest/loadgen/config.go` 失败，输出是 `FAIL … [build failed]` 加一条 Go 编译诊断，因为命令写着 gofmt 而没被认成任何工种。现在形状认不出时改看失败日志的编译器/测试执行特征，`build_fixer` 与 `test_fixer` 的自动派工同步走这条通道；日志通道只认非编译器不会打印的标记，失败时打印"build"这个词的普通脚本仍然不匹配。
+- **测试超时不再一律出局。** 触发条件原本要求非零退出码，而超时没有退出码，于是被和"启动失败/取消"归为一类丢弃——实测中 `yarn test:e2e` 超时是最常见的测试失败形态，每一次都被无声丢掉。现在超时的 test/build 命令会给出提示，并明确要求 worker 用**缩小范围后**的命令作为 verifier（单个测试文件、单个 target），而不是原样接过那条刚撞线的命令。发布类命令超时不提示，判断是否重试仍留在主会话。
+
+### Tests
+
+- 新增 [AgentWorkerReachTests](XeditTests/AgentWorkerReachTests.swift)：日志特征分类（含 gofmt 实测样本与"普通散文不匹配"反例）、超时提示与 launch failure 的分界、四类只读工种的点名与每回合一次限流、托管链回落的四种边界（普通失败不换模型、非托管模型不动、回落模型自身失败不成环）。相关 5 个套件共 95 项通过，委派链路 6 个套件 58 项回归通过。
+
+## 1.293.0-rc10 - 2026-08-26
+
+### Changed
+
+- **工具活动行改用聊天正文字号。** 「已运行 1 条命令」「已读取 3 个文件」这类活动行不再降一档到 supporting 字号，跟随设置里的聊天字号和行高，与正文同大小；图标随字号同步放大。运行中的实时活动时间线一并改为正文字号，回合结束落进历史时不再出现字号跳变。回合末尾的统计行（tokens / 耗时）仍是 supporting 字号——它是元数据，不是过程记录。
+- **活动行的上下间距改成上小下大。** 活动行与其上方正文之间留 `0.25 × 聊天字号`（默认 3.75pt），与下一段正文之间留 `0.75 × 聊天字号`（默认 11.25pt）。rc9 的等距让「正文、活动行、正文、活动行」排成一列均匀队伍，看不出活动行属于哪一句；现在「正文 + 活动行」读成一个块。间距落在活动组的首段与末段 margin 上，不进共享段落样式，组内多行仍保持紧凑。
+
+### Tests
+
+- [AgentChatHistoryRendererTests](XeditTests/AgentChatHistoryRendererTests.swift) 的内联活动层用例改为锁定活动行与正文同字号同行距、统计 footer 仍为 supporting 字号，并新增首段 `paragraphSpacingBefore` / 末段 `paragraphSpacing` 的上小下大断言与「中间行不带 margin」的守卫。
+
+## 1.293.0-rc9 - 2026-08-26
+
+### Fixed
+
+- **工具活动行不再被推离发起它的那段正文。** 「已运行 1 条命令」这类灰色活动行与其上方正文之间，原先插入一行 `0.7 × 聊天字号`（默认 10.5pt）的 metadata 间隔，而活动行下方到下一段正文只隔一个普通换行，上大下小、活动行看起来不属于发起它的那句话。现在上方也只用普通换行，与下方对称、与正文段落间距一致。回合末尾统计行（tokens / 耗时）前的间隔保持不变。
+
+### Tests
+
+- [AgentChatHistoryRendererTests](XeditTests/AgentChatHistoryRendererTests.swift) 的内联活动层用例改为锁定正文与活动行之间只有单个换行、且该换行沿用正文段落的行距而非被压成 spacer 行高；统计行 0.7 倍间隔的用例保持原样，防止两处被一起改掉。
+
+## 1.293.0-rc8 - 2026-08-26
+
+### Changed
+
+- **聊天正文恢复正常黑色，灰色只留给工具活动行。** 同一回合里的过程叙述不再刷成 `#858585` 中灰，和最终结论一样使用系统主文字色；「已读取 3 个文件」「执行了 1 次工具调用」这类工具活动摘要继续用 `secondaryLabelColor` 灰。此前过程正文和工具 chrome 同为灰色，整段回复通篇发灰，反而看不出哪里是模型说的话、哪里是工具执行记录。过程与结论之间的半行间距保持不变，继续承担分段职责。
+
+### Tests
+
+- [AgentChatHistoryRendererTests](XeditTests/AgentChatHistoryRendererTests.swift) 的回合分组用例改为锁定过程与结论同为 `labelColor`，同字号与半行分区间距断言保持不变。
 
 ## 1.293.0-rc7 - 2026-08-26
 

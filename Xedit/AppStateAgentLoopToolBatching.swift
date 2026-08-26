@@ -166,7 +166,9 @@ extension AppState {
                     toolCallID: entry.externalID,
                     payload: result.payload,
                     images: result.images,
-                    outcomeStatus: .succeeded
+                    outcomeStatus: .succeeded,
+                    toolName: entry.toolName,
+                    toolCommand: entry.arguments["command"]?.stringValue()
                 )
             case .failure(is CancellationError), nil:
                 // User stopped the turn mid-batch. Answer this call like the

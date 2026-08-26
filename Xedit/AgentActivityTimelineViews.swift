@@ -186,16 +186,15 @@ private struct AgentActivityTimelineSummaryRow: View {
         .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
     }
 
+    // 活动行跟着聊天正文字号,不再降一档 —— 回合结束落进 TextKit
+    // transcript 后同样是正文字号,两个显示面之间不能有字号跳变。
     private var agentMetadataFont: Font {
-        AgentDesign.chatSupportingFont(baseFontSize: appState.agentChatBaseFontSize)
+        .system(size: appState.agentChatBaseFontSize)
     }
 
     private var agentMetadataLineSpacing: CGFloat {
-        let fontSize = AgentDesign.chatSupportingFontSize(
-            baseFontSize: appState.agentChatBaseFontSize
-        )
-        return AgentChatTypography.lineSpacing(
-            fontSize: fontSize,
+        AgentChatTypography.lineSpacing(
+            fontSize: appState.agentChatBaseFontSize,
             lineHeightMultiple: appState.agentChatLineHeightMultiple
         )
     }
@@ -235,9 +234,7 @@ private struct AgentToolActivityTimelineRow: View {
             Spacer(minLength: 0)
         }
         .frame(minHeight: AgentChatTypography.lineHeight(
-            fontSize: AgentDesign.chatSupportingFontSize(
-                baseFontSize: appState.agentChatBaseFontSize
-            ),
+            fontSize: appState.agentChatBaseFontSize,
             lineHeightMultiple: appState.agentChatLineHeightMultiple
         ))
         .help(errorDetail ?? presentation.title)
@@ -276,16 +273,14 @@ private struct AgentToolActivityTimelineRow: View {
         }
     }
 
+    // 同上:活动行跟着正文字号,和落定后的 transcript 保持同一档。
     private var agentMetadataFont: Font {
-        AgentDesign.chatSupportingFont(baseFontSize: appState.agentChatBaseFontSize)
+        .system(size: appState.agentChatBaseFontSize)
     }
 
     private var agentMetadataLineSpacing: CGFloat {
-        let fontSize = AgentDesign.chatSupportingFontSize(
-            baseFontSize: appState.agentChatBaseFontSize
-        )
-        return AgentChatTypography.lineSpacing(
-            fontSize: fontSize,
+        AgentChatTypography.lineSpacing(
+            fontSize: appState.agentChatBaseFontSize,
             lineHeightMultiple: appState.agentChatLineHeightMultiple
         )
     }

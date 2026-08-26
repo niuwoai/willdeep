@@ -368,12 +368,9 @@ enum AgentChatHistoryRenderer {
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
         // Status, tool activity, and footer statistics remain compact chrome.
         // Process prose itself follows the user's body-size setting exactly;
-        // grayscale and a half-line transition gap carry its hierarchy.
+        // the half-line transition gap carries its hierarchy.
         let assistantStatusFont = supportingFont
         let bodyColor = NSColor.labelColor
-        let assistantProcessColor = AgentChatHistoryLayoutMetrics.assistantProcessTextColor(
-            isDark: isDark
-        )
         let assistantStatusColor = NSColor.secondaryLabelColor
         let assistantStatusDividerColor = AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(
             isDark: isDark
@@ -479,9 +476,9 @@ enum AgentChatHistoryRenderer {
                     group,
                     isExpanded: expandedToolGroupIDs.contains(group.id),
                     to: result,
-                    bodyFont: supportingFont,
+                    bodyFont: bodyFont,
                     monoFont: chromeMonoFont,
-                    lineSpacing: supportingLineSpacing,
+                    lineSpacing: bodyLineSpacing,
                     secondaryColor: secondaryColor
                 )
                 continue
@@ -597,12 +594,13 @@ enum AgentChatHistoryRenderer {
             let activityHeadline = message.role == .assistant
                 ? AgentActivityHeadlinePresentation.make(from: body)
                 : nil
-            let isInterimAssistantMessage = message.role == .assistant
-                && turnPresentation != nil
-                && turnPresentation?.isLastVisibleMessage(message) == false
             let messageBodyFont = bodyFont
             let messageMonoFont = monoFont
-            let messageBodyColor = isInterimAssistantMessage ? assistantProcessColor : bodyColor
+            // 助手正文一律用正文黑：过程叙述和最终答案都是「模型说的话」。
+            // 层次交给工具活动行的灰(secondaryLabelColor)和过程→答案之间
+            // 的半行间距承担 —— 过程文字本身刷成灰会让整段回复看起来
+            // 通篇发灰，反而分不出哪里是纯 chrome。
+            let messageBodyColor = bodyColor
             let messageLineSpacing = bodyLineSpacing
             let messageParagraphStyle = bodyParagraphStyle(
                 for: message.role,
@@ -781,23 +779,31 @@ enum AgentChatHistoryRenderer {
             let inlineToolCalls = inlineGroup?.calls ?? []
             if let inlineGroup, !inlineToolCalls.isEmpty {
                 if hasMessageBubbleContent {
-                    // Keep the answer and metadata distinct, but use 0.7×
-                    // the configured body font size instead of a complete
-                    // blank body row. Tool summary and footer remain adjacent.
-                    _ = appendAssistantMetadataGroupSeparator(
-                        to: result,
-                        bodyFont: bodyFont,
-                        layoutWidth: layoutWidth,
-                        lineSpacing: bodyLineSpacing
-                    )
+                    // 工具活动行和发起它的那段正文之间只用一个普通换行,
+                    // 与活动行下方到下一段正文的间距对称(同回合的后续
+                    // assistant 消息同样只隔一个 "\n")。此前这里插 0.7×
+                    // 字号的 metadata spacer,上大下小,活动行看起来被推
+                    // 离了发起它的那句话。统计 footer 仍保留那道 spacer:
+                    // 它是回合末尾的元数据,和正文拉开是对的。
+                    result.append(NSAttributedString(
+                        string: "\n",
+                        attributes: [
+                            .font: bodyFont,
+                            .paragraphStyle: bodyParagraphStyle(
+                                for: .assistant,
+                                layoutWidth: layoutWidth,
+                                lineSpacing: bodyLineSpacing
+                            ),
+                        ]
+                    ))
                 }
                 appendToolCallGroup(
                     inlineGroup,
                     isExpanded: expandedToolGroupIDs.contains(inlineGroup.id),
                     to: result,
-                    bodyFont: supportingFont,
+                    bodyFont: bodyFont,
                     monoFont: chromeMonoFont,
-                    lineSpacing: supportingLineSpacing,
+                    lineSpacing: bodyLineSpacing,
                     secondaryColor: secondaryColor
                 )
             }
