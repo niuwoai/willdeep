@@ -287,6 +287,27 @@ enum AgentSidebarSessionTrailingLayout {
     }
 }
 
+/// Keeps hover invalidation inside the one workspace or conversation row
+/// currently under the pointer. Storing the hovered id on the parent sidebar
+/// made a scroll gesture rebuild every group whenever a new row passed under
+/// a stationary cursor.
+private struct AgentSidebarHoverScope<Content: View>: View {
+    @State private var isHovered = false
+    private let content: (Bool) -> Content
+
+    init(@ViewBuilder content: @escaping (Bool) -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        content(isHovered)
+            .onHover { hovering in
+                guard hovering != isHovered else { return }
+                isHovered = hovering
+            }
+    }
+}
+
 struct AgentSessionsSidebar: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
@@ -302,14 +323,6 @@ struct AgentSessionsSidebar: View {
     /// Archived sessions sit behind a disclosure row so they don't add
     /// noise to the main list but stay one click away.
     @State private var expandedArchivedGroups = AgentSidebarWorkspaceStateStore.load(.expandedArchivedGroups)
-    /// The session row the mouse is hovering. Drives the on-row
-    /// pin/archive button visibility — cursor-style "they only show up
-    /// when you're aiming at them".
-    @State private var hoveredSessionID: AgentSession.ID?
-    /// The workspace group the mouse is hovering. Drives the trailing
-    /// "+" (new chat in this workspace) button visibility, same
-    /// show-on-aim pattern as the session rows.
-    @State private var hoveredWorkspaceGroup: String?
     @State private var someIMAccount = SomeIMIntegrationStore.loadAuthenticatedAccount()
     @State private var isSomeIMAuthenticated = SomeIMIntegrationStore
         .loadAuthenticationSnapshot()
@@ -713,10 +726,10 @@ struct AgentSessionsSidebar: View {
         let archivedExpanded = expandedArchivedGroups.contains(workspace)
         let remoteWorkspace = remoteWorkspaceGroup(from: workspace)
         let remoteRuntime = group.remoteRuntime
-        let isWorkspaceHovered = hoveredWorkspaceGroup == workspace
         let isFocused = focusedWorkspaceGroupKey == workspace
 
-        VStack(alignment: .leading, spacing: 0) {
+        AgentSidebarHoverScope { isWorkspaceHovered in
+            VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: AgentDesign.sidebarWorkspaceIconToTitleSpacing) {
                 // Clicking the workspace identity collapses / expands the
                 // whole group. Using `folder` vs `folder.fill` as the visual
@@ -766,6 +779,9 @@ struct AgentSessionsSidebar: View {
                 }
                 .buttonStyle(.plain)
                 .help(isCollapsed ? L10n.Sidebar.workspaceToggleExpandTooltip : L10n.Sidebar.workspaceToggleCollapseTooltip)
+                .accessibilityAction(named: L10n.Sidebar.workspaceMenuNewChat) {
+                    startNewSession(inWorkspaceGroup: workspace)
+                }
                 Spacer(minLength: 0)
                 Button {
                     startNewSession(inWorkspaceGroup: workspace)
@@ -779,7 +795,11 @@ struct AgentSessionsSidebar: View {
                 .buttonStyle(.plain)
                 .opacity(isWorkspaceHovered ? 1 : 0)
                 .allowsHitTesting(isWorkspaceHovered)
-                .accessibilityHidden(!isWorkspaceHovered)
+                // VoiceOver gets the same operation as a stable custom
+                // action on the workspace button above. Keeping this visual
+                // hover affordance out of the accessibility tree avoids
+                // rebuilding that tree as rows move beneath the pointer.
+                .accessibilityHidden(true)
                 .help(L10n.Sidebar.workspaceMenuNewChat)
             }
             .padding(.horizontal, AgentDesign.sidebarWorkspaceHorizontalInset)
@@ -857,12 +877,6 @@ struct AgentSessionsSidebar: View {
             }
 
             Spacer().frame(height: AgentDesign.sidebarWorkspaceGroupSpacing)
-        }
-        .onHover { hovering in
-            if hovering {
-                hoveredWorkspaceGroup = workspace
-            } else if hoveredWorkspaceGroup == workspace {
-                hoveredWorkspaceGroup = nil
             }
         }
     }
@@ -915,16 +929,16 @@ struct AgentSessionsSidebar: View {
     ) -> some View {
         let palette = appState.editorSettings.interfaceSkin.palette
         let isActive = appState.activeAgentSessionID == session.id
-        let isHovered = (hoveredSessionID == session.id)
         let observedRuntime = appState.agentRuntimes[session.id]
         let displaySession = observedRuntime?.session ?? session
 
-        Button {
-            focusedWorkspaceGroupKey = nil
-            setSessionUnread(session.id, unread: false)
-            appState.selectAgentSession(id: session.id)
-        } label: {
-            HStack(spacing: 6) {
+        AgentSidebarHoverScope { isHovered in
+            Button {
+                focusedWorkspaceGroupKey = nil
+                setSessionUnread(session.id, unread: false)
+                appState.selectAgentSession(id: session.id)
+            } label: {
+                HStack(spacing: 6) {
                 if activeScheduledTaskCount(for: session) > 0 {
                     Image(systemName: "clock.fill")
                         .font(.system(size: 9, weight: .semibold))
@@ -998,33 +1012,41 @@ struct AgentSessionsSidebar: View {
                     accentColor: palette.accent
                 )
                 .opacity(isHovered ? 0 : 1)
-            }
-            .padding(.leading, contentLeadingInset)
-            .padding(.trailing, contentTrailingInset)
-            .frame(height: AgentDesign.sidebarRowHeight)
-            .contentShape(Rectangle())
-            .background(
-                RoundedRectangle(
+                }
+                .padding(.leading, contentLeadingInset)
+                .padding(.trailing, contentTrailingInset)
+                .frame(height: AgentDesign.sidebarRowHeight)
+                .contentShape(Rectangle())
+                .background(
+                    RoundedRectangle(
+                        cornerRadius: AgentDesign.sidebarSelectionCornerRadius,
+                        style: .continuous
+                    )
+                    .fill(isActive ? palette.selectionFill : (isHovered ? palette.hoverFill : Color.clear))
+                )
+                .clipShape(RoundedRectangle(
                     cornerRadius: AgentDesign.sidebarSelectionCornerRadius,
                     style: .continuous
-                )
-                .fill(isActive ? palette.selectionFill : (isHovered ? palette.hoverFill : Color.clear))
-            )
-            .clipShape(RoundedRectangle(
-                cornerRadius: AgentDesign.sidebarSelectionCornerRadius,
-                style: .continuous
-            ))
-            .padding(.horizontal, AgentDesign.sidebarSelectionHorizontalInset)
-        }
-        .buttonStyle(.plain)
-        .id(session.id)
-        .onHover { hovering in
-            if hovering {
-                hoveredSessionID = session.id
-            } else if hoveredSessionID == session.id {
-                hoveredSessionID = nil
+                ))
+                .padding(.horizontal, AgentDesign.sidebarSelectionHorizontalInset)
+            }
+            .buttonStyle(.plain)
+            .accessibilityAction(
+                named: session.isPinned
+                    ? L10n.Sidebar.sessionRowUnpinTooltip
+                    : L10n.Sidebar.sessionRowPinTooltip
+            ) {
+                appState.toggleAgentSessionPinned(id: session.id)
+            }
+            .accessibilityAction(
+                named: session.isArchived
+                    ? L10n.Sidebar.sessionRowUnarchiveTooltip
+                    : L10n.Sidebar.sessionRowArchiveTooltip
+            ) {
+                requestArchiveToggle(for: session)
             }
         }
+        .id(session.id)
         .contextMenu {
             Button(session.isPinned ? L10n.Sidebar.sessionMenuUnpin : L10n.Sidebar.sessionMenuPin) {
                 appState.toggleAgentSessionPinned(id: session.id)
@@ -1277,7 +1299,11 @@ struct AgentSessionsSidebar: View {
         }
         .opacity(isHovered ? 1 : 0)
         .allowsHitTesting(isHovered)
-        .accessibilityHidden(!isHovered)
+        // These two visual buttons duplicate the stable custom actions on
+        // the row button. Never add/remove them from the accessibility tree
+        // while scrolling; that previously made SwiftUI walk the complete
+        // responder hierarchy for every crossed row.
+        .accessibilityHidden(true)
         .frame(
             width: AgentSidebarSessionTrailingLayout.reservedActionsWidth(
                 isHovered: isHovered

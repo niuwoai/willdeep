@@ -280,18 +280,26 @@ struct DesktopPetTests {
 
     /// Resting is the mood the pet holds almost all the time, and its breathing
     /// drives an app-wide CA flush per frame for motion nobody is waiting on.
-    /// Everything that actually reports state must keep animating — including
-    /// the automatic jump, which is what brings a parked pet back to life.
+    /// `.ready` can persist while an output preview remains unread, so it must
+    /// park as well; otherwise completed work leaves an otherwise idle app on a
+    /// permanent display cycle. Transient/actionable moods keep animating,
+    /// including the automatic jump that brings a parked pet back to life.
     @Test
-    func idleMoodParksTheTimelineWhileSignallingMoodsKeepAnimating() {
+    func restingAndReadyMoodsParkTheTimeline() {
         #expect(!DesktopPetAnimationGate.requiresTimeline(mood: .idle))
         #expect(!DesktopPetAnimationGate.shouldAnimate(
             isEnabled: true,
             isWindowVisible: true,
             mood: .idle
         ))
+        #expect(!DesktopPetAnimationGate.requiresTimeline(mood: .ready))
+        #expect(!DesktopPetAnimationGate.shouldAnimate(
+            isEnabled: true,
+            isWindowVisible: true,
+            mood: .ready
+        ))
 
-        for mood: DesktopPetMood in [.walking, .typing, .jumping, .ready, .attention, .celebrating] {
+        for mood: DesktopPetMood in [.walking, .typing, .jumping, .attention, .celebrating] {
             #expect(DesktopPetAnimationGate.requiresTimeline(mood: mood))
             #expect(DesktopPetAnimationGate.shouldAnimate(
                 isEnabled: true,

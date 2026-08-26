@@ -1,7 +1,19 @@
 # Changelog
 
-> 当前文件保留最新版本（1.293.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.293.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.293.0-rc6 - 2026-08-26
+
+### Fixed
+
+- **左侧会话列表滚动不再逐行重建整个侧栏。** 会话行与工作区的 hover 状态从侧栏父视图下沉到各自局部作用域；指针固定、列表从下方滚过时，只更新当前行或当前工作区，不再重新过滤、分组和渲染全部会话。悬停出现的置顶、归档与新会话按钮保持视觉行为不变，但不再随 hover 反复进出无障碍树；对应操作通过稳定的自定义无障碍动作继续提供。
+- **活动状态移除常驻高频重绘。** 主聊天区当前动作文字不再由连续 `TimelineView` 驱动扫光，生产界面保持静态文字，扫光进度只供确定性的设计预览使用且不进入无障碍树。
+- **桌面宠物完成态停止常驻动画。** `.ready` 和 `.idle` 一样停驻时间线，避免未读输出让桌宠永久维持 4 FPS 刷新；行走、输入、跳跃、需关注与庆祝等短暂状态仍正常动画。
+
+### Tests
+
+- [AgentSidebarListVisualMetricsTests](XeditTests/AgentSidebarListVisualMetricsTests.swift) 新增侧栏 hover 局部失效与稳定无障碍树守卫；[AgentConfirmationVisualTests](XeditTests/AgentConfirmationVisualTests.swift) 和 [DesktopPetTests](XeditTests/DesktopPetTests.swift) 分别锁定活动文字不创建连续时间线、完成态桌宠停驻。相关 4 个套件共 77 项测试通过。
 
 ## 1.293.0-rc5 - 2026-08-25
 

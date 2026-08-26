@@ -313,13 +313,17 @@ enum DesktopPetAnimationGate {
     /// idle wiggle for the app-wide display cycle it would otherwise drive on
     /// every frame.
     ///
-    /// Nothing that carries information is parked: every mood that reports
-    /// state (`.walking`, `.typing`, `.attention`, `.celebrating`, `.ready`)
-    /// still animates, and so does the periodic automatic `.jumping`, which
-    /// overrides `.idle` while it runs. The pet therefore comes back to life
-    /// on its own rather than looking frozen.
+    /// `.ready` is also parked. It can remain selected as long as an unread
+    /// output preview exists, so animating it kept an otherwise idle app on a
+    /// permanent 4fps display cycle. The bubble and status text still carry the
+    /// result; transient and actionable moods continue to animate.
     nonisolated static func requiresTimeline(mood: DesktopPetMood) -> Bool {
-        mood != .idle
+        switch mood {
+        case .idle, .ready:
+            return false
+        case .walking, .typing, .jumping, .attention, .celebrating:
+            return true
+        }
     }
 
     nonisolated static func shouldAnimate(

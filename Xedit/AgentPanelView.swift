@@ -530,24 +530,6 @@ struct AgentInlineStatusDivider: View {
     }
 }
 
-/// Whether the activity sweep should be driving frames.
-///
-/// The sweep is decorative feedback for whoever is watching the turn. It runs
-/// for the whole turn — a `run_command` that takes ten minutes means ten
-/// minutes of animation — and a CA transaction flush lays out every window
-/// with pending work, so each sweep frame costs a pass over the main window's
-/// whole view tree. Parking it while the window is inactive removes that cost
-/// exactly when nobody can see the result.
-nonisolated enum AgentActivitySweepGate {
-    static func shouldAnimate(
-        isActive: Bool,
-        reduceMotion: Bool,
-        windowIsActive: Bool
-    ) -> Bool {
-        isActive && !reduceMotion && windowIsActive
-    }
-}
-
 nonisolated enum AgentActivitySweepMetrics {
     static let sweepDuration: TimeInterval = 1.25
     static let pauseDuration: TimeInterval = 0.65
@@ -555,11 +537,6 @@ nonisolated enum AgentActivitySweepMetrics {
     static let bandWidthFraction: CGFloat = 0.38
     static let baseOpacity = 0.58
     static let animatesElapsedTime = false
-    /// The sweep is decorative. Keeping it below the display refresh rate
-    /// avoids repeatedly invalidating the surrounding transcript hierarchy
-    /// while still looking continuous at the current 1.25-second duration.
-    static let maximumFramesPerSecond = 12.0
-    static let frameInterval: TimeInterval = 1.0 / maximumFramesPerSecond
 
     static func progress(elapsed: TimeInterval) -> CGFloat {
         let cycleDuration = sweepDuration + pauseDuration
@@ -574,14 +551,11 @@ nonisolated enum AgentActivitySweepMetrics {
 }
 
 struct AgentActivitySweepLabel: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.controlActiveState) private var controlActiveState
     let text: String
     let font: Font
     var isActive: Bool
     var progressOverride: CGFloat? = nil
     var baseColor = Color(nsColor: .secondaryLabelColor)
-    @State private var animationStartedAt = Date()
 
     var body: some View {
         Text(text)
@@ -589,31 +563,16 @@ struct AgentActivitySweepLabel: View {
             .foregroundStyle(baseColor.opacity(AgentActivitySweepMetrics.baseOpacity))
             .lineLimit(1)
             .overlay {
-                if AgentActivitySweepGate.shouldAnimate(
-                    isActive: isActive,
-                    reduceMotion: reduceMotion,
-                    windowIsActive: controlActiveState != .inactive
-                ) {
-                    if let progressOverride {
-                        sweepLayer(progress: progressOverride)
-                    } else {
-                        TimelineView(.animation(
-                            minimumInterval: AgentActivitySweepMetrics.frameInterval
-                        )) { context in
-                            sweepLayer(progress: AgentActivitySweepMetrics.progress(
-                                elapsed: context.date.timeIntervalSince(animationStartedAt)
-                            ))
-                        }
-                    }
+                // The sweep is decoration, but a TimelineView here invalidated
+                // the main NSHostingView for the entire turn. On macOS 26 that
+                // made every frame rescan the complete accessibility/focus
+                // responder tree. Keep the production label static; an
+                // explicit override remains for deterministic design previews.
+                if isActive, let progressOverride {
+                    sweepLayer(progress: progressOverride)
+                        .accessibilityHidden(true)
+                        .allowsHitTesting(false)
                 }
-            }
-            .onChange(of: text) { [text] newText in
-                // Restart the sweep only for a genuinely different line. While
-                // reasoning streams, the same line keeps growing; restarting on
-                // every increment meant the sweep never completed a cycle and
-                // read as flicker.
-                guard !Self.isContinuation(of: text, in: newText) else { return }
-                animationStartedAt = Date()
             }
             .accessibilityLabel(text)
     }
