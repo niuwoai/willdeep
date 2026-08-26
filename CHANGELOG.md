@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.295.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.295.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.295.0-rc6 - 2026-08-27
+
+### Fixed
+
+- 本地辅助模型与 Ollama provider 的默认模型改为官方 QAT 指令微调版 `gemma4:e2b-it-qat`。此前默认值 `gemma4:e2b` 指向 registry 上 7.16GB 的非 QAT 版本，体积比 QAT 版（4.3GB）大 66%，且实测本机常见安装是 `-it-qat` 后缀，启用本地模型加速会因 `model 'gemma4:e2b' not found` 直接失败。rc3–rc5 期间存量配置里的 `gemma4:e2b` 随迁移列表自动更新，用户手填的自定义模型名保持不变。
+
+### Tests
+
+- 新增非 QAT 默认值 `gemma4:e2b` 迁移到 `gemma4:e2b-it-qat` 的回归测试，与既有的旧版 Qwen 默认值迁移测试并列。
 
 ## 1.295.0-rc5 - 2026-08-27
 

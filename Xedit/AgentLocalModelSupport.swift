@@ -11,18 +11,20 @@ import Combine
 
 struct AgentLocalModelSettings: Codable, Equatable {
     static let defaultBaseURL = "http://127.0.0.1:11434/v1"
-    static let defaultVisionModelID = "gemma4:e2b"
-    static let defaultSummaryModelID = "gemma4:e2b"
+    static let defaultVisionModelID = "gemma4:e2b-it-qat"
+    static let defaultSummaryModelID = "gemma4:e2b-it-qat"
     static let defaultModelID = defaultSummaryModelID
     static let defaultComposerDisplayName = "Local Chat (Ollama)"
     static let composerProviderEntryID = UUID(uuidString: "9C9B8A64-4F84-4D9C-8F4F-4C7C6F63616C")!
 
     private static let legacyDefaultVisionModelIDs: Set<String> = [
         "qwen3.5-4b-vl-q4_k_m",
-        "qwen3.5-4b-q4_k_m"
+        "qwen3.5-4b-q4_k_m",
+        "gemma4:e2b"
     ]
     private static let legacyDefaultSummaryModelIDs: Set<String> = [
-        "qwen3.5-4b-q4_k_m"
+        "qwen3.5-4b-q4_k_m",
+        "gemma4:e2b"
     ]
 
     var enabled: Bool

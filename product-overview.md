@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-27 | Current version: v1.295.0-rc5
+> Last updated: 2026-08-27 | Current version: v1.295.0-rc6
 
 ## Positioning
 
@@ -14,7 +14,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 - **本地模型默认关闭思考（1.295.0-rc5）** —— Ollama 与 `localhost` / `127.0.0.1` / `::1` 上的 OpenAI-compatible 请求会固定发送 `reasoning_effort: "none"`，流式会话、Summary、图片理解、标题生成和本地裁判共享同一规则；远程模型不注入该字段，避免改变既有推理能力。
 - **子代理生命周期诊断（1.295.0-rc4）** —— `spawn_agent` 的同步与后台路径都会通过 OSLog 记录接收、解析、启动、模型回落、升级重跑、取消、失败、完成、报告排队与父会话消费节点；每条记录携带 runID、父会话、profile、model、轮次、工具调用数、token 与报告长度，错误正文按隐私字段写入，完整 prompt 和命令不落日志，方便排查“子代理为何没有返回结果”而不扩大敏感信息面。
-- **本地辅助模型统一为 Gemma 4 E2B（1.295.0-rc3）** —— 图片理解、会话标题与可选上下文压缩默认通过 Ollama 的 `gemma4:e2b` 执行，图片与文本任务共用同一指令微调多模态模型；旧版 Qwen 默认配置自动迁移，用户手填的自定义模型保持不变。Ollama 仍通过 `http://127.0.0.1:11434/v1` 提供 OpenAI-compatible API，模型安装由 `ollama pull gemma4:e2b` 管理。
+- **本地辅助模型统一为 Gemma 4 E2B（1.295.0-rc3，rc6 起改用 QAT 版）** —— 图片理解、会话标题与可选上下文压缩默认通过 Ollama 的 `gemma4:e2b-it-qat` 执行，图片与文本任务共用同一指令微调多模态模型；旧版 Qwen 默认配置与 rc3-rc5 的非 QAT 默认值 `gemma4:e2b` 均自动迁移，用户手填的自定义模型保持不变。Ollama 仍通过 `http://127.0.0.1:11434/v1` 提供 OpenAI-compatible API，模型安装由 `ollama pull gemma4:e2b-it-qat` 管理。
 - **小模型编码直通与独立验收（1.295.0-rc2）** —— 对本地 1–3 文件、低风险、有确定验证命令的编码任务，宿主把 `scout` 的结构化 Task Packet 直接交给 `someim-32b` 的 `small_implementer`，由退出码驱动最多两轮修复；失败才升级到 `glm-5`。通过后再由无工具的独立 `small_reviewer` 审补丁范围与目标，双闸全绿可直接交付并跳过高智主模型，否则保留现场交回主模型。Task Packet 按完整工作区修订指纹缓存；统计面板同时展示直通率与主模型返工率，并以中、英、西、法、日五语完整展示新增 Worker 指标与工种说明，避免只追调用量或出现英文回退。
 - **宿主强制混合模型路由与真实 Worker 账本（1.294.0-rc3）** —— WillDeep 不再只靠提示词劝主模型委派：高置信度修改任务由 32–64K 小模型先侦察，再交给 `editor` / 256K `implementer` 落地；测试、失败诊断、生产操作和可见终端分别进入 `tester`、`log_inspector`、`ops_runner`、`terminal_operator`。写工具和生产命令前有确定性委派门，未实际尝试目标工种就拒绝主模型越权直做，`/no-subagent` 可逐回合退出。生产写命令即使发往用户可见的 SSH 终端也不能绕过路由：获批 `ops_runner` 绑定同一终端，只能发送审批卡上精确匹配的一条命令。宿主自动运行写入持久化账本，统计区分“请求过 Worker”和“Worker 真正开始运行”，承担占比按合格用户回合计算；完整的模型分层、升级规则、上下文包与成本指标见 [混合模型执行设计](docs/HYBRID_MODEL_EXECUTION_DESIGN.md)。
 - **同字号过程/结论灰度层级（1.293.0-rc7）** —— TextKit 历史中的过程正文与最终结论共同使用设置页的聊天字号和行高，层级只由灰度承担：浅色过程正文为 `#858585`，结论保持系统主文字色，深色界面使用对应的可读动态灰。两区转换只增加半行高度，同区块编号列表仍保持 3pt 的紧凑段距，避免把“区块分隔”误做成“每个列表项各空一行”。

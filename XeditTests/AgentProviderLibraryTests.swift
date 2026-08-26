@@ -403,6 +403,29 @@ struct AgentProviderLibraryTests {
         #expect(settings.summaryModel == AgentLocalModelSettings.defaultSummaryModelID)
     }
 
+    /// `gemma4:e2b` 是 1.295.0-rc3 到 rc5 之间的默认值，指向 registry 上
+    /// 7.16GB 的非 QAT 版本；默认已改为体积更小的官方 QAT 指令微调版
+    /// `gemma4:e2b-it-qat`，存量配置需要跟着迁移。
+    @Test
+    func localModelSettingsMigrateNonQATGemma4DefaultToQAT() {
+        let settings = AgentLocalModelSettings(
+            enabled: true,
+            baseURL: AgentLocalModelSettings.defaultBaseURL,
+            visionModel: "gemma4:e2b",
+            summaryModel: "gemma4:e2b",
+            preferForImageUnderstanding: true,
+            preferForTitles: true,
+            preferForContextSummaries: false,
+            exposeAsComposerModel: false,
+            composerDisplayName: AgentLocalModelSettings.defaultComposerDisplayName
+        ).normalized
+
+        #expect(settings.visionModel == "gemma4:e2b-it-qat")
+        #expect(settings.summaryModel == "gemma4:e2b-it-qat")
+        #expect(settings.visionModel == AgentLocalModelSettings.defaultVisionModelID)
+        #expect(settings.summaryModel == AgentLocalModelSettings.defaultSummaryModelID)
+    }
+
     @Test
     func localModelSettingsPreserveCustomModelIDs() {
         let settings = AgentLocalModelSettings(
