@@ -288,32 +288,28 @@ struct AgentConfirmationVisualTests {
         #expect(AgentPatchDecisionMetrics.cornerRadius == 7)
     }
 
-    /// 扫光是给「正在看」的人的装饰性反馈，而它会持续整个回合——一条跑十
-    /// 分钟的 run_command 就是十分钟的动画。一次 CA transaction flush 会把
-    /// 所有待布局窗口一起过一遍，所以每一帧扫光都要付一次主窗口整棵视图树
-    /// 的代价。窗口不活跃时必须停摆。
-    @Test("窗口不活跃时扫光停摆")
-    func sweepParksWhileWindowIsInactive() {
-        #expect(AgentActivitySweepGate.shouldAnimate(
-            isActive: true,
-            reduceMotion: false,
-            windowIsActive: true
+    /// 运行态扫光曾用 12fps TimelineView 驱动主窗口，每帧都会触发 macOS 26
+    /// 的完整焦点/无障碍响应树扫描。生产组件必须保持静态，只允许显式注入
+    /// progressOverride 的设计预览绘制单帧扫光。
+    @Test("当前动作不创建连续动画时间线")
+    func currentActionDoesNotCreateContinuousTimeline() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentPanelView.swift"),
+            encoding: .utf8
+        )
+        let start = try #require(source.range(of: "struct AgentActivitySweepLabel: View"))
+        let end = try #require(source.range(
+            of: "private enum AgentInlineStatusLayout",
+            range: start.upperBound..<source.endIndex
         ))
-        #expect(!AgentActivitySweepGate.shouldAnimate(
-            isActive: true,
-            reduceMotion: false,
-            windowIsActive: false
-        ))
-        #expect(!AgentActivitySweepGate.shouldAnimate(
-            isActive: false,
-            reduceMotion: false,
-            windowIsActive: true
-        ))
-        #expect(!AgentActivitySweepGate.shouldAnimate(
-            isActive: true,
-            reduceMotion: true,
-            windowIsActive: true
-        ))
+        let component = source[start.lowerBound..<end.lowerBound]
+
+        #expect(!component.contains("TimelineView(.animation"))
+        #expect(component.contains("if isActive, let progressOverride"))
+        #expect(component.contains(".accessibilityHidden(true)"))
     }
 
     /// 侧栏切换按钮在窗口过窄时不可点，但必须保持 enabled——AppKit 不会为
@@ -355,8 +351,8 @@ struct AgentConfirmationVisualTests {
         )
     }
 
-    @Test("当前动作文字从左向右扫光，计时保持稳定")
-    func currentActionSweepStaysSubtle() {
+    @Test("设计预览扫光保持克制，运行计时不参与动画")
+    func currentActionSweepPreviewStaysSubtle() {
         #expect(AgentActivitySweepMetrics.sweepDuration >= 1.0)
         #expect(AgentActivitySweepMetrics.pauseDuration >= 0.5)
         #expect(AgentActivitySweepMetrics.bandWidthFraction <= 0.4)
@@ -368,11 +364,6 @@ struct AgentConfirmationVisualTests {
             elapsed: AgentActivitySweepMetrics.sweepDuration + 0.1
         ) > 1)
         #expect(!AgentActivitySweepMetrics.animatesElapsedTime)
-        #expect(AgentActivitySweepMetrics.maximumFramesPerSecond <= 12)
-        #expect(
-            AgentActivitySweepMetrics.frameInterval
-                == 1.0 / AgentActivitySweepMetrics.maximumFramesPerSecond
-        )
     }
 
     private func designQAOutputDirectory() throws -> URL {

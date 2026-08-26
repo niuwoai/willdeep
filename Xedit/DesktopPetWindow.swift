@@ -81,6 +81,31 @@ struct DesktopPetAmbientEffectPlan: Equatable {
     }
 }
 
+struct DesktopPetAmbientBurst: Equatable {
+    let cycleIndex: Int
+    let startedAt: Date
+}
+
+enum DesktopPetAmbientBurstCadence {
+    nonisolated static let minimumDelay: TimeInterval = 16
+    nonisolated static let maximumDelay: TimeInterval = 28
+    nonisolated static let duration: TimeInterval = 2.8
+
+    nonisolated static func delay(unitInterval: Double) -> TimeInterval {
+        let normalized = min(max(unitInterval, 0), 1)
+        return minimumDelay + (maximumDelay - minimumDelay) * normalized
+    }
+
+    static func delay(cycleIndex: Int) -> TimeInterval {
+        let seed = DesktopPetAmbientEffectPlan.make(
+            cycleIndex: cycleIndex,
+            progress: 0
+        ).seed
+        let unitInterval = Double((seed >> 16) % 10_000) / 9_999
+        return delay(unitInterval: unitInterval)
+    }
+}
+
 enum DesktopPetAutonomy {
     static let minimumJumpDelay: TimeInterval = 14
     static let maximumJumpDelay: TimeInterval = 32
@@ -313,13 +338,17 @@ enum DesktopPetAnimationGate {
     /// idle wiggle for the app-wide display cycle it would otherwise drive on
     /// every frame.
     ///
-    /// Nothing that carries information is parked: every mood that reports
-    /// state (`.walking`, `.typing`, `.attention`, `.celebrating`, `.ready`)
-    /// still animates, and so does the periodic automatic `.jumping`, which
-    /// overrides `.idle` while it runs. The pet therefore comes back to life
-    /// on its own rather than looking frozen.
+    /// `.ready` is also parked. It can remain selected as long as an unread
+    /// output preview exists, so animating it kept an otherwise idle app on a
+    /// permanent 4fps display cycle. Resting moods now wake only for brief cute
+    /// effect bursts; transient and actionable moods continue to animate.
     nonisolated static func requiresTimeline(mood: DesktopPetMood) -> Bool {
-        mood != .idle
+        switch mood {
+        case .idle, .ready:
+            return false
+        case .walking, .typing, .jumping, .attention, .celebrating:
+            return true
+        }
     }
 
     nonisolated static func shouldAnimate(
@@ -328,6 +357,24 @@ enum DesktopPetAnimationGate {
         mood: DesktopPetMood
     ) -> Bool {
         isEnabled && isWindowVisible && requiresTimeline(mood: mood)
+    }
+
+    /// Resting pets stay parked most of the time, then briefly wake to show one
+    /// of the existing kiss, star, heart, or bubble flourishes. Keeping this
+    /// separate from `requiresTimeline` preserves those ambient moments without
+    /// restoring a permanent app-wide display cycle.
+    nonisolated static func shouldScheduleAmbientBursts(
+        isEnabled: Bool,
+        isWindowVisible: Bool,
+        mood: DesktopPetMood
+    ) -> Bool {
+        guard isEnabled, isWindowVisible else { return false }
+        switch mood {
+        case .idle, .ready:
+            return true
+        case .walking, .typing, .jumping, .attention, .celebrating:
+            return false
+        }
     }
 }
 
@@ -1098,6 +1145,11 @@ struct DesktopPetOverlayView: View {
                 isEnabled: manager.isEnabled,
                 isWindowVisible: manager.isWindowVisible,
                 mood: displayMood
+            ),
+            schedulesAmbientBursts: DesktopPetAnimationGate.shouldScheduleAmbientBursts(
+                isEnabled: manager.isEnabled,
+                isWindowVisible: manager.isWindowVisible,
+                mood: displayMood
             )
         )
         .contentShape(Rectangle())
@@ -1128,6 +1180,9 @@ struct DesktopPetAnimatedSceneView: View {
     let mood: DesktopPetMood
     let appIsActive: Bool
     let isAnimating: Bool
+    let schedulesAmbientBursts: Bool
+
+    @State private var ambientBurst: DesktopPetAmbientBurst?
 
     /// Pose held while the timeline is parked. A fixed instant keeps the
     /// subtree's geometry constant, so an off-screen pet stops driving the
@@ -1135,27 +1190,72 @@ struct DesktopPetAnimatedSceneView: View {
     private static let parkedInstant = Date(timeIntervalSinceReferenceDate: 0)
 
     var body: some View {
-        if isAnimating {
-            TimelineView(.animation(
-                minimumInterval: DesktopPetAnimationCadence.minimumInterval(
-                    appIsActive: appIsActive
-                )
-            )) { context in
-                scene(at: context.date)
+        Group {
+            if isAnimating || ambientBurst != nil {
+                TimelineView(.animation(
+                    minimumInterval: DesktopPetAnimationCadence.minimumInterval(
+                        appIsActive: appIsActive
+                    )
+                )) { context in
+                    scene(at: context.date)
+                }
+            } else {
+                scene(at: Self.parkedInstant)
             }
-        } else {
-            scene(at: Self.parkedInstant)
+        }
+        .task(id: schedulesAmbientBursts) {
+            await scheduleAmbientBurstsIfNeeded()
         }
     }
 
     private func scene(at date: Date) -> some View {
-        DesktopPetSceneView(
+        let burstProgress = ambientBurst.map {
+            min(max(date.timeIntervalSince($0.startedAt) / DesktopPetAmbientBurstCadence.duration, 0), 1)
+        }
+        return DesktopPetSceneView(
             appearance: appearance,
             animation: DesktopPetAnimationValues(
                 mood: mood,
-                date: date
+                date: date,
+                ambientBurstCycleIndex: ambientBurst?.cycleIndex,
+                ambientBurstProgress: burstProgress
             )
         )
+    }
+
+    @MainActor
+    private func scheduleAmbientBurstsIfNeeded() async {
+        ambientBurst = nil
+        guard schedulesAmbientBursts else { return }
+
+        var cycleIndex = Int(
+            Date().timeIntervalSinceReferenceDate
+                / DesktopPetAmbientBurstCadence.maximumDelay
+        )
+        while !Task.isCancelled {
+            let delay = DesktopPetAmbientBurstCadence.delay(cycleIndex: cycleIndex)
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+
+            ambientBurst = DesktopPetAmbientBurst(
+                cycleIndex: cycleIndex,
+                startedAt: Date()
+            )
+            do {
+                try await Task.sleep(
+                    nanoseconds: UInt64(DesktopPetAmbientBurstCadence.duration * 1_000_000_000)
+                )
+            } catch {
+                ambientBurst = nil
+                return
+            }
+            ambientBurst = nil
+            cycleIndex += 1
+        }
     }
 }
 
@@ -1273,7 +1373,12 @@ struct DesktopPetAnimationValues {
     let facesRight: Bool
     let ambientEffectPlan: DesktopPetAmbientEffectPlan?
 
-    init(mood: DesktopPetMood, date: Date) {
+    init(
+        mood: DesktopPetMood,
+        date: Date,
+        ambientBurstCycleIndex: Int? = nil,
+        ambientBurstProgress: Double? = nil
+    ) {
         let t = date.timeIntervalSinceReferenceDate
         var horizontalOffset: CGFloat = 0
         var verticalOffset: CGFloat = 0
@@ -1287,13 +1392,16 @@ struct DesktopPetAnimationValues {
         switch mood {
         case .idle, .ready:
             let breathing = CGFloat(sin(t * 2.1))
-            let cycleIndex = Int(floor(t / Self.ambientCycleDuration))
-            let cycleTime = t - Double(cycleIndex) * Self.ambientCycleDuration
-            let isPerformingCuteAction = cycleTime >= Self.ambientEffectStart
+            let scheduledCycleIndex = Int(floor(t / Self.ambientCycleDuration))
+            let cycleTime = t - Double(scheduledCycleIndex) * Self.ambientCycleDuration
+            let scheduledCuteAction = cycleTime >= Self.ambientEffectStart
                 && cycleTime <= Self.ambientEffectStart + Self.ambientEffectDuration
-            let cuteProgress = isPerformingCuteAction
-                ? (cycleTime - Self.ambientEffectStart) / Self.ambientEffectDuration
-                : 0
+            let isPerformingCuteAction = ambientBurstProgress != nil || scheduledCuteAction
+            let cuteProgress = ambientBurstProgress.map { min(max($0, 0), 1) }
+                ?? (scheduledCuteAction
+                    ? (cycleTime - Self.ambientEffectStart) / Self.ambientEffectDuration
+                    : 0)
+            let cycleIndex = ambientBurstCycleIndex ?? scheduledCycleIndex
             let cuteEnvelope = CGFloat(sin(cuteProgress * .pi))
             let cuteWiggle = CGFloat(sin(cuteProgress * .pi * 4))
 

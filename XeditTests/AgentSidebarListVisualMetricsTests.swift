@@ -315,6 +315,25 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(!sidebarSource.contains("LazyVStack"))
     }
 
+    @Test("conversation sidebar scopes hover redraws and keeps accessibility stable")
+    func conversationSidebarScopesHoverInvalidation() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sidebarSource = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentSessionsSidebar.swift"),
+            encoding: .utf8
+        )
+
+        #expect(sidebarSource.contains("private struct AgentSidebarHoverScope"))
+        #expect(sidebarSource.contains("AgentSidebarHoverScope { isHovered in"))
+        #expect(sidebarSource.contains("AgentSidebarHoverScope { isWorkspaceHovered in"))
+        #expect(!sidebarSource.contains("hoveredSessionID"))
+        #expect(!sidebarSource.contains("hoveredWorkspaceGroup"))
+        #expect(sidebarSource.contains(".accessibilityAction("))
+        #expect(sidebarSource.contains(".accessibilityHidden(true)"))
+    }
+
     @Test("workspace and conversation titles share the Codex text column")
     func titleColumnsAlign() {
         let workspaceTitleX = AgentDesign.sidebarWorkspaceHorizontalInset

@@ -80,12 +80,22 @@ struct AgentChatFontChoice: Identifiable, CaseIterable, Equatable {
 }
 
 enum AgentChatTypography {
+    static let processToAnswerGapLineFraction: CGFloat = 0.5
+
     static func lineSpacing(fontSize: CGFloat, lineHeightMultiple: CGFloat) -> CGFloat {
         max(0, fontSize * (lineHeightMultiple - 1))
     }
 
     static func lineHeight(fontSize: CGFloat, lineHeightMultiple: CGFloat) -> CGFloat {
         fontSize + lineSpacing(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
+    }
+
+    static func processToAnswerGap(
+        fontSize: CGFloat,
+        lineHeightMultiple: CGFloat
+    ) -> CGFloat {
+        lineHeight(fontSize: fontSize, lineHeightMultiple: lineHeightMultiple)
+            * processToAnswerGapLineFraction
     }
 
     /// Markdown headings scale from the user's chat body size instead of

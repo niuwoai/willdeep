@@ -366,11 +366,14 @@ enum AgentChatHistoryRenderer {
         let monoFont = NSFont.monospacedSystemFont(ofSize: baseFontSize, weight: .regular)
         let chromeMonoFont = NSFont.monospacedSystemFont(ofSize: supportingFontSize, weight: .regular)
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        // Status, process commentary, tool activity, and footer statistics are
-        // supporting information. Keeping them two points below the answer body
-        // creates a stable hierarchy without adding color or decorative cards.
+        // Status, tool activity, and footer statistics remain compact chrome.
+        // Process prose itself follows the user's body-size setting exactly;
+        // grayscale and a half-line transition gap carry its hierarchy.
         let assistantStatusFont = supportingFont
         let bodyColor = NSColor.labelColor
+        let assistantProcessColor = AgentChatHistoryLayoutMetrics.assistantProcessTextColor(
+            isDark: isDark
+        )
         let assistantStatusColor = NSColor.secondaryLabelColor
         let assistantStatusDividerColor = AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(
             isDark: isDark
@@ -394,6 +397,10 @@ enum AgentChatHistoryRenderer {
                     .filter { $0.role == .assistant }
                     .map(\.id)
             )
+        )
+        let processToAnswerMessageIDs = processToAnswerMessageIDs(
+            in: assistantTurnContextMessages,
+            visibleMessages: messages
         )
         let settledMessageToolGrouping = assistantMessageToolCallGrouping(
             messages: messages,
@@ -491,6 +498,12 @@ enum AgentChatHistoryRenderer {
                     && previousMessage?.role == .assistant
                     && turnPresentation?.firstVisibleAssistantMessageID
                         == previousTurnPresentation?.firstVisibleAssistantMessageID
+                let beginsFinalAssistantAnswer = continuesSameAssistantTurn
+                    && turnPresentation?.isLastVisibleMessage(message) == true
+                    && processToAnswerMessageIDs.contains(message.id)
+                    && previousMessage.map {
+                        previousTurnPresentation?.isLastVisibleMessage($0) == false
+                    } == true
                 // Providers often split one assistant turn into many short
                 // progress messages around tool calls. They form one visual
                 // activity timeline, so use a normal line break instead of
@@ -498,6 +511,14 @@ enum AgentChatHistoryRenderer {
                 result.append(NSAttributedString(
                     string: continuesSameAssistantTurn ? "\n" : "\n\n"
                 ))
+                if beginsFinalAssistantAnswer {
+                    appendAssistantProcessToAnswerGap(
+                        to: result,
+                        bodyFont: bodyFont,
+                        layoutWidth: layoutWidth,
+                        lineHeightMultiple: lineHeightMultiple
+                    )
+                }
                 if message.role == .user {
                     let style = NSMutableParagraphStyle()
                     style.paragraphSpacing = AgentChatHistoryLayoutMetrics.userTurnTopSpacing
@@ -579,10 +600,10 @@ enum AgentChatHistoryRenderer {
             let isInterimAssistantMessage = message.role == .assistant
                 && turnPresentation != nil
                 && turnPresentation?.isLastVisibleMessage(message) == false
-            let messageBodyFont = isInterimAssistantMessage ? supportingFont : bodyFont
-            let messageMonoFont = isInterimAssistantMessage ? chromeMonoFont : monoFont
-            let messageBodyColor = isInterimAssistantMessage ? secondaryColor : bodyColor
-            let messageLineSpacing = isInterimAssistantMessage ? supportingLineSpacing : bodyLineSpacing
+            let messageBodyFont = bodyFont
+            let messageMonoFont = monoFont
+            let messageBodyColor = isInterimAssistantMessage ? assistantProcessColor : bodyColor
+            let messageLineSpacing = bodyLineSpacing
             let messageParagraphStyle = bodyParagraphStyle(
                 for: message.role,
                 layoutWidth: layoutWidth,
@@ -876,6 +897,76 @@ enum AgentChatHistoryRenderer {
             index += 1
         }
 
+        return result
+    }
+
+    private static func appendAssistantProcessToAnswerGap(
+        to result: NSMutableAttributedString,
+        bodyFont: NSFont,
+        layoutWidth: CGFloat,
+        lineHeightMultiple: CGFloat
+    ) {
+        let gapHeight = AgentChatTypography.processToAnswerGap(
+            fontSize: bodyFont.pointSize,
+            lineHeightMultiple: AgentSettingsStore.clampChatLineHeightMultiple(lineHeightMultiple)
+        )
+        let style = bodyParagraphStyle(
+            for: .assistant,
+            layoutWidth: layoutWidth,
+            lineSpacing: 0
+        ).mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        style.minimumLineHeight = gapHeight
+        style.maximumLineHeight = gapHeight
+        style.paragraphSpacing = 0
+        style.paragraphSpacingBefore = 0
+        let spacerFont = NSFont(
+            descriptor: bodyFont.fontDescriptor,
+            size: max(1, gapHeight)
+        ) ?? NSFont.systemFont(ofSize: max(1, gapHeight))
+        result.append(NSAttributedString(
+            string: "\n",
+            attributes: [
+                .font: spacerFont,
+                .foregroundColor: NSColor.clear,
+                .paragraphStyle: style,
+            ]
+        ))
+    }
+
+    /// A final answer gets extra breathing room only when it follows a real
+    /// tool-driven process. Consecutive prose updates without tool activity
+    /// are still one compact process list and keep their ordinary line break.
+    private static func processToAnswerMessageIDs(
+        in contextMessages: [AgentMessage],
+        visibleMessages: [AgentMessage]
+    ) -> Set<AgentMessage.ID> {
+        let visibleIDs = Set(visibleMessages.lazy.map(\.id))
+        var result: Set<AgentMessage.ID> = []
+        var visibleAssistantIDs: [AgentMessage.ID] = []
+        var hasToolActivity = false
+
+        func finishTurn() {
+            if hasToolActivity, visibleAssistantIDs.count > 1,
+               let finalVisibleID = visibleAssistantIDs.last {
+                result.insert(finalVisibleID)
+            }
+            visibleAssistantIDs.removeAll(keepingCapacity: true)
+            hasToolActivity = false
+        }
+
+        for message in contextMessages {
+            if message.role == .user {
+                finishTurn()
+                continue
+            }
+            guard message.role == .assistant else { continue }
+            hasToolActivity = hasToolActivity || !message.toolCalls.isEmpty
+            if visibleIDs.contains(message.id),
+               message.hasRenderableTextContent || !message.images.isEmpty {
+                visibleAssistantIDs.append(message.id)
+            }
+        }
+        finishTurn()
         return result
     }
 

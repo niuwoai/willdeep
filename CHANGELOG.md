@@ -1,7 +1,33 @@
 # Changelog
 
-> 当前文件保留最新版本（1.293.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.293.0-rc7 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.293.0-rc7 - 2026-08-26
+
+### Fixed
+
+- **桌面宠物恢复间歇可爱动作。** `.idle` 与 `.ready` 仍在绝大多数时间停驻，不恢复永久 4 FPS 时间线；宠物可见时每隔约 16–28 秒短暂唤醒 2.8 秒，轮换播放亲吻、星星、爱心与泡泡效果，播完立即休眠。窗口被遮挡、切到其他空间或桌宠关闭时不安排动画。
+
+### Changed
+
+- **聊天过程区采用统一字号的灰度层级。** 过程正文与最终结论统一跟随设置中的聊天字号和行高，不再额外缩小两号；浅色界面使用 `#858585` 中灰，结论保持系统主文字色。仅在最后一段过程与结论之间加入 `0.5 × 当前行高` 的空隙，同一区块内的编号/项目列表继续保持 3pt 紧凑间距，不把分区留白错误扩散到列表项之间。
+
+### Tests
+
+- [DesktopPetTests](XeditTests/DesktopPetTests.swift) 新增间歇唤醒范围、强制环境动作、可见性门控和四类既有效果轮换回归；[AgentChatHistoryRendererTests](XeditTests/AgentChatHistoryRendererTests.swift) 锁定过程/结论同字号、动态中灰、半行分区间距与紧凑列表间距。
+
+## 1.293.0-rc6 - 2026-08-26
+
+### Fixed
+
+- **左侧会话列表滚动不再逐行重建整个侧栏。** 会话行与工作区的 hover 状态从侧栏父视图下沉到各自局部作用域；指针固定、列表从下方滚过时，只更新当前行或当前工作区，不再重新过滤、分组和渲染全部会话。悬停出现的置顶、归档与新会话按钮保持视觉行为不变，但不再随 hover 反复进出无障碍树；对应操作通过稳定的自定义无障碍动作继续提供。
+- **活动状态移除常驻高频重绘。** 主聊天区当前动作文字不再由连续 `TimelineView` 驱动扫光，生产界面保持静态文字，扫光进度只供确定性的设计预览使用且不进入无障碍树。
+- **桌面宠物完成态停止常驻动画。** `.ready` 和 `.idle` 一样停驻时间线，避免未读输出让桌宠永久维持 4 FPS 刷新；行走、输入、跳跃、需关注与庆祝等短暂状态仍正常动画。
+
+### Tests
+
+- [AgentSidebarListVisualMetricsTests](XeditTests/AgentSidebarListVisualMetricsTests.swift) 新增侧栏 hover 局部失效与稳定无障碍树守卫；[AgentConfirmationVisualTests](XeditTests/AgentConfirmationVisualTests.swift) 和 [DesktopPetTests](XeditTests/DesktopPetTests.swift) 分别锁定活动文字不创建连续时间线、完成态桌宠停驻。相关 4 个套件共 77 项测试通过。
 
 ## 1.293.0-rc5 - 2026-08-25
 
