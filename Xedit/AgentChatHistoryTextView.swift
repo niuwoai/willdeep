@@ -1265,6 +1265,14 @@ enum AgentChatHistoryLayoutMetrics {
     static let listNestingIndent: CGFloat = 18
     static let listHangingIndent: CGFloat = 22
     static let listParagraphSpacing: CGFloat = 3
+    /// Variant A: process prose shares the configured body size with the
+    /// answer, so grayscale — not a second type scale — carries hierarchy.
+    /// The dark-mode value is lifted enough to retain the same readable role
+    /// on a near-black transcript surface.
+    static func assistantProcessTextColor(isDark: Bool) -> NSColor {
+        let white: CGFloat = isDark ? 0.68 : 0.52
+        return NSColor(srgbRed: white, green: white, blue: white, alpha: 1)
+    }
     /// Measured from the Codex reference at 1x: 9 pt from the status line
     /// box to the divider, then 18 pt from the divider to the body line box.
     static let assistantStatusDividerTopSpacing: CGFloat = 9

@@ -69,7 +69,8 @@ private struct AboutView: View {
                         appearance: .bearGirl,
                         mood: .idle,
                         appIsActive: NSApp.isActive,
-                        isAnimating: true
+                        isAnimating: true,
+                        schedulesAmbientBursts: false
                     )
                     .frame(width: 128, height: 128)
                     .accessibilityHidden(true)

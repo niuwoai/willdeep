@@ -117,6 +117,39 @@ struct DesktopPetTests {
     }
 
     @Test
+    func scheduledAmbientBurstRestoresCuteEffectsWithoutAContinuousTimeline() {
+        let start = Date(timeIntervalSinceReferenceDate: 1_000)
+        let animation = DesktopPetAnimationValues(
+            mood: .idle,
+            date: start.addingTimeInterval(DesktopPetAmbientBurstCadence.duration / 2),
+            ambientBurstCycleIndex: 7,
+            ambientBurstProgress: 0.5
+        )
+
+        #expect(animation.ambientEffectPlan != nil)
+        #expect(animation.ambientEffectPlan?.progress == 0.5)
+        #expect(animation.verticalOffset < 0)
+    }
+
+    @Test
+    func ambientBurstDelayStaysInsideTheRestingWindow() {
+        #expect(
+            DesktopPetAmbientBurstCadence.delay(unitInterval: -1)
+                == DesktopPetAmbientBurstCadence.minimumDelay
+        )
+        #expect(
+            DesktopPetAmbientBurstCadence.delay(unitInterval: 1)
+                == DesktopPetAmbientBurstCadence.maximumDelay
+        )
+        #expect(DesktopPetAmbientBurstCadence.delay(unitInterval: 0.5) == 22)
+        #expect((0..<64).allSatisfy {
+            let delay = DesktopPetAmbientBurstCadence.delay(cycleIndex: $0)
+            return delay >= DesktopPetAmbientBurstCadence.minimumDelay
+                && delay <= DesktopPetAmbientBurstCadence.maximumDelay
+        })
+    }
+
+    @Test
     func ambientEffectsChooseExactlyOneKindPerCycle() {
         let plans = (0..<64).map {
             DesktopPetAmbientEffectPlan.make(cycleIndex: $0, progress: 0.5)
@@ -278,14 +311,11 @@ struct DesktopPetTests {
         ))
     }
 
-    /// Resting is the mood the pet holds almost all the time, and its breathing
-    /// drives an app-wide CA flush per frame for motion nobody is waiting on.
-    /// `.ready` can persist while an output preview remains unread, so it must
-    /// park as well; otherwise completed work leaves an otherwise idle app on a
-    /// permanent display cycle. Transient/actionable moods keep animating,
-    /// including the automatic jump that brings a parked pet back to life.
+    /// Resting is the mood the pet holds almost all the time. It parks its
+    /// continuous timeline, but visible idle/ready pets still schedule brief
+    /// cute-effect bursts. Transient/actionable moods animate continuously.
     @Test
-    func restingAndReadyMoodsParkTheTimeline() {
+    func restingAndReadyMoodsParkBetweenAmbientBursts() {
         #expect(!DesktopPetAnimationGate.requiresTimeline(mood: .idle))
         #expect(!DesktopPetAnimationGate.shouldAnimate(
             isEnabled: true,
@@ -298,10 +328,35 @@ struct DesktopPetTests {
             isWindowVisible: true,
             mood: .ready
         ))
+        #expect(DesktopPetAnimationGate.shouldScheduleAmbientBursts(
+            isEnabled: true,
+            isWindowVisible: true,
+            mood: .idle
+        ))
+        #expect(DesktopPetAnimationGate.shouldScheduleAmbientBursts(
+            isEnabled: true,
+            isWindowVisible: true,
+            mood: .ready
+        ))
+        #expect(!DesktopPetAnimationGate.shouldScheduleAmbientBursts(
+            isEnabled: true,
+            isWindowVisible: false,
+            mood: .idle
+        ))
+        #expect(!DesktopPetAnimationGate.shouldScheduleAmbientBursts(
+            isEnabled: false,
+            isWindowVisible: true,
+            mood: .idle
+        ))
 
         for mood: DesktopPetMood in [.walking, .typing, .jumping, .attention, .celebrating] {
             #expect(DesktopPetAnimationGate.requiresTimeline(mood: mood))
             #expect(DesktopPetAnimationGate.shouldAnimate(
+                isEnabled: true,
+                isWindowVisible: true,
+                mood: mood
+            ))
+            #expect(!DesktopPetAnimationGate.shouldScheduleAmbientBursts(
                 isEnabled: true,
                 isWindowVisible: true,
                 mood: mood
