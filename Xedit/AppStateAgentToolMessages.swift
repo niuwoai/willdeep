@@ -8,6 +8,9 @@
 //
 
 import Foundation
+import OSLog
+
+private let agentSpawnLog = Logger(subsystem: "com.willdeep.agent", category: "spawn-agent")
 
 extension AppState {
     func denyPlanProgressReconciliationToolCall(
@@ -120,6 +123,9 @@ extension AppState {
         var prompt = arguments["prompt"]?.stringValue()?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !prompt.isEmpty else {
+            agentSpawnLog.error(
+                "spawn_agent rejected reason=missing_prompt runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public)"
+            )
             finishRecord(
                 status: .failed,
                 summary: "missing prompt",
@@ -137,6 +143,9 @@ extension AppState {
             return String(prompt.prefix(40))
         }()
         let runInBackground = arguments["run_in_background"]?.boolValue() ?? false
+        agentSpawnLog.info(
+            "spawn_agent received runtime=\(runtime.id.uuidString, privacy: .public) turn=\(runtime.activeTurnID?.uuidString ?? "none", privacy: .public) call=\(call.externalID, privacy: .public) label=\(label, privacy: .public) requestedProfile=\(arguments["profile"]?.stringValue() ?? "default", privacy: .public) background=\(runInBackground ? "true" : "false", privacy: .public) promptChars=\(prompt.count, privacy: .public)"
+        )
 
         // Which trade to run. An absent profile still means `deep`, which is
         // what every pre-profile caller expects.
@@ -158,6 +167,9 @@ extension AppState {
             // reporting a note nobody acts on. Refuse instead — the retry
             // costs one round and lands on the trade that was meant.
             let message = "Unknown profile `\(requestedProfileID)`. Valid trades: \(availableTradeIDs.joined(separator: ", ")). Pick one and call spawn_agent again — this was not run as `deep`."
+            agentSpawnLog.error(
+                "spawn_agent rejected reason=unknown_profile runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) requestedProfile=\(requestedProfileID, privacy: .public)"
+            )
             finishRecord(
                 status: .failed,
                 summary: "unknown profile",
@@ -180,6 +192,9 @@ extension AppState {
             case .success(let updated):
                 runtime.deepAdmissionObservation = updated
             case .failure(let refusal):
+                agentSpawnLog.error(
+                    "spawn_agent rejected reason=deep_refused runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public) refusal=\(refusal.modelFacingMessage, privacy: .private)"
+                )
                 finishRecord(
                     status: .failed,
                     summary: "deep escalation refused",
@@ -261,6 +276,9 @@ extension AppState {
             }
             guard !rawTargets.isEmpty,
                   let access = AgentSubagentWriteAccess(targetRelativePaths: rawTargets) else {
+                agentSpawnLog.error(
+                    "spawn_agent rejected reason=missing_write_scope runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public) requestedTargets=\(rawTargets.count, privacy: .public)"
+                )
                 finishRecord(
                     status: .failed,
                     summary: "missing target files",
@@ -271,6 +289,9 @@ extension AppState {
             }
             if profile.id == AgentSubagentProfileCatalog.smallImplementerID,
                access.targetRelativePaths.count > AgentCodingTaskPlan.automaticMaximumWriteCount {
+                agentSpawnLog.error(
+                    "spawn_agent rejected reason=write_scope_too_broad runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public) targetCount=\(access.targetRelativePaths.count, privacy: .public)"
+                )
                 finishRecord(
                     status: .failed,
                     summary: "small implementer scope too broad",
@@ -289,6 +310,9 @@ extension AppState {
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !targetCommand.isEmpty {
             guard profile.id == AgentSubagentProfileCatalog.opsRunnerID else {
+                agentSpawnLog.error(
+                    "spawn_agent rejected reason=target_command_misrouted runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public)"
+                )
                 finishRecord(
                     status: .failed,
                     summary: "target_command misrouted",
@@ -349,12 +373,18 @@ extension AppState {
             for: profile,
             parentConfiguration: configuration
         )
+        agentSpawnLog.info(
+            "spawn_agent resolved runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public) model=\(childConfiguration.model, privacy: .public) provider=\(childConfiguration.providerID, privacy: .public) background=\(runInBackground ? "true" : "false", privacy: .public) verifier=\(verifierCommand == nil ? "none" : "present", privacy: .public) approvedCommand=\(approvedCommand == nil ? "none" : "present", privacy: .public)"
+        )
         updateSubagent(model: childConfiguration.model, progress: "启动中…")
 
         if runInBackground {
             // Editor trades are synchronous by construction: the file lock
             // and the approval are scoped to a turn the user is watching.
             if profile.requiresWriteAccess {
+                agentSpawnLog.error(
+                    "spawn_agent rejected reason=write_trade_background runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public)"
+                )
                 finishRecord(
                     status: .failed,
                     summary: "editor cannot run in background",
@@ -376,12 +406,18 @@ extension AppState {
                     profile: profile
                 )
                 bindSubagentRun(run.id)
+                agentSpawnLog.info(
+                    "spawn_agent background started runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(run.id.uuidString, privacy: .public) handle=\(run.displayHandle, privacy: .public) profile=\(profile.id, privacy: .public) model=\(childConfiguration.model, privacy: .public)"
+                )
                 finishRecord(
                     status: .succeeded,
                     summary: "started \(run.displayHandle)",
                     payload: "Subagent \(run.displayHandle) (\(label)) started in the background on model \(childConfiguration.model). Its report will arrive as a <subagent-report> system message when it finishes — keep working on other things or end your turn; do not poll."
                 )
             } catch {
+                agentSpawnLog.error(
+                    "spawn_agent background failed_to_start runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public) errorType=\(String(describing: type(of: error)), privacy: .public) error=\(error.localizedDescription, privacy: .private)"
+                )
                 finishRecord(
                     status: .failed,
                     summary: "spawn failed",
@@ -398,6 +434,9 @@ extension AppState {
         let runID = UUID()
         let startedAt = Date()
         bindSubagentRun(runID)
+        agentSpawnLog.info(
+            "spawn_agent synchronous started runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(childConfiguration.model, privacy: .public)"
+        )
 
         // One editor per file per session. Two children patching the same
         // file would interleave hunks against a moving base.
@@ -413,6 +452,9 @@ extension AppState {
                     runID: runID
                 )
                 let busyList = busy.map { "`\($0)`" }.joined(separator: ", ")
+                agentSpawnLog.error(
+                    "spawn_agent rejected reason=files_locked runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) busyCount=\(busy.count, privacy: .public)"
+                )
                 finishRecord(
                     status: .failed,
                     summary: "files locked",
@@ -569,6 +611,9 @@ extension AppState {
             var hostedFallbackNote: String?
             var outcome: AgentSubagentRunner.Outcome
             do {
+                agentSpawnLog.info(
+                    "spawn_agent child attempt runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(attemptConfiguration.model, privacy: .public)"
+                )
                 outcome = try await runChild(configuration: attemptConfiguration, profile: profile)
             } catch let error where AgentSubagentHostedModelFallback.retryModel(
                 afterError: error,
@@ -582,6 +627,9 @@ extension AppState {
                     attemptedModel: staleModel,
                     hostedModel: profile.hostedVirtualModel
                 ) ?? AgentSubagentHostedModelFallback.fallbackModel
+                agentSpawnLog.error(
+                    "spawn_agent hosted_model_missing retrying runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) staleModel=\(staleModel, privacy: .public) fallbackModel=\(fallback, privacy: .public) error=\(error.localizedDescription, privacy: .private)"
+                )
                 updateSubagent(model: fallback, progress: "托管模型缺失，改用 \(fallback) 重跑…")
                 attemptConfiguration.model = fallback
                 outcome = try await runChild(configuration: attemptConfiguration, profile: profile)
@@ -602,6 +650,9 @@ extension AppState {
             if profile.escalation == .retryWithParentModel,
                attemptConfiguration.model != configuration.model,
                AgentSubagentEscalation.shouldEscalate(outcome: outcome, profile: profile) {
+                agentSpawnLog.info(
+                    "spawn_agent escalating retry runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) fromModel=\(attemptConfiguration.model, privacy: .public) toModel=\(configuration.model, privacy: .public) firstRounds=\(outcome.roundCount, privacy: .public) firstReportChars=\(outcome.report.count, privacy: .public)"
+                )
                 updateSubagent(model: configuration.model, progress: "升级重跑中…")
                 let escalatedProfile = AgentSubagentEscalation.escalatedProfile(from: profile)
                 if let retried = try? await runChild(
@@ -630,6 +681,9 @@ extension AppState {
                 providerID: effectiveProviderID,
                 escalatedFrom: escalatedFrom
             )
+            agentSpawnLog.info(
+                "spawn_agent synchronous completed runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(effectiveModel, privacy: .public) rounds=\(outcome.roundCount, privacy: .public) tools=\(outcome.toolInvocationCount, privacy: .public) tokens=\(outcome.usageTokens, privacy: .public) reportChars=\(outcome.report.count, privacy: .public) verifierPassed=\(outcome.verifierPassed.map { $0 ? "true" : "false" } ?? "none", privacy: .public)"
+            )
             let notices = profileNotices.isEmpty ? "" : "\n\n" + profileNotices.joined(separator: "\n")
             // A report-only run has no exit code to judge it. The citation
             // audit inside the runner already checked that its locations
@@ -647,6 +701,9 @@ extension AppState {
                 payload: "\(outcome.report)\(verdict)\n\n\(stats)\(notices)"
             )
         } catch is CancellationError {
+            agentSpawnLog.info(
+                "spawn_agent synchronous cancelled runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(childConfiguration.model, privacy: .public)"
+            )
             // No outcome to record, but the prompt/model/timing still explain
             // what was cancelled — better than an inspector button that opens
             // onto nothing.
@@ -664,6 +721,9 @@ extension AppState {
                 errorMessage: "Cancelled"
             )
         } catch {
+            agentSpawnLog.error(
+                "spawn_agent synchronous failed runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(childConfiguration.model, privacy: .public) errorType=\(String(describing: type(of: error)), privacy: .public) error=\(error.localizedDescription, privacy: .private)"
+            )
             persist(
                 status: .failed,
                 outcome: nil,
