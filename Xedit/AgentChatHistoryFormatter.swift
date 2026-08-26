@@ -779,15 +779,23 @@ enum AgentChatHistoryRenderer {
             let inlineToolCalls = inlineGroup?.calls ?? []
             if let inlineGroup, !inlineToolCalls.isEmpty {
                 if hasMessageBubbleContent {
-                    // Keep the answer and metadata distinct, but use 0.7×
-                    // the configured body font size instead of a complete
-                    // blank body row. Tool summary and footer remain adjacent.
-                    _ = appendAssistantMetadataGroupSeparator(
-                        to: result,
-                        bodyFont: bodyFont,
-                        layoutWidth: layoutWidth,
-                        lineSpacing: bodyLineSpacing
-                    )
+                    // 工具活动行和发起它的那段正文之间只用一个普通换行,
+                    // 与活动行下方到下一段正文的间距对称(同回合的后续
+                    // assistant 消息同样只隔一个 "\n")。此前这里插 0.7×
+                    // 字号的 metadata spacer,上大下小,活动行看起来被推
+                    // 离了发起它的那句话。统计 footer 仍保留那道 spacer:
+                    // 它是回合末尾的元数据,和正文拉开是对的。
+                    result.append(NSAttributedString(
+                        string: "\n",
+                        attributes: [
+                            .font: bodyFont,
+                            .paragraphStyle: bodyParagraphStyle(
+                                for: .assistant,
+                                layoutWidth: layoutWidth,
+                                lineSpacing: bodyLineSpacing
+                            ),
+                        ]
+                    ))
                 }
                 appendToolCallGroup(
                     inlineGroup,
