@@ -52,13 +52,16 @@ extension AppState {
         runtime.currentTurnDelegationPolicy = delegationPolicy
         runtime.currentTurnSpawnAgentCallCount = 0
         runtime.currentTurnAutoDispatchedCommands = []
+        runtime.currentTurnAttemptedWorkerProfiles = []
         runtime.currentTurnEmittedReadOnlyHandoffHint = false
         // Classified from what the user actually typed. Tool-loop
         // continuations and system notices re-enter here with the same
         // runtime; routing those would classify WillDeep's own plumbing.
-        runtime.currentTurnRouteSteering = source == .operatorInput
-            ? AgentRequestRouter.steering(for: text, delegationPolicy: delegationPolicy)
+        let routeDecision = source == .operatorInput
+            ? AgentRequestRouter.routedDecision(for: text, delegationPolicy: delegationPolicy)
             : nil
+        runtime.currentTurnRouteDecision = routeDecision
+        runtime.currentTurnRouteSteering = routeDecision?.steering
         if source == .operatorInput {
             runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
             // A human steering the session starts a fresh budget of automatic
@@ -285,12 +288,39 @@ extension AppState {
             // currentTurnRouteSteering, which runAgentLoop reads when it
             // assembles the system prompt.
             if source == .operatorInput {
-                await self.runReadOnlyPreflightIfNeeded(
+                let codingPlan = await self.runReadOnlyPreflightIfNeeded(
                     for: runtime,
                     requestText: text,
                     configuration: configuration,
-                    assistantMessageID: userMessage.id
+                    userMessageID: userMessage.id
                 )
+                if let codingPlan {
+                    let pipelineResult = await self.runAutomaticCodingPipelineIfEligible(
+                        for: runtime,
+                        requestText: text,
+                        userMessageID: userMessage.id,
+                        plan: codingPlan,
+                        parentConfiguration: configuration
+                    )
+                    switch pipelineResult {
+                    case .delivered(let message):
+                        self.completeAutomaticCodingTurn(
+                            for: runtime,
+                            message: message,
+                            configuration: configuration,
+                            providerSlotClaimID: providerSlotClaim.id,
+                            turnID: turnID
+                        )
+                        return
+                    case .needsParent(let note):
+                        runtime.currentTurnRouteSteering = [
+                            runtime.currentTurnRouteSteering,
+                            note,
+                        ].compactMap { $0 }.joined(separator: "\n\n")
+                    case .notEligible:
+                        break
+                    }
+                }
             }
             await self.runAgentLoop(
                 for: runtime,
@@ -1922,6 +1952,29 @@ extension AppState {
                         source: .systemNotice,
                         outcomeStatus: .denied,
                         errorMessage: "Planning-only request"
+                    )
+                    continue
+                }
+
+                if let refusal = AgentWorkerRouteGuard.refusal(
+                    toolName: call.toolName,
+                    risk: risk,
+                    decision: runtime.currentTurnRouteDecision,
+                    delegationPolicy: runtime.currentTurnDelegationPolicy,
+                    attemptedProfiles: runtime.currentTurnAttemptedWorkerProfiles
+                ) {
+                    anyDenied = true
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .denied
+                        runtime.toolCalls[index].errorMessage = "Delegate-first worker route"
+                    }
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: refusal,
+                        source: .systemNotice,
+                        outcomeStatus: .denied,
+                        errorMessage: "Delegate-first worker route"
                     )
                     continue
                 }

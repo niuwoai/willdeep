@@ -10,7 +10,7 @@ import Testing
 @testable import WillDeep
 
 @Suite(.serialized)
-struct EditorLanguageServiceCompletionTests {
+nonisolated struct EditorLanguageServiceCompletionTests {
     @Test("LSP completion item decodes text edit additional edits and snippet format")
     func testLSPCompletionItemDecodesServerEdits() throws {
         let item = try JSONDecoder().decode(LSPCompletionItem.self, from: Data("""

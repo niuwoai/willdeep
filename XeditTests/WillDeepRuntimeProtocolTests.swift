@@ -10,7 +10,7 @@ import Testing
 /// expense. Nothing in this suite touches the network or a live Runtime; this
 /// is step zero of rs `docs/CLI_TUI_RUNTIME_ROADMAP.md` §1.0.
 @Suite
-struct WillDeepRuntimeProtocolTests {
+nonisolated struct WillDeepRuntimeProtocolTests {
     private static let fixtureURL = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .appendingPathComponent("Fixtures/willdeep-runtime-public-api-v1.json")

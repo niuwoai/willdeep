@@ -8,7 +8,7 @@ import Testing
 @testable import WillDeep
 
 @Suite
-struct AgentTranscriptScrollPolicyTests {
+nonisolated struct AgentTranscriptScrollPolicyTests {
     @Test
     func scrollToLatestButtonOnlyAppearsWhileReadingAboveTheBottom() {
         #expect(

@@ -117,6 +117,10 @@ extension L10n {
             localized: "agent-delegation.profile-implementer-name",
             defaultValue: "Implementer"
         )
+        static let profileSmallImplementerName = String(
+            localized: "agent-delegation.profile-small-implementer-name",
+            defaultValue: "Small Implementer"
+        )
 
         static let profileTesterName = String(
             localized: "agent-delegation.profile-tester-name",
@@ -125,6 +129,10 @@ extension L10n {
         static let profileReviewerName = String(
             localized: "agent-delegation.profile-reviewer-name",
             defaultValue: "Reviewer"
+        )
+        static let profileSmallReviewerName = String(
+            localized: "agent-delegation.profile-small-reviewer-name",
+            defaultValue: "Small Reviewer"
         )
         static let profileTestFixerName = String(
             localized: "agent-delegation.profile-test-fixer-name",
@@ -228,6 +236,10 @@ extension L10n {
             localized: "agent-delegation.profile-implementer-purpose",
             defaultValue: "Implements a bounded multi-file feature or refactor across at most 16 declared existing or new paths on a deployable 256K model."
         )
+        static let profileSmallImplementerPurpose = String(
+            localized: "agent-delegation.profile-small-implementer-purpose",
+            defaultValue: "Implements a verified low-risk change across at most three declared files on someim-32b."
+        )
         static let profileTesterPurpose = String(
             localized: "agent-delegation.profile-tester-purpose",
             defaultValue: "Runs tests and gates, reports evidence, never edits code."
@@ -235,6 +247,10 @@ extension L10n {
         static let profileReviewerPurpose = String(
             localized: "agent-delegation.profile-reviewer-purpose",
             defaultValue: "Independent read-only review of a change's scope, version consistency and git hygiene."
+        )
+        static let profileSmallReviewerPurpose = String(
+            localized: "agent-delegation.profile-small-reviewer-purpose",
+            defaultValue: "Independently accepts, rejects, or escalates one verified low-risk change from supplied evidence."
         )
         static let profileTestFixerPurpose = String(
             localized: "agent-delegation.profile-test-fixer-purpose",

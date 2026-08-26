@@ -239,6 +239,7 @@ struct AgentStatsDashboard: View {
                     workerDetailHeader
                     workerSummaryBand
                     workerKPIBand
+                    workerCodingKPIBand
                     workerUsageList
                 }
             case .calendar:
@@ -1274,10 +1275,16 @@ struct AgentStatsDashboard: View {
 
     private var workerSummaryBand: some View {
         let totalCalls = subagentUsageRows.reduce(0) { $0 + $1.invocationCount }
+        let totalRuns = subagentUsageRows.reduce(0) { $0 + $1.runCount }
         return HStack(spacing: 0) {
             CodexDashboardMetric(
                 value: formatInteger(totalCalls),
                 title: L10n.StatsDashboard.workersTotalCalls
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatInteger(totalRuns),
+                title: L10n.StatsDashboard.workersActualRuns
             )
             metricDivider
             CodexDashboardMetric(
@@ -1310,7 +1317,7 @@ struct AgentStatsDashboard: View {
         let kpis = dashboardModel.skillWorkerKPIs
         return HStack(spacing: 0) {
             CodexDashboardMetric(
-                value: formatOptionalPercent(kpis.skillCoverage),
+                value: formatOptionalPercent(kpis.workerCoverage),
                 title: L10n.StatsDashboard.workersSkillCoverage
             )
             metricDivider
@@ -1327,6 +1334,44 @@ struct AgentStatsDashboard: View {
             CodexDashboardMetric(
                 value: formatOptionalPercent(kpis.deepShare),
                 title: L10n.StatsDashboard.workersDeepShare
+            )
+        }
+        .frame(height: AgentStatsDashboardLayout.metricStripHeight)
+        .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
+                .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+        )
+    }
+
+    /// Quality signals for the host-owned low-risk coding lane. A verifier
+    /// pass alone is deliberately not called delivery: only an independent
+    /// reviewer can move the straight-through numerator.
+    private var workerCodingKPIBand: some View {
+        let kpis = dashboardModel.skillWorkerKPIs
+        return HStack(spacing: 0) {
+            CodexDashboardMetric(
+                value: formatInteger(kpis.automaticCodingRunCount),
+                title: L10n.StatsDashboard.workersAutomaticCodingRuns,
+                titleLineLimit: 2
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatOptionalPercent(kpis.straightThroughRate),
+                title: L10n.StatsDashboard.workersStraightThroughRate,
+                titleLineLimit: 2
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatOptionalPercent(kpis.codingReworkRate),
+                title: L10n.StatsDashboard.workersCodingReworkRate,
+                titleLineLimit: 2
+            )
+            metricDivider
+            CodexDashboardMetric(
+                value: formatInteger(kpis.codingPlanCacheHitCount),
+                title: L10n.StatsDashboard.workersPlanCacheHits,
+                titleLineLimit: 2
             )
         }
         .frame(height: AgentStatsDashboardLayout.metricStripHeight)
@@ -1390,6 +1435,7 @@ struct AgentStatsDashboard: View {
         peakCalls: Int
     ) -> some View {
         let invocationCount = usage?.invocationCount ?? 0
+        let runCount = usage?.runCount ?? 0
         let sessionCount = usage?.sessionCount ?? 0
         let share = totalCalls > 0 ? Double(invocationCount) / Double(totalCalls) : 0
 
@@ -1417,6 +1463,7 @@ struct AgentStatsDashboard: View {
                     Spacer(minLength: 8)
                     Text(L10n.StatsDashboard.workerUsageSummary(
                         formatInteger(invocationCount),
+                        formatInteger(runCount),
                         formatInteger(sessionCount),
                         formatPercentage(share)
                     ))
@@ -1450,8 +1497,10 @@ struct AgentStatsDashboard: View {
         case AgentSubagentProfileCatalog.scoutID: return "scope"
         case AgentSubagentProfileCatalog.readerID: return "doc.text.magnifyingglass"
         case AgentSubagentProfileCatalog.editorID: return "pencil.line"
+        case AgentSubagentProfileCatalog.smallImplementerID: return "hammer.circle"
         case AgentSubagentProfileCatalog.testerID: return "checkmark.seal"
         case AgentSubagentProfileCatalog.reviewerID: return "eye"
+        case AgentSubagentProfileCatalog.smallReviewerID: return "checkmark.magnifyingglass"
         case AgentSubagentProfileCatalog.testFixerID: return "ladybug"
         case AgentSubagentProfileCatalog.buildFixerID: return "hammer"
         case AgentSubagentProfileCatalog.logInspectorID: return "list.bullet.rectangle"
@@ -1776,7 +1825,14 @@ struct AgentStatsDashboard: View {
     }
 
     private func formatPercentage(_ value: Double) -> String {
-        String(format: "%.0f%%", min(1, max(0, value)) * 100)
+        let percent = min(1, max(0, value)) * 100
+        if percent > 0, percent < 0.1 {
+            return String(format: "%.2f%%", percent)
+        }
+        if percent > 0, percent < 1 {
+            return String(format: "%.1f%%", percent)
+        }
+        return String(format: "%.0f%%", percent)
     }
 
     private func formatTokens(_ count: Int) -> String {
@@ -2247,6 +2303,7 @@ private struct CodexDashboardMetric: View {
     let value: String
     let title: String
     var showsDisclosure = false
+    var titleLineLimit = 1
 
     var body: some View {
         VStack(spacing: 3) {
@@ -2273,10 +2330,13 @@ private struct CodexDashboardMetric: View {
                     visualMinimum: AgentStatsDashboardTypography.metricLabel
                 ))
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .multilineTextAlignment(.center)
+                .lineLimit(titleLineLimit)
                 .minimumScaleFactor(0.72)
+                .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
         .contentShape(Rectangle())
     }
 }

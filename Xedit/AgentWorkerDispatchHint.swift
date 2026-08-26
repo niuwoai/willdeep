@@ -56,7 +56,7 @@ nonisolated enum AgentWorkerDispatchHint {
         /// failure. Absent leaves the command-shape verdict as-is.
         failureOutput: String = ""
     ) -> String? {
-        guard toolName == "run_command" else { return nil }
+        guard ["run_command", "terminal_send_command"].contains(toolName) else { return nil }
         guard let command = arguments["command"]?.stringValue()?
             .trimmingCharacters(in: .whitespacesAndNewlines), !command.isEmpty else { return nil }
         // No exit code means the command never rendered a verdict. A launch
@@ -256,6 +256,7 @@ nonisolated enum AgentWorkerDispatchHint {
         "release.rb", "release.sh", "release_mac_app", "scripts/release",
         "deploy", "publish", "fastlane",
         "helm upgrade", "helm install", "kubectl apply", "kubectl rollout",
+        "kubectl set image",
         "terraform apply", "ansible-playbook",
         "gh release create", "npm publish", "cargo publish", "gem push",
     ]

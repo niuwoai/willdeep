@@ -8,7 +8,7 @@ import Testing
 @testable import WillDeep
 
 @Suite("Plan on demand")
-struct AgentPlanOnDemandPolicyTests {
+nonisolated struct AgentPlanOnDemandPolicyTests {
     /// The whole point: a task that finishes inside a few rounds never pays
     /// for a plan or its reporting machinery.
     @Test("小任务在阈值之下不触发")

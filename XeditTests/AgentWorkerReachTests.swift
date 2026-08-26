@@ -14,7 +14,7 @@ import Testing
 @testable import WillDeep
 
 @Suite
-struct AgentWorkerReachTests {
+nonisolated struct AgentWorkerReachTests {
 
     // MARK: - Log-shaped classification
 

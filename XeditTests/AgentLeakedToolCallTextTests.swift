@@ -10,7 +10,7 @@ import Testing
 /// Samples are transcribed from real sessions on disk, including the doubled
 /// full-width bars the models actually produced.
 @Suite("Leaked tool-call markup")
-struct AgentLeakedToolCallTextTests {
+nonisolated struct AgentLeakedToolCallTextTests {
     @Test("整条回复都是 DSML 块时正文清空、片段留证")
     func wholeReplyIsDSMLMarkup() {
         let raw = """
