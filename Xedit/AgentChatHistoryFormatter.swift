@@ -368,12 +368,9 @@ enum AgentChatHistoryRenderer {
         let headerFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
         // Status, tool activity, and footer statistics remain compact chrome.
         // Process prose itself follows the user's body-size setting exactly;
-        // grayscale and a half-line transition gap carry its hierarchy.
+        // the half-line transition gap carries its hierarchy.
         let assistantStatusFont = supportingFont
         let bodyColor = NSColor.labelColor
-        let assistantProcessColor = AgentChatHistoryLayoutMetrics.assistantProcessTextColor(
-            isDark: isDark
-        )
         let assistantStatusColor = NSColor.secondaryLabelColor
         let assistantStatusDividerColor = AgentChatHistoryLayoutMetrics.assistantStatusDividerColor(
             isDark: isDark
@@ -597,12 +594,13 @@ enum AgentChatHistoryRenderer {
             let activityHeadline = message.role == .assistant
                 ? AgentActivityHeadlinePresentation.make(from: body)
                 : nil
-            let isInterimAssistantMessage = message.role == .assistant
-                && turnPresentation != nil
-                && turnPresentation?.isLastVisibleMessage(message) == false
             let messageBodyFont = bodyFont
             let messageMonoFont = monoFont
-            let messageBodyColor = isInterimAssistantMessage ? assistantProcessColor : bodyColor
+            // 助手正文一律用正文黑：过程叙述和最终答案都是「模型说的话」。
+            // 层次交给工具活动行的灰(secondaryLabelColor)和过程→答案之间
+            // 的半行间距承担 —— 过程文字本身刷成灰会让整段回复看起来
+            // 通篇发灰，反而分不出哪里是纯 chrome。
+            let messageBodyColor = bodyColor
             let messageLineSpacing = bodyLineSpacing
             let messageParagraphStyle = bodyParagraphStyle(
                 for: message.role,

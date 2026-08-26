@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.293.0-rc7 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.293.0-rc8 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.293.0-rc8 - 2026-08-26
+
+### Changed
+
+- **聊天正文恢复正常黑色，灰色只留给工具活动行。** 同一回合里的过程叙述不再刷成 `#858585` 中灰，和最终结论一样使用系统主文字色；「已读取 3 个文件」「执行了 1 次工具调用」这类工具活动摘要继续用 `secondaryLabelColor` 灰。此前过程正文和工具 chrome 同为灰色，整段回复通篇发灰，反而看不出哪里是模型说的话、哪里是工具执行记录。过程与结论之间的半行间距保持不变，继续承担分段职责。
+
+### Tests
+
+- [AgentChatHistoryRendererTests](XeditTests/AgentChatHistoryRendererTests.swift) 的回合分组用例改为锁定过程与结论同为 `labelColor`，同字号与半行分区间距断言保持不变。
 
 ## 1.293.0-rc7 - 2026-08-26
 

@@ -1938,9 +1938,8 @@ struct AgentChatHistoryRendererTests {
             effectiveRange: nil
         ) as? NSColor)
         #expect(interimFont.pointSize == finalFont.pointSize)
-        #expect(interimColor == AgentChatHistoryLayoutMetrics.assistantProcessTextColor(
-            isDark: false
-        ))
+        // 过程叙述和最终答案都用正文黑；灰色只留给工具活动行这类 chrome。
+        #expect(interimColor == NSColor.labelColor)
         #expect(finalColor == NSColor.labelColor)
 
         let transitionRange = NSRange(
