@@ -1937,12 +1937,29 @@ struct AgentChatHistoryRendererTests {
             at: finalRange.location,
             effectiveRange: nil
         ) as? NSColor)
-        #expect(interimFont.pointSize == AgentDesign.chatSupportingFontSize(
-            baseFontSize: finalFont.pointSize
+        #expect(interimFont.pointSize == finalFont.pointSize)
+        #expect(interimColor == AgentChatHistoryLayoutMetrics.assistantProcessTextColor(
+            isDark: false
         ))
-        #expect(interimFont.pointSize < finalFont.pointSize)
-        #expect(interimColor == NSColor.secondaryLabelColor)
         #expect(finalColor == NSColor.labelColor)
+
+        let transitionRange = NSRange(
+            location: NSMaxRange(interimRange),
+            length: finalRange.location - NSMaxRange(interimRange)
+        )
+        #expect(text.substring(with: transitionRange) == "\n\n")
+        let transitionSpacerStyle = try #require(rendered.attribute(
+            .paragraphStyle,
+            at: NSMaxRange(interimRange) + 1,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let expectedGap = AgentChatTypography.processToAnswerGap(
+            fontSize: finalFont.pointSize,
+            lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
+        )
+        #expect(abs(transitionSpacerStyle.minimumLineHeight - expectedGap) < 0.001)
+        #expect(abs(transitionSpacerStyle.maximumLineHeight - expectedGap) < 0.001)
+        #expect(AgentChatHistoryLayoutMetrics.listParagraphSpacing < expectedGap)
     }
 
     @Test("markdown lists use depth-aware hanging indents")
