@@ -540,9 +540,38 @@ extension AppState {
         }
 
         do {
-            var outcome = try await runChild(configuration: childConfiguration, profile: profile)
-            var effectiveModel = childConfiguration.model
-            var effectiveProviderID = childConfiguration.providerID
+            // A hosted trade whose relay chain is gone answers
+            // `model_not_configured` and kills the spawn outright. The roster
+            // in `hostedTradeIDs` is hand-maintained, so it goes stale without
+            // anyone noticing — one retry on a concrete model turns that into
+            // a slower success, and the note keeps the stale entry visible.
+            var attemptConfiguration = childConfiguration
+            var hostedFallbackNote: String?
+            var outcome: AgentSubagentRunner.Outcome
+            do {
+                outcome = try await runChild(configuration: attemptConfiguration, profile: profile)
+            } catch let error where AgentSubagentHostedModelFallback.retryModel(
+                afterError: error,
+                attemptedModel: attemptConfiguration.model,
+                hostedModel: profile.hostedVirtualModel
+            ) != nil {
+                let staleModel = attemptConfiguration.model
+                // Non-nil by the `where` clause above.
+                let fallback = AgentSubagentHostedModelFallback.retryModel(
+                    afterError: error,
+                    attemptedModel: staleModel,
+                    hostedModel: profile.hostedVirtualModel
+                ) ?? AgentSubagentHostedModelFallback.fallbackModel
+                updateSubagent(model: fallback, progress: "托管模型缺失，改用 \(fallback) 重跑…")
+                attemptConfiguration.model = fallback
+                outcome = try await runChild(configuration: attemptConfiguration, profile: profile)
+                hostedFallbackNote = AgentSubagentHostedModelFallback.fallbackNote(
+                    hostedModel: staleModel,
+                    ranOn: fallback
+                )
+            }
+            var effectiveModel = attemptConfiguration.model
+            var effectiveProviderID = attemptConfiguration.providerID
             var escalatedFrom: String?
 
             // A cheap trade that ran out of rounds without a report is the
@@ -551,7 +580,7 @@ extension AppState {
             // continuation — a small model's stuck history is noise to a
             // bigger one.
             if profile.escalation == .retryWithParentModel,
-               childConfiguration.model != configuration.model,
+               attemptConfiguration.model != configuration.model,
                AgentSubagentEscalation.shouldEscalate(outcome: outcome, profile: profile) {
                 updateSubagent(model: configuration.model, progress: "升级重跑中…")
                 let escalatedProfile = AgentSubagentEscalation.escalatedProfile(from: profile)
@@ -559,7 +588,7 @@ extension AppState {
                     configuration: configuration,
                     profile: escalatedProfile
                 ) {
-                    escalatedFrom = childConfiguration.model
+                    escalatedFrom = attemptConfiguration.model
                     effectiveModel = configuration.model
                     effectiveProviderID = configuration.providerID
                     outcome = retried
@@ -567,6 +596,9 @@ extension AppState {
             }
 
             var stats = statsLine(outcome)
+            if let hostedFallbackNote {
+                stats += hostedFallbackNote
+            }
             if let escalatedFrom {
                 stats += "\n(escalated from \(escalatedFrom) to \(effectiveModel) after the first attempt stalled)"
             }
@@ -750,7 +782,13 @@ extension AppState {
         images: [AgentImageAttachment] = [],
         source: AgentInjectionDefense.ToolMessageSource = .toolOutput,
         outcomeStatus: AgentToolCallStatus? = nil,
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        /// Set by callers relaying a real tool's output. Truncation is the
+        /// deterministic trigger for the read-only trades, and picking the
+        /// right one needs to know what produced the payload. Nil keeps the
+        /// old behaviour for hand-authored notices.
+        toolName: String? = nil,
+        toolCommand: String? = nil
     ) {
         let sanitized = AgentInjectionDefense.sanitizedToolMessageContent(
             payload: payload,
@@ -759,7 +797,20 @@ extension AppState {
         let limited: String
         let maxPayload = 24_000
         if sanitized.count > maxPayload {
-            limited = String(sanitized.prefix(maxPayload)) + "\n...[tool output truncated]"
+            let handoff: String
+            if let toolName,
+               let note = AgentReadOnlyWorkerHandoffHint.hint(
+                   toolName: toolName,
+                   command: toolCommand,
+                   omittedCharacters: sanitized.count - maxPayload,
+                   alreadyHintedThisTurn: runtime.currentTurnEmittedReadOnlyHandoffHint
+               ) {
+                runtime.currentTurnEmittedReadOnlyHandoffHint = true
+                handoff = note
+            } else {
+                handoff = ""
+            }
+            limited = String(sanitized.prefix(maxPayload)) + "\n...[tool output truncated]" + handoff
         } else {
             limited = sanitized
         }

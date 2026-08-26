@@ -52,6 +52,7 @@ extension AppState {
         runtime.currentTurnDelegationPolicy = delegationPolicy
         runtime.currentTurnSpawnAgentCallCount = 0
         runtime.currentTurnAutoDispatchedCommands = []
+        runtime.currentTurnEmittedReadOnlyHandoffHint = false
         // Classified from what the user actually typed. Tool-loop
         // continuations and system notices re-enter here with the same
         // runtime; routing those would classify WillDeep's own plumbing.
@@ -2685,7 +2686,9 @@ extension AppState {
                         toolCallID: call.externalID,
                         payload: result.payload,
                         images: result.images,
-                        outcomeStatus: .succeeded
+                        outcomeStatus: .succeeded,
+                        toolName: call.toolName,
+                        toolCommand: argsDict["command"]?.stringValue()
                     )
                     if isPatchReviewTool {
                         needsPatchReviewBoundary = true

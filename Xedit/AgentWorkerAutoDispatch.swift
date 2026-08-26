@@ -129,13 +129,18 @@ nonisolated enum AgentWorkerAutoDispatch {
             return .failure(.alreadyDispatchedThisTurn)
         }
 
-        guard let commandKind = AgentWorkerDispatchHint.classify(command: command) else {
+        // Shape first, then the log. The shape check alone dropped every
+        // failure whose command did not look like a build — including ones
+        // whose output was nothing but compiler diagnostics. `classify` also
+        // folds in the old `refinedKind` correction: a command shaped like a
+        // test whose log shows the build never ran is a build failure, and
+        // must not reach the trade whose brief is about test files.
+        guard let kind = AgentWorkerDispatchHint.classify(
+            command: command,
+            failureOutput: failureOutput
+        ) else {
             return .failure(.notACommandFailure)
         }
-        // The command's shape says "test"; the log may say the build never got
-        // that far. A compile error must not be handed to the trade whose
-        // brief is about test files.
-        let kind = AgentWorkerDispatchHint.refinedKind(for: commandKind, failureOutput: failureOutput)
         switch kind {
         case .testFixer, .buildFixer:
             break
