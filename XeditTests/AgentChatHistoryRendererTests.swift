@@ -1275,7 +1275,6 @@ struct AgentChatHistoryRendererTests {
         ))
         #expect(!summaryLine.contains(" · "))
         #expect(summaryLine.contains("\n"))
-        #expect(collapsed.string.contains("我先检查工程状态。\n\n"))
 
         let bodyRange = collapsedText.range(of: "我先检查工程状态。")
         let bodyFont = try #require(collapsed.attribute(
@@ -1324,23 +1323,24 @@ struct AgentChatHistoryRendererTests {
             location: bodyEnd,
             length: readRange.location - bodyEnd
         )
-        #expect(collapsedText.substring(with: bodyToToolRange).hasPrefix("\n\n"))
-        let metadataSpacerFont = try #require(collapsed.attribute(
-            .font,
-            at: bodyEnd + 1,
-            effectiveRange: nil
-        ) as? NSFont)
-        let metadataSpacerStyle = try #require(collapsed.attribute(
+        // 活动行紧跟发起它的那段正文,中间只隔一个普通换行 —— 和活动行
+        // 下方到下一段正文的间距对称,不再插 0.7×字号的 metadata spacer。
+        let bodyToToolText = collapsedText.substring(with: bodyToToolRange)
+        #expect(bodyToToolText.hasPrefix("\n"))
+        #expect(!bodyToToolText.hasPrefix("\n\n"))
+        let separatorStyle = try #require(collapsed.attribute(
             .paragraphStyle,
-            at: bodyEnd + 1,
+            at: bodyEnd,
             effectiveRange: nil
         ) as? NSParagraphStyle)
-        let expectedMetadataSpacing = AgentDesign.assistantMetadataTopSpacing(
-            baseFontSize: bodyFont.pointSize
-        )
-        #expect(abs(metadataSpacerFont.pointSize - expectedMetadataSpacing) < 0.001)
-        #expect(abs(metadataSpacerStyle.minimumLineHeight - expectedMetadataSpacing) < 0.001)
-        #expect(abs(metadataSpacerStyle.maximumLineHeight - expectedMetadataSpacing) < 0.001)
+        let proseStyle = try #require(collapsed.attribute(
+            .paragraphStyle,
+            at: bodyRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(separatorStyle.lineSpacing == proseStyle.lineSpacing)
+        #expect(separatorStyle.minimumLineHeight == 0)
+        #expect(separatorStyle.maximumLineHeight == 0)
 
         let groupID = "inline:\(proseID.uuidString):\(followupID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
