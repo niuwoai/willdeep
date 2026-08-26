@@ -258,8 +258,8 @@ struct AgentProviderPreset: Identifiable, Equatable {
             id: ollamaID,
             displayName: "Ollama / Local OpenAI",
             baseURL: "http://127.0.0.1:11434/v1",
-            defaultModel: "gemma4:e2b-it-qat",
-            defaultProModel: "gemma4:e2b-it-qat",
+            defaultModel: "gemma4:e4b-it-qat",
+            defaultProModel: "gemma4:e4b-it-qat",
             supportsModelFetch: true,
             requiresAPIKey: false,
             modelHints: []

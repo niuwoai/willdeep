@@ -11,8 +11,8 @@ import Combine
 
 struct AgentLocalModelSettings: Codable, Equatable {
     static let defaultBaseURL = "http://127.0.0.1:11434/v1"
-    static let defaultVisionModelID = "gemma4:e2b-it-qat"
-    static let defaultSummaryModelID = "gemma4:e2b-it-qat"
+    static let defaultVisionModelID = "gemma4:e4b-it-qat"
+    static let defaultSummaryModelID = "gemma4:e4b-it-qat"
     static let defaultModelID = defaultSummaryModelID
     static let defaultComposerDisplayName = "Local Chat (Ollama)"
     static let composerProviderEntryID = UUID(uuidString: "9C9B8A64-4F84-4D9C-8F4F-4C7C6F63616C")!

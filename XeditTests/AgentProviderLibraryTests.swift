@@ -404,10 +404,10 @@ struct AgentProviderLibraryTests {
     }
 
     /// `gemma4:e2b` 是 1.295.0-rc3 到 rc5 之间的默认值，指向 registry 上
-    /// 7.16GB 的非 QAT 版本；默认已改为体积更小的官方 QAT 指令微调版
-    /// `gemma4:e2b-it-qat`，存量配置需要跟着迁移。
+    /// 7.16GB 的非 QAT 版本，常见本机安装并没有这个 tag，启用本地加速会
+    /// 直接 `model not found`。存量配置需要跟着迁移到当前默认值。
     @Test
-    func localModelSettingsMigrateNonQATGemma4DefaultToQAT() {
+    func localModelSettingsMigrateNonQATGemma4DefaultToCurrentDefault() {
         let settings = AgentLocalModelSettings(
             enabled: true,
             baseURL: AgentLocalModelSettings.defaultBaseURL,
@@ -420,10 +420,19 @@ struct AgentProviderLibraryTests {
             composerDisplayName: AgentLocalModelSettings.defaultComposerDisplayName
         ).normalized
 
-        #expect(settings.visionModel == "gemma4:e2b-it-qat")
-        #expect(settings.summaryModel == "gemma4:e2b-it-qat")
         #expect(settings.visionModel == AgentLocalModelSettings.defaultVisionModelID)
         #expect(settings.summaryModel == AgentLocalModelSettings.defaultSummaryModelID)
+    }
+
+    /// 默认值本身必须是官方 QAT 指令微调 tag：非 QAT 的 `gemma4:e2b` /
+    /// `gemma4:e4b` 体积大得多，且不是本机常见安装。
+    @Test
+    func defaultLocalModelIDsAreQATInstructionTunedTags() {
+        #expect(AgentLocalModelSettings.defaultVisionModelID.hasSuffix("-it-qat"))
+        #expect(AgentLocalModelSettings.defaultSummaryModelID.hasSuffix("-it-qat"))
+        // 派发判决复用 Summary 模型，两者共用同一个模型是刻意设计。
+        #expect(AgentLocalModelSettings.defaultVisionModelID
+            == AgentLocalModelSettings.defaultSummaryModelID)
     }
 
     @Test
