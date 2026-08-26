@@ -1205,8 +1205,11 @@ struct AgentChatHistoryRendererTests {
             at: summaryRange.location,
             effectiveRange: nil
         ) as? NSFont)
-        let supportingFontSize = AgentDesign.chatSupportingFontSize(baseFontSize: baseFontSize)
-        #expect(summaryFont.pointSize == supportingFontSize)
+        // 活动行跟随聊天正文字号,不降到 supporting 档。
+        #expect(summaryFont.pointSize == baseFontSize)
+        #expect(summaryFont.pointSize > AgentDesign.chatSupportingFontSize(
+            baseFontSize: baseFontSize
+        ))
         let summaryStyle = try #require(collapsed.attribute(
             .paragraphStyle,
             at: summaryRange.location,
@@ -1214,7 +1217,7 @@ struct AgentChatHistoryRendererTests {
         ) as? NSParagraphStyle)
         #expect(summaryStyle.lineBreakMode == .byWordWrapping)
         #expect(summaryStyle.lineSpacing == AgentChatTypography.lineSpacing(
-            fontSize: supportingFontSize,
+            fontSize: baseFontSize,
             lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
         ))
 
@@ -1302,13 +1305,17 @@ struct AgentChatHistoryRendererTests {
             at: copyRange.location,
             effectiveRange: nil
         ) as? NSParagraphStyle)
+        // 活动行跟正文同字号同行距;回合末尾的统计 footer 仍是降一档的
+        // supporting 字号,两者不能再被同一个断言绑在一起。
         let supportingFontSize = AgentDesign.chatSupportingFontSize(
             baseFontSize: bodyFont.pointSize
         )
-        #expect(toolFont.pointSize == supportingFontSize)
-        #expect(toolFont.pointSize < bodyFont.pointSize)
-        #expect(toolStyle.lineSpacing == footerStyle.lineSpacing)
+        #expect(toolFont.pointSize == bodyFont.pointSize)
         #expect(toolStyle.lineSpacing == AgentChatTypography.lineSpacing(
+            fontSize: bodyFont.pointSize,
+            lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
+        ))
+        #expect(footerStyle.lineSpacing == AgentChatTypography.lineSpacing(
             fontSize: supportingFontSize,
             lineHeightMultiple: AgentSettingsStore.chatLineHeightMultipleDefault
         ))
@@ -1323,8 +1330,8 @@ struct AgentChatHistoryRendererTests {
             location: bodyEnd,
             length: readRange.location - bodyEnd
         )
-        // 活动行紧跟发起它的那段正文,中间只隔一个普通换行 —— 和活动行
-        // 下方到下一段正文的间距对称,不再插 0.7×字号的 metadata spacer。
+        // 活动行紧跟发起它的那段正文,中间只有一个普通换行(没有额外的
+        // spacer 行);上下间距的差别由活动组自己的段落 margin 承担。
         let bodyToToolText = collapsedText.substring(with: bodyToToolRange)
         #expect(bodyToToolText.hasPrefix("\n"))
         #expect(!bodyToToolText.hasPrefix("\n\n"))
@@ -1341,6 +1348,31 @@ struct AgentChatHistoryRendererTests {
         #expect(separatorStyle.lineSpacing == proseStyle.lineSpacing)
         #expect(separatorStyle.minimumLineHeight == 0)
         #expect(separatorStyle.maximumLineHeight == 0)
+
+        // 上小下大:活动组紧跟发起它的正文,和下一段正文之间拉开。
+        let expectedBefore = AgentChatHistoryLayoutMetrics.toolActivityGroupSpacingBefore(
+            baseFontSize: bodyFont.pointSize
+        )
+        let expectedAfter = AgentChatHistoryLayoutMetrics.toolActivityGroupSpacingAfter(
+            baseFontSize: bodyFont.pointSize
+        )
+        #expect(expectedBefore > 0)
+        #expect(expectedAfter > expectedBefore)
+        let firstActivityStyle = try #require(collapsed.attribute(
+            .paragraphStyle,
+            at: readRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        let lastActivityStyle = try #require(collapsed.attribute(
+            .paragraphStyle,
+            at: commandRange.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(abs(firstActivityStyle.paragraphSpacingBefore - expectedBefore) < 0.001)
+        #expect(abs(lastActivityStyle.paragraphSpacing - expectedAfter) < 0.001)
+        // 中间行不能带 margin,否则组内行距被一起撑开。
+        #expect(firstActivityStyle.paragraphSpacing < expectedAfter)
+        #expect(lastActivityStyle.paragraphSpacingBefore < expectedBefore)
 
         let groupID = "inline:\(proseID.uuidString):\(followupID.uuidString)"
         let expanded = AgentChatHistoryRenderer.render(
