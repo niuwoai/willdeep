@@ -57,14 +57,20 @@ nonisolated enum AgentWorkerDispatchHint {
         failureOutput: String = ""
     ) -> String? {
         guard toolName == "run_command" else { return nil }
-        // No exit code means the command never produced a verdict: it failed
-        // to launch, timed out, or was cancelled. Suggesting a fixer there
-        // sends a worker to repair a machine problem.
-        guard let exitCode, exitCode != 0 else { return nil }
         guard let command = arguments["command"]?.stringValue()?
             .trimmingCharacters(in: .whitespacesAndNewlines), !command.isEmpty else { return nil }
-        guard let commandKind = classify(command: command) else { return nil }
-        let kind = refinedKind(for: commandKind, failureOutput: failureOutput)
+        // No exit code means the command never rendered a verdict. A launch
+        // failure or a cancellation is a machine problem no worker can
+        // repair — but a timeout is not: the suite ran, it just ran past the
+        // deadline, and narrowing it is exactly the kind of bounded work a
+        // fixer can own. Measured: `yarn test:e2e` timing out was the single
+        // most common test failure in real sessions, and every one of them
+        // was dropped here without a word.
+        guard let exitCode, exitCode != 0 else {
+            guard exitCode == nil, isTimeout(failureOutput: failureOutput) else { return nil }
+            return timeoutHint(command: command, failureOutput: failureOutput)
+        }
+        guard let kind = classify(command: command, failureOutput: failureOutput) else { return nil }
 
         let quoted = command.count <= quotedCommandLimit ? "`\(command)`" : "the command above"
         switch kind {
@@ -112,6 +118,49 @@ nonisolated enum AgentWorkerDispatchHint {
         return nil
     }
 
+    /// Classify using the command's shape first, then what the failure log
+    /// actually says.
+    ///
+    /// Shape alone misses the common case where the compiler runs behind a
+    /// command that looks like nothing in particular. Measured example from a
+    /// real session: `gofmt -w internal/perftest/loadgen/config.go …` failed
+    /// with `FAIL tokenhub/internal/perftest/loadgen [build failed]` and a
+    /// compiler diagnostic underneath — an obvious `build_fixer` job that the
+    /// shape check dropped on the floor because the command said "gofmt".
+    ///
+    /// The log channel only runs when the shape said nothing, and only on
+    /// markers a non-compiler failure would not print, so a shell script that
+    /// happens to fail while echoing the word "build" still classifies as
+    /// nothing. Build beats test here, the reverse of the shape rule: a log
+    /// with compiler diagnostics and no evidence a test executed is a build
+    /// failure whatever produced it.
+    static func classify(command: String, failureOutput: String) -> Kind? {
+        if let shaped = classify(command: command) {
+            return refinedKind(for: shaped, failureOutput: failureOutput)
+        }
+        guard !failureOutput.isEmpty else { return nil }
+        let lowered = failureOutput.lowercased()
+        if compileFailureMarkers.contains(where: { lowered.contains($0) }),
+           !testExecutionMarkers.contains(where: { lowered.contains($0) }) {
+            return .buildFixer
+        }
+        if testExecutionMarkers.contains(where: { lowered.contains($0) }) {
+            return .testFixer
+        }
+        return nil
+    }
+
+    /// Whether a failure with no exit code was a timeout rather than a launch
+    /// failure or a cancellation.
+    ///
+    /// Worth separating because a test suite that runs past its deadline is
+    /// still a test problem someone can own, while a command that never
+    /// started is a machine problem no worker can repair.
+    static func isTimeout(failureOutput: String) -> Bool {
+        let lowered = failureOutput.lowercased()
+        return timeoutMarkers.contains { lowered.contains($0) }
+    }
+
     /// Correct the trade using what the log actually shows.
     ///
     /// `classify` reads the command's shape, and a test command builds before
@@ -134,10 +183,44 @@ nonisolated enum AgentWorkerDispatchHint {
         return .buildFixer
     }
 
+    /// The hint for a command that ran past its deadline.
+    ///
+    /// Deliberately does *not* name the original command as the verifier: a
+    /// suite that timed out will time out again, and handing a worker a
+    /// verifier it can never pass is worse than not delegating at all. The
+    /// worker's job here is to narrow the run first.
+    private static func timeoutHint(command: String, failureOutput: String) -> String? {
+        // A timeout only points at a trade if the command was doing something
+        // a trade owns. Shape is all there is to go on — a timed-out command
+        // produced no verdict to read.
+        guard let kind = classify(command: command), kind != .opsRunner else { return nil }
+        let quoted = command.count <= quotedCommandLimit ? "`\(command)`" : "the command above"
+        return """
+
+        (WillDeep: \(quoted) ran past its deadline rather than failing outright. \
+        That is still worker-shaped work — spawn `profile="\(kind.tradeID)"` with `target_files` \
+        and a `task` whose `verifier.command` is a NARROWED form of it: one test file, one target, \
+        one case, whatever finishes inside the limit. Do not hand the worker the full command as \
+        its verifier — it will time out on the worker too and burn the whole attempt budget. \
+        Diagnose it here instead when you already suspect a hang rather than slow work.)
+        """
+    }
+
+    /// Failure text produced by the runner's own deadline, not by the command.
+    private static let timeoutMarkers: [String] = [
+        "timed out before completing", "command timed out", "timeout after",
+        "deadline exceeded",
+    ]
+
     /// Markers specific enough that a *test* failure would not print them.
     /// A bare "error:" is deliberately absent — test output is full of it.
+    ///
+    /// `[build failed]` is Go's per-package verdict and was the marker missing
+    /// when a real `gofmt` failure carrying compiler diagnostics classified as
+    /// nothing.
     private static let compileFailureMarkers: [String] = [
-        "compilation failed", "compile error", "** build failed **",
+        "compilation failed", "compile error", "** build failed **", "[build failed]",
+        "declared and not used", "undefined:", "cannot use ",
         "command swiftcompile failed", "command compileswift failed",
         "error: cannot find", "error: value of type", "error: no such module",
         "does not conform to protocol", "use of unresolved identifier",

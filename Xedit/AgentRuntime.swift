@@ -352,6 +352,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// dispatch for the same command would repeat a fight it already lost —
     /// at that point the failure is the parent's to reason about.
     var currentTurnAutoDispatchedCommands: Set<String> = []
+    /// Whether this turn already suggested handing a truncated tool payload to
+    /// a read-only worker. The payload cap is hit repeatedly while sweeping a
+    /// large tree, and repeating the same paragraph after every result is how
+    /// a hint becomes wallpaper.
+    var currentTurnEmittedReadOnlyHandoffHint = false
     /// The runtime's own read of what this turn's request is, rendered as a
     /// system-prompt paragraph. Lives here rather than being appended to the
     /// user's message because the user's message is *shown* — steering markup
