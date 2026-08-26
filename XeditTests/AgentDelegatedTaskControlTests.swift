@@ -3,7 +3,7 @@ import Testing
 @testable import WillDeep
 
 @Suite
-struct AgentDelegatedTaskControlTests {
+nonisolated struct AgentDelegatedTaskControlTests {
     @Test("task contract uses goal checklist and clamps retry budget")
     func contractUsesGoalChecklist() {
         let goal = AgentGoal(

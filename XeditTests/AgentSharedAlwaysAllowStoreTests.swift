@@ -10,7 +10,7 @@ import Testing
 /// `with_always_allow_store`, `persist_always_allowed`); when that side moves,
 /// this suite is where it should hurt first.
 @Suite
-struct AgentSharedAlwaysAllowStoreTests {
+nonisolated struct AgentSharedAlwaysAllowStoreTests {
     private static func temporaryStore(_ name: String) -> URL {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("willdeep-shared-allow-\(name)-\(UUID().uuidString)")

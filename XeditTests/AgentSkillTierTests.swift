@@ -14,7 +14,7 @@ import Testing
 @testable import WillDeep
 
 @Suite("Skill tier parsing")
-struct AgentSkillTierTests {
+nonisolated struct AgentSkillTierTests {
     @Test("A declared tier parses, aliases included")
     func declaredTierParses() {
         let parsed = AgentSkillDirectory.parseMetadata(

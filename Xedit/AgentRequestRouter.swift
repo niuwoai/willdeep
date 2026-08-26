@@ -10,11 +10,12 @@
 //  problem, and compiling a task packet reads as a detour. Advice loses to
 //  momentum.
 //
-//  So the runtime forms its own opinion first, from the request text alone,
-//  and states it in the turn. This is deliberately the *weak* half of the
-//  mechanism — it appends a `<runtime-route>` note and nothing more. The
-//  model can still decide the classification is wrong, which matters,
-//  because this is keyword matching and it will sometimes be wrong.
+//  So the runtime forms its own opinion first, from the request text alone.
+//  Read/preparation work can run as a bounded preflight. For a high-confidence
+//  writing route, the host also requires the matching writing trade to be
+//  attempted before the parent may use direct file-edit tools. Classification
+//  remains deliberately narrow because keyword matching will sometimes be
+//  wrong; `/no-subagent` is the explicit per-turn escape hatch.
 //
 //  What it is NOT: a dispatcher. willdeep-rs runs the high-confidence
 //  read-only cases as a worker *before* the root model sees the repository
@@ -52,7 +53,17 @@ nonisolated enum AgentRequestRouter {
         /// files is never pre-run, because a preflight that edits is not a
         /// preflight.
         var autoDispatchEligible: Bool
+        /// Bounded worker the host should run before the root model starts.
+        /// For read-only requests this is normally the routed profile itself;
+        /// for mutations it is a read-only scout that prepares the write task.
+        var preflightProfileID: String? = nil
+        /// Direct file/ops execution is held until this routed profile has
+        /// been attempted. This turns delegation from advice into policy for
+        /// the cases where routing confidence is high.
+        var requiresDelegatedExecution: Bool = false
         var reason: String
+
+        var isPreflightCandidate: Bool { preflightProfileID != nil }
 
         /// The paragraph appended to the user's message, or nil when there is
         /// nothing useful to say.
@@ -63,7 +74,7 @@ nonisolated enum AgentRequestRouter {
             WillDeep classified this request as bounded `\(profileID)` work before you read it. \
             Compile a task packet — keep `read_files` separate from `write_files` — and delegate \
             it rather than doing the work here. Supply a verifier whenever completion is decidable \
-            by a command. If the classification is wrong, say so in one line and proceed your way.
+            by a command.\(requiresDelegatedExecution ? " The host will refuse direct execution until the routed worker has been attempted; use /no-subagent on a new turn only when the operator explicitly wants inline execution." : " If the classification is wrong, say why before choosing a different bounded trade.")
             </runtime-route>
             """
         }
@@ -79,6 +90,8 @@ nonisolated enum AgentRequestRouter {
     /// "fix this test failure" is repair, and they route to different trades.
     private static let mutatingMarkers = [
         "修复", "修改", "实现", "新增", "删除", "重构", "改成", "改为", "补上", "加上",
+        "开发", "编码", "写代码", "修一下", "改一下", "优化", "适配", "接入", "添加",
+        "补测试", "写测试",
         "fix", "implement", "add ", "change", "edit", "refactor", "rewrite", "create",
     ]
 
@@ -130,21 +143,52 @@ nonisolated enum AgentRequestRouter {
         "audit", "scan the", "walk me through",
     ]
 
+    private static let terminalMarkers = [
+        "看看终端", "检查终端", "终端环境检查", "终端里", "终端窗口", "侧栏终端",
+        "inspect terminal", "check terminal", "terminal environment", "terminal pane", "terminal window",
+    ]
+
+    private static let operationsMarkers = [
+        "部署", "发布到", "生产环境", "线上环境", "重启服务", "服务状态", "回滚发布",
+        "deploy", "release to", "production cluster", "restart service", "service status",
+        "systemctl", "kubectl rollout", "helm upgrade",
+    ]
+
     /// Classify a request. Pure and cheap — no I/O, no model call.
     static func classify(_ request: String) -> Decision {
         let sample = String(request.prefix(classifiedPrefixLength)).lowercased()
         let mutating = contains(sample, mutatingMarkers)
 
+        if contains(sample, terminalMarkers) {
+            return worker(
+                "terminal_operator",
+                94,
+                autoDispatch: true,
+                reason: "visible terminal inspection belongs to the terminal operator"
+            )
+        }
+        if contains(sample, operationsMarkers) {
+            return worker(
+                "ops_runner",
+                94,
+                autoDispatch: true,
+                requiresDelegatedExecution: true,
+                reason: "production operations need a read-only preflight and exact-command execution"
+            )
+        }
+
         if contains(sample, testFailureMarkers) {
             return mutating
-                ? worker("test_fixer", 96, autoDispatch: false,
+                ? worker("test_fixer", 96, autoDispatch: false, preflightProfileID: "log_inspector",
+                         requiresDelegatedExecution: true,
                          reason: "a failing test has a deterministic verifier")
                 : worker("log_inspector", 92, autoDispatch: true,
                          reason: "explaining a test failure is bounded and read-only")
         }
         if contains(sample, buildFailureMarkers) {
             return mutating
-                ? worker("build_fixer", 96, autoDispatch: false,
+                ? worker("build_fixer", 96, autoDispatch: false, preflightProfileID: "log_inspector",
+                         requiresDelegatedExecution: true,
                          reason: "build diagnostics have a deterministic verifier")
                 : worker("log_inspector", 92, autoDispatch: true,
                          reason: "explaining a build failure is bounded and read-only")
@@ -158,10 +202,7 @@ nonisolated enum AgentRequestRouter {
                           reason: "failure output can be inspected in a small window")
         }
         if !mutating, contains(sample, testRunMarkers) {
-            // Named but never pre-run: a test suite takes minutes and touches
-            // build state. Pre-running one as a "preflight" would be the
-            // opposite of cheap.
-            return worker("tester", 90, autoDispatch: false,
+            return worker("tester", 90, autoDispatch: true,
                           reason: "running gates and reporting evidence is the tester trade")
         }
         if !mutating, contains(sample, reviewMarkers) {
@@ -183,6 +224,8 @@ nonisolated enum AgentRequestRouter {
             // `editor` was never so much as suggested.
             if namedSourceFiles(sample).count == 1 {
                 return worker("editor", 88, autoDispatch: false,
+                              preflightProfileID: "scout",
+                              requiresDelegatedExecution: true,
                               reason: "the request names a single file to change")
             }
             return Decision(
@@ -190,6 +233,8 @@ nonisolated enum AgentRequestRouter {
                 profileID: "implementer",
                 confidence: 78,
                 autoDispatchEligible: false,
+                preflightProfileID: "scout",
+                requiresDelegatedExecution: true,
                 reason: "ordinary implementation belongs on the standard tier"
             )
         }
@@ -215,15 +260,29 @@ nonisolated enum AgentRequestRouter {
         // `agent.small_model_routing = false` in the shared config.toml turns
         // this off for both clients at once. Absent means on, matching the
         // willdeep-rs default.
+        routedDecision(
+            for: request,
+            delegationPolicy: delegationPolicy,
+            sharedConfig: sharedConfig
+        )?.steering
+    }
+
+    static func routedDecision(
+        for request: String,
+        delegationPolicy: AgentDelegationPolicy,
+        sharedConfig: AgentSharedRuntimeConfig = .load()
+    ) -> Decision? {
         guard sharedConfig.smallModelRouting != false else { return nil }
         guard delegationPolicy != .forbidden else { return nil }
-        return classify(request).steering
+        return classify(request)
     }
 
     private static func worker(
         _ profileID: String,
         _ confidence: Int,
         autoDispatch: Bool,
+        preflightProfileID: String? = nil,
+        requiresDelegatedExecution: Bool = false,
         reason: String
     ) -> Decision {
         Decision(
@@ -231,6 +290,8 @@ nonisolated enum AgentRequestRouter {
             profileID: profileID,
             confidence: confidence,
             autoDispatchEligible: autoDispatch,
+            preflightProfileID: preflightProfileID ?? (autoDispatch ? profileID : nil),
+            requiresDelegatedExecution: requiresDelegatedExecution,
             reason: reason
         )
     }

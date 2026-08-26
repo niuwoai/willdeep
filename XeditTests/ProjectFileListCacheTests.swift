@@ -19,7 +19,7 @@ import Foundation
 @testable import WillDeep
 
 @Suite
-struct ProjectFileListCacheTests {
+nonisolated struct ProjectFileListCacheTests {
 
     // MARK: - cacheURL / SHA-256 stability
 

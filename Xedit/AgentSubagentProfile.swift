@@ -151,16 +151,21 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
     /// the global read-only set. `writeAccessGranted` is the writing trades'
     /// narrow door, opened only once the workspace policy and file lock are
     /// satisfied.
-    func effectiveToolNames(writeAccessGranted: Bool = false) -> Set<String> {
+    func effectiveToolNames(
+        writeAccessGranted: Bool = false,
+        approvedCommandGranted: Bool = false
+    ) -> Set<String> {
         var allowed = AgentSubagentRunner.allowedToolNames
         if requiresWriteAccess, writeAccessGranted {
             allowed.formUnion(AgentSubagentProfileCatalog.writeToolNames)
         }
         // 终端工具照 editor 写工具的先例走**按工种放行**，不进全局白名单：
         // 进了全局名单，deep/tester 会静默获得读用户终端屏幕的能力。
-        // send_command 虽在此放行，执行层仍有第二道闸——只许命令文本分类
-        // 为只读的（见 AgentSubagents.executeToolCall）。
-        if id == AgentSubagentProfileCatalog.terminalOperatorID {
+        // send_command 虽在此放行，执行层仍有第二道闸：terminal_operator
+        // 只许只读命令；ops_runner 只有获批 target_command 后才看到工具，
+        // 且写命令必须与批准文本精确匹配。
+        if id == AgentSubagentProfileCatalog.terminalOperatorID
+            || (id == AgentSubagentProfileCatalog.opsRunnerID && approvedCommandGranted) {
             allowed.formUnion(AgentSubagentProfileCatalog.terminalOperatorToolNames)
         }
         return toolNames.intersection(allowed)
@@ -171,9 +176,11 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.scoutID: return L10n.AgentDelegation.profileScoutName
         case AgentSubagentProfileCatalog.readerID: return L10n.AgentDelegation.profileReaderName
         case AgentSubagentProfileCatalog.editorID: return L10n.AgentDelegation.profileEditorName
+        case AgentSubagentProfileCatalog.smallImplementerID: return L10n.AgentDelegation.profileSmallImplementerName
         case AgentSubagentProfileCatalog.implementerID: return L10n.AgentDelegation.profileImplementerName
         case AgentSubagentProfileCatalog.testerID: return L10n.AgentDelegation.profileTesterName
         case AgentSubagentProfileCatalog.reviewerID: return L10n.AgentDelegation.profileReviewerName
+        case AgentSubagentProfileCatalog.smallReviewerID: return L10n.AgentDelegation.profileSmallReviewerName
         case AgentSubagentProfileCatalog.testFixerID: return L10n.AgentDelegation.profileTestFixerName
         case AgentSubagentProfileCatalog.buildFixerID: return L10n.AgentDelegation.profileBuildFixerName
         case AgentSubagentProfileCatalog.logInspectorID: return L10n.AgentDelegation.profileLogInspectorName
@@ -194,9 +201,11 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.scoutID: return L10n.AgentDelegation.profileScoutPurpose
         case AgentSubagentProfileCatalog.readerID: return L10n.AgentDelegation.profileReaderPurpose
         case AgentSubagentProfileCatalog.editorID: return L10n.AgentDelegation.profileEditorPurpose
+        case AgentSubagentProfileCatalog.smallImplementerID: return L10n.AgentDelegation.profileSmallImplementerPurpose
         case AgentSubagentProfileCatalog.implementerID: return L10n.AgentDelegation.profileImplementerPurpose
         case AgentSubagentProfileCatalog.testerID: return L10n.AgentDelegation.profileTesterPurpose
         case AgentSubagentProfileCatalog.reviewerID: return L10n.AgentDelegation.profileReviewerPurpose
+        case AgentSubagentProfileCatalog.smallReviewerID: return L10n.AgentDelegation.profileSmallReviewerPurpose
         case AgentSubagentProfileCatalog.testFixerID: return L10n.AgentDelegation.profileTestFixerPurpose
         case AgentSubagentProfileCatalog.buildFixerID: return L10n.AgentDelegation.profileBuildFixerPurpose
         case AgentSubagentProfileCatalog.logInspectorID: return L10n.AgentDelegation.profileLogInspectorPurpose
@@ -217,9 +226,11 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let readerID = "reader"
     static let deepID = "deep"
     static let editorID = "editor"
+    static let smallImplementerID = "small_implementer"
     static let implementerID = "implementer"
     static let testerID = "tester"
     static let reviewerID = "reviewer"
+    static let smallReviewerID = "small_reviewer"
     static let testFixerID = "test_fixer"
     static let buildFixerID = "build_fixer"
     static let logInspectorID = "log_inspector"
@@ -292,6 +303,16 @@ nonisolated enum AgentSubagentProfileCatalog {
         preferredProviderID: AgentProviderPreset.someIMID,
         model: "glm-5",
         contextWindowTokens: implementerContextWindowTokens
+    )
+
+    /// Base someim-32b has no hosted job prompt. These automatic coding-lane
+    /// trades therefore pin the real base model and always send their prompt
+    /// from the client. Do not add them to `hostedTradeIDs` until matching
+    /// relay chains have actually been provisioned and probed.
+    private static let smallCodingBinding = AgentSubagentProfile.ModelBinding(
+        preferredProviderID: AgentProviderPreset.someIMID,
+        model: AgentSubagentJobPrompts.hostedModelPrefix,
+        contextWindowTokens: wideContextWindowTokens
     )
 
     /// Deep used to inherit the parent session. Subagents now default to a
@@ -388,6 +409,21 @@ nonisolated enum AgentSubagentProfileCatalog {
         requiresWriteAccess: true
     )
 
+    static let smallImplementer = AgentSubagentProfile(
+        id: smallImplementerID,
+        purpose: "Implement a low-risk task across at most three declared paths on the base someim-32b model; a verifier and independent reviewer gate delivery.",
+        modelBinding: smallCodingBinding,
+        toolNames: [
+            "search_files", "grep_files", "list_directory", "read_file",
+            "create_file", "apply_patch", "run_command",
+        ],
+        capabilityPromptSection: AgentSubagentJobPrompts.smallImplementer,
+        maxRounds: 10,
+        toolPayloadCharacterLimit: widePayloadCharacterLimit,
+        escalation: .none,
+        requiresWriteAccess: true
+    )
+
     /// Runs the gates and reports evidence. Deliberately has the read-only
     /// shell (tests, linters and reports are read-tier commands) but no write
     /// tool: whoever verifies may not also implement — a tester that can patch
@@ -425,6 +461,17 @@ nonisolated enum AgentSubagentProfileCatalog {
         """,
         maxRounds: 10,
         toolPayloadCharacterLimit: 16_000,
+        escalation: .none
+    )
+
+    static let smallReviewer = AgentSubagentProfile(
+        id: smallReviewerID,
+        purpose: "Independently accept, reject, or escalate one verified low-risk change from supplied before/after evidence. No tools and no edits.",
+        modelBinding: smallCodingBinding,
+        toolNames: [],
+        capabilityPromptSection: AgentSubagentJobPrompts.smallReviewer,
+        maxRounds: 3,
+        toolPayloadCharacterLimit: widePayloadCharacterLimit,
         escalation: .none
     )
 
@@ -516,9 +563,13 @@ nonisolated enum AgentSubagentProfileCatalog {
 
     static let opsRunner = AgentSubagentProfile(
         id: opsRunnerID,
-        purpose: "Read-only operations queries via shell: service status, log tails, `kubectl get/describe/logs`, `gh run list`, CI results. The sandbox denies anything that mutates state, so it can inspect but never change.",
+        purpose: "Read-only operations queries plus one exact operator-approved release/deploy command. An approved command may run through the workspace shell or the verified visible SSH terminal; every other mutation is denied.",
         modelBinding: cheapBinding,
-        toolNames: ["run_command", "read_file", "grep_files", "list_directory"],
+        toolNames: [
+            "run_command", "read_file", "grep_files", "list_directory",
+            "terminal_list_tabs", "terminal_select_tab",
+            "terminal_snapshot", "terminal_send_command",
+        ],
         capabilityPromptSection: AgentSubagentJobPrompts.opsRunner,
         maxRounds: 8,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
@@ -547,9 +598,11 @@ nonisolated enum AgentSubagentProfileCatalog {
         reader,
         deep,
         editor,
+        smallImplementer,
         implementer,
         tester,
         reviewer,
+        smallReviewer,
         testFixer,
         buildFixer,
         logInspector,

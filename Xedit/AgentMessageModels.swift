@@ -532,6 +532,84 @@ nonisolated struct AgentSubagentRunUsage: Codable, Equatable, Sendable {
     }
 }
 
+/// One worker invocation started by WillDeep's host runtime rather than by a
+/// provider-emitted `spawn_agent` tool call.
+///
+/// Model-requested workers persist on `AgentMessageToolCall`. Automatic
+/// preflights and failed-command repairs have no provider tool-call id to
+/// attach to, so they need a parallel session ledger or they disappear from
+/// usage statistics after the live card is gone.
+nonisolated struct AgentHostWorkerRunRecord: Identifiable, Codable, Equatable, Sendable {
+    enum Source: String, Codable, Equatable, Sendable {
+        case requestPreflight
+        case codingPlanCacheHit
+        case failedCommandRepair
+        case automaticCoding
+        case automaticCodingEscalation
+        case automaticCodingReview
+    }
+
+    enum Status: String, Codable, Equatable, Sendable {
+        case proposed
+        case running
+        case succeeded
+        case failed
+        case denied
+    }
+
+    let id: UUID
+    /// Operator message that caused this dispatch. It lets analytics measure
+    /// eligible user turns instead of dividing by every assistant message.
+    var userMessageID: UUID?
+    var profileID: String
+    var source: Source
+    var status: Status
+    var requestedAt: Date
+    var startedAt: Date?
+    var finishedAt: Date?
+    /// Effective child-loop model, known even when the loop fails before it
+    /// can return token accounting.
+    var model: String?
+    var providerID: String?
+    var usage: AgentSubagentRunUsage?
+    /// Set after the independent review gate. Nil means this run was not a
+    /// coding candidate or never reached a delivery decision.
+    var acceptedOutput: Bool?
+    /// True when the automatic lane handed the partially completed turn back
+    /// to the parent model for diagnosis or repair.
+    var requiredParentRepair: Bool?
+
+    init(
+        id: UUID = UUID(),
+        userMessageID: UUID? = nil,
+        profileID: String,
+        source: Source,
+        status: Status = .proposed,
+        requestedAt: Date = Date(),
+        startedAt: Date? = nil,
+        finishedAt: Date? = nil,
+        model: String? = nil,
+        providerID: String? = nil,
+        usage: AgentSubagentRunUsage? = nil,
+        acceptedOutput: Bool? = nil,
+        requiredParentRepair: Bool? = nil
+    ) {
+        self.id = id
+        self.userMessageID = userMessageID
+        self.profileID = profileID
+        self.source = source
+        self.status = status
+        self.requestedAt = requestedAt
+        self.startedAt = startedAt
+        self.finishedAt = finishedAt
+        self.model = model
+        self.providerID = providerID
+        self.usage = usage
+        self.acceptedOutput = acceptedOutput
+        self.requiredParentRepair = requiredParentRepair
+    }
+}
+
 nonisolated struct AgentMessageToolCall: Codable, Equatable {
     var externalID: String
     var toolName: String

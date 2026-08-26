@@ -1,7 +1,8 @@
 # Small-model-first 进 Runtime：从建议到强制（Xedit 侧规划）
 
-> 状态：第 1–4 步已于 1.273.0-rc1 落地（见 §4 各步的「实现」行）；自动预检的**执行**部分
-> 仍未接线，只有分类与资格判定（见 §4 第 4 步）。
+> 状态：第 1–4 步均已落地；1.295.0-rc2 完善 1–3 文件低风险编码的结构化 Task Packet、someim-32b 自动实现、独立小模型审查、直通交付与五语界面，
+> 并在直接写文件/生产命令的工具边界执行 delegate-first。当前执行契约见
+> `docs/HYBRID_MODEL_EXECUTION_DESIGN.md`，本文保留演进背景。
 > 日期：2026-08-19
 > 来源：willdeep-rs `0.37.0-rc1` / `0.38.0-rc1`（2026-08-19 上午）的回流。
 > 关联：`docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md`（主设计）、willdeep-rs
@@ -41,7 +42,7 @@ rs 侧把「优先用小模型」从系统提示词里的劝告，搬进了 Runt
 
 | rs 机制 | Xedit 现状 | 判定 |
 |---|---|---|
-| 请求级确定性路由 | **无**。只有失败驱动的 `AgentWorkerAutoDispatch`（`run_command` 测试/构建失败时派 fixer） | 缺口 |
+| 请求级确定性路由 | **当时无**。现已由 `AgentRequestRouter` + 自动预检 + `AgentWorkerRouteGuard` 补齐 | 已完成 |
 | Deep 准入票据 + 预算 | **无**。`AgentSubagentEscalation` 名字撞车但语义相反——它是「小模型失败后向上兜底重试」 | 缺口 |
 | 未知 profile 不回落 deep | `AgentSubagentProfileStore.resolvedProfile(id:)` 明确回落 deep（`AgentSubagentProfile.swift:657`） | 小改 |
 | read/write 分离 | `AgentSubagentTaskPacket.relevantFiles` 读写合一；无 `target_files` 时它就是写集 | 中等 |
@@ -61,7 +62,7 @@ rs 侧把「优先用小模型」从系统提示词里的劝告，搬进了 Runt
 |---|---|---|
 | Root 默认模型 | **改为 M 档（`glm-5`），但只影响新会话** | 整套「L 稀缺、向上申请」的前提；已有会话保留用户已选模型，不做迁移，避免存量用户被静默改窗口 |
 | Deep 预算 | **每会话 3 次，设置里可配 0–16**，0 表示彻底禁用 deep | rs 取 1 次/harness；Xedit 一次会话显著更长，1 次会频繁误挡。0–16 与 rs 的校验区间对齐 |
-| 请求级路由第一版 | **只做引导注入；自动预检写好但默认关闭** | rs 是 TUI，先跑 scout 再答可接受；Xedit 是 GUI，自动预检让首字延迟翻倍，且 `classify()` 是关键词匹配、中文误判代价可见。先用数据说话 |
+| 请求级路由第一版 | **历史决策：只引导；现已被实测推翻** | 只引导时父模型仍会自己做。1.294.0-rc3 改为高置信路径宿主自动准备、工具边界 delegate-first；`/no-subagent` 保留显式逃生口 |
 
 ---
 
@@ -173,13 +174,27 @@ rs 侧把「优先用小模型」从系统提示词里的劝告，搬进了 Runt
 `injectedReportCharacterLimit = 6000` 的注入上限，超出部分截断并**明说被截断**——
 静默截断会让根模型把「报告里没提」当成「仓库里没有」。
 
+**强制混合路由（1.295.0-rc2）**：写任务先由 `scout` / `log_inspector` 做只读准备；
+Root 未尝试匹配的 `editor` / `implementer` / `test_fixer` / `build_fixer` 就直接调用文件写工具时，
+`AgentWorkerRouteGuard` 在工具边界拒绝。测试请求直接预派 `tester`；部署/生产/终端请求支持远程
+Runtime，分别预派 `ops_runner` / `terminal_operator`。生产变更必须把用户批准的精确命令交给
+`ops_runner(target_command:)`，只读预检本身不会解锁写命令。
+
+低风险本地编码另有宿主直通链：`scout` 强制结构化输出 → D0 风险/路径/verifier 校验 →
+基础 `someim-32b` 的 `small_implementer`（最多 3 文件、两轮验证修复）→ 无工具
+`small_reviewer`。双闸全绿直接交付，不调用 Root；失败仅升级一次到 `glm-5`，审查拒绝或
+任何未决问题交回 Root。Task Packet 用完整 worktree 修订作 30 分钟缓存键，工作区一变即失效。
+
 ---
 
 ## 5. 指标
 
-`AgentSkillWorkerKPIs`（`AgentUsageStats.swift:195`）已统计 `deepRunCount`，
-补一个 **Deep Share = deepRunCount / (narrowRunCount + deepRunCount)** 的展示口径，
-目标 ≤ 5%（与 rs 的 `agent-metrics` 同口径，便于两端横向对比）。
+`AgentSkillWorkerKPIs` 统计真实 child run，并保留
+**Deep Share = deepRunCount / (narrowRunCount + deepRunCount)**，目标 ≤ 5%。
+1.295.0-rc2 起面板除 Worker request 与 actual run 外，还展示自动编码运行、直通率、
+主模型返工率和 Task Packet 缓存命中；宿主自动运行进入会话账本；
+覆盖率改为“实际启动过 Worker 的可路由用户回合 / 全部可路由用户回合”，不再除以全部
+assistant message。完整口径见混合模型设计 §7。
 
 这个数字是判断第 4 步的自动预检该不该默认打开的**唯一依据**——
 在只有引导注入的版本上跑一段时间，Deep Share 和 Skill Coverage 说了算。
@@ -209,7 +224,7 @@ rs 0.37.0-rc1 新增的三个路由开关落在 `[agent]` 段，因此 Xedit 也
 | key | 含义 | Xedit 侧行为 |
 |---|---|---|
 | `small_model_routing` | 是否做请求级路由 | `false` 即不注入引导；缺省=开（对齐 rs 默认） |
-| `auto_dispatch_read_only` | 高置信只读活是否先跑 worker | **仅解析不生效**——执行半边尚未接线，先认下键名与语义，避免两端漂移 |
+| `auto_dispatch_read_only` | 高置信请求是否先跑 bounded preflight | 已生效；缺省=开，`false` 可关闭自动预检，delegate-first 工具闸门仍由 `small_model_routing` 控制 |
 | `max_deep_calls_per_harness` | L 档准入预算 | 直接作为 deep 预算；rs 的单位是 harness，Xedit 用会话，是它最接近的等价单位 |
 
 优先级：`config.toml` 显式值 > Xedit 自身设置 > 内置默认。手工编辑过的文件是更审慎的配置，

@@ -4,7 +4,7 @@ import Testing
 @testable import WillDeep
 
 @Suite
-struct AgentComputerUsePresentationTests {
+nonisolated struct AgentComputerUsePresentationTests {
     @Test("active control exposes pause, takeover, and stop without resume")
     func activeControlActions() {
         for phase in [

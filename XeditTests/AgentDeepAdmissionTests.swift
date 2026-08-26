@@ -3,7 +3,7 @@ import Testing
 @testable import WillDeep
 
 @Suite
-struct AgentDeepAdmissionTests {
+nonisolated struct AgentDeepAdmissionTests {
     // MARK: Ticket parsing
 
     private func wellFormedTicket(

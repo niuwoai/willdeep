@@ -10,7 +10,7 @@ import Testing
 @testable import WillDeep
 
 @Suite
-struct WorkflowTradeBindingTests {
+nonisolated struct WorkflowTradeBindingTests {
     /// Tools a file-picking step needs. Annotating a workflow step with a
     /// trade whose whitelist misses one of these would get it denied mid-run,
     /// which is why the rule is "only annotate steps that fit inside a trade".
@@ -48,6 +48,39 @@ struct WorkflowTradeBindingTests {
         }
     }
 
+    @Test("new worker dashboard and small-model copy ships in every supported language")
+    func workerCopyHasCompleteLocalizationCoverage() throws {
+        let catalogURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Xedit/Localizable.xcstrings")
+        let catalogData = try Data(contentsOf: catalogURL)
+        let catalog = try #require(
+            JSONSerialization.jsonObject(with: catalogData) as? [String: Any]
+        )
+        let strings = try #require(catalog["strings"] as? [String: Any])
+        let expectedLocales = Set(["en", "es", "fr", "ja", "zh-Hans"])
+        let keys = [
+            "stats-dashboard.workers.automatic-coding-runs",
+            "stats-dashboard.workers.straight-through-rate",
+            "stats-dashboard.workers.coding-rework-rate",
+            "stats-dashboard.workers.plan-cache-hits",
+            "agent-delegation.profile-small-implementer-name",
+            "agent-delegation.profile-small-implementer-purpose",
+            "agent-delegation.profile-small-reviewer-name",
+            "agent-delegation.profile-small-reviewer-purpose",
+        ]
+
+        for key in keys {
+            let entry = try #require(strings[key] as? [String: Any], "Missing \(key)")
+            let localizations = try #require(
+                entry["localizations"] as? [String: Any],
+                "Missing localizations for \(key)"
+            )
+            #expect(Set(localizations.keys) == expectedLocales, "Incomplete locales for \(key)")
+        }
+    }
+
     @Test("deep stays the default so unannotated steps are unchanged")
     func deepRemainsTheDefault() {
         // Every workflow step that names no trade keeps running exactly as it
@@ -57,5 +90,19 @@ struct WorkflowTradeBindingTests {
         // the provider's primary model happens to be — that is what makes an
         // escalation to it mean something.
         #expect(AgentSubagentProfileCatalog.deep.modelBinding.model == "deepseek-v4-flash")
+    }
+
+    @Test("automatic coding trades use the real base someim model with client prompts")
+    func smallCodingTradesUseBaseModel() {
+        for trade in [
+            AgentSubagentProfileCatalog.smallImplementer,
+            AgentSubagentProfileCatalog.smallReviewer,
+        ] {
+            #expect(trade.modelBinding.preferredProviderID == AgentProviderPreset.someIMID)
+            #expect(trade.modelBinding.model == "someim-32b")
+            #expect(trade.hostedVirtualModel == nil)
+        }
+        #expect(AgentSubagentProfileCatalog.smallImplementer.requiresWriteAccess)
+        #expect(AgentSubagentProfileCatalog.smallReviewer.toolNames.isEmpty)
     }
 }

@@ -13,7 +13,7 @@ import Testing
 @testable import WillDeep
 
 @Suite
-struct AgentSkillWorkerKPITests {
+nonisolated struct AgentSkillWorkerKPITests {
     @Test("deep share counts against delegated runs, not parent turns")
     func deepShareDenominatorIsChildRunsOnly() {
         var kpis = AgentSkillWorkerKPIs()
@@ -59,5 +59,24 @@ struct AgentSkillWorkerKPITests {
         kpis.deepRunCount = 4
 
         #expect(kpis.deepShare == 1.0)
+    }
+
+    @Test("automatic coding separates straight-through delivery from parent rework")
+    func codingQualityRatesUseAutomaticRuns() {
+        var kpis = AgentSkillWorkerKPIs()
+        kpis.automaticCodingRunCount = 10
+        kpis.straightThroughDeliveryCount = 7
+        kpis.parentRepairCodingRunCount = 2
+
+        #expect(kpis.straightThroughRate == 0.7)
+        #expect(kpis.codingReworkRate == 0.2)
+    }
+
+    @Test("coding quality rates show no data before the lane runs")
+    func codingQualityRatesAreNilWithoutRuns() {
+        let kpis = AgentSkillWorkerKPIs()
+
+        #expect(kpis.straightThroughRate == nil)
+        #expect(kpis.codingReworkRate == nil)
     }
 }

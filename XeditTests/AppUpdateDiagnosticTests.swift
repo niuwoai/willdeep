@@ -11,7 +11,7 @@ import Testing
 @testable import WillDeep
 
 @Suite
-struct AppUpdateDiagnosticTests {
+nonisolated struct AppUpdateDiagnosticTests {
     @Test("diagnostic keeps the error chain and excludes arbitrary user info")
     func testDiagnosticRedactsArbitraryUserInfo() {
         let sensitiveMarker = "must-not-appear-in-update-log"

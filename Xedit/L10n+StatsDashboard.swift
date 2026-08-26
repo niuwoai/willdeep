@@ -144,21 +144,26 @@ extension L10n {
             return String(format: template, a1, a2)
         }
 
-        static func workerUsageSummary(_ a1: String, _ a2: String, _ a3: String) -> String {
-            let template = String(localized: "stats-dashboard.workers.usage-summary", defaultValue: "%1$@ calls · %2$@ chats · %3$@")
-            return String(format: template, a1, a2, a3)
+        static func workerUsageSummary(_ a1: String, _ a2: String, _ a3: String, _ a4: String) -> String {
+            let template = String(localized: "stats-dashboard.workers.usage-summary", defaultValue: "%1$@ requests · %2$@ runs · %3$@ chats · %4$@")
+            return String(format: template, a1, a2, a3, a4)
         }
 
         static let workersEmpty = String(localized: "stats-dashboard.workers.empty", defaultValue: "No worker calls recorded yet.")
-        static let workersProfilesUsed = String(localized: "stats-dashboard.workers.profiles-used", defaultValue: "Workers used")
-        static let workersSubtitle = String(localized: "stats-dashboard.workers.subtitle", defaultValue: "Historical spawn_agent calls grouped by worker profile")
+        static let workersProfilesUsed = String(localized: "stats-dashboard.workers.profiles-used", defaultValue: "Profiles requested")
+        static let workersSubtitle = String(localized: "stats-dashboard.workers.subtitle", defaultValue: "Worker requests and actual child runs grouped by profile")
         static let workersTitle = String(localized: "stats-dashboard.workers.title", defaultValue: "Worker usage")
-        static let workersTotalCalls = String(localized: "stats-dashboard.workers.total-calls", defaultValue: "Worker calls")
+        static let workersTotalCalls = String(localized: "stats-dashboard.workers.total-calls", defaultValue: "Worker requests")
+        static let workersActualRuns = String(localized: "stats-dashboard.workers.actual-runs", defaultValue: "Actual runs")
         static let workersChats = String(localized: "stats-dashboard.workers.chats", defaultValue: "Chats with workers")
         static let workersSkillCoverage = String(localized: "stats-dashboard.workers.skill-coverage", defaultValue: "Handled by workers")
         static let workersVerifiedSuccess = String(localized: "stats-dashboard.workers.verified-success", defaultValue: "Verified success")
         static let workersEscalationRate = String(localized: "stats-dashboard.workers.escalation-rate", defaultValue: "Escalated to main")
         static let workersDeepShare = String(localized: "stats-dashboard.workers.deep-share", defaultValue: "Used the 1M tier")
+        static let workersAutomaticCodingRuns = String(localized: "stats-dashboard.workers.automatic-coding-runs", defaultValue: "Automatic coding runs")
+        static let workersStraightThroughRate = String(localized: "stats-dashboard.workers.straight-through-rate", defaultValue: "Straight-through delivery")
+        static let workersCodingReworkRate = String(localized: "stats-dashboard.workers.coding-rework-rate", defaultValue: "Parent rework required")
+        static let workersPlanCacheHits = String(localized: "stats-dashboard.workers.plan-cache-hits", defaultValue: "Task-packet cache hits")
         /// Shown instead of a percentage when the metric has no denominator
         /// yet. "0%" would read as a failure rather than as missing data.
         static let workersMetricNoData = String(localized: "stats-dashboard.workers.metric-no-data", defaultValue: "—")
