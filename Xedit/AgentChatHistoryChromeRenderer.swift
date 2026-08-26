@@ -448,7 +448,15 @@ extension AgentChatHistoryRenderer {
             range: NSRange(location: start, length: result.length - start)
         )
 
-        guard isExpanded else { return }
+        guard isExpanded else {
+            applyToolGroupVerticalMargins(
+                to: result,
+                groupRange: NSRange(location: start, length: result.length - start),
+                baseStyle: toolGroupHeaderParagraphStyle(lineSpacing: lineSpacing),
+                bodyFontSize: bodyFont.pointSize
+            )
+            return
+        }
 
         result.append(NSAttributedString(string: "\n", attributes: [.font: monoFont]))
         result.append(NSAttributedString(
@@ -465,6 +473,54 @@ extension AgentChatHistoryRenderer {
             paragraphStyle: toolSummaryParagraphStyle(lineSpacing: lineSpacing),
             foregroundColor: nil
         )
+        applyToolGroupVerticalMargins(
+            to: result,
+            groupRange: NSRange(location: start, length: result.length - start),
+            baseStyle: toolSummaryParagraphStyle(lineSpacing: lineSpacing),
+            bodyFontSize: bodyFont.pointSize
+        )
+    }
+
+    /// 工具活动组是「上一段正文的执行回执」：它紧跟发起它的那句话
+    /// (上间距小)，和下一段正文之间留出更明显的呼吸(下间距大)，
+    /// 让「正文 + 活动行」读成一个块，而不是等距排开的独立行。
+    ///
+    /// 组内每一行都是独立的 TextKit 段落，所以 before/after 只能落在
+    /// 首段和末段上；设在共享样式里会把组内行距一并撑开(和代码块、
+    /// 表格同一个坑，见 applyCodeBlockVerticalMargins)。
+    private static func applyToolGroupVerticalMargins(
+        to attributed: NSMutableAttributedString,
+        groupRange: NSRange,
+        baseStyle: NSParagraphStyle,
+        bodyFontSize: CGFloat
+    ) {
+        guard groupRange.length > 0 else { return }
+        let before = AgentChatHistoryLayoutMetrics.toolActivityGroupSpacingBefore(
+            baseFontSize: bodyFontSize
+        )
+        let after = AgentChatHistoryLayoutMetrics.toolActivityGroupSpacingAfter(
+            baseFontSize: bodyFontSize
+        )
+        let text = attributed.string as NSString
+        let firstParagraph = text.paragraphRange(
+            for: NSRange(location: groupRange.location, length: 0)
+        )
+        let lastParagraph = text.paragraphRange(
+            for: NSRange(location: NSMaxRange(groupRange) - 1, length: 0)
+        )
+        if firstParagraph == lastParagraph {
+            let style = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+            style.paragraphSpacingBefore = before
+            style.paragraphSpacing = after
+            attributed.addAttribute(.paragraphStyle, value: style, range: firstParagraph)
+            return
+        }
+        let firstStyle = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        firstStyle.paragraphSpacingBefore = before
+        attributed.addAttribute(.paragraphStyle, value: firstStyle, range: firstParagraph)
+        let lastStyle = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        lastStyle.paragraphSpacing = after
+        attributed.addAttribute(.paragraphStyle, value: lastStyle, range: lastParagraph)
     }
 
     static func shouldShowFooter(

@@ -476,9 +476,9 @@ enum AgentChatHistoryRenderer {
                     group,
                     isExpanded: expandedToolGroupIDs.contains(group.id),
                     to: result,
-                    bodyFont: supportingFont,
+                    bodyFont: bodyFont,
                     monoFont: chromeMonoFont,
-                    lineSpacing: supportingLineSpacing,
+                    lineSpacing: bodyLineSpacing,
                     secondaryColor: secondaryColor
                 )
                 continue
@@ -801,9 +801,9 @@ enum AgentChatHistoryRenderer {
                     inlineGroup,
                     isExpanded: expandedToolGroupIDs.contains(inlineGroup.id),
                     to: result,
-                    bodyFont: supportingFont,
+                    bodyFont: bodyFont,
                     monoFont: chromeMonoFont,
-                    lineSpacing: supportingLineSpacing,
+                    lineSpacing: bodyLineSpacing,
                     secondaryColor: secondaryColor
                 )
             }
