@@ -3,7 +3,7 @@ import Testing
 @testable import WillDeep
 
 @Suite
-struct AgentSidebarCollapseAllTests {
+nonisolated struct AgentSidebarCollapseAllTests {
     @Test("collapse all folds every listed project")
     func collapseAllFoldsEverything() {
         let ids = ["~/a", "~/b", "~/c"]

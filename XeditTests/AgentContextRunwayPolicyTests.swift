@@ -8,7 +8,7 @@ import Testing
 @testable import WillDeep
 
 @Suite("Context runway handoff")
-struct AgentContextRunwayPolicyTests {
+nonisolated struct AgentContextRunwayPolicyTests {
     @Test("首轮请求即使很大也先让模型处理用户请求")
     func firstRoundIsNeverPreempted() {
         let decision = AgentContextRunwayPolicy.evaluate(

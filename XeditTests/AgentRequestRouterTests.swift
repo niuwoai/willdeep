@@ -107,14 +107,13 @@ struct AgentRequestRouterTests {
         ) != nil)
     }
 
-    @Test("running the gates names tester but is never pre-run")
-    func testRunRoutesToTesterWithoutPreflight() {
+    @Test("running the gates is executed by the tester preflight")
+    func testRunRoutesToTesterPreflight() {
         let decision = AgentRequestRouter.classify("跑一下测试看看现在什么情况")
 
         #expect(decision.profileID == "tester")
-        // A suite takes minutes and touches build state — pre-running one as
-        // a "preflight" would be the opposite of cheap.
-        #expect(!decision.autoDispatchEligible)
+        #expect(decision.autoDispatchEligible)
+        #expect(decision.preflightProfileID == "tester")
 
         // A failure that already happened is a different trade.
         #expect(AgentRequestRouter.classify("测试失败了，修复这个断言").profileID == "test_fixer")
@@ -142,6 +141,8 @@ struct AgentRequestRouterTests {
         // Writing work is never pre-run — a preflight that edits is not a
         // preflight.
         #expect(!single.autoDispatchEligible)
+        #expect(single.preflightProfileID == "scout")
+        #expect(single.requiresDelegatedExecution)
 
         let several = AgentRequestRouter.classify(
             "修改 Xedit/AppState.swift 和 Xedit/AgentRuntime.swift 的超时"
@@ -150,6 +151,30 @@ struct AgentRequestRouterTests {
 
         // No file named at all stays with the wider trade.
         #expect(AgentRequestRouter.classify("实现重试退避").profileID == "implementer")
+    }
+
+    @Test("ordinary Chinese coding verbs enter the delegated implementation lane")
+    func broaderCodingRequestsRouteToImplementer() {
+        for request in [
+            "帮我开发一个重试按钮",
+            "这个模块需要优化一下",
+            "接入新的缓存策略",
+            "给这个解析器补测试",
+        ] {
+            let decision = AgentRequestRouter.classify(request)
+            #expect(decision.profileID == "implementer", "request: \(request)")
+            #expect(decision.preflightProfileID == "scout", "request: \(request)")
+            #expect(decision.requiresDelegatedExecution, "request: \(request)")
+        }
+    }
+
+    @Test("operations get a read-only ops preflight and delegate-first execution")
+    func operationsRouteToOpsRunner() {
+        let decision = AgentRequestRouter.classify("部署到生产环境并确认服务状态")
+
+        #expect(decision.profileID == "ops_runner")
+        #expect(decision.preflightProfileID == "ops_runner")
+        #expect(decision.requiresDelegatedExecution)
     }
 
     @Test("only source files count as a named edit target")

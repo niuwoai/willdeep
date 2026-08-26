@@ -128,6 +128,11 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     let createdAt: Date
     var updatedAt: Date
     var messages: [AgentMessage]
+    /// Automatic host-side Worker invocations have no provider-emitted tool
+    /// call to persist on. Keep their request/run accounting beside the
+    /// transcript so reopening a chat and the stats dashboard see the same
+    /// work the live execution card showed.
+    var hostWorkerRuns: [AgentHostWorkerRunRecord]?
     /// Model-facing summary of older messages. This is intentionally
     /// separate from `messages`: context compression must shrink only the
     /// next provider request, never the user's local transcript.
@@ -257,6 +262,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         messages: [AgentMessage] = [],
+        hostWorkerRuns: [AgentHostWorkerRunRecord]? = nil,
         contextSummary: String? = nil,
         contextSummaryThroughMessageID: AgentMessage.ID? = nil,
         didEditFiles: Bool = false,
@@ -306,6 +312,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.messages = messages
+        self.hostWorkerRuns = hostWorkerRuns
         self.contextSummary = contextSummary
         self.contextSummaryThroughMessageID = contextSummaryThroughMessageID
         self.didEditFiles = didEditFiles

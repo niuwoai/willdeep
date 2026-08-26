@@ -269,6 +269,16 @@ extension AppState {
                 )
                 return
             }
+            if profile.id == AgentSubagentProfileCatalog.smallImplementerID,
+               access.targetRelativePaths.count > AgentCodingTaskPlan.automaticMaximumWriteCount {
+                finishRecord(
+                    status: .failed,
+                    summary: "small implementer scope too broad",
+                    payload: "Tool error: `profile=\"\(profile.id)\"` may edit at most \(AgentCodingTaskPlan.automaticMaximumWriteCount) declared files. Split the task into bounded packets or use the ordinary implementer profile.",
+                    errorMessage: "Small implementer write scope exceeds host limit"
+                )
+                return
+            }
             writeAccess = access
         }
 
@@ -288,6 +298,16 @@ extension AppState {
                 return
             }
             approvedCommand = targetCommand
+        }
+
+        // Crossing this point means the routed trade passed its packet and
+        // scope validation. The host's delegate-first guard may now allow the
+        // parent to integrate or repair after the bounded worker attempt. An
+        // ops inspection alone does not unlock a mutating command: that route
+        // must carry the exact approved command.
+        if profile.requiresWriteAccess
+            || (profile.id == AgentSubagentProfileCatalog.opsRunnerID && approvedCommand != nil) {
+            runtime.currentTurnAttemptedWorkerProfiles.insert(profile.id)
         }
 
         // A task packet lets the worker start hot: the parent already knows
@@ -528,8 +548,8 @@ extension AppState {
                 verifierMaxAttempts: taskPacket?.maxAttempts
                     ?? AgentSubagentTaskPacket.defaultMaxAttempts,
                 patchProposalSink: editorPatchSink,
-                // terminal_operator 需要父会话的侧栏终端；其余工种在执行层
-                // 拿不到这个 controller（见 executeToolCall）。
+                // terminal_operator 与带 target_command 的 ops_runner 需要
+                // 父会话侧栏终端；其余工种在执行层拿不到这个 controller。
                 terminalController: agentTerminalController,
                 approvedCommand: approvedCommand,
                 onProgress: { round, toolInvocations in
@@ -691,7 +711,7 @@ extension AppState {
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: runtimeDescriptor
         )
-        for path in packet.relevantFiles {
+        for path in packet.inlineFiles {
             guard let result = try? await AgentToolRunner.run(
                 name: "read_file",
                 arguments: ["path": .string(path)],

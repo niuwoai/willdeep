@@ -3,7 +3,7 @@ import Testing
 @testable import WillDeep
 
 @Suite("Composer @ 文件搜索")
-struct AgentWorkspaceFileSearchTests {
+nonisolated struct AgentWorkspaceFileSearchTests {
     @Test("按文件名与相对路径检查当前工作区")
     func searchesFilenameAndRelativePath() throws {
         let root = FileManager.default.temporaryDirectory

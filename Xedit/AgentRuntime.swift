@@ -362,6 +362,13 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// user's message because the user's message is *shown* — steering markup
     /// in the transcript would be the model's context leaking onto screen.
     var currentTurnRouteSteering: String?
+    /// Structured counterpart to the rendered steering block. The tool loop
+    /// uses it to enforce delegate-first execution without reparsing prose.
+    var currentTurnRouteDecision: AgentRequestRouter.Decision?
+    /// Worker profiles whose model-requested spawn passed packet and write-
+    /// scope validation this turn. Automatic preflights do not enter this set:
+    /// preparation is not delegated execution.
+    var currentTurnAttemptedWorkerProfiles: Set<String> = []
     /// What this session was observed doing, checked against any `deep`
     /// escalation ticket. Per-session rather than per-turn on purpose: the
     /// worker you ran three turns ago is still evidence that you tried, and

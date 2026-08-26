@@ -13,7 +13,7 @@ import Foundation
 @testable import WillDeep
 
 @Suite
-struct SparkleAutomaticUpdateContractTests {
+nonisolated struct SparkleAutomaticUpdateContractTests {
     private func appInfoPlist() throws -> [String: Any] {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

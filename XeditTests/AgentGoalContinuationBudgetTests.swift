@@ -9,7 +9,7 @@ import Testing
 @testable import WillDeep
 
 @Suite("Goal continuation budget")
-struct AgentGoalContinuationBudgetTests {
+nonisolated struct AgentGoalContinuationBudgetTests {
     private let now = Date(timeIntervalSince1970: 1_000_000)
 
     private func budget(

@@ -10,7 +10,7 @@ import Testing
 /// These pin the two halves of the fix: the Markdown mirror on disk, and the
 /// per-turn index that makes `read_memory` reachable.
 @Suite
-struct AgentMemoryProjectionTests {
+nonisolated struct AgentMemoryProjectionTests {
     private func record(
         content: String,
         scope: AgentMemoryScope = .project,
@@ -233,7 +233,7 @@ struct AgentMemoryProjectionTests {
 
 /// The per-turn index — the half that makes on-demand recall possible at all.
 @Suite
-struct AgentMemoryIndexBlockTests {
+nonisolated struct AgentMemoryIndexBlockTests {
     private let workspace = URL(fileURLWithPath: "/Users/rocky/Sites/Xedit", isDirectory: true)
 
     private func record(content: String, scope: AgentMemoryScope = .global) -> AgentMemoryRecord {

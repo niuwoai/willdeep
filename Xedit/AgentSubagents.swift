@@ -502,9 +502,13 @@ enum AgentSubagentRunner {
     /// exist to shrink: it is resent on every round of the child loop.
     static func toolDescriptors(
         profile: AgentSubagentProfile,
-        writeAccessGranted: Bool = false
+        writeAccessGranted: Bool = false,
+        approvedCommandGranted: Bool = false
     ) -> [AgentToolDescriptor] {
-        let permitted = profile.effectiveToolNames(writeAccessGranted: writeAccessGranted)
+        let permitted = profile.effectiveToolNames(
+            writeAccessGranted: writeAccessGranted,
+            approvedCommandGranted: approvedCommandGranted
+        )
         return AgentToolRegistry.all.filter { permitted.contains($0.name) }
     }
 
@@ -580,6 +584,7 @@ enum AgentSubagentRunner {
         outputSchema: AgentStructuredSchema? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         writeAccess: AgentSubagentWriteAccess? = nil,
+        approvedCommand: String? = nil,
         jobPromptIsHosted: Bool = false
     ) -> String {
         var lines: [String] = []
@@ -613,6 +618,26 @@ enum AgentSubagentRunner {
         }
         if let workspaceURL {
             lines.append("Workspace root: \(workspaceURL.path)")
+        }
+        if let approvedCommand,
+           profile.id == AgentSubagentProfileCatalog.opsRunnerID {
+            let commandEncoder = JSONEncoder()
+            commandEncoder.outputFormatting = [.withoutEscapingSlashes]
+            let encodedCommand = (try? commandEncoder.encode(approvedCommand))
+                .flatMap { String(data: $0, encoding: .utf8) }
+                ?? "\"\""
+            lines.append("""
+            Operator-approved command (JSON string; the decoded text must match exactly):
+            \(encodedCommand)
+
+            Rules:
+            - You have READ access plus exactly one bounded mutation capability: the operator-approved command above. The host rejects every other write command and every textual variation of this one.
+            - Use `terminal_send_command` only when the task says the command belongs in the visible terminal. First snapshot/select the intended tab, verify the host and `shell_ready` state, send the exact command, then snapshot the result. An active SSH tab is not interchangeable with local `run_command`.
+            - Never invent or execute rollback, cleanup, force, delete, migration repair, or any second mutating command. Report those decisions to the parent.
+            - You cannot ask the user anything. If the approved command cannot run safely in the specified context, stop and report the exact blocker.
+            - Work autonomously until the command and read-only verification finish, then STOP calling tools and write a self-contained final report with the command, target context, and decisive output.
+            """)
+            return lines.joined(separator: "\n")
         }
         if writeAccess != nil {
             // The read-only rule block below is wrong for this trade, and a
@@ -798,13 +823,14 @@ enum AgentSubagentRunner {
         verifierCommand: String? = nil,
         verifierMaxAttempts: Int = AgentSubagentTaskPacket.defaultMaxAttempts,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil,
-        /// 仅 terminal_operator 工种需要：把父会话的侧栏终端 controller 递
-        /// 给子循环，terminal_* 工具才有执行对象。其余工种传了也会在
-        /// executeToolCall 里被丢弃。
+        /// terminal_operator 与带 target_command 的 ops_runner 需要：把父
+        /// 会话的侧栏终端 controller 递给子循环，terminal_* 工具才有执行
+        /// 对象。其余工种传了也会在 executeToolCall 里被丢弃。
         terminalController: AgentInteractiveTerminalController? = nil,
         /// 单命令授权（仅 ops_runner）：用户在 spawn 审批卡上批准的那条
-        /// 确切命令。子循环里恰好等于这条文本的 run_command 可以越过
-        /// "只许 read"的死门执行——语义上等同用户在主会话批准了这条命令，
+        /// 确切命令。子循环里恰好等于这条文本的 run_command 或
+        /// terminal_send_command 可以越过"只许 read"的死门执行——
+        /// 语义上等同用户在主会话批准了这条命令，
         /// 爆炸半径恰好一条。可重复执行（发布脚本按部署规范应幂等），
         /// verifier 循环靠这一点重试。
         approvedCommand: String? = nil,
@@ -823,6 +849,7 @@ enum AgentSubagentRunner {
                     outputSchema: outputSchema,
                     profile: profile,
                     writeAccess: writeAccess,
+                    approvedCommand: approvedCommand,
                     // Derived rather than passed in: the relay hosts this
                     // trade's job prompt exactly when we are actually calling
                     // its hosted virtual model. Signed out, binding resolution
@@ -862,7 +889,8 @@ enum AgentSubagentRunner {
         // where a cheap profile earns most of its savings.
         var toolList = toolDescriptors(
             profile: profile,
-            writeAccessGranted: writeAccess != nil
+            writeAccessGranted: writeAccess != nil,
+            approvedCommandGranted: approvedCommand != nil
         )
         if outputSchema != nil {
             toolList.append(structuredOutputDescriptor)
@@ -1353,7 +1381,10 @@ enum AgentSubagentRunner {
         approvedCommand: String? = nil,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil
     ) async -> String {
-        let permitted = profile.effectiveToolNames(writeAccessGranted: writeAccess != nil)
+        let permitted = profile.effectiveToolNames(
+            writeAccessGranted: writeAccess != nil,
+            approvedCommandGranted: approvedCommand != nil
+        )
         guard permitted.contains(call.toolName) else {
             // A narrow trade being asked for a tool it does not carry is a
             // routing mistake, not a capability gap — tell the parent how to
@@ -1414,14 +1445,14 @@ enum AgentSubagentRunner {
         }()
         // 单命令授权：用户在 spawn 审批卡上批准的那条确切命令（仅
         // ops_runner）。精确文本匹配——多一个字符都不放。
-        let isApprovedCommandRun: Bool = {
-            guard call.toolName == "run_command",
+        let isApprovedCommandInvocation: Bool = {
+            guard ["run_command", "terminal_send_command"].contains(call.toolName),
                   profile.id == AgentSubagentProfileCatalog.opsRunnerID,
                   let approvedCommand,
                   let command = argsDict["command"]?.stringValue() else { return false }
             return approvedCommandMatches(command, approved: approvedCommand)
         }()
-        guard risk == .read || isApprovedWrite || isTerminalOperatorReadOnlySend || isApprovedCommandRun else {
+        guard risk == .read || isApprovedWrite || isTerminalOperatorReadOnlySend || isApprovedCommandInvocation else {
             if call.toolName == "terminal_send_command",
                profile.id == AgentSubagentProfileCatalog.terminalOperatorID {
                 return "Denied: this command did not classify as read-only, and the terminal-operator trade may only send read-only commands. Report it back to the parent agent instead of working around the denial."
@@ -1448,7 +1479,7 @@ enum AgentSubagentRunner {
                 command: command,
                 rootDirectory: workspaceURL
             )
-            if isApprovedCommandRun {
+            if isApprovedCommandInvocation {
                 sandboxMode = decision.mode
             } else if decision.mode == .readOnlyNetwork {
                 sandboxMode = .readOnlyNetwork
@@ -1461,9 +1492,10 @@ enum AgentSubagentRunner {
             runtimeDescriptor: runtimeDescriptor,
             sandboxMode: sandboxMode,
             patchProposalSink: writeAccess == nil ? nil : patchProposalSink,
-            // 终端 controller 只随 terminal_operator 下发；其他工种即便被
-            // 允许调 snapshot 之类，也拿不到执行所需的 controller。
-            terminalController: profile.id == AgentSubagentProfileCatalog.terminalOperatorID
+            // 终端 controller 只随 terminal_operator 或已获单命令授权的
+            // ops_runner 下发；其他工种拿不到用户终端。
+            terminalController: (profile.id == AgentSubagentProfileCatalog.terminalOperatorID
+                || (profile.id == AgentSubagentProfileCatalog.opsRunnerID && approvedCommand != nil))
                 ? terminalController : nil
         )
         do {

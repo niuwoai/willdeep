@@ -88,6 +88,14 @@ extension AppState {
             for: profile,
             parentConfiguration: configuration
         )
+        let hostRunID = beginHostWorkerRun(
+            profileID: profile.id,
+            source: .failedCommandRepair,
+            userMessageID: runtime.messages.last(where: { $0.isOperatorInput })?.id,
+            model: childConfiguration.model,
+            providerID: childConfiguration.providerID,
+            runtime: runtime
+        )
 
         // A record in WillDeep's own ledger — this is what the user sees and
         // approves. It is not part of the provider transcript.
@@ -135,10 +143,12 @@ extension AppState {
             let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
             if Task.isCancelled {
                 settle(.denied, summary: "cancelled", error: "Cancelled")
+                finishHostWorkerRun(hostRunID, status: .denied, runtime: runtime)
                 return nil
             }
             if case .denied = decision {
                 settle(.denied, summary: "declined", error: "Declined")
+                finishHostWorkerRun(hostRunID, status: .denied, runtime: runtime)
                 return "(WillDeep: you declined the automatic `\(profile.id)` dispatch for this failure, so it is yours to fix here.)"
             }
         }
@@ -156,11 +166,14 @@ extension AppState {
             runID: runID
         ) else {
             settle(.failed, summary: "files locked", error: "Target files locked")
+            finishHostWorkerRun(hostRunID, status: .failed, runtime: runtime)
             return "(WillDeep: another subagent already holds \(writeAccess.displayList), so this failure was not auto-delegated.)"
         }
         defer { AgentSubagentEditorLock.shared.release(runID: runID) }
 
         do {
+            runtime.currentTurnAttemptedWorkerProfiles.insert(profile.id)
+            markHostWorkerRunStarted(hostRunID, runtime: runtime)
             let outcome = try await AgentSubagentRunner.run(
                 prompt: dispatch.prompt,
                 configuration: childConfiguration,
@@ -189,6 +202,12 @@ extension AppState {
                 outcome.verifierPassed == true ? .succeeded : .failed,
                 summary: outcome.verifierPassed == true ? "verified" : "not verified"
             )
+            finishHostWorkerRun(
+                hostRunID,
+                status: outcome.verifierPassed == true ? .succeeded : .failed,
+                outcome: outcome,
+                runtime: runtime
+            )
             return Self.autoDispatchResultNote(
                 profile: profile,
                 model: childConfiguration.model,
@@ -198,6 +217,7 @@ extension AppState {
             )
         } catch {
             settle(.failed, summary: "dispatch failed", error: error.localizedDescription)
+            finishHostWorkerRun(hostRunID, status: .failed, runtime: runtime)
             return "(WillDeep: the automatic `\(profile.id)` dispatch could not run (\(error.localizedDescription)). The failure above is yours to diagnose.)"
         }
     }

@@ -8,7 +8,7 @@ import Testing
 @testable import WillDeep
 
 @Suite
-struct AgentKnowledgeFolderIndexerTests {
+nonisolated struct AgentKnowledgeFolderIndexerTests {
     @Test("New knowledge folders stay pending outside Goal mode")
     func knowledgeFolderIndexPolicy() {
         let folder = AgentKnowledgeFolder(url: URL(fileURLWithPath: "/tmp/reference"))

@@ -7,7 +7,7 @@ import Testing
 /// daemon when one is running on this machine and skips when none is — the
 /// pure tests below prove the parts, that one proves they add up.
 @Suite
-struct WillDeepRuntimeClientTests {
+nonisolated struct WillDeepRuntimeClientTests {
     private static func temporaryDirectory(_ name: String) -> URL {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("willdeep-runtime-\(name)-\(UUID().uuidString)")

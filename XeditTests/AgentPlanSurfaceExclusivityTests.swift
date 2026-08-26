@@ -12,7 +12,7 @@ import Testing
 /// screen at a time — the regression this guards is both showing at once for
 /// the entire execution.
 @Suite("Plan surface exclusivity")
-struct AgentPlanSurfaceExclusivityTests {
+nonisolated struct AgentPlanSurfaceExclusivityTests {
     private func plan(_ status: AgentPlan.Status, steps: Int = 3) -> AgentPlan {
         AgentPlan(
             status: status,

@@ -2,28 +2,21 @@
 //  AppStateAgentReadOnlyPreflight.swift
 //  WillDeep
 //
-//  Running a bounded read-only worker *before* the root model answers.
+//  Running a bounded worker *before* the root model answers.
 //
 //  `AgentRequestRouter` classifies the request and, on its own, only appends
-//  a steering paragraph. This is the executing half: for the high-confidence
-//  read-only cases it actually dispatches the worker first and hands the root
-//  model the report as evidence, so the expensive model spends its window
-//  reasoning about findings instead of re-deriving them.
+//  a steering paragraph. This is the executing half: for high-confidence
+//  routes it dispatches the cheapest suitable worker first and hands the root
+//  model the report as evidence, so the expensive model spends its window on
+//  synthesis and decisions instead of re-deriving repository facts.
 //
-//  Off by default, and that is a considered position rather than caution:
+//  It defaults on after production telemetry showed that prompt-only routing
+//  was not enough: the root model commonly performed the work itself. The
+//  shared `agent.auto_dispatch_read_only` switch remains the emergency brake.
 //
-//  - It costs time the user can feel. In a TUI a pause before the first token
-//    is ordinary; in a GUI it doubles time-to-first-token on questions as
-//    small as "where is this function".
-//  - The classifier is keyword matching. A false positive here is not a
-//    wasted paragraph, it is a wasted worker run and a visibly slower answer.
-//
-//  So the switch ships off and the Deep Share / Skill Coverage numbers decide
-//  when to turn it on. `agent.auto_dispatch_read_only` in the shared
-//  config.toml turns it on for both clients at once.
-//
-//  Read-only by construction: no write access, no verifier, no editor lock,
-//  no patch sink. A preflight that can edit is not a preflight.
+//  Read-only by construction: the tester may execute read-tier gates, but no
+//  preflight receives write access, an editor lock, a verifier, or a patch
+//  sink. Mutation is delegated separately after the report is available.
 //
 //  See docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md §4 step 4.
 //
@@ -34,8 +27,8 @@ extension AppState {
     /// Whether request-level preflight may run at all. The shared config.toml
     /// wins; absent, it is on.
     ///
-    /// It shipped off, on the theory that the Deep Share numbers should
-    /// decide. They did: the read-only trades this path feeds — `scout`,
+    /// It originally shipped off, on the theory that the Deep Share numbers
+    /// should decide. They did: the trades this path feeds — `scout`,
     /// `reader`, `git_detective`, `log_inspector` — recorded no runs at all,
     /// because the only other way to reach them is the parent model choosing
     /// to delegate, and the parent reliably does the work itself instead
@@ -60,31 +53,94 @@ extension AppState {
         for runtime: AgentRuntime,
         requestText: String,
         configuration: AgentConfiguration,
-        assistantMessageID: UUID
-    ) async {
-        guard Self.readOnlyPreflightEnabled() else { return }
+        userMessageID: UUID
+    ) async -> AgentCodingTaskPlan? {
+        guard Self.readOnlyPreflightEnabled() else { return nil }
         // `/no-subagent` means "do all of it yourself this turn". Dispatching
         // a worker anyway would be the one thing the user explicitly refused.
-        guard runtime.currentTurnDelegationPolicy != .forbidden else { return }
+        guard runtime.currentTurnDelegationPolicy != .forbidden else { return nil }
 
-        let decision = AgentRequestRouter.classify(requestText)
-        guard decision.autoDispatchEligible, let profileID = decision.profileID else { return }
+        let decision = runtime.currentTurnRouteDecision ?? AgentRequestRouter.classify(requestText)
+        guard let profileID = decision.preflightProfileID else { return nil }
 
-        // A remote workspace has no local tree for a read-only worker to walk,
-        // and the trades this path uses are the local file/git ones.
+        let requestsCodingPlan = decision.requiresDelegatedExecution
+            && profileID == AgentSubagentProfileCatalog.scoutID
+            && [
+                AgentSubagentProfileCatalog.editorID,
+                AgentSubagentProfileCatalog.implementerID,
+            ].contains(decision.profileID)
+
         let workspaceLocation = runtime.workspaceLocation
             ?? runtime.workspaceRootPath.map { .local(path: $0) }
-        guard workspaceLocation?.remoteRuntimeID == nil,
-              let workspaceURL = try? runtime.localWorkspaceURLForOptimisticUse() else { return }
+        let runtimeDescriptor = workspaceLocation?.remoteRuntimeID.flatMap {
+            AgentRuntimeStore.descriptor(id: $0)
+        }
+        let workspaceURL: URL?
+        if workspaceLocation?.remoteRuntimeID != nil {
+            guard runtimeDescriptor != nil else { return nil }
+            workspaceURL = nil
+        } else {
+            workspaceURL = try? runtime.localWorkspaceURLForOptimisticUse()
+        }
 
         let profile = AgentSubagentProfileStore.resolvedProfile(id: profileID)
-        // Defensive: every trade this router names is read-only, but a
-        // user-edited profile store could have widened one of them.
-        guard !profile.requiresWriteAccess else { return }
+        // Defensive: every preflight trade is non-writing, but a user-edited
+        // profile store could have widened one of them.
+        guard !profile.requiresWriteAccess else { return nil }
 
         let childConfiguration = resolvedSubagentConfiguration(
             for: profile,
             parentConfiguration: configuration
+        )
+        // Terminal inspection is the only preflight that can be useful with
+        // no workspace binding at all. Every other trade needs either a local
+        // root or a resolvable remote runtime.
+        guard profile.id == AgentSubagentProfileCatalog.terminalOperatorID
+                || workspaceURL != nil
+                || runtimeDescriptor != nil else { return nil }
+
+        let workspaceRevision = requestsCodingPlan
+            ? await AgentWorkspaceRevisionCapture.capture(for: workspaceURL)
+            : nil
+        if let workspaceRevision,
+           let cachedPlan = await AgentCodingArtifactCache.shared.plan(
+                requestText: requestText,
+                revision: workspaceRevision
+           ) {
+            let cacheRecordID = beginHostWorkerRun(
+                profileID: profile.id,
+                source: .codingPlanCacheHit,
+                userMessageID: userMessageID,
+                model: "artifact-cache",
+                providerID: nil,
+                runtime: runtime
+            )
+            finishHostWorkerRun(cacheRecordID, status: .succeeded, runtime: runtime)
+            runtime.currentTurnRouteSteering = Self.steeringWithCodingPlan(
+                existing: runtime.currentTurnRouteSteering,
+                profileID: profile.id,
+                model: "artifact-cache",
+                plan: cachedPlan,
+                cacheHit: true
+            )
+            return cachedPlan
+        }
+
+        let someIMContext: SomeIMRequestContext? = {
+            guard childConfiguration.providerID == AgentProviderPreset.someIMID else { return nil }
+            let workspaceID = AgentWorkspaceIdentityStore.workspaceID(
+                forWorkspaceKey: Self.managedWorkspaceKey(for: runtime)
+            )
+            return SomeIMRequestContext(sessionID: runtime.id.uuidString, workspaceID: workspaceID)
+        }()
+
+        let hostRunID = beginHostWorkerRun(
+            profileID: profile.id,
+            source: .requestPreflight,
+            userMessageID: userMessageID,
+            model: childConfiguration.model,
+            providerID: childConfiguration.providerID,
+            runtime: runtime
         )
 
         // Visible in WillDeep's own ledger before it starts. A pause the user
@@ -92,7 +148,7 @@ extension AppState {
         let recordID = UUID()
         runtime.toolCalls.append(AgentToolCall(
             id: recordID,
-            messageID: assistantMessageID,
+            messageID: userMessageID,
             externalID: "preflight-\(recordID.uuidString)",
             toolName: "spawn_agent",
             arguments: [
@@ -115,39 +171,82 @@ extension AppState {
         runtime.deepAdmissionObservation.recordProfileAttempt(profile.id)
 
         do {
+            markHostWorkerRunStarted(hostRunID, runtime: runtime)
             let outcome = try await AgentSubagentRunner.run(
-                prompt: Self.preflightPrompt(requestText: requestText),
+                prompt: Self.preflightPrompt(requestText: requestText, profileID: profile.id),
                 configuration: childConfiguration,
                 workspaceURL: workspaceURL,
+                runtimeDescriptor: runtimeDescriptor,
                 workspaceLocation: workspaceLocation,
+                someIMContext: someIMContext,
+                outputSchema: requestsCodingPlan ? AgentCodingTaskPlan.schema : nil,
                 profile: profile,
                 writeAccess: nil,
                 verifierCommand: nil,
-                patchProposalSink: nil
+                patchProposalSink: nil,
+                terminalController: profile.id == AgentSubagentProfileCatalog.terminalOperatorID
+                    ? agentTerminalController
+                    : nil
             )
             settle(.succeeded, summary: "preflight")
-            runtime.currentTurnRouteSteering = Self.steeringWithReport(
-                existing: runtime.currentTurnRouteSteering,
-                profileID: profile.id,
-                model: childConfiguration.model,
-                report: outcome.report
-            )
+            finishHostWorkerRun(hostRunID, status: .succeeded, outcome: outcome, runtime: runtime)
+            if requestsCodingPlan,
+               let data = outcome.report.data(using: .utf8),
+               let plan = try? JSONDecoder().decode(AgentCodingTaskPlan.self, from: data) {
+                if let workspaceRevision {
+                    await AgentCodingArtifactCache.shared.store(
+                        plan,
+                        requestText: requestText,
+                        revision: workspaceRevision
+                    )
+                }
+                runtime.currentTurnRouteSteering = Self.steeringWithCodingPlan(
+                    existing: runtime.currentTurnRouteSteering,
+                    profileID: profile.id,
+                    model: childConfiguration.model,
+                    plan: plan,
+                    cacheHit: false
+                )
+                return plan
+            } else {
+                runtime.currentTurnRouteSteering = Self.steeringWithReport(
+                    existing: runtime.currentTurnRouteSteering,
+                    profileID: profile.id,
+                    model: childConfiguration.model,
+                    report: outcome.report
+                )
+            }
         } catch {
             settle(.failed, summary: "preflight failed", error: error.localizedDescription)
+            finishHostWorkerRun(hostRunID, status: .failed, runtime: runtime)
             // Deliberately silent toward the model: a failed preflight is not
             // evidence that the task is hard, and telling the root model about
             // WillDeep's plumbing invites it to reason about the wrong thing.
         }
+        return nil
     }
 
     /// The worker sees none of this conversation, so the request is restated
     /// as a self-contained brief.
-    static func preflightPrompt(requestText: String) -> String {
-        """
-        Answer the following request about this workspace using read-only \
-        inspection. Report precise locations (path plus line numbers) and quote \
-        only what you actually saw. If you cannot answer it fully, say exactly \
-        what you checked so the caller can continue from there — do not guess.
+    static func preflightPrompt(requestText: String, profileID: String = "reader") -> String {
+        let task: String
+        switch profileID {
+        case AgentSubagentProfileCatalog.scoutID:
+            task = "Locate the smallest relevant file and symbol set, likely call sites, and verification commands. For coding requests, return an exact bounded task packet: workspace-relative read_files and write_files, confirmed symbols/facts, constraints, the narrowest verifier command, concrete risk flags, and every unresolved question. Never put a path in write_files unless the requested implementation must change it. Do not edit anything."
+        case AgentSubagentProfileCatalog.logInspectorID:
+            task = "Inspect the supplied failure evidence and nearby diagnostics. Identify likely causes and the smallest repair scope. Do not edit anything."
+        case AgentSubagentProfileCatalog.testerID:
+            task = "Run the narrowest relevant existing test or validation gates, then report exact commands, exit status, and failures. Do not repair failures."
+        case AgentSubagentProfileCatalog.opsRunnerID:
+            task = "Perform read-only operational preflight only: inspect current service/deployment state, find the repository's existing release procedure, and report the exact command plus rollback/verification evidence. Do not deploy, restart, mutate, or retry anything."
+        case AgentSubagentProfileCatalog.terminalOperatorID:
+            task = "Inspect the visible terminal using only read-only terminal actions. Report the active command/prompt and relevant output; do not type a mutating command."
+        default:
+            task = "Answer using bounded read-only inspection. Report precise locations (path plus line numbers) and quote only what you actually saw."
+        }
+        return """
+        \(task) If you cannot finish, say exactly what you checked so the caller can continue \
+        from there — do not guess.
 
         Request:
         \(requestText)
@@ -177,13 +276,42 @@ extension AppState {
         let report = clampedReport(report)
         let block = """
         <runtime-preflight profile="\(profileID)" model="\(model)">
-        WillDeep ran this bounded read-only worker before you saw the request. Treat the report \
+        WillDeep ran this bounded worker before you saw the request. Treat the report \
         as evidence, not as a conclusion: verify a citation when you are about to rely on it, and \
         do not re-read the same material unless the report is incomplete or looks wrong.
         <worker-report>
         \(report)
         </worker-report>
         </runtime-preflight>
+        """
+        guard let existing, !existing.isEmpty else { return block }
+        return existing + "\n\n" + block
+    }
+
+    static func steeringWithCodingPlan(
+        existing: String?,
+        profileID: String,
+        model: String,
+        plan: AgentCodingTaskPlan,
+        cacheHit: Bool
+    ) -> String {
+        let writeFiles = plan.writeFiles.map { "`\($0)`" }.joined(separator: ", ")
+        let readFiles = plan.readFiles.map { "`\($0)`" }.joined(separator: ", ")
+        let unresolved = plan.unresolved.isEmpty
+            ? "none"
+            : plan.unresolved.map { "- \($0)" }.joined(separator: "\n")
+        let block = """
+        <runtime-coding-plan profile="\(profileID)" model="\(model)" cache-hit="\(cacheHit)">
+        WillDeep's read-only scout produced a structured task packet. The host independently \
+        enforces file scope and risk; do not assume the scout's risk label grants authority.
+        Goal: \(plan.goal)
+        Read files: \(readFiles.isEmpty ? "none" : readFiles)
+        Write files: \(writeFiles.isEmpty ? "none" : writeFiles)
+        Verifier: \(plan.verifierCommand.isEmpty ? "none" : plan.verifierCommand)
+        Suggested risk: \(plan.suggestedRiskLevel.rawValue)
+        Unresolved:
+        \(unresolved)
+        </runtime-coding-plan>
         """
         guard let existing, !existing.isEmpty else { return block }
         return existing + "\n\n" + block

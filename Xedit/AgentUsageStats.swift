@@ -171,7 +171,11 @@ struct AgentCapabilityUsageRow: Identifiable, Equatable {
 /// worker was used without inflating repeated fan-out in one conversation.
 nonisolated struct AgentSubagentUsageRow: Identifiable, Equatable {
     let profileID: String
+    /// Requested by either the parent model or the host dispatcher.
     let invocationCount: Int
+    /// Child loops that actually started. A rejected/denied proposal remains
+    /// a request but is not presented as model work performed.
+    let runCount: Int
     let sessionCount: Int
 
     var id: String { profileID }
@@ -200,6 +204,17 @@ nonisolated struct AgentSkillWorkerKPIs: Equatable {
     /// the only number that says anything about their answers.
     var citationsChecked: Int = 0
     var citationsResolved: Int = 0
+    /// Operator turns for which the deterministic router selected a worker,
+    /// and how many of those turns saw at least one child loop actually start.
+    var eligibleUserTurnCount: Int = 0
+    var workerHandledUserTurnCount: Int = 0
+    /// Automatic bounded coding attempts and their delivery quality. These
+    /// are separate from verifier success: a green test can still fail an
+    /// independent review and require the parent to repair it.
+    var automaticCodingRunCount: Int = 0
+    var straightThroughDeliveryCount: Int = 0
+    var parentRepairCodingRunCount: Int = 0
+    var codingPlanCacheHitCount: Int = 0
 
     /// Share of model invocations a narrow trade handled. Runs and parent
     /// turns are different units on purpose: the question is "how much of
@@ -209,6 +224,11 @@ nonisolated struct AgentSkillWorkerKPIs: Equatable {
         let total = narrowRunCount + deepRunCount + parentTurnCount
         guard total > 0 else { return nil }
         return Double(narrowRunCount) / Double(total)
+    }
+
+    var workerCoverage: Double? {
+        guard eligibleUserTurnCount > 0 else { return nil }
+        return Double(workerHandledUserTurnCount) / Double(eligibleUserTurnCount)
     }
 
     /// Share of child runs that spent the scarce 1M tier. Target ≤ 5%.
@@ -236,6 +256,16 @@ nonisolated struct AgentSkillWorkerKPIs: Equatable {
     var escalationRate: Double? {
         guard narrowRunCount > 0 else { return nil }
         return Double(escalatedRunCount) / Double(narrowRunCount)
+    }
+
+    var straightThroughRate: Double? {
+        guard automaticCodingRunCount > 0 else { return nil }
+        return Double(straightThroughDeliveryCount) / Double(automaticCodingRunCount)
+    }
+
+    var codingReworkRate: Double? {
+        guard automaticCodingRunCount > 0 else { return nil }
+        return Double(parentRepairCodingRunCount) / Double(automaticCodingRunCount)
     }
 
     /// Share of cited locations that actually exist. Nil when nothing was
@@ -292,6 +322,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
     var createdAt: Date
     var updatedAt: Date
     var messages: [AgentUsageMessageSnapshot]
+    var hostWorkerRuns: [AgentHostWorkerRunRecord]?
     var workspaceIdentifier: String?
     var editedFileCount: Int
     var artifactCount: Int
@@ -313,6 +344,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
         createdAt: Date,
         updatedAt: Date,
         messages: [AgentUsageMessageSnapshot],
+        hostWorkerRuns: [AgentHostWorkerRunRecord]? = nil,
         workspaceIdentifier: String? = nil,
         editedFileCount: Int = 0,
         artifactCount: Int = 0,
@@ -326,6 +358,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.messages = messages
+        self.hostWorkerRuns = hostWorkerRuns
         self.workspaceIdentifier = workspaceIdentifier
         self.editedFileCount = editedFileCount
         self.artifactCount = artifactCount
@@ -342,6 +375,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
             messages: session.messages.map { AgentUsageMessageSnapshot(message: $0) },
+            hostWorkerRuns: session.hostWorkerRuns,
             workspaceIdentifier: Self.workspaceIdentifier(
                 for: session.sidebarWorkspaceRootPath.map { .local(path: $0) }
                     ?? session.workspaceLocation
@@ -368,7 +402,12 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
 }
 
 nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
+    var id: UUID?
     var role: AgentRole
+    var isOperatorInput: Bool?
+    /// Profile selected from the operator's raw request when the usage sidecar
+    /// was built. The raw text is not duplicated into analytics.
+    var workerRouteProfileID: String?
     var contentCharacterCount: Int
     var reasoningCharacterCount: Int
     var imageCount: Int
@@ -402,7 +441,10 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
     var createdAt: Date
 
     init(
+        id: UUID? = nil,
         role: AgentRole,
+        isOperatorInput: Bool? = nil,
+        workerRouteProfileID: String? = nil,
         contentCharacterCount: Int,
         reasoningCharacterCount: Int = 0,
         imageCount: Int = 0,
@@ -428,7 +470,10 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
         requestStablePrefixCharacters: Int? = nil,
         createdAt: Date
     ) {
+        self.id = id
         self.role = role
+        self.isOperatorInput = isOperatorInput
+        self.workerRouteProfileID = workerRouteProfileID
         self.contentCharacterCount = contentCharacterCount
         self.reasoningCharacterCount = reasoningCharacterCount
         self.imageCount = imageCount
@@ -457,7 +502,13 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
 
     init(message: AgentMessage) {
         self.init(
+            id: message.id,
             role: message.role,
+            isOperatorInput: message.isOperatorInput,
+            workerRouteProfileID: message.isOperatorInput
+                && message.delegationPolicy != .forbidden
+                ? AgentRequestRouter.classify(message.content).profileID
+                : nil,
             contentCharacterCount: message.modelContent.count,
             reasoningCharacterCount: message.reasoningContent?.count ?? 0,
             imageCount: message.images.count,
@@ -563,6 +614,7 @@ enum AgentUsageStats {
             subagentUsage: subagentUsage(for: sessions),
             subagentSessionCount: sessions.count { session in
                 session.messages.contains { !$0.subagentProfileIDs.isEmpty }
+                    || !(session.hostWorkerRuns ?? []).isEmpty
             },
             skillWorkerKPIs: skillWorkerKPIs(for: sessions),
             heatmapCells: heatmap(for: sessions, weekCount: heatmapWeekCount, now: now),
@@ -920,7 +972,9 @@ enum AgentUsageStats {
             // accounting existed) makes the cheap tier look free: the whole
             // point of the tier is that these tokens moved somewhere cheaper,
             // and that only shows up if they are counted where they landed.
-            for run in session.messages.flatMap(\.subagentRuns) {
+            let workerUsages = session.messages.flatMap(\.subagentRuns)
+                + (session.hostWorkerRuns ?? []).compactMap(\.usage)
+            for run in workerUsages {
                 let modelID = normalizedModelID(run.model)
                 let declaredProviderID = run.providerID?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -1019,33 +1073,70 @@ enum AgentUsageStats {
         let deepID = AgentSubagentProfileCatalog.deep.id
 
         for session in sessions {
-            for message in session.messages {
-                if message.role == .assistant {
-                    kpis.parentTurnCount += 1
+            var currentEligibleUserMessageID: UUID?
+            var eligibleUserMessageIDs = Set<UUID>()
+            var handledUserMessageIDs = Set<UUID>()
+
+            func recordRun(profileID: String, usage: AgentSubagentRunUsage?) {
+                if profileID == deepID {
+                    kpis.deepRunCount += 1
+                } else {
+                    kpis.narrowRunCount += 1
+                    if usage?.escalatedFromModel != nil {
+                        kpis.escalatedRunCount += 1
+                    }
                 }
-                for run in message.subagentRuns {
-                    if run.profileID == deepID {
-                        kpis.deepRunCount += 1
-                    } else {
-                        kpis.narrowRunCount += 1
-                        if run.escalatedFromModel != nil {
-                            kpis.escalatedRunCount += 1
-                        }
-                    }
-                    // Only runs that were actually verified count toward the
-                    // success rate; `nil` is "never checked", not "failed".
-                    if let passed = run.verifierPassed {
-                        kpis.verifiedRunCount += 1
-                        if passed { kpis.verifiedPassCount += 1 }
-                    }
-                    // Report-only runs land here instead: no verdict to count,
-                    // but the places they named either exist or they do not.
-                    if let checked = run.citationsChecked, checked > 0 {
-                        kpis.citationsChecked += checked
-                        kpis.citationsResolved += checked - (run.citationsUnverifiable ?? 0)
-                    }
+                guard let usage else { return }
+                if let passed = usage.verifierPassed {
+                    kpis.verifiedRunCount += 1
+                    if passed { kpis.verifiedPassCount += 1 }
+                }
+                if let checked = usage.citationsChecked, checked > 0 {
+                    kpis.citationsChecked += checked
+                    kpis.citationsResolved += checked - (usage.citationsUnverifiable ?? 0)
                 }
             }
+
+            for message in session.messages {
+                if message.isOperatorInput == true,
+                   message.workerRouteProfileID != nil,
+                   let messageID = message.id {
+                    eligibleUserMessageIDs.insert(messageID)
+                    currentEligibleUserMessageID = messageID
+                }
+                if message.role == .assistant, message.origin != .delegatedExternal {
+                    kpis.parentTurnCount += 1
+                    if !message.subagentRuns.isEmpty,
+                       let currentEligibleUserMessageID {
+                        handledUserMessageIDs.insert(currentEligibleUserMessageID)
+                    }
+                }
+                for run in message.subagentRuns {
+                    recordRun(profileID: run.profileID, usage: run)
+                }
+            }
+
+            for hostRun in session.hostWorkerRuns ?? [] where hostRun.startedAt != nil {
+                recordRun(profileID: hostRun.profileID, usage: hostRun.usage)
+                if hostRun.source == .automaticCoding {
+                    kpis.automaticCodingRunCount += 1
+                    if hostRun.acceptedOutput == true {
+                        kpis.straightThroughDeliveryCount += 1
+                    }
+                    if hostRun.requiredParentRepair == true {
+                        kpis.parentRepairCodingRunCount += 1
+                    }
+                }
+                if let userMessageID = hostRun.userMessageID,
+                   eligibleUserMessageIDs.contains(userMessageID) {
+                    handledUserMessageIDs.insert(userMessageID)
+                }
+            }
+            kpis.codingPlanCacheHitCount += (session.hostWorkerRuns ?? []).filter {
+                $0.source == .codingPlanCacheHit
+            }.count
+            kpis.eligibleUserTurnCount += eligibleUserMessageIDs.count
+            kpis.workerHandledUserTurnCount += handledUserMessageIDs.count
         }
 
         return kpis
@@ -1055,6 +1146,7 @@ enum AgentUsageStats {
         for sessions: [AgentUsageSessionSnapshot]
     ) -> [AgentSubagentUsageRow] {
         var invocationCounts: [String: Int] = [:]
+        var runCounts: [String: Int] = [:]
         var sessionIDs: [String: Set<UUID>] = [:]
 
         for session in sessions {
@@ -1062,12 +1154,26 @@ enum AgentUsageStats {
                 invocationCounts[profileID, default: 0] += 1
                 sessionIDs[profileID, default: []].insert(session.id)
             }
+            for run in session.messages.flatMap(\.subagentRuns) {
+                runCounts[run.profileID, default: 0] += 1
+                sessionIDs[run.profileID, default: []].insert(session.id)
+            }
+            for hostRun in session.hostWorkerRuns ?? [] {
+                guard hostRun.source != .codingPlanCacheHit else { continue }
+                invocationCounts[hostRun.profileID, default: 0] += 1
+                sessionIDs[hostRun.profileID, default: []].insert(session.id)
+                if hostRun.startedAt != nil {
+                    runCounts[hostRun.profileID, default: 0] += 1
+                }
+            }
         }
 
-        return invocationCounts.map { profileID, invocationCount in
+        let profileIDs = Set(invocationCounts.keys).union(runCounts.keys)
+        return profileIDs.map { profileID in
             AgentSubagentUsageRow(
                 profileID: profileID,
-                invocationCount: invocationCount,
+                invocationCount: invocationCounts[profileID] ?? 0,
+                runCount: runCounts[profileID] ?? 0,
                 sessionCount: sessionIDs[profileID]?.count ?? 0
             )
         }

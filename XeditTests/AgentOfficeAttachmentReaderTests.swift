@@ -10,7 +10,7 @@ import Testing
 @testable import WillDeep
 
 @Suite
-struct AgentOfficeAttachmentReaderTests {
+nonisolated struct AgentOfficeAttachmentReaderTests {
     @Test("Composer attachment allow-list covers text, source, PDF, Word, and Excel files")
     func composerAttachmentAllowList() {
         for filename in [
