@@ -316,13 +316,15 @@ struct AgentClient {
         model: String,
         messages: [AgentMessage],
         tools: [AgentToolDescriptor],
-        supportsImages: Bool = true
+        supportsImages: Bool = true,
+        disableThinking: Bool = false
     ) throws -> Data {
         try OpenAIChatAdapter.encodeChatRequest(
             model: model,
             messages: messages,
             tools: tools,
-            supportsImages: supportsImages
+            supportsImages: supportsImages,
+            disableThinking: disableThinking
         )
     }
 }

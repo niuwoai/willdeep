@@ -11,11 +11,19 @@ import Combine
 
 struct AgentLocalModelSettings: Codable, Equatable {
     static let defaultBaseURL = "http://127.0.0.1:11434/v1"
-    static let defaultVisionModelID = "qwen3.5-4b-vl-q4_k_m"
-    static let defaultSummaryModelID = "qwen3.5-4b-q4_k_m"
+    static let defaultVisionModelID = "gemma4:e2b"
+    static let defaultSummaryModelID = "gemma4:e2b"
     static let defaultModelID = defaultSummaryModelID
     static let defaultComposerDisplayName = "Local Chat (Ollama)"
     static let composerProviderEntryID = UUID(uuidString: "9C9B8A64-4F84-4D9C-8F4F-4C7C6F63616C")!
+
+    private static let legacyDefaultVisionModelIDs: Set<String> = [
+        "qwen3.5-4b-vl-q4_k_m",
+        "qwen3.5-4b-q4_k_m"
+    ]
+    private static let legacyDefaultSummaryModelIDs: Set<String> = [
+        "qwen3.5-4b-q4_k_m"
+    ]
 
     var enabled: Bool
     var baseURL: String
@@ -117,10 +125,10 @@ struct AgentLocalModelSettings: Codable, Equatable {
         if result.baseURL.isEmpty {
             result.baseURL = Self.defaultBaseURL
         }
-        if result.visionModel.isEmpty || result.visionModel == Self.defaultSummaryModelID {
+        if result.visionModel.isEmpty || Self.legacyDefaultVisionModelIDs.contains(result.visionModel) {
             result.visionModel = Self.defaultVisionModelID
         }
-        if result.summaryModel.isEmpty {
+        if result.summaryModel.isEmpty || Self.legacyDefaultSummaryModelIDs.contains(result.summaryModel) {
             result.summaryModel = Self.defaultSummaryModelID
         }
         if result.composerDisplayName.isEmpty {
@@ -150,7 +158,7 @@ enum AgentLocalAuxiliaryPurpose {
 }
 
 nonisolated enum AgentLocalModelPrompting {
-    static func prefersLocalLanguageInstruction(_ configuration: AgentConfiguration) -> Bool {
+    static func isLocalProvider(_ configuration: AgentConfiguration) -> Bool {
         if configuration.providerID == "ollama" {
             return true
         }
@@ -158,6 +166,10 @@ nonisolated enum AgentLocalModelPrompting {
             return false
         }
         return ["localhost", "127.0.0.1", "::1"].contains(host)
+    }
+
+    static func prefersLocalLanguageInstruction(_ configuration: AgentConfiguration) -> Bool {
+        isLocalProvider(configuration)
     }
 
     static func applyLanguageInstruction(to systemPrompt: String, configuration: AgentConfiguration) -> String {

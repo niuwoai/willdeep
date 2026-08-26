@@ -57,7 +57,8 @@ struct OpenAIChatAdapter {
             model: configuration.model,
             messages: requestMessages,
             tools: tools,
-            supportsImages: configuration.supportsImageInput
+            supportsImages: configuration.supportsImageInput,
+            disableThinking: AgentLocalModelPrompting.isLocalProvider(configuration)
         )
         request.httpBody = requestBody
 
@@ -200,7 +201,7 @@ struct OpenAIChatAdapter {
             environmentTrust: environmentTrust
         )
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": configuration.model,
             "stream": false,
             "max_tokens": AgentInjectionDefense.judgeMaxOutputTokens,
@@ -210,6 +211,7 @@ struct OpenAIChatAdapter {
                 ["role": "user", "content": userPayload]
             ]
         ]
+        Self.disableThinkingIfNeeded(in: &body, configuration: configuration)
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
             return .unavailable("encode failed")
         }
@@ -265,7 +267,7 @@ struct OpenAIChatAdapter {
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model,
             "stream": false,
             "max_tokens": maxTokens,
@@ -282,6 +284,7 @@ struct OpenAIChatAdapter {
                 ["role": "user", "content": userPayload]
             ]
         ]
+        Self.disableThinkingIfNeeded(in: &body, configuration: configuration)
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else { return nil }
         request.httpBody = payload
 
@@ -452,7 +455,8 @@ struct OpenAIChatAdapter {
         model: String,
         messages: [AgentMessage],
         tools: [AgentToolDescriptor],
-        supportsImages: Bool = true
+        supportsImages: Bool = true,
+        disableThinking: Bool = false
     ) throws -> Data {
         let providerMessages = providerReadyMessages(messages, supportsImages: supportsImages)
         var body: [String: Any] = [
@@ -472,7 +476,18 @@ struct OpenAIChatAdapter {
             body["tools"] = tools.map(encodeTool)
             body["tool_choice"] = "auto"
         }
+        if disableThinking {
+            body["reasoning_effort"] = "none"
+        }
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    }
+
+    private static func disableThinkingIfNeeded(
+        in body: inout [String: Any],
+        configuration: AgentConfiguration
+    ) {
+        guard AgentLocalModelPrompting.isLocalProvider(configuration) else { return }
+        body["reasoning_effort"] = "none"
     }
 
     /// Chat Completions does not accept `image_url` parts on a `tool`

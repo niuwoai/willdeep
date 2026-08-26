@@ -352,9 +352,9 @@ struct AgentProviderLibraryTests {
         let local = AgentConfiguration(
             providerID: AgentProviderPreset.ollamaID,
             baseURL: "http://127.0.0.1:11434/v1",
-            model: "qwen3.5-4b-q4_k_m",
-            flashModel: "qwen3.5-4b-q4_k_m",
-            proModel: "qwen3.5-4b-q4_k_m",
+            model: AgentLocalModelSettings.defaultModelID,
+            flashModel: AgentLocalModelSettings.defaultModelID,
+            proModel: AgentLocalModelSettings.defaultModelID,
             routingMode: .flash,
             imageDescription: .default,
             apiKey: ""
@@ -386,12 +386,12 @@ struct AgentProviderLibraryTests {
     }
 
     @Test
-    func localModelSettingsMigrateOldTextVisionDefaultToVL() {
+    func localModelSettingsMigrateLegacyQwenDefaultsToGemma4() {
         let settings = AgentLocalModelSettings(
             enabled: true,
             baseURL: AgentLocalModelSettings.defaultBaseURL,
-            visionModel: AgentLocalModelSettings.defaultSummaryModelID,
-            summaryModel: AgentLocalModelSettings.defaultSummaryModelID,
+            visionModel: "qwen3.5-4b-vl-q4_k_m",
+            summaryModel: "qwen3.5-4b-q4_k_m",
             preferForImageUnderstanding: true,
             preferForTitles: true,
             preferForContextSummaries: false,
@@ -401,6 +401,53 @@ struct AgentProviderLibraryTests {
 
         #expect(settings.visionModel == AgentLocalModelSettings.defaultVisionModelID)
         #expect(settings.summaryModel == AgentLocalModelSettings.defaultSummaryModelID)
+    }
+
+    @Test
+    func localModelSettingsPreserveCustomModelIDs() {
+        let settings = AgentLocalModelSettings(
+            enabled: true,
+            baseURL: AgentLocalModelSettings.defaultBaseURL,
+            visionModel: "custom-vision",
+            summaryModel: "custom-summary",
+            preferForImageUnderstanding: true,
+            preferForTitles: true,
+            preferForContextSummaries: false,
+            exposeAsComposerModel: false,
+            composerDisplayName: AgentLocalModelSettings.defaultComposerDisplayName
+        ).normalized
+
+        #expect(settings.visionModel == "custom-vision")
+        #expect(settings.summaryModel == "custom-summary")
+    }
+
+    @Test
+    func localProviderDetectionIncludesOllamaAndLoopbackEndpoints() {
+        let ollama = AgentLocalModelSettings.default.configuration(model: "gemma4:e2b")
+        let loopback = AgentConfiguration(
+            providerID: "custom",
+            baseURL: "http://localhost:1234/v1",
+            model: "local-model",
+            flashModel: "local-model",
+            proModel: "local-model",
+            routingMode: .flash,
+            imageDescription: .default,
+            apiKey: ""
+        )
+        let remote = AgentConfiguration(
+            providerID: "custom",
+            baseURL: "https://example.com/v1",
+            model: "remote-model",
+            flashModel: "remote-model",
+            proModel: "remote-model",
+            routingMode: .flash,
+            imageDescription: .default,
+            apiKey: ""
+        )
+
+        #expect(AgentLocalModelPrompting.isLocalProvider(ollama))
+        #expect(AgentLocalModelPrompting.isLocalProvider(loopback))
+        #expect(!AgentLocalModelPrompting.isLocalProvider(remote))
     }
 
     @Test
