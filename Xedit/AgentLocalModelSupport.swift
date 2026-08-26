@@ -34,6 +34,12 @@ struct AgentLocalModelSettings: Codable, Equatable {
     var preferForImageUnderstanding: Bool
     var preferForTitles: Bool
     var preferForContextSummaries: Bool
+    /// Worker 路由判决是否先问本地模型。关掉（或整个本地加速关掉）时，
+    /// 路由回落到会话默认模型；两者都不可用时回落纯关键词判决。
+    /// 刻意不给它单独的模型字段：本机一次只能驻留一个模型，路由模型与
+    /// Summary 模型不同会让每轮会话在两个模型间来回换装，实测单次切换
+    /// 7.5–9.4 秒，比推理本身贵五倍。路由复用 `summaryModel`。
+    var preferForWorkerRouting: Bool
     var exposeAsComposerModel: Bool
     var composerDisplayName: String
 
@@ -45,6 +51,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         preferForImageUnderstanding: true,
         preferForTitles: true,
         preferForContextSummaries: false,
+        preferForWorkerRouting: true,
         exposeAsComposerModel: false,
         composerDisplayName: defaultComposerDisplayName
     )
@@ -57,6 +64,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         preferForImageUnderstanding: Bool,
         preferForTitles: Bool,
         preferForContextSummaries: Bool,
+        preferForWorkerRouting: Bool = AgentLocalModelSettings.defaultPreferForWorkerRouting,
         exposeAsComposerModel: Bool,
         composerDisplayName: String
     ) {
@@ -67,9 +75,13 @@ struct AgentLocalModelSettings: Codable, Equatable {
         self.preferForImageUnderstanding = preferForImageUnderstanding
         self.preferForTitles = preferForTitles
         self.preferForContextSummaries = preferForContextSummaries
+        self.preferForWorkerRouting = preferForWorkerRouting
         self.exposeAsComposerModel = exposeAsComposerModel
         self.composerDisplayName = composerDisplayName
     }
+
+    /// `default` 自己要用它初始化，所以不能从 `Self.default` 取。
+    static let defaultPreferForWorkerRouting = true
 
     enum CodingKeys: String, CodingKey {
         case enabled
@@ -80,6 +92,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         case preferForSummaries
         case preferForTitles
         case preferForContextSummaries
+        case preferForWorkerRouting
         case exposeAsComposerModel
         case composerDisplayName
     }
@@ -99,6 +112,8 @@ struct AgentLocalModelSettings: Codable, Equatable {
             ?? defaults.preferForTitles
         self.preferForContextSummaries = try c.decodeIfPresent(Bool.self, forKey: .preferForContextSummaries)
             ?? defaults.preferForContextSummaries
+        self.preferForWorkerRouting = try c.decodeIfPresent(Bool.self, forKey: .preferForWorkerRouting)
+            ?? defaults.preferForWorkerRouting
         self.exposeAsComposerModel = try c.decodeIfPresent(Bool.self, forKey: .exposeAsComposerModel)
             ?? defaults.exposeAsComposerModel
         self.composerDisplayName = try c.decodeIfPresent(String.self, forKey: .composerDisplayName)
@@ -114,6 +129,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         try c.encode(preferForImageUnderstanding, forKey: .preferForImageUnderstanding)
         try c.encode(preferForTitles, forKey: .preferForTitles)
         try c.encode(preferForContextSummaries, forKey: .preferForContextSummaries)
+        try c.encode(preferForWorkerRouting, forKey: .preferForWorkerRouting)
         try c.encode(exposeAsComposerModel, forKey: .exposeAsComposerModel)
         try c.encode(composerDisplayName, forKey: .composerDisplayName)
     }
@@ -157,6 +173,7 @@ enum AgentLocalAuxiliaryPurpose {
     case imageUnderstanding
     case title
     case contextSummary
+    case workerRouting
 }
 
 nonisolated enum AgentLocalModelPrompting {
@@ -678,7 +695,19 @@ extension AppState {
         case .contextSummary:
             guard settings.preferForContextSummaries else { return nil }
             return settings.configuration(model: settings.summaryModel)
+        case .workerRouting:
+            guard settings.preferForWorkerRouting else { return nil }
+            return settings.configuration(model: settings.summaryModel)
         }
+    }
+
+    /// 路由判决的模型候选：本地辅助模型（启用且勾选时）→ 会话默认模型。
+    /// 两者都拿不到时调用方回落到纯关键词判决。
+    func workerRoutingConfigurationCandidates(fallback: AgentConfiguration) -> [AgentConfiguration] {
+        auxiliaryConfigurationCandidates(
+            local: localAuxiliaryConfiguration(for: .workerRouting),
+            fallback: fallback
+        )
     }
 
     func imageDescriptionConfigurationCandidates(fallback: AgentConfiguration) -> [AgentConfiguration] {
