@@ -9,6 +9,7 @@
 
 - **收藏夹插件随 App 发行，默认出现在左侧插件分组**：`PluginExamples/favorites` 现在由 Xcode 的「Bundle built-in plugins」阶段复制进 `BundledPlugins/favorites`（清单、本地化、`mcp.json`、`server/` 与静态页），目的地声明 `defaultPinned`，不需要用户手工安装。页面也整体重做：搜索并高亮命中、标签过滤与直方图、行内改备注、置顶、长文本折叠、删除后 6 秒内可撤销、清空要点两次、⌘F / `/` 聚焦搜索、中英双语与深浅色跟随宿主。
 - 收藏夹服务端从三个工具扩到六个：`add` / `list` / `update` / `remove` / `restore` / `clear`。同一段文字重复收藏会合并到已有那条并顶到最前（返回 `duplicate: true`）；`remove` 回传被删掉的整条以支撑撤销；`clear` 必须显式 `confirm=true`；标签会去空白、忽略大小写去重、限长限量。存储升到 `version: 2`（新增 `tags` / `pinned` / `updatedAt`），v1 老文件读进来自动补齐。
+- 会话体检插件包版本升到 `2.0.0`：它是「本地安装」来源的插件，同版本不同内容的重装会被注册表拒掉，升号后可以在插件中心用「从本地安装」指向 `PluginExamples/session-vitality` 直接覆盖到新版本。
 - **会话体检中心改用真实用量**：不再按「消息数 × 500」估算，而是逐条累加助手消息上报的 `promptTokens` / `completionTokens` / `cachedPromptTokens` / `usageTokens` / `elapsedSeconds`。面板新增缓存命中率、平均响应时长、工具调用数、模型请求数、近 14 天输出走势、按项目与模型的排行、最近会话列表，以及一键导出 Markdown 报告（新增 `vitality.export` 命令）。每文件摘要按 (mtime, size) 缓存：本机 578 个会话文件首次扫描 1.9 秒，之后刷新 6 毫秒。
 
 ### Fixed
