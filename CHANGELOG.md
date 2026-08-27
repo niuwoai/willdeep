@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.300.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.300.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.300.0-rc3 - 2026-08-27
+
+### Added
+
+- **会话体检中心也随 App 发行**：`PluginExamples/session-vitality` 加入 Xcode 的「Bundle built-in plugins」阶段（清单、本地化、侧栏 Schema、`mcp.json` 与 `server/`），装机即已批准、默认启用，不再需要用户手工「从本地安装」并逐条确认权限。它的页面由服务端当 MCP 资源发（`ui://vitality/main`），所以不需要额外带前端产物。左侧入口保持由用户自己固定（没有声明 `defaultPinned`）。
+
+### Tests
+
+- 新增内置插件打包守卫 `bundledPluginsShipEveryFileTheyNeedAtRuntime`：逐条解析构建阶段的 `bundle_plugin` 清单，校验登记的路径真实存在、清单里 localWeb 页面的 `entryPath` 被复制、有 `mcp.json` 的插件连同它 `${pluginRoot}` 指向的服务端脚本一起带上。此前只针对收藏夹写死的那条断言被它取代——加了文件却忘了登记，装进 App 就是点不开，这类漏带以后会在测试里当场红。
 
 ## 1.300.0-rc2 - 2026-08-27
 
