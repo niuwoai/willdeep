@@ -26,6 +26,14 @@ export const en: Record<string, string> = {
   'games.memory.description': 'Flip pairs and clear the board in the fewest moves.',
   'games.memory.controls': 'Click or tap cards to turn them and find every pair.',
 
+  'games.onet.name': 'Onet Link',
+  'games.onet.description': 'Match identical tiles linked by a path with at most two turns.',
+  'games.onet.controls': 'Tap two identical tiles; hint and shuffle sit above the board.',
+
+  'games.marble.name': 'Inca Marbles',
+  'games.marble.description': 'Marbles roll down a spiral — shoot three of a kind to clear the chain.',
+  'games.marble.controls': 'Aim with pointer or touch and click to shoot; arrows aim, space shoots, S swaps.',
+
   'game.back': 'Back to lobby',
   'game.bestScore': 'Best score',
   'game.noScore': 'No record yet',

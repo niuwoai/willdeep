@@ -3,6 +3,8 @@
  *
  * 契约约束：
  *  - 一切随机只经 createRng / shuffle（src/core/rng.ts），同一种子完全可复现
+ *  - 每次重开换一副牌：牌组种子 = `<基准种子>#<局数>`，所以「同一基准种子下的
+ *    第 N 局」依旧完全确定可复现，但玩家连按重开不会再拿到同一张布局表
  *  - 不触碰共享契约文件（src/core/*、src/games/manifest.ts、i18n 字典）
  *  - 步数（moves）= 翻开第二张牌的次数（每次“尝试”计 1）；全部配对后胜利
  *  - 最佳成绩 = 效率分 scoreFor(pairs, moves)：更高分更好，
@@ -18,7 +20,10 @@ export interface MemoryCard {
 export type MemoryStatus = 'idle' | 'playing' | 'won';
 
 export interface MemoryState {
+  /** 基准种子：来自 `?seed=`，缺省时由组件生成一次性熵种子。 */
   seed: string;
+  /** 局数，从 0 开始；每次重开 +1，参与牌组种子推导。 */
+  round: number;
   /** 牌对数（牌面数 = pairs * 2）。 */
   pairs: number;
   /** 洗牌后的牌组（确定性，取决于 pairs 与 seed）。 */
@@ -45,6 +50,11 @@ export const MISMATCH_MS = 600;
 const SCORE_PER_PAIR = 100;
 const SCORE_PER_MOVE = 10;
 
+/** 牌组种子：基准种子 + 局数，保证「重开换布局」与「可复现」同时成立。 */
+export function deckSeed(seed: string, round: number): string {
+  return `${seed}#${round}`;
+}
+
 /** 构造确定性的成对牌组并洗牌：每个 pairId 恰好出现两次。 */
 export function buildDeck(pairs: number, seed: string): MemoryCard[] {
   const deck: MemoryCard[] = [];
@@ -55,12 +65,13 @@ export function buildDeck(pairs: number, seed: string): MemoryCard[] {
 }
 
 /** 新局初始状态：全部牌面朝下、零步数、idle。 */
-export function createInitialState(pairs: number, seed?: string): MemoryState {
+export function createInitialState(pairs: number, seed?: string, round = 0): MemoryState {
   const normalizedSeed = seed ?? 'memory';
   return {
     seed: normalizedSeed,
+    round,
     pairs,
-    cards: buildDeck(pairs, normalizedSeed),
+    cards: buildDeck(pairs, deckSeed(normalizedSeed, round)),
     flipped: [],
     matched: [],
     moves: 0,
@@ -69,9 +80,12 @@ export function createInitialState(pairs: number, seed?: string): MemoryState {
   };
 }
 
-/** 重开复位：同牌对数、同种子重建一局（确定性布局不变，进度清零）。 */
+/**
+ * 重开：局数 +1 重建一局——牌对数与基准种子不变，但换一副新洗的牌。
+ * 玩家反复重开不会再撞上同一张布局；同一基准种子下第 N 局仍完全可复现。
+ */
 export function restart(state: MemoryState): MemoryState {
-  return createInitialState(state.pairs, state.seed);
+  return createInitialState(state.pairs, state.seed, state.round + 1);
 }
 
 /** 翻开下标为 index 的牌。返回新状态；非法/已处理的操作返回原状态。 */

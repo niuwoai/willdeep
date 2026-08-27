@@ -5,7 +5,18 @@
   align-items: center;
   gap: 12px;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
+
+/*
+ * 棋盘尺寸规则（1.297.0-rc1 修）：
+ *   旧版用 width: min(92vw, 420px)。视口单位在插件面板里并不等于「可视宽度」——
+ *   宿主窗口/面板宽度与 WKWebView 布局视口不一致时，棋盘会按视口算出比容器还宽
+ *   的尺寸，表现就是选「挑战 · 6 对」时牌被撑大、页面横向出滚动条。
+ *   现在改成容器相对（width: 100%）+ 每张牌绝对上限（--memory-cell），
+ *   棋盘既不可能超出容器，也不可能把单张牌放大到离谱尺寸。
+ */
 
 .memory__bar {
   display: flex;
@@ -47,9 +58,17 @@
 }
 
 .memory__board {
+  --memory-cols: 4;
+  --memory-cell: 96px;
+  --memory-gap: 8px;
   display: grid;
-  gap: 8px;
-  width: min(92vw, 420px);
+  gap: var(--memory-gap);
+  grid-template-columns: repeat(var(--memory-cols), minmax(0, 1fr));
+  width: 100%;
+  max-width: calc(
+    var(--memory-cols) * var(--memory-cell) + (var(--memory-cols) - 1) * var(--memory-gap)
+  );
+  margin: 0 auto;
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
@@ -57,6 +76,7 @@
 
 .memory__card {
   aspect-ratio: 1;
+  min-width: 0;
   min-height: 44px;
   border: 1px solid var(--border);
   border-radius: var(--radius);

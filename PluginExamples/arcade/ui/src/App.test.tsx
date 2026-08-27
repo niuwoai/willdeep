@@ -19,7 +19,7 @@ function renderApp() {
 const GAME_IDS = GAME_MANIFEST.map((g) => g.id);
 
 describe('大厅与路由（骨架契约）', () => {
-  it('大厅渲染五款游戏卡片（data-testid 契约）', () => {
+  it('大厅渲染清单里的全部游戏卡片（data-testid 契约）', () => {
     renderApp();
     expect(screen.getByTestId('lobby')).toBeInTheDocument();
     expect(screen.getByTestId('lobby-title')).toHaveTextContent('经典网页小游戏');

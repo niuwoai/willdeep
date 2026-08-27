@@ -4,7 +4,7 @@
 
 ## 1. 目标
 
-构建一个最小但完整的经典网页小游戏平台：统一游戏大厅 + 五款独立可游玩的游戏
+构建一个最小但完整的经典网页小游戏平台：统一游戏大厅 + 多款独立可游玩的游戏
 （贪吃蛇、俄罗斯方块、Pong、扫雷、记忆翻牌），支持响应式布局、键盘与触屏操作、
 localStorage 最佳成绩，并配套 Vitest 单元测试与 Playwright 端到端回归。
 
@@ -56,7 +56,7 @@ main.tsx
 
 ## 5. 并行开发与集成
 
-- 五个游戏模块由并行节点独立开发，仅触碰 `src/games/<id>/`。
+- 各游戏模块相互独立，仅触碰 `src/games/<id>/`；新增游戏 = 扩展 `GameId` + `manifest.ts` + i18n 文案。
 - 集成节点合并后替换占位实现，并校验 manifest import、i18n key 与 data-testid。
 - 验收节点执行 `yarn build`、`yarn test`、`yarn test:e2e` 全量回归。
 

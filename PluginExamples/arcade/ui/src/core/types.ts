@@ -6,8 +6,15 @@
  */
 import type { ComponentType } from 'react';
 
-/** 平台内置的五款游戏（最终上线集合）。 */
-export type GameId = 'snake' | 'tetris' | 'pong' | 'minesweeper' | 'memory';
+/** 平台内置游戏集合（新增游戏 = 扩展本联合类型 + games/manifest.ts + i18n 文案）。 */
+export type GameId =
+  | 'snake'
+  | 'tetris'
+  | 'pong'
+  | 'minesweeper'
+  | 'memory'
+  | 'onet'
+  | 'marble';
 
 /** 游戏渲染组件：由各游戏模块提供默认导出组件。 */
 export type GameComponent = ComponentType<GameProps>;
