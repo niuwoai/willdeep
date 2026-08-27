@@ -15,16 +15,21 @@ import Foundation
 /// over-trigger on that judgment — planning looks diligent — so every small
 /// task paid for a plan block plus the machinery that follows one
 /// (`update_plan` reporting rounds, format corrections, reconciliation).
-/// This policy inverts the decision: nothing plans upfront, and the only
-/// ground truth for "complex" is the turn actually running long. Crossing a
-/// threshold injects one host instruction asking for a plan that covers the
-/// remaining work.
+/// This policy inverts the decision: nothing plans upfront. A long read-only
+/// investigation remains evidence gathering; only a turn that has entered
+/// write execution can cross the threshold that asks for a remaining-work
+/// plan.
 ///
 /// Deliberately out of scope: Goal mode (the plan is the acceptance loop's
 /// skeleton) and unattended dispatch tasks (the dispatch board projects node
-/// state from plans) keep their own always-plan contracts, and a user who
-/// asks for a plan gets one regardless of size.
+/// state from plans) keep their own always-plan contracts. An ordinary user
+/// request for planning still obeys the visible three-step minimum below.
 nonisolated enum AgentPlanOnDemandPolicy {
+    /// Ordinary visible checklists need enough independent work to justify
+    /// their own lifecycle and progress chrome. One or two actions are an
+    /// execution note, not a plan.
+    static let minimumVisibleStepCount = 3
+
     /// Completed tool rounds before the host asks for a checklist. Four full
     /// rounds of tool calls is past every quick lookup-and-fix; the request
     /// lands at the top of the fifth.
@@ -47,7 +52,13 @@ nonisolated enum AgentPlanOnDemandPolicy {
               !hasActivePlan else {
             return false
         }
-        return toolRound >= toolRoundThreshold
+        // Read-only rounds alone never earn a plan. Research, analysis,
+        // diagnosis, log inspection, and operations troubleshooting often
+        // need many evidence-gathering calls, but turning that exploration
+        // into a checklist adds ceremony without clarifying execution. Once
+        // a mutation succeeds, a long turn has crossed into execution and a
+        // remaining-work checklist can become useful.
+        return (succeededWriteCalls > 0 && toolRound >= toolRoundThreshold)
             || succeededWriteCalls >= succeededWriteCallThreshold
     }
 
@@ -60,7 +71,7 @@ nonisolated enum AgentPlanOnDemandPolicy {
     static func requestNotice(toolRound: Int) -> String {
         """
         === PLAN REQUESTED — TASK HAS GROWN MULTI-STEP ===
-        This turn has already run \(toolRound) tool rounds without a visible checklist, so the user cannot see progress or remaining scope. In this reply, first emit exactly one complete numbered `plan` fenced block covering the REMAINING work — do not restate finished stages as pending steps — then continue executing immediately in the same reply. Planning is not a stopping point and needs no approval. From then on, report step statuses with the `update_plan` tool as they change.
+        This turn has already crossed from evidence gathering into multi-step execution after \(toolRound) tool rounds. If at least \(minimumVisibleStepCount) independent steps still remain, first emit exactly one complete numbered `plan` fenced block covering only that REMAINING work — do not restate finished stages as pending steps — then continue executing immediately in the same reply. If fewer than \(minimumVisibleStepCount) independent steps remain, do not emit a plan block; continue directly. Planning is not a stopping point and needs no approval. From then on, report step statuses with the `update_plan` tool as they change.
         """
     }
 }
