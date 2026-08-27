@@ -700,9 +700,9 @@ enum AgentToolApprovalSource: String, Equatable, Codable {
     /// The user marked this MCP server as fully trusted ("my own MCP")
     /// in MCP settings -- every call to it auto-runs, writes included.
     case trustedServer
-    /// An editor-trade subagent patching the single file the user approved
-    /// when the spawn itself was confirmed. The approval is per-file and
-    /// granted up front, so its patches apply without re-asking per hunk.
+    /// An editor-trade subagent patching the single file declared by its
+    /// parent. The host enforces that exact path as the worker's write
+    /// boundary, so its patches apply without asking per hunk.
     case subagentEditor
 }
 
@@ -734,6 +734,10 @@ struct AgentToolCall: Identifiable, Equatable {
     /// spawn starts so the card can answer "用的哪个子代理" — previously
     /// this was collected in the registry but never surfaced in the UI.
     var subagentModel: String?
+    /// For `spawn_agent`: localized name of the resolved Worker trade that
+    /// actually runs. This is stamped after role/profile resolution so the
+    /// activity rail names the executor instead of merely saying "subagent".
+    var subagentWorkerName: String?
     /// For `spawn_agent`: a short live-progress line for the child loop
     /// ("第 3/12 轮 · 5 次工具"), refreshed each round so the card shows
     /// forward motion instead of an opaque "委派中" spinner.
@@ -760,6 +764,7 @@ struct AgentToolCall: Identifiable, Equatable {
         commandExitCode: Int32? = nil,
         approvalSource: AgentToolApprovalSource? = nil,
         subagentModel: String? = nil,
+        subagentWorkerName: String? = nil,
         subagentProgress: String? = nil,
         subagentRunID: UUID? = nil,
         delegatedProgress: AgentDelegatedLiveProgress? = nil
@@ -776,6 +781,7 @@ struct AgentToolCall: Identifiable, Equatable {
         self.commandExitCode = commandExitCode
         self.approvalSource = approvalSource
         self.subagentModel = subagentModel
+        self.subagentWorkerName = subagentWorkerName
         self.subagentProgress = subagentProgress
         self.subagentRunID = subagentRunID
         self.delegatedProgress = delegatedProgress

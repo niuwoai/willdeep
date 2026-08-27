@@ -1606,6 +1606,10 @@ struct AgentToolCallCard: View {
     /// 完整命令（默认约 3 行高，超出滚动查看）；网页、控制键及通用工具
     /// 分别展示地址、友好按键说明或参数明细。
     private var approvalDetail: (title: String, body: String)? {
+        if call.toolName == "spawn_agent",
+           let detail = AgentDelegatedCommandApprovalCopy.detail(arguments: call.arguments) {
+            return (detail.title, detail.body)
+        }
         if let command = fullCommand {
             var body = command
             if call.toolName == "terminal_send_command",

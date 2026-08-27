@@ -82,4 +82,52 @@ extension L10n.ToolCard {
         localized: "tool-card.authorization.sandbox-escalation.automatic-approval-reason",
         defaultValue: "The active approval policy automatically authorized re-running the same command outside the sandbox."
     )
+
+    static let delegatedCommandTitle = String(
+        localized: "tool-card.authorization.delegated-command.title",
+        defaultValue: "Ready to run an operation that changes repository or remote state"
+    )
+    static func delegatedCommandGoal(_ goal: String) -> String {
+        let template = String(
+            localized: "tool-card.authorization.delegated-command.goal",
+            defaultValue: "Goal: %@"
+        )
+        return String(format: template, goal)
+    }
+    static let delegatedCommandSubtitle = String(
+        localized: "tool-card.authorization.delegated-command.subtitle",
+        defaultValue: "The operations Worker will run the exact command below."
+    )
+    static let delegatedCommandDetail = String(
+        localized: "tool-card.authorization.delegated-command.detail",
+        defaultValue: "Exact command to run"
+    )
+    static let delegatedCommandWorker = String(
+        localized: "tool-card.authorization.delegated-command.worker",
+        defaultValue: "Run by the operations Worker"
+    )
+    static let delegatedCommandExactScope = String(
+        localized: "tool-card.authorization.delegated-command.exact-scope",
+        defaultValue: "Only this exact command is authorized"
+    )
+    static let delegatedCommandExplanation = String(
+        localized: "tool-card.authorization.delegated-command.explanation",
+        defaultValue: "Why confirmation is needed"
+    )
+    static let delegatedCommandDecisionTitle = String(
+        localized: "tool-card.authorization.delegated-command.decision-title",
+        defaultValue: "Run this operation?"
+    )
+    static let delegatedCommandDecisionSubtitle = String(
+        localized: "tool-card.authorization.delegated-command.decision-subtitle",
+        defaultValue: "You are approving the write command below, not spawning the Worker. Any different command requires separate approval."
+    )
+    static let delegatedCommandDecline = String(
+        localized: "tool-card.authorization.delegated-command.decline",
+        defaultValue: "Not now"
+    )
+    static let delegatedCommandApprove = String(
+        localized: "tool-card.authorization.delegated-command.approve",
+        defaultValue: "Run operation"
+    )
 }

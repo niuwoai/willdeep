@@ -370,6 +370,21 @@ extension AppState {
             return nil
         }
 
+        // Creating a built-in worker is internal scheduling, not a security
+        // boundary. Even Strict mode should not stop to ask whether WillDeep
+        // may split its own work. Writing workers remain write-tier for audit,
+        // but their declared paths are still locked and checked on every edit.
+        //
+        // `ops_runner.target_command` is deliberately excluded: that field
+        // grants one exact command permission to change repository or remote
+        // state. If present, the confirmation is for the command, not for
+        // spawning the worker that will execute it.
+        if toolName == "spawn_agent",
+           !Self.subagentHasExactCommandAuthorization(arguments: arguments) {
+            if interactionMode == .goal { return .goalMode }
+            return approvalMode == .workspaceAccess ? .workspaceAccess : .staticAllowlist
+        }
+
         let sandboxDecision = AgentSandboxPolicy.decision(
             toolName: toolName,
             arguments: arguments,
@@ -435,6 +450,7 @@ extension AppState {
         // reach this function; untrusted MCP servers still hit the per-call
         // gate below.
         if interactionMode == .goal,
+           !Self.subagentHasExactCommandAuthorization(arguments: arguments),
            !sandboxDecision.requiresTypedConfirmation,
            !Self.isCommandShapedTool(toolName),
            sandboxDecision.mode != .escalated || Self.goalPlanningCanAutoApprove(
@@ -446,16 +462,6 @@ extension AppState {
 
         if approvalMode == .requestEveryTime {
             return nil
-        }
-
-        // Built-in writing subagents are coding workers, not an external
-        // effect. Smart and Workspace Access inherit the parent's bounded
-        // workspace-write grant, while Strict returned above. The execution
-        // path still locks and checks every declared path, so this removes a
-        // duplicate approval without widening the child's file authority.
-        if toolName == "spawn_agent",
-           Self.subagentWriteScopeIsBounded(arguments: arguments) {
-            return approvalMode == .workspaceAccess ? .workspaceAccess : .staticAllowlist
         }
 
         // Delegated coding agents can modify many files in one call. Smart
@@ -1044,26 +1050,13 @@ extension AppState {
         trustedDelegatedAgentToolNames.contains(toolName)
     }
 
-    nonisolated static func subagentWriteScopeIsBounded(
+    nonisolated static func subagentHasExactCommandAuthorization(
         arguments: [String: AgentJSONValue]
     ) -> Bool {
-        let profile = AgentSubagentProfileStore.resolvedProfile(
-            id: arguments["profile"]?.stringValue()
-        )
-        guard profile.requiresWriteAccess else { return false }
-
-        var targets: [String] = []
-        if case .array(let values)? = arguments["target_files"] {
-            targets = values.compactMap { $0.stringValue() }
-        } else if let target = arguments["target_file"]?.stringValue() {
-            targets = [target]
-        } else if profile.id != AgentSubagentProfileCatalog.editorID {
-            // Must match the write set `executeSpawnAgentToolCall` will
-            // actually lock, or the approval card would describe a different
-            // set of files than the one the worker gets.
-            targets = AgentSubagentTaskPacket.parse(arguments["task"])?.requestedWriteFiles ?? []
+        guard let command = arguments["target_command"]?.stringValue() else {
+            return false
         }
-        return AgentSubagentWriteAccess(targetRelativePaths: targets) != nil
+        return !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Remote media-generation lifecycle tools (submit / poll / cancel an

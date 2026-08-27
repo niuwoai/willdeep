@@ -125,7 +125,9 @@ struct AgentPluginCenterPage: View {
                 AgentPluginIcon(
                     icon: record.activePackage.codexManifest.interface?.logo
                         ?? record.activePackage.codexManifest.interface?.composerIcon,
-                    packageURL: record.activePackage.packageURL
+                    packageURL: record.activePackage.packageURL,
+                    presentation: .originalColor,
+                    fallbackSeed: record.pluginID
                 )
                 .frame(width: 30, height: 30)
                 .foregroundStyle(.primary)
@@ -170,7 +172,7 @@ struct AgentPluginCenterPage: View {
                     Button(L10n.Plugins.approve) {
                         stage(.local(record.activePackage.packageURL))
                     }
-                    .buttonStyle(AgentPluginPrimaryActionButtonStyle())
+                    .buttonStyle(AgentPluginApprovalActionButtonStyle())
                 }
                 Menu {
                     if let source = registry.installSource(for: record.activePackage) {
@@ -466,7 +468,9 @@ private struct AgentPluginApprovalSheet: View {
             HStack(spacing: 12) {
                 AgentPluginIcon(
                     icon: proposal.package.codexManifest.interface?.logo,
-                    packageURL: proposal.package.packageURL
+                    packageURL: proposal.package.packageURL,
+                    presentation: .originalColor,
+                    fallbackSeed: proposal.package.pluginID
                 )
                 .frame(width: 36, height: 36)
                 Text(proposal.package.displayName)
@@ -572,6 +576,32 @@ private struct AgentPluginPrimaryActionButtonStyle: ButtonStyle {
     private func backgroundOpacity(isPressed: Bool) -> Double {
         guard isEnabled else { return 0.35 }
         return isPressed ? 0.72 : 1
+    }
+}
+
+private struct AgentPluginApprovalActionButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.accentColor.opacity(isEnabled ? 0.95 : 0.5))
+            .padding(.horizontal, 12)
+            .frame(minHeight: 30)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.accentColor.opacity(backgroundOpacity(isPressed: configuration.isPressed)))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(Color.accentColor.opacity(isEnabled ? 0.20 : 0.08), lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    private func backgroundOpacity(isPressed: Bool) -> Double {
+        guard isEnabled else { return 0.05 }
+        return isPressed ? 0.18 : 0.11
     }
 }
 

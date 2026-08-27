@@ -10585,6 +10585,7 @@
     "app-termination.active-task.message" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quitting now may interrupt active work and stop progress updates. Do you still want to quit WillDeep?" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Salir ahora puede interrumpir el trabajo activo y detener las actualizaciones de progreso. ¿Aún quieres salir de WillDeep?" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Quitter maintenant risque d'interrompre le travail en cours et d'arrêter les mises à jour de progression. Voulez-vous tout de même quitter WillDeep ?" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "今終了すると、進行中の作業が中断され、進捗の更新が停止する可能性があります。それでも WillDeep を終了しますか？" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "现在退出可能会中断正在进行的工作，并停止更新任务进度。仍要退出 WillDeep 吗？" } } } },
     "app-termination.active-task.quit-anyway" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quit Anyway" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Salir de todos modos" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Quitter quand même" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "このまま終了" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仍要退出" } } } },
     "app-termination.active-task.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tasks are still running" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Aún hay tareas en ejecución" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Des tâches sont encore en cours" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクがまだ実行中です" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仍有任务正在进行" } } } },
+    "agent-delegation.activity.delegated-to-worker" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Delegated to %@ Worker" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Delegado al Worker «%@»" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Délégué au Worker « %@ »" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "「%@」Worker に委任" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "委派给「%@」Worker" } } } },
     "agent-delegation.profile-deep-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Deep" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Profundo" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Approfondi" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "精査" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深查" } } } },
     "agent-delegation.profile-deep-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Complex investigation: reasoning across many files, read-only shell commands, and git status." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Investigación compleja: razonamiento a través de muchos archivos, comandos de shell de solo lectura y estado de git." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Investigation complexe : raisonnement sur de nombreux fichiers, commandes shell en lecture seule et état Git." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "複雑な調査: 多数のファイルを横断した推論、読み取り専用の shell コマンド、git ステータスの確認。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复杂调查：跨多文件推理、只读 shell 命令和 git 状态。" } } } },
     "agent-delegation.profile-editor-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Editor" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Editor" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Éditeur" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "編集" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑" } } } },
@@ -79020,6 +79021,116 @@
             "value" : "Computer Use"
           }
         }
+      }
+    },
+    "tool-card.authorization.delegated-command.approve" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Run operation" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Ejecutar operación" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Exécuter l’opération" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "操作を実行" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行这项操作" } }
+      }
+    },
+    "tool-card.authorization.delegated-command.decision-subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "You are approving the write command below, not spawning the Worker. Any different command requires separate approval." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Estás aprobando el comando de escritura siguiente, no la creación del Worker. Cualquier comando diferente requiere otra aprobación." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Vous approuvez la commande d’écriture ci-dessous, pas la création du Worker. Toute autre commande nécessite une nouvelle autorisation." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "承認するのは下の書き込みコマンドであり、Worker の起動ではありません。別のコマンドには再承認が必要です。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你确认的是下方写操作，不是派生 Worker；任何不同的命令都要重新授权。" } }
+      }
+    },
+    "tool-card.authorization.delegated-command.decision-title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Run this operation?" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "¿Ejecutar esta operación?" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Exécuter cette opération ?" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "この操作を実行しますか？" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行这项操作吗？" } }
+      }
+    },
+    "tool-card.authorization.delegated-command.decline" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not now" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Ahora no" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Pas maintenant" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "今は実行しない" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "先不执行" } }
+      }
+    },
+    "tool-card.authorization.delegated-command.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Exact command to run" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Comando exacto que se ejecutará" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Commande exacte à exécuter" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "実行する正確なコマンド" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "将执行的完整命令" } }
+      }
+    },
+    "tool-card.authorization.delegated-command.exact-scope" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Only this exact command is authorized" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Solo se autoriza este comando exacto" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Seule cette commande exacte est autorisée" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "この正確なコマンドだけを許可" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "只授权这一条命令" } }
+      }
+    },
+    "tool-card.authorization.delegated-command.explanation" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Why confirmation is needed" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Por qué se necesita confirmación" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Pourquoi une confirmation est nécessaire" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "確認が必要な理由" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "为什么需要确认" } }
+      }
+    },
+    "tool-card.authorization.delegated-command.goal" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Goal: %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Objetivo: %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Objectif : %@" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "目的：%@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "目标：%@" } }
+      }
+    },
+    "tool-card.authorization.delegated-command.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The operations Worker will run the exact command below." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "El Worker de operaciones ejecutará exactamente el comando siguiente." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Le Worker d’exploitation exécutera exactement la commande ci-dessous." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "運用 Worker が下の正確なコマンドを実行します。" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "运维 Worker 将执行下方这条完整命令。" } }
+      }
+    },
+    "tool-card.authorization.delegated-command.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready to run an operation that changes repository or remote state" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Listo para ejecutar una operación que cambia el repositorio o el estado remoto" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Prêt à exécuter une opération qui modifie le dépôt ou l’état distant" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "リポジトリまたはリモートの状態を変更する操作を実行します" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "准备执行一项会改变仓库或远端状态的操作" } }
+      }
+    },
+    "tool-card.authorization.delegated-command.worker" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Run by the operations Worker" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Ejecutado por el Worker de operaciones" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Exécuté par le Worker d’exploitation" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "運用 Worker が実行" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "由运维 Worker 执行" } }
       }
     },
     "tool-card.authorization.sandbox-escalation.title" : {

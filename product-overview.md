@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-27 | Current version: v1.296.0-rc5
+> Last updated: 2026-08-27 | Current version: v1.296.0-rc8
 
 ## Positioning
 
@@ -12,6 +12,9 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **插件原彩图标与轻量批准操作（1.296.0-rc8）** —— 插件中心优先展示插件包自带的原色 PNG／SVG 品牌图标，缺失资源时根据插件标识生成稳定的彩色 SF Symbol 替代图标；高频出现的“批准并启用”使用柔和系统强调色底板与细描边，减少连续深色按钮造成的视觉压迫。
+- **Worker 委派执行者可见（1.296.0-rc7）** —— 对话底部的实时委派状态显示最终实际执行的 Worker 名称，并继续附带轮次、工具调用量与耗时，用户无需打开内部详情即可判断任务交给了阅读、实现、验证、运维、裁判或深查 Worker。
+- **Worker 派生免打扰与人性化写操作确认（1.296.0-rc6）** —— 创建内置 Worker 本身属于内部调度，即使 Strict 模式也不再弹出无意义的派生确认；只有 Worker 被授予精确提交、推送、发布等外部写命令时才向用户确认。确认页直接说明任务目标、实际影响和唯一获准命令，不再暴露内部 profile、label 与任务包参数。
 - **六类公开工种、长调查与分级命令审核（1.296.0-rc5）** —— 面向用户和父模型的目录收敛为阅读研究、实现、验证、运维、裁判、深度调查六类能力，模型档位由各工种的模型绑定独立配置；原专用 ID 仅在内部保留，旧 Workflow、托管链路和历史记录无需迁移。`ops_runner` 与 `terminal_operator` 的上限扩到 32 轮，补齐 Linux 主机、DNS、时钟、网络和资源检查类只读命令；所有原本携带命令工具的工种共享 Smart/Goal 安全模型审核，未获准的修改命令交回父代理请求人类精确授权，危险、凭据命令以及无命令工具的工种始终不能借此越权。
 - **Ollama 主 LLM 置顶标识（1.296.0-rc4）** —— Composer 的 Ollama 完整模型列表会优先显示本地模型设置里填写的 LLM，并用“本地 LLM”标签区分它与同一 Ollama 实例上的视觉、嵌入及其他模型；服务端列表即使重复返回该模型也只展示一次。
 - **本地文本／视觉模型分工与关闭思考兼容（1.296.0-rc3）** —— 设置页以“LLM 模型”和“图片理解模型”分别配置文本与视觉任务：LLM 负责本地聊天、标题、上下文压缩和 Worker 派发判断，视觉模型只处理图片且不会成为文本聊天的备用模型。Ollama 请求同时发送 `reasoning_effort: "none"`、`reasoning.effort: "none"` 与 `think: false`；其他回环 OpenAI-compatible 服务发送两种 OpenAI 形态，避免单一字段被兼容层忽略。远程模型不注入这些字段。

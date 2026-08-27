@@ -3,12 +3,66 @@
 //  WillDeepTests
 //
 
+import AppKit
 import Foundation
 import Testing
 @testable import WillDeep
 
 @Suite(.serialized)
 struct AgentPluginSystemTests {
+    @Test @MainActor
+    func pluginArtworkKeepsItsOriginalColorsInThePluginCenter() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let iconURL = root.appendingPathComponent("icon.tiff")
+        let sourceImage = NSImage(size: NSSize(width: 8, height: 8), flipped: false) { rect in
+            NSColor.systemRed.setFill()
+            NSBezierPath(rect: rect).fill()
+            return true
+        }
+        let imageData = try #require(sourceImage.tiffRepresentation)
+        try imageData.write(to: iconURL, options: .atomic)
+
+        let original = try #require(AgentPluginIcon.loadImage(
+            icon: "icon.tiff",
+            packageURL: root,
+            presentation: .originalColor
+        ))
+        let monochrome = try #require(AgentPluginIcon.loadImage(
+            icon: "icon.tiff",
+            packageURL: root,
+            presentation: .monochrome
+        ))
+
+        #expect(!original.isTemplate)
+        #expect(monochrome.isTemplate)
+    }
+
+    @Test
+    func missingPluginArtworkGetsAStableGeneratedStyle() {
+        let first = AgentPluginFallbackIconStyle.resolve(seed: "example-plugin")
+        let repeated = AgentPluginFallbackIconStyle.resolve(seed: "example-plugin")
+
+        #expect(first == repeated)
+        #expect(!first.symbolName.isEmpty)
+        #expect((0..<6).contains(first.paletteIndex))
+    }
+
+    @Test
+    func pluginApprovalUsesTheSoftAccentActionStyle() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentPluginCenterPage.swift"),
+            encoding: .utf8
+        )
+
+        #expect(source.contains(".buttonStyle(AgentPluginApprovalActionButtonStyle())"))
+        #expect(source.contains(".fill(Color.accentColor.opacity(backgroundOpacity"))
+        #expect(source.contains("return isPressed ? 0.18 : 0.11"))
+    }
+
     @Test
     func loadsDestinationAndAllSidebarModes() throws {
         let root = try makePackage(id: "sample", destinations: [
