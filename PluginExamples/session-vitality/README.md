@@ -63,6 +63,20 @@ MCP App 页面在 WillDeep 里是 **WKWebView 的顶层文档**，`parent === wi
 
 `scripts/session_vitality_server_test.rb` 里有这两条的守卫。
 
+## 随 App 发行
+
+`Xedit.xcodeproj` 的 **Bundle built-in plugins** 构建阶段把 `.codex-plugin`、
+`.willdeep-plugin`（含侧栏 Schema 与本地化）、`mcp.json` 与 `server/` 复制进
+`WillDeep.app/Contents/Resources/BundledPlugins/session-vitality`。页面是服务端发的
+MCP 资源（`ui://vitality/main`），所以不需要额外带前端产物。
+
+`bundled` 来源的插件自动获批、默认启用，也不会为自己的 MCP 工具逐条弹确认框；
+左侧入口没有声明 `defaultPinned`，要不要固定在侧栏由用户自己决定。
+
+改了插件里的任何文件都要重新构建 App，`BundledPlugins` 才会更新。**注意**：如果
+本机还留着一份「从本地安装」的同名插件，注册表里的 `activeVersions` 会继续把它钉在
+旧版本上——在插件中心卸载那份，或切到随 App 发行的版本。
+
 ## 回归
 
 ```bash

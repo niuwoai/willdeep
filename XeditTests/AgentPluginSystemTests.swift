@@ -672,7 +672,7 @@ struct AgentPluginSystemTests {
                 packageURL: packageURL,
                 source: .installed,
                 // 收藏夹与会话体检要求的宿主版本比其它样例新
-                currentWillDeepVersion: "1.300.0-rc1"
+                currentWillDeepVersion: "1.300.0-rc3"
             )
             #expect(package.destinations.count == 1)
         }
@@ -686,7 +686,7 @@ struct AgentPluginSystemTests {
         let package = try AgentPluginPackageLoader.load(
             packageURL: repositoryRoot.appendingPathComponent("PluginExamples/favorites"),
             source: .installed,
-            currentWillDeepVersion: "1.300.0-rc1"
+            currentWillDeepVersion: "1.300.0-rc3"
         )
         let manifest = try #require(package.manifest)
 
@@ -715,7 +715,7 @@ struct AgentPluginSystemTests {
         let package = try AgentPluginPackageLoader.load(
             packageURL: packageURL,
             source: .installed,
-            currentWillDeepVersion: "1.300.0-rc1"
+            currentWillDeepVersion: "1.300.0-rc3"
         )
         let manifest = try #require(package.manifest)
 
@@ -754,6 +754,76 @@ struct AgentPluginSystemTests {
                     atPath: packageURL.appendingPathComponent(relativePath).path
                 )
             )
+        }
+    }
+
+    @Test
+    func bundledPluginsShipEveryFileTheyNeedAtRuntime() throws {
+        // 「Bundle built-in plugins」阶段是一份手写清单：加了文件却忘了登记，
+        // 插件装进 App 就是点不开（页面 404、MCP 服务端脚本不存在）。这条守卫
+        // 按每个内置插件的清单反查它运行时真正要的文件有没有被复制。
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let projectFile = repositoryRoot.appendingPathComponent("Xedit.xcodeproj/project.pbxproj")
+        let project = try String(contentsOf: projectFile, encoding: .utf8)
+            .replacingOccurrences(of: "\\n", with: "\n")
+        let bundleLines = project
+            .split(separator: "\n")
+            .filter { $0.hasPrefix("bundle_plugin ") && !$0.hasSuffix("() {") }
+            .map(String.init)
+        #expect(bundleLines.count >= 4)
+
+        for line in bundleLines {
+            let fields = line.split(separator: " ").map(String.init)
+            let pluginDirectory = fields[1]
+            let relativePaths = Array(fields.dropFirst(2))
+            let packageURL = repositoryRoot
+                .appendingPathComponent("PluginExamples/\(pluginDirectory)")
+
+            // 登记的每一条都得真实存在，否则 ditto 会在构建时炸掉
+            for relativePath in relativePaths {
+                #expect(
+                    FileManager.default.fileExists(
+                        atPath: packageURL.appendingPathComponent(relativePath).path
+                    ),
+                    "\(pluginDirectory) 登记了不存在的路径 \(relativePath)"
+                )
+            }
+            #expect(relativePaths.contains(".willdeep-plugin"))
+            #expect(relativePaths.contains(".codex-plugin"))
+
+            func isCovered(_ path: String) -> Bool {
+                relativePaths.contains { path == $0 || path.hasPrefix("\($0)/") }
+            }
+
+            // localWeb 页面的 entryPath 必须在复制清单里。
+            // 这里直接解码清单而不过生产加载器：游戏厅的源码目录带着未构建的
+            // 前端工程，会被加载器的体积上限拒掉（发行时只复制 ui/dist）。
+            let manifestData = try Data(
+                contentsOf: packageURL.appendingPathComponent(".willdeep-plugin/plugin.json")
+            )
+            let manifest = try JSONDecoder().decode(AgentPluginManifest.self, from: manifestData)
+            for page in manifest.contributes.pages {
+                guard let entryPath = page.entryPath else { continue }
+                #expect(isCovered(entryPath), "\(pluginDirectory) 漏带页面 \(entryPath)")
+            }
+
+            // 带 MCP 服务端的插件：mcp.json 与它指向的脚本都得带上，
+            // 否则装进 App 之后服务端起不来
+            let mcpURL = packageURL.appendingPathComponent("mcp.json")
+            guard FileManager.default.fileExists(atPath: mcpURL.path) else { continue }
+            #expect(isCovered("mcp.json"), "\(pluginDirectory) 有 mcp.json 却没带上")
+            let mcpText = try String(contentsOf: mcpURL, encoding: .utf8)
+            for reference in mcpText.components(separatedBy: "${pluginRoot}/").dropFirst() {
+                let relativePath = String(reference.prefix { $0 != "\"" })
+                #expect(isCovered(relativePath), "\(pluginDirectory) 漏带 MCP 服务端文件 \(relativePath)")
+                #expect(
+                    FileManager.default.fileExists(
+                        atPath: packageURL.appendingPathComponent(relativePath).path
+                    )
+                )
+            }
         }
     }
 
