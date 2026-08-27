@@ -20,9 +20,10 @@ function cell(row: number, col: number): Point {
 function stateWith(
   snake: Point[],
   direction: Direction,
-  overrides: Partial<Pick<SnakeState, 'food' | 'score' | 'foodsEaten' | 'seed'>> = {},
+  overrides: Partial<Pick<SnakeState, 'food' | 'score' | 'foodsEaten' | 'seed' | 'milestone'>> = {},
 ): SnakeState {
   return {
+    milestone: overrides.milestone ?? MILESTONE_FOOD,
     snake,
     direction,
     food: overrides.food ?? cell(0, GRID_COLS - 1),

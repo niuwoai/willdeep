@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { App } from '../../App';
 import { HashRouter } from '../../core/hashRouter';
 import { I18nProvider } from '../../core/i18n';
-import { LEVELS } from './logic';
+import { boardForStage } from './logic';
 
 /**
  * 连连看集成回归（jsdom）。
@@ -40,26 +40,47 @@ describe('连连看集成', () => {
     window.location.hash = '';
   });
 
-  it('默认进入中等难度，棋盘牌数与档位一致', async () => {
+  it('从第 1 关的 4×4 开局，外壳与棋内都显示关卡', async () => {
     renderAtOnet();
     await screen.findByTestId('onet-board');
-    const medium = LEVELS[1] as { rows: number; cols: number };
-    expect(screen.getAllByTestId('onet-tile')).toHaveLength(medium.rows * medium.cols);
+    const first = boardForStage(1);
+    expect(screen.getAllByTestId('onet-tile')).toHaveLength(first.rows * first.cols);
     expect(screen.getByTestId('onet-remaining-value')).toHaveTextContent(
-      String(medium.rows * medium.cols),
+      String(first.rows * first.cols),
     );
+    expect(screen.getByTestId('onet-stage')).toHaveTextContent('关卡 1');
+    expect(screen.getByTestId('game-stage')).toHaveTextContent('关卡: 1');
   });
 
-  it('切换难度后重新发牌', async () => {
+  it('通关后自动进入下一关，棋盘变大且分数累计', async () => {
     const user = userEvent.setup();
     renderAtOnet();
     await screen.findByTestId('onet-board');
 
-    await user.click(screen.getByTestId('onet-level-easy'));
-    const easy = LEVELS[0] as { rows: number; cols: number };
-    await waitFor(() =>
-      expect(screen.getAllByTestId('onet-tile')).toHaveLength(easy.rows * easy.cols),
-    );
+    // 用提示反复消对，清空第 1 关
+    for (let round = 0; round < 12; round += 1) {
+      const remaining = Number(screen.getByTestId('onet-remaining-value').textContent);
+      if (remaining === 0) break;
+      await user.click(screen.getByTestId('onet-hint'));
+      const hinted = await waitFor(() => {
+        const tiles = screen
+          .getAllByTestId('onet-tile')
+          .filter((tile) => tile.className.includes('onet__tile--hint'));
+        expect(tiles).toHaveLength(2);
+        return tiles;
+      });
+      await user.click(hinted[0] as HTMLElement);
+      await user.click(hinted[1] as HTMLElement);
+      await waitFor(() =>
+        expect(Number(screen.getByTestId('onet-remaining-value').textContent)).toBeLessThan(remaining),
+      );
+    }
+
+    await waitFor(() => expect(screen.getByTestId('onet-stage')).toHaveTextContent('关卡 2'), {
+      timeout: 4000,
+    });
+    const second = boardForStage(2);
+    expect(screen.getAllByTestId('onet-tile')).toHaveLength(second.rows * second.cols);
   });
 
   it('提示指出的一对可以消掉，剩余牌数减二', async () => {
@@ -96,7 +117,6 @@ describe('连连看集成', () => {
     const user = userEvent.setup();
     renderAtOnet();
     await screen.findByTestId('onet-board');
-    await user.click(screen.getByTestId('onet-level-easy'));
     await waitFor(() => expect(screen.getAllByTestId('onet-tile')).toHaveLength(16));
 
     // 反复用提示消对，直到清空棋盘（提示保证给出的一定是可消对）

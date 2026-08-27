@@ -89,14 +89,23 @@ describe('印加弹珠集成', () => {
     expect(screen.getByTestId('marble-field')).toBeInTheDocument();
   });
 
-  it('切换关卡后剩余弹珠数按关卡重置', async () => {
-    const user = userEvent.setup();
+  it('从第 1 关开局，关卡与累计分同时上报给外壳', async () => {
     renderAtMarble();
     await screen.findByTestId('marble-field');
 
-    await user.click(screen.getByTestId('marble-level-hard'));
-    await waitFor(() =>
-      expect(screen.getByTestId('marble-remaining').textContent?.replace(/\D/g, '')).toBe('70'),
-    );
+    expect(screen.getByTestId('marble-stage')).toHaveTextContent('关卡 1');
+    expect(screen.getByTestId('game-stage')).toHaveTextContent('关卡: 1');
+    expect(screen.getByTestId('game-score')).toHaveTextContent('分数: 0');
+    // 第 1 关 40 颗弹珠（开局链条 + 待入场补给）
+    expect(screen.getByTestId('marble-remaining').textContent?.replace(/\D/g, '')).toBe('40');
+  });
+
+  it('从头开始会把关卡与累计分打回起点', async () => {
+    const user = userEvent.setup();
+    renderAtMarble();
+    await screen.findByTestId('marble-field');
+    await user.click(screen.getByTestId('marble-restart-run'));
+    await waitFor(() => expect(screen.getByTestId('marble-stage')).toHaveTextContent('关卡 1'));
+    expect(screen.getByTestId('marble-score-value')).toHaveTextContent('0');
   });
 });

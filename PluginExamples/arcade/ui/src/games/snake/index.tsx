@@ -20,13 +20,14 @@ import { snakeStrings } from './strings';
 import {
   GRID_COLS,
   GRID_ROWS,
-  MILESTONE_FOOD,
-  TICK_MS,
   isOpposite,
   initialState,
+  milestoneForStage,
   resetState,
   step,
+  tickForStage,
 } from './logic';
+import { useAutoAdvance, useStageReport } from '../../core/stage';
 import type { Direction, GameStatus, SnakeState } from './logic';
 import './snake.css';
 
@@ -48,11 +49,14 @@ const DIRECTION_KEYS: Record<string, Direction> = {
   D: 'right',
 };
 
-export default function SnakeGame({ seed, onWin }: GameProps) {
+export default function SnakeGame({ seed, onWin, onStage }: GameProps) {
   const { locale } = useI18n();
   const strings = snakeStrings(locale);
 
-  const [state, setState] = useState<SnakeState>(() => initialState(seed));
+  // 关卡阶梯：目标食物数 5 起步每关 +2，节拍越来越快，一直往上加
+  const [stage, setStage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [state, setState] = useState<SnakeState>(() => initialState(seed, milestoneForStage(1)));
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
@@ -91,9 +95,19 @@ export default function SnakeGame({ seed, onWin }: GameProps) {
       const dir = pendingDirection.current;
       pendingDirection.current = null;
       setState(step(stateRef.current, dir ?? undefined));
-    }, TICK_MS);
+    }, tickForStage(stage));
     return () => window.clearInterval(timer);
-  }, [state.status]);
+  }, [state.status, stage]);
+
+  useStageReport(onStage, { stage, score: total + state.score, label: `${state.milestone} 食物` });
+  useAutoAdvance(state.status === 'won', () => {
+    setTotal((current) => current + stateRef.current.score);
+    setStage((current) => {
+      const next = current + 1;
+      setState(initialState(seed, milestoneForStage(next)));
+      return next;
+    });
+  });
 
   // 吃到食物给一声反馈。
   useEffect(() => {
@@ -103,7 +117,7 @@ export default function SnakeGame({ seed, onWin }: GameProps) {
   // 终局/胜利时写入最佳成绩（saveBestScore 幂等，只保留更高分）；通关撒花。
   useEffect(() => {
     if (state.status !== 'gameover' && state.status !== 'won') return;
-    saveBestScore('snake', state.score);
+    saveBestScore('snake', total + state.score);
     if (state.status === 'won') {
       playCue('win');
       onWin?.();
@@ -117,6 +131,14 @@ export default function SnakeGame({ seed, onWin }: GameProps) {
     pendingDirection.current = null;
     setState(resetState(stateRef.current));
   }, []);
+
+  /** 从第 1 关重来，累计分数归零。 */
+  const handleRestartRun = useCallback(() => {
+    pendingDirection.current = null;
+    setTotal(0);
+    setStage(1);
+    setState(initialState(seed, milestoneForStage(1)));
+  }, [seed]);
 
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse') return;
@@ -182,6 +204,14 @@ export default function SnakeGame({ seed, onWin }: GameProps) {
         >
           {strings.restart}
         </button>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          data-testid="snake-restart-run"
+          onClick={handleRestartRun}
+        >
+          {strings.restartRun}
+        </button>
       </div>
       <div
         className="snake__board"
@@ -197,7 +227,7 @@ export default function SnakeGame({ seed, onWin }: GameProps) {
       <p className="snake__milestone" data-testid="snake-milestone">
         {strings.milestone
           .replace('{eaten}', String(state.foodsEaten))
-          .replace('{total}', String(MILESTONE_FOOD))}
+          .replace('{total}', String(state.milestone))}
       </p>
       <p className="snake__hint" data-testid="snake-hint">
         {strings.hint}

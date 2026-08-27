@@ -22,6 +22,8 @@ export const TEST_IDS = {
   bestScore: 'game-best-score',
   controlsHelp: 'game-controls-help',
   seed: 'game-seed',
+  stage: 'game-stage',
+  score: 'game-score',
   soundToggle: 'game-sound',
   notFound: 'not-found',
   dummyCounter: 'dummy-counter',

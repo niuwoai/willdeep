@@ -82,7 +82,7 @@ describe('游戏外壳', () => {
     const user = userEvent.setup();
     renderAt('#/game/memory?seed=shell-confetti');
     await screen.findByTestId('memory-board');
-    await user.click(screen.getByTestId('memory-pairs-2'));
+    // 关卡 1 就是 2 对，四张牌点完即通关
     await waitFor(() => expect(screen.getAllByTestId('memory-card')).toHaveLength(4));
     expect(raf).not.toHaveBeenCalled();
 

@@ -34,6 +34,9 @@ export const zhHans: Record<string, string> = {
   'games.marble.description': '螺旋轨道上的弹珠往洞口滚，打进同色三连把它们清空。',
   'games.marble.controls': '鼠标或触屏瞄准点击发射；键盘 ← → 瞄准、空格发射、S 换色。',
 
+  'game.stage': '关卡',
+  'game.score': '分数',
+
   'sound.on': '音效已开，点击静音',
   'sound.off': '音效已静音，点击开启',
 

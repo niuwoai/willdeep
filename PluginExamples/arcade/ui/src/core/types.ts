@@ -28,6 +28,11 @@ export interface GameProps {
    * 外壳据此放一次撒花。不调用不影响任何既有行为。
    */
   onWin?: () => void;
+  /**
+   * 上报当前关卡与本轮累计分数，外壳渲染成徽章（见 core/stage.ts）。
+   * 关卡阶梯由各游戏自己定义，通关自动进阶。
+   */
+  onStage?: (info: { stage: number; score: number; label?: string }) => void;
 }
 
 /** 游戏清单条目（冻结）。 */

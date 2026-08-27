@@ -35,7 +35,25 @@ export const LEVELS: readonly OnetLevel[] = [
   { id: 'hard', rows: 6, cols: 8, symbols: 12 },
 ];
 
-export const DEFAULT_LEVEL = 1;
+export const DEFAULT_LEVEL = 0;
+
+/**
+ * 第 stage 关的棋盘：4×4 起步，一路长到 8×8 封顶（再大就塞不进面板了），
+ * 封顶后关卡号继续涨、分数继续累计。
+ */
+const STAGE_BOARDS: readonly OnetLevel[] = [
+  { id: 'easy', rows: 4, cols: 4, symbols: 6 },
+  { id: 'easy', rows: 4, cols: 6, symbols: 8 },
+  { id: 'medium', rows: 6, cols: 6, symbols: 9 },
+  { id: 'medium', rows: 6, cols: 8, symbols: 10 },
+  { id: 'hard', rows: 8, cols: 8, symbols: 12 },
+];
+
+export function boardForStage(stage: number): OnetLevel {
+  const index = Math.min(STAGE_BOARDS.length - 1, Math.max(0, stage - 1));
+  return STAGE_BOARDS[index] as OnetLevel;
+}
+
 /** 连接线展示时长（毫秒），由组件在此后清除路径。 */
 export const PATH_MS = 420;
 /** 最多允许的拐弯次数（经典规则：两次）。 */
@@ -52,10 +70,12 @@ export interface OnetState {
   seed: string;
   /** 局数，从 0 开始；每次重开 +1。 */
   round: number;
-  /** 难度档位下标（LEVELS 的下标）。 */
+  /** 难度档位下标（LEVELS 的下标，仅供展示/回退用）。 */
   level: number;
   rows: number;
   cols: number;
+  /** 本局图案种类数（关卡阶梯给的，restart 要照着重发）。 */
+  symbols: number;
   /** 牌面：图案 id，已消除的位置为 null；下标 = y * cols + x。 */
   tiles: readonly (number | null)[];
   /** 当前选中的牌下标。 */
@@ -278,16 +298,18 @@ function redeal(state: OnetState, symbols: readonly number[], seed: string): (nu
  * 新局：按难度发牌，并保证开局至少有一对可消
  * （极小概率的死局牌面直接换下一个子种子重发，最多尝试 8 次）。
  */
-export function createInitialState(level: number, seed?: string, round = 0): OnetState {
-  const config = levelAt(level);
+export function createInitialState(level: number | OnetLevel, seed?: string, round = 0): OnetState {
+  const config = typeof level === 'number' ? levelAt(level) : level;
+  const levelIndex = typeof level === 'number' ? level : LEVELS.findIndex((item) => item.id === config.id);
   const normalizedSeed = seed ?? 'onet';
   let tiles = buildTiles(config.rows, config.cols, config.symbols, createRng(dealSeed(normalizedSeed, round)));
   let state: OnetState = {
     seed: normalizedSeed,
     round,
-    level,
+    level: levelIndex < 0 ? DEFAULT_LEVEL : levelIndex,
     rows: config.rows,
     cols: config.cols,
+    symbols: config.symbols,
     tiles,
     selected: null,
     lastPath: null,
@@ -310,9 +332,15 @@ export function createInitialState(level: number, seed?: string, round = 0): One
   return state;
 }
 
-/** 重开：局数 +1，换一副新牌面（同一基准种子下第 N 局仍可复现）。 */
+/** 重开：局数 +1，换一副新牌面（棋盘尺寸不变，同一基准种子下第 N 局仍可复现）。 */
 export function restart(state: OnetState): OnetState {
-  return createInitialState(state.level, state.seed, state.round + 1);
+  const config: OnetLevel = {
+    id: (LEVELS[state.level] ?? LEVELS[DEFAULT_LEVEL] as OnetLevel).id,
+    rows: state.rows,
+    cols: state.cols,
+    symbols: state.symbols,
+  };
+  return createInitialState(config, state.seed, state.round + 1);
 }
 
 /**

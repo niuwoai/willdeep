@@ -7,10 +7,9 @@
 import type { Locale } from '../../core/types';
 
 export interface OnetStrings {
-  levelLabel: string;
-  levelEasy: string;
-  levelMedium: string;
-  levelHard: string;
+  stageLabel: string;
+  totalLabel: string;
+  restartRun: string;
   remaining: string;
   moves: string;
   restart: string;
@@ -27,10 +26,9 @@ export interface OnetStrings {
 
 const dict: Record<Locale, OnetStrings> = {
   'zh-Hans': {
-    levelLabel: '难度',
-    levelEasy: '简单 · 4×4',
-    levelMedium: '中等 · 6×4',
-    levelHard: '挑战 · 8×6',
+    stageLabel: '关卡',
+    totalLabel: '累计',
+    restartRun: '从头开始',
     remaining: '剩余',
     moves: '尝试',
     restart: '重开',
@@ -38,17 +36,16 @@ const dict: Record<Locale, OnetStrings> = {
     shuffle: '洗牌',
     statusIdle: '点两张相同的图案，连线不超过两个折角就能消',
     statusPlaying: '进行中',
-    statusWon: '全部消完，漂亮！',
+    statusWon: '全部消完，下一关准备中……',
     statusShuffled: '没有可消的了，已自动洗牌',
     boardLabel: '连连看棋盘',
     tileLabel: '第 {index} 张牌',
     help: '点选两张相同图案的牌：连线只走空格、拐弯不超过两次即可消除；棋盘外围一圈可以绕行。死局会自动洗牌，提示与洗牌都会扣分。',
   },
   en: {
-    levelLabel: 'Level',
-    levelEasy: 'Easy · 4×4',
-    levelMedium: 'Medium · 6×4',
-    levelHard: 'Hard · 8×6',
+    stageLabel: 'Stage',
+    totalLabel: 'Total',
+    restartRun: 'Start over',
     remaining: 'Left',
     moves: 'Tries',
     restart: 'Restart',
@@ -56,7 +53,7 @@ const dict: Record<Locale, OnetStrings> = {
     shuffle: 'Shuffle',
     statusIdle: 'Match two identical tiles linked by at most two turns',
     statusPlaying: 'Playing',
-    statusWon: 'Board cleared!',
+    statusWon: 'Cleared! Next stage coming up…',
     statusShuffled: 'No moves left — board reshuffled',
     boardLabel: 'Onet board',
     tileLabel: 'Tile {index}',
