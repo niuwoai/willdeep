@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "minimumWillDeepVersion": "1.300.0-rc5",
+  "contributes": {
+    "destinations": [{
+      "id": "todo",
+      "titleKey": "destination.todo",
+      "icon": "sf:checklist",
+      "mainPage": "todo.main",
+      "companionSidebar": "todo.sidebar",
+      "toolbarCommandIDs": ["todo.refresh"],
+      "defaultPinned": true
+    }],
+    "sidebars": [{
+      "id": "todo.sidebar",
+      "mode": "none"
+    }],
+    "pages": [{
+      "id": "todo.main",
+      "runtime": "localWeb",
+      "entryPath": "ui/index.html"
+    }],
+    "commands": [
+      {
+        "id": "todo.add",
+        "titleKey": "command.add",
+        "icon": "sf:plus.circle",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.add"}
+      },
+      {
+        "id": "todo.quick_add",
+        "titleKey": "command.quickAdd",
+        "icon": "sf:text.badge.plus",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.quick_add"}
+      },
+      {
+        "id": "todo.list",
+        "titleKey": "command.list",
+        "icon": "sf:list.bullet",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.list"}
+      },
+      {
+        "id": "todo.update",
+        "titleKey": "command.update",
+        "icon": "sf:square.and.pencil",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.update"}
+      },
+      {
+        "id": "todo.toggle",
+        "titleKey": "command.toggle",
+        "icon": "sf:checkmark.circle",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.toggle"}
+      },
+      {
+        "id": "todo.remove",
+        "titleKey": "command.remove",
+        "icon": "sf:trash",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.remove"}
+      },
+      {
+        "id": "todo.restore",
+        "titleKey": "command.restore",
+        "icon": "sf:arrow.uturn.backward",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.restore"}
+      },
+      {
+        "id": "todo.settings",
+        "titleKey": "command.settings",
+        "icon": "sf:gearshape",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.settings"}
+      },
+      {
+        "id": "todo.stats",
+        "titleKey": "command.stats",
+        "icon": "sf:chart.bar",
+        "handler": {"type": "mcpTool", "server": "todo", "tool": "todo.stats"}
+      },
+      {
+        "id": "todo.refresh",
+        "titleKey": "command.refresh",
+        "icon": "sf:arrow.clockwise",
+        "handler": {"type": "host", "action": "plugin.refresh"}
+      },
+      {
+        "id": "todo.open",
+        "titleKey": "command.open",
+        "icon": "sf:checklist",
+        "handler": {"type": "navigate", "destination": "todo"}
+      }
+    ],
+    "menus": {
+      "chat.selection": ["todo.quick_add"],
+      "commandPalette": ["todo.open", "todo.refresh"],
+      "plugin.page.toolbar": ["todo.refresh"]
+    },
+    "settings": []
+  },
+  "permissions": ["process.execute", "workspace.read", "ai.chat", "providers.read"],
+  "dependencies": {"mcpServers": ["todo"], "skills": []}
+}

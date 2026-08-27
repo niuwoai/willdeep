@@ -176,6 +176,13 @@ final class AgentPluginRegistry: ObservableObject {
         snapshot.records.first { $0.pluginID == pluginID }
     }
 
+    /// 插件有没有声明某项权限。只认「已启用」的插件——停用的插件不该还能
+    /// 借页面桥继续问模型。
+    func hasPermission(_ permission: AgentPluginPermission, pluginID: AgentPluginID) -> Bool {
+        guard let record = record(pluginID: pluginID), record.isEnabled else { return false }
+        return record.activePackage.manifest?.permissions.contains(permission) ?? false
+    }
+
     func commands(for pluginID: AgentPluginID) -> [AgentPluginCommandContribution] {
         guard let record = record(pluginID: pluginID), record.isEnabled else { return [] }
         return record.activePackage.manifest?.contributes.commands ?? []

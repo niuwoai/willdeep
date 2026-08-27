@@ -1,0 +1,14 @@
+{
+  "destination.todo": "待办",
+  "command.add": "加到待办",
+  "command.quickAdd": "一句话记待办",
+  "command.list": "待办列表",
+  "command.update": "修改待办",
+  "command.toggle": "完成/取消完成",
+  "command.remove": "删除待办",
+  "command.restore": "恢复待办",
+  "command.settings": "待办设置",
+  "command.stats": "待办概览",
+  "command.refresh": "刷新",
+  "command.open": "打开待办"
+}
