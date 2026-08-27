@@ -73,7 +73,10 @@ describe('已集成游戏可运行', () => {
     );
 
     expect(screen.getByTestId('game-best-score')).toHaveTextContent('暂无记录');
-    expect(screen.getAllByTestId('memory-card')).toHaveLength(12);
+    // 关卡 1 = 2 对 4 张；外壳同时挂出关卡与分数徽章
+    expect(screen.getAllByTestId('memory-card')).toHaveLength(4);
+    expect(screen.getByTestId('game-stage')).toHaveTextContent('关卡: 1');
+    expect(screen.getByTestId('game-score')).toHaveTextContent('分数: 0');
   });
 
   it('路由携带 ?seed= 时外壳展示种子徽章', async () => {

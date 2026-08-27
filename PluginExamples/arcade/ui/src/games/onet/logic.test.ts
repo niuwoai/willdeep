@@ -6,7 +6,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_LEVEL,
   LEVELS,
+  boardForStage,
   clearHint,
   clearPath,
   connectionPath,
@@ -41,6 +43,7 @@ function board(rows: readonly string[]): OnetState {
     level: 0,
     rows: rows.length,
     cols,
+    symbols: 26,
     tiles,
     selected: null,
     lastPath: null,
@@ -252,7 +255,15 @@ describe('连连看：发牌与重开', () => {
   });
 
   it('levelAt 对越界下标回退到默认档位', () => {
-    expect(levelAt(99)).toEqual(LEVELS[1]);
+    expect(levelAt(99)).toEqual(LEVELS[DEFAULT_LEVEL]);
+  });
+
+  it('关卡阶梯从 4×4 一路长到 8×8 封顶', () => {
+    expect(boardForStage(1)).toMatchObject({ rows: 4, cols: 4 });
+    expect(boardForStage(3)).toMatchObject({ rows: 6, cols: 6 });
+    expect(boardForStage(5)).toMatchObject({ rows: 8, cols: 8 });
+    // 封顶之后继续升级也不再变大
+    expect(boardForStage(50)).toEqual(boardForStage(5));
   });
 });
 

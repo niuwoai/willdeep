@@ -13,6 +13,7 @@ import { useI18n } from './core/i18n';
 import { TEST_IDS } from './core/testid';
 import { Link } from './core/hashRouter';
 import type { GameManifestEntry } from './core/types';
+import type { StageInfo } from './core/stage';
 
 function NotFound() {
   const { t } = useI18n();
@@ -29,10 +30,15 @@ function NotFound() {
 /** 单局路由：持有撒花计数，游戏通关时 +1，由 GameShell 负责渲染。 */
 function GameRoute({ entry, seed }: { entry: GameManifestEntry; seed?: string }) {
   const [celebration, setCelebration] = useState(0);
+  const [stage, setStage] = useState<StageInfo | null>(null);
   const GameComponent = entry.component;
   return (
-    <GameShell gameId={entry.id} celebration={celebration}>
-      <GameComponent seed={seed} onWin={() => setCelebration((count) => count + 1)} />
+    <GameShell gameId={entry.id} celebration={celebration} stage={stage}>
+      <GameComponent
+        seed={seed}
+        onWin={() => setCelebration((count) => count + 1)}
+        onStage={setStage}
+      />
     </GameShell>
   );
 }

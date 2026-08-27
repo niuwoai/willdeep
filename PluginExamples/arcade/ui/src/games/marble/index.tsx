@@ -21,18 +21,17 @@ import { saveBestScore } from '../../core/bestScore';
 import { entropySeed } from '../../core/rng';
 import { playCue } from '../../core/audio';
 import { MARBLE_COLORS, marbleStrings } from './strings';
-import type { MarbleStrings } from './strings';
+import { useAutoAdvance, useStageReport } from '../../core/stage';
 import {
   BALL_RADIUS,
   EFFECT_SECONDS,
-  DEFAULT_LEVEL,
   FIELD,
-  LEVELS,
   PATH_LENGTH,
   SHOOTER,
   SPACING,
   aimAt,
   createInitialState,
+  levelForStage,
   pointAt,
   restart,
   scoreFor,
@@ -49,8 +48,6 @@ import './marble.css';
 const MAX_DT = 1 / 20;
 /** 键盘每次瞄准的角度增量（弧度）。 */
 const AIM_STEP = 0.09;
-
-const LEVEL_LABEL_KEY: readonly (keyof MarbleStrings)[] = ['levelEasy', 'levelMedium', 'levelHard'];
 
 interface Hud {
   score: number;
@@ -399,15 +396,17 @@ function drawFlash(
   context.fill();
 }
 
-export default function MarbleGame({ seed, onWin }: GameProps) {
+export default function MarbleGame({ seed, onWin, onStage }: GameProps) {
   const { locale } = useI18n();
   const strings = marbleStrings(locale);
 
   // 未显式指定种子时，本次进入游戏用一次性熵种子。
   const baseSeed = useMemo(() => seed ?? entropySeed('marble'), [seed]);
 
-  const [level, setLevel] = useState<number>(DEFAULT_LEVEL);
-  const stateRef = useRef<MarbleState>(createInitialState(DEFAULT_LEVEL, baseSeed));
+  // 关卡阶梯：颜色/弹珠数/速度/道具数随关卡一路往上，没有上限。
+  const [stage, setStage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const stateRef = useRef<MarbleState>(createInitialState(levelForStage(1), `${baseSeed}@1`));
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   // 2D 上下文只取一次：取不到（如 jsdom）就此关掉绘制，主循环照跑不误。
   const contextRef = useRef<CanvasRenderingContext2D | null | undefined>(undefined);
@@ -419,10 +418,15 @@ export default function MarbleGame({ seed, onWin }: GameProps) {
   useEffect(() => {
     onWinRef.current = onWin;
   }, [onWin]);
+  // 主循环里要读到最新的累计分（写最佳成绩用），走 ref 免得重挂循环
+  const totalRef = useRef(0);
+  useEffect(() => {
+    totalRef.current = total;
+  }, [total]);
 
   const reset = useCallback(
-    (nextLevel: number) => {
-      stateRef.current = createInitialState(nextLevel, baseSeed);
+    (nextStage: number) => {
+      stateRef.current = createInitialState(levelForStage(nextStage), `${baseSeed}@${nextStage}`);
       scoredRef.current = false;
       effectsRef.current = 0;
       setHud(toHud(stateRef.current));
@@ -432,8 +436,16 @@ export default function MarbleGame({ seed, onWin }: GameProps) {
 
   // 关卡或种子变化时重开一局。
   useEffect(() => {
-    reset(level);
-  }, [level, reset]);
+    reset(stage);
+  }, [stage, reset]);
+
+  const config = levelForStage(stage);
+  useStageReport(onStage, { stage, score: total + hud.score, label: `${config.colors} 色` });
+  // 通关后自动进入下一关；失败则停在原地等玩家按「重开」
+  useAutoAdvance(hud.status === 'won', () => {
+    setTotal((current) => current + stateRef.current.score);
+    setStage((current) => current + 1);
+  });
 
   // 主循环：推进引擎 → 画帧 → HUD 变化才触发 React 重渲染。
   useEffect(() => {
@@ -467,7 +479,7 @@ export default function MarbleGame({ seed, onWin }: GameProps) {
       setHud((previous) => (sameHud(previous, snapshot) ? previous : snapshot));
       if ((next.status === 'won' || next.status === 'lost') && !scoredRef.current) {
         scoredRef.current = true;
-        saveBestScore('marble', scoreFor(next));
+        saveBestScore('marble', totalRef.current + scoreFor(next));
         if (next.status === 'won') {
           playCue('win');
           onWinRef.current?.();
@@ -552,19 +564,12 @@ export default function MarbleGame({ seed, onWin }: GameProps) {
       </div>
 
       <div className="marble__tools" data-testid="marble-tools">
-        <span>{strings.levelLabel}:</span>
-        {LEVELS.map((option, index) => (
-          <button
-            key={option.id}
-            type="button"
-            className="btn btn--ghost"
-            data-testid={`marble-level-${option.id}`}
-            aria-pressed={level === index}
-            onClick={() => setLevel(index)}
-          >
-            {strings[LEVEL_LABEL_KEY[index] ?? 'levelEasy']}
-          </button>
-        ))}
+        <span data-testid="marble-stage">
+          {strings.stageLabel} {stage} · {config.colors} {strings.colorsUnit}
+        </span>
+        <span data-testid="marble-total">
+          {strings.totalLabel}: {total + hud.score}
+        </span>
         <button type="button" className="btn" data-testid="marble-restart" onClick={() => {
           stateRef.current = restart(stateRef.current);
           scoredRef.current = false;
@@ -573,6 +578,19 @@ export default function MarbleGame({ seed, onWin }: GameProps) {
           setHud(toHud(stateRef.current));
         }}>
           {strings.restart}
+        </button>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          data-testid="marble-restart-run"
+          onClick={() => {
+            playCue('select');
+            setTotal(0);
+            if (stage === 1) reset(1);
+            else setStage(1);
+          }}
+        >
+          {strings.restartRun}
         </button>
       </div>
 

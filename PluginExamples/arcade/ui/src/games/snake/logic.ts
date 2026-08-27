@@ -22,11 +22,23 @@ export const GRID_COLS = 20;
 export const INITIAL_LENGTH = 3;
 /** 里程碑：累计吃满该数量的食物即通关（won）。 */
 export const MILESTONE_FOOD = 5;
+
+/** 第 stage 关要吃的食物数：5 个起步，每关 +2，一直往上加。 */
+export function milestoneForStage(stage: number): number {
+  return MILESTONE_FOOD + Math.max(0, stage - 1) * 2;
+}
+
+/** 第 stage 关的节拍（毫秒）：越往后越快，90ms 封顶。 */
+export function tickForStage(stage: number): number {
+  return Math.max(90, TICK_MS - Math.max(0, stage - 1) * 12);
+}
 /** 自动行进间隔（毫秒）。 */
 export const TICK_MS = 220;
 export const DEFAULT_SEED = 'snake';
 
 export interface SnakeState {
+  /** 本局的通关目标（吃满多少个食物），由关卡阶梯给。 */
+  milestone: number;
   /** 蛇身，索引 0 为头。 */
   snake: Point[];
   direction: Direction;
@@ -90,10 +102,11 @@ export function placeFood(snake: readonly Point[], seed: string, step: number): 
 }
 
 /** 初始状态：idle，蛇身 3 格，初始方向向右，食物由种子决定。 */
-export function initialState(seed?: string): SnakeState {
+export function initialState(seed?: string, milestone: number = MILESTONE_FOOD): SnakeState {
   const normalized = seed !== undefined && seed.length > 0 ? seed : DEFAULT_SEED;
   const snake = initialSnake();
   return {
+    milestone,
     snake,
     direction: 'right',
     food: placeFood(snake, normalized, 0),
@@ -105,8 +118,8 @@ export function initialState(seed?: string): SnakeState {
 }
 
 /** 重开复位：回到初始状态（保留原种子）。 */
-export function resetState(state: Pick<SnakeState, 'seed'>): SnakeState {
-  return initialState(state.seed);
+export function resetState(state: Pick<SnakeState, 'seed' | 'milestone'>): SnakeState {
+  return initialState(state.seed, state.milestone ?? MILESTONE_FOOD);
 }
 
 /**
@@ -143,7 +156,7 @@ export function step(state: SnakeState, nextDirection?: Direction): SnakeState {
   if (!eating) return { ...state, snake, direction };
 
   const foodsEaten = state.foodsEaten + 1;
-  const won = foodsEaten >= MILESTONE_FOOD;
+  const won = foodsEaten >= (state.milestone ?? MILESTONE_FOOD);
   return {
     ...state,
     snake,

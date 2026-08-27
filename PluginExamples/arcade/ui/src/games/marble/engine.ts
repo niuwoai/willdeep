@@ -88,6 +88,25 @@ export const LEVELS: readonly MarbleLevel[] = [
 ];
 
 export const DEFAULT_LEVEL = 0;
+
+/**
+ * 第 stage 关的配置：颜色、弹珠数、开局长度、速度、道具数都随关卡往上走，
+ * 没有上限——这游戏可以一直打下去（颜色受配色表限制封顶 6 种）。
+ */
+export function levelForStage(stage: number): MarbleLevel {
+  const step = Math.max(0, stage - 1);
+  const colors = Math.min(6, 4 + Math.floor(step / 2));
+  const id: MarbleLevel['id'] = colors >= 6 ? 'hard' : colors === 5 ? 'medium' : 'easy';
+  return {
+    id,
+    colors,
+    supply: 40 + step * 8,
+    opening: Math.min(26, 12 + step * 2),
+    speed: 3.2 + step * 0.45,
+    bombs: 3 + Math.floor(step / 2),
+    reverses: 2 + Math.floor(step / 3),
+  };
+}
 /** 场地边长（世界单位）。 */
 export const FIELD = 100;
 /** 弹珠半径。 */
@@ -132,7 +151,10 @@ export interface MarbleState {
   seed: string;
   /** 局数，从 0 开始；每次重开 +1。 */
   round: number;
+  /** 关卡号（1 起），同时作为旧档位表的下标回退。 */
   level: number;
+  /** 本关生效的配置（关卡阶梯算出来的）。 */
+  config?: MarbleLevel;
   /** 链条，按 dist 从大到小排列（队首最接近洞口）。 */
   balls: readonly MarbleBall[];
   /** 待入场的补给队列（含道具标记）。 */
@@ -246,6 +268,11 @@ export function levelAt(level: number): MarbleLevel {
   return (LEVELS[level] ?? LEVELS[DEFAULT_LEVEL]) as MarbleLevel;
 }
 
+/** 本局生效的关卡配置：优先用 state 上带的那份（关卡阶梯生成），否则回退到档位表。 */
+export function configOf(state: Pick<MarbleState, 'level' | 'config'>): MarbleLevel {
+  return state.config ?? levelAt(state.level);
+}
+
 /** 关卡种子：基准种子 + 局数。 */
 export function levelSeed(seed: string, round: number): string {
   return `${seed}#${round}`;
@@ -277,8 +304,13 @@ function assignPowers(rng: Rng, total: number, bombs: number, reverses: number):
  * 新局：生成补给队列与弹药序列。
  * 开局先把 opening 颗摆在入口一段轨道上（祖玛开局就有一串），其余陆续入场。
  */
-export function createInitialState(level: number, seed?: string, round = 0): MarbleState {
-  const config = levelAt(level);
+export function createInitialState(
+  level: number | MarbleLevel,
+  seed?: string,
+  round = 0,
+): MarbleState {
+  const config = typeof level === 'number' ? levelAt(level) : level;
+  const levelIndex = typeof level === 'number' ? level : DEFAULT_LEVEL;
   const normalizedSeed = seed ?? 'marble';
   const rng = createRng(levelSeed(normalizedSeed, round));
   const colors = drawColors(rng, config.supply, config.colors);
@@ -298,7 +330,8 @@ export function createInitialState(level: number, seed?: string, round = 0): Mar
   return {
     seed: normalizedSeed,
     round,
-    level,
+    level: levelIndex,
+    config,
     balls,
     supply,
     shots: [],
@@ -340,9 +373,10 @@ export function entryShift(from: number, to: number, target: number): number {
   return (after - before) * target;
 }
 
-/** 重开：局数 +1，换一套补给与弹药（同一基准种子下第 N 局仍可复现）。 */
+/** 重开：局数 +1，换一套补给与弹药（关卡配置不变，同一基准种子下第 N 局仍可复现）。 */
 export function restart(state: MarbleState): MarbleState {
-  return createInitialState(state.level, state.seed, state.round + 1);
+  const next = createInitialState(configOf(state), state.seed, state.round + 1);
+  return { ...next, level: state.level };
 }
 
 /** 设置瞄准角。 */
@@ -653,7 +687,7 @@ function hitTest(
  */
 export function step(state: MarbleState, dt: number): MarbleState {
   if (state.status === 'won' || state.status === 'lost') return state;
-  const config = levelAt(state.level);
+  const config = configOf(state);
   const time = state.time + dt;
 
   // 落洞阶段：不再接受补给与命中，整条链加速涌进洞口，逐颗被吞掉

@@ -8,6 +8,8 @@
 import type { Locale } from '../../core/types';
 
 export interface SnakeStrings {
+  stageLabel: string;
+  restartRun: string;
   score: string;
   restart: string;
   statusIdle: string;
@@ -21,6 +23,8 @@ export interface SnakeStrings {
 
 const dict: Record<Locale, SnakeStrings> = {
   'zh-Hans': {
+    stageLabel: '关卡',
+    restartRun: '从头开始',
     score: '得分',
     restart: '重开',
     statusIdle: '按方向键或滑动开始',
@@ -32,6 +36,8 @@ const dict: Record<Locale, SnakeStrings> = {
     boardLabel: '贪吃蛇棋盘',
   },
   en: {
+    stageLabel: 'Stage',
+    restartRun: 'Start over',
     score: 'Score',
     restart: 'Restart',
     statusIdle: 'Press a direction key or swipe to start',

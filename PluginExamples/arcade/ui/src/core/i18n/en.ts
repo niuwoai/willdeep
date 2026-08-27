@@ -34,6 +34,9 @@ export const en: Record<string, string> = {
   'games.marble.description': 'Marbles roll down a spiral — shoot three of a kind to clear the chain.',
   'games.marble.controls': 'Aim with pointer or touch and click to shoot; arrows aim, space shoots, S swaps.',
 
+  'game.stage': 'Stage',
+  'game.score': 'Score',
+
   'sound.on': 'Sound on — click to mute',
   'sound.off': 'Sound muted — click to unmute',
 

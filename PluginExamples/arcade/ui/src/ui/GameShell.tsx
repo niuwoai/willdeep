@@ -13,6 +13,7 @@ import { useBestScore } from '../core/bestScore';
 import { TEST_IDS } from '../core/testid';
 import { getGameEntry } from '../games/manifest';
 import { isSoundEnabled, playCue, setSoundEnabled, subscribeSound } from '../core/audio';
+import type { StageInfo } from '../core/stage';
 import { Confetti } from './Confetti';
 
 export interface GameShellProps {
@@ -20,9 +21,11 @@ export interface GameShellProps {
   children: ReactNode;
   /** 撒花计数：游戏每通关一次由路由层 +1（见 App.tsx 的 GameRoute）。 */
   celebration?: number;
+  /** 当前关卡与本轮累计分数，由游戏经 onStage 上报。 */
+  stage?: StageInfo | null;
 }
 
-export function GameShell({ gameId, children, celebration = 0 }: GameShellProps) {
+export function GameShell({ gameId, children, celebration = 0, stage = null }: GameShellProps) {
   const { t } = useI18n();
   const soundOn = useSyncExternalStore(subscribeSound, isSoundEnabled, () => true);
   const { route } = useRoute();
@@ -50,6 +53,17 @@ export function GameShell({ gameId, children, celebration = 0 }: GameShellProps)
           {t(entry.nameKey)}
         </h1>
         <div className="shell__meta">
+          {stage && (
+            <span className="badge badge--stage" data-testid={TEST_IDS.stage}>
+              {t('game.stage')}: {stage.stage}
+              {stage.label ? ` · ${stage.label}` : ''}
+            </span>
+          )}
+          {stage && (
+            <span className="badge badge--score" data-testid={TEST_IDS.score}>
+              {t('game.score')}: {stage.score}
+            </span>
+          )}
           <span className="badge" data-testid={TEST_IDS.bestScore}>
             {t('game.bestScore')}: {best ? best.value : t('game.noScore')}
           </span>
