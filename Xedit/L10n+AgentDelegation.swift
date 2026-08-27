@@ -159,6 +159,43 @@ extension L10n {
             defaultValue: "Judge"
         )
 
+        static func profileName(for id: String, fallback: String? = nil) -> String {
+            switch id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case AgentSubagentProfileCatalog.scoutID: return profileScoutName
+            case AgentSubagentProfileCatalog.readerID: return profileReaderName
+            case AgentSubagentProfileCatalog.deepID: return profileDeepName
+            case AgentSubagentProfileCatalog.editorID: return profileEditorName
+            case AgentSubagentProfileCatalog.smallImplementerID: return profileSmallImplementerName
+            case AgentSubagentProfileCatalog.implementerID: return profileImplementerName
+            case AgentSubagentProfileCatalog.testerID: return profileTesterName
+            case AgentSubagentProfileCatalog.reviewerID: return profileReviewerName
+            case AgentSubagentProfileCatalog.smallReviewerID: return profileSmallReviewerName
+            case AgentSubagentProfileCatalog.testFixerID: return profileTestFixerName
+            case AgentSubagentProfileCatalog.buildFixerID: return profileBuildFixerName
+            case AgentSubagentProfileCatalog.logInspectorID: return profileLogInspectorName
+            case AgentSubagentProfileCatalog.gitDetectiveID: return profileGitDetectiveName
+            case AgentSubagentProfileCatalog.securityGuardID: return profileSecurityGuardName
+            case AgentSubagentProfileCatalog.judgeID: return profileJudgeName
+            case AgentSubagentProfileCatalog.opsRunnerID: return profileOpsRunnerName
+            case AgentSubagentProfileCatalog.terminalOperatorID: return profileTerminalOperatorName
+            default:
+                let cleanFallback = fallback?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if let cleanFallback, !cleanFallback.isEmpty {
+                    return cleanFallback
+                }
+                return id.replacingOccurrences(of: "_", with: " ")
+            }
+        }
+
+        static func delegatedToWorker(_ workerName: String) -> String {
+            let template = String(
+                localized: "agent-delegation.activity.delegated-to-worker",
+                defaultValue: "Delegated to %@ Worker"
+            )
+            return String(format: template, workerName)
+        }
+
         static let profilesSectionTitle = String(
             localized: "agent-delegation.profiles-section-title",
             defaultValue: "Subagent trades"

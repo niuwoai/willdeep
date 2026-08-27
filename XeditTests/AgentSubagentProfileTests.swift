@@ -178,8 +178,8 @@ struct AgentSubagentProfileTests {
         })
     }
 
-    @Test("smart and workspace access inherit bounded subagent writes while strict still asks")
-    func boundedWriterApprovalFollowsParentWorkspacePolicy() async {
+    @Test("built-in worker scheduling never asks while exact operations commands still do")
+    func workerSchedulingDoesNotCreateApprovalFriction() async {
         let appState = AppState()
         let arguments: [String: AgentJSONValue] = [
             "profile": .string("implementer"),
@@ -210,7 +210,7 @@ struct AgentSubagentProfileTests {
 
         #expect(smart == .staticAllowlist)
         #expect(workspace == .workspaceAccess)
-        #expect(strict == nil)
+        #expect(strict == .staticAllowlist)
 
         let taskFallback = await appState.autoApprovalSource(
             toolName: "spawn_agent",
@@ -229,6 +229,37 @@ struct AgentSubagentProfileTests {
             approvalMode: .smart
         )
         #expect(taskFallback == .staticAllowlist)
+
+        let delegatedCommand: [String: AgentJSONValue] = [
+            "profile": .string("ops_runner"),
+            "target_command": .string("git push origin main"),
+        ]
+        let smartCommand = await appState.autoApprovalSource(
+            toolName: "spawn_agent",
+            arguments: delegatedCommand,
+            risk: .write,
+            rootDirectory: nil,
+            approvalMode: .smart
+        )
+        let strictCommand = await appState.autoApprovalSource(
+            toolName: "spawn_agent",
+            arguments: delegatedCommand,
+            risk: .write,
+            rootDirectory: nil,
+            approvalMode: .requestEveryTime
+        )
+        let goalCommand = await appState.autoApprovalSource(
+            toolName: "spawn_agent",
+            arguments: delegatedCommand,
+            risk: .write,
+            rootDirectory: nil,
+            interactionMode: .goal,
+            approvalMode: .smart
+        )
+
+        #expect(smartCommand == nil)
+        #expect(strictCommand == nil)
+        #expect(goalCommand == nil)
     }
 
     // MARK: Payload budget

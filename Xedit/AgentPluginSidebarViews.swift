@@ -133,9 +133,44 @@ private struct AgentPluginNavigationRow: View {
     }
 }
 
+nonisolated enum AgentPluginIconPresentation: Equatable, Sendable {
+    case monochrome
+    case originalColor
+}
+
+nonisolated struct AgentPluginFallbackIconStyle: Equatable, Sendable {
+    let symbolName: String
+    let paletteIndex: Int
+
+    static func resolve(seed: String) -> Self {
+        let symbols = [
+            "puzzlepiece.extension.fill",
+            "sparkles",
+            "shippingbox.fill",
+            "square.grid.2x2.fill",
+            "wand.and.stars",
+            "bolt.horizontal.circle.fill",
+        ]
+        let index = stableIndex(seed: seed, count: symbols.count)
+        return Self(symbolName: symbols[index], paletteIndex: index)
+    }
+
+    private static func stableIndex(seed: String, count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        var hash: UInt64 = 1_469_598_103_934_665_603
+        for byte in seed.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return Int(hash % UInt64(count))
+    }
+}
+
 struct AgentPluginIcon: View {
     let icon: String?
     let packageURL: URL
+    var presentation: AgentPluginIconPresentation = .monochrome
+    var fallbackSeed: String? = nil
 
     var body: some View {
         if let systemName {
@@ -144,11 +179,28 @@ struct AgentPluginIcon: View {
         } else if let image {
             Image(nsImage: image)
                 .resizable()
+                .interpolation(.high)
                 .scaledToFit()
+        } else if presentation == .originalColor {
+            generatedFallbackIcon
         } else {
             Image(systemName: "puzzlepiece.extension")
                 .font(.system(size: 12, weight: .medium))
         }
+    }
+
+    private var generatedFallbackIcon: some View {
+        let style = AgentPluginFallbackIconStyle.resolve(
+            seed: fallbackSeed ?? packageURL.lastPathComponent
+        )
+        return RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(Self.fallbackColors[style.paletteIndex])
+            .overlay {
+                Image(systemName: style.symbolName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(Color.white.opacity(0.96))
+            }
     }
 
     private var systemName: String? {
@@ -158,15 +210,36 @@ struct AgentPluginIcon: View {
     }
 
     private var image: NSImage? {
+        Self.loadImage(
+            icon: icon,
+            packageURL: packageURL,
+            presentation: presentation
+        )
+    }
+
+    static func loadImage(
+        icon: String?,
+        packageURL: URL,
+        presentation: AgentPluginIconPresentation
+    ) -> NSImage? {
         guard let icon, !icon.hasPrefix("sf:"),
               let url = try? AgentPluginPackageLoader.safeResourceURL(
-                relativePath: icon,
-                packageURL: packageURL
+                  relativePath: icon,
+                  packageURL: packageURL
               ),
               let image = NSImage(contentsOf: url) else { return nil }
-        image.isTemplate = true
+        image.isTemplate = presentation == .monochrome
         return image
     }
+
+    private static let fallbackColors: [Color] = [
+        Color(red: 0.34, green: 0.40, blue: 0.88),
+        Color(red: 0.18, green: 0.52, blue: 0.88),
+        Color(red: 0.12, green: 0.62, blue: 0.62),
+        Color(red: 0.92, green: 0.48, blue: 0.20),
+        Color(red: 0.62, green: 0.36, blue: 0.84),
+        Color(red: 0.88, green: 0.32, blue: 0.52),
+    ]
 }
 
 private struct AgentPluginNavigationDropDelegate: DropDelegate {

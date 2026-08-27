@@ -947,6 +947,7 @@ struct AgentSemanticActivityStatusLine: View {
                 )
             }
             let label = AgentToolKind.of(call).delegatedActivityLabel(
+                for: call,
                 progress: delegatedProgress ?? call.subagentProgress
             ) ?? "委派中"
             // 委派同样属于无需用户介入的正常推进状态。用灰度保留进度

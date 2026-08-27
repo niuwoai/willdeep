@@ -96,24 +96,7 @@ nonisolated struct AgentProfile: Codable, Equatable, Identifiable, Sendable {
     /// Built-in subagent trades render under their localized names; everything
     /// else uses the stored name.
     @MainActor var localizedName: String {
-        switch id {
-        case AgentSubagentProfileCatalog.scoutID: return L10n.AgentDelegation.profileScoutName
-        case AgentSubagentProfileCatalog.readerID: return L10n.AgentDelegation.profileReaderName
-        case AgentSubagentProfileCatalog.editorID: return L10n.AgentDelegation.profileEditorName
-        case AgentSubagentProfileCatalog.implementerID: return L10n.AgentDelegation.profileImplementerName
-        case AgentSubagentProfileCatalog.deepID: return L10n.AgentDelegation.profileDeepName
-        case AgentSubagentProfileCatalog.testerID: return L10n.AgentDelegation.profileTesterName
-        case AgentSubagentProfileCatalog.reviewerID: return L10n.AgentDelegation.profileReviewerName
-        case AgentSubagentProfileCatalog.testFixerID: return L10n.AgentDelegation.profileTestFixerName
-        case AgentSubagentProfileCatalog.buildFixerID: return L10n.AgentDelegation.profileBuildFixerName
-        case AgentSubagentProfileCatalog.logInspectorID: return L10n.AgentDelegation.profileLogInspectorName
-        case AgentSubagentProfileCatalog.gitDetectiveID: return L10n.AgentDelegation.profileGitDetectiveName
-        case AgentSubagentProfileCatalog.securityGuardID: return L10n.AgentDelegation.profileSecurityGuardName
-        case AgentSubagentProfileCatalog.judgeID: return L10n.AgentDelegation.profileJudgeName
-        case AgentSubagentProfileCatalog.opsRunnerID: return L10n.AgentDelegation.profileOpsRunnerName
-        case AgentSubagentProfileCatalog.terminalOperatorID: return L10n.AgentDelegation.profileTerminalOperatorName
-        default: return name
-        }
+        L10n.AgentDelegation.profileName(for: id, fallback: name)
     }
 
     /// Soul edits only reach an in-process child loop. An external CLI takes

@@ -524,10 +524,20 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
 }
 
 extension AgentToolKind {
-    var delegatedActivityBaseLabel: String? {
+    func delegatedActivityBaseLabel(for call: AgentToolCall) -> String? {
         switch self {
         case .subagent:
-            return "委派给子代理"
+            let stampedName = call.subagentWorkerName?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let requestedProfile = call.arguments["profile"]?.stringValue()
+                ?? AgentSubagentProfileCatalog.deepID
+            let workerName: String
+            if let stampedName, !stampedName.isEmpty {
+                workerName = stampedName
+            } else {
+                workerName = L10n.AgentDelegation.profileName(for: requestedProfile)
+            }
+            return L10n.AgentDelegation.delegatedToWorker(workerName)
         case .claudeCode:
             return "委派给 Claude Code"
         case .codexCLI:
@@ -543,8 +553,8 @@ extension AgentToolKind {
         }
     }
 
-    func delegatedActivityLabel(progress: String?) -> String? {
-        guard let base = delegatedActivityBaseLabel else { return nil }
+    func delegatedActivityLabel(for call: AgentToolCall, progress: String?) -> String? {
+        guard let base = delegatedActivityBaseLabel(for: call) else { return nil }
         let cleanProgress = progress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return cleanProgress.isEmpty ? base : "\(base) · \(cleanProgress)"
     }
