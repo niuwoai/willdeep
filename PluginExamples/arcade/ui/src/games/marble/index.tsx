@@ -87,6 +87,166 @@ function colorOf(color: number): string {
   return MARBLE_COLORS[color % MARBLE_COLORS.length] as string;
 }
 
+/** 光从左上方 45° 打过来：高光偏左上，阴影落右下。 */
+const LIGHT = { x: -0.42, y: -0.45 };
+/** 弹珠精灵的贴图边长（像素）：一次画好、之后只做缩放贴图，省掉逐帧渐变。 */
+const SPRITE_SIZE = 96;
+
+const spriteCache = new Map<number, HTMLCanvasElement>();
+
+/** 取（或生成）某个颜色的球体精灵：底色 + 高光 + 暗边，自带立体感。 */
+function marbleSprite(color: number): HTMLCanvasElement | null {
+  const cached = spriteCache.get(color);
+  if (cached) return cached;
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = SPRITE_SIZE;
+  canvas.height = SPRITE_SIZE;
+  let context: CanvasRenderingContext2D | null = null;
+  try {
+    context = canvas.getContext('2d');
+  } catch {
+    context = null;
+  }
+  if (!context) return null;
+
+  const radius = SPRITE_SIZE / 2;
+  const base = colorOf(color);
+  const gradient = context.createRadialGradient(
+    radius + LIGHT.x * radius * 0.9,
+    radius + LIGHT.y * radius * 0.9,
+    radius * 0.08,
+    radius,
+    radius,
+    radius,
+  );
+  gradient.addColorStop(0, '#ffffff');
+  gradient.addColorStop(0.18, base);
+  gradient.addColorStop(0.82, base);
+  gradient.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+  context.beginPath();
+  context.arc(radius, radius, radius * 0.98, 0, Math.PI * 2);
+  context.fillStyle = gradient;
+  context.fill();
+
+  // 迎光面的小高光点，让球看起来是「亮面材质」
+  context.beginPath();
+  context.ellipse(
+    radius + LIGHT.x * radius * 1.05,
+    radius + LIGHT.y * radius * 1.05,
+    radius * 0.26,
+    radius * 0.18,
+    -Math.PI / 4,
+    0,
+    Math.PI * 2,
+  );
+  context.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  context.fill();
+
+  // 背光侧的暗环，压住轮廓
+  context.beginPath();
+  context.arc(radius, radius, radius * 0.96, 0, Math.PI * 2);
+  context.strokeStyle = 'rgba(0, 0, 0, 0.28)';
+  context.lineWidth = radius * 0.08;
+  context.stroke();
+
+  spriteCache.set(color, canvas);
+  return canvas;
+}
+
+/** 画一颗球：先落地阴影（背光方向），再贴球体精灵。 */
+function drawMarble(
+  context: CanvasRenderingContext2D,
+  center: Vec,
+  color: number,
+  scale = 1,
+): void {
+  const radius = BALL_RADIUS * scale;
+  context.beginPath();
+  context.ellipse(
+    center.x - LIGHT.x * radius * 0.75,
+    center.y - LIGHT.y * radius * 0.75,
+    radius * 0.95,
+    radius * 0.72,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  context.fillStyle = 'rgba(0, 0, 0, 0.38)';
+  context.fill();
+
+  const sprite = marbleSprite(color);
+  if (sprite) {
+    context.drawImage(sprite, center.x - radius, center.y - radius, radius * 2, radius * 2);
+    return;
+  }
+  context.beginPath();
+  context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+  context.fillStyle = colorOf(color);
+  context.fill();
+}
+
+/** 洞口的黄金浮雕骷髅：一眼就知道珠子滚到这儿就结束了。 */
+function drawSkull(context: CanvasRenderingContext2D, center: Vec, radius: number): void {
+  const gold = context.createLinearGradient(
+    center.x - radius,
+    center.y - radius,
+    center.x + radius,
+    center.y + radius,
+  );
+  gold.addColorStop(0, '#ffe9a8');
+  gold.addColorStop(0.35, '#e8b84a');
+  gold.addColorStop(0.7, '#a9761f');
+  gold.addColorStop(1, '#6d4711');
+
+  // 洞：先挖一圈黑，再镶金环
+  context.beginPath();
+  context.arc(center.x, center.y, radius * 1.28, 0, Math.PI * 2);
+  context.fillStyle = '#05070d';
+  context.fill();
+  context.lineWidth = radius * 0.26;
+  context.strokeStyle = gold;
+  context.stroke();
+
+  // 头骨轮廓
+  context.save();
+  context.translate(center.x, center.y);
+  context.beginPath();
+  context.moveTo(-radius * 0.72, -radius * 0.1);
+  context.bezierCurveTo(-radius * 0.78, -radius * 0.95, radius * 0.78, -radius * 0.95, radius * 0.72, -radius * 0.1);
+  context.bezierCurveTo(radius * 0.7, radius * 0.42, radius * 0.42, radius * 0.5, radius * 0.34, radius * 0.52);
+  context.lineTo(-radius * 0.34, radius * 0.52);
+  context.bezierCurveTo(-radius * 0.42, radius * 0.5, -radius * 0.7, radius * 0.42, -radius * 0.72, -radius * 0.1);
+  context.closePath();
+  context.fillStyle = gold;
+  context.fill();
+  // 浮雕感：迎光面提亮描边
+  context.strokeStyle = 'rgba(255, 245, 210, 0.65)';
+  context.lineWidth = radius * 0.07;
+  context.stroke();
+
+  // 眼窝与鼻腔（凹陷用黑 + 内侧一点反光）
+  context.fillStyle = '#0a0c12';
+  for (const sign of [-1, 1]) {
+    context.beginPath();
+    context.ellipse(sign * radius * 0.32, -radius * 0.24, radius * 0.24, radius * 0.27, 0, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.beginPath();
+  context.moveTo(0, radius * 0.02);
+  context.lineTo(radius * 0.13, radius * 0.26);
+  context.lineTo(-radius * 0.13, radius * 0.26);
+  context.closePath();
+  context.fill();
+
+  // 牙
+  context.fillStyle = 'rgba(10, 12, 18, 0.85)';
+  for (let i = -2; i <= 2; i += 1) {
+    context.fillRect(i * radius * 0.16 - radius * 0.05, radius * 0.34, radius * 0.1, radius * 0.18);
+  }
+  context.restore();
+}
+
 /** 画一帧：轨道 → 洞口 → 链条 → 飞行弹珠 → 发射器与准星。 */
 function draw(
   canvas: HTMLCanvasElement,
@@ -111,44 +271,38 @@ function draw(
     if (index === 0) context.moveTo(point.x, point.y);
     else context.lineTo(point.x, point.y);
   });
-  context.strokeStyle = '#1b2437';
-  context.lineWidth = SPACING + 1.6;
   context.lineCap = 'round';
   context.lineJoin = 'round';
+  // 槽壁：先画一圈偏亮的外沿，再压上暗色槽底，形成凹槽的立体感
+  context.strokeStyle = '#2b3650';
+  context.lineWidth = SPACING + 3.4;
+  context.stroke();
+  context.strokeStyle = '#141b2b';
+  context.lineWidth = SPACING + 1.2;
   context.stroke();
 
-  // 洞口
+  // 洞口：黄金浮雕骷髅，珠子滚到这儿就是终局
   const hole = pointAt(PATH_LENGTH);
-  context.beginPath();
-  context.arc(hole.x, hole.y, BALL_RADIUS * 1.6, 0, Math.PI * 2);
-  context.fillStyle = '#05070d';
-  context.fill();
-  context.strokeStyle = '#39435c';
-  context.lineWidth = 0.8;
-  context.stroke();
+  drawSkull(context, hole, BALL_RADIUS * 1.75);
 
   // 链条（带道具的珠子额外画标记：炸弹是深色芯 + 引信，闪光是脉动白环 + 回退箭头）
   const pulse = 0.55 + 0.45 * Math.sin(state.time * 7);
   for (const ball of state.balls) {
+    if (ball.dist < 0) continue; // 还在入口隧道里，尚未露头
     const center = pointAt(ball.dist);
-    context.beginPath();
-    context.arc(center.x, center.y, BALL_RADIUS, 0, Math.PI * 2);
-    context.fillStyle = colorOf(ball.color);
-    context.fill();
-    context.beginPath();
-    context.arc(center.x - BALL_RADIUS * 0.3, center.y - BALL_RADIUS * 0.3, BALL_RADIUS * 0.35, 0, Math.PI * 2);
-    context.fillStyle = 'rgba(255, 255, 255, 0.45)';
-    context.fill();
-    if (ball.power === 'bomb') drawBomb(context, center, pulse);
-    else if (ball.power === 'reverse') drawFlash(context, center, pulse, tangentAt(ball.dist));
+    // 快到洞口的珠子按距离缩小，看起来是被骷髅一口口吞下去
+    const remain = PATH_LENGTH - ball.dist;
+    const scale = remain < SPACING * 1.6 ? Math.max(0.15, remain / (SPACING * 1.6)) : 1;
+    drawMarble(context, center, ball.color, scale);
+    if (scale > 0.7) {
+      if (ball.power === 'bomb') drawBomb(context, center, pulse);
+      else if (ball.power === 'reverse') drawFlash(context, center, pulse, tangentAt(ball.dist));
+    }
   }
 
   // 飞行中的弹珠
   for (const shot of state.shots) {
-    context.beginPath();
-    context.arc(shot.x, shot.y, BALL_RADIUS, 0, Math.PI * 2);
-    context.fillStyle = colorOf(shot.color);
-    context.fill();
+    drawMarble(context, { x: shot.x, y: shot.y }, shot.color);
   }
 
   // 一次性特效：爆炸是橙色扩散圈，倒流是白色收缩圈
@@ -194,14 +348,13 @@ function draw(
   context.strokeStyle = '#39435c';
   context.lineWidth = 0.8;
   context.stroke();
-  context.beginPath();
-  context.arc(SHOOTER.x, SHOOTER.y, BALL_RADIUS, 0, Math.PI * 2);
-  context.fillStyle = colorOf(state.loaded);
-  context.fill();
-  context.beginPath();
-  context.arc(SHOOTER.x + BALL_RADIUS * 2.6, SHOOTER.y + BALL_RADIUS * 2.6, BALL_RADIUS * 0.7, 0, Math.PI * 2);
-  context.fillStyle = colorOf(state.next);
-  context.fill();
+  drawMarble(context, SHOOTER, state.loaded);
+  drawMarble(
+    context,
+    { x: SHOOTER.x + BALL_RADIUS * 2.6, y: SHOOTER.y + BALL_RADIUS * 2.6 },
+    state.next,
+    0.62,
+  );
 }
 
 /** 炸弹标记：深色芯 + 顶上一点引信火花。 */
@@ -369,6 +522,7 @@ export default function MarbleGame({ seed, onWin }: GameProps) {
   const statusText: Record<MarbleStatus, string> = {
     idle: strings.statusIdle,
     playing: strings.statusPlaying,
+    falling: strings.statusFalling,
     won: strings.statusWon,
     lost: strings.statusLost,
   };

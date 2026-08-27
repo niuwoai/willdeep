@@ -59,7 +59,11 @@ export interface MarbleShot {
   vy: number;
 }
 
-export type MarbleStatus = 'idle' | 'playing' | 'won' | 'lost';
+/**
+ * 'falling' 是判负前的落洞动画阶段：链条加速涌进洞口，逐颗被吞掉，
+ * 全部吞完才落到 'lost'。这样用户看得见「为什么输」，而不是画面一僵。
+ */
+export type MarbleStatus = 'idle' | 'playing' | 'falling' | 'won' | 'lost';
 
 export interface MarbleLevel {
   id: 'easy' | 'medium' | 'hard';
@@ -98,8 +102,8 @@ export const SHOOTER: Vec = { x: FIELD / 2, y: FIELD / 2 };
 export const SHOT_SPEED = 78;
 /** 同时在飞的弹珠上限。 */
 export const MAX_SHOTS = 3;
-/** 链条断口后方的追赶速度倍率（缺口会被迅速补上）。 */
-const CATCH_UP = 4.5;
+/** 链条断口后方的追赶速度上限倍率（缺口会被迅速补上）。 */
+const CATCH_UP = 6;
 /** 每消一颗的基础分。 */
 const SCORE_PER_BALL = 10;
 /** 炸弹爆炸半径（沿轨道的距离，约 3 个身位前后各一片）。 */
@@ -108,6 +112,20 @@ export const BOMB_RADIUS = SPACING * 3.2;
 export const REVERSE_DISTANCE = SPACING * 10;
 /** 特效停留时长（秒），渲染层按它换算扩散进度。 */
 export const EFFECT_SECONDS = 0.45;
+/** 开局弹簧入场：整条链在这段时间里被「甩」上轨道，中途会过冲再回弹。 */
+const ENTRY_SECONDS = 1.2;
+/** 落洞阶段：基础速度与随时间的加速度（越掉越快）。 */
+const FALL_BASE_SPEED = 26;
+const FALL_ACCEL = 34;
+/** 落洞兜底时长（秒）：再慢也要收场，不能卡在动画里。 */
+const FALL_TIMEOUT = 4;
+/** 闪光倒退：起步速度、加速度与上限（带一点推背感，不是瞬移）。 */
+const PULLBACK_START_SPEED = 24;
+const PULLBACK_ACCEL = 190;
+const PULLBACK_MAX_SPEED = 150;
+/** 缺口合拢：起步倍率 + 每个身位的加成，缺口越大追得越快，合拢时自然减速。 */
+const CATCH_UP_BASE = 2.2;
+const CATCH_UP_PER_BODY = 2.2;
 
 export interface MarbleState {
   /** 基准种子：来自 `?seed=`，缺省时由组件生成一次性熵种子。 */
@@ -137,6 +155,16 @@ export interface MarbleState {
   pendingJunctions: readonly number[];
   /** 进行中的一次性特效（爆炸圈、倒流圈）。 */
   effects: readonly MarbleEffect[];
+  /** 开局弹簧入场已经过去的时间（秒）。 */
+  entry: number;
+  /** 入场要把链条整体推进的距离（= 开局珠子数 × 身位）。 */
+  entryTarget: number;
+  /** 待完成的倒退距离（闪光珠触发，按 pullbackSpeed 逐帧吃掉）。 */
+  pullback: number;
+  /** 当前倒退速度（世界单位/秒），从 0 加速上去。 */
+  pullbackSpeed: number;
+  /** 落洞阶段已经过去的时间（秒）。 */
+  falling: number;
   /** 已推进的时间（秒），用于特效寿命与道具闪烁节拍。 */
   time: number;
   nextId: number;
@@ -257,9 +285,11 @@ export function createInitialState(level: number, seed?: string, round = 0): Mar
   const ammo = drawColors(rng, config.supply * 2 + 20, config.colors);
   const powers = assignPowers(rng, colors.length, config.bombs, config.reverses);
   const opening = Math.min(config.opening, colors.length);
+  // 开局这批珠子先排在入口之前（dist < 0 = 还在隧道里，渲染层不画），
+  // 由 step 的弹簧入场把它们成串甩上轨道。
   const balls: MarbleBall[] = colors.slice(0, opening).map((color, index) => {
     const power = powers.get(index);
-    return { id: index + 1, color, dist: (opening - 1 - index) * SPACING, ...(power ? { power } : {}) };
+    return { id: index + 1, color, dist: -(index + 1) * SPACING, ...(power ? { power } : {}) };
   });
   const supply: MarbleSupplyBall[] = colors.slice(opening).map((color, offset) => {
     const power = powers.get(opening + offset);
@@ -282,9 +312,32 @@ export function createInitialState(level: number, seed?: string, round = 0): Mar
     status: 'idle',
     pendingJunctions: [],
     effects: [],
+    entry: 0,
+    entryTarget: opening * SPACING,
+    pullback: 0,
+    pullbackSpeed: 0,
+    falling: 0,
     time: 0,
     nextId: opening + 1,
   };
+}
+
+/**
+ * 弹簧缓动：0 → 1 的阻尼振荡曲线，中途冲过 1 再回弹几下落定。
+ * 开局入场用它把整条链甩上轨道，看起来就是「弹进来」而不是匀速爬进来。
+ */
+export function springEase(progress: number): number {
+  if (progress <= 0) return 0;
+  if (progress >= 1) return 1;
+  return 1 - Math.exp(-5.5 * progress) * Math.cos(7.5 * progress);
+}
+
+/** 本帧因入场弹簧产生的整体位移（入场结束后恒为 0）。 */
+export function entryShift(from: number, to: number, target: number): number {
+  if (from >= ENTRY_SECONDS) return 0;
+  const before = springEase(from / ENTRY_SECONDS);
+  const after = springEase(Math.min(ENTRY_SECONDS, to) / ENTRY_SECONDS);
+  return (after - before) * target;
 }
 
 /** 重开：局数 +1，换一套补给与弹药（同一基准种子下第 N 局仍可复现）。 */
@@ -392,6 +445,8 @@ export interface DetonationResult {
   /** 断口后方那颗珠的 id，供缺口合拢的连锁判定。 */
   junction: number | null;
   effects: MarbleEffect[];
+  /** 本次要往回倒退的距离（闪光珠），交给 step 逐帧加速吃掉。 */
+  pullback: number;
 }
 
 const NO_DETONATION: Omit<DetonationResult, 'balls'> = {
@@ -399,6 +454,7 @@ const NO_DETONATION: Omit<DetonationResult, 'balls'> = {
   removed: 0,
   junction: null,
   effects: [],
+  pullback: 0,
 };
 
 /**
@@ -462,10 +518,12 @@ function detonate(
     }
   }
 
+  let pullback = 0;
   if (reverses > 0 && current.length > 0) {
     const head = current[0] as MarbleBall;
     const center = pointAt(head.dist);
-    current = rollbackChain(current, REVERSE_DISTANCE * reverses);
+    // 不瞬移：把距离挂账，由 step 带加速地把链条拉回去
+    pullback = REVERSE_DISTANCE * reverses;
     effects.push({
       kind: 'reverse',
       x: center.x,
@@ -475,7 +533,7 @@ function detonate(
     });
   }
 
-  return { balls: current, gained, removed, junction, effects };
+  return { balls: current, gained, removed, junction, effects, pullback };
 }
 
 /**
@@ -539,6 +597,7 @@ export function applyHit(
     combo: result.removed > 0 ? state.combo + 1 : 1,
     pendingJunctions,
     effects: [...state.effects, ...result.effects],
+    pullback: state.pullback + result.pullback,
     nextId: Math.max(state.nextId, id) + 1,
     status: state.status === 'idle' ? 'playing' : state.status,
   };
@@ -559,9 +618,12 @@ function advance(
       continue;
     }
     const ahead = next[i - 1] as MarbleBall;
-    const wasTouching = (balls[i - 1] as MarbleBall).dist - ball.dist <= SPACING + CONTACT_EPS;
+    const gap = (balls[i - 1] as MarbleBall).dist - ball.dist - SPACING;
+    const wasTouching = gap <= CONTACT_EPS;
+    // 缺口越大追得越快（爆炸炸出的大缺口先猛冲），越合拢越慢，天然是个缓动
+    const chase = wasTouching ? 1 : Math.min(CATCH_UP, CATCH_UP_BASE + (gap / SPACING) * CATCH_UP_PER_BODY);
     const limit = ahead.dist - SPACING;
-    const moved = ball.dist + speed * (wasTouching ? 1 : CATCH_UP) * dt;
+    const moved = ball.dist + speed * chase * dt;
     const dist = Math.min(moved, limit);
     if (!wasTouching && dist >= limit - CONTACT_EPS) joined.push(ball.id);
     next.push({ ...ball, dist });
@@ -592,9 +654,32 @@ function hitTest(
 export function step(state: MarbleState, dt: number): MarbleState {
   if (state.status === 'won' || state.status === 'lost') return state;
   const config = levelAt(state.level);
-
   const time = state.time + dt;
-  const advanced = advance(state.balls, dt, config.speed);
+
+  // 落洞阶段：不再接受补给与命中，整条链加速涌进洞口，逐颗被吞掉
+  if (state.status === 'falling') {
+    const falling = state.falling + dt;
+    const speed = FALL_BASE_SPEED + FALL_ACCEL * falling;
+    const balls = state.balls
+      .map((ball) => ({ ...ball, dist: ball.dist + speed * dt }))
+      .filter((ball) => ball.dist < PATH_LENGTH);
+    const done = balls.length === 0 || falling >= FALL_TIMEOUT;
+    return {
+      ...state,
+      balls,
+      shots: [],
+      time,
+      falling,
+      effects: state.effects.filter((effect) => effect.until > time),
+      status: done ? 'lost' : 'falling',
+    };
+  }
+
+  // 入场弹簧：整体位移（含过冲回弹），不改变彼此间距，插珠也不受影响
+  const entry = state.entry + dt;
+  const shift = entryShift(state.entry, entry, state.entryTarget);
+  const entering = shift === 0 ? state.balls : state.balls.map((ball) => ({ ...ball, dist: ball.dist + shift }));
+  const advanced = advance(entering, dt, config.speed);
   let balls = advanced.balls;
   let score = state.score;
   let combo = state.combo;
@@ -614,6 +699,26 @@ export function step(state: MarbleState, dt: number): MarbleState {
     combo += 1;
     effects = [...effects, ...result.effects];
     if (result.junction !== null) pendingJunctions = [...pendingJunctions, result.junction];
+  }
+
+  // 闪光倒退：带加速地把链条往回拉，而不是瞬移
+  let pullback = state.pullback;
+  let pullbackSpeed = state.pullbackSpeed;
+  if (pullback > 0 && balls.length > 0) {
+    pullbackSpeed = Math.min(
+      PULLBACK_MAX_SPEED,
+      (pullbackSpeed > 0 ? pullbackSpeed : PULLBACK_START_SPEED) + PULLBACK_ACCEL * dt,
+    );
+    const move = Math.min(pullback, pullbackSpeed * dt);
+    balls = rollbackChain(balls, move);
+    pullback -= move;
+    if (pullback <= 1e-6) {
+      pullback = 0;
+      pullbackSpeed = 0;
+    }
+  } else if (pullback > 0) {
+    pullback = 0;
+    pullbackSpeed = 0;
   }
 
   // 补给入场：入口空出一个身位就放下一颗
@@ -640,6 +745,9 @@ export function step(state: MarbleState, dt: number): MarbleState {
     combo,
     pendingJunctions,
     effects,
+    entry,
+    pullback,
+    pullbackSpeed,
     time,
     nextId,
     shots: [],
@@ -667,10 +775,11 @@ export function step(state: MarbleState, dt: number): MarbleState {
   }
 
   const head = working.balls[0];
-  const lost = head !== undefined && head.dist >= PATH_LENGTH;
-  const won = !lost && working.supply.length === 0 && working.balls.length === 0;
+  // 队首碰到洞口不是立刻判负，先进落洞动画，吞完才 lost
+  const falling = head !== undefined && head.dist >= PATH_LENGTH;
+  const won = !falling && working.supply.length === 0 && working.balls.length === 0;
   // idle 只由「玩家开了第一枪」翻成 playing（见 shoot），链条则一直在走。
-  const status: MarbleStatus = lost ? 'lost' : won ? 'won' : working.status;
+  const status: MarbleStatus = falling ? 'falling' : won ? 'won' : working.status;
 
   return { ...working, shots, combo, status };
 }
