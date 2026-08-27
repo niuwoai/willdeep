@@ -578,7 +578,10 @@ struct AgentSessionsSidebar: View {
             // owns; the "⌘N" label this row used to show never actually fired).
             SidebarActionRow(
                 icon: "bubble.left",
-                title: L10n.Sidebar.chatAction,
+                // 标题跟着语义走：在聊天页它就是「新会话」，在别处它是
+                // 「会话」＝回到最近那一次。行为本来就是这样分叉的
+                // （见 activateAgentConversationEntry），此前只有标题没跟上。
+                title: appState.agentConversationEntryTitle,
                 shortcut: nil,
                 isSelected: appState.agentPrimaryDestination == .conversation,
                 trailingIcon: "square.and.pencil",

@@ -61,6 +61,8 @@ nonisolated enum AgentSessionSearch {
     enum Limits {
         /// Characters kept from each quoted message.
         static let excerptCharacters = 400
+        /// 搜索面板空查询时默认列出的最近会话条数。
+        static let recentSessions = 50
         /// Messages of surrounding context on each side of a hit.
         static let contextRadius = 1
         /// Sessions opened from disk in one search, however many match on
@@ -106,6 +108,23 @@ nonisolated enum AgentSessionSearch {
             .map(AgentSessionSearchResult.session)
 
         return projectResults + sessionResults
+    }
+
+    /// 空查询时的默认列表：不分项目、不分组，按最后更新时间倒序的最近会话。
+    /// 刻意不过滤「看起来是空壳」的会话——元数据装载的会话 `messages` 本来就是
+    /// 空的，按它过滤会把真实历史藏掉。
+    static func recentSessions(
+        _ sessions: [AgentSession],
+        limit: Int = Limits.recentSessions
+    ) -> [AgentSessionSearchResult] {
+        sessions
+            .filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .sorted { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
+            .prefix(limit)
+            .map(AgentSessionSearchResult.session)
     }
 
     /// Whether a session belongs to the workspace the user is looking at.

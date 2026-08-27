@@ -36,6 +36,36 @@ struct AgentSessionSearchTests {
         #expect(!AgentSessionSearch.matches("anything", query: "   "))
     }
 
+    @Test("空查询给的是最近会话：按最后更新时间倒序，不分项目")
+    func emptyQueryListsRecentSessionsAcrossProjects() throws {
+        var older = session(title: "旧会话", workspacePath: "/Users/rocky/Sites/a")
+        older.updatedAt = Date(timeIntervalSince1970: 1_000)
+        var newer = session(title: "新会话", workspacePath: "/Users/rocky/Sites/b")
+        newer.updatedAt = Date(timeIntervalSince1970: 2_000)
+        var middle = session(title: "中间会话", workspacePath: nil)
+        middle.updatedAt = Date(timeIntervalSince1970: 1_500)
+
+        let results = AgentSessionSearch.recentSessions([older, newer, middle])
+        let titles = results.compactMap { result -> String? in
+            guard case .session(let value) = result else { return nil }
+            return value.title
+        }
+        #expect(titles == ["新会话", "中间会话", "旧会话"])
+        // 项目不参与：面板里默认就是一条平铺的最近会话流
+        #expect(results.allSatisfy { if case .project = $0 { return false } else { return true } })
+    }
+
+    @Test("最近会话有条数上限，不把整份历史铺进面板")
+    func recentSessionsAreCapped() throws {
+        let sessions = (0..<80).map { index -> AgentSession in
+            var value = session(title: "会话 \(index)")
+            value.updatedAt = Date(timeIntervalSince1970: TimeInterval(index))
+            return value
+        }
+        #expect(AgentSessionSearch.recentSessions(sessions).count == AgentSessionSearch.Limits.recentSessions)
+        #expect(AgentSessionSearch.recentSessions(sessions, limit: 5).count == 5)
+    }
+
     @Test("title results include matching projects before matching chats")
     func titleResultsIncludeProjectsAndChats() {
         let project = AgentProject(

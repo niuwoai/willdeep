@@ -59,7 +59,9 @@ struct AgentSessionSearchView: View {
 
     @ViewBuilder
     private var content: some View {
-        if query.trimmingCharacters(in: .whitespaces).isEmpty {
+        // 一打开就有东西看：空查询时列最近会话（不分项目），真的一条会话都
+        // 没有才退回空态提示。
+        if results.isEmpty, query.trimmingCharacters(in: .whitespaces).isEmpty {
             placeholderState(text: L10n.SessionSearch.prompt, systemImage: "text.bubble")
         } else if results.isEmpty {
             placeholderState(text: L10n.SessionSearch.empty, systemImage: "magnifyingglass")
@@ -110,7 +112,10 @@ struct AgentSessionSearchView: View {
     /// Searches chat titles and named projects. The shared matcher keeps the
     /// literal, case/diacritic-insensitive rules consistent with model tools.
     private var results: [AgentSessionSearchResult] {
-        AgentSessionSearch.titleResults(
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return AgentSessionSearch.recentSessions(appState.agentSessions)
+        }
+        return AgentSessionSearch.titleResults(
             sessions: appState.agentSessions,
             projects: appState.agentProjects,
             query: query
