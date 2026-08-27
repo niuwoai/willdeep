@@ -68,6 +68,54 @@ struct AgentToolCallGroupingPresentationTests {
         )
     }
 
+    @Test("subagent progress keeps the current safe activity behind the Worker name")
+    func subagentProgressShowsCurrentActivity() {
+        let thinking = AgentSubagentProgressUpdate(
+            round: 1,
+            maximumRounds: 12,
+            completedToolInvocations: 0,
+            activity: .thinking
+        )
+        #expect(
+            thinking.displayText == [
+                L10n.AgentDelegation.progressRound(1, 12),
+                L10n.AgentDelegation.progressThinking,
+            ].joined(separator: " · ")
+        )
+
+        let reading = AgentSubagentProgressUpdate(
+            round: 3,
+            maximumRounds: 12,
+            completedToolInvocations: 5,
+            activity: .runningTool(AgentToolDisplay.name(for: "read_file"))
+        )
+        let expectedReading = [
+            L10n.AgentDelegation.progressRound(3, 12),
+            L10n.AgentDelegation.progressCompletedTools(5),
+            L10n.AgentDelegation.progressRunningTool(AgentToolDisplay.name(for: "read_file")),
+        ].joined(separator: " · ")
+        #expect(reading.displayText == expectedReading)
+
+        let implementer = makeCall(
+            "spawn_agent",
+            arguments: ["profile": .string(AgentSubagentProfileCatalog.implementerID)]
+        )
+        #expect(
+            AgentToolKind.of(implementer).delegatedActivityLabel(
+                for: implementer,
+                progress: reading.displayText
+            ) == "\(L10n.AgentDelegation.delegatedToWorker(AgentSubagentProfileCatalog.implementer.localizedDisplayName)) · \(expectedReading)"
+        )
+
+        let verifying = AgentSubagentProgressUpdate(
+            round: 4,
+            maximumRounds: 12,
+            completedToolInvocations: 7,
+            activity: .verifying
+        )
+        #expect(verifying.displayText.hasSuffix(L10n.AgentDelegation.progressVerifying))
+    }
+
     @Test("delegated agent composer activity uses a neutral gray tint")
     func delegatedAgentActivityUsesNeutralTint() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
