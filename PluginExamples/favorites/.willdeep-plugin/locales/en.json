@@ -2,6 +2,10 @@
   "destination.favorites": "Favorites",
   "command.add": "Favorite",
   "command.list": "List favorites",
+  "command.update": "Update favorite",
   "command.remove": "Remove favorite",
+  "command.restore": "Restore favorite",
+  "command.clear": "Clear favorites",
+  "command.refresh": "Refresh",
   "command.open": "Open favorites"
 }

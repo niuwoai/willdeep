@@ -23,14 +23,17 @@ def app_html
     let nextID=1,context={};const pending=new Map();
     function request(method,params){const id=nextID++;parent.postMessage({jsonrpc:"2.0",id,method,params},"*");return new Promise((resolve,reject)=>pending.set(id,{resolve,reject}))}
     function notify(method,params){parent.postMessage({jsonrpc:"2.0",method,params},"*")}
-    addEventListener("message",event=>{const message=event.data;if(!message||message.jsonrpc!=="2.0")return;if(message.id&&pending.has(message.id)){const waiter=pending.get(message.id);pending.delete(message.id);message.error?waiter.reject(new Error(message.error.message)):waiter.resolve(message.result);return}if(message.method==="ui/notifications/host-context-changed"){context={...context,...(message.params?.willdeep||{})};draw(context)}});
+    // 页面是 WKWebView 的顶层文档，parent === window：自己 postMessage 出去的请求
+    // 会原样回到这个监听器。带 method 的一律是请求/通知，绝不能当成响应处理，
+    // 否则 ui/initialize 会被自己的回声「解决」成 undefined。
+    addEventListener("message",event=>{const message=event.data;if(!message||message.jsonrpc!=="2.0")return;if(typeof message.method==="string"){if(message.method==="ui/notifications/host-context-changed"){context={...context,...(message.params?.willdeep||{})};draw(context)}return}if(message.id===undefined||message.id===null||!pending.has(message.id))return;const waiter=pending.get(message.id);pending.delete(message.id);message.error?waiter.reject(new Error(message.error.message)):waiter.resolve(message.result)});
     const titleLabel=document.getElementById("title"),selectionLabel=document.getElementById("selection"),createButton=document.getElementById("create"),editButton=document.getElementById("edit"),closeButton=document.getElementById("close");
     function draw(c){const t=m[(c.locale||"").startsWith("zh")?"zh-Hans":"en"];titleLabel.textContent=t.title;selectionLabel.textContent=t.selected+": "+(c.selectedItemID||"—");createButton.textContent=t.create;editButton.textContent=t.edit;closeButton.textContent=t.close;editButton.disabled=closeButton.disabled=!c.selectedItemID}
     function callTool(name,args){return request("tools/call",{name,arguments:args})}
     createButton.onclick=()=>callTool("issues.create",{});
     editButton.onclick=()=>callTool("issues.edit",{id:context.selectedItemID});
     closeButton.onclick=()=>callTool("issues.close",{id:context.selectedItemID});
-    request("ui/initialize",{protocolVersion:"2026-01-26",appCapabilities:{},clientInfo:{name:"willdeep-issue-panel",version:"1.0.0"}}).then(result=>{context=result.hostContext?.willdeep||{};draw(context);notify("ui/notifications/initialized",{})});
+    request("ui/initialize",{protocolVersion:"2026-01-26",appCapabilities:{},clientInfo:{name:"willdeep-issue-panel",version:"1.0.0"}}).then(result=>{context=(result&&result.hostContext&&result.hostContext.willdeep)||{};notify("ui/notifications/initialized",{});draw(context)});
     </script></body></html>
   HTML
 end

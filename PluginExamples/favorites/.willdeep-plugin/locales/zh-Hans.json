@@ -2,6 +2,10 @@
   "destination.favorites": "收藏夹",
   "command.add": "收藏",
   "command.list": "收藏列表",
+  "command.update": "修改收藏",
   "command.remove": "删除收藏",
+  "command.restore": "恢复收藏",
+  "command.clear": "清空收藏",
+  "command.refresh": "刷新",
   "command.open": "打开收藏夹"
 }
