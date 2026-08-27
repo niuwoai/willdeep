@@ -1,7 +1,23 @@
 # Changelog
 
-> 当前文件保留最新版本（1.300.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.300.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.300.0-rc6 - 2026-08-27
+
+### Fixed
+
+- **模型路由的候选菜单里不再有特权目的地**：`ops_runner`（部署、发布、重启线上服务）与 `terminal_operator`（操作用户可见的终端）从模型可选的 worker 里摘掉。它们的关键词分支本来就是 94 分，永远轮不到模型；留在菜单上等于开了一条「请求含糊 → 小模型猜 → 生产运维」的路径。特权目的地只能由明确的关键词证据抵达。
+- 模型偶尔把 `confidence` 写成 0-1 的小数或大于 100 的整数，现在钳到 `0...100`，与 willdeep-rs 侧的 `.min(100)` 对齐。
+- 路由提示词补上输出格式那一行（`{"worker": ..., "confidence": ...}`）。实测本地 gemma4 在措辞不含 `worker` 时会改吐 `{"category":...}`，解析器认不出就永远静默回落关键词——功能等于没上线。
+
+### Added
+
+- **新增双端路由契约 `docs/WORKER_ROUTING_CONTRACT.json`**：阈值、超时、截断长度、候选清单与用途文案、模型能改什么不能改什么，此前是 Xedit(Swift) 与 willdeep-rs(Rust) 各写一份、谁也不知道对方——实测已经漂过：rs 有 8 个候选，Swift 有 12 个，其中两个还是特权目的地。这份 JSON 是唯一事实来源，两侧各有守卫对着它断言。它挡不住两份 JSON 自己漂开（那需要跨仓库 CI），但能把静默漂移变成至少一侧的红灯。
+
+### Tests
+
+- 新增 `AgentWorkerRoutingContractTests`（10 项：候选 ID 与顺序、用途文案逐字一致、被排除的特权目的地确实不在菜单里、阈值 / 超时 / 截断长度 / none 取值与契约一致）；连同 `AgentWorkerRoutingModelTests`、`AgentHybridWorkerRoutingTests` 共 28 个用例通过。
 
 ## 1.300.0-rc5 - 2026-08-27
 
