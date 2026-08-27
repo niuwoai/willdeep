@@ -610,6 +610,40 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "kubectl config view --raw") == .alwaysDangerous)
     }
 
+    @Test("SafeCommand: common operations inspectors stay read-only")
+    func testSafeCommandOperationsInspection() {
+        #expect(SafeCommand.classify(command: "getent hosts db.internal") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "ss -lntp") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "free -h") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "timedatectl") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "timedatectl status") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "timedatectl show -p Timezone") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "resolvectl query db.internal") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "resolvectl status") == .alwaysSafe)
+        #expect(SafeCommand.classify(command: "hostnamectl status") == .alwaysSafe)
+
+        #expect(SafeCommand.classify(command: "timedatectl set-timezone UTC") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "timedatectl set-ntp false") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "resolvectl flush-caches") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "resolvectl dns eth0 1.1.1.1") == .needsJudgment)
+        #expect(SafeCommand.classify(command: "hostnamectl set-hostname changed") == .needsJudgment)
+
+        let remoteInspection = "ssh root@example.com 'cat /etc/resolv.conf; "
+            + "getent hosts db.internal; timedatectl status; resolvectl query db.internal'"
+        #expect(SafeCommand.classify(command: remoteInspection) == .alwaysSafe)
+
+        let productionShape = "ssh -o ConnectTimeout=15 "
+            + "-o StrictHostKeyChecking=accept-new root@example.com "
+            + "'getent hosts db.internal; timedatectl status'"
+        let productionDecision = AgentSandboxPolicy.commandDecision(
+            command: productionShape,
+            rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-ops-inspection")
+        )
+        #expect(productionDecision.mode == .readOnlyNetwork)
+        #expect(!productionDecision.requiresUserApproval)
+        #expect(!productionDecision.requiresTypedConfirmation)
+    }
+
     @Test
     func testSafeCommandNetworkFetcherBoundaries() {
         #expect(SafeCommand.classify(command: "curl https://example.com/status") == .needsJudgment)

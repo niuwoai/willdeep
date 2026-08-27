@@ -1150,20 +1150,23 @@ enum AgentUsageStats {
         var sessionIDs: [String: Set<UUID>] = [:]
 
         for session in sessions {
-            for profileID in session.messages.flatMap(\.subagentProfileIDs) {
+            for storedProfileID in session.messages.flatMap(\.subagentProfileIDs) {
+                let profileID = AgentSubagentProfileCatalog.publicID(for: storedProfileID)
                 invocationCounts[profileID, default: 0] += 1
                 sessionIDs[profileID, default: []].insert(session.id)
             }
             for run in session.messages.flatMap(\.subagentRuns) {
-                runCounts[run.profileID, default: 0] += 1
-                sessionIDs[run.profileID, default: []].insert(session.id)
+                let profileID = AgentSubagentProfileCatalog.publicID(for: run.profileID)
+                runCounts[profileID, default: 0] += 1
+                sessionIDs[profileID, default: []].insert(session.id)
             }
             for hostRun in session.hostWorkerRuns ?? [] {
                 guard hostRun.source != .codingPlanCacheHit else { continue }
-                invocationCounts[hostRun.profileID, default: 0] += 1
-                sessionIDs[hostRun.profileID, default: []].insert(session.id)
+                let profileID = AgentSubagentProfileCatalog.publicID(for: hostRun.profileID)
+                invocationCounts[profileID, default: 0] += 1
+                sessionIDs[profileID, default: []].insert(session.id)
                 if hostRun.startedAt != nil {
-                    runCounts[hostRun.profileID, default: 0] += 1
+                    runCounts[profileID, default: 0] += 1
                 }
             }
         }

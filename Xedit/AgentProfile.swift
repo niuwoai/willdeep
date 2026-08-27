@@ -216,8 +216,9 @@ nonisolated struct AgentProfile: Codable, Equatable, Identifiable, Sendable {
         )
     }
 
-    /// Everything that exists without any user configuration: the four
-    /// subagent trades plus the dispatch execution presets.
+    /// Everything that exists without user configuration. Legacy specialist
+    /// trades remain here for stored-profile compatibility; presentation
+    /// surfaces filter them through `publicBuiltIn`.
     static var builtIns: [AgentProfile] {
         AgentSubagentProfileCatalog.builtIn.map(AgentProfile.from(trade:))
             + AgentExecutionProfile.builtIns.map(AgentProfile.from(execution:))

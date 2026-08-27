@@ -157,9 +157,10 @@ extension AppState {
         // trade, and checking the catalog would report it as unknown while
         // happily running it.
         let availableTradeIDs = AgentSubagentProfileStore.resolvedProfiles().map(\.id)
+        let compatibleTradeIDs = AgentSubagentProfileStore.allResolvedProfiles().map(\.id)
         if let requestedProfileID,
            !requestedProfileID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           !availableTradeIDs.contains(where: {
+           !compatibleTradeIDs.contains(where: {
                $0.caseInsensitiveCompare(requestedProfileID.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
            }) {
             // A typo used to be a free upgrade: unknown names fell through to
@@ -578,7 +579,26 @@ extension AppState {
             configuration: AgentConfiguration,
             profile: AgentSubagentProfile
         ) async throws -> AgentSubagentRunner.Outcome {
-            try await AgentSubagentRunner.run(
+            let effectiveTools = profile.effectiveToolNames(
+                writeAccessGranted: writeAccess != nil,
+                approvedCommandGranted: approvedCommand != nil
+            )
+            let commandReviewer: AgentSubagentRunner.CommandReviewer? = {
+                guard effectiveTools.contains("run_command")
+                        || effectiveTools.contains("terminal_send_command"),
+                      runtime.approvalMode == .smart || runtime.interactionMode == .goal else {
+                    return nil
+                }
+                return { [weak self] toolName, command in
+                    guard let self else { return false }
+                    return await self.safetyJudgeApproval(
+                        toolName: toolName,
+                        command: command,
+                        taskContext: "Subagent trade: \(profile.id). \(profile.purpose)\nTask:\n\(prompt)"
+                    ) != nil
+                }
+            }()
+            return try await AgentSubagentRunner.run(
                 prompt: prompt,
                 configuration: configuration,
                 workspaceURL: workspaceURL,
@@ -594,6 +614,7 @@ extension AppState {
                 // 父会话侧栏终端；其余工种在执行层拿不到这个 controller。
                 terminalController: agentTerminalController,
                 approvedCommand: approvedCommand,
+                commandReviewer: commandReviewer,
                 onProgress: { round, toolInvocations in
                     let toolPart = toolInvocations > 0 ? " · \(toolInvocations) 次工具" : ""
                     updateSubagent(progress: "第 \(round)/\(profile.maxRounds) 轮\(toolPart)")

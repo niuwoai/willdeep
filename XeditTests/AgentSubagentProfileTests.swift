@@ -45,6 +45,12 @@ struct AgentSubagentProfileTests {
         #expect(deep.escalation == .none)
     }
 
+    @Test("read-only operations trades keep enough rounds for evidence and synthesis")
+    func operationsTradesUseExpandedRoundBudget() {
+        #expect(AgentSubagentProfileCatalog.opsRunner.maxRounds == 32)
+        #expect(AgentSubagentProfileCatalog.terminalOperator.maxRounds == 32)
+    }
+
     @Test("a new session opens on the standard tier, not the scarce one")
     func newSessionsDefaultToTheStandardTier() {
         // The whole admission mechanism is theatre if the session already
@@ -543,12 +549,32 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentProfileCatalog.bindingModelApplies(binding, to: selected))
     }
 
-    @Test("every built-in trade appears in the schema catalog line")
-    func toolDescriptionListsEveryTrade() {
+    @Test("schema exposes six capability trades while legacy ids still resolve")
+    func toolDescriptionListsOnlyPublicTrades() {
         let catalog = AgentSubagentProfileCatalog.toolDescriptionCatalog
 
-        for profile in AgentSubagentProfileCatalog.builtIn {
+        #expect(AgentSubagentProfileCatalog.publicBuiltIn.map(\.id) == [
+            "reader", "implementer", "tester", "ops_runner", "judge", "deep",
+        ])
+        for profile in AgentSubagentProfileCatalog.publicBuiltIn {
             #expect(catalog.contains("`\(profile.id)`"), "missing \(profile.id)")
         }
+        #expect(!catalog.contains("`small_implementer`"))
+        #expect(!catalog.contains("`terminal_operator`"))
+        #expect(AgentSubagentProfileCatalog.profile(id: "test_fixer").id == "test_fixer")
+        #expect(AgentSubagentProfileCatalog.profile(id: "git_detective").id == "git_detective")
+        #expect(AgentSubagentProfileCatalog.publicID(for: "test_fixer") == "implementer")
+        #expect(AgentSubagentProfileCatalog.publicID(for: "git_detective") == "reader")
+    }
+
+    @Test("live profile store advertises public trades but resolves saved specialist ids")
+    func profileStoreKeepsLegacyCompatibilityOffCatalog() {
+        let advertisedBuiltIns = AgentSubagentProfileStore.resolvedProfiles()
+            .filter { AgentSubagentProfileCatalog.isKnown(id: $0.id) }
+            .map(\.id)
+
+        #expect(advertisedBuiltIns == AgentSubagentProfileCatalog.publicBuiltIn.map(\.id))
+        #expect(AgentSubagentProfileStore.resolvedProfile(id: "small_reviewer").id == "small_reviewer")
+        #expect(AgentSubagentProfileStore.resolvedProfile(id: "terminal_operator").id == "terminal_operator")
     }
 }

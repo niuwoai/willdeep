@@ -49,8 +49,14 @@ struct AgentProfileSettingsView: View {
     private let store = AgentProfileStore()
 
     private var visibleProfiles: [AgentProfile] {
-        guard let usage = filter.usage else { return profiles }
-        return profiles.filter { $0.usages.contains(usage) }
+        let publicProfiles = profiles.filter { profile in
+            profile.origin != .builtIn
+                || !profile.usages.contains(.subagent)
+                || profile.usages.contains(.dispatch)
+                || AgentSubagentProfileCatalog.isPublic(id: profile.id)
+        }
+        guard let usage = filter.usage else { return publicProfiles }
+        return publicProfiles.filter { $0.usages.contains(usage) }
     }
 
     private var selectedIndex: Int? {
@@ -579,8 +585,8 @@ struct AgentProfileSettingsView: View {
 
     private func reload() {
         profiles = store.profiles()
-        if selectedID == nil || !profiles.contains(where: { $0.id == selectedID }) {
-            selectedID = profiles.first?.id
+        if selectedID == nil || !visibleProfiles.contains(where: { $0.id == selectedID }) {
+            selectedID = visibleProfiles.first?.id
         }
     }
 
@@ -623,7 +629,7 @@ struct AgentProfileSettingsView: View {
         guard let target = deleteTarget else { return }
         profiles.removeAll { $0.id == target.id && $0.origin == .managed }
         deleteTarget = nil
-        selectedID = profiles.first?.id
+        selectedID = visibleProfiles.first?.id
         persist()
     }
 
