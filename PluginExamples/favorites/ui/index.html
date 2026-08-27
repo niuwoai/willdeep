@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>收藏夹</title>
+    <style>
+      /*
+       * 收藏夹页面：纯静态页 + window.willdeep.executeCommand 调插件命令，
+       * 没有构建步骤（改完直接生效），也不引任何外部资源——插件页跑在
+       * CSP 收紧的 WKWebView 里，connect-src 是 'none'。
+       */
+      :root {
+        --bg: transparent;
+        --fg: var(--willdeep-fg, #e8ecf4);
+        --muted: var(--willdeep-secondary, #8b93a7);
+        --card: rgba(127, 127, 127, 0.12);
+        --border: rgba(127, 127, 127, 0.28);
+        --radius: 10px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 16px;
+        color: var(--fg);
+        font: 14px/1.55 -apple-system, BlinkMacSystemFont, 'PingFang SC', system-ui, sans-serif;
+      }
+      header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+      h1 { font-size: 18px; margin: 0; }
+      .count { color: var(--muted); font-size: 13px; }
+      .toolbar { margin-left: auto; display: flex; gap: 8px; }
+      button {
+        font: inherit;
+        color: inherit;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 5px 12px;
+        cursor: pointer;
+      }
+      button:hover { border-color: var(--fg); }
+      button.danger:hover { border-color: #ff5d73; color: #ff5d73; }
+      ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+      li {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--card);
+        padding: 12px 14px;
+      }
+      .text { white-space: pre-wrap; word-break: break-word; }
+      .meta {
+        margin-top: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .meta .spacer { margin-left: auto; }
+      .empty { color: var(--muted); padding: 32px 0; text-align: center; }
+      .error { color: #ff5d73; padding: 12px 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>收藏夹</h1>
+      <span class="count" id="count"></span>
+      <div class="toolbar">
+        <button id="refresh" type="button">刷新</button>
+      </div>
+    </header>
+    <div id="status" class="empty">加载中……</div>
+    <ul id="list"></ul>
+
+    <script>
+      (function () {
+        var listEl = document.getElementById('list');
+        var statusEl = document.getElementById('status');
+        var countEl = document.getElementById('count');
+
+        function runCommand(commandID, args) {
+          if (!window.willdeep || typeof window.willdeep.executeCommand !== 'function') {
+            return Promise.reject(new Error('插件桥接不可用'));
+          }
+          return window.willdeep.executeCommand(commandID, args || {});
+        }
+
+        // 命令返回的是 MCP 工具的文本内容，约定为一段 JSON
+        function parseResult(raw) {
+          if (raw == null) return null;
+          if (typeof raw === 'object') return raw;
+          try {
+            return JSON.parse(String(raw));
+          } catch (error) {
+            return null;
+          }
+        }
+
+        function formatTime(iso) {
+          if (!iso) return '';
+          var date = new Date(iso);
+          if (isNaN(date.getTime())) return '';
+          return date.toLocaleString();
+        }
+
+        function render(items) {
+          listEl.textContent = '';
+          countEl.textContent = items.length ? '共 ' + items.length + ' 条' : '';
+          if (!items.length) {
+            statusEl.className = 'empty';
+            statusEl.textContent = '还没有收藏。在聊天正文里选中一段文字，点气泡上的「收藏」即可存进来。';
+            return;
+          }
+          statusEl.textContent = '';
+          statusEl.className = '';
+          items.forEach(function (item) {
+            var li = document.createElement('li');
+
+            var text = document.createElement('div');
+            text.className = 'text';
+            text.textContent = item.text || '';
+            li.appendChild(text);
+
+            var meta = document.createElement('div');
+            meta.className = 'meta';
+            var time = document.createElement('span');
+            time.textContent = formatTime(item.createdAt);
+            meta.appendChild(time);
+            if (item.source) {
+              var source = document.createElement('span');
+              source.textContent = item.source;
+              meta.appendChild(source);
+            }
+            var spacer = document.createElement('span');
+            spacer.className = 'spacer';
+            meta.appendChild(spacer);
+
+            var copy = document.createElement('button');
+            copy.type = 'button';
+            copy.textContent = '复制';
+            copy.addEventListener('click', function () {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(item.text || '').then(function () {
+                  copy.textContent = '已复制';
+                  window.setTimeout(function () { copy.textContent = '复制'; }, 1200);
+                });
+              }
+            });
+            meta.appendChild(copy);
+
+            var remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'danger';
+            remove.textContent = '删除';
+            remove.addEventListener('click', function () {
+              remove.disabled = true;
+              runCommand('favorites.remove', { id: item.id })
+                .then(load)
+                .catch(function (error) { showError(error); remove.disabled = false; });
+            });
+            meta.appendChild(remove);
+
+            li.appendChild(meta);
+            listEl.appendChild(li);
+          });
+        }
+
+        function showError(error) {
+          statusEl.className = 'error';
+          statusEl.textContent = '读取收藏失败：' + (error && error.message ? error.message : error);
+        }
+
+        function load() {
+          return runCommand('favorites.list')
+            .then(function (raw) {
+              var payload = parseResult(raw);
+              render(payload && Array.isArray(payload.items) ? payload.items : []);
+            })
+            .catch(showError);
+        }
+
+        document.getElementById('refresh').addEventListener('click', load);
+        // 宿主推上下文时也刷新一次（切回这个页面就重新拉数据）
+        window.addEventListener('willdeep:context', load);
+        load();
+      })();
+    </script>
+  </body>
+</html>

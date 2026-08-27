@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.299.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.299.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.299.0-rc3 - 2026-08-27
+
+### Added
+
+- 插件新增 **`chat.selection` 菜单挂载点**：聊天正文里选中文字后，气泡与右键菜单除了内置的「添加到任务」，还会列出插件贡献的动作。宿主执行这类命令时固定传 `text`（选中的原文）与 `source`（`chat.selection`）两个参数，权限确认与 MCP 派发复用既有的命令执行器。菜单位置白名单收敛到 `AgentPluginMenuLocation.all` 一处，加载器校验与对外 schema 同源。
+- 新增**收藏夹插件样例**（`PluginExamples/favorites`）：在聊天里选中一段文字点「收藏」即可存下，左侧「收藏夹」页面可回看、复制、删除。数据存在 `~/Library/Application Support/WillDeep/plugin-data/favorites.json`（临时文件 + rename 落盘，文件损坏时按空列表降级），由一个 Ruby MCP stdio 服务端提供 add / list / remove 三个工具。
+
+### Tests
+
+- 新增收藏夹服务端契约测试 `scripts/favorites_server_test.rb`（19 项检查：工具清单、收藏→列出→删除闭环、空文本拒绝、存储格式与临时文件清理、损坏降级），以及两条 Swift 用例（收藏夹样例过生产加载器并正确声明选区菜单、菜单位置常量与 schema 枚举不许劈叉）；`AgentPluginSystemTests` 27 个用例通过。
 
 ## 1.299.0-rc2 - 2026-08-27
 

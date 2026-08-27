@@ -1,0 +1,7 @@
+{
+  "destination.favorites": "Favorites",
+  "command.add": "Favorite",
+  "command.list": "List favorites",
+  "command.remove": "Remove favorite",
+  "command.open": "Open favorites"
+}
