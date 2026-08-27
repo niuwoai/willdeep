@@ -36,6 +36,9 @@ extension AppState {
         fallback: AgentConfiguration
     ) async {
         guard let keyword = runtime.currentTurnRouteDecision else { return }
+        // 操作员点了名就别再问模型了：模型是用来补关键词认不出的意图的，
+        // 不是用来推翻明确指令的。
+        guard !keyword.isOperatorPinned else { return }
         guard AgentWorkerRoutingModel.shouldConsultModel(for: keyword) else { return }
         guard let verdict = await routingVerdict(for: requestText, fallback: fallback) else { return }
 

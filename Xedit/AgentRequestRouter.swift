@@ -65,13 +65,21 @@ nonisolated enum AgentRequestRouter {
 
         var isPreflightCandidate: Bool { preflightProfileID != nil }
 
+        /// 操作员点名的判决：满分 + 强制委派，且不是预跑候选。
+        var isOperatorPinned: Bool {
+            confidence == 100 && requiresDelegatedExecution && !autoDispatchEligible
+                && reason == "operator named this worker in the composer"
+        }
+
         /// The paragraph appended to the user's message, or nil when there is
         /// nothing useful to say.
         var steering: String? {
             guard let profileID else { return nil }
             return """
             <runtime-route tier="\(tier.rawValue)" profile="\(profileID)" confidence="\(confidence)">
-            WillDeep classified this request as bounded `\(profileID)` work before you read it. \
+            \(isOperatorPinned
+                ? "The operator named `\(profileID)` for this request in the composer. This is an instruction, not a classification — do not re-route it."
+                : "WillDeep classified this request as bounded `\(profileID)` work before you read it.") \
             Compile a task packet — keep `read_files` separate from `write_files` — and delegate \
             it rather than doing the work here. Supply a verifier whenever completion is decidable \
             by a command.\(requiresDelegatedExecution ? " The host will refuse direct execution until the routed worker has been attempted; use /no-subagent on a new turn only when the operator explicitly wants inline execution." : " If the classification is wrong, say why before choosing a different bounded trade.")
@@ -275,6 +283,24 @@ nonisolated enum AgentRequestRouter {
         guard sharedConfig.smallModelRouting != false else { return nil }
         guard delegationPolicy != .forbidden else { return nil }
         return classify(request)
+    }
+
+    /// 操作员在 composer 里 `@` 点名了某个 worker。
+    ///
+    /// 这跟关键词打分、模型判断都不是一回事：那两条是「猜」，这条是明确指令。
+    /// 所以 confidence 直接给满分，并把 `requiresDelegatedExecution` 置真——
+    /// 点了名还让根模型自己上手，等于没点。刻意**不**开 autoDispatchEligible：
+    /// 预跑是宿主替用户抢跑，用户点名的是「派给他」，不是「现在就跑」。
+    static func pinnedDecision(profileID: String) -> Decision {
+        Decision(
+            tier: .worker,
+            profileID: profileID,
+            confidence: 100,
+            autoDispatchEligible: false,
+            preflightProfileID: nil,
+            requiresDelegatedExecution: true,
+            reason: "operator named this worker in the composer"
+        )
     }
 
     private static func worker(

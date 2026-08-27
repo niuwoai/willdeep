@@ -1,6 +1,6 @@
 # WillDeep Browser Extension
 
-> Version: 1.300.0-rc6
+> Version: 1.300.0-rc7
 
 This extension is the default Chrome profile bridge for WillDeep. It is meant
 for workflows where the user wants WillDeep to operate already-signed-in pages,
