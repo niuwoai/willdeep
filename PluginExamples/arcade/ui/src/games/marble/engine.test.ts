@@ -7,11 +7,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   BALL_RADIUS,
+  BOMB_RADIUS,
   DEFAULT_LEVEL,
   FIELD,
   LEVELS,
   MAX_SHOTS,
   PATH_LENGTH,
+  REVERSE_DISTANCE,
   SHOOTER,
   SPACING,
   aimAt,
@@ -21,6 +23,7 @@ import {
   levelSeed,
   pointAt,
   restart,
+  rollbackChain,
   scoreFor,
   shoot,
   step,
@@ -28,16 +31,24 @@ import {
   tangentAt,
   trackPoints,
 } from './engine';
-import type { MarbleBall, MarbleState } from './engine';
+import type { MarbleBall, MarblePower, MarbleState } from './engine';
 
-/** 直接摆一条链条，绕开逐帧入场，方便测消除规则。 */
-function withChain(colors: readonly number[], headDist = 200): MarbleState {
+/** 直接摆一条链条，绕开逐帧入场，方便测消除规则；powers 按下标挂道具。 */
+function withChain(
+  colors: readonly number[],
+  headDist = 200,
+  powers: Readonly<Record<number, MarblePower>> = {},
+): MarbleState {
   const base = createInitialState(0, 'chain');
-  const balls: MarbleBall[] = colors.map((color, index) => ({
-    id: index + 1,
-    color,
-    dist: headDist - index * SPACING,
-  }));
+  const balls: MarbleBall[] = colors.map((color, index) => {
+    const power = powers[index];
+    return {
+      id: index + 1,
+      color,
+      dist: headDist - index * SPACING,
+      ...(power ? { power } : {}),
+    };
+  });
   return { ...base, balls, supply: [], status: 'playing', nextId: colors.length + 1 };
 }
 
@@ -222,10 +233,26 @@ describe('印加弹珠：关卡与重开', () => {
       const state = createInitialState(index, 'colors');
       expect(state.balls.length + state.supply.length).toBe(level.supply);
       expect(state.balls).toHaveLength(level.opening);
-      for (const color of [...state.supply, ...state.balls.map((ball) => ball.color)]) {
+      const colors = [
+        ...state.supply.map((item) => item.color),
+        ...state.balls.map((ball) => ball.color),
+      ];
+      for (const color of colors) {
         expect(color).toBeGreaterThanOrEqual(0);
         expect(color).toBeLessThan(level.colors);
       }
+    });
+  });
+
+  it('每关按配置撒下炸弹珠与闪光珠', () => {
+    LEVELS.forEach((level, index) => {
+      const state = createInitialState(index, 'powers');
+      const all = [
+        ...state.balls.map((ball) => ball.power),
+        ...state.supply.map((item) => item.power),
+      ];
+      expect(all.filter((power) => power === 'bomb')).toHaveLength(level.bombs);
+      expect(all.filter((power) => power === 'reverse')).toHaveLength(level.reverses);
     });
   });
 
@@ -237,5 +264,77 @@ describe('印加弹珠：关卡与重开', () => {
     const state = withChain([0, 0, 1]);
     expect(scoreFor({ ...state, score: 250 })).toBe(250);
     expect(BALL_RADIUS).toBeGreaterThan(0);
+  });
+});
+
+describe('印加弹珠：道具珠', () => {
+  it('炸弹珠被消掉时炸掉附近一整片', () => {
+    // 队首三颗同色（其中一颗是炸弹），后面紧跟一串异色，爆炸半径内的都得没
+    const chain = withChain([0, 0, 1, 2, 3, 4, 5, 6, 7], 200, { 1: 'bomb' });
+    const before = chain.balls.length;
+    const after = applyHit(chain, 1, 0, false);
+
+    // 三连本身 3 颗 + 爆炸半径（3.2 个身位）内的邻居
+    const removed = before + 1 - after.balls.length;
+    expect(removed).toBeGreaterThan(3);
+    expect(after.score).toBe(removed * 10);
+    expect(after.effects.some((effect) => effect.kind === 'blast')).toBe(true);
+    // 幸存的珠子都在爆炸半径之外
+    const bombDist = (chain.balls[1] as MarbleBall).dist;
+    for (const ball of after.balls) {
+      expect(Math.abs(ball.dist - bombDist)).toBeGreaterThan(BOMB_RADIUS);
+    }
+  });
+
+  it('炸弹连环引爆：炸到的另一颗炸弹继续炸', () => {
+    // 第二颗炸弹落在第一颗的爆炸半径内，被炸到后接力再炸一片
+    const colors = [0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const single = applyHit(withChain(colors, 200, { 1: 'bomb' }), 1, 0, false);
+    const chained = applyHit(withChain(colors, 200, { 1: 'bomb', 3: 'bomb' }), 1, 0, false);
+
+    expect(chained.balls.length).toBeLessThan(single.balls.length);
+    expect(chained.score).toBeGreaterThan(single.score);
+    expect(chained.effects.filter((effect) => effect.kind === 'blast')).toHaveLength(2);
+  });
+
+  it('闪光珠被消掉时整条链往回倒退', () => {
+    // 同一手消除，只差队首那颗带不带闪光：带的那局所有幸存珠都要往回退一段
+    const plain = applyHit(withChain([0, 0, 1, 2, 3, 4], 300), 1, 0, false);
+    const flashy = applyHit(withChain([0, 0, 1, 2, 3, 4], 300, { 1: 'reverse' }), 1, 0, false);
+
+    expect(flashy.balls).toHaveLength(plain.balls.length);
+    flashy.balls.forEach((ball, index) => {
+      const reference = plain.balls[index] as MarbleBall;
+      expect(ball.dist).toBeCloseTo(reference.dist - REVERSE_DISTANCE, 5);
+    });
+    expect(flashy.effects.some((effect) => effect.kind === 'reverse')).toBe(true);
+    expect(plain.effects.some((effect) => effect.kind === 'reverse')).toBe(false);
+  });
+
+  it('倒退不会把队尾推到入口之前，且保持一个身位的间距', () => {
+    const chain = withChain([0, 1, 2, 3], 3 * SPACING + 1);
+    const rolled = rollbackChain(chain.balls, 999);
+    expect((rolled[rolled.length - 1] as MarbleBall).dist).toBe(0);
+    for (let i = 1; i < rolled.length; i += 1) {
+      const ahead = rolled[i - 1] as MarbleBall;
+      const current = rolled[i] as MarbleBall;
+      expect(ahead.dist - current.dist).toBeCloseTo(SPACING, 5);
+    }
+    expect(rollbackChain(chain.balls, 0)).toEqual(chain.balls);
+  });
+
+  it('特效有寿命，过期后被 step 清掉', () => {
+    const chain = withChain([0, 0, 1, 2, 3], 200, { 1: 'bomb' });
+    let state = applyHit(chain, 1, 0, false);
+    expect(state.effects.length).toBeGreaterThan(0);
+    for (let frame = 0; frame < 60; frame += 1) state = step(state, 1 / 60);
+    expect(state.effects).toHaveLength(0);
+  });
+
+  it('发射出去的弹珠永远不带道具', () => {
+    const chain = withChain([0, 1, 2], 200, { 0: 'bomb' });
+    const after = applyHit(chain, 1, 5, false);
+    expect(after.balls.filter((ball) => ball.power === 'bomb')).toHaveLength(1);
+    expect(after.balls.find((ball) => ball.color === 5)?.power).toBeUndefined();
   });
 });

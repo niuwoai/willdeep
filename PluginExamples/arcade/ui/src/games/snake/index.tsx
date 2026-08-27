@@ -14,6 +14,7 @@ import type { GameProps } from '../../core/types';
 import { useKeyControls } from '../../core/input';
 import type { KeyBinding } from '../../core/input';
 import { saveBestScore } from '../../core/bestScore';
+import { playCue } from '../../core/audio';
 import { useI18n } from '../../core/i18n';
 import { snakeStrings } from './strings';
 import {
@@ -47,7 +48,7 @@ const DIRECTION_KEYS: Record<string, Direction> = {
   D: 'right',
 };
 
-export default function SnakeGame({ seed }: GameProps) {
+export default function SnakeGame({ seed, onWin }: GameProps) {
   const { locale } = useI18n();
   const strings = snakeStrings(locale);
 
@@ -94,12 +95,23 @@ export default function SnakeGame({ seed }: GameProps) {
     return () => window.clearInterval(timer);
   }, [state.status]);
 
-  // 终局/胜利时写入最佳成绩（saveBestScore 幂等，只保留更高分）。
+  // 吃到食物给一声反馈。
   useEffect(() => {
-    if (state.status === 'gameover' || state.status === 'won') {
-      saveBestScore('snake', state.score);
+    if (state.score > 0) playCue('eat');
+  }, [state.score]);
+
+  // 终局/胜利时写入最佳成绩（saveBestScore 幂等，只保留更高分）；通关撒花。
+  useEffect(() => {
+    if (state.status !== 'gameover' && state.status !== 'won') return;
+    saveBestScore('snake', state.score);
+    if (state.status === 'won') {
+      playCue('win');
+      onWin?.();
+    } else {
+      playCue('lose');
     }
-  }, [state.status, state.score]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status]);
 
   const handleRestart = useCallback(() => {
     pendingDirection.current = null;
