@@ -509,6 +509,46 @@ final class AgentSubagentRegistry: ObservableObject {
 
 // MARK: - Headless runner
 
+/// One safe, user-facing heartbeat from a headless Worker. The activity is
+/// deliberately semantic rather than copied from private reasoning or command
+/// text: users can see that work is moving without leaking prompts, secrets or
+/// chain-of-thought into the parent transcript.
+nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
+    enum Activity: Equatable, Sendable {
+        case thinking
+        case runningTool(String)
+        case verifying
+        case preparingReport
+
+        var displayText: String {
+            switch self {
+            case .thinking:
+                return L10n.AgentDelegation.progressThinking
+            case .runningTool(let toolName):
+                return L10n.AgentDelegation.progressRunningTool(toolName)
+            case .verifying:
+                return L10n.AgentDelegation.progressVerifying
+            case .preparingReport:
+                return L10n.AgentDelegation.progressPreparingReport
+            }
+        }
+    }
+
+    let round: Int
+    let maximumRounds: Int
+    let completedToolInvocations: Int
+    let activity: Activity
+
+    var displayText: String {
+        var parts = [L10n.AgentDelegation.progressRound(round, maximumRounds)]
+        if completedToolInvocations > 0 {
+            parts.append(L10n.AgentDelegation.progressCompletedTools(completedToolInvocations))
+        }
+        parts.append(activity.displayText)
+        return parts.joined(separator: " · ")
+    }
+}
+
 /// The child agent loop. It has no independent UI: bounded file writes are
 /// granted at spawn, and ambiguous operations commands can only call back to
 /// the parent's safety judge. Human approval remains a new parent-level
@@ -859,11 +899,11 @@ enum AgentSubagentRunner {
     /// runtime these must be forwarded, otherwise the child's
     /// `AgentToolContext.remoteBackend` is nil and read-only tools run
     /// against the local Mac instead of the remote box.
-    /// `onProgress` (round, cumulative tool invocations) fires once at the
-    /// end of every round on the main actor. The synchronous `spawn_agent`
-    /// path uses it to keep the tool card's live-progress line current so a
-    /// long child loop reads as "第 3/12 轮" rather than a bare spinner.
-    /// Background / workflow callers leave it nil.
+    /// `onProgress` reports round changes plus safe semantic activity before
+    /// every potentially long provider, tool and verifier operation. The
+    /// synchronous `spawn_agent` path appends it after the Worker name so a
+    /// long child loop never looks frozen. Background / workflow callers leave
+    /// it nil.
     static func run(
         prompt: String,
         configuration: AgentConfiguration,
@@ -891,7 +931,7 @@ enum AgentSubagentRunner {
         /// verifier 循环靠这一点重试。
         approvedCommand: String? = nil,
         commandReviewer: CommandReviewer? = nil,
-        onProgress: ((_ round: Int, _ toolInvocations: Int) -> Void)? = nil
+        onProgress: ((AgentSubagentProgressUpdate) -> Void)? = nil
     ) async throws -> Outcome {
         // some.im-gated providers require the session/workspace context headers on
         // every request; without them some.im rejects/stalls the call. Workflow
@@ -960,11 +1000,24 @@ enum AgentSubagentRunner {
         var recordedRounds: [AgentSubagentTranscript.Round] = []
         var didTruncateRecord = false
 
+        func publishProgress(
+            round: Int,
+            activity: AgentSubagentProgressUpdate.Activity
+        ) {
+            onProgress?(
+                AgentSubagentProgressUpdate(
+                    round: round,
+                    maximumRounds: roundLimit,
+                    completedToolInvocations: toolInvocations,
+                    activity: activity
+                )
+            )
+        }
+
         for round in 1...roundLimit {
-            // Surface "entering round N" to the card before the (potentially
-            // long) streaming round begins — this is the window the user
-            // otherwise stares at a still spinner during.
-            onProgress?(round, toolInvocations)
+            // Surface the provider wait before the (potentially long)
+            // streaming round begins. Never mirror private reasoning text.
+            publishProgress(round: round, activity: .thinking)
             let roundStartedAt = Date()
             var content = ""
             var reasoning = ""
@@ -1048,6 +1101,7 @@ enum AgentSubagentRunner {
             if let outputSchema {
                 for call in toolCalls where call.toolName == structuredOutputToolName {
                     try Task.checkCancellation()
+                    publishProgress(round: round, activity: .preparingReport)
                     toolInvocations += 1
                     let callStartedAt = Date()
                     let (ok, payload) = handleStructuredOutputCall(call, schema: outputSchema)
@@ -1085,6 +1139,7 @@ enum AgentSubagentRunner {
                 // rather than trusting the report, because "I fixed it" is
                 // exactly the sentence a stuck small model produces.
                 if let verifierCommand, verifierPassed != true {
+                    publishProgress(round: round, activity: .verifying)
                     let verification = await runVerifier(
                         command: verifierCommand,
                         workspaceURL: workspaceURL,
@@ -1168,6 +1223,7 @@ enum AgentSubagentRunner {
                 let finalReport = report.isEmpty
                     ? "(subagent finished without producing a report)"
                     : report
+                publishProgress(round: round, activity: .preparingReport)
                 let audit = auditCitations(finalReport)
                 return Outcome(
                     report: annotate(finalReport, audit),
@@ -1188,6 +1244,10 @@ enum AgentSubagentRunner {
             // 下,structured_output 已经在前面拎走处理,这里只剩别的。
             for call in toolCalls where call.toolName != structuredOutputToolName {
                 try Task.checkCancellation()
+                publishProgress(
+                    round: round,
+                    activity: .runningTool(AgentToolDisplay.name(for: call.toolName))
+                )
                 toolInvocations += 1
                 let callStartedAt = Date()
                 let rawPayload = await executeToolCall(
@@ -1234,6 +1294,7 @@ enum AgentSubagentRunner {
         // narrating after the change already landed, and "did the tests pass"
         // is worth one command before we call the run a loss.
         if let verifierCommand, verifierPassed == nil {
+            publishProgress(round: roundLimit, activity: .verifying)
             let verification = await runVerifier(
                 command: verifierCommand,
                 workspaceURL: workspaceURL,

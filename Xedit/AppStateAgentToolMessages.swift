@@ -629,9 +629,8 @@ extension AppState {
                 terminalController: agentTerminalController,
                 approvedCommand: approvedCommand,
                 commandReviewer: commandReviewer,
-                onProgress: { round, toolInvocations in
-                    let toolPart = toolInvocations > 0 ? " · \(toolInvocations) 次工具" : ""
-                    updateSubagent(progress: "第 \(round)/\(profile.maxRounds) 轮\(toolPart)")
+                onProgress: { progress in
+                    updateSubagent(progress: progress.displayText)
                 }
             )
         }
