@@ -72,6 +72,7 @@ struct AgentModelCatalogItem: Identifiable, Equatable {
     let providerName: String
     let modelID: String
     let tier: AgentModelPickerTierFilter?
+    let isPrimaryFlashModel: Bool
 
     var id: String {
         "\(providerEntryID.uuidString)::\(modelID.lowercased())"
@@ -91,7 +92,8 @@ enum AgentModelPickerCatalog {
                         providerID: entry.providerID,
                         providerName: entry.displayName,
                         modelID: model,
-                        tier: tier(for: model, in: entry)
+                        tier: tier(for: model, in: entry),
+                        isPrimaryFlashModel: entry.flashPrimary.caseInsensitiveCompare(model) == .orderedSame
                     )
                 }
         }

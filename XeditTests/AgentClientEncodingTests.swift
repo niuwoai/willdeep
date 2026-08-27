@@ -44,10 +44,14 @@ struct AgentClientEncodingTests {
             model: "gemma4:e2b",
             messages: [AgentMessage(role: .user, content: "hi")],
             tools: [],
-            disableThinking: true
+            disableThinking: true,
+            includeOllamaThinkingFlag: true
         )
         let dict = try parseJSONObject(data)
         #expect(dict["reasoning_effort"] as? String == "none")
+        let reasoning = dict["reasoning"] as? [String: Any]
+        #expect(reasoning?["effort"] as? String == "none")
+        #expect(dict["think"] as? Bool == false)
     }
 
     /// With no tools, the request omits both `tools` and `tool_choice`

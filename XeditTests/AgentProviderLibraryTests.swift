@@ -1060,7 +1060,7 @@ struct AgentProviderLibraryTests {
 
     @MainActor
     @Test
-    func syncingLocalModelComposerProviderAddsAndRemovesBackupEntry() {
+    func syncingLocalModelComposerProviderUsesOnlyLLMModelForChat() {
         let sandbox = KeychainSandbox()
         _ = sandbox
 
@@ -1086,7 +1086,7 @@ struct AgentProviderLibraryTests {
         #expect(entry?.displayName == "Offline Local")
         #expect(entry?.baseURL == AgentLocalModelSettings.defaultBaseURL)
         #expect(entry?.flashPrimary == "qwen-chat-local")
-        #expect(entry?.flashAlternates == ["qwen-vl-local"])
+        #expect(entry?.flashAlternates == [])
         #expect(entry?.apiKey == "")
 
         var disabled = settings

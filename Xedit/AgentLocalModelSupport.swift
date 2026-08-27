@@ -36,9 +36,9 @@ struct AgentLocalModelSettings: Codable, Equatable {
     var preferForContextSummaries: Bool
     /// Worker 路由判决是否先问本地模型。关掉（或整个本地加速关掉）时，
     /// 路由回落到会话默认模型；两者都不可用时回落纯关键词判决。
-    /// 刻意不给它单独的模型字段：本机一次只能驻留一个模型，路由模型与
-    /// Summary 模型不同会让每轮会话在两个模型间来回换装，实测单次切换
-    /// 7.5–9.4 秒，比推理本身贵五倍。路由复用 `summaryModel`。
+    /// 刻意不给它单独的模型字段：文本辅助任务统一复用 `summaryModel`
+    /// 持久化字段（设置页对用户展示为“LLM 模型”）；图片理解独立使用
+    /// `visionModel`，不会进入文本聊天的备用模型列表。
     var preferForWorkerRouting: Bool
     var exposeAsComposerModel: Bool
     var composerDisplayName: String

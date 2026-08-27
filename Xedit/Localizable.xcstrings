@@ -6135,31 +6135,66 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Summary Model"
+            "value" : "LLM Model"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Modelo de resumen"
+            "value" : "Modelo LLM"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Modèle de résumé"
+            "value" : "Modèle LLM"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Summary モデル"
+            "value" : "LLM モデル"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Summary 模型"
+            "value" : "LLM 模型"
+          }
+        }
+      }
+    },
+    "settings.local-model.worker-routing-hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The LLM model handles local chat, session titles, context compression, and Worker routing decisions; the vision model is used only for image understanding. Requests classified by keywords skip the model; ambiguous requests ask the LLM, adding about 1–2 seconds. When disabled, routing uses the session's default model."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El modelo LLM se usa para el chat local, los títulos de sesión, la compresión de contexto y las decisiones de enrutamiento de Worker; el modelo de visión solo procesa imágenes. Las solicitudes clasificadas por palabras clave omiten el modelo; las ambiguas consultan al LLM y añaden unos 1–2 segundos. Si se desactiva, se usa el modelo predeterminado de la sesión."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le modèle LLM gère le chat local, les titres de session, la compression du contexte et les décisions de routage Worker ; le modèle de vision sert uniquement à comprendre les images. Les requêtes classées par mots-clés ignorent le modèle ; les requêtes ambiguës interrogent le LLM, avec environ 1 à 2 secondes supplémentaires. Si cette option est désactivée, le modèle par défaut de la session est utilisé."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LLM モデルはローカルチャット、セッションタイトル、コンテキスト圧縮、Worker の振り分け判断に使用し、画像理解モデルは画像処理だけに使用します。キーワードで判定できる要求はモデルを使わず、曖昧な場合のみ LLM に問い合わせるため約 1～2 秒かかります。オフにするとセッションの既定モデルで判断します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LLM 模型用于本地聊天、会话标题、上下文压缩和 Worker 派发判断；图片理解模型只处理图片。关键词能判定的派发请求直接走，判不准时才问 LLM，约多花 1–2 秒；关闭后改用会话默认模型判断。"
           }
         }
       }
@@ -11055,6 +11090,7 @@
     "agent-model-picker.tag.affordable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Affordable" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Económico" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Abordable" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "低コスト" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "便宜" } } } },
     "agent-model-picker.tag.coding" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Coding" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Programación" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Codage" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "コーディング" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编程" } } } },
     "agent-model-picker.tag.fast" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Fast" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Rápido" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Rapide" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "高速" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "快速" } } } },
+    "agent-model-picker.tag.local-llm" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Local LLM" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "LLM local" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "LLM local" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "ローカル LLM" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地 LLM" } } } },
     "agent-model-picker.title" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Select Model" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Seleccionar modelo" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Sélectionner un modèle" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "モデルを選択" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择模型" } } } },
     "agent-model-picker.upgrade-to" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Upgrade this conversation to %@" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Actualizar esta conversación a %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Passer cette conversation à %@" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "この会話を %@ にアップグレード" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本会话升至 %@" } } } },
     "agent-model-picker.view-all" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "View all models" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Ver todos los modelos" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Voir tous les modèles" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "すべてのモデルを見る" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看全部模型" } } } },

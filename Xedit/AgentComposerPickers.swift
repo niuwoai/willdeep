@@ -2097,7 +2097,8 @@ struct ModelPickerPill: View {
                 providerID: entry.providerID,
                 providerName: entry.displayName,
                 modelID: recommendation.model,
-                tier: recommendation.tier
+                tier: recommendation.tier,
+                isPrimaryFlashModel: false
             )
             return ResolvedCodingRecommendation(
                 item: item,
@@ -2296,6 +2297,10 @@ struct ModelPickerPill: View {
     }
 
     private func catalogTags(_ item: AgentModelCatalogItem) -> [String] {
+        if item.providerID == AgentProviderPreset.ollamaID,
+           item.isPrimaryFlashModel {
+            return [L10n.AgentModelPicker.localLLM]
+        }
         if let recommendation = Self.codingRecommendations.first(where: {
             $0.providerID == item.providerID
                 && $0.model.caseInsensitiveCompare(item.modelID) == .orderedSame

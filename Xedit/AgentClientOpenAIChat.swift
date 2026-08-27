@@ -58,7 +58,8 @@ struct OpenAIChatAdapter {
             messages: requestMessages,
             tools: tools,
             supportsImages: configuration.supportsImageInput,
-            disableThinking: AgentLocalModelPrompting.isLocalProvider(configuration)
+            disableThinking: AgentLocalModelPrompting.isLocalProvider(configuration),
+            includeOllamaThinkingFlag: configuration.providerID == AgentProviderPreset.ollamaID
         )
         request.httpBody = requestBody
 
@@ -456,7 +457,8 @@ struct OpenAIChatAdapter {
         messages: [AgentMessage],
         tools: [AgentToolDescriptor],
         supportsImages: Bool = true,
-        disableThinking: Bool = false
+        disableThinking: Bool = false,
+        includeOllamaThinkingFlag: Bool = false
     ) throws -> Data {
         let providerMessages = providerReadyMessages(messages, supportsImages: supportsImages)
         var body: [String: Any] = [
@@ -477,7 +479,10 @@ struct OpenAIChatAdapter {
             body["tool_choice"] = "auto"
         }
         if disableThinking {
-            body["reasoning_effort"] = "none"
+            applyDisabledThinkingFields(
+                to: &body,
+                includeOllamaThinkingFlag: includeOllamaThinkingFlag
+            )
         }
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
     }
@@ -487,7 +492,26 @@ struct OpenAIChatAdapter {
         configuration: AgentConfiguration
     ) {
         guard AgentLocalModelPrompting.isLocalProvider(configuration) else { return }
+        applyDisabledThinkingFields(
+            to: &body,
+            includeOllamaThinkingFlag: configuration.providerID == AgentProviderPreset.ollamaID
+        )
+    }
+
+    /// Ollama's OpenAI-compatible API accepts the OpenAI-shaped reasoning
+    /// controls, while its native chat API uses `think: false`. Send both for
+    /// the built-in Ollama provider so older/newer compatibility layers cannot
+    /// silently fall back to model-default thinking. Other loopback-compatible
+    /// providers receive only the documented OpenAI fields.
+    nonisolated private static func applyDisabledThinkingFields(
+        to body: inout [String: Any],
+        includeOllamaThinkingFlag: Bool
+    ) {
         body["reasoning_effort"] = "none"
+        body["reasoning"] = ["effort": "none"]
+        if includeOllamaThinkingFlag {
+            body["think"] = false
+        }
     }
 
     /// Chat Completions does not accept `image_url` parts on a `tool`

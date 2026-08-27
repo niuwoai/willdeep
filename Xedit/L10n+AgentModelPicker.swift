@@ -71,6 +71,7 @@ extension L10n {
         static let coding = String(localized: "agent-model-picker.tag.coding", defaultValue: "Coding")
         static let fast = String(localized: "agent-model-picker.tag.fast", defaultValue: "Fast")
         static let affordable = String(localized: "agent-model-picker.tag.affordable", defaultValue: "Affordable")
+        static let localLLM = String(localized: "agent-model-picker.tag.local-llm", defaultValue: "Local LLM")
         static let complexCodingNote = String(localized: "agent-model-picker.note.complex-coding", defaultValue: "Complex refactors, multi-file reasoning, and difficult debugging")
         static let repositoryCodingNote = String(localized: "agent-model-picker.note.repository-coding", defaultValue: "Repository implementation and fixes")
         static let dailyCodingNote = String(localized: "agent-model-picker.note.daily-coding", defaultValue: "Daily coding and quick edits")

@@ -35,7 +35,7 @@ struct AgentLocalModelSettingsSection: View {
                     .textFieldStyle(.roundedBorder)
             }
 
-            LabeledContent(L10n.Settings.LocalModel.summaryModel) {
+            LabeledContent(L10n.Settings.LocalModel.llmModel) {
                 TextField("", text: $settings.summaryModel, onCommit: save)
                     .textFieldStyle(.roundedBorder)
             }
