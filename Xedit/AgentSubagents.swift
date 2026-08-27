@@ -28,6 +28,9 @@
 
 import Foundation
 import Combine
+import OSLog
+
+private let agentSubagentLog = Logger(subsystem: "com.willdeep.agent", category: "subagent")
 
 // MARK: - Run snapshot
 
@@ -244,10 +247,16 @@ final class AgentSubagentRegistry: ObservableObject {
         if !queuesParentReport {
             coordinatorOwnedRunIDs.insert(id)
         }
+        agentSubagentLog.info(
+            "background subagent queued run=\(id.uuidString, privacy: .public) parent=\(parentRuntimeID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(configuration.model, privacy: .public) provider=\(configuration.providerID, privacy: .public) label=\(label, privacy: .public) queuesParentReport=\(queuesParentReport ? "true" : "false", privacy: .public) promptChars=\(prompt.count, privacy: .public)"
+        )
 
         tasks[id] = Task { [weak self] in
             let outcome: AgentSubagentRunner.Outcome
             do {
+                agentSubagentLog.info(
+                    "background subagent started run=\(id.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(configuration.model, privacy: .public)"
+                )
                 outcome = try await self?.runOperation(
                     prompt,
                     configuration,
@@ -264,12 +273,21 @@ final class AgentSubagentRegistry: ObservableObject {
                     toolInvocationCount: 0
                 )
             } catch is CancellationError {
+                agentSubagentLog.info(
+                    "background subagent cancelled run=\(id.uuidString, privacy: .public) profile=\(profile.id, privacy: .public)"
+                )
                 self?.finish(id: id, status: .cancelled, report: "(subagent cancelled)", profileID: profile.id)
                 return
             } catch {
+                agentSubagentLog.error(
+                    "background subagent failed run=\(id.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) errorType=\(String(describing: type(of: error)), privacy: .public) error=\(error.localizedDescription, privacy: .private)"
+                )
                 self?.finish(id: id, status: .failed, report: "Subagent failed: \(error.localizedDescription)", profileID: profile.id)
                 return
             }
+            agentSubagentLog.info(
+                "background subagent completed run=\(id.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) rounds=\(outcome.roundCount, privacy: .public) tools=\(outcome.toolInvocationCount, privacy: .public) tokens=\(outcome.usageTokens, privacy: .public) reportChars=\(outcome.report.count, privacy: .public) truncated=\(outcome.didTruncate ? "true" : "false", privacy: .public)"
+            )
             self?.finish(
                 id: id,
                 status: .completed,
@@ -392,6 +410,9 @@ final class AgentSubagentRegistry: ObservableObject {
         if !coordinatorOwned && !suppressReport {
             pendingReports[parentID, default: []].append(id)
         }
+        agentSubagentLog.info(
+            "subagent finished run=\(id.uuidString, privacy: .public) parent=\(parentID.uuidString, privacy: .public) status=\(status.rawValue, privacy: .public) profile=\(profileID ?? finishedRun.profileID, privacy: .public) durationMs=\(Int((finishedRun.finishedAt ?? Date()).timeIntervalSince(finishedRun.startedAt) * 1000), privacy: .public) rounds=\(roundCount, privacy: .public) tools=\(toolInvocationCount, privacy: .public) reportChars=\(report.count, privacy: .public) queuedForParent=\((!coordinatorOwned && !suppressReport) ? "true" : "false", privacy: .public) coordinatorOwned=\(coordinatorOwned ? "true" : "false", privacy: .public) suppressed=\(suppressReport ? "true" : "false", privacy: .public)"
+        )
         evictOldFinishedRuns(forParentRuntime: parentID)
         if !suppressReport, let finished = runs.first(where: { $0.id == id }) {
             onRunFinished?(finished)
@@ -407,7 +428,17 @@ final class AgentSubagentRegistry: ObservableObject {
         guard let ids = pendingReports.removeValue(forKey: runtimeID), !ids.isEmpty else {
             return []
         }
-        return ids.compactMap { id in runs.first { $0.id == id } }
+        let reports = ids.compactMap { id in runs.first { $0.id == id } }
+        if reports.count != ids.count {
+            let missing = ids.count - reports.count
+            agentSubagentLog.error(
+                "subagent pending reports missing snapshots parent=\(runtimeID.uuidString, privacy: .public) requested=\(ids.count, privacy: .public) missing=\(missing, privacy: .public)"
+            )
+        }
+        agentSubagentLog.info(
+            "subagent pending reports consumed parent=\(runtimeID.uuidString, privacy: .public) count=\(reports.count, privacy: .public)"
+        )
+        return reports
     }
 
     /// Non-destructive count of finished-but-unreported runs — the
@@ -441,6 +472,9 @@ final class AgentSubagentRegistry: ObservableObject {
         if suppressReports {
             suppressedReportRunIDs.formUnion(matches.map(\.id))
         }
+        agentSubagentLog.info(
+            "subagent cancel requested parent=\(runtimeID.uuidString, privacy: .public) turn=\(turnID.uuidString, privacy: .public) count=\(matches.count, privacy: .public) suppressReports=\(suppressReports ? "true" : "false", privacy: .public)"
+        )
         for run in matches {
             tasks[run.id]?.cancel()
         }

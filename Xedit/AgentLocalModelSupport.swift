@@ -11,11 +11,21 @@ import Combine
 
 struct AgentLocalModelSettings: Codable, Equatable {
     static let defaultBaseURL = "http://127.0.0.1:11434/v1"
-    static let defaultVisionModelID = "qwen3.5-4b-vl-q4_k_m"
-    static let defaultSummaryModelID = "qwen3.5-4b-q4_k_m"
+    static let defaultVisionModelID = "gemma4:e4b-it-qat"
+    static let defaultSummaryModelID = "gemma4:e4b-it-qat"
     static let defaultModelID = defaultSummaryModelID
     static let defaultComposerDisplayName = "Local Chat (Ollama)"
     static let composerProviderEntryID = UUID(uuidString: "9C9B8A64-4F84-4D9C-8F4F-4C7C6F63616C")!
+
+    private static let legacyDefaultVisionModelIDs: Set<String> = [
+        "qwen3.5-4b-vl-q4_k_m",
+        "qwen3.5-4b-q4_k_m",
+        "gemma4:e2b"
+    ]
+    private static let legacyDefaultSummaryModelIDs: Set<String> = [
+        "qwen3.5-4b-q4_k_m",
+        "gemma4:e2b"
+    ]
 
     var enabled: Bool
     var baseURL: String
@@ -24,6 +34,12 @@ struct AgentLocalModelSettings: Codable, Equatable {
     var preferForImageUnderstanding: Bool
     var preferForTitles: Bool
     var preferForContextSummaries: Bool
+    /// Worker 路由判决是否先问本地模型。关掉（或整个本地加速关掉）时，
+    /// 路由回落到会话默认模型；两者都不可用时回落纯关键词判决。
+    /// 刻意不给它单独的模型字段：文本辅助任务统一复用 `summaryModel`
+    /// 持久化字段（设置页对用户展示为“LLM 模型”）；图片理解独立使用
+    /// `visionModel`，不会进入文本聊天的备用模型列表。
+    var preferForWorkerRouting: Bool
     var exposeAsComposerModel: Bool
     var composerDisplayName: String
 
@@ -35,6 +51,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         preferForImageUnderstanding: true,
         preferForTitles: true,
         preferForContextSummaries: false,
+        preferForWorkerRouting: true,
         exposeAsComposerModel: false,
         composerDisplayName: defaultComposerDisplayName
     )
@@ -47,6 +64,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         preferForImageUnderstanding: Bool,
         preferForTitles: Bool,
         preferForContextSummaries: Bool,
+        preferForWorkerRouting: Bool = AgentLocalModelSettings.defaultPreferForWorkerRouting,
         exposeAsComposerModel: Bool,
         composerDisplayName: String
     ) {
@@ -57,9 +75,13 @@ struct AgentLocalModelSettings: Codable, Equatable {
         self.preferForImageUnderstanding = preferForImageUnderstanding
         self.preferForTitles = preferForTitles
         self.preferForContextSummaries = preferForContextSummaries
+        self.preferForWorkerRouting = preferForWorkerRouting
         self.exposeAsComposerModel = exposeAsComposerModel
         self.composerDisplayName = composerDisplayName
     }
+
+    /// `default` 自己要用它初始化，所以不能从 `Self.default` 取。
+    static let defaultPreferForWorkerRouting = true
 
     enum CodingKeys: String, CodingKey {
         case enabled
@@ -70,6 +92,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         case preferForSummaries
         case preferForTitles
         case preferForContextSummaries
+        case preferForWorkerRouting
         case exposeAsComposerModel
         case composerDisplayName
     }
@@ -89,6 +112,8 @@ struct AgentLocalModelSettings: Codable, Equatable {
             ?? defaults.preferForTitles
         self.preferForContextSummaries = try c.decodeIfPresent(Bool.self, forKey: .preferForContextSummaries)
             ?? defaults.preferForContextSummaries
+        self.preferForWorkerRouting = try c.decodeIfPresent(Bool.self, forKey: .preferForWorkerRouting)
+            ?? defaults.preferForWorkerRouting
         self.exposeAsComposerModel = try c.decodeIfPresent(Bool.self, forKey: .exposeAsComposerModel)
             ?? defaults.exposeAsComposerModel
         self.composerDisplayName = try c.decodeIfPresent(String.self, forKey: .composerDisplayName)
@@ -104,6 +129,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         try c.encode(preferForImageUnderstanding, forKey: .preferForImageUnderstanding)
         try c.encode(preferForTitles, forKey: .preferForTitles)
         try c.encode(preferForContextSummaries, forKey: .preferForContextSummaries)
+        try c.encode(preferForWorkerRouting, forKey: .preferForWorkerRouting)
         try c.encode(exposeAsComposerModel, forKey: .exposeAsComposerModel)
         try c.encode(composerDisplayName, forKey: .composerDisplayName)
     }
@@ -117,10 +143,10 @@ struct AgentLocalModelSettings: Codable, Equatable {
         if result.baseURL.isEmpty {
             result.baseURL = Self.defaultBaseURL
         }
-        if result.visionModel.isEmpty || result.visionModel == Self.defaultSummaryModelID {
+        if result.visionModel.isEmpty || Self.legacyDefaultVisionModelIDs.contains(result.visionModel) {
             result.visionModel = Self.defaultVisionModelID
         }
-        if result.summaryModel.isEmpty {
+        if result.summaryModel.isEmpty || Self.legacyDefaultSummaryModelIDs.contains(result.summaryModel) {
             result.summaryModel = Self.defaultSummaryModelID
         }
         if result.composerDisplayName.isEmpty {
@@ -147,10 +173,11 @@ enum AgentLocalAuxiliaryPurpose {
     case imageUnderstanding
     case title
     case contextSummary
+    case workerRouting
 }
 
 nonisolated enum AgentLocalModelPrompting {
-    static func prefersLocalLanguageInstruction(_ configuration: AgentConfiguration) -> Bool {
+    static func isLocalProvider(_ configuration: AgentConfiguration) -> Bool {
         if configuration.providerID == "ollama" {
             return true
         }
@@ -158,6 +185,10 @@ nonisolated enum AgentLocalModelPrompting {
             return false
         }
         return ["localhost", "127.0.0.1", "::1"].contains(host)
+    }
+
+    static func prefersLocalLanguageInstruction(_ configuration: AgentConfiguration) -> Bool {
+        isLocalProvider(configuration)
     }
 
     static func applyLanguageInstruction(to systemPrompt: String, configuration: AgentConfiguration) -> String {
@@ -664,7 +695,19 @@ extension AppState {
         case .contextSummary:
             guard settings.preferForContextSummaries else { return nil }
             return settings.configuration(model: settings.summaryModel)
+        case .workerRouting:
+            guard settings.preferForWorkerRouting else { return nil }
+            return settings.configuration(model: settings.summaryModel)
         }
+    }
+
+    /// 路由判决的模型候选：本地辅助模型（启用且勾选时）→ 会话默认模型。
+    /// 两者都拿不到时调用方回落到纯关键词判决。
+    func workerRoutingConfigurationCandidates(fallback: AgentConfiguration) -> [AgentConfiguration] {
+        auxiliaryConfigurationCandidates(
+            local: localAuxiliaryConfiguration(for: .workerRouting),
+            fallback: fallback
+        )
     }
 
     func imageDescriptionConfigurationCandidates(fallback: AgentConfiguration) -> [AgentConfiguration] {

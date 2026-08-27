@@ -35,6 +35,23 @@ struct AgentClientEncodingTests {
         #expect(streamOpts?["include_usage"] as? Bool == true)
         let messages = dict["messages"] as? [[String: Any]] ?? []
         #expect(messages.count == 1)
+        #expect(dict["reasoning_effort"] == nil)
+    }
+
+    @Test
+    func encodeChatRequestDisablesThinkingForLocalModels() throws {
+        let data = try AgentClient.encodeChatRequest(
+            model: "gemma4:e2b",
+            messages: [AgentMessage(role: .user, content: "hi")],
+            tools: [],
+            disableThinking: true,
+            includeOllamaThinkingFlag: true
+        )
+        let dict = try parseJSONObject(data)
+        #expect(dict["reasoning_effort"] as? String == "none")
+        let reasoning = dict["reasoning"] as? [String: Any]
+        #expect(reasoning?["effort"] as? String == "none")
+        #expect(dict["think"] as? Bool == false)
     }
 
     /// With no tools, the request omits both `tools` and `tool_choice`

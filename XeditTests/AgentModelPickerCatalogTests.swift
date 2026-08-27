@@ -89,6 +89,27 @@ struct AgentModelPickerCatalogTests {
     }
 
     @Test
+    func ollamaConfiguredLLMStaysFirstAndIsMarkedAsPrimary() {
+        let ollama = AgentProviderEntry(
+            id: AgentLocalModelSettings.composerProviderEntryID,
+            providerID: AgentProviderPreset.ollamaID,
+            displayName: AgentLocalModelSettings.defaultComposerDisplayName,
+            baseURL: AgentLocalModelSettings.defaultBaseURL,
+            flashPrimary: "configured-llm:latest",
+            proPrimary: "configured-llm:latest"
+        )
+
+        let items = AgentModelPickerCatalog.items(
+            entries: [ollama],
+            fetchedByProvider: [ollama.id: ["alpha:latest", "configured-llm:latest", "zeta:latest"]]
+        )
+
+        #expect(items.map(\.modelID) == ["configured-llm:latest", "alpha:latest", "zeta:latest"])
+        #expect(items.first?.isPrimaryFlashModel == true)
+        #expect(items.dropFirst().allSatisfy { !$0.isPrimaryFlashModel })
+    }
+
+    @Test
     func managedMarketingStatusSeparatesSelectionFromAuthentication() {
         #expect(AgentManagedMarketingStatus.resolve(
             isAuthenticated: true,

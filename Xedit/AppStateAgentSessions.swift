@@ -362,7 +362,7 @@ extension AppState {
             baseURL: settings.baseURL,
             apiKey: "",
             flashPrimary: settings.summaryModel,
-            flashAlternates: settings.visionModel == settings.summaryModel ? [] : [settings.visionModel],
+            flashAlternates: [],
             proPrimary: settings.summaryModel,
             proAlternates: [],
             routingMode: .flash

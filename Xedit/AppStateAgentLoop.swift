@@ -288,6 +288,14 @@ extension AppState {
             // currentTurnRouteSteering, which runAgentLoop reads when it
             // assembles the system prompt.
             if source == .operatorInput {
+                // Keyword routing already produced a decision synchronously.
+                // Where it fell back rather than matched, a model gets a say
+                // before the preflight reads the decision.
+                await self.refineRouteDecisionWithModelIfNeeded(
+                    for: runtime,
+                    requestText: text,
+                    fallback: configuration
+                )
                 let codingPlan = await self.runReadOnlyPreflightIfNeeded(
                     for: runtime,
                     requestText: text,

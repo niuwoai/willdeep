@@ -35,7 +35,7 @@ struct AgentLocalModelSettingsSection: View {
                     .textFieldStyle(.roundedBorder)
             }
 
-            LabeledContent(L10n.Settings.LocalModel.summaryModel) {
+            LabeledContent(L10n.Settings.LocalModel.llmModel) {
                 TextField("", text: $settings.summaryModel, onCommit: save)
                     .textFieldStyle(.roundedBorder)
             }
@@ -46,6 +46,11 @@ struct AgentLocalModelSettingsSection: View {
                 .onCompatibleChange(of: settings.preferForTitles) { _, _ in save() }
             Toggle(L10n.Settings.LocalModel.preferContextSummary, isOn: $settings.preferForContextSummaries)
                 .onCompatibleChange(of: settings.preferForContextSummaries) { _, _ in save() }
+            Toggle(L10n.Settings.LocalModel.preferWorkerRouting, isOn: $settings.preferForWorkerRouting)
+                .onCompatibleChange(of: settings.preferForWorkerRouting) { _, _ in save() }
+            Text(L10n.Settings.LocalModel.workerRoutingHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Toggle(L10n.Settings.LocalModel.exposeComposerModel, isOn: $settings.exposeAsComposerModel)
                 .onCompatibleChange(of: settings.exposeAsComposerModel) { _, _ in save() }
 

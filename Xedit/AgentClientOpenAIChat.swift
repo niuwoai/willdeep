@@ -57,7 +57,9 @@ struct OpenAIChatAdapter {
             model: configuration.model,
             messages: requestMessages,
             tools: tools,
-            supportsImages: configuration.supportsImageInput
+            supportsImages: configuration.supportsImageInput,
+            disableThinking: AgentLocalModelPrompting.isLocalProvider(configuration),
+            includeOllamaThinkingFlag: configuration.providerID == AgentProviderPreset.ollamaID
         )
         request.httpBody = requestBody
 
@@ -200,7 +202,7 @@ struct OpenAIChatAdapter {
             environmentTrust: environmentTrust
         )
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": configuration.model,
             "stream": false,
             "max_tokens": AgentInjectionDefense.judgeMaxOutputTokens,
@@ -210,6 +212,7 @@ struct OpenAIChatAdapter {
                 ["role": "user", "content": userPayload]
             ]
         ]
+        Self.disableThinkingIfNeeded(in: &body, configuration: configuration)
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
             return .unavailable("encode failed")
         }
@@ -265,7 +268,7 @@ struct OpenAIChatAdapter {
         applyAuthenticationHeaders(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model,
             "stream": false,
             "max_tokens": maxTokens,
@@ -282,6 +285,7 @@ struct OpenAIChatAdapter {
                 ["role": "user", "content": userPayload]
             ]
         ]
+        Self.disableThinkingIfNeeded(in: &body, configuration: configuration)
         guard let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else { return nil }
         request.httpBody = payload
 
@@ -452,7 +456,9 @@ struct OpenAIChatAdapter {
         model: String,
         messages: [AgentMessage],
         tools: [AgentToolDescriptor],
-        supportsImages: Bool = true
+        supportsImages: Bool = true,
+        disableThinking: Bool = false,
+        includeOllamaThinkingFlag: Bool = false
     ) throws -> Data {
         let providerMessages = providerReadyMessages(messages, supportsImages: supportsImages)
         var body: [String: Any] = [
@@ -472,7 +478,40 @@ struct OpenAIChatAdapter {
             body["tools"] = tools.map(encodeTool)
             body["tool_choice"] = "auto"
         }
+        if disableThinking {
+            applyDisabledThinkingFields(
+                to: &body,
+                includeOllamaThinkingFlag: includeOllamaThinkingFlag
+            )
+        }
         return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    }
+
+    private static func disableThinkingIfNeeded(
+        in body: inout [String: Any],
+        configuration: AgentConfiguration
+    ) {
+        guard AgentLocalModelPrompting.isLocalProvider(configuration) else { return }
+        applyDisabledThinkingFields(
+            to: &body,
+            includeOllamaThinkingFlag: configuration.providerID == AgentProviderPreset.ollamaID
+        )
+    }
+
+    /// Ollama's OpenAI-compatible API accepts the OpenAI-shaped reasoning
+    /// controls, while its native chat API uses `think: false`. Send both for
+    /// the built-in Ollama provider so older/newer compatibility layers cannot
+    /// silently fall back to model-default thinking. Other loopback-compatible
+    /// providers receive only the documented OpenAI fields.
+    nonisolated private static func applyDisabledThinkingFields(
+        to body: inout [String: Any],
+        includeOllamaThinkingFlag: Bool
+    ) {
+        body["reasoning_effort"] = "none"
+        body["reasoning"] = ["effort": "none"]
+        if includeOllamaThinkingFlag {
+            body["think"] = false
+        }
     }
 
     /// Chat Completions does not accept `image_url` parts on a `tool`
