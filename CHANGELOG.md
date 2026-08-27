@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.296.0-rc9 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.296.0-rc10 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.296.0-rc10 - 2026-08-27
+
+### Fixed
+
+- ARM-only Release 在主程序之外继续裁剪内置 `willdeep-agent` 与 `WillDeepComputerUseHelper`，避免辅助可执行文件残留 Intel 切片；通用架构构建保持原行为。
+- ARM 裁剪后重新签名并严格验证 Computer Use Helper，确保后续 Developer ID 导出、公证与 Gatekeeper 校验使用有效的嵌套签名。
+
+### Tests
+
+- 新增 ARM Release 产物架构核验，主程序、Agent 与 Computer Use Helper 均必须只包含 `arm64`。
 
 ## 1.296.0-rc9 - 2026-08-27
 
