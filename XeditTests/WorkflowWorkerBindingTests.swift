@@ -133,6 +133,77 @@ struct WorkflowWorkerBindingTests {
         #expect(!rogue.effectiveToolNames().contains("terminal_send_command"))
     }
 
+    @Test("运维子代理只把非敏感的模糊修改命令送智能审核")
+    @MainActor
+    func terminalOperatorIntelligentReviewBoundary() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-terminal-review")
+        #expect(AgentSubagentRunner.subagentCommandCanUseIntelligentReview(
+            "timedatectl set-timezone UTC",
+            workspaceURL: root
+        ))
+        #expect(AgentSubagentRunner.subagentCommandCanUseIntelligentReview(
+            "hostnamectl set-hostname staging-box",
+            workspaceURL: root
+        ))
+
+        // 已知只读命令无需浪费裁判调用；危险与凭据命令则没有模型放行权。
+        #expect(!AgentSubagentRunner.subagentCommandCanUseIntelligentReview(
+            "timedatectl status",
+            workspaceURL: root
+        ))
+        #expect(!AgentSubagentRunner.subagentCommandCanUseIntelligentReview(
+            "rm -rf /",
+            workspaceURL: root
+        ))
+        #expect(!AgentSubagentRunner.subagentCommandCanUseIntelligentReview(
+            "cat ~/.ssh/id_rsa",
+            workspaceURL: root
+        ))
+
+        let smartPrompt = AgentSubagentRunner.systemPrompt(
+            workspaceURL: root,
+            profile: AgentSubagentProfileCatalog.opsRunner,
+            intelligentCommandReviewAvailable: true
+        )
+        #expect(smartPrompt.contains("intelligent safety review"))
+        #expect(smartPrompt.contains("ops_runner.target_command"))
+        #expect(!smartPrompt.contains("Write operations are denied"))
+
+        let strictPrompt = AgentSubagentRunner.systemPrompt(
+            workspaceURL: root,
+            profile: AgentSubagentProfileCatalog.opsRunner
+        )
+        #expect(strictPrompt.contains("Write operations are denied"))
+    }
+
+    @Test("所有自带命令工具的工种共享同一智能审核通道")
+    @MainActor
+    func everyCommandCarryingTradeUsesSharedReviewContract() {
+        let commandTradeIDs = Set(AgentSubagentProfileCatalog.builtIn.compactMap { profile in
+            let tools = profile.effectiveToolNames(
+                writeAccessGranted: profile.requiresWriteAccess
+            )
+            return tools.contains("run_command") || tools.contains("terminal_send_command")
+                ? profile.id
+                : nil
+        })
+        #expect(commandTradeIDs == Set([
+            "deep", "implementer", "small_implementer", "tester",
+            "test_fixer", "build_fixer", "git_detective", "ops_runner",
+            "terminal_operator",
+        ]))
+
+        for profile in AgentSubagentProfileCatalog.builtIn where commandTradeIDs.contains(profile.id) {
+            let prompt = AgentSubagentRunner.systemPrompt(
+                workspaceURL: URL(fileURLWithPath: "/tmp/willdeep-shared-command-review"),
+                profile: profile,
+                intelligentCommandReviewAvailable: true
+            )
+            #expect(prompt.contains("intelligent safety review"), "\(profile.id) 未接共享审核提示词")
+            #expect(!prompt.contains("Write operations are denied"), "\(profile.id) 仍带一刀切拒绝提示")
+        }
+    }
+
     @Test("reader 是唯一能联网的窄工种")
     func readerIsTheOnlyNarrowTradeWithWebSearch() {
         #expect(AgentSubagentProfileCatalog.reader.toolNames.contains("web_search"))

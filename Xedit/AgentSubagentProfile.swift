@@ -161,9 +161,9 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         }
         // 终端工具照 editor 写工具的先例走**按工种放行**，不进全局白名单：
         // 进了全局名单，deep/tester 会静默获得读用户终端屏幕的能力。
-        // send_command 虽在此放行，执行层仍有第二道闸：terminal_operator
-        // 只许只读命令；ops_runner 只有获批 target_command 后才看到工具，
-        // 且写命令必须与批准文本精确匹配。
+        // send_command 虽在此放行，执行层仍有第二道闸：静态只读直接走；
+        // Smart/Goal 只把非敏感、非确定性危险命令交父安全裁判；其余必须
+        // 通过 ops_runner 的精确 target_command 人工授权。
         if id == AgentSubagentProfileCatalog.terminalOperatorID
             || (id == AgentSubagentProfileCatalog.opsRunnerID && approvedCommandGranted) {
             allowed.formUnion(AgentSubagentProfileCatalog.terminalOperatorToolNames)
@@ -563,7 +563,7 @@ nonisolated enum AgentSubagentProfileCatalog {
 
     static let opsRunner = AgentSubagentProfile(
         id: opsRunnerID,
-        purpose: "Read-only operations queries plus one exact operator-approved release/deploy command. An approved command may run through the workspace shell or the verified visible SSH terminal; every other mutation is denied.",
+        purpose: "Run operations queries directly; submit bounded modifying commands for smart review or exact human approval. Dangerous, credential-sensitive, rollback, and cleanup commands stay with the parent.",
         modelBinding: cheapBinding,
         toolNames: [
             "run_command", "read_file", "grep_files", "list_directory",
@@ -571,7 +571,10 @@ nonisolated enum AgentSubagentProfileCatalog {
             "terminal_snapshot", "terminal_send_command",
         ],
         capabilityPromptSection: AgentSubagentJobPrompts.opsRunner,
-        maxRounds: 8,
+        // Read-only production investigations often need several independent
+        // probes plus one final synthesis turn. Eight rounds could expire
+        // immediately after the decisive command returned.
+        maxRounds: 32,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
         escalation: .retryWithParentModel,
         hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: opsRunnerID)
@@ -579,7 +582,7 @@ nonisolated enum AgentSubagentProfileCatalog {
 
     static let terminalOperator = AgentSubagentProfile(
         id: terminalOperatorID,
-        purpose: "Drive the visible side-panel terminal: run given read-only commands in a specified tab, read the screen, report results. Everything happens in front of the user; write commands are denied by policy.",
+        purpose: "Drive the visible side-panel terminal: run read-only commands directly; submit bounded modifying commands for smart review or exact human approval; read the screen and report results.",
         modelBinding: cheapBinding,
         toolNames: [
             "terminal_list_tabs", "terminal_select_tab",
@@ -587,7 +590,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         ],
         capabilityPromptSection: AgentSubagentJobPrompts.terminalOperator,
         // 每条命令要「snapshot → send → snapshot」三步起，轮次给足。
-        maxRounds: 12,
+        maxRounds: 32,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
         escalation: .retryWithParentModel,
         hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: terminalOperatorID)
@@ -612,6 +615,48 @@ nonisolated enum AgentSubagentProfileCatalog {
         opsRunner,
         terminalOperator,
     ]
+
+    /// The capability-oriented trades exposed to people and to the parent
+    /// model. The remaining built-ins are implementation details retained for
+    /// automatic routing, hosted relay chains, saved workflows, and history.
+    /// Model size is configured by the binding, not encoded as another trade.
+    static let publicBuiltIn: [AgentSubagentProfile] = [
+        reader,
+        implementer,
+        tester,
+        opsRunner,
+        judge,
+        deep,
+    ]
+
+    static let publicIDs = Set(publicBuiltIn.map(\.id))
+
+    static func isPublic(id rawID: String) -> Bool {
+        let trimmed = rawID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return publicIDs.contains(trimmed)
+    }
+
+    /// Presentation-only grouping for legacy specialist trades. Runtime
+    /// resolution deliberately keeps the original ID and its narrower tools.
+    static func publicID(for rawID: String) -> String {
+        let id = rawID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch id {
+        case scoutID, readerID, logInspectorID, gitDetectiveID:
+            return readerID
+        case editorID, smallImplementerID, implementerID, testFixerID, buildFixerID:
+            return implementerID
+        case testerID, reviewerID, smallReviewerID:
+            return testerID
+        case opsRunnerID, terminalOperatorID:
+            return opsRunnerID
+        case securityGuardID, judgeID:
+            return judgeID
+        case deepID:
+            return deepID
+        default:
+            return id
+        }
+    }
 
     /// Resolve a spawn's `profile` argument. Unknown or missing → `deep`,
     /// which is the behaviour every pre-profile caller already expects.
@@ -677,7 +722,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// is the one the live schema uses, since it also lists user-created
     /// trades.
     static var toolDescriptionCatalog: String {
-        catalogLine(for: builtIn)
+        catalogLine(for: publicBuiltIn)
     }
 
     static func catalogLine(for profiles: [AgentSubagentProfile]) -> String {
@@ -730,10 +775,19 @@ nonisolated enum AgentSubagentProfileStore {
         store.save(profiles: profiles)
     }
 
-    /// Every trade `spawn_agent` may select: the four built-ins with the
-    /// user's soul/model edits applied, plus any user-created in-process
-    /// profile marked for subagent use.
+    /// Public capability trades `spawn_agent` advertises, with user edits
+    /// applied, plus user-created in-process profiles.
     static func resolvedProfiles() -> [AgentSubagentProfile] {
+        let all = allResolvedProfiles()
+        let byID = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+        let publicProfiles = AgentSubagentProfileCatalog.publicBuiltIn.compactMap { byID[$0.id] }
+        let managedProfiles = all.filter { !AgentSubagentProfileCatalog.isKnown(id: $0.id) }
+        return publicProfiles + managedProfiles
+    }
+
+    /// Includes hidden legacy built-ins so saved workflows and automatic
+    /// specialist routing continue to resolve their exact tool contracts.
+    static func allResolvedProfiles() -> [AgentSubagentProfile] {
         let resolved = store.profiles(usage: .subagent).compactMap { $0.asSubagentProfile() }
         // A damaged or emptied store must never leave `spawn_agent` with no
         // trades at all; fall back to code.
@@ -741,14 +795,14 @@ nonisolated enum AgentSubagentProfileStore {
     }
 
     /// Schema catalog including user-created trades, so the model can pick
-    /// one the user configured rather than only the four built-ins.
+    /// one the user configured rather than only the six public built-ins.
     static var toolDescriptionCatalog: String {
         AgentSubagentProfileCatalog.catalogLine(for: resolvedProfiles())
     }
 
     static func resolvedProfile(id rawID: String?) -> AgentSubagentProfile {
         let trimmed = rawID?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let profiles = resolvedProfiles()
+        let profiles = allResolvedProfiles()
         if let trimmed, !trimmed.isEmpty,
            let match = profiles.first(where: { $0.id.lowercased() == trimmed }) {
             return match

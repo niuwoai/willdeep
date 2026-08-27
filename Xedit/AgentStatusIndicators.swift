@@ -1386,7 +1386,7 @@ struct AgentStatsDashboard: View {
         let rowsByProfile = Dictionary(
             uniqueKeysWithValues: subagentUsageRows.map { ($0.profileID, $0) }
         )
-        let profiles = AgentSubagentProfileCatalog.builtIn.sorted { lhs, rhs in
+        let profiles = AgentSubagentProfileCatalog.publicBuiltIn.sorted { lhs, rhs in
             let lhsCount = rowsByProfile[lhs.id]?.invocationCount ?? 0
             let rhsCount = rowsByProfile[rhs.id]?.invocationCount ?? 0
             if lhsCount != rhsCount { return lhsCount > rhsCount }
@@ -1489,9 +1489,7 @@ struct AgentStatsDashboard: View {
         .padding(.vertical, 10)
     }
 
-    /// One glyph per trade. With ten trades in the list, sharing a default
-    /// icon between seven of them makes the column unreadable — the icon is
-    /// how you find the row you care about without reading every label.
+    /// One glyph per public capability trade.
     private func workerSymbol(_ profileID: String) -> String {
         switch profileID {
         case AgentSubagentProfileCatalog.scoutID: return "scope"

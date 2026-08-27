@@ -7752,31 +7752,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Read-only operations queries via shell: service status, log tails, kubectl/gh inspection. Can inspect, never change."
+            "value" : "Runs operations queries directly; bounded modifying commands require smart or human approval."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Consultas de operaciones de solo lectura por shell: estado de servicios, colas de logs, inspección de kubectl/gh. Puede inspeccionar, nunca cambiar."
+            "value" : "Ejecuta consultas operativas directamente; los cambios acotados requieren aprobación inteligente o humana."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Requêtes d'exploitation en lecture seule via le shell : état des services, fins de journaux, inspection kubectl/gh. Peut inspecter, jamais modifier."
+            "value" : "Exécute directement les requêtes d’exploitation ; les modifications limitées exigent une approbation intelligente ou humaine."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "シェル経由の読み取り専用の運用クエリ：サービス状態、ログ末尾、kubectl/gh の確認。調査はできるが変更は一切しない。"
+            "value" : "運用クエリは直接実行し、限定的な変更コマンドにはAIまたは人の承認が必要。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只读运维查询：服务状态、日志尾部、kubectl/gh 检视。只看不改。"
+            "value" : "运维查询直接执行；有限修改命令须经智能审核或人类批准。"
           }
         }
       }
@@ -7824,31 +7824,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Drives the visible side-panel terminal: runs given read-only commands in a tab, reads the screen, reports results."
+            "value" : "Drives the visible side-panel terminal. Read-only commands run directly; bounded modifying commands require smart or human approval."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Maneja el terminal visible del panel lateral: ejecuta comandos de solo lectura en una pestaña, lee la pantalla e informa resultados."
+            "value" : "Maneja el terminal visible del panel lateral. Los comandos de solo lectura se ejecutan directamente; los cambios acotados requieren aprobación inteligente o humana."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Pilote le terminal visible du panneau latéral : exécute des commandes en lecture seule dans un onglet, lit l'écran et rapporte les résultats."
+            "value" : "Pilote le terminal visible du panneau latéral. Les commandes en lecture seule s’exécutent directement ; les modifications limitées exigent une approbation intelligente ou humaine."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "サイドパネルの可視ターミナルを操作：指定タブで読み取り専用コマンドを実行し、画面を読んで結果を報告する。"
+            "value" : "サイドパネルの可視ターミナルを操作する。読み取り専用コマンドは直接実行し、限定的な変更コマンドにはAIまたは人の承認が必要。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "驾驶侧栏可见终端：在指定标签页执行只读命令、读屏并汇报结果。"
+            "value" : "驾驶侧栏可见终端：只读命令直接执行；有限修改命令须经智能审核或人类批准。"
           }
         }
       }
