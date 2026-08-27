@@ -1376,6 +1376,13 @@ nonisolated enum L10n {
         /// `newChatAction`, which starts a fresh one.
         static let chatAction = String(localized: "sidebar.chat-action", defaultValue: "Chat")
         static let newChatAction = String(localized: "sidebar.new-chat-action", defaultValue: "New Chat")
+        /// 首行在聊天页之外的说法：点它是「回到最近一次会话」。
+        static let sessionAction = String(localized: "sidebar.session-action", defaultValue: "Session")
+        /// 首行在聊天页里的说法：点它是「开一个新会话」。
+        static let newSessionAction = String(
+            localized: "sidebar.new-session-action",
+            defaultValue: "New Session"
+        )
         static let pinnedHeader = String(localized: "sidebar.pinned-header", defaultValue: "Pinned")
         static let defaultSessionTitle = String(localized: "sidebar.default-session-title", defaultValue: "New Chat")
         static let recentSessionsRailTitle = String(localized: "sidebar.recent-sessions-rail.title", defaultValue: "Recent chats")

@@ -61,6 +61,11 @@ nonisolated struct AgentPluginPermission: RawRepresentable, Codable, Hashable, S
     static let processExecute = Self(rawValue: "process.execute")
     static let networkAccess = Self(rawValue: "network.access")
     static let credentialUse = Self(rawValue: "credentials.use")
+    /// 插件页面可以问模型（`window.willdeep.ai.complete`）。密钥不出宿主，
+    /// provider 与模型必须落在用户自己的库里，见 AgentPluginAIBridge。
+    static let aiChat = Self(rawValue: "ai.chat")
+    /// 只读地拿 provider 与模型清单（`window.willdeep.ai.providers`）。
+    static let providersRead = Self(rawValue: "providers.read")
     static let clipboardWrite = Self(rawValue: "clipboard.write")
     static let notifications = Self(rawValue: "notifications")
 }

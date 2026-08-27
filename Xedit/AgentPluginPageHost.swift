@@ -287,6 +287,26 @@ private struct AgentPluginWebPage: View {
               window.addEventListener('willdeep:command-result', listener);
             });
           };
+          function willdeepBridgeRequest(type, payload) {
+            var requestID = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random();
+            var message = {type:type, requestID:requestID};
+            for (var key in payload) { if (Object.prototype.hasOwnProperty.call(payload, key)) message[key] = payload[key]; }
+            if (handler) handler.postMessage(message);
+            return new Promise(function(resolve, reject) {
+              function listener(event) {
+                if (!event.detail || event.detail.requestID !== requestID) return;
+                window.removeEventListener('willdeep:bridge-result', listener);
+                if (event.detail.error) reject(new Error(event.detail.error)); else resolve(event.detail.result);
+              }
+              window.addEventListener('willdeep:bridge-result', listener);
+            });
+          }
+          // 插件能问模型，但拿不到任何一把 key：provider 与模型都由宿主校验，
+          // 页面递上来的 baseURL 一律不认。需要 ai.chat / providers.read 权限。
+          window.willdeep.ai = {
+            providers: function() { return willdeepBridgeRequest('aiProviders', {}); },
+            complete: function(request) { return willdeepBridgeRequest('aiComplete', {request: request || {}}); }
+          };
           window.__willdeepDeliverMCPMessage = function(message) {
             window.dispatchEvent(new MessageEvent('message', {data:message, source:null}));
           };
@@ -555,6 +575,10 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 }
             case "executeCommand":
                 executeCommand(body)
+            case "aiProviders":
+                listAIProviders(body)
+            case "aiComplete":
+                runAICompletion(body)
             case "mcpMessage":
                 handleMCPMessage(body["message"])
             default:
@@ -620,6 +644,84 @@ private struct AgentPluginWebView: NSViewRepresentable {
                     self.sendCommandResult(requestID: requestID, result: nil, error: error.localizedDescription)
                 }
             }
+        }
+
+        private func listAIProviders(_ body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                guard AgentPluginRegistry.shared.hasPermission(
+                    .providersRead,
+                    pluginID: self.destination.pluginID
+                ) || AgentPluginRegistry.shared.hasPermission(
+                    .aiChat,
+                    pluginID: self.destination.pluginID
+                ) else {
+                    self.sendBridgeResult(
+                        requestID: requestID,
+                        result: nil,
+                        error: AgentPluginAIError.permissionDenied.localizedDescription
+                    )
+                    return
+                }
+                let providers = appState.pluginAIProviders().map(\.jsonObject)
+                self.sendBridgeResult(requestID: requestID, result: ["providers": providers], error: nil)
+            }
+        }
+
+        private func runAICompletion(_ body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let raw = body["request"] as? [String: Any] ?? [:]
+            guard JSONSerialization.isValidJSONObject(raw),
+                  let encoded = try? JSONSerialization.data(withJSONObject: raw),
+                  encoded.count <= 262_144 else {
+                sendBridgeResult(requestID: requestID, result: nil, error: "Invalid AI request")
+                return
+            }
+            switch AgentPluginAIRequestValidator.request(from: raw) {
+            case .failure(let error):
+                sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
+            case .success(let request):
+                Task { @MainActor [weak self] in
+                    guard let self, let appState = self.appState else { return }
+                    do {
+                        let result = try await appState.runPluginAICompletion(
+                            pluginID: self.destination.pluginID,
+                            request: request
+                        )
+                        self.sendBridgeResult(
+                            requestID: requestID,
+                            result: [
+                                "text": result.text,
+                                "model": result.model,
+                                "providerID": result.providerID,
+                            ],
+                            error: nil
+                        )
+                    } catch {
+                        self.sendBridgeResult(
+                            requestID: requestID,
+                            result: nil,
+                            error: error.localizedDescription
+                        )
+                    }
+                }
+            }
+        }
+
+        private func sendBridgeResult(requestID: String, result: [String: Any]?, error: String?) {
+            var detail: [String: Any] = ["requestID": requestID]
+            if let result { detail["result"] = result }
+            if let error { detail["error"] = String(error.prefix(2_000)) }
+            guard let webView,
+                  JSONSerialization.isValidJSONObject(detail),
+                  let data = try? JSONSerialization.data(withJSONObject: detail),
+                  let json = String(data: data, encoding: .utf8) else {
+                return
+            }
+            webView.evaluateJavaScript(
+                "window.dispatchEvent(new CustomEvent('willdeep:bridge-result', {detail: \(json)}));"
+            )
         }
 
         private func handleMCPMessage(_ rawMessage: Any?) {

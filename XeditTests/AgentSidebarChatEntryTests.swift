@@ -21,6 +21,28 @@ struct AgentSidebarChatEntryTests {
         return workspace
     }
 
+    @Test("首行的说法跟着场景走：聊天页是「新会话」，别处是「会话」")
+    func entryTitleFollowsTheDestination() throws {
+        let workspace = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState()
+        _ = appState.startNewAgentSession(inWorkspaceAt: workspace.path)
+        #expect(appState.agentPrimaryDestination == .conversation)
+        #expect(appState.agentConversationEntryTitle == L10n.Sidebar.newSessionAction)
+
+        for destination in [
+            AgentPrimaryDestination.dispatchBoard,
+            .scheduledTasks,
+            .roundtable,
+            .plugin("demo.panel"),
+            .pluginCenter,
+        ] {
+            appState.agentPrimaryDestination = destination
+            #expect(appState.agentConversationEntryTitle == L10n.Sidebar.sessionAction)
+        }
+    }
+
     /// The reported bug: leave for a plugin, come back, and you were dropped
     /// into a brand-new chat because the only way back said "New Chat".
     @Test("returning from a plugin keeps the conversation that was open")

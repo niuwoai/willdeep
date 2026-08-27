@@ -75504,6 +75504,7 @@
         }
       }
     },
+    "sidebar.new-session-action" : { "extractionState" : "manual", "localizations" : { "comment" : { "stringUnit" : { "state" : "translated", "value" : "sidebar row that starts a new conversation while already on the chat" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "New Session" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Nueva sesión" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nouvelle session" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "新規セッション" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新会话" } } } },
     "sidebar.recent-sessions-rail.empty" : {
       "comment" : "empty state in the collapsed-sidebar recent chats hover rail",
       "extractionState" : "manual",
@@ -75756,6 +75757,7 @@
         }
       }
     },
+    "sidebar.session-action" : { "extractionState" : "manual", "localizations" : { "comment" : { "stringUnit" : { "state" : "translated", "value" : "sidebar row that navigates back to the most recent conversation" } }, "en" : { "stringUnit" : { "state" : "translated", "value" : "Session" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Sesión" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Session" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "セッション" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会话" } } } },
     "sidebar.session-unavailable.alert-message" : {
       "comment" : "Alert body shown when a sidebar session metadata row no longer has a readable history file; %@ is the session title",
       "extractionState" : "manual",

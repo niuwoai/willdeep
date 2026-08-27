@@ -1710,6 +1710,15 @@ extension AppState {
     /// The one exception is an untouched chat: repeated clicks would otherwise
     /// pile up empty sessions in the sidebar, each identical to the last. There
     /// the click just returns focus to the composer, so it still does something.
+    /// 侧栏首行的说法随场景变：在聊天页里它是「新会话」（点击开新的），
+    /// 在调度台 / 插件这些页面里它是「会话」（点击回到最近那一次）。
+    /// 行为一直是这么分叉的，这里只是把同一个判断挪到能被测到的地方。
+    var agentConversationEntryTitle: String {
+        agentPrimaryDestination == .conversation
+            ? L10n.Sidebar.newSessionAction
+            : L10n.Sidebar.sessionAction
+    }
+
     func activateAgentConversationEntry() {
         agentSidePanelKind = nil
         agentSidePanelRequest = nil

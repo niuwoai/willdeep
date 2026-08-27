@@ -664,7 +664,7 @@ struct AgentPluginSystemTests {
             from: repositoryRoot.appendingPathComponent("PluginExamples/arcade")
         )
         defer { try? FileManager.default.removeItem(at: arcadeRuntimePackage) }
-        for name in ["project-overview", "issue-panel", "tetris", "arcade", "session-vitality", "favorites"] {
+        for name in ["project-overview", "issue-panel", "tetris", "arcade", "session-vitality", "favorites", "todo"] {
             let packageURL = name == "arcade"
                 ? arcadeRuntimePackage
                 : repositoryRoot.appendingPathComponent("PluginExamples/\(name)")
@@ -672,7 +672,7 @@ struct AgentPluginSystemTests {
                 packageURL: packageURL,
                 source: .installed,
                 // 收藏夹与会话体检要求的宿主版本比其它样例新
-                currentWillDeepVersion: "1.300.0-rc1"
+                currentWillDeepVersion: "1.300.0-rc5"
             )
             #expect(package.destinations.count == 1)
         }
@@ -686,7 +686,7 @@ struct AgentPluginSystemTests {
         let package = try AgentPluginPackageLoader.load(
             packageURL: repositoryRoot.appendingPathComponent("PluginExamples/favorites"),
             source: .installed,
-            currentWillDeepVersion: "1.300.0-rc1"
+            currentWillDeepVersion: "1.300.0-rc5"
         )
         let manifest = try #require(package.manifest)
 
@@ -715,7 +715,7 @@ struct AgentPluginSystemTests {
         let package = try AgentPluginPackageLoader.load(
             packageURL: packageURL,
             source: .installed,
-            currentWillDeepVersion: "1.300.0-rc1"
+            currentWillDeepVersion: "1.300.0-rc5"
         )
         let manifest = try #require(package.manifest)
 
@@ -755,6 +755,160 @@ struct AgentPluginSystemTests {
                 )
             )
         }
+    }
+
+    @Test
+    func bundledPluginsShipEveryFileTheyNeedAtRuntime() throws {
+        // 「Bundle built-in plugins」阶段是一份手写清单：加了文件却忘了登记，
+        // 插件装进 App 就是点不开（页面 404、MCP 服务端脚本不存在）。这条守卫
+        // 按每个内置插件的清单反查它运行时真正要的文件有没有被复制。
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let projectFile = repositoryRoot.appendingPathComponent("Xedit.xcodeproj/project.pbxproj")
+        let project = try String(contentsOf: projectFile, encoding: .utf8)
+            .replacingOccurrences(of: "\\n", with: "\n")
+        let bundleLines = project
+            .split(separator: "\n")
+            .filter { $0.hasPrefix("bundle_plugin ") && !$0.hasSuffix("() {") }
+            .map(String.init)
+        #expect(bundleLines.count >= 4)
+
+        for line in bundleLines {
+            let fields = line.split(separator: " ").map(String.init)
+            let pluginDirectory = fields[1]
+            let relativePaths = Array(fields.dropFirst(2))
+            let packageURL = repositoryRoot
+                .appendingPathComponent("PluginExamples/\(pluginDirectory)")
+
+            // 登记的每一条都得真实存在，否则 ditto 会在构建时炸掉
+            for relativePath in relativePaths {
+                #expect(
+                    FileManager.default.fileExists(
+                        atPath: packageURL.appendingPathComponent(relativePath).path
+                    ),
+                    "\(pluginDirectory) 登记了不存在的路径 \(relativePath)"
+                )
+            }
+            #expect(relativePaths.contains(".willdeep-plugin"))
+            #expect(relativePaths.contains(".codex-plugin"))
+
+            func isCovered(_ path: String) -> Bool {
+                relativePaths.contains { path == $0 || path.hasPrefix("\($0)/") }
+            }
+
+            // localWeb 页面的 entryPath 必须在复制清单里。
+            // 这里直接解码清单而不过生产加载器：游戏厅的源码目录带着未构建的
+            // 前端工程，会被加载器的体积上限拒掉（发行时只复制 ui/dist）。
+            let manifestData = try Data(
+                contentsOf: packageURL.appendingPathComponent(".willdeep-plugin/plugin.json")
+            )
+            let manifest = try JSONDecoder().decode(AgentPluginManifest.self, from: manifestData)
+            for page in manifest.contributes.pages {
+                guard let entryPath = page.entryPath else { continue }
+                #expect(isCovered(entryPath), "\(pluginDirectory) 漏带页面 \(entryPath)")
+            }
+
+            // 带 MCP 服务端的插件：mcp.json 与它指向的脚本都得带上，
+            // 否则装进 App 之后服务端起不来
+            let mcpURL = packageURL.appendingPathComponent("mcp.json")
+            guard FileManager.default.fileExists(atPath: mcpURL.path) else { continue }
+            #expect(isCovered("mcp.json"), "\(pluginDirectory) 有 mcp.json 却没带上")
+            let mcpText = try String(contentsOf: mcpURL, encoding: .utf8)
+            for reference in mcpText.components(separatedBy: "${pluginRoot}/").dropFirst() {
+                let relativePath = String(reference.prefix { $0 != "\"" })
+                #expect(isCovered(relativePath), "\(pluginDirectory) 漏带 MCP 服务端文件 \(relativePath)")
+                #expect(
+                    FileManager.default.fileExists(
+                        atPath: packageURL.appendingPathComponent(relativePath).path
+                    )
+                )
+            }
+        }
+    }
+
+    @Test
+    func pluginAIRequestValidatorGuardsThePayload() {
+        // 空请求、超量、超长都要在起模型之前就被挡住
+        #expect(AgentPluginAIRequestValidator.request(from: [:]) == .failure(.emptyRequest))
+        #expect(
+            AgentPluginAIRequestValidator.request(from: ["messages": [["role": "user", "content": "   "]]])
+                == .failure(.emptyRequest)
+        )
+        let flood = (0..<40).map { ["role": "user", "content": "第 \($0) 条"] }
+        #expect(AgentPluginAIRequestValidator.request(from: ["messages": flood]) == .failure(.tooManyMessages))
+        let long = String(repeating: "字", count: AgentPluginAIRequest.maximumCharacters + 1)
+        #expect(
+            AgentPluginAIRequestValidator.request(from: ["messages": [["role": "user", "content": long]]])
+                == .failure(.tooLong)
+        )
+
+        let raw: [String: Any] = [
+            "system": "把一句话变成待办",
+            "messages": [
+                ["role": "user", "content": "明天下午三点前把发布验一遍"],
+                ["role": "assistant", "content": "好的"],
+                ["role": "什么角色", "content": "按 user 处理"],
+            ],
+            "provider": " ollama ",
+            "model": "gemma4:e4b-it-qat",
+            "maxOutputTokens": 99_999,
+        ]
+        guard case .success(let request) = AgentPluginAIRequestValidator.request(from: raw) else {
+            Issue.record("合法请求不该被拒")
+            return
+        }
+        #expect(request.messages.count == 4)
+        #expect(request.messages.first?.role == .system)
+        #expect(request.messages.last?.role == .user, "认不出的角色按 user 处理，绝不当成 system")
+        #expect(request.providerID == "ollama", "provider 两边的空白要去掉")
+        // 输出上限由宿主收口，插件报多少都夹到上限内
+        #expect(request.maxOutputTokens == AgentPluginAIRequest.maximumOutputTokens)
+    }
+
+    @Test
+    func chatSelectionArgumentsCarryWorkspaceOnlyWhenThereIsOne() {
+        let withoutWorkspace = AppState.chatSelectionArguments(text: "选中的一段话", workspace: nil)
+        #expect(withoutWorkspace == ["text": "选中的一段话", "source": "chat.selection"])
+
+        let withWorkspace = AppState.chatSelectionArguments(
+            text: "选中的一段话",
+            workspace: "/Users/rocky/Sites/Xedit"
+        )
+        #expect(withWorkspace["workspace"] == "/Users/rocky/Sites/Xedit")
+        #expect(withWorkspace["source"] == "chat.selection")
+        // 空字符串不算工作区，不能塞个空值进去让插件误判
+        #expect(AppState.chatSelectionArguments(text: "x", workspace: "")["workspace"] == nil)
+    }
+
+    @Test
+    func todoExampleDeclaresTheModelPermissionsItActuallyUses() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let packageURL = repositoryRoot.appendingPathComponent("PluginExamples/todo")
+        let package = try AgentPluginPackageLoader.load(
+            packageURL: packageURL,
+            source: .installed,
+            currentWillDeepVersion: "1.300.0-rc5"
+        )
+        let manifest = try #require(package.manifest)
+
+        // 页面用了 window.willdeep.ai.complete / .providers 和当前工作区，
+        // 三样都必须在清单里声明，否则宿主会在运行时把它挡回去。
+        #expect(manifest.permissions.contains(.aiChat))
+        #expect(manifest.permissions.contains(.providersRead))
+        #expect(manifest.permissions.contains(.workspaceRead))
+        #expect(manifest.permissions.contains(.processExecute))
+
+        let selection = manifest.contributes.menus[AgentPluginMenuLocation.chatSelection] ?? []
+        #expect(selection == ["todo.quick_add"], "聊天里选中一段话应该走一句话解析那条命令")
+        let page = try String(
+            contentsOf: packageURL.appendingPathComponent("ui/index.html"),
+            encoding: .utf8
+        )
+        #expect(page.contains("window.willdeep.ai.complete"))
+        #expect(page.contains("todo.quick_add"), "模型不可用时页面要能回落到本地规则解析")
     }
 
     @Test
