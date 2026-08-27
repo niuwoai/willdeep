@@ -61,13 +61,9 @@ nonisolated enum AgentPluginPackageLoader {
     static let maximumPackageFiles = 20_000
     static let maximumPackageBytes: Int64 = 256 * 1_024 * 1_024
     static let maximumPackageFileBytes: Int64 = 32 * 1_024 * 1_024
-    static let allowedMenuLocations: Set<String> = [
-        "commandPalette",
-        "session.context",
-        "composer.more",
-        "plugin.page.toolbar",
-        "plugin.sidebar.row.context",
-    ]
+    /// 允许的菜单挂载点：与 `AgentPluginMenuLocation` 同源，避免这里和
+    /// docs/plugin-schema 的枚举各写一份、加了新位置却忘了放行。
+    static let allowedMenuLocations = Set(AgentPluginMenuLocation.all)
     static let allowedHostCommands: Set<String> = [
         "plugin.refresh",
         "destination.select",

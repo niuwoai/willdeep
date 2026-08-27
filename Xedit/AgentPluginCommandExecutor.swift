@@ -70,8 +70,15 @@ enum AgentPluginCommandExecutor {
                   let tool = command.handler.tool else {
                 throw AgentPluginPackageError.invalidContribution(commandID)
             }
-            let commandTitle = AgentPluginRegistry.shared.localizedString(command.titleKey, pluginID: pluginID)
-            guard confirmMCPCommand(pluginID: pluginID, commandTitle: commandTitle) else { return nil }
+            if Self.requiresExecutionConfirmation(
+                source: AgentPluginRegistry.shared.record(pluginID: pluginID)?.activePackage.source
+            ) {
+                let commandTitle = AgentPluginRegistry.shared.localizedString(
+                    command.titleKey,
+                    pluginID: pluginID
+                )
+                guard confirmMCPCommand(pluginID: pluginID, commandTitle: commandTitle) else { return nil }
+            }
             return try await AgentMCPBridge.callPluginTool(
                 pluginID: pluginID,
                 serverName: server,
@@ -108,6 +115,14 @@ enum AgentPluginCommandExecutor {
         default:
             throw AgentPluginPackageError.invalidContribution("unsupported host action \(action)")
         }
+    }
+
+    /// 随 App 一起签名发行的第一方内置插件（`BundledPlugins/`）执行自己的 MCP
+    /// 工具时不再逐条弹确认框。它们和宿主是同一份签名产物，安装时也没有第三方
+    /// 来源可核对，而收藏夹这种默认入口每翻一次页面就要点一次「执行」根本没法用。
+    /// 其它来源（本地安装、Codex 缓存）仍然每次执行都要用户点头。
+    nonisolated static func requiresExecutionConfirmation(source: AgentPluginPackageSource?) -> Bool {
+        source != .bundled
     }
 
     private static func confirmMCPCommand(pluginID: String, commandTitle: String) -> Bool {

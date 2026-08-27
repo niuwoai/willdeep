@@ -39,11 +39,21 @@ export interface MemoryState {
   status: MemoryStatus;
 }
 
-export const DEFAULT_PAIRS = 6;
+export const DEFAULT_PAIRS = 2;
 export const MIN_PAIRS = 2;
-export const MAX_PAIRS = 6;
-/** 可选牌对数（难度档位）。 */
-export const PAIR_OPTIONS: readonly number[] = [2, 4, 6];
+/** 牌对数上限：再多就塞不进面板了，封顶后关卡号继续涨。 */
+export const MAX_PAIRS = 12;
+
+/** 第 stage 关的牌对数：2 对起步，每关 +1，到 12 对封顶。 */
+export function pairsForStage(stage: number): number {
+  return Math.min(MAX_PAIRS, MIN_PAIRS + Math.max(0, stage - 1));
+}
+
+/** 棋盘列数：让牌面尽量接近方阵，最多 6 列。 */
+export function columnsForPairs(pairs: number): number {
+  const cards = pairs * 2;
+  return Math.max(2, Math.min(6, Math.ceil(Math.sqrt(cards))));
+}
 /** 不匹配展示停留时长（毫秒），由组件在锁定期间调度翻转复位。 */
 export const MISMATCH_MS = 600;
 /** 效率分系数：每对 100 分，每多一次尝试扣 10 分。 */

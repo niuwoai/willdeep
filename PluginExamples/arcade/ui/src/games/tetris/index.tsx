@@ -13,6 +13,9 @@ import type { GameProps } from '../../core/types';
 import { useKeyControls } from '../../core/input';
 import type { KeyBinding } from '../../core/input';
 import { saveBestScore } from '../../core/bestScore';
+import { isNewBestScore } from '../../core/safeLocalStorage';
+import { playCue } from '../../core/audio';
+import { useStageReport } from '../../core/stage';
 import { useI18n } from '../../core/i18n';
 import { tetrisStrings } from './strings';
 import {
@@ -32,8 +35,11 @@ import './tetris.css';
 
 /** 7-bag 袋数（7×16 = 112 个方块，足够完整对局）。 */
 const QUEUE_BAGS = 16;
-/** 重力下落间隔（毫秒）。 */
+/** 重力下落间隔（毫秒）：等级越高掉得越快，140ms 封顶。 */
 const TICK_MS = 600;
+function tickForLevel(level: number): number {
+  return Math.max(140, TICK_MS - Math.max(0, level - 1) * 55);
+}
 
 interface ViewState {
   game: TetrisState;
@@ -75,7 +81,7 @@ function reduce(queue: PieceKind[], state: ViewState, action: Action): ViewState
   }
 }
 
-export default function TetrisGame({ seed }: GameProps) {
+export default function TetrisGame({ seed, onWin, onStage }: GameProps) {
   const { locale } = useI18n();
   const strings = tetrisStrings(locale);
 
@@ -91,14 +97,32 @@ export default function TetrisGame({ seed }: GameProps) {
     initialViewState,
   );
 
+  // 消行给一声反馈。
   useEffect(() => {
-    if (view.game.gameOver) saveBestScore('tetris', view.game.score);
-  }, [view.game.gameOver, view.game.score]);
+    if (view.game.lines > 0) playCue('line');
+  }, [view.game.lines]);
+
+  // 终局写分：俄罗斯方块没有「通关」，刷新最佳成绩就是值得撒花的时刻。
+  useEffect(() => {
+    if (!view.game.gameOver) return;
+    const record = isNewBestScore('tetris', view.game.score);
+    saveBestScore('tetris', view.game.score);
+    if (record) {
+      playCue('win');
+      onWin?.();
+    } else {
+      playCue('lose');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.game.gameOver]);
+
+  // 俄罗斯方块没有「通关」，等级本身就是关卡：消行越多掉得越快，无限往上。
+  useStageReport(onStage, { stage: view.game.level, score: view.game.score, label: `${view.game.lines} 行` });
 
   useEffect(() => {
-    const timer = window.setInterval(() => dispatch({ type: 'tick' }), TICK_MS);
+    const timer = window.setInterval(() => dispatch({ type: 'tick' }), tickForLevel(view.game.level));
     return () => window.clearInterval(timer);
-  }, []);
+  }, [view.game.level]);
 
   const bindings = useMemo<KeyBinding[]>(
     () => [

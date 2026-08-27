@@ -57,6 +57,8 @@ main.tsx
 ## 5. 并行开发与集成
 
 - 各游戏模块相互独立，仅触碰 `src/games/<id>/`；新增游戏 = 扩展 `GameId` + `manifest.ts` + i18n 文案。
+- 通关反馈是平台级能力：游戏调用可选的 `GameProps.onWin`，由 `App` 的 `GameRoute` 记数、`GameShell` 渲染
+  `Confetti`；音效统一走 `src/core/audio.ts`（Web Audio 合成，无素材文件），开关在 `GameShell` 上。
 - 集成节点合并后替换占位实现，并校验 manifest import、i18n key 与 data-testid。
 - 验收节点执行 `yarn build`、`yarn test`、`yarn test:e2e` 全量回归。
 

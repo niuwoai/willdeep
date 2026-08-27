@@ -4,6 +4,7 @@
  *  '/game/:id'  → GameShell + 对应游戏模块（含 ?seed= 传递）
  *  其他         → 404
  */
+import { useState } from 'react';
 import { useRoute } from './core/hashRouter';
 import { getGameEntry } from './games/manifest';
 import { GameShell } from './ui/GameShell';
@@ -11,6 +12,8 @@ import { Lobby } from './ui/Lobby';
 import { useI18n } from './core/i18n';
 import { TEST_IDS } from './core/testid';
 import { Link } from './core/hashRouter';
+import type { GameManifestEntry } from './core/types';
+import type { StageInfo } from './core/stage';
 
 function NotFound() {
   const { t } = useI18n();
@@ -24,6 +27,22 @@ function NotFound() {
   );
 }
 
+/** 单局路由：持有撒花计数，游戏通关时 +1，由 GameShell 负责渲染。 */
+function GameRoute({ entry, seed }: { entry: GameManifestEntry; seed?: string }) {
+  const [celebration, setCelebration] = useState(0);
+  const [stage, setStage] = useState<StageInfo | null>(null);
+  const GameComponent = entry.component;
+  return (
+    <GameShell gameId={entry.id} celebration={celebration} stage={stage}>
+      <GameComponent
+        seed={seed}
+        onWin={() => setCelebration((count) => count + 1)}
+        onStage={setStage}
+      />
+    </GameShell>
+  );
+}
+
 export function App() {
   const { route } = useRoute();
 
@@ -33,12 +52,7 @@ export function App() {
   if (match) {
     const entry = getGameEntry(match[1] as string);
     if (entry) {
-      const GameComponent = entry.component;
-      return (
-        <GameShell gameId={entry.id}>
-          <GameComponent seed={route.seed} />
-        </GameShell>
-      );
+      return <GameRoute key={`${entry.id}:${route.seed ?? ''}`} entry={entry} seed={route.seed} />;
     }
   }
 

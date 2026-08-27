@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "minimumWillDeepVersion": "1.280.0",
+  "minimumWillDeepVersion": "1.300.0-rc1",
   "contributes": {
     "destinations": [{
       "id": "vitality",
@@ -19,10 +19,11 @@
     "pages": [{"id":"vitality.main","runtime":"mcpApp","server":"session-vitality","resourceURI":"ui://vitality/main"}],
     "commands": [
       {"id":"vitality.refresh","titleKey":"command.refresh","icon":"sf:arrow.clockwise","handler":{"type":"host","action":"plugin.refresh"}},
-      {"id":"vitality.snapshot","titleKey":"command.snapshot","icon":"sf:chart.bar","handler":{"type":"mcpTool","server":"session-vitality","tool":"vitality.snapshot"}}
+      {"id":"vitality.snapshot","titleKey":"command.snapshot","icon":"sf:chart.bar","handler":{"type":"mcpTool","server":"session-vitality","tool":"vitality.snapshot"}},
+      {"id":"vitality.export","titleKey":"command.export","icon":"sf:square.and.arrow.up","handler":{"type":"mcpTool","server":"session-vitality","tool":"vitality.export"}}
     ],
     "menus": {
-      "commandPalette": ["vitality.refresh", "vitality.snapshot"],
+      "commandPalette": ["vitality.refresh", "vitality.snapshot", "vitality.export"],
       "plugin.page.toolbar": ["vitality.refresh"]
     },
     "settings": []

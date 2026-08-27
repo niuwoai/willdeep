@@ -664,16 +664,134 @@ struct AgentPluginSystemTests {
             from: repositoryRoot.appendingPathComponent("PluginExamples/arcade")
         )
         defer { try? FileManager.default.removeItem(at: arcadeRuntimePackage) }
-        for name in ["project-overview", "issue-panel", "tetris", "arcade", "session-vitality"] {
+        for name in ["project-overview", "issue-panel", "tetris", "arcade", "session-vitality", "favorites"] {
             let packageURL = name == "arcade"
                 ? arcadeRuntimePackage
                 : repositoryRoot.appendingPathComponent("PluginExamples/\(name)")
             let package = try AgentPluginPackageLoader.load(
                 packageURL: packageURL,
                 source: .installed,
-                currentWillDeepVersion: "1.281.0-rc1"
+                // 收藏夹与会话体检要求的宿主版本比其它样例新
+                currentWillDeepVersion: "1.300.0-rc1"
             )
             #expect(package.destinations.count == 1)
+        }
+    }
+
+    @Test
+    func favoritesExampleContributesTheChatSelectionMenu() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let package = try AgentPluginPackageLoader.load(
+            packageURL: repositoryRoot.appendingPathComponent("PluginExamples/favorites"),
+            source: .installed,
+            currentWillDeepVersion: "1.300.0-rc1"
+        )
+        let manifest = try #require(package.manifest)
+
+        // 选区菜单挂载点解析出来的必须是本插件里真实存在的命令
+        let selectionCommandIDs = manifest.contributes.menus[AgentPluginMenuLocation.chatSelection] ?? []
+        #expect(selectionCommandIDs == ["favorites.add"])
+        let commandIDs = Set(manifest.contributes.commands.map(\.id))
+        for commandID in selectionCommandIDs {
+            #expect(commandIDs.contains(commandID))
+        }
+
+        // 「收藏」这条命令要把文本转交给 MCP 工具，否则选区里的原文没人接
+        let add = try #require(manifest.contributes.commands.first { $0.id == "favorites.add" })
+        #expect(add.handler.type == .mcpTool)
+        #expect(add.handler.server == "favorites")
+        #expect(add.handler.tool == "favorites.add")
+        #expect(manifest.dependencies.mcpServers.contains("favorites"))
+    }
+
+    @Test
+    func favoritesShipsInsideTheAppAsAFixedSidebarEntry() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let packageURL = repositoryRoot.appendingPathComponent("PluginExamples/favorites")
+        let package = try AgentPluginPackageLoader.load(
+            packageURL: packageURL,
+            source: .installed,
+            currentWillDeepVersion: "1.300.0-rc1"
+        )
+        let manifest = try #require(package.manifest)
+
+        // 左侧默认入口靠目的地清单里的 defaultPinned，而它只对 bundled 来源生效
+        let destination = try #require(manifest.contributes.destinations.first)
+        #expect(destination.defaultPinned)
+
+        // 页面用到的每条命令都要真实存在，否则页面点了没反应
+        let commandIDs = Set(manifest.contributes.commands.map(\.id))
+        for required in ["favorites.add", "favorites.list", "favorites.update",
+                         "favorites.remove", "favorites.restore", "favorites.clear"] {
+            #expect(commandIDs.contains(required))
+        }
+
+        // 打包清单：Xcode 的「Bundle built-in plugins」阶段必须把收藏夹跑起来
+        // 需要的每个文件都复制进 App，漏一个就是装进去点不开。
+        let projectFile = repositoryRoot.appendingPathComponent("Xedit.xcodeproj/project.pbxproj")
+        let project = try String(contentsOf: projectFile, encoding: .utf8)
+        let bundleLine = try #require(
+            project
+                .replacingOccurrences(of: "\\n", with: "\n")
+                .split(separator: "\n")
+                .first { $0.hasPrefix("bundle_plugin favorites ") }
+        )
+        let relativePaths = bundleLine
+            .split(separator: " ")
+            .dropFirst(2)
+            .map(String.init)
+        let entryPath = try #require(manifest.contributes.pages.first?.entryPath)
+        for required in [entryPath, "mcp.json", "server", ".willdeep-plugin", ".codex-plugin"] {
+            #expect(relativePaths.contains(required))
+        }
+        for relativePath in relativePaths {
+            #expect(
+                FileManager.default.fileExists(
+                    atPath: packageURL.appendingPathComponent(relativePath).path
+                )
+            )
+        }
+    }
+
+    @Test
+    func bundledPluginsSkipThePerCommandConfirmation() {
+        // 随 App 签名发行的第一方插件不再逐条弹确认：收藏夹这种默认入口
+        // 每翻一次页面都要点「执行」根本没法用。其它来源仍然每次都要点头。
+        #expect(AgentPluginCommandExecutor.requiresExecutionConfirmation(source: .bundled) == false)
+        #expect(AgentPluginCommandExecutor.requiresExecutionConfirmation(source: .installed))
+        #expect(AgentPluginCommandExecutor.requiresExecutionConfirmation(source: .codexCache))
+        #expect(AgentPluginCommandExecutor.requiresExecutionConfirmation(source: nil))
+    }
+
+    @Test
+    func chatSelectionFeedbackFollowsTheToolResult() {
+        // 气泡上的「✓ / ⚠︎」认的是工具自己的结论：MCP 把载荷放在
+        // content[].text 的一段 JSON 里，ok:false 表示这次没存下。
+        let refused = #"{"content":[{"type":"text","text":"{\"ok\":false,\"error\":\"empty text\"}"}]}"#
+        let saved = #"{"content":[{"type":"text","text":"{\"ok\":true,\"count\":3}"}]}"#
+        #expect(AppState.selectionPluginActionSucceeded(result: refused) == false)
+        #expect(AppState.selectionPluginActionSucceeded(result: saved))
+        // 顶层就带 ok 的、非 JSON 的、以及什么都没返回的（host / navigate 命令）按成功算
+        #expect(AppState.selectionPluginActionSucceeded(result: #"{"ok":false}"#) == false)
+        #expect(AppState.selectionPluginActionSucceeded(result: "plain text"))
+        #expect(AppState.selectionPluginActionSucceeded(result: nil))
+    }
+
+    @Test
+    func chatSelectionMenuLocationIsRegisteredInTheSchema() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let schemaURL = repositoryRoot
+            .appendingPathComponent("docs/plugin-schema/willdeep-plugin.schema.json")
+        let schema = try String(contentsOf: schemaURL, encoding: .utf8)
+        // Swift 侧的常量与对外 schema 的枚举必须同步，否则插件作者按文档写会被加载器拒掉
+        for location in AgentPluginMenuLocation.all {
+            #expect(schema.contains("\"\(location)\""))
         }
     }
 

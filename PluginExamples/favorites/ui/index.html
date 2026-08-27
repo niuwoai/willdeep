@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>收藏夹</title>
+    <style>
+      /*
+       * 收藏夹页面：纯静态页 + window.willdeep.executeCommand 调插件命令，
+       * 没有构建步骤（改完直接生效），也不引任何外部资源——插件页跑在
+       * CSP 收紧的 WKWebView 里，connect-src 是 'none'。
+       *
+       * 宿主注入了 --willdeep-bg / --willdeep-fg / --willdeep-secondary /
+       * --willdeep-accent 与 color-scheme，这里在其之上再派生一套语义 token，
+       * 深浅色都靠 color-mix 从宿主色推出来，不写死第二套配色。
+       * 布局一律用 % 与 flex：插件页宽度由宿主分栏决定，vw 会算错。
+       */
+      :root {
+        --fg: var(--willdeep-fg, #1a1a1c);
+        --muted: var(--willdeep-secondary, #6c6c70);
+        --surface: color-mix(in srgb, var(--fg) 5%, transparent);
+        --surface-strong: color-mix(in srgb, var(--fg) 9%, transparent);
+        --border: color-mix(in srgb, var(--fg) 16%, transparent);
+        --border-strong: color-mix(in srgb, var(--fg) 34%, transparent);
+        --danger: #e5484d;
+        --pin: #e8a33d;
+        --radius: 10px;
+        --gap: 10px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 18px 20px 96px;
+        color: var(--fg);
+        font: 13.5px/1.55 -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      button, input, textarea {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: none;
+        padding: 0;
+      }
+      button { cursor: pointer; }
+      .hidden { display: none !important; }
+
+      /* ── 顶栏 ────────────────────────────────────────────── */
+      header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      h1 { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: .2px; }
+      .count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+      .toolbar { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 150px;
+        max-width: 260px;
+        flex: 1 1 180px;
+        padding: 4px 9px;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: var(--surface);
+      }
+      .search:focus-within { border-color: var(--border-strong); }
+      .search input { width: 100%; outline: none; }
+      .search input::placeholder { color: var(--muted); }
+      .search .glyph { color: var(--muted); font-size: 12px; }
+      .search .clear { color: var(--muted); font-size: 15px; line-height: 1; }
+      .search .clear:hover { color: var(--fg); }
+      .chip {
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        padding: 4px 10px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .chip:hover { border-color: var(--border-strong); }
+      .chip[aria-pressed="true"] { background: var(--surface-strong); border-color: var(--border-strong); }
+      .chip.danger:hover { border-color: var(--danger); color: var(--danger); }
+
+      /* ── 标签过滤条 ──────────────────────────────────────── */
+      .tagbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+      .tagbar .chip { font-size: 11.5px; padding: 3px 9px; }
+      .tagbar .chip .n { color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+      /* ── 列表 ────────────────────────────────────────────── */
+      ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--gap); }
+      li.card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--surface);
+        padding: 12px 14px 10px;
+        position: relative;
+      }
+      li.card[data-pinned="true"] { border-color: color-mix(in srgb, var(--pin) 45%, var(--border)); }
+      li.card[data-pinned="true"]::before {
+        content: "";
+        position: absolute;
+        left: -1px; top: 12px;
+        width: 3px; height: 20px;
+        border-radius: 0 3px 3px 0;
+        background: var(--pin);
+      }
+      .text {
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      .text.clamped {
+        display: -webkit-box;
+        -webkit-line-clamp: 6;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .text mark { background: color-mix(in srgb, var(--pin) 45%, transparent); color: inherit; border-radius: 2px; }
+      .expand { color: var(--muted); font-size: 12px; margin-top: 4px; }
+      .expand:hover { color: var(--fg); }
+      .note {
+        margin-top: 8px;
+        padding: 6px 9px;
+        border-radius: 7px;
+        background: var(--surface-strong);
+        color: var(--muted);
+        font-size: 12.5px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        cursor: text;
+      }
+      .note.empty { background: none; padding: 4px 0 0; opacity: .75; }
+      .note:hover { color: var(--fg); }
+      .note-editor {
+        margin-top: 8px;
+        width: 100%;
+        min-height: 54px;
+        resize: vertical;
+        padding: 6px 9px;
+        border-radius: 7px;
+        border: 1px solid var(--border-strong);
+        background: var(--surface-strong);
+        outline: none;
+      }
+      .tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 1px 8px;
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .tag:hover { color: var(--fg); border-color: var(--border-strong); }
+      .tag .x { opacity: 0; font-size: 12px; line-height: 1; }
+      .tag:hover .x { opacity: .6; }
+      .tag .x:hover { opacity: 1; color: var(--danger); }
+      .tag-input {
+        border: 1px dashed var(--border-strong);
+        border-radius: 999px;
+        padding: 1px 9px;
+        font-size: 11.5px;
+        outline: none;
+        width: 90px;
+      }
+      .meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 9px;
+        color: var(--muted);
+        font-size: 11.5px;
+      }
+      .meta .spacer { margin-left: auto; }
+      .meta .source {
+        border-radius: 4px;
+        padding: 0 5px;
+        background: var(--surface-strong);
+      }
+      .actions { display: flex; gap: 4px; opacity: 0; transition: opacity .12s ease; }
+      li.card:hover .actions, li.card:focus-within .actions { opacity: 1; }
+      .actions button {
+        color: var(--muted);
+        font-size: 11.5px;
+        border-radius: 6px;
+        padding: 2px 7px;
+      }
+      .actions button:hover { color: var(--fg); background: var(--surface-strong); }
+      .actions button.danger:hover { color: var(--danger); }
+      .actions button[aria-pressed="true"] { color: var(--pin); }
+
+      /* ── 状态位 ──────────────────────────────────────────── */
+      .state { padding: 44px 12px; text-align: center; color: var(--muted); }
+      .state .headline { color: var(--fg); font-size: 14px; margin-bottom: 6px; }
+      .state.error .headline { color: var(--danger); }
+      .state code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11.5px;
+        background: var(--surface-strong);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+      .state .retry { margin-top: 12px; }
+      .skeleton { display: flex; flex-direction: column; gap: var(--gap); }
+      .skeleton div {
+        height: 64px;
+        border-radius: var(--radius);
+        background: var(--surface);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      .skeleton div:nth-child(2) { animation-delay: .18s; }
+      .skeleton div:nth-child(3) { animation-delay: .36s; }
+      @keyframes pulse { 0%, 100% { opacity: .45; } 50% { opacity: .9; } }
+
+      /* ── 撤销条 ──────────────────────────────────────────── */
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translate(-50%, 12px);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        border-radius: 9px;
+        border: 1px solid var(--border-strong);
+        /* 页面底色就是 --willdeep-bg，撤销条必须比它再抬一档才看得见。 */
+        background: color-mix(in srgb, var(--willdeep-bg, #1c1c1e) 86%, var(--fg));
+        box-shadow: 0 6px 24px rgba(0, 0, 0, .32);
+        font-size: 12.5px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .15s ease, transform .15s ease;
+        max-width: 90%;
+      }
+      .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+      .toast .undo { color: var(--fg); font-weight: 600; }
+      .toast .undo:hover { text-decoration: underline; }
+      .toast.error { border-color: color-mix(in srgb, var(--danger) 60%, var(--border)); color: var(--danger); }
+
+      @media (prefers-reduced-motion: reduce) {
+        .skeleton div { animation: none; }
+        .toast { transition: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1 id="title">收藏夹</h1>
+      <span class="count" id="count"></span>
+      <div class="toolbar">
+        <label class="search">
+          <span class="glyph" aria-hidden="true">⌕</span>
+          <input id="search" type="search" autocomplete="off" spellcheck="false" />
+          <button class="clear hidden" id="search-clear" type="button" aria-label="clear">×</button>
+        </label>
+        <button class="chip" id="sort" type="button" aria-pressed="false"></button>
+        <button class="chip" id="refresh" type="button"></button>
+        <button class="chip danger" id="clear-all" type="button"></button>
+      </div>
+    </header>
+
+    <div class="tagbar hidden" id="tagbar"></div>
+
+    <div class="skeleton" id="skeleton"><div></div><div></div><div></div></div>
+    <div class="state hidden" id="state"></div>
+    <ul id="list"></ul>
+
+    <div class="toast" id="toast">
+      <span id="toast-text"></span>
+      <button class="undo hidden" id="toast-undo" type="button"></button>
+    </div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        // ── i18n ──────────────────────────────────────────────
+        var STRINGS = {
+          zh: {
+            title: '收藏夹',
+            search: '搜索收藏…',
+            sortNewest: '最新在前',
+            sortOldest: '最早在前',
+            refresh: '刷新',
+            clearAll: '清空',
+            clearConfirm: '再点一次清空',
+            all: '全部',
+            count: function (n) { return '共 ' + n + ' 条'; },
+            filtered: function (n, total) { return n + ' / ' + total + ' 条'; },
+            emptyTitle: '还没有收藏',
+            emptyBody: '在聊天正文里选中一段文字，点气泡上的「收藏」就存进来了。',
+            noMatchTitle: '没有匹配的收藏',
+            noMatchBody: '换个关键词，或者清掉标签过滤。',
+            errorTitle: '读取收藏失败',
+            retry: '重试',
+            copy: '复制',
+            copied: '已复制',
+            copyFailed: '复制失败',
+            remove: '删除',
+            pin: '置顶',
+            unpin: '取消置顶',
+            note: '备注',
+            addNote: '＋ 备注',
+            notePlaceholder: '写点备注…（⌘↩ 保存，Esc 取消）',
+            expand: '展开',
+            collapse: '收起',
+            addTag: '＋ 标签',
+            removed: '已删除 1 条收藏',
+            cleared: function (n) { return '已清空 ' + n + ' 条收藏'; },
+            undo: '撤销',
+            justNow: '刚刚',
+            minutesAgo: function (n) { return n + ' 分钟前'; },
+            hoursAgo: function (n) { return n + ' 小时前'; },
+            yesterday: '昨天',
+            bridgeMissing: '插件桥接不可用：这个页面需要在 WillDeep 里打开。'
+          },
+          en: {
+            title: 'Favorites',
+            search: 'Search favorites…',
+            sortNewest: 'Newest first',
+            sortOldest: 'Oldest first',
+            refresh: 'Refresh',
+            clearAll: 'Clear',
+            clearConfirm: 'Click again to clear',
+            all: 'All',
+            count: function (n) { return n + ' saved'; },
+            filtered: function (n, total) { return n + ' of ' + total; },
+            emptyTitle: 'Nothing saved yet',
+            emptyBody: 'Select text in the chat transcript and hit “Favorite” in the bubble.',
+            noMatchTitle: 'No matching favorites',
+            noMatchBody: 'Try another keyword, or drop the tag filter.',
+            errorTitle: 'Could not read favorites',
+            retry: 'Retry',
+            copy: 'Copy',
+            copied: 'Copied',
+            copyFailed: 'Copy failed',
+            remove: 'Delete',
+            pin: 'Pin',
+            unpin: 'Unpin',
+            note: 'Note',
+            addNote: '+ Note',
+            notePlaceholder: 'Add a note… (⌘↩ to save, Esc to cancel)',
+            expand: 'Expand',
+            collapse: 'Collapse',
+            addTag: '+ tag',
+            removed: 'Favorite deleted',
+            cleared: function (n) { return 'Cleared ' + n + ' favorites'; },
+            undo: 'Undo',
+            justNow: 'just now',
+            minutesAgo: function (n) { return n + 'm ago'; },
+            hoursAgo: function (n) { return n + 'h ago'; },
+            yesterday: 'Yesterday',
+            bridgeMissing: 'Plugin bridge unavailable: open this page inside WillDeep.'
+          }
+        };
+
+        function currentLocale() {
+          var context = (window.willdeep && window.willdeep.getContext) ? window.willdeep.getContext() : {};
+          return String((context && context.locale) || navigator.language || 'en');
+        }
+        function dict() {
+          return currentLocale().toLowerCase().indexOf('zh') === 0 ? STRINGS.zh : STRINGS.en;
+        }
+        function t(key) {
+          var value = dict()[key];
+          return typeof value === 'function' ? value.apply(null, [].slice.call(arguments, 1)) : value;
+        }
+
+        // ── 宿主桥接 ───────────────────────────────────────────
+        // executeCommand 回来的是 MCP 工具调用的完整 result 对象（JSON 文本），
+        // 真正的载荷在 content[0].text 里，所以这里统一剥一层。
+        function runCommand(commandID, args) {
+          if (!window.willdeep || typeof window.willdeep.executeCommand !== 'function') {
+            return Promise.reject(new Error(t('bridgeMissing')));
+          }
+          return window.willdeep.executeCommand(commandID, args || {}).then(unwrap);
+        }
+
+        function unwrap(raw) {
+          var payload = parseJSON(raw);
+          if (payload && Array.isArray(payload.content)) {
+            var text = null;
+            payload.content.forEach(function (entry) {
+              if (text === null && entry && typeof entry.text === 'string') text = entry.text;
+            });
+            payload = parseJSON(text);
+          }
+          if (payload && payload.ok === false) {
+            throw new Error(String(payload.error || 'unknown error'));
+          }
+          return payload;
+        }
+
+        function parseJSON(raw) {
+          if (raw === null || raw === undefined) return null;
+          if (typeof raw === 'object') return raw;
+          try {
+            return JSON.parse(String(raw));
+          } catch (error) {
+            return null;
+          }
+        }
+
+        // ── 状态 ──────────────────────────────────────────────
+        var state = {
+          items: [],
+          tags: [],
+          total: 0,
+          query: '',
+          tag: '',
+          oldestFirst: false,
+          expanded: {},
+          editingNote: null,
+          loaded: false,
+          confirmingClear: false
+        };
+        var lastRemoved = null;
+        var toastTimer = null;
+        var confirmTimer = null;
+
+        var el = {
+          title: document.getElementById('title'),
+          count: document.getElementById('count'),
+          search: document.getElementById('search'),
+          searchClear: document.getElementById('search-clear'),
+          sort: document.getElementById('sort'),
+          refresh: document.getElementById('refresh'),
+          clearAll: document.getElementById('clear-all'),
+          tagbar: document.getElementById('tagbar'),
+          skeleton: document.getElementById('skeleton'),
+          state: document.getElementById('state'),
+          list: document.getElementById('list'),
+          toast: document.getElementById('toast'),
+          toastText: document.getElementById('toast-text'),
+          toastUndo: document.getElementById('toast-undo')
+        };
+
+        // ── 渲染 ──────────────────────────────────────────────
+        function renderChrome() {
+          document.documentElement.lang = dict() === STRINGS.zh ? 'zh-Hans' : 'en';
+          el.title.textContent = t('title');
+          el.search.placeholder = t('search');
+          el.sort.textContent = state.oldestFirst ? t('sortOldest') : t('sortNewest');
+          el.sort.setAttribute('aria-pressed', String(state.oldestFirst));
+          el.refresh.textContent = t('refresh');
+          el.clearAll.textContent = state.confirmingClear ? t('clearConfirm') : t('clearAll');
+          el.clearAll.classList.toggle('hidden', state.total === 0);
+          el.searchClear.classList.toggle('hidden', state.query === '');
+        }
+
+        function visibleItems() {
+          var needle = state.query.trim().toLowerCase();
+          var list = state.items.filter(function (item) {
+            if (state.tag && !(item.tags || []).some(function (tag) {
+              return tag.toLowerCase() === state.tag.toLowerCase();
+            })) return false;
+            if (!needle) return true;
+            var haystack = [item.text, item.note, item.source, (item.tags || []).join(' ')]
+              .join('\n').toLowerCase();
+            return haystack.indexOf(needle) !== -1;
+          });
+          if (state.oldestFirst) {
+            // 服务端给的是「置顶优先 + 最新在前」；反转时保持置顶仍在最前。
+            list = list.slice().sort(function (a, b) {
+              if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+              return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+            });
+          }
+          return list;
+        }
+
+        function renderCount(shown) {
+          if (!state.total) { el.count.textContent = ''; return; }
+          el.count.textContent = shown === state.total ? t('count', state.total) : t('filtered', shown, state.total);
+        }
+
+        function renderTagbar() {
+          el.tagbar.textContent = '';
+          if (!state.tags.length) { el.tagbar.classList.add('hidden'); return; }
+          el.tagbar.classList.remove('hidden');
+          el.tagbar.appendChild(tagChip('', t('all'), null, state.tag === ''));
+          state.tags.forEach(function (entry) {
+            el.tagbar.appendChild(
+              tagChip(entry.name, entry.name, entry.count, state.tag.toLowerCase() === entry.name.toLowerCase())
+            );
+          });
+        }
+
+        function tagChip(value, label, count, active) {
+          var button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'chip';
+          button.setAttribute('aria-pressed', String(!!active));
+          button.appendChild(document.createTextNode(label));
+          if (count !== null && count !== undefined) {
+            var badge = document.createElement('span');
+            badge.className = 'n';
+            badge.textContent = String(count);
+            button.appendChild(badge);
+          }
+          button.addEventListener('click', function () {
+            state.tag = state.tag.toLowerCase() === String(value).toLowerCase() ? '' : value;
+            render();
+          });
+          return button;
+        }
+
+        function showState(kind, headline, body, action) {
+          el.state.className = 'state' + (kind ? ' ' + kind : '');
+          el.state.textContent = '';
+          var head = document.createElement('div');
+          head.className = 'headline';
+          head.textContent = headline;
+          el.state.appendChild(head);
+          if (body) {
+            var detail = document.createElement('div');
+            detail.textContent = body;
+            el.state.appendChild(detail);
+          }
+          if (action) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'chip retry';
+            button.textContent = action.label;
+            button.addEventListener('click', action.run);
+            el.state.appendChild(button);
+          }
+          el.state.classList.remove('hidden');
+        }
+
+        function render() {
+          renderChrome();
+          var items = visibleItems();
+          renderCount(items.length);
+          renderTagbar();
+          el.list.textContent = '';
+
+          if (!state.loaded) return;
+          el.skeleton.classList.add('hidden');
+
+          if (!items.length) {
+            if (state.total === 0) {
+              showState('', t('emptyTitle'), t('emptyBody'), null);
+            } else {
+              showState('', t('noMatchTitle'), t('noMatchBody'), null);
+            }
+            return;
+          }
+          el.state.classList.add('hidden');
+          items.forEach(function (item) { el.list.appendChild(card(item)); });
+          pruneExpandButtons();
+        }
+
+        // 折叠是按字数猜的，真正有没有被裁掉要等排版完才知道：
+        // 没裁掉的那些把折叠样式和「展开」一起撤掉，免得按钮点了没反应。
+        function pruneExpandButtons() {
+          var cards = el.list.querySelectorAll('li.card');
+          Array.prototype.forEach.call(cards, function (li) {
+            var text = li.querySelector('.text');
+            var expand = li.querySelector('.expand');
+            if (!text || !expand || !text.classList.contains('clamped')) return;
+            if (text.scrollHeight <= text.clientHeight + 1) {
+              text.classList.remove('clamped');
+              expand.classList.add('hidden');
+            }
+          });
+        }
+
+        // ── 单条卡片 ───────────────────────────────────────────
+        function card(item) {
+          var li = document.createElement('li');
+          li.className = 'card';
+          li.dataset.pinned = String(!!item.pinned);
+
+          var text = document.createElement('div');
+          text.className = 'text';
+          var isLong = String(item.text || '').length > 320 || String(item.text || '').split('\n').length > 6;
+          if (isLong && !state.expanded[item.id]) text.classList.add('clamped');
+          highlight(text, String(item.text || ''), state.query.trim());
+          li.appendChild(text);
+
+          if (isLong) {
+            var expand = document.createElement('button');
+            expand.type = 'button';
+            expand.className = 'expand';
+            expand.textContent = state.expanded[item.id] ? t('collapse') : t('expand');
+            expand.addEventListener('click', function () {
+              state.expanded[item.id] = !state.expanded[item.id];
+              render();
+            });
+            li.appendChild(expand);
+          }
+
+          li.appendChild(noteView(item));
+          li.appendChild(tagsRow(item));
+          li.appendChild(metaRow(item));
+          return li;
+        }
+
+        // 命中的关键词高亮：全部走 textContent，绝不用 innerHTML 拼用户内容。
+        function highlight(container, value, needle) {
+          if (!needle) { container.textContent = value; return; }
+          var haystack = value.toLowerCase();
+          var target = needle.toLowerCase();
+          var index = haystack.indexOf(target);
+          if (index === -1) { container.textContent = value; return; }
+          var cursor = 0;
+          while (index !== -1 && cursor < value.length) {
+            container.appendChild(document.createTextNode(value.slice(cursor, index)));
+            var mark = document.createElement('mark');
+            mark.textContent = value.slice(index, index + needle.length);
+            container.appendChild(mark);
+            cursor = index + needle.length;
+            index = haystack.indexOf(target, cursor);
+          }
+          container.appendChild(document.createTextNode(value.slice(cursor)));
+        }
+
+        function noteView(item) {
+          if (state.editingNote === item.id) {
+            var editor = document.createElement('textarea');
+            editor.className = 'note-editor';
+            editor.value = item.note || '';
+            editor.placeholder = t('notePlaceholder');
+            editor.addEventListener('keydown', function (event) {
+              if (event.key === 'Escape') {
+                event.stopPropagation();
+                state.editingNote = null;
+                render();
+              } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                commitNote(item, editor.value);
+              }
+            });
+            editor.addEventListener('blur', function () { commitNote(item, editor.value); });
+            window.setTimeout(function () { editor.focus(); }, 0);
+            return editor;
+          }
+          var note = document.createElement('div');
+          note.className = 'note' + (item.note ? '' : ' empty');
+          note.textContent = item.note || t('addNote');
+          note.title = t('note');
+          note.addEventListener('click', function () {
+            state.editingNote = item.id;
+            render();
+          });
+          return note;
+        }
+
+        function commitNote(item, value) {
+          var next = String(value == null ? '' : value).trim();
+          state.editingNote = null;
+          if (next === String(item.note || '')) { render(); return; }
+          item.note = next;
+          render();
+          runCommand('favorites.update', { id: item.id, note: next }).then(load).catch(fail);
+        }
+
+        function tagsRow(item) {
+          var row = document.createElement('div');
+          row.className = 'tags';
+          (item.tags || []).forEach(function (tag) {
+            var chip = document.createElement('span');
+            chip.className = 'tag';
+            var label = document.createElement('button');
+            label.type = 'button';
+            label.textContent = tag;
+            label.addEventListener('click', function () {
+              state.tag = state.tag.toLowerCase() === tag.toLowerCase() ? '' : tag;
+              render();
+            });
+            var remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'x';
+            remove.textContent = '×';
+            remove.addEventListener('click', function () {
+              var next = (item.tags || []).filter(function (value) { return value !== tag; });
+              runCommand('favorites.update', { id: item.id, tags: next }).then(load).catch(fail);
+            });
+            chip.appendChild(label);
+            chip.appendChild(remove);
+            row.appendChild(chip);
+          });
+
+          var adder = document.createElement('button');
+          adder.type = 'button';
+          adder.className = 'tag';
+          adder.textContent = t('addTag');
+          adder.addEventListener('click', function () {
+            var input = document.createElement('input');
+            input.className = 'tag-input';
+            input.maxLength = 24;
+            row.replaceChild(input, adder);
+            input.focus();
+            var done = false;
+            var commit = function (save) {
+              if (done) return;
+              done = true;
+              var value = input.value.trim();
+              if (save && value) {
+                var next = (item.tags || []).concat([value]);
+                runCommand('favorites.update', { id: item.id, tags: next }).then(load).catch(fail);
+              } else {
+                render();
+              }
+            };
+            input.addEventListener('keydown', function (event) {
+              if (event.key === 'Enter') { event.preventDefault(); commit(true); }
+              else if (event.key === 'Escape') { event.stopPropagation(); commit(false); }
+            });
+            input.addEventListener('blur', function () { commit(true); });
+          });
+          row.appendChild(adder);
+          return row;
+        }
+
+        function metaRow(item) {
+          var meta = document.createElement('div');
+          meta.className = 'meta';
+
+          var time = document.createElement('span');
+          time.textContent = relativeTime(item.createdAt);
+          time.title = absoluteTime(item.createdAt);
+          meta.appendChild(time);
+
+          if (item.source) {
+            var source = document.createElement('span');
+            source.className = 'source';
+            source.textContent = item.source;
+            meta.appendChild(source);
+          }
+
+          var spacer = document.createElement('span');
+          spacer.className = 'spacer';
+          meta.appendChild(spacer);
+
+          var actions = document.createElement('div');
+          actions.className = 'actions';
+
+          var pin = document.createElement('button');
+          pin.type = 'button';
+          pin.textContent = item.pinned ? t('unpin') : t('pin');
+          pin.setAttribute('aria-pressed', String(!!item.pinned));
+          pin.addEventListener('click', function () {
+            runCommand('favorites.update', { id: item.id, pinned: !item.pinned }).then(load).catch(fail);
+          });
+          actions.appendChild(pin);
+
+          var copy = document.createElement('button');
+          copy.type = 'button';
+          copy.textContent = t('copy');
+          copy.addEventListener('click', function () {
+            copyText(String(item.text || '')).then(function (ok) {
+              copy.textContent = ok ? t('copied') : t('copyFailed');
+              window.setTimeout(function () { copy.textContent = t('copy'); }, 1200);
+            });
+          });
+          actions.appendChild(copy);
+
+          var remove = document.createElement('button');
+          remove.type = 'button';
+          remove.className = 'danger';
+          remove.textContent = t('remove');
+          remove.addEventListener('click', function () {
+            remove.disabled = true;
+            runCommand('favorites.remove', { id: item.id })
+              .then(function (payload) {
+                lastRemoved = (payload && payload.item) || item;
+                toast(t('removed'), t('undo'), undoRemove);
+                return load();
+              })
+              .catch(function (error) { remove.disabled = false; fail(error); });
+          });
+          actions.appendChild(remove);
+
+          meta.appendChild(actions);
+          return meta;
+        }
+
+        function undoRemove() {
+          if (!lastRemoved) return;
+          var item = lastRemoved;
+          lastRemoved = null;
+          hideToast();
+          runCommand('favorites.restore', { item: item }).then(load).catch(fail);
+        }
+
+        // ── 时间 ──────────────────────────────────────────────
+        function parseDate(iso) {
+          if (!iso) return null;
+          var date = new Date(iso);
+          return isNaN(date.getTime()) ? null : date;
+        }
+        function absoluteTime(iso) {
+          var date = parseDate(iso);
+          return date ? date.toLocaleString() : '';
+        }
+        function relativeTime(iso) {
+          var date = parseDate(iso);
+          if (!date) return '';
+          var minutes = Math.floor((Date.now() - date.getTime()) / 60000);
+          if (minutes < 1) return t('justNow');
+          if (minutes < 60) return t('minutesAgo', minutes);
+          if (minutes < 60 * 24) return t('hoursAgo', Math.floor(minutes / 60));
+          var today = new Date();
+          var yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+          if (date >= yesterday && date < new Date(yesterday.getTime() + 86400000)) {
+            return t('yesterday') + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          }
+          return date.toLocaleDateString();
+        }
+
+        // ── 复制：插件页不是安全上下文，navigator.clipboard 可能缺席 ──
+        function copyText(value) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(value).then(function () { return true; }, legacyCopy);
+          }
+          return Promise.resolve(legacyCopy());
+
+          function legacyCopy() {
+            try {
+              var area = document.createElement('textarea');
+              area.value = value;
+              area.style.position = 'fixed';
+              area.style.opacity = '0';
+              document.body.appendChild(area);
+              area.select();
+              var ok = document.execCommand('copy');
+              document.body.removeChild(area);
+              return ok;
+            } catch (error) {
+              return false;
+            }
+          }
+        }
+
+        // ── 提示条 ────────────────────────────────────────────
+        function toast(message, actionLabel, action) {
+          el.toast.classList.remove('error');
+          el.toastText.textContent = message;
+          if (actionLabel && action) {
+            el.toastUndo.textContent = actionLabel;
+            el.toastUndo.classList.remove('hidden');
+            el.toastUndo.onclick = action;
+          } else {
+            el.toastUndo.classList.add('hidden');
+            el.toastUndo.onclick = null;
+          }
+          el.toast.classList.add('show');
+          window.clearTimeout(toastTimer);
+          toastTimer = window.setTimeout(hideToast, 6000);
+        }
+        function hideToast() {
+          el.toast.classList.remove('show');
+          window.clearTimeout(toastTimer);
+        }
+        function fail(error) {
+          var message = (error && error.message) ? error.message : String(error);
+          if (!state.loaded) {
+            el.skeleton.classList.add('hidden');
+            showState('error', t('errorTitle'), message, { label: t('retry'), run: load });
+            return;
+          }
+          el.toast.classList.add('error');
+          el.toastText.textContent = message;
+          el.toastUndo.classList.add('hidden');
+          el.toast.classList.add('show');
+          window.clearTimeout(toastTimer);
+          toastTimer = window.setTimeout(hideToast, 6000);
+        }
+
+        // ── 载入 ──────────────────────────────────────────────
+        var inFlight = null;
+        function load() {
+          if (inFlight) return inFlight;
+          inFlight = runCommand('favorites.list')
+            .then(function (payload) {
+              state.items = (payload && Array.isArray(payload.items)) ? payload.items : [];
+              state.tags = (payload && Array.isArray(payload.tags)) ? payload.tags : [];
+              state.total = (payload && typeof payload.total === 'number') ? payload.total : state.items.length;
+              state.loaded = true;
+              el.state.classList.add('hidden');
+              render();
+            })
+            .catch(fail)
+            .then(function () { inFlight = null; });
+          return inFlight;
+        }
+
+        // ── 事件接线 ───────────────────────────────────────────
+        var searchTimer = null;
+        el.search.addEventListener('input', function () {
+          window.clearTimeout(searchTimer);
+          searchTimer = window.setTimeout(function () {
+            state.query = el.search.value;
+            render();
+          }, 100);
+        });
+        el.searchClear.addEventListener('click', function () {
+          el.search.value = '';
+          state.query = '';
+          el.search.focus();
+          render();
+        });
+        el.sort.addEventListener('click', function () {
+          state.oldestFirst = !state.oldestFirst;
+          render();
+        });
+        el.refresh.addEventListener('click', function () { load(); });
+        el.clearAll.addEventListener('click', function () {
+          if (!state.confirmingClear) {
+            state.confirmingClear = true;
+            renderChrome();
+            window.clearTimeout(confirmTimer);
+            confirmTimer = window.setTimeout(function () {
+              state.confirmingClear = false;
+              renderChrome();
+            }, 4000);
+            return;
+          }
+          state.confirmingClear = false;
+          window.clearTimeout(confirmTimer);
+          runCommand('favorites.clear', { confirm: true })
+            .then(function (payload) {
+              toast(t('cleared', (payload && payload.removed) || 0), null, null);
+              return load();
+            })
+            .catch(fail);
+        });
+
+        document.addEventListener('keydown', function (event) {
+          var typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement && document.activeElement.tagName);
+          if ((event.metaKey || event.ctrlKey) && event.key === 'f') {
+            event.preventDefault();
+            el.search.focus();
+            el.search.select();
+          } else if (event.key === '/' && !typing) {
+            event.preventDefault();
+            el.search.focus();
+          } else if (event.key === 'Escape' && !typing) {
+            if (state.query || state.tag) {
+              el.search.value = '';
+              state.query = '';
+              state.tag = '';
+              render();
+            } else {
+              hideToast();
+            }
+          }
+        });
+
+        // 宿主推上下文（切回这个页面、刷新命令、深浅色切换）时重新拉数据。
+        window.addEventListener('willdeep:context-changed', function () {
+          renderChrome();
+          load();
+        });
+
+        renderChrome();
+        load();
+      })();
+    </script>
+  </body>
+</html>

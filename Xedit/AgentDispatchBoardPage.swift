@@ -84,6 +84,13 @@ private struct AgentDispatchBoardContent: View {
             reloadExecutionProfiles()
             resumeSelectedGoalAfterSynchronization()
         }
+        // 目录装载完成是一条边：页面可能在它之前就出现了，那一次同步会被门禁
+        // 拦掉。onReceive($agentSessions) 也救不了——@Published 在 willSet 时
+        // 发布，那一刻 hasLoadedAgentSessionCatalog 还是 false。
+        .task(id: appState.hasLoadedAgentSessionCatalog) {
+            appState.synchronizeDispatchBoardInBackground()
+            resumeSelectedGoalAfterSynchronization()
+        }
         // `onReceive` of a @Published fires with the CURRENT value at
         // subscription time. When the app launches straight onto the board,
         // that value is the pre-catalog empty array — the projection then

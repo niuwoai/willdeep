@@ -339,6 +339,14 @@ struct AgentChatTranscript: View {
                                 onShowTurnReport: { showTurnReportPopover = true },
                                 onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput,
                                 onAddSelectionToTask: appState.addAgentChatSelectionToTask,
+                                onSelectionPluginAction: { text, pluginID, commandID, completion in
+                                    appState.runAgentChatSelectionPluginAction(
+                                        text: text,
+                                        pluginID: pluginID,
+                                        commandID: commandID,
+                                        completion: completion
+                                    )
+                                },
                                 onOpenFilePath: { rawPath in
                                     // Agent mode 里点击 transcript 中的路径
                                     // chip:workspace 内的目录 → 右侧 Files

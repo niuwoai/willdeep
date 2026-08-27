@@ -11,5 +11,8 @@
   "overview.edited": "Edited sessions",
   "overview.artifacts": "Artifacts",
   "projects.empty": "No session data yet",
-  "status.demo": "Demo data — no session store found"
+  "status.demo": "Demo data — no session store found",
+  "command.export": "Export report",
+  "overview.output": "Output tokens",
+  "overview.toolCalls": "Tool calls"
 }

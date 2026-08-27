@@ -15,12 +15,12 @@ import type { GameProps } from '../../core/types';
 import { useI18n } from '../../core/i18n';
 import { saveBestScore } from '../../core/bestScore';
 import { entropySeed } from '../../core/rng';
+import { playCue } from '../../core/audio';
 import { ONET_FACES, onetStrings } from './strings';
-import type { OnetStrings } from './strings';
+import { useAutoAdvance, useStageReport } from '../../core/stage';
 import {
-  DEFAULT_LEVEL,
-  LEVELS,
   PATH_MS,
+  boardForStage,
   clearHint,
   clearPath,
   createInitialState,
@@ -36,35 +36,41 @@ import './onet.css';
 
 /** 提示高亮停留时长（毫秒）。 */
 const HINT_MS = 1600;
-/** 各难度的单格上限（px）：列数越多每格越小，整体宽度都压在 480px 以内。 */
-const CELL_PX: readonly number[] = [88, 72, 60];
+/** 单格上限（px）：列数越多每格越小，整体宽度始终压在 480px 以内。 */
+function cellPx(cols: number): number {
+  return Math.max(48, Math.min(88, Math.floor(480 / Math.max(1, cols))));
+}
 /** 连续自动洗牌的次数上限：万一洗不出可消对，停手交给玩家重开，避免死循环。 */
 const MAX_AUTO_SHUFFLE = 3;
-
-const LEVEL_LABEL_KEY: readonly (keyof OnetStrings)[] = ['levelEasy', 'levelMedium', 'levelHard'];
 
 /** 折线 → SVG points：坐标以「格」为单位，牌心在格中央。 */
 function polylinePoints(path: readonly Point[]): string {
   return path.map((point) => `${point.x + 0.5},${point.y + 0.5}`).join(' ');
 }
 
-export default function OnetGame({ seed }: GameProps) {
+export default function OnetGame({ seed, onWin, onStage }: GameProps) {
   const { locale } = useI18n();
   const strings = onetStrings(locale);
 
   // 未显式指定种子时，本次进入游戏用一次性熵种子：牌面不再是每次都一样的那副。
   const baseSeed = useMemo(() => seed ?? entropySeed('onet'), [seed]);
 
-  const [level, setLevel] = useState<number>(DEFAULT_LEVEL);
-  const [state, setState] = useState<OnetState>(() => createInitialState(DEFAULT_LEVEL, baseSeed));
+  // 关卡阶梯：4×4 起步一路长到 8×8 封顶，通关自动进下一关，分数跨关累计。
+  const [stage, setStage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const board = boardForStage(stage);
+  const [state, setState] = useState<OnetState>(() => createInitialState(board, `${baseSeed}@1`));
   const [autoShuffled, setAutoShuffled] = useState(false);
   const autoShuffleRef = useRef(0);
 
-  // 种子或难度变化时重开一局。
+  // 种子或关卡变化时重开一局。
   useEffect(() => {
-    setState(createInitialState(level, baseSeed));
+    setState(createInitialState(boardForStage(stage), `${baseSeed}@${stage}`));
     setAutoShuffled(false);
-  }, [level, baseSeed]);
+  }, [stage, baseSeed]);
+
+  useStageReport(onStage, { stage, score: total, label: `${board.cols}×${board.rows}` });
+  useAutoAdvance(state.status === 'won', () => setStage((current) => current + 1));
 
   // 连接线展示停留后清除。
   useEffect(() => {
@@ -95,13 +101,30 @@ export default function OnetGame({ seed }: GameProps) {
     setAutoShuffled(true);
   }, [state]);
 
-  // 胜利时写入最佳成绩（saveBestScore 只保留更高分）。
+  // 消掉一对给一声反馈。
   useEffect(() => {
-    if (state.status === 'won') saveBestScore('onet', scoreFor(state));
+    if (state.lastPath) playCue('clear');
+  }, [state.lastPath]);
+
+  // 洗牌（手动或死局自救）给一声反馈。
+  useEffect(() => {
+    if (state.shuffles > 0) playCue('shuffle');
+  }, [state.shuffles]);
+
+  // 通关：累计分数、写最佳成绩、撒花，随后自动进入下一关。
+  useEffect(() => {
+    if (state.status !== 'won') return;
+    const gained = scoreFor(state);
+    setTotal((current) => {
+      const next = current + gained;
+      saveBestScore('onet', next);
+      return next;
+    });
+    playCue('win');
+    onWin?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
 
-  const config = LEVELS[state.level] ?? LEVELS[DEFAULT_LEVEL];
   const statusText = state.status === 'won'
     ? strings.statusWon
     : autoShuffled
@@ -112,6 +135,7 @@ export default function OnetGame({ seed }: GameProps) {
 
   const handleTileClick = (index: number): void => {
     setAutoShuffled(false);
+    playCue('select');
     setState((current) => selectTile(current, index));
   };
 
@@ -130,19 +154,12 @@ export default function OnetGame({ seed }: GameProps) {
       </div>
 
       <div className="onet__tools" data-testid="onet-tools">
-        <span>{strings.levelLabel}:</span>
-        {LEVELS.map((option, index) => (
-          <button
-            key={option.id}
-            type="button"
-            className="btn btn--ghost"
-            data-testid={`onet-level-${option.id}`}
-            aria-pressed={level === index}
-            onClick={() => setLevel(index)}
-          >
-            {strings[LEVEL_LABEL_KEY[index] ?? 'levelEasy']}
-          </button>
-        ))}
+        <span data-testid="onet-stage">
+          {strings.stageLabel} {stage} · {board.cols}×{board.rows}
+        </span>
+        <span data-testid="onet-total">
+          {strings.totalLabel}: {total}
+        </span>
         <button
           type="button"
           className="btn"
@@ -175,15 +192,29 @@ export default function OnetGame({ seed }: GameProps) {
         >
           {strings.restart}
         </button>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          data-testid="onet-restart-run"
+          onClick={() => {
+            playCue('select');
+            setAutoShuffled(false);
+            setTotal(0);
+            setStage(1);
+            setState(createInitialState(boardForStage(1), `${baseSeed}@1`));
+          }}
+        >
+          {strings.restartRun}
+        </button>
       </div>
 
       <div
         className="onet__stage"
         style={
           {
-            '--onet-cols': config?.cols ?? state.cols,
-            '--onet-rows': config?.rows ?? state.rows,
-            '--onet-cell': `${CELL_PX[state.level] ?? 60}px`,
+            '--onet-cols': state.cols,
+            '--onet-rows': state.rows,
+            '--onet-cell': `${cellPx(state.cols)}px`,
           } as CSSProperties
         }
       >

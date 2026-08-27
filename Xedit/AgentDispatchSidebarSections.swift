@@ -22,9 +22,12 @@ struct AgentDispatchSidebarSections: View {
                 .padding(.vertical, 12)
             environmentsSection
         }
-        .onAppear {
+        .task(id: appState.hasLoadedAgentSessionCatalog) {
             // Gated inside: a projection from the not-yet-loaded session
             // catalog would persist an empty board over completed goals.
+            // 认的是「目录装载完成」这条边而不是 onAppear：侧栏经常在装载完成
+            // 之前就出现，只挂 onAppear 的话那一次会被门禁拦掉，而且没有第二次
+            // 机会——本机 99 条早该消失的项目就是这么一直留着的。
             appState.synchronizeDispatchBoardInBackground()
         }
     }

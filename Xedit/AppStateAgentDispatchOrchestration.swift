@@ -72,8 +72,17 @@ extension AppState {
     /// real; never hand `agentSessions` to the coordinator directly. Session
     /// removal has its own explicit path (`removeGoal`), so a skipped early
     /// projection loses nothing.
+    ///
+    /// 被门禁拦下时不再干等：改跑一遍只删不建的收敛（`reconcileWithLoadedSessions`）。
+    /// 那条规则「在场才判决」——会话不在列表里就一律保留，所以半份目录也伤不到
+    /// 任何已记录的状态；而目录里明明还在、却早就不是调度台项目的行（多半是后来
+    /// 变成了别的目标的子任务）不用再等一个可能永远不来的完整投影。这正是本机
+    /// 攒出 99 条重复项目的由来：门禁一关，收敛就再没跑过。
     func synchronizeDispatchBoard() {
-        guard hasLoadedAgentSessionCatalog else { return }
+        guard hasLoadedAgentSessionCatalog else {
+            agentDispatchCoordinator.reconcileWithLoadedSessions(agentSessions)
+            return
+        }
         agentDispatchCoordinator.synchronize(
             with: agentSessions,
             projects: agentProjects
@@ -81,9 +90,12 @@ extension AppState {
     }
 
     /// Coalesced off-main variant of `synchronizeDispatchBoard()` for view
-    /// appearance hooks; same catalog gate.
+    /// appearance hooks; same catalog gate, same shut-gate reconciliation.
     func synchronizeDispatchBoardInBackground() {
-        guard hasLoadedAgentSessionCatalog else { return }
+        guard hasLoadedAgentSessionCatalog else {
+            agentDispatchCoordinator.reconcileWithLoadedSessions(agentSessions)
+            return
+        }
         agentDispatchCoordinator.synchronizeInBackground(
             with: agentSessions,
             projects: agentProjects

@@ -50,7 +50,7 @@ enum AgentPrimaryDestination: Equatable {
 
 四个原生入口顺序固定，插件组只能位于其下方。最多固定 5 个插件目的地，支持拖拽排序；有插件时末尾显示“更多插件”，没有时显示“添加插件…”。默认、悬停和选中继续使用宿主灰度语义色，插件品牌色不参与选中表达。
 
-第一方随 App 签名发行的内置插件可以在目的地清单声明 `defaultPinned: true`。宿主会把这类入口稳定放在插件分组顶部并计入 5 个固定名额，用户安装的同名更新仍可覆盖页面实现，但不能取消该入口；非 `bundled` 来源即使声明该字段也会被忽略，第三方插件不能借此抢占导航。
+第一方随 App 签名发行的内置插件（构建阶段复制进 `BundledPlugins/<plugin-id>`，目前是经典游戏厅、俄罗斯方块与收藏夹）可以在目的地清单声明 `defaultPinned: true`。宿主会把这类入口稳定放在插件分组顶部并计入 5 个固定名额，用户安装的同名更新仍可覆盖页面实现，但不能取消该入口；非 `bundled` 来源即使声明该字段也会被忽略，第三方插件不能借此抢占导航。
 
 插件界面必须遵循宿主的单色交互规范：导航、开关、菜单、链接式操作和选中状态不得使用 macOS 系统蓝色或插件品牌色，统一通过不同灰度表达默认、hover、按下和选中状态。安装、批准并启用、检查安装源等推动安装流程的主要操作使用黑底白字，确保其在灰度界面中保持明确的视觉优先级；次要和取消操作继续使用灰度文字或描边。该规则是项目级长期视觉约束，新增插件宿主界面时默认适用。
 
@@ -168,12 +168,18 @@ v1 菜单位置：
 - `composer.more`
 - `plugin.page.toolbar`
 - `plugin.sidebar.row.context`
+- `chat.selection`（1.299.0-rc3 起）：聊天正文选中文字后的气泡与右键菜单。宿主执行这里的命令时固定传两个参数：
+  `text`（选中的原文，已按聊天导出的净化规则处理）与 `source`（固定 `"chat.selection"`，供插件区分入口）。
+  内置的「添加到任务」永远排在第一位，插件项按安装顺序接在后面。参考实现见 `PluginExamples/favorites`。
+
+菜单位置的白名单在 `AgentPluginMenuLocation.all` 一处定义，加载器校验、`docs/plugin-schema` 的枚举都从它来；
+`AgentPluginSystemTests.chatSelectionMenuLocationIsRegisteredInTheSchema` 盯着两边不许劈叉。
 
 命令 handler 仅可为：
 
 - `host`：公开白名单 Host Command。
 - `navigate`：跳转到已安装并启用的插件目的地。
-- `mcpTool`：调用已配置 MCP Tool；执行前显示插件名和命令名确认。
+- `mcpTool`：调用已配置 MCP Tool；执行前显示插件名和命令名确认。随 App 签名发行的第一方内置插件（`bundled` 来源）例外，不再逐条确认——它们与宿主是同一份签名产物，也没有第三方来源可核对，而收藏夹这类默认入口每翻一次页面就要点一次确认根本无法使用；本地安装与 Codex 缓存来源仍然每次执行都要用户点头。
 
 公开 Host Command v1：`plugin.refresh`、`destination.select`、`settings.mcp`、`plugins.open-center`。任意 selector、类名和脚本文本均被拒绝。
 

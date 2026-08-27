@@ -19,10 +19,20 @@ export type GameId =
 /** 游戏渲染组件：由各游戏模块提供默认导出组件。 */
 export type GameComponent = ComponentType<GameProps>;
 
-/** 传给游戏组件的固定 props（冻结）。 */
+/** 传给游戏组件的固定 props（冻结；新增字段一律可选，向后兼容）。 */
 export interface GameProps {
   /** 确定性随机种子（来自 hash 查询串 `?seed=`），可为空。 */
   seed?: string;
+  /**
+   * 值得庆祝的时刻（通关；无通关概念的游戏用「刷新最佳成绩」）由游戏模块调用，
+   * 外壳据此放一次撒花。不调用不影响任何既有行为。
+   */
+  onWin?: () => void;
+  /**
+   * 上报当前关卡与本轮累计分数，外壳渲染成徽章（见 core/stage.ts）。
+   * 关卡阶梯由各游戏自己定义，通关自动进阶。
+   */
+  onStage?: (info: { stage: number; score: number; label?: string }) => void;
 }
 
 /** 游戏清单条目（冻结）。 */

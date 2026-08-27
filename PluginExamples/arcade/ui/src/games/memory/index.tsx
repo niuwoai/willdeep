@@ -16,14 +16,15 @@ import type { GameProps } from '../../core/types';
 import { useI18n } from '../../core/i18n';
 import { saveBestScore } from '../../core/bestScore';
 import { entropySeed } from '../../core/rng';
+import { playCue } from '../../core/audio';
 import { memoryStrings } from './strings';
-import type { MemoryStrings } from './strings';
+import { useAutoAdvance, useStageReport } from '../../core/stage';
 import {
-  DEFAULT_PAIRS,
   MISMATCH_MS,
-  PAIR_OPTIONS,
+  columnsForPairs,
   createInitialState,
   flipCard,
+  pairsForStage,
   resolveMismatch,
   restart,
   scoreFor,
@@ -31,30 +32,26 @@ import {
 import type { MemoryState } from './logic';
 import './memory.css';
 
-const PAIR_LABEL_KEY: Record<number, keyof MemoryStrings> = {
-  2: 'pairsEasy',
-  4: 'pairsMedium',
-  6: 'pairsHard',
-};
-
-function pairLabelKey(option: number): keyof MemoryStrings {
-  return (PAIR_LABEL_KEY[option] ?? 'pairsEasy') as keyof MemoryStrings;
-}
-
-export default function MemoryGame({ seed }: GameProps) {
+export default function MemoryGame({ seed, onWin, onStage }: GameProps) {
   const { locale } = useI18n();
   const strings = memoryStrings(locale);
 
   // 未显式指定种子时，本次进入游戏用一次性熵种子：布局不再是每次都一样的那副牌。
   const baseSeed = useMemo(() => seed ?? entropySeed('memory'), [seed]);
 
-  const [pairs, setPairs] = useState<number>(DEFAULT_PAIRS);
-  const [state, setState] = useState<MemoryState>(() => createInitialState(DEFAULT_PAIRS, baseSeed));
+  // 关卡阶梯：第 1 关 2 对，每通一关自动 +1 对（12 对封顶），分数跨关累计。
+  const [stage, setStage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pairs = pairsForStage(stage);
+  const [state, setState] = useState<MemoryState>(() => createInitialState(pairs, `${baseSeed}@1`));
 
-  // 种子或牌对数变化时重建一局（确定性布局，进度清零）。
+  // 种子或关卡变化时重建一局（确定性布局，进度清零）。
   useEffect(() => {
-    setState(createInitialState(pairs, baseSeed));
-  }, [pairs, baseSeed]);
+    setState(createInitialState(pairsForStage(stage), `${baseSeed}@${stage}`));
+  }, [stage, baseSeed]);
+
+  useStageReport(onStage, { stage, score: total, label: `${pairs} 对` });
+  useAutoAdvance(state.status === 'won', () => setStage((current) => current + 1));
 
   // 不匹配展示停留后自动复位两张牌。
   useEffect(() => {
@@ -63,19 +60,45 @@ export default function MemoryGame({ seed }: GameProps) {
     return () => window.clearTimeout(timer);
   }, [state.locked]);
 
-  // 胜利时写入最佳成绩（saveBestScore 幂等，只保留更高分）。
+  // 配对成功/失败各给一声反馈。
   useEffect(() => {
-    if (state.status === 'won') {
-      saveBestScore('memory', scoreFor(state.pairs, state.moves));
-    }
-  }, [state.status, state.pairs, state.moves]);
+    if (state.matched.length > 0) playCue('match');
+  }, [state.matched.length]);
+  useEffect(() => {
+    if (state.locked) playCue('miss');
+  }, [state.locked]);
+
+  // 通关：累计分数、写入最佳成绩（只保留更高分）、撒花，随后自动进入下一关。
+  useEffect(() => {
+    if (state.status !== 'won') return;
+    const gained = scoreFor(state.pairs, state.moves);
+    setTotal((current) => {
+      const next = current + gained;
+      saveBestScore('memory', next);
+      return next;
+    });
+    playCue('win');
+    onWin?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status]);
 
   const handleCardClick = (index: number): void => {
+    playCue('flip');
     setState((s) => flipCard(s, index));
   };
 
+  /** 换一副牌重打本关（关卡与累计分数不变）。 */
   const handleRestart = (): void => {
+    playCue('select');
     setState((s) => restart(s));
+  };
+
+  /** 从第 1 关重新开始，累计分数归零。 */
+  const handleRestartRun = (): void => {
+    playCue('select');
+    setTotal(0);
+    setStage(1);
+    setState(createInitialState(pairsForStage(1), `${baseSeed}@1`));
   };
 
   const statusText: Record<MemoryState['status'], string> = {
@@ -84,9 +107,9 @@ export default function MemoryGame({ seed }: GameProps) {
     won: strings.statusWon,
   };
 
-  // 列数固定，宽度交给 CSS：容器相对 + 每张牌绝对上限（见 memory.css），
-  // 不再用视口单位，避免面板宽度与布局视口不一致时把棋盘撑出可视区。
-  const gridColumns = Math.min(pairs, 4);
+  // 列数随牌数走（尽量方阵），宽度交给 CSS：容器相对 + 每张牌绝对上限
+  // （见 memory.css），不用视口单位，免得面板宽度与布局视口不一致时被撑出可视区。
+  const gridColumns = columnsForPairs(pairs);
 
   return (
     <div className="memory" data-testid="memory-game">
@@ -109,19 +132,20 @@ export default function MemoryGame({ seed }: GameProps) {
       </div>
 
       <div className="memory__pairs" data-testid="memory-pairs">
-        <span>{strings.pairsLabel}:</span>
-        {PAIR_OPTIONS.map((option) => (
-          <button
-            key={option}
-            type="button"
-            className="btn btn--ghost btn--pairs"
-            data-testid={`memory-pairs-${option}`}
-            aria-pressed={pairs === option}
-            onClick={() => setPairs(option)}
-          >
-            {strings[pairLabelKey(option)]}
-          </button>
-        ))}
+        <span data-testid="memory-stage">
+          {strings.stageLabel} {stage} · {pairs} {strings.pairsUnit}
+        </span>
+        <span data-testid="memory-total">
+          {strings.totalLabel}: {total}
+        </span>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          data-testid="memory-restart-run"
+          onClick={handleRestartRun}
+        >
+          {strings.restartRun}
+        </button>
       </div>
 
       <div

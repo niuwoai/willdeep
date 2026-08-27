@@ -50,6 +50,11 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     var onShowTurnReport: (() -> Void)? = nil
     var onReferenceGeneratedImage: ((String) -> Void)? = nil
     var onAddSelectionToTask: ((String) -> Void)? = nil
+    /// 插件经 `menus["chat.selection"]` 贡献的选区动作被点中（选中文本, 插件, 命令,
+    /// 执行完成回调）。回调带着成功与否，气泡据此给一个「✓ / ⚠︎」的即时反馈。
+    var onSelectionPluginAction: (
+        (String, AgentPluginID, AgentPluginCommandID, @escaping (Bool) -> Void) -> Void
+    )? = nil
     var onOpenFilePath: ((String) -> Void)? = nil
     var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)? = nil
     var progressPlan: AgentPlan? = nil
@@ -71,6 +76,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.onShowTurnReport = onShowTurnReport
         view.onReferenceGeneratedImage = onReferenceGeneratedImage
         view.onAddSelectionToTask = onAddSelectionToTask
+        view.onSelectionPluginAction = onSelectionPluginAction
         view.onOpenFilePath = onOpenFilePath
         view.onOpenAttachmentCitation = onOpenAttachmentCitation
         view.onShowPlan = onShowPlan
@@ -100,6 +106,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         nsView.onShowTurnReport = onShowTurnReport
         nsView.onReferenceGeneratedImage = onReferenceGeneratedImage
         nsView.onAddSelectionToTask = onAddSelectionToTask
+        nsView.onSelectionPluginAction = onSelectionPluginAction
         nsView.onOpenFilePath = onOpenFilePath
         nsView.onOpenAttachmentCitation = onOpenAttachmentCitation
         nsView.onShowPlan = onShowPlan
@@ -190,12 +197,18 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var pendingFooterCopyRestores: [Int: DispatchWorkItem] = [:]
     private var selectionActionView: AgentChatSelectionActionView?
     private var selectionActionText: String?
+    /// 每次气泡重新出现/收起都自增。异步的插件动作回来时拿它对一下，
+    /// 确认自己反馈的还是当初那一次选区。
+    private var selectionActionRevision: UInt64 = 0
     var onRetryLastTurn: (() -> Void)?
     /// 1.103.0-rc11: TextKit footer 里 doc.text 图标被点时回调 SwiftUI 侧
     /// 弹出 AgentTurnReportCard popover —— 见 AgentChatTranscript。
     var onShowTurnReport: (() -> Void)?
     var onReferenceGeneratedImage: ((String) -> Void)?
     var onAddSelectionToTask: ((String) -> Void)?
+    var onSelectionPluginAction: (
+        (String, AgentPluginID, AgentPluginCommandID, @escaping (Bool) -> Void) -> Void
+    )?
     var onOpenFilePath: ((String) -> Void)?
     var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)?
     var onShowPlan: (() -> Void)?
@@ -320,6 +333,23 @@ final class AgentChatHistoryNSTextView: NSTextView {
         }
         if let selectedText {
             menu.addItem(addSelectionToTaskMenuItem(selectedText: selectedText))
+            for resolved in AgentPluginRegistry.shared.menuCommands(at: AgentPluginMenuLocation.chatSelection) {
+                let item = NSMenuItem(
+                    title: AgentPluginRegistry.shared.localizedString(
+                        resolved.command.titleKey,
+                        pluginID: resolved.pluginID
+                    ),
+                    action: #selector(runSelectionPluginActionFromMenu(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = AgentChatSelectionPluginMenuPayload(
+                    text: selectedText,
+                    pluginID: resolved.pluginID,
+                    commandID: resolved.command.id
+                )
+                menu.addItem(item)
+            }
         }
         if let marker {
             let item = NSMenuItem(
@@ -354,8 +384,19 @@ final class AgentChatHistoryNSTextView: NSTextView {
 
         let actionView = selectionActionView ?? makeSelectionActionView()
         selectionActionText = selectedText
+        selectionActionRevision &+= 1
+        actionView.update(items: selectionActionItems())
+        actionView.isInteractive = true
         actionView.isHidden = false
+        positionSelectionAction(actionView, near: selectionRect)
+    }
 
+    /// 气泡定位：优先贴在选区上方，放不下时翻到下方，再夹进可视区。
+    /// 执行插件动作后气泡内容会变（换成结果提示），要按新尺寸重新摆一次。
+    private func positionSelectionAction(
+        _ actionView: AgentChatSelectionActionView,
+        near selectionRect: NSRect
+    ) {
         let size = actionView.preferredSize
         let visible = visibleRect.insetBy(dx: 8, dy: 8)
         let gap: CGFloat = 6
@@ -380,12 +421,39 @@ final class AgentChatHistoryNSTextView: NSTextView {
         )
     }
 
+    /// 气泡里的动作：内置「添加到任务」打头，后面接插件贡献的项。
+    private func selectionActionItems() -> [AgentChatSelectionActionItem] {
+        let builtIn = AgentChatSelectionActionItem(title: L10n.AgentSelection.addToTask, plugin: nil)
+        let pluginItems = AgentPluginRegistry.shared
+            .menuCommands(at: AgentPluginMenuLocation.chatSelection)
+            .map { resolved in
+                AgentChatSelectionActionItem(
+                    title: AgentPluginRegistry.shared.localizedString(
+                        resolved.command.titleKey,
+                        pluginID: resolved.pluginID
+                    ),
+                    plugin: (resolved.pluginID, resolved.command.id)
+                )
+            }
+        return [builtIn] + pluginItems
+    }
+
     private func makeSelectionActionView() -> AgentChatSelectionActionView {
-        let actionView = AgentChatSelectionActionView(title: L10n.AgentSelection.addToTask)
-        actionView.onAdd = { [weak self] in
+        let actionView = AgentChatSelectionActionView(items: selectionActionItems())
+        actionView.onSelect = { [weak self] item in
             guard let self, let selectedText = self.selectionActionText else { return }
-            self.dismissSelectionAction()
-            self.onAddSelectionToTask?(selectedText)
+            guard let plugin = item.plugin else {
+                self.dismissSelectionAction()
+                self.onAddSelectionToTask?(selectedText)
+                return
+            }
+            // 插件动作是异步的（命令执行器 → MCP 工具），先把气泡置灰留在原地，
+            // 回来了再换成「✓ 收藏」并停一下——否则点完屏幕上什么都不会发生。
+            let revision = self.selectionActionRevision
+            actionView.isInteractive = false
+            self.onSelectionPluginAction?(selectedText, plugin.pluginID, plugin.commandID) { [weak self] succeeded in
+                self?.showSelectionActionResult(title: item.title, succeeded: succeeded, revision: revision)
+            }
         }
         addSubview(actionView, positioned: .above, relativeTo: nil)
         selectionActionView = actionView
@@ -411,7 +479,29 @@ final class AgentChatHistoryNSTextView: NSTextView {
 
     private func dismissSelectionAction() {
         selectionActionText = nil
+        selectionActionRevision &+= 1
+        selectionActionView?.isInteractive = true
         selectionActionView?.isHidden = true
+    }
+
+    /// 插件选区动作执行完的即时反馈：把气泡整条换成结果，停 1.1 秒再收起。
+    /// `revision` 认的是「还是当初点的那一次选区」——期间用户改了选区或气泡
+    /// 已经收起，这次回调就什么都不做，不去打扰新的选区。
+    private func showSelectionActionResult(title: String, succeeded: Bool, revision: UInt64) {
+        guard revision == selectionActionRevision,
+              let actionView = selectionActionView,
+              !actionView.isHidden,
+              let selectionRect = selectedTextBoundingRect() else {
+            return
+        }
+        let marker = succeeded ? "✓" : "⚠︎"
+        actionView.update(items: [AgentChatSelectionActionItem(title: "\(marker) \(title)", plugin: nil)])
+        actionView.isInteractive = false
+        positionSelectionAction(actionView, near: selectionRect)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { [weak self] in
+            guard let self, revision == self.selectionActionRevision else { return }
+            self.dismissSelectionAction()
+        }
     }
 
     private func currentSelectedConversationText() -> String? {
@@ -443,6 +533,12 @@ final class AgentChatHistoryNSTextView: NSTextView {
             return
         }
         onAddSelectionToTask?(selectedText)
+    }
+
+    @objc private func runSelectionPluginActionFromMenu(_ sender: NSMenuItem) {
+        guard let payload = sender.representedObject as? AgentChatSelectionPluginMenuPayload else { return }
+        // 右键菜单没有可反馈的载体，执行结果只走命令执行器自己的提示。
+        onSelectionPluginAction?(payload.text, payload.pluginID, payload.commandID) { _ in }
     }
 
     @objc private func quoteGeneratedImageFromMenu(_ sender: NSMenuItem) {
@@ -871,14 +967,44 @@ enum AgentChatSelectionActionMetrics {
     }
 }
 
+/// 右键菜单项带的载荷（NSMenuItem.representedObject 只能放对象/结构体值）。
+final class AgentChatSelectionPluginMenuPayload: NSObject {
+    let text: String
+    let pluginID: AgentPluginID
+    let commandID: AgentPluginCommandID
+
+    init(text: String, pluginID: AgentPluginID, commandID: AgentPluginCommandID) {
+        self.text = text
+        self.pluginID = pluginID
+        self.commandID = commandID
+    }
+}
+
+/// 选区气泡里的一项：内置「添加到任务」，或插件经 `menus["chat.selection"]` 贡献的动作。
+struct AgentChatSelectionActionItem {
+    let title: String
+    /// 插件项带上来源；内置项为 nil。
+    let plugin: (pluginID: AgentPluginID, commandID: AgentPluginCommandID)?
+}
+
 private final class AgentChatSelectionActionView: NSView {
-    private let actionButton: NSButton
+    private let stack: NSStackView
+    private var buttons: [NSButton] = []
+    private var items: [AgentChatSelectionActionItem] = []
     private var hoverTrackingArea: NSTrackingArea?
     private var isHovered = false
-    var onAdd: (() -> Void)?
+    /// 点了第几项（下标对应 items）。
+    var onSelect: ((AgentChatSelectionActionItem) -> Void)?
+    /// 异步动作执行期间与结果展示期间置 false：按钮点不动，整条气泡淡一档。
+    var isInteractive = true {
+        didSet {
+            alphaValue = isInteractive ? 1 : 0.7
+            buttons.forEach { $0.isEnabled = isInteractive }
+        }
+    }
 
-    init(title: String) {
-        actionButton = NSButton(title: title, target: nil, action: nil)
+    init(items: [AgentChatSelectionActionItem]) {
+        stack = NSStackView()
         super.init(frame: .zero)
 
         wantsLayer = true
@@ -889,26 +1015,47 @@ private final class AgentChatSelectionActionView: NSView {
         layer?.shadowOffset = AgentChatSelectionActionMetrics.shadowOffset
         applyAppearance()
 
-        actionButton.target = self
-        actionButton.action = #selector(addToTask(_:))
-        actionButton.isBordered = false
-        actionButton.focusRingType = .none
-        actionButton.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        actionButton.contentTintColor = .labelColor
-        actionButton.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(actionButton)
+        stack.orientation = .horizontal
+        stack.spacing = 2
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
         NSLayoutConstraint.activate([
-            actionButton.leadingAnchor.constraint(
+            stack.leadingAnchor.constraint(
                 equalTo: leadingAnchor,
                 constant: AgentChatSelectionActionMetrics.horizontalPadding
             ),
-            actionButton.trailingAnchor.constraint(
+            stack.trailingAnchor.constraint(
                 equalTo: trailingAnchor,
                 constant: -AgentChatSelectionActionMetrics.horizontalPadding
             ),
-            actionButton.topAnchor.constraint(equalTo: topAnchor),
-            actionButton.bottomAnchor.constraint(equalTo: bottomAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+        update(items: items)
+    }
+
+    /// 重建按钮：插件启停后条目会变，气泡复用同一个 view。
+    func update(items: [AgentChatSelectionActionItem]) {
+        guard items.map(\.title) != self.items.map(\.title) || buttons.isEmpty else {
+            self.items = items
+            return
+        }
+        self.items = items
+        for button in buttons {
+            stack.removeArrangedSubview(button)
+            button.removeFromSuperview()
+        }
+        buttons = items.enumerated().map { index, item in
+            let button = NSButton(title: item.title, target: self, action: #selector(selectAction(_:)))
+            button.tag = index
+            button.isBordered = false
+            button.focusRingType = .none
+            button.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+            button.contentTintColor = .labelColor
+            button.isEnabled = isInteractive
+            stack.addArrangedSubview(button)
+            return button
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -916,9 +1063,12 @@ private final class AgentChatSelectionActionView: NSView {
     }
 
     var preferredSize: NSSize {
-        NSSize(
-            width: ceil(actionButton.intrinsicContentSize.width)
-                + AgentChatSelectionActionMetrics.horizontalPadding * 2,
+        let buttonsWidth = buttons.reduce(CGFloat.zero) { total, button in
+            total + ceil(button.intrinsicContentSize.width)
+        }
+        let spacing = CGFloat(max(0, buttons.count - 1)) * stack.spacing
+        return NSSize(
+            width: buttonsWidth + spacing + AgentChatSelectionActionMetrics.horizontalPadding * 2,
             height: AgentChatSelectionActionMetrics.height
         )
     }
@@ -992,8 +1142,9 @@ private final class AgentChatSelectionActionView: NSView {
         needsDisplay = true
     }
 
-    @objc private func addToTask(_ sender: NSButton) {
-        onAdd?()
+    @objc private func selectAction(_ sender: NSButton) {
+        guard sender.tag >= 0, sender.tag < items.count else { return }
+        onSelect?(items[sender.tag])
     }
 }
 

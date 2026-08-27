@@ -8,10 +8,10 @@
 import type { Locale } from '../../core/types';
 
 export interface MemoryStrings {
-  pairsLabel: string;
-  pairsEasy: string;
-  pairsMedium: string;
-  pairsHard: string;
+  stageLabel: string;
+  pairsUnit: string;
+  totalLabel: string;
+  restartRun: string;
   moves: string;
   restart: string;
   statusIdle: string;
@@ -23,28 +23,28 @@ export interface MemoryStrings {
 
 const dict: Record<Locale, MemoryStrings> = {
   'zh-Hans': {
-    pairsLabel: '牌对数',
-    pairsEasy: '简单 · 2 对',
-    pairsMedium: '中等 · 4 对',
-    pairsHard: '挑战 · 6 对',
+    stageLabel: '关卡',
+    pairsUnit: '对',
+    totalLabel: '累计',
+    restartRun: '从头开始',
     moves: '步数',
     restart: '重开',
     statusIdle: '翻开两张相同的卡牌开始',
     statusPlaying: '进行中',
-    statusWon: '恭喜通关！',
+    statusWon: '恭喜通关！下一关准备中……',
     hint: '点击/点按卡牌翻面；花色相同的两张成对消除，用最少步数清空棋盘',
     boardLabel: '记忆翻牌棋盘',
   },
   en: {
-    pairsLabel: 'Pairs',
-    pairsEasy: 'Easy · 2',
-    pairsMedium: 'Medium · 4',
-    pairsHard: 'Hard · 6',
+    stageLabel: 'Stage',
+    pairsUnit: 'pairs',
+    totalLabel: 'Total',
+    restartRun: 'Start over',
     moves: 'Moves',
     restart: 'Restart',
     statusIdle: 'Flip two matching cards to start',
     statusPlaying: 'Playing',
-    statusWon: 'You Win!',
+    statusWon: 'Cleared! Next stage coming up…',
     hint: 'Tap cards to flip; match pairs to clear the board in the fewest moves',
     boardLabel: 'Memory board',
   },

@@ -4,6 +4,9 @@
 
 技术栈：React 18 + TypeScript（strict）+ Vite 5 + yarn 1 + Vitest + Playwright + 轻量自研 i18n/HashRouter。
 
+通关会撒花（`src/ui/Confetti.tsx`，自绘 canvas，无第三方依赖），音效由 Web Audio 现场合成
+（`src/core/audio.ts`，不打包任何音频素材，外壳右上角可静音）。
+
 ## 快速开始
 
 ```bash

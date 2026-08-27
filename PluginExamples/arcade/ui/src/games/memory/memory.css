@@ -100,12 +100,19 @@
   border-color: var(--accent-strong);
 }
 
+/* 关卡最多 12 对，配色也要够 12 种（相邻色相拉开，翻开时好区分） */
 .memory__card--pair-0 { background: #4f8cff; }
 .memory__card--pair-1 { background: #3d9b6e; }
 .memory__card--pair-2 { background: #ff5d73; }
 .memory__card--pair-3 { background: #e6a23c; }
 .memory__card--pair-4 { background: #9b59d0; }
 .memory__card--pair-5 { background: #2fb8c9; }
+.memory__card--pair-6 { background: #d95fa4; }
+.memory__card--pair-7 { background: #7fbf3f; }
+.memory__card--pair-8 { background: #f2784b; }
+.memory__card--pair-9 { background: #5f6bd8; }
+.memory__card--pair-10 { background: #17a398; }
+.memory__card--pair-11 { background: #b8a038; }
 
 .memory__hint {
   margin: 0;

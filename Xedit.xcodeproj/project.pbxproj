@@ -352,6 +352,11 @@
 				"$(SRCROOT)/PluginExamples/arcade/.codex-plugin",
 				"$(SRCROOT)/PluginExamples/arcade/.willdeep-plugin",
 				"$(SRCROOT)/PluginExamples/arcade/ui/dist",
+				"$(SRCROOT)/PluginExamples/favorites/.codex-plugin",
+				"$(SRCROOT)/PluginExamples/favorites/.willdeep-plugin",
+				"$(SRCROOT)/PluginExamples/favorites/mcp.json",
+				"$(SRCROOT)/PluginExamples/favorites/server",
+				"$(SRCROOT)/PluginExamples/favorites/ui/index.html",
 			);
 			name = "Bundle built-in plugins";
 			outputFileListPaths = (
@@ -360,7 +365,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "set -euo pipefail\nbundled_root=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/BundledPlugins\"\nfor plugin_id in tetris arcade; do\n  source_root=\"$SRCROOT/PluginExamples/$plugin_id\"\n  destination_root=\"$bundled_root/$plugin_id\"\n  rm -rf \"$destination_root\"\n  mkdir -p \"$destination_root/ui\"\n  /usr/bin/ditto \"$source_root/.codex-plugin\" \"$destination_root/.codex-plugin\"\n  /usr/bin/ditto \"$source_root/.willdeep-plugin\" \"$destination_root/.willdeep-plugin\"\n  /usr/bin/ditto \"$source_root/ui/dist\" \"$destination_root/ui/dist\"\ndone\n";
+			shellScript = "set -euo pipefail\nbundled_root=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/BundledPlugins\"\n# 每个内置插件只带运行时真正需要的文件。前两个是纯前端产物；收藏夹是无构建\n# 步骤的静态页 + Ruby stdio 服务端，所以额外带上 mcp.json 与 server/。\nbundle_plugin() {\n  plugin_id=\"$1\"\n  shift\n  source_root=\"$SRCROOT/PluginExamples/$plugin_id\"\n  destination_root=\"$bundled_root/$plugin_id\"\n  rm -rf \"$destination_root\"\n  mkdir -p \"$destination_root\"\n  for relative in \"$@\"; do\n    mkdir -p \"$destination_root/$(dirname \"$relative\")\"\n    /usr/bin/ditto \"$source_root/$relative\" \"$destination_root/$relative\"\n  done\n}\nbundle_plugin tetris .codex-plugin .willdeep-plugin ui/dist\nbundle_plugin arcade .codex-plugin .willdeep-plugin ui/dist\nbundle_plugin favorites .codex-plugin .willdeep-plugin mcp.json server ui/index.html\n";
 		};
 		5CA6B0B72FE10A01006DFCCC /* Build willdeep-agent */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -494,7 +499,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 528;
+				CURRENT_PROJECT_VERSION = 534;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -515,7 +520,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.297.0-rc2;
+				MARKETING_VERSION = 1.300.0-rc2;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -539,7 +544,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 528;
+				CURRENT_PROJECT_VERSION = 534;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -560,7 +565,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.297.0-rc2;
+				MARKETING_VERSION = 1.300.0-rc2;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -700,11 +705,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 528;
+				CURRENT_PROJECT_VERSION = 534;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.297.0-rc2;
+				MARKETING_VERSION = 1.300.0-rc2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -721,11 +726,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 528;
+				CURRENT_PROJECT_VERSION = 534;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.297.0-rc2;
+				MARKETING_VERSION = 1.300.0-rc2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -741,10 +746,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 528;
+				CURRENT_PROJECT_VERSION = 534;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.297.0-rc2;
+				MARKETING_VERSION = 1.300.0-rc2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -760,10 +765,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 528;
+				CURRENT_PROJECT_VERSION = 534;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.297.0-rc2;
+				MARKETING_VERSION = 1.300.0-rc2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

@@ -226,6 +226,22 @@ nonisolated struct AgentPluginCommandContribution: Codable, Equatable, Identifia
     var handler: AgentPluginCommandHandler
 }
 
+/// `contributes.menus` 支持的挂载位置（与 docs/plugin-schema 的枚举一一对应）。
+nonisolated enum AgentPluginMenuLocation {
+    static let commandPalette = "commandPalette"
+    static let sessionContext = "session.context"
+    static let composerMore = "composer.more"
+    static let pageToolbar = "plugin.page.toolbar"
+    static let sidebarRowContext = "plugin.sidebar.row.context"
+    /// 聊天正文选中文字后的气泡与右键菜单：插件在这里加自己的动作，
+    /// 被点中时命令会收到 `text`（选中的原文）与 `source` 两个参数。
+    static let chatSelection = "chat.selection"
+
+    static let all: [String] = [
+        commandPalette, sessionContext, composerMore, pageToolbar, sidebarRowContext, chatSelection,
+    ]
+}
+
 nonisolated struct AgentPluginResolvedCommand: Identifiable, Sendable {
     var id: String { "\(pluginID):\(command.id)" }
     let pluginID: AgentPluginID
