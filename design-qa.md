@@ -1,3 +1,27 @@
+# Design QA — 插件中心图标与批准按钮
+
+- 日期：2026-08-27
+- 参考图：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-946e39d1-c701-445c-b03f-f59dce640554.png`
+- 验收构建：WillDeep `1.296.0-rc8`（Build 524，Debug）
+- 实现截图：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/com.openai.sky.CUAService/WillDeep Screenshot 2026-08-27 at 12.45.14 PM.jpeg`
+
+## 对照结果
+
+| 检查项 | 结果 | 说明 |
+| --- | --- | --- |
+| 插件原始图标 | 通过 | Chrome、Computer Use、Documents、Figma、GitHub、Gmail 等均展示插件包原始资源，不再被模板色染黑。 |
+| 原生单色图标 | 通过 | Browser 等原资源本身为单色的插件保持原貌，不再显示为整块黑色。 |
+| 缺省图标 | 通过 | 缺失或无法读取资源时使用由插件标识稳定选出的彩色底板与 SF Symbol，同一插件刷新后样式不变。 |
+| 批准按钮层级 | 通过 | “批准并启用”改为浅色系统强调色底板、强调色文字和细描边，连续排列时不再形成黑色视觉墙。 |
+| 主次操作关系 | 通过 | 顶部安装按钮继续使用深色主操作样式，与卡片内批准操作形成清晰层级。 |
+| 布局与可读性 | 通过 | 图标、文本、开关、菜单与卡片间距未发生挤压、裁切或错位。 |
+
+## 结论
+
+final result: passed
+
+---
+
 # 补丁审批黑白操作与正文对齐 Design QA
 
 **Findings**

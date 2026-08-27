@@ -279,6 +279,71 @@ nonisolated struct AgentApprovalNoticeDescriptor: Equatable {
     let usesOutlinedApproveAction: Bool
 }
 
+nonisolated struct AgentApprovalDetailDescriptor: Equatable {
+    let title: String
+    let body: String
+}
+
+/// Human-facing copy for the one built-in worker case that still needs a
+/// confirmation. The user is authorizing an exact external write command,
+/// not WillDeep's decision to create a worker, so internal routing arguments
+/// must never be dumped into the card as if they were useful instructions.
+nonisolated enum AgentDelegatedCommandApprovalCopy {
+    static func notice(
+        arguments: [String: AgentJSONValue]
+    ) -> AgentApprovalNoticeDescriptor? {
+        guard detail(arguments: arguments) != nil else { return nil }
+        let goal = AgentSubagentTaskPacket.parse(arguments["task"])?.goal
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let subtitle: String
+        if let goal, !goal.isEmpty {
+            subtitle = L10n.ToolCard.delegatedCommandGoal(clampedGoal(goal))
+        } else {
+            subtitle = L10n.ToolCard.delegatedCommandSubtitle
+        }
+        return AgentApprovalNoticeDescriptor(
+            iconName: "shippingbox.and.arrow.backward",
+            title: L10n.ToolCard.delegatedCommandTitle,
+            subtitle: subtitle,
+            detailTitle: L10n.ToolCard.delegatedCommandDetail,
+            metadata: [
+                L10n.ToolCard.delegatedCommandWorker,
+                L10n.ToolCard.delegatedCommandExactScope,
+            ],
+            explanationTitle: L10n.ToolCard.delegatedCommandExplanation,
+            decisionTitle: L10n.ToolCard.delegatedCommandDecisionTitle,
+            decisionSubtitle: L10n.ToolCard.delegatedCommandDecisionSubtitle,
+            declineTitle: L10n.ToolCard.delegatedCommandDecline,
+            approveTitle: L10n.ToolCard.delegatedCommandApprove,
+            usesOutlinedApproveAction: false
+        )
+    }
+
+    static func detail(
+        arguments: [String: AgentJSONValue]
+    ) -> AgentApprovalDetailDescriptor? {
+        guard let command = arguments["target_command"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !command.isEmpty else {
+            return nil
+        }
+        return AgentApprovalDetailDescriptor(
+            title: L10n.ToolCard.delegatedCommandDetail,
+            body: command
+        )
+    }
+
+    private static func clampedGoal(_ goal: String) -> String {
+        let oneLine = goal
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .joined(separator: " ")
+        let limit = 180
+        guard oneLine.count > limit else { return oneLine }
+        return String(oneLine.prefix(limit - 1)) + "…"
+    }
+}
+
 /// Tool-specific copy for the shared authorization notice. Keep this free of
 /// SwiftUI types so its user-facing promises can be covered by unit tests.
 nonisolated enum AgentApprovalNoticeCopy {
@@ -287,6 +352,11 @@ nonisolated enum AgentApprovalNoticeCopy {
         arguments: [String: AgentJSONValue]
     ) -> AgentApprovalNoticeDescriptor {
         switch toolName {
+        case "spawn_agent":
+            if let descriptor = AgentDelegatedCommandApprovalCopy.notice(arguments: arguments) {
+                return descriptor
+            }
+            return defaultDescriptor(toolName: toolName)
         case "run_command":
             if arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey]?.boolValue() == true {
                 var metadata = commandMetadata(arguments: arguments)
@@ -385,21 +455,25 @@ nonisolated enum AgentApprovalNoticeCopy {
                 usesOutlinedApproveAction: false
             )
         default:
-            let displayName = AgentToolDisplay.name(for: toolName)
-            return AgentApprovalNoticeDescriptor(
-                iconName: "sparkles",
-                title: "Agent 准备\(displayName)",
-                subtitle: "确认后，Agent 会继续完成当前任务。",
-                detailTitle: "操作内容",
-                metadata: ["由你确认后继续", displayName],
-                explanationTitle: "查看操作说明",
-                decisionTitle: "允许这一步吗？",
-                decisionSubtitle: "操作结果会继续显示在当前对话中。",
-                declineTitle: "暂不允许",
-                approveTitle: "允许",
-                usesOutlinedApproveAction: false
-            )
+            return defaultDescriptor(toolName: toolName)
         }
+    }
+
+    private static func defaultDescriptor(toolName: String) -> AgentApprovalNoticeDescriptor {
+        let displayName = AgentToolDisplay.name(for: toolName)
+        return AgentApprovalNoticeDescriptor(
+            iconName: "sparkles",
+            title: "Agent 准备\(displayName)",
+            subtitle: "确认后，Agent 会继续完成当前任务。",
+            detailTitle: "操作内容",
+            metadata: ["由你确认后继续", displayName],
+            explanationTitle: "查看操作说明",
+            decisionTitle: "允许这一步吗？",
+            decisionSubtitle: "操作结果会继续显示在当前对话中。",
+            declineTitle: "暂不允许",
+            approveTitle: "允许",
+            usesOutlinedApproveAction: false
+        )
     }
 
     private static func commandMetadata(

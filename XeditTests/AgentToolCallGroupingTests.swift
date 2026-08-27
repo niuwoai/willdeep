@@ -30,14 +30,41 @@ struct AgentToolCallGroupingPresentationTests {
 
     @Test("delegated agent activity labels name the target tool")
     func delegatedAgentActivityLabelsNameTargetTool() {
-        #expect(AgentToolKind.of(makeCall("spawn_agent")).delegatedActivityLabel(progress: nil) == "委派给子代理")
-        #expect(AgentToolKind.of(makeCall("claude_code")).delegatedActivityLabel(progress: nil) == "委派给 Claude Code")
-        #expect(AgentToolKind.of(makeCall("codex_cli")).delegatedActivityLabel(progress: nil) == "委派给 Codex")
-        #expect(AgentToolKind.of(makeCall("cursor_agent")).delegatedActivityLabel(progress: nil) == "委派给 Cursor Agent")
-        #expect(AgentToolKind.of(makeCall("cline_cli")).delegatedActivityLabel(progress: nil) == "委派给 Cline")
+        let implementer = makeCall(
+            "spawn_agent",
+            arguments: ["profile": .string(AgentSubagentProfileCatalog.implementerID)]
+        )
         #expect(
-            AgentToolKind.of(makeCall("spawn_agent")).delegatedActivityLabel(progress: " 第 5/12 轮 · 11 次工具 ")
-                == "委派给子代理 · 第 5/12 轮 · 11 次工具"
+            AgentToolKind.of(implementer).delegatedActivityLabel(for: implementer, progress: nil)
+                == "委派给「实现」Worker"
+        )
+        let customWorker = AgentToolCall(
+            messageID: UUID(),
+            externalID: UUID().uuidString,
+            toolName: "spawn_agent",
+            arguments: ["profile": .string("custom_worker")],
+            risk: .read,
+            status: .running,
+            subagentWorkerName: "API 重构"
+        )
+        #expect(
+            AgentToolKind.of(customWorker).delegatedActivityLabel(for: customWorker, progress: nil)
+                == "委派给「API 重构」Worker"
+        )
+        for (toolName, expected) in [
+            ("claude_code", "委派给 Claude Code"),
+            ("codex_cli", "委派给 Codex"),
+            ("cursor_agent", "委派给 Cursor Agent"),
+            ("cline_cli", "委派给 Cline"),
+        ] {
+            let call = makeCall(toolName)
+            #expect(AgentToolKind.of(call).delegatedActivityLabel(for: call, progress: nil) == expected)
+        }
+        #expect(
+            AgentToolKind.of(implementer).delegatedActivityLabel(
+                for: implementer,
+                progress: " 第 5/12 轮 · 11 次工具 "
+            ) == "委派给「实现」Worker · 第 5/12 轮 · 11 次工具"
         )
     }
 
@@ -934,6 +961,30 @@ struct AgentAuthorizationNoticeTests {
 
     @Test("authorization notice copy adapts to command, terminal, and web access")
     func descriptorsAdaptToToolContext() {
+        let delegatedArguments: [String: AgentJSONValue] = [
+            "label": .string("commit-push-release"),
+            "profile": .string("ops_runner"),
+            "prompt": .string("Execute the repository release."),
+            "target_command": .string("git commit -m 'release' && git push origin main"),
+            "task": .object([
+                "goal": .string("提交准备好的改动并推送到远端仓库"),
+            ]),
+        ]
+        let delegated = AgentApprovalNoticeCopy.descriptor(
+            toolName: "spawn_agent",
+            arguments: delegatedArguments
+        )
+        let delegatedDetail = AgentDelegatedCommandApprovalCopy.detail(
+            arguments: delegatedArguments
+        )
+        #expect(delegated.title == L10n.ToolCard.delegatedCommandTitle)
+        #expect(delegated.subtitle.contains("提交准备好的改动"))
+        #expect(delegated.decisionSubtitle.contains("Worker"))
+        #expect(delegatedDetail?.title == L10n.ToolCard.delegatedCommandDetail)
+        #expect(delegatedDetail?.body == "git commit -m 'release' && git push origin main")
+        #expect(delegatedDetail?.body.contains("profile") == false)
+        #expect(delegatedDetail?.body.contains("task") == false)
+
         let command = AgentApprovalNoticeCopy.descriptor(
             toolName: "run_command",
             arguments: [

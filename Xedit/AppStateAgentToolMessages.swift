@@ -100,9 +100,14 @@ extension AppState {
         // Stamp the child's effective model + a live progress line onto the
         // tool-call record so the card can show "用的哪个子代理 · 进度到哪了"
         // instead of an opaque spinner. Both fields are render-only.
-        func updateSubagent(model: String? = nil, progress: String? = nil) {
+        func updateSubagent(
+            model: String? = nil,
+            workerName: String? = nil,
+            progress: String? = nil
+        ) {
             guard let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) else { return }
             if let model { runtime.toolCalls[index].subagentModel = model }
+            if let workerName { runtime.toolCalls[index].subagentWorkerName = workerName }
             if let progress { runtime.toolCalls[index].subagentProgress = progress }
         }
 
@@ -180,9 +185,9 @@ extension AppState {
             return
         }
 
-        // Admission for the scarce 1M tier. Checked before the write-set and
-        // approval machinery so a refused escalation costs nothing and never
-        // shows the user an approval card for a spawn that cannot run.
+        // Admission for the scarce 1M tier. Checked before write-scope and
+        // runtime setup so a refused escalation costs nothing and does not
+        // perform unnecessary worker setup.
         if profile.id == AgentSubagentProfileCatalog.deepID {
             let ticket = AgentDeepAdmissionTicket.parse(arguments["escalation"])
             switch AgentDeepAdmission.authorize(
@@ -374,10 +379,19 @@ extension AppState {
             for: profile,
             parentConfiguration: configuration
         )
+        let resolvedWorkerName = AgentProfileStore()
+            .profiles(usage: .subagent)
+            .first { $0.id.caseInsensitiveCompare(profile.id) == .orderedSame }?
+            .localizedName
+            ?? L10n.AgentDelegation.profileName(for: profile.id)
         agentSpawnLog.info(
             "spawn_agent resolved runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public) model=\(childConfiguration.model, privacy: .public) provider=\(childConfiguration.providerID, privacy: .public) background=\(runInBackground ? "true" : "false", privacy: .public) verifier=\(verifierCommand == nil ? "none" : "present", privacy: .public) approvedCommand=\(approvedCommand == nil ? "none" : "present", privacy: .public)"
         )
-        updateSubagent(model: childConfiguration.model, progress: "启动中…")
+        updateSubagent(
+            model: childConfiguration.model,
+            workerName: resolvedWorkerName,
+            progress: "启动中…"
+        )
 
         if runInBackground {
             // Editor trades are synchronous by construction: the file lock
