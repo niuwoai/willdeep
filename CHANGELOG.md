@@ -1,7 +1,28 @@
 # Changelog
 
-> 当前文件保留最新版本（1.299.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.300.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.300.0-rc1 - 2026-08-27
+
+### Added
+
+- **收藏夹插件随 App 发行，默认出现在左侧插件分组**：`PluginExamples/favorites` 现在由 Xcode 的「Bundle built-in plugins」阶段复制进 `BundledPlugins/favorites`（清单、本地化、`mcp.json`、`server/` 与静态页），目的地声明 `defaultPinned`，不需要用户手工安装。页面也整体重做：搜索并高亮命中、标签过滤与直方图、行内改备注、置顶、长文本折叠、删除后 6 秒内可撤销、清空要点两次、⌘F / `/` 聚焦搜索、中英双语与深浅色跟随宿主。
+- 收藏夹服务端从三个工具扩到六个：`add` / `list` / `update` / `remove` / `restore` / `clear`。同一段文字重复收藏会合并到已有那条并顶到最前（返回 `duplicate: true`）；`remove` 回传被删掉的整条以支撑撤销；`clear` 必须显式 `confirm=true`；标签会去空白、忽略大小写去重、限长限量。存储升到 `version: 2`（新增 `tags` / `pinned` / `updatedAt`），v1 老文件读进来自动补齐。
+- **会话体检中心改用真实用量**：不再按「消息数 × 500」估算，而是逐条累加助手消息上报的 `promptTokens` / `completionTokens` / `cachedPromptTokens` / `usageTokens` / `elapsedSeconds`。面板新增缓存命中率、平均响应时长、工具调用数、模型请求数、近 14 天输出走势、按项目与模型的排行、最近会话列表，以及一键导出 Markdown 报告（新增 `vitality.export` 命令）。每文件摘要按 (mtime, size) 缓存：本机 578 个会话文件首次扫描 1.9 秒，之后刷新 6 毫秒。
+
+### Fixed
+
+- **会话体检中心点「刷新」报 `undefined is not an object (evaluating 'res.contents')`**：MCP App 页面是 WKWebView 的顶层文档，`parent === window`，页面自己 `postMessage` 出去的请求会原样回到它自己的 message 监听器；监听器只按 id 匹配，于是每个请求都被自己的回声「解决」成 `undefined`——`ui/initialize` 因此从未真正返回（页面一直停在英文标题），刷新时 `res.contents` 自然就炸了。现在带 `method` 的消息一律不当响应，握手也改成先声明 `ui/notifications/initialized` 再取数（宿主在这之前会用 -32002 顶回 `resources/read`）。`issue-panel` 样例页面的同款写法一并修掉。
+- 随 App 签名发行的第一方插件（`bundled` 来源）执行自己的 MCP 工具时不再逐条弹「执行插件命令？」确认框——收藏夹这种默认入口每翻一次页面就要点一次根本没法用。其它来源（本地安装、Codex 缓存）保持每次执行都要用户点头。
+- 聊天选区气泡点插件动作后不再毫无反应：执行期间气泡置灰留在原地，回来后就地变成「✓ 收藏」或「⚠︎ 收藏」再收起；成功与否认的是工具自己返回的 `ok` 字段。
+- 收藏夹页面此前读不出任何数据：`executeCommand` 回来的是 MCP 工具调用的完整 result 对象，页面却按 `{items: [...]}` 直接解析，于是永远显示「还没有收藏」。现在统一剥掉 `content[].text` 这一层。
+
+### Tests
+
+- `scripts/favorites_server_test.rb` 扩到 38 项检查（收藏 → 列出 → 改 → 删 → 撤销闭环、重复合并、标签规范化与直方图、关键词与标签过滤、置顶排序、清空确认、v1 存储兼容、落盘格式与损坏降级）；`scripts/session_vitality_server_test.rb` 扩到 40 项（真实 token 口径、趋势落桶、项目与模型分组、Apple 纪元时间戳、缓存失效、演示数据降级、导出报告，以及页面握手的两条不变量）。
+- 两个测试脚本此前在没有 `LANG` 的 shell 里会直接崩在 `Encoding::InvalidByteSequenceError`（中文会话名读成 US-ASCII 非法字节），现已钉死 UTF-8。
+- 新增三条 Swift 用例：收藏夹的 `defaultPinned` 与打包清单覆盖（漏带文件即失败）、bundled 插件免确认的判定、选区气泡成功与否的判定。
 
 ## 1.299.0-rc3 - 2026-08-27
 

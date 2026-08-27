@@ -11,5 +11,8 @@
   "overview.edited": "已编辑会话",
   "overview.artifacts": "产物文件",
   "projects.empty": "暂无会话数据",
-  "status.demo": "演示数据 — 未找到会话存储"
+  "status.demo": "演示数据 — 未找到会话存储",
+  "command.export": "导出报告",
+  "overview.output": "输出 Token",
+  "overview.toolCalls": "工具调用"
 }

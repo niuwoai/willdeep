@@ -2275,24 +2275,57 @@ extension AppState {
     ///
     /// 参数按契约固定为 `text`（选中的原文）与 `source`（来自哪里，便于插件区分入口），
     /// 复用既有的命令执行器，所以权限确认、mcpTool 派发、错误提示都和其它入口一致。
+    /// `completion` 回给选区气泡做即时反馈（成功打勾、失败画警告），失败本身仍然
+    /// 不打断聊天。
     func runAgentChatSelectionPluginAction(
         text rawText: String,
         pluginID: AgentPluginID,
-        commandID: AgentPluginCommandID
+        commandID: AgentPluginCommandID,
+        completion: @escaping (Bool) -> Void = { _ in }
     ) {
         let text = AgentTextAttachment.sanitizedPastedContent(rawText)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty else {
+            completion(false)
+            return
+        }
         let destinationID = AgentPluginRegistry.shared.defaultDestinationID(for: pluginID)
         Task { @MainActor in
-            // 与侧栏/composer 的插件命令入口保持一致：失败只记日志，不打断聊天
-            _ = try? await AgentPluginCommandExecutor.execute(
-                pluginID: pluginID,
-                commandID: commandID,
-                arguments: ["text": text, "source": "chat.selection"],
-                destinationID: destinationID,
-                appState: self
-            )
+            do {
+                let result = try await AgentPluginCommandExecutor.execute(
+                    pluginID: pluginID,
+                    commandID: commandID,
+                    arguments: ["text": text, "source": "chat.selection"],
+                    destinationID: destinationID,
+                    appState: self
+                )
+                completion(Self.selectionPluginActionSucceeded(result: result))
+            } catch {
+                completion(false)
+            }
         }
+    }
+
+    /// 命令执行器抛错固然是失败，但 MCP 工具「跑通了却拒绝干活」是另一种失败：
+    /// 约定里工具把结果放在 `content[].text` 的一段 JSON 里，其中 `ok:false`
+    /// 表示这次没存下。解析不出来的（非 JSON、纯文本工具）按成功算。
+    nonisolated static func selectionPluginActionSucceeded(result: String?) -> Bool {
+        guard let result,
+              let data = result.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return true
+        }
+        if let ok = root["ok"] as? Bool { return ok }
+        guard let content = root["content"] as? [[String: Any]] else { return true }
+        for entry in content {
+            guard let text = entry["text"] as? String,
+                  let payload = text.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                  let ok = object["ok"] as? Bool else {
+                continue
+            }
+            return ok
+        }
+        return true
     }
 
     func appendGeneratedImageReferenceToAgentInput(_ marker: String) {
