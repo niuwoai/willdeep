@@ -320,7 +320,7 @@ enum AgentContextBuilder {
             \(stepsText)
 
             Follow the user's latest message:
-            - If it starts a different task, do that task directly. Do not resume the interrupted plan, do not treat its steps as pending work, and do not mention it unless relevant. For a genuinely multi-step new task, emit one complete numbered `plan` fenced block — it replaces the interrupted plan as the visible checklist.
+            - If it starts a different task, do that task directly. Do not resume the interrupted plan, do not treat its steps as pending work, and do not mention it unless relevant. Only when at least \(AgentPlanOnDemandPolicy.minimumVisibleStepCount) independent execution steps remain may you emit one complete numbered `plan` fenced block — it replaces the interrupted plan as the visible checklist. One or two actions stay as prose, and evidence-first analysis, diagnosis, troubleshooting, or investigation stays plan-free.
             - If it asks to continue or resume, pick the interrupted plan back up from its current step statuses. Call `update_plan` marking the step you are resuming as in_progress BEFORE you start working on it — that report is what tells WillDeep the plan is live again and clears the paused badge the user is looking at. Keep reporting the same way after that.
             - Reconcile before you resume: if the conversation shows work that is already finished but the bracketed status above still says `pending`, an earlier report failed to register. Mark those steps `done` in your first `update_plan` call instead of redoing the work, then continue from the first genuinely unfinished step.
             - If it is ambiguous about which of the two they mean, ask one concise question instead of guessing.
@@ -352,12 +352,14 @@ enum AgentContextBuilder {
             """)
         } else if interactionMode == .normal {
             sections.append("""
-            === ORDINARY MODE — EXECUTE DIRECTLY, PLAN ON REQUEST ===
-            Do the task directly, without a `plan` fenced block up front: most requests finish within a few tool rounds, and a checklist plus its per-round status reporting costs more than it shows. WillDeep watches the turn — when the work has demonstrably grown multi-step it sends a host instruction asking for a plan; emit exactly one complete numbered `plan` fenced block then, covering the remaining work, and continue executing in the same reply. Plan up front only when the user explicitly asks for a plan (and still continue without waiting for approval). Once a plan exists, do not re-plan on later rounds; update the original steps with the `update_plan` tool as you go.
+            === ORDINARY MODE — EXECUTE DIRECTLY, PLAN ONLY WHEN IT EARNS ONE ===
+            Do the task directly, without a `plan` fenced block up front: most requests finish within a few tool rounds, and a checklist plus its per-round status reporting costs more than it shows. Evidence-first work — analysis, research, diagnosis, troubleshooting, log inspection, operational investigation, and exploratory repository reading — does not become a plan merely because it needs many read-only calls. Gather evidence and answer directly.
+
+            An ordinary visible plan is valid only when at least \(AgentPlanOnDemandPolicy.minimumVisibleStepCount) independent execution steps remain. One or two actions are an execution note, not a plan: never wrap them in a `plan` fence. WillDeep watches the turn and may request a plan only after work has crossed into multi-step execution; when asked, emit exactly one complete numbered `plan` fenced block covering the remaining work only if that minimum is met, then continue executing in the same reply. If the user explicitly asks for a plan but the work has fewer than \(AgentPlanOnDemandPolicy.minimumVisibleStepCount) independent steps, give a concise prose outline instead of a plan block. Once a valid plan exists, do not re-plan on later rounds; update the original steps with the `update_plan` tool as you go.
 
             Before the first write or expensive action, privately preflight the complete request: intended outcome, material scope choices, credentials or private user takeover, external side effects, destructive/irreversible steps, and likely approval boundaries. If a genuinely user-owned decision is predictably required, surface it now in one concise clarification round rather than discovering it halfway through execution. Do not ask about implementation details that repository inspection or a safe reversible default can settle.
 
-            If the operator explicitly asks only for analysis or a plan and says not to execute, emit the plan and stop without write-tier tools. Otherwise, planning is not a stopping point. Once execution starts, continue as an unattended run: diagnose and recover from ordinary Git/worktree, dependency, build, test, path, and transient tool failures yourself. Prefer reversible repairs and preserve unrelated changes. Re-contact the user only for missing authority or credentials, private interactive control, a destructive/irreversible choice, or a product decision that would materially change the agreed outcome. The tool approval policy remains independent and still governs consequential actions.
+            If the operator explicitly asks only for analysis, perform the analysis directly and stop without write-tier tools or a plan block. If the operator asks only for a plan, emit one only when the minimum step count is met; otherwise provide the concise prose outline and stop. In all other cases, planning is not a stopping point. Once execution starts, continue as an unattended run: diagnose and recover from ordinary Git/worktree, dependency, build, test, path, and transient tool failures yourself. Prefer reversible repairs and preserve unrelated changes. Re-contact the user only for missing authority or credentials, private interactive control, a destructive/irreversible choice, or a product decision that would materially change the agreed outcome. The tool approval policy remains independent and still governs consequential actions.
             """)
         }
 
@@ -991,7 +993,8 @@ nonisolated enum AgentPlanParser {
 
     static func extract(
         from content: String,
-        scope: ExtractionScope = .entireBlock
+        scope: ExtractionScope = .entireBlock,
+        minimumStepCount: Int = 1
     ) -> AgentPlan? {
         guard let body = fencedBody(in: content, tag: "plan") else { return nil }
         var stepTexts: [String] = []
@@ -1022,7 +1025,7 @@ nonisolated enum AgentPlanParser {
                 stepTexts[lastIdx] = "\(stepTexts[lastIdx]) \(trimmed)"
             }
         }
-        guard !stepTexts.isEmpty else { return nil }
+        guard stepTexts.count >= max(1, minimumStepCount) else { return nil }
         let summary = summaryLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return AgentPlan(status: .proposed, summary: summary, stepTexts: stepTexts)
     }

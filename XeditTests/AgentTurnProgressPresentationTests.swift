@@ -119,6 +119,43 @@ struct AgentTurnProgressPresentationTests {
         #expect(extraction.presentation == nil)
     }
 
+    @Test("一到两步的伪计划不再显示成协议代码块")
+    func hidesUndersizedOrdinaryPlanFence() {
+        let extraction = AgentTurnProgressPresentation.extract(
+            from: """
+            正在整理数据。
+
+            ```plan
+            1. 汇总数据
+            2. 输出结论
+            ```
+
+            下面是分析结果。
+            """,
+            plan: nil
+        )
+
+        #expect(extraction.visibleContent == "正在整理数据。\n\n下面是分析结果。")
+        #expect(!extraction.visibleContent.contains("```plan"))
+        #expect(extraction.presentation == nil)
+    }
+
+    @Test("三步计划仍按原样保留")
+    func keepsPlanAtMinimumStepCount() {
+        let content = """
+        ```plan
+        1. 读取工程
+        2. 完成修改
+        3. 运行验证
+        ```
+        """
+
+        let extraction = AgentTurnProgressPresentation.extract(from: content, plan: nil)
+
+        #expect(extraction.visibleContent == content)
+        #expect(extraction.presentation == nil)
+    }
+
     @Test("XML progress 普通清单保留正文但不泄漏标签")
     func xmlProgressProseKeepsReadableBody() {
         let content = """

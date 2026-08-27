@@ -670,14 +670,14 @@ extension AppState {
         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let prompt: String
         if trimmed.isEmpty {
-            prompt = "Please revise the execution plan, emit one complete replacement ```plan``` block, and continue executing it without waiting for plan approval."
+            prompt = "Please revise the execution plan. Emit one complete replacement ```plan``` block only when at least \(AgentPlanOnDemandPolicy.minimumVisibleStepCount) independent execution steps remain; otherwise give a concise prose outline. Continue executing without waiting for plan approval."
         } else {
             prompt = """
             Please revise the plan with this guidance from me:
 
             \(trimmed)
 
-            Emit one complete replacement ```plan``` block and continue executing it without waiting for plan approval.
+            Emit one complete replacement ```plan``` block only when at least \(AgentPlanOnDemandPolicy.minimumVisibleStepCount) independent execution steps remain; otherwise give a concise prose outline. Continue executing without waiting for plan approval.
             """
         }
 
@@ -718,7 +718,14 @@ extension AppState {
         let extractionScope: AgentPlanParser.ExtractionScope = runtime.interactionMode == .goal
             ? .firstPhase
             : .entireBlock
-        if let parsed = AgentPlanParser.extract(from: last.content, scope: extractionScope) {
+        let minimumStepCount = runtime.interactionMode == .normal
+            ? AgentPlanOnDemandPolicy.minimumVisibleStepCount
+            : 1
+        if let parsed = AgentPlanParser.extract(
+            from: last.content,
+            scope: extractionScope,
+            minimumStepCount: minimumStepCount
+        ) {
             if runtime.interactionMode == .normal {
                 if let existing = runtime.currentPlan,
                    AgentPlanContinuationPolicy.hasActiveExecutionContract(existing) {

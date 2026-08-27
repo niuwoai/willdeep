@@ -42,6 +42,13 @@ check.call(
   "两个嵌入式可执行文件必须共用 arm64 裁剪函数"
 )
 check.call(
+  "重复 ARM 构建不会再次裁剪单架构文件",
+  project.include?('architectures=\"$(/usr/bin/lipo -archs \"$binary\")\"') &&
+    project.include?('[ \"$architectures\" = \"arm64\" ]') &&
+    project.include?('ARM-only build cannot use %s architectures'),
+  "已是 arm64 时必须直接通过，缺少 arm64 时必须明确失败"
+)
+check.call(
   "裁剪后重新签名并验证 Helper",
   project.include?('/usr/bin/codesign --force --sign') &&
     project.include?('/usr/bin/codesign --verify --deep --strict'),

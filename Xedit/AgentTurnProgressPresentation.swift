@@ -50,6 +50,10 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
         from content: String,
         plan: AgentPlan?
     ) -> (visibleContent: String, presentation: AgentTurnProgressPresentation?) {
+        let hidesUndersizedOrdinaryPlan = plan == nil
+            && AgentPlanParser.extract(from: content).map {
+                $0.steps.count < AgentPlanOnDemandPolicy.minimumVisibleStepCount
+            } == true
         let lines = content.components(separatedBy: .newlines)
         var visibleLines: [String] = []
         var updates: [Int: AgentPlan.StepStatus] = [:]
@@ -60,6 +64,7 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
         var isInsideOrdinaryFence = false
         var foundProgressBlock = false
         var foundGoalCheckBlock = false
+        var foundUndersizedPlanBlock = false
 
         func applyProgressBody() {
             for line in progressBody {
@@ -130,6 +135,11 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
                 activeProtocolBlock = "goal-check"
                 continue
             }
+            if hidesUndersizedOrdinaryPlan, isPlanFenceStart(trimmed) {
+                foundUndersizedPlanBlock = true
+                activeProtocolBlock = "plan"
+                continue
+            }
             if trimmed.hasPrefix("```") {
                 isInsideOrdinaryFence = true
                 visibleLines.append(line)
@@ -153,7 +163,9 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
             applyProgressElementBody()
         }
 
-        guard foundProgressBlock || foundGoalCheckBlock else { return (content, nil) }
+        guard foundProgressBlock || foundGoalCheckBlock || foundUndersizedPlanBlock else {
+            return (content, nil)
+        }
         let visibleContent = normalizedVisibleContent(visibleLines.joined(separator: "\n"))
         guard foundProgressBlock, !updates.isEmpty else { return (visibleContent, nil) }
 
@@ -179,6 +191,14 @@ nonisolated struct AgentTurnProgressPresentation: Equatable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         return info == "progress"
+    }
+
+    private static func isPlanFenceStart(_ trimmed: String) -> Bool {
+        guard trimmed.hasPrefix("```") else { return false }
+        let info = trimmed.dropFirst(3)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return info == "plan"
     }
 
     private static func isGoalCheckFenceStart(_ trimmed: String) -> Bool {

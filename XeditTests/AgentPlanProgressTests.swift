@@ -219,6 +219,22 @@ struct AgentPlanProgressTests {
         #expect(plan?.summary == "We'll do it in three passes.")
     }
 
+    @Test("普通模式拒绝少于三步的伪计划")
+    func ordinaryExtractionRejectsUndersizedPlan() {
+        let content = """
+        ```plan
+        1. 收集数据
+        2. 输出分析
+        ```
+        """
+
+        #expect(AgentPlanParser.extract(
+            from: content,
+            minimumStepCount: AgentPlanOnDemandPolicy.minimumVisibleStepCount
+        ) == nil)
+        #expect(AgentPlanParser.extract(from: content)?.steps.count == 2)
+    }
+
     @Test("Goal 阶段计划在下一个 Phase 标题前停止")
     func firstPhaseExtractionStopsBeforeLaterPhaseSteps() {
         let content = """
@@ -458,7 +474,7 @@ struct AgentPlanProgressTests {
             interactionMode: .normal,
             currentPlan: plan
         )
-        #expect(prompt.contains("=== ORDINARY MODE — EXECUTE DIRECTLY, PLAN ON REQUEST ==="))
+        #expect(prompt.contains("=== ORDINARY MODE — EXECUTE DIRECTLY, PLAN ONLY WHEN IT EARNS ONE ==="))
         #expect(!prompt.contains("=== ACTIVE PLAN — CONTINUE, DO NOT RE-PLAN ==="))
     }
 
@@ -535,6 +551,7 @@ struct AgentPlanProgressTests {
                 ```plan
                 1. Inspect the follow-up request
                 2. Patch the follow-up behavior
+                3. Verify the follow-up result
                 ```
                 """
             )
@@ -545,7 +562,8 @@ struct AgentPlanProgressTests {
         #expect(appState.agentCurrentPlan?.status == .approved)
         #expect(appState.agentCurrentPlan?.steps.map(\.text) == [
             "Inspect the follow-up request",
-            "Patch the follow-up behavior"
+            "Patch the follow-up behavior",
+            "Verify the follow-up result"
         ])
     }
 
@@ -987,7 +1005,7 @@ struct AgentPlanProgressTests {
         #expect(decision == .pauseAfterLimit)
     }
 
-    @Test("ordinary prompt executes directly and plans on request")
+    @Test("ordinary prompt executes directly and only plans for three execution steps")
     func ordinaryPromptDoesNotPauseAtPlanning() {
         let prompt = AgentContextBuilder.systemPrompt(
             rootDirectory: nil,
@@ -999,12 +1017,15 @@ struct AgentPlanProgressTests {
             currentPlan: nil
         )
 
-        #expect(prompt.contains("=== ORDINARY MODE — EXECUTE DIRECTLY, PLAN ON REQUEST ==="))
+        #expect(prompt.contains("=== ORDINARY MODE — EXECUTE DIRECTLY, PLAN ONLY WHEN IT EARNS ONE ==="))
         #expect(prompt.contains("without a `plan` fenced block up front"))
         #expect(prompt.contains("emit exactly one complete numbered `plan` fenced block"))
         #expect(prompt.contains("continue executing in the same reply"))
         #expect(prompt.contains("do not re-plan on later rounds"))
-        #expect(prompt.contains("explicitly asks only for analysis or a plan"))
+        #expect(prompt.contains("analysis, research, diagnosis, troubleshooting"))
+        #expect(prompt.contains("at least 3 independent execution steps"))
+        #expect(prompt.contains("One or two actions are an execution note, not a plan"))
+        #expect(prompt.contains("explicitly asks only for analysis"))
         #expect(prompt.contains("privately preflight the complete request"))
         #expect(prompt.contains("Once execution starts, continue as an unattended run"))
         #expect(prompt.contains("ordinary Git/worktree"))
