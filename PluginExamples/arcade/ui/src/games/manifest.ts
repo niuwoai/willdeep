@@ -6,8 +6,10 @@
  * 新增游戏 = 扩展 GameId 联合类型 + 本清单 + 对应 i18n 文案。
  */
 import type { GameId, GameManifestEntry } from '../core/types';
+import MarbleGame from './marble';
 import MemoryGame from './memory';
 import MinesweeperGame from './minesweeper';
+import OnetGame from './onet';
 import PongGame from './pong';
 import SnakeGame from './snake';
 import TetrisGame from './tetris';
@@ -20,6 +22,22 @@ export const GAME_MANIFEST: readonly GameManifestEntry[] = [
     controlsKey: 'games.memory.controls',
     bestScoreKeyPrefix: 'arcade.best',
     component: MemoryGame,
+  },
+  {
+    id: 'onet',
+    nameKey: 'games.onet.name',
+    descriptionKey: 'games.onet.description',
+    controlsKey: 'games.onet.controls',
+    bestScoreKeyPrefix: 'arcade.best',
+    component: OnetGame,
+  },
+  {
+    id: 'marble',
+    nameKey: 'games.marble.name',
+    descriptionKey: 'games.marble.description',
+    controlsKey: 'games.marble.controls',
+    bestScoreKeyPrefix: 'arcade.best',
+    component: MarbleGame,
   },
   {
     id: 'minesweeper',

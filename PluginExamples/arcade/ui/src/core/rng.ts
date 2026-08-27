@@ -56,3 +56,20 @@ export function range(length: number, start = 0): number[] {
 export function pick<T>(rng: Rng, input: readonly T[]): T {
   return input[Math.floor(rng() * input.length)] as T;
 }
+
+/**
+ * 一次性熵种子：仅用于「调用方未指定 seed 时，每局布局都要不一样」的场景
+ * （如记忆翻牌重开、连连看洗牌的基准种子）。
+ *
+ * 注意：玩法内部的一切随机仍必须经 createRng / shuffle / pick——本函数只
+ * 负责产出种子字符串本身，产出后的序列依旧完全确定、可复现。
+ */
+export function entropySeed(prefix = 'seed'): string {
+  const cryptoRef = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+  if (cryptoRef && typeof cryptoRef.getRandomValues === 'function') {
+    const buffer = new Uint32Array(2);
+    cryptoRef.getRandomValues(buffer);
+    return `${prefix}-${(buffer[0] as number).toString(36)}${(buffer[1] as number).toString(36)}`;
+  }
+  return `${prefix}-${Date.now().toString(36)}${Math.floor(Math.random() * 0xffffff).toString(36)}`;
+}

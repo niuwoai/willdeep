@@ -1,0 +1,88 @@
+/*
+ * 印加弹珠模块样式。
+ *
+ * 场地是正方形 canvas：宽度容器相对（不用视口单位），高度靠 aspect-ratio 跟随，
+ * 这样面板多窄都不会把场地撑出可视区，也不会出现横向滚动条。
+ */
+.marble {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.marble__bar,
+.marble__tools,
+.marble__pad {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: var(--fg-muted);
+}
+
+.marble__stat {
+  font-size: 16px;
+  color: var(--fg);
+}
+
+.marble__stat b {
+  color: var(--accent-strong);
+  margin-left: 4px;
+}
+
+.marble__status {
+  font-size: 15px;
+  color: var(--fg-muted);
+}
+
+.marble__tools .btn[aria-pressed='true'] {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent-strong);
+}
+
+.marble__field {
+  width: 100%;
+  max-width: 460px;
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #0b1120;
+  touch-action: manipulation;
+  cursor: crosshair;
+  display: block;
+}
+
+.marble__ammo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.marble__chip {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: inline-block;
+}
+
+.marble__chip--next {
+  width: 12px;
+  height: 12px;
+  opacity: 0.75;
+}
+
+.marble__help {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 13px;
+  text-align: center;
+  max-width: 520px;
+}
