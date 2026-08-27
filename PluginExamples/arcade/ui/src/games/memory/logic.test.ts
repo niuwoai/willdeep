@@ -2,7 +2,7 @@
  * 记忆翻牌纯逻辑回归（并行节点交付）。
  *
  * 覆盖契约要求：确定性洗牌 / 匹配 / 不配对 / 锁定 / 胜利 /
- * 最佳成绩（效率分 + 只保留更高分）/ 重开复位。
+ * 最佳成绩（效率分 + 只保留更高分）/ 重开换牌（局数推导、可复现、不重复）。
  */
 import { describe, expect, it } from 'vitest';
 import { saveBestScore } from '../../core/bestScore';
@@ -10,6 +10,7 @@ import { readBestScore } from '../../core/safeLocalStorage';
 import {
   buildDeck,
   createInitialState,
+  deckSeed,
   flipCard,
   restart,
   resolveMismatch,
@@ -183,21 +184,47 @@ describe('记忆翻牌逻辑：最佳成绩', () => {
   });
 });
 
-describe('记忆翻牌逻辑：重开复位', () => {
-  it('restart 清空进度并回到与初始一致的状态（同种子同布局）', () => {
-    const state = createInitialState(4, 'restart');
+describe('记忆翻牌逻辑：重开换牌', () => {
+  it('restart 清空进度、局数 +1，并换一副新洗的牌', () => {
+    const state = createInitialState(6, 'restart');
     const [a0] = pairIndices(state, 0);
     const [b1] = pairIndices(state, 1);
     const progressed = resolveMismatch(flipCard(flipCard(state, a0), b1));
     expect(progressed.moves).toBe(1);
 
     const reset = restart(progressed);
-    expect(reset).toEqual(createInitialState(4, 'restart'));
     expect(reset.moves).toBe(0);
     expect(reset.flipped).toEqual([]);
     expect(reset.matched).toEqual([]);
     expect(reset.locked).toBe(false);
     expect(reset.status).toBe('idle');
-    expect(reset.cards).toEqual(state.cards);
+    expect(reset.round).toBe(state.round + 1);
+    // 核心诉求：玩家连按重开不该再拿到背下来的那副牌
+    expect(reset.cards).not.toEqual(state.cards);
+  });
+
+  it('重开后的布局仍完全可复现：等价于同种子的第 N 局', () => {
+    const state = createInitialState(4, 'reproducible');
+    const second = restart(state);
+    expect(second).toEqual(createInitialState(4, 'reproducible', 1));
+    expect(restart(second)).toEqual(createInitialState(4, 'reproducible', 2));
+    expect(deckSeed('reproducible', 2)).toBe('reproducible#2');
+  });
+
+  it('连开 8 局，6 对布局互不重复', () => {
+    const layouts = new Set<string>();
+    let state = createInitialState(6, 'no-repeat');
+    for (let round = 0; round < 8; round += 1) {
+      layouts.add(state.cards.map((card) => card.pairId).join(','));
+      state = restart(state);
+    }
+    expect(layouts.size).toBe(8);
+  });
+
+  it('未指定种子时也走同一套局数推导（默认基准种子）', () => {
+    const state = createInitialState(2);
+    expect(state.round).toBe(0);
+    expect(restart(state).round).toBe(1);
+    expect(restart(state).cards).toEqual(createInitialState(2, 'memory', 1).cards);
   });
 });

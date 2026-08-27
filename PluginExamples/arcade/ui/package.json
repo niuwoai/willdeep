@@ -1,8 +1,8 @@
 {
   "name": "classic-arcade-platform",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "经典网页小游戏平台：统一大厅 + 贪吃蛇/俄罗斯方块/Pong/扫雷/记忆翻牌",
+  "description": "经典网页小游戏平台：统一大厅 + 贪吃蛇/俄罗斯方块/Pong/扫雷/记忆翻牌/连连看/印加弹珠",
   "packageManager": "yarn@1.22.22",
   "type": "module",
   "scripts": {
