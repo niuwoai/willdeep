@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-27 | Current version: v1.296.0-rc4
+> Last updated: 2026-08-27 | Current version: v1.296.0-rc5
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **六类公开工种、长调查与分级命令审核（1.296.0-rc5）** —— 面向用户和父模型的目录收敛为阅读研究、实现、验证、运维、裁判、深度调查六类能力，模型档位由各工种的模型绑定独立配置；原专用 ID 仅在内部保留，旧 Workflow、托管链路和历史记录无需迁移。`ops_runner` 与 `terminal_operator` 的上限扩到 32 轮，补齐 Linux 主机、DNS、时钟、网络和资源检查类只读命令；所有原本携带命令工具的工种共享 Smart/Goal 安全模型审核，未获准的修改命令交回父代理请求人类精确授权，危险、凭据命令以及无命令工具的工种始终不能借此越权。
 - **Ollama 主 LLM 置顶标识（1.296.0-rc4）** —— Composer 的 Ollama 完整模型列表会优先显示本地模型设置里填写的 LLM，并用“本地 LLM”标签区分它与同一 Ollama 实例上的视觉、嵌入及其他模型；服务端列表即使重复返回该模型也只展示一次。
 - **本地文本／视觉模型分工与关闭思考兼容（1.296.0-rc3）** —— 设置页以“LLM 模型”和“图片理解模型”分别配置文本与视觉任务：LLM 负责本地聊天、标题、上下文压缩和 Worker 派发判断，视觉模型只处理图片且不会成为文本聊天的备用模型。Ollama 请求同时发送 `reasoning_effort: "none"`、`reasoning.effort: "none"` 与 `think: false`；其他回环 OpenAI-compatible 服务发送两种 OpenAI 形态，避免单一字段被兼容层忽略。远程模型不注入这些字段。
 - **子代理生命周期诊断（1.295.0-rc4）** —— `spawn_agent` 的同步与后台路径都会通过 OSLog 记录接收、解析、启动、模型回落、升级重跑、取消、失败、完成、报告排队与父会话消费节点；每条记录携带 runID、父会话、profile、model、轮次、工具调用数、token 与报告长度，错误正文按隐私字段写入，完整 prompt 和命令不落日志，方便排查“子代理为何没有返回结果”而不扩大敏感信息面。

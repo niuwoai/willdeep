@@ -336,7 +336,12 @@ nonisolated enum SafeCommand {
         "echo", "printf", "which", "whereis", "type",
         "printenv", "uname", "whoami", "id", "date", "uptime",
         "sw_vers", "arch", "hostname", "getconf", "locale",
-        "groups", "logname", "man",
+        "groups", "logname", "man", "getent",
+        // Host / process / kernel snapshots used by read-only operations
+        // investigations. Mutating siblings such as sysctl/mount stay gated.
+        "who", "w", "users", "last", "lastlog",
+        "free", "dmesg", "ss", "netstat",
+        "lsblk", "lscpu", "lsmem", "lsns",
         // terminal display reset; changes only the current terminal screen.
         "clear",
         // process / memory snapshot (no signals)
@@ -375,7 +380,7 @@ nonisolated enum SafeCommand {
     /// `git`, `find`, `xargs`, etc.: dispatched to a per-tool checker.
     static let conditionalFirstTokens: Set<String> = [
         "git", "find", "xargs", "ssh", "scp", "rsync", "kubectl",
-        "journalctl", "systemctl",
+        "journalctl", "systemctl", "timedatectl", "resolvectl", "hostnamectl",
         "mysql", "mariadb",
         "curl", "wget",
         "npm", "yarn", "pnpm", "cargo", "swift", "make", "python", "python3",
@@ -549,6 +554,12 @@ nonisolated enum SafeCommand {
             return classifyJournalctl(tokens: tokens)
         case "systemctl":
             return classifySystemctl(tokens: tokens)
+        case "timedatectl":
+            return classifyTimedatectl(tokens: tokens)
+        case "resolvectl":
+            return classifyResolvectl(tokens: tokens)
+        case "hostnamectl":
+            return classifyHostnamectl(tokens: tokens)
         case "find":
             return classifyFind(tokens: tokens)
         case "go":
@@ -686,6 +697,63 @@ nonisolated enum SafeCommand {
             return readOnlyVerbs.contains(token.lowercased()) ? .alwaysSafe : .needsJudgment
         }
         return .needsJudgment
+    }
+
+    /// `timedatectl` without a mutating verb is an inspector. Keep clock,
+    /// timezone, RTC and NTP changes behind review even when nested in SSH.
+    private static func classifyTimedatectl(tokens: [String]) -> CommandSafety {
+        classifySystemInspector(
+            tokens: tokens,
+            readOnlyVerbs: [
+                "status", "show", "timesync-status", "show-timesync", "list-timezones",
+            ]
+        )
+    }
+
+    /// Resolver queries and status are reads; cache flushes and per-link DNS
+    /// configuration are mutations and therefore deliberately omitted.
+    private static func classifyResolvectl(tokens: [String]) -> CommandSafety {
+        classifySystemInspector(
+            tokens: tokens,
+            readOnlyVerbs: ["status", "query", "statistics", "show-server-state"]
+        )
+    }
+
+    /// Bare/status hostname inspection is safe. Setter verbs remain gated.
+    private static func classifyHostnamectl(tokens: [String]) -> CommandSafety {
+        classifySystemInspector(tokens: tokens, readOnlyVerbs: ["status"])
+    }
+
+    private static func classifySystemInspector(
+        tokens: [String],
+        readOnlyVerbs: Set<String>
+    ) -> CommandSafety {
+        guard tokens.count > 1 else { return .alwaysSafe }
+
+        var index = 1
+        while index < tokens.count {
+            let token = tokens[index].lowercased()
+            if ["--no-pager", "--no-legend", "--all", "-a", "--value"].contains(token) {
+                index += 1
+                continue
+            }
+            if ["--property", "-p", "--json", "--lines"].contains(token) {
+                guard index + 1 < tokens.count else { return .needsJudgment }
+                index += 2
+                continue
+            }
+            if token.hasPrefix("--property=")
+                || token.hasPrefix("--json=")
+                || token.hasPrefix("--lines=") {
+                index += 1
+                continue
+            }
+            if token.hasPrefix("-") {
+                return .needsJudgment
+            }
+            return readOnlyVerbs.contains(token) ? .alwaysSafe : .needsJudgment
+        }
+        return .alwaysSafe
     }
 
     /// `defaults read …` is inspection; write/delete/import stay gated.

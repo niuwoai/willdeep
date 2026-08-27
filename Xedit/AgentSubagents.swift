@@ -509,12 +509,19 @@ final class AgentSubagentRegistry: ObservableObject {
 
 // MARK: - Headless runner
 
-/// The child agent loop. No UI, no approvals, no patch proposals —
-/// just stream → run read-only tools → stream until the model stops
-/// calling tools, then hand back its final message as the report.
+/// The child agent loop. It has no independent UI: bounded file writes are
+/// granted at spawn, and ambiguous operations commands can only call back to
+/// the parent's safety judge. Human approval remains a new parent-level
+/// `ops_runner.target_command` spawn.
 @MainActor
 enum AgentSubagentRunner {
     static let maxRounds = 12
+
+    /// Smart/Goal sessions may let the parent's safety judge review an
+    /// otherwise unknown terminal command. A nil reviewer preserves Strict
+    /// and Workspace Access semantics: the child reports the command so the
+    /// parent can request an explicit `ops_runner.target_command` approval.
+    typealias CommandReviewer = (_ toolName: String, _ command: String) async -> Bool
 
     /// The only tools a subagent may call. Deliberately excludes:
     /// `spawn_agent` (no nesting), `ask_user` (nobody to ask),
@@ -619,6 +626,7 @@ enum AgentSubagentRunner {
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         writeAccess: AgentSubagentWriteAccess? = nil,
         approvedCommand: String? = nil,
+        intelligentCommandReviewAvailable: Bool = false,
         jobPromptIsHosted: Bool = false
     ) -> String {
         var lines: [String] = []
@@ -676,13 +684,27 @@ enum AgentSubagentRunner {
         if writeAccess != nil {
             // The read-only rule block below is wrong for this trade, and a
             // contradicted rule is worse than no rule.
-            lines.append("""
+            var rules = """
             Rules:
             - You have READ access plus bounded write tools (`create_file` / `apply_patch`) carried by your trade, scoped to the files named above. Everything else is denied.
             - You cannot ask the user anything. Make reasonable assumptions and note them.
             - Read a file before patching it. Keep the change minimal and consistent with surrounding code.
             - Work autonomously until the edit is done, then STOP calling tools and write your final report as a normal message.
             - Your final message IS the deliverable returned to the parent agent. State exactly what you changed and why, and flag anything you deliberately left alone.
+            """
+            if intelligentCommandReviewAvailable {
+                rules += "\n- Commands already classified as read-only run directly. A necessary non-destructive modifying command may be submitted once for the parent's intelligent safety review; if denied, report the exact command for human approval instead of retrying or disguising it."
+            }
+            lines.append(rules)
+            return lines.joined(separator: "\n")
+        }
+        if intelligentCommandReviewAvailable {
+            lines.append("""
+            Rules:
+            - Read-only operations run directly. You may submit one necessary, non-destructive modifying command for the parent's intelligent safety review without disguising, splitting, or rewriting it.
+            - If review does not approve the command, stop retrying it and report the exact command to the parent so the parent can request explicit human approval through `ops_runner.target_command`.
+            - Deterministically dangerous, destructive, credential-sensitive, rollback, cleanup, and force commands are outside model authority and must be left to the parent.
+            - You cannot ask the user anything. Work autonomously until the investigation is complete, then write a self-contained final report.
             """)
             return lines.joined(separator: "\n")
         }
@@ -868,6 +890,7 @@ enum AgentSubagentRunner {
         /// 爆炸半径恰好一条。可重复执行（发布脚本按部署规范应幂等），
         /// verifier 循环靠这一点重试。
         approvedCommand: String? = nil,
+        commandReviewer: CommandReviewer? = nil,
         onProgress: ((_ round: Int, _ toolInvocations: Int) -> Void)? = nil
     ) async throws -> Outcome {
         // some.im-gated providers require the session/workspace context headers on
@@ -884,6 +907,7 @@ enum AgentSubagentRunner {
                     profile: profile,
                     writeAccess: writeAccess,
                     approvedCommand: approvedCommand,
+                    intelligentCommandReviewAvailable: commandReviewer != nil,
                     // Derived rather than passed in: the relay hosts this
                     // trade's job prompt exactly when we are actually calling
                     // its hosted virtual model. Signed out, binding resolution
@@ -1175,6 +1199,7 @@ enum AgentSubagentRunner {
                     writeAccess: writeAccess,
                     terminalController: terminalController,
                     approvedCommand: approvedCommand,
+                    commandReviewer: commandReviewer,
                     patchProposalSink: patchProposalSink
                 )
                 // Budgeted per trade: a 128K-window child cannot afford the
@@ -1404,6 +1429,23 @@ enum AgentSubagentRunner {
             == approved.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Only ambiguous, non-sensitive terminal commands may reach the AI
+    /// judge. Deterministically dangerous or typed-confirmation operations
+    /// remain outside model authority and must be approved by the operator as
+    /// an exact `ops_runner.target_command` on a new spawn.
+    nonisolated static func subagentCommandCanUseIntelligentReview(
+        _ command: String,
+        workspaceURL: URL?
+    ) -> Bool {
+        let decision = AgentSandboxPolicy.commandDecision(
+            command: command,
+            rootDirectory: workspaceURL
+        )
+        guard !decision.requiresTypedConfirmation,
+              !decision.credentialSensitive else { return false }
+        return SafeCommand.classify(command: command) == .needsJudgment
+    }
+
     private static func executeToolCall(
         _ call: AgentMessageToolCall,
         workspaceURL: URL?,
@@ -1413,6 +1455,7 @@ enum AgentSubagentRunner {
         writeAccess: AgentSubagentWriteAccess? = nil,
         terminalController: AgentInteractiveTerminalController? = nil,
         approvedCommand: String? = nil,
+        commandReviewer: CommandReviewer? = nil,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil
     ) async -> String {
         let permitted = profile.effectiveToolNames(
@@ -1464,10 +1507,10 @@ enum AgentSubagentRunner {
         let isApprovedWrite = writeAccess != nil
             && AgentSubagentProfileCatalog.writeToolNames.contains(call.toolName)
         // terminal_operator 的 send_command 是 .write 档，但放行的口子开得
-        // 很窄：命令文本自己必须分类为只读（`kubectl get` 能敲，`rm` 在这
-        // 里就被拒）。终端是用户的真实 shell，seatbelt 管不到那里，所以这
-        // 道文本分类闸是唯一的边界——分不出只读的一律拒。此外一切都发生
-        // 在用户可见的侧栏终端里，本身就是一层监督。
+        // 很窄：静态只读直接通过；Smart/Goal 可把非敏感、非确定性危险的
+        // 模糊命令送父会话安全裁判一次。裁判不放行时仍由父会话通过
+        // ops_runner.target_command 向用户申请精确授权。终端是用户的真实
+        // shell，seatbelt 管不到那里，所以危险与敏感命令绝不能交给模型越权。
         let isTerminalOperatorReadOnlySend: Bool = {
             guard call.toolName == "terminal_send_command",
                   profile.id == AgentSubagentProfileCatalog.terminalOperatorID,
@@ -1477,6 +1520,15 @@ enum AgentSubagentRunner {
                 rootDirectory: workspaceURL
             ).risk == .read
         }()
+        let isReviewableCommandTool = call.toolName == "run_command"
+            || call.toolName == "terminal_send_command"
+        var isJudgeApprovedCommand = false
+        if isReviewableCommandTool,
+           let command = argsDict["command"]?.stringValue(),
+           subagentCommandCanUseIntelligentReview(command, workspaceURL: workspaceURL),
+           let commandReviewer {
+            isJudgeApprovedCommand = await commandReviewer(call.toolName, command)
+        }
         // 单命令授权：用户在 spawn 审批卡上批准的那条确切命令（仅
         // ops_runner）。精确文本匹配——多一个字符都不放。
         let isApprovedCommandInvocation: Bool = {
@@ -1486,10 +1538,17 @@ enum AgentSubagentRunner {
                   let command = argsDict["command"]?.stringValue() else { return false }
             return approvedCommandMatches(command, approved: approvedCommand)
         }()
-        guard risk == .read || isApprovedWrite || isTerminalOperatorReadOnlySend || isApprovedCommandInvocation else {
+        guard risk == .read
+            || isApprovedWrite
+            || isTerminalOperatorReadOnlySend
+            || isJudgeApprovedCommand
+            || isApprovedCommandInvocation else {
             if call.toolName == "terminal_send_command",
                profile.id == AgentSubagentProfileCatalog.terminalOperatorID {
-                return "Denied: this command did not classify as read-only, and the terminal-operator trade may only send read-only commands. Report it back to the parent agent instead of working around the denial."
+                return "Denied: this command was neither statically read-only nor approved by intelligent safety review. Report the exact command to the parent. If it still needs to run, the parent must re-spawn `profile=\"ops_runner\"` with this exact `target_command`, which asks the operator for approval instead of silently discarding the request."
+            }
+            if call.toolName == "run_command" {
+                return "Denied: this subagent command was neither statically read-only nor approved by intelligent safety review. Report the exact command to the parent. If it still needs to run, the parent must request exact human approval, using `profile=\"ops_runner\"` with this `target_command` for an operations command."
             }
             return "Denied: subagents may only run read-only operations, and this call classified as `\(risk.rawValue)`. Report the suggested change to the parent agent instead of performing it."
         }
@@ -1513,7 +1572,7 @@ enum AgentSubagentRunner {
                 command: command,
                 rootDirectory: workspaceURL
             )
-            if isApprovedCommandInvocation {
+            if isApprovedCommandInvocation || isJudgeApprovedCommand {
                 sandboxMode = decision.mode
             } else if decision.mode == .readOnlyNetwork {
                 sandboxMode = .readOnlyNetwork

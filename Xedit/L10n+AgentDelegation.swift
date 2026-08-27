@@ -282,7 +282,7 @@ extension L10n {
         )
         static let profileOpsRunnerPurpose = String(
             localized: "agent-delegation.profile-ops-runner-purpose",
-            defaultValue: "Read-only operations queries via shell: service status, log tails, kubectl/gh inspection. Can inspect, never change."
+            defaultValue: "Runs operations queries directly; bounded modifying commands require smart or human approval."
         )
         static let profileTerminalOperatorName = String(
             localized: "agent-delegation.profile-terminal-operator-name",
@@ -290,7 +290,7 @@ extension L10n {
         )
         static let profileTerminalOperatorPurpose = String(
             localized: "agent-delegation.profile-terminal-operator-purpose",
-            defaultValue: "Drives the visible side-panel terminal: runs given read-only commands in a tab, reads the screen, reports results."
+            defaultValue: "Drives the visible side-panel terminal. Read-only commands run directly; bounded modifying commands require smart or human approval."
         )
 
         // MARK: Hosted trades (some.im)

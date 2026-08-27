@@ -347,7 +347,7 @@ extension WillDeepTests {
         #expect(rows.first { $0.modelID == "gpt-5.6-sol" }?.totalTokens == 200)
     }
 
-    @Test("AgentUsageStats groups worker calls and distinct chats by normalized profile")
+    @Test("AgentUsageStats groups specialist calls into public capability trades")
     func testUsageStatsGroupsSubagentWorkers() {
         func spawn(_ id: String, profile: String?) -> AgentMessageToolCall {
             let arguments: String
@@ -382,11 +382,11 @@ extension WillDeepTests {
         let rows = AgentUsageStats.subagentUsage(for: snapshots)
         let model = AgentUsageStats.dashboardModel(for: snapshots)
 
-        #expect(rows.first { $0.profileID == "scout" }?.invocationCount == 3)
-        #expect(rows.first { $0.profileID == "scout" }?.sessionCount == 2)
+        #expect(rows.first { $0.profileID == "scout" } == nil)
+        #expect(rows.first { $0.profileID == "reader" }?.invocationCount == 4)
+        #expect(rows.first { $0.profileID == "reader" }?.sessionCount == 2)
         #expect(rows.first { $0.profileID == "deep" }?.invocationCount == 2)
         #expect(rows.first { $0.profileID == "deep" }?.sessionCount == 1)
-        #expect(rows.first { $0.profileID == "reader" }?.invocationCount == 1)
         #expect(model.subagentSessionCount == 2)
     }
 
