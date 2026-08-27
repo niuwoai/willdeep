@@ -79,6 +79,58 @@ final class AgentDispatchCoordinator: ObservableObject {
         }
     }
 
+    /// 一个会话够不够格在调度台里当「项目」。
+    ///
+    /// 只收编真正在调度台里开出来的会话：光有 goal 不算数——普通聊天从
+    /// composer 就能进 Goal 模式，把它们也填进来会造出用户从没创建过的项目。
+    /// 子任务会话由 `dispatchParentProjectID` 认领；`persistedTaskSessionIDs`
+    /// 兜住老版本留下的重复项目。
+    nonisolated static func isBoardProject(
+        session: AgentSession,
+        persistedTaskSessionIDs: Set<UUID>
+    ) -> Bool {
+        guard session.presentationScope == .dispatchBoard else { return false }
+        // Goal-board projection does not remove the source conversation
+        // from its workspace sidebar; it is an additional task view.
+        guard session.hasBoardGoal else { return false }
+        return session.dispatchParentProjectID == nil
+            && !persistedTaskSessionIDs.contains(session.id)
+    }
+
+    /// 目录不完整时也能安全跑的一遍收敛：只清掉「目录里确实有这个会话、但它
+    /// 已经不再是调度台项目」的行——典型是它后来变成了别的目标的子任务，或者
+    /// 压根就是普通聊天被老版本收编进来的。
+    ///
+    /// 会话不在传入列表里的一律保留。这正是完整投影必须等目录装载完成的原因
+    /// （见 `synchronize(with:)` 的注释）：启动期的空列表会把已完成节点整片抹掉。
+    /// 按「在场才判决」这条规则重写之后，收敛不再依赖目录是否权威，于是那些
+    /// 早就不该留着的行不用再等一个可能永远不来的完整投影。
+    nonisolated static func reconciledGoals(
+        existingGoals: [AgentDispatchGoal],
+        sessions: [AgentSession]
+    ) -> [AgentDispatchGoal] {
+        guard !sessions.isEmpty else { return existingGoals }
+        let persistedTaskSessionIDs = Set(
+            existingGoals.flatMap { $0.tasks.compactMap(\.runtimeSessionID) }
+        )
+        let sessionsByID = Dictionary(
+            sessions.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return existingGoals.filter { goal in
+            guard let session = sessionsByID[goal.id] else { return true }
+            return isBoardProject(session: session, persistedTaskSessionIDs: persistedTaskSessionIDs)
+        }
+    }
+
+    /// 目录还没装载完时的收敛入口。只做删除、不做重建，所以拿到半份目录也
+    /// 不会伤到任何已记录的任务状态；没有变化就不写盘。
+    func reconcileWithLoadedSessions(_ sessions: [AgentSession]) {
+        let reconciled = Self.reconciledGoals(existingGoals: goals, sessions: sessions)
+        guard reconciled.count != goals.count else { return }
+        applySynchronizedGoals(reconciled)
+    }
+
     private nonisolated static func synchronizedGoals(
         from sessions: [AgentSession],
         projects: [AgentProject],
@@ -89,21 +141,7 @@ final class AgentDispatchCoordinator: ObservableObject {
             existingGoals.flatMap { $0.tasks.compactMap(\.runtimeSessionID) }
         )
         let sourceSessions = sessions.filter { session in
-            // Only sessions that were actually started in the dispatch console
-            // become projects there. Having a goal is not enough: ordinary
-            // chats reach Goal mode straight from the composer without ever
-            // opting into the console, and filing them there filled the board
-            // with projects the user never created — then offered to navigate
-            // into it. The console is a separate system; it owns what was
-            // created inside it.
-            guard session.presentationScope == .dispatchBoard else { return false }
-            // Goal-board projection does not remove the source conversation
-            // from its workspace sidebar; it is an additional task view.
-            guard session.hasBoardGoal else { return false }
-            // Explicit ownership handles new task sessions. Persisted task
-            // IDs also remove duplicate projects created by older builds.
-            return session.dispatchParentProjectID == nil
-                && !persistedTaskSessionIDs.contains(session.id)
+            isBoardProject(session: session, persistedTaskSessionIDs: persistedTaskSessionIDs)
         }
         let existingByID = Dictionary(uniqueKeysWithValues: existingGoals.map { ($0.id, $0) })
         let projected = sourceSessions.map { session in

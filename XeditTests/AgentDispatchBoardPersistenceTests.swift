@@ -129,6 +129,95 @@ struct AgentDispatchBoardPersistenceTests {
         #expect(relaunched.goals.first?.tasks.first?.state == .merged)
     }
 
+    @Test("目录里已不是调度台项目的行会被清掉，即使门禁还关着")
+    func staleGoalsAreReconciledEvenWhileTheCatalogGateIsShut() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-dispatch-reconcile-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        let appState = AppState(
+            rootDirectory: workspace,
+            dispatchStore: AgentDispatchStore(defaults: sandbox.defaults)
+        )
+        // 先按「当时都还站得住」把四条种进面板——线上那 99 条就是这么来的
+        let live = makePlannedSession()
+        var demoted = makePlannedSession()
+        var ordinary = makePlannedSession()
+        let vanished = makePlannedSession()
+        appState.agentDispatchCoordinator.synchronize(with: [live, demoted, ordinary, vanished])
+        #expect(appState.agentDispatchCoordinator.goals.count == 4)
+
+        // 之后会话各自变了：一个成了别的目标的子任务，一个本来就是普通聊天
+        demoted.dispatchParentProjectID = live.id
+        ordinary.presentationScope = .workspace
+
+        // 门禁仍然关着（磁盘装载是异步的），但会话目录已经有内容了。
+        // 修复前这里直接 return，那些早就不该留着的行会一直挂在侧栏上。
+        #expect(!appState.hasLoadedAgentSessionCatalog)
+        appState.agentSessions = [live, demoted, ordinary]
+        appState.synchronizeDispatchBoard()
+
+        let remaining = appState.agentDispatchCoordinator.goals.map(\.id)
+        #expect(remaining.contains(live.id), "还站得住的项目要留下")
+        #expect(!remaining.contains(demoted.id), "已经变成子任务的行要清掉")
+        #expect(!remaining.contains(ordinary.id), "不在调度台开出来的会话要清掉")
+        #expect(remaining.contains(vanished.id), "目录里没有这个会话时一律保留")
+        #expect(remaining.count == 2)
+
+        // 收敛结果同样落盘，重启不会把它们带回来
+        let reloaded = AgentDispatchStore(defaults: sandbox.defaults).load()
+        #expect(reloaded.count == 2)
+    }
+
+    @Test("收敛只删不建，且任务状态原样保留")
+    func reconciliationNeverRebuildsOrResetsTasks() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let coordinator = AgentDispatchCoordinator(
+            store: AgentDispatchStore(defaults: sandbox.defaults)
+        )
+        let session = makePlannedSession()
+        coordinator.synchronize(with: [session])
+        let goal = try #require(coordinator.goals.first)
+        coordinator.updateTaskState(goalID: goal.id, taskID: goal.tasks[0].id, state: .merged)
+
+        coordinator.reconcileWithLoadedSessions([session])
+        #expect(coordinator.goals.count == 1)
+        #expect(coordinator.goals.first?.tasks.first?.state == .merged)
+
+        // 空目录（启动期）不许动任何东西——这是 1.253.0-rc4 那条保护的核心
+        coordinator.reconcileWithLoadedSessions([])
+        #expect(coordinator.goals.count == 1)
+        #expect(coordinator.goals.first?.tasks.first?.state == .merged)
+    }
+
+    @Test("纯函数：在场才判决")
+    func reconciledGoalsOnlyJudgesSessionsItCanSee() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let coordinator = AgentDispatchCoordinator(
+            store: AgentDispatchStore(defaults: sandbox.defaults)
+        )
+        let present = makePlannedSession()
+        var child = makePlannedSession()
+        let absent = makePlannedSession()
+        coordinator.synchronize(with: [present, child, absent])
+        let existing = coordinator.goals
+        #expect(existing.count == 3)
+        child.dispatchParentProjectID = present.id
+
+        let reconciled = AgentDispatchCoordinator.reconciledGoals(
+            existingGoals: existing,
+            sessions: [present, child]
+        )
+        let reconciledIDs = Set(reconciled.map(\.id))
+        let expectedIDs: Set<UUID> = [present.id, absent.id]
+        #expect(reconciledIDs == expectedIDs)
+    }
+
     private func makePlannedSession() -> AgentSession {
         let firstID = UUID()
         let secondID = UUID()
