@@ -131,6 +131,27 @@ extension L10n {
             defaultValue: "Output truncated for storage."
         )
 
+        /// Composer chip：这一回合派给谁。
+        static func pinnedWorkerChip(_ name: String) -> String {
+            String(
+                format: String(
+                    localized: "agent-delegation.pinned-worker-chip",
+                    defaultValue: "Delegate to %@"
+                ),
+                name
+            )
+        }
+        static let pinnedWorkerRemove = String(
+            localized: "agent-delegation.pinned-worker-remove",
+            defaultValue: "Cancel this delegation"
+        )
+        /// 点了名又用 `/no-subagent`：两条指令直接矛盾，宿主拒绝执行而不是
+        /// 替用户挑一个。
+        static let pinnedWorkerConflict = String(
+            localized: "agent-delegation.pinned-worker-conflict",
+            defaultValue: "You named a worker and asked for no delegation at the same time. Remove one of them."
+        )
+
         // MARK: Subagent profiles (trades)
 
         static let profileScoutName = String(

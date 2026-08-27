@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-27 | Current version: v1.300.0-rc6
+> Last updated: 2026-08-27 | Current version: v1.300.0-rc7
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **`@` 点名工种（1.300.0-rc7）** —— composer 的 `@` 选择器最前面多一组工种，选中即把这一回合的派发判决钉死：满分置信、强制委派、模型不得改判；单槽位，再点一个就换人。特权工种（部署运维、终端操作）允许被点名并照常走审批——「你亲自点名」与「小模型在含糊请求里猜」是两回事。点名与 `/no-subagent` 冲突时拒绝发送而不是替用户挑一个。
 - **插件能问模型了，并附带一个跟项目长在一起的待办（1.300.0-rc5）** —— 插件页面新增 `window.willdeep.ai.complete` 与 `window.willdeep.ai.providers`（权限 `ai.chat` / `providers.read`）：能借宿主的手问一次模型、列出用户配好的 provider 与模型，但一把 key 都拿不到，provider 与模型必须落在用户自己的库里，载荷有硬上限。这是插件系统与一张 H5 页面的分界线。随之附带第一方「待办」插件：聊天里选中一句即可记下，一句话里的计划时间与优先级默认交给模型读（默认用当前 provider 的 flash 档，也可钉死本机 Ollama），模型不可用时回落到服务端确定性解析器；按到期分七组，可按项目过滤，也可以完全不属于任何项目。「宿主按 cron 叫醒插件命令」的设计已成文（`docs/PLUGIN_HOST_CAPABILITIES_DESIGN.md`），它是「已安排」将来能变成插件的前提。
 - **收藏夹随 App 发行 + 会话体检中心用真实用量（1.300.0-rc1）** —— 收藏夹插件改为随 App 签名发行并默认固定在左侧插件分组：选中即收藏，页面支持搜索高亮、标签过滤、行内备注、置顶、长文折叠与 6 秒撤销，存储升到带标签与置顶的 v2 结构；第一方 bundled 插件执行自己的 MCP 工具不再逐条弹确认框，聊天气泡点完会就地给「✓ 收藏」的回执。会话体检中心不再按消息数估算 Token，改为累加每次请求上报的真实用量，新增缓存命中率、平均响应、近 14 天走势、项目与模型排行、最近会话与 Markdown 导出；并修掉 MCP App 页面把自己的 postMessage 回声当成响应、导致刷新报 `undefined is not an object (evaluating 'res.contents')` 的根因。
 - **选区插件菜单与收藏夹（1.299.0-rc3）** —— 聊天正文选中文字后的气泡与右键菜单开放给插件（新的 `chat.selection` 挂载点），宿主把选中的原文与来源交给插件命令执行；随仓库附带收藏夹样例插件：选中即收藏，独立页面回看、复制、删除，数据落在应用支持目录下的单个 JSON 文件里。

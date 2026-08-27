@@ -159,6 +159,12 @@ extension AppState {
         set { activeRuntime?.pendingIncludeWorkspaceOverview = newValue }
     }
 
+    /// 操作员点名的 worker（`@` 选择器写入，chip 显示，发送时消费）。
+    var agentPendingWorkerProfileID: String? {
+        get { activeRuntime?.pendingWorkerProfileID }
+        set { activeRuntime?.pendingWorkerProfileID = newValue }
+    }
+
     /// Top-level interaction mode for the active session.
     var agentInteractionMode: AgentInteractionMode {
         get { activeRuntime?.interactionMode ?? .normal }

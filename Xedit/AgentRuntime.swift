@@ -338,6 +338,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// (and reset) by `dispatchAgentMessage`, or carried into the queued
     /// message when the runtime is still responding.
     var pendingDelegationPolicy: AgentDelegationPolicy = .automatic
+    /// 操作员在 composer 里 `@` 点名的 worker，作用于下一次派发。
+    /// 单槽位：再点一个就换人，永远不会同时有两个——「委派」在语义上
+    /// 就只能点一个人，想让多个人分头干活那是调度台的事。
+    @Published var pendingWorkerProfileID: String?
     /// `spawn_agent` invocations observed during the current turn. Only used
     /// to audit whether a `.required` policy was actually honored.
     var currentTurnSpawnAgentCallCount: Int = 0
