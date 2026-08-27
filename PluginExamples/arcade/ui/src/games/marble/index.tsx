@@ -306,16 +306,30 @@ function draw(
   for (const effect of state.effects) {
     const remain = Math.max(0, Math.min(1, (effect.until - state.time) / EFFECT_SECONDS));
     const progress = 1 - remain;
-    const radius = effect.kind === 'blast'
-      ? BALL_RADIUS + (effect.radius - BALL_RADIUS) * progress
-      : effect.radius * (1 - progress * 0.6);
+    const radius = effect.kind === 'reverse'
+      ? effect.radius * (1 - progress * 0.6)
+      : BALL_RADIUS + (effect.radius - BALL_RADIUS) * progress;
     context.beginPath();
     context.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
     context.strokeStyle = effect.kind === 'blast'
       ? `rgba(255, 168, 76, ${remain.toFixed(3)})`
-      : `rgba(226, 240, 255, ${remain.toFixed(3)})`;
-    context.lineWidth = effect.kind === 'blast' ? 1.4 : 1;
+      : effect.kind === 'combo'
+        ? `rgba(255, 226, 128, ${remain.toFixed(3)})`
+        : `rgba(226, 240, 255, ${remain.toFixed(3)})`;
+    context.lineWidth = effect.kind === 'blast' ? 1.4 : effect.kind === 'combo' ? 1.1 : 1;
     context.stroke();
+    if (effect.kind === 'combo') {
+      // 星芒：四道向外甩的金色短线，表示「连锁成了」
+      context.strokeStyle = `rgba(255, 244, 200, ${(remain * 0.9).toFixed(3)})`;
+      context.lineWidth = 0.7;
+      for (let spoke = 0; spoke < 8; spoke += 1) {
+        const angle = (spoke / 8) * Math.PI * 2 + progress * 1.2;
+        context.beginPath();
+        context.moveTo(effect.x + Math.cos(angle) * radius * 0.75, effect.y + Math.sin(angle) * radius * 0.75);
+        context.lineTo(effect.x + Math.cos(angle) * radius * 1.25, effect.y + Math.sin(angle) * radius * 1.25);
+        context.stroke();
+      }
+    }
     if (effect.kind === 'blast') {
       context.beginPath();
       context.arc(effect.x, effect.y, radius * 0.55, 0, Math.PI * 2);
@@ -412,6 +426,7 @@ export default function MarbleGame({ seed, onWin, onStage }: GameProps) {
   const contextRef = useRef<CanvasRenderingContext2D | null | undefined>(undefined);
   const scoredRef = useRef(false);
   const effectsRef = useRef(0);
+  const chainsRef = useRef(0);
   const [hud, setHud] = useState<Hud>(() => toHud(stateRef.current));
   // 主循环只建一次，回调用 ref 取最新的，避免把循环重挂
   const onWinRef = useRef(onWin);
@@ -429,6 +444,7 @@ export default function MarbleGame({ seed, onWin, onStage }: GameProps) {
       stateRef.current = createInitialState(levelForStage(nextStage), `${baseSeed}@${nextStage}`);
       scoredRef.current = false;
       effectsRef.current = 0;
+      chainsRef.current = 0;
       setHud(toHud(stateRef.current));
     },
     [baseSeed],
@@ -467,13 +483,20 @@ export default function MarbleGame({ seed, onWin, onStage }: GameProps) {
         }
         if (contextRef.current) draw(canvas, contextRef.current, next);
       }
-      // 新冒出来的特效各配一声（爆炸 / 倒流）
+      // 新冒出来的特效各配一声（爆炸 / 倒流 / 连锁）
       if (next.effects.length > effectsRef.current) {
         const fresh = next.effects.slice(effectsRef.current);
         if (fresh.some((effect) => effect.kind === 'blast')) playCue('blast');
         if (fresh.some((effect) => effect.kind === 'reverse')) playCue('reverse');
       }
       effectsRef.current = next.effects.length;
+
+      // 断口撞在一起又消掉：庆祝一下（音效 + 外壳撒花）
+      if (next.chains > chainsRef.current) {
+        chainsRef.current = next.chains;
+        playCue('match');
+        onWinRef.current?.();
+      }
 
       const snapshot = toHud(next);
       setHud((previous) => (sameHud(previous, snapshot) ? previous : snapshot));
@@ -574,6 +597,7 @@ export default function MarbleGame({ seed, onWin, onStage }: GameProps) {
           stateRef.current = restart(stateRef.current);
           scoredRef.current = false;
           effectsRef.current = 0;
+          chainsRef.current = 0;
           playCue('select');
           setHud(toHud(stateRef.current));
         }}>
