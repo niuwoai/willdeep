@@ -24,6 +24,7 @@ import {
   pointAt,
   restart,
   rollbackChain,
+  springEase,
   scoreFor,
   shoot,
   step,
@@ -49,7 +50,16 @@ function withChain(
       ...(power ? { power } : {}),
     };
   });
-  return { ...base, balls, supply: [], status: 'playing', nextId: colors.length + 1 };
+  // 入场弹簧当作已经演完（entry 超过窗口、位移目标清零），免得测消除时链条还在被甩
+  return {
+    ...base,
+    balls,
+    supply: [],
+    status: 'playing',
+    entry: 10,
+    entryTarget: 0,
+    nextId: colors.length + 1,
+  };
 }
 
 describe('印加弹珠：轨道', () => {
@@ -83,17 +93,29 @@ describe('印加弹珠：轨道', () => {
 });
 
 describe('印加弹珠：链条前进与补给', () => {
-  it('开局就有一串弹珠，随后补给从入口陆续入场', () => {
+  it('开局的一串弹珠排在隧道里，被弹簧甩上轨道后补给才陆续入场', () => {
     const easy = LEVELS[0] as { supply: number; opening: number };
     let state = createInitialState(0, 'supply');
     expect(state.balls).toHaveLength(easy.opening);
     expect(state.supply).toHaveLength(easy.supply - easy.opening);
-    const openingHead = (state.balls[0] as MarbleBall).dist;
+    // 开局全部在入口之前（dist < 0），渲染层不画
+    expect(state.balls.every((ball) => ball.dist < 0)).toBe(true);
+
+    // 入场结束（约 1.2 秒）后整条链已经在轨道上
+    for (let frame = 0; frame < 45; frame += 1) state = step(state, 1 / 30);
+    expect(state.balls.slice(0, easy.opening).every((ball) => ball.dist >= 0)).toBe(true);
 
     for (let frame = 0; frame < 90; frame += 1) state = step(state, 1 / 30);
     expect(state.supply.length).toBeLessThan(easy.supply - easy.opening);
     expect(state.balls.length).toBeGreaterThan(easy.opening);
-    expect((state.balls[0] as MarbleBall).dist).toBeGreaterThan(openingHead);
+  });
+
+  it('弹簧缓动会过冲再落定', () => {
+    expect(springEase(0)).toBe(0);
+    expect(springEase(1)).toBe(1);
+    // 中途冲过目标位置（>1），这就是「弹一下」的观感
+    const overshoot = Math.max(...[0.2, 0.25, 0.3, 0.35].map((p) => springEase(p)));
+    expect(overshoot).toBeGreaterThan(1);
   });
 
   it('链条不会自我穿插：相邻两珠间距不小于一个身位', () => {
@@ -106,9 +128,28 @@ describe('印加弹珠：链条前进与补给', () => {
     }
   });
 
-  it('队首走到轨道尽头即判负', () => {
-    const state = withChain([0, 1, 2], PATH_LENGTH - 0.1);
-    expect(step(state, 1).status).toBe('lost');
+  it('队首碰到洞口先进落洞动画，弹珠被逐颗吞掉后才判负', () => {
+    let falling = withChain([0, 1, 2], PATH_LENGTH - 0.1);
+    for (let frame = 0; frame < 10 && falling.status !== 'falling'; frame += 1) {
+      falling = step(falling, 1 / 60);
+    }
+    expect(falling.status).toBe('falling');
+    expect(falling.balls.length).toBeGreaterThan(0);
+
+    // 越掉越快：盯住同一颗（队尾）看它每帧走多远，后一帧一定比前一帧远
+    const tailId = (falling.balls[falling.balls.length - 1] as MarbleBall).id;
+    const distOf = (state: MarbleState): number =>
+      (state.balls.find((ball) => ball.id === tailId) as MarbleBall).dist;
+    const frame1 = step(falling, 1 / 60);
+    const frame2 = step(frame1, 1 / 60);
+    expect(distOf(frame1) - distOf(falling)).toBeGreaterThan(0);
+    expect(distOf(frame2) - distOf(frame1)).toBeGreaterThan(distOf(frame1) - distOf(falling));
+
+    for (let frame = 0; frame < 240 && falling.status === 'falling'; frame += 1) {
+      falling = step(falling, 1 / 60);
+    }
+    expect(falling.status).toBe('lost');
+    expect(falling.balls).toHaveLength(0);
   });
 
   it('补给放完且链条清空即通关', () => {
@@ -117,7 +158,9 @@ describe('印加弹珠：链条前进与补给', () => {
   });
 
   it('已分出胜负后 step 不再改变状态', () => {
-    const lost = step(withChain([0, 1, 2], PATH_LENGTH - 0.1), 1);
+    let lost = withChain([0, 1, 2], PATH_LENGTH - 0.1);
+    for (let frame = 0; frame < 300 && lost.status !== 'lost'; frame += 1) lost = step(lost, 1 / 60);
+    expect(lost.status).toBe('lost');
     expect(step(lost, 1)).toEqual(lost);
   });
 });
@@ -195,7 +238,7 @@ describe('印加弹珠：消除与连锁', () => {
     expect(afterFirst.pendingJunctions.length).toBeGreaterThan(0);
 
     let state = afterFirst;
-    for (let frame = 0; frame < 120 && state.balls.length > 0; frame += 1) {
+    for (let frame = 0; frame < 600 && state.balls.length > 0; frame += 1) {
       state = step(state, 1 / 60);
     }
     expect(state.balls).toHaveLength(0);
@@ -297,18 +340,35 @@ describe('印加弹珠：道具珠', () => {
     expect(chained.effects.filter((effect) => effect.kind === 'blast')).toHaveLength(2);
   });
 
-  it('闪光珠被消掉时整条链往回倒退', () => {
-    // 同一手消除，只差队首那颗带不带闪光：带的那局所有幸存珠都要往回退一段
-    const plain = applyHit(withChain([0, 0, 1, 2, 3, 4], 300), 1, 0, false);
-    const flashy = applyHit(withChain([0, 0, 1, 2, 3, 4], 300, { 1: 'reverse' }), 1, 0, false);
+  it('闪光珠把倒退挂账，随后带加速地把链条拉回去', () => {
+    // 同一手消除，只差队首那颗带不带闪光
+    let plain = applyHit(withChain([0, 0, 1, 2, 3, 4], 300), 1, 0, false);
+    let flashy = applyHit(withChain([0, 0, 1, 2, 3, 4], 300, { 1: 'reverse' }), 1, 0, false);
 
-    expect(flashy.balls).toHaveLength(plain.balls.length);
-    flashy.balls.forEach((ball, index) => {
-      const reference = plain.balls[index] as MarbleBall;
-      expect(ball.dist).toBeCloseTo(reference.dist - REVERSE_DISTANCE, 5);
-    });
-    expect(flashy.effects.some((effect) => effect.kind === 'reverse')).toBe(true);
-    expect(plain.effects.some((effect) => effect.kind === 'reverse')).toBe(false);
+    // 不是瞬移：命中当帧只记账，位置还没动
+    expect(flashy.pullback).toBeCloseTo(REVERSE_DISTANCE, 5);
+    expect(plain.pullback).toBe(0);
+    expect(flashy.balls[0]?.dist).toBeCloseTo(plain.balls[0]?.dist as number, 5);
+
+    // 倒退是加速的：第二帧退得比第一帧多
+    const before = flashy.balls[0]?.dist as number;
+    const frame1 = step(flashy, 1 / 60);
+    const frame2 = step(frame1, 1 / 60);
+    const delta1 = before - (frame1.balls[0]?.dist as number);
+    const delta2 = (frame1.balls[0]?.dist as number) - (frame2.balls[0]?.dist as number);
+    expect(delta2).toBeGreaterThan(delta1);
+
+    // 退完之后与不带闪光的那局刚好差一个 REVERSE_DISTANCE
+    for (let frame = 0; frame < 240; frame += 1) {
+      plain = step(plain, 1 / 60);
+      flashy = step(flashy, 1 / 60);
+    }
+    expect(flashy.pullback).toBe(0);
+    expect(flashy.balls[0]?.dist as number).toBeCloseTo(
+      (plain.balls[0]?.dist as number) - REVERSE_DISTANCE,
+      1,
+    );
+    expect(flashy.effects.some((effect) => effect.kind === 'reverse')).toBe(false);
   });
 
   it('倒退不会把队尾推到入口之前，且保持一个身位的间距', () => {

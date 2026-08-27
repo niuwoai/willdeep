@@ -21,6 +21,7 @@ export interface MarbleStrings {
   aimRight: string;
   statusIdle: string;
   statusPlaying: string;
+  statusFalling: string;
   statusWon: string;
   statusLost: string;
   fieldLabel: string;
@@ -45,6 +46,7 @@ const dict: Record<Locale, MarbleStrings> = {
     aimRight: '转 →',
     statusIdle: '移动鼠标瞄准，点击或空格发射',
     statusPlaying: '进行中',
+    statusFalling: '弹珠正在滚进骷髅口……',
     statusWon: '清空链条，通关！',
     statusLost: '弹珠滚进洞里了',
     fieldLabel: '印加弹珠场地',
@@ -67,6 +69,7 @@ const dict: Record<Locale, MarbleStrings> = {
     aimRight: 'Aim →',
     statusIdle: 'Aim with the pointer, click or press space to shoot',
     statusPlaying: 'Playing',
+    statusFalling: 'The marbles are pouring into the skull…',
     statusWon: 'Chain cleared!',
     statusLost: 'The marbles reached the hole',
     fieldLabel: 'Inca marbles field',
