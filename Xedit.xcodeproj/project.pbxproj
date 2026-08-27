@@ -420,7 +420,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "set -euo pipefail\nrequested_archs=\" ${ARCHS:-} \"\nif [[ \"$requested_archs\" != *\" arm64 \"* || \"$requested_archs\" == *\" x86_64 \"* ]]; then\n  exit 0\nfi\nresources=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nagent=\"$resources/willdeep-agent\"\nhelper_app=\"$resources/WillDeepComputerUseHelper.app\"\nhelper=\"$helper_app/Contents/MacOS/WillDeepComputerUseHelper\"\nthin_arm64() {\n  local binary=\"$1\"\n  local thinned=\"${binary}.arm64\"\n  /usr/bin/lipo \"$binary\" -thin arm64 -output \"$thinned\"\n  /bin/chmod +x \"$thinned\"\n  /bin/mv -f \"$thinned\" \"$binary\"\n  /usr/bin/lipo -info \"$binary\"\n}\n[ ! -f \"$agent\" ] || thin_arm64 \"$agent\"\nif [ -f \"$helper\" ]; then\n  thin_arm64 \"$helper\"\n  sign=\"${EXPANDED_CODE_SIGN_IDENTITY:-${CODE_SIGN_IDENTITY:--}}\"\n  [ -n \"$sign\" ] || sign=\"-\"\n  if [ \"$sign\" != \"-\" ] && [ -n \"${DEVELOPMENT_TEAM:-}\" ]; then\n    identity_output=\"$(security find-identity -v -p codesigning 2>/dev/null || true)\"\n    resolved_sign=\"$(/usr/bin/awk -v label=\"$sign\" -v team=\"$DEVELOPMENT_TEAM\" 'index($0, label) > 0 && index($0, \"(\" team \")\") > 0 { print $2; exit }' <<< \"$identity_output\")\"\n    [ -z \"$resolved_sign\" ] || sign=\"$resolved_sign\"\n  fi\n  /usr/bin/codesign --force --sign \"$sign\" --timestamp=none \"$helper_app\"\n  /usr/bin/codesign --verify --deep --strict --verbose=2 \"$helper_app\"\nfi\n";
+			shellScript = "set -euo pipefail\nrequested_archs=\" ${ARCHS:-} \"\nif [[ \"$requested_archs\" != *\" arm64 \"* || \"$requested_archs\" == *\" x86_64 \"* ]]; then\n  exit 0\nfi\nresources=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\nagent=\"$resources/willdeep-agent\"\nhelper_app=\"$resources/WillDeepComputerUseHelper.app\"\nhelper=\"$helper_app/Contents/MacOS/WillDeepComputerUseHelper\"\nthin_arm64() {\n  local binary=\"$1\"\n  local architectures thinned\n  architectures=\"$(/usr/bin/lipo -archs \"$binary\")\"\n  if [ \"$architectures\" = \"arm64\" ]; then\n    /usr/bin/lipo -info \"$binary\"\n    return 0\n  fi\n  if [[ \" $architectures \" != *\" arm64 \"* ]]; then\n    printf 'ARM-only build cannot use %s architectures: %s\\n' \"$binary\" \"$architectures\" >&2\n    return 1\n  fi\n  thinned=\"${binary}.arm64\"\n  /usr/bin/lipo \"$binary\" -thin arm64 -output \"$thinned\"\n  /bin/chmod +x \"$thinned\"\n  /bin/mv -f \"$thinned\" \"$binary\"\n  /usr/bin/lipo -info \"$binary\"\n}\n[ ! -f \"$agent\" ] || thin_arm64 \"$agent\"\nif [ -f \"$helper\" ]; then\n  thin_arm64 \"$helper\"\n  sign=\"${EXPANDED_CODE_SIGN_IDENTITY:-${CODE_SIGN_IDENTITY:--}}\"\n  [ -n \"$sign\" ] || sign=\"-\"\n  if [ \"$sign\" != \"-\" ] && [ -n \"${DEVELOPMENT_TEAM:-}\" ]; then\n    identity_output=\"$(security find-identity -v -p codesigning 2>/dev/null || true)\"\n    resolved_sign=\"$(/usr/bin/awk -v label=\"$sign\" -v team=\"$DEVELOPMENT_TEAM\" 'index($0, label) > 0 && index($0, \"(\" team \")\") > 0 { print $2; exit }' <<< \"$identity_output\")\"\n    [ -z \"$resolved_sign\" ] || sign=\"$resolved_sign\"\n  fi\n  /usr/bin/codesign --force --sign \"$sign\" --timestamp=none \"$helper_app\"\n  /usr/bin/codesign --verify --deep --strict --verbose=2 \"$helper_app\"\nfi\n";
 		};
 		7E2F8B7A2F9E4A1C9E0B1003 /* Generate embedded build credentials */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -494,7 +494,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 526;
+				CURRENT_PROJECT_VERSION = 528;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -515,7 +515,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.296.0-rc10;
+				MARKETING_VERSION = 1.297.0-rc2;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -539,7 +539,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 526;
+				CURRENT_PROJECT_VERSION = 528;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -560,7 +560,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.296.0-rc10;
+				MARKETING_VERSION = 1.297.0-rc2;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -700,11 +700,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 526;
+				CURRENT_PROJECT_VERSION = 528;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.296.0-rc10;
+				MARKETING_VERSION = 1.297.0-rc2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -721,11 +721,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 526;
+				CURRENT_PROJECT_VERSION = 528;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.296.0-rc10;
+				MARKETING_VERSION = 1.297.0-rc2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -741,10 +741,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 526;
+				CURRENT_PROJECT_VERSION = 528;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.296.0-rc10;
+				MARKETING_VERSION = 1.297.0-rc2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -760,10 +760,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 526;
+				CURRENT_PROJECT_VERSION = 528;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.296.0-rc10;
+				MARKETING_VERSION = 1.297.0-rc2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

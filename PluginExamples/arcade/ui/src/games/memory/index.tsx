@@ -5,13 +5,17 @@
  *   - 默认导出组件，props 为 GameProps（{ seed?: string }）
  *   - 触屏/键盘均通过可点按钮触发（onClick，touch-action: manipulation 防双击缩放）
  *   - 不匹配时锁定棋盘 MISMATCH_MS 后自动复位；胜利时 saveBestScore('memory', score)
- *   - 随机仅经 createRng（见 logic.ts buildDeck），同一种子布局完全可复现
+ *   - 随机仅经 createRng（见 logic.ts buildDeck），同一基准种子下第 N 局完全可复现
+ *   - 未通过 `?seed=` 指定种子时，每次进入游戏取一次性熵种子；每次重开局数 +1，
+ *     所以布局不会重复（玩家背下来的那副牌不再翻回来）
  *   - 用户可见文案走模块内 i18n 资源（strings.ts），不硬编码在视图
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { GameProps } from '../../core/types';
 import { useI18n } from '../../core/i18n';
 import { saveBestScore } from '../../core/bestScore';
+import { entropySeed } from '../../core/rng';
 import { memoryStrings } from './strings';
 import type { MemoryStrings } from './strings';
 import {
@@ -41,13 +45,16 @@ export default function MemoryGame({ seed }: GameProps) {
   const { locale } = useI18n();
   const strings = memoryStrings(locale);
 
+  // 未显式指定种子时，本次进入游戏用一次性熵种子：布局不再是每次都一样的那副牌。
+  const baseSeed = useMemo(() => seed ?? entropySeed('memory'), [seed]);
+
   const [pairs, setPairs] = useState<number>(DEFAULT_PAIRS);
-  const [state, setState] = useState<MemoryState>(() => createInitialState(DEFAULT_PAIRS, seed));
+  const [state, setState] = useState<MemoryState>(() => createInitialState(DEFAULT_PAIRS, baseSeed));
 
   // 种子或牌对数变化时重建一局（确定性布局，进度清零）。
   useEffect(() => {
-    setState(createInitialState(pairs, seed));
-  }, [pairs, seed]);
+    setState(createInitialState(pairs, baseSeed));
+  }, [pairs, baseSeed]);
 
   // 不匹配展示停留后自动复位两张牌。
   useEffect(() => {
@@ -77,6 +84,8 @@ export default function MemoryGame({ seed }: GameProps) {
     won: strings.statusWon,
   };
 
+  // 列数固定，宽度交给 CSS：容器相对 + 每张牌绝对上限（见 memory.css），
+  // 不再用视口单位，避免面板宽度与布局视口不一致时把棋盘撑出可视区。
   const gridColumns = Math.min(pairs, 4);
 
   return (
@@ -120,7 +129,8 @@ export default function MemoryGame({ seed }: GameProps) {
         data-testid="memory-board"
         role="grid"
         aria-label={strings.boardLabel}
-        style={{ gridTemplateColumns: `repeat(${gridColumns}, 1fr)` }}
+        data-columns={gridColumns}
+        style={{ '--memory-cols': gridColumns } as CSSProperties}
       >
         {state.cards.map((card, index) => {
           const faceUp = state.flipped.includes(index) || state.matched.includes(card.pairId);

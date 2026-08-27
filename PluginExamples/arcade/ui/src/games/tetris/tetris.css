@@ -22,7 +22,7 @@
   position: relative;
   display: grid;
   grid-template-columns: repeat(10, minmax(0, 1fr));
-  width: min(65vw, 18rem);
+  width: min(100%, 18rem);
   aspect-ratio: 1 / 2;
   background: var(--color-board, #0f172a);
   border: 2px solid var(--color-border, #334155);
@@ -40,6 +40,6 @@
 
 @media (max-width: 30rem) {
   .tetris-layout { flex-direction: column; }
-  .tetris-board { width: min(88vw, 18rem); }
+  .tetris-board { width: min(100%, 18rem); }
   .tetris-stats { display: flex; flex-wrap: wrap; gap: .75rem; }
 }

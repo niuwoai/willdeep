@@ -26,6 +26,14 @@ export const zhHans: Record<string, string> = {
   'games.memory.description': '翻开两张配对，用最少步数清空棋盘。',
   'games.memory.controls': '点击或点按卡牌翻面，找到所有配对。',
 
+  'games.onet.name': '连连看',
+  'games.onet.description': '找出两张相同的图案，连线不超过两个折角就能消。',
+  'games.onet.controls': '点选两张相同的牌；提示与洗牌按钮在棋盘上方。',
+
+  'games.marble.name': '印加弹珠',
+  'games.marble.description': '螺旋轨道上的弹珠往洞口滚，打进同色三连把它们清空。',
+  'games.marble.controls': '鼠标或触屏瞄准点击发射；键盘 ← → 瞄准、空格发射、S 换色。',
+
   'game.back': '返回大厅',
   'game.bestScore': '最佳成绩',
   'game.noScore': '暂无记录',

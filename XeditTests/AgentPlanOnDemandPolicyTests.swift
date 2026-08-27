@@ -26,12 +26,34 @@ nonisolated struct AgentPlanOnDemandPolicyTests {
         }
     }
 
-    @Test("跑满工具轮阈值即请求计划")
-    func roundThresholdTriggers() {
+    @Test("纯只读调查跑满轮次也不请求计划")
+    func readOnlyInvestigationNeverTriggersFromRoundsAlone() {
         #expect(
             AgentPlanOnDemandPolicy.shouldRequestPlan(
                 toolRound: AgentPlanOnDemandPolicy.toolRoundThreshold,
                 succeededWriteCalls: 0,
+                hasActivePlan: false,
+                interactionMode: .normal,
+                isUnattendedDispatchTask: false
+            ) == false
+        )
+        #expect(
+            AgentPlanOnDemandPolicy.shouldRequestPlan(
+                toolRound: AgentPlanOnDemandPolicy.toolRoundThreshold * 3,
+                succeededWriteCalls: 0,
+                hasActivePlan: false,
+                interactionMode: .normal,
+                isUnattendedDispatchTask: false
+            ) == false
+        )
+    }
+
+    @Test("进入写执行后跑满轮次才请求计划")
+    func executionRoundThresholdTriggersAfterWrite() {
+        #expect(
+            AgentPlanOnDemandPolicy.shouldRequestPlan(
+                toolRound: AgentPlanOnDemandPolicy.toolRoundThreshold,
+                succeededWriteCalls: 1,
                 hasActivePlan: false,
                 interactionMode: .normal,
                 isUnattendedDispatchTask: false
@@ -107,6 +129,8 @@ nonisolated struct AgentPlanOnDemandPolicyTests {
         #expect(notice.contains("not a stopping point"))
         #expect(notice.contains("update_plan"))
         #expect(notice.contains("5 tool rounds"))
+        #expect(notice.contains("at least 3 independent steps"))
+        #expect(notice.contains("fewer than 3"))
     }
 
     /// The thresholds are the product decision: small enough that long tasks
@@ -118,5 +142,6 @@ nonisolated struct AgentPlanOnDemandPolicyTests {
         #expect(AgentPlanOnDemandPolicy.toolRoundThreshold <= 6)
         #expect(AgentPlanOnDemandPolicy.succeededWriteCallThreshold >= 2)
         #expect(AgentPlanOnDemandPolicy.succeededWriteCallThreshold <= 5)
+        #expect(AgentPlanOnDemandPolicy.minimumVisibleStepCount == 3)
     }
 }

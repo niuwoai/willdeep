@@ -35,8 +35,10 @@
   display: grid;
   grid-template-columns: repeat(20, 1fr);
   grid-template-rows: repeat(20, 1fr);
-  width: min(92vw, 480px);
-  height: min(92vw, 480px);
+  /* 容器相对而非视口相对：插件面板宽度 ≠ 布局视口时不会被撑出可视区。 */
+  width: min(100%, 480px);
+  height: auto;
+  aspect-ratio: 1;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 8px;
