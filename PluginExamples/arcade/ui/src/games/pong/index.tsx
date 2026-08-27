@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { GameProps } from '../../core/types';
 import { useKeyControls } from '../../core/input';
 import { saveBestScore } from '../../core/bestScore';
+import { playCue } from '../../core/audio';
 import { useI18n } from '../../core/i18n';
 import { pongStrings } from './strings';
 import './pong.css';
@@ -18,7 +19,7 @@ interface PongState {
 
 const initialState = (): PongState => ({ playerY: 40, cpuY: 40, ballX: 48, ballY: 48, dx: 1.4, dy: .8, player: 0, cpu: 0, won: false });
 
-export default function PongGame(_: GameProps) {
+export default function PongGame({ onWin }: GameProps) {
   const { locale } = useI18n();
   const strings = pongStrings(locale);
   const [game, setGame] = useState<PongState>(initialState);
@@ -48,6 +49,33 @@ export default function PongGame(_: GameProps) {
       });
     }, 32);
     return () => window.clearInterval(timer);
+  }, [game.won]);
+
+  // 球拍回球（dx 换向）、得分与终局各给一声反馈；胜利再撒花。
+  const mounted = useRef(false);
+  useEffect(() => {
+    // 挂载那一下不要凭空响一声，只有真的换向才出声
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    playCue('bounce');
+  }, [Math.sign(game.dx)]);
+  useEffect(() => {
+    if (game.player > 0) playCue('point');
+  }, [game.player]);
+  useEffect(() => {
+    if (game.cpu > 0) playCue('miss');
+  }, [game.cpu]);
+  useEffect(() => {
+    if (!game.won) return;
+    if (game.player > game.cpu) {
+      playCue('win');
+      onWin?.();
+    } else {
+      playCue('lose');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.won]);
 
   return <section className="pong" data-testid="pong-game">

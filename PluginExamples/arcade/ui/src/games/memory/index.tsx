@@ -16,6 +16,7 @@ import type { GameProps } from '../../core/types';
 import { useI18n } from '../../core/i18n';
 import { saveBestScore } from '../../core/bestScore';
 import { entropySeed } from '../../core/rng';
+import { playCue } from '../../core/audio';
 import { memoryStrings } from './strings';
 import type { MemoryStrings } from './strings';
 import {
@@ -41,7 +42,7 @@ function pairLabelKey(option: number): keyof MemoryStrings {
   return (PAIR_LABEL_KEY[option] ?? 'pairsEasy') as keyof MemoryStrings;
 }
 
-export default function MemoryGame({ seed }: GameProps) {
+export default function MemoryGame({ seed, onWin }: GameProps) {
   const { locale } = useI18n();
   const strings = memoryStrings(locale);
 
@@ -63,18 +64,30 @@ export default function MemoryGame({ seed }: GameProps) {
     return () => window.clearTimeout(timer);
   }, [state.locked]);
 
-  // 胜利时写入最佳成绩（saveBestScore 幂等，只保留更高分）。
+  // 配对成功/失败各给一声反馈。
   useEffect(() => {
-    if (state.status === 'won') {
-      saveBestScore('memory', scoreFor(state.pairs, state.moves));
-    }
-  }, [state.status, state.pairs, state.moves]);
+    if (state.matched.length > 0) playCue('match');
+  }, [state.matched.length]);
+  useEffect(() => {
+    if (state.locked) playCue('miss');
+  }, [state.locked]);
+
+  // 胜利时写入最佳成绩（saveBestScore 幂等，只保留更高分）并撒花。
+  useEffect(() => {
+    if (state.status !== 'won') return;
+    saveBestScore('memory', scoreFor(state.pairs, state.moves));
+    playCue('win');
+    onWin?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status]);
 
   const handleCardClick = (index: number): void => {
+    playCue('flip');
     setState((s) => flipCard(s, index));
   };
 
   const handleRestart = (): void => {
+    playCue('select');
     setState((s) => restart(s));
   };
 

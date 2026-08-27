@@ -19,10 +19,12 @@ import { useI18n } from '../../core/i18n';
 import { useKeyControls } from '../../core/input';
 import { saveBestScore } from '../../core/bestScore';
 import { entropySeed } from '../../core/rng';
+import { playCue } from '../../core/audio';
 import { MARBLE_COLORS, marbleStrings } from './strings';
 import type { MarbleStrings } from './strings';
 import {
   BALL_RADIUS,
+  EFFECT_SECONDS,
   DEFAULT_LEVEL,
   FIELD,
   LEVELS,
@@ -37,9 +39,10 @@ import {
   shoot,
   step,
   swapAmmo,
+  tangentAt,
   trackPoints,
 } from './engine';
-import type { MarbleState, MarbleStatus } from './engine';
+import type { MarbleState, MarbleStatus, Vec } from './engine';
 import './marble.css';
 
 /** 单帧最大时间步长（秒）：切后台回来时不要一次性把链条推很远。 */
@@ -124,7 +127,8 @@ function draw(
   context.lineWidth = 0.8;
   context.stroke();
 
-  // 链条
+  // 链条（带道具的珠子额外画标记：炸弹是深色芯 + 引信，闪光是脉动白环 + 回退箭头）
+  const pulse = 0.55 + 0.45 * Math.sin(state.time * 7);
   for (const ball of state.balls) {
     const center = pointAt(ball.dist);
     context.beginPath();
@@ -135,6 +139,8 @@ function draw(
     context.arc(center.x - BALL_RADIUS * 0.3, center.y - BALL_RADIUS * 0.3, BALL_RADIUS * 0.35, 0, Math.PI * 2);
     context.fillStyle = 'rgba(255, 255, 255, 0.45)';
     context.fill();
+    if (ball.power === 'bomb') drawBomb(context, center, pulse);
+    else if (ball.power === 'reverse') drawFlash(context, center, pulse, tangentAt(ball.dist));
   }
 
   // 飞行中的弹珠
@@ -143,6 +149,28 @@ function draw(
     context.arc(shot.x, shot.y, BALL_RADIUS, 0, Math.PI * 2);
     context.fillStyle = colorOf(shot.color);
     context.fill();
+  }
+
+  // 一次性特效：爆炸是橙色扩散圈，倒流是白色收缩圈
+  for (const effect of state.effects) {
+    const remain = Math.max(0, Math.min(1, (effect.until - state.time) / EFFECT_SECONDS));
+    const progress = 1 - remain;
+    const radius = effect.kind === 'blast'
+      ? BALL_RADIUS + (effect.radius - BALL_RADIUS) * progress
+      : effect.radius * (1 - progress * 0.6);
+    context.beginPath();
+    context.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+    context.strokeStyle = effect.kind === 'blast'
+      ? `rgba(255, 168, 76, ${remain.toFixed(3)})`
+      : `rgba(226, 240, 255, ${remain.toFixed(3)})`;
+    context.lineWidth = effect.kind === 'blast' ? 1.4 : 1;
+    context.stroke();
+    if (effect.kind === 'blast') {
+      context.beginPath();
+      context.arc(effect.x, effect.y, radius * 0.55, 0, Math.PI * 2);
+      context.fillStyle = `rgba(255, 214, 148, ${(remain * 0.35).toFixed(3)})`;
+      context.fill();
+    }
   }
 
   // 准星
@@ -176,7 +204,49 @@ function draw(
   context.fill();
 }
 
-export default function MarbleGame({ seed }: GameProps) {
+/** 炸弹标记：深色芯 + 顶上一点引信火花。 */
+function drawBomb(context: CanvasRenderingContext2D, center: Vec, pulse: number): void {
+  context.beginPath();
+  context.arc(center.x, center.y, BALL_RADIUS * 0.58, 0, Math.PI * 2);
+  context.fillStyle = '#12151f';
+  context.fill();
+  context.strokeStyle = `rgba(255, 214, 148, ${(0.5 + 0.5 * pulse).toFixed(3)})`;
+  context.lineWidth = 0.45;
+  context.stroke();
+  context.beginPath();
+  context.arc(center.x + BALL_RADIUS * 0.45, center.y - BALL_RADIUS * 0.45, BALL_RADIUS * 0.22, 0, Math.PI * 2);
+  context.fillStyle = `rgba(255, 196, 92, ${(0.45 + 0.55 * pulse).toFixed(3)})`;
+  context.fill();
+}
+
+/** 闪光标记：脉动白环 + 指向入口方向的回退箭头。 */
+function drawFlash(
+  context: CanvasRenderingContext2D,
+  center: Vec,
+  pulse: number,
+  tangent: Vec,
+): void {
+  context.beginPath();
+  context.arc(center.x, center.y, BALL_RADIUS * 0.92, 0, Math.PI * 2);
+  context.strokeStyle = `rgba(255, 255, 255, ${(0.35 + 0.65 * pulse).toFixed(3)})`;
+  context.lineWidth = 0.7;
+  context.stroke();
+  // 箭头朝链条前进方向的反向（也就是往回退的方向）
+  const back = { x: -tangent.x, y: -tangent.y };
+  const side = { x: -back.y, y: back.x };
+  const tip = { x: center.x + back.x * BALL_RADIUS * 0.62, y: center.y + back.y * BALL_RADIUS * 0.62 };
+  const baseX = center.x - back.x * BALL_RADIUS * 0.28;
+  const baseY = center.y - back.y * BALL_RADIUS * 0.28;
+  context.beginPath();
+  context.moveTo(tip.x, tip.y);
+  context.lineTo(baseX + side.x * BALL_RADIUS * 0.42, baseY + side.y * BALL_RADIUS * 0.42);
+  context.lineTo(baseX - side.x * BALL_RADIUS * 0.42, baseY - side.y * BALL_RADIUS * 0.42);
+  context.closePath();
+  context.fillStyle = `rgba(255, 255, 255, ${(0.6 + 0.4 * pulse).toFixed(3)})`;
+  context.fill();
+}
+
+export default function MarbleGame({ seed, onWin }: GameProps) {
   const { locale } = useI18n();
   const strings = marbleStrings(locale);
 
@@ -189,12 +259,19 @@ export default function MarbleGame({ seed }: GameProps) {
   // 2D 上下文只取一次：取不到（如 jsdom）就此关掉绘制，主循环照跑不误。
   const contextRef = useRef<CanvasRenderingContext2D | null | undefined>(undefined);
   const scoredRef = useRef(false);
+  const effectsRef = useRef(0);
   const [hud, setHud] = useState<Hud>(() => toHud(stateRef.current));
+  // 主循环只建一次，回调用 ref 取最新的，避免把循环重挂
+  const onWinRef = useRef(onWin);
+  useEffect(() => {
+    onWinRef.current = onWin;
+  }, [onWin]);
 
   const reset = useCallback(
     (nextLevel: number) => {
       stateRef.current = createInitialState(nextLevel, baseSeed);
       scoredRef.current = false;
+      effectsRef.current = 0;
       setHud(toHud(stateRef.current));
     },
     [baseSeed],
@@ -225,11 +302,25 @@ export default function MarbleGame({ seed }: GameProps) {
         }
         if (contextRef.current) draw(canvas, contextRef.current, next);
       }
+      // 新冒出来的特效各配一声（爆炸 / 倒流）
+      if (next.effects.length > effectsRef.current) {
+        const fresh = next.effects.slice(effectsRef.current);
+        if (fresh.some((effect) => effect.kind === 'blast')) playCue('blast');
+        if (fresh.some((effect) => effect.kind === 'reverse')) playCue('reverse');
+      }
+      effectsRef.current = next.effects.length;
+
       const snapshot = toHud(next);
       setHud((previous) => (sameHud(previous, snapshot) ? previous : snapshot));
       if ((next.status === 'won' || next.status === 'lost') && !scoredRef.current) {
         scoredRef.current = true;
         saveBestScore('marble', scoreFor(next));
+        if (next.status === 'won') {
+          playCue('win');
+          onWinRef.current?.();
+        } else {
+          playCue('lose');
+        }
       }
       frame = window.requestAnimationFrame(loop);
     };
@@ -244,12 +335,15 @@ export default function MarbleGame({ seed }: GameProps) {
   }, []);
 
   const fire = useCallback(() => {
+    const before = stateRef.current.shots.length;
     stateRef.current = shoot(stateRef.current);
+    if (stateRef.current.shots.length > before) playCue('shoot');
     setHud(toHud(stateRef.current));
   }, []);
 
   const swap = useCallback(() => {
     stateRef.current = swapAmmo(stateRef.current);
+    playCue('select');
     setHud(toHud(stateRef.current));
   }, []);
 
@@ -320,6 +414,8 @@ export default function MarbleGame({ seed }: GameProps) {
         <button type="button" className="btn" data-testid="marble-restart" onClick={() => {
           stateRef.current = restart(stateRef.current);
           scoredRef.current = false;
+          effectsRef.current = 0;
+          playCue('select');
           setHud(toHud(stateRef.current));
         }}>
           {strings.restart}
@@ -353,6 +449,17 @@ export default function MarbleGame({ seed }: GameProps) {
           {strings.aimRight}
         </button>
       </div>
+
+      <ul className="marble__legend" data-testid="marble-legend">
+        <li>
+          <i className="marble__mark marble__mark--bomb" aria-hidden="true" />
+          {strings.legendBomb}
+        </li>
+        <li>
+          <i className="marble__mark marble__mark--flash" aria-hidden="true" />
+          {strings.legendReverse}
+        </li>
+      </ul>
 
       <p className="marble__help" data-testid="marble-help">
         {strings.help}

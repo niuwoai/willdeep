@@ -4,6 +4,7 @@
  * 所有游戏渲染在 GameShell 内：顶部为返回大厅链接、标题、最佳成绩与
  * 种子展示，底部为操作说明。游戏模块只负责渲染 GameProps.seed 与玩法区。
  */
+import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { GameId } from '../core/types';
 import { Link, useRoute } from '../core/hashRouter';
@@ -11,14 +12,19 @@ import { useI18n } from '../core/i18n';
 import { useBestScore } from '../core/bestScore';
 import { TEST_IDS } from '../core/testid';
 import { getGameEntry } from '../games/manifest';
+import { isSoundEnabled, playCue, setSoundEnabled, subscribeSound } from '../core/audio';
+import { Confetti } from './Confetti';
 
 export interface GameShellProps {
   gameId: GameId;
   children: ReactNode;
+  /** 撒花计数：游戏每通关一次由路由层 +1（见 App.tsx 的 GameRoute）。 */
+  celebration?: number;
 }
 
-export function GameShell({ gameId, children }: GameShellProps) {
+export function GameShell({ gameId, children, celebration = 0 }: GameShellProps) {
   const { t } = useI18n();
+  const soundOn = useSyncExternalStore(subscribeSound, isSoundEnabled, () => true);
   const { route } = useRoute();
   const entry = getGameEntry(gameId);
   const best = useBestScore(gameId);
@@ -52,6 +58,22 @@ export function GameShell({ gameId, children }: GameShellProps) {
               {t('game.seedLabel')}: {route.seed}
             </span>
           )}
+          <button
+            type="button"
+            className="btn btn--ghost btn--sound"
+            data-testid={TEST_IDS.soundToggle}
+            aria-pressed={soundOn}
+            aria-label={t(soundOn ? 'sound.on' : 'sound.off')}
+            title={t(soundOn ? 'sound.on' : 'sound.off')}
+            onClick={() => {
+              const next = !soundOn;
+              setSoundEnabled(next);
+              // 开启的那一下先出个声，用户马上知道生效了（也顺便解锁 AudioContext）
+              if (next) playCue('select');
+            }}
+          >
+            {soundOn ? '🔊' : '🔇'}
+          </button>
         </div>
       </header>
 
@@ -60,6 +82,8 @@ export function GameShell({ gameId, children }: GameShellProps) {
       <footer className="shell__footer" data-testid={TEST_IDS.controlsHelp}>
         {t(entry.controlsKey)}
       </footer>
+
+      <Confetti trigger={celebration} />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import type { GameProps } from '../../core/types';
 import { useI18n } from '../../core/i18n';
 import { saveBestScore } from '../../core/bestScore';
 import { entropySeed } from '../../core/rng';
+import { playCue } from '../../core/audio';
 import { ONET_FACES, onetStrings } from './strings';
 import type { OnetStrings } from './strings';
 import {
@@ -48,7 +49,7 @@ function polylinePoints(path: readonly Point[]): string {
   return path.map((point) => `${point.x + 0.5},${point.y + 0.5}`).join(' ');
 }
 
-export default function OnetGame({ seed }: GameProps) {
+export default function OnetGame({ seed, onWin }: GameProps) {
   const { locale } = useI18n();
   const strings = onetStrings(locale);
 
@@ -95,9 +96,22 @@ export default function OnetGame({ seed }: GameProps) {
     setAutoShuffled(true);
   }, [state]);
 
-  // 胜利时写入最佳成绩（saveBestScore 只保留更高分）。
+  // 消掉一对给一声反馈。
   useEffect(() => {
-    if (state.status === 'won') saveBestScore('onet', scoreFor(state));
+    if (state.lastPath) playCue('clear');
+  }, [state.lastPath]);
+
+  // 洗牌（手动或死局自救）给一声反馈。
+  useEffect(() => {
+    if (state.shuffles > 0) playCue('shuffle');
+  }, [state.shuffles]);
+
+  // 胜利时写入最佳成绩（saveBestScore 只保留更高分）并撒花。
+  useEffect(() => {
+    if (state.status !== 'won') return;
+    saveBestScore('onet', scoreFor(state));
+    playCue('win');
+    onWin?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
 
@@ -112,6 +126,7 @@ export default function OnetGame({ seed }: GameProps) {
 
   const handleTileClick = (index: number): void => {
     setAutoShuffled(false);
+    playCue('select');
     setState((current) => selectTile(current, index));
   };
 

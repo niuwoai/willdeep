@@ -13,6 +13,8 @@ import type { GameProps } from '../../core/types';
 import { useKeyControls } from '../../core/input';
 import type { KeyBinding } from '../../core/input';
 import { saveBestScore } from '../../core/bestScore';
+import { isNewBestScore } from '../../core/safeLocalStorage';
+import { playCue } from '../../core/audio';
 import { useI18n } from '../../core/i18n';
 import { tetrisStrings } from './strings';
 import {
@@ -75,7 +77,7 @@ function reduce(queue: PieceKind[], state: ViewState, action: Action): ViewState
   }
 }
 
-export default function TetrisGame({ seed }: GameProps) {
+export default function TetrisGame({ seed, onWin }: GameProps) {
   const { locale } = useI18n();
   const strings = tetrisStrings(locale);
 
@@ -91,9 +93,24 @@ export default function TetrisGame({ seed }: GameProps) {
     initialViewState,
   );
 
+  // 消行给一声反馈。
   useEffect(() => {
-    if (view.game.gameOver) saveBestScore('tetris', view.game.score);
-  }, [view.game.gameOver, view.game.score]);
+    if (view.game.lines > 0) playCue('line');
+  }, [view.game.lines]);
+
+  // 终局写分：俄罗斯方块没有「通关」，刷新最佳成绩就是值得撒花的时刻。
+  useEffect(() => {
+    if (!view.game.gameOver) return;
+    const record = isNewBestScore('tetris', view.game.score);
+    saveBestScore('tetris', view.game.score);
+    if (record) {
+      playCue('win');
+      onWin?.();
+    } else {
+      playCue('lose');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.game.gameOver]);
 
   useEffect(() => {
     const timer = window.setInterval(() => dispatch({ type: 'tick' }), TICK_MS);
