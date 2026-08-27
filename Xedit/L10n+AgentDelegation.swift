@@ -46,6 +46,42 @@ extension L10n {
             defaultValue: "Subagents required · none spawned"
         )
 
+        // MARK: Live Worker progress
+
+        static func progressRound(_ round: Int, _ maximumRounds: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.progress-round",
+                defaultValue: "Round %1$d/%2$d"
+            )
+            return String(format: template, round, maximumRounds)
+        }
+        static func progressCompletedTools(_ count: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.progress-completed-tools",
+                defaultValue: "%d tools completed"
+            )
+            return String(format: template, count)
+        }
+        static let progressThinking = String(
+            localized: "agent-delegation.progress-thinking",
+            defaultValue: "Thinking about the next step"
+        )
+        static func progressRunningTool(_ toolName: String) -> String {
+            let template = String(
+                localized: "agent-delegation.progress-running-tool",
+                defaultValue: "Running %@"
+            )
+            return String(format: template, toolName)
+        }
+        static let progressVerifying = String(
+            localized: "agent-delegation.progress-verifying",
+            defaultValue: "Verifying the result"
+        )
+        static let progressPreparingReport = String(
+            localized: "agent-delegation.progress-preparing-report",
+            defaultValue: "Preparing the result"
+        )
+
         // MARK: Subagent inspector
 
         static let inspectorTitle = String(

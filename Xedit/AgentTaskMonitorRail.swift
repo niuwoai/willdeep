@@ -748,6 +748,7 @@ struct AgentSemanticActivityStatusLine: View {
                         isActive: shouldAnimateCurrentAction,
                         baseColor: phase.tint
                     )
+                    .layoutPriority(1)
                     if let startedAt = appState.agentTurnStartedAt, appState.isAgentResponding {
                         Spacer(minLength: 4)
                         TimelineView(.periodic(from: .now, by: 1.0)) { context in
