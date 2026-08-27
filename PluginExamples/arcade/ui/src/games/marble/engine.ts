@@ -41,7 +41,7 @@ export interface MarbleSupplyBall {
 
 /** 一次性视觉特效（渲染层按 until 与当前时间画扩散圈）。 */
 export interface MarbleEffect {
-  kind: 'blast' | 'reverse';
+  kind: 'blast' | 'reverse' | 'combo';
   x: number;
   y: number;
   radius: number;
@@ -129,6 +129,8 @@ const SCORE_PER_BALL = 10;
 export const BOMB_RADIUS = SPACING * 3.2;
 /** 闪光珠每颗把链条往回推的距离（约 10 个身位）。 */
 export const REVERSE_DISTANCE = SPACING * 10;
+/** 断口合拢又凑成三连时的回退距离（比闪光珠温和些，但足够看出「被顶回去了」）。 */
+export const CHAIN_PULLBACK = SPACING * 6;
 /** 特效停留时长（秒），渲染层按它换算扩散进度。 */
 export const EFFECT_SECONDS = 0.45;
 /** 开局弹簧入场：整条链在这段时间里被「甩」上轨道，中途会过冲再回弹。 */
@@ -187,6 +189,8 @@ export interface MarbleState {
   pullbackSpeed: number;
   /** 落洞阶段已经过去的时间（秒）。 */
   falling: number;
+  /** 断口合拢连锁消除的累计次数：组件据此放庆祝特效。 */
+  chains: number;
   /** 已推进的时间（秒），用于特效寿命与道具闪烁节拍。 */
   time: number;
   nextId: number;
@@ -350,6 +354,7 @@ export function createInitialState(
     pullback: 0,
     pullbackSpeed: 0,
     falling: 0,
+    chains: 0,
     time: 0,
     nextId: opening + 1,
   };
@@ -720,23 +725,34 @@ export function step(state: MarbleState, dt: number): MarbleState {
   let effects = state.effects.filter((effect) => effect.until > time);
   let pendingJunctions = state.pendingJunctions.filter((id) => balls.some((ball) => ball.id === id));
 
-  // 缺口合拢：断口两侧接上时重新判定三连（连锁得分）
+  // 缺口合拢：断口两侧接上时重新判定三连（连锁得分 + 回退 + 庆祝）
+  let chains = state.chains;
+  let chainPullback = 0;
   for (const id of advanced.joined) {
     if (!pendingJunctions.includes(id)) continue;
     const index = balls.findIndex((ball) => ball.id === id);
     if (index <= 0) continue;
+    const contact = balls[index] as MarbleBall;
     const result = resolveMatch(balls, index, combo + 1, time);
     pendingJunctions = pendingJunctions.filter((pending) => pending !== id);
     if (result.removed === 0) continue;
     balls = result.balls;
     score += result.gained;
     combo += 1;
-    effects = [...effects, ...result.effects];
+    chains += 1;
+    // 撞在一起消掉的这一下，把链条往回顶一段，并在接合处放个庆祝圈
+    chainPullback += CHAIN_PULLBACK;
+    const center = pointAt(contact.dist);
+    effects = [
+      ...effects,
+      ...result.effects,
+      { kind: 'combo', x: center.x, y: center.y, radius: SPACING * 3, until: time + EFFECT_SECONDS * 1.6 },
+    ];
     if (result.junction !== null) pendingJunctions = [...pendingJunctions, result.junction];
   }
 
-  // 闪光倒退：带加速地把链条往回拉，而不是瞬移
-  let pullback = state.pullback;
+  // 闪光倒退 / 连锁回退：带加速地把链条往回拉，而不是瞬移
+  let pullback = state.pullback + chainPullback;
   let pullbackSpeed = state.pullbackSpeed;
   if (pullback > 0 && balls.length > 0) {
     pullbackSpeed = Math.min(
@@ -782,6 +798,7 @@ export function step(state: MarbleState, dt: number): MarbleState {
     entry,
     pullback,
     pullbackSpeed,
+    chains,
     time,
     nextId,
     shots: [],

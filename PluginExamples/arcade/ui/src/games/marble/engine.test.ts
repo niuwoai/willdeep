@@ -243,6 +243,28 @@ describe('印加弹珠：消除与连锁', () => {
     }
     expect(state.balls).toHaveLength(0);
     expect(state.score).toBeGreaterThan(afterFirst.score);
+    // 撞在一起消掉这一下：记一次连锁、放一圈庆祝特效
+    expect(state.chains).toBe(1);
+  });
+
+  it('断口合拢连锁会顶回链条并放庆祝特效', () => {
+    const chain = withChain([7, 7, 3, 3, 3, 7, 1, 2, 4], 260);
+    const afterFirst = applyHit(chain, 4, 3, false);
+    expect(afterFirst.chains).toBe(0);
+
+    let state = afterFirst;
+    for (let frame = 0; frame < 400 && state.chains === 0; frame += 1) {
+      state = step(state, 1 / 60);
+    }
+    expect(state.chains).toBe(1);
+    // 连锁那一帧：挂上回退距离 + 金色庆祝圈
+    expect(state.pullback + state.pullbackSpeed).toBeGreaterThan(0);
+    expect(state.effects.some((effect) => effect.kind === 'combo')).toBe(true);
+
+    // 回退真的把队首往回拉了
+    const headBefore = state.balls[0]?.dist as number;
+    for (let frame = 0; frame < 20; frame += 1) state = step(state, 1 / 60);
+    expect(state.balls[0]?.dist as number).toBeLessThan(headBefore);
   });
 
   it('命中检测把飞行弹珠并入链条', () => {
