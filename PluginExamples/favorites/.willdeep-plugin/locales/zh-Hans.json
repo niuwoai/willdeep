@@ -1,0 +1,7 @@
+{
+  "destination.favorites": "收藏夹",
+  "command.add": "收藏",
+  "command.list": "收藏列表",
+  "command.remove": "删除收藏",
+  "command.open": "打开收藏夹"
+}

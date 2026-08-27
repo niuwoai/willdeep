@@ -50,6 +50,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     var onShowTurnReport: (() -> Void)? = nil
     var onReferenceGeneratedImage: ((String) -> Void)? = nil
     var onAddSelectionToTask: ((String) -> Void)? = nil
+    /// 插件经 `menus["chat.selection"]` 贡献的选区动作被点中（选中文本, 插件, 命令）。
+    var onSelectionPluginAction: ((String, AgentPluginID, AgentPluginCommandID) -> Void)? = nil
     var onOpenFilePath: ((String) -> Void)? = nil
     var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)? = nil
     var progressPlan: AgentPlan? = nil
@@ -71,6 +73,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.onShowTurnReport = onShowTurnReport
         view.onReferenceGeneratedImage = onReferenceGeneratedImage
         view.onAddSelectionToTask = onAddSelectionToTask
+        view.onSelectionPluginAction = onSelectionPluginAction
         view.onOpenFilePath = onOpenFilePath
         view.onOpenAttachmentCitation = onOpenAttachmentCitation
         view.onShowPlan = onShowPlan
@@ -100,6 +103,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         nsView.onShowTurnReport = onShowTurnReport
         nsView.onReferenceGeneratedImage = onReferenceGeneratedImage
         nsView.onAddSelectionToTask = onAddSelectionToTask
+        nsView.onSelectionPluginAction = onSelectionPluginAction
         nsView.onOpenFilePath = onOpenFilePath
         nsView.onOpenAttachmentCitation = onOpenAttachmentCitation
         nsView.onShowPlan = onShowPlan
@@ -196,6 +200,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     var onShowTurnReport: (() -> Void)?
     var onReferenceGeneratedImage: ((String) -> Void)?
     var onAddSelectionToTask: ((String) -> Void)?
+    var onSelectionPluginAction: ((String, AgentPluginID, AgentPluginCommandID) -> Void)?
     var onOpenFilePath: ((String) -> Void)?
     var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)?
     var onShowPlan: (() -> Void)?
@@ -320,6 +325,23 @@ final class AgentChatHistoryNSTextView: NSTextView {
         }
         if let selectedText {
             menu.addItem(addSelectionToTaskMenuItem(selectedText: selectedText))
+            for resolved in AgentPluginRegistry.shared.menuCommands(at: AgentPluginMenuLocation.chatSelection) {
+                let item = NSMenuItem(
+                    title: AgentPluginRegistry.shared.localizedString(
+                        resolved.command.titleKey,
+                        pluginID: resolved.pluginID
+                    ),
+                    action: #selector(runSelectionPluginActionFromMenu(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = AgentChatSelectionPluginMenuPayload(
+                    text: selectedText,
+                    pluginID: resolved.pluginID,
+                    commandID: resolved.command.id
+                )
+                menu.addItem(item)
+            }
         }
         if let marker {
             let item = NSMenuItem(
@@ -354,6 +376,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
 
         let actionView = selectionActionView ?? makeSelectionActionView()
         selectionActionText = selectedText
+        actionView.update(items: selectionActionItems())
         actionView.isHidden = false
 
         let size = actionView.preferredSize
@@ -380,12 +403,33 @@ final class AgentChatHistoryNSTextView: NSTextView {
         )
     }
 
+    /// 气泡里的动作：内置「添加到任务」打头，后面接插件贡献的项。
+    private func selectionActionItems() -> [AgentChatSelectionActionItem] {
+        let builtIn = AgentChatSelectionActionItem(title: L10n.AgentSelection.addToTask, plugin: nil)
+        let pluginItems = AgentPluginRegistry.shared
+            .menuCommands(at: AgentPluginMenuLocation.chatSelection)
+            .map { resolved in
+                AgentChatSelectionActionItem(
+                    title: AgentPluginRegistry.shared.localizedString(
+                        resolved.command.titleKey,
+                        pluginID: resolved.pluginID
+                    ),
+                    plugin: (resolved.pluginID, resolved.command.id)
+                )
+            }
+        return [builtIn] + pluginItems
+    }
+
     private func makeSelectionActionView() -> AgentChatSelectionActionView {
-        let actionView = AgentChatSelectionActionView(title: L10n.AgentSelection.addToTask)
-        actionView.onAdd = { [weak self] in
+        let actionView = AgentChatSelectionActionView(items: selectionActionItems())
+        actionView.onSelect = { [weak self] item in
             guard let self, let selectedText = self.selectionActionText else { return }
             self.dismissSelectionAction()
-            self.onAddSelectionToTask?(selectedText)
+            if let plugin = item.plugin {
+                self.onSelectionPluginAction?(selectedText, plugin.pluginID, plugin.commandID)
+            } else {
+                self.onAddSelectionToTask?(selectedText)
+            }
         }
         addSubview(actionView, positioned: .above, relativeTo: nil)
         selectionActionView = actionView
@@ -443,6 +487,11 @@ final class AgentChatHistoryNSTextView: NSTextView {
             return
         }
         onAddSelectionToTask?(selectedText)
+    }
+
+    @objc private func runSelectionPluginActionFromMenu(_ sender: NSMenuItem) {
+        guard let payload = sender.representedObject as? AgentChatSelectionPluginMenuPayload else { return }
+        onSelectionPluginAction?(payload.text, payload.pluginID, payload.commandID)
     }
 
     @objc private func quoteGeneratedImageFromMenu(_ sender: NSMenuItem) {
@@ -871,14 +920,37 @@ enum AgentChatSelectionActionMetrics {
     }
 }
 
+/// 右键菜单项带的载荷（NSMenuItem.representedObject 只能放对象/结构体值）。
+final class AgentChatSelectionPluginMenuPayload: NSObject {
+    let text: String
+    let pluginID: AgentPluginID
+    let commandID: AgentPluginCommandID
+
+    init(text: String, pluginID: AgentPluginID, commandID: AgentPluginCommandID) {
+        self.text = text
+        self.pluginID = pluginID
+        self.commandID = commandID
+    }
+}
+
+/// 选区气泡里的一项：内置「添加到任务」，或插件经 `menus["chat.selection"]` 贡献的动作。
+struct AgentChatSelectionActionItem {
+    let title: String
+    /// 插件项带上来源；内置项为 nil。
+    let plugin: (pluginID: AgentPluginID, commandID: AgentPluginCommandID)?
+}
+
 private final class AgentChatSelectionActionView: NSView {
-    private let actionButton: NSButton
+    private let stack: NSStackView
+    private var buttons: [NSButton] = []
+    private var items: [AgentChatSelectionActionItem] = []
     private var hoverTrackingArea: NSTrackingArea?
     private var isHovered = false
-    var onAdd: (() -> Void)?
+    /// 点了第几项（下标对应 items）。
+    var onSelect: ((AgentChatSelectionActionItem) -> Void)?
 
-    init(title: String) {
-        actionButton = NSButton(title: title, target: nil, action: nil)
+    init(items: [AgentChatSelectionActionItem]) {
+        stack = NSStackView()
         super.init(frame: .zero)
 
         wantsLayer = true
@@ -889,26 +961,46 @@ private final class AgentChatSelectionActionView: NSView {
         layer?.shadowOffset = AgentChatSelectionActionMetrics.shadowOffset
         applyAppearance()
 
-        actionButton.target = self
-        actionButton.action = #selector(addToTask(_:))
-        actionButton.isBordered = false
-        actionButton.focusRingType = .none
-        actionButton.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        actionButton.contentTintColor = .labelColor
-        actionButton.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(actionButton)
+        stack.orientation = .horizontal
+        stack.spacing = 2
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
         NSLayoutConstraint.activate([
-            actionButton.leadingAnchor.constraint(
+            stack.leadingAnchor.constraint(
                 equalTo: leadingAnchor,
                 constant: AgentChatSelectionActionMetrics.horizontalPadding
             ),
-            actionButton.trailingAnchor.constraint(
+            stack.trailingAnchor.constraint(
                 equalTo: trailingAnchor,
                 constant: -AgentChatSelectionActionMetrics.horizontalPadding
             ),
-            actionButton.topAnchor.constraint(equalTo: topAnchor),
-            actionButton.bottomAnchor.constraint(equalTo: bottomAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+        update(items: items)
+    }
+
+    /// 重建按钮：插件启停后条目会变，气泡复用同一个 view。
+    func update(items: [AgentChatSelectionActionItem]) {
+        guard items.map(\.title) != self.items.map(\.title) || buttons.isEmpty else {
+            self.items = items
+            return
+        }
+        self.items = items
+        for button in buttons {
+            stack.removeArrangedSubview(button)
+            button.removeFromSuperview()
+        }
+        buttons = items.enumerated().map { index, item in
+            let button = NSButton(title: item.title, target: self, action: #selector(selectAction(_:)))
+            button.tag = index
+            button.isBordered = false
+            button.focusRingType = .none
+            button.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+            button.contentTintColor = .labelColor
+            stack.addArrangedSubview(button)
+            return button
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -916,9 +1008,12 @@ private final class AgentChatSelectionActionView: NSView {
     }
 
     var preferredSize: NSSize {
-        NSSize(
-            width: ceil(actionButton.intrinsicContentSize.width)
-                + AgentChatSelectionActionMetrics.horizontalPadding * 2,
+        let buttonsWidth = buttons.reduce(CGFloat.zero) { total, button in
+            total + ceil(button.intrinsicContentSize.width)
+        }
+        let spacing = CGFloat(max(0, buttons.count - 1)) * stack.spacing
+        return NSSize(
+            width: buttonsWidth + spacing + AgentChatSelectionActionMetrics.horizontalPadding * 2,
             height: AgentChatSelectionActionMetrics.height
         )
     }
@@ -992,8 +1087,9 @@ private final class AgentChatSelectionActionView: NSView {
         needsDisplay = true
     }
 
-    @objc private func addToTask(_ sender: NSButton) {
-        onAdd?()
+    @objc private func selectAction(_ sender: NSButton) {
+        guard sender.tag >= 0, sender.tag < items.count else { return }
+        onSelect?(items[sender.tag])
     }
 }
 

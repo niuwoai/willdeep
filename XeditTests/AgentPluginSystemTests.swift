@@ -664,16 +664,59 @@ struct AgentPluginSystemTests {
             from: repositoryRoot.appendingPathComponent("PluginExamples/arcade")
         )
         defer { try? FileManager.default.removeItem(at: arcadeRuntimePackage) }
-        for name in ["project-overview", "issue-panel", "tetris", "arcade", "session-vitality"] {
+        for name in ["project-overview", "issue-panel", "tetris", "arcade", "session-vitality", "favorites"] {
             let packageURL = name == "arcade"
                 ? arcadeRuntimePackage
                 : repositoryRoot.appendingPathComponent("PluginExamples/\(name)")
             let package = try AgentPluginPackageLoader.load(
                 packageURL: packageURL,
                 source: .installed,
-                currentWillDeepVersion: "1.281.0-rc1"
+                // 收藏夹插件要求的宿主版本比其它样例新（它依赖 chat.selection 挂载点）
+                currentWillDeepVersion: "1.299.0-rc3"
             )
             #expect(package.destinations.count == 1)
+        }
+    }
+
+    @Test
+    func favoritesExampleContributesTheChatSelectionMenu() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let package = try AgentPluginPackageLoader.load(
+            packageURL: repositoryRoot.appendingPathComponent("PluginExamples/favorites"),
+            source: .installed,
+            currentWillDeepVersion: "1.299.0-rc3"
+        )
+        let manifest = try #require(package.manifest)
+
+        // 选区菜单挂载点解析出来的必须是本插件里真实存在的命令
+        let selectionCommandIDs = manifest.contributes.menus[AgentPluginMenuLocation.chatSelection] ?? []
+        #expect(selectionCommandIDs == ["favorites.add"])
+        let commandIDs = Set(manifest.contributes.commands.map(\.id))
+        for commandID in selectionCommandIDs {
+            #expect(commandIDs.contains(commandID))
+        }
+
+        // 「收藏」这条命令要把文本转交给 MCP 工具，否则选区里的原文没人接
+        let add = try #require(manifest.contributes.commands.first { $0.id == "favorites.add" })
+        #expect(add.handler.type == .mcpTool)
+        #expect(add.handler.server == "favorites")
+        #expect(add.handler.tool == "favorites.add")
+        #expect(manifest.dependencies.mcpServers.contains("favorites"))
+    }
+
+    @Test
+    func chatSelectionMenuLocationIsRegisteredInTheSchema() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let schemaURL = repositoryRoot
+            .appendingPathComponent("docs/plugin-schema/willdeep-plugin.schema.json")
+        let schema = try String(contentsOf: schemaURL, encoding: .utf8)
+        // Swift 侧的常量与对外 schema 的枚举必须同步，否则插件作者按文档写会被加载器拒掉
+        for location in AgentPluginMenuLocation.all {
+            #expect(schema.contains("\"\(location)\""))
         }
     }
 

@@ -168,6 +168,12 @@ v1 菜单位置：
 - `composer.more`
 - `plugin.page.toolbar`
 - `plugin.sidebar.row.context`
+- `chat.selection`（1.299.0-rc3 起）：聊天正文选中文字后的气泡与右键菜单。宿主执行这里的命令时固定传两个参数：
+  `text`（选中的原文，已按聊天导出的净化规则处理）与 `source`（固定 `"chat.selection"`，供插件区分入口）。
+  内置的「添加到任务」永远排在第一位，插件项按安装顺序接在后面。参考实现见 `PluginExamples/favorites`。
+
+菜单位置的白名单在 `AgentPluginMenuLocation.all` 一处定义，加载器校验、`docs/plugin-schema` 的枚举都从它来；
+`AgentPluginSystemTests.chatSelectionMenuLocationIsRegisteredInTheSchema` 盯着两边不许劈叉。
 
 命令 handler 仅可为：
 

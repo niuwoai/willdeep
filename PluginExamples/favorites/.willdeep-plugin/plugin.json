@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "minimumWillDeepVersion": "1.299.0-rc3",
+  "contributes": {
+    "destinations": [{
+      "id": "favorites",
+      "titleKey": "destination.favorites",
+      "icon": "sf:bookmark.fill",
+      "mainPage": "favorites.main",
+      "companionSidebar": "favorites.sidebar"
+    }],
+    "sidebars": [{
+      "id": "favorites.sidebar",
+      "mode": "none"
+    }],
+    "pages": [{
+      "id": "favorites.main",
+      "runtime": "localWeb",
+      "entryPath": "ui/index.html"
+    }],
+    "commands": [
+      {
+        "id": "favorites.add",
+        "titleKey": "command.add",
+        "icon": "sf:bookmark",
+        "handler": {"type": "mcpTool", "server": "favorites", "tool": "favorites.add"}
+      },
+      {
+        "id": "favorites.list",
+        "titleKey": "command.list",
+        "icon": "sf:list.bullet",
+        "handler": {"type": "mcpTool", "server": "favorites", "tool": "favorites.list"}
+      },
+      {
+        "id": "favorites.remove",
+        "titleKey": "command.remove",
+        "icon": "sf:trash",
+        "handler": {"type": "mcpTool", "server": "favorites", "tool": "favorites.remove"}
+      },
+      {
+        "id": "favorites.open",
+        "titleKey": "command.open",
+        "icon": "sf:bookmark.fill",
+        "handler": {"type": "navigate", "destination": "favorites"}
+      }
+    ],
+    "menus": {
+      "chat.selection": ["favorites.add"],
+      "commandPalette": ["favorites.open"]
+    },
+    "settings": []
+  },
+  "permissions": ["process.execute"],
+  "dependencies": {"mcpServers": ["favorites"], "skills": []}
+}

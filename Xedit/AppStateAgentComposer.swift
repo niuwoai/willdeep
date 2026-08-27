@@ -2271,6 +2271,30 @@ extension AppState {
         agentComposerFocusRevision += 1
     }
 
+    /// 插件贡献的选区动作：把选中的原文交给插件命令执行。
+    ///
+    /// 参数按契约固定为 `text`（选中的原文）与 `source`（来自哪里，便于插件区分入口），
+    /// 复用既有的命令执行器，所以权限确认、mcpTool 派发、错误提示都和其它入口一致。
+    func runAgentChatSelectionPluginAction(
+        text rawText: String,
+        pluginID: AgentPluginID,
+        commandID: AgentPluginCommandID
+    ) {
+        let text = AgentTextAttachment.sanitizedPastedContent(rawText)
+        guard !text.isEmpty else { return }
+        let destinationID = AgentPluginRegistry.shared.defaultDestinationID(for: pluginID)
+        Task { @MainActor in
+            // 与侧栏/composer 的插件命令入口保持一致：失败只记日志，不打断聊天
+            _ = try? await AgentPluginCommandExecutor.execute(
+                pluginID: pluginID,
+                commandID: commandID,
+                arguments: ["text": text, "source": "chat.selection"],
+                destinationID: destinationID,
+                appState: self
+            )
+        }
+    }
+
     func appendGeneratedImageReferenceToAgentInput(_ marker: String) {
         let trimmed = marker.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }

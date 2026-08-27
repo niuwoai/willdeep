@@ -42,7 +42,7 @@
         "commands": { "type": "array", "items": { "$ref": "#/$defs/command" } },
         "menus": {
           "type": "object",
-          "propertyNames": { "enum": ["commandPalette", "session.context", "composer.more", "plugin.page.toolbar", "plugin.sidebar.row.context"] },
+          "propertyNames": { "enum": ["commandPalette", "session.context", "composer.more", "plugin.page.toolbar", "plugin.sidebar.row.context", "chat.selection"] },
           "additionalProperties": { "$ref": "#/$defs/idArray" }
         },
         "settings": { "type": "array", "items": { "$ref": "#/$defs/setting" } }
