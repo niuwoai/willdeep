@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-27 | Current version: v1.296.0-rc9
+> Last updated: 2026-08-27 | Current version: v1.296.0-rc10
 
 ## Positioning
 
@@ -12,6 +12,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **完整 ARM-only 发布产物（1.296.0-rc10）** —— 当 Release 构建只请求 `arm64` 时，除主程序外还会裁剪内置 `willdeep-agent` 和 Computer Use Helper 的 Intel 切片，并在裁剪后重新签名、验证嵌套 Helper；常规通用架构构建不受影响。
 - **Worker 委派实时动作可见（1.296.0-rc9）** —— 对话底部的委派状态不再只显示执行者与不断增长的耗时，而是在 Worker 名称后持续追加当前轮次、已完成工具数，以及“正在思考下一步／读取文件／搜索代码／运行命令／验证结果／整理结果”等安全动态；整组文案支持英、简中、日、西、法五种语言，只使用宿主掌握的语义阶段和工具名称，不展示子代理私有推理、完整命令或提示词。
 - **插件原彩图标与轻量批准操作（1.296.0-rc8）** —— 插件中心优先展示插件包自带的原色 PNG／SVG 品牌图标，缺失资源时根据插件标识生成稳定的彩色 SF Symbol 替代图标；高频出现的“批准并启用”使用柔和系统强调色底板与细描边，减少连续深色按钮造成的视觉压迫。
 - **Worker 委派执行者可见（1.296.0-rc7）** —— 对话底部的实时委派状态显示最终实际执行的 Worker 名称，并继续附带轮次、工具调用量与耗时，用户无需打开内部详情即可判断任务交给了阅读、实现、验证、运维、裁判或深查 Worker。
