@@ -2289,12 +2289,21 @@ extension AppState {
             return
         }
         let destinationID = AgentPluginRegistry.shared.defaultDestinationID(for: pluginID)
+        // 声明了 workspace.read 的插件再多收一个「当前工作区」：待办这类插件
+        // 靠它把从聊天里抓下来的东西归到项目上。没声明的插件拿不到——和页面
+        // 上下文（AgentPluginDestinationContext）走同一条门禁。
+        let workspace = AgentPluginRegistry.shared.hasPermission(.workspaceRead, pluginID: pluginID)
+            ? (activeRuntime?.workspaceLocation?.localPath
+                ?? activeRuntime?.workspaceRootPath
+                ?? rootDirectory?.path)
+            : nil
+        let arguments = Self.chatSelectionArguments(text: text, workspace: workspace)
         Task { @MainActor in
             do {
                 let result = try await AgentPluginCommandExecutor.execute(
                     pluginID: pluginID,
                     commandID: commandID,
-                    arguments: ["text": text, "source": "chat.selection"],
+                    arguments: arguments,
                     destinationID: destinationID,
                     appState: self
                 )
@@ -2303,6 +2312,19 @@ extension AppState {
                 completion(false)
             }
         }
+    }
+
+    /// 选区动作的参数契约：`text`（选中的原文）+ `source`（入口），
+    /// 外加可选的 `workspace`（仅当插件声明了 workspace.read）。
+    nonisolated static func chatSelectionArguments(
+        text: String,
+        workspace: String?
+    ) -> [String: String] {
+        var arguments = ["text": text, "source": "chat.selection"]
+        if let workspace, !workspace.isEmpty {
+            arguments["workspace"] = workspace
+        }
+        return arguments
     }
 
     /// 命令执行器抛错固然是失败，但 MCP 工具「跑通了却拒绝干活」是另一种失败：
