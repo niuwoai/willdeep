@@ -432,11 +432,16 @@ struct AgentAssistantMarkdownBody: View {
 
     var body: some View {
         let extraction = AgentTurnProgressPresentation.extract(from: content, plan: progressPlan)
+        // 同 TextKit 历史:交接里的 `NEXT PROMPT:` 段不进正文。两条路径
+        // 必须一起剥,否则流式时看得见、回合一结束折进历史又不见了。
+        let visibleContent = AgentContextRunwayHandoffDisplay
+            .extract(from: extraction.visibleContent)
+            .visibleContent
         VStack(alignment: .leading, spacing: AgentTurnProgressLayoutMetrics.contentSpacing) {
-            if !extraction.visibleContent.isEmpty {
+            if !visibleContent.isEmpty {
                 if isStreaming {
                     AgentAssistantStreamingBody(
-                        content: extraction.visibleContent,
+                        content: visibleContent,
                         baseFontSize: baseFontSize,
                         showsCursor: showsStreamingCursor,
                         rendersMarkdown: rendersStreamingMarkdown
@@ -447,7 +452,7 @@ struct AgentAssistantMarkdownBody: View {
                     // summary remains a bounded second view rather than
                     // rebuilding one view per Markdown block.
                     Text(AgentAssistantMarkdownRenderer.render(
-                        extraction.visibleContent,
+                        visibleContent,
                         isDark: colorScheme == .dark,
                         baseFontSize: baseFontSize,
                         fontID: agentChatFontID

@@ -359,6 +359,8 @@ struct AgentChatTranscript: View {
                                 onShowPlan: {
                                     appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .plan)
                                 },
+                                onResumeHandoff: appState.prefillAgentInputWithHandoffResumeWord,
+                                onStartHandoffInNewSession: appState.startAgentSessionWithHandoffRelayPrompt,
                                 searchQuery: conversationSearchQuery,
                                 activeSearchMatchIndex: conversationSearchActiveIndex,
                                 onSearchResultCountChange: updateConversationSearchMatchCount,
