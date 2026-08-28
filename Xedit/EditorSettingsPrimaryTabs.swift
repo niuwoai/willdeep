@@ -161,6 +161,13 @@ extension EditorSettingsView {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section(L10n.Settings.sectionFontSmoothing) {
+                Toggle(L10n.Settings.toggleFontSmoothing, isOn: $appState.agentFontSmoothingEnabled)
+                Text(L10n.Settings.fontSmoothingDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }

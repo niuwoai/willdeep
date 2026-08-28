@@ -1509,76 +1509,6 @@
         }
       }
     },
-    "automation.run-outcome.failed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Failed"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fallido"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Échec"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "失敗"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "失败"
-          }
-        }
-      }
-    },
-    "automation.run-outcome.interrupted" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Interrupted"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Interrumpido"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Interrompu"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "中断"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已中断"
-          }
-        }
-      }
-    },
     "automation.run-outcome.running" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1610,41 +1540,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行中"
-          }
-        }
-      }
-    },
-    "automation.run-outcome.succeeded" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Succeeded"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Completado"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Réussi"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "成功"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "成功"
           }
         }
       }
@@ -24858,6 +24753,8 @@
         }
       }
     },
+    "automation.page.next-run" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Next %@" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Próxima %@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Prochaine %@" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "次回 %@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下次 %@" } } } },
+    "automation.page.paused" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Paused" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "En pausa" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "En pause" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "一時停止中" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已暂停" } } } },
     "automation.notification.body.catch-up" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -46454,6 +46351,9 @@
     },
     "settings.computer-use.accessibility-detail" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Required to click, type, scroll, and inspect app controls." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Necesario para hacer clic, escribir, desplazarse e inspeccionar controles de la aplicación." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nécessaire pour cliquer, saisir du texte, faire défiler et inspecter les contrôles des applications." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "クリック、入力、スクロール、アプリコントロールの検査に必要です。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用于点击、输入、滚动和读取应用控件。" } } } },
     "settings.computer-use.accessibility-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Accessibility" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Accesibilidad" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Accessibilité" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "アクセシビリティ" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "辅助功能" } } } },
+    "settings.section.font-smoothing" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Font Smoothing" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Suavizado de fuentes" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Lissage des polices" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "フォントスムージング" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "字体平滑" } } } },
+    "settings.toggle.font-smoothing" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Use macOS font smoothing" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Usar el suavizado de fuentes de macOS" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Utiliser le lissage de polices de macOS" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "macOS のフォントスムージングを使う" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用 macOS 原生字体抗锯齿" } } } },
+    "settings.font-smoothing.description" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "macOS turns off subpixel antialiasing for layer-backed windows, which can make text look thin on a non-Retina display. Newly drawn text picks this up right away; text already on screen changes after a relaunch." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "macOS desactiva el suavizado de subpíxeles en ventanas con capa, lo que puede hacer que el texto se vea delgado en pantallas no Retina. El texto que se dibuje a partir de ahora lo aplica de inmediato; el texto ya en pantalla cambia tras reiniciar la app." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "macOS désactive l'anticrénelage sous-pixel pour les fenêtres à calques, ce qui peut rendre le texte fin sur un écran non Retina. Le texte dessiné ensuite l'applique aussitôt ; le texte déjà affiché change après un redémarrage." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "macOS はレイヤー描画のウインドウでサブピクセルアンチエイリアスを無効にするため、非 Retina ディスプレイでは文字が細く見えることがあります。以降に描画される文字はすぐ反映され、すでに表示中の文字は再起動後に変わります。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "macOS 会对图层绘制的窗口关闭次像素抗锯齿，在非 Retina 屏上文字可能显得偏细。此后新绘制的文字立即生效，已经显示在屏幕上的文字要重启 App 才会变。" } } } },
     "settings.computer-use.explanation" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "These permissions belong to the separately signed WillDeep Computer Use helper. Granting them to the main WillDeep app does not grant them to the helper. System audio is not recorded or saved by Computer Use." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Estos permisos pertenecen al asistente WillDeep Computer Use, firmado por separado. Concederlos a la aplicación principal de WillDeep no se los concede al asistente. Computer Use no graba ni guarda el audio del sistema." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ces autorisations appartiennent à l'assistant WillDeep Computer Use, signé séparément. Les accorder à l'application principale WillDeep ne les accorde pas à l'assistant. Computer Use n'enregistre ni ne conserve l'audio système." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "これらの権限は、個別に署名されたWillDeep Computer Useヘルパーに属します。メインのWillDeepアプリに権限を付与しても、ヘルパーには付与されません。Computer Useはシステムオーディオを録音・保存しません。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这些权限属于独立签名的 WillDeep Computer Use 辅助程序；授权 WillDeep 主程序并不会同时授权该辅助程序。Computer Use 不会录制或保存系统音频。" } } } },
     "settings.computer-use.helper-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep Computer Use" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep Computer Use" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep Computer Use" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep Computer Use" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "WillDeep Computer Use" } } } },
     "settings.computer-use.refresh-button-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Refresh permission status" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Actualizar estado del permiso" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Actualiser l'état des autorisations" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "権限状態を更新" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "刷新权限状态" } } } },

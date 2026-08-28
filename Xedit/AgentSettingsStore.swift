@@ -59,6 +59,7 @@ enum AgentSettingsStore {
     private static let chatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v2"
     private static let legacyChatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
     private static let chatFontIDKey = "com.willdeep.agentSettings.chatFontID.v1"
+    private static let fontSmoothingEnabledKey = "com.willdeep.agentSettings.fontSmoothing.v1"
     private static let chatLineHeightMultipleKey = "com.willdeep.agentSettings.chatLineHeightMultiple.v1"
     private static let anthropicMaxOutputTokensKey = "com.willdeep.agentSettings.anthropicMaxOutputTokens.v1"
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
@@ -359,6 +360,20 @@ enum AgentSettingsStore {
     static func saveAgentChatBaseFontSize(_ size: CGFloat) {
         let clamped = clampChatBaseFontSize(size)
         defaults.set(Double(clamped), forKey: chatBaseFontSizeKey)
+    }
+
+    /// Whether macOS font smoothing is on for this app.
+    ///
+    /// Defaults to true — smoothing is what text looked like before macOS
+    /// turned it off for layer-backed views, and it is what the rest of the
+    /// system still looks like on a non-Retina display.
+    static func loadFontSmoothingEnabled() -> Bool {
+        guard defaults.object(forKey: fontSmoothingEnabledKey) != nil else { return true }
+        return defaults.bool(forKey: fontSmoothingEnabledKey)
+    }
+
+    static func saveFontSmoothingEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: fontSmoothingEnabledKey)
     }
 
     static func loadAgentChatFontID() -> String {

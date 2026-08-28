@@ -112,6 +112,12 @@ extension L10n {
         static let labelEditorSurface = String(localized: "settings.label.editor-surface", defaultValue: "Editor Surface")
         static let labelTextSize = String(localized: "settings.label.text-size", defaultValue: "Text Size")
         static let labelLineHeight = String(localized: "settings.label.line-height", defaultValue: "Line Height")
+        static let sectionFontSmoothing = String(localized: "settings.section.font-smoothing", defaultValue: "Font Smoothing")
+        static let toggleFontSmoothing = String(localized: "settings.toggle.font-smoothing", defaultValue: "Use macOS font smoothing")
+        static let fontSmoothingDescription = String(
+            localized: "settings.font-smoothing.description",
+            defaultValue: "macOS turns off subpixel antialiasing for layer-backed windows, which can make text look thin on a non-Retina display. Newly drawn text picks this up right away; text already on screen changes after a relaunch."
+        )
         static let labelInstalledVersion = String(localized: "settings.label.installed-version", defaultValue: "Installed Version")
         static let labelDefaultView = String(localized: "settings.label.default-view", defaultValue: "Default View")
         static let labelViewOrder = String(localized: "settings.label.view-order", defaultValue: "View Order")
