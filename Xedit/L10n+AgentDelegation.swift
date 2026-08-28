@@ -308,7 +308,7 @@ extension L10n {
         )
         static let interventionHelp = String(
             localized: "agent-delegation.intervention-help",
-            defaultValue: "Normal send applies after the current step; interrupt stops the current step and injects your instruction immediately."
+            defaultValue: "Return adds a line; ⌘↩ sends for the next round. Normal send applies after the current step; interrupt stops the current step and injects your instruction immediately."
         )
         static let interventionEmptyError = String(
             localized: "agent-delegation.intervention-empty-error",

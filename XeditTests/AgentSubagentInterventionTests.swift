@@ -210,9 +210,20 @@ struct AgentSubagentInterventionTests {
                 AgentSubagentToolMention(name: "读取文件", object: "sync.rb")
             ]
         )
+        // A build report, which is what Workers actually write: a table, a
+        // fenced command, bold verdicts. This used to print raw on the card.
         activity.recordUtterance(
             round: 4,
-            text: "问题出在配置文件包含中文字符，默认编码无法处理。",
+            text: """
+            所有步骤通过，明细如下：
+
+            | 步骤 | 命令 | 结果 |
+            |---|---|---|
+            | 1 | `go build ./...` | 编译成功 |
+            | 2 | `gofmt -l` | 两个文件待格式化 |
+
+            **`gofmt -l` 退出码为 0**，它只列出待格式化的文件。
+            """,
             tools: [AgentSubagentToolMention(name: "应用补丁", object: "sync.rb")]
         )
         let intervention = AgentSubagentInterventionSubmission(
@@ -247,7 +258,7 @@ struct AgentSubagentInterventionTests {
             )
         }
         .padding(18)
-        .frame(width: 1_024, height: 672, alignment: .topLeading)
+        .frame(width: 1_024, height: 880, alignment: .topLeading)
         .background(Color(nsColor: .windowBackgroundColor))
         .preferredColorScheme(.light)
 
@@ -256,7 +267,7 @@ struct AgentSubagentInterventionTests {
         ] ?? "/tmp/Xedit-subagent-intervention-implementation.png"
         try renderPNG(
             fixture,
-            size: NSSize(width: 1_024, height: 672),
+            size: NSSize(width: 1_024, height: 880),
             to: URL(fileURLWithPath: path)
         )
         #expect(FileManager.default.fileExists(atPath: path))

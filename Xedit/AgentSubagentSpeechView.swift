@@ -228,17 +228,8 @@ struct AgentSubagentSpeechView: View {
 
     private var interventionComposer: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 7) {
-                TextField(
-                    L10n.AgentDelegation.interventionPlaceholder,
-                    text: $interventionDraft
-                )
-                .textFieldStyle(.roundedBorder)
-                .focused($interventionFieldIsFocused)
-                .onSubmit {
-                    sendIntervention(mode: .nextRound)
-                }
-                .accessibilityIdentifier("subagent-intervention-input")
+            HStack(alignment: .bottom, spacing: 7) {
+                interventionField
 
                 Button {
                     sendIntervention(mode: .nextRound)
@@ -250,6 +241,10 @@ struct AgentSubagentSpeechView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(interventionDraftTrimmed.isEmpty)
+                // Return now inserts a newline — the field is two lines and
+                // has to be typeable as two lines — so the keyboard path to
+                // sending moves to ⌘↩ rather than disappearing.
+                .keyboardShortcut(.return, modifiers: .command)
                 .accessibilityIdentifier("subagent-intervention-next-round")
 
                 Button {
@@ -288,6 +283,54 @@ struct AgentSubagentSpeechView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .stroke(Color(nsColor: .separatorColor).opacity(0.6), lineWidth: 0.5)
+        }
+    }
+
+    /// Two lines, scrolling past that.
+    ///
+    /// A correction is rarely one clause — "别改编码，先确认脚本支不支持
+    /// 直接传 UTF-8" already wraps at this width — and a single-line field
+    /// hides everything but the tail while you type it. `TextEditor` keeps
+    /// the box a fixed two lines high and scrolls the overflow instead of
+    /// growing the card, which would push the Worker's own transcript
+    /// around every time someone typed.
+    private var interventionField: some View {
+        let lineHeight = AgentDesign.chatSupportingFontSize(
+            baseFontSize: appState.agentChatBaseFontSize,
+            visualMinimum: 10
+        ) * 1.45
+        return ZStack(alignment: .topLeading) {
+            TextEditor(text: $interventionDraft)
+                .font(AgentDesign.chatSupportingFont(
+                    baseFontSize: appState.agentChatBaseFontSize,
+                    visualMinimum: 10
+                ))
+                .scrollContentBackground(.hidden)
+                .focused($interventionFieldIsFocused)
+                .frame(height: lineHeight * 2)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 3)
+                .accessibilityIdentifier("subagent-intervention-input")
+
+            // TextEditor has no placeholder of its own, and an empty box
+            // with two buttons beside it does not say what to type.
+            if interventionDraft.isEmpty {
+                Text(L10n.AgentDelegation.interventionPlaceholder)
+                    .font(AgentDesign.chatSupportingFont(
+                        baseFontSize: appState.agentChatBaseFontSize,
+                        visualMinimum: 10
+                    ))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .allowsHitTesting(false)
+            }
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
         }
     }
 
@@ -391,16 +434,20 @@ struct AgentSubagentSpeechView: View {
         case .speech(let round, let text, let tools):
             gutteredRow(marker: L10n.AgentDelegation.speechRoundMarker(round)) {
                 VStack(alignment: .leading, spacing: 3) {
-                    // Plain text on purpose. Rendering a Worker's markdown
-                    // live is the shape that previously melted the main
-                    // thread in SwiftUI layout; the full report still gets
-                    // rich treatment once the run returns.
-                    Text(text)
-                        .font(AgentDesign.chatSupportingFont(
+                    // Markdown, baked into a single AttributedString. The
+                    // hazard this card was originally written around is a
+                    // SwiftUI *view tree* per block on a surface that
+                    // repaints every heartbeat — one `Text` carrying runs
+                    // is not that shape. Workers report build tables and
+                    // command output, and raw `|---|---|` rows were the
+                    // least readable thing on the card.
+                    Text(AgentSubagentSpeechMarkdown.attributed(
+                        from: text,
+                        baseSize: AgentDesign.chatSupportingFontSize(
                             baseFontSize: appState.agentChatBaseFontSize,
-                            visualMinimum: 10,
-                            weight: .regular
-                        ))
+                            visualMinimum: 10
+                        )
+                    ))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
