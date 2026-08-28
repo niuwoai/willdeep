@@ -173,8 +173,13 @@ struct AgentPlanContinuationTests {
         #expect(runtime.queuedMessages[0].text.contains(
             "Replace only the verification approach"
         ))
+        // 改写计划的提示词自 1.296.0-rc11 起带上了三步门槛,这里一并钉住:
+        // 光断言"继续执行"会让门槛悄悄消失也照样绿。
         #expect(runtime.queuedMessages[0].text.contains(
-            "continue executing it without waiting for plan approval"
+            "at least \(AgentPlanOnDemandPolicy.minimumVisibleStepCount) independent execution steps remain"
+        ))
+        #expect(runtime.queuedMessages[0].text.contains(
+            "Continue executing without waiting for plan approval"
         ))
     }
 
@@ -363,6 +368,44 @@ struct AgentPlanContinuationTests {
         let runtime = AgentRuntime(session: AgentSession(title: "Interrupted"))
         runtime.interactionMode = .normal
         runtime.currentPlan = Self.interruptedPlan()
+        // 普通模式的可见计划自 1.296.0-rc11 起要求至少
+        // `minimumVisibleStepCount` 步,少于此数的围栏块根本不成为计划。
+        // 这条用例要证的是"新计划顶掉被中断的旧计划",所以替换计划必须先
+        // 够得着那道门槛,否则测的就变成门槛本身了。
+        runtime.messages = [
+            AgentMessage(
+                role: .assistant,
+                content: """
+                ```plan
+                1. New task step one
+                2. New task step two
+                3. New task step three
+                ```
+                """
+            )
+        ]
+
+        let outcome = appState.captureAgentPlanFromLatestMessage(for: runtime)
+
+        #expect(outcome == .captured)
+        #expect(runtime.currentPlan?.steps.map(\.text) == [
+            "New task step one",
+            "New task step two",
+            "New task step three"
+        ])
+        #expect(runtime.currentPlan?.isInterrupted == false)
+    }
+
+    @MainActor
+    @Test("少于三步的替换计划不顶掉被中断的计划")
+    func undersizedReplacementLeavesInterruptedPlanIntact() {
+        // 门槛的另一面:两步的围栏块在普通模式下不是计划,既不该被捕获,也
+        // 不该顺手把旧计划的中断标记清掉——否则用户按下 Stop 之后,模型随
+        // 手发一个两步清单就能把"已暂停"的徽标抹掉,而计划并没有被接管。
+        let appState = AppState()
+        let runtime = AgentRuntime(session: AgentSession(title: "Interrupted"))
+        runtime.interactionMode = .normal
+        runtime.currentPlan = Self.interruptedPlan()
         runtime.messages = [
             AgentMessage(
                 role: .assistant,
@@ -377,9 +420,9 @@ struct AgentPlanContinuationTests {
 
         let outcome = appState.captureAgentPlanFromLatestMessage(for: runtime)
 
-        #expect(outcome == .captured)
-        #expect(runtime.currentPlan?.steps.map(\.text) == ["New task step one", "New task step two"])
-        #expect(runtime.currentPlan?.isInterrupted == false)
+        #expect(outcome == .noProposal)
+        #expect(runtime.currentPlan?.steps.map(\.text) == ["Inspect", "Implement"])
+        #expect(runtime.currentPlan?.isInterrupted == true)
     }
 
     @MainActor

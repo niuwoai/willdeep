@@ -1,7 +1,24 @@
 # Changelog
 
-> 当前文件保留最新版本（1.301.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.301.0-rc5 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.301.0-rc5 - 2026-08-28
+
+### Fixed
+
+- **提示词契约升到 `willdeep-agent-system-v35`，三档快照哈希全部重录**。本机全量单测里的两条哈希守卫已经红了一周，一直被当成"最近 UI 改动的连带伤害"。
+  - 归错了帐：真凶是 `70fafbe7`（工种派发与插件视觉），不是后面那个 `ae84537c`。前者改写了稳定工具契约里 `spawn_agent` 那条 bullet 的审批语义——"派生内建工种在任何模式下都不问用户，`ops_runner.target_command` 另行确认"——改完没重录哈希。后者虽然也大改提示词，但动的全在 `systemPrompt()` 的模式分支里，稳定前缀一个字节没碰。用 `git diff ac13c1c3..HEAD` 圈到稳定前缀区间，命中的只有那一条 bullet。
+  - 顺带解释了一个看着矛盾的现象：compact 档的哈希当时是**过**的。那条 bullet 只在非 compact 分支里，compact 根本没有它。这次它跟着一起变，是因为版本号字符串本身就印在每一档提示词的抬头行上。
+  - 代价照付：契约版本号一动，全体用户的 provider 前缀缓存打穿一次。文本在 `70fafbe7` 那会儿就已经变了、缓存也早就破过一轮，但版本号是这段契约的身份——让 v34 同时指代两份正文，正是这道守卫存在的理由。
+
+- **两条计划续推用例跟上了三步门槛**。`ae84537c` 把普通模式可见计划的下限提到 `minimumVisibleStepCount = 3`，并在 `AgentPlanProgressTests` 里把一个两步样本补成三步——同样的补丁漏了 `AgentPlanContinuationTests`。
+  - 「中断后捕获替换计划」用的替换计划只有两步，新门槛下它压根不成其为计划，`extract` 返回 nil，旧的中断计划原地不动。这条用例要证的是"新计划顶掉旧计划"，所以样本补到三步，先够着门槛。
+  - 「显式改写计划不切换模式」断言的是 `requestPlanRevision` 的提示词原文，而那句已经从 "continue executing it without waiting..." 改成了 "Continue executing without waiting..."。断言跟到新文本，并补钉了那句三步门槛——只断言"继续执行"的话，门槛哪天悄悄没了它照样绿。
+
+### Tests
+
+- `AgentPlanContinuationTests` 新增「少于三步的替换计划不顶掉被中断的计划」：两步围栏块既不该被捕获，也不该顺手把 `interruptedAt` 清掉。否则用户按下 Stop 之后，模型随手发个两步清单就能把"已暂停"的徽标抹掉，而计划其实没人接管。门槛的正面（三步能过）在上面那条用例里，反面在这条。
 
 ## 1.301.0-rc4 - 2026-08-28
 
