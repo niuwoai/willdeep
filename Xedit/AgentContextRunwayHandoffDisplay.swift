@@ -113,6 +113,20 @@ nonisolated enum AgentContextRunwayHandoffDisplay {
         extract(from: content).relayPrompt
     }
 
+    /// What the "continue here" footer action actually sends.
+    ///
+    /// The button sends immediately — it is a shortcut, and a shortcut that
+    /// still needs a Return keypress is just a slower way to type one word.
+    /// The composer is empty in almost every case this button appears (the
+    /// user just finished reading the handover), but when it is not, the
+    /// draft rides along instead of being dropped: `sendAgentMessage()`
+    /// clears the input, so anything left behind would be gone with no way
+    /// to get it back.
+    static func composedResumeInput(currentInput: String, resumeWord: String) -> String {
+        let draft = currentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        return draft.isEmpty ? resumeWord : "\(draft)\n\n\(resumeWord)"
+    }
+
     // MARK: - Parsing
 
     /// The relay section runs until the next handover section starts, or to

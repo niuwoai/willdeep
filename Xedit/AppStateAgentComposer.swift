@@ -2395,39 +2395,44 @@ extension AppState {
     // MARK: - Context runway handoff relay
 
     /// 「在本会话继续」。跑道交接的 `NEXT PROMPT` 段已经从正文折进
-    /// footer 图标(见 `AgentContextRunwayHandoffDisplay`),这里只把本
-    /// 地化的「继续」填进输入框。
+    /// footer 图标(见 `AgentContextRunwayHandoffDisplay`),这个图标把
+    /// 本地化的「继续」直接发出去。
     ///
-    /// 刻意不代发:交接停下来的时候操作者往往要先补一句(改方向、加
-    /// 约束、点名先跑哪个测试),一键直发等于把这个机会拿走,还多烧一
-    /// 轮 token。填好并聚焦,回车与否是人的决定。
-    func prefillAgentInputWithHandoffResumeWord() {
-        if activeRuntime == nil {
-            _ = activeRuntimeAfterCreatingNewSession()
-        }
-        guard let runtime = activeRuntime else { return }
-        let word = L10n.ContextRunwayHandoff.resumeWord
-        let current = runtime.input.trimmingCharacters(in: .whitespacesAndNewlines)
-        runtime.input = current.isEmpty ? word : "\(current)\n\n\(word)"
+    /// 就是发,不是填。它是个懒人快捷键 —— 填好还要人再按一次回车,
+    /// 那还不如自己打两个字。输入框里若有没发完的草稿,一并带上:
+    /// `sendAgentMessage()` 发完会清空输入框,留在那儿的草稿会连同这
+    /// 一次发送一起消失,找都找不回来。
+    func resumeAgentTurnFromHandoff() {
+        guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
+        runtime.input = AgentContextRunwayHandoffDisplay.composedResumeInput(
+            currentInput: runtime.input,
+            resumeWord: L10n.ContextRunwayHandoff.resumeWord
+        )
         isAgentPanelVisible = true
-        agentComposerFocusRevision += 1
+        sendAgentMessage()
     }
 
     /// 「开新会话继续」。新会话绑定当前会话的 workspace —— 接力提示词
     /// 通篇是分支、文件、符号、命令这类工作区事实(交接提示词明确要求
     /// 它指向可续的落盘状态),换一个根目录它一句都对不上。
     ///
-    /// 照 `openQueuedAgentMessageInSideChat` 的老路:新会话建好后把文本
-    /// 停在它的 composer 里,不自动发送。
+    /// 同样直接发送。新会话的输入框必然是空的,没有草稿要顾。
     func startAgentSessionWithHandoffRelayPrompt(_ prompt: String) {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let workspacePath = activeRuntime?.session.workspaceRootPath
         let session = startNewAgentSession(inWorkspaceAt: workspacePath)
+        // `sendAgentMessage()` 打的是 `activeRuntime`。新会话没能接管
+        // 活跃位时宁可把提示词停在它自己的输入框里,也不能把这一句发
+        // 进上一个会话 —— 那是把接力发回给刚说自己跑不动了的那一边。
         guard let runtime = agentRuntimes[session.id] else { return }
         runtime.input = trimmed
         isAgentPanelVisible = true
-        agentComposerFocusRevision += 1
+        guard activeAgentSessionID == session.id else {
+            agentComposerFocusRevision += 1
+            return
+        }
+        sendAgentMessage()
     }
 
     private func stageEditorSelection(_ selection: AgentEditorSelectionContext, prefillQuestion: Bool) {
