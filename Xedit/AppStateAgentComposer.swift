@@ -41,6 +41,12 @@ extension AppState {
         guard let runtime = activeRuntime ?? activeRuntimeAfterCreatingNewSession() else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // 点了名又说不要委派——两条指令直接矛盾。宿主不替用户挑一个：
+        // 把话说清楚，让他自己撤掉其中一条。
+        if policy == .forbidden, runtime.pendingWorkerProfileID != nil {
+            runtime.errorMessage = L10n.AgentDelegation.pinnedWorkerConflict
+            return
+        }
         runtime.input = trimmed
         runtime.pendingDelegationPolicy = policy
         sendAgentMessage()

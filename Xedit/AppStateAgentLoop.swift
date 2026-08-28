@@ -57,9 +57,18 @@ extension AppState {
         // Classified from what the user actually typed. Tool-loop
         // continuations and system notices re-enter here with the same
         // runtime; routing those would classify WillDeep's own plumbing.
-        let routeDecision = source == .operatorInput
-            ? AgentRequestRouter.routedDecision(for: text, delegationPolicy: delegationPolicy)
-            : nil
+        // 操作员点名优先于一切分类：关键词和模型都是在猜，这条是明确指令。
+        // 单槽位，消费即清空——点名只作用于这一回合。
+        let pinnedWorker = runtime.pendingWorkerProfileID
+        runtime.pendingWorkerProfileID = nil
+        let routeDecision: AgentRequestRouter.Decision?
+        if source == .operatorInput, let pinnedWorker, delegationPolicy != .forbidden {
+            routeDecision = AgentRequestRouter.pinnedDecision(profileID: pinnedWorker)
+        } else {
+            routeDecision = source == .operatorInput
+                ? AgentRequestRouter.routedDecision(for: text, delegationPolicy: delegationPolicy)
+                : nil
+        }
         runtime.currentTurnRouteDecision = routeDecision
         runtime.currentTurnRouteSteering = routeDecision?.steering
         if source == .operatorInput {

@@ -55,9 +55,18 @@ nonisolated enum AgentWorkerRoutingModel {
     }
 
     /// Routable trades, each with the one-line purpose the model sees.
-    /// `judge`, `security_guard` and the `small_*` variants are deliberately
-    /// absent: they are escalation targets chosen by other machinery, not
-    /// destinations for a fresh user request.
+    /// Kept in lockstep with `docs/WORKER_ROUTING_CONTRACT.json`, which
+    /// willdeep-rs mirrors; `AgentWorkerRoutingContractTests` fails if the
+    /// two drift.
+    ///
+    /// Three groups are deliberately absent. `judge` / `security_guard` and
+    /// the `small_*` variants are escalation or tier machinery, not
+    /// destinations for a fresh request. `ops_runner` and
+    /// `terminal_operator` are privileged: both score 94 from the keyword
+    /// router, so the model never sees them anyway, and putting them on the
+    /// menu would open a path from "request was ambiguous" to "small model
+    /// guessed production operations". Privileged destinations are reached
+    /// by explicit keyword evidence only.
     static let candidates: [Candidate] = [
         Candidate(id: AgentSubagentProfileCatalog.scoutID,
                   purpose: "定位符号、文件、调用点；只读的代码检索"),
@@ -71,10 +80,6 @@ nonisolated enum AgentWorkerRoutingModel {
                   purpose: "运行测试或检查门禁并汇报结果；不修改源码"),
         Candidate(id: AgentSubagentProfileCatalog.reviewerID,
                   purpose: "审查一段改动或代码质量；只读"),
-        Candidate(id: AgentSubagentProfileCatalog.terminalOperatorID,
-                  purpose: "查看或操作用户可见的终端会话"),
-        Candidate(id: AgentSubagentProfileCatalog.opsRunnerID,
-                  purpose: "部署、发布、重启线上服务等生产运维动作"),
         Candidate(id: AgentSubagentProfileCatalog.editorID,
                   purpose: "改动明确点名的单个文件"),
         Candidate(id: AgentSubagentProfileCatalog.testFixerID,
@@ -102,6 +107,7 @@ nonisolated enum AgentWorkerRoutingModel {
         - \(noneChoice): 以上都不合适，或请求过于宽泛无法归类
 
         判断依据是请求要做的事，不是它提到的词。只输出 JSON，不要解释。
+        格式：{"worker":"候选ID或none","confidence":0到100的整数}
         """
     }
 
@@ -126,9 +132,12 @@ nonisolated enum AgentWorkerRoutingModel {
               let worker = object["worker"] as? String
         else { return nil }
 
-        let confidence = (object["confidence"] as? Int)
+        // 模型偶尔把 confidence 写成 0-1 的小数或超过 100 的整数，钳到
+        // 0...100 与 willdeep-rs 的 `.min(100)` 对齐。
+        let rawConfidence = (object["confidence"] as? Int)
             ?? (object["confidence"] as? Double).map(Int.init)
             ?? 0
+        let confidence = min(max(rawConfidence, 0), 100)
         if worker == noneChoice { return Verdict(profileID: nil, confidence: confidence) }
         guard candidates.contains(where: { $0.id == worker }) else { return nil }
         return Verdict(profileID: worker, confidence: confidence)

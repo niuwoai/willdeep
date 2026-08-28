@@ -746,6 +746,18 @@ private struct ComposerCard: View {
         let q = atMenuQuery.lowercased()
         var entries: [AtPickerEntry] = []
 
+        // 工种排在最前：`@` 的语义是「引用一个东西」，而点名谁来干活是
+        // 这里最有分量的一种引用。匹配 id 与本地化名字，"@scout" 和
+        // "@读" 都能找到。
+        let workers = AgentSubagentProfileCatalog.publicBuiltIn.filter { profile in
+            guard !q.isEmpty else { return true }
+            return profile.id.lowercased().contains(q)
+                || profile.localizedDisplayName.lowercased().contains(q)
+        }
+        entries.append(contentsOf: workers.map {
+            .worker(id: $0.id, name: $0.localizedDisplayName, purpose: $0.localizedPurpose)
+        })
+
         // Workspace shortcut — only shows when a folder is open, and
         // either the query is empty or matches "workspace".
         if appState.activeRuntime?.workspaceLocation?.localPath != nil,
@@ -905,6 +917,15 @@ private struct ComposerCard: View {
                         appState.updateAgentKnowledgeFolderExclusions(id: folderID, rawPatterns: patterns)
                     },
                     onStartIndexing: { appState.startAgentKnowledgeFolderIndexing(id: $0) }
+                )
+            }
+
+            // 点名的工种单独一枚 chip：告诉用户这一回合的活会派给谁，
+            // 以及怎么反悔。
+            if let pinned = appState.agentPendingWorkerProfileID {
+                AgentComposerPinnedWorkerChip(
+                    profileID: pinned,
+                    onRemove: { appState.agentPendingWorkerProfileID = nil }
                 )
             }
 
@@ -1378,6 +1399,10 @@ private struct ComposerCard: View {
             }
         case .file(let url, _):
             attachFile(url)
+        case .worker(let id, _, _):
+            // 单槽位：再点一个就换人。委派在语义上只能点一个人，想让几个人
+            // 分头干活那是调度台的事。
+            appState.agentPendingWorkerProfileID = id
         }
         closeAtMenu()
         return true

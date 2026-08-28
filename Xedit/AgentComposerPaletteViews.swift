@@ -391,11 +391,15 @@ struct AgentComposerAttachmentStrip: View {
 enum AtPickerEntry: Identifiable, Equatable {
     case workspace
     case file(url: URL, relativePath: String)
+    /// 点名一个工种去干这一回合的活。候选取 `publicBuiltIn`——那份清单的
+    /// 定义就是「给人看的工种」，专家/裁判之类的内部分档已经在那里收拢过了。
+    case worker(id: String, name: String, purpose: String)
 
     var id: String {
         switch self {
         case .workspace: return "@workspace"
         case .file(let url, _): return "file:\(url.standardizedFileURL.path)"
+        case .worker(let id, _, _): return "worker:\(id)"
         }
     }
 
@@ -403,6 +407,7 @@ enum AtPickerEntry: Identifiable, Equatable {
         switch self {
         case .workspace: return "folder"
         case .file: return "doc.text"
+        case .worker: return "person.badge.shield.checkmark"
         }
     }
 
@@ -410,6 +415,7 @@ enum AtPickerEntry: Identifiable, Equatable {
         switch self {
         case .workspace: return "workspace"
         case .file(_, let rel): return rel
+        case .worker(let id, let name, _): return "\(name) · @\(id)"
         }
     }
 
@@ -417,7 +423,49 @@ enum AtPickerEntry: Identifiable, Equatable {
         switch self {
         case .workspace: return "Attach the current workspace root + file list"
         case .file(let url, _): return url.deletingLastPathComponent().lastPathComponent
+        case .worker(_, _, let purpose): return purpose
         }
+    }
+}
+
+/// 操作员点名的工种，显示在输入框上方。它是「这一回合派给谁」的唯一可见处，
+/// 也是唯一的反悔入口——`@` 选中即写入，发送即消费。
+struct AgentComposerPinnedWorkerChip: View {
+    let profileID: String
+    let onRemove: () -> Void
+
+    private var profile: AgentSubagentProfile? {
+        AgentSubagentProfileCatalog.builtIn.first { $0.id == profileID }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "person.badge.shield.checkmark")
+                .font(.system(size: 11, weight: .medium))
+            Text(L10n.AgentDelegation.pinnedWorkerChip(profile?.localizedDisplayName ?? profileID))
+                .font(.system(size: 11.5))
+                .lineLimit(1)
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .frame(width: 14, height: 14)
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .help(L10n.AgentDelegation.pinnedWorkerRemove)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color.primary.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .help(profile?.localizedPurpose ?? "")
     }
 }
 
