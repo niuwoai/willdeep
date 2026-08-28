@@ -1,7 +1,20 @@
 # Changelog
 
-> 当前文件保留最新版本（1.302.0-rc8 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.302.0-rc9 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.302.0-rc9 - 2026-08-28
+
+### Fixed
+
+- **修掉一个会整体崩掉 App 的无界递归：`spawn_agent` 的 `task` 写成一句大白话就会栈溢出。** 用户提供的 1.301.0-rc4（build 542，x86_64）崩溃报告是 `EXC_BAD_ACCESS`，写入地址落在主线程的 **STACK GUARD** 页；调用栈第 14 至 511 帧是同一个返回地址。用发布 DMG 里的原二进制符号化（UUID 逐字对上 `1E01869C-…`），指向 `AgentSubagentTaskPacket.parse(_:)`。
+  - 根因是两段代码合起来的死循环：`parse` 遇到 `.string` 就 `return parse(AgentJSONValue.decode(from: trimmed))`，而 `AgentJSONValue.decode(from:)` 在**文本不是 JSON 时把原字符串原样包成 `.string` 返回**。于是同一个值进、同一个值出、再进——直到 8 MB 主线程栈被吃穿。触发条件极低：模型把 `task` 写成 `"修复登录 bug"` 而不是 JSON 对象就够了；`.fragmentsAllowed` 让 `"\"hello\""` 这种合法但解析回字符串的输入走同一条路。
+  - `AgentDeepAdmissionTicket.parse(_:)` 的 `escalation` 参数是**同一个写法**，同样能崩，一并修掉。
+  - 修法是把「可能是对象、也可能是装着对象的字符串」收敛成一个**迭代且有界**的 `AgentJSONValue.objectFields(unwrapping:)`：最多剥 3 层，一旦解码没有推进（解出来还是同一个字符串）立刻停手。两个调用点共用它，防止再长出第三处。原本要兼容的形状一个没丢——真对象、装着对象的字符串、双重编码都照常解析。
+
+### Tests
+
+- 新增 `AgentJSONArgumentUnwrapTests` 9 项。其中「大白话 task」「引号包起来的 JSON 字符串」两条就是崩溃复现——**修复前它们会挂起并带走整个测试进程**，这正是它们的价值；另有双重编码仍能解出、非对象 JSON 拒绝而不是半读、以及两个调用点原有形状不回归。
 
 ## 1.302.0-rc8 - 2026-08-28
 

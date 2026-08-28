@@ -61,12 +61,7 @@ nonisolated struct AgentDeepAdmissionTicket: Equatable, Sendable {
     /// models send objects anyway, and losing a spawn to a formatting
     /// preference helps nobody.
     static func parse(_ value: AgentJSONValue?) -> AgentDeepAdmissionTicket? {
-        if case .string(let raw)? = value {
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return nil }
-            return parse(AgentJSONValue.decode(from: trimmed))
-        }
-        guard case .object(let fields)? = value else { return nil }
+        guard let fields = AgentJSONValue.objectFields(unwrapping: value) else { return nil }
 
         let reason = trimmedString(fields["reason"])
         let contextEvidence = trimmedString(fields["context_evidence"])
