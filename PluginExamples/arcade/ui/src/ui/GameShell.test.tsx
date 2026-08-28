@@ -34,7 +34,7 @@ describe('游戏外壳', () => {
   });
 
   it('每个游戏外壳都挂着撒花画布', async () => {
-    for (const id of ['memory', 'onet', 'marble', 'snake', 'tetris', 'pong', 'minesweeper']) {
+    for (const id of ['2048', 'breakout', 'jigsaw', 'memory', 'onet', 'marble', 'snake', 'tetris', 'pong', 'minesweeper']) {
       const view = renderAt(`#/game/${id}`);
       await screen.findByTestId(`game-shell-${id}`);
       expect(screen.getByTestId('confetti')).toBeInTheDocument();

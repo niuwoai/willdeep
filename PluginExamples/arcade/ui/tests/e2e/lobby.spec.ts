@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test';
 import { test } from './fixtures';
 
-const GAME_IDS = ['memory', 'onet', 'marble', 'minesweeper', 'pong', 'snake', 'tetris'] as const;
+const GAME_IDS = ['2048', 'breakout', 'jigsaw', 'memory', 'onet', 'marble', 'minesweeper', 'pong', 'snake', 'tetris'] as const;
 
 test('大厅展示全部游戏，可进入贪吃蛇并返回', async ({ page }) => {
   await page.goto('/');

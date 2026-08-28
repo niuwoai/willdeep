@@ -1,6 +1,6 @@
 # 经典网页小游戏平台（Classic Arcade Platform）
 
-统一游戏大厅 + 七款经典小游戏：贪吃蛇、俄罗斯方块、Pong、扫雷、记忆翻牌、连连看、印加弹珠。
+统一游戏大厅 + 十款经典小游戏：2048、打砖块、贪吃蛇、俄罗斯方块、Pong、扫雷、记忆翻牌、连连看、印加弹珠、图片拼图。
 
 技术栈：React 18 + TypeScript（strict）+ Vite 5 + yarn 1 + Vitest + Playwright + 轻量自研 i18n/HashRouter。
 
@@ -43,7 +43,7 @@ yarn test:e2e       # Playwright 端到端测试（需先 yarn playwright instal
 本仓库的核心交付是**冻结的共享契约**，各游戏模块独立开发、按清单注册：
 
 - `src/core/types.ts` — `GameId` / `GameManifestEntry` / `GameProps` / `BestScore` / `Locale`
-- `src/games/manifest.ts` — GameManifest：注册全部正式游戏（`memory`、`onet`、`marble`、`minesweeper`、`pong`、`snake`、`tetris`）
+- `src/games/manifest.ts` — GameManifest：注册全部正式游戏（`2048`、`breakout`、`jigsaw`、`memory`、`onet`、`marble`、`minesweeper`、`pong`、`snake`、`tetris`）
 - `src/core/hashRouter.tsx` — Hash 路由（`#/game/<id>?seed=`），无需服务端 rewrite
 - `src/core/safeLocalStorage.ts` — 存储安全封装 + 成绩 key 约定（`arcade.best.<id>`）
 - `src/core/i18n.tsx` — i18n（默认 zh-Hans，fallback en→zh-Hans→key，`{param}` 插值）

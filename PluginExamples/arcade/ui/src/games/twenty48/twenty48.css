@@ -1,0 +1,91 @@
+.twenty48 {
+  display: flex;
+  width: 100%;
+  max-width: 560px;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.twenty48__bar,
+.twenty48__tools,
+.twenty48__pad {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 14px;
+}
+
+.twenty48__bar {
+  color: var(--fg-muted);
+  font-size: 14px;
+}
+
+.twenty48__status {
+  color: var(--accent-strong);
+}
+
+.twenty48__board {
+  display: grid;
+  width: min(100%, 500px);
+  aspect-ratio: 1;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(6px, 1.5vw, 12px);
+  padding: clamp(7px, 1.8vw, 14px);
+  border: 1px solid #4b443b;
+  border-radius: 18px;
+  background: #302c28;
+  touch-action: none;
+  user-select: none;
+}
+
+.twenty48__tile {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  border-radius: 12px;
+  background: #49443e;
+  color: #f6f2e9;
+  font-size: clamp(19px, 7vw, 42px);
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.twenty48__tile[data-value='2'] { background: #eee4da; color: #5c554d; }
+.twenty48__tile[data-value='4'] { background: #ede0c8; color: #5c554d; }
+.twenty48__tile[data-value='8'] { background: #f2b179; }
+.twenty48__tile[data-value='16'] { background: #f59563; }
+.twenty48__tile[data-value='32'] { background: #f67c5f; }
+.twenty48__tile[data-value='64'] { background: #f65e3b; }
+.twenty48__tile[data-value='128'] { background: #edcf72; font-size: clamp(17px, 6vw, 35px); }
+.twenty48__tile[data-value='256'] { background: #edcc61; font-size: clamp(17px, 6vw, 35px); }
+.twenty48__tile[data-value='512'] { background: #edc850; font-size: clamp(17px, 6vw, 35px); }
+.twenty48__tile[data-value='1024'] { background: #edc53f; font-size: clamp(15px, 5vw, 30px); }
+.twenty48__tile[data-value='2048'] { background: #edc22e; font-size: clamp(15px, 5vw, 30px); }
+.twenty48__tile[data-large='true'] { background: #493b72; font-size: clamp(13px, 4.5vw, 27px); }
+
+.twenty48__pad {
+  display: grid;
+  grid-template-columns: repeat(3, 48px);
+  grid-template-areas:
+    '. up .'
+    'left down right';
+  gap: 6px;
+}
+
+.twenty48__pad .btn { padding: 6px; font-size: 20px; }
+.twenty48__pad-up { grid-area: up; }
+.twenty48__pad-down { grid-area: down; }
+.twenty48__pad-left { grid-area: left; }
+.twenty48__pad-right { grid-area: right; }
+
+.twenty48__hint {
+  max-width: 500px;
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 13px;
+  text-align: center;
+}

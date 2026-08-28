@@ -39,15 +39,14 @@ test.describe('印加弹珠', () => {
     await expect(page.getByTestId('marble-status')).toHaveText('进行中');
   });
 
-  test('切换关卡重置剩余弹珠数，重开回到零分', async ({ page }) => {
-    await page.goto('/#/game/marble?seed=e2e-marble-level');
+  test('首关展示螺旋轨迹，重开仍回到零分', async ({ page }) => {
+    await page.goto('/#/game/marble?seed=e2e-marble-restart');
     await expect(page.getByTestId('marble-field')).toBeVisible();
-
-    await page.getByTestId('marble-level-hard').click();
-    await expect(page.getByTestId('marble-remaining')).toContainText('70');
+    await expect(page.getByTestId('marble-stage')).toContainText('神庙螺旋');
 
     await page.getByTestId('marble-shoot').click();
     await page.getByTestId('marble-restart').click();
     await expect(page.getByTestId('marble-score-value')).toHaveText('0');
+    await expect(page.getByTestId('marble-stage')).toContainText('神庙螺旋');
   });
 });

@@ -6,6 +6,14 @@ export const zhHans: Record<string, string> = {
   'locale.switchToEnglish': 'EN',
   'locale.switchToChinese': '中文',
 
+  'games.2048.name': '2048',
+  'games.2048.description': '滑动数字方块，让相同数字合并，向 2048 和更高目标前进。',
+  'games.2048.controls': '方向键或 WASD 移动；在触屏棋盘上向任意方向滑动。',
+
+  'games.breakout.name': '打砖块',
+  'games.breakout.description': '控制挡板接住弹球，逐层击碎全部彩色砖块。',
+  'games.breakout.controls': '鼠标或触屏移动挡板；方向键或 A/D 移动，空格发球或暂停。',
+
   'games.snake.name': '贪吃蛇',
   'games.snake.description': '经典街机贪吃蛇，吃食物变长，别撞墙和自己的身体。',
   'games.snake.controls': '方向键或 WASD 控制移动；在触屏上滑动。',
@@ -31,8 +39,12 @@ export const zhHans: Record<string, string> = {
   'games.onet.controls': '点选两张相同的牌；提示与洗牌按钮在棋盘上方。',
 
   'games.marble.name': '印加弹珠',
-  'games.marble.description': '螺旋轨道上的弹珠往洞口滚，打进同色三连把它们清空。',
+  'games.marble.description': '多种轨迹上的弹珠往洞口滚，打进同色三连把它们清空。',
   'games.marble.controls': '鼠标或触屏瞄准点击发射；键盘 ← → 瞄准、空格发射、S 换色。',
+
+  'games.jigsaw.name': '图片拼图',
+  'games.jigsaw.description': '先选一张内置插画，再交换碎片把完整画面拼回来。',
+  'games.jigsaw.controls': '拖动两块互换；触屏或键盘可依次点选两块，原图可随时展开。',
 
   'game.stage': '关卡',
   'game.score': '分数',

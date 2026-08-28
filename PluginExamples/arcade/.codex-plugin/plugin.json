@@ -1,10 +1,10 @@
 {
   "name": "willdeep-classic-arcade",
-  "version": "1.0.0",
-  "description": "Five classic games in one bundled WillDeep destination.",
+  "version": "1.2.0",
+  "description": "Ten classic games in one bundled WillDeep destination.",
   "interface": {
     "displayName": "Classic Arcade",
-    "shortDescription": "Snake, Tetris, Pong, Minesweeper, and Memory.",
+    "shortDescription": "Ten games including 2048, Breakout, Jigsaw and Inca Marbles.",
     "composerIcon": "sf:gamecontroller.fill"
   }
 }

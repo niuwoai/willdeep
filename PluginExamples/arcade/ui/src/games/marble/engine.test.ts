@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BALL_RADIUS,
   BOMB_RADIUS,
+  CONTACT_EPS,
   DEFAULT_LEVEL,
   FIELD,
   LEVELS,
@@ -20,7 +21,9 @@ import {
   applyHit,
   createInitialState,
   levelAt,
+  levelForStage,
   levelSeed,
+  pathLength,
   pointAt,
   restart,
   rollbackChain,
@@ -33,6 +36,7 @@ import {
   trackPoints,
 } from './engine';
 import type { MarbleBall, MarblePower, MarbleState } from './engine';
+import type { MarbleTrackId } from './engine';
 
 /** 直接摆一条链条，绕开逐帧入场，方便测消除规则；powers 按下标挂道具。 */
 function withChain(
@@ -89,6 +93,31 @@ describe('印加弹珠：轨道', () => {
       const tangent = tangentAt(dist);
       expect(Math.hypot(tangent.x, tangent.y)).toBeCloseTo(1, 5);
     }
+  });
+
+  it('三种轨迹都留在场地内，长度足够且洞口位置各不相同', () => {
+    const ids: readonly MarbleTrackId[] = ['spiral', 'wave', 'switchback'];
+    const holes = ids.map((id) => {
+      expect(pathLength(id)).toBeGreaterThan(250);
+      for (const point of trackPoints(id)) {
+        expect(point.x).toBeGreaterThanOrEqual(0);
+        expect(point.x).toBeLessThanOrEqual(FIELD);
+        expect(point.y).toBeGreaterThanOrEqual(0);
+        expect(point.y).toBeLessThanOrEqual(FIELD);
+      }
+      return pointAt(pathLength(id), id);
+    });
+    expect(new Set(holes.map((hole) => `${hole.x.toFixed(1)},${hole.y.toFixed(1)}`)).size).toBe(3);
+    expect(holes.some((hole) => Math.hypot(hole.x - SHOOTER.x, hole.y - SHOOTER.y) > 25)).toBe(true);
+  });
+
+  it('关卡依次轮换螺旋、波浪与折返轨迹', () => {
+    expect([1, 2, 3, 4].map((stage) => levelForStage(stage).track)).toEqual([
+      'spiral',
+      'wave',
+      'switchback',
+      'spiral',
+    ]);
   });
 });
 
@@ -245,6 +274,24 @@ describe('印加弹珠：消除与连锁', () => {
     expect(state.score).toBeGreaterThan(afterFirst.score);
     // 撞在一起消掉这一下：记一次连锁、放一圈庆祝特效
     expect(state.chains).toBe(1);
+  });
+
+  it('断口已经进入视觉接触容差时仍会复检并触发连锁', () => {
+    const afterFirst = applyHit(withChain([7, 7, 3, 3, 3, 7]), 4, 3, false);
+    const junctionId = afterFirst.pendingJunctions[0] as number;
+    const junctionIndex = afterFirst.balls.findIndex((ball) => ball.id === junctionId);
+    const ahead = afterFirst.balls[junctionIndex - 1] as MarbleBall;
+    const touching = afterFirst.balls.map((ball) => (
+      ball.id === junctionId
+        ? { ...ball, dist: ahead.dist - SPACING - CONTACT_EPS * 0.8 }
+        : ball
+    ));
+
+    // dt=0 故意不制造新的 joined 瞬时事件；连锁必须靠持续接触复检触发。
+    const resolved = step({ ...afterFirst, balls: touching }, 0);
+    expect(resolved.balls).toHaveLength(0);
+    expect(resolved.chains).toBe(1);
+    expect(resolved.pendingJunctions).toHaveLength(0);
   });
 
   it('断口合拢连锁会顶回链条并放庆祝特效', () => {

@@ -18,6 +18,9 @@ export interface Vec {
   y: number;
 }
 
+/** 关卡轨迹：每关轮换，洞口就是对应轨迹的终点，不要求位于场地中央。 */
+export type MarbleTrackId = 'spiral' | 'wave' | 'switchback';
+
 /**
  * 弹珠道具（只长在链条上的珠子身上，发射出去的弹珠永远没有道具）：
  *  - bomb    炸弹：被消掉时炸掉附近一整片，可连环引爆
@@ -79,12 +82,14 @@ export interface MarbleLevel {
   bombs: number;
   /** 本关闪光（倒流）珠数量。 */
   reverses: number;
+  /** 本关使用的轨迹。 */
+  track: MarbleTrackId;
 }
 
 export const LEVELS: readonly MarbleLevel[] = [
-  { id: 'easy', colors: 4, supply: 40, opening: 12, speed: 3.2, bombs: 3, reverses: 2 },
-  { id: 'medium', colors: 5, supply: 55, opening: 16, speed: 4.4, bombs: 4, reverses: 3 },
-  { id: 'hard', colors: 6, supply: 70, opening: 20, speed: 5.6, bombs: 6, reverses: 4 },
+  { id: 'easy', colors: 4, supply: 40, opening: 12, speed: 3.2, bombs: 3, reverses: 2, track: 'spiral' },
+  { id: 'medium', colors: 5, supply: 55, opening: 16, speed: 4.4, bombs: 4, reverses: 3, track: 'wave' },
+  { id: 'hard', colors: 6, supply: 70, opening: 20, speed: 5.6, bombs: 6, reverses: 4, track: 'switchback' },
 ];
 
 export const DEFAULT_LEVEL = 0;
@@ -105,16 +110,17 @@ export function levelForStage(stage: number): MarbleLevel {
     speed: 3.2 + step * 0.45,
     bombs: 3 + Math.floor(step / 2),
     reverses: 2 + Math.floor(step / 3),
+    track: TRACK_ORDER[step % TRACK_ORDER.length] as MarbleTrackId,
   };
 }
 /** 场地边长（世界单位）。 */
 export const FIELD = 100;
 /** 弹珠半径。 */
-export const BALL_RADIUS = 2.6;
+export const BALL_RADIUS = 3;
 /** 链条上相邻两珠的中心间距。 */
 export const SPACING = BALL_RADIUS * 2;
-/** 判定「已经贴上」的间距容差。 */
-const CONTACT_EPS = 0.35;
+/** 判定「已经贴上」的间距容差；与视觉球径联动，避免看着挨上、逻辑却差半个像素。 */
+export const CONTACT_EPS = BALL_RADIUS * 0.36;
 /** 发射器位置（场地中心）。 */
 export const SHOOTER: Vec = { x: FIELD / 2, y: FIELD / 2 };
 /** 飞行速度（世界单位/秒）。 */
@@ -203,23 +209,15 @@ interface Track {
   length: number;
 }
 
+const TRACK_ORDER: readonly MarbleTrackId[] = ['spiral', 'wave', 'switchback'];
+
 const TRACK_TURNS = 2.6;
 const TRACK_OUTER = 45;
 const TRACK_INNER = 15;
 const TRACK_STEPS = 720;
 const TRACK_START_ANGLE = -Math.PI / 2;
 
-function buildTrack(): Track {
-  const points: Vec[] = [];
-  for (let i = 0; i <= TRACK_STEPS; i += 1) {
-    const t = i / TRACK_STEPS;
-    const angle = TRACK_START_ANGLE + t * TRACK_TURNS * Math.PI * 2;
-    const radius = TRACK_OUTER - (TRACK_OUTER - TRACK_INNER) * t;
-    points.push({
-      x: FIELD / 2 + radius * Math.cos(angle),
-      y: FIELD / 2 + radius * Math.sin(angle),
-    });
-  }
+function finishTrack(points: readonly Vec[]): Track {
   const cumulative: number[] = [0];
   for (let i = 1; i < points.length; i += 1) {
     const previous = points[i - 1] as Vec;
@@ -230,38 +228,126 @@ function buildTrack(): Track {
   return { points, cumulative, length: cumulative[cumulative.length - 1] as number };
 }
 
-const TRACK = buildTrack();
+function buildSpiralTrack(): Track {
+  const points: Vec[] = [];
+  for (let i = 0; i <= TRACK_STEPS; i += 1) {
+    const t = i / TRACK_STEPS;
+    const angle = TRACK_START_ANGLE + t * TRACK_TURNS * Math.PI * 2;
+    const radius = TRACK_OUTER - (TRACK_OUTER - TRACK_INNER) * t;
+    points.push({
+      x: FIELD / 2 + radius * Math.cos(angle),
+      y: FIELD / 2 + radius * Math.sin(angle),
+    });
+  }
+  return finishTrack(points);
+}
+
+/** 横向波浪：入口在左上，洞口落在右上，中央发射器不再与洞口重合。 */
+function buildWaveTrack(): Track {
+  const points: Vec[] = [];
+  for (let i = 0; i <= TRACK_STEPS; i += 1) {
+    const t = i / TRACK_STEPS;
+    points.push({
+      x: 7 + t * 86,
+      y: 50 + Math.sin(-Math.PI / 2 + t * Math.PI * 4) * 34,
+    });
+  }
+  return finishTrack(points);
+}
+
+/**
+ * 山路折返：长直道与圆滑发卡弯交替，洞口落在左下区域。
+ * Catmull-Rom 采样让弹珠过弯时切向连续，不会在折角处突然跳方向。
+ */
+function buildSwitchbackTrack(): Track {
+  const waypoints: readonly Vec[] = [
+    { x: 5, y: 14 },
+    { x: 88, y: 14 },
+    { x: 88, y: 37 },
+    { x: 13, y: 37 },
+    { x: 13, y: 61 },
+    { x: 88, y: 61 },
+    { x: 88, y: 86 },
+    { x: 24, y: 86 },
+  ];
+  const points: Vec[] = [];
+  const samplesPerSegment = 90;
+  for (let segment = 0; segment < waypoints.length - 1; segment += 1) {
+    const p0 = waypoints[Math.max(0, segment - 1)] as Vec;
+    const p1 = waypoints[segment] as Vec;
+    const p2 = waypoints[segment + 1] as Vec;
+    const p3 = waypoints[Math.min(waypoints.length - 1, segment + 2)] as Vec;
+    for (let sample = 0; sample < samplesPerSegment; sample += 1) {
+      const t = sample / samplesPerSegment;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      points.push({
+        x: 0.5 * (
+          2 * p1.x +
+          (-p0.x + p2.x) * t +
+          (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+          (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3
+        ),
+        y: 0.5 * (
+          2 * p1.y +
+          (-p0.y + p2.y) * t +
+          (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+          (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
+        ),
+      });
+    }
+  }
+  points.push(waypoints[waypoints.length - 1] as Vec);
+  return finishTrack(points);
+}
+
+const TRACKS: Readonly<Record<MarbleTrackId, Track>> = {
+  spiral: buildSpiralTrack(),
+  wave: buildWaveTrack(),
+  switchback: buildSwitchbackTrack(),
+};
+
+function trackFor(id: MarbleTrackId = 'spiral'): Track {
+  return TRACKS[id];
+}
 
 /** 轨道总长（世界单位）。 */
-export const PATH_LENGTH = TRACK.length;
+export const PATH_LENGTH = TRACKS.spiral.length;
+
+/** 指定轨迹的总长。 */
+export function pathLength(track: MarbleTrackId = 'spiral'): number {
+  return trackFor(track).length;
+}
 
 /** 轨道折线（渲染层画轨道用）。 */
-export function trackPoints(): readonly Vec[] {
-  return TRACK.points;
+export function trackPoints(track: MarbleTrackId = 'spiral'): readonly Vec[] {
+  return trackFor(track).points;
 }
 
 /** 轨道上距离 dist 处的坐标（越界按端点夹紧）。 */
-export function pointAt(dist: number): Vec {
-  const clamped = Math.max(0, Math.min(TRACK.length, dist));
+export function pointAt(dist: number, trackId: MarbleTrackId = 'spiral'): Vec {
+  const track = trackFor(trackId);
+  const clamped = Math.max(0, Math.min(track.length, dist));
   let low = 0;
-  let high = TRACK.cumulative.length - 1;
+  let high = track.cumulative.length - 1;
   while (low < high - 1) {
     const mid = (low + high) >> 1;
-    if ((TRACK.cumulative[mid] as number) <= clamped) low = mid;
+    if ((track.cumulative[mid] as number) <= clamped) low = mid;
     else high = mid;
   }
-  const start = TRACK.points[low] as Vec;
-  const end = TRACK.points[high] as Vec;
-  const startDist = TRACK.cumulative[low] as number;
-  const endDist = TRACK.cumulative[high] as number;
+  const start = track.points[low] as Vec;
+  const end = track.points[high] as Vec;
+  const startDist = track.cumulative[low] as number;
+  const endDist = track.cumulative[high] as number;
   const ratio = endDist === startDist ? 0 : (clamped - startDist) / (endDist - startDist);
   return { x: start.x + (end.x - start.x) * ratio, y: start.y + (end.y - start.y) * ratio };
 }
 
 /** 轨道上距离 dist 处的单位切向（指向前进方向）。 */
-export function tangentAt(dist: number): Vec {
-  const back = pointAt(Math.max(0, dist - 0.5));
-  const front = pointAt(Math.min(TRACK.length, dist + 0.5));
+export function tangentAt(dist: number, trackId: MarbleTrackId = 'spiral'): Vec {
+  const track = trackFor(trackId);
+  const back = pointAt(Math.max(0, dist - 0.5), trackId);
+  const front = pointAt(Math.min(track.length, dist + 0.5), trackId);
   const dx = front.x - back.x;
   const dy = front.y - back.y;
   const size = Math.hypot(dx, dy) || 1;
@@ -507,6 +593,7 @@ function detonate(
   end: number,
   combo: number,
   time: number,
+  track: MarbleTrackId,
 ): DetonationResult {
   let current = balls.slice();
   let gained = 0;
@@ -532,7 +619,7 @@ function detonate(
 
     for (const ball of taken) {
       if (ball.power === 'bomb') {
-        const center = pointAt(ball.dist);
+        const center = pointAt(ball.dist, track);
         effects.push({
           kind: 'blast',
           x: center.x,
@@ -560,7 +647,7 @@ function detonate(
   let pullback = 0;
   if (reverses > 0 && current.length > 0) {
     const head = current[0] as MarbleBall;
-    const center = pointAt(head.dist);
+    const center = pointAt(head.dist, track);
     // 不瞬移：把距离挂账，由 step 带加速地把链条拉回去
     pullback = REVERSE_DISTANCE * reverses;
     effects.push({
@@ -584,10 +671,11 @@ function resolveMatch(
   index: number,
   combo: number,
   time: number,
+  track: MarbleTrackId,
 ): DetonationResult {
   const { start, end } = runAround(balls, index);
   if (end - start + 1 < 3) return { balls: balls.slice(), ...NO_DETONATION };
-  return detonate(balls, start, end, combo, time);
+  return detonate(balls, start, end, combo, time, track);
 }
 
 /** 插入一颗弹珠：position 为插入后的数组下标，随后把后方的珠依次顶开。 */
@@ -625,7 +713,7 @@ export function applyHit(
   const id = ballId ?? state.nextId;
   const inserted = insertBall(state.balls, position, { id, color, dist });
   const combo = 1;
-  const result = resolveMatch(inserted, position, combo, state.time);
+  const result = resolveMatch(inserted, position, combo, state.time, configOf(state).track);
   const pendingJunctions = result.junction === null
     ? state.pendingJunctions
     : [...state.pendingJunctions, result.junction];
@@ -674,12 +762,13 @@ function advance(
 function hitTest(
   balls: readonly MarbleBall[],
   shot: MarbleShot,
+  track: MarbleTrackId,
 ): { index: number; ahead: boolean } | null {
   for (let i = 0; i < balls.length; i += 1) {
     const ball = balls[i] as MarbleBall;
-    const center = pointAt(ball.dist);
-    if (Math.hypot(center.x - shot.x, center.y - shot.y) > SPACING) continue;
-    const tangent = tangentAt(ball.dist);
+    const center = pointAt(ball.dist, track);
+    if (Math.hypot(center.x - shot.x, center.y - shot.y) > SPACING + CONTACT_EPS) continue;
+    const tangent = tangentAt(ball.dist, track);
     const ahead = (shot.x - center.x) * tangent.x + (shot.y - center.y) * tangent.y > 0;
     return { index: i, ahead };
   }
@@ -693,6 +782,8 @@ function hitTest(
 export function step(state: MarbleState, dt: number): MarbleState {
   if (state.status === 'won' || state.status === 'lost') return state;
   const config = configOf(state);
+  const track = config.track;
+  const currentPathLength = pathLength(track);
   const time = state.time + dt;
 
   // 落洞阶段：不再接受补给与命中，整条链加速涌进洞口，逐颗被吞掉
@@ -701,7 +792,7 @@ export function step(state: MarbleState, dt: number): MarbleState {
     const speed = FALL_BASE_SPEED + FALL_ACCEL * falling;
     const balls = state.balls
       .map((ball) => ({ ...ball, dist: ball.dist + speed * dt }))
-      .filter((ball) => ball.dist < PATH_LENGTH);
+      .filter((ball) => ball.dist < currentPathLength);
     const done = balls.length === 0 || falling >= FALL_TIMEOUT;
     return {
       ...state,
@@ -725,16 +816,21 @@ export function step(state: MarbleState, dt: number): MarbleState {
   let effects = state.effects.filter((effect) => effect.until > time);
   let pendingJunctions = state.pendingJunctions.filter((id) => balls.some((ball) => ball.id === id));
 
-  // 缺口合拢：断口两侧接上时重新判定三连（连锁得分 + 回退 + 庆祝）
+  // 缺口合拢：持续复检所有待接合断口，而不是只押注「首次碰撞」那一帧。
+  // 回退、较大 dt 或多个断口同时移动时，即使 joined 事件被跨过去，也不会漏掉连锁。
   let chains = state.chains;
   let chainPullback = 0;
-  for (const id of advanced.joined) {
-    if (!pendingJunctions.includes(id)) continue;
+  for (const id of [...pendingJunctions]) {
     const index = balls.findIndex((ball) => ball.id === id);
-    if (index <= 0) continue;
+    if (index <= 0) {
+      pendingJunctions = pendingJunctions.filter((pending) => pending !== id);
+      continue;
+    }
+    const ahead = balls[index - 1] as MarbleBall;
     const contact = balls[index] as MarbleBall;
-    const result = resolveMatch(balls, index, combo + 1, time);
+    if (ahead.dist - contact.dist > SPACING + CONTACT_EPS) continue;
     pendingJunctions = pendingJunctions.filter((pending) => pending !== id);
+    const result = resolveMatch(balls, index, combo + 1, time, track);
     if (result.removed === 0) continue;
     balls = result.balls;
     score += result.gained;
@@ -742,7 +838,7 @@ export function step(state: MarbleState, dt: number): MarbleState {
     chains += 1;
     // 撞在一起消掉的这一下，把链条往回顶一段，并在接合处放个庆祝圈
     chainPullback += CHAIN_PULLBACK;
-    const center = pointAt(contact.dist);
+    const center = pointAt(contact.dist, track);
     effects = [
       ...effects,
       ...result.effects,
@@ -816,7 +912,7 @@ export function step(state: MarbleState, dt: number): MarbleState {
       working = { ...working, combo };
       continue;
     }
-    const hit = hitTest(working.balls, moved);
+    const hit = hitTest(working.balls, moved, track);
     if (!hit) {
       shots.push(moved);
       continue;
@@ -827,7 +923,7 @@ export function step(state: MarbleState, dt: number): MarbleState {
 
   const head = working.balls[0];
   // 队首碰到洞口不是立刻判负，先进落洞动画，吞完才 lost
-  const falling = head !== undefined && head.dist >= PATH_LENGTH;
+  const falling = head !== undefined && head.dist >= currentPathLength;
   const won = !falling && working.supply.length === 0 && working.balls.length === 0;
   // idle 只由「玩家开了第一枪」翻成 playing（见 shoot），链条则一直在走。
   const status: MarbleStatus = falling ? 'falling' : won ? 'won' : working.status;

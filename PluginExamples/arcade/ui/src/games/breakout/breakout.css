@@ -1,0 +1,44 @@
+.breakout {
+  display: flex;
+  width: 100%;
+  max-width: 680px;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.breakout__bar,
+.breakout__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 14px;
+}
+
+.breakout__bar {
+  color: var(--fg-muted);
+  font-size: 14px;
+}
+
+.breakout__status { color: var(--accent-strong); }
+
+.breakout__field {
+  display: block;
+  width: min(100%, 620px);
+  aspect-ratio: 100 / 72;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #101522;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.breakout__hint {
+  max-width: 580px;
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 13px;
+  text-align: center;
+}
