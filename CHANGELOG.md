@@ -1,9 +1,19 @@
 # Changelog
 
-> 当前文件保留最新版本（1.302.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.302.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
-## 1.302.0-rc1 - 2026-08-28
+## 1.302.0-rc4 - 2026-08-28
+
+### Fixed
+
+- **产物文件菜单移除「用内置编辑器打开」。** WillDeep 已定位为 Agent-only，通用编辑能力属于独立 Qeditor；文本产物继续支持默认 App、侧边栏预览、指定其他 App 与 Finder 定位，不再通过遗留入口唤起 WillDeep 内部编辑链路。
+
+### Tests
+
+- `AgentHeaderEditorEntryTests` 扩展 Agent-only 源码守卫，明确禁止产物菜单重新出现内置编辑器文案或 `openAgentReferencedFile` 调用，同时确认侧边栏只读预览仍保留。
+
+## 1.302.0-rc3 - 2026-08-28
 
 ### Added
 

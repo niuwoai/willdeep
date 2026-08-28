@@ -58,6 +58,7 @@ struct AgentHeaderEditorEntryTests {
         let terminalSource = try Self.source(in: "Xedit", named: "AgentSidePanelTerminalView.swift")
         let appSource = try Self.source(in: "Xedit", named: "XeditApp.swift")
         let filePanelSource = try Self.source(in: "Xedit", named: "AgentSidePanel.swift")
+        let artifactActionsSource = try Self.source(in: "Xedit", named: "AgentArtifactFileActions.swift")
         let infoPlist = try Self.source(in: "Xedit", named: "Info.plist")
 
         // Terminal shortcut JSON is the one deliberate exception to "files
@@ -74,6 +75,9 @@ struct AgentHeaderEditorEntryTests {
         // this door.
         #expect(!terminalSource.contains("appState.openEditorFile"))
         #expect(filePanelSource.contains("NSWorkspace.shared.open(url)"))
+        #expect(!artifactActionsSource.contains("用内置编辑器打开"))
+        #expect(!artifactActionsSource.contains("appState.openAgentReferencedFile"))
+        #expect(artifactActionsSource.contains("appState.previewAgentArtifactFileInSidePanel"))
         #expect(!infoPlist.contains("CFBundleDocumentTypes"))
     }
 
