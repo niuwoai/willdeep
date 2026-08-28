@@ -13,8 +13,8 @@
 //  parent's own turn readable.
 //
 //  What makes it legible as *someone else* speaking:
-//   - a left rail and a tint derived from the trade id, stable across runs,
-//     so two Workers in one turn never wear the same colour;
+//   - a left rail and a tint assigned per public trade, stable across runs,
+//     so the six built-in trades never wear the same colour as each other;
 //   - the trade name and model on the header row, not just "subagent";
 //   - round numbers on each utterance, matching the inspector's numbering.
 //
@@ -23,22 +23,47 @@ import SwiftUI
 
 /// Deterministic per-trade colour. Same trade, same colour, every session —
 /// a Worker whose colour changed between runs would be worse than no colour.
+///
+/// Keyed on the *public* trade, not the raw profile id. The catalog carries
+/// seventeen internal trades but shows six: `publicID(for:)` folds `scout`,
+/// `log_inspector` and `git_detective` all into `reader`. Colouring the raw
+/// id would paint two runs that both say "阅读者" in different colours, which
+/// is worse than not colouring them at all.
+///
+/// The six are assigned by hand rather than hashed. Hashing is the wrong tool
+/// for a domain of six known values: FNV-1a over the public ids happens to
+/// collide `reader`, `tester` and `ops_runner` onto the same slot — half the
+/// roster sharing one colour. A table cannot collide.
 nonisolated enum AgentSubagentTradePalette {
-    /// Hand-picked rather than hue-rotated: these all stay legible against
-    /// both chat backgrounds, which an evenly spaced hue wheel does not.
-    private static let colors: [Color] = [
+    /// Fallback ramp for custom trades outside the built-in six. Hand-picked
+    /// rather than hue-rotated: these all stay legible against both chat
+    /// backgrounds, which an evenly spaced hue wheel does not.
+    private static let fallbackColors: [Color] = [
         .blue, .purple, .teal, .orange, .pink, .indigo, .green, .brown,
     ]
 
+    private static let publicColors: [String: Color] = [
+        AgentSubagentProfileCatalog.readerID: .blue,
+        AgentSubagentProfileCatalog.implementerID: .purple,
+        AgentSubagentProfileCatalog.testerID: .green,
+        AgentSubagentProfileCatalog.opsRunnerID: .orange,
+        AgentSubagentProfileCatalog.judgeID: .pink,
+        AgentSubagentProfileCatalog.deepID: .teal,
+    ]
+
     static func color(forProfileID id: String) -> Color {
-        guard !id.isEmpty else { return .accentColor }
-        // FNV-1a over the id's bytes. `hashValue` is seeded per process and
-        // would repaint every Worker on relaunch.
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .accentColor }
+        let publicID = AgentSubagentProfileCatalog.publicID(for: trimmed)
+        if let assigned = publicColors[publicID] { return assigned }
+        // A user-defined trade still deserves a stable colour. FNV-1a rather
+        // than `hashValue`, which is seeded per process and would repaint the
+        // Worker on every relaunch.
         var hash: UInt32 = 2_166_136_261
-        for byte in id.utf8 {
+        for byte in publicID.utf8 {
             hash = (hash ^ UInt32(byte)) &* 16_777_619
         }
-        return colors[Int(hash % UInt32(colors.count))]
+        return fallbackColors[Int(hash % UInt32(fallbackColors.count))]
     }
 }
 

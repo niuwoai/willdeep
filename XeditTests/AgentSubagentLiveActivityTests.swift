@@ -216,15 +216,57 @@ struct AgentSubagentLiveActivityTests {
 
     /// `hashValue` is seeded per process; a Worker whose colour changed
     /// between launches would be worse than no colour at all.
-    @Test("trade colours are stable and spread across the palette")
-    func tradeColoursAreStableAndDistinct() {
+    @Test("a trade's colour is stable across calls")
+    func tradeColourIsStable() {
         #expect(
             AgentSubagentTradePalette.color(forProfileID: "scout")
                 == AgentSubagentTradePalette.color(forProfileID: "scout")
         )
-        let ids = ["scout", "reader", "deep", "editor", "tester", "reviewer", "ops_runner"]
-        let distinct = Set(ids.map { String(describing: AgentSubagentTradePalette.color(forProfileID: $0)) })
-        #expect(distinct.count >= 4)
+    }
+
+    /// The roster shows six trades, and all six can run in one turn. A shared
+    /// colour there is not a near-miss, it is the feature failing. An earlier
+    /// `distinct.count >= 4` assertion passed while `reader`, `tester` and
+    /// `ops_runner` all rendered the same green — half the roster.
+    @Test("every public trade gets its own colour")
+    func publicTradeColoursAreAllDistinct() {
+        let ids = AgentSubagentProfileCatalog.publicBuiltIn.map(\.id)
+        let colors = ids.map { String(describing: AgentSubagentTradePalette.color(forProfileID: $0)) }
+
+        #expect(ids.count == 6)
+        #expect(Set(colors).count == ids.count)
+    }
+
+    /// Seventeen internal trades are presented as six. Two runs that both
+    /// say "阅读者" must look the same, so the colour keys on the public id.
+    @Test("internal trades inherit the colour of the public trade they fold into")
+    func internalTradesFollowTheirPublicTrade() {
+        let reader = AgentSubagentTradePalette.color(forProfileID: "reader")
+        for folded in ["scout", "log_inspector", "git_detective"] {
+            #expect(AgentSubagentTradePalette.color(forProfileID: folded) == reader)
+        }
+
+        let implementer = AgentSubagentTradePalette.color(forProfileID: "implementer")
+        for folded in ["editor", "small_implementer", "test_fixer", "build_fixer"] {
+            #expect(AgentSubagentTradePalette.color(forProfileID: folded) == implementer)
+        }
+
+        #expect(
+            AgentSubagentTradePalette.color(forProfileID: "terminal_operator")
+                == AgentSubagentTradePalette.color(forProfileID: "ops_runner")
+        )
+        #expect(
+            AgentSubagentTradePalette.color(forProfileID: "security_guard")
+                == AgentSubagentTradePalette.color(forProfileID: "judge")
+        )
+    }
+
+    @Test("a trade outside the built-in roster still gets a stable colour")
+    func customTradeFallsBackToAStableColour() {
+        let first = AgentSubagentTradePalette.color(forProfileID: "my_custom_trade")
+        let second = AgentSubagentTradePalette.color(forProfileID: " My_Custom_Trade ")
+
+        #expect(first == second)
     }
 
     // MARK: Progress plumbing
@@ -241,5 +283,87 @@ struct AgentSubagentLiveActivityTests {
         #expect(update.speech.isEmpty)
         #expect(update.toolNames.isEmpty)
         #expect(update.displayText.contains("2"))
+    }
+
+    // MARK: Step duration
+
+    private func timedCall(status: AgentToolCallStatus, startedAt: Date) -> AgentToolCall {
+        AgentToolCall(
+            messageID: UUID(),
+            externalID: UUID().uuidString,
+            toolName: "run_command",
+            arguments: [:],
+            risk: .write,
+            status: status,
+            startedAt: startedAt
+        )
+    }
+
+    @Test("a step in flight has no finish time, so its row keeps ticking")
+    func inFlightStepHasNoFinishTime() {
+        for status in [AgentToolCallStatus.running, .pendingApproval, .awaitingConfirm, .awaitingUserAnswer] {
+            #expect(timedCall(status: status, startedAt: Date()).finishedAt == nil)
+        }
+    }
+
+    /// `didSet` never fires from `init`, so a record born terminal — a denial
+    /// written after the fact — would otherwise count upward forever.
+    @Test("a step born terminal is sealed at creation")
+    func stepBornTerminalIsSealed() {
+        let started = Date(timeIntervalSince1970: 5_000)
+        for status in [AgentToolCallStatus.succeeded, .failed, .denied] {
+            let call = timedCall(status: status, startedAt: started)
+            #expect(call.finishedAt == started)
+        }
+    }
+
+    /// Status is written from a dozen places; the stamp lives on `didSet` so
+    /// none of them can forget it.
+    @Test("reaching a terminal status stamps the finish time exactly once")
+    func terminalStatusStampsFinishTime() throws {
+        var call = timedCall(status: .running, startedAt: Date())
+        #expect(call.finishedAt == nil)
+
+        call.status = .succeeded
+        let firstStamp = try #require(call.finishedAt)
+
+        // Re-asserting the same terminal status must not move the clock.
+        call.status = .succeeded
+        #expect(call.finishedAt == firstStamp)
+    }
+
+    /// A sandbox escalation puts a settled call back to work. Leaving the old
+    /// finish time in place would show a frozen duration on a running step.
+    @Test("a settled step that resumes drops its finish time and ticks again")
+    func resumedStepClearsFinishTime() {
+        var call = timedCall(status: .running, startedAt: Date())
+        call.status = .failed
+        #expect(call.finishedAt != nil)
+
+        call.status = .running
+        #expect(call.finishedAt == nil)
+    }
+
+    @Test("the row presentation carries both instants through")
+    func presentationCarriesTiming() {
+        let started = Date(timeIntervalSince1970: 9_000)
+        var call = timedCall(status: .running, startedAt: started)
+        call.status = .succeeded
+
+        let presentation = AgentToolActivityRowPresentation(call: call)
+        #expect(presentation.startedAt == started)
+        #expect(presentation.finishedAt == call.finishedAt)
+    }
+
+    @Test("durations read as seconds, then minutes, then hours")
+    func durationFormatting() {
+        #expect(AgentToolActivityRowPresentation.formatDuration(0) == "0s")
+        #expect(AgentToolActivityRowPresentation.formatDuration(42) == "42s")
+        #expect(AgentToolActivityRowPresentation.formatDuration(60) == "1m 0s")
+        #expect(AgentToolActivityRowPresentation.formatDuration(1_482) == "24m 42s")
+        #expect(AgentToolActivityRowPresentation.formatDuration(3_600) == "1h 0m")
+        // A clock that briefly reads backwards (system time adjustment)
+        // must not render a negative duration.
+        #expect(AgentToolActivityRowPresentation.formatDuration(-5) == "0s")
     }
 }

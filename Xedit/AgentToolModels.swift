@@ -55,6 +55,17 @@ extension AgentToolCallStatus {
             return false
         }
     }
+
+    /// The step is over — nothing more will happen to it. Drives when the
+    /// row's duration stops ticking and freezes at what it took.
+    var isTerminal: Bool {
+        switch self {
+        case .succeeded, .failed, .denied:
+            return true
+        case .running, .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
+            return false
+        }
+    }
 }
 
 struct AgentToolParameter: Codable, Equatable {
@@ -714,7 +725,30 @@ struct AgentToolCall: Identifiable, Equatable {
     let toolName: String
     var arguments: [String: AgentJSONValue]
     let risk: AgentToolRisk
-    var status: AgentToolCallStatus
+    /// Stamps `finishedAt` on the way to a terminal status so the row's
+    /// duration freezes at what the step took. A `didSet` rather than a stamp
+    /// at each assignment site: status is written from a dozen places across
+    /// the loop, the approval paths, the sandbox escalation and the subagent
+    /// spawn, and any one of them forgetting would silently leave a finished
+    /// step counting upward forever.
+    var status: AgentToolCallStatus {
+        didSet {
+            guard status != oldValue else { return }
+            if status.isTerminal {
+                if finishedAt == nil { finishedAt = Date() }
+            } else {
+                // A sandbox escalation puts a settled call back to work.
+                finishedAt = nil
+            }
+        }
+    }
+    /// When this step appeared. Wall time from here is what the row shows —
+    /// including any stretch spent queued for approval, because that is time
+    /// the user actually waited on this step.
+    let startedAt: Date
+    /// Set once the step reaches a terminal status; nil while it is still
+    /// in flight. Render-only, like the rest of the live fields here.
+    var finishedAt: Date?
     var result: AgentToolResult?
     var errorMessage: String?
     /// Exit status of a command that actually ran to completion and returned
@@ -764,6 +798,8 @@ struct AgentToolCall: Identifiable, Equatable {
         arguments: [String: AgentJSONValue],
         risk: AgentToolRisk,
         status: AgentToolCallStatus,
+        startedAt: Date = Date(),
+        finishedAt: Date? = nil,
         result: AgentToolResult? = nil,
         errorMessage: String? = nil,
         commandExitCode: Int32? = nil,
@@ -781,6 +817,10 @@ struct AgentToolCall: Identifiable, Equatable {
         self.arguments = arguments
         self.risk = risk
         self.status = status
+        self.startedAt = startedAt
+        // A record born terminal (a denial recorded after the fact) has no
+        // live stretch to time; `didSet` never fires from init, so seal it here.
+        self.finishedAt = finishedAt ?? (status.isTerminal ? startedAt : nil)
         self.result = result
         self.errorMessage = errorMessage
         self.commandExitCode = commandExitCode
