@@ -1063,7 +1063,12 @@ enum AgentSubagentRunner {
                     profile: profile,
                     writeAccess: writeAccess,
                     approvedCommand: approvedCommand,
-                    intelligentCommandReviewAvailable: commandReviewer != nil,
+                    // 严格只读工种没有这条通道（见执行闸门处的说明），提示词
+                    // 就不能许诺它。提示词说"可以送审"而闸门一律拒绝，模型
+                    // 会把每条被拒的命令当成偶发故障反复重试。
+                    intelligentCommandReviewAvailable: commandReviewer != nil
+                        && !AgentSubagentProfileCatalog
+                            .strictReadOnlyShellTradeIDs.contains(profile.id),
                     // Derived rather than passed in: the relay hosts this
                     // trade's job prompt exactly when we are actually calling
                     // its hosted virtual model. Signed out, binding resolution
@@ -1928,8 +1933,15 @@ enum AgentSubagentRunner {
         // unless the command classified `.needsJudgment`, so Full Access
         // could not reach commands it plainly authorizes. The reviewer
         // returning false still lands in the same denial below.
+        // 严格只读工种（scout / reader / generalist）不参与智能审核这条口子。
+        // 它们拿到 shell 是为了 `ls` / `head` / `git log` 这类静态只读命令，
+        // 不必再经过父会话裁判；一旦允许裁判为它们放行修改类命令，"只读
+        // 工种"这个词就没有意义了，而这些工种恰恰跑在最小的模型上。
+        let isStrictReadOnlyShellTrade = AgentSubagentProfileCatalog
+            .strictReadOnlyShellTradeIDs.contains(profile.id)
         var isJudgeApprovedCommand = false
         if isReviewableCommandTool,
+           !isStrictReadOnlyShellTrade,
            let command = argsDict["command"]?.stringValue(),
            let commandReviewer {
             isJudgeApprovedCommand = await commandReviewer(call.toolName, command)
@@ -1951,6 +1963,9 @@ enum AgentSubagentRunner {
             if call.toolName == "terminal_send_command",
                profile.id == AgentSubagentProfileCatalog.terminalOperatorID {
                 return "Denied: this command was neither statically read-only nor approved by intelligent safety review. Report the exact command to the parent. If it still needs to run, the parent must re-spawn `profile=\"ops_runner\"` with this exact `target_command`, which asks the operator for approval instead of silently discarding the request."
+            }
+            if call.toolName == "run_command", isStrictReadOnlyShellTrade {
+                return "Denied: `\(profile.id)` runs only statically read-only commands, and this one classified as `\(risk.rawValue)`. Common causes: it writes, or it touches a path outside the workspace. Report the exact command to the parent — a modifying command belongs to a writing trade, and an operations command to `profile=\"ops_runner\"` with an exact `target_command`."
             }
             if call.toolName == "run_command" {
                 return "Denied: this subagent command was neither statically read-only nor approved by intelligent safety review. Report the exact command to the parent. If it still needs to run, the parent must request exact human approval, using `profile=\"ops_runner\"` with this `target_command` for an operations command."

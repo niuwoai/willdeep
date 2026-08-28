@@ -14,7 +14,7 @@
 //
 //  What makes it legible as *someone else* speaking:
 //   - a left rail and a tint assigned per public trade, stable across runs,
-//     so the six built-in trades never wear the same colour as each other;
+//     so no two built-in trades wear the same colour as each other;
 //   - the trade name and model on the header row, not just "subagent";
 //   - round numbers on each utterance, matching the inspector's numbering.
 //
@@ -25,17 +25,17 @@ import SwiftUI
 /// a Worker whose colour changed between runs would be worse than no colour.
 ///
 /// Keyed on the *public* trade, not the raw profile id. The catalog carries
-/// seventeen internal trades but shows six: `publicID(for:)` folds `scout`,
+/// eighteen internal trades but shows seven: `publicID(for:)` folds `scout`,
 /// `log_inspector` and `git_detective` all into `reader`. Colouring the raw
 /// id would paint two runs that both say "阅读者" in different colours, which
 /// is worse than not colouring them at all.
 ///
-/// The six are assigned by hand rather than hashed. Hashing is the wrong tool
-/// for a domain of six known values: FNV-1a over the public ids happens to
+/// They are assigned by hand rather than hashed. Hashing is the wrong tool
+/// for a domain of a handful of known values: FNV-1a over the public ids happens to
 /// collide `reader`, `tester` and `ops_runner` onto the same slot — half the
 /// roster sharing one colour. A table cannot collide.
 nonisolated enum AgentSubagentTradePalette {
-    /// Fallback ramp for custom trades outside the built-in six. Hand-picked
+    /// Fallback ramp for custom trades outside the built-in roster. Hand-picked
     /// rather than hue-rotated: these all stay legible against both chat
     /// backgrounds, which an evenly spaced hue wheel does not.
     private static let fallbackColors: [Color] = [
@@ -49,6 +49,7 @@ nonisolated enum AgentSubagentTradePalette {
         AgentSubagentProfileCatalog.opsRunnerID: .orange,
         AgentSubagentProfileCatalog.judgeID: .pink,
         AgentSubagentProfileCatalog.deepID: .teal,
+        AgentSubagentProfileCatalog.generalistID: .indigo,
     ]
 
     static func color(forProfileID id: String) -> Color {

@@ -23,15 +23,22 @@ nonisolated struct WorkflowTradeBindingTests {
         #expect(filePickingTools.isSubset(of: scout.effectiveToolNames(writeAccessGranted: false)))
     }
 
-    @Test("a picking step must not be annotated with a trade that lacks the shell")
-    func scoutHasNoShell() {
+    @Test("a step that shells out must be annotated with a trade that has one")
+    func shellStepsNeedAShellCarryingTrade() {
         // Documents the boundary the annotation rule protects: any step that
         // shells out (gh, git, build tooling) must stay on a trade that
         // actually carries `run_command`.
-        #expect(!AgentSubagentProfileCatalog.scout
+        #expect(!AgentSubagentProfileCatalog.reviewer
             .effectiveToolNames(writeAccessGranted: false).contains("run_command"))
         #expect(AgentSubagentProfileCatalog.deep
             .effectiveToolNames(writeAccessGranted: false).contains("run_command"))
+        // Since 1.303.0-rc1 `scout` has a shell too, but a strictly read-only
+        // one — a step whose command modifies anything still cannot be bound
+        // to it, and that is the second half of the same rule.
+        #expect(AgentSubagentProfileCatalog.scout
+            .effectiveToolNames(writeAccessGranted: false).contains("run_command"))
+        #expect(AgentSubagentProfileCatalog.strictReadOnlyShellTradeIDs
+            .contains(AgentSubagentProfileCatalog.scoutID))
     }
 
     @Test("every built-in trade carries a localized name, not a raw id")

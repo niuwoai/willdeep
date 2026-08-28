@@ -103,15 +103,25 @@ struct WorkflowWorkerBindingTests {
         #expect(!reviewer.contains("run_command"))
     }
 
-    @Test("带 shell 的窄工种只有 git_detective 与 ops_runner")
+    @Test("窄工种的 shell 分两档：可送审的与严格只读的")
     func shellCarryingNarrowTrades() {
         // ReleaseNotes 的素材收集绑 git_detective，正因为要跑 `git log`。
         #expect(AgentSubagentProfileCatalog.gitDetective.toolNames.contains("run_command"))
         // ops_runner 是 1.263.0-rc1 补上的"只读 + shell"通用工种——正是
         // 此前 `gh issue list` 类抓取步骤无处可绑的缺口。
         #expect(AgentSubagentProfileCatalog.opsRunner.toolNames.contains("run_command"))
-        #expect(!AgentSubagentProfileCatalog.scout.toolNames.contains("run_command"))
-        #expect(!AgentSubagentProfileCatalog.reader.toolNames.contains("run_command"))
+        // 1.303.0-rc1：scout / reader 也拿到了 shell，否则连 `ls` 都要洗成
+        // ops_runner 的单命令授权。但它们那把 shell 是严格只读的一档——
+        // 静态只读放行，其余一律拒，不经父会话智能审核。
+        for id in AgentSubagentProfileCatalog.strictReadOnlyShellTradeIDs {
+            let profile = AgentSubagentProfileCatalog.profile(id: id)
+            #expect(profile.toolNames.contains("run_command"), "\(id) 缺 shell")
+        }
+        #expect(AgentSubagentProfileCatalog.strictReadOnlyShellTradeIDs
+            .isDisjoint(with: [
+                AgentSubagentProfileCatalog.gitDetectiveID,
+                AgentSubagentProfileCatalog.opsRunnerID,
+            ]))
     }
 
     @Test("terminal_operator 的工具面收在只读观察 + 单发命令")
@@ -176,7 +186,7 @@ struct WorkflowWorkerBindingTests {
         #expect(strictPrompt.contains("Write operations are denied"))
     }
 
-    @Test("所有自带命令工具的工种共享同一智能审核通道")
+    @Test("能送审的工种共享同一审核通道，严格只读的一个都不许诺")
     @MainActor
     func everyCommandCarryingTradeUsesSharedReviewContract() {
         let commandTradeIDs = Set(AgentSubagentProfileCatalog.builtIn.compactMap { profile in
@@ -190,17 +200,25 @@ struct WorkflowWorkerBindingTests {
         #expect(commandTradeIDs == Set([
             "deep", "implementer", "small_implementer", "tester",
             "test_fixer", "build_fixer", "git_detective", "ops_runner",
-            "terminal_operator",
+            "terminal_operator", "scout", "reader", "generalist",
         ]))
 
+        let strict = AgentSubagentProfileCatalog.strictReadOnlyShellTradeIDs
         for profile in AgentSubagentProfileCatalog.builtIn where commandTradeIDs.contains(profile.id) {
             let prompt = AgentSubagentRunner.systemPrompt(
                 workspaceURL: URL(fileURLWithPath: "/tmp/willdeep-shared-command-review"),
                 profile: profile,
-                intelligentCommandReviewAvailable: true
+                intelligentCommandReviewAvailable: !strict.contains(profile.id)
             )
-            #expect(prompt.contains("intelligent safety review"), "\(profile.id) 未接共享审核提示词")
-            #expect(!prompt.contains("Write operations are denied"), "\(profile.id) 仍带一刀切拒绝提示")
+            if strict.contains(profile.id) {
+                // 提示词必须和闸门说同一句话。许诺一条闸门一律拒绝的送审
+                // 通道，模型只会把每次拒绝当偶发故障，反复重试同一条命令。
+                #expect(!prompt.contains("intelligent safety review"), "\(profile.id) 许诺了它没有的通道")
+                #expect(prompt.contains("Write operations are denied"), "\(profile.id) 缺只读边界提示")
+            } else {
+                #expect(prompt.contains("intelligent safety review"), "\(profile.id) 未接共享审核提示词")
+                #expect(!prompt.contains("Write operations are denied"), "\(profile.id) 仍带一刀切拒绝提示")
+            }
         }
     }
 

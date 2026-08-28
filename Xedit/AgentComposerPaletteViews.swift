@@ -47,6 +47,12 @@ struct SlashCommand: Identifiable {
     let subtitle: String
     let symbol: String
     let argumentMode: SlashCommandArgumentMode
+    /// Extra slash-less names that resolve to this command. The palette
+    /// filters on `id`/`title` substrings, so a command whose canonical name
+    /// carries punctuation the user does not type (`/no-subagent` vs the
+    /// `/noagent` people actually reach for) is unreachable without this —
+    /// the query matches nothing and the palette looks empty.
+    let aliases: [String]
     /// 接收用户输入框里去掉 leading slash-command 后的 trailing args
     /// （已 trim 空白）。绝大多数命令忽略这个参数；workflow 类命令
     /// 把它当 query 转给 startWorkflow。
@@ -58,6 +64,7 @@ struct SlashCommand: Identifiable {
         subtitle: String,
         symbol: String,
         argumentMode: SlashCommandArgumentMode = .none,
+        aliases: [String] = [],
         action: @escaping (_ args: String) -> Void
     ) {
         self.id = id
@@ -65,8 +72,28 @@ struct SlashCommand: Identifiable {
         self.subtitle = subtitle
         self.symbol = symbol
         self.argumentMode = argumentMode
+        self.aliases = aliases
         self.action = action
     }
+
+    /// Every name this command answers to, slash-stripped and lowercased.
+    var matchableNames: [String] {
+        ([id, String(title.dropFirst())] + aliases).map { $0.lowercased() }
+    }
+
+    /// True when `name` (already slash-stripped) is one of this command's
+    /// exact names. Used by `invocation(in:commands:)`, which must not match
+    /// on prefixes — ordinary prose starting with `/` has to fall through.
+    func answersTo(exactName name: String) -> Bool {
+        matchableNames.contains(name.lowercased())
+    }
+
+    /// Names people actually type for the delegation switches. `/no-subagent`
+    /// is the canonical title, but the hyphen is exactly the character a user
+    /// in a hurry drops — before these existed, typing `/noagent` filtered the
+    /// palette down to nothing and the feature read as missing.
+    static let noSubagentAliases = ["noagent", "no-agent", "nosubagent", "solo"]
+    static let subagentAliases = ["delegate", "subagents"]
 
     static func builtIn(state: AppState) -> [SlashCommand] {
         let core: [SlashCommand] = [
@@ -101,7 +128,8 @@ struct SlashCommand: Identifiable {
                 title: "/subagent",
                 subtitle: L10n.AgentDelegation.subagentCommandSubtitle,
                 symbol: "person.2.badge.gearshape",
-                argumentMode: .required(placeholder: L10n.AgentDelegation.subagentCommandPlaceholder)
+                argumentMode: .required(placeholder: L10n.AgentDelegation.subagentCommandPlaceholder),
+                aliases: SlashCommand.subagentAliases
             ) { args in
                 state.sendAgentMessage(withDelegationPolicy: .required, text: args)
             },
@@ -110,7 +138,8 @@ struct SlashCommand: Identifiable {
                 title: "/no-subagent",
                 subtitle: L10n.AgentDelegation.noSubagentCommandSubtitle,
                 symbol: "person.2.slash",
-                argumentMode: .required(placeholder: L10n.AgentDelegation.noSubagentCommandPlaceholder)
+                argumentMode: .required(placeholder: L10n.AgentDelegation.noSubagentCommandPlaceholder),
+                aliases: SlashCommand.noSubagentAliases
             ) { args in
                 state.sendAgentMessage(withDelegationPolicy: .forbidden, text: args)
             },
@@ -165,7 +194,7 @@ struct SlashCommand: Identifiable {
         let query = String(head.dropFirst()).lowercased()
         guard !query.isEmpty else { return allCommands }
         return allCommands.filter { c in
-            c.id.lowercased().contains(query) || c.title.lowercased().contains(query)
+            c.matchableNames.contains { $0.contains(query) }
         }
     }
 
@@ -188,7 +217,8 @@ struct SlashCommand: Identifiable {
         let trimmed = rawInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("/") else { return nil }
         let commandName = String(trimmed.prefix { !$0.isWhitespace })
-        guard let command = commands.first(where: { $0.title == commandName }) else { return nil }
+        let bareName = String(commandName.dropFirst())
+        guard let command = commands.first(where: { $0.answersTo(exactName: bareName) }) else { return nil }
         return (command, argsForCommand(rawInput))
     }
 }

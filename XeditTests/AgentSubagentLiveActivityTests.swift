@@ -335,7 +335,7 @@ struct AgentSubagentLiveActivityTests {
         )
     }
 
-    /// The roster shows six trades, and all six can run in one turn. A shared
+    /// The roster shows seven trades, and all seven can run in one turn. A shared
     /// colour there is not a near-miss, it is the feature failing. An earlier
     /// `distinct.count >= 4` assertion passed while `reader`, `tester` and
     /// `ops_runner` all rendered the same green — half the roster.
@@ -344,11 +344,11 @@ struct AgentSubagentLiveActivityTests {
         let ids = AgentSubagentProfileCatalog.publicBuiltIn.map(\.id)
         let colors = ids.map { String(describing: AgentSubagentTradePalette.color(forProfileID: $0)) }
 
-        #expect(ids.count == 6)
+        #expect(ids.count == 7)
         #expect(Set(colors).count == ids.count)
     }
 
-    /// Seventeen internal trades are presented as six. Two runs that both
+    /// Eighteen internal trades are presented as seven. Two runs that both
     /// say "阅读者" must look the same, so the colour keys on the public id.
     @Test("internal trades inherit the colour of the public trade they fold into")
     func internalTradesFollowTheirPublicTrade() {

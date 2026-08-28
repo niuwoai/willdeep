@@ -189,6 +189,7 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.judgeID: return L10n.AgentDelegation.profileJudgeName
         case AgentSubagentProfileCatalog.opsRunnerID: return L10n.AgentDelegation.profileOpsRunnerName
         case AgentSubagentProfileCatalog.terminalOperatorID: return L10n.AgentDelegation.profileTerminalOperatorName
+        case AgentSubagentProfileCatalog.generalistID: return L10n.AgentDelegation.profileGeneralistName
         default: return L10n.AgentDelegation.profileDeepName
         }
     }
@@ -214,6 +215,7 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         case AgentSubagentProfileCatalog.judgeID: return L10n.AgentDelegation.profileJudgePurpose
         case AgentSubagentProfileCatalog.opsRunnerID: return L10n.AgentDelegation.profileOpsRunnerPurpose
         case AgentSubagentProfileCatalog.terminalOperatorID: return L10n.AgentDelegation.profileTerminalOperatorPurpose
+        case AgentSubagentProfileCatalog.generalistID: return L10n.AgentDelegation.profileGeneralistPurpose
         default: return L10n.AgentDelegation.profileDeepPurpose
         }
     }
@@ -239,11 +241,16 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let judgeID = "judge"
     static let opsRunnerID = "ops_runner"
     static let terminalOperatorID = "terminal_operator"
+    static let generalistID = "generalist"
 
     static let workerPayloadCharacterLimit = 4_000
     static let balancedPayloadCharacterLimit = 5_000
     static let widePayloadCharacterLimit = 6_000
     static let implementerPayloadCharacterLimit = 16_000
+    /// The generalist reads whole files the way `deep` does, but on a 64K
+    /// window rather than 1M — so its per-result cap sits between the narrow
+    /// trades and `tester`, not at `deep`'s 24K.
+    static let generalistPayloadCharacterLimit = 8_000
 
     /// Deployable model tiers. 16K is deliberately absent: the target 16GB
     /// baseline can run 35B-A3B-class models at 32K and, depending on KV cache
@@ -269,6 +276,21 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let terminalOperatorToolNames: Set<String> = [
         "terminal_list_tabs", "terminal_select_tab",
         "terminal_snapshot", "terminal_send_command",
+    ]
+
+    /// Trades whose shell is read-only and stays read-only: their
+    /// `run_command` passes the static read classifier or it is denied, full
+    /// stop. No intelligent-review escalation, no approved-command channel.
+    ///
+    /// The distinction matters because the runner's command gate is otherwise
+    /// profile-agnostic: any trade holding `run_command` can have a *modifying*
+    /// command waved through by the parent's safety judge. That is a reasonable
+    /// bargain for `deep` and `ops_runner`, which exist to act. It is not one
+    /// for the reading trades, which were handed a shell so they could stop
+    /// laundering `ls` and `head` through `ops_runner` — widening them into
+    /// quiet writers would trade one mis-routing problem for a worse one.
+    static let strictReadOnlyShellTradeIDs: Set<String> = [
+        scoutID, readerID, generalistID,
     ]
 
     /// Default binding for the managed worker trades.
@@ -325,6 +347,19 @@ nonisolated enum AgentSubagentProfileCatalog {
         contextWindowTokens: nil
     )
 
+    /// One size down from the session's model, at the 64K deployable window.
+    ///
+    /// Pinned to the base `someim-32b` rather than left nil: nil resolves to
+    /// the provider's *primary* model, which is the parent's own tier — and a
+    /// catch-all worker that silently costs what the parent costs is not a
+    /// cheaper lane, it is the same lane with extra steps. `.retryWithParentModel`
+    /// is what covers the cases the small model cannot close.
+    private static let generalistBinding = AgentSubagentProfile.ModelBinding(
+        preferredProviderID: AgentProviderPreset.someIMID,
+        model: AgentSubagentJobPrompts.hostedModelPrefix,
+        contextWindowTokens: wideContextWindowTokens
+    )
+
     /// `deep` is the only trade that gets the 1M window, and now it says so.
     ///
     /// It used to share `automaticProviderBinding` with tester/reviewer, which
@@ -341,9 +376,9 @@ nonisolated enum AgentSubagentProfileCatalog {
 
     static let scout = AgentSubagentProfile(
         id: scoutID,
-        purpose: "Locate things: find files, symbols, call sites, or answer \"where is X / does X exist\". Fastest and cheapest; no shell.",
+        purpose: "Locate things: find files, symbols, call sites, or answer \"where is X / does X exist\". Fastest and cheapest; read-only shell for listing and inspection only.",
         modelBinding: cheapBinding,
-        toolNames: ["grep_files", "search_files", "list_directory", "read_file"],
+        toolNames: ["grep_files", "search_files", "list_directory", "read_file", "run_command"],
         capabilityPromptSection: AgentSubagentJobPrompts.scout,
         maxRounds: 8,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
@@ -353,9 +388,9 @@ nonisolated enum AgentSubagentProfileCatalog {
 
     static let reader = AgentSubagentProfile(
         id: readerID,
-        purpose: "Read and summarize: digest long files, docs, or public web pages and answer questions about their content. No shell.",
+        purpose: "Read and summarize: digest long files, docs, or public web pages and answer questions about their content. Read-only shell for locating and listing the material.",
         modelBinding: balancedBinding,
-        toolNames: ["read_file", "list_directory", "web_search", "web_fetch"],
+        toolNames: ["read_file", "list_directory", "web_search", "web_fetch", "run_command"],
         capabilityPromptSection: AgentSubagentJobPrompts.reader,
         maxRounds: 8,
         toolPayloadCharacterLimit: balancedPayloadCharacterLimit,
@@ -596,8 +631,35 @@ nonisolated enum AgentSubagentProfileCatalog {
         hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: terminalOperatorID)
     )
 
+    /// The catch-all trade: everything `deep` can read, on a model a size down
+    /// from the session's and with no admission ticket to spend.
+    ///
+    /// It exists because the catalog had a hole in the middle. The narrow read
+    /// trades carry four tools apiece and no shell; `deep` carries everything
+    /// but is the scarce 1M tier behind `AgentDeepAdmission`. Any ordinary
+    /// question that needed to both read files and run `git log` therefore had
+    /// two exits, and both were wrong: burn the 1M ticket, or file it as
+    /// operations work and send it to `ops_runner`. The usage data says which
+    /// one people took — `ops_runner` ran 60% of all spawns, a third of them on
+    /// jobs with nothing operational about them.
+    ///
+    /// Read-only on purpose. "General-purpose" here means "you do not have to
+    /// pick a trade", not "you may do anything": writes keep going through
+    /// `editor` and `implementer`, which declare their paths and hold a lock.
+    static let generalist = AgentSubagentProfile(
+        id: generalistID,
+        purpose: "General-purpose read-only work on a smaller, cheaper model than this session's: read files, search, run read-only shell commands, check git state, answer the question. Use it whenever no narrower trade fits and the job does not write.",
+        modelBinding: generalistBinding,
+        toolNames: AgentSubagentRunner.allowedToolNames,
+        capabilityPromptSection: AgentSubagentJobPrompts.generalist,
+        maxRounds: 14,
+        toolPayloadCharacterLimit: generalistPayloadCharacterLimit,
+        escalation: .retryWithParentModel
+    )
+
     static let builtIn: [AgentSubagentProfile] = [
         scout,
+        generalist,
         reader,
         deep,
         editor,
@@ -621,6 +683,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// automatic routing, hosted relay chains, saved workflows, and history.
     /// Model size is configured by the binding, not encoded as another trade.
     static let publicBuiltIn: [AgentSubagentProfile] = [
+        generalist,
         reader,
         implementer,
         tester,
@@ -653,6 +716,8 @@ nonisolated enum AgentSubagentProfileCatalog {
             return judgeID
         case deepID:
             return deepID
+        case generalistID:
+            return generalistID
         default:
             return id
         }

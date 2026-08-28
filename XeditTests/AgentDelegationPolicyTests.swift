@@ -173,6 +173,30 @@ struct AgentDelegationPolicyTests {
         #expect(invocation.args == "check the auth flow")
     }
 
+    @Test("the palette finds /no-subagent under the names people actually type")
+    func slashCommandAliasesResolve() throws {
+        let commands = SlashCommand.builtIn(state: AppState())
+        let canonical = try #require(commands.first { $0.title == "/no-subagent" })
+
+        // The bug this guards: the palette filters on substrings of the id and
+        // title, so the hyphen made "/noagent" match nothing at all and the
+        // feature read as missing.
+        for typed in ["/noagent", "/nosubagent", "/no-agent", "/solo", "/NoAgent"] {
+            let matches = SlashCommand.filter(typed, allCommands: commands)
+            #expect(matches.contains { $0.id == canonical.id }, "no match for \(typed)")
+        }
+
+        // Enter on an exact alias runs the command rather than sending prose.
+        let invocation = try #require(
+            SlashCommand.invocation(in: "/noagent check the auth flow", commands: commands)
+        )
+        #expect(invocation.command.title == "/no-subagent")
+        #expect(invocation.args == "check the auth flow")
+
+        // Prose that merely starts with a slash still falls through to send.
+        #expect(SlashCommand.invocation(in: "/usr/bin/env is missing", commands: commands) == nil)
+    }
+
     @Test("queued messages carry their directive to the drained turn")
     func queuedMessageCarriesPolicy() {
         let queued = AgentQueuedMessage(text: "later", delegationPolicy: .required)

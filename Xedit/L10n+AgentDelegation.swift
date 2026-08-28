@@ -162,6 +162,10 @@ extension L10n {
             localized: "agent-delegation.profile-reader-name",
             defaultValue: "Reader"
         )
+        static let profileGeneralistName = String(
+            localized: "agent-delegation.profile-generalist-name",
+            defaultValue: "Generalist"
+        )
         static let profileDeepName = String(
             localized: "agent-delegation.profile-deep-name",
             defaultValue: "Deep"
@@ -220,6 +224,7 @@ extension L10n {
             switch id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
             case AgentSubagentProfileCatalog.scoutID: return profileScoutName
             case AgentSubagentProfileCatalog.readerID: return profileReaderName
+            case AgentSubagentProfileCatalog.generalistID: return profileGeneralistName
             case AgentSubagentProfileCatalog.deepID: return profileDeepName
             case AgentSubagentProfileCatalog.editorID: return profileEditorName
             case AgentSubagentProfileCatalog.smallImplementerID: return profileSmallImplementerName
@@ -404,11 +409,15 @@ extension L10n {
         // English. These are the user-facing translations of the same text.
         static let profileScoutPurpose = String(
             localized: "agent-delegation.profile-scout-purpose",
-            defaultValue: "Locate things: find files, symbols, call sites, or answer \"where is X / does X exist\". Fastest and cheapest; no shell."
+            defaultValue: "Locate things: find files, symbols, call sites, or answer \"where is X / does X exist\". Fastest and cheapest; read-only shell for listing and inspection only."
         )
         static let profileReaderPurpose = String(
             localized: "agent-delegation.profile-reader-purpose",
-            defaultValue: "Read and summarize: digest long files, docs, or public web pages and answer questions about their content. No shell."
+            defaultValue: "Read and summarize: digest long files, docs, or public web pages and answer questions about their content. Read-only shell for locating and listing the material."
+        )
+        static let profileGeneralistPurpose = String(
+            localized: "agent-delegation.profile-generalist-purpose",
+            defaultValue: "General-purpose read-only work on a smaller model than this session's: reads files, searches, runs read-only commands, checks git state. Use it when no narrower trade fits."
         )
         static let profileDeepPurpose = String(
             localized: "agent-delegation.profile-deep-purpose",

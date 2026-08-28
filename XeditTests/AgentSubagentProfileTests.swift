@@ -110,8 +110,13 @@ struct AgentSubagentProfileTests {
 
         #expect(scout.count < deep.count)
         #expect(scout.isSubset(of: deep))
-        // Locating code needs no shell.
-        #expect(!scout.contains("run_command"))
+        // Scout got a shell in 1.303.0-rc1 so that `ls`/`head` stop being
+        // laundered through `ops_runner`, but only a read-only one — the gate
+        // that enforces that lives in the runner, asserted separately.
+        #expect(scout.contains("run_command"))
+        #expect(AgentSubagentProfileCatalog.strictReadOnlyShellTradeIDs.contains(
+            AgentSubagentProfileCatalog.scoutID
+        ))
     }
 
     @Test("the tool table shrinks with the trade")
@@ -124,7 +129,7 @@ struct AgentSubagentProfileTests {
         )
 
         #expect(scoutTools.count < deepTools.count)
-        #expect(!scoutTools.contains { $0.name == "run_command" })
+        #expect(!scoutTools.contains { $0.name == "web_fetch" })
     }
 
     // MARK: Write access
@@ -580,12 +585,59 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentProfileCatalog.bindingModelApplies(binding, to: selected))
     }
 
-    @Test("schema exposes six capability trades while legacy ids still resolve")
+    // MARK: Generalist and the read-only shell
+
+    @Test("the generalist is a catch-all that is cheaper than deep and cannot write")
+    func generalistFillsTheGapBetweenNarrowTradesAndDeep() {
+        let generalist = AgentSubagentProfileCatalog.generalist
+        let deep = AgentSubagentProfileCatalog.deep
+
+        // Same reach as deep — that is the point of a catch-all.
+        #expect(generalist.effectiveToolNames() == deep.effectiveToolNames())
+        // ...on a smaller window, and without deep's 1M ticket.
+        #expect(generalist.modelBinding.contextWindowTokens
+            == AgentSubagentProfileCatalog.wideContextWindowTokens)
+        #expect(deep.modelBinding.contextWindowTokens == AgentSubagentProfileCatalog.deepContextWindowTokens)
+        // Pinned, not nil: a nil model resolves to the provider's primary,
+        // i.e. the parent's own tier, which would make this no cheaper.
+        #expect(generalist.modelBinding.model == AgentSubagentJobPrompts.hostedModelPrefix)
+        // A small model that gives up must still have an exit.
+        #expect(generalist.escalation == .retryWithParentModel)
+        // "General-purpose" means "no need to pick a trade", not "may write".
+        #expect(!generalist.requiresWriteAccess)
+        #expect(generalist.effectiveToolNames(writeAccessGranted: true)
+            .isDisjoint(with: AgentSubagentProfileCatalog.writeToolNames))
+    }
+
+    @Test("the reading trades got a shell, and it is a strictly read-only one")
+    func readingTradesCarryAReadOnlyShell() {
+        let strict = AgentSubagentProfileCatalog.strictReadOnlyShellTradeIDs
+
+        for profile in [
+            AgentSubagentProfileCatalog.scout,
+            AgentSubagentProfileCatalog.reader,
+            AgentSubagentProfileCatalog.generalist,
+        ] {
+            // The shell is why `ls`/`head` no longer need `ops_runner`.
+            #expect(profile.effectiveToolNames().contains("run_command"), "\(profile.id) has no shell")
+            // And the strict list is what stops the parent's safety judge from
+            // widening that shell into a writing one.
+            #expect(strict.contains(profile.id), "\(profile.id) missing from the strict list")
+            #expect(!profile.requiresWriteAccess)
+        }
+
+        // The acting trades stay out of it: judged escalation is their job.
+        #expect(!strict.contains(AgentSubagentProfileCatalog.opsRunnerID))
+        #expect(!strict.contains(AgentSubagentProfileCatalog.deepID))
+        #expect(!strict.contains(AgentSubagentProfileCatalog.implementerID))
+    }
+
+    @Test("schema exposes seven capability trades while legacy ids still resolve")
     func toolDescriptionListsOnlyPublicTrades() {
         let catalog = AgentSubagentProfileCatalog.toolDescriptionCatalog
 
         #expect(AgentSubagentProfileCatalog.publicBuiltIn.map(\.id) == [
-            "reader", "implementer", "tester", "ops_runner", "judge", "deep",
+            "generalist", "reader", "implementer", "tester", "ops_runner", "judge", "deep",
         ])
         for profile in AgentSubagentProfileCatalog.publicBuiltIn {
             #expect(catalog.contains("`\(profile.id)`"), "missing \(profile.id)")

@@ -1507,6 +1507,7 @@ struct AgentStatsDashboard: View {
         case AgentSubagentProfileCatalog.judgeID: return "scalemass"
         case AgentSubagentProfileCatalog.opsRunnerID: return "server.rack"
         case AgentSubagentProfileCatalog.terminalOperatorID: return "terminal"
+        case AgentSubagentProfileCatalog.generalistID: return "square.grid.2x2"
         default: return "brain.head.profile"
         }
     }
