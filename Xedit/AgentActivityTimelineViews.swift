@@ -26,23 +26,38 @@ struct AgentLiveActivityTimeline: View {
                 if call.status.isBlockingForUserDecision {
                     AgentToolCallCard(call: call)
                 } else if detailCallIDs.contains(call.id) {
-                    if call.status == .failed,
-                       call.toolName == "run_command",
-                       AgentFailedCommandDetailPresentation(call: call).hasDetails {
-                        AgentFailedCommandActivityRow(
-                            call: call,
-                            expandsTimeline: call.id == presentation.disclosureCall?.id
-                                && presentation.hasExpandableDetails,
-                            isTimelineExpanded: $isExpanded
-                        )
-                    } else if call.id == presentation.disclosureCall?.id,
-                       presentation.hasExpandableDetails {
-                        AgentActivityTimelineDisclosureRow(call: call, isExpanded: $isExpanded)
-                    } else {
-                        AgentToolActivityTimelineRow(
-                            presentation: AgentToolActivityRowPresentation(call: call),
-                            errorDetail: call.errorMessage
-                        )
+                    // A Worker's narration hangs under whichever row shape
+                    // this call drew. It has to live here and not only on
+                    // `AgentToolCallCard`: while the turn is still running
+                    // the timeline shows compact rows, and the full card is
+                    // what the transcript falls back to *after* it settles —
+                    // which is exactly too late to watch a Worker work.
+                    VStack(alignment: .leading, spacing: 5) {
+                        if call.status == .failed,
+                           call.toolName == "run_command",
+                           AgentFailedCommandDetailPresentation(call: call).hasDetails {
+                            AgentFailedCommandActivityRow(
+                                call: call,
+                                expandsTimeline: call.id == presentation.disclosureCall?.id
+                                    && presentation.hasExpandableDetails,
+                                isTimelineExpanded: $isExpanded
+                            )
+                        } else if call.id == presentation.disclosureCall?.id,
+                           presentation.hasExpandableDetails {
+                            AgentActivityTimelineDisclosureRow(call: call, isExpanded: $isExpanded)
+                        } else {
+                            AgentToolActivityTimelineRow(
+                                presentation: AgentToolActivityRowPresentation(call: call),
+                                errorDetail: call.errorMessage
+                            )
+                        }
+                        if let activity = call.subagentLiveActivity,
+                           !activity.utterances.isEmpty {
+                            AgentSubagentSpeechView(
+                                activity: activity,
+                                isRunning: call.status == .running
+                            )
+                        }
                     }
                 }
             }
@@ -136,6 +151,47 @@ private struct AgentFailedCommandDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: 5))
         }
     }
+}
+
+/// How long one step has taken. Ticks while the step is in flight; the moment
+/// it settles the clock stops and the number becomes what it cost.
+///
+/// Its own view, with its own timeline, following the
+/// `AgentComposerGoalElapsedLabel` / `AgentBackgroundTaskDurationLabel`
+/// pattern — a per-second tick wrapped around the whole row would rebuild the
+/// icon, title, detail and spinner once a second, for every visible row.
+///
+/// The schedule is anchored to `startedAt`, not to `.now`. `.now` is captured
+/// when the enclosing body is evaluated, so a schedule built that way is
+/// re-anchored on every unrelated state change and its phase depends on
+/// render timing rather than on the thing being measured. Every other elapsed
+/// clock in this app anchors to the start instant; this one does too.
+private struct AgentStepDurationLabel: View {
+    let startedAt: Date
+    let finishedAt: Date?
+
+    var body: some View {
+        Group {
+            if let finishedAt {
+                Text(AgentToolActivityRowPresentation.formatDuration(
+                    finishedAt.timeIntervalSince(startedAt)
+                ))
+            } else {
+                TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                    Text(AgentToolActivityRowPresentation.formatDuration(
+                        context.date.timeIntervalSince(startedAt)
+                    ))
+                }
+            }
+        }
+        .font(.system(size: 10.5, weight: .regular, design: .monospaced))
+        .foregroundStyle(.tertiary)
+        .monospacedDigit()
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityHidden(true)
+    }
+
 }
 
 private struct AgentActivityTimelineDisclosureRow: View {
@@ -232,6 +288,10 @@ private struct AgentToolActivityTimelineRow: View {
                     .frame(width: 13, height: 13)
             }
             Spacer(minLength: 0)
+            AgentStepDurationLabel(
+                startedAt: presentation.startedAt,
+                finishedAt: presentation.finishedAt
+            )
         }
         .frame(minHeight: AgentChatTypography.lineHeight(
             fontSize: appState.agentChatBaseFontSize,

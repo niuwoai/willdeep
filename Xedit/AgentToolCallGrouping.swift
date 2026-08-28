@@ -162,6 +162,11 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
     /// non-zero. The Agent reads that as an answer and keeps going, so the
     /// row stays in the neutral palette instead of the alarming one.
     let isCompletedCommandFailure: Bool
+    /// When this step appeared, for the row's duration readout.
+    let startedAt: Date
+    /// Nil while the step is still in flight — that is what tells the row to
+    /// keep ticking instead of freezing at a final number.
+    let finishedAt: Date?
 
     init(call: AgentToolCall) {
         id = call.id
@@ -171,6 +176,19 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
         systemImage = Self.systemImage(for: call)
         title = Self.statusTitle(for: call)
         detail = Self.detail(for: call)
+        startedAt = call.startedAt
+        finishedAt = call.finishedAt
+    }
+
+    /// Sub-second steps read as `0s` rather than being hidden: a row that
+    /// sometimes has a number and sometimes does not makes the column jump.
+    /// Lives here rather than on the row view so it is reachable from tests.
+    static func formatDuration(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        if total < 60 { return "\(total)s" }
+        let minutes = total / 60
+        if minutes < 60 { return "\(minutes)m \(total % 60)s" }
+        return "\(minutes / 60)h \(minutes % 60)m"
     }
 
     private static func statusTitle(for call: AgentToolCall) -> String {
