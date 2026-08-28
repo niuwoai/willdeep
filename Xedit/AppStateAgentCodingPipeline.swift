@@ -473,6 +473,16 @@ extension AppState {
                         autoApplySource: .subagentEditor,
                         applyImmediately: true
                     )
+                },
+                onProgress: { [weak self] progress in
+                    self?.applySubagentLiveProgress(
+                        progress,
+                        recordID: recordID,
+                        runtime: runtime,
+                        profileID: profile.id,
+                        workerName: L10n.AgentDelegation.profileName(for: profile.id),
+                        model: configuration.model
+                    )
                 }
             )
             let succeeded = verifierCommand == nil || outcome.verifierPassed == true

@@ -253,6 +253,26 @@ extension L10n {
             return String(format: template, workerName)
         }
 
+        /// Several Workers at once. The count leads because the strip has one
+        /// line and naming a single trade would understate what is running.
+        static func fleetRunning(_ count: Int, _ primaryWorkerName: String) -> String {
+            let template = String(
+                localized: "agent-delegation.activity.fleet-running",
+                defaultValue: "%1$d Workers running · %2$@"
+            )
+            return String(format: template, count, primaryWorkerName)
+        }
+
+        /// Round marker in front of one Worker utterance, matching the
+        /// inspector's numbering so the two surfaces can be read together.
+        static func speechRoundMarker(_ round: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.speech-round-marker",
+                defaultValue: "R%d"
+            )
+            return String(format: template, round)
+        }
+
         static let profilesSectionTitle = String(
             localized: "agent-delegation.profiles-section-title",
             defaultValue: "Subagent trades"

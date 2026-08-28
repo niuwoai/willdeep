@@ -196,6 +196,19 @@ extension AppState {
                         autoApplySource: .subagentEditor,
                         applyImmediately: true
                     )
+                },
+                // Without this the card and the composer strip showed a
+                // frozen trade name for the whole run: only the model's own
+                // `spawn_agent` path was wired for progress.
+                onProgress: { [weak self] progress in
+                    self?.applySubagentLiveProgress(
+                        progress,
+                        recordID: recordID,
+                        runtime: runtime,
+                        profileID: profile.id,
+                        workerName: L10n.AgentDelegation.profileName(for: profile.id),
+                        model: childConfiguration.model
+                    )
                 }
             )
             settle(
