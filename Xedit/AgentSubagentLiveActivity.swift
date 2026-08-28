@@ -56,7 +56,22 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
     /// that spawns a Worker eight minutes in should not show the Worker as
     /// eight minutes old.
     var startedAt: Date
+    /// Set when the Worker's run ends. The tool-call status cannot answer
+    /// "is this Worker still working": a background spawn settles its record
+    /// to `.succeeded` the instant it hands back a handle, while the Worker
+    /// itself runs for minutes afterwards. This is the Worker's own liveness.
+    var finishedAt: Date?
+    /// Who is responsible for sealing `finishedAt`.
+    ///
+    /// A foreground Worker dies with the tool call that spawned it, so the
+    /// record's own `didSet` seals it — no completion path can forget. A
+    /// background Worker outlives that record and is sealed by the registry's
+    /// closing heartbeat instead. Getting this backwards leaves a finished
+    /// Worker on the composer strip forever, or drops a live one off it.
+    var isBackground: Bool = false
     var utterances: [Utterance] = []
+
+    var isRunning: Bool { finishedAt == nil }
 
     /// `第 3/8 轮 · 已完成 5 次工具调用 · 正在执行 grep_files`
     var detailLine: String {
@@ -113,9 +128,10 @@ nonisolated struct AgentSubagentFleetStatus: Equatable {
         from calls: [AgentToolCall],
         fallbackWorkerName: (AgentToolCall) -> String
     ) -> AgentSubagentFleetStatus? {
-        let running = calls.filter {
-            $0.toolName == "spawn_agent" && $0.status == .running
-        }
+        // See `AgentToolCall.subagentIsWorking` for why liveness cannot just
+        // read the record's status: a background spawn settles the moment it
+        // hands back a handle, while its Worker runs on for minutes.
+        let running = calls.filter { $0.toolName == "spawn_agent" && $0.subagentIsWorking }
         guard !running.isEmpty else { return nil }
 
         // Prefer a Worker that has actually reported in. One that has not
@@ -169,9 +185,22 @@ extension AppState {
         runtime: AgentRuntime,
         profileID: String,
         workerName: String,
-        model: String
+        model: String,
+        isBackground: Bool = false
     ) {
         guard let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) else { return }
+
+        // The closing heartbeat only flips liveness. Overwriting round and
+        // tool counts with its zeroes would blank a card that should keep
+        // showing what the Worker got through.
+        if update.activity == .finished {
+            runtime.toolCalls[index].subagentProgress = nil
+            if runtime.toolCalls[index].subagentLiveActivity?.finishedAt == nil {
+                runtime.toolCalls[index].subagentLiveActivity?.finishedAt = Date()
+            }
+            return
+        }
+
         runtime.toolCalls[index].subagentProgress = update.displayText
         if runtime.toolCalls[index].subagentWorkerName == nil {
             runtime.toolCalls[index].subagentWorkerName = workerName
@@ -188,7 +217,8 @@ extension AppState {
                 // First heartbeat wins the clock: the strip should time the
                 // Worker, not the turn that happened to spawn it eight
                 // minutes ago.
-                startedAt: Date()
+                startedAt: Date(),
+                isBackground: isBackground
             )
         activity.round = update.round
         activity.maximumRounds = update.maximumRounds
@@ -200,5 +230,29 @@ extension AppState {
             toolNames: update.toolNames
         )
         runtime.toolCalls[index].subagentLiveActivity = activity
+    }
+
+    /// Route one background Worker's heartbeat back to the tool call that
+    /// spawned it. The registry only knows the run id; `subagentRunID` is the
+    /// thread back to the record, bound at spawn time by `bindSubagentRun`.
+    func applyBackgroundSubagentProgress(
+        runID: UUID,
+        _ update: AgentSubagentProgressUpdate
+    ) {
+        guard let run = agentSubagentRegistry.runs.first(where: { $0.id == runID }),
+              let runtime = runtime(for: run.parentRuntimeID),
+              let call = runtime.toolCalls.first(where: { $0.subagentRunID == runID }) else {
+            return
+        }
+        applySubagentLiveProgress(
+            update,
+            recordID: call.id,
+            runtime: runtime,
+            profileID: run.profileID,
+            workerName: call.subagentWorkerName
+                ?? L10n.AgentDelegation.profileName(for: run.profileID),
+            model: run.model,
+            isBackground: true
+        )
     }
 }

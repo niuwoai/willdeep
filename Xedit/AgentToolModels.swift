@@ -781,6 +781,25 @@ struct AgentToolCall: Identifiable, Equatable {
     /// summary older surfaces read; this is what the delegation card and the
     /// composer strip use to show the Worker talking while it works.
     var subagentLiveActivity: AgentSubagentLiveActivity?
+    /// Is the Worker this record spawned still working?
+    ///
+    /// Two regimes, one accessor, because the honest answer comes from a
+    /// different place in each:
+    ///
+    ///  - A **foreground** Worker lives and dies inside this tool call, so
+    ///    the record's own status is the fact. No stamp to remember, nothing
+    ///    a missed completion path can strand.
+    ///  - A **background** Worker outlives the record — the spawn settles to
+    ///    `.succeeded` the instant it hands back a handle — so its liveness
+    ///    can only come from the registry, through `finishedAt`.
+    ///
+    /// Deriving it in one place rather than letting each surface pick a
+    /// signal is the point: two sources of truth for one fact is how a
+    /// finished Worker ends up parked on the composer strip forever.
+    var subagentIsWorking: Bool {
+        guard let activity = subagentLiveActivity else { return status == .running }
+        return activity.isBackground ? activity.isRunning : status == .running
+    }
     /// For `spawn_agent`: stable id of the child run, used to look its
     /// per-round transcript up in `AgentSubagentTranscriptStore` when the
     /// user opens the inspector from this card.

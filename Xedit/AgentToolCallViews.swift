@@ -135,10 +135,7 @@ struct AgentToolCallCard: View {
             // Worker that reasoned its way to the answer from one that
             // guessed, and the final report alone does not show that.
             if let activity = call.subagentLiveActivity, !activity.utterances.isEmpty {
-                AgentSubagentSpeechView(
-                    activity: activity,
-                    isRunning: call.status == .running
-                )
+                AgentSubagentSpeechView(activity: activity, isRunning: call.subagentIsWorking)
             }
 
             if let progress = call.delegatedProgress {

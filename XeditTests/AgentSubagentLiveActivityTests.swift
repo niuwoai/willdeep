@@ -26,6 +26,17 @@ struct AgentSubagentLiveActivityTests {
         )
     }
 
+    private func backgroundActivity(
+        workerName: String = "后台工",
+        round: Int = 1,
+        finishedAt: Date? = nil
+    ) -> AgentSubagentLiveActivity {
+        var live = activity(workerName: workerName, round: round)
+        live.isBackground = true
+        live.finishedAt = finishedAt
+        return live
+    }
+
     private func spawnCall(
         status: AgentToolCallStatus,
         activity: AgentSubagentLiveActivity? = nil,
@@ -133,6 +144,90 @@ struct AgentSubagentLiveActivityTests {
         #expect(AgentSubagentFleetStatus.make(from: calls, fallbackWorkerName: { _ in "X" }) == nil)
     }
 
+    // MARK: Liveness — two regimes
+
+    /// A foreground Worker lives and dies inside its tool call, so the
+    /// record's status is the fact. Nothing to remember to stamp.
+    @Test("a foreground Worker's liveness follows its tool call status")
+    func foregroundLivenessFollowsRecordStatus() {
+        #expect(spawnCall(status: .running, activity: activity()).subagentIsWorking)
+        for done in [AgentToolCallStatus.succeeded, .failed, .denied] {
+            #expect(!spawnCall(status: done, activity: activity()).subagentIsWorking)
+        }
+    }
+
+    /// The case the whole split exists for: a background spawn settles to
+    /// `.succeeded` the instant it hands back a handle, while its Worker runs
+    /// on for minutes. Reading the record's status would drop it off the
+    /// strip immediately.
+    @Test("a background Worker keeps working after its spawn record settles")
+    func backgroundWorkerOutlivesItsRecord() {
+        let call = spawnCall(status: .succeeded, activity: backgroundActivity())
+
+        #expect(call.subagentIsWorking)
+    }
+
+    @Test("a background Worker stops once the registry seals it")
+    func backgroundWorkerStopsWhenSealed() {
+        let call = spawnCall(
+            status: .succeeded,
+            activity: backgroundActivity(finishedAt: Date())
+        )
+
+        #expect(!call.subagentIsWorking)
+    }
+
+    @Test("a spawn with no activity at all still reads its status")
+    func livenessWithoutActivityReadsStatus() {
+        #expect(spawnCall(status: .running).subagentIsWorking)
+        #expect(!spawnCall(status: .succeeded).subagentIsWorking)
+    }
+
+    @Test("a live background Worker holds the strip on its own")
+    func fleetIncludesBackgroundWorker() throws {
+        let calls = [spawnCall(status: .succeeded, activity: backgroundActivity(workerName: "后台工"))]
+
+        let fleet = try #require(
+            AgentSubagentFleetStatus.make(from: calls, fallbackWorkerName: { _ in "X" })
+        )
+
+        #expect(fleet.runningCount == 1)
+        #expect(fleet.primaryWorkerName == "后台工")
+    }
+
+    @Test("foreground and background Workers are counted together")
+    func fleetMixesBothRegimes() throws {
+        let calls = [
+            spawnCall(status: .running, activity: activity(workerName: "前台工", round: 2)),
+            spawnCall(status: .succeeded, activity: backgroundActivity(workerName: "后台工", round: 5)),
+            // Sealed background Worker — finished, must not be counted.
+            spawnCall(
+                status: .succeeded,
+                activity: backgroundActivity(workerName: "已收工", round: 9, finishedAt: Date())
+            ),
+        ]
+
+        let fleet = try #require(
+            AgentSubagentFleetStatus.make(from: calls, fallbackWorkerName: { _ in "X" })
+        )
+
+        #expect(fleet.runningCount == 2)
+        #expect(fleet.primaryWorkerName == "后台工")
+    }
+
+    /// The closing heartbeat exists only to flip liveness. If it were folded
+    /// in like an ordinary update, its zeroes would blank the round and tool
+    /// counts the card should keep showing.
+    @Test("the closing heartbeat carries no counts to overwrite with")
+    func closingHeartbeatIsCountless() {
+        let update = AgentSubagentProgressUpdate.runFinished
+
+        #expect(update.activity == .finished)
+        #expect(update.displayText.isEmpty)
+        #expect(update.round == 0)
+        #expect(update.completedToolInvocations == 0)
+    }
+
     /// The bug this replaced: the strip described whichever call happened to
     /// be last in the array and never said that others existed.
     @Test("several running Workers are counted, and the count leads the label")
@@ -141,6 +236,8 @@ struct AgentSubagentLiveActivityTests {
             spawnCall(status: .running, activity: activity(profileID: "scout", workerName: "侦察兵", round: 1)),
             spawnCall(status: .running, activity: activity(profileID: "tester", workerName: "测试员", round: 4)),
             spawnCall(status: .running, activity: activity(profileID: "reader", workerName: "阅读者", round: 2)),
+            // Foreground and settled: its Worker died with the record, so it
+            // must not be counted however high its round got.
             spawnCall(status: .succeeded, activity: activity(round: 9)),
         ]
 
