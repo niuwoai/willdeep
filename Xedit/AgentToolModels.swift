@@ -912,6 +912,48 @@ enum AgentJSONValue: Equatable {
         }
     }
 
+    /// Unwraps a tool argument that may arrive either as a real JSON object or
+    /// as a *string* holding one. Models send both for the same parameter,
+    /// because the tool-parameter vocabulary has no object type.
+    ///
+    /// Iterative, and bounded, on purpose. The obvious recursive spelling —
+    /// `parse(AgentJSONValue.decode(from: text))` — is an infinite loop,
+    /// because `decode(from:)` hands the text straight back as `.string` when
+    /// it is not JSON. A model writing `task: "修复登录 bug"` instead of a JSON
+    /// object therefore re-entered forever and took the main thread's 8 MB
+    /// stack with it. That shipped: 1.301.0-rc4 crashed with EXC_BAD_ACCESS in
+    /// thread 0's stack guard page, ~500 identical frames deep.
+    ///
+    /// Returns nil rather than a partial result when the argument is not an
+    /// object in the end — callers already fall back to the plain prompt.
+    nonisolated static func objectFields(
+        unwrapping value: AgentJSONValue?,
+        maximumUnwraps: Int = 3
+    ) -> [String: AgentJSONValue]? {
+        var current = value
+        for _ in 0...maximumUnwraps {
+            switch current {
+            case .object(let fields)?:
+                return fields
+            case .string(let raw)?:
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                let decoded = decode(from: trimmed)
+                // No progress. The text was not JSON, or was a JSON string
+                // that decodes to itself; another turn would decode the same
+                // bytes to the same value, and the one after that too.
+                if case .string(let again) = decoded,
+                   again.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed {
+                    return nil
+                }
+                current = decoded
+            default:
+                return nil
+            }
+        }
+        return nil
+    }
+
     nonisolated static func wrap(_ value: Any) -> AgentJSONValue {
         if value is NSNull { return .null }
         if let boolean = value as? Bool { return .bool(boolean) }

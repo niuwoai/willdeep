@@ -100,12 +100,7 @@ nonisolated struct AgentSubagentTaskPacket: Equatable, Sendable {
         // vocabulary has no object type), but models routinely send a real
         // object anyway. Accept both rather than lose a whole spawn to a
         // formatting preference.
-        if case .string(let raw)? = value {
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return nil }
-            return parse(AgentJSONValue.decode(from: trimmed))
-        }
-        guard case .object(let fields)? = value else { return nil }
+        guard let fields = AgentJSONValue.objectFields(unwrapping: value) else { return nil }
         let goal = fields["goal"]?.stringValue()?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !goal.isEmpty else { return nil }
