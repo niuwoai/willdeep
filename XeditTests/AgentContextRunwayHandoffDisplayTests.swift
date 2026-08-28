@@ -158,6 +158,29 @@ nonisolated struct AgentContextRunwayHandoffDisplayTests {
         #expect(!extraction.visibleContent.contains("再把两个图标"))
     }
 
+    @Test("空输入框直接发「继续」，有草稿就带着草稿一起发")
+    func composedResumeInputCarriesAnyDraft() {
+        #expect(
+            AgentContextRunwayHandoffDisplay.composedResumeInput(
+                currentInput: "",
+                resumeWord: "继续"
+            ) == "继续"
+        )
+        #expect(
+            AgentContextRunwayHandoffDisplay.composedResumeInput(
+                currentInput: "   \n  ",
+                resumeWord: "继续"
+            ) == "继续"
+        )
+        // 草稿不能丢:发送会清空输入框,留在那儿就是永久丢失。
+        #expect(
+            AgentContextRunwayHandoffDisplay.composedResumeInput(
+                currentInput: "先别动 scripts/,",
+                resumeWord: "继续"
+            ) == "先别动 scripts/,\n\n继续"
+        )
+    }
+
     @Test("便捷入口和完整提取给出同一个提示词")
     func convenienceAccessorAgreesWithExtraction() {
         #expect(
