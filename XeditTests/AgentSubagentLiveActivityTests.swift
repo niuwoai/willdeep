@@ -62,15 +62,24 @@ struct AgentSubagentLiveActivityTests {
 
     // MARK: Utterances
 
-    @Test("an utterance carries the round's public text and its tool names")
+    @Test("an utterance carries the round's public text, its tools and their objects")
     func recordsUtterance() {
         var live = activity()
-        live.recordUtterance(round: 1, text: "  先看路由表  ", toolNames: ["grep_files", "read_file"])
+        live.recordUtterance(
+            round: 1,
+            text: "  先看路由表  ",
+            tools: [
+                AgentSubagentToolMention(name: "grep_files", object: "AppState.swift"),
+                AgentSubagentToolMention(name: "read_file")
+            ]
+        )
 
         #expect(live.utterances.count == 1)
         #expect(live.utterances[0].round == 1)
         #expect(live.utterances[0].text == "先看路由表")
-        #expect(live.utterances[0].toolNames == ["grep_files", "read_file"])
+        #expect(live.utterances[0].tools.map(\.name) == ["grep_files", "read_file"])
+        #expect(live.utterances[0].tools[0].object == "AppState.swift")
+        #expect(live.utterances[0].tools[1].object == nil)
     }
 
     /// A round publishes more than once — text arrives with the assistant
@@ -79,18 +88,22 @@ struct AgentSubagentLiveActivityTests {
     @Test("re-publishing the same round replaces its utterance instead of stacking")
     func republishingRoundReplaces() {
         var live = activity()
-        live.recordUtterance(round: 2, text: "第一版", toolNames: [])
-        live.recordUtterance(round: 2, text: "第二版", toolNames: ["run_command"])
+        live.recordUtterance(round: 2, text: "第一版", tools: [])
+        live.recordUtterance(
+            round: 2,
+            text: "第二版",
+            tools: [AgentSubagentToolMention(name: "run_command", object: "yarn test")]
+        )
 
         #expect(live.utterances.count == 1)
         #expect(live.utterances[0].text == "第二版")
-        #expect(live.utterances[0].toolNames == ["run_command"])
+        #expect(live.utterances[0].tools.map(\.name) == ["run_command"])
     }
 
     @Test("a heartbeat with neither text nor tools records nothing")
     func emptyHeartbeatIsIgnored() {
         var live = activity()
-        live.recordUtterance(round: 1, text: "   \n  ", toolNames: [])
+        live.recordUtterance(round: 1, text: "   \n  ", tools: [])
 
         #expect(live.utterances.isEmpty)
     }
@@ -101,7 +114,7 @@ struct AgentSubagentLiveActivityTests {
     func utterancesAreCappedToTheTail() {
         var live = activity()
         for round in 1...(AgentSubagentLiveActivity.maxUtterances + 3) {
-            live.recordUtterance(round: round, text: "round \(round)", toolNames: [])
+            live.recordUtterance(round: round, text: "round \(round)", tools: [])
         }
 
         #expect(live.utterances.count == AgentSubagentLiveActivity.maxUtterances)
@@ -113,11 +126,12 @@ struct AgentSubagentLiveActivityTests {
     func utteranceContentIsClamped() {
         var live = activity()
         let long = String(repeating: "字", count: AgentSubagentLiveActivity.utteranceCharacterLimit + 200)
-        let manyTools = (0..<(AgentSubagentLiveActivity.maxToolNamesPerUtterance + 5)).map { "tool\($0)" }
-        live.recordUtterance(round: 1, text: long, toolNames: manyTools)
+        let manyTools = (0..<(AgentSubagentLiveActivity.maxToolMentionsPerUtterance + 5))
+            .map { AgentSubagentToolMention(name: "tool\($0)") }
+        live.recordUtterance(round: 1, text: long, tools: manyTools)
 
         #expect(live.utterances[0].text.count == AgentSubagentLiveActivity.utteranceCharacterLimit)
-        #expect(live.utterances[0].toolNames.count == AgentSubagentLiveActivity.maxToolNamesPerUtterance)
+        #expect(live.utterances[0].tools.count == AgentSubagentLiveActivity.maxToolMentionsPerUtterance)
     }
 
     // MARK: Detail line
@@ -378,7 +392,7 @@ struct AgentSubagentLiveActivityTests {
         )
 
         #expect(update.speech.isEmpty)
-        #expect(update.toolNames.isEmpty)
+        #expect(update.tools.isEmpty)
         #expect(update.displayText.contains("2"))
     }
 

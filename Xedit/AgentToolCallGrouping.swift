@@ -192,6 +192,15 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
     }
 
     private static func statusTitle(for call: AgentToolCall) -> String {
+        // 派生只花几毫秒,这一行接下来盯的是子代理本身,可以跑上几分钟。
+        // 底下的卡都读到「第 15/18 轮」了,标题还写「正在派生子代理」,
+        // 说的是十四轮以前就结束的那个阶段。
+        if call.toolName == "spawn_agent",
+           call.subagentIsWorking,
+           let activity = call.subagentLiveActivity,
+           activity.round > 0 {
+            return "子代理运行中"
+        }
         let operation = operationName(for: call)
         if AgentSerialToolApprovalQueue.contains(call) {
             return "排队等待确认：\(operation)"

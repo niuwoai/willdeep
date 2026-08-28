@@ -68,6 +68,14 @@ final class AgentSubagentInterventionChannel {
 
     var hasPendingSubmission: Bool { !pending.isEmpty }
 
+    /// Whether a child step is registered and therefore cancellable right
+    /// now. The runner never needs to ask; tests do. Waiting on this is the
+    /// only honest way to know the step has actually registered — a fixed
+    /// sleep in its place is a race that stays invisible on an idle machine
+    /// and fails under a full-load run, where the MainActor can be busy far
+    /// longer than any constant anyone would write.
+    var hasActiveStep: Bool { activeStep != nil }
+
     func beginRound(_ round: Int) {
         currentRound = max(0, round)
     }

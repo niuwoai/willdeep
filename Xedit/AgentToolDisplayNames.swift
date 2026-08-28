@@ -41,6 +41,82 @@ nonisolated enum AgentToolDisplay {
         }
     }
 
+    /// 工具作用的**宾语**：读的哪个文件、grep 的什么模式、跑的哪条命令。
+    ///
+    /// 只有动词的标签（派工卡上一列三个「运行命令」）只能告诉人「它在忙」。
+    /// 而那张卡存在的意义是让人判断要不要打断，判断依据恰恰是宾语。返回值
+    /// 已做密钥脱敏与长度收敛，可以直接进 UI。拿不到有意义的宾语时返回 nil，
+    /// 由调用方决定退化成只有动词的样子——绝不编一个出来。
+    static func objectSummary(
+        toolName: String,
+        arguments: [String: AgentJSONValue]
+    ) -> String? {
+        func string(_ key: String) -> String? { arguments[key]?.stringValue() }
+        switch toolName {
+        case "read_file", "list_directory", "edit_file", "create_file", "write_file", "apply_patch":
+            return objectFileName(string("path"))
+        case "grep_files":
+            return objectCondensed(string("pattern")) ?? objectFileName(string("path"))
+        case "search_files":
+            return objectCondensed(string("query")) ?? objectFileName(string("path"))
+        case "run_command":
+            return objectCondensed(string("label")) ?? objectCondensed(string("command"))
+        case "terminal_send_command":
+            return objectCondensed(string("command"))
+        case "terminal_send_control":
+            return string("control").map(controlLabel(for:)).flatMap(objectCondensed)
+        case "web_fetch":
+            guard let raw = string("url") else { return nil }
+            return URL(string: raw)?.host ?? objectCondensed(raw)
+        case "web_search":
+            return objectCondensed(string("query"))
+        case "spawn_agent":
+            return objectCondensed(string("label")) ?? objectCondensed(string("trade"))
+        case "call_mcp_tool":
+            return objectCondensed(string("tool"))
+        case "show_widget":
+            return objectCondensed(string("title"))
+        default:
+            return nil
+        }
+    }
+
+    /// 同上，参数还是 provider 回来的原始 JSON 字符串时用这个。子代理运行器
+    /// 手里的 `AgentMessageToolCall` 只有 `argumentsJSON`，没有解析好的字典。
+    static func objectSummary(toolName: String, argumentsJSON: String) -> String? {
+        guard !argumentsJSON.isEmpty,
+              case .object(let arguments) = AgentJSONValue.decode(from: argumentsJSON) else {
+            return nil
+        }
+        return objectSummary(toolName: toolName, arguments: arguments)
+    }
+
+    /// 路径取末段：派工卡的一行放不下绝对路径，而人认的是文件名。
+    private static func objectFileName(_ path: String?) -> String? {
+        guard let path else { return nil }
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let name = URL(fileURLWithPath: trimmed).lastPathComponent
+        return name.isEmpty ? objectCondensed(trimmed) : objectCondensed(name)
+    }
+
+    /// 压成单行、把 `${secret:…}` 引用换成 `[secret]`、超长截断。与失败命令
+    /// 详情卡同一套口径：占位符指向哪一条凭据不该印在聊天区里。
+    private static func objectCondensed(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = AgentSecretStore.redactPlaceholders(in: value)
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        guard normalized.count > objectSummaryCharacterLimit else { return normalized }
+        return String(normalized.prefix(objectSummaryCharacterLimit)) + "…"
+    }
+
+    /// 标签是横向流排的，宾语再长也不能把一行撑爆。
+    static let objectSummaryCharacterLimit = 34
+
     /// 审批卡只展示用户真正需要核对的工具参数。以下划线开头的字段由
     /// 宿主写入，供沙箱判定和审计使用；把它们原样展示会泄露实现细节，
     /// 还会让英文安全原因挤掉文件路径、写入内容等关键信息。

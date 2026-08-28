@@ -7,6 +7,20 @@ import Testing
 @Suite
 @MainActor
 struct AgentSubagentInterventionTests {
+    /// Bounded wait on a MainActor condition. The sleep between checks is
+    /// what lets the task under test make progress on the same actor — this
+    /// suite is `@MainActor`, so a spin loop would starve exactly the work
+    /// it is waiting for.
+    private func waitUntil(
+        attempts: Int = 3_000,
+        _ condition: () -> Bool
+    ) async throws {
+        for _ in 0..<attempts {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+    }
+
     @Test("normal intervention queues for the next round without cancelling the active step")
     func normalSubmissionWaitsForBoundary() async throws {
         let channel = AgentSubagentInterventionChannel()
@@ -18,7 +32,7 @@ struct AgentSubagentInterventionTests {
                 return 42
             }
         }
-        try await Task.sleep(nanoseconds: 2_000_000)
+        try await waitUntil { channel.hasActiveStep }
         let submission = try channel.submit(
             text: "  改用 UTF-8 继续  ",
             mode: .nextRound
@@ -47,7 +61,15 @@ struct AgentSubagentInterventionTests {
                 return true
             }
         }
-        try await Task.sleep(nanoseconds: 2_000_000)
+        // Wait for the step to actually register rather than guessing how
+        // long that takes. The 2ms this replaces was enough on an idle
+        // machine and not enough under a full-load run, where the MainActor
+        // is contended: the interrupt then arrived before there was anything
+        // to cancel, the step slept out its five seconds, and the suite went
+        // red for reasons that had nothing to do with the channel.
+        try await waitUntil { channel.hasActiveStep }
+        #expect(channel.hasActiveStep)
+
         _ = try channel.submit(
             text: "不要继续读这个文件，先检查环境变量",
             mode: .interruptCurrentStep
@@ -160,34 +182,51 @@ struct AgentSubagentInterventionTests {
             profileID: AgentSubagentProfileCatalog.opsRunnerID,
             workerName: "运维查询员",
             model: "glm-5",
-            round: 4,
+            round: 5,
             maximumRounds: 32,
-            completedToolInvocations: 3,
+            completedToolInvocations: 7,
             activityText: "正在运行命令",
             startedAt: Date()
         )
+        // Shaped like a real run rather than a tidy one: three silent rounds
+        // that each called a tool or two, then a round the Worker spoke in.
+        // That is the case the card used to draw as a column of single-chip
+        // lines, so it is the case the QA render has to cover.
+        activity.recordUtterance(
+            round: 1,
+            text: "",
+            tools: [AgentSubagentToolMention(name: "运行命令", object: "ruby sync.rb")]
+        )
         activity.recordUtterance(
             round: 2,
-            text: "脚本遇到了编码问题，让我检查一下环境配置文件。",
-            toolNames: ["读取文件"]
+            text: "",
+            tools: [AgentSubagentToolMention(name: "运行命令", object: "file -I .env.local")]
         )
         activity.recordUtterance(
             round: 3,
+            text: "",
+            tools: [
+                AgentSubagentToolMention(name: "读取文件", object: ".env.local"),
+                AgentSubagentToolMention(name: "读取文件", object: "sync.rb")
+            ]
+        )
+        activity.recordUtterance(
+            round: 4,
             text: "问题出在配置文件包含中文字符，默认编码无法处理。",
-            toolNames: ["运行命令"]
+            tools: [AgentSubagentToolMention(name: "应用补丁", object: "sync.rb")]
         )
         let intervention = AgentSubagentInterventionSubmission(
             id: UUID(),
             text: "先别改编码，确认脚本是否支持直接传入 UTF-8 参数。",
             mode: .nextRound,
             submittedAt: Date(),
-            requestedRound: 4
+            requestedRound: 5
         )
-        activity.recordIntervention(.applied(intervention, effectiveRound: 4))
+        activity.recordIntervention(.applied(intervention, effectiveRound: 5))
         activity.recordUtterance(
-            round: 4,
+            round: 5,
             text: "收到，我先检查脚本参数，不再修改环境配置。",
-            toolNames: ["运行命令"]
+            tools: [AgentSubagentToolMention(name: "运行命令", object: "ruby sync.rb --encoding utf-8")]
         )
 
         let runID = UUID()

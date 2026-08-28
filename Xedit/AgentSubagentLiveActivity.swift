@@ -28,6 +28,23 @@
 
 import Foundation
 
+/// One tool call as the delegation card shows it: verb plus object.
+///
+/// The card used to carry only the verb, which produced columns of identical
+/// `运行命令` chips — enough to tell you the Worker is busy, not enough to
+/// decide whether to interrupt it. `object` is what the call acts on: the
+/// file it reads, the pattern it greps, the command it runs. Nil when the
+/// tool has nothing worth naming; the chip then shows the verb alone.
+nonisolated struct AgentSubagentToolMention: Equatable, Sendable {
+    let name: String
+    let object: String?
+
+    init(name: String, object: String? = nil) {
+        self.name = name
+        self.object = object
+    }
+}
+
 nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
     /// One thing the Worker said out loud, in the round it said it.
     nonisolated struct Utterance: Equatable, Sendable, Identifiable {
@@ -35,7 +52,7 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
         let round: Int
         let text: String
         /// Tools the Worker went on to call in that same round, in order.
-        let toolNames: [String]
+        let tools: [AgentSubagentToolMention]
     }
 
     enum InterventionDeliveryState: Equatable, Sendable {
@@ -56,7 +73,7 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
     /// reading, and an old round is one inspector click away.
     static let maxUtterances = 6
     static let utteranceCharacterLimit = 600
-    static let maxToolNamesPerUtterance = 8
+    static let maxToolMentionsPerUtterance = 8
     static let maxInterventionReceipts = 6
 
     var profileID: String
@@ -104,14 +121,18 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
     /// Appends `text` as round `round`'s utterance, replacing the existing
     /// one for that round rather than stacking duplicates — a round can
     /// publish more than once (text first, then its tool names).
-    mutating func recordUtterance(round: Int, text: String, toolNames: [String]) {
+    mutating func recordUtterance(
+        round: Int,
+        text: String,
+        tools: [AgentSubagentToolMention]
+    ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let clampedTools = Array(toolNames.prefix(Self.maxToolNamesPerUtterance))
+        let clampedTools = Array(tools.prefix(Self.maxToolMentionsPerUtterance))
         guard !trimmed.isEmpty || !clampedTools.isEmpty else { return }
         let utterance = Utterance(
             round: round,
             text: String(trimmed.prefix(Self.utteranceCharacterLimit)),
-            toolNames: clampedTools
+            tools: clampedTools
         )
         if let index = utterances.firstIndex(where: { $0.round == round }) {
             utterances[index] = utterance
@@ -160,6 +181,144 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
                 interventionReceipts.count - Self.maxInterventionReceipts
             )
         }
+    }
+}
+
+/// One row of the delegation card, after merging.
+nonisolated enum AgentSubagentSpeechRow: Equatable, Identifiable {
+    /// A round the Worker actually spoke in, plus whatever it called next.
+    case speech(round: Int, text: String, tools: [AgentSubagentToolMention])
+    /// One or more consecutive silent rounds, as a single flowing chip run.
+    case tools(firstRound: Int, lastRound: Int, mentions: [AgentSubagentToolMention])
+    case intervention(AgentSubagentLiveActivity.InterventionReceipt)
+
+    var id: String {
+        switch self {
+        case .speech(let round, _, _):
+            return "speech-\(round)"
+        case .tools(let firstRound, let lastRound, _):
+            return "tools-\(firstRound)-\(lastRound)"
+        case .intervention(let receipt):
+            return "intervention-\(receipt.id.uuidString)"
+        }
+    }
+}
+
+/// Turns a Worker's utterances and intervention receipts into the rows the
+/// card draws.
+///
+/// Two jobs, both of which used to live in the view:
+///
+///  - **Order.** Receipts sort *before* the round they take effect in, so a
+///    correction reads above the round that acted on it.
+///  - **Merge.** One row per utterance produced a column of single-chip rows
+///    whenever the Worker spent several rounds calling one tool each: the
+///    line breaks came from the shape of the data rather than from how much
+///    there was to read. Consecutive silent rounds now collapse into one
+///    row that carries the whole span, so the card wraps when it runs out of
+///    width instead of when a round happens to end.
+///
+/// Pure on purpose — the merging rule is the part worth testing, and it
+/// should not need a rendered view to check.
+nonisolated enum AgentSubagentSpeechTimeline {
+    /// A merged run stops accumulating chips here. Six silent rounds of
+    /// eight tools each would otherwise put 48 chips in one row, which is
+    /// the same wall of noise the merge was meant to remove.
+    static let maximumMergedMentions = 12
+
+    static func rows(for activity: AgentSubagentLiveActivity) -> [AgentSubagentSpeechRow] {
+        rows(
+            utterances: activity.utterances,
+            interventions: activity.interventionReceipts
+        )
+    }
+
+    static func rows(
+        utterances: [AgentSubagentLiveActivity.Utterance],
+        interventions: [AgentSubagentLiveActivity.InterventionReceipt]
+    ) -> [AgentSubagentSpeechRow] {
+        enum Item {
+            case utterance(AgentSubagentLiveActivity.Utterance)
+            case intervention(AgentSubagentLiveActivity.InterventionReceipt)
+
+            /// Doubled so a receipt can sit at an odd slot just ahead of the
+            /// round it lands in, without inventing a fractional round.
+            var sortRound: Int {
+                switch self {
+                case .utterance(let utterance):
+                    return utterance.round * 2
+                case .intervention(let receipt):
+                    switch receipt.deliveryState {
+                    case .queued:
+                        return receipt.requestedRound * 2 - 1
+                    case .applied(let effectiveRound):
+                        return effectiveRound * 2 - 1
+                    }
+                }
+            }
+
+            var submittedAt: Date {
+                switch self {
+                case .utterance: return .distantPast
+                case .intervention(let receipt): return receipt.submittedAt
+                }
+            }
+        }
+
+        let ordered = (utterances.map(Item.utterance) + interventions.map(Item.intervention))
+            .sorted {
+                if $0.sortRound == $1.sortRound {
+                    return $0.submittedAt < $1.submittedAt
+                }
+                return $0.sortRound < $1.sortRound
+            }
+
+        var rows: [AgentSubagentSpeechRow] = []
+        // The silent run being accumulated, if any.
+        var pendingFirstRound: Int?
+        var pendingLastRound = 0
+        var pendingMentions: [AgentSubagentToolMention] = []
+
+        func flushPendingTools() {
+            guard let firstRound = pendingFirstRound, !pendingMentions.isEmpty else {
+                pendingFirstRound = nil
+                pendingMentions = []
+                return
+            }
+            rows.append(.tools(
+                firstRound: firstRound,
+                lastRound: pendingLastRound,
+                mentions: pendingMentions
+            ))
+            pendingFirstRound = nil
+            pendingMentions = []
+        }
+
+        for item in ordered {
+            switch item {
+            case .utterance(let utterance) where utterance.text.isEmpty:
+                guard !utterance.tools.isEmpty else { continue }
+                if pendingFirstRound == nil { pendingFirstRound = utterance.round }
+                pendingLastRound = utterance.round
+                let room = maximumMergedMentions - pendingMentions.count
+                if room > 0 {
+                    pendingMentions.append(contentsOf: utterance.tools.prefix(room))
+                }
+            case .utterance(let utterance):
+                // A round with text anchors itself; it never joins a run.
+                flushPendingTools()
+                rows.append(.speech(
+                    round: utterance.round,
+                    text: utterance.text,
+                    tools: utterance.tools
+                ))
+            case .intervention(let receipt):
+                flushPendingTools()
+                rows.append(.intervention(receipt))
+            }
+        }
+        flushPendingTools()
+        return rows
     }
 }
 
@@ -311,7 +470,7 @@ extension AppState {
         activity.recordUtterance(
             round: update.round,
             text: update.speech,
-            toolNames: update.toolNames
+            tools: update.tools
         )
         runtime.toolCalls[index].subagentLiveActivity = activity
     }

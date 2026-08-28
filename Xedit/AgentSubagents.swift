@@ -622,8 +622,10 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
     /// Empty on the plain heartbeats. Reasoning is never carried here —
     /// the same rule the activity labels above follow.
     let speech: String
-    /// Display names of the tools this round went on to call, in order.
-    let toolNames: [String]
+    /// The tools this round went on to call, in order — display name plus
+    /// the object each one acts on, so the card can say *which* file was
+    /// read rather than only that a file was.
+    let tools: [AgentSubagentToolMention]
 
     init(
         round: Int,
@@ -631,14 +633,14 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
         completedToolInvocations: Int,
         activity: Activity,
         speech: String = "",
-        toolNames: [String] = []
+        tools: [AgentSubagentToolMention] = []
     ) {
         self.round = round
         self.maximumRounds = maximumRounds
         self.completedToolInvocations = completedToolInvocations
         self.activity = activity
         self.speech = speech
-        self.toolNames = toolNames
+        self.tools = tools
     }
 
     /// The closing heartbeat. Carries no round or tool counts — whatever the
@@ -1123,7 +1125,7 @@ enum AgentSubagentRunner {
             round: Int,
             activity: AgentSubagentProgressUpdate.Activity,
             speech: String = "",
-            toolNames: [String] = []
+            tools: [AgentSubagentToolMention] = []
         ) {
             onProgress?(
                 AgentSubagentProgressUpdate(
@@ -1132,7 +1134,7 @@ enum AgentSubagentRunner {
                     completedToolInvocations: toolInvocations,
                     activity: activity,
                     speech: speech,
-                    toolNames: toolNames
+                    tools: tools
                 )
             )
         }
@@ -1213,16 +1215,24 @@ enum AgentSubagentRunner {
             // completed round rather than per token: streaming rich text into
             // the transcript is the shape that previously pinned the main
             // thread in SwiftUI layout, and a round's text is already whole.
-            let roundToolNames = toolCalls.map { AgentToolDisplay.name(for: $0.toolName) }
+            let roundTools = toolCalls.map { call in
+                AgentSubagentToolMention(
+                    name: AgentToolDisplay.name(for: call.toolName),
+                    object: AgentToolDisplay.objectSummary(
+                        toolName: call.toolName,
+                        argumentsJSON: call.argumentsJSON
+                    )
+                )
+            }
             if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || !roundToolNames.isEmpty {
+                || !roundTools.isEmpty {
                 publishProgress(
                     round: round,
-                    activity: roundToolNames.isEmpty
+                    activity: roundTools.isEmpty
                         ? .preparingReport
-                        : .runningTool(roundToolNames[0]),
+                        : .runningTool(roundTools[0].name),
                     speech: content,
-                    toolNames: roundToolNames
+                    tools: roundTools
                 )
             }
 

@@ -273,20 +273,19 @@ extension L10n {
             return String(format: template, round)
         }
 
+        /// Same marker for a run of consecutive rounds the Worker spent
+        /// only calling tools — those collapse into one row, and the row has
+        /// to say which rounds it covers or the numbering goes missing.
+        static func speechRoundSpanMarker(_ first: Int, _ last: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.speech-round-span-marker",
+                defaultValue: "R%1$d–%2$d"
+            )
+            return String(format: template, first, last)
+        }
+
         // MARK: Live Worker intervention
 
-        static func interventionCurrentStep(_ activity: String) -> String {
-            guard !activity.isEmpty else { return interventionCurrentStepFallback }
-            let template = String(
-                localized: "agent-delegation.intervention-current-step",
-                defaultValue: "Current: %@"
-            )
-            return String(format: template, activity)
-        }
-        static let interventionCurrentStepFallback = String(
-            localized: "agent-delegation.intervention-current-step-fallback",
-            defaultValue: "Current step is running"
-        )
         static let interventionAction = String(
             localized: "agent-delegation.intervention-action",
             defaultValue: "Steer Worker"
