@@ -782,6 +782,7 @@ extension AgentChatHistoryRenderer {
         isLatestAssistant: Bool,
         isVisible: Bool = true,
         turnReportToolCount: Int? = nil,
+        handoffRelayPrompt: String? = nil,
         layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
         baseFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault,
         bodyFont: NSFont? = nil,
@@ -838,6 +839,22 @@ extension AgentChatHistoryRenderer {
                 result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
                 result.append(AgentChatHistoryFooterChrome.retryButton(baseFontSize: baseFontSize, font: metadataFont))
             }
+            // 上下文跑道交接的接力动作。只挂最后一条 assistant:交接是
+            // 「这一轮停在这儿了」,历史轮里那条 handoff 早就被后面的
+            // 消息接上了,再挂一次等于给用户一排全是「继续」的按钮。
+            if isLatestAssistant, let handoffRelayPrompt, !handoffRelayPrompt.isEmpty {
+                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
+                result.append(AgentChatHistoryFooterChrome.resumeHandoffButton(
+                    baseFontSize: baseFontSize,
+                    font: metadataFont
+                ))
+                result.append(AgentChatHistoryFooterChrome.separator(baseFontSize: baseFontSize, font: metadataFont))
+                result.append(AgentChatHistoryFooterChrome.handoffNewSessionButton(
+                    relayPrompt: handoffRelayPrompt,
+                    baseFontSize: baseFontSize,
+                    font: metadataFont
+                ))
+            }
         }
 
         if !isVisible {
@@ -845,6 +862,8 @@ extension AgentChatHistoryRenderer {
             result.removeAttribute(.link, range: footerRange)
             result.removeAttribute(.agentChatHistoryMessageCopyText, range: footerRange)
             result.removeAttribute(.agentChatHistoryRetryLastTurn, range: footerRange)
+            result.removeAttribute(.agentChatHistoryResumeHandoff, range: footerRange)
+            result.removeAttribute(.agentChatHistoryHandoffRelayPrompt, range: footerRange)
             result.addAttribute(.foregroundColor, value: NSColor.clear, range: footerRange)
         }
 
