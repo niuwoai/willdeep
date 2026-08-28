@@ -6,6 +6,14 @@ export const en: Record<string, string> = {
   'locale.switchToEnglish': 'EN',
   'locale.switchToChinese': '中文',
 
+  'games.2048.name': '2048',
+  'games.2048.description': 'Slide number tiles, merge equal values, and climb from 2048 to higher targets.',
+  'games.2048.controls': 'Use arrow keys or WASD; swipe in any direction on touch screens.',
+
+  'games.breakout.name': 'Breakout',
+  'games.breakout.description': 'Keep the ball alive with your paddle and smash every colorful brick.',
+  'games.breakout.controls': 'Move with mouse, touch, arrows, or A/D; Space launches or pauses.',
+
   'games.snake.name': 'Snake',
   'games.snake.description': 'Classic arcade snake: eat food, grow longer, avoid walls and yourself.',
   'games.snake.controls': 'Use arrow keys or WASD; swipe on touch screens.',
@@ -31,8 +39,12 @@ export const en: Record<string, string> = {
   'games.onet.controls': 'Tap two identical tiles; hint and shuffle sit above the board.',
 
   'games.marble.name': 'Inca Marbles',
-  'games.marble.description': 'Marbles roll down a spiral — shoot three of a kind to clear the chain.',
+  'games.marble.description': 'Marbles roll along changing tracks — shoot three of a kind to clear the chain.',
   'games.marble.controls': 'Aim with pointer or touch and click to shoot; arrows aim, space shoots, S swaps.',
+
+  'games.jigsaw.name': 'Picture Jigsaw',
+  'games.jigsaw.description': 'Choose a built-in illustration, then swap pieces to restore the full picture.',
+  'games.jigsaw.controls': 'Drag pieces to swap; on touch or keyboard, select two pieces. The reference can be opened anytime.',
 
   'game.stage': 'Stage',
   'game.score': 'Score',

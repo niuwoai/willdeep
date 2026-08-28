@@ -6,6 +6,9 @@
  * 新增游戏 = 扩展 GameId 联合类型 + 本清单 + 对应 i18n 文案。
  */
 import type { GameId, GameManifestEntry } from '../core/types';
+import Twenty48Game from './twenty48';
+import BreakoutGame from './breakout';
+import JigsawGame from './jigsaw';
 import MarbleGame from './marble';
 import MemoryGame from './memory';
 import MinesweeperGame from './minesweeper';
@@ -15,6 +18,30 @@ import SnakeGame from './snake';
 import TetrisGame from './tetris';
 
 export const GAME_MANIFEST: readonly GameManifestEntry[] = [
+  {
+    id: '2048',
+    nameKey: 'games.2048.name',
+    descriptionKey: 'games.2048.description',
+    controlsKey: 'games.2048.controls',
+    bestScoreKeyPrefix: 'arcade.best',
+    component: Twenty48Game,
+  },
+  {
+    id: 'breakout',
+    nameKey: 'games.breakout.name',
+    descriptionKey: 'games.breakout.description',
+    controlsKey: 'games.breakout.controls',
+    bestScoreKeyPrefix: 'arcade.best',
+    component: BreakoutGame,
+  },
+  {
+    id: 'jigsaw',
+    nameKey: 'games.jigsaw.name',
+    descriptionKey: 'games.jigsaw.description',
+    controlsKey: 'games.jigsaw.controls',
+    bestScoreKeyPrefix: 'arcade.best',
+    component: JigsawGame,
+  },
   {
     id: 'memory',
     nameKey: 'games.memory.name',

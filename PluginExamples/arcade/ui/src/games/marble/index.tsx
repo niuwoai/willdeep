@@ -26,12 +26,13 @@ import {
   BALL_RADIUS,
   EFFECT_SECONDS,
   FIELD,
-  PATH_LENGTH,
   SHOOTER,
   SPACING,
   aimAt,
+  configOf,
   createInitialState,
   levelForStage,
+  pathLength,
   pointAt,
   restart,
   scoreFor,
@@ -262,7 +263,9 @@ function draw(
   context.clearRect(0, 0, FIELD, FIELD);
 
   // 轨道
-  const points = trackPoints();
+  const track = configOf(state).track;
+  const currentPathLength = pathLength(track);
+  const points = trackPoints(track);
   context.beginPath();
   points.forEach((point, index) => {
     if (index === 0) context.moveTo(point.x, point.y);
@@ -279,21 +282,21 @@ function draw(
   context.stroke();
 
   // 洞口：黄金浮雕骷髅，珠子滚到这儿就是终局
-  const hole = pointAt(PATH_LENGTH);
+  const hole = pointAt(currentPathLength, track);
   drawSkull(context, hole, BALL_RADIUS * 1.75);
 
   // 链条（带道具的珠子额外画标记：炸弹是深色芯 + 引信，闪光是脉动白环 + 回退箭头）
   const pulse = 0.55 + 0.45 * Math.sin(state.time * 7);
   for (const ball of state.balls) {
     if (ball.dist < 0) continue; // 还在入口隧道里，尚未露头
-    const center = pointAt(ball.dist);
+    const center = pointAt(ball.dist, track);
     // 快到洞口的珠子按距离缩小，看起来是被骷髅一口口吞下去
-    const remain = PATH_LENGTH - ball.dist;
+    const remain = currentPathLength - ball.dist;
     const scale = remain < SPACING * 1.6 ? Math.max(0.15, remain / (SPACING * 1.6)) : 1;
     drawMarble(context, center, ball.color, scale);
     if (scale > 0.7) {
       if (ball.power === 'bomb') drawBomb(context, center, pulse);
-      else if (ball.power === 'reverse') drawFlash(context, center, pulse, tangentAt(ball.dist));
+      else if (ball.power === 'reverse') drawFlash(context, center, pulse, tangentAt(ball.dist, track));
     }
   }
 
@@ -456,7 +459,11 @@ export default function MarbleGame({ seed, onWin, onStage }: GameProps) {
   }, [stage, reset]);
 
   const config = levelForStage(stage);
-  useStageReport(onStage, { stage, score: total + hud.score, label: `${config.colors} 色` });
+  useStageReport(onStage, {
+    stage,
+    score: total + hud.score,
+    label: `${config.colors} ${strings.colorsUnit} · ${strings.trackNames[config.track]}`,
+  });
   // 通关后自动进入下一关；失败则停在原地等玩家按「重开」
   useAutoAdvance(hud.status === 'won', () => {
     setTotal((current) => current + stateRef.current.score);
@@ -588,7 +595,7 @@ export default function MarbleGame({ seed, onWin, onStage }: GameProps) {
 
       <div className="marble__tools" data-testid="marble-tools">
         <span data-testid="marble-stage">
-          {strings.stageLabel} {stage} · {config.colors} {strings.colorsUnit}
+          {strings.stageLabel} {stage} · {config.colors} {strings.colorsUnit} · {strings.trackNames[config.track]}
         </span>
         <span data-testid="marble-total">
           {strings.totalLabel}: {total + hud.score}
