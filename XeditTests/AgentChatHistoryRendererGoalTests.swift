@@ -1041,6 +1041,214 @@ struct AgentChatHistoryRendererGoalTests {
         )
     }
 
+    @Test("selection bubble separates its items and highlights the hovered one")
+    func selectionActionMetricsSeparateAndHighlightItems() {
+        #expect(AgentChatSelectionActionMetrics.separatorWidth > 0)
+        #expect(AgentChatSelectionActionMetrics.separatorHeight > 0)
+        // 竖线要比整条气泡矮：和气泡上下边缘齐平的线会读成「两个气泡」。
+        #expect(
+            AgentChatSelectionActionMetrics.separatorHeight
+                < AgentChatSelectionActionMetrics.height
+        )
+        #expect(AgentChatSelectionActionMetrics.itemSpacing > 0)
+        #expect(AgentChatSelectionActionMetrics.itemHorizontalPadding > 0)
+        // hover 底色必须是半透明叠加，实色会盖掉气泡自己的底。
+        for isDark in [true, false] {
+            let hover = AgentChatSelectionActionMetrics.itemHoverBackgroundColor(isDark: isDark)
+            #expect(hover.alphaComponent > 0)
+            #expect(hover.alphaComponent < 1)
+            #expect(AgentChatSelectionActionMetrics.separatorColor(isDark: isDark).alphaComponent > 0)
+        }
+    }
+
+    @Test("selection bubble puts one separator between every pair of items")
+    @MainActor
+    func selectionActionViewInterleavesSeparators() throws {
+        let items = [
+            AgentChatSelectionActionItem(title: "添加到任务", plugin: nil),
+            AgentChatSelectionActionItem(title: "收藏", plugin: nil),
+            AgentChatSelectionActionItem(title: "一句话记待办", plugin: nil),
+        ]
+        let view = AgentChatSelectionActionView(items: items)
+        let stack = try #require(view.subviews.compactMap { $0 as? NSStackView }.first)
+        let arranged = stack.arrangedSubviews
+        let buttons = arranged.compactMap { $0 as? NSButton }
+        #expect(buttons.map(\.title) == items.map(\.title))
+        // 三项两条线，按 项/线/项/线/项 交替排开。
+        #expect(arranged.count == items.count * 2 - 1)
+        #expect(arranged.count - buttons.count == items.count - 1)
+        for (index, arrangedView) in arranged.enumerated() {
+            #expect((arrangedView is NSButton) == (index.isMultiple(of: 2)))
+        }
+        // 单项时不该冒出一条孤零零的竖线。
+        view.update(items: [items[0]])
+        #expect(stack.arrangedSubviews.count == 1)
+        #expect(stack.arrangedSubviews.first is NSButton)
+    }
+
+    @Test("selection actions come from one catalog, built-in first")
+    @MainActor
+    func selectionActionCatalogLeadsWithAddToTask() {
+        let items = AgentChatSelectionActionCatalog.items()
+        #expect(items.first?.title == L10n.AgentSelection.addToTask)
+        #expect(items.first?.plugin == nil)
+        // 插件项只能接在后面，不能插到内置项前面。
+        #expect(items.dropFirst().allSatisfy { $0.plugin != nil })
+
+        let menu = NSMenu()
+        AgentChatSelectionActionCatalog.appendMenuItems(
+            to: menu,
+            selectedText: "选中的原文",
+            target: NSView(),
+            builtInAction: Selector(("builtInActionForTesting:")),
+            pluginAction: Selector(("pluginActionForTesting:"))
+        )
+        #expect(menu.items.map(\.title) == items.map(\.title))
+        #expect(menu.items.first?.representedObject as? String == "选中的原文")
+        #expect(menu.items.first?.action == Selector(("builtInActionForTesting:")))
+    }
+
+    @Test("worker speech hosts its bubble on the window, the transcript keeps it inline")
+    @MainActor
+    func selectionActionPresenterPlacementFollowsHostSize() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let contentView = try #require(window.contentView)
+
+        let transcript = AgentChatHistoryNSTextView()
+        transcript.frame = NSRect(x: 0, y: 0, width: 600, height: 400)
+        contentView.addSubview(transcript)
+        let inline = AgentChatSelectionActionPresenter(owner: transcript, placement: .insideOwner)
+        inline.show(selectedText: "正文选区", selectionRect: NSRect(x: 40, y: 120, width: 90, height: 16))
+        #expect(inline.isVisible)
+        #expect(Self.visibleBubble(in: contentView)?.superview === transcript)
+
+        // 工种发言只有一行高：气泡挂进去会溢出 bounds，而 bounds 之外的点击
+        // AppKit 不派给子视图——所以必须挂到窗口内容视图上。
+        let speech = AgentSubagentSpeechNSTextView()
+        speech.frame = NSRect(x: 24, y: 40, width: 400, height: 16)
+        contentView.addSubview(speech)
+        let floating = AgentChatSelectionActionPresenter(owner: speech, placement: .windowContent)
+        floating.show(selectedText: "工种发言", selectionRect: NSRect(x: 10, y: 0, width: 80, height: 16))
+        #expect(floating.isVisible)
+        // 一次只留一个气泡：两条文本视图的选区互不清除，气泡得自己让位。
+        #expect(!inline.isVisible)
+        #expect(Self.visibleBubble(in: contentView)?.superview === contentView)
+
+        floating.detach()
+        #expect(!floating.isVisible)
+        #expect(Self.visibleBubble(in: contentView) == nil)
+    }
+
+    /// 气泡是 presenter 私有的，从容器一侧反查当前露出来的那一个。
+    @MainActor
+    private static func visibleBubble(in view: NSView) -> AgentChatSelectionActionView? {
+        for child in view.subviews {
+            if let bubble = child as? AgentChatSelectionActionView, !bubble.isHidden {
+                return bubble
+            }
+            if let found = visibleBubble(in: child) { return found }
+        }
+        return nil
+    }
+
+    @Test("selected worker speech reads back as the sanitized original text")
+    @MainActor
+    func subagentSpeechTextViewReportsSanitizedSelection() {
+        let view = AgentSubagentSpeechNSTextView()
+        view.frame = NSRect(x: 0, y: 0, width: 320, height: 40)
+        view.string = "同步子模块完成，正在克隆 sdk"
+        view.setSelectedRange((view.string as NSString).range(of: "正在克隆 sdk"))
+        #expect(view.selectedConversationText() == "正在克隆 sdk")
+
+        view.setSelectedRange(NSRange(location: 0, length: 0))
+        #expect(view.selectedConversationText() == nil)
+    }
+
+    @Test("selecting worker speech raises the same bubble the transcript raises")
+    @MainActor
+    func subagentSpeechSelectionRaisesActionBubble() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 320),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let contentView = try #require(window.contentView)
+
+        let view = AgentSubagentSpeechNSTextView()
+        view.frame = NSRect(x: 30, y: 200, width: 400, height: 18)
+        contentView.addSubview(view)
+        view.string = "The command is running - the submodule sync completed"
+
+        var addedToTask: String?
+        view.onAddSelectionToTask = { addedToTask = $0 }
+        view.setSelectedRange((view.string as NSString).range(of: "submodule sync"))
+        // 走的是真实入口：选区落定的委托回调，不是直接戳 presenter。
+        view.textViewDidChangeSelection(
+            Notification(name: NSTextView.didChangeSelectionNotification, object: view)
+        )
+
+        let bubble = try #require(Self.visibleBubble(in: contentView))
+        // 一条发言只有 18pt 高，气泡必须落在窗口内容视图上而不是发言自己身上。
+        #expect(bubble.superview === contentView)
+        #expect(contentView.bounds.contains(bubble.frame))
+
+        let stack = try #require(bubble.subviews.compactMap { $0 as? NSStackView }.first)
+        let builtIn = try #require(stack.arrangedSubviews.compactMap { $0 as? NSButton }.first)
+        #expect(builtIn.title == L10n.AgentSelection.addToTask)
+        builtIn.performClick(nil)
+        #expect(addedToTask == "submodule sync")
+        // 内置项点完气泡就收，不留一个点过的壳在屏幕上。
+        #expect(Self.visibleBubble(in: contentView) == nil)
+    }
+
+    @Test("render the multi-item selection bubble for design QA")
+    @MainActor
+    func renderSelectionActionItemsForDesignQA() throws {
+        let outputPath = ProcessInfo.processInfo.environment[
+            "WILLDEEP_SELECTION_ACTION_ITEMS_DESIGN_QA_OUTPUT"
+        ] ?? "/private/tmp/willdeep-selection-action-items-design-qa.png"
+
+        let view = AgentChatSelectionActionView(items: [
+            AgentChatSelectionActionItem(title: "添加到任务", plugin: nil),
+            AgentChatSelectionActionItem(title: "收藏", plugin: nil),
+            AgentChatSelectionActionItem(title: "一句话记待办", plugin: nil),
+        ])
+        view.frame = NSRect(origin: .zero, size: view.preferredSize)
+        view.layoutSubtreeIfNeeded()
+
+        // 把 hover 打在中间那一项上：这张图要同时验分隔线和逐项高亮。
+        let stack = try #require(view.subviews.compactMap { $0 as? NSStackView }.first)
+        let buttons = stack.arrangedSubviews.compactMap { $0 as? NSButton }
+        #expect(buttons.count == 3)
+        let hovered = try #require(buttons.dropFirst().first)
+        let enter = try #require(
+            NSEvent.enterExitEvent(
+                with: .mouseEntered,
+                location: NSPoint(x: hovered.bounds.midX, y: hovered.bounds.midY),
+                modifierFlags: [],
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                eventNumber: 0,
+                trackingNumber: 0,
+                userData: nil
+            )
+        )
+        hovered.mouseEntered(with: enter)
+        view.layoutSubtreeIfNeeded()
+
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
     @Test("render Codex-style chat selection action for design QA")
     @MainActor
     func renderSelectionActionForDesignQA() throws {

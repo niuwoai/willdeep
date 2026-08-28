@@ -80,6 +80,15 @@ struct AgentSubagentSpeechView: View {
         AgentSubagentTradePalette.color(forProfileID: activity.profileID)
     }
 
+    /// 发言正文的字号。正文走 AppKit 文本视图，拿的是点数而不是 `Font`，
+    /// 但口径必须和卡片里其余 supporting 文本完全一致。
+    private var speechFontSize: CGFloat {
+        AgentDesign.chatSupportingFontSize(
+            baseFontSize: appState.agentChatBaseFontSize,
+            visualMinimum: 10
+        )
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
             Capsule()
@@ -157,15 +166,29 @@ struct AgentSubagentSpeechView: View {
                     // live is the shape that previously melted the main
                     // thread in SwiftUI layout; the full report still gets
                     // rich treatment once the run returns.
-                    Text(utterance.text)
-                        .font(AgentDesign.chatSupportingFont(
-                            baseFontSize: appState.agentChatBaseFontSize,
-                            visualMinimum: 10,
-                            weight: .regular
-                        ))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    //
+                    // TextKit rather than `Text`: a Worker's words deserve the
+                    // same「添加到任务 / 收藏 / …」bubble the settled transcript
+                    // gets, and SwiftUI's own `.textSelection` hands us no way
+                    // to read back what the reader selected.
+                    AgentSubagentSpeechSelectableText(
+                        text: utterance.text,
+                        fontSize: speechFontSize,
+                        onAddSelectionToTask: appState.addAgentChatSelectionToTask,
+                        onSelectionPluginAction: { text, pluginID, commandID, completion in
+                            appState.runAgentChatSelectionPluginAction(
+                                text: text,
+                                pluginID: pluginID,
+                                commandID: commandID,
+                                completion: completion
+                            )
+                        }
+                    )
+                        .alignmentGuide(.firstTextBaseline) { _ in
+                            AgentSubagentSpeechSelectableText.firstBaselineOffset(
+                                fontSize: speechFontSize
+                            )
+                        }
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
