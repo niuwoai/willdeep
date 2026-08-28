@@ -1,5 +1,5 @@
+import AppKit
 import Foundation
-import SwiftUI
 import Testing
 @testable import WillDeep
 
@@ -14,13 +14,13 @@ import Testing
 @Suite
 @MainActor
 struct AgentSubagentSpeechMarkdownTests {
-    private func plainText(_ rendered: AttributedString) -> String {
-        String(rendered.characters)
+    private func plainText(_ rendered: NSAttributedString) -> String {
+        rendered.string
     }
 
     @Test("inline markers are consumed, not printed")
     func inlineMarkersAreBaked() {
-        let rendered = AgentSubagentSpeechMarkdown.attributed(
+        let rendered = AgentSubagentSpeechMarkdown.attributedString(
             from: "**`gofmt -l` 退出码为 0**，其余文件格式已正确。",
             baseSize: 10
         )
@@ -41,7 +41,7 @@ struct AgentSubagentSpeechMarkdownTests {
         | 1 | `go build ./...` | 编译成功 |
         | 2 | `go test ./internal/gateway/` | ok 0.605s |
         """
-        let rendered = AgentSubagentSpeechMarkdown.attributed(from: raw, baseSize: 10)
+        let rendered = AgentSubagentSpeechMarkdown.attributedString(from: raw, baseSize: 10)
         let text = plainText(rendered)
 
         #expect(!text.contains("|---|"))
@@ -50,16 +50,24 @@ struct AgentSubagentSpeechMarkdownTests {
         #expect(text.contains("go build ./..."))
         #expect(text.contains("ok 0.605s"))
 
-        // Columns only line up if the table runs are monospaced.
-        let monospaced = rendered.runs.contains { run in
-            run.font == .system(size: 9.5, design: .monospaced)
+        // Columns only line up if the table runs are fixed-pitch. The CJK
+        // fallback pass may swap individual runs for a font that can draw
+        // 步骤 / 命令 — those stay fixed-pitch too, which is the property
+        // that actually matters here.
+        var sawFixedPitch = false
+        rendered.enumerateAttribute(
+            .font,
+            in: NSRange(location: 0, length: rendered.length),
+            options: []
+        ) { value, _, _ in
+            if let font = value as? NSFont, font.isFixedPitch { sawFixedPitch = true }
         }
-        #expect(monospaced)
+        #expect(sawFixedPitch)
     }
 
     @Test("headings and list markers become structure, not literal # and -")
     func blockMarkersAreConsumed() {
-        let rendered = AgentSubagentSpeechMarkdown.attributed(
+        let rendered = AgentSubagentSpeechMarkdown.attributedString(
             from: "## 结论\n- 编译通过\n- 单测通过",
             baseSize: 10
         )
@@ -73,7 +81,7 @@ struct AgentSubagentSpeechMarkdownTests {
 
     @Test("a fenced block keeps its contents verbatim in monospace")
     func fencedCodeKeepsItsText() {
-        let rendered = AgentSubagentSpeechMarkdown.attributed(
+        let rendered = AgentSubagentSpeechMarkdown.attributedString(
             from: "先跑这个：\n```bash\nyarn test --watch=false\n```",
             baseSize: 10
         )
@@ -88,14 +96,14 @@ struct AgentSubagentSpeechMarkdownTests {
     @Test("plain prose survives unchanged")
     func proseIsUntouched() {
         let raw = "问题出在配置文件包含中文字符，默认编码无法处理。"
-        let rendered = AgentSubagentSpeechMarkdown.attributed(from: raw, baseSize: 10)
+        let rendered = AgentSubagentSpeechMarkdown.attributedString(from: raw, baseSize: 10)
 
         #expect(plainText(rendered) == raw)
     }
 
     @Test("empty input renders nothing rather than crashing")
     func emptyInputIsSafe() {
-        #expect(plainText(AgentSubagentSpeechMarkdown.attributed(from: "", baseSize: 10)).isEmpty)
+        #expect(plainText(AgentSubagentSpeechMarkdown.attributedString(from: "", baseSize: 10)).isEmpty)
     }
 
     /// A round's text is clamped to 600 characters before it ever reaches
@@ -109,7 +117,7 @@ struct AgentSubagentSpeechMarkdownTests {
         | 1 | ok |
         | 2 | ok tokenhub/interna
         """
-        let text = plainText(AgentSubagentSpeechMarkdown.attributed(from: raw, baseSize: 10))
+        let text = plainText(AgentSubagentSpeechMarkdown.attributedString(from: raw, baseSize: 10))
 
         #expect(text.contains("ok tokenhub/interna"))
         #expect(!text.contains("|---|"))

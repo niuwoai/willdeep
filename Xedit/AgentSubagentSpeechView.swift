@@ -107,6 +107,15 @@ struct AgentSubagentSpeechView: View {
         AgentSubagentSpeechTimeline.rows(for: activity)
     }
 
+    /// 发言正文的字号。正文走 AppKit 文本视图，拿的是点数而不是 `Font`，
+    /// 但口径必须和卡片里其余 supporting 文本完全一致。
+    private var speechFontSize: CGFloat {
+        AgentDesign.chatSupportingFontSize(
+            baseFontSize: appState.agentChatBaseFontSize,
+            visualMinimum: 10
+        )
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
             Capsule()
@@ -434,23 +443,34 @@ struct AgentSubagentSpeechView: View {
         case .speech(let round, let text, let tools):
             gutteredRow(marker: L10n.AgentDelegation.speechRoundMarker(round)) {
                 VStack(alignment: .leading, spacing: 3) {
-                    // Markdown, baked into a single AttributedString. The
-                    // hazard this card was originally written around is a
-                    // SwiftUI *view tree* per block on a surface that
-                    // repaints every heartbeat — one `Text` carrying runs
-                    // is not that shape. Workers report build tables and
-                    // command output, and raw `|---|---|` rows were the
-                    // least readable thing on the card.
-                    Text(AgentSubagentSpeechMarkdown.attributed(
-                        from: text,
-                        baseSize: AgentDesign.chatSupportingFontSize(
-                            baseFontSize: appState.agentChatBaseFontSize,
-                            visualMinimum: 10
-                        )
-                    ))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // Markdown, baked into a single attributed string and
+                    // handed to one read-only TextKit view. Two things had to
+                    // survive being merged together here:
+                    //
+                    //  - the rendering (Workers report build tables, and raw
+                    //    `|---|---|` rows were the least readable thing on
+                    //    the card), and
+                    //  - the selection: a Worker's words get the same
+                    //    「添加到任务 / 收藏 / …」bubble the settled transcript
+                    //    gets, which SwiftUI's `.textSelection` cannot give —
+                    //    it hands back no way to read what was selected.
+                    //
+                    // One attributed string, one view: still not the
+                    // per-block SwiftUI view tree that once pinned the main
+                    // thread in layout.
+                    AgentSubagentSpeechSelectableText(
+                        text: text,
+                        fontSize: speechFontSize,
+                        onAddSelectionToTask: appState.addAgentChatSelectionToTask,
+                        onSelectionPluginAction: { selected, pluginID, commandID, completion in
+                            appState.runAgentChatSelectionPluginAction(
+                                text: selected,
+                                pluginID: pluginID,
+                                commandID: commandID,
+                                completion: completion
+                            )
+                        }
+                    )
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if !tools.isEmpty {
                         toolChipFlow(tools)

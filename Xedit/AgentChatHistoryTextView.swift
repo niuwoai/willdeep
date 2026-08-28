@@ -203,11 +203,23 @@ final class AgentChatHistoryNSTextView: NSTextView {
     /// other copied buttons from restoring themselves.
     private var pendingCodeCopyRestores: [Int: DispatchWorkItem] = [:]
     private var pendingFooterCopyRestores: [Int: DispatchWorkItem] = [:]
-    private var selectionActionView: AgentChatSelectionActionView?
-    private var selectionActionText: String?
-    /// 每次气泡重新出现/收起都自增。异步的插件动作回来时拿它对一下，
-    /// 确认自己反馈的还是当初那一次选区。
-    private var selectionActionRevision: UInt64 = 0
+    /// 选区气泡。这条 transcript 铺满整块聊天区，气泡挂在自己身上就够用，
+    /// 而且跟着内容一起滚。工种发言那种小文本视图走的是另一种摆法，
+    /// 见 `AgentChatSelectionActionPresenter.Placement`。
+    private lazy var selectionActionPresenter: AgentChatSelectionActionPresenter = {
+        let presenter = AgentChatSelectionActionPresenter(owner: self, placement: .insideOwner)
+        presenter.onAddSelectionToTask = { [weak self] text in
+            self?.onAddSelectionToTask?(text)
+        }
+        presenter.onSelectionPluginAction = { [weak self] text, pluginID, commandID, completion in
+            guard let handler = self?.onSelectionPluginAction else {
+                completion(false)
+                return
+            }
+            handler(text, pluginID, commandID, completion)
+        }
+        return presenter
+    }()
     var onRetryLastTurn: (() -> Void)?
     /// 1.103.0-rc11: TextKit footer 里 doc.text 图标被点时回调 SwiftUI 侧
     /// 弹出 AgentTurnReportCard popover —— 见 AgentChatTranscript。
@@ -342,24 +354,13 @@ final class AgentChatHistoryNSTextView: NSTextView {
             menu.addItem(.separator())
         }
         if let selectedText {
-            menu.addItem(addSelectionToTaskMenuItem(selectedText: selectedText))
-            for resolved in AgentPluginRegistry.shared.menuCommands(at: AgentPluginMenuLocation.chatSelection) {
-                let item = NSMenuItem(
-                    title: AgentPluginRegistry.shared.localizedString(
-                        resolved.command.titleKey,
-                        pluginID: resolved.pluginID
-                    ),
-                    action: #selector(runSelectionPluginActionFromMenu(_:)),
-                    keyEquivalent: ""
-                )
-                item.target = self
-                item.representedObject = AgentChatSelectionPluginMenuPayload(
-                    text: selectedText,
-                    pluginID: resolved.pluginID,
-                    commandID: resolved.command.id
-                )
-                menu.addItem(item)
-            }
+            AgentChatSelectionActionCatalog.appendMenuItems(
+                to: menu,
+                selectedText: selectedText,
+                target: self,
+                builtInAction: #selector(addSelectionToTaskFromMenu(_:)),
+                pluginAction: #selector(runSelectionPluginActionFromMenu(_:))
+            )
         }
         if let marker {
             let item = NSMenuItem(
@@ -374,100 +375,12 @@ final class AgentChatHistoryNSTextView: NSTextView {
         return menu
     }
 
-    private func addSelectionToTaskMenuItem(selectedText: String) -> NSMenuItem {
-        let item = NSMenuItem(
-            title: L10n.AgentSelection.addToTask,
-            action: #selector(addSelectionToTaskFromMenu(_:)),
-            keyEquivalent: ""
-        )
-        item.target = self
-        item.representedObject = selectedText
-        item.isEnabled = true
-        return item
-    }
-
     private func showSelectionAction(selectedText: String) {
         guard let selectionRect = selectedTextBoundingRect() else {
             dismissSelectionAction()
             return
         }
-
-        let actionView = selectionActionView ?? makeSelectionActionView()
-        selectionActionText = selectedText
-        selectionActionRevision &+= 1
-        actionView.update(items: selectionActionItems())
-        actionView.isInteractive = true
-        actionView.isHidden = false
-        positionSelectionAction(actionView, near: selectionRect)
-    }
-
-    /// 气泡定位：优先贴在选区上方，放不下时翻到下方，再夹进可视区。
-    /// 执行插件动作后气泡内容会变（换成结果提示），要按新尺寸重新摆一次。
-    private func positionSelectionAction(
-        _ actionView: AgentChatSelectionActionView,
-        near selectionRect: NSRect
-    ) {
-        let size = actionView.preferredSize
-        let visible = visibleRect.insetBy(dx: 8, dy: 8)
-        let gap: CGFloat = 6
-        let proposedAboveY = isFlipped
-            ? selectionRect.minY - size.height - gap
-            : selectionRect.maxY + gap
-        let proposedBelowY = isFlipped
-            ? selectionRect.maxY + gap
-            : selectionRect.minY - size.height - gap
-        let fitsAbove = proposedAboveY >= visible.minY
-            && proposedAboveY + size.height <= visible.maxY
-        let targetY = fitsAbove ? proposedAboveY : proposedBelowY
-        let unclampedX = selectionRect.midX - size.width / 2
-        let maxX = max(visible.minX, visible.maxX - size.width)
-        let targetX = min(max(unclampedX, visible.minX), maxX)
-        let maxY = max(visible.minY, visible.maxY - size.height)
-        actionView.frame = NSRect(
-            x: targetX,
-            y: min(max(targetY, visible.minY), maxY),
-            width: size.width,
-            height: size.height
-        )
-    }
-
-    /// 气泡里的动作：内置「添加到任务」打头，后面接插件贡献的项。
-    private func selectionActionItems() -> [AgentChatSelectionActionItem] {
-        let builtIn = AgentChatSelectionActionItem(title: L10n.AgentSelection.addToTask, plugin: nil)
-        let pluginItems = AgentPluginRegistry.shared
-            .menuCommands(at: AgentPluginMenuLocation.chatSelection)
-            .map { resolved in
-                AgentChatSelectionActionItem(
-                    title: AgentPluginRegistry.shared.localizedString(
-                        resolved.command.titleKey,
-                        pluginID: resolved.pluginID
-                    ),
-                    plugin: (resolved.pluginID, resolved.command.id)
-                )
-            }
-        return [builtIn] + pluginItems
-    }
-
-    private func makeSelectionActionView() -> AgentChatSelectionActionView {
-        let actionView = AgentChatSelectionActionView(items: selectionActionItems())
-        actionView.onSelect = { [weak self] item in
-            guard let self, let selectedText = self.selectionActionText else { return }
-            guard let plugin = item.plugin else {
-                self.dismissSelectionAction()
-                self.onAddSelectionToTask?(selectedText)
-                return
-            }
-            // 插件动作是异步的（命令执行器 → MCP 工具），先把气泡置灰留在原地，
-            // 回来了再换成「✓ 收藏」并停一下——否则点完屏幕上什么都不会发生。
-            let revision = self.selectionActionRevision
-            actionView.isInteractive = false
-            self.onSelectionPluginAction?(selectedText, plugin.pluginID, plugin.commandID) { [weak self] succeeded in
-                self?.showSelectionActionResult(title: item.title, succeeded: succeeded, revision: revision)
-            }
-        }
-        addSubview(actionView, positioned: .above, relativeTo: nil)
-        selectionActionView = actionView
-        return actionView
+        selectionActionPresenter.show(selectedText: selectedText, selectionRect: selectionRect)
     }
 
     private func selectedTextBoundingRect() -> NSRect? {
@@ -488,30 +401,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     }
 
     private func dismissSelectionAction() {
-        selectionActionText = nil
-        selectionActionRevision &+= 1
-        selectionActionView?.isInteractive = true
-        selectionActionView?.isHidden = true
-    }
-
-    /// 插件选区动作执行完的即时反馈：把气泡整条换成结果，停 1.1 秒再收起。
-    /// `revision` 认的是「还是当初点的那一次选区」——期间用户改了选区或气泡
-    /// 已经收起，这次回调就什么都不做，不去打扰新的选区。
-    private func showSelectionActionResult(title: String, succeeded: Bool, revision: UInt64) {
-        guard revision == selectionActionRevision,
-              let actionView = selectionActionView,
-              !actionView.isHidden,
-              let selectionRect = selectedTextBoundingRect() else {
-            return
-        }
-        let marker = succeeded ? "✓" : "⚠︎"
-        actionView.update(items: [AgentChatSelectionActionItem(title: "\(marker) \(title)", plugin: nil)])
-        actionView.isInteractive = false
-        positionSelectionAction(actionView, near: selectionRect)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { [weak self] in
-            guard let self, revision == self.selectionActionRevision else { return }
-            self.dismissSelectionAction()
-        }
+        selectionActionPresenter.dismiss()
     }
 
     private func currentSelectedConversationText() -> String? {
@@ -950,211 +840,6 @@ final class AgentChatHistoryNSTextView: NSTextView {
         hoveredUserMessageID = id
         lastContentHash = nil
         renderCurrentMessages()
-    }
-}
-
-enum AgentChatSelectionActionMetrics {
-    static let cornerRadius: CGFloat = 8
-    static let horizontalPadding: CGFloat = 9
-    static let height: CGFloat = 28
-    static let borderWidth: CGFloat = 0.5
-    static let shadowRadius: CGFloat = 7
-    static let shadowOffset = NSSize(width: 0, height: -2)
-    static let lightShadowOpacity: Float = 0.16
-    static let darkShadowOpacity: Float = 0.36
-
-    static func backgroundColor(isDark: Bool, isHovered: Bool) -> NSColor {
-        if isDark {
-            return NSColor(calibratedWhite: isHovered ? 0.22 : 0.16, alpha: 0.98)
-        }
-        return NSColor(calibratedWhite: isHovered ? 0.965 : 1, alpha: 0.98)
-    }
-
-    static func borderColor(isDark: Bool) -> NSColor {
-        isDark
-            ? NSColor.white.withAlphaComponent(0.16)
-            : NSColor.black.withAlphaComponent(0.13)
-    }
-}
-
-/// 右键菜单项带的载荷（NSMenuItem.representedObject 只能放对象/结构体值）。
-final class AgentChatSelectionPluginMenuPayload: NSObject {
-    let text: String
-    let pluginID: AgentPluginID
-    let commandID: AgentPluginCommandID
-
-    init(text: String, pluginID: AgentPluginID, commandID: AgentPluginCommandID) {
-        self.text = text
-        self.pluginID = pluginID
-        self.commandID = commandID
-    }
-}
-
-/// 选区气泡里的一项：内置「添加到任务」，或插件经 `menus["chat.selection"]` 贡献的动作。
-struct AgentChatSelectionActionItem {
-    let title: String
-    /// 插件项带上来源；内置项为 nil。
-    let plugin: (pluginID: AgentPluginID, commandID: AgentPluginCommandID)?
-}
-
-private final class AgentChatSelectionActionView: NSView {
-    private let stack: NSStackView
-    private var buttons: [NSButton] = []
-    private var items: [AgentChatSelectionActionItem] = []
-    private var hoverTrackingArea: NSTrackingArea?
-    private var isHovered = false
-    /// 点了第几项（下标对应 items）。
-    var onSelect: ((AgentChatSelectionActionItem) -> Void)?
-    /// 异步动作执行期间与结果展示期间置 false：按钮点不动，整条气泡淡一档。
-    var isInteractive = true {
-        didSet {
-            alphaValue = isInteractive ? 1 : 0.7
-            buttons.forEach { $0.isEnabled = isInteractive }
-        }
-    }
-
-    init(items: [AgentChatSelectionActionItem]) {
-        stack = NSStackView()
-        super.init(frame: .zero)
-
-        wantsLayer = true
-        layer?.cornerRadius = AgentChatSelectionActionMetrics.cornerRadius
-        layer?.masksToBounds = false
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowRadius = AgentChatSelectionActionMetrics.shadowRadius
-        layer?.shadowOffset = AgentChatSelectionActionMetrics.shadowOffset
-        applyAppearance()
-
-        stack.orientation = .horizontal
-        stack.spacing = 2
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(
-                equalTo: leadingAnchor,
-                constant: AgentChatSelectionActionMetrics.horizontalPadding
-            ),
-            stack.trailingAnchor.constraint(
-                equalTo: trailingAnchor,
-                constant: -AgentChatSelectionActionMetrics.horizontalPadding
-            ),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-        update(items: items)
-    }
-
-    /// 重建按钮：插件启停后条目会变，气泡复用同一个 view。
-    func update(items: [AgentChatSelectionActionItem]) {
-        guard items.map(\.title) != self.items.map(\.title) || buttons.isEmpty else {
-            self.items = items
-            return
-        }
-        self.items = items
-        for button in buttons {
-            stack.removeArrangedSubview(button)
-            button.removeFromSuperview()
-        }
-        buttons = items.enumerated().map { index, item in
-            let button = NSButton(title: item.title, target: self, action: #selector(selectAction(_:)))
-            button.tag = index
-            button.isBordered = false
-            button.focusRingType = .none
-            button.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-            button.contentTintColor = .labelColor
-            button.isEnabled = isInteractive
-            stack.addArrangedSubview(button)
-            return button
-        }
-    }
-
-    required init?(coder: NSCoder) {
-        return nil
-    }
-
-    var preferredSize: NSSize {
-        let buttonsWidth = buttons.reduce(CGFloat.zero) { total, button in
-            total + ceil(button.intrinsicContentSize.width)
-        }
-        let spacing = CGFloat(max(0, buttons.count - 1)) * stack.spacing
-        return NSSize(
-            width: buttonsWidth + spacing + AgentChatSelectionActionMetrics.horizontalPadding * 2,
-            height: AgentChatSelectionActionMetrics.height
-        )
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        applyAppearance()
-    }
-
-    override func updateTrackingAreas() {
-        if let hoverTrackingArea {
-            removeTrackingArea(hoverTrackingArea)
-        }
-        let trackingArea = NSTrackingArea(
-            rect: .zero,
-            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        hoverTrackingArea = trackingArea
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovered = true
-        needsDisplay = true
-        super.mouseEntered(with: event)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovered = false
-        needsDisplay = true
-        super.mouseExited(with: event)
-    }
-
-    override func layout() {
-        super.layout()
-        layer?.shadowPath = CGPath(
-            roundedRect: bounds,
-            cornerWidth: AgentChatSelectionActionMetrics.cornerRadius,
-            cornerHeight: AgentChatSelectionActionMetrics.cornerRadius,
-            transform: nil
-        )
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let borderInset = AgentChatSelectionActionMetrics.borderWidth / 2
-        let path = NSBezierPath(
-            roundedRect: bounds.insetBy(dx: borderInset, dy: borderInset),
-            xRadius: AgentChatSelectionActionMetrics.cornerRadius,
-            yRadius: AgentChatSelectionActionMetrics.cornerRadius
-        )
-        AgentChatSelectionActionMetrics.backgroundColor(
-            isDark: isDark,
-            isHovered: isHovered
-        ).setFill()
-        path.fill()
-        AgentChatSelectionActionMetrics.borderColor(isDark: isDark).setStroke()
-        path.lineWidth = AgentChatSelectionActionMetrics.borderWidth
-        path.stroke()
-    }
-
-    private func applyAppearance() {
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        layer?.shadowOpacity = isDark
-            ? AgentChatSelectionActionMetrics.darkShadowOpacity
-            : AgentChatSelectionActionMetrics.lightShadowOpacity
-        needsDisplay = true
-    }
-
-    @objc private func selectAction(_ sender: NSButton) {
-        guard sender.tag >= 0, sender.tag < items.count else { return }
-        onSelect?(items[sender.tag])
     }
 }
 
