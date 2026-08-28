@@ -41,7 +41,7 @@ struct AgentChatHistoryRendererTests {
     @Test
     func agentTypographyUsesReadableDefaultsAndClampsLineHeight() {
         #expect(AgentSettingsStore.chatBaseFontSizeDefault == 15)
-        #expect(AgentSettingsStore.chatFontIDDefault == "system")
+        #expect(AgentSettingsStore.chatFontIDDefault == AgentChatFontChoice.pingFang.id)
         #expect(AgentSettingsStore.chatLineHeightMultipleDefault == 1.4)
         // 1.4 has no exact binary representation, so these are the one place
         // in this file that compares with a tolerance rather than `==`.
@@ -57,8 +57,12 @@ struct AgentChatHistoryRendererTests {
 
     @Test
     func agentTypographyResolvesFontsAndLineSpacing() {
+        let pingFangFont = AgentChatFontChoice.pingFang.nsFont(size: 15)
+        let pingFangHeadingFont = AgentChatFontChoice.pingFang.nsFont(size: 18, weight: .semibold)
         let systemFont = AgentChatFontChoice.system.nsFont(size: 15)
         let monospacedFont = AgentChatFontChoice.monospaced.nsFont(size: 15)
+        #expect(pingFangFont.fontName == "PingFangSC-Regular")
+        #expect(pingFangHeadingFont.fontName == "PingFangSC-Semibold")
         #expect(systemFont.fontDescriptor.symbolicTraits.contains(.monoSpace) == false)
         #expect(monospacedFont.fontDescriptor.symbolicTraits.contains(.monoSpace))
 

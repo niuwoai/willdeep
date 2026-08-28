@@ -11,6 +11,7 @@ import SwiftUI
 
 struct AgentChatFontChoice: Identifiable, CaseIterable, Equatable {
     enum Kind {
+        case pingFang
         case system
         case rounded
         case serif
@@ -21,6 +22,14 @@ struct AgentChatFontChoice: Identifiable, CaseIterable, Equatable {
     let id: String
     let displayName: String
     let kind: Kind
+
+    static var pingFang: AgentChatFontChoice {
+        AgentChatFontChoice(
+            id: "pingfang-sc",
+            displayName: L10n.Settings.agentFontPingFang,
+            kind: .pingFang
+        )
+    }
 
     static var system: AgentChatFontChoice {
         AgentChatFontChoice(id: "system", displayName: L10n.Settings.agentFontSystem, kind: .system)
@@ -43,7 +52,7 @@ struct AgentChatFontChoice: Identifiable, CaseIterable, Equatable {
     }
 
     static var allCases: [AgentChatFontChoice] {
-        [.system, .rounded, .serif, .monospaced, .menlo]
+        [.pingFang, .system, .rounded, .serif, .monospaced, .menlo]
     }
 
     static func byID(_ id: String) -> AgentChatFontChoice? {
@@ -53,6 +62,9 @@ struct AgentChatFontChoice: Identifiable, CaseIterable, Equatable {
     func nsFont(size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         let font: NSFont
         switch kind {
+        case .pingFang:
+            font = Self.pingFangFont(size: size, weight: weight)
+                ?? NSFont.systemFont(ofSize: size, weight: weight)
         case .system:
             font = NSFont.systemFont(ofSize: size, weight: weight)
         case .rounded:
@@ -72,6 +84,25 @@ struct AgentChatFontChoice: Identifiable, CaseIterable, Equatable {
                 ?? NSFont.monospacedSystemFont(ofSize: size, weight: weight)
         }
         return font.withEditorCJKCascade()
+    }
+
+    private static func pingFangFont(size: CGFloat, weight: NSFont.Weight) -> NSFont? {
+        let value = weight.rawValue
+        let postScriptName: String
+        if value >= NSFont.Weight.semibold.rawValue {
+            postScriptName = "PingFangSC-Semibold"
+        } else if value >= NSFont.Weight.medium.rawValue {
+            postScriptName = "PingFangSC-Medium"
+        } else if value <= NSFont.Weight.ultraLight.rawValue {
+            postScriptName = "PingFangSC-Ultralight"
+        } else if value <= NSFont.Weight.thin.rawValue {
+            postScriptName = "PingFangSC-Thin"
+        } else if value <= NSFont.Weight.light.rawValue {
+            postScriptName = "PingFangSC-Light"
+        } else {
+            postScriptName = "PingFangSC-Regular"
+        }
+        return NSFont(name: postScriptName, size: size)
     }
 
     func swiftUIFont(size: CGFloat, weight: NSFont.Weight = .regular) -> Font {
