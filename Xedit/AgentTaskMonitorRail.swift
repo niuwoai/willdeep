@@ -752,17 +752,7 @@ struct AgentSemanticActivityStatusLine: View {
                     if let startedAt = phase.elapsedStartOverride ?? appState.agentTurnStartedAt,
                        appState.isAgentResponding {
                         Spacer(minLength: 4)
-                        TimelineView(.periodic(from: .now, by: 1.0)) { context in
-                            Text(Self.formatElapsed(context.date.timeIntervalSince(startedAt)))
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(phase.tint.opacity(0.82))
-                                .monospacedDigit()
-                                .transaction { transaction in
-                                    if !AgentActivitySweepMetrics.animatesElapsedTime {
-                                        transaction.animation = nil
-                                    }
-                                }
-                        }
+                        AgentStripElapsedLabel(startedAt: startedAt, tint: phase.tint)
                     }
                 }
                 .padding(.horizontal, style == .composer ? 12 : 0)
@@ -1008,13 +998,37 @@ struct AgentSemanticActivityStatusLine: View {
         }
     }
 
-    private static func formatElapsed(_ seconds: TimeInterval) -> String {
+    static func formatElapsed(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds))
         if total < 60 { return "\(total)s" }
         let minutes = total / 60
         let remaining = total % 60
         if minutes < 60 { return "\(minutes)m \(remaining)s" }
         return "\(minutes / 60)h \(minutes % 60)m"
+    }
+}
+
+/// The strip's clock. Its own view with its own timeline, anchored to
+/// `startedAt` — see `AgentStepDurationLabel` for why `.now` is the wrong
+/// anchor for something that measures elapsed time.
+private struct AgentStripElapsedLabel: View {
+    let startedAt: Date
+    let tint: Color
+
+    var body: some View {
+        TimelineView(.periodic(from: startedAt, by: 1)) { context in
+            Text(AgentSemanticActivityStatusLine.formatElapsed(
+                context.date.timeIntervalSince(startedAt)
+            ))
+            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+            .foregroundStyle(tint.opacity(0.82))
+            .monospacedDigit()
+            .transaction { transaction in
+                if !AgentActivitySweepMetrics.animatesElapsedTime {
+                    transaction.animation = nil
+                }
+            }
+        }
     }
 }
 

@@ -153,6 +153,47 @@ private struct AgentFailedCommandDetailView: View {
     }
 }
 
+/// How long one step has taken. Ticks while the step is in flight; the moment
+/// it settles the clock stops and the number becomes what it cost.
+///
+/// Its own view, with its own timeline, following the
+/// `AgentComposerGoalElapsedLabel` / `AgentBackgroundTaskDurationLabel`
+/// pattern — a per-second tick wrapped around the whole row would rebuild the
+/// icon, title, detail and spinner once a second, for every visible row.
+///
+/// The schedule is anchored to `startedAt`, not to `.now`. `.now` is captured
+/// when the enclosing body is evaluated, so a schedule built that way is
+/// re-anchored on every unrelated state change and its phase depends on
+/// render timing rather than on the thing being measured. Every other elapsed
+/// clock in this app anchors to the start instant; this one does too.
+private struct AgentStepDurationLabel: View {
+    let startedAt: Date
+    let finishedAt: Date?
+
+    var body: some View {
+        Group {
+            if let finishedAt {
+                Text(AgentToolActivityRowPresentation.formatDuration(
+                    finishedAt.timeIntervalSince(startedAt)
+                ))
+            } else {
+                TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                    Text(AgentToolActivityRowPresentation.formatDuration(
+                        context.date.timeIntervalSince(startedAt)
+                    ))
+                }
+            }
+        }
+        .font(.system(size: 10.5, weight: .regular, design: .monospaced))
+        .foregroundStyle(.tertiary)
+        .monospacedDigit()
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityHidden(true)
+    }
+
+}
+
 private struct AgentActivityTimelineDisclosureRow: View {
     let call: AgentToolCall
     @Binding var isExpanded: Bool
@@ -247,6 +288,10 @@ private struct AgentToolActivityTimelineRow: View {
                     .frame(width: 13, height: 13)
             }
             Spacer(minLength: 0)
+            AgentStepDurationLabel(
+                startedAt: presentation.startedAt,
+                finishedAt: presentation.finishedAt
+            )
         }
         .frame(minHeight: AgentChatTypography.lineHeight(
             fontSize: appState.agentChatBaseFontSize,
