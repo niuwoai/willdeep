@@ -422,6 +422,28 @@ extension AppState {
                     profile: profile
                 )
                 bindSubagentRun(run.id)
+                // Seed the activity before any heartbeat arrives, so the
+                // record is already marked background. Without it the first
+                // heartbeat would create a foreground activity, and the
+                // spawn's own `.succeeded` would seal a Worker that is only
+                // just getting started.
+                updateSubagent(
+                    model: childConfiguration.model,
+                    workerName: resolvedWorkerName
+                )
+                if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                    runtime.toolCalls[index].subagentLiveActivity = AgentSubagentLiveActivity(
+                        profileID: profile.id,
+                        workerName: resolvedWorkerName,
+                        model: childConfiguration.model,
+                        round: 0,
+                        maximumRounds: profile.maxRounds,
+                        completedToolInvocations: 0,
+                        activityText: "",
+                        startedAt: Date(),
+                        isBackground: true
+                    )
+                }
                 agentSpawnLog.info(
                     "spawn_agent background started runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(run.id.uuidString, privacy: .public) handle=\(run.displayHandle, privacy: .public) profile=\(profile.id, privacy: .public) model=\(childConfiguration.model, privacy: .public)"
                 )

@@ -844,6 +844,9 @@ final class AppState: ObservableObject {
                   let runtime = self.runtime(for: runtimeID) else { return }
             self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
+        agentSubagentRegistry.onRunProgress = { [weak self] runID, update in
+            self?.applyBackgroundSubagentProgress(runID: runID, update)
+        }
         agentSubagentRegistry.onRunFinished = { [weak self] run in
             guard let self else { return }
             if self.handleAgentGoalPlanningSubagentCompletion(run) {

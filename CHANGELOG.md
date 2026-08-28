@@ -1,7 +1,37 @@
 # Changelog
 
-> 当前文件保留最新版本（1.301.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.301.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.301.0-rc4 - 2026-08-28
+
+> rc3 被另一条并行分支占用（苹方默认字体），这里跳号到 rc4，避免两边版本文件撞在同一个号上。
+
+### Added
+
+- **后台派发的工种也上状态条、也在聊天区说话了**。`run_in_background: true` 派出去的工种此前是一片空白：既不上 composer 状态条，也不在聊天区出声，一个跑十分钟的后台工种在界面上和"什么也没发生"没有区别。
+  - 根因不在显示层。`AgentSubagentRunner.run` 一共四条调用路径，rc1 补齐了三条同步的；第四条是 `AgentSubagentRegistry.startBackground`，它走 `runOperation` 那个 typealias，签名上压根没有进度回调的位置。现在加上了，registry 按 run id 把心跳转回宿主。
+  - 宿主靠 `subagentRunID` 找回派生它的那条工具卡（`bindSubagentRun` 在 spawn 时就绑好了），把发言和轮次折进去。
+  - Goal Teams 的成员刻意保持静默：它们由协调器聚合裁决，从来不作为独立工种露面。
+
+### Fixed
+
+- **「这个工种还在跑吗」此前没有正确答案**。后台 spawn 在交出 handle 那一刻就把工具卡 settle 成"已成功"，而工种本身还要再跑几分钟——照工具卡状态判定，后台工种一启动就从状态条上消失。
+  - 第一版改法是让 liveness 只认 `AgentSubagentLiveActivity.finishedAt`，被自己的测试打回来了：那个字段要靠有人记得去封口，而前台工种的死活本来就是**事实**（派生它的工具卡状态），不是需要谁盖的戳。两个真相来源，必出幽灵工种。
+  - 最终收在一个派生规则 `AgentToolCall.subagentIsWorking`：没有 activity 看工具卡状态；后台 activity 看它自己的 `finishedAt`（由 registry 封口）；前台 activity 看工具卡状态。一个地方判定，状态条和发言卡都读它。
+
+### Docs
+
+- 新增 [docs/SUBAGENT_WRITE_APPROVAL_DESIGN.md](docs/SUBAGENT_WRITE_APPROVAL_DESIGN.md)：开放工种写入 + 审批升格的设计。现状三道门（策略/路径/锁）与命令判定顺序、三个缺口（审批 UI 到不了子层、工种的工具调用不进 `sandbox.jsonl`、等待槽只有一个）、四步方案、子层刻意收窄的三处（打字确认不升格、完全访问在子层降档、工种的"一律允许"不落会话级）、明确不做的两件、逐步验收标准。
+
+### Tests
+
+- `AgentSubagentLiveActivityTests` 23 → 30 项，7 项专打前台/后台这道分界：前台跟工具卡状态走、后台活过自己的记录、registry 封口后停、无 activity 时回落状态、前后台混算、已收工的不计入、收尾心跳不带计数（它那串 0 若被当成普通更新折进去，会把卡片上的轮次和工具数抹掉）。
+- `AgentGoalTeamsTests` 8 处 `runOperation` 注入补签名参数，8 增 8 删只动签名行。
+
+### Known issues
+
+- 本机全量 3128 例 passed=3123 failed=4，仍是那四条存量红（`ae84537c` 带入），与本次改动零交集。
 
 ## 1.301.0-rc2 - 2026-08-28
 
