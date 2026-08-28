@@ -59,6 +59,10 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)? = nil
     var progressPlan: AgentPlan? = nil
     var onShowPlan: (() -> Void)? = nil
+    /// 上下文跑道交接的接力动作。`onResumeHandoff` 在本会话续跑,
+    /// `onStartHandoffInNewSession` 带着接力提示词开一个新会话。
+    var onResumeHandoff: (() -> Void)? = nil
+    var onStartHandoffInNewSession: ((String) -> Void)? = nil
     var searchQuery: String = ""
     var activeSearchMatchIndex: Int? = nil
     var onSearchResultCountChange: ((Int) -> Void)? = nil
@@ -80,6 +84,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.onOpenFilePath = onOpenFilePath
         view.onOpenAttachmentCitation = onOpenAttachmentCitation
         view.onShowPlan = onShowPlan
+        view.onResumeHandoff = onResumeHandoff
+        view.onStartHandoffInNewSession = onStartHandoffInNewSession
         view.onSearchResultCountChange = onSearchResultCountChange
         configure(view)
         view.applyMessages(
@@ -110,6 +116,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         nsView.onOpenFilePath = onOpenFilePath
         nsView.onOpenAttachmentCitation = onOpenAttachmentCitation
         nsView.onShowPlan = onShowPlan
+        nsView.onResumeHandoff = onResumeHandoff
+        nsView.onStartHandoffInNewSession = onStartHandoffInNewSession
         nsView.onSearchResultCountChange = onSearchResultCountChange
         nsView.applyMessages(
             messages,
@@ -212,6 +220,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
     var onOpenFilePath: ((String) -> Void)?
     var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)?
     var onShowPlan: (() -> Void)?
+    var onResumeHandoff: (() -> Void)?
+    var onStartHandoffInNewSession: ((String) -> Void)?
     var onSearchResultCountChange: ((Int) -> Void)?
 
     init() {
@@ -1227,6 +1237,24 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return true
         }
 
+        if (textStorage.attribute(
+            .agentChatHistoryResumeHandoff,
+            at: charIndex,
+            effectiveRange: nil
+        ) as? NSNumber)?.boolValue == true {
+            onResumeHandoff?()
+            return true
+        }
+
+        if let relayPrompt = textStorage.attribute(
+            .agentChatHistoryHandoffRelayPrompt,
+            at: charIndex,
+            effectiveRange: nil
+        ) as? String {
+            onStartHandoffInNewSession?(relayPrompt)
+            return true
+        }
+
         if let payload = textStorage.attribute(.agentChatHistoryTablePayload, at: charIndex, effectiveRange: nil) as? AgentMarkdownTablePayload {
             AgentMarkdownTableDetailWindowRegistry.open(payload: payload)
             return true
@@ -1319,6 +1347,8 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             AgentChatHistoryFooterChrome.copyLinkValue,
             AgentChatHistoryFooterChrome.retryLinkValue,
             AgentChatHistoryFooterChrome.reportLinkValue,
+            AgentChatHistoryFooterChrome.resumeHandoffLinkValue,
+            AgentChatHistoryFooterChrome.handoffNewSessionLinkValue,
             AgentChatHistoryTableLink.value,
             AgentChatHistoryTextAttachmentLink.value,
             AgentChatHistoryImageLink.value,
