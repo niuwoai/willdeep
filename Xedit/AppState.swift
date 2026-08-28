@@ -847,6 +847,9 @@ final class AppState: ObservableObject {
         agentSubagentRegistry.onRunProgress = { [weak self] runID, update in
             self?.applyBackgroundSubagentProgress(runID: runID, update)
         }
+        agentSubagentRegistry.onRunIntervention = { [weak self] runID, event in
+            self?.applySubagentIntervention(runID: runID, event: event)
+        }
         agentSubagentRegistry.onRunFinished = { [weak self] run in
             guard let self else { return }
             if self.handleAgentGoalPlanningSubagentCompletion(run) {

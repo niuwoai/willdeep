@@ -38,11 +38,26 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
         let toolNames: [String]
     }
 
+    enum InterventionDeliveryState: Equatable, Sendable {
+        case queued
+        case applied(effectiveRound: Int)
+    }
+
+    struct InterventionReceipt: Equatable, Sendable, Identifiable {
+        let id: UUID
+        let text: String
+        let mode: AgentSubagentInterventionMode
+        let submittedAt: Date
+        let requestedRound: Int
+        var deliveryState: InterventionDeliveryState
+    }
+
     /// Keep the tail, not the head: the newest round is what the user is
     /// reading, and an old round is one inspector click away.
     static let maxUtterances = 6
     static let utteranceCharacterLimit = 600
     static let maxToolNamesPerUtterance = 8
+    static let maxInterventionReceipts = 6
 
     var profileID: String
     var workerName: String
@@ -70,6 +85,7 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
     /// Worker on the composer strip forever, or drops a live one off it.
     var isBackground: Bool = false
     var utterances: [Utterance] = []
+    var interventionReceipts: [InterventionReceipt] = []
 
     var isRunning: Bool { finishedAt == nil }
 
@@ -104,6 +120,45 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
         }
         if utterances.count > Self.maxUtterances {
             utterances.removeFirst(utterances.count - Self.maxUtterances)
+        }
+    }
+
+    mutating func recordIntervention(_ event: AgentSubagentInterventionEvent) {
+        switch event {
+        case .queued(let submission):
+            let receipt = InterventionReceipt(
+                id: submission.id,
+                text: submission.text,
+                mode: submission.mode,
+                submittedAt: submission.submittedAt,
+                requestedRound: submission.requestedRound,
+                deliveryState: .queued
+            )
+            if let index = interventionReceipts.firstIndex(where: { $0.id == receipt.id }) {
+                interventionReceipts[index] = receipt
+            } else {
+                interventionReceipts.append(receipt)
+            }
+        case .applied(let submission, let effectiveRound):
+            if let index = interventionReceipts.firstIndex(where: { $0.id == submission.id }) {
+                interventionReceipts[index].deliveryState = .applied(
+                    effectiveRound: effectiveRound
+                )
+            } else {
+                interventionReceipts.append(InterventionReceipt(
+                    id: submission.id,
+                    text: submission.text,
+                    mode: submission.mode,
+                    submittedAt: submission.submittedAt,
+                    requestedRound: submission.requestedRound,
+                    deliveryState: .applied(effectiveRound: effectiveRound)
+                ))
+            }
+        }
+        if interventionReceipts.count > Self.maxInterventionReceipts {
+            interventionReceipts.removeFirst(
+                interventionReceipts.count - Self.maxInterventionReceipts
+            )
         }
     }
 }
@@ -168,6 +223,35 @@ nonisolated struct AgentSubagentFleetStatus: Equatable {
 
 @MainActor
 extension AppState {
+    @discardableResult
+    func submitSubagentIntervention(
+        runID: UUID,
+        text: String,
+        mode: AgentSubagentInterventionMode
+    ) throws -> AgentSubagentInterventionSubmission {
+        try agentSubagentRegistry.submitIntervention(
+            runID: runID,
+            text: text,
+            mode: mode
+        )
+    }
+
+    func applySubagentIntervention(
+        runID: UUID,
+        event: AgentSubagentInterventionEvent
+    ) {
+        guard let runtimeID = agentSubagentRegistry.parentRuntimeID(
+            forInterventionRunID: runID
+        ),
+        let runtime = runtime(for: runtimeID),
+        let index = runtime.toolCalls.firstIndex(where: { $0.subagentRunID == runID }),
+        var activity = runtime.toolCalls[index].subagentLiveActivity else {
+            return
+        }
+        activity.recordIntervention(event)
+        runtime.toolCalls[index].subagentLiveActivity = activity
+    }
+
     /// Fold one child heartbeat into the structured live activity the
     /// delegation card and the composer strip read.
     ///

@@ -502,7 +502,14 @@ extension AppState {
                 return
             }
         }
+        let interventionChannel = AgentSubagentInterventionChannel()
+        agentSubagentRegistry.registerInterventionChannel(
+            interventionChannel,
+            runID: runID,
+            parentRuntimeID: runtime.id
+        )
         defer {
+            agentSubagentRegistry.unregisterInterventionChannel(runID: runID)
             if writeAccess != nil {
                 AgentSubagentEditorLock.shared.release(runID: runID)
             }
@@ -652,6 +659,7 @@ extension AppState {
                 terminalController: agentTerminalController,
                 approvedCommand: approvedCommand,
                 commandReviewer: commandReviewer,
+                interventionChannel: interventionChannel,
                 onProgress: { [weak self] progress in
                     self?.applySubagentLiveProgress(
                         progress,

@@ -22,6 +22,69 @@ final result: passed
 
 ---
 
+# 子代理原位干预 Design QA
+
+- 日期：2026-08-28
+- 验收构建：WillDeep `1.302.0-rc1`（Build 544，Debug）
+- 目标：变种 1；默认折叠，点击「干预子代理」后在原位展开紧凑输入，支持下轮生效和打断发送。
+
+## Findings
+
+- 最终对比未发现 P0、P1 或 P2 问题；默认态与展开态均无裁切、挤压、错位或不可读文字。
+- 「你 · 刚刚」与上一条 Worker 发言之间保留 16 pt 顶部间距，视觉上明确属于用户纠正，不会被误读成下一轮子代理正文。
+- 默认态不渲染输入框，只保留当前活动与「干预子代理」入口；展开后仍保持单行输入和两枚操作按钮，没有形成第二个大型 composer。
+- 实现沿用现有 Worker 工种色、聊天字体与 SF Symbols，因此和真实聊天卡一致；参考图更偏中性白卡，实现保留了现有运维工种的浅橙底色，这是遵循产品既有设计系统的有意差异。
+- 空输入时两枚发送按钮处于禁用态，参考稿里按钮保持高亮；实现按真实交互约束处理，避免发送空指令，不构成视觉或功能缺陷。
+
+## Open Questions
+
+- 无阻塞问题。
+
+## Implementation Checklist
+
+- [x] 默认不显示输入框。
+- [x] 点击「干预子代理」原位展开，再次点击「收起」折叠。
+- [x] 「下轮生效」等待当前步骤结束后注入用户原文。
+- [x] 「打断并发送」只取消当前 Worker 子步骤，随后注入用户原文。
+- [x] 「你 · 刚刚」回执带等待、打断、已送达状态，并插入对应轮次之前。
+- [x] 回执上方额外留白符合用户明确要求。
+- [x] 前台、后台与托管模型回退路径共用同一干预通道。
+- [x] 英、西、法、日、简中五语资源齐全；输入与按钮有稳定无障碍标识。
+- [x] 原生 SwiftUI 编译、协议测试、状态渲染测试通过。
+
+## Evidence
+
+- Source visual truth: `/Users/rocky/.codex/generated_images/01a04734-ea29-7ac1-b6d7-67f4aae1ca00/exec-9b979ac7-27ed-41ce-9b8a-ee207849c346.png`
+- Implementation screenshot: `/Users/rocky/Sites/Xedit/design-qa-assets/subagent-intervention-implementation.png`
+- Density-normalized implementation: `/Users/rocky/Sites/Xedit/design-qa-assets/subagent-intervention-implementation-normalized.png`
+- Same-input comparison board: `/Users/rocky/Sites/Xedit/design-qa-assets/subagent-intervention-reference-vs-implementation.png`
+- Viewport: 原生 SwiftUI 夹具 `1024 × 672 pt`，light appearance；2× backing scale 生成 `2048 × 1344 px`。
+- Source pixels: `1548 × 1016 px`。
+- Implementation pixels: 原始 `2048 × 1344 px`；仅按密度归一化为 `1548 × 1016 px`，宽高比一致，无拉伸失真。
+- CSS size: 不适用；这是原生 macOS SwiftUI 界面。
+- State: 同一张验收板包含默认折叠态与点击入口后的展开态；Worker 处于第 4/32 轮、已完成 3 次工具调用、正在运行命令，并显示一条已应用的用户纠正回执。
+- Full-view evidence: 对比板将参考图置顶、实现图置底，二者同宽、同状态、同密度，可同时检查完整卡片、输入显隐、按钮层级与纵向节奏。
+- Focused-region evidence: 目标组件已占满 1548 px 宽的对比板，文字、回执和输入条在完整视图中清晰可读，无需额外裁切。
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: 使用现有 `AgentDesign.chatSupportingFont` 层级；工种名 semibold、模型/进度 secondary、轮次 monospaced；标题夹具仅用于状态标注，不进入产品 UI。
+- Spacing and layout rhythm: Worker 卡内部 6–7 pt 节奏；用户回执顶部 16 pt；输入容器 8 pt 内边距；折叠态只增加一条  divider + 操作行。
+- Colors and visual tokens: 运维工种继续使用稳定橙色 rail/tint；用户回执与干预入口使用系统 accent；打断按钮使用系统红色危险语义；没有新造主题色。
+- Image quality and asset fidelity: 全部可见图标来自 SF Symbols，真实实现截图为 PNG；归一化仅做确定性缩放，源图与原始实现均保留。
+- Copy and content: 所有产品文案来自 `Localizable.xcstrings` / `L10n.AgentDelegation`，没有在 SwiftUI 产品代码里硬编码；测试夹具文案只存在于验收测试。
+
+## Comparison History
+
+1. 第一版真实渲染使用 `1500 × 900 pt` 夹具，2× 截图直接压到参考宽度后文字密度过小，不能算同 viewport 对比。
+2. 夹具改为与参考宽高比一致的 `1024 × 672 pt`，以 2× 渲染后按密度归一化为 `1548 × 1016 px`；文字与操作区密度接近目标。
+3. 首次同密度实现板包含多余第 1 轮和两行说明，展开态底部输入条被画布裁掉；删除非目标轮次与验收说明、收紧夹具间距后重新渲染。
+4. 最终同屏检查：默认态无输入，展开态输入/普通发送/打断发送完整可见；「你 · 刚刚」顶部留白、工种色 rail、状态回执和按钮语义均符合选定变种。
+
+final result: passed
+
+---
+
 # 补丁审批黑白操作与正文对齐 Design QA
 
 **Findings**
