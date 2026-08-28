@@ -111,6 +111,7 @@ extension AppState {
             if let progress { runtime.toolCalls[index].subagentProgress = progress }
         }
 
+
         // Bind the run to both the live card and the persisted assistant
         // message: the former drives the inspector button this session, the
         // latter is what survives a reopen.
@@ -629,8 +630,15 @@ extension AppState {
                 terminalController: agentTerminalController,
                 approvedCommand: approvedCommand,
                 commandReviewer: commandReviewer,
-                onProgress: { progress in
-                    updateSubagent(progress: progress.displayText)
+                onProgress: { [weak self] progress in
+                    self?.applySubagentLiveProgress(
+                        progress,
+                        recordID: recordID,
+                        runtime: runtime,
+                        profileID: profile.id,
+                        workerName: resolvedWorkerName,
+                        model: configuration.model
+                    )
                 }
             )
         }

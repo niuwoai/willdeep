@@ -1,7 +1,35 @@
 # Changelog
 
-> 当前文件保留最新版本（1.300.0-rc7 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.301.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.301.0-rc1 - 2026-08-28
+
+### Added
+
+- **子代理在聊天区里开口说话了**。此前一个 Worker 在跑，聊天区能看到的就一行「委派给「X」Worker」；它看了什么、想到哪一步、接下来打算干什么，全锁在子 loop 里，要等它跑完、再去点开检查器窗口才读得到。现在每完成一轮，Worker 的公开正文就挂在派工那条记录底下，带轮次标记和这一轮调用的工具 chip。
+  - **一眼看出是谁在说话**：左侧色条 + 工种名 + 模型名。颜色按工种 id 走 FNV-1a 定死，不用 `hashValue`——那玩意每次启动换种子，同一个工种昨天蓝今天紫，比不上色更糟。同一回合里两个 Worker 不会撞色。
+  - **一轮一条，不是一 token 一条**。把富文本流式往 transcript 里灌，正是之前把主线程钉死在 SwiftUI 布局里的那个形状；而一轮的正文本来就是完整段落，整段到达什么也不损失。
+  - 只带 provider 吐出来的公开正文，**推理内容一个字不带**——沿用 `AgentSubagentProgressUpdate` 原本的规矩。
+  - 最近 6 轮 × 每轮 600 字 × 每轮 8 个工具名封顶；更早的轮次仍在检查器里，那才是完整档案。
+  - 挂载点选在**时间轴行**而不只是完整卡片。回合还在跑的时候聊天区画的是紧凑行，完整卡片要等回合结束才出现——只挂卡片等于挂了个看不见的东西。
+  - 刻意**不新开一种消息 role**。让子代理的轮次以独立气泡落进 transcript，一个 Worker 时好看，三个 Worker 时它们按到达时间彼此交错，transcript 就不再是「谁对谁说了什么」的记录了。嵌在派工卡里，每个 Worker 的叙述始终贴着它领到的那件活。
+
+- **composer 上吸附的那一行会说人话了**：工种名 · 第 3/8 轮 · 已完成 5 次工具调用 · 正在执行 grep_files。
+  - **好几个工种同时在跑时先报数量**（「3 个工种在跑 · 测试员 …」）。此前那一行描述的是数组里最后那个 tool call，另外几个连存在都看不出来。选谁来详述看谁的轮次最新，还没汇报过的工种不会顶掉有话说的那个。
+  - 计时换成**这个工种自己的起跑时间**，不再是整个回合的。回合跑了八分钟才派出去的工种，不该显示成八分钟。
+
+### Fixed
+
+- **自动派发的 Worker，进度从头冻到尾**。`AgentSubagentRunner.run` 三个调用点里，只有「模型自己调 `spawn_agent`」那一个接了 `onProgress`；失败命令自动修复（`AppStateAgentWorkerAutoDispatch`）和结构化编码管线（`AppStateAgentCodingPipeline`）压根没传这个参数。于是那行标签留着放进度的位置，永远没人往里填——用户看到的就是一个几分钟纹丝不动的工种名。三处现在统一走 `AppState.applySubagentLiveProgress`。
+
+### Tests
+
+- 新增 `AgentSubagentLiveActivityTests`（14 项）：发言记录与同轮替换、空心跳不落账、尾部截断与字数/工具数上限、工具数为 0 时不显示计数、无 Worker 在跑时不接管状态栏、多 Worker 计数与「选最新汇报者」、单 Worker 保持原措辞、没汇报过的不当主角、回退到进度字符串再回退到名字解析器、工种自己的计时、工种配色稳定且分散、心跳默认不带发言。
+
+### Known issues
+
+- 本机全量 3112 例中 4 条红与本次改动零交集，全部来自 `ae84537c fix(agent): make ordinary plans evidence-driven`：`AgentContextBuilderPromptTests` 两条提示词快照哈希未重录，`AgentPlanContinuationTests` 两条断言文本没跟上（源码是 "Continue executing without waiting…"，断言还在找 "continue executing **it** without waiting…"）。已在基线 commit `d53bba59` 上单独复跑这两个 suite，四条一字不差地同样失败，归属确认。
 
 ## 1.300.0-rc7 - 2026-08-28
 

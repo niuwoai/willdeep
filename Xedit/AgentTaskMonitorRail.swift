@@ -749,7 +749,8 @@ struct AgentSemanticActivityStatusLine: View {
                         baseColor: phase.tint
                     )
                     .layoutPriority(1)
-                    if let startedAt = appState.agentTurnStartedAt, appState.isAgentResponding {
+                    if let startedAt = phase.elapsedStartOverride ?? appState.agentTurnStartedAt,
+                       appState.isAgentResponding {
                         Spacer(minLength: 4)
                         TimelineView(.periodic(from: .now, by: 1.0)) { context in
                             Text(Self.formatElapsed(context.date.timeIntervalSince(startedAt)))
@@ -939,7 +940,39 @@ struct AgentSemanticActivityStatusLine: View {
             return AgentActivityPhase(label: "操作终端", systemImage: "terminal", tint: .secondary)
         case .fileMutation, .applyPatch:
             return AgentActivityPhase(label: "编辑中", systemImage: "pencil.line", tint: .secondary)
-        case .subagent, .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI:
+        case .subagent:
+            // 一条状态栏、可能好几个工种在跑。此前这里只描述"最后那个"
+            // tool call，另外几个工种连存在都看不出来；现在先报数量，再
+            // 详述状态最新的那一个，并且用这个工种自己的起跑时间计时——
+            // 回合跑了八分钟才派出去的工种，不该显示成八分钟。
+            if let fleet = AgentSubagentFleetStatus.make(
+                from: appState.agentToolCalls,
+                // The bare trade name, not `delegatedActivityBaseLabel` —
+                // that one returns the whole "委派给「X」Worker" sentence, and
+                // feeding it back in would nest the sentence inside itself.
+                fallbackWorkerName: { fallbackCall in
+                    L10n.AgentDelegation.profileName(
+                        for: fallbackCall.arguments["profile"]?.stringValue()
+                            ?? AgentSubagentProfileCatalog.deepID
+                    )
+                }
+            ) {
+                return AgentActivityPhase(
+                    label: fleet.composerLabel,
+                    systemImage: "person.2",
+                    tint: .secondary,
+                    elapsedStartOverride: fleet.primaryStartedAt
+                )
+            }
+            return AgentActivityPhase(
+                label: AgentToolKind.of(call).delegatedActivityLabel(
+                    for: call,
+                    progress: call.subagentProgress
+                ) ?? "委派中",
+                systemImage: "person.2",
+                tint: .secondary
+            )
+        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI:
             let delegatedProgress = call.delegatedProgress.map {
                 L10n.DelegatedTask.liveProgress(
                     phase: $0.phase,
@@ -989,6 +1022,9 @@ private struct AgentActivityPhase {
     var label: String
     var systemImage: String
     var tint: Color
+    /// When set, the strip's clock times this instead of the whole turn.
+    /// A Worker spawned late in a long turn should report its own age.
+    var elapsedStartOverride: Date?
 }
 
 private struct AgentRailTodoItem: Identifiable {

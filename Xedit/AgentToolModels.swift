@@ -742,6 +742,11 @@ struct AgentToolCall: Identifiable, Equatable {
     /// ("第 3/12 轮 · 5 次工具"), refreshed each round so the card shows
     /// forward motion instead of an opaque "委派中" spinner.
     var subagentProgress: String?
+    /// For `spawn_agent`: the same heartbeat in structured form, plus the
+    /// Worker's public round text. `subagentProgress` stays as the one-line
+    /// summary older surfaces read; this is what the delegation card and the
+    /// composer strip use to show the Worker talking while it works.
+    var subagentLiveActivity: AgentSubagentLiveActivity?
     /// For `spawn_agent`: stable id of the child run, used to look its
     /// per-round transcript up in `AgentSubagentTranscriptStore` when the
     /// user opens the inspector from this card.

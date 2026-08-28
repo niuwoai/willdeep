@@ -538,6 +538,28 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
     let maximumRounds: Int
     let completedToolInvocations: Int
     let activity: Activity
+    /// The Worker's public text for this round, when it produced any.
+    /// Empty on the plain heartbeats. Reasoning is never carried here —
+    /// the same rule the activity labels above follow.
+    let speech: String
+    /// Display names of the tools this round went on to call, in order.
+    let toolNames: [String]
+
+    init(
+        round: Int,
+        maximumRounds: Int,
+        completedToolInvocations: Int,
+        activity: Activity,
+        speech: String = "",
+        toolNames: [String] = []
+    ) {
+        self.round = round
+        self.maximumRounds = maximumRounds
+        self.completedToolInvocations = completedToolInvocations
+        self.activity = activity
+        self.speech = speech
+        self.toolNames = toolNames
+    }
 
     var displayText: String {
         var parts = [L10n.AgentDelegation.progressRound(round, maximumRounds)]
@@ -1002,14 +1024,18 @@ enum AgentSubagentRunner {
 
         func publishProgress(
             round: Int,
-            activity: AgentSubagentProgressUpdate.Activity
+            activity: AgentSubagentProgressUpdate.Activity,
+            speech: String = "",
+            toolNames: [String] = []
         ) {
             onProgress?(
                 AgentSubagentProgressUpdate(
                     round: round,
                     maximumRounds: roundLimit,
                     completedToolInvocations: toolInvocations,
-                    activity: activity
+                    activity: activity,
+                    speech: speech,
+                    toolNames: toolNames
                 )
             )
         }
@@ -1045,6 +1071,25 @@ enum AgentSubagentRunner {
                 reasoningContent: reasoning.isEmpty ? nil : reasoning,
                 toolCalls: toolCalls
             ))
+
+            // The round's public text, published as its own heartbeat so the
+            // parent's delegation card can show the Worker talking instead of
+            // holding everything back until the final report. Emitted once per
+            // completed round rather than per token: streaming rich text into
+            // the transcript is the shape that previously pinned the main
+            // thread in SwiftUI layout, and a round's text is already whole.
+            let roundToolNames = toolCalls.map { AgentToolDisplay.name(for: $0.toolName) }
+            if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !roundToolNames.isEmpty {
+                publishProgress(
+                    round: round,
+                    activity: roundToolNames.isEmpty
+                        ? .preparingReport
+                        : .runningTool(roundToolNames[0]),
+                    speech: content,
+                    toolNames: roundToolNames
+                )
+            }
 
             let clampedContent = AgentSubagentTranscript.clamped(
                 content,
