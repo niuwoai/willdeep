@@ -1800,6 +1800,37 @@ enum AgentSubagentRunner {
     /// judge. Deterministically dangerous or typed-confirmation operations
     /// remain outside model authority and must be approved by the operator as
     /// an exact `ops_runner.target_command` on a new spawn.
+    /// Whether a Worker's command may be resolved by the parent's approval
+    /// ladder instead of a human approval card.
+    ///
+    /// The ladder itself is the user's `approvalMode` and lives in the
+    /// parent; this only answers whether to consult it:
+    ///
+    ///  - **Strict** means "ask me every time", so nothing is consulted —
+    ///    consulting would answer on the user's behalf.
+    ///  - **Full Access** consults for everything. The user has already
+    ///    granted that level to the parent; a Worker running the same
+    ///    command is not a second decision, and the deterministic malicious
+    ///    denylist remains the hard floor on the parent side.
+    ///  - Everything else keeps the narrower floor below: a command needing
+    ///    typed confirmation, or one touching credentials, is never put to
+    ///    the judge. A terminal is the user's real shell and seatbelt does
+    ///    not reach it.
+    nonisolated static func subagentCommandMayBeReviewedByParent(
+        _ command: String,
+        approvalMode: AgentApprovalMode,
+        workspaceURL: URL?
+    ) -> Bool {
+        switch approvalMode {
+        case .requestEveryTime:
+            return false
+        case .fullAccess:
+            return true
+        case .smart, .workspaceAccess:
+            return subagentCommandCanUseIntelligentReview(command, workspaceURL: workspaceURL)
+        }
+    }
+
     nonisolated static func subagentCommandCanUseIntelligentReview(
         _ command: String,
         workspaceURL: URL?
@@ -1889,10 +1920,17 @@ enum AgentSubagentRunner {
         }()
         let isReviewableCommandTool = call.toolName == "run_command"
             || call.toolName == "terminal_send_command"
+        // The child no longer pre-filters what the parent is allowed to be
+        // asked about. Deciding *which* commands may run without a human is
+        // the user's approval-mode setting, and that setting lives in the
+        // parent — a second policy down here could only ever disagree with
+        // it, and did: it silently refused to consult the parent at all
+        // unless the command classified `.needsJudgment`, so Full Access
+        // could not reach commands it plainly authorizes. The reviewer
+        // returning false still lands in the same denial below.
         var isJudgeApprovedCommand = false
         if isReviewableCommandTool,
            let command = argsDict["command"]?.stringValue(),
-           subagentCommandCanUseIntelligentReview(command, workspaceURL: workspaceURL),
            let commandReviewer {
             isJudgeApprovedCommand = await commandReviewer(call.toolName, command)
         }
