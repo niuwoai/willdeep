@@ -19,6 +19,14 @@ extension L10n.Automation {
     static let pageSuggestions = String(localized: "automation.page.suggestions", defaultValue: "Suggestions")
     static let pageTitle = String(localized: "automation.page.title", defaultValue: "Scheduled tasks")
     static let pageYourTasks = String(localized: "automation.page.your-tasks", defaultValue: "Your tasks")
+    static let pagePaused = String(localized: "automation.page.paused", defaultValue: "Paused")
+    /// When this task fires next — the one thing someone opening this page
+    /// actually wants and the page never showed, though `nextFireDate()`
+    /// has been sitting there computing it the whole time.
+    static func pageNextRun(_ when: String) -> String {
+        let template = String(localized: "automation.page.next-run", defaultValue: "Next %@")
+        return String(format: template, when)
+    }
     static let helpOpenRecentRun = String(localized: "automation.help.open-recent-run", defaultValue: "Open this run's conversation")
     static let recentRunUnavailable = String(localized: "automation.page.recent-run-unavailable", defaultValue: "This conversation is no longer available")
 }

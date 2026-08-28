@@ -502,7 +502,14 @@ extension AppState {
                 return
             }
         }
+        let interventionChannel = AgentSubagentInterventionChannel()
+        agentSubagentRegistry.registerInterventionChannel(
+            interventionChannel,
+            runID: runID,
+            parentRuntimeID: runtime.id
+        )
         defer {
+            agentSubagentRegistry.unregisterInterventionChannel(runID: runID)
             if writeAccess != nil {
                 AgentSubagentEditorLock.shared.release(runID: runID)
             }
@@ -620,18 +627,55 @@ extension AppState {
                 writeAccessGranted: writeAccess != nil,
                 approvedCommandGranted: approvedCommand != nil
             )
+            // A Worker's command goes through the *same* approval ladder the
+            // parent applies to its own — Full Access, Workspace Access, the
+            // static allowlist and the safety judge all live in
+            // `autoApprovalSource`, so there is one policy here, not two.
+            //
+            // It used to be judge-or-nothing, and only in Smart mode. That
+            // inverted the ladder: a user on Full Access — the mode that
+            // exists to stop being asked — got *no* reviewer at all, so a
+            // Worker running `git add package.json` bounced back as a
+            // human approval card, while the same command from the parent
+            // ran without a word.
             let commandReviewer: AgentSubagentRunner.CommandReviewer? = {
                 guard effectiveTools.contains("run_command")
-                        || effectiveTools.contains("terminal_send_command"),
-                      runtime.approvalMode == .smart || runtime.interactionMode == .goal else {
+                        || effectiveTools.contains("terminal_send_command") else {
                     return nil
                 }
+                // Strict mode is the one setting that means "ask me every
+                // time". Handing it a reviewer would answer on the user's
+                // behalf, which is the whole thing they turned off.
+                guard runtime.approvalMode != .requestEveryTime else { return nil }
+                let workspaceRoots = Array(
+                    self.agentWorkspaceRoots(for: runtime.session).dropFirst()
+                )
+                let latestUserMessage = runtime.messages
+                    .last(where: { $0.isOperatorInput })?.content ?? ""
                 return { [weak self] toolName, command in
                     guard let self else { return false }
-                    return await self.safetyJudgeApproval(
+                    guard AgentSubagentRunner.subagentCommandMayBeReviewedByParent(
+                        command,
+                        approvalMode: runtime.approvalMode,
+                        workspaceURL: workspaceURL
+                    ) else { return false }
+                    let arguments: [String: AgentJSONValue] = ["command": .string(command)]
+                    let risk = AgentToolRegistry.risk(
+                        for: toolName,
+                        arguments: arguments,
+                        rootDirectory: workspaceURL
+                    )
+                    return await self.autoApprovalSource(
                         toolName: toolName,
-                        command: command,
-                        taskContext: "Subagent trade: \(profile.id). \(profile.purpose)\nTask:\n\(prompt)"
+                        arguments: arguments,
+                        risk: risk,
+                        rootDirectory: workspaceURL,
+                        additionalWorkspaceRoots: workspaceRoots,
+                        interactionMode: runtime.interactionMode,
+                        approvalMode: runtime.approvalMode,
+                        conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                        environmentTrustDeclarations: runtime.environmentTrustDeclarations,
+                        latestUserMessage: latestUserMessage
                     ) != nil
                 }
             }()
@@ -652,6 +696,7 @@ extension AppState {
                 terminalController: agentTerminalController,
                 approvedCommand: approvedCommand,
                 commandReviewer: commandReviewer,
+                interventionChannel: interventionChannel,
                 onProgress: { [weak self] progress in
                     self?.applySubagentLiveProgress(
                         progress,

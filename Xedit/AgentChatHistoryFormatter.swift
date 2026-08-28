@@ -567,6 +567,7 @@ enum AgentChatHistoryRenderer {
             }()
             let body: String
             var progressPresentation: AgentTurnProgressPresentation? = nil
+            var handoffRelayPrompt: String? = nil
             if message.role == .workflowReport, let report = message.workflowReport {
                 // Workflow 消息的 content 恒为空,状态/摘要都在 report 字段
                 // 上。运行中的卡片由 AgentChatTranscript 的 SwiftUI 工作态
@@ -584,7 +585,12 @@ enum AgentChatHistoryRenderer {
                     from: displaySourceContent,
                     plan: progressPlan
                 )
-                body = extraction.visibleContent
+                // 上下文跑道交接里的 `NEXT PROMPT:` 段是给宿主看的接力
+                // 指令,不是给人读的段落 —— 宿主本来就会压缩后自动拿它
+                // 续跑。正文里去掉,改成 footer 上两个接力图标。
+                let handoff = AgentContextRunwayHandoffDisplay.extract(from: extraction.visibleContent)
+                body = handoff.visibleContent
+                handoffRelayPrompt = handoff.relayPrompt
                 progressPresentation = message.id == latestProgressCardMessageID
                     ? extraction.presentation
                     : nil
@@ -847,6 +853,9 @@ enum AgentChatHistoryRenderer {
                     isLatestAssistant: message.id == latestAssistantMessageID,
                     isVisible: message.role != .user || isHoveredUserMessage,
                     turnReportToolCount: latestTurnReportToolCount,
+                    // 回合还在跑的时候不给接力按钮:宿主此刻多半正在压缩
+                    // 后自动续跑,这两个图标一闪而过只会让人以为要自己动手。
+                    handoffRelayPrompt: isAssistantTurnActive ? nil : handoffRelayPrompt,
                     layoutWidth: layoutWidth,
                     baseFontSize: baseFontSize,
                     lineSpacing: supportingLineSpacing,

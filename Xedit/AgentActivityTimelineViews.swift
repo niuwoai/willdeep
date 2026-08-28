@@ -52,10 +52,13 @@ struct AgentLiveActivityTimeline: View {
                             )
                         }
                         if let activity = call.subagentLiveActivity,
-                           !activity.utterances.isEmpty {
+                           call.subagentIsWorking
+                                || !activity.utterances.isEmpty
+                                || !activity.interventionReceipts.isEmpty {
                             AgentSubagentSpeechView(
                                 activity: activity,
-                                isRunning: call.status == .running
+                                runID: call.subagentRunID,
+                                isRunning: call.subagentIsWorking
                             )
                         }
                     }

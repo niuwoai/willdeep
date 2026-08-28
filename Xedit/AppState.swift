@@ -269,6 +269,17 @@ final class AppState: ObservableObject {
             AgentSettingsStore.saveAgentChatFontID(normalized)
         }
     }
+    /// Writing the CoreGraphics default here rather than only at launch is
+    /// what lets a window opened *after* the toggle pick the new value up
+    /// without a relaunch; already-drawn text keeps the old one, which the
+    /// settings copy says out loud.
+    @Published var agentFontSmoothingEnabled: Bool = AgentSettingsStore.loadFontSmoothingEnabled() {
+        didSet {
+            guard oldValue != agentFontSmoothingEnabled else { return }
+            AgentSettingsStore.saveFontSmoothingEnabled(agentFontSmoothingEnabled)
+            AgentFontSmoothing.apply(enabled: agentFontSmoothingEnabled)
+        }
+    }
     @Published var agentChatLineHeightMultiple: CGFloat = AgentSettingsStore.loadAgentChatLineHeightMultiple() {
         didSet {
             let clamped = AgentSettingsStore.clampChatLineHeightMultiple(agentChatLineHeightMultiple)
@@ -846,6 +857,9 @@ final class AppState: ObservableObject {
         }
         agentSubagentRegistry.onRunProgress = { [weak self] runID, update in
             self?.applyBackgroundSubagentProgress(runID: runID, update)
+        }
+        agentSubagentRegistry.onRunIntervention = { [weak self] runID, event in
+            self?.applySubagentIntervention(runID: runID, event: event)
         }
         agentSubagentRegistry.onRunFinished = { [weak self] run in
             guard let self else { return }

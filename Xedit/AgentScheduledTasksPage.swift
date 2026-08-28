@@ -32,41 +32,31 @@ enum AgentPrimaryDestination: Equatable {
     }
 }
 
-/// How one run outcome reads in the recent-runs list. Pure mapping so the
-/// glyph/label pairing is testable and stays in one place instead of being
-/// re-derived inside a view body.
+/// How one run reads in the recent-runs list.
+///
+/// A finished run carries no verdict here — no `失败` label, no warning
+/// triangle, no extra weight. The reason: a scheduled run that failed at
+/// 22:00 is routinely dealt with by hand afterwards, in the conversation it
+/// left behind, and nothing ever came back to clear the badge. The list then
+/// showed a permanent alarm for a problem that was fixed days ago, which is
+/// worse than showing nothing — it trains you to ignore the section.
+///
+/// What survives is the part that was actually informative: the failure
+/// reason, rendered as one muted line by the row itself. `运行中` keeps its
+/// label because it is not a verdict — it says something is happening right
+/// now, and it clears itself.
 struct AgentRoutineRunOutcomePresentation: Equatable {
     let systemImage: String
     let label: String?
-    /// Whether the row should carry full text weight. Reserved for outcomes
-    /// the user has to act on — the list is otherwise uniformly muted, so
-    /// emphasis is the signal that replaces a colour badge.
-    let emphasized: Bool
 
     init(outcome: AgentRoutineRunOutcome) {
         switch outcome {
         case .running:
             systemImage = "clock.arrow.circlepath"
             label = L10n.Automation.runOutcomeRunning
-            emphasized = false
-        case .succeeded:
-            systemImage = "checkmark.circle"
-            label = L10n.Automation.runOutcomeSucceeded
-            emphasized = false
-        case .failed:
-            systemImage = "exclamationmark.triangle"
-            label = L10n.Automation.runOutcomeFailed
-            emphasized = true
-        case .interrupted:
-            systemImage = "minus.circle"
-            label = L10n.Automation.runOutcomeInterrupted
-            emphasized = false
-        case .unknown:
-            // Records from before outcomes were tracked. Keep the old neutral
-            // glyph and say nothing rather than invent a verdict.
-            systemImage = "clock.arrow.circlepath"
+        case .succeeded, .failed, .interrupted, .unknown:
+            systemImage = "clock"
             label = nil
-            emphasized = false
         }
     }
 }
@@ -154,9 +144,32 @@ struct AgentScheduledTasksPage: View {
         AgentRoutineRunHistory.recent(appState.agentRoutineRuns)
     }
 
-    private func pageFont(weight: NSFont.Weight = .regular) -> Font {
+    /// One type scale for the whole page, expressed as offsets from the
+    /// user's chat size.
+    ///
+    /// Everything here — task name, schedule, prompt, workspace, timestamp —
+    /// used to be drawn at exactly the same size, so three sections of
+    /// near-identical rows arrived with no hierarchy at all: nothing said
+    /// which line was the thing and which lines were about the thing. The
+    /// floor at 10pt keeps the meta line legible for someone who has turned
+    /// their chat text down.
+    private func pageFont(_ sizeDelta: CGFloat = 0, weight: NSFont.Weight = .regular) -> Font {
         (AgentChatFontChoice.byID(appState.agentChatFontID) ?? .system)
-            .swiftUIFont(size: appState.agentChatBaseFontSize, weight: weight)
+            .swiftUIFont(size: max(10, appState.agentChatBaseFontSize + sizeDelta), weight: weight)
+    }
+
+    /// `每天 22:00 · muchtoken · 下次 22:00`
+    private func metaLine(for routine: AgentRoutine) -> String {
+        var parts = [routine.schedule.summary, routine.workspaceDisplayName]
+        if !routine.isEnabled {
+            parts.append(L10n.Automation.pagePaused)
+        } else if let next = routine.nextFireDate() {
+            let when = Calendar.current.isDateInToday(next)
+                ? next.formatted(date: .omitted, time: .shortened)
+                : next.formatted(date: .abbreviated, time: .shortened)
+            parts.append(L10n.Automation.pageNextRun(when))
+        }
+        return parts.joined(separator: " · ")
     }
 
     var body: some View {
@@ -168,14 +181,14 @@ struct AgentScheduledTasksPage: View {
 
                 if !appState.agentRoutines.isEmpty {
                     routinesSection
-                        .padding(.top, 28)
+                        .padding(.top, 26)
                 }
 
                 suggestionsSection
-                    .padding(.top, 30)
+                    .padding(.top, 26)
 
                 recentRunsSection
-                    .padding(.top, 30)
+                    .padding(.top, 26)
             }
             .frame(maxWidth: 860, alignment: .leading)
             .padding(.horizontal, 34)
@@ -240,82 +253,110 @@ struct AgentScheduledTasksPage: View {
     }
 
     private var routinesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionTitle(L10n.Automation.pageYourTasks)
+        VStack(alignment: .leading, spacing: 9) {
+            sectionTitle(L10n.Automation.pageYourTasks, count: filteredRoutines.count)
             if filteredRoutines.isEmpty {
                 Text(L10n.Automation.pageEmptySearch)
-                    .font(pageFont())
+                    .font(pageFont(-1))
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 16)
             } else {
-                VStack(spacing: 6) {
+                VStack(spacing: 7) {
                     ForEach(filteredRoutines) { routine in
-                        routineRow(routine)
+                        routineCard(routine)
                     }
                 }
             }
         }
     }
 
+    /// Suggestions are offers, not tasks. Rendering them as full-width rows
+    /// with a prompt line made them read as three more scheduled tasks the
+    /// user had somehow forgotten about — the page's own "your tasks" list
+    /// and its catalogue of templates looked identical. They are compact
+    /// cards now: name, cadence, a plus. What they are, and nothing more.
     private var suggestionsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 9) {
             sectionTitle(L10n.Automation.pageSuggestions)
-            VStack(spacing: 4) {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 210, maximum: 320), spacing: 8)],
+                alignment: .leading,
+                spacing: 8
+            ) {
                 ForEach(AgentAutomationTemplate.allCases) { template in
-                    templateRow(template)
+                    templateCard(template)
                 }
             }
         }
     }
 
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .font(pageFont(weight: .medium))
-            .foregroundStyle(.secondary)
+    private func sectionTitle(_ title: String, count: Int? = nil) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(pageFont(-1, weight: .semibold))
+                .foregroundStyle(.primary)
+            if let count, count > 0 {
+                Text("\(count)")
+                    .font(pageFont(-2.5))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+            }
+        }
     }
 
-    private func routineRow(_ routine: AgentRoutine) -> some View {
+    /// A task is the page's primary object, so it gets a card: name on its
+    /// own line, then one meta line that answers "when, where, and when
+    /// next", then the prompt.
+    ///
+    /// The workspace name used to float alone at the far right edge of a
+    /// flat row, a full column away from the task it belonged to. It now
+    /// sits in the meta line where it reads as an attribute of the task.
+    private func routineCard(_ routine: AgentRoutine) -> some View {
         let isHovered = hoveredRoutineID == routine.id
         let palette = appState.editorSettings.interfaceSkin.palette
         return Button {
             editing = RoutineSheetTarget(routine: routine, isNew: false)
         } label: {
-            HStack(spacing: 13) {
-                Image(systemName: routine.isEnabled ? "clock.fill" : "clock")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(routine.isEnabled ? Color.accentColor : Color.secondary)
-                    .frame(width: 24)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 7) {
-                        Text(routine.name)
-                            .font(pageFont(weight: .medium))
-                            .foregroundStyle(routine.isEnabled ? .primary : .secondary)
-                            .lineLimit(1)
-                        Text(routine.schedule.summary)
-                            .font(pageFont())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 8) {
+                    Image(systemName: routine.isEnabled ? "clock.fill" : "pause.circle")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(routine.isEnabled ? Color.accentColor : Color.secondary)
+                    Text(routine.name)
+                        .font(pageFont(weight: .semibold))
+                        .foregroundStyle(routine.isEnabled ? .primary : .secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    if isHovered {
+                        routineActions(routine)
                     }
-                    Text(routine.prompt)
-                        .font(pageFont())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
-                Spacer(minLength: 12)
-                if isHovered {
-                    routineActions(routine)
-                } else {
-                    Text(routine.workspaceDisplayName)
-                        .font(pageFont())
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
+                Text(metaLine(for: routine))
+                    .font(pageFont(-2.5))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(routine.prompt)
+                    .font(pageFont(-1))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 12)
-            .frame(minHeight: 58)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .background(isHovered ? palette.hoverFill : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 9))
+            // Skin-neutral on purpose: the light skin's `controlFill` is
+            // near-white against a near-white page, which drew "cards" with
+            // no edge at all — three tasks read as one block of text.
+            .background(isHovered ? palette.hoverFill : Color.primary.opacity(0.035))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.primary.opacity(0.07), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -389,47 +430,52 @@ struct AgentScheduledTasksPage: View {
         appState.deleteAgentRoutine(id: routine.id)
     }
 
-    private func templateRow(_ template: AgentAutomationTemplate) -> some View {
+    private func templateCard(_ template: AgentAutomationTemplate) -> some View {
         Button {
             openTemplate(template)
         } label: {
-            HStack(spacing: 13) {
+            HStack(spacing: 9) {
                 Image(systemName: template.icon)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(template.color)
-                    .frame(width: 24)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text(template.name)
-                            .font(pageFont(weight: .medium))
-                        Text(template.schedule.summary)
-                            .font(pageFont())
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(template.prompt)
-                        .font(pageFont())
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(template.name)
+                        .font(pageFont(-1, weight: .medium))
+                        .lineLimit(1)
+                    Text(template.schedule.summary)
+                        .font(pageFont(-2.5))
+                        .monospacedDigit()
+                        .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 6)
+                Image(systemName: "plus")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 58)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
+        .help(template.prompt)
     }
 
     private var recentRunsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 9) {
             sectionTitle(L10n.Automation.pageRecentRuns)
             if recentRuns.isEmpty {
                 Text(L10n.Automation.pageNoRecentRuns)
-                    .font(pageFont())
+                    .font(pageFont(-1))
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 16)
             } else {
-                VStack(spacing: 4) {
+                VStack(spacing: 1) {
                     ForEach(recentRuns) { run in
                         recentRunRow(run)
                     }
@@ -444,46 +490,40 @@ struct AgentScheduledTasksPage: View {
         return Button {
             _ = appState.selectAgentSession(id: run.sessionID)
         } label: {
-            HStack(spacing: 13) {
+            HStack(alignment: .firstTextBaseline, spacing: 9) {
                 Image(systemName: presentation.systemImage)
-                    .font(.system(size: 15, weight: .medium))
-                    // Grayscale, like the error banner and the terminal tab
-                    // strip: a failed run is marked by carrying full text
-                    // weight against the muted rest of the list, not by red.
-                    .foregroundStyle(presentation.emphasized ? .primary : .secondary)
-                    .frame(width: 24)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(run.routineName)
-                        .font(pageFont(weight: .medium))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 13)
+                Text(run.routineName)
+                    .font(pageFont(-1))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                // The reason is what the removed `失败` badge was standing in
+                // front of, and the only line here that explains anything.
+                if let failureMessage = run.failureMessage, !failureMessage.isEmpty {
+                    Text(failureMessage)
+                        .font(pageFont(-2.5))
+                        .foregroundStyle(.tertiary)
                         .lineLimit(1)
-                    // The reason is the whole point of recording the outcome:
-                    // without it the page can only say a run went wrong, and
-                    // the user still has to open the conversation to find out
-                    // what happened.
-                    if let failureMessage = run.failureMessage, !failureMessage.isEmpty {
-                        Text(failureMessage)
-                            .font(pageFont())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
+                        .truncationMode(.tail)
                 }
-                Spacer(minLength: 12)
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(pageFont())
+                Spacer(minLength: 10)
+                if let label = presentation.label {
+                    Text(label)
+                        .font(pageFont(-2.5))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                    if let label = presentation.label {
-                        Text(label)
-                            .font(pageFont())
-                            .foregroundStyle(presentation.emphasized ? .primary : .secondary)
-                            .lineLimit(1)
-                    }
                 }
+                Text(run.startedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(pageFont(-2.5))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: 48)
+            .padding(.horizontal, 8)
+            .frame(minHeight: 30)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

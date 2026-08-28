@@ -273,6 +273,78 @@ extension L10n {
             return String(format: template, round)
         }
 
+        /// Same marker for a run of consecutive rounds the Worker spent
+        /// only calling tools — those collapse into one row, and the row has
+        /// to say which rounds it covers or the numbering goes missing.
+        static func speechRoundSpanMarker(_ first: Int, _ last: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.speech-round-span-marker",
+                defaultValue: "R%1$d–%2$d"
+            )
+            return String(format: template, first, last)
+        }
+
+        // MARK: Live Worker intervention
+
+        static let interventionAction = String(
+            localized: "agent-delegation.intervention-action",
+            defaultValue: "Steer Worker"
+        )
+        static let interventionCollapse = String(
+            localized: "agent-delegation.intervention-collapse",
+            defaultValue: "Collapse"
+        )
+        static let interventionPlaceholder = String(
+            localized: "agent-delegation.intervention-placeholder",
+            defaultValue: "Correct the Worker's next step…"
+        )
+        static let interventionNextRound = String(
+            localized: "agent-delegation.intervention-next-round",
+            defaultValue: "Next round"
+        )
+        static let interventionInterruptAndSend = String(
+            localized: "agent-delegation.intervention-interrupt-and-send",
+            defaultValue: "Interrupt & send"
+        )
+        static let interventionHelp = String(
+            localized: "agent-delegation.intervention-help",
+            defaultValue: "Return adds a line; ⌘↩ sends for the next round. Normal send applies after the current step; interrupt stops the current step and injects your instruction immediately."
+        )
+        static let interventionEmptyError = String(
+            localized: "agent-delegation.intervention-empty-error",
+            defaultValue: "Enter an instruction first."
+        )
+        static let interventionUnavailableError = String(
+            localized: "agent-delegation.intervention-unavailable-error",
+            defaultValue: "This Worker has already finished."
+        )
+        static let interventionYou = String(
+            localized: "agent-delegation.intervention-you",
+            defaultValue: "You"
+        )
+        static let interventionJustNow = String(
+            localized: "agent-delegation.intervention-just-now",
+            defaultValue: "just now"
+        )
+        static let interventionInterrupting = String(
+            localized: "agent-delegation.intervention-interrupting",
+            defaultValue: "Interrupting current step"
+        )
+        static func interventionWaitingForRound(_ round: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.intervention-waiting-for-round",
+                defaultValue: "Waiting · applies in round %d"
+            )
+            return String(format: template, round)
+        }
+        static func interventionAppliedAtRound(_ round: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.intervention-applied-at-round",
+                defaultValue: "Delivered · round %d"
+            )
+            return String(format: template, round)
+        }
+
         static let profilesSectionTitle = String(
             localized: "agent-delegation.profiles-section-title",
             defaultValue: "Subagent trades"

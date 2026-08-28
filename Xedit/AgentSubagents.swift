@@ -147,6 +147,7 @@ final class AgentSubagentRegistry: ObservableObject {
         _ someIMContext: SomeIMRequestContext?,
         _ outputSchema: AgentStructuredSchema?,
         _ profile: AgentSubagentProfile,
+        _ interventionChannel: AgentSubagentInterventionChannel?,
         _ onProgress: ((AgentSubagentProgressUpdate) -> Void)?
     ) async throws -> AgentSubagentRunner.Outcome
 
@@ -162,6 +163,8 @@ final class AgentSubagentRegistry: ObservableObject {
     private static let historyLimit = 20
 
     private var tasks: [UUID: Task<Void, Never>] = [:]
+    private var interventionChannels: [UUID: AgentSubagentInterventionChannel] = [:]
+    private var interventionRuntimeIDs: [UUID: UUID] = [:]
     private var pendingReports: [UUID: [UUID]] = [:]
     /// Exact parent turn that created each background run. This is narrower
     /// than `parentRuntimeID` and prevents Stop from cancelling subagents that
@@ -173,7 +176,7 @@ final class AgentSubagentRegistry: ObservableObject {
     private var coordinatorOwnedRunIDs: Set<UUID> = []
     /// Injectable only so coordinator orchestration can be covered without a
     /// live provider. Production keeps the real read-only runner.
-    var runOperation: RunOperation = { prompt, configuration, workspaceURL, runtimeDescriptor, workspaceLocation, someIMContext, outputSchema, profile, onProgress in
+    var runOperation: RunOperation = { prompt, configuration, workspaceURL, runtimeDescriptor, workspaceLocation, someIMContext, outputSchema, profile, interventionChannel, onProgress in
         try await AgentSubagentRunner.run(
             prompt: prompt,
             configuration: configuration,
@@ -183,6 +186,7 @@ final class AgentSubagentRegistry: ObservableObject {
             someIMContext: someIMContext,
             outputSchema: outputSchema,
             profile: profile,
+            interventionChannel: interventionChannel,
             onProgress: onProgress
         )
     }
@@ -195,6 +199,9 @@ final class AgentSubagentRegistry: ObservableObject {
     /// originating tool-call record, which is how a Worker that outlives its
     /// turn still shows its work.
     var onRunProgress: ((UUID, AgentSubagentProgressUpdate) -> Void)?
+
+    /// Queued/applied receipts follow the same run-id route as progress.
+    var onRunIntervention: ((UUID, AgentSubagentInterventionEvent) -> Void)?
 
     /// Host hook fired after a run finishes and its report is queued
     /// into `pendingReports`. AppState uses it to auto-resume the parent
@@ -214,6 +221,44 @@ final class AgentSubagentRegistry: ObservableObject {
 
     func isGoalPlanningRun(_ id: UUID) -> Bool {
         coordinatorOwnedRunIDs.contains(id)
+    }
+
+    func registerInterventionChannel(
+        _ channel: AgentSubagentInterventionChannel,
+        runID: UUID,
+        parentRuntimeID: UUID
+    ) {
+        interventionChannels[runID] = channel
+        interventionRuntimeIDs[runID] = parentRuntimeID
+        channel.onEvent = { [weak self] event in
+            self?.onRunIntervention?(runID, event)
+        }
+    }
+
+    func unregisterInterventionChannel(runID: UUID) {
+        interventionChannels[runID]?.onEvent = nil
+        interventionChannels[runID] = nil
+        interventionRuntimeIDs[runID] = nil
+    }
+
+    func parentRuntimeID(forInterventionRunID runID: UUID) -> UUID? {
+        interventionRuntimeIDs[runID]
+    }
+
+    func canIntervene(runID: UUID) -> Bool {
+        interventionChannels[runID] != nil
+    }
+
+    @discardableResult
+    func submitIntervention(
+        runID: UUID,
+        text: String,
+        mode: AgentSubagentInterventionMode
+    ) throws -> AgentSubagentInterventionSubmission {
+        guard let channel = interventionChannels[runID] else {
+            throw AgentSubagentInterventionError.runUnavailable
+        }
+        return try channel.submit(text: text, mode: mode)
     }
 
     // MARK: Spawn (background)
@@ -258,6 +303,12 @@ final class AgentSubagentRegistry: ObservableObject {
         if !queuesParentReport {
             coordinatorOwnedRunIDs.insert(id)
         }
+        let interventionChannel = AgentSubagentInterventionChannel()
+        registerInterventionChannel(
+            interventionChannel,
+            runID: id,
+            parentRuntimeID: parentRuntimeID
+        )
         agentSubagentLog.info(
             "background subagent queued run=\(id.uuidString, privacy: .public) parent=\(parentRuntimeID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(configuration.model, privacy: .public) provider=\(configuration.providerID, privacy: .public) label=\(label, privacy: .public) queuesParentReport=\(queuesParentReport ? "true" : "false", privacy: .public) promptChars=\(prompt.count, privacy: .public)"
         )
@@ -277,6 +328,7 @@ final class AgentSubagentRegistry: ObservableObject {
                     someIMContext,
                     outputSchema,
                     profile,
+                    interventionChannel,
                     { [weak self] update in
                         self?.onRunProgress?(id, update)
                     }
@@ -367,6 +419,7 @@ final class AgentSubagentRegistry: ObservableObject {
             // Goal planning is a parent-owned deliberation, not a cost
             // optimization — it stays on the parent's model and tool set.
             AgentSubagentProfileCatalog.deep,
+            nil,
             // Deliberately silent: goal-planning members are aggregated by
             // their coordinator and never surface as individual Workers.
             nil
@@ -386,6 +439,7 @@ final class AgentSubagentRegistry: ObservableObject {
         profileID: String? = nil
     ) {
         tasks[id] = nil
+        unregisterInterventionChannel(runID: id)
         // Seal the Worker's liveness before anything else. The strip and the
         // speech card key on this, not on the spawn's tool-call status, so a
         // run that ends without it would stay "in flight" forever.
@@ -568,8 +622,10 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
     /// Empty on the plain heartbeats. Reasoning is never carried here —
     /// the same rule the activity labels above follow.
     let speech: String
-    /// Display names of the tools this round went on to call, in order.
-    let toolNames: [String]
+    /// The tools this round went on to call, in order — display name plus
+    /// the object each one acts on, so the card can say *which* file was
+    /// read rather than only that a file was.
+    let tools: [AgentSubagentToolMention]
 
     init(
         round: Int,
@@ -577,14 +633,14 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
         completedToolInvocations: Int,
         activity: Activity,
         speech: String = "",
-        toolNames: [String] = []
+        tools: [AgentSubagentToolMention] = []
     ) {
         self.round = round
         self.maximumRounds = maximumRounds
         self.completedToolInvocations = completedToolInvocations
         self.activity = activity
         self.speech = speech
-        self.toolNames = toolNames
+        self.tools = tools
     }
 
     /// The closing heartbeat. Carries no round or tool counts — whatever the
@@ -962,6 +1018,7 @@ enum AgentSubagentRunner {
     /// synchronous `spawn_agent` path appends it after the Worker name so a
     /// long child loop never looks frozen. Background / workflow callers leave
     /// it nil.
+    @MainActor
     static func run(
         prompt: String,
         configuration: AgentConfiguration,
@@ -989,6 +1046,7 @@ enum AgentSubagentRunner {
         /// verifier 循环靠这一点重试。
         approvedCommand: String? = nil,
         commandReviewer: CommandReviewer? = nil,
+        interventionChannel: AgentSubagentInterventionChannel? = nil,
         onProgress: ((AgentSubagentProgressUpdate) -> Void)? = nil
     ) async throws -> Outcome {
         // some.im-gated providers require the session/workspace context headers on
@@ -1051,7 +1109,12 @@ enum AgentSubagentRunner {
         if outputSchema != nil {
             toolList.append(structuredOutputDescriptor)
         }
-        let roundLimit = max(1, profile.maxRounds)
+        // This begins at the profile budget, but a user instruction accepted
+        // at the final boundary must still receive one real provider round.
+        // Extending only when an instruction is actually applied preserves
+        // the ordinary Worker budget while preventing a late correction from
+        // being acknowledged in the UI and then silently dropped.
+        var roundLimit = max(1, profile.maxRounds)
         // Inspector record, built alongside the provider-facing transcript.
         // Kept separate because this one is capped, keeps per-call timings,
         // and drops the system prompt.
@@ -1062,7 +1125,7 @@ enum AgentSubagentRunner {
             round: Int,
             activity: AgentSubagentProgressUpdate.Activity,
             speech: String = "",
-            toolNames: [String] = []
+            tools: [AgentSubagentToolMention] = []
         ) {
             onProgress?(
                 AgentSubagentProgressUpdate(
@@ -1071,12 +1134,31 @@ enum AgentSubagentRunner {
                     completedToolInvocations: toolInvocations,
                     activity: activity,
                     speech: speech,
-                    toolNames: toolNames
+                    tools: tools
                 )
             )
         }
 
-        for round in 1...roundLimit {
+        @discardableResult
+        func applyPendingInterventions(effectiveRound: Int) -> Bool {
+            guard let interventionChannel else { return false }
+            let submissions = interventionChannel.drainPending(
+                effectiveRound: effectiveRound
+            )
+            guard !submissions.isEmpty else { return false }
+            roundLimit = max(roundLimit, effectiveRound)
+            transcript.append(AgentMessage(
+                role: .user,
+                content: interventionMessage(submissions)
+            ))
+            return true
+        }
+
+        var round = 1
+        while round <= roundLimit {
+            defer { round += 1 }
+            interventionChannel?.beginRound(round)
+            _ = applyPendingInterventions(effectiveRound: round)
             // Surface the provider wait before the (potentially long)
             // streaming round begins. Never mirror private reasoning text.
             publishProgress(round: round, activity: .thinking)
@@ -1086,11 +1168,30 @@ enum AgentSubagentRunner {
             var toolCalls: [AgentMessageToolCall] = []
             let collector = SubagentTurnCollector()
 
-            try await client.streamChat(
-                messages: transcript,
-                tools: toolList
-            ) { event in
-                await collector.consume(event)
+            do {
+                if let interventionChannel {
+                    try await interventionChannel.runCancellableStep {
+                        try await client.streamChat(
+                            messages: transcript,
+                            tools: toolList
+                        ) { event in
+                            await collector.consume(event)
+                        }
+                    }
+                } else {
+                    try await client.streamChat(
+                        messages: transcript,
+                        tools: toolList
+                    ) { event in
+                        await collector.consume(event)
+                    }
+                }
+            } catch is CancellationError {
+                guard interventionChannel?.hasPendingInterruption == true else {
+                    throw CancellationError()
+                }
+                _ = applyPendingInterventions(effectiveRound: round + 1)
+                continue
             }
             let turn = await collector.snapshot()
             content = turn.content
@@ -1114,16 +1215,24 @@ enum AgentSubagentRunner {
             // completed round rather than per token: streaming rich text into
             // the transcript is the shape that previously pinned the main
             // thread in SwiftUI layout, and a round's text is already whole.
-            let roundToolNames = toolCalls.map { AgentToolDisplay.name(for: $0.toolName) }
+            let roundTools = toolCalls.map { call in
+                AgentSubagentToolMention(
+                    name: AgentToolDisplay.name(for: call.toolName),
+                    object: AgentToolDisplay.objectSummary(
+                        toolName: call.toolName,
+                        argumentsJSON: call.argumentsJSON
+                    )
+                )
+            }
             if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || !roundToolNames.isEmpty {
+                || !roundTools.isEmpty {
                 publishProgress(
                     round: round,
-                    activity: roundToolNames.isEmpty
+                    activity: roundTools.isEmpty
                         ? .preparingReport
-                        : .runningTool(roundToolNames[0]),
+                        : .runningTool(roundTools[0].name),
                     speech: content,
-                    toolNames: roundToolNames
+                    tools: roundTools
                 )
             }
 
@@ -1177,6 +1286,27 @@ enum AgentSubagentRunner {
                 )
             }
 
+            // An interrupt may arrive in the tiny boundary after the provider
+            // completed but before its proposed tools started. Close every
+            // emitted tool call with a synthetic result so the next provider
+            // request remains protocol-valid, then follow the user's route.
+            if interventionChannel?.hasPendingInterruption == true {
+                for call in toolCalls {
+                    let payload = "Skipped because the user interrupted this Worker step before the tool started."
+                    let callStartedAt = Date()
+                    transcript.append(AgentMessage(
+                        role: .tool,
+                        content: payload,
+                        toolCallID: call.externalID
+                    ))
+                    recordToolCall(call, payload: payload, startedAt: callStartedAt)
+                }
+                _ = applyPendingInterventions(effectiveRound: round + 1)
+                recordedRound.finishedAt = Date()
+                recordedRounds.append(recordedRound)
+                continue
+            }
+
             // schema 模式下:本轮里若已经成功调过 structured_output,
             // 立即结束 loop —— 别等模型再吐自由文本。
             if let outputSchema {
@@ -1192,7 +1322,11 @@ enum AgentSubagentRunner {
                         toolCallID: call.externalID
                     ))
                     recordToolCall(call, payload: payload, startedAt: callStartedAt)
-                    if ok {
+                    // A queued user correction outranks a would-be final
+                    // structured result. Finish this tool step so the
+                    // transcript stays protocol-valid, then the common
+                    // boundary below injects the correction into a new round.
+                    if ok, interventionChannel?.hasPendingSubmission != true {
                         return Outcome(
                             report: payload,
                             usageTokens: totalTokens,
@@ -1214,6 +1348,16 @@ enum AgentSubagentRunner {
             // 文本会收到纠正回合，而不是第一轮就把整个 Goal Team 判死。
             if toolCalls.isEmpty {
                 let report = content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // A normal intervention received during the provider step is
+                // the next round, even if the Worker was about to declare
+                // itself done. Give the user's correction the final word.
+                if interventionChannel?.hasPendingSubmission == true {
+                    _ = applyPendingInterventions(effectiveRound: round + 1)
+                    recordedRound.finishedAt = Date()
+                    recordedRounds.append(recordedRound)
+                    continue
+                }
 
                 // The worker says it is finished. With a verifier configured,
                 // that claim is not the verdict — the command is. Run it here
@@ -1323,7 +1467,11 @@ enum AgentSubagentRunner {
 
             // 普通工具(read-only / web_search / web_fetch 等)走原路径。schema 模式
             // 下,structured_output 已经在前面拎走处理,这里只剩别的。
-            for call in toolCalls where call.toolName != structuredOutputToolName {
+            let executableCalls = toolCalls.filter {
+                $0.toolName != structuredOutputToolName
+            }
+            var toolStepWasInterrupted = false
+            for (callIndex, call) in executableCalls.enumerated() {
                 try Task.checkCancellation()
                 publishProgress(
                     round: round,
@@ -1331,18 +1479,65 @@ enum AgentSubagentRunner {
                 )
                 toolInvocations += 1
                 let callStartedAt = Date()
-                let rawPayload = await executeToolCall(
-                    call,
-                    workspaceURL: workspaceURL,
-                    runtimeDescriptor: runtimeDescriptor,
-                    workspaceLocation: workspaceLocation,
-                    profile: profile,
-                    writeAccess: writeAccess,
-                    terminalController: terminalController,
-                    approvedCommand: approvedCommand,
-                    commandReviewer: commandReviewer,
-                    patchProposalSink: patchProposalSink
-                )
+                let rawPayload: String
+                do {
+                    if let interventionChannel {
+                        rawPayload = try await interventionChannel.runCancellableStep {
+                            await executeToolCall(
+                                call,
+                                workspaceURL: workspaceURL,
+                                runtimeDescriptor: runtimeDescriptor,
+                                workspaceLocation: workspaceLocation,
+                                profile: profile,
+                                writeAccess: writeAccess,
+                                terminalController: terminalController,
+                                approvedCommand: approvedCommand,
+                                commandReviewer: commandReviewer,
+                                patchProposalSink: patchProposalSink
+                            )
+                        }
+                    } else {
+                        rawPayload = await executeToolCall(
+                            call,
+                            workspaceURL: workspaceURL,
+                            runtimeDescriptor: runtimeDescriptor,
+                            workspaceLocation: workspaceLocation,
+                            profile: profile,
+                            writeAccess: writeAccess,
+                            terminalController: terminalController,
+                            approvedCommand: approvedCommand,
+                            commandReviewer: commandReviewer,
+                            patchProposalSink: patchProposalSink
+                        )
+                    }
+                } catch is CancellationError {
+                    guard interventionChannel?.hasPendingInterruption == true else {
+                        throw CancellationError()
+                    }
+                    rawPayload = "Interrupted by the user's new instruction before this tool completed."
+                }
+
+                if interventionChannel?.hasPendingInterruption == true {
+                    transcript.append(AgentMessage(
+                        role: .tool,
+                        content: rawPayload,
+                        toolCallID: call.externalID
+                    ))
+                    recordToolCall(call, payload: rawPayload, startedAt: callStartedAt)
+                    for remaining in executableCalls.dropFirst(callIndex + 1) {
+                        let payload = "Skipped because the user interrupted the preceding Worker step."
+                        let skippedAt = Date()
+                        transcript.append(AgentMessage(
+                            role: .tool,
+                            content: payload,
+                            toolCallID: remaining.externalID
+                        ))
+                        recordToolCall(remaining, payload: payload, startedAt: skippedAt)
+                    }
+                    _ = applyPendingInterventions(effectiveRound: round + 1)
+                    toolStepWasInterrupted = true
+                    break
+                }
                 // Budgeted per trade: a 128K-window child cannot afford the
                 // same tool payloads a 1M-window parent shrugs off.
                 let payload = clampedToolPayload(
@@ -1358,6 +1553,17 @@ enum AgentSubagentRunner {
             }
             recordedRound.finishedAt = Date()
             recordedRounds.append(recordedRound)
+            if toolStepWasInterrupted {
+                continue
+            }
+            // Normally the next loop head drains a queued instruction. At
+            // the configured final round there would be no next head, so do
+            // it at this safe tool boundary and extend `roundLimit` before
+            // evaluating the while condition.
+            if interventionChannel?.hasPendingSubmission == true {
+                _ = applyPendingInterventions(effectiveRound: round + 1)
+                continue
+            }
         }
 
         // schema 模式下 round cap 到了 = 没有合规的结构化答案;别给
@@ -1402,6 +1608,25 @@ enum AgentSubagentRunner {
             rounds: recordedRounds,
             didTruncate: didTruncateRecord
         )
+    }
+
+    /// Provider-facing wrapper for one or more user corrections. The wrapper
+    /// is deliberately short and carries the user's exact visible text; no
+    /// private reasoning or hidden command context is reconstructed here.
+    static func interventionMessage(
+        _ submissions: [AgentSubagentInterventionSubmission]
+    ) -> String {
+        let instructions = submissions.enumerated().map { index, submission in
+            let mode = submission.mode == .interruptCurrentStep
+                ? "interrupt"
+                : "next-round"
+            return "\(index + 1). [\(mode)] \(submission.text)"
+        }
+        return """
+        The user redirected this Worker while it was running. Treat the following text as the newest user instruction, adjust the route immediately, and do not repeat the abandoned step unless the instruction asks for it.
+
+        \(instructions.joined(separator: "\n"))
+        """
     }
 
     /// Provider compatibility path for structured output. Some compatible
@@ -1575,6 +1800,37 @@ enum AgentSubagentRunner {
     /// judge. Deterministically dangerous or typed-confirmation operations
     /// remain outside model authority and must be approved by the operator as
     /// an exact `ops_runner.target_command` on a new spawn.
+    /// Whether a Worker's command may be resolved by the parent's approval
+    /// ladder instead of a human approval card.
+    ///
+    /// The ladder itself is the user's `approvalMode` and lives in the
+    /// parent; this only answers whether to consult it:
+    ///
+    ///  - **Strict** means "ask me every time", so nothing is consulted —
+    ///    consulting would answer on the user's behalf.
+    ///  - **Full Access** consults for everything. The user has already
+    ///    granted that level to the parent; a Worker running the same
+    ///    command is not a second decision, and the deterministic malicious
+    ///    denylist remains the hard floor on the parent side.
+    ///  - Everything else keeps the narrower floor below: a command needing
+    ///    typed confirmation, or one touching credentials, is never put to
+    ///    the judge. A terminal is the user's real shell and seatbelt does
+    ///    not reach it.
+    nonisolated static func subagentCommandMayBeReviewedByParent(
+        _ command: String,
+        approvalMode: AgentApprovalMode,
+        workspaceURL: URL?
+    ) -> Bool {
+        switch approvalMode {
+        case .requestEveryTime:
+            return false
+        case .fullAccess:
+            return true
+        case .smart, .workspaceAccess:
+            return subagentCommandCanUseIntelligentReview(command, workspaceURL: workspaceURL)
+        }
+    }
+
     nonisolated static func subagentCommandCanUseIntelligentReview(
         _ command: String,
         workspaceURL: URL?
@@ -1664,10 +1920,17 @@ enum AgentSubagentRunner {
         }()
         let isReviewableCommandTool = call.toolName == "run_command"
             || call.toolName == "terminal_send_command"
+        // The child no longer pre-filters what the parent is allowed to be
+        // asked about. Deciding *which* commands may run without a human is
+        // the user's approval-mode setting, and that setting lives in the
+        // parent — a second policy down here could only ever disagree with
+        // it, and did: it silently refused to consult the parent at all
+        // unless the command classified `.needsJudgment`, so Full Access
+        // could not reach commands it plainly authorizes. The reviewer
+        // returning false still lands in the same denial below.
         var isJudgeApprovedCommand = false
         if isReviewableCommandTool,
            let command = argsDict["command"]?.stringValue(),
-           subagentCommandCanUseIntelligentReview(command, workspaceURL: workspaceURL),
            let commandReviewer {
             isJudgeApprovedCommand = await commandReviewer(call.toolName, command)
         }

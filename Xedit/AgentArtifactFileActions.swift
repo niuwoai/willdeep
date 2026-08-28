@@ -181,14 +181,6 @@ struct AgentArtifactFileContextMenu: View {
             Label("用默认 App 打开", systemImage: "arrow.up.right.square")
         }
 
-        if AgentArtifactFileActions.isTextFile(fileURL) {
-            Button {
-                appState.openAgentReferencedFile(fileURL.path)
-            } label: {
-                Label("用内置编辑器打开", systemImage: "doc.text")
-            }
-        }
-
         if AgentArtifactFileActions.isSidePanelPreviewCandidate(fileURL) {
             Button {
                 appState.previewAgentArtifactFileInSidePanel(fileURL)

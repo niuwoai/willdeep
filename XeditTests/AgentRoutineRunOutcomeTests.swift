@@ -120,22 +120,32 @@ struct AgentRoutineRunOutcomeTests {
 
     // MARK: - Presentation
 
-    @Test("only a failed run takes emphasis, and it says why")
-    func outcomePresentation() {
-        let failed = AgentRoutineRunOutcomePresentation(outcome: .failed)
-        #expect(failed.emphasized)
-        #expect(failed.label == L10n.Automation.runOutcomeFailed)
-
-        for outcome in [AgentRoutineRunOutcome.running, .succeeded, .interrupted, .unknown] {
+    /// The list is a history, not a verdict board. A run that failed at
+    /// 22:00 is routinely fixed by hand afterwards in the conversation it
+    /// left behind, and nothing ever came back to clear the badge — so a
+    /// permanent `失败` marker described a problem that had been solved days
+    /// earlier, and taught the reader to skip the section. What stays is the
+    /// failure reason, which the row still renders.
+    @Test("a finished run carries no verdict label")
+    func finishedRunsCarryNoVerdict() {
+        for outcome in [AgentRoutineRunOutcome.succeeded, .failed, .interrupted, .unknown] {
+            let presentation = AgentRoutineRunOutcomePresentation(outcome: outcome)
+            #expect(presentation.label == nil, "\(outcome) must not label the row")
             #expect(
-                !AgentRoutineRunOutcomePresentation(outcome: outcome).emphasized,
-                "\(outcome) must stay muted so the failed row is the one thing that stands out"
+                presentation.systemImage == "clock",
+                "\(outcome) must share the neutral history glyph, not an alarm"
             )
         }
+    }
 
-        // Legacy rows keep the old neutral glyph and claim nothing.
-        #expect(AgentRoutineRunOutcomePresentation(outcome: .unknown).label == nil)
-        #expect(AgentRoutineRunOutcomePresentation(outcome: .succeeded).label != nil)
+    /// `运行中` is not a verdict — it says something is happening right now,
+    /// and it clears itself — so it keeps both its label and its own glyph.
+    @Test("a run still in flight keeps saying so")
+    func runningKeepsItsLabel() {
+        let running = AgentRoutineRunOutcomePresentation(outcome: .running)
+
+        #expect(running.label == L10n.Automation.runOutcomeRunning)
+        #expect(running.systemImage != "clock")
     }
 
     // MARK: - Settling a real run

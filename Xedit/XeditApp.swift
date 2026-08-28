@@ -13,6 +13,13 @@ import Combine
 struct WillDeepApp: App {
     @NSApplicationDelegateAdaptor(WillDeepAppDelegate.self) private var appDelegate
 
+    init() {
+        // Before any scene exists: CoreGraphics reads the smoothing default
+        // lazily and caches it, so the first window has to find the right
+        // value already written.
+        AgentFontSmoothing.applyPersistedSetting()
+    }
+
     var body: some Scene {
         let defaultSize = Self.defaultWindowSize
 
