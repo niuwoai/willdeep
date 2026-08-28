@@ -92,6 +92,7 @@ extension L10n {
 
         static let perProviderConcurrency = String(localized: "settings.per-provider-concurrency", defaultValue: "Per-provider concurrency")
         static let chatBaseFontSize = String(localized: "settings.chat-base-font-size", defaultValue: "Chat base font size")
+        static let agentFontPingFang = String(localized: "settings.agent-font.pingfang", defaultValue: "PingFang SC")
         static let agentFontSystem = String(localized: "settings.agent-font.system", defaultValue: "System")
         static let agentFontRounded = String(localized: "settings.agent-font.rounded", defaultValue: "System Rounded")
         static let agentFontSerif = String(localized: "settings.agent-font.serif", defaultValue: "System Serif")

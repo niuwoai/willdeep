@@ -72,7 +72,7 @@ enum AgentSettingsStore {
     static let chatBaseFontSizeMin: CGFloat = 11
     static let chatBaseFontSizeMax: CGFloat = 20
     static let chatBaseFontSizeDefault: CGFloat = 15
-    static let chatFontIDDefault = "system"
+    static let chatFontIDDefault = "pingfang-sc"
     static let chatLineHeightMultipleMin: CGFloat = 1.2
     static let chatLineHeightMultipleMax: CGFloat = 2.0
     static let chatLineHeightMultipleDefault: CGFloat = 1.4

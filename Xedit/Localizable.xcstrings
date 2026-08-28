@@ -46143,6 +46143,16 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统等宽" } }
       }
     },
+    "settings.agent-font.pingfang" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "PingFang SC" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "PingFang SC" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "PingFang SC" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "PingFang SC" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "苹方（PingFang SC）" } }
+      }
+    },
     "settings.agent-font.rounded" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {

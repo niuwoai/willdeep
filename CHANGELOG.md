@@ -1,7 +1,21 @@
 # Changelog
 
-> 当前文件保留最新版本（1.301.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.301.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.301.0-rc3 - 2026-08-28
+
+### Added
+
+- **“Agent 外观”字体新增“苹方（PingFang SC）”，并作为未设置用户的新默认值。** 字体 Picker 继续保留系统、圆体、衬线体、等宽体和 Menlo；PingFang SC 同时接入 SwiftUI 消息、Markdown 预览与 TextKit 历史记录，正文使用 Regular，标题与强调按 Medium / Semibold 映射。已明确保存过其他字体的用户保持原选择，不会被升级强行覆盖。
+
+### Tests
+
+- Agent 聊天排版回归新增默认字体 ID、PingFang SC Regular 正文和 Semibold 标题解析断言。
+
+### Known issues
+
+- 本机全量 3121 例 passed=3116 failed=4，与 rc2 记录的数字逐字一致，仍是 `ae84537c` 带入的那四条存量红（`AgentContextBuilderPromptTests` 两条提示词快照哈希、`AgentPlanContinuationTests` 两条计划续推断言），与本次字体改动零交集。
 
 ## 1.301.0-rc2 - 2026-08-28
 
