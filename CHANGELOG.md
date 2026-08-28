@@ -1,7 +1,105 @@
 # Changelog
 
-> 当前文件保留最新版本（1.300.0-rc7 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.301.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.301.0-rc4 - 2026-08-28
+
+> rc3 被另一条并行分支占用（苹方默认字体），这里跳号到 rc4，避免两边版本文件撞在同一个号上。
+
+### Added
+
+- **后台派发的工种也上状态条、也在聊天区说话了**。`run_in_background: true` 派出去的工种此前是一片空白：既不上 composer 状态条，也不在聊天区出声，一个跑十分钟的后台工种在界面上和"什么也没发生"没有区别。
+  - 根因不在显示层。`AgentSubagentRunner.run` 一共四条调用路径，rc1 补齐了三条同步的；第四条是 `AgentSubagentRegistry.startBackground`，它走 `runOperation` 那个 typealias，签名上压根没有进度回调的位置。现在加上了，registry 按 run id 把心跳转回宿主。
+  - 宿主靠 `subagentRunID` 找回派生它的那条工具卡（`bindSubagentRun` 在 spawn 时就绑好了），把发言和轮次折进去。
+  - Goal Teams 的成员刻意保持静默：它们由协调器聚合裁决，从来不作为独立工种露面。
+
+### Fixed
+
+- **「这个工种还在跑吗」此前没有正确答案**。后台 spawn 在交出 handle 那一刻就把工具卡 settle 成"已成功"，而工种本身还要再跑几分钟——照工具卡状态判定，后台工种一启动就从状态条上消失。
+  - 第一版改法是让 liveness 只认 `AgentSubagentLiveActivity.finishedAt`，被自己的测试打回来了：那个字段要靠有人记得去封口，而前台工种的死活本来就是**事实**（派生它的工具卡状态），不是需要谁盖的戳。两个真相来源，必出幽灵工种。
+  - 最终收在一个派生规则 `AgentToolCall.subagentIsWorking`：没有 activity 看工具卡状态；后台 activity 看它自己的 `finishedAt`（由 registry 封口）；前台 activity 看工具卡状态。一个地方判定，状态条和发言卡都读它。
+
+### Docs
+
+- 新增 [docs/SUBAGENT_WRITE_APPROVAL_DESIGN.md](docs/SUBAGENT_WRITE_APPROVAL_DESIGN.md)：开放工种写入 + 审批升格的设计。现状三道门（策略/路径/锁）与命令判定顺序、三个缺口（审批 UI 到不了子层、工种的工具调用不进 `sandbox.jsonl`、等待槽只有一个）、四步方案、子层刻意收窄的三处（打字确认不升格、完全访问在子层降档、工种的"一律允许"不落会话级）、明确不做的两件、逐步验收标准。
+
+### Tests
+
+- `AgentSubagentLiveActivityTests` 23 → 30 项，7 项专打前台/后台这道分界：前台跟工具卡状态走、后台活过自己的记录、registry 封口后停、无 activity 时回落状态、前后台混算、已收工的不计入、收尾心跳不带计数（它那串 0 若被当成普通更新折进去，会把卡片上的轮次和工具数抹掉）。
+- `AgentGoalTeamsTests` 8 处 `runOperation` 注入补签名参数，8 增 8 删只动签名行。
+
+### Known issues
+
+- 本机全量 3128 例 passed=3123 failed=4，仍是那四条存量红（`ae84537c` 带入），与本次改动零交集。
+
+## 1.301.0-rc3 - 2026-08-28
+
+### Added
+
+- **“Agent 外观”字体新增“苹方（PingFang SC）”，并作为未设置用户的新默认值。** 字体 Picker 继续保留系统、圆体、衬线体、等宽体和 Menlo；PingFang SC 同时接入 SwiftUI 消息、Markdown 预览与 TextKit 历史记录，正文使用 Regular，标题与强调按 Medium / Semibold 映射。已明确保存过其他字体的用户保持原选择，不会被升级强行覆盖。
+
+### Tests
+
+- Agent 聊天排版回归新增默认字体 ID、PingFang SC Regular 正文和 Semibold 标题解析断言。
+
+### Known issues
+
+- 本机全量 3121 例 passed=3116 failed=4，与 rc2 记录的数字逐字一致，仍是 `ae84537c` 带入的那四条存量红（`AgentContextBuilderPromptTests` 两条提示词快照哈希、`AgentPlanContinuationTests` 两条计划续推断言），与本次字体改动零交集。
+
+## 1.301.0-rc2 - 2026-08-28
+
+### Added
+
+- **每一步都显示自己花了多久**。跑着的时候逐秒走，进终态那一刻停住，之后只显示这一步花了多少时间。此前做不到不是显示逻辑的问题：`AgentToolCall` 上一个时间字段都没有，没有起点也没有终点，任何版本都算不出耗时。
+  - 计时从「这一步出现」算起，包含排队等审批那一段——那也是你实打实等掉的时间。
+  - 终态戳记挂在 `status` 的 `didSet` 上，不在各个赋值点手写。status 在主循环、审批路径、沙箱升级、子代理派生里有十几处赋值，逐处补戳漏掉一个，那一行就会永远往上数。
+  - 三个边界都写了测试：出生即终态的记录（事后补记的拒绝，`didSet` 不从 `init` 触发）在 init 里封口；重复赋同一个终态不让时钟往后跳；沙箱升级让已结算的调用重新开工时清掉旧的完成时间，否则一个正在跑的步骤会顶着一个冻住的耗时。
+
+### Fixed
+
+- **composer 状态条的秒表锚错了基准**。它是全仓唯一一处内联在会频繁重算的 body 里、且用 `TimelineView(.periodic(from: .now))` 的耗时——`.now` 在 body 求值那一刻取值，而这个 body 挂在 `appState` 上，任何无关状态变化都会重算它并重新锚定节拍表，相位取决于渲染时机而不是被测量的那件事。其余六处耗时（goal 卡、后台任务、job 面板、终端面板等）全部锚 `startedAt` 并抽成自己拥有节拍的独立 View；这一处现在也是。
+  - 说明：`.now` 锚定「一定会冻住」这一步没能静态证明，改动依据是语义正确性与全仓一致性。若装上后秒表仍然不动，下一步是埋点而不是继续改。
+- **六个公开工种里有三个共用一个颜色**。发言卡的配色按原始 `profileID` 做 FNV-1a 取模 8，而目录里十七个内部工种展示时由 `publicID(for:)` 折叠成六个：`reader`、`tester`、`ops_runner` 恰好全落在同一格。一半的花名册同色，等于没上色。
+  - 域只有六个已知值时哈希本来就是错的工具，改为查表：阅读者蓝、实施者紫、测试员绿、运维查询员橙、裁判粉、深度青。表不会撞。
+  - 同时改为按公开工种取色，`scout` / `log_inspector` / `git_detective` 显示出来都叫「阅读者」，此前是三种颜色。
+  - 自定义工种仍走 FNV-1a 兜底，保持跨启动稳定。
+
+### Tests
+
+- `AgentSubagentLiveActivityTests` 14 → 23 项。配色那条原本写的是 `distinct.count >= 4`（七个 id 里有四种颜色就算过），它眼睁睁放过了「三个工种同色」；换成对 `publicBuiltIn` 全量断言 `Set(colors).count == ids.count`，另加内部工种必须继承其公开工种配色、自定义工种配色稳定两条。耗时新增六项，含负值（系统调时间可能让时钟短暂倒退，不得渲染出负耗时）。
+
+### Known issues
+
+- 本机全量 3121 例 passed=3116 failed=4，仍是 rc1 记录的那四条存量红（`ae84537c` 带入），与本次改动零交集。
+
+## 1.301.0-rc1 - 2026-08-28
+
+### Added
+
+- **子代理在聊天区里开口说话了**。此前一个 Worker 在跑，聊天区能看到的就一行「委派给「X」Worker」；它看了什么、想到哪一步、接下来打算干什么，全锁在子 loop 里，要等它跑完、再去点开检查器窗口才读得到。现在每完成一轮，Worker 的公开正文就挂在派工那条记录底下，带轮次标记和这一轮调用的工具 chip。
+  - **一眼看出是谁在说话**：左侧色条 + 工种名 + 模型名。颜色按工种 id 走 FNV-1a 定死，不用 `hashValue`——那玩意每次启动换种子，同一个工种昨天蓝今天紫，比不上色更糟。同一回合里两个 Worker 不会撞色。
+  - **一轮一条，不是一 token 一条**。把富文本流式往 transcript 里灌，正是之前把主线程钉死在 SwiftUI 布局里的那个形状；而一轮的正文本来就是完整段落，整段到达什么也不损失。
+  - 只带 provider 吐出来的公开正文，**推理内容一个字不带**——沿用 `AgentSubagentProgressUpdate` 原本的规矩。
+  - 最近 6 轮 × 每轮 600 字 × 每轮 8 个工具名封顶；更早的轮次仍在检查器里，那才是完整档案。
+  - 挂载点选在**时间轴行**而不只是完整卡片。回合还在跑的时候聊天区画的是紧凑行，完整卡片要等回合结束才出现——只挂卡片等于挂了个看不见的东西。
+  - 刻意**不新开一种消息 role**。让子代理的轮次以独立气泡落进 transcript，一个 Worker 时好看，三个 Worker 时它们按到达时间彼此交错，transcript 就不再是「谁对谁说了什么」的记录了。嵌在派工卡里，每个 Worker 的叙述始终贴着它领到的那件活。
+
+- **composer 上吸附的那一行会说人话了**：工种名 · 第 3/8 轮 · 已完成 5 次工具调用 · 正在执行 grep_files。
+  - **好几个工种同时在跑时先报数量**（「3 个工种在跑 · 测试员 …」）。此前那一行描述的是数组里最后那个 tool call，另外几个连存在都看不出来。选谁来详述看谁的轮次最新，还没汇报过的工种不会顶掉有话说的那个。
+  - 计时换成**这个工种自己的起跑时间**，不再是整个回合的。回合跑了八分钟才派出去的工种，不该显示成八分钟。
+
+### Fixed
+
+- **自动派发的 Worker，进度从头冻到尾**。`AgentSubagentRunner.run` 三个调用点里，只有「模型自己调 `spawn_agent`」那一个接了 `onProgress`；失败命令自动修复（`AppStateAgentWorkerAutoDispatch`）和结构化编码管线（`AppStateAgentCodingPipeline`）压根没传这个参数。于是那行标签留着放进度的位置，永远没人往里填——用户看到的就是一个几分钟纹丝不动的工种名。三处现在统一走 `AppState.applySubagentLiveProgress`。
+
+### Tests
+
+- 新增 `AgentSubagentLiveActivityTests`（14 项）：发言记录与同轮替换、空心跳不落账、尾部截断与字数/工具数上限、工具数为 0 时不显示计数、无 Worker 在跑时不接管状态栏、多 Worker 计数与「选最新汇报者」、单 Worker 保持原措辞、没汇报过的不当主角、回退到进度字符串再回退到名字解析器、工种自己的计时、工种配色稳定且分散、心跳默认不带发言。
+
+### Known issues
+
+- 本机全量 3112 例中 4 条红与本次改动零交集，全部来自 `ae84537c fix(agent): make ordinary plans evidence-driven`：`AgentContextBuilderPromptTests` 两条提示词快照哈希未重录，`AgentPlanContinuationTests` 两条断言文本没跟上（源码是 "Continue executing without waiting…"，断言还在找 "continue executing **it** without waiting…"）。已在基线 commit `d53bba59` 上单独复跑这两个 suite，四条一字不差地同样失败，归属确认。
 
 ## 1.300.0-rc7 - 2026-08-28
 

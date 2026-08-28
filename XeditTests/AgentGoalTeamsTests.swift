@@ -519,7 +519,7 @@ struct AgentGoalTeamsTests {
     func controlledThreeMemberRunSuppressesPerMemberWake() async {
         let (appState, runtime) = makeAppRuntime()
         var arbitrationCalls = 0
-        appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _ in
+        appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _, _ in
             let report: String
             if prompt.contains("评审-分歧证据仲裁") {
                 arbitrationCalls += 1
@@ -551,7 +551,7 @@ struct AgentGoalTeamsTests {
     func twoOfThreeReportsAllowArbitrationWithFailureEvidence() async {
         let (appState, runtime) = makeAppRuntime()
         var arbitrationPrompt = ""
-        appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _ in
+        appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _, _ in
             if prompt.contains("评审-分歧证据仲裁") {
                 arbitrationPrompt = prompt
                 return .init(report: validArbitrationReport(), usageTokens: 1, roundCount: 1, toolInvocationCount: 0)
@@ -576,7 +576,7 @@ struct AgentGoalTeamsTests {
         let (appState, runtime) = makeAppRuntime()
         var memberCalls = 0
         var arbitrationCalls = 0
-        appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _ in
+        appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _, _ in
             if prompt.contains("评审-分歧证据仲裁") {
                 arbitrationCalls += 1
                 return .init(report: validArbitrationReport(), usageTokens: 1, roundCount: 1, toolInvocationCount: 0)
@@ -601,7 +601,7 @@ struct AgentGoalTeamsTests {
     @Test("仲裁仅因结构化输出失败时使用保守结果继续生成提案")
     func arbitrationFormatFailureUsesConservativeFallback() async throws {
         let (appState, runtime) = makeAppRuntime()
-        appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _ in
+        appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _, _ in
             let report = prompt.contains("评审-分歧证据仲裁") ? "" : validMemberReport()
             return .init(report: report, usageTokens: 1, roundCount: 1, toolInvocationCount: 0)
         }
@@ -627,7 +627,7 @@ struct AgentGoalTeamsTests {
     func arbitrationRetryPreservesFirstRoundAndOnlyRerunsArbitration() async {
         let (appState, runtime) = makeAppRuntime()
         let probe = GoalPlanningRetryProbe()
-        appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _ in
+        appState.agentSubagentRegistry.runOperation = { prompt, _, _, _, _, _, _, _, _ in
             if prompt.contains("评审-分歧证据仲裁") {
                 let shouldSucceed = await probe.recordArbitrationCall()
                 guard shouldSucceed else { throw URLError(.timedOut) }
@@ -669,7 +669,7 @@ struct AgentGoalTeamsTests {
     @Test("Goal 捕获后只自动启动一次三成员规划")
     func goalCaptureAutoStartsPlanningOnce() {
         let (appState, runtime) = makeAppRuntime(goal: nil)
-        appState.agentSubagentRegistry.runOperation = { _, _, _, _, _, _, _, _ in
+        appState.agentSubagentRegistry.runOperation = { _, _, _, _, _, _, _, _, _ in
             try await Task.sleep(nanoseconds: 30_000_000_000)
             return .init(report: "", usageTokens: 0, roundCount: 0, toolInvocationCount: 0)
         }
@@ -733,7 +733,7 @@ struct AgentGoalTeamsTests {
         appState.agentRuntimes = [session.id: runtime]
         appState.activeAgentSessionID = session.id
         appState.subscribeToActiveRuntime()
-        appState.agentSubagentRegistry.runOperation = { [self] prompt, _, _, _, _, _, _, _ in
+        appState.agentSubagentRegistry.runOperation = { [self] prompt, _, _, _, _, _, _, _, _ in
             let report = prompt.contains("评审-分歧证据仲裁")
                 ? validArbitrationReport()
                 : validMemberReport(prompt)
@@ -846,7 +846,7 @@ struct AgentGoalTeamsTests {
     @Test("revision 强制换代会释放旧并发槽并忽略迟到完成")
     func revisionGenerationCancelsOldRunsAndIgnoresStaleCompletion() {
         let (appState, runtime) = makeAppRuntime()
-        appState.agentSubagentRegistry.runOperation = { _, _, _, _, _, _, _, _ in
+        appState.agentSubagentRegistry.runOperation = { _, _, _, _, _, _, _, _, _ in
             try await Task.sleep(nanoseconds: 30_000_000_000)
             return .init(report: "", usageTokens: 0, roundCount: 0, toolInvocationCount: 0)
         }

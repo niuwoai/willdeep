@@ -130,6 +130,14 @@ struct AgentToolCallCard: View {
                 }
             }
 
+            // The Worker's own words, in the card that spawned it. Kept on
+            // screen after the run finishes: the narration is how you tell a
+            // Worker that reasoned its way to the answer from one that
+            // guessed, and the final report alone does not show that.
+            if let activity = call.subagentLiveActivity, !activity.utterances.isEmpty {
+                AgentSubagentSpeechView(activity: activity, isRunning: call.subagentIsWorking)
+            }
+
             if let progress = call.delegatedProgress {
                 AgentDelegatedLiveProgressView(progress: progress)
             }

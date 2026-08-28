@@ -146,7 +146,8 @@ final class AgentSubagentRegistry: ObservableObject {
         _ workspaceLocation: WorkspaceLocation?,
         _ someIMContext: SomeIMRequestContext?,
         _ outputSchema: AgentStructuredSchema?,
-        _ profile: AgentSubagentProfile
+        _ profile: AgentSubagentProfile,
+        _ onProgress: ((AgentSubagentProgressUpdate) -> Void)?
     ) async throws -> AgentSubagentRunner.Outcome
 
     @Published private(set) var runs: [AgentSubagentRun] = []
@@ -172,7 +173,7 @@ final class AgentSubagentRegistry: ObservableObject {
     private var coordinatorOwnedRunIDs: Set<UUID> = []
     /// Injectable only so coordinator orchestration can be covered without a
     /// live provider. Production keeps the real read-only runner.
-    var runOperation: RunOperation = { prompt, configuration, workspaceURL, runtimeDescriptor, workspaceLocation, someIMContext, outputSchema, profile in
+    var runOperation: RunOperation = { prompt, configuration, workspaceURL, runtimeDescriptor, workspaceLocation, someIMContext, outputSchema, profile, onProgress in
         try await AgentSubagentRunner.run(
             prompt: prompt,
             configuration: configuration,
@@ -181,9 +182,19 @@ final class AgentSubagentRegistry: ObservableObject {
             workspaceLocation: workspaceLocation,
             someIMContext: someIMContext,
             outputSchema: outputSchema,
-            profile: profile
+            profile: profile,
+            onProgress: onProgress
         )
     }
+
+    /// Heartbeat from a background run, tagged with the run it came from.
+    ///
+    /// Background runs are the case the foreground plumbing cannot cover: the
+    /// spawn's tool call settles the moment it hands back a handle, so there
+    /// is no live parent turn holding a sink. AppState folds these onto the
+    /// originating tool-call record, which is how a Worker that outlives its
+    /// turn still shows its work.
+    var onRunProgress: ((UUID, AgentSubagentProgressUpdate) -> Void)?
 
     /// Host hook fired after a run finishes and its report is queued
     /// into `pendingReports`. AppState uses it to auto-resume the parent
@@ -265,7 +276,10 @@ final class AgentSubagentRegistry: ObservableObject {
                     workspaceLocation,
                     someIMContext,
                     outputSchema,
-                    profile
+                    profile,
+                    { [weak self] update in
+                        self?.onRunProgress?(id, update)
+                    }
                 ) ?? AgentSubagentRunner.Outcome(
                     report: "",
                     usageTokens: 0,
@@ -352,7 +366,10 @@ final class AgentSubagentRegistry: ObservableObject {
             outputSchema,
             // Goal planning is a parent-owned deliberation, not a cost
             // optimization — it stays on the parent's model and tool set.
-            AgentSubagentProfileCatalog.deep
+            AgentSubagentProfileCatalog.deep,
+            // Deliberately silent: goal-planning members are aggregated by
+            // their coordinator and never surface as individual Workers.
+            nil
         )
     }
 
@@ -369,6 +386,10 @@ final class AgentSubagentRegistry: ObservableObject {
         profileID: String? = nil
     ) {
         tasks[id] = nil
+        // Seal the Worker's liveness before anything else. The strip and the
+        // speech card key on this, not on the spawn's tool-call status, so a
+        // run that ends without it would stay "in flight" forever.
+        onRunProgress?(id, .runFinished)
         guard let index = runs.firstIndex(where: { $0.id == id }) else { return }
         runs[index].status = status
         runs[index].finishedAt = Date()
@@ -519,9 +540,14 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
         case runningTool(String)
         case verifying
         case preparingReport
+        /// The run is over. Not a heartbeat — the closing one, so the
+        /// surfaces watching this Worker can stop calling it live.
+        case finished
 
         var displayText: String {
             switch self {
+            case .finished:
+                return ""
             case .thinking:
                 return L10n.AgentDelegation.progressThinking
             case .runningTool(let toolName):
@@ -538,8 +564,40 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
     let maximumRounds: Int
     let completedToolInvocations: Int
     let activity: Activity
+    /// The Worker's public text for this round, when it produced any.
+    /// Empty on the plain heartbeats. Reasoning is never carried here —
+    /// the same rule the activity labels above follow.
+    let speech: String
+    /// Display names of the tools this round went on to call, in order.
+    let toolNames: [String]
+
+    init(
+        round: Int,
+        maximumRounds: Int,
+        completedToolInvocations: Int,
+        activity: Activity,
+        speech: String = "",
+        toolNames: [String] = []
+    ) {
+        self.round = round
+        self.maximumRounds = maximumRounds
+        self.completedToolInvocations = completedToolInvocations
+        self.activity = activity
+        self.speech = speech
+        self.toolNames = toolNames
+    }
+
+    /// The closing heartbeat. Carries no round or tool counts — whatever the
+    /// surface already shows for those stays put; only liveness changes.
+    static let runFinished = AgentSubagentProgressUpdate(
+        round: 0,
+        maximumRounds: 0,
+        completedToolInvocations: 0,
+        activity: .finished
+    )
 
     var displayText: String {
+        if activity == .finished { return "" }
         var parts = [L10n.AgentDelegation.progressRound(round, maximumRounds)]
         if completedToolInvocations > 0 {
             parts.append(L10n.AgentDelegation.progressCompletedTools(completedToolInvocations))
@@ -1002,14 +1060,18 @@ enum AgentSubagentRunner {
 
         func publishProgress(
             round: Int,
-            activity: AgentSubagentProgressUpdate.Activity
+            activity: AgentSubagentProgressUpdate.Activity,
+            speech: String = "",
+            toolNames: [String] = []
         ) {
             onProgress?(
                 AgentSubagentProgressUpdate(
                     round: round,
                     maximumRounds: roundLimit,
                     completedToolInvocations: toolInvocations,
-                    activity: activity
+                    activity: activity,
+                    speech: speech,
+                    toolNames: toolNames
                 )
             )
         }
@@ -1045,6 +1107,25 @@ enum AgentSubagentRunner {
                 reasoningContent: reasoning.isEmpty ? nil : reasoning,
                 toolCalls: toolCalls
             ))
+
+            // The round's public text, published as its own heartbeat so the
+            // parent's delegation card can show the Worker talking instead of
+            // holding everything back until the final report. Emitted once per
+            // completed round rather than per token: streaming rich text into
+            // the transcript is the shape that previously pinned the main
+            // thread in SwiftUI layout, and a round's text is already whole.
+            let roundToolNames = toolCalls.map { AgentToolDisplay.name(for: $0.toolName) }
+            if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !roundToolNames.isEmpty {
+                publishProgress(
+                    round: round,
+                    activity: roundToolNames.isEmpty
+                        ? .preparingReport
+                        : .runningTool(roundToolNames[0]),
+                    speech: content,
+                    toolNames: roundToolNames
+                )
+            }
 
             let clampedContent = AgentSubagentTranscript.clamped(
                 content,
