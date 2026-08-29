@@ -157,7 +157,7 @@ extension AppState {
 
     func alwaysAllowAgentToolCall(id: AgentToolCall.ID) {
         guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
-        if runtime.resolveLocalConfirmationPreview(id: id, decision: .approved) {
+        if runtime.resolveLocalPanelPreview(id: id, decision: .approved) {
             return
         }
         let call = runtime.toolCalls[index]
@@ -189,7 +189,7 @@ extension AppState {
 
     func allowAgentToolFamilyForConversation(id: AgentToolCall.ID) {
         guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
-        if runtime.resolveLocalConfirmationPreview(id: id, decision: .approved) {
+        if runtime.resolveLocalPanelPreview(id: id, decision: .approved) {
             return
         }
         let call = runtime.toolCalls[index]
@@ -231,8 +231,8 @@ extension AppState {
         resolveAgentToolCallDecision(id: id, decision: .answered(answer))
     }
 
-    func isLocalConfirmationPreviewCall(id: AgentToolCall.ID) -> Bool {
-        runtimeAndToolCallIndex(containing: id)?.runtime.localConfirmationPreviewCallIDs.contains(id) == true
+    func isLocalPanelPreviewCall(id: AgentToolCall.ID) -> Bool {
+        runtimeAndToolCallIndex(containing: id)?.runtime.localPanelPreviewCallIDs.contains(id) == true
     }
 
     func fillTerminalShortcutProtectedInputs(
@@ -1289,7 +1289,7 @@ extension AppState {
 
     func resolveAgentToolCallDecision(id: AgentToolCall.ID, decision: AgentToolDecision) {
         guard let (runtime, index) = runtimeAndToolCallIndex(containing: id) else { return }
-        if runtime.resolveLocalConfirmationPreview(id: id, decision: decision) {
+        if runtime.resolveLocalPanelPreview(id: id, decision: decision) {
             return
         }
         guard runtime.toolCalls[index].status == .pendingApproval
@@ -1386,7 +1386,7 @@ extension AppState {
     ) -> Task<Void, Never>? {
         let pendingCallIDs = runtime.toolCalls.compactMap { call in
             (call.status == .pendingApproval || AgentSerialToolApprovalQueue.contains(call))
-                && !runtime.localConfirmationPreviewCallIDs.contains(call.id)
+                && !runtime.localPanelPreviewCallIDs.contains(call.id)
                 && candidateFilter(call)
                 ? call.id : nil
         }

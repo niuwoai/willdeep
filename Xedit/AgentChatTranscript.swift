@@ -275,7 +275,7 @@ struct AgentChatTranscript: View {
 
                     if showsEmptyState,
                        appState.agentMessages.isEmpty,
-                       localConfirmationPreviewCalls.isEmpty {
+                       localPanelPreviewCalls.isEmpty {
                         AgentChatEmptyState()
                             .frame(maxWidth: .infinity)
                             .padding(.top, 44)
@@ -467,14 +467,14 @@ struct AgentChatTranscript: View {
                         }
                     }
 
-                    if !localConfirmationPreviewCalls.isEmpty {
+                    if !localPanelPreviewCalls.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            ForEach(localConfirmationPreviewCalls) { call in
+                            ForEach(localPanelPreviewCalls) { call in
                                 AgentToolCallCard(call: call)
                             }
                         }
-                        .id("agent-local-confirmation-preview")
-                        .accessibilityIdentifier("agent-local-confirmation-preview")
+                        .id("agent-local-panel-preview")
+                        .accessibilityIdentifier("agent-local-panel-preview")
                         .padding(.top, 8)
                         .padding(.bottom, 6)
                         .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
@@ -596,7 +596,7 @@ struct AgentChatTranscript: View {
             }
                 .overlay(alignment: .bottomTrailing) {
                     if AgentTranscriptScrollPolicy.shouldShowScrollToLatest(
-                        hasVisibleContent: !visibleMessages.isEmpty || !localConfirmationPreviewCalls.isEmpty,
+                        hasVisibleContent: !visibleMessages.isEmpty || !localPanelPreviewCalls.isEmpty,
                         isFollowingBottom: isFollowingTranscriptBottom,
                         isConversationSearchActive: isConversationSearchActive
                     ) {
@@ -958,8 +958,8 @@ private struct AgentScrollToLatestButton: View {
         appState.agentToolCalls.filter { $0.messageID == messageID }
     }
 
-    private var localConfirmationPreviewCalls: [AgentToolCall] {
-        appState.activeRuntime?.localConfirmationPreviewCalls ?? []
+    private var localPanelPreviewCalls: [AgentToolCall] {
+        appState.activeRuntime?.localPanelPreviewCalls ?? []
     }
 
     private func isEmptyThinkingPlaceholder(_ message: AgentMessage) -> Bool {

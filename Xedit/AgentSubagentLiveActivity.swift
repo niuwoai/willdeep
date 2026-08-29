@@ -184,6 +184,95 @@ nonisolated struct AgentSubagentLiveActivity: Equatable, Sendable {
     }
 }
 
+/// The compact monitor intentionally shows coarse execution phases instead of
+/// a made-up percentage. The active phase is inferred from the Worker's
+/// provider-visible status and latest tool mention; no private reasoning is
+/// inspected and no completion estimate is claimed.
+nonisolated enum AgentSubagentMonitorPhase: Int, CaseIterable, Equatable, Sendable {
+    case reading
+    case locating
+    case implementing
+    case verifying
+
+    @MainActor
+    var title: String {
+        switch self {
+        case .reading: return L10n.AgentDelegation.monitorPhaseReading
+        case .locating: return L10n.AgentDelegation.monitorPhaseLocating
+        case .implementing: return L10n.AgentDelegation.monitorPhaseImplementing
+        case .verifying: return L10n.AgentDelegation.monitorPhaseVerifying
+        }
+    }
+
+    static func infer(from activity: AgentSubagentLiveActivity) -> Self {
+        let latestToolName = activity.utterances.reversed().lazy
+            .compactMap { $0.tools.last?.name }
+            .first ?? ""
+        let signal = "\(activity.activityText) \(latestToolName)".lowercased()
+
+        if containsAny(signal, keywords: [
+            "verify", "validat", "test", "build", "compil", "review",
+            "验证", "校验", "测试", "构建", "编译", "审查", "整理结果", "准备结果",
+        ]) {
+            return .verifying
+        }
+        if containsAny(signal, keywords: [
+            "implement", "edit", "write", "patch", "create", "run",
+            "实现", "编辑", "写入", "补丁", "创建", "运行", "执行",
+        ]) {
+            return .implementing
+        }
+        if containsAny(signal, keywords: [
+            "search", "grep", "glob", "find", "locat",
+            "搜索", "正则", "查找", "定位", "通配",
+        ]) {
+            return .locating
+        }
+        if containsAny(signal, keywords: [
+            "read", "list", "browse", "inspect", "读取", "浏览", "查看",
+        ]) {
+            return .reading
+        }
+        return activity.round <= 1 && activity.completedToolInvocations == 0
+            ? .reading
+            : .implementing
+    }
+
+    private static func containsAny(_ value: String, keywords: [String]) -> Bool {
+        keywords.contains(where: value.contains)
+    }
+}
+
+/// View-ready facts for the three-column Worker monitor. Keeping the newest
+/// action and phase selection outside SwiftUI makes the information contract
+/// testable without rendering the entire transcript.
+nonisolated struct AgentSubagentMonitorPresentation: Equatable, Sendable {
+    let taskTitle: String?
+    let currentPhase: AgentSubagentMonitorPhase
+    let currentAction: String
+    let latestTool: AgentSubagentToolMention?
+
+    init(activity: AgentSubagentLiveActivity, taskTitle: String?) {
+        let normalizedTitle = taskTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.taskTitle = normalizedTitle?.isEmpty == false ? normalizedTitle : nil
+        currentPhase = AgentSubagentMonitorPhase.infer(from: activity)
+        currentAction = activity.activityText.trimmingCharacters(in: .whitespacesAndNewlines)
+        latestTool = activity.utterances.reversed().lazy
+            .compactMap { $0.tools.last }
+            .first
+    }
+
+    var latestAction: String {
+        if let latestTool {
+            return [latestTool.name, latestTool.object]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .joined(separator: "  ")
+        }
+        return currentAction
+    }
+}
+
 /// One row of the delegation card, after merging.
 nonisolated enum AgentSubagentSpeechRow: Equatable, Identifiable {
     /// A round the Worker actually spoke in, plus whatever it called next.

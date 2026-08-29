@@ -73,11 +73,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// This state drives the approval card's immediate "submitted" receipt,
     /// so it must publish even though the loop consumes entries in order.
     @Published var pendingToolDecisions: [AgentToolCall.ID: AgentToolDecision] = [:]
-    /// Runtime-only tool cards installed by the exact `#1983#` composer
-    /// trigger. They deliberately never enter `AgentSession.messages`, so a
-    /// confirmation-surface preview cannot leak into a later model request or
-    /// survive an app restart as fake conversation history.
-    @Published private(set) var localConfirmationPreviewCallIDs: Set<AgentToolCall.ID> = []
+    /// Runtime-only tool cards installed by the exact `#1983#` / `#1984#`
+    /// composer triggers. They deliberately never enter
+    /// `AgentSession.messages`, so a local preview cannot leak into a later
+    /// model request or survive an app restart as fake conversation history.
+    @Published private(set) var localPanelPreviewCallIDs: Set<AgentToolCall.ID> = []
     @Published var latestComputerUseActivity: AgentComputerUseActivity?
 
     // MARK: - Composer state (per-session draft — switching tabs preserves)
@@ -732,36 +732,36 @@ final class AgentRuntime: ObservableObject, Identifiable {
         !messages.contains(where: { $0.role == .user })
     }
 
-    var localConfirmationPreviewCalls: [AgentToolCall] {
-        toolCalls.filter { localConfirmationPreviewCallIDs.contains($0.id) }
+    var localPanelPreviewCalls: [AgentToolCall] {
+        toolCalls.filter { localPanelPreviewCallIDs.contains($0.id) }
     }
 
-    var hasLocalConfirmationPreview: Bool {
-        !localConfirmationPreviewCallIDs.isEmpty
+    var hasLocalPanelPreview: Bool {
+        !localPanelPreviewCallIDs.isEmpty
     }
 
-    func installLocalConfirmationPreview(_ calls: [AgentToolCall]) {
-        clearLocalConfirmationPreview()
-        localConfirmationPreviewCallIDs = Set(calls.map(\.id))
+    func installLocalPanelPreview(_ calls: [AgentToolCall]) {
+        clearLocalPanelPreview()
+        localPanelPreviewCallIDs = Set(calls.map(\.id))
         toolCalls.append(contentsOf: calls)
     }
 
-    func clearLocalConfirmationPreview() {
-        guard !localConfirmationPreviewCallIDs.isEmpty else { return }
-        let previewIDs = localConfirmationPreviewCallIDs
+    func clearLocalPanelPreview() {
+        guard !localPanelPreviewCallIDs.isEmpty else { return }
+        let previewIDs = localPanelPreviewCallIDs
         toolCalls.removeAll { previewIDs.contains($0.id) }
         for id in previewIDs {
             pendingToolDecisions.removeValue(forKey: id)
         }
-        localConfirmationPreviewCallIDs.removeAll()
+        localPanelPreviewCallIDs.removeAll()
     }
 
     @discardableResult
-    func resolveLocalConfirmationPreview(
+    func resolveLocalPanelPreview(
         id: AgentToolCall.ID,
         decision: AgentToolDecision
     ) -> Bool {
-        guard localConfirmationPreviewCallIDs.contains(id),
+        guard localPanelPreviewCallIDs.contains(id),
               let index = toolCalls.firstIndex(where: { $0.id == id }) else {
             return false
         }

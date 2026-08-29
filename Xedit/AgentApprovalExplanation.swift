@@ -38,7 +38,7 @@ nonisolated enum AgentApprovalExplanationRouting {
 
 extension AppState {
     func explainAgentToolApproval(_ call: AgentToolCall) async throws -> AgentApprovalExplanationResult {
-        if isLocalConfirmationPreviewCall(id: call.id) {
+        if isLocalPanelPreviewCall(id: call.id) {
             return AgentApprovalExplanationResult(
                 text: L10n.ToolCard.localPreviewExplanation,
                 model: L10n.ToolCard.localPreviewModel

@@ -82,6 +82,97 @@ extension L10n {
             defaultValue: "Preparing the result"
         )
 
+        // MARK: Worker monitor
+
+        static let monitorCurrentPhase = String(
+            localized: "agent-delegation.monitor-current-phase",
+            defaultValue: "Current phase"
+        )
+        static let monitorPhaseReading = String(
+            localized: "agent-delegation.monitor-phase-reading",
+            defaultValue: "Read"
+        )
+        static let monitorPhaseLocating = String(
+            localized: "agent-delegation.monitor-phase-locating",
+            defaultValue: "Locate"
+        )
+        static let monitorPhaseImplementing = String(
+            localized: "agent-delegation.monitor-phase-implementing",
+            defaultValue: "Implement"
+        )
+        static let monitorPhaseVerifying = String(
+            localized: "agent-delegation.monitor-phase-verifying",
+            defaultValue: "Verify"
+        )
+        static let monitorTaskFallback = String(
+            localized: "agent-delegation.monitor-task-fallback",
+            defaultValue: "Assigned Worker task"
+        )
+        static let monitorRoundsCompleted = String(
+            localized: "agent-delegation.monitor-rounds-completed",
+            defaultValue: "Completed"
+        )
+        static let monitorToolCalls = String(
+            localized: "agent-delegation.monitor-tool-calls",
+            defaultValue: "Tool calls"
+        )
+        static let monitorElapsed = String(
+            localized: "agent-delegation.monitor-elapsed",
+            defaultValue: "Elapsed"
+        )
+        static let monitorJustNow = String(
+            localized: "agent-delegation.monitor-just-now",
+            defaultValue: "Just now"
+        )
+        static let monitorRunDetails = String(
+            localized: "agent-delegation.monitor-run-details",
+            defaultValue: "Run details"
+        )
+        static let monitorHideDetails = String(
+            localized: "agent-delegation.monitor-hide-details",
+            defaultValue: "Hide details"
+        )
+        static let monitorWaitingForUpdate = String(
+            localized: "agent-delegation.monitor-waiting-for-update",
+            defaultValue: "Waiting for the next update"
+        )
+        static let monitorRunning = String(
+            localized: "agent-delegation.monitor-running",
+            defaultValue: "Worker is running"
+        )
+        static let monitorFinished = String(
+            localized: "agent-delegation.monitor-finished",
+            defaultValue: "Worker finished"
+        )
+        static let monitorPreviewRunningTask = String(
+            localized: "agent-delegation.monitor-preview-running-task",
+            defaultValue: "Implement the Worker monitor and verify its behavior"
+        )
+        static let monitorPreviewRunningSpeech = String(
+            localized: "agent-delegation.monitor-preview-running-speech",
+            defaultValue: "The monitor layout is in place. I am checking the status data and regression tests."
+        )
+        static let monitorPreviewCompletedTask = String(
+            localized: "agent-delegation.monitor-preview-completed-task",
+            defaultValue: "Review version consistency and release notes"
+        )
+        static let monitorPreviewCompletedSpeech = String(
+            localized: "agent-delegation.monitor-preview-completed-speech",
+            defaultValue: "Review completed. Version sources and documentation are consistent."
+        )
+        static let monitorPreviewFailedTask = String(
+            localized: "agent-delegation.monitor-preview-failed-task",
+            defaultValue: "Run the macOS regression test suite"
+        )
+        static let monitorPreviewFailedSpeech = String(
+            localized: "agent-delegation.monitor-preview-failed-speech",
+            defaultValue: "The test run stopped at a compile failure. The failing target is recorded below."
+        )
+        static let monitorPreviewFailureMessage = String(
+            localized: "agent-delegation.monitor-preview-failure-message",
+            defaultValue: "WillDeepTests failed to compile. Open the run details to inspect the recorded activity."
+        )
+
         // MARK: Subagent inspector
 
         static let inspectorTitle = String(
