@@ -629,11 +629,12 @@ nonisolated enum AgentSessionStore {
         let agentArtifactPaths: [String]
         let managedRouting: AgentManagedRoutingState?
         let hostWorkerRuns: [AgentHostWorkerRunRecord]?
+        let coordinatorWorkerRuns: [AgentSubagentRunUsage]?
 
         enum CodingKeys: String, CodingKey {
             case id, modelID, providerID, providerDisplayName, createdAt, updatedAt, messages
             case workspaceLocation, workspaceRootPath, sidebarWorkspaceRootPath, agentEditedPaths, agentArtifactPaths
-            case managedRouting, hostWorkerRuns
+            case managedRouting, hostWorkerRuns, coordinatorWorkerRuns
         }
 
         init(from decoder: Decoder) throws {
@@ -652,6 +653,7 @@ nonisolated enum AgentSessionStore {
             agentArtifactPaths = try c.decodeIfPresent([String].self, forKey: .agentArtifactPaths) ?? []
             managedRouting = try c.decodeIfPresent(AgentManagedRoutingState.self, forKey: .managedRouting)
             hostWorkerRuns = try c.decodeIfPresent([AgentHostWorkerRunRecord].self, forKey: .hostWorkerRuns)
+            coordinatorWorkerRuns = try c.decodeIfPresent([AgentSubagentRunUsage].self, forKey: .coordinatorWorkerRuns)
         }
 
         var snapshot: AgentUsageSessionSnapshot {
@@ -664,6 +666,7 @@ nonisolated enum AgentSessionStore {
                 updatedAt: updatedAt,
                 messages: messages.compactMap(\.snapshot),
                 hostWorkerRuns: hostWorkerRuns,
+                coordinatorWorkerRuns: coordinatorWorkerRuns,
                 workspaceIdentifier: workspaceIdentifier,
                 editedFileCount: agentEditedPaths.count,
                 artifactCount: agentArtifactPaths.count,

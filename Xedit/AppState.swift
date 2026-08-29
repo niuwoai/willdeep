@@ -863,15 +863,16 @@ final class AppState: ObservableObject {
         }
         agentSubagentRegistry.onRunFinished = { [weak self] run in
             guard let self else { return }
-            if self.handleAgentGoalPlanningSubagentCompletion(run) {
-                return
-            }
-            guard
-                  let runtime = self.runtime(for: run.parentRuntimeID) else { return }
+            // Accounting goes first, before any branch that can return.
+            //
             // Background runs finish long after their spawn call returned, so
-            // their cost has to be stamped onto the persisted tool call here —
-            // the foreground path does the same inside its own `persist`.
-            self.recordSubagentRunUsage(
+            // their cost has to be recorded here — the foreground path does the
+            // same inside its own `persist`. It used to sit *below* the
+            // goal-planning branch and below a `runtime` guard, so every
+            // planning member returned early and billed to nobody: planning a
+            // goal spends several child loops and the dashboard showed none of
+            // them.
+            self.recordSubagentRunUsageAnywhere(
                 AgentSubagentRunUsage(
                     profileID: run.profileID,
                     model: run.model,
@@ -884,8 +885,13 @@ final class AppState: ObservableObject {
                     toolInvocationCount: run.toolInvocationCount
                 ),
                 runID: run.id,
-                runtime: runtime
+                parentRuntimeID: run.parentRuntimeID
             )
+            if self.handleAgentGoalPlanningSubagentCompletion(run) {
+                return
+            }
+            guard
+                  let runtime = self.runtime(for: run.parentRuntimeID) else { return }
             self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
         // Session writes ride a background queue now; when one fails

@@ -926,17 +926,44 @@ extension AppState {
     /// is the only route by which worker tokens reach it. Without the stamp a
     /// cheap-model tier looks free: the parent's tokens are counted and the
     /// child's are not.
+    @discardableResult
     func recordSubagentRunUsage(
         _ usage: AgentSubagentRunUsage,
         runID: UUID,
         runtime: AgentRuntime
-    ) {
+    ) -> Bool {
         guard let messageIndex = runtime.messages.lastIndex(where: { message in
             message.toolCalls.contains { $0.subagentRunID == runID }
-        }) else { return }
-        guard let callIndex = runtime.messages[messageIndex].toolCalls
-            .firstIndex(where: { $0.subagentRunID == runID }) else { return }
+        }),
+            let callIndex = runtime.messages[messageIndex].toolCalls
+                .firstIndex(where: { $0.subagentRunID == runID }) else {
+            // No tool call carries this run. That is not a lost cause — the
+            // coordinator starts runs of its own — so say so and let the
+            // caller put the cost in the session-level ledger instead of
+            // dropping it, which is what used to happen here.
+            return false
+        }
         runtime.messages[messageIndex].toolCalls[callIndex].subagentUsage = usage
+        persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+        return true
+    }
+
+    /// Bill a finished child loop, wherever its cost belongs.
+    ///
+    /// A `spawn_agent` run stamps the tool call that started it. A run the
+    /// coordinator started itself (goal-planning members) has no such call, so
+    /// it lands in `session.coordinatorWorkerRuns`. Both routes reach the
+    /// stats dashboard; neither is allowed to be a silent no-op.
+    func recordSubagentRunUsageAnywhere(
+        _ usage: AgentSubagentRunUsage,
+        runID: UUID,
+        parentRuntimeID: UUID
+    ) {
+        guard let runtime = runtime(for: parentRuntimeID) else { return }
+        guard !recordSubagentRunUsage(usage, runID: runID, runtime: runtime) else { return }
+        var ledger = runtime.session.coordinatorWorkerRuns ?? []
+        ledger.append(usage)
+        runtime.session.coordinatorWorkerRuns = ledger
         persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
     }
 

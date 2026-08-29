@@ -701,6 +701,45 @@ struct AgentSubagentProfileTests {
         #expect(!SettingsGroup.ai.tabs.contains(.subagents))
     }
 
+    @Test("a coordinator-started run bills to the session, not to nobody")
+    func coordinatorRunsReachTheDashboard() {
+        let usage = AgentSubagentRunUsage(
+            profileID: AgentSubagentProfileCatalog.deepID,
+            model: "deepseek-v4-flash",
+            providerID: "some-im",
+            usageTokens: 12_000,
+            promptTokens: 9_000,
+            completionTokens: 3_000,
+            cachedPromptTokens: 0,
+            roundCount: 4,
+            toolInvocationCount: 7
+        )
+        let snapshot = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: nil,
+            providerID: nil,
+            providerDisplayName: nil,
+            createdAt: Date(),
+            updatedAt: Date(),
+            messages: [],
+            coordinatorWorkerRuns: [usage]
+        )
+
+        // Goal-planning members have no `spawn_agent` tool call, so before
+        // 1.307 they matched nothing in `subagentUsage` and their tokens were
+        // simply absent from the dashboard.
+        let rows = AgentUsageStats.subagentUsage(for: [snapshot])
+        let deep = rows.first { $0.profileID == AgentSubagentProfileCatalog.deepID }
+        #expect(deep?.invocationCount == 1)
+        #expect(deep?.runCount == 1)
+        #expect(deep?.sessionCount == 1)
+
+        // A session whose only worker activity is coordinator-started still
+        // counts as a session that used workers.
+        let kpis = AgentUsageStats.skillWorkerKPIs(for: [snapshot])
+        #expect(kpis.deepRunCount == 1)
+    }
+
     @Test("schema exposes seven capability trades while legacy ids still resolve")
     func toolDescriptionListsOnlyPublicTrades() {
         let catalog = AgentSubagentProfileCatalog.toolDescriptionCatalog

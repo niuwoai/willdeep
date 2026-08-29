@@ -323,6 +323,9 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
     var updatedAt: Date
     var messages: [AgentUsageMessageSnapshot]
     var hostWorkerRuns: [AgentHostWorkerRunRecord]?
+    /// Runs the coordinator started without a `spawn_agent` tool call.
+    /// See `AgentSession.coordinatorWorkerRuns`.
+    var coordinatorWorkerRuns: [AgentSubagentRunUsage]?
     var workspaceIdentifier: String?
     var editedFileCount: Int
     var artifactCount: Int
@@ -345,6 +348,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
         updatedAt: Date,
         messages: [AgentUsageMessageSnapshot],
         hostWorkerRuns: [AgentHostWorkerRunRecord]? = nil,
+        coordinatorWorkerRuns: [AgentSubagentRunUsage]? = nil,
         workspaceIdentifier: String? = nil,
         editedFileCount: Int = 0,
         artifactCount: Int = 0,
@@ -359,6 +363,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
         self.updatedAt = updatedAt
         self.messages = messages
         self.hostWorkerRuns = hostWorkerRuns
+        self.coordinatorWorkerRuns = coordinatorWorkerRuns
         self.workspaceIdentifier = workspaceIdentifier
         self.editedFileCount = editedFileCount
         self.artifactCount = artifactCount
@@ -376,6 +381,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
             updatedAt: session.updatedAt,
             messages: session.messages.map { AgentUsageMessageSnapshot(message: $0) },
             hostWorkerRuns: session.hostWorkerRuns,
+            coordinatorWorkerRuns: session.coordinatorWorkerRuns,
             workspaceIdentifier: Self.workspaceIdentifier(
                 for: session.sidebarWorkspaceRootPath.map { .local(path: $0) }
                     ?? session.workspaceLocation
@@ -615,6 +621,7 @@ enum AgentUsageStats {
             subagentSessionCount: sessions.count { session in
                 session.messages.contains { !$0.subagentProfileIDs.isEmpty }
                     || !(session.hostWorkerRuns ?? []).isEmpty
+                    || !(session.coordinatorWorkerRuns ?? []).isEmpty
             },
             skillWorkerKPIs: skillWorkerKPIs(for: sessions),
             heatmapCells: heatmap(for: sessions, weekCount: heatmapWeekCount, now: now),
@@ -974,6 +981,7 @@ enum AgentUsageStats {
             // and that only shows up if they are counted where they landed.
             let workerUsages = session.messages.flatMap(\.subagentRuns)
                 + (session.hostWorkerRuns ?? []).compactMap(\.usage)
+                + (session.coordinatorWorkerRuns ?? [])
             for run in workerUsages {
                 let modelID = normalizedModelID(run.model)
                 let declaredProviderID = run.providerID?
@@ -1116,6 +1124,14 @@ enum AgentUsageStats {
                 }
             }
 
+            // Coordinator-started runs have no tool call and no host record,
+            // so they reach the KPIs only here. They carry no verifier verdict
+            // or citation audit, which `recordRun` already treats as absent
+            // rather than as a failure.
+            for run in session.coordinatorWorkerRuns ?? [] {
+                recordRun(profileID: run.profileID, usage: run)
+            }
+
             for hostRun in session.hostWorkerRuns ?? [] where hostRun.startedAt != nil {
                 recordRun(profileID: hostRun.profileID, usage: hostRun.usage)
                 if hostRun.source == .automaticCoding {
@@ -1157,6 +1173,12 @@ enum AgentUsageStats {
             }
             for run in session.messages.flatMap(\.subagentRuns) {
                 let profileID = AgentSubagentProfileCatalog.publicID(for: run.profileID)
+                runCounts[profileID, default: 0] += 1
+                sessionIDs[profileID, default: []].insert(session.id)
+            }
+            for run in session.coordinatorWorkerRuns ?? [] {
+                let profileID = AgentSubagentProfileCatalog.publicID(for: run.profileID)
+                invocationCounts[profileID, default: 0] += 1
                 runCounts[profileID, default: 0] += 1
                 sessionIDs[profileID, default: []].insert(session.id)
             }
