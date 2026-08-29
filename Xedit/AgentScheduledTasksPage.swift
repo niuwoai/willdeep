@@ -194,7 +194,10 @@ struct AgentScheduledTasksPage: View {
             .padding(.horizontal, 34)
             .padding(.top, 30)
             .padding(.bottom, 48)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // The page body has a deliberate reading-width cap. Once the
+            // center column grows beyond it, keep that body centered instead
+            // of pinning the whole Scheduled page to the sidebar edge.
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .sheet(item: $editing) { target in
             AgentRoutineEditorView(routine: target.routine, isNew: target.isNew)
