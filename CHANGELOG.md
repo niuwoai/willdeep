@@ -1,7 +1,17 @@
 # Changelog
 
-> 当前文件保留最新版本（1.306.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.306.0-rc2 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.306.0-rc2 - 2026-08-29
+
+### Fixed
+
+- **目标规划的子代理用量一直没进账**。规划一个目标要跑好几个子循环，是这个 App 比较贵的动作之一，而统计面板上一个都看不到。
+  - 表面原因是 `AppState.onRunFinished` 里记账排在两个提前 return 之后：目标规划分支命中就 `return`，`runtime(for:)` 取不到也 `return`，两条都跳过了 `recordSubagentRunUsage`。
+  - 但把记账挪到前面并不够，真正的原因更靠下：**工种用量是盖在「发起它的那次 `spawn_agent` 工具调用」上的**，而协调器自己起的运行（`coordinatorOwnedRunIDs`，目前就是目标规划成员）压根没有工具调用可盖。`recordSubagentRunUsage` 找不到落点，`guard … else { return }` 静默返回——这才是钱丢掉的那一行。
+  - 于是补了一个会话级台账 `AgentSession.coordinatorWorkerRuns`：没有工具调用可盖的运行落这里。`recordSubagentRunUsage` 改成返回 Bool（到底盖上了没有），新的 `recordSubagentRunUsageAnywhere` 按这个结果二选一——两条路都通向统计面板，**哪条都不许再静默变成空操作**。
+  - 统计侧三处一并接齐：按工种的请求/运行行、Token 归因（工种的 Token 记在它实际跑的模型上，不记父会话）、以及工种 KPI。老会话没有这个字段，`decodeIfPresent` 回落 nil，读起来跟以前一样。
 
 ## 1.306.0-rc1 - 2026-08-29
 
