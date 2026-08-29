@@ -8,24 +8,37 @@
 import Foundation
 
 nonisolated enum AgentComposerLocalPanelTrigger {
-    static let exactInput = "#1983#"
-
-    static func isExactInput(_ input: String) -> Bool {
-        input.trimmingCharacters(in: .whitespacesAndNewlines) == exactInput
+    enum Kind: Equatable, Sendable {
+        case confirmation
+        case workerMonitor
     }
 
-    static func matches(
+    static let confirmationInput = "#1983#"
+    static let workerMonitorInput = "#1984#"
+
+    static func kind(for input: String) -> Kind? {
+        switch input.trimmingCharacters(in: .whitespacesAndNewlines) {
+        case confirmationInput: return .confirmation
+        case workerMonitorInput: return .workerMonitor
+        default: return nil
+        }
+    }
+
+    static func matchingKind(
         input: String,
         isNewSession: Bool,
         hasTurnAttachments: Bool,
         isResponding: Bool,
         hasExistingPreview: Bool
-    ) -> Bool {
-        isExactInput(input)
-            && isNewSession
-            && !hasTurnAttachments
-            && !isResponding
-            && !hasExistingPreview
+    ) -> Kind? {
+        guard let kind = kind(for: input),
+              isNewSession,
+              !hasTurnAttachments,
+              !isResponding,
+              !hasExistingPreview else {
+            return nil
+        }
+        return kind
     }
 }
 
@@ -74,23 +87,27 @@ extension AppState {
             || !runtime.pendingSkills.isEmpty
             || !runtime.pendingFiles.isEmpty
             || runtime.pendingIncludeWorkspaceOverview
-        if AgentComposerLocalPanelTrigger.isExactInput(runtime.input) {
-            guard AgentComposerLocalPanelTrigger.matches(
+        if AgentComposerLocalPanelTrigger.kind(for: runtime.input) != nil {
+            guard let localPanelKind = AgentComposerLocalPanelTrigger.matchingKind(
                 input: runtime.input,
                 isNewSession: runtime.isEmpty,
                 hasTurnAttachments: hasTurnAttachments,
                 isResponding: runtime.isResponding,
-                hasExistingPreview: runtime.hasLocalConfirmationPreview
+                hasExistingPreview: runtime.hasLocalPanelPreview
             ) else {
-                // `#1983#` is reserved for this local surface. In an existing
-                // or busy session it intentionally does nothing instead of
+                // Local preview passwords are reserved. In an existing or
+                // busy session they intentionally do nothing instead of
                 // falling through into a model request.
                 return
             }
             runtime.input = ""
-            runtime.installLocalConfirmationPreview(
+            let calls = switch localPanelKind {
+            case .confirmation:
                 localConfirmationPreviewCalls(for: runtime)
-            )
+            case .workerMonitor:
+                localWorkerMonitorPreviewCalls()
+            }
+            runtime.installLocalPanelPreview(calls)
             return
         }
 
@@ -124,7 +141,7 @@ extension AppState {
         // The preview is a transient, local-only surface. As soon as the user
         // starts a real turn, remove its synthetic cards before any normal
         // activity accounting or approval routing runs.
-        runtime.clearLocalConfirmationPreview()
+        runtime.clearLocalPanelPreview()
 
         let prompt = composeAttachedPrompt(
             userText: userText,
@@ -271,6 +288,168 @@ extension AppState {
                 status: .awaitingUserAnswer
             ),
         ]
+    }
+
+    /// `#1984#` installs three synthetic `spawn_agent` records that exercise
+    /// the real transcript surface without starting a provider request or a
+    /// child process. The records live only in `AgentRuntime.toolCalls` and
+    /// share the same cleanup/accounting exclusion as the `#1983#` approval
+    /// previews.
+    private func localWorkerMonitorPreviewCalls() -> [AgentToolCall] {
+        let messageID = UUID()
+        let now = Date()
+
+        return [
+            localWorkerMonitorPreviewCall(
+                messageID: messageID,
+                externalID: "local-worker-monitor-preview-running",
+                profileID: AgentSubagentProfileCatalog.implementerID,
+                workerName: L10n.AgentDelegation.profileImplementerName,
+                model: "glm-5",
+                taskTitle: L10n.AgentDelegation.monitorPreviewRunningTask,
+                status: .running,
+                round: 15,
+                maximumRounds: 18,
+                completedToolInvocations: 22,
+                activityText: L10n.AgentDelegation.progressVerifying,
+                startedAt: now.addingTimeInterval(-154),
+                finishedAt: nil,
+                utterances: [
+                    (
+                        13,
+                        L10n.AgentDelegation.monitorPreviewRunningSpeech,
+                        [
+                            AgentSubagentToolMention(
+                                name: AgentToolDisplay.name(for: "grep_files"),
+                                object: "subagentLiveActivity"
+                            ),
+                            AgentSubagentToolMention(
+                                name: AgentToolDisplay.name(for: "read_file"),
+                                object: "AgentSubagentMonitorSurface.swift"
+                            ),
+                        ]
+                    ),
+                    (
+                        15,
+                        "",
+                        [
+                            AgentSubagentToolMention(
+                                name: AgentToolDisplay.name(for: "run_command"),
+                                object: "scripts/run_tests.sh"
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            localWorkerMonitorPreviewCall(
+                messageID: messageID,
+                externalID: "local-worker-monitor-preview-completed",
+                profileID: AgentSubagentProfileCatalog.reviewerID,
+                workerName: L10n.AgentDelegation.profileReviewerName,
+                model: "glm-5",
+                taskTitle: L10n.AgentDelegation.monitorPreviewCompletedTask,
+                status: .succeeded,
+                round: 8,
+                maximumRounds: 8,
+                completedToolInvocations: 11,
+                activityText: L10n.AgentDelegation.progressPreparingReport,
+                startedAt: now.addingTimeInterval(-309),
+                finishedAt: now.addingTimeInterval(-18),
+                utterances: [
+                    (
+                        8,
+                        L10n.AgentDelegation.monitorPreviewCompletedSpeech,
+                        [
+                            AgentSubagentToolMention(
+                                name: AgentToolDisplay.name(for: "run_command"),
+                                object: "version_consistency.rb"
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+            localWorkerMonitorPreviewCall(
+                messageID: messageID,
+                externalID: "local-worker-monitor-preview-failed",
+                profileID: AgentSubagentProfileCatalog.testerID,
+                workerName: L10n.AgentDelegation.profileTesterName,
+                model: "glm-5",
+                taskTitle: L10n.AgentDelegation.monitorPreviewFailedTask,
+                status: .failed,
+                round: 6,
+                maximumRounds: 10,
+                completedToolInvocations: 9,
+                activityText: L10n.AgentDelegation.progressVerifying,
+                startedAt: now.addingTimeInterval(-226),
+                finishedAt: now.addingTimeInterval(-42),
+                utterances: [
+                    (
+                        6,
+                        L10n.AgentDelegation.monitorPreviewFailedSpeech,
+                        [
+                            AgentSubagentToolMention(
+                                name: AgentToolDisplay.name(for: "run_command"),
+                                object: "xcodebuild test"
+                            ),
+                        ]
+                    ),
+                ],
+                errorMessage: L10n.AgentDelegation.monitorPreviewFailureMessage
+            ),
+        ]
+    }
+
+    private func localWorkerMonitorPreviewCall(
+        messageID: UUID,
+        externalID: String,
+        profileID: String,
+        workerName: String,
+        model: String,
+        taskTitle: String,
+        status: AgentToolCallStatus,
+        round: Int,
+        maximumRounds: Int,
+        completedToolInvocations: Int,
+        activityText: String,
+        startedAt: Date,
+        finishedAt: Date?,
+        utterances: [(Int, String, [AgentSubagentToolMention])],
+        errorMessage: String? = nil
+    ) -> AgentToolCall {
+        var activity = AgentSubagentLiveActivity(
+            profileID: profileID,
+            workerName: workerName,
+            model: model,
+            round: round,
+            maximumRounds: maximumRounds,
+            completedToolInvocations: completedToolInvocations,
+            activityText: activityText,
+            startedAt: startedAt,
+            finishedAt: finishedAt
+        )
+        for (utteranceRound, text, tools) in utterances {
+            activity.recordUtterance(round: utteranceRound, text: text, tools: tools)
+        }
+
+        var call = AgentToolCall(
+            messageID: messageID,
+            externalID: externalID,
+            toolName: "spawn_agent",
+            arguments: [
+                "label": .string(taskTitle),
+                "profile": .string(profileID),
+            ],
+            risk: .read,
+            status: status,
+            startedAt: startedAt,
+            finishedAt: finishedAt,
+            errorMessage: errorMessage,
+            subagentModel: model,
+            subagentWorkerName: workerName,
+            subagentProgress: status == .running ? activity.detailLine : nil
+        )
+        call.subagentLiveActivity = activity
+        return call
     }
 
     func dispatchAgentMessageUsingSelectedExecutor(

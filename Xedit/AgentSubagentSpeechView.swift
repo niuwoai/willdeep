@@ -12,13 +12,12 @@
 //  every Worker's narration attached to the task it was given, and keeps the
 //  parent's own turn readable.
 //
-//  What makes it legible as *someone else* speaking:
-//   - a left rail and a tint assigned per public trade, stable across runs,
-//     so no two built-in trades wear the same colour as each other;
-//   - the trade name and model on the header row, not just "subagent";
-//   - round numbers on each utterance, matching the inspector's numbering.
+//  The collapsed surface is a three-column monitor: identity/task, current
+//  phase, and measured run stats. The full Worker transcript and steering
+//  controls remain available behind one explicit run-details disclosure.
 //
 
+import Foundation
 import SwiftUI
 
 /// Deterministic per-trade colour. Same trade, same colour, every session —
@@ -77,7 +76,9 @@ struct AgentSubagentSpeechView: View {
     /// its transcript on screen — that is the point — but stops claiming to
     /// still be working.
     let isRunning: Bool
+    let taskTitle: String?
 
+    @State private var isDetailsExpanded = false
     @State private var isInterventionExpanded: Bool
     @State private var interventionDraft = ""
     @State private var interventionError: String?
@@ -87,11 +88,13 @@ struct AgentSubagentSpeechView: View {
         activity: AgentSubagentLiveActivity,
         runID: UUID?,
         isRunning: Bool,
+        taskTitle: String? = nil,
         initiallyShowsIntervention: Bool = false
     ) {
         self.activity = activity
         self.runID = runID
         self.isRunning = isRunning
+        self.taskTitle = taskTitle
         _isInterventionExpanded = State(initialValue: initiallyShowsIntervention)
     }
 
@@ -118,75 +121,46 @@ struct AgentSubagentSpeechView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 7) {
-            Capsule()
-                .fill(tint.opacity(0.55))
-                .frame(width: 2.5)
-            VStack(alignment: .leading, spacing: 6) {
-                header
-                ForEach(speechRows) { row in
-                    speechRow(row)
+        VStack(alignment: .leading, spacing: 0) {
+            AgentSubagentMonitorSurface(
+                activity: activity,
+                isRunning: isRunning,
+                taskTitle: taskTitle,
+                tint: tint,
+                baseFontSize: appState.agentChatBaseFontSize,
+                isDetailsExpanded: $isDetailsExpanded
+            )
+            if isDetailsExpanded {
+                Divider()
+                    .opacity(0.36)
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(speechRows) { row in
+                        speechRow(row)
+                    }
+                    if isRunning, runID != nil {
+                        interventionControl
+                    }
                 }
-                if isRunning, runID != nil {
-                    interventionControl
-                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.18))
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.leading, 2)
-        .padding(.vertical, 6)
-        .padding(.trailing, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.055))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.22))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.56), lineWidth: 0.5)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("subagent-monitor")
         .onChange(of: isRunning) { running in
             if !running {
                 isInterventionExpanded = false
                 interventionFieldIsFocused = false
             }
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "person.wave.2.fill")
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(tint)
-            Text(activity.workerName)
-                .font(AgentDesign.chatSupportingFont(
-                    baseFontSize: appState.agentChatBaseFontSize,
-                    visualMinimum: 10,
-                    weight: .semibold
-                ))
-                .foregroundStyle(tint)
-                .lineLimit(1)
-            if !activity.model.isEmpty {
-                Text(activity.model)
-                    .font(AgentDesign.chatSupportingFont(
-                        baseFontSize: appState.agentChatBaseFontSize,
-                        visualMinimum: 9,
-                        weight: .regular
-                    ))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            if isRunning {
-                Text(activity.detailLine)
-                    .font(AgentDesign.chatSupportingFont(
-                        baseFontSize: appState.agentChatBaseFontSize,
-                        visualMinimum: 9,
-                        weight: .regular
-                    ))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                ProgressView()
-                    .controlSize(.small)
-                    .scaleEffect(0.5)
-                    .frame(width: 11, height: 11)
-            }
-            Spacer(minLength: 0)
         }
     }
 
@@ -512,20 +486,23 @@ struct AgentSubagentSpeechView: View {
     }
 
     private func toolChipFlow(_ mentions: [AgentSubagentToolMention]) -> some View {
-        AgentSubagentChipFlowLayout(spacing: 4, lineSpacing: 3) {
+        VStack(alignment: .leading, spacing: 3) {
             ForEach(Array(mentions.enumerated()), id: \.offset) { _, mention in
-                toolChip(mention)
+                toolMentionRow(mention)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Verb plus object. The chip palette is deliberately neutral: the trade
-    /// tint already carries identity on the rail and the Worker's name, and
-    /// a third tinted surface at 12% opacity blurred into the 5.5% card
-    /// behind it — a block of colour where a list of facts belongs.
-    private func toolChip(_ mention: AgentSubagentToolMention) -> some View {
-        HStack(spacing: 3) {
+    /// Expanded history is a readable activity list, not a badge cloud. The
+    /// compact monitor already summarizes the newest action, so this list is
+    /// intentionally quiet and appears only after the user asks for details.
+    private func toolMentionRow(_ mention: AgentSubagentToolMention) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: toolSystemImage(mention.name))
+                .font(.system(size: 9.5, weight: .regular))
+                .foregroundStyle(.tertiary)
+                .frame(width: 12)
             Text(mention.name)
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -536,76 +513,25 @@ struct AgentSubagentSpeechView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 5)
-        .padding(.vertical, 1.5)
-        .background(Color.primary.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        .frame(minHeight: 16)
         .accessibilityElement(children: .combine)
     }
-}
 
-/// Wraps tool chips at the width available instead of at whatever round
-/// boundary the Worker happened to produce.
-///
-/// SwiftUI has no stock flow container, and the stack this replaces put one
-/// row per utterance — so three consecutive rounds that each called a single
-/// tool drew three lines holding one chip apiece, with the break points
-/// decided by the data rather than by how much there was to read.
-struct AgentSubagentChipFlowLayout: Layout {
-    var spacing: CGFloat = 4
-    var lineSpacing: CGFloat = 3
-
-    func sizeThatFits(
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout Void
-    ) -> CGSize {
-        let limit = proposal.width ?? .infinity
-        var widest: CGFloat = 0
-        var cursor: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        var total: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if cursor > 0, cursor + spacing + size.width > limit {
-                widest = max(widest, cursor)
-                total += lineHeight + lineSpacing
-                cursor = 0
-                lineHeight = 0
-            }
-            cursor += (cursor > 0 ? spacing : 0) + size.width
-            lineHeight = max(lineHeight, size.height)
+    private func toolSystemImage(_ name: String) -> String {
+        let normalized = name.lowercased()
+        if normalized.contains("read") || normalized.contains("读取") { return "doc.text" }
+        if normalized.contains("search") || normalized.contains("搜索") || normalized.contains("正则") {
+            return "magnifyingglass"
         }
-        widest = max(widest, cursor)
-        total += lineHeight
-        return CGSize(width: min(widest, limit), height: total)
-    }
-
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout Void
-    ) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var lineHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + spacing + size.width > bounds.maxX {
-                y += lineHeight + lineSpacing
-                x = bounds.minX
-                lineHeight = 0
-            }
-            if x > bounds.minX { x += spacing }
-            subview.place(
-                at: CGPoint(x: x, y: y),
-                anchor: .topLeading,
-                proposal: ProposedViewSize(size)
-            )
-            x += size.width
-            lineHeight = max(lineHeight, size.height)
+        if normalized.contains("edit") || normalized.contains("write")
+            || normalized.contains("编辑") || normalized.contains("写入") {
+            return "square.and.pencil"
         }
+        if normalized.contains("command") || normalized.contains("运行") || normalized.contains("执行") {
+            return "terminal"
+        }
+        return "gearshape"
     }
 }

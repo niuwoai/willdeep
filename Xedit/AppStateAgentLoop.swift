@@ -471,7 +471,7 @@ extension AppState {
         }
         agentMessages.removeAll()
         agentPatchProposals.removeAll()
-        activeRuntime?.clearLocalConfirmationPreview()
+        activeRuntime?.clearLocalPanelPreview()
         agentToolCalls.removeAll()
         agentQueuedMessages.removeAll()
         agentPendingImages.removeAll()

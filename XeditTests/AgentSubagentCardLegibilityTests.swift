@@ -124,6 +124,73 @@ struct AgentSubagentCardLegibilityTests {
         #expect(AgentToolDisplay.objectSummary(toolName: "read_file", argumentsJSON: "not json") == nil)
     }
 
+    // MARK: Monitor presentation
+
+    private func monitorActivity(
+        round: Int = 4,
+        completedTools: Int = 3,
+        activityText: String
+    ) -> AgentSubagentLiveActivity {
+        AgentSubagentLiveActivity(
+            profileID: AgentSubagentProfileCatalog.implementerID,
+            workerName: "实现",
+            model: "glm-5",
+            round: round,
+            maximumRounds: 18,
+            completedToolInvocations: completedTools,
+            activityText: activityText,
+            startedAt: Date(timeIntervalSince1970: 1_000)
+        )
+    }
+
+    @Test("monitor phase follows provider-visible activity instead of inventing a percentage")
+    func monitorPhaseUsesVisibleSignals() {
+        #expect(
+            AgentSubagentMonitorPhase.infer(from: monitorActivity(activityText: "正在验证结果"))
+                == .verifying
+        )
+        #expect(
+            AgentSubagentMonitorPhase.infer(from: monitorActivity(activityText: "正在正则搜索"))
+                == .locating
+        )
+        #expect(
+            AgentSubagentMonitorPhase.infer(from: monitorActivity(activityText: "正在编辑文件"))
+                == .implementing
+        )
+        #expect(
+            AgentSubagentMonitorPhase.infer(from: monitorActivity(
+                round: 1,
+                completedTools: 0,
+                activityText: "正在读取文件"
+            )) == .reading
+        )
+    }
+
+    @Test("monitor shows the newest concrete tool action and normalizes its task title")
+    func monitorUsesNewestToolAction() {
+        var activity = monitorActivity(activityText: "正在思考下一步")
+        activity.recordUtterance(
+            round: 3,
+            text: "",
+            tools: [AgentSubagentToolMention(name: "读取文件", object: "service.go")]
+        )
+        activity.recordUtterance(
+            round: 4,
+            text: "",
+            tools: [AgentSubagentToolMention(name: "正则搜索", object: "upgradePolicy")]
+        )
+
+        let presentation = AgentSubagentMonitorPresentation(
+            activity: activity,
+            taskTitle: "  实现 VIP 自动升级  "
+        )
+
+        #expect(presentation.taskTitle == "实现 VIP 自动升级")
+        #expect(presentation.latestTool?.object == "upgradePolicy")
+        #expect(presentation.latestAction == "正则搜索  upgradePolicy")
+        #expect(presentation.currentPhase == .locating)
+    }
+
     // MARK: Row merging
 
     private func utterance(

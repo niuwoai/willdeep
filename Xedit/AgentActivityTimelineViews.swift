@@ -26,41 +26,38 @@ struct AgentLiveActivityTimeline: View {
                 if call.status.isBlockingForUserDecision {
                     AgentToolCallCard(call: call)
                 } else if detailCallIDs.contains(call.id) {
-                    // A Worker's narration hangs under whichever row shape
-                    // this call drew. It has to live here and not only on
-                    // `AgentToolCallCard`: while the turn is still running
-                    // the timeline shows compact rows, and the full card is
-                    // what the transcript falls back to *after* it settles —
-                    // which is exactly too late to watch a Worker work.
-                    VStack(alignment: .leading, spacing: 5) {
-                        if call.status == .failed,
-                           call.toolName == "run_command",
-                           AgentFailedCommandDetailPresentation(call: call).hasDetails {
-                            AgentFailedCommandActivityRow(
-                                call: call,
-                                expandsTimeline: call.id == presentation.disclosureCall?.id
-                                    && presentation.hasExpandableDetails,
-                                isTimelineExpanded: $isExpanded
-                            )
-                        } else if call.id == presentation.disclosureCall?.id,
-                           presentation.hasExpandableDetails {
-                            AgentActivityTimelineDisclosureRow(call: call, isExpanded: $isExpanded)
-                        } else {
-                            AgentToolActivityTimelineRow(
-                                presentation: AgentToolActivityRowPresentation(call: call),
-                                errorDetail: call.errorMessage
-                            )
-                        }
-                        if let activity = call.subagentLiveActivity,
-                           call.subagentIsWorking
-                                || !activity.utterances.isEmpty
-                                || !activity.interventionReceipts.isEmpty {
-                            AgentSubagentSpeechView(
-                                activity: activity,
-                                runID: call.subagentRunID,
-                                isRunning: call.subagentIsWorking
-                            )
-                        }
+                    // A reporting Worker owns the whole row: its monitor
+                    // already carries task, identity, phase and metrics, so
+                    // keeping the generic "subagent running" row above it
+                    // would repeat the same state and reintroduce the visual
+                    // hierarchy problem this component solves.
+                    if let activity = call.subagentLiveActivity,
+                       call.subagentIsWorking
+                            || !activity.utterances.isEmpty
+                            || !activity.interventionReceipts.isEmpty {
+                        AgentSubagentSpeechView(
+                            activity: activity,
+                            runID: call.subagentRunID,
+                            isRunning: call.subagentIsWorking,
+                            taskTitle: AgentToolActivityRowPresentation(call: call).detail
+                        )
+                    } else if call.status == .failed,
+                              call.toolName == "run_command",
+                              AgentFailedCommandDetailPresentation(call: call).hasDetails {
+                        AgentFailedCommandActivityRow(
+                            call: call,
+                            expandsTimeline: call.id == presentation.disclosureCall?.id
+                                && presentation.hasExpandableDetails,
+                            isTimelineExpanded: $isExpanded
+                        )
+                    } else if call.id == presentation.disclosureCall?.id,
+                              presentation.hasExpandableDetails {
+                        AgentActivityTimelineDisclosureRow(call: call, isExpanded: $isExpanded)
+                    } else {
+                        AgentToolActivityTimelineRow(
+                            presentation: AgentToolActivityRowPresentation(call: call),
+                            errorDetail: call.errorMessage
+                        )
                     }
                 }
             }

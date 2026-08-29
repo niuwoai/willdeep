@@ -6,53 +6,60 @@
 import Testing
 @testable import WillDeep
 
-@Suite("Composer #1983# 本地确认面板")
+@Suite("Composer 本地面板口令")
 @MainActor
 struct AgentComposerLocalPanelTriggerTests {
-    @Test("精确口令只在无附件的新会话中匹配")
+    @Test("两个精确口令只在无附件的新会话中匹配")
     func exactTriggerPolicy() {
-        #expect(AgentComposerLocalPanelTrigger.matches(
+        #expect(AgentComposerLocalPanelTrigger.matchingKind(
             input: "  #1983#\n",
             isNewSession: true,
             hasTurnAttachments: false,
             isResponding: false,
             hasExistingPreview: false
-        ))
-        #expect(!AgentComposerLocalPanelTrigger.matches(
+        ) == .confirmation)
+        #expect(AgentComposerLocalPanelTrigger.matchingKind(
+            input: "\t#1984# ",
+            isNewSession: true,
+            hasTurnAttachments: false,
+            isResponding: false,
+            hasExistingPreview: false
+        ) == .workerMonitor)
+        #expect(AgentComposerLocalPanelTrigger.matchingKind(
             input: "请显示 #1983#",
             isNewSession: true,
             hasTurnAttachments: false,
             isResponding: false,
             hasExistingPreview: false
-        ))
-        #expect(!AgentComposerLocalPanelTrigger.matches(
-            input: "#1983#",
+        ) == nil)
+        #expect(AgentComposerLocalPanelTrigger.matchingKind(
+            input: "#1984#",
             isNewSession: false,
             hasTurnAttachments: false,
             isResponding: false,
             hasExistingPreview: false
-        ))
-        #expect(!AgentComposerLocalPanelTrigger.matches(
+        ) == nil)
+        #expect(AgentComposerLocalPanelTrigger.matchingKind(
             input: "#1983#",
             isNewSession: true,
             hasTurnAttachments: true,
             isResponding: false,
             hasExistingPreview: false
-        ))
-        #expect(!AgentComposerLocalPanelTrigger.matches(
-            input: "#1983#",
+        ) == nil)
+        #expect(AgentComposerLocalPanelTrigger.matchingKind(
+            input: "#1984#",
             isNewSession: true,
             hasTurnAttachments: false,
             isResponding: true,
             hasExistingPreview: false
-        ))
-        #expect(!AgentComposerLocalPanelTrigger.matches(
+        ) == nil)
+        #expect(AgentComposerLocalPanelTrigger.matchingKind(
             input: "#1983#",
             isNewSession: true,
             hasTurnAttachments: false,
             isResponding: false,
             hasExistingPreview: true
-        ))
+        ) == nil)
     }
 
     @Test("发送口令只安装本地面板，不创建消息或请求")
@@ -70,7 +77,7 @@ struct AgentComposerLocalPanelTriggerTests {
         #expect(runtime.requestTask == nil)
         #expect(!runtime.isResponding)
         #expect(runtime.queuedMessages.isEmpty)
-        #expect(runtime.localConfirmationPreviewCalls.map(\.toolName) == [
+        #expect(runtime.localPanelPreviewCalls.map(\.toolName) == [
             "run_command",
             "web_fetch",
             "create_user_skills",
@@ -79,6 +86,32 @@ struct AgentComposerLocalPanelTriggerTests {
             "ask_user",
         ])
         #expect(runtime.toolCalls.count == 6)
+    }
+
+    @Test("#1984# 安装运行、完成和失败三种 Worker 监控卡")
+    func workerMonitorTriggerInstallsAllPreviewStates() throws {
+        let appState = AppState()
+        _ = appState.startNewAgentSession()
+        let runtime = try #require(appState.activeRuntime)
+        runtime.input = "#1984#"
+
+        appState.sendAgentMessage()
+
+        let calls = runtime.localPanelPreviewCalls
+        #expect(runtime.input.isEmpty)
+        #expect(runtime.messages.isEmpty)
+        #expect(runtime.session.messages.isEmpty)
+        #expect(runtime.requestTask == nil)
+        #expect(!runtime.isResponding)
+        #expect(runtime.queuedMessages.isEmpty)
+        #expect(calls.map(\.toolName) == ["spawn_agent", "spawn_agent", "spawn_agent"])
+        #expect(calls.map(\.status) == [.running, .succeeded, .failed])
+        #expect(calls.map(\.subagentIsWorking) == [true, false, false])
+        #expect(calls.allSatisfy { $0.subagentLiveActivity != nil })
+        #expect(calls.allSatisfy { $0.subagentRunID == nil })
+        #expect(calls.first?.subagentLiveActivity?.utterances.count == 2)
+        #expect(calls.last?.errorMessage == L10n.AgentDelegation.monitorPreviewFailureMessage)
+        #expect(runtime.toolCalls.count == 3)
     }
 
     @Test("旧会话中的保留口令不会触发，也不会发送给 AI")
@@ -93,7 +126,7 @@ struct AgentComposerLocalPanelTriggerTests {
 
         #expect(runtime.messages.count == 1)
         #expect(runtime.input == "#1983#")
-        #expect(!runtime.hasLocalConfirmationPreview)
+        #expect(!runtime.hasLocalPanelPreview)
         #expect(runtime.requestTask == nil)
         #expect(runtime.queuedMessages.isEmpty)
     }
@@ -106,7 +139,7 @@ struct AgentComposerLocalPanelTriggerTests {
         let initialAlwaysAllowedCommands = appState.agentAlwaysAllowedCommands
         runtime.input = "#1983#"
         appState.sendAgentMessage()
-        let command = try #require(runtime.localConfirmationPreviewCalls.first)
+        let command = try #require(runtime.localPanelPreviewCalls.first)
 
         appState.alwaysAllowAgentToolCall(id: command.id)
 
@@ -122,14 +155,14 @@ struct AgentComposerLocalPanelTriggerTests {
         let appState = AppState()
         _ = appState.startNewAgentSession()
         let runtime = try #require(appState.activeRuntime)
-        runtime.input = "#1983#"
+        runtime.input = "#1984#"
         appState.sendAgentMessage()
-        #expect(runtime.hasLocalConfirmationPreview)
+        #expect(runtime.hasLocalPanelPreview)
 
         runtime.input = "请重构认证模块，同时完成数据库迁移，并补充单元测试。"
         appState.sendAgentMessage()
 
-        #expect(!runtime.hasLocalConfirmationPreview)
+        #expect(!runtime.hasLocalPanelPreview)
         #expect(runtime.toolCalls.isEmpty)
         #expect(runtime.messages.last?.role == .user)
         #expect(runtime.messages.last?.content.contains("请重构认证模块") == true)
@@ -140,16 +173,16 @@ struct AgentComposerLocalPanelTriggerTests {
         let appState = AppState()
         _ = appState.startNewAgentSession()
         let runtime = try #require(appState.activeRuntime)
-        runtime.input = "#1983#"
+        runtime.input = "#1984#"
         appState.sendAgentMessage()
-        #expect(runtime.hasLocalConfirmationPreview)
+        #expect(runtime.hasLocalPanelPreview)
 
         appState.clearAgentConversation()
 
-        #expect(!runtime.hasLocalConfirmationPreview)
+        #expect(!runtime.hasLocalPanelPreview)
         #expect(runtime.toolCalls.isEmpty)
         runtime.input = "#1983#"
         appState.sendAgentMessage()
-        #expect(runtime.localConfirmationPreviewCalls.count == 6)
+        #expect(runtime.localPanelPreviewCalls.count == 6)
     }
 }

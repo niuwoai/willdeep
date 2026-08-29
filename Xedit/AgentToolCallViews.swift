@@ -141,7 +141,11 @@ struct AgentToolCallCard: View {
                 AgentSubagentSpeechView(
                     activity: activity,
                     runID: call.subagentRunID,
-                    isRunning: call.subagentIsWorking
+                    isRunning: call.subagentIsWorking,
+                    taskTitle: AgentToolDisplay.objectSummary(
+                        toolName: call.toolName,
+                        arguments: call.arguments
+                    )
                 )
             }
 
