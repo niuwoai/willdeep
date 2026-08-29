@@ -204,6 +204,41 @@ struct AgentSubagentUsageAccountingTests {
         return AgentUsageStats.skillWorkerKPIs(for: [snapshot])
     }
 
+    @Test("a coordinator-started run bills to the session instead of to nobody")
+    func coordinatorRunsReachTheDashboard() {
+        let usage = AgentSubagentRunUsage(
+            profileID: AgentSubagentProfileCatalog.deepID,
+            model: "deepseek-v4-flash",
+            providerID: "some-im",
+            usageTokens: 12_000,
+            promptTokens: 9_000,
+            completionTokens: 3_000,
+            cachedPromptTokens: 0,
+            roundCount: 4,
+            toolInvocationCount: 7
+        )
+        var subject = session(modelID: "claude-opus-5", providerID: "claude", messages: [])
+        subject.coordinatorWorkerRuns = [usage]
+        let snapshot = AgentUsageSessionSnapshot(session: subject)
+
+        // Goal-planning members are started by the coordinator, not by a
+        // `spawn_agent` tool call, so there is no tool call to stamp their cost
+        // onto. `recordSubagentRunUsage` found no target and returned silently,
+        // and planning — several child loops — billed to nobody.
+        let rows = AgentUsageStats.subagentUsage(for: [snapshot])
+        let deep = rows.first { $0.profileID == AgentSubagentProfileCatalog.deepID }
+        #expect(deep?.invocationCount == 1)
+        #expect(deep?.runCount == 1)
+        #expect(deep?.sessionCount == 1)
+
+        // Same attribution rule as the tool-call route: a worker's tokens bill
+        // to the model the worker ran on, never to the parent's row.
+        let models = AgentUsageStats.modelUsage(for: [snapshot])
+        #expect(models.first { $0.modelID == "deepseek-v4-flash" }?.totalTokens == 12_000)
+
+        #expect(AgentUsageStats.skillWorkerKPIs(for: [snapshot]).deepRunCount == 1)
+    }
+
     @Test("skill coverage counts narrow trades against all model invocations")
     func skillCoverageCountsNarrowTradesOnly() throws {
         // 2 narrow runs; the deep run inherits the parent's model, so it
