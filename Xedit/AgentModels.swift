@@ -133,6 +133,15 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// transcript so reopening a chat and the stats dashboard see the same
     /// work the live execution card showed.
     var hostWorkerRuns: [AgentHostWorkerRunRecord]?
+    /// Subagent runs the coordinator started itself rather than through a
+    /// `spawn_agent` tool call — goal-planning members, today.
+    ///
+    /// Their cost has nowhere else to live: worker accounting is stamped onto
+    /// the persisted tool call that spawned the run, and these runs have no
+    /// such call, so `recordSubagentRunUsage` found no target and silently
+    /// dropped them. Planning a goal is one of the more expensive things the
+    /// app does, and it was billing to nobody.
+    var coordinatorWorkerRuns: [AgentSubagentRunUsage]?
     /// Model-facing summary of older messages. This is intentionally
     /// separate from `messages`: context compression must shrink only the
     /// next provider request, never the user's local transcript.
@@ -263,6 +272,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         updatedAt: Date = Date(),
         messages: [AgentMessage] = [],
         hostWorkerRuns: [AgentHostWorkerRunRecord]? = nil,
+        coordinatorWorkerRuns: [AgentSubagentRunUsage]? = nil,
         contextSummary: String? = nil,
         contextSummaryThroughMessageID: AgentMessage.ID? = nil,
         didEditFiles: Bool = false,
@@ -313,6 +323,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.updatedAt = updatedAt
         self.messages = messages
         self.hostWorkerRuns = hostWorkerRuns
+        self.coordinatorWorkerRuns = coordinatorWorkerRuns
         self.contextSummary = contextSummary
         self.contextSummaryThroughMessageID = contextSummaryThroughMessageID
         self.didEditFiles = didEditFiles
