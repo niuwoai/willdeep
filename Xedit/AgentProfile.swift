@@ -60,6 +60,18 @@ nonisolated struct AgentProfileRuntime: Codable, Equatable, Sendable {
 /// Tool/budget policy for the in-process child loop. Absent for external CLI
 /// profiles, which run under their own harness.
 nonisolated struct AgentProfileCapability: Codable, Equatable, Sendable {
+    /// Bounds on a user-set round budget. The floor keeps a trade able to do
+    /// anything at all (a one-round worker cannot read then answer); the
+    /// ceiling keeps a stuck loop from billing indefinitely — the child pays
+    /// per round and nobody is watching it.
+    static let roundBudgetRange: ClosedRange<Int> = 1...64
+
+    /// Clamp rather than reject: a stored value from an older build (or a
+    /// hand-edited defaults blob) must still produce a runnable trade.
+    static func clampRoundBudget(_ value: Int) -> Int {
+        min(max(value, roundBudgetRange.lowerBound), roundBudgetRange.upperBound)
+    }
+
     var toolNames: Set<String>
     var requiresWriteAccess: Bool
     var maxRounds: Int
@@ -220,6 +232,14 @@ nonisolated struct AgentProfileOverride: Codable, Equatable, Sendable {
     var modelBinding: AgentSubagentProfile.ModelBinding?
     var nativeProfileName: String?
     var usages: [AgentProfile.Usage]?
+    /// Round budget for a built-in trade. Optional so a trade whose default
+    /// changes in code still reaches everyone who never touched this field —
+    /// the same rule the rest of the override follows.
+    ///
+    /// Tool sets stay code-owned (a trade's narrow tool table is what makes it
+    /// cheap and accurate). The round budget is different: it is a *budget*,
+    /// and only the operator knows whether a job is worth more rounds.
+    var maxRounds: Int?
 
     var isEmpty: Bool { self == AgentProfileOverride() }
 
@@ -229,7 +249,8 @@ nonisolated struct AgentProfileOverride: Codable, Equatable, Sendable {
         skillIdentifiers: [String]? = nil,
         modelBinding: AgentSubagentProfile.ModelBinding? = nil,
         nativeProfileName: String? = nil,
-        usages: [AgentProfile.Usage]? = nil
+        usages: [AgentProfile.Usage]? = nil,
+        maxRounds: Int? = nil
     ) {
         self.name = name
         self.promptSection = promptSection
@@ -237,6 +258,7 @@ nonisolated struct AgentProfileOverride: Codable, Equatable, Sendable {
         self.modelBinding = modelBinding
         self.nativeProfileName = nativeProfileName
         self.usages = usages
+        self.maxRounds = maxRounds
     }
 
     func applied(to profile: AgentProfile) -> AgentProfile {
@@ -247,6 +269,9 @@ nonisolated struct AgentProfileOverride: Codable, Equatable, Sendable {
         if let modelBinding { copy.runtime.modelBinding = modelBinding }
         if let nativeProfileName { copy.runtime.nativeProfileName = nativeProfileName }
         if let usages, !usages.isEmpty { copy.usages = Set(usages) }
+        if let maxRounds {
+            copy.capability?.maxRounds = AgentProfileCapability.clampRoundBudget(maxRounds)
+        }
         return copy
     }
 }

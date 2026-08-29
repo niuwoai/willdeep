@@ -140,7 +140,10 @@ nonisolated struct AgentProfileStore {
                 : profile.runtime.nativeProfileName,
             usages: profile.usages == base.usages
                 ? nil
-                : Array(profile.usages).sorted { $0.rawValue < $1.rawValue }
+                : Array(profile.usages).sorted { $0.rawValue < $1.rawValue },
+            maxRounds: profile.capability?.maxRounds == base.capability?.maxRounds
+                ? nil
+                : profile.capability?.maxRounds
         )
     }
 

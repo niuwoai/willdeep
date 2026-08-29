@@ -53,7 +53,7 @@ extension L10n {
 
         static let capabilityBuiltInNote = String(
             localized: "agent-profiles.capability-built-in-note",
-            defaultValue: "A built-in trade's tool set and budgets are code, not settings: the narrow tool set is what makes it cheap and accurate. Create a custom profile to choose your own tools."
+            defaultValue: "A built-in trade's tool set is code, not settings: the narrow tool set is what makes it cheap and accurate. Its budgets are yours to tune. Create a custom profile to choose your own tools."
         )
         static let capabilityExternalNote = String(
             localized: "agent-profiles.capability-external-note",
@@ -61,6 +61,25 @@ extension L10n {
         )
         static let fieldTools = String(localized: "agent-profiles.field-tools", defaultValue: "Tools")
         static let fieldMaxRounds = String(localized: "agent-profiles.field-max-rounds", defaultValue: "Max rounds")
+        static let fieldContextWindow = String(
+            localized: "agent-profiles.field-context-window",
+            defaultValue: "Max context"
+        )
+        static let contextWindowInherits = String(
+            localized: "agent-profiles.context-window-inherits",
+            defaultValue: "Inherit"
+        )
+        static let contextWindowNote = String(
+            localized: "agent-profiles.context-window-note",
+            defaultValue: "Tokens this trade may fill before its payload is trimmed. Leave empty to use the trade's default. This is a budget, not a claim about the model: setting it above what the model accepts produces provider overflow errors."
+        )
+        static func maxRoundsNote(_ minimum: Int, _ maximum: Int) -> String {
+            let template = String(
+                localized: "agent-profiles.max-rounds-note",
+                defaultValue: "How many tool rounds the worker may take before it must report. %1$d–%2$d; leave empty for the trade's default."
+            )
+            return String(format: template, minimum, maximum)
+        }
         static let fieldPayloadLimit = String(localized: "agent-profiles.field-payload-limit", defaultValue: "Tool output limit")
         static let writeAccessNote = String(
             localized: "agent-profiles.write-access-note",

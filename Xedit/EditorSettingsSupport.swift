@@ -112,7 +112,11 @@ extension EditorSettingsTab {
         // appears as a duplicate Editor pane.
         case .editing, .typography, .appearance, .workspace: return .editor
         case .agentAppearance: return .agentAppearance
-        case .agent, .notifications, .subagents, .memory, .rules: return .ai
+        case .agent, .notifications, .memory, .rules: return .ai
+        // Agent profiles is its own top-level group: it is where the model,
+        // window, round budget and preloaded skills of every trade are set,
+        // which is configuration people return to, not a corner of "AI".
+        case .subagents: return .agentProfiles
         case .skills, .mcp, .tools, .secrets: return .agentTools
         case .localAgents, .remoteRuntimes: return .runtimes
         case .terminal: return .terminal
@@ -161,6 +165,7 @@ extension EditorSettingsTab {
 enum SettingsGroup: Hashable, Identifiable {
     case accountAndDevices
     case ai
+    case agentProfiles
     case agentTools
     case runtimes
     case integrations
@@ -173,6 +178,7 @@ enum SettingsGroup: Hashable, Identifiable {
     static let allCases: [Self] = [
         .accountAndDevices,
         .ai,
+        .agentProfiles,
         .agentTools,
         .runtimes,
         .integrations,
@@ -193,7 +199,8 @@ enum SettingsGroup: Hashable, Identifiable {
         case .editor: return [.editing, .appearance, .typography, .workspace]
         case .agentAppearance: return [.agentAppearance]
         case .pet: return [.pet]
-        case .ai: return [.agent, .notifications, .subagents, .memory, .rules]
+        case .ai: return [.agent, .notifications, .memory, .rules]
+        case .agentProfiles: return [.subagents]
         case .agentTools: return [.skills, .mcp, .tools, .secrets]
         case .accountAndDevices: return [.someIM, .mobileGateway]
         case .runtimes: return [.localAgents, .remoteRuntimes]
@@ -211,6 +218,7 @@ enum SettingsGroup: Hashable, Identifiable {
         case .agentAppearance: return L10n.Settings.groupAgentAppearance
         case .pet: return L10n.DesktopPet.settingsTabTitle
         case .ai: return L10n.Settings.groupAI
+        case .agentProfiles: return L10n.AgentProfiles.tabTitle
         case .agentTools: return L10n.Settings.groupAgentTools
         case .accountAndDevices: return L10n.Settings.groupAccountAndDevices
         case .runtimes: return L10n.Settings.groupRuntimes
@@ -226,6 +234,7 @@ enum SettingsGroup: Hashable, Identifiable {
         case .agentAppearance: return "textformat.size"
         case .pet: return "pawprint.fill"
         case .ai: return "sparkles"
+        case .agentProfiles: return "person.2.badge.gearshape"
         case .agentTools: return "wrench.and.screwdriver"
         case .accountAndDevices: return "person.crop.circle.badge.checkmark"
         case .runtimes: return "network"

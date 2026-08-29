@@ -638,6 +638,14 @@ extension AppState {
             // Worker running `git add package.json` bounced back as a
             // human approval card, while the same command from the parent
             // ran without a word.
+            //
+            // Hoisted out of the reviewer closure: the child's tool context
+            // needs the same list, so it can no longer be a local of one
+            // closure. `dropFirst()` because the primary root travels as
+            // `workspaceURL`.
+            let workspaceRoots = Array(
+                self.agentWorkspaceRoots(for: runtime.session).dropFirst()
+            )
             let commandReviewer: AgentSubagentRunner.CommandReviewer? = {
                 guard effectiveTools.contains("run_command")
                         || effectiveTools.contains("terminal_send_command") else {
@@ -647,9 +655,6 @@ extension AppState {
                 // time". Handing it a reviewer would answer on the user's
                 // behalf, which is the whole thing they turned off.
                 guard runtime.approvalMode != .requestEveryTime else { return nil }
-                let workspaceRoots = Array(
-                    self.agentWorkspaceRoots(for: runtime.session).dropFirst()
-                )
                 let latestUserMessage = runtime.messages
                     .last(where: { $0.isOperatorInput })?.content ?? ""
                 return { [weak self] toolName, command in
@@ -657,13 +662,15 @@ extension AppState {
                     guard AgentSubagentRunner.subagentCommandMayBeReviewedByParent(
                         command,
                         approvalMode: runtime.approvalMode,
-                        workspaceURL: workspaceURL
+                        workspaceURL: workspaceURL,
+                        additionalWorkspaceRoots: workspaceRoots
                     ) else { return false }
                     let arguments: [String: AgentJSONValue] = ["command": .string(command)]
                     let risk = AgentToolRegistry.risk(
                         for: toolName,
                         arguments: arguments,
-                        rootDirectory: workspaceURL
+                        rootDirectory: workspaceURL,
+                        additionalWorkspaceRoots: workspaceRoots
                     )
                     return await self.autoApprovalSource(
                         toolName: toolName,
@@ -683,6 +690,11 @@ extension AppState {
                 prompt: prompt,
                 configuration: configuration,
                 workspaceURL: workspaceURL,
+                // Same folder set the parent measures its own paths against.
+                // Without this a worker in a multi-folder project can only
+                // reach the primary folder, which is what "the subagent cannot
+                // touch my other directory" turned out to be.
+                additionalWorkspaceRoots: workspaceRoots,
                 runtimeDescriptor: runtimeDescriptor,
                 workspaceLocation: workspaceLocation,
                 profile: profile,

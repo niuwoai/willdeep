@@ -347,17 +347,23 @@ nonisolated enum AgentSubagentProfileCatalog {
         contextWindowTokens: nil
     )
 
-    /// One size down from the session's model, at the 64K deployable window.
+    /// One size down from the session's model, at the 256K window.
     ///
     /// Pinned to the base `someim-32b` rather than left nil: nil resolves to
     /// the provider's *primary* model, which is the parent's own tier — and a
     /// catch-all worker that silently costs what the parent costs is not a
     /// cheaper lane, it is the same lane with extra steps. `.retryWithParentModel`
     /// is what covers the cases the small model cannot close.
+    ///
+    /// The window is the operator's call, not an inferred property of the
+    /// model: this pairing is deliberate and is the reason per-trade
+    /// `contextWindowTokens` is user-editable in settings. If the pinned model
+    /// turns out not to hold 256K the symptom is a provider overflow, and the
+    /// fix is that field — not a code change.
     private static let generalistBinding = AgentSubagentProfile.ModelBinding(
         preferredProviderID: AgentProviderPreset.someIMID,
         model: AgentSubagentJobPrompts.hostedModelPrefix,
-        contextWindowTokens: wideContextWindowTokens
+        contextWindowTokens: implementerContextWindowTokens
     )
 
     /// `deep` is the only trade that gets the 1M window, and now it says so.

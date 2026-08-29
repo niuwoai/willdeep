@@ -1023,6 +1023,10 @@ enum AgentSubagentRunner {
         prompt: String,
         configuration: AgentConfiguration,
         workspaceURL: URL?,
+        /// The parent's other authorized folders, handed down verbatim. See
+        /// `executeToolCall` — the child's boundary is the folder set the user
+        /// authorized, not whichever one happens to be primary.
+        additionalWorkspaceRoots: [URL] = [],
         runtimeDescriptor: RuntimeDescriptor? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
         someIMContext: SomeIMRequestContext? = nil,
@@ -1373,6 +1377,7 @@ enum AgentSubagentRunner {
                     let verification = await runVerifier(
                         command: verifierCommand,
                         workspaceURL: workspaceURL,
+                        additionalWorkspaceRoots: additionalWorkspaceRoots,
                         runtimeDescriptor: runtimeDescriptor,
                         workspaceLocation: workspaceLocation
                     )
@@ -1491,6 +1496,7 @@ enum AgentSubagentRunner {
                             await executeToolCall(
                                 call,
                                 workspaceURL: workspaceURL,
+                                additionalWorkspaceRoots: additionalWorkspaceRoots,
                                 runtimeDescriptor: runtimeDescriptor,
                                 workspaceLocation: workspaceLocation,
                                 profile: profile,
@@ -1505,6 +1511,7 @@ enum AgentSubagentRunner {
                         rawPayload = await executeToolCall(
                             call,
                             workspaceURL: workspaceURL,
+                            additionalWorkspaceRoots: additionalWorkspaceRoots,
                             runtimeDescriptor: runtimeDescriptor,
                             workspaceLocation: workspaceLocation,
                             profile: profile,
@@ -1590,6 +1597,7 @@ enum AgentSubagentRunner {
             let verification = await runVerifier(
                 command: verifierCommand,
                 workspaceURL: workspaceURL,
+                additionalWorkspaceRoots: additionalWorkspaceRoots,
                 runtimeDescriptor: runtimeDescriptor,
                 workspaceLocation: workspaceLocation
             )
@@ -1744,11 +1752,13 @@ enum AgentSubagentRunner {
     static func runVerifier(
         command: String,
         workspaceURL: URL?,
+        additionalWorkspaceRoots: [URL] = [],
         runtimeDescriptor: RuntimeDescriptor? = nil,
         workspaceLocation: WorkspaceLocation? = nil
     ) async -> VerifierRun {
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
+            additionalWorkspaceRoots: additionalWorkspaceRoots,
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: runtimeDescriptor
         )
@@ -1824,7 +1834,8 @@ enum AgentSubagentRunner {
     nonisolated static func subagentCommandMayBeReviewedByParent(
         _ command: String,
         approvalMode: AgentApprovalMode,
-        workspaceURL: URL?
+        workspaceURL: URL?,
+        additionalWorkspaceRoots: [URL] = []
     ) -> Bool {
         switch approvalMode {
         case .requestEveryTime:
@@ -1832,17 +1843,23 @@ enum AgentSubagentRunner {
         case .fullAccess:
             return true
         case .smart, .workspaceAccess:
-            return subagentCommandCanUseIntelligentReview(command, workspaceURL: workspaceURL)
+            return subagentCommandCanUseIntelligentReview(
+                command,
+                workspaceURL: workspaceURL,
+                additionalWorkspaceRoots: additionalWorkspaceRoots
+            )
         }
     }
 
     nonisolated static func subagentCommandCanUseIntelligentReview(
         _ command: String,
-        workspaceURL: URL?
+        workspaceURL: URL?,
+        additionalWorkspaceRoots: [URL] = []
     ) -> Bool {
         let decision = AgentSandboxPolicy.commandDecision(
             command: command,
-            rootDirectory: workspaceURL
+            rootDirectory: workspaceURL,
+            additionalWorkspaceRoots: additionalWorkspaceRoots
         )
         guard !decision.requiresTypedConfirmation,
               !decision.credentialSensitive else { return false }
@@ -1852,6 +1869,13 @@ enum AgentSubagentRunner {
     private static func executeToolCall(
         _ call: AgentMessageToolCall,
         workspaceURL: URL?,
+        /// The parent's other authorized folders. A child used to be handed
+        /// only `workspaceURL`, so every tool it called measured paths against
+        /// one root: in a multi-folder project the parent could read the second
+        /// folder and its own worker could not, which reads as the subagent
+        /// being broken rather than as a boundary. The boundary is the set the
+        /// user authorized, and the child gets the same set.
+        additionalWorkspaceRoots: [URL] = [],
         runtimeDescriptor: RuntimeDescriptor? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
@@ -1903,7 +1927,8 @@ enum AgentSubagentRunner {
         let risk = AgentToolRegistry.risk(
             for: call.toolName,
             arguments: argsDict,
-            rootDirectory: workspaceURL
+            rootDirectory: workspaceURL,
+            additionalWorkspaceRoots: additionalWorkspaceRoots
         )
         // Writing trades carry bounded tools backed by an exact workspace
         // capability. Everything else stays read-only.
@@ -1920,7 +1945,8 @@ enum AgentSubagentRunner {
                   let command = argsDict["command"]?.stringValue() else { return false }
             return AgentSandboxPolicy.commandDecision(
                 command: command,
-                rootDirectory: workspaceURL
+                rootDirectory: workspaceURL,
+                additionalWorkspaceRoots: additionalWorkspaceRoots
             ).risk == .read
         }()
         let isReviewableCommandTool = call.toolName == "run_command"
@@ -1990,7 +2016,8 @@ enum AgentSubagentRunner {
            let command = argsDict["command"]?.stringValue() {
             let decision = AgentSandboxPolicy.commandDecision(
                 command: command,
-                rootDirectory: workspaceURL
+                rootDirectory: workspaceURL,
+                additionalWorkspaceRoots: additionalWorkspaceRoots
             )
             if isApprovedCommandInvocation || isJudgeApprovedCommand {
                 sandboxMode = decision.mode
@@ -2001,6 +2028,7 @@ enum AgentSubagentRunner {
 
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
+            additionalWorkspaceRoots: additionalWorkspaceRoots,
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: runtimeDescriptor,
             sandboxMode: sandboxMode,

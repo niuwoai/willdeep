@@ -80,6 +80,7 @@ struct SettingsInformationArchitectureTests {
         #expect(SettingsGroup.allCases == [
             .accountAndDevices,
             .ai,
+            .agentProfiles,
             .agentTools,
             .runtimes,
             .integrations,
@@ -91,7 +92,13 @@ struct SettingsInformationArchitectureTests {
         #expect(SettingsGroup.agentAppearance.tabs == [.agentAppearance])
         #expect(EditorSettingsTab.agentAppearance.group == .agentAppearance)
         #expect(SettingsGroup.allCases.suffix(2) == [.agentAppearance, .general])
-        #expect(SettingsGroup.ai.tabs == [.agent, .notifications, .subagents, .memory, .rules])
+        #expect(SettingsGroup.ai.tabs == [.agent, .notifications, .memory, .rules])
+        // 1.306.0-rc1：代理档案升为一级页签。工种的模型、窗口、轮次预算和
+        // 预加载技能都在这儿定，是会反复回来改的配置，不该是 AI 组里的第
+        // 四个次级项。它必须**离开**原来那组，而不是两处都出现——
+        // `everyPaneHasOneGroup` 守的就是这条。
+        #expect(SettingsGroup.agentProfiles.tabs == [.subagents])
+        #expect(EditorSettingsTab.subagents.group == .agentProfiles)
         // 密钥管理器与技能/MCP/工具同属「Agent 的资源」，放在同一组末位。
         #expect(SettingsGroup.agentTools.tabs == [.skills, .mcp, .tools, .secrets])
         #expect(SettingsGroup.accountAndDevices.tabs == [.someIM, .mobileGateway])

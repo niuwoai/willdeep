@@ -596,7 +596,7 @@ struct AgentSubagentProfileTests {
         #expect(generalist.effectiveToolNames() == deep.effectiveToolNames())
         // ...on a smaller window, and without deep's 1M ticket.
         #expect(generalist.modelBinding.contextWindowTokens
-            == AgentSubagentProfileCatalog.wideContextWindowTokens)
+            == AgentSubagentProfileCatalog.implementerContextWindowTokens)
         #expect(deep.modelBinding.contextWindowTokens == AgentSubagentProfileCatalog.deepContextWindowTokens)
         // Pinned, not nil: a nil model resolves to the provider's primary,
         // i.e. the parent's own tier, which would make this no cheaper.
@@ -630,6 +630,75 @@ struct AgentSubagentProfileTests {
         #expect(!strict.contains(AgentSubagentProfileCatalog.opsRunnerID))
         #expect(!strict.contains(AgentSubagentProfileCatalog.deepID))
         #expect(!strict.contains(AgentSubagentProfileCatalog.implementerID))
+    }
+
+    @Test("a subagent measures paths against every folder the parent authorized")
+    func subagentInheritsTheParentsFolderSet() {
+        let primary = URL(fileURLWithPath: "/tmp/willdeep-primary")
+        let second = URL(fileURLWithPath: "/tmp/willdeep-second")
+
+        // The bug this guards: the child used to be built with only the
+        // primary root, so in a multi-folder project the parent could read the
+        // second folder and its own worker could not.
+        let inherited = AgentToolContext(
+            rootDirectory: primary,
+            additionalWorkspaceRoots: [second]
+        )
+        #expect(inherited.workspaceRoots.contains(second))
+
+        let isolated = AgentToolContext(rootDirectory: primary)
+        #expect(!isolated.workspaceRoots.contains(second))
+    }
+
+    @Test("full access widens what the parent will review, strict mode never does")
+    func approvalModeReachesTheSubagentCommandGate() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-approval")
+        // Something that is plainly not statically read-only.
+        let command = "npm install left-pad"
+
+        #expect(AgentSubagentRunner.subagentCommandMayBeReviewedByParent(
+            command, approvalMode: .fullAccess, workspaceURL: root
+        ))
+        // "Ask me every time" means exactly that: no reviewer answers for the
+        // user, whatever the parent's own latitude is.
+        #expect(!AgentSubagentRunner.subagentCommandMayBeReviewedByParent(
+            command, approvalMode: .requestEveryTime, workspaceURL: root
+        ))
+    }
+
+    @Test("a round budget can be tuned but not set to something unrunnable")
+    func roundBudgetOverrideIsClamped() {
+        let range = AgentProfileCapability.roundBudgetRange
+        #expect(AgentProfileCapability.clampRoundBudget(0) == range.lowerBound)
+        #expect(AgentProfileCapability.clampRoundBudget(10_000) == range.upperBound)
+        #expect(AgentProfileCapability.clampRoundBudget(20) == 20)
+
+        guard let base = AgentProfile.builtIns.first(where: {
+            $0.id == AgentSubagentProfileCatalog.generalistID
+        }) else {
+            Issue.record("generalist is missing from the built-ins")
+            return
+        }
+        // An override reaches the trade the runner actually gets, and an
+        // absent one still follows the code default.
+        let tuned = AgentProfileOverride(maxRounds: 40).applied(to: base)
+        #expect(tuned.capability?.maxRounds == 40)
+        #expect(tuned.asSubagentProfile()?.maxRounds == 40)
+        #expect(AgentProfileOverride().applied(to: base).capability?.maxRounds
+            == base.capability?.maxRounds)
+
+        // The window is an override too, and 1.305 ships the generalist at 256K.
+        #expect(base.runtime.modelBinding.contextWindowTokens
+            == AgentSubagentProfileCatalog.implementerContextWindowTokens)
+    }
+
+    @Test("agent profiles is a top-level settings group, not a corner of AI")
+    func agentProfilesIsAFirstClassSettingsPane() {
+        #expect(EditorSettingsTab.subagents.group == .agentProfiles)
+        #expect(SettingsGroup.agentProfiles.tabs == [.subagents])
+        #expect(SettingsGroup.allCases.contains(.agentProfiles))
+        // ...and it left its old home rather than appearing in both.
+        #expect(!SettingsGroup.ai.tabs.contains(.subagents))
     }
 
     @Test("schema exposes seven capability trades while legacy ids still resolve")

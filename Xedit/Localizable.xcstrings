@@ -9126,31 +9126,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A built-in trade's tool set and budgets are code, not settings: the narrow tool set is what makes it cheap and accurate. Create a custom profile to choose your own tools."
+            "value" : "A built-in trade's tool set is code, not settings: the narrow tool set is what makes it cheap and accurate. Its budgets are yours to tune. Create a custom profile to choose your own tools."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El conjunto de herramientas y presupuestos de un oficio integrado son código, no configuración: es precisamente ese conjunto reducido de herramientas lo que lo hace económico y preciso. Crea un perfil personalizado para elegir tus propias herramientas."
+            "value" : "El conjunto de herramientas de un oficio integrado es código, no configuración: es precisamente ese conjunto reducido de herramientas lo que lo hace económico y preciso. Crea un perfil personalizado para elegir tus propias herramientas."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le jeu d'outils et le budget d'un métier intégré relèvent du code, pas des réglages : c'est ce jeu d'outils restreint qui le rend économique et précis. Créez un profil personnalisé pour choisir vos propres outils."
+            "value" : "Le jeu d'outils d'un métier intégré relève du code, pas des réglages : c'est ce jeu d'outils restreint qui le rend économique et précis. Créez un profil personnalisé pour choisir vos propres outils."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "組み込みの職種が使うツールセットと予算はコードで定義されており、設定ではありません。ツールセットを絞ることで低コストかつ高精度になっています。独自のツールを選びたい場合はカスタムプロファイルを作成してください。"
+            "value" : "組み込みの職種が使うツールセットはコードで定義されており、設定ではありません。ツールセットを絞ることで低コストかつ高精度になっています。予算は自由に調整できます。独自のツールを選びたい場合はカスタムプロファイルを作成してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "内置工种的工具集与预算属于代码而非配置：正是这份窄工具集让它又快又准。想自定义工具集请新建档案。"
+            "value" : "内置工种的工具集属于代码而非配置：正是这份窄工具集让它又快又准。但预算归你调。想自定义工具集请新建档案。"
           }
         }
       }
@@ -9227,6 +9227,10 @@
         }
       }
     },
+    "agent-profiles.field-context-window" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Max context" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Contexto máximo" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Contexte max" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "最大コンテキスト" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最大上下文" } } } },
+    "agent-profiles.context-window-inherits" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Inherit" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Heredar" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Hériter" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "継承" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "继承" } } } },
+    "agent-profiles.context-window-note" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tokens this trade may fill before its payload is trimmed. Leave empty to use the trade's default. This is a budget, not a claim about the model: setting it above what the model accepts produces provider overflow errors." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Tokens que este oficio puede llenar antes de recortar su carga. Déjalo vacío para usar el valor por defecto del oficio. Es un presupuesto, no una afirmación sobre el modelo: fijarlo por encima de lo que el modelo acepta provoca errores de desbordamiento del proveedor." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Tokens que ce metier peut remplir avant que sa charge ne soit rognee. Laissez vide pour utiliser la valeur par defaut du metier. C'est un budget, pas une affirmation sur le modele : le fixer au-dela de ce que le modele accepte provoque des erreurs de depassement du fournisseur." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "この職種がペイロードを削られる前に使えるトークン数です。空にすると職種の既定値を使います。これはモデルの能力の宣言ではなく予算です。モデルが受け付ける上限を超えて設定すると、プロバイダー側でオーバーフローエラーになります。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个工种在负载被裁剪前可以占用的 Token 数。留空则用工种自己的默认值。这是预算，不是对模型能力的声明：设得比模型实际能吃的还大，会导致 provider 溢出报错。" } } } },
+    "agent-profiles.max-rounds-note" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "How many tool rounds the worker may take before it must report. %1$d–%2$d; leave empty for the trade's default." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Cuántas rondas de herramientas puede usar el trabajador antes de tener que informar. %1$d–%2$d; déjalo vacío para el valor por defecto del oficio." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nombre de tours d'outils que le travailleur peut prendre avant de devoir rendre compte. %1$d–%2$d ; laissez vide pour la valeur par defaut du metier." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "ワーカーが報告するまでに使えるツール実行の回数です。%1$d〜%2$d。空にすると職種の既定値を使います。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工种在必须汇报之前可以用掉多少轮工具调用。%1$d–%2$d；留空则用工种默认值。" } } } },
     "agent-profiles.field-max-rounds" : {
       "comment" : "Field label",
       "extractionState" : "manual",

@@ -294,6 +294,8 @@ struct AgentProfileSettingsView: View {
                 }
                 .disabled(profile.origin == .discovered)
             }
+
+            contextWindowField(index: index, profile: profile)
         }
 
         Section(L10n.AgentProfiles.sectionSoul) {
@@ -346,6 +348,7 @@ struct AgentProfileSettingsView: View {
                     .foregroundStyle(.secondary)
             } else if isManaged {
                 toolToggles(index: index, profile: profile)
+                maxRoundsField(index: index, profile: profile)
                 Text(L10n.AgentProfiles.writeAccessNote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -357,9 +360,7 @@ struct AgentProfileSettingsView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.trailing)
                 }
-                LabeledContent(L10n.AgentProfiles.fieldMaxRounds) {
-                    Text("\(profile.capability?.maxRounds ?? 0)").foregroundStyle(.secondary)
-                }
+                maxRoundsField(index: index, profile: profile)
                 Text(L10n.AgentProfiles.capabilityBuiltInNote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -376,6 +377,63 @@ struct AgentProfileSettingsView: View {
                 }
             }
         }
+    }
+
+    /// Forced context window for this trade. Empty means "use the trade's
+    /// own default", which is deliberately not the same as the model's real
+    /// window — the built-in numbers are deployable-tier budgets chosen per
+    /// trade, and a model may hold more than a trade is meant to spend.
+    @ViewBuilder
+    private func contextWindowField(index: Int, profile: AgentProfile) -> some View {
+        let placeholder = defaultContextWindow(for: profile)
+            .map(String.init) ?? L10n.AgentProfiles.contextWindowInherits
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent(L10n.AgentProfiles.fieldContextWindow) {
+                TextField(placeholder, text: contextWindowBinding(index))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 120)
+                    .multilineTextAlignment(.trailing)
+            }
+            Text(L10n.AgentProfiles.contextWindowNote)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .disabled(profile.origin == .discovered)
+    }
+
+    @ViewBuilder
+    private func maxRoundsField(index: Int, profile: AgentProfile) -> some View {
+        let range = AgentProfileCapability.roundBudgetRange
+        VStack(alignment: .leading, spacing: 4) {
+            LabeledContent(L10n.AgentProfiles.fieldMaxRounds) {
+                TextField(
+                    String(defaultMaxRounds(for: profile)),
+                    text: maxRoundsBinding(index)
+                )
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 80)
+                .multilineTextAlignment(.trailing)
+            }
+            Text(L10n.AgentProfiles.maxRoundsNote(range.lowerBound, range.upperBound))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .disabled(!profile.runtime.isInProcess)
+    }
+
+    /// The code default, i.e. what an empty field falls back to. Read off the
+    /// built-in rather than the edited copy, so clearing the field shows the
+    /// value it is about to restore instead of the one being replaced.
+    private func defaultContextWindow(for profile: AgentProfile) -> Int? {
+        AgentProfile.builtIns.first { $0.id == profile.id }?
+            .runtime.modelBinding.contextWindowTokens
+    }
+
+    private func defaultMaxRounds(for profile: AgentProfile) -> Int {
+        AgentProfile.builtIns.first { $0.id == profile.id }?.capability?.maxRounds
+            ?? AgentProfileCapability.managedDefault.maxRounds
     }
 
     @ViewBuilder
@@ -491,6 +549,41 @@ struct AgentProfileSettingsView: View {
                 }
                 profiles[index].runtime.modelBinding.preferredProviderEntryID = entry.id
                 profiles[index].runtime.modelBinding.preferredProviderID = entry.providerID
+                persist()
+            }
+        )
+    }
+
+    /// Digits only, and an empty string means "clear the override". Parsing
+    /// leniently (`Int(...)` on whatever was typed) would turn a half-typed
+    /// "2 5 6" into a real window of 2 mid-keystroke.
+    private func contextWindowBinding(_ index: Int) -> Binding<String> {
+        Binding(
+            get: {
+                profiles[index].runtime.modelBinding.contextWindowTokens.map(String.init) ?? ""
+            },
+            set: { raw in
+                let digits = raw.filter(\.isNumber)
+                guard !digits.isEmpty, let value = Int(digits), value > 0 else {
+                    profiles[index].runtime.modelBinding.contextWindowTokens = nil
+                    persist()
+                    return
+                }
+                profiles[index].runtime.modelBinding.contextWindowTokens = value
+                persist()
+            }
+        )
+    }
+
+    private func maxRoundsBinding(_ index: Int) -> Binding<String> {
+        Binding(
+            get: { profiles[index].capability.map { String($0.maxRounds) } ?? "" },
+            set: { raw in
+                guard profiles[index].capability != nil else { return }
+                let digits = raw.filter(\.isNumber)
+                guard !digits.isEmpty, let value = Int(digits) else { return }
+                profiles[index].capability?.maxRounds =
+                    AgentProfileCapability.clampRoundBudget(value)
                 persist()
             }
         )
