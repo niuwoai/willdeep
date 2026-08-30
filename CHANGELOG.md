@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.307.0-rc5 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.307.0-rc6 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.307.0-rc6 - 2026-08-30
+
+### Fixed
+
+- **专家圆桌的发言气泡不再随鼠标变高。** 「引用」按钮过去把悬停状态写进插入条件，鼠标划过气泡就凭空多出一行，气泡变高、底下所有发言跟着往下窜；现在按钮常驻占位，只切换可见性。
+
+### Changed
+
+- 悬停显隐统一走新的 `hoverRevealed(_:)`（放在 `ContentViewBackgrounds.swift` 的 View 扩展里）：`opacity` 控制显隐，隐藏时一并让出点击和无障碍焦点，避免看不见的按钮仍可点击、仍被读屏念出。
+
+### Tests
+
+- `AgentRoundtableTests` 与 `AgentScheduledTasksPageDesignQATests` 共 30 项通过，新增圆桌引用按钮的悬停守卫 1 项。
+- 全仓库 20 个使用 `onHover` 的视图文件逐个复核：除本次修复的圆桌气泡外，其余悬停效果只改颜色、阴影、`scaleEffect`、光标或走 `overlay`，都不参与父容器布局。会话侧边栏的 `reservedActionsWidth` 会随悬停改变标题可用**宽度**（有意为之，让不悬停时标题更完整），不影响行高，本次未动。
 
 ## 1.307.0-rc5 - 2026-08-30
 

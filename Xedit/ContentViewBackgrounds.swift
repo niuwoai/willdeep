@@ -249,4 +249,13 @@ extension View {
     func cursor(_ cursor: NSCursor) -> some View {
         modifier(CursorModifier(cursor: cursor))
     }
+
+    /// 悬停才显示、但任何时候都占位的元素。用 opacity 而不是 `if` 分支：
+    /// 条件插入会让父容器随鼠标进出改变高度，整列内容跟着跳。隐藏时一并
+    /// 让出点击和无障碍焦点，免得看不见的按钮还能被点到、还被读屏念出来。
+    func hoverRevealed(_ isVisible: Bool) -> some View {
+        opacity(isVisible ? 1 : 0)
+            .allowsHitTesting(isVisible)
+            .accessibilityHidden(!isVisible)
+    }
 }

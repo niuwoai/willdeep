@@ -17,16 +17,6 @@ enum AgentScheduledTaskRowMetrics {
     static let titleRowHeight: CGFloat = 26
 }
 
-extension View {
-    /// 悬停才显示、但任何时候都占位的元素。用 opacity 而不是 `if` 分支，
-    /// 布局高度才不会随鼠标进出跳动；隐藏时同时让出点击和无障碍焦点。
-    func hoverRevealed(_ isVisible: Bool) -> some View {
-        opacity(isVisible ? 1 : 0)
-            .allowsHitTesting(isVisible)
-            .accessibilityHidden(!isVisible)
-    }
-}
-
 enum AgentPrimaryDestination: Equatable {
     case conversation
     case scheduledTasks
