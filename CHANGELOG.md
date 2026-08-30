@@ -1,7 +1,51 @@
 # Changelog
 
-> 当前文件保留最新版本（1.307.0-rc4 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.308.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.308.0-rc1 - 2026-08-30
+
+### Added
+
+- **随 App 发行的插件开发者文档。** 新增 `BundledSkills/willdeep-plugin-dev/`：`SKILL.md` 是入口，`references/` 下分别是 WillDeep 运行机理（目的地导航、会话与回合、工作区、审批与沙箱、四种扩展方式的分工、页面隔离边界）、上手教程、清单字段参考、`window.willdeep.*` 页面 API 与 MCP App 协议、打包安装审批与安全上限。它随 App 打包进 `Contents/Resources/BundledSkills/`，用户机器上的 AI 也能读到；`docs/PLUGIN_DEVELOPER_GUIDE.md` 是指向它的索引。
+- **「帮助」菜单自己开窗。** 新增 `HelpBookWindow.swift`：菜单项改为打开 App 内置的帮助窗口，用 WKWebView 显示包内 Help Book，按系统语言选中文或英文，页面里的外部链接交给默认浏览器。
+- **帮助书补齐中文并接上搜索索引。** 新增 `zh-Hans.lproj`，`Info.plist` 补 `HPDBookType` 与 `HPDBookIndexPath`，两种语言各生成 lsm 与 CoreSpotlight 两份索引；`scripts/build_help_index.rb` 负责重建（`--check` 供 CI 校验索引不比 HTML 旧）。
+
+### Fixed
+
+- **帮助菜单进去是「所选内容当前不可用」。** macOS 26 起系统帮助由「提示」(Tips.app) 接管，它把 App 内的 Help Book 判为不可显示后转去 Apple 在线帮助库找内容，用户看到的是一张与 WillDeep 无关的错误页。现在不再依赖系统帮助查看器；Help Book 本身保留，旧系统上仍可用，两边读同一份文件。
+- **帮助内容还停在编辑器时代。** 原帮助整篇讲的是打开文件夹、标签页、查找替换、Markdown 预览这些已经移交给独立 Qeditor 的功能。中英两版重写为会话与工作区、Agent 回合、审批与沙箱、侧栏面板、已安排任务、插件扩展、设置与命令行、排错；命令行工具名从 `willdeep` 更正为实际的 `willdeep-app`。
+- **已经存过的记忆、已经装好的技能不再被重复建议。** 回合末的自学习此前只在会话内去重，管不到「上周就存过这条」；现在记忆草稿会先与本地记忆逐条比对，整批重复时连建议卡都不产生，技能建议也会先跟已安装技能（含随 App 内置的）比名字和描述。用户明确开口要建技能时不受影响。
+
+### Tests
+
+- 新增 `AgentLearningSuggestionDeduplicatorTests` 7 项（中英文重复识别、包含关系、批内重复、短文本误判防护、技能同名与换名识别）与 `HelpBookLocatorTests` 4 项（区域语言回落、英文兜底、空书返回 nil、发行帮助书的完整性与 `Info.plist` 关键字段）。
+- 与既有自学习、记忆、学习动作用例一同运行，6 个 suite 共 81 项通过。
+
+## 1.307.0-rc6 - 2026-08-30
+
+### Fixed
+
+- **专家圆桌的发言气泡不再随鼠标变高。** 「引用」按钮过去把悬停状态写进插入条件，鼠标划过气泡就凭空多出一行，气泡变高、底下所有发言跟着往下窜；现在按钮常驻占位，只切换可见性。
+
+### Changed
+
+- 悬停显隐统一走新的 `hoverRevealed(_:)`（放在 `ContentViewBackgrounds.swift` 的 View 扩展里）：`opacity` 控制显隐，隐藏时一并让出点击和无障碍焦点，避免看不见的按钮仍可点击、仍被读屏念出。
+
+### Tests
+
+- `AgentRoundtableTests` 与 `AgentScheduledTasksPageDesignQATests` 共 30 项通过，新增圆桌引用按钮的悬停守卫 1 项。
+- 全仓库 20 个使用 `onHover` 的视图文件逐个复核：除本次修复的圆桌气泡外，其余悬停效果只改颜色、阴影、`scaleEffect`、光标或走 `overlay`，都不参与父容器布局。会话侧边栏的 `reservedActionsWidth` 会随悬停改变标题可用**宽度**（有意为之，让不悬停时标题更完整），不影响行高，本次未动。
+
+## 1.307.0-rc5 - 2026-08-30
+
+### Fixed
+
+- **「已安排」任务列表鼠标划过时不再抖动。** 悬停才出现的「立即运行 / 暂停」按钮以前是直接插进标题行的，26 pt 的按钮一出现就把标题行连同整张卡片撑高，鼠标扫过列表就一格一格地跳。按钮改为常驻布局、只切换可见性（隐藏时同时让出点击和无障碍焦点），标题行按按钮高度定高，卡片高度不再随鼠标变化。
+
+### Tests
+
+- `AgentScheduledTasksPageDesignQATests` 3 项通过，新增用例用 `NSHostingView` 实测隐藏态仍占满 26 pt，并核对标题行高度不低于按钮高度。
 
 ## 1.307.0-rc4 - 2026-08-30
 

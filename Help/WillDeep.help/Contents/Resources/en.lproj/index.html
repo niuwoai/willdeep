@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="AppleTitle" content="WillDeep Help">
-  <meta name="description" content="Learn the core WillDeep workflows for opening projects, editing files, finding text, previewing Markdown, and tuning the editor.">
+  <meta name="description" content="Learn how WillDeep runs agent turns, approves tools, manages workspaces and scheduled tasks, and extends through plugins.">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>WillDeep Help</title>
   <link rel="stylesheet" href="style.css">
@@ -12,111 +12,121 @@
   <main>
     <header class="hero">
       <p class="eyebrow">WillDeep Help</p>
-      <h1>Write, browse, and edit with less ceremony.</h1>
-      <p class="intro">WillDeep is a lightweight macOS editor for opening a folder, moving through files quickly, and keeping common text workflows close at hand.</p>
+      <h1>Let the agent inspect the work, act, and leave evidence.</h1>
+      <p class="intro">WillDeep is a native macOS agent workbench built around workspaces, sessions, and deliverables. It reads projects, drives the terminal and browser, edits files, runs tests, works on remote machines, and puts every change, tool output, and artifact back into the same session for review.</p>
     </header>
 
     <nav aria-label="Help topics" class="topics">
       <a href="#getting-started">Getting started</a>
-      <a href="#editing">Editing</a>
-      <a href="#navigation">Navigation</a>
-      <a href="#sidebar">Sidebar</a>
-      <a href="#search">Find and replace</a>
-      <a href="#markdown">Markdown/HTML preview</a>
-      <a href="#cli">Command line</a>
-      <a href="#settings">Settings</a>
+      <a href="#agent">How the agent works</a>
+      <a href="#approvals">Approvals and safety</a>
+      <a href="#workspaces">Workspaces and run location</a>
+      <a href="#panels">Panels</a>
+      <a href="#scheduled">Scheduled tasks</a>
+      <a href="#plugins">Plugins and extensions</a>
+      <a href="#settings">Settings and command line</a>
       <a href="#troubleshooting">Troubleshooting</a>
     </nav>
 
     <section id="getting-started">
       <h2>Getting started</h2>
       <ul>
-        <li>Choose File &gt; Open Folder to browse a project in the sidebar.</li>
-        <li>Choose File &gt; Open File to open one file without selecting a folder.</li>
-        <li>In Finder, choose Open With &gt; WillDeep for text files, source files, or folders.</li>
-        <li>Use recent files and folders from the empty sidebar to return to previous work.</li>
-        <li>Use File &gt; Open Containing Folder to reveal the active file in Finder.</li>
-        <li>When a Git repository is open, the status bar shows the current branch.</li>
+        <li>You need a model source first: sign in to the some.im managed service, or configure your own provider in Settings &gt; AI Providers.</li>
+        <li>Pick a workspace (a local folder) on the left side of the composer. It is the boundary for everything the agent reads, writes, and runs.</li>
+        <li>Type what you need and send. The agent reads files, runs commands, and edits code on its own, and stops to ask when something needs your approval.</li>
+        <li>Press Command-N for a new session. WillDeep is agent-only: general-purpose file editing lives in the standalone Qeditor app, so what you get here is read-only preview and diff review.</li>
       </ul>
     </section>
 
-    <section id="editing">
-      <h2>Editing</h2>
+    <section id="agent">
+      <h2>How the agent works</h2>
       <ul>
-        <li>Press Command-S to save the active file.</li>
-        <li>Press Command-Shift-S to save a copy with Save As.</li>
-        <li>Press Command-D to duplicate the current line.</li>
-        <li>Press Option-Up or Option-Down to move the current line.</li>
-        <li>Use Tab and Shift-Tab to indent or outdent selected lines.</li>
+        <li>Every session owns its own runtime. Switching sessions never cancels a request in flight; other sessions keep running in the background and the full transcript is there when you return.</li>
+        <li>A turn goes: your message, context assembly (global rules, project rules, relevant memories), model output, tool calls, approval, execution, results fed back to the model, and repeat until a final answer.</li>
+        <li>Tool calls collapse into readable activity summaries (files read, commands run). Expand one to see the full arguments, output, errors, and where the approval came from.</li>
+        <li>Requests to the same provider queue up, three at a time by default and adjustable in Settings. Different providers do not block each other.</li>
+        <li>You can keep typing while the agent is busy — messages queue — and you can stop the current turn at any point.</li>
       </ul>
     </section>
 
-    <section id="navigation">
-      <h2>Navigation</h2>
+    <section id="approvals">
+      <h2>Approvals and safety</h2>
       <ul>
-        <li>Press Command-P to open files quickly inside the selected folder.</li>
-        <li>Press Command-Shift-P to show the command palette, then use Up, Down, and Return to run the selected command. The palette supports fuzzy matches, keywords, and shortcut hints.</li>
-        <li>Press Command-L to jump to a line in the active file.</li>
-        <li>Press Command-Shift-O to jump to a symbol in supported files.</li>
-        <li>Use Command-1 through Command-9, Command-Shift-[, and Command-Shift-] to switch tabs.</li>
-        <li>Press Command-Shift-T to reopen the most recently closed tab.</li>
-        <li>Press Command-W to close the active tab.</li>
+        <li>The composer sets a per-session approval tier: ask every time, smart approval, workspace access, or silent.</li>
+        <li>Decisions are deterministic first: a malicious-command blocklist stops everything in every tier, common read-only commands pass automatically, remembered grants apply, and only what is left may go to an AI judge.</li>
+        <li>Destructive operations always require you to type a confirmation. No tier auto-approves them.</li>
+        <li>Read-only commands run in a restricted environment with networking and out-of-scope writes disabled. Execution is written to an audit log in the app support directory with secrets redacted.</li>
+        <li>File edits arrive as a change summary and a diff you can review, apply, or reject.</li>
       </ul>
     </section>
 
-    <section id="sidebar">
-      <h2>Sidebar</h2>
+    <section id="workspaces">
+      <h2>Workspaces and run location</h2>
       <ul>
-        <li>Right-click a folder to create a new file or folder.</li>
-        <li>Right-click a file or folder to reveal it in Finder, open Terminal at that location, or copy its path.</li>
-        <li>Git markers show modified, added, deleted, renamed, and untracked items when the selected folder is inside a repository.</li>
+        <li>A session's workspace can be a local folder or a directory on a remote machine.</li>
+        <li>Add an SSH or daemon runtime in Settings &gt; Runtimes, then pick the run location in the composer to execute tools remotely.</li>
+        <li>SSH stores only the path to your key file, never the private key itself. Daemon tokens live in the keychain.</li>
+        <li>Inside a Git repository you can create, switch, and prune worktrees straight from the composer's workspace menu.</li>
       </ul>
     </section>
 
-    <section id="search">
-      <h2>Find and replace</h2>
+    <section id="panels">
+      <h2>Panels</h2>
       <ul>
-        <li>Press Command-F to search in the active editor.</li>
-        <li>Press Command-G or Command-Shift-G to move between matches.</li>
-        <li>Choose the active tab, all open tabs, or the selected folder as the find and replace scope.</li>
-        <li>Review highlighted matches before replacing text across a broader scope.</li>
+        <li>The right-hand panels cover files, terminal, diff, web preview, media tasks, and image editing, all sharing the current session's workspace.</li>
+        <li>The terminal panel is a real terminal: what the agent runs and what you type see the same environment.</li>
+        <li>The diff panel lists this turn's changes per file so you can check them before applying.</li>
+        <li>The left sidebar groups past sessions by workspace. Right-click a group to remove it from the list; that only hides it, the session data stays.</li>
       </ul>
     </section>
 
-    <section id="markdown">
-      <h2>Markdown and HTML preview</h2>
+    <section id="scheduled">
+      <h2>Scheduled tasks</h2>
       <ul>
-        <li>Open a Markdown or HTML file, then choose View &gt; Toggle Preview or press Command-Option-R.</li>
-        <li>The preview renders headings, paragraphs, quotes, lists, dividers, fenced code, and common HTML content blocks beside the editor.</li>
+        <li>Scheduled in the sidebar is where WillDeep runs something on its own schedule: a morning brief, a weekly review, a project check.</li>
+        <li>Each task shows its schedule, workspace, and next fire time. Paused tasks say so instead of claiming a next run.</li>
+        <li>Hover a task card for Run now and Pause. Right-click to edit or delete.</li>
+        <li>Recent runs list the last few results with failure reasons, and link back to the session that ran them.</li>
       </ul>
     </section>
 
-    <section id="cli">
-      <h2>Command line</h2>
+    <section id="plugins">
+      <h2>Plugins and extensions</h2>
       <ul>
-        <li>Open WillDeep &gt; Settings, then install the willdeep command from the Command Line Tool section. The command is installed in ~/.local/bin.</li>
-        <li>Run willdeep . to open the current folder.</li>
-        <li>Run willdeep file.md to open a specific file.</li>
+        <li>WillDeep extends in four ways: skills (change how the AI works), MCP servers (give the AI new real capabilities), workflows (repeatable multi-step orchestration), and plugins (add a surface you operate directly, in the main navigation).</li>
+        <li>More Plugins opens the plugin center: install, enable, pin to navigation, check for updates, roll back a version, and uninstall. Permissions are listed before anything is written to disk.</li>
+        <li>Plugins shipped with the app include the classic arcade, Tetris, favorites, to-dos, session vitality, and project overview.</li>
+        <li>Plugin pages run isolated: no network, no file access, no keys. Anything real they do goes through a command declared in their manifest.</li>
+        <li><strong>To build your own plugin</strong>, the full architecture and API documentation ships with the app at
+          <code>WillDeep.app/Contents/Resources/BundledSkills/willdeep-plugin-dev/</code>. Start at <code>SKILL.md</code>;
+          <code>references/</code> covers runtime architecture, a quickstart, manifest fields, the page API, and packaging and security.
+          Asking the agent "how do I write a WillDeep plugin" makes it read the same document.</li>
       </ul>
     </section>
 
     <section id="settings">
-      <h2>Settings</h2>
+      <h2>Settings and command line</h2>
       <ul>
-        <li>Open WillDeep &gt; Settings to adjust font, font size, line height, color style, line numbers, and current-line highlighting.</li>
-        <li>Enable save cleanup to trim trailing whitespace or ensure a final newline when saving.</li>
+        <li>WillDeep &gt; Settings covers providers, local agents, skills, rules, memory, notifications, appearance, and remote runtimes.</li>
+        <li>The Rules tab enables a global rules file (<code>~/.willdeep/CLAUDE.md</code> by default) that applies across projects. A project's own <code>AGENTS.md</code> or <code>CLAUDE.md</code> is more specific and wins.</li>
+        <li>Install the command line tool from Settings &gt; Tools, then run <code>willdeep-app .</code> to open WillDeep on the current folder. It installs to <code>~/.local/bin</code>; add that to your PATH if needed.</li>
+        <li>Appearance adjusts interface font, size, color style, and font smoothing.</li>
       </ul>
     </section>
 
     <section id="troubleshooting">
       <h2>Troubleshooting</h2>
       <dl>
-        <dt>A file will not open.</dt>
-        <dd>WillDeep blocks binary files and asks for confirmation before loading files larger than 1 MB.</dd>
-        <dt>Changes appeared on disk outside the app.</dt>
-        <dd>Use the status bar reload action when WillDeep reports that the active file changed externally.</dd>
-        <dt>Syntax highlighting looks stale.</dt>
-        <dd>Switch tabs or reopen the file. WillDeep refreshes highlighting after file loads and tab activation.</dd>
+        <dt>A message seems to go nowhere.</dt>
+        <dd>Check whether the composer shows a queued state — requests to one provider queue up. If you use the managed service, confirm you are still signed in.</dd>
+        <dt>The agent keeps asking about the same kind of command.</dt>
+        <dd>Move the approval tier to smart approval or workspace access, or choose to remember that command on the authorization card. Destructive operations always ask; that is by design.</dd>
+        <dt>A plugin page is blank.</dt>
+        <dd>Use the refresh button in the page toolbar. If it stays blank, check in the plugin center that the plugin is enabled and its minimum version is met; load failures now state the reason on the page itself.</dd>
+        <dt>I want to edit a file directly, but I cannot.</dt>
+        <dd>WillDeep is agent-only now; general-purpose editing belongs to the standalone Qeditor app. The file panel here is a read-only preview, and changes come from the agent for you to review in the diff.</dd>
+        <dt>Remote commands will not connect.</dt>
+        <dd>Re-probe that runtime in Settings &gt; Runtimes. SSH uses the system <code>ssh</code>, so first confirm you can log in to the same host from a terminal without a password prompt.</dd>
       </dl>
     </section>
   </main>

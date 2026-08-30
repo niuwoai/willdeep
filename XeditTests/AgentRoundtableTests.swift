@@ -515,4 +515,22 @@ struct AgentRoundtableTests {
         #expect(png.count > 20_000)
         #expect(FileManager.default.fileExists(atPath: output.path))
     }
+
+    /// 鼠标划过发言气泡不能改变它的高度：「引用」按钮曾经是 `isHovering` 直接
+    /// 参与插入条件，一悬停气泡就多出一行，底下所有发言跟着往下窜。按钮要常驻
+    /// 占位、只切换可见性。这里只能做源码级断言——布局塌陷依赖真实指针事件。
+    /// 守卫红了先确认是不是这里的断言文本没跟上重构。
+    @Test("hovering a roundtable bubble does not change its height")
+    func quoteButtonKeepsItsSpaceWhileHidden() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/RoundtableDiscussionView.swift"),
+            encoding: .utf8
+        )
+
+        #expect(!source.contains("if canQuote, isHovering"))
+        #expect(source.contains(".hoverRevealed(isHovering)"))
+    }
 }

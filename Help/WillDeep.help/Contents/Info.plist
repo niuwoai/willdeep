@@ -13,12 +13,16 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.307.0-rc4</string>
+	<string>1.308.0-rc1</string>
 	<key>CFBundleVersion</key>
 	<string>442</string>
 	<key>HPDBookAccessPath</key>
 	<string>index.html</string>
+	<key>HPDBookIndexPath</key>
+	<string>WillDeep.helpindex</string>
 	<key>HPDBookTitle</key>
 	<string>WillDeep Help</string>
+	<key>HPDBookType</key>
+	<string>3</string>
 </dict>
 </plist>

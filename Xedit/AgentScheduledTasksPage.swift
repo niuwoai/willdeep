@@ -9,6 +9,14 @@
 import AppKit
 import SwiftUI
 
+/// 任务卡片标题行的固定尺寸。悬停操作条是这一行里最高的东西，标题行按它定高，
+/// 操作条出现或消失时整张卡片的高度就不会变。
+enum AgentScheduledTaskRowMetrics {
+    static let actionButtonSide: CGFloat = 26
+    /// 必须 ≥ `actionButtonSide`，否则悬停时按钮还是会把行撑高。
+    static let titleRowHeight: CGFloat = 26
+}
+
 enum AgentPrimaryDestination: Equatable {
     case conversation
     case scheduledTasks
@@ -330,10 +338,13 @@ struct AgentScheduledTasksPage: View {
                         .foregroundStyle(routine.isEnabled ? .primary : .secondary)
                         .lineLimit(1)
                     Spacer(minLength: 8)
-                    if isHovered {
-                        routineActions(routine)
-                    }
+                    // 常驻布局、只切换可见性：以前是 `if isHovered` 直接插进
+                    // 这一行，26 pt 的按钮一出现就把标题行、连带整张卡片撑高，
+                    // 鼠标扫过列表就是一路抖。
+                    routineActions(routine)
+                        .hoverRevealed(isHovered)
                 }
+                .frame(height: AgentScheduledTaskRowMetrics.titleRowHeight)
                 Text(metaLine(for: routine))
                     .font(pageFont(-2.5))
                     .monospacedDigit()
@@ -388,7 +399,10 @@ struct AgentScheduledTasksPage: View {
             Image(systemName: icon)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 26, height: 26)
+                .frame(
+                    width: AgentScheduledTaskRowMetrics.actionButtonSide,
+                    height: AgentScheduledTaskRowMetrics.actionButtonSide
+                )
                 .background(appState.editorSettings.interfaceSkin.palette.controlFill.opacity(0.72))
                 .clipShape(RoundedRectangle(cornerRadius: 7))
         }

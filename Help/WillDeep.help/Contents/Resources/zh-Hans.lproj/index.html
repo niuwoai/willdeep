@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="AppleTitle" content="WillDeep Help">
+  <meta name="description" content="WillDeep 使用帮助：会话与工作区、Agent 回合与审批、侧栏面板、已安排任务、插件扩展、设置与排错。">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WillDeep 帮助</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <p class="eyebrow">WillDeep 帮助</p>
+      <h1>让 Agent 看现场、动手做、留下证据。</h1>
+      <p class="intro">WillDeep 是以工作区、会话和交付物为中心的 macOS 原生 Agent 工作台。它可以读取项目、调用终端与浏览器、修改文件、运行测试、操作远端服务器，并把改动、工具输出和产物放回同一个会话里供你检查。</p>
+    </header>
+
+    <nav aria-label="帮助主题" class="topics">
+      <a href="#getting-started">快速开始</a>
+      <a href="#agent">Agent 怎么工作</a>
+      <a href="#approvals">审批与安全</a>
+      <a href="#workspaces">工作区与运行位置</a>
+      <a href="#panels">侧栏与面板</a>
+      <a href="#scheduled">已安排任务</a>
+      <a href="#plugins">插件与扩展</a>
+      <a href="#settings">设置与命令行</a>
+      <a href="#troubleshooting">排错</a>
+    </nav>
+
+    <section id="getting-started">
+      <h2>快速开始</h2>
+      <ul>
+        <li>首次运行需要一个可用的模型来源：登录 some.im 托管服务，或在「设置 &gt; AI 服务商」里配置自有 provider。</li>
+        <li>在输入区左侧选择工作区（一个本地目录），Agent 的读写和命令都以它为边界。</li>
+        <li>直接把需求写进输入框发送即可。Agent 会自己读文件、跑命令、改代码，需要你点头的地方会停下来问。</li>
+        <li>按 Command-N 开一个新会话。WillDeep 是 Agent 专用应用，通用的文件编辑交给独立的 Qeditor，这里只保留只读预览和 Diff 审阅。</li>
+      </ul>
+    </section>
+
+    <section id="agent">
+      <h2>Agent 怎么工作</h2>
+      <ul>
+        <li>每个会话独占一个运行时。切换会话不会打断正在进行的请求，其它会话继续在后台跑，回来还能看到完整记录。</li>
+        <li>一个回合的顺序是：你的消息 → 组装上下文（全局规则、项目规则、相关记忆）→ 模型输出 → 调用工具 → 审批 → 执行 → 结果回灌模型 → 继续，直到给出最终回复。</li>
+        <li>工具调用在对话里折叠成活动摘要（读了几个文件、跑了几条命令），展开可以看到完整参数、输出、错误和审批来源。</li>
+        <li>同一个服务商的并发请求会排队，默认最多 3 条，可在设置里调整；不同服务商互不影响。</li>
+        <li>Agent 忙的时候仍可继续输入，消息会排队；也可以随时停止当前回合。</li>
+      </ul>
+    </section>
+
+    <section id="approvals">
+      <h2>审批与安全</h2>
+      <ul>
+        <li>输入区底部可以为当前会话选择审批档位：每次询问、智能审批、Workspace 访问、静默。</li>
+        <li>判定顺序是确定性优先：恶意命令黑名单任何档位都拦；常见只读命令自动放行；记住过的授权直接生效；都不命中时才可能交给 AI 裁判判断。</li>
+        <li>破坏性操作始终需要你键入确认，不会被任何档位自动放行。</li>
+        <li>只读命令默认在受限环境中执行，禁网、禁越权写。执行记录写入应用支持目录下的审计日志，密钥已脱敏。</li>
+        <li>Agent 改动文件后会在对话里给出改动摘要与 Diff，你可以逐个查看、应用或拒绝。</li>
+      </ul>
+    </section>
+
+    <section id="workspaces">
+      <h2>工作区与运行位置</h2>
+      <ul>
+        <li>会话的工作区可以是本地目录，也可以是远端机器上的目录。</li>
+        <li>「设置 &gt; Runtimes」可以添加 SSH 远端或 daemon 远端；添加后在输入区选择运行位置即可让工具在远端执行。</li>
+        <li>SSH 只保存密钥文件路径，不保存私钥内容；daemon 的 token 存放在钥匙串里。</li>
+        <li>在 Git 仓库里可以直接从输入区的工作区菜单创建、切换和清理 worktree。</li>
+      </ul>
+    </section>
+
+    <section id="panels">
+      <h2>侧栏与面板</h2>
+      <ul>
+        <li>右侧面板提供文件、终端、Diff、网页预览、媒体任务和图片编辑等视图，和当前会话共享同一个工作区。</li>
+        <li>终端面板是真实终端，Agent 跑的命令与你手敲的命令看到的是同一个环境。</li>
+        <li>Diff 面板按文件列出本回合的改动，可以在应用前逐段核对。</li>
+        <li>左侧栏按工作区分组列出历史会话，右键分组可以把它从列表里移除（只隐藏，会话数据保留）。</li>
+      </ul>
+    </section>
+
+    <section id="scheduled">
+      <h2>已安排任务</h2>
+      <ul>
+        <li>左侧栏的「已安排」用来让 WillDeep 定期自己跑一件事：每日简报、每周回顾、项目监控等。</li>
+        <li>每条任务记录了执行周期、所属工作区和下次触发时间；暂停的任务会明确标出「已暂停」，不会假装还有下次运行。</li>
+        <li>鼠标悬停在任务卡片上会出现「立即运行」和「暂停」按钮，右键可以编辑或删除。</li>
+        <li>近期运行会列出最近几次的结果和失败原因，点击可以跳回对应会话。</li>
+      </ul>
+    </section>
+
+    <section id="plugins">
+      <h2>插件与扩展</h2>
+      <ul>
+        <li>WillDeep 有四种扩展方式：技能（改变 AI 的做事方法）、MCP 服务（给 AI 新的真实能力）、工作流（可重复的多步编排）、插件（在主导航里增加一块你直接操作的界面）。</li>
+        <li>「更多插件」进入插件中心：安装、启停、固定到导航、检查更新、回滚版本和卸载都在这里。安装前会列出插件要的权限，批准后才会写入。</li>
+        <li>随 App 内置的第一方插件包括经典游戏厅、俄罗斯方块、收藏夹、待办、会话体检中心和项目概览。</li>
+        <li>插件页面运行在隔离环境中：没有网络、没有文件访问、拿不到密钥。它要做任何真实的事，都必须经过清单里声明过的命令。</li>
+        <li><strong>想自己开发插件</strong>：完整的机理说明与 API 文档随 App 一起发行，位于应用包内的
+          <code>WillDeep.app/Contents/Resources/BundledSkills/willdeep-plugin-dev/</code>，其中
+          <code>SKILL.md</code> 是入口，<code>references/</code> 下分别是运行机理、上手教程、清单字段、页面 API、打包与安全。
+          在 WillDeep 里直接问「怎么开发 WillDeep 插件」，AI 也会读这份文档来回答。</li>
+      </ul>
+    </section>
+
+    <section id="settings">
+      <h2>设置与命令行</h2>
+      <ul>
+        <li>「WillDeep &gt; 设置」里可以配置模型服务商、本机 Agent、技能、规则、记忆、通知、外观和远端 Runtime。</li>
+        <li>「规则」页可以启用全局规则文件（默认 <code>~/.willdeep/CLAUDE.md</code>），它会在每个项目里生效；项目内的 <code>AGENTS.md</code> / <code>CLAUDE.md</code> 仍然更具体、优先级更高。</li>
+        <li>在「设置 &gt; 工具」里安装命令行工具后，可以用 <code>willdeep-app .</code> 在当前目录打开 WillDeep。命令装在 <code>~/.local/bin</code>，必要时把它加进 PATH。</li>
+        <li>外观页可以调整界面字体、字号、配色和字体平滑。</li>
+      </ul>
+    </section>
+
+    <section id="troubleshooting">
+      <h2>排错</h2>
+      <dl>
+        <dt>发出去的消息像没反应。</dt>
+        <dd>先看输入区是否显示排队状态：同一服务商的并发请求会排队。如果使用托管服务，检查是否仍处于登录状态。</dd>
+        <dt>Agent 一直要我确认同一类命令。</dt>
+        <dd>把审批档位调到「智能审批」或「Workspace 访问」，或在授权卡上选择记住这条命令。破坏性操作永远需要确认，这是设计。</dd>
+        <dt>插件页面是白的。</dt>
+        <dd>点页面工具栏的刷新重新加载。仍然空白时，到插件中心确认插件已启用且版本满足要求；加载失败现在会在页面上直接写明原因。</dd>
+        <dt>想直接改文件，但这里编辑不了。</dt>
+        <dd>WillDeep 现在是 Agent 专用应用，通用文件编辑归独立的 Qeditor。这里的文件面板是只读预览，改动由 Agent 提交、你在 Diff 里审阅后应用。</dd>
+        <dt>远端命令连不上。</dt>
+        <dd>到「设置 &gt; Runtimes」重新探测该远端。SSH 用系统 <code>ssh</code>，所以先确认在终端里能免密登上同一台机器。</dd>
+      </dl>
+    </section>
+  </main>
+</body>
+</html>
