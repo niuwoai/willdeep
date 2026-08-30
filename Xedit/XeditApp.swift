@@ -122,6 +122,16 @@ private struct AgentOnlyCommands: Commands {
             }
             .keyboardShortcut("n", modifiers: .command)
         }
+
+        // 系统帮助查看器（macOS 26 起是「提示」）经常把 App 内的 Help Book
+        // 显示成「所选内容当前不可用」，转头去 Apple 在线帮助库找内容。
+        // 帮助就在包里，自己开窗显示，不依赖系统组件和网络。
+        CommandGroup(replacing: .help) {
+            Button(L10n.HelpMenu.menuItem) {
+                HelpWindowOpener.open()
+            }
+            .keyboardShortcut("?", modifiers: .command)
+        }
     }
 }
 

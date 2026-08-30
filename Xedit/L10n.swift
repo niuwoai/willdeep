@@ -29,6 +29,16 @@ nonisolated enum L10n {
         static let windowTitle = String(localized: "about.window-title", defaultValue: "About WillDeep")
     }
 
+    enum HelpMenu {
+        static let menuItem = String(localized: "help-menu.menu-item", defaultValue: "WillDeep Help")
+        static let windowTitle = String(localized: "help-menu.window-title", defaultValue: "WillDeep Help")
+        static let unavailableTitle = String(localized: "help-menu.unavailable-title", defaultValue: "Help content is missing")
+        static let unavailableDetail = String(
+            localized: "help-menu.unavailable-detail",
+            defaultValue: "This copy of WillDeep does not contain the help book. Reinstall a complete release to restore it."
+        )
+    }
+
     enum AppUpdate {
         static let checkForUpdates = String(localized: "app-update.check-for-updates", defaultValue: "Check for Updates…")
         static let diagnosticClose = String(localized: "app-update.diagnostic-close", defaultValue: "Close")

@@ -690,31 +690,37 @@ enum AgentSelfLearning {
         // `memoryState.addMemory` + 「Saved N memories」事件那一支去掉。
         if !memories.isEmpty {
             let scope: AgentMemoryScope = workspaceURL == nil ? .global : .project
-            let drafts = memories.map {
-                AgentMemoryDraft(
-                    content: $0,
-                    scopeRaw: scope.rawValue,
-                    lifetimeRaw: AgentMemoryLifetime.longTerm.rawValue,
-                    rootDirectoryPath: scope == .project ? workspaceURL?.path : nil
-                )
+            let drafts = AgentLearningSuggestionDeduplicator.newMemoryDrafts(
+                memories.map {
+                    AgentMemoryDraft(
+                        content: $0,
+                        scopeRaw: scope.rawValue,
+                        lifetimeRaw: AgentMemoryLifetime.longTerm.rawValue,
+                        rootDirectoryPath: scope == .project ? workspaceURL?.path : nil
+                    )
+                },
+                existingMemoryContents: memoryState.memories.map(\.content)
+            )
+            // 全部与已有记忆重复时，连事件都不产生。
+            if !drafts.isEmpty {
+                events.append(AgentLearningEvent(
+                    kind: .memory,
+                    status: .suggested,
+                    title: L10n.Transcript.learningEventTitleSuggestedMemories(String(drafts.count)),
+                    detail: AgentLearningActionPresentation.memorySuggestionDetail(for: drafts),
+                    action: AgentLearningAction(
+                        kind: .saveMemory,
+                        commandName: "add_memory",
+                        target: scope == .global
+                            ? L10n.Transcript.learningTargetGlobalMemory
+                            : L10n.Transcript.learningTargetProjectMemory,
+                        reason: L10n.Transcript.learningReasonSelfLearningPolicy,
+                        nextStep: L10n.Transcript.learningNextStepApprovePopover,
+                        requiresUserConfirmation: true
+                    ),
+                    memoryDrafts: drafts
+                ))
             }
-            events.append(AgentLearningEvent(
-                kind: .memory,
-                status: .suggested,
-                title: L10n.Transcript.learningEventTitleSuggestedMemories(String(drafts.count)),
-                detail: AgentLearningActionPresentation.memorySuggestionDetail(for: drafts),
-                action: AgentLearningAction(
-                    kind: .saveMemory,
-                    commandName: "add_memory",
-                    target: scope == .global
-                        ? L10n.Transcript.learningTargetGlobalMemory
-                        : L10n.Transcript.learningTargetProjectMemory,
-                    reason: L10n.Transcript.learningReasonSelfLearningPolicy,
-                    nextStep: L10n.Transcript.learningNextStepApprovePopover,
-                    requiresUserConfirmation: true
-                ),
-                memoryDrafts: drafts
-            ))
         }
         if let mcpSuggestion = audit.mcpSuggestion {
             events.append(AgentLearningEvent(
@@ -753,7 +759,8 @@ enum AgentSelfLearning {
         for runtime: AgentRuntime,
         workspaceURL: URL?,
         skillSettings: AgentSkillSettings? = nil,
-        root: URL = AgentSkillFileManager.userSkillsRoot
+        root: URL = AgentSkillFileManager.userSkillsRoot,
+        existingSkills: [AgentLearningSuggestionDeduplicator.ExistingSkill]? = nil
     ) -> [AgentLearningEvent] {
         let settings = (skillSettings ?? AgentSkillSettingsStore.load()).normalized
         guard let audit = auditTurn(
@@ -816,6 +823,18 @@ enum AgentSelfLearning {
             ]
         }
         guard audit.explicitSkillDirective else {
+            // 本地已经装了做同一件事的技能就别再建议了。用户明确开口要建技能
+            // （explicitSkillDirective）时不走这条路，那是他自己的决定。
+            let installed = existingSkills ?? AgentSkillDirectory.list(includeDisabled: true).map {
+                AgentLearningSuggestionDeduplicator.ExistingSkill(name: $0.name, description: $0.description)
+            }
+            guard !AgentLearningSuggestionDeduplicator.isKnownSkill(
+                name: candidate.name,
+                description: candidate.description,
+                existing: installed
+            ) else {
+                return []
+            }
             let draft = AgentLearningSkillDraft(
                 name: candidate.name,
                 description: candidate.description,
