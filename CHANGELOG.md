@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.307.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.307.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.307.0-rc4 - 2026-08-30
+
+### Fixed
+
+- **对话里的 Widget 卡片不再被无关刷新清零。** `show_widget` 渲染的卡片过去在每一次 SwiftUI 刷新时都会重新加载整份 HTML，卡片里的表单输入、滑块位置和游戏进度随之丢失；现在只有文档本身（含随主题变化的配色）真的变了才重灌。
+- **Widget 卡片的网页内容进程被回收后能自己回来。** 补上 `webViewWebContentProcessDidTerminate` 与 `didFailProvisionalNavigation` / `didFail`：崩溃或加载失败时重灌同一份 HTML，连续崩溃三次后停手，不再空转。此前卡片会一直空着，直到某次无关刷新碰巧把它重灌回来。
+
+### Tests
+
+- 新增 `AgentWidgetWebViewLifecycleTests` 2 项；与 `AgentPluginSystemTests` 36 项一同通过（共 38 项）。
 
 ## 1.307.0-rc3 - 2026-08-30
 

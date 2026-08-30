@@ -257,6 +257,12 @@ private struct AgentWidgetWebView: NSViewRepresentable {
         context.coordinator.baseURL = baseURL
         context.coordinator.appState = appState
         context.coordinator.onHeightChange = onHeightChange
+        // 只在文档本身变了才重灌。以前这里无条件 loadHTMLString，任何一次无关的
+        // SwiftUI 刷新都会把 widget 从头加载一遍，里面的表单、滑块、游戏进度跟着清零。
+        guard context.coordinator.loadedHTML != html || context.coordinator.loadedBaseURL != baseURL else {
+            return
+        }
+        context.coordinator.prepareForLoad(html: html, baseURL: baseURL)
         webView.loadHTMLString(html, baseURL: baseURL)
     }
 
@@ -277,6 +283,10 @@ private struct AgentWidgetWebView: NSViewRepresentable {
         var baseURL: URL?
         weak var appState: AppState?
         var onHeightChange: (CGFloat) -> Void
+        private(set) var loadedHTML: String?
+        private(set) var loadedBaseURL: URL?
+        private var navigationFailureRetries = 0
+        private var consecutiveProcessCrashes = 0
 
         init(widgetID: UUID, widgetTitle: String, widgetContext: String, baseURL: URL?, appState: AppState, onHeightChange: @escaping (CGFloat) -> Void) {
             self.widgetID = widgetID
@@ -288,6 +298,48 @@ private struct AgentWidgetWebView: NSViewRepresentable {
         }
 
         // MARK: Navigation
+
+        func prepareForLoad(html: String, baseURL: URL?) {
+            loadedHTML = html
+            loadedBaseURL = baseURL
+            navigationFailureRetries = 0
+            consecutiveProcessCrashes = 0
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            navigationFailureRetries = 0
+        }
+
+        /// 网页内容进程被系统回收后，卡片会一直空着——这里的文档是 loadHTMLString
+        /// 灌进去的，`reload()` 救不回来（baseURL 要么是 nil，要么是一个目录），
+        /// 只能重灌同一份 HTML。
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            // 反复崩就别再重灌了，免得和内容进程互相拉着空转。
+            guard consecutiveProcessCrashes < 3 else { return }
+            consecutiveProcessCrashes += 1
+            reloadDocument(in: webView)
+        }
+
+        func webView(_ webView: WKWebView,
+                     didFailProvisionalNavigation navigation: WKNavigation!,
+                     withError error: Error) {
+            handleNavigationFailure(error, in: webView)
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            handleNavigationFailure(error, in: webView)
+        }
+
+        private func handleNavigationFailure(_ error: Error, in webView: WKWebView) {
+            guard (error as NSError).code != NSURLErrorCancelled, navigationFailureRetries < 1 else { return }
+            navigationFailureRetries += 1
+            reloadDocument(in: webView)
+        }
+
+        private func reloadDocument(in webView: WKWebView) {
+            guard let loadedHTML else { return }
+            webView.loadHTMLString(loadedHTML, baseURL: loadedBaseURL)
+        }
 
         func webView(_ webView: WKWebView,
                      decidePolicyFor navigationAction: WKNavigationAction,
