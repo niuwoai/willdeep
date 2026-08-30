@@ -1100,6 +1100,48 @@ struct AgentPluginSystemTests {
         }
     }
 
+    @Test
+    func pluginWebResourceResolverServesIndexHTMLForDirectoryRequests() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let distURL = root.appendingPathComponent("ui/dist", isDirectory: true)
+        try FileManager.default.createDirectory(at: distURL, withIntermediateDirectories: true)
+        try "<html>root</html>".write(to: root.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+        try "<html>dist</html>".write(to: distURL.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+        try "console.log(1)".write(to: distURL.appendingPathComponent("app.js"), atomically: true, encoding: .utf8)
+
+        // 目录请求（WebContent 进程重启后 reload 打到 baseURL 的那种）不能落空，否则就是一张白页。
+        let directoryHit = try AgentPluginWebResourceResolver.fileURL(forRequestPath: "/ui/dist/", packageURL: root)
+        #expect(directoryHit.lastPathComponent == "index.html")
+        #expect(try String(contentsOf: directoryHit, encoding: .utf8) == "<html>dist</html>")
+
+        let rootHit = try AgentPluginWebResourceResolver.fileURL(forRequestPath: "/", packageURL: root)
+        #expect(try String(contentsOf: rootHit, encoding: .utf8) == "<html>root</html>")
+
+        let fileHit = try AgentPluginWebResourceResolver.fileURL(forRequestPath: "/ui/dist/app.js", packageURL: root)
+        #expect(fileHit.lastPathComponent == "app.js")
+
+        #expect(throws: (any Error).self) {
+            try AgentPluginWebResourceResolver.fileURL(forRequestPath: "/../escape.txt", packageURL: root)
+        }
+    }
+
+    @Test
+    func pluginPageRecoversFromWebContentCrashByReloadingTheDocument() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentPluginPageHost.swift"),
+            encoding: .utf8
+        )
+
+        // reload() 对 loadHTMLString 的页面等于导航到 baseURL 目录，只会留下白页。
+        #expect(!source.contains("webView.reload()"))
+        #expect(source.contains("func reloadDocument()"))
+        #expect(source.contains("didFailProvisionalNavigation"))
+    }
+
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("willdeep-plugin-test-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
