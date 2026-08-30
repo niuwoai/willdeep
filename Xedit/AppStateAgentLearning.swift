@@ -133,7 +133,7 @@ extension AppState {
             now: Date()
         )
         guard !candidates.isEmpty else { return [] }
-        let drafts = candidates.map { record in
+        let allDrafts = candidates.map { record in
             AgentMemoryDraft(
                 content: record.content,
                 scopeRaw: record.scope.rawValue,
@@ -141,6 +141,13 @@ extension AppState {
                 rootDirectoryPath: record.scope == .project ? workspaceURL?.path : nil
             )
         }
+        // 已经存过的记忆不再建议第二次。会话内去重管不到"上周就存过这条"，
+        // 用户看到的是同一句话反复来敲门。
+        let drafts = AgentLearningSuggestionDeduplicator.newMemoryDrafts(
+            allDrafts,
+            existingMemoryContents: memoryState.memories.map(\.content)
+        )
+        guard !drafts.isEmpty else { return [] }
         return [
             AgentLearningEvent(
                 kind: .memory,
