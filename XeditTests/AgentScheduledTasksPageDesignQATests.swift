@@ -108,6 +108,31 @@ struct AgentScheduledTasksPageDesignQATests {
         #expect(FileManager.default.fileExists(atPath: path))
     }
 
+    /// 鼠标扫过任务列表时卡片会一格一格地抖：悬停操作条以前是 `if isHovered`
+    /// 直接插进标题行，26 pt 的按钮一出现就把整张卡片撑高。修法是让它常驻布局、
+    /// 只切换可见性——所以这里量的是「隐藏时还占不占位」。
+    @Test("hover actions keep their space while hidden")
+    func hoverRevealedContentKeepsItsLayoutSpace() {
+        func measuredHeight(isVisible: Bool) -> CGFloat {
+            let probe = Color.clear
+                .frame(
+                    width: AgentScheduledTaskRowMetrics.actionButtonSide,
+                    height: AgentScheduledTaskRowMetrics.actionButtonSide
+                )
+                .hoverRevealed(isVisible)
+            let hostingView = NSHostingView(rootView: probe)
+            return hostingView.fittingSize.height
+        }
+
+        let visible = measuredHeight(isVisible: true)
+        let hidden = measuredHeight(isVisible: false)
+
+        #expect(visible == AgentScheduledTaskRowMetrics.actionButtonSide)
+        #expect(hidden == visible)
+        // 标题行按最高的元素定高，操作条进出才撑不动它。
+        #expect(AgentScheduledTaskRowMetrics.titleRowHeight >= AgentScheduledTaskRowMetrics.actionButtonSide)
+    }
+
     /// The meta line is the redesign's load-bearing addition: schedule,
     /// workspace and *when it fires next* on one line, under the name. The
     /// page never showed the next fire time, though `nextFireDate()` had
