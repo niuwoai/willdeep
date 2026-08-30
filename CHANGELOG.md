@@ -1,7 +1,30 @@
 # Changelog
 
-> 当前文件保留最新版本（1.307.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.307.0-rc4 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.307.0-rc4 - 2026-08-30
+
+### Fixed
+
+- **对话里的 Widget 卡片不再被无关刷新清零。** `show_widget` 渲染的卡片过去在每一次 SwiftUI 刷新时都会重新加载整份 HTML，卡片里的表单输入、滑块位置和游戏进度随之丢失；现在只有文档本身（含随主题变化的配色）真的变了才重灌。
+- **Widget 卡片的网页内容进程被回收后能自己回来。** 补上 `webViewWebContentProcessDidTerminate` 与 `didFailProvisionalNavigation` / `didFail`：崩溃或加载失败时重灌同一份 HTML，连续崩溃三次后停手，不再空转。此前卡片会一直空着，直到某次无关刷新碰巧把它重灌回来。
+
+### Tests
+
+- 新增 `AgentWidgetWebViewLifecycleTests` 2 项；与 `AgentPluginSystemTests` 36 项一同通过（共 38 项）。
+
+## 1.307.0-rc3 - 2026-08-30
+
+### Fixed
+
+- **插件页面（经典游戏厅等）偶发白页。** 插件页是用 `loadHTMLString` 灌进 WKWebView 的，网页内容进程被系统回收后，原来的恢复动作 `reload()` 实际是去请求 baseURL 指向的插件目录，什么也拿不到，于是留下一张白页。恢复改为重新灌入同一份 HTML。
+- **导航失败不再静默。** 插件 WebView 过去没有实现 `didFailProvisionalNavigation` / `didFail`，任何加载失败都只表现为白页；现在会先自动重灌一次，仍失败则在页面上显示「页面不可用」和具体错误，工具栏的刷新按钮可继续重试。
+- **插件资源目录请求兜底。** `willdeep-plugin://` 的目录请求（含根路径）改为返回该目录下的 `index.html`，越界路径仍然拒绝。
+
+### Tests
+
+- `AgentPluginSystemTests` 36 项通过，含新增的资源解析用例（目录/根路径/普通文件/越界路径）与崩溃恢复路径的源码守卫。
 
 ## 1.307.0-rc2 - 2026-08-29
 
