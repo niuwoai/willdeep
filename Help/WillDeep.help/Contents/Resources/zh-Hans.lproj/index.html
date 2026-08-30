@@ -34,7 +34,7 @@
         <li>首次运行需要一个可用的模型来源：登录 some.im 托管服务，或在「设置 &gt; AI 服务商」里配置自有 provider。</li>
         <li>在输入区左侧选择工作区（一个本地目录），Agent 的读写和命令都以它为边界。</li>
         <li>直接把需求写进输入框发送即可。Agent 会自己读文件、跑命令、改代码，需要你点头的地方会停下来问。</li>
-        <li>按 Command-N 开一个新会话。WillDeep 是 Agent 专用应用，通用的文件编辑交给独立的 Qeditor，这里只保留只读预览和 Diff 审阅。</li>
+        <li>按 <kbd>Command-N</kbd> 开一个新会话。WillDeep 是 Agent 专用应用，通用的文件编辑交给独立的 Qeditor，这里只保留只读预览和 Diff 审阅。</li>
       </ul>
     </section>
 
@@ -130,5 +130,29 @@
       </dl>
     </section>
   </main>
+  <script>
+    // 滚动时高亮目录里当前所在的章节。纯本地脚本，没有外部依赖；
+    // 浏览器不支持 IntersectionObserver 时页面照常可读，只是不高亮。
+    (function () {
+      if (!('IntersectionObserver' in window)) return;
+      var links = {};
+      Array.prototype.forEach.call(document.querySelectorAll('.topics a'), function (a) {
+        links[a.getAttribute('href').slice(1)] = a;
+      });
+      var visible = {};
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          visible[entry.target.id] = entry.isIntersecting;
+        });
+        var current = Object.keys(links).filter(function (id) { return visible[id]; })[0];
+        Object.keys(links).forEach(function (id) {
+          links[id].classList.toggle('is-current', id === current);
+        });
+      }, { rootMargin: '-72px 0px -70% 0px' });
+      Array.prototype.forEach.call(document.querySelectorAll('main section[id]'), function (section) {
+        observer.observe(section);
+      });
+    })();
+  </script>
 </body>
 </html>
