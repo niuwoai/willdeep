@@ -528,7 +528,10 @@ private struct RoundtableMessageBubble: View {
             VStack(alignment: message.speaker == .user ? .trailing : .leading, spacing: 6) {
                 speakerHeader
                 bubbleContent
-                if canQuote, isHovering, selectedExcerpt == nil {
+                // 常驻占位、只切换可见性：以前 `isHovering` 在插入条件里，
+                // 鼠标划过气泡就多出一行「引用」，气泡变高、底下所有发言跟着
+                // 往下窜。
+                if canQuote, selectedExcerpt == nil {
                     Button {
                         onQuote(message.content, false)
                     } label: {
@@ -537,7 +540,7 @@ private struct RoundtableMessageBubble: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .transition(.opacity)
+                    .hoverRevealed(isHovering)
                 }
             }
 
