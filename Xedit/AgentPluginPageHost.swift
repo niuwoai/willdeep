@@ -476,6 +476,8 @@ private struct AgentPluginWebView: NSViewRepresentable {
         var mcpAppInitialized = false
         var nextHostRequestID = 1
         var crashResetWorkItem: DispatchWorkItem?
+        var navigationFailureRetries = 0
+        var isShowingFailureDocument = false
 
         init(
             destination: AgentPluginDestinationDescriptor,
@@ -489,6 +491,7 @@ private struct AgentPluginWebView: NSViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             pushContext()
+            if !isShowingFailureDocument { navigationFailureRetries = 0 }
             crashResetWorkItem?.cancel()
             let workItem = DispatchWorkItem { [weak self] in
                 self?.consecutiveProcessCrashes = 0
@@ -502,7 +505,9 @@ private struct AgentPluginWebView: NSViewRepresentable {
             mcpAppInitialized = false
             consecutiveProcessCrashes += 1
             guard consecutiveProcessCrashes >= 3 else {
-                webView.reload()
+                // 页面是 loadHTMLString 灌进去的，reload() 只会去请求 baseURL 那个目录，
+                // 换来一张白页；恢复必须重灌同一份 HTML。
+                reloadDocument()
                 return
             }
             let pluginName = destination.pluginID
@@ -523,6 +528,66 @@ private struct AgentPluginWebView: NSViewRepresentable {
         func prepareForReload() {
             crashResetWorkItem?.cancel()
             mcpAppInitialized = false
+            navigationFailureRetries = 0
+            isShowingFailureDocument = false
+        }
+
+        /// 重新灌入当前文档。WKWebView 的 `reload()` 对 loadHTMLString 加载的页面无效：
+        /// 它请求的是 baseURL（插件包里的目录），拿不到内容就留下一张白页。
+        func reloadDocument() {
+            guard let webView, let loadedHTML else { return }
+            mcpAppInitialized = false
+            webView.loadHTMLString(loadedHTML, baseURL: pluginBaseURL(for: baseURL))
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFailProvisionalNavigation navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            handleNavigationFailure(error)
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            handleNavigationFailure(error)
+        }
+
+        /// 导航失败以前是彻底静默的：用户看到的就是一张白页，没有任何提示。
+        /// 先重灌一次，仍旧失败就把错误显示出来。
+        private func handleNavigationFailure(_ error: Error) {
+            if (error as NSError).code == NSURLErrorCancelled { return }
+            guard navigationFailureRetries < 1 else {
+                showFailureDocument(message: error.localizedDescription)
+                return
+            }
+            navigationFailureRetries += 1
+            reloadDocument()
+        }
+
+        private func showFailureDocument(message: String) {
+            guard let webView, !isShowingFailureDocument else { return }
+            isShowingFailureDocument = true
+            let document = """
+            <!doctype html><html><head><meta charset="utf-8">
+            <style>
+            html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+            body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; \
+            color: \(destinationContext.colorScheme == "dark" ? "#f2f2f4" : "#1a1a1c"); \
+            background: \(destinationContext.colorScheme == "dark" ? "#1c1c1e" : "#ffffff"); }
+            .title { font-size: 15px; font-weight: 600; }
+            .detail { font-size: 12px; opacity: 0.6; max-width: 420px; text-align: center; }
+            </style></head><body>
+            <div class="title">\(Self.escapeHTML(L10n.Plugins.pageUnavailable))</div>
+            <div class="detail">\(Self.escapeHTML(message))</div>
+            </body></html>
+            """
+            webView.loadHTMLString(document, baseURL: nil)
+        }
+
+        private static func escapeHTML(_ raw: String) -> String {
+            raw.replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
         }
 
         func webView(
@@ -921,6 +986,36 @@ private struct AgentPluginWebView: NSViewRepresentable {
     }
 }
 
+/// 把 `willdeep-plugin://bundle/...` 的请求路径解析成插件包内的真实文件。
+/// 目录请求（含根路径）落到该目录下的 `index.html`，否则请求 baseURL 只会得到一张白页。
+enum AgentPluginWebResourceResolver {
+    static let directoryIndexFile = "index.html"
+
+    static func fileURL(forRequestPath path: String, packageURL: URL) throws -> URL {
+        let decoded = path.removingPercentEncoding ?? path
+        let relativePath = decoded.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !relativePath.isEmpty else {
+            return try AgentPluginPackageLoader.safeResourceURL(
+                relativePath: directoryIndexFile,
+                packageURL: packageURL
+            )
+        }
+        let resourceURL = try AgentPluginPackageLoader.safeResourceURL(
+            relativePath: relativePath,
+            packageURL: packageURL
+        )
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: resourceURL.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return resourceURL
+        }
+        return try AgentPluginPackageLoader.safeResourceURL(
+            relativePath: relativePath + "/" + directoryIndexFile,
+            packageURL: packageURL
+        )
+    }
+}
+
 private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
     nonisolated static let scheme = "willdeep-plugin"
     nonisolated static let host = "bundle"
@@ -938,19 +1033,14 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
                   requestURL.host == Self.host else {
                 throw AgentPluginPackageError.resourceOutsidePackage(urlSchemeTask.request.url?.absoluteString ?? "")
             }
-            let relativePath = requestURL.path.removingPercentEncoding?
-                .trimmingCharacters(in: CharacterSet(charactersIn: "/")) ?? ""
-            guard !relativePath.isEmpty else {
-                throw AgentPluginPackageError.unreadableManifest(requestURL.absoluteString)
-            }
-            let resourceURL = try AgentPluginPackageLoader.safeResourceURL(
-                relativePath: relativePath,
+            let resourceURL = try AgentPluginWebResourceResolver.fileURL(
+                forRequestPath: requestURL.path,
                 packageURL: packageURL
             )
             let values = try resourceURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard values.isRegularFile == true,
                   (values.fileSize ?? 0) <= maximumResourceBytes else {
-                throw AgentPluginPackageError.oversizedManifest(relativePath)
+                throw AgentPluginPackageError.oversizedManifest(requestURL.path)
             }
             let data = try Data(contentsOf: resourceURL, options: [.mappedIfSafe])
             let mimeType = UTType(filenameExtension: resourceURL.pathExtension)?.preferredMIMEType
