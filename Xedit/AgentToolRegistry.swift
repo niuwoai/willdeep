@@ -20,7 +20,7 @@
 import Foundation
 
 enum AgentToolRegistry {
-    static let all: [AgentToolDescriptor] = [
+    static let all: [AgentToolDescriptor] = AgentSessionManagementTools.descriptors + [
         AgentToolPackCatalog.loaderDescriptor,
         AgentToolDescriptor(
             name: "search_files",
@@ -1789,13 +1789,14 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "spawn_agent",
-            description: "Spawn a focused subagent on an isolated context. Prefer deployable private-model trades and the narrowest profile that fits: 32K/48K/64K workers for bounded reading or repair, 256K implementer for ordinary multi-file coding, and deep only when the work cannot be bounded. Writing trades can create or edit only their declared paths; children cannot ask the user or spawn further agents. The prompt must be self-contained because the child does not see this conversation.",
+            description: "Spawn a focused worker with one of five responsibilities: investigation, implementation, verification, review, or operations. Model capability is selected separately through the configured standard/advanced/expert tier; context budgets are configured independently at 128K/256K and capped by the supported model window. Prefer the lowest adequate tier. Writing workers can create or edit only declared paths; children cannot ask the user or spawn agents. Supply a self-contained task.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description for the subagent. Include all needed context — it cannot see the parent conversation or ask questions.", required: true),
                 AgentToolParameter(name: "label", type: .string, description: "Short display label for the UI (e.g. `explore-auth-flow`). Defaults to a prompt prefix.", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, return immediately with an agent handle (agent_xxxxxx); the report is injected as a system message when the subagent finishes. Up to 3 subagents may run in parallel per session. Defaults to false (wait for the report inline).", required: false),
-                AgentToolParameter(name: "profile", type: .string, description: "Which subagent trade to spawn. Each trade runs on its own model with a narrowed tool set, so prefer the narrowest one that fits the task — it is faster and far cheaper. Trades: \(AgentSubagentProfileStore.toolDescriptionCatalog) Defaults to `deep`.", required: false),
+                AgentToolParameter(name: "profile", type: .string, description: "Select the responsibility, independently of model capability. Public roles: \(AgentSubagentProfileStore.toolDescriptionCatalog) Defaults to `generalist` (investigation). Legacy IDs remain compatible with their narrower tools.", required: false),
+                AgentToolParameter(name: "worker_tier", type: .string, description: "Optional capability tier: standard, advanced, or expert. Defaults to the role's configured tier. Select the lowest sufficient tier; explain complex work in the task packet. It never expands tools, write scope, or command approval. Profiles with an explicit legacy/custom model binding cannot be overridden this way.", required: false),
                 AgentToolParameter(name: "target_file", type: .string, description: "Required for `profile=\"editor\"`, ignored otherwise. Workspace-relative path of the single file the child may edit. Scheduling the worker never asks for approval in any mode; the declared path is enforced as its exact write boundary, and every other path is rejected.", required: false),
                 AgentToolParameter(name: "target_files", type: .stringArray, description: "Write set for `implementer`, `test_fixer`, and `build_fixer`: 1–16 workspace-relative existing or new paths. If omitted, those trades use `task.write_files` (or the legacy `task.relevant_files`). Scheduling the worker never asks for approval in any mode; every undeclared path and all file deletion are rejected.", required: false),
                 AgentToolParameter(name: "target_command", type: .string, description: "Only for `profile=\"ops_runner\"`, ignored otherwise. The EXACT shell command the worker may execute despite it being write-tier (a release/deploy script, typically). Spawning a worker never needs approval by itself; this field instead opens a human-readable confirmation for the specific external write command. The worker may run the approved text repeatedly (retry loops need idempotent scripts), but any different write command is denied. Combine with a `task` whose `verifier.command` is a read-only health/status check so success is decided by exit code, not the worker's claim. Keep rollback and other irreversible decisions in this session.", required: false),
@@ -1987,6 +1988,10 @@ enum AgentToolRegistry {
         // which would pop a bogus "destructive command" confirm for a plain
         // file listing. See AgentFileTools.glob / AgentTools.run.
         if name == "glob" { return .read }
+        if name == "manage_sessions" {
+            if arguments["dry_run"]?.boolValue() != false { return .read }
+            return arguments["action"]?.stringValue() == "delete" ? .danger : .write
+        }
         // Keep writing trades in the write risk tier for audit and policy
         // accounting, while the decision layer auto-allows the scheduling
         // itself. Their declared file set is still checked on every write.

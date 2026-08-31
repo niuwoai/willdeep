@@ -74,6 +74,34 @@ struct AgentSidebarListVisualMetricsTests {
         )
     }
 
+    @Test("collapsed workspace rows omit the expanded group gap", arguments: [true, false])
+    @MainActor
+    func workspaceSpacingFollowsCollapsedState(isCollapsed: Bool) {
+        let spacing = AgentDesign.sidebarWorkspaceBottomSpacing(isCollapsed: isCollapsed)
+        #expect(spacing == (isCollapsed ? 0 : 6))
+
+        let content = VStack(spacing: 0) {
+            Text("Workspace").frame(height: AgentDesign.sidebarRowHeight)
+            Spacer().frame(height: spacing)
+        }
+        .fixedSize()
+        let view = NSHostingView(rootView: content)
+        #expect(abs(view.fittingSize.height - (isCollapsed ? 31 : 37)) < 0.1)
+    }
+
+    @Test("production workspace groups use state-aware bottom spacing")
+    func workspaceGroupsUseCollapsedSpacing() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentSessionsSidebar.swift"),
+            encoding: .utf8
+        )
+        #expect(source.contains("AgentDesign.sidebarWorkspaceBottomSpacing(isCollapsed: isCollapsed)"))
+        #expect(!source.contains("Spacer().frame(height: AgentDesign.sidebarWorkspaceGroupSpacing)"))
+    }
+
     @Test("conversation sidebar follows the Codex typography and vertical rhythm")
     func codexReferenceMetricsStaySynchronized() {
         #expect(AgentDesign.sidebarRowFontSize == 14)

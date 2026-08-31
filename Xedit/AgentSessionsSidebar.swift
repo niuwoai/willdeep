@@ -879,7 +879,7 @@ struct AgentSessionsSidebar: View {
                 }
             }
 
-            Spacer().frame(height: AgentDesign.sidebarWorkspaceGroupSpacing)
+            Spacer().frame(height: AgentDesign.sidebarWorkspaceBottomSpacing(isCollapsed: isCollapsed))
             }
         }
     }

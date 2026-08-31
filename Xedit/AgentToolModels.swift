@@ -221,6 +221,7 @@ struct AgentToolContext {
     let sessionQueueSnapshotProvider: (@MainActor () -> AgentSessionQueueSnapshot)?
     /// Current-workspace session list for read-only session discovery tools.
     let workspaceSessionsSnapshotProvider: (@MainActor () -> [AgentWorkspaceSessionSnapshot])?
+    let sessionManagementHandler: (@MainActor (AgentSessionManagementRequest) async throws -> AgentToolResult)?
     /// Flash/title-summary-model backed title suggestion for the current
     /// session. The model can ask for a cheap candidate, then use
     /// rename_session when the title is stale.
@@ -312,6 +313,7 @@ struct AgentToolContext {
         shortDramaStore: AgentShortDramaStore? = nil,
         sessionQueueSnapshotProvider: (@MainActor () -> AgentSessionQueueSnapshot)? = nil,
         workspaceSessionsSnapshotProvider: (@MainActor () -> [AgentWorkspaceSessionSnapshot])? = nil,
+        sessionManagementHandler: (@MainActor (AgentSessionManagementRequest) async throws -> AgentToolResult)? = nil,
         sessionTitleSuggestionProvider: (@MainActor () async -> AgentSessionTitleSuggestionSnapshot)? = nil,
         sessionPersistenceBarrier: (@MainActor () -> Void)? = nil,
         localCommandEnvironment: [String: String]? = nil,
@@ -347,6 +349,7 @@ struct AgentToolContext {
         self.shortDramaStore = shortDramaStore
         self.sessionQueueSnapshotProvider = sessionQueueSnapshotProvider
         self.workspaceSessionsSnapshotProvider = workspaceSessionsSnapshotProvider
+        self.sessionManagementHandler = sessionManagementHandler
         self.sessionTitleSuggestionProvider = sessionTitleSuggestionProvider
         self.sessionPersistenceBarrier = sessionPersistenceBarrier
         self.localCommandEnvironment = localCommandEnvironment
@@ -407,6 +410,7 @@ struct AgentToolContext {
             shortDramaStore: shortDramaStore,
             sessionQueueSnapshotProvider: sessionQueueSnapshotProvider,
             workspaceSessionsSnapshotProvider: workspaceSessionsSnapshotProvider,
+            sessionManagementHandler: sessionManagementHandler,
             sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
             sessionPersistenceBarrier: sessionPersistenceBarrier,
             localCommandEnvironment: localCommandEnvironment,
@@ -444,6 +448,7 @@ struct AgentToolContext {
             shortDramaStore: shortDramaStore,
             sessionQueueSnapshotProvider: sessionQueueSnapshotProvider,
             workspaceSessionsSnapshotProvider: workspaceSessionsSnapshotProvider,
+            sessionManagementHandler: sessionManagementHandler,
             sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
             sessionPersistenceBarrier: sessionPersistenceBarrier,
             localCommandEnvironment: localCommandEnvironment,

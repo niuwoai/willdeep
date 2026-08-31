@@ -478,8 +478,7 @@ extension AppState {
         agentPendingTextAttachments.removeAll()
         activeRuntime?.latestComputerUseActivity = nil
         activeRuntime?.clearTurnError()
-        agentToolDecisionWaiter?.resume(returning: .denied(reason: "Conversation cleared"))
-        agentToolDecisionWaiter = nil
+        activeRuntime?.cancelToolDecisions(reason: "Conversation cleared")
         activeRuntime?.pendingToolDecisions.removeAll()
         isAgentResponding = false
         agentTurnStartedAt = nil
@@ -2137,6 +2136,9 @@ extension AppState {
                     },
                     workspaceSessionsSnapshotProvider: {
                         self.workspaceSessionSnapshots(for: runtime)
+                    },
+                    sessionManagementHandler: { request in
+                        try await self.handleSessionManagement(request, callerID: runtime.id)
                     },
                     sessionTitleSuggestionProvider: {
                         await self.sessionTitleSuggestionSnapshot(for: runtime)

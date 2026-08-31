@@ -40,8 +40,10 @@ Encoding.default_internal = Encoding::UTF_8
 $stdout.set_encoding(Encoding::UTF_8)
 $stderr.set_encoding(Encoding::UTF_8)
 
-STORE_VERSION = 1
+STORE_VERSION = 2
 MAX_ITEMS = 1_000
+MAX_TAGS = 20
+MAX_TAG_LENGTH = 40
 MAX_TEXT_BYTES = 4_000
 MAX_NOTE_BYTES = 4_000
 PRIORITIES = %w[urgent high normal low].freeze
@@ -78,6 +80,27 @@ def normalize_priority(raw)
   PRIORITIES.include?(value) ? value : nil
 end
 
+def normalize_tags(raw)
+  return [] unless raw.is_a?(Array)
+  seen = {}
+  raw.select { |tag| tag.is_a?(String) }.each_with_object([]) do |tag, result|
+    name = tag.unicode_normalize(:nfc).strip.sub(/\A#+/, "").strip[0, MAX_TAG_LENGTH]
+    key = name.downcase
+    next if name.empty? || seen[key] || result.length >= MAX_TAGS
+    seen[key] = true
+    result << name
+  end
+end
+
+def validate_tags(arguments)
+  return nil unless arguments.key?("tags")
+  tags = arguments["tags"]
+  valid = tags.is_a?(Array) && tags.length <= MAX_TAGS && tags.all? do |tag|
+    tag.is_a?(String) && tag.strip.length <= MAX_TAG_LENGTH && !tag.match?(/[\u0000-\u001f\u007f]/)
+  end
+  valid ? nil : { "ok" => false, "error" => "tags must contain at most 20 names of at most 40 characters" }
+end
+
 # 项目名取工作区目录名；路径原样留着，页面用来做 tooltip 与去重。
 def project_name_for(path, fallback = nil)
   name = fallback.to_s.strip
@@ -100,8 +123,9 @@ def normalize_item(raw)
     "note" => clip(raw["note"], MAX_NOTE_BYTES).strip,
     "project" => project_name_for(path, raw["project"]),
     "projectPath" => path.empty? ? nil : path,
+    "tags" => normalize_tags(raw["tags"]),
     "due" => due ? due.utc.iso8601 : nil,
-    "allDay" => raw["allDay"] == true,
+    "allDay" => !due.nil? && raw["allDay"] == true,
     "priority" => normalize_priority(raw["priority"]),
     "done" => raw["done"] == true,
     "doneAt" => parse_time(raw["doneAt"]) ? parse_time(raw["doneAt"]).utc.iso8601 : nil,
@@ -420,6 +444,7 @@ def build_item(arguments, parsed = nil)
     "note" => arguments["note"],
     "project" => arguments["project"],
     "projectPath" => arguments["projectPath"] || arguments["workspace"],
+    "tags" => arguments["tags"],
     "due" => arguments["due"] || (parsed && parsed.due ? parsed.due.utc.iso8601 : nil),
     "allDay" => arguments.key?("allDay") ? arguments["allDay"] == true : (parsed ? parsed.all_day : false),
     "priority" => arguments["priority"] || (parsed ? parsed.priority : nil),
@@ -429,6 +454,8 @@ def build_item(arguments, parsed = nil)
 end
 
 def add_item(arguments)
+  error = validate_tags(arguments)
+  return error if error
   item = build_item(arguments)
   return { "ok" => false, "error" => "empty text" } if item.nil?
   saved = save_items([item] + load_items)
@@ -436,6 +463,8 @@ def add_item(arguments)
 end
 
 def quick_add(arguments)
+  error = validate_tags(arguments)
+  return error if error
   raw = arguments["text"].to_s
   return { "ok" => false, "error" => "empty text" } if raw.strip.empty?
   parsed = parse_natural(raw)
@@ -458,6 +487,8 @@ def quick_add(arguments)
 end
 
 def update_item(arguments)
+  error = validate_tags(arguments)
+  return error if error
   id = arguments["id"].to_s
   return { "ok" => false, "error" => "missing id" } if id.empty?
   items = load_items
@@ -470,8 +501,9 @@ def update_item(arguments)
   if arguments.key?("due")
     due = parse_time(arguments["due"])
     item["due"] = due ? due.utc.iso8601 : nil
-    item["allDay"] = arguments.key?("allDay") ? arguments["allDay"] == true : item["allDay"]
+    item["allDay"] = !due.nil? && (arguments.key?("allDay") ? arguments["allDay"] == true : item["allDay"])
   end
+  item["tags"] = normalize_tags(arguments["tags"]) if arguments.key?("tags")
   item["priority"] = normalize_priority(arguments["priority"]) if arguments.key?("priority")
   if arguments.key?("projectPath") || arguments.key?("project")
     path = (arguments["projectPath"] || "").to_s.strip
@@ -539,6 +571,8 @@ def matches_status?(item, status)
 end
 
 def list_items(arguments)
+  error = validate_tags(arguments)
+  return error if error
   items = ordered(load_items)
   scope = arguments["scope"].to_s
   scope = "all" if scope.empty?
@@ -551,7 +585,21 @@ def list_items(arguments)
     next false unless matches_scope?(item, scope, project_path)
     next false unless matches_status?(item, status)
     next true if query.empty?
-    [item["text"], item["note"], item["project"]].join("\n").downcase.include?(query)
+    [item["text"], item["note"], item["project"], *item["tags"]].join("\n").downcase.include?(query)
+  end
+
+  facets = tag_histogram(filtered)
+  untagged = filtered.count { |item| item["tags"].empty? }
+  requested_tags = normalize_tags(arguments["tags"]).map(&:downcase)
+  filtered = filtered.select do |item|
+    if arguments["withoutTags"] == true
+      item["tags"].empty?
+    elsif requested_tags.empty?
+      true
+    else
+      keys = item["tags"].map(&:downcase)
+      arguments["tagMode"] == "all" ? (requested_tags - keys).empty? : !(requested_tags & keys).empty?
+    end
   end
 
   {
@@ -559,6 +607,9 @@ def list_items(arguments)
     "total" => items.length,
     "count" => filtered.length,
     "items" => filtered,
+    "tags" => facets,
+    "allTags" => tag_histogram(items),
+    "untaggedCount" => untagged,
     "projects" => project_histogram(items),
     "buckets" => bucket_counts(items),
     "storePath" => store_path,
@@ -567,13 +618,23 @@ def list_items(arguments)
   }
 end
 
+def tag_histogram(items)
+  counts = {}
+  items.each do |item|
+    item["tags"].each do |name|
+      entry = (counts[name.downcase] ||= { "name" => name, "count" => 0 })
+      entry["count"] += 1
+    end
+  end
+  counts.values.sort_by { |entry| [-entry["count"], entry["name"].downcase] }
+end
+
 def project_histogram(items)
   counts = {}
   items.each do |item|
-    next if item["done"]
     key = item["projectPath"] || ""
     entry = (counts[key] ||= { "name" => item["project"], "path" => item["projectPath"], "count" => 0 })
-    entry["count"] += 1
+    entry["count"] += 1 unless item["done"]
   end
   counts.values.sort_by { |entry| [-entry["count"], entry["name"].to_s] }
 end
@@ -650,6 +711,8 @@ end
 
 PRIORITY_SCHEMA = { type: "string", enum: PRIORITIES, description: "Optional priority." }.freeze
 DUE_SCHEMA = { type: "string", description: "Optional planned completion time (ISO 8601)." }.freeze
+TAGS_SCHEMA = { type: "array", maxItems: MAX_TAGS, items: { type: "string", maxLength: MAX_TAG_LENGTH },
+                description: "Optional labels. Pass [] to clear; omit to preserve on update." }.freeze
 
 TOOLS = [
   {
@@ -661,6 +724,7 @@ TOOLS = [
       properties: {
         text: { type: "string", description: "What to do." },
         note: { type: "string", description: "Optional note." },
+        tags: TAGS_SCHEMA,
         projectPath: { type: "string", description: "Workspace path this todo belongs to. Omit for an unfiled todo." },
         due: DUE_SCHEMA,
         allDay: { type: "boolean", description: "True when only a date was given." },
@@ -678,6 +742,7 @@ TOOLS = [
       type: "object",
       properties: {
         text: { type: "string", description: "One sentence, e.g. 明天下午三点前把发布验一遍，很急." },
+        tags: TAGS_SCHEMA,
         projectPath: { type: "string", description: "Workspace path this todo belongs to." },
         source: { type: "string", description: "Where the todo came from." }
       },
@@ -693,19 +758,22 @@ TOOLS = [
         scope: { type: "string", enum: %w[all project inbox], description: "all / this project / unfiled." },
         projectPath: { type: "string", description: "Workspace path, required when scope is project." },
         status: { type: "string", enum: %w[open done all], description: "Defaults to open." },
-        query: { type: "string", description: "Keyword filter." }
+        query: { type: "string", description: "Keyword filter." },
+        tags: TAGS_SCHEMA,
+        tagMode: { type: "string", enum: %w[any all], description: "Match any (default) or all selected tags." },
+        withoutTags: { type: "boolean", description: "Only untagged todos; overrides selected tags." }
       }
     }
   },
   {
     name: "todo.update",
-    description: "Update the text, note, due date, priority or project of one todo.",
+    description: "Update the text, note, due date, priority, project or labels of one todo.",
     inputSchema: {
       type: "object",
       properties: {
         id: { type: "string" }, text: { type: "string" }, note: { type: "string" },
         due: DUE_SCHEMA, allDay: { type: "boolean" }, priority: PRIORITY_SCHEMA,
-        projectPath: { type: "string" }
+        projectPath: { type: "string" }, tags: TAGS_SCHEMA
       },
       required: ["id"]
     }

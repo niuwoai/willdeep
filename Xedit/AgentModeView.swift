@@ -879,6 +879,9 @@ enum AgentDesign {
     static let sidebarPinnedSessionContentHorizontalInset: CGFloat = 4
     static let sidebarSelectionCornerRadius: CGFloat = 10
     static let sidebarWorkspaceGroupSpacing: CGFloat = 6
+    static func sidebarWorkspaceBottomSpacing(isCollapsed: Bool) -> CGFloat {
+        isCollapsed ? 0 : sidebarWorkspaceGroupSpacing
+    }
     static let sidebarPrimaryTextOpacity: Double = 0.86
     // Keep the conversation readable while allowing the configured image to
     // show through. Navigation and utility panels intentionally stay opaque.

@@ -795,6 +795,15 @@ nonisolated enum SafeCommand {
             return .needsJudgment
         }
         let sub = tokens[subcommandIndex].lowercased()
+        // Explicit external helpers are executable code, not ordinary diff
+        // inspection. Do not let a template-path exception bless them.
+        if tokens.contains(where: {
+            let flag = $0.lowercased()
+            return flag == "--ext-diff" || flag == "--textconv"
+                || flag.hasPrefix("--exec-path") || flag.hasPrefix("diff.external=")
+                || flag.hasPrefix("core.pager=") || flag.contains(".textconv=")
+                || (flag.hasPrefix("diff.") && flag.contains(".command="))
+        }) { return .needsJudgment }
         if sub == "commit" {
             return .alwaysSafe
         }

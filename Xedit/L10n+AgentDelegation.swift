@@ -312,6 +312,7 @@ extension L10n {
         )
 
         static func profileName(for id: String, fallback: String? = nil) -> String {
+            if let role = AgentWorkerRole.matching(id) { return role.title }
             switch id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
             case AgentSubagentProfileCatalog.scoutID: return profileScoutName
             case AgentSubagentProfileCatalog.readerID: return profileReaderName

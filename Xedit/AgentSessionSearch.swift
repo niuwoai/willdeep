@@ -90,7 +90,9 @@ nonisolated enum AgentSessionSearch {
     static func titleResults(
         sessions: [AgentSession],
         projects: [AgentProject],
-        query: String
+        query: String,
+        isMetadataOnly: (AgentSession.ID) -> Bool = { _ in false },
+        metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool = { _ in false }
     ) -> [AgentSessionSearchResult] {
         let projectResults = projects
             .filter { matches($0.resolvedDisplayName, query: query) }
@@ -103,7 +105,11 @@ nonisolated enum AgentSessionSearch {
             .map(AgentSessionSearchResult.project)
 
         let sessionResults = sessions
-            .filter { matches($0.title, query: query) }
+            .filter {
+                hasConversation($0, isMetadataOnly: isMetadataOnly,
+                                metadataOnlyHasUserMessage: metadataOnlyHasUserMessage)
+                    && matches($0.title, query: query)
+            }
             .sorted { $0.updatedAt > $1.updatedAt }
             .map(AgentSessionSearchResult.session)
 
@@ -111,20 +117,38 @@ nonisolated enum AgentSessionSearch {
     }
 
     /// 空查询时的默认列表：不分项目、不分组，按最后更新时间倒序的最近会话。
-    /// 刻意不过滤「看起来是空壳」的会话——元数据装载的会话 `messages` 本来就是
-    /// 空的，按它过滤会把真实历史藏掉。
+    /// 在截取条数前排除空会话；历史会话用所属 AppState 的元数据判定，
+    /// 不为搜索加载全文，也不把尚未加载的正文误判为空。
     static func recentSessions(
         _ sessions: [AgentSession],
-        limit: Int = Limits.recentSessions
+        limit: Int = Limits.recentSessions,
+        isMetadataOnly: (AgentSession.ID) -> Bool = { _ in false },
+        metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool = { _ in false }
     ) -> [AgentSessionSearchResult] {
         sessions
-            .filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .filter {
+                hasConversation($0, isMetadataOnly: isMetadataOnly,
+                                metadataOnlyHasUserMessage: metadataOnlyHasUserMessage)
+                    && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
             .sorted { lhs, rhs in
                 if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
                 return lhs.id.uuidString < rhs.id.uuidString
             }
             .prefix(limit)
             .map(AgentSessionSearchResult.session)
+    }
+
+    /// 与侧栏一致：发送过用户消息才算会话，纯附件消息也保留。
+    private static func hasConversation(
+        _ session: AgentSession,
+        isMetadataOnly: (AgentSession.ID) -> Bool,
+        metadataOnlyHasUserMessage: (AgentSession.ID) -> Bool
+    ) -> Bool {
+        if isMetadataOnly(session.id) {
+            return metadataOnlyHasUserMessage(session.id)
+        }
+        return session.messages.contains { $0.role == .user }
     }
 
     /// Whether a session belongs to the workspace the user is looking at.

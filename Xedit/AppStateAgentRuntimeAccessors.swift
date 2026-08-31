@@ -292,13 +292,7 @@ extension AppState {
     /// tool call. Each runtime owns its own waiter so concurrent sessions
     /// do not fight over one slot.
     var agentToolDecisionWaiter: CheckedContinuation<AgentToolDecision, Never>? {
-        get { activeRuntime?.toolDecisionWaiter }
-        set {
-            activeRuntime?.toolDecisionWaiter = newValue
-            if newValue == nil {
-                activeRuntime?.toolDecisionWaiterCallID = nil
-            }
-        }
+        activeRuntime?.toolDecisionWaiter
     }
 
     /// Provider request task for the active turn. Each runtime holds its

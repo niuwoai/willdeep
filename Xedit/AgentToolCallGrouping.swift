@@ -713,7 +713,11 @@ struct AgentActiveTurnToolCallPresentation: Equatable {
         let assistantMessageIDs = Set(messages[turnStart...].lazy.compactMap { message in
             message.role == .assistant ? message.id : nil
         })
-        let activeCalls = toolCalls.filter { assistantMessageIDs.contains($0.messageID) }
+        // Host/user messages can be appended while a tool is waiting. Approvals
+        // must stay interactive even when their message is now in TextKit history.
+        let activeCalls = toolCalls.filter {
+            assistantMessageIDs.contains($0.messageID) || $0.status.isBlockingForUserDecision
+        }
         guard !activeCalls.isEmpty else { return nil }
         guard isResponding || activeCalls.contains(where: { isWorking($0.status) }) else {
             return nil

@@ -245,10 +245,10 @@ struct AgentSubagentEscalationTests {
         ))
     }
 
-    @Test("an empty or near-empty report escalates")
+    @Test("an empty report escalates, not merely a short one")
     func emptyReportTriggersEscalation() {
         #expect(AgentSubagentEscalation.shouldEscalate(
-            outcome: outcome(report: "not found", roundCount: 2),
+            outcome: outcome(report: "", roundCount: 2),
             profile: AgentSubagentProfileCatalog.scout
         ))
     }
@@ -272,15 +272,15 @@ struct AgentSubagentEscalationTests {
         ))
     }
 
-    @Test("the retry runs on the parent model with deep's budgets, and cannot re-escalate")
-    func escalatedProfileWidensToDeep() {
+    @Test("the retry advances one configured tier without widening tools or budgets")
+    func escalatedProfileKeepsAuthority() {
         let escalated = AgentSubagentEscalation.escalatedProfile(
             from: AgentSubagentProfileCatalog.scout
         )
 
-        #expect(escalated.modelBinding.inheritsEverything)
-        #expect(escalated.toolNames == AgentSubagentProfileCatalog.deep.toolNames)
-        #expect(escalated.maxRounds == AgentSubagentProfileCatalog.deep.maxRounds)
+        #expect(escalated.modelBinding.workerTier == .advanced)
+        #expect(escalated.toolNames == AgentSubagentProfileCatalog.scout.toolNames)
+        #expect(escalated.maxRounds == AgentSubagentProfileCatalog.scout.maxRounds)
         // Only upward, and only once.
         #expect(escalated.escalation == .none)
     }

@@ -35,13 +35,11 @@ struct AgentSubagentProfileTests {
 
         #expect(deep.effectiveToolNames() == AgentSubagentRunner.allowedToolNames)
         #expect(deep.maxRounds == AgentSubagentRunner.maxRounds)
-        #expect(deep.modelBinding.preferredProviderID == AgentProviderPreset.someIMID)
         // Previously nil, i.e. "whatever the provider's primary model is".
         // That made the 1M tier the default rather than the exception, so
         // there was nothing for an escalation to escalate to.
-        #expect(deep.modelBinding.model == "deepseek-v4-flash")
-        #expect(deep.modelBinding.contextWindowTokens
-            == AgentSubagentProfileCatalog.deepContextWindowTokens)
+        #expect(deep.modelBinding.workerTier == .expert)
+        #expect(deep.modelBinding.model == nil)
         #expect(deep.escalation == .none)
     }
 
@@ -69,7 +67,7 @@ struct AgentSubagentProfileTests {
 
     @Test("implicit some.im worker defaults follow a private parent provider")
     func implicitHostedDefaultDoesNotEscapePrivateProvider() {
-        let binding = AgentSubagentProfileCatalog.scout.modelBinding
+        let binding = AgentSubagentProfile.ModelBinding(preferredProviderID: AgentProviderPreset.someIMID)
         #expect(AppState.implicitSomeIMBindingFollowsParent(
             binding: binding,
             parentProviderID: "private-openai-compatible"
@@ -169,15 +167,15 @@ struct AgentSubagentProfileTests {
         #expect(defaultRisk == .read)
     }
 
-    @Test("deployable trades use 32K 48K 64K and 256K windows with no 16K tier")
+    @Test("roles select shared model slots with 128K or 256K budgets")
     func deployableContextTiersAreExplicit() {
-        #expect(AgentSubagentProfileCatalog.scout.modelBinding.contextWindowTokens == 32_768)
-        #expect(AgentSubagentProfileCatalog.logInspector.modelBinding.contextWindowTokens == 32_768)
-        #expect(AgentSubagentProfileCatalog.reader.modelBinding.contextWindowTokens == 49_152)
-        #expect(AgentSubagentProfileCatalog.editor.modelBinding.contextWindowTokens == 49_152)
-        #expect(AgentSubagentProfileCatalog.buildFixer.modelBinding.contextWindowTokens == 49_152)
-        #expect(AgentSubagentProfileCatalog.testFixer.modelBinding.contextWindowTokens == 65_536)
-        #expect(AgentSubagentProfileCatalog.implementer.modelBinding.contextWindowTokens == 262_144)
+        #expect(AgentSubagentProfileCatalog.scout.modelBinding.workerTier == .standard)
+        #expect(AgentSubagentProfileCatalog.logInspector.modelBinding.workerTier == .standard)
+        #expect(AgentSubagentProfileCatalog.reader.modelBinding.workerTier == .standard)
+        #expect(AgentSubagentProfileCatalog.editor.modelBinding.workerTier == .standard)
+        #expect(AgentSubagentProfileCatalog.buildFixer.modelBinding.workerTier == .standard)
+        #expect(AgentSubagentProfileCatalog.testFixer.modelBinding.workerTier == .standard)
+        #expect(AgentSubagentProfileCatalog.implementer.modelBinding.workerTier == .advanced)
         #expect(!AgentSubagentProfileCatalog.builtIn.contains {
             $0.modelBinding.contextWindowTokens == 16_384
         })
@@ -327,132 +325,11 @@ struct AgentSubagentProfileTests {
         )
 
         // Assert the section is present by its own text rather than a keyword
-        // that happens to be in it — the job prompts are mirrored from
-        // docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3 and their wording moves.
+        // that happens to be in it — the profile owns the canonical job text.
         #expect(scoutPrompt.contains(AgentSubagentJobPrompts.scout))
         // The invariants stay regardless of trade.
         #expect(scoutPrompt.contains("READ-ONLY"))
         #expect(scoutPrompt.contains("cannot ask the user"))
-    }
-
-    @Test("a relay-hosted trade sends no local job section, only the invariants")
-    func hostedTradeOmitsLocalJobSection() {
-        let hosted = AgentSubagentRunner.systemPrompt(
-            workspaceURL: nil,
-            profile: AgentSubagentProfileCatalog.scout,
-            jobPromptIsHosted: true
-        )
-
-        // Sending our copy too would stack two sets of the same instructions
-        // on top of the relay's and pay for both.
-        #expect(!hosted.contains(AgentSubagentJobPrompts.scout))
-        // Safety rules are never hosted: they ship from the client always.
-        #expect(hosted.contains("READ-ONLY"))
-        #expect(hosted.contains("cannot ask the user"))
-    }
-
-    @Test("only the managed worker trades carry a hosted model")
-    func hostedModelsCoverExactlyTheManagedTrades() {
-        let hosted = AgentSubagentProfileCatalog.builtIn
-            .filter { $0.hostedVirtualModel != nil }
-            .map(\.id)
-
-        #expect(Set(hosted) == AgentSubagentJobPrompts.hostedTradeIDs)
-        // deep / tester / reviewer stay user-configurable in every login
-        // state — locking deep to a cheap tier would delete the trade whose
-        // whole job is to run at the parent's capability.
-        #expect(AgentSubagentProfileCatalog.deep.hostedVirtualModel == nil)
-        #expect(AgentSubagentProfileCatalog.tester.hostedVirtualModel == nil)
-        #expect(AgentSubagentProfileCatalog.reviewer.hostedVirtualModel == nil)
-        #expect(AgentSubagentProfileCatalog.implementer.hostedVirtualModel == nil)
-    }
-
-    @Test("hosted model ids hyphenate snake_case trade ids")
-    func hostedModelIDsMatchRelayNaming() {
-        #expect(AgentSubagentProfileCatalog.testFixer.hostedVirtualModel == "someim-32b-test-fixer")
-        #expect(AgentSubagentProfileCatalog.scout.hostedVirtualModel == "someim-32b-scout")
-        #expect(AgentSubagentJobPrompts.hostedModel(for: "deep") == nil)
-    }
-
-    /// The catalog-derived check above cannot catch this: `hostedVirtualModel`
-    /// is itself derived from `hostedTradeIDs`, so the two always agree even
-    /// when both are wrong. Only a literal list compares the client's belief
-    /// against what the gateway actually serves.
-    ///
-    /// Live probe 2026-08-21: these seven answer; `someim-32b-security-guard`,
-    /// `someim-32b-judge`, `someim-32b-reviewer` and `someim-32b-ops-runner`
-    /// return `model_not_configured`. Same table as willdeep-rs
-    /// `hosted_worker_model` — the two clients share one gateway and one set
-    /// of accounts, so a trade must resolve identically from either app.
-    @Test("hosted trades match the chains the relay has actually provisioned")
-    func hostedTradesMatchProvisionedRelayChains() {
-        #expect(
-            AgentSubagentJobPrompts.hostedTradeIDs == [
-                "scout", "reader", "editor", "test_fixer",
-                "build_fixer", "log_inspector", "git_detective",
-            ]
-        )
-        // Claiming hosting for an unbuilt chain is worse than not claiming it:
-        // the client suppresses its own job prompt when it believes the server
-        // supplies one, so the trade loses its prompt *and* fails to resolve.
-        for unprovisioned in ["security_guard", "judge", "reviewer", "ops_runner"] {
-            #expect(
-                AgentSubagentJobPrompts.hostedModel(for: unprovisioned) == nil,
-                "\(unprovisioned) has no relay chain; hosting it resolves to model_not_configured"
-            )
-        }
-        // The main loop's judge is a different model with a different trust
-        // boundary and is unaffected by the worker-tier chain being absent.
-        #expect(SomeIMManagedModel.securityGuard == "someim-security-guard")
-    }
-
-    @Test("managed trades ship with no pinned model, so 'recommended' is a real state")
-    func managedTradesDefaultToTheRecommendation() {
-        // These used to say `glm-5` while the hosted override ignored them
-        // entirely: the binding was dead code and the user had no say. An
-        // empty model is what makes "use the recommendation" distinguishable
-        // from "the user picked this".
-        for trade in [
-            AgentSubagentProfileCatalog.scout,
-            AgentSubagentProfileCatalog.reader,
-            AgentSubagentProfileCatalog.editor,
-            AgentSubagentProfileCatalog.testFixer,
-            AgentSubagentProfileCatalog.buildFixer,
-            AgentSubagentProfileCatalog.logInspector,
-            AgentSubagentProfileCatalog.gitDetective,
-        ] {
-            #expect(trade.modelBinding.model == nil, "\(trade.id) should not pin a model")
-            #expect(trade.usesRecommendedHostedModel(someIMAuthenticated: true))
-            // Signed out there is no hosted model to recommend.
-            #expect(!trade.usesRecommendedHostedModel(someIMAuthenticated: false))
-        }
-    }
-
-    @Test("an explicit model overrides the hosted recommendation")
-    func explicitModelBeatsTheHostedRecommendation() {
-        var scout = AgentSubagentProfileCatalog.scout
-        scout.modelBinding.model = "glm-5"
-
-        // The user asked for glm-5; the relay's virtual model no longer wins.
-        #expect(!scout.usesRecommendedHostedModel(someIMAuthenticated: true))
-        // Still a managed trade — it just runs elsewhere, and the job prompt
-        // follows the model actually called rather than being lost.
-        #expect(scout.usesHostedJobPrompt(someIMAuthenticated: true))
-
-        // Whitespace is not a choice.
-        scout.modelBinding.model = "   "
-        #expect(scout.usesRecommendedHostedModel(someIMAuthenticated: true))
-    }
-
-    @Test("a trade is only hosted while signed in to some.im")
-    func hostedResolutionFollowsLoginState() {
-        let scout = AgentSubagentProfileCatalog.scout
-
-        #expect(scout.usesHostedJobPrompt(someIMAuthenticated: true))
-        // Signed out the user's own binding applies and the client supplies
-        // the job prompt, so the same trade still behaves the same way.
-        #expect(!scout.usesHostedJobPrompt(someIMAuthenticated: false))
-        #expect(!AgentSubagentProfileCatalog.deep.usesHostedJobPrompt(someIMAuthenticated: true))
     }
 
     @Test("结构化提示为不支持工具调用的 Provider 提供 JSON 兼容路径")
@@ -542,15 +419,16 @@ struct AgentSubagentProfileTests {
             proPrimary: "deepseek-reasoner"
         )
         let library = AgentProviderLibrary(entries: [first, active], activeID: active.id)
+        let legacyBinding = AgentSubagentProfile.ModelBinding(preferredProviderID: AgentProviderPreset.someIMID)
 
         let selected = try #require(AgentSubagentProfileCatalog.providerEntry(
-            for: AgentSubagentProfileCatalog.scout.modelBinding,
+            for: legacyBinding,
             in: library
         ))
 
         #expect(selected.id == active.id)
         #expect(!AgentSubagentProfileCatalog.bindingModelApplies(
-            AgentSubagentProfileCatalog.scout.modelBinding,
+            legacyBinding,
             to: selected
         ))
     }
@@ -595,12 +473,11 @@ struct AgentSubagentProfileTests {
         // Same reach as deep — that is the point of a catch-all.
         #expect(generalist.effectiveToolNames() == deep.effectiveToolNames())
         // ...on a smaller window, and without deep's 1M ticket.
-        #expect(generalist.modelBinding.contextWindowTokens
-            == AgentSubagentProfileCatalog.implementerContextWindowTokens)
-        #expect(deep.modelBinding.contextWindowTokens == AgentSubagentProfileCatalog.deepContextWindowTokens)
+        #expect(generalist.modelBinding.workerTier == .standard)
+        #expect(deep.modelBinding.workerTier == .expert)
         // Pinned, not nil: a nil model resolves to the provider's primary,
         // i.e. the parent's own tier, which would make this no cheaper.
-        #expect(generalist.modelBinding.model == AgentSubagentJobPrompts.hostedModelPrefix)
+        #expect(AgentWorkerTierModels.defaultBinding(.standard).model == AgentSubagentModelCompatibility.baseModel)
         // A small model that gives up must still have an exit.
         #expect(generalist.escalation == .retryWithParentModel)
         // "General-purpose" means "no need to pick a trade", not "may write".
@@ -688,8 +565,7 @@ struct AgentSubagentProfileTests {
             == base.capability?.maxRounds)
 
         // The window is an override too, and 1.305 ships the generalist at 256K.
-        #expect(base.runtime.modelBinding.contextWindowTokens
-            == AgentSubagentProfileCatalog.implementerContextWindowTokens)
+        #expect(base.runtime.modelBinding.workerTier == .standard)
     }
 
     @Test("agent profiles is a top-level settings group, not a corner of AI")
@@ -701,12 +577,12 @@ struct AgentSubagentProfileTests {
         #expect(!SettingsGroup.ai.tabs.contains(.subagents))
     }
 
-    @Test("schema exposes seven capability trades while legacy ids still resolve")
+    @Test("schema exposes five roles while legacy ids still resolve")
     func toolDescriptionListsOnlyPublicTrades() {
         let catalog = AgentSubagentProfileCatalog.toolDescriptionCatalog
 
         #expect(AgentSubagentProfileCatalog.publicBuiltIn.map(\.id) == [
-            "generalist", "reader", "implementer", "tester", "ops_runner", "judge", "deep",
+            "generalist", "implementer", "tester", "reviewer", "ops_runner",
         ])
         for profile in AgentSubagentProfileCatalog.publicBuiltIn {
             #expect(catalog.contains("`\(profile.id)`"), "missing \(profile.id)")
@@ -716,7 +592,7 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentProfileCatalog.profile(id: "test_fixer").id == "test_fixer")
         #expect(AgentSubagentProfileCatalog.profile(id: "git_detective").id == "git_detective")
         #expect(AgentSubagentProfileCatalog.publicID(for: "test_fixer") == "implementer")
-        #expect(AgentSubagentProfileCatalog.publicID(for: "git_detective") == "reader")
+        #expect(AgentSubagentProfileCatalog.publicID(for: "git_detective") == "generalist")
     }
 
     @Test("live profile store advertises public trades but resolves saved specialist ids")

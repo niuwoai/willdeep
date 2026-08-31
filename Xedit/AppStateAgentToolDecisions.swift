@@ -344,7 +344,8 @@ extension AppState {
         //
         // 这一段提到 `guard risk == .write` 之前：完全访问要处理 danger 档，
         // 而那道 guard 会把 danger 档直接判成"要人工"。
-        if AgentEnvironmentTrust.neverAutoApprovedToolNames.contains(toolName) {
+        if AgentSessionManagementTools.requiresConfirmation(tool: toolName, arguments: arguments)
+            || AgentEnvironmentTrust.neverAutoApprovedToolNames.contains(toolName) {
             return nil
         }
 
@@ -366,7 +367,7 @@ extension AppState {
         if toolName == "rename_session" {
             return interactionMode == .goal ? .goalMode : .staticAllowlist
         }
-        if toolName == "change_workspace" {
+        if toolName == "change_workspace" || AgentSessionManagementTools.requiresConfirmation(tool: toolName, arguments: arguments) {
             return nil
         }
 
@@ -811,7 +812,7 @@ extension AppState {
             break
         }
         // 工作区重绑会把后续所有工具指向别处，任何档位都不自动通过。
-        if toolName == "change_workspace" {
+        if toolName == "change_workspace" || AgentSessionManagementTools.requiresConfirmation(tool: toolName, arguments: arguments) {
             return nil
         }
         // Saved Terminal recordings may contain protected input and a long
@@ -1297,12 +1298,9 @@ extension AppState {
             || runtime.toolCalls[index].status == .awaitingUserAnswer else {
             return
         }
-        // Only the call that currently owns the continuation may accept UI
-        // input. Future calls are marked as serially queued and have no
-        // controls; rejecting an out-of-order delivery here is the final
-        // safety net against the old "submitted, waiting for loop" deadlock.
-        guard let waiter = runtime.toolDecisionWaiter,
-              runtime.toolDecisionWaiterCallID == id else {
+        // Match the exact call, even when a delegated executor is also waiting.
+        // Future serially queued calls still have no waiter and cannot accept input.
+        guard let waiter = runtime.toolDecisionWaiters.removeValue(forKey: id) else {
             return
         }
 
@@ -1321,15 +1319,12 @@ extension AppState {
             runtime.toolCalls[index].errorMessage = reason
         }
 
-        runtime.toolDecisionWaiter = nil
-        runtime.toolDecisionWaiterCallID = nil
-
         if case .approved = decision {
             runtime.toolCalls[index].status = .running
         } else if case .answered = decision {
             runtime.toolCalls[index].status = .running
         }
-        waiter.resume(returning: decision)
+        waiter.continuation.resume(returning: decision)
     }
 
     /// Apply an explicit user-pinned grant to future calls that are still in

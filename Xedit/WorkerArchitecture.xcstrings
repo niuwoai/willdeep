@@ -1,0 +1,688 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+"模型空响应，正在重试（%lld/%lld）": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"模型空响应，正在重试（%lld/%lld）"}},"en":{"stringUnit":{"state":"translated","value":"Empty model response, retrying (%lld/%lld)"}},"ja":{"stringUnit":{"state":"translated","value":"モデルの応答が空のため再試行中（%lld/%lld）"}},"fr":{"stringUnit":{"state":"translated","value":"Réponse du modèle vide, nouvelle tentative (%lld/%lld)"}},"es":{"stringUnit":{"state":"translated","value":"Respuesta vacía del modelo, reintentando (%lld/%lld)"}}}},
+"显示旧工种兼容配置": {"localizations":{"zh-Hans":{"stringUnit":{"state":"translated","value":"显示旧工种兼容配置"}},"en":{"stringUnit":{"state":"translated","value":"Show legacy role settings"}},"ja":{"stringUnit":{"state":"translated","value":"旧役割の互換設定を表示"}},"fr":{"stringUnit":{"state":"translated","value":"Afficher les anciens rôles"}},"es":{"stringUnit":{"state":"translated","value":"Mostrar roles anteriores"}}}},
+    "基础": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "基础"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Básico"
+          }
+        }
+      }
+    },
+    "进阶": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "进阶"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advanced"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上級"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avancé"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avanzado"
+          }
+        }
+      }
+    },
+    "专家": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "专家"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expert"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エキスパート"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expert"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experto"
+          }
+        }
+      }
+    },
+    "调查": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "调查"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Investigate"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "調査"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enquête"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Investigar"
+          }
+        }
+      }
+    },
+    "实现": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实现"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Implement"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "実装"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Implémentation"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Implementar"
+          }
+        }
+      }
+    },
+    "验证": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verify"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検証"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérification"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verificar"
+          }
+        }
+      }
+    },
+    "审查": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "审查"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レビュー"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revue"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revisar"
+          }
+        }
+      }
+    },
+    "运维": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "运维"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Operations"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "運用"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opérations"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Operaciones"
+          }
+        }
+      }
+    },
+    "三档模型": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "三档模型"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Three model tiers"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3段階のモデル"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trois niveaux de modèles"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tres niveles de modelos"
+          }
+        }
+      }
+    },
+    "模型档位": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型档位"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model tier"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルの段階"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niveau du modèle"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nivel del modelo"
+          }
+        }
+      }
+    },
+    "独立配置（兼容）": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "独立配置（兼容）"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Independent configuration (legacy)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "個別設定（互換）"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configuration indépendante (compatibilité)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configuración independiente (compatibilidad)"
+          }
+        }
+      }
+    },
+    "自动（仅 some.im 会话）": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动（仅 some.im 会话）"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic (some.im sessions only)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動（some.im セッションのみ）"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatique (sessions some.im uniquement)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automático (solo sesiones some.im)"
+          }
+        }
+      }
+    },
+    "跟随当前提供商": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跟随当前提供商"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use the current provider"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のプロバイダーを使用"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliser le fournisseur actuel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar el proveedor actual"
+          }
+        }
+      }
+    },
+    "恢复此档默认配置": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复此档默认配置"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset this tier to defaults"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この段階の既定値に戻す"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réinitialiser ce niveau"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restablecer este nivel"
+          }
+        }
+      }
+    },
+    "模型按能力分档，职责只决定工作方式和权限。上下文预算不代表模型智力，也不会突破模型实际窗口。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型按能力分档，职责只决定工作方式和权限。上下文预算不代表模型智力，也不会突破模型实际窗口。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tiers select model capability; roles define instructions and permissions. Context budgets do not measure intelligence or increase a model's actual window."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "段階はモデル能力、役割は指示と権限を定義します。コンテキスト予算は知能を示さず、実際の上限を超えません。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les niveaux choisissent la capacité ; les rôles définissent les consignes et permissions. Le budget de contexte ne mesure pas l’intelligence et n’augmente pas la fenêtre réelle."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los niveles eligen la capacidad; los roles definen instrucciones y permisos. El presupuesto de contexto no mide la inteligencia ni amplía la ventana real."
+          }
+        }
+      }
+    },
+    "配置可用不等于实测通过；请使用提供商支持的模型 ID。未配置的私有提供商不会自动转发到 some.im。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "配置可用不等于实测通过；请使用提供商支持的模型 ID。未配置的私有提供商不会自动转发到 some.im。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A valid configuration is not a live generation test. Use model IDs supported by the provider. Unconfigured private providers never redirect to some.im."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定の有効性は生成テストの成功とは異なります。対応モデルIDを使用してください。未設定のプライベート接続はsome.imに転送されません。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une configuration valide n’est pas un test de génération. Utilisez les identifiants pris en charge. Les fournisseurs privés non configurés ne sont jamais redirigés vers some.im."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una configuración válida no equivale a una prueba de generación. Use IDs admitidos. Los proveedores privados sin configurar nunca se redirigen a some.im."
+          }
+        }
+      }
+    },
+    "此档当前不可用：使用当前会话模型，不自动升级。请检查提供商和模型配置。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此档当前不可用：使用当前会话模型，不自动升级。请检查提供商和模型配置。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This tier is unavailable: use the current conversation model without automatic escalation. Check the provider and model settings."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この段階は利用できません。自動昇格せず現在の会話モデルを使用します。プロバイダーとモデルの設定を確認してください。"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce niveau est indisponible : le modèle de la conversation est utilisé sans montée automatique. Vérifiez le fournisseur et le modèle."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este nivel no está disponible: se usa el modelo actual sin ascenso automático. Revise el proveedor y el modelo."
+          }
+        }
+      }
+    },
+    "请确认命令的操作范围": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请确认命令的操作范围"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review the command's scope"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コマンドの操作範囲を確認"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifiez la portée de la commande"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revise el alcance del comando"
+          }
+        }
+      }
+    },
+    "可能读取凭据或敏感文件": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可能读取凭据或敏感文件"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "May read credentials or sensitive files"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "認証情報や機密ファイルを読み取る可能性"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peut lire des identifiants ou fichiers sensibles"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puede leer credenciales o archivos sensibles"
+          }
+        }
+      }
+    },
+    "只读检查，不修改工作区文件": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只读检查，不修改工作区文件"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read-only inspection; no workspace file changes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み取り専用、ワークスペースの変更なし"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspection en lecture seule, sans modifier les fichiers"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspección de solo lectura, sin modificar archivos"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

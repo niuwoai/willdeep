@@ -17,10 +17,11 @@
   --muted: var(--willdeep-secondary, #6e6e73);
   --surface: color-mix(in srgb, var(--fg) 5%, transparent);
   --surface-strong: color-mix(in srgb, var(--fg) 9%, transparent);
+  --surface-soft: color-mix(in srgb, var(--fg) 2.5%, transparent);
   --border: color-mix(in srgb, var(--fg) 15%, transparent);
   --border-strong: color-mix(in srgb, var(--fg) 32%, transparent);
-  --bar: color-mix(in srgb, var(--fg) 55%, transparent);
-  --bar-strong: var(--fg);
+  --chart-bar: color-mix(in srgb, var(--fg) 28%, transparent);
+  --chart-line: color-mix(in srgb, var(--fg) 78%, transparent);
   --warn: #d99b1c;
   --danger: #e5484d;
   --radius: 10px;
@@ -64,53 +65,112 @@ h1 { font-size: 17px; font-weight: 650; letter-spacing: .2px; }
 .banner.error { border-left-color: var(--danger); color: var(--danger); }
 .banner .spacer { margin-left: auto; }
 
-h2 {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: .4px;
-  text-transform: uppercase;
-  margin: 22px 0 9px;
-}
-h2 .hint { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 8px; }
-
-/* ── KPI ─────────────────────────────────────────────── */
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px; }
-.card {
+main { display: flex; flex-direction: column; gap: 14px; }
+.panel {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface);
-  padding: 11px 13px;
+  background: var(--surface-soft);
+  padding: 14px;
+  min-width: 0;
 }
-.card .num { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.2; }
-.card .num .unit { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 2px; }
-.card .lbl { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
-.card .sub { font-size: 11px; color: var(--muted); margin-top: 5px; opacity: .85; }
-
-/* ── 趋势柱状图 ───────────────────────────────────────── */
-.trend {
+.panel-heading {
   display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 110px;
-  padding: 10px 12px 0;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  margin-bottom: 12px;
+}
+.panel-heading h2 {
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: .1px;
+}
+.panel-heading .hint { color: var(--muted); font-size: 11px; }
+.panel-heading .spacer { margin-left: auto; }
+
+/* ── 主指标 ───────────────────────────────────────────── */
+.hero-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 10px;
+}
+.metric-card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
+  padding: 13px 15px 12px;
+  min-width: 0;
 }
-.trend .col { flex: 1 1 0; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
-.trend .bar {
-  background: var(--bar);
-  border-radius: 3px 3px 0 0;
-  min-height: 2px;
-  transition: opacity .12s ease;
+.metric-card .num {
+  font-size: 25px;
+  font-weight: 670;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.14;
+  letter-spacing: -.35px;
 }
-.trend .col:hover .bar { background: var(--bar-strong); }
-.trend .col.today .bar { background: var(--bar-strong); }
-.trend .day { font-size: 9.5px; color: var(--muted); text-align: center; padding: 5px 0 6px; white-space: nowrap; }
-.trend .col.today .day { color: var(--fg); font-weight: 600; }
+.metric-card .num .unit { font-size: 12px; font-weight: 520; color: var(--muted); margin-left: 3px; }
+.metric-card .lbl { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.metric-card .sub {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-/* ── 排行表 ──────────────────────────────────────────── */
+/* ── 趋势与工作画像 ───────────────────────────────────── */
+.analytics-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, .82fr);
+  gap: 10px;
+  align-items: stretch;
+}
+.legend { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 10.5px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+.legend .bar { height: 7px; background: var(--chart-bar); }
+.legend .line { background: var(--chart-line); }
+.chart-stage { position: relative; min-height: 230px; }
+.chart-stage canvas { display: block; width: 100%; height: 230px; }
+.chart-tooltip {
+  position: absolute;
+  top: 12px;
+  transform: translateX(-50%);
+  max-width: min(260px, 76%);
+  padding: 6px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--willdeep-bg, #fff) 94%, var(--fg));
+  color: var(--fg);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, .12);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.profile-rates { display: flex; flex-direction: column; gap: 12px; }
+.rate-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; }
+.rate-line .label { color: var(--muted); font-size: 11px; }
+.rate-line .value { font-size: 11.5px; font-weight: 620; font-variant-numeric: tabular-nums; }
+.rate-line .meter { grid-column: 1 / -1; }
+.profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.profile-stat { border-radius: 8px; background: var(--surface); padding: 9px 10px; min-width: 0; }
+.profile-stat .value { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.profile-stat .label { color: var(--muted); font-size: 10.5px; margin-top: 2px; }
+
+/* ── 项目与模型 ───────────────────────────────────────── */
+.rank-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, .85fr);
+  gap: 10px;
+  align-items: start;
+}
+.table-scroll { overflow-x: auto; }
+
 table { width: 100%; border-collapse: collapse; }
 th {
   font-size: 11px; color: var(--muted); text-align: left;
@@ -123,28 +183,47 @@ tbody tr:hover td { background: var(--surface); }
 td.name { font-weight: 600; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 td.muted, .muted { color: var(--muted); }
 .meter { height: 5px; background: var(--surface-strong); border-radius: 3px; overflow: hidden; min-width: 60px; }
-.meter > span { display: block; height: 100%; background: var(--bar); border-radius: 3px; }
+.meter > span { display: block; height: 100%; background: var(--chart-line); border-radius: 3px; }
+.name-meter { margin-top: 5px; max-width: 180px; }
+.model-list { display: flex; flex-direction: column; gap: 8px; }
+.model-row { border-radius: 8px; background: var(--surface); padding: 9px 10px; }
+.model-row .top { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.model-row .name { font-size: 12px; font-weight: 620; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-row .provider { color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-row .share { margin-left: auto; color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.model-row .meter { margin-top: 7px; }
+.model-row .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 7px; color: var(--muted); font-size: 10.5px; }
 
 /* ── 最近会话 ─────────────────────────────────────────── */
-.recent { display: flex; flex-direction: column; gap: 7px; }
-.recent .row {
-  display: flex; align-items: baseline; gap: 9px;
-  border: 1px solid var(--border); border-radius: 8px;
-  background: var(--surface); padding: 8px 11px;
+.recent {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 8px;
+  align-items: start;
 }
-.recent .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46%; }
+.recent .row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px 11px;
+  min-width: 0;
+}
+.recent .title { font-weight: 620; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent .tags { display: flex; gap: 5px; margin-top: 7px; min-width: 0; }
 .recent .tag {
   font-size: 11px; color: var(--muted);
   background: var(--surface-strong); border-radius: 4px; padding: 1px 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.recent .spacer { margin-left: auto; }
-.recent .stat { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.recent .stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
+.recent .stat { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.recent .time { margin-left: auto; }
 
 /* ── 状态位 ──────────────────────────────────────────── */
 .state { padding: 40px 12px; text-align: center; color: var(--muted); }
 .state .headline { color: var(--fg); font-size: 14px; margin-bottom: 6px; }
 .state.error .headline { color: var(--danger); }
-.skeleton { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px; }
+.skeleton { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
 .skeleton div { height: 66px; border-radius: var(--radius); background: var(--surface); animation: pulse 1.4s ease-in-out infinite; }
 .skeleton div:nth-child(2) { animation-delay: .15s; }
 .skeleton div:nth-child(3) { animation-delay: .3s; }
@@ -154,6 +233,19 @@ footer { margin-top: 24px; font-size: 11px; color: var(--muted); line-height: 1.
 footer code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   background: var(--surface-strong); border-radius: 4px; padding: 1px 5px;
+}
+@media (max-width: 900px) {
+  .analytics-grid, .rank-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .projects-table .optional { display: none; }
+}
+@media (max-width: 560px) {
+  body { padding-left: 14px; padding-right: 14px; }
+  .toolbar { width: 100%; margin-left: 0; }
+  .toolbar .chip { flex: 1; }
+  .panel { padding: 12px; }
+  .chart-stage, .chart-stage canvas { height: 205px; min-height: 205px; }
 }
 @media (prefers-reduced-motion: reduce) { .skeleton div { animation: none; } }
 </style>
@@ -177,19 +269,49 @@ footer code {
 <div class="skeleton" id="skeleton"><div></div><div></div><div></div><div></div></div>
 <div class="state hidden" id="state"></div>
 <main id="main" class="hidden">
-  <div class="grid" id="kpis"></div>
+  <div class="hero-grid" id="kpis"></div>
 
-  <h2 id="trend-title">Trend<span class="hint" id="trend-hint"></span></h2>
-  <div class="trend" id="trend"></div>
+  <div class="analytics-grid">
+    <section class="panel">
+      <div class="panel-heading">
+        <h2 id="trend-title">Trend</h2>
+        <span class="hint" id="trend-hint"></span>
+        <span class="spacer"></span>
+        <div class="legend" aria-hidden="true">
+          <span><i class="bar"></i><b id="trend-output-legend"></b></span>
+          <span><i class="line"></i><b id="trend-request-legend"></b></span>
+        </div>
+      </div>
+      <div class="chart-stage">
+        <canvas id="trend" role="img"></canvas>
+        <div class="chart-tooltip hidden" id="trend-tooltip"></div>
+      </div>
+    </section>
 
-  <h2 id="projects-title">Projects</h2>
-  <div id="projects-wrap"></div>
+    <section class="panel">
+      <div class="panel-heading">
+        <h2 id="profile-title">Work profile</h2>
+      </div>
+      <div class="profile-rates" id="profile-rates"></div>
+      <div class="profile-grid" id="profile-stats"></div>
+    </section>
+  </div>
 
-  <h2 id="models-title">Models</h2>
-  <div id="models-wrap"></div>
+  <div class="rank-grid">
+    <section class="panel">
+      <div class="panel-heading"><h2 id="projects-title">Projects</h2></div>
+      <div id="projects-wrap"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-heading"><h2 id="models-title">Models</h2></div>
+      <div id="models-wrap"></div>
+    </section>
+  </div>
 
-  <h2 id="recent-title">Recent sessions</h2>
-  <div class="recent" id="recent"></div>
+  <section class="panel">
+    <div class="panel-heading"><h2 id="recent-title">Recent sessions</h2></div>
+    <div class="recent" id="recent"></div>
+  </section>
 
   <footer id="foot"></footer>
 </main>
@@ -228,13 +350,32 @@ footer code {
       requests: '模型请求',
       seconds: '秒',
       trend: '近 14 天',
-      trendHint: '每天的输出 Token',
+      trendHint: '输出量与请求密度',
+      trendOutput: '输出 Token',
+      trendRequests: '模型请求',
+      trendAccessible: function (output, requests) { return '近 14 天输出 ' + output + '，模型请求 ' + requests; },
+      dayDetail: function (date, output, requests, messages, billed) {
+        return date + ' · 输出 ' + output + ' · 请求 ' + requests + ' · 消息 ' + messages + ' · 计费 ' + billed;
+      },
+      profile: '工作画像',
+      activeRate: '有效会话占比',
+      editRate: '文件改动会话占比',
+      activeDays: '近 14 天活跃',
+      daysOf: function (active, total) { return active + ' / ' + total + ' 天'; },
+      messagesPerSession: '每个有效会话消息',
+      outputPerRequest: '每次请求输出',
+      toolsPerSession: '每个有效会话工具调用',
       projects: '项目',
       models: '模型',
       recent: '最近会话',
       sessionsCount: function (n) { return n + ' 个会话'; },
       project: '项目',
       lastActive: '最后活跃',
+      fileImpact: '改动 / 产物',
+      fileImpactValue: function (edited, artifacts) { return edited + ' / ' + artifacts; },
+      percentValue: function (value) { return value + '%'; },
+      messageCount: function (value) { return value + ' 条消息'; },
+      requestCount: function (value) { return value + ' 次请求'; },
       empty: '暂无数据',
       justNow: '刚刚',
       minutesAgo: function (n) { return n + ' 分钟前'; },
@@ -272,13 +413,32 @@ footer code {
       requests: 'Model requests',
       seconds: 's',
       trend: 'Last 14 days',
-      trendHint: 'output tokens per day',
+      trendHint: 'output volume and request density',
+      trendOutput: 'Output tokens',
+      trendRequests: 'Model requests',
+      trendAccessible: function (output, requests) { return output + ' output tokens and ' + requests + ' model requests over 14 days'; },
+      dayDetail: function (date, output, requests, messages, billed) {
+        return date + ' · ' + output + ' output · ' + requests + ' requests · ' + messages + ' messages · ' + billed + ' billed';
+      },
+      profile: 'Work profile',
+      activeRate: 'Sessions with messages',
+      editRate: 'Sessions that edited files',
+      activeDays: 'Active in the last 14 days',
+      daysOf: function (active, total) { return active + ' of ' + total + ' days'; },
+      messagesPerSession: 'Messages per active session',
+      outputPerRequest: 'Output per request',
+      toolsPerSession: 'Tool calls per active session',
       projects: 'Projects',
       models: 'Models',
       recent: 'Recent sessions',
       sessionsCount: function (n) { return n + (n === '1' ? ' session' : ' sessions'); },
       project: 'Project',
       lastActive: 'Last active',
+      fileImpact: 'Edited / artifacts',
+      fileImpactValue: function (edited, artifacts) { return edited + ' / ' + artifacts; },
+      percentValue: function (value) { return value + '%'; },
+      messageCount: function (value) { return value + ' messages'; },
+      requestCount: function (value) { return value + ' requests'; },
       empty: 'Nothing yet',
       justNow: 'just now',
       minutesAgo: function (n) { return n + 'm ago'; },
@@ -410,8 +570,11 @@ footer code {
     $('refresh').textContent = loading ? t('refreshing') : t('refresh');
     $('refresh').disabled = loading;
     $('export').textContent = t('export');
-    $('trend-title').firstChild.nodeValue = t('trend');
-    $('trend-hint').textContent = '· ' + t('trendHint');
+    $('trend-title').textContent = t('trend');
+    $('trend-hint').textContent = t('trendHint');
+    $('trend-output-legend').textContent = t('trendOutput');
+    $('trend-request-legend').textContent = t('trendRequests');
+    $('profile-title').textContent = t('profile');
     $('projects-title').textContent = t('projects');
     $('models-title').textContent = t('models');
     $('recent-title').textContent = t('recent');
@@ -454,7 +617,7 @@ footer code {
   }
 
   function kpi(labelKey, value, sub) {
-    var card = element('div', 'card');
+    var card = element('div', 'metric-card');
     var num = element('div', 'num');
     if (typeof value === 'object' && value !== null) {
       num.appendChild(document.createTextNode(value.num));
@@ -472,17 +635,16 @@ footer code {
     var grid = $('kpis');
     grid.textContent = '';
     grid.appendChild(kpi('sessions', compact(stats.sessions),
-      t('activeSessions') + ' ' + nf.format(stats.activeSessions || 0)));
+      t('activeSessions') + ' ' + nf.format(stats.activeSessions || 0)
+        + ' · ' + percent(stats.activeSessions, stats.sessions)));
     grid.appendChild(kpi('messages', compact(stats.messages),
-      t('requests') + ' ' + nf.format(stats.requests || 0)));
-    grid.appendChild(kpi('toolCalls', compact(stats.toolCalls)));
+      t('requests') + ' ' + nf.format(stats.requests || 0)
+        + ' · ' + t('toolCalls') + ' ' + nf.format(stats.toolCalls || 0)));
     grid.appendChild(kpi('output', compact(stats.outputTokens),
       t('outputToday') + ' ' + compactText(stats.outputToday) + ' · ' + t('outputWeek') + ' ' + compactText(stats.outputWeek)));
-    grid.appendChild(kpi('billed', compact(stats.billedTokens)));
-    grid.appendChild(kpi('cacheRate', { num: (Number(stats.cacheRate || 0) * 100).toFixed(1), unit: '%' }));
-    grid.appendChild(kpi('avgSeconds', { num: Number(stats.averageSeconds || 0).toFixed(1), unit: t('seconds') }));
-    grid.appendChild(kpi('edited', compact(stats.editedSessions),
-      t('artifacts') + ' ' + nf.format(stats.artifacts || 0)));
+    grid.appendChild(kpi('cacheRate', { num: (Number(stats.cacheRate || 0) * 100).toFixed(1), unit: '%' },
+      t('avgSeconds') + ' ' + Number(stats.averageSeconds || 0).toFixed(1) + t('seconds')
+        + ' · ' + t('billed') + ' ' + compactText(stats.billedTokens)));
   }
 
   function compactText(value) {
@@ -490,23 +652,182 @@ footer code {
     return parts.num + (parts.unit ? parts.unit : '');
   }
 
+  function percent(part, whole) {
+    var denominator = Number(whole) || 0;
+    var value = denominator > 0 ? (Number(part) || 0) / denominator * 100 : 0;
+    return t('percentValue', value.toFixed(1));
+  }
+
+  function decimal(value) {
+    var number = Number(value) || 0;
+    return number >= 100 ? nf.format(Math.round(number)) : number.toFixed(1);
+  }
+
+  var trendDays = [];
+  var trendGeometry = null;
+  var trendHoverIndex = null;
+  var trendFrame = null;
+
   function renderTrend() {
-    var wrap = $('trend');
-    wrap.textContent = '';
-    var days = stats.trend || [];
-    var max = 0;
-    days.forEach(function (day) { max = Math.max(max, Number(day.output) || 0); });
-    days.forEach(function (day, index) {
-      var column = element('div', 'col' + (index === days.length - 1 ? ' today' : ''));
-      var height = max > 0 ? Math.max(2, Math.round((Number(day.output) || 0) / max * 100)) : 2;
-      var bar = element('div', 'bar');
-      bar.style.height = height + '%';
-      column.title = day.date + ' · ' + t('output') + ' ' + nf.format(day.output || 0)
-        + ' · ' + t('messages') + ' ' + nf.format(day.messages || 0);
-      column.appendChild(bar);
-      column.appendChild(element('div', 'day', day.weekday || day.date.slice(5)));
-      wrap.appendChild(column);
+    trendDays = stats.trend || [];
+    trendHoverIndex = null;
+    $('trend-tooltip').classList.add('hidden');
+    var output = trendDays.reduce(function (sum, day) { return sum + (Number(day.output) || 0); }, 0);
+    var requests = trendDays.reduce(function (sum, day) { return sum + (Number(day.requests) || 0); }, 0);
+    $('trend').setAttribute('aria-label', t('trendAccessible', nf.format(output), nf.format(requests)));
+    scheduleTrendDraw();
+  }
+
+  function scheduleTrendDraw() {
+    if (trendFrame !== null) window.cancelAnimationFrame(trendFrame);
+    trendFrame = window.requestAnimationFrame(function () {
+      trendFrame = null;
+      drawTrend();
     });
+  }
+
+  function canvasColor(name, fallback) {
+    var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  }
+
+  function drawTrend() {
+    var canvas = $('trend');
+    if (!canvas || !trendDays.length) return;
+    var rect = canvas.getBoundingClientRect();
+    if (rect.width < 40 || rect.height < 40) return;
+    var scale = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = Math.round(rect.width * scale);
+    canvas.height = Math.round(rect.height * scale);
+    var context = canvas.getContext('2d');
+    context.setTransform(scale, 0, 0, scale, 0, 0);
+    context.clearRect(0, 0, rect.width, rect.height);
+
+    var left = rect.width < 460 ? 35 : 44;
+    var right = 14;
+    var top = 14;
+    var bottom = 29;
+    var width = Math.max(1, rect.width - left - right);
+    var height = Math.max(1, rect.height - top - bottom);
+    var slot = width / trendDays.length;
+    var barWidth = Math.max(5, Math.min(28, slot * .58));
+    var maxOutput = trendDays.reduce(function (max, day) { return Math.max(max, Number(day.output) || 0); }, 0) || 1;
+    var maxRequests = trendDays.reduce(function (max, day) { return Math.max(max, Number(day.requests) || 0); }, 0) || 1;
+    var border = canvasColor('--border', 'rgba(120,120,120,.18)');
+    var muted = canvasColor('--muted', '#6e6e73');
+    var barColor = canvasColor('--chart-bar', 'rgba(90,90,90,.28)');
+    var lineColor = canvasColor('--chart-line', 'rgba(30,30,30,.78)');
+    var foreground = canvasColor('--fg', '#1d1d1f');
+    var highlight = canvasColor('--surface-strong', 'rgba(90,90,90,.09)');
+
+    context.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+    context.textBaseline = 'middle';
+    for (var grid = 0; grid <= 3; grid++) {
+      var y = top + height * grid / 3;
+      context.strokeStyle = border;
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(left, Math.round(y) + .5);
+      context.lineTo(left + width, Math.round(y) + .5);
+      context.stroke();
+      context.fillStyle = muted;
+      context.textAlign = 'right';
+      context.fillText(compactText(maxOutput * (1 - grid / 3)), left - 7, y);
+    }
+
+    if (trendHoverIndex !== null) {
+      var hoverX = left + slot * trendHoverIndex;
+      context.fillStyle = highlight;
+      context.fillRect(hoverX, top, slot, height);
+    }
+
+    trendDays.forEach(function (day, index) {
+      var x = left + slot * index + (slot - barWidth) / 2;
+      var barHeight = Math.max(2, (Number(day.output) || 0) / maxOutput * height);
+      context.fillStyle = index === trendDays.length - 1 ? foreground : barColor;
+      context.fillRect(x, top + height - barHeight, barWidth, barHeight);
+    });
+
+    context.strokeStyle = lineColor;
+    context.fillStyle = lineColor;
+    context.lineWidth = 1.7;
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
+    context.beginPath();
+    trendDays.forEach(function (day, index) {
+      var x = left + slot * (index + .5);
+      var y = top + height - (Number(day.requests) || 0) / maxRequests * height;
+      if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+    });
+    context.stroke();
+    trendDays.forEach(function (day, index) {
+      var x = left + slot * (index + .5);
+      var y = top + height - (Number(day.requests) || 0) / maxRequests * height;
+      context.beginPath();
+      context.arc(x, y, index === trendDays.length - 1 ? 2.8 : 2.1, 0, Math.PI * 2);
+      context.fill();
+    });
+
+    var labelCount = rect.width >= 720 ? 7 : 4;
+    var labelStep = Math.max(1, Math.ceil(trendDays.length / labelCount));
+    context.fillStyle = muted;
+    context.textAlign = 'center';
+    trendDays.forEach(function (day, index) {
+      if (index % labelStep !== 0 && index !== trendDays.length - 1) return;
+      context.fillText(dayLabel(day.date), left + slot * (index + .5), rect.height - 10);
+    });
+    trendGeometry = { left: left, width: width, slot: slot, canvasWidth: rect.width };
+  }
+
+  function dayLabel(iso) {
+    var date = new Date(String(iso) + 'T12:00:00');
+    if (isNaN(date.getTime())) return String(iso).slice(5);
+    return date.toLocaleDateString([], { month: 'numeric', day: 'numeric' });
+  }
+
+  function fullDayLabel(iso) {
+    var date = new Date(String(iso) + 'T12:00:00');
+    if (isNaN(date.getTime())) return String(iso);
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric', weekday: 'short' });
+  }
+
+  function renderProfile() {
+    var rates = $('profile-rates');
+    var cards = $('profile-stats');
+    rates.textContent = '';
+    cards.textContent = '';
+    var active = Number(stats.activeSessions) || 0;
+    var sessions = Number(stats.sessions) || 0;
+    var edited = Number(stats.editedSessions) || 0;
+    rates.appendChild(profileRate('activeRate', active, sessions));
+    rates.appendChild(profileRate('editRate', edited, active));
+
+    var days = stats.trend || [];
+    var activeDays = days.filter(function (day) { return Number(day.messages) > 0; }).length;
+    cards.appendChild(profileStat(t('daysOf', activeDays, days.length), t('activeDays')));
+    cards.appendChild(profileStat(decimal((Number(stats.messages) || 0) / Math.max(1, active)), t('messagesPerSession')));
+    cards.appendChild(profileStat(compactText(Math.round((Number(stats.outputTokens) || 0) / Math.max(1, Number(stats.requests) || 0))), t('outputPerRequest')));
+    cards.appendChild(profileStat(decimal((Number(stats.toolCalls) || 0) / Math.max(1, active)), t('toolsPerSession')));
+  }
+
+  function profileRate(labelKey, value, total) {
+    var ratio = total > 0 ? Math.max(0, Math.min(1, value / total)) : 0;
+    var row = element('div', 'rate-line');
+    row.appendChild(element('span', 'label', t(labelKey)));
+    row.appendChild(element('span', 'value', t('percentValue', (ratio * 100).toFixed(1))));
+    var meter = element('div', 'meter');
+    var fill = document.createElement('span');
+    fill.style.width = Math.round(ratio * 100) + '%';
+    meter.appendChild(fill);
+    row.appendChild(meter);
+    return row;
+  }
+
+  function profileStat(value, label) {
+    var card = element('div', 'profile-stat');
+    card.appendChild(element('div', 'value', value));
+    card.appendChild(element('div', 'label', label));
+    return card;
   }
 
   function renderProjects() {
@@ -518,10 +839,11 @@ footer code {
       return;
     }
     var table = document.createElement('table');
+    table.className = 'projects-table';
     var head = document.createElement('tr');
-    [t('project'), '', t('sessions'), t('messages'), t('output'), t('lastActive')].forEach(function (label, index) {
-      var th = element('th', index >= 2 && index <= 4 ? 'num' : null, label);
-      if (index === 1) th.style.width = '22%';
+    [t('project'), t('sessions'), t('messages'), t('output'), t('fileImpact'), t('lastActive')].forEach(function (label, index) {
+      var th = element('th', index >= 1 && index <= 4 ? 'num' : null, label);
+      if (index === 2 || index === 4) th.classList.add('optional');
       head.appendChild(th);
     });
     var thead = document.createElement('thead');
@@ -533,24 +855,23 @@ footer code {
       var tr = document.createElement('tr');
       var name = element('td', 'name', project.name);
       if (project.path) name.title = project.path;
+      var nameMeter = element('div', 'meter name-meter');
+      var nameFill = document.createElement('span');
+      nameFill.style.width = Math.round(Math.max(0, Math.min(1, project.share || 0)) * 100) + '%';
+      nameMeter.appendChild(nameFill);
+      name.appendChild(nameMeter);
       tr.appendChild(name);
-
-      var meterCell = document.createElement('td');
-      var meter = element('div', 'meter');
-      var fill = document.createElement('span');
-      fill.style.width = Math.round(Math.max(0, Math.min(1, project.share || 0)) * 100) + '%';
-      meter.appendChild(fill);
-      meterCell.appendChild(meter);
-      tr.appendChild(meterCell);
-
       tr.appendChild(element('td', 'num', nf.format(project.sessions || 0)));
-      tr.appendChild(element('td', 'num', nf.format(project.messages || 0)));
+      tr.appendChild(element('td', 'num optional', nf.format(project.messages || 0)));
       tr.appendChild(element('td', 'num', compactText(project.output)));
+      tr.appendChild(element('td', 'num optional', t('fileImpactValue', nf.format(project.edited || 0), nf.format(project.artifacts || 0))));
       tr.appendChild(element('td', 'muted', relative(project.updatedAt)));
       body.appendChild(tr);
     });
     table.appendChild(body);
-    wrap.appendChild(table);
+    var scroller = element('div', 'table-scroll');
+    scroller.appendChild(table);
+    wrap.appendChild(scroller);
   }
 
   function renderModels() {
@@ -561,27 +882,29 @@ footer code {
       wrap.appendChild(element('div', 'muted', t('empty')));
       return;
     }
-    var table = document.createElement('table');
-    var body = document.createElement('tbody');
+    var totalOutput = rows.reduce(function (sum, model) { return sum + (Number(model.output) || 0); }, 0);
+    var list = element('div', 'model-list');
     rows.forEach(function (model) {
-      var tr = document.createElement('tr');
-      tr.appendChild(element('td', 'name', model.name));
-
-      var meterCell = document.createElement('td');
-      meterCell.style.width = '38%';
+      var row = element('div', 'model-row');
+      var top = element('div', 'top');
+      top.appendChild(element('span', 'name', model.name));
+      if (model.provider && model.provider !== model.name) top.appendChild(element('span', 'provider', model.provider));
+      var share = totalOutput > 0 ? (Number(model.output) || 0) / totalOutput : 0;
+      top.appendChild(element('span', 'share', t('percentValue', (share * 100).toFixed(1))));
+      row.appendChild(top);
       var meter = element('div', 'meter');
       var fill = document.createElement('span');
-      fill.style.width = Math.round(Math.max(0, Math.min(1, model.share || 0)) * 100) + '%';
+      fill.style.width = Math.round(Math.max(0, Math.min(1, share)) * 100) + '%';
       meter.appendChild(fill);
-      meterCell.appendChild(meter);
-      tr.appendChild(meterCell);
-
-      tr.appendChild(element('td', 'num', t('sessionsCount', nf.format(model.sessions || 0))));
-      tr.appendChild(element('td', 'num', compactText(model.output)));
-      body.appendChild(tr);
+      row.appendChild(meter);
+      var details = element('div', 'stats');
+      details.appendChild(element('span', null, t('sessionsCount', nf.format(model.sessions || 0))));
+      details.appendChild(element('span', null, t('messageCount', nf.format(model.messages || 0))));
+      details.appendChild(element('span', null, t('output') + ' ' + compactText(model.output)));
+      row.appendChild(details);
+      list.appendChild(row);
     });
-    table.appendChild(body);
-    wrap.appendChild(table);
+    wrap.appendChild(list);
   }
 
   function renderRecent() {
@@ -594,13 +917,17 @@ footer code {
     }
     rows.forEach(function (session) {
       var row = element('div', 'row');
-      row.appendChild(element('span', 'title', session.title));
-      if (session.project) row.appendChild(element('span', 'tag', session.project));
-      if (session.model) row.appendChild(element('span', 'tag', session.model));
-      row.appendChild(element('span', 'spacer'));
-      row.appendChild(element('span', 'stat',
-        nf.format(session.messages || 0) + ' · ' + compactText(session.output)));
-      row.appendChild(element('span', 'stat', relative(session.updatedAt)));
+      row.appendChild(element('div', 'title', session.title));
+      var tags = element('div', 'tags');
+      if (session.project) tags.appendChild(element('span', 'tag', session.project));
+      if (session.model) tags.appendChild(element('span', 'tag', session.model));
+      if (tags.childNodes.length) row.appendChild(tags);
+      var details = element('div', 'stats');
+      details.appendChild(element('span', 'stat', t('messageCount', nf.format(session.messages || 0))));
+      details.appendChild(element('span', 'stat', t('output') + ' ' + compactText(session.output)));
+      details.appendChild(element('span', 'stat', t('billed') + ' ' + compactText(session.billed)));
+      details.appendChild(element('span', 'stat time', relative(session.updatedAt)));
+      row.appendChild(details);
       wrap.appendChild(row);
     });
   }
@@ -633,6 +960,7 @@ footer code {
     }
     renderKPIs();
     renderTrend();
+    renderProfile();
     renderProjects();
     renderModels();
     renderRecent();
@@ -686,6 +1014,42 @@ footer code {
         return false;
       }
     }
+  }
+
+  function updateTrendHover(event) {
+    if (!trendGeometry || !trendDays.length) return;
+    var canvas = $('trend');
+    var rect = canvas.getBoundingClientRect();
+    var x = event.clientX - rect.left;
+    var raw = Math.floor((x - trendGeometry.left) / trendGeometry.slot);
+    var index = Math.max(0, Math.min(trendDays.length - 1, raw));
+    if (x < trendGeometry.left || x > trendGeometry.left + trendGeometry.width) {
+      clearTrendHover();
+      return;
+    }
+    trendHoverIndex = index;
+    var day = trendDays[index];
+    var tooltip = $('trend-tooltip');
+    tooltip.textContent = t('dayDetail', fullDayLabel(day.date), nf.format(day.output || 0),
+      nf.format(day.requests || 0), nf.format(day.messages || 0), nf.format(day.billed || 0));
+    tooltip.style.left = Math.max(92, Math.min(rect.width - 92, x)) + 'px';
+    tooltip.classList.remove('hidden');
+    drawTrend();
+  }
+
+  function clearTrendHover() {
+    if (trendHoverIndex === null) return;
+    trendHoverIndex = null;
+    $('trend-tooltip').classList.add('hidden');
+    drawTrend();
+  }
+
+  $('trend').addEventListener('pointermove', updateTrendHover);
+  $('trend').addEventListener('pointerleave', clearTrendHover);
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(scheduleTrendDraw).observe($('trend'));
+  } else {
+    window.addEventListener('resize', scheduleTrendDraw);
   }
 
   $('refresh').addEventListener('click', function () { load(); });

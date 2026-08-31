@@ -410,6 +410,7 @@ struct EditorSettingsView: View {
             }
 
             AgentLocalModelSettingsSection()
+            AgentSessionRetentionSettingsSection()
 
             Section(L10n.Settings.sectionConversationTitle) {
                 LabeledContent(L10n.Settings.AgentBehavior.titleModelLabel) {

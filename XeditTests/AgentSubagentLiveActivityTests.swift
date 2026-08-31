@@ -344,7 +344,7 @@ struct AgentSubagentLiveActivityTests {
         let ids = AgentSubagentProfileCatalog.publicBuiltIn.map(\.id)
         let colors = ids.map { String(describing: AgentSubagentTradePalette.color(forProfileID: $0)) }
 
-        #expect(ids.count == 7)
+        #expect(ids.count == 5)
         #expect(Set(colors).count == ids.count)
     }
 

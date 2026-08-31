@@ -60,7 +60,7 @@ struct AgentSessionSearchView: View {
     @ViewBuilder
     private var content: some View {
         // 一打开就有东西看：空查询时列最近会话（不分项目），真的一条会话都
-        // 没有才退回空态提示。
+        // 没有有效会话才退回空态提示。
         if results.isEmpty, query.trimmingCharacters(in: .whitespaces).isEmpty {
             placeholderState(text: L10n.SessionSearch.prompt, systemImage: "text.bubble")
         } else if results.isEmpty {
@@ -113,12 +113,18 @@ struct AgentSessionSearchView: View {
     /// literal, case/diacritic-insensitive rules consistent with model tools.
     private var results: [AgentSessionSearchResult] {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return AgentSessionSearch.recentSessions(appState.agentSessions)
+            return AgentSessionSearch.recentSessions(
+                appState.agentSessions,
+                isMetadataOnly: appState.agentSessionIsMetadataOnly,
+                metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
+            )
         }
         return AgentSessionSearch.titleResults(
             sessions: appState.agentSessions,
             projects: appState.agentProjects,
-            query: query
+            query: query,
+            isMetadataOnly: appState.agentSessionIsMetadataOnly,
+            metadataOnlyHasUserMessage: appState.agentSessionMetadataOnlyHasUserMessage
         )
     }
 
