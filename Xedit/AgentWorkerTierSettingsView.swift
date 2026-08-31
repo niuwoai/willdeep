@@ -14,18 +14,81 @@ struct AgentWorkerTierSettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
             ForEach(AgentWorkerTier.allCases) { tier in
                 DisclosureGroup {
-                    tierEditor(tier)
+                    tierBody(tier)
                 } label: {
-                    HStack {
-                        Text(tier.title)
-                        Spacer()
-                        Text(models[tier].model ?? "")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                    tierLabel(tier)
                 }
             }
         }
-        .onAppear { models = store.workerTierModels() }
+        .onAppear {
+            // The file may have been edited in another window since this pane
+            // was last opened; the app never writes it, so it is the only one
+            // of the two sides that can change behind our back.
+            AgentWorkerTierSharedConfig.invalidateCache()
+            models = store.workerTierModels()
+        }
+    }
+
+    @ViewBuilder
+    private func tierBody(_ tier: AgentWorkerTier) -> some View {
+        if let pinned = appState.workerTierFileBinding(tier) {
+            pinnedEditor(entry: pinned.entry, resolved: pinned.resolved)
+        } else {
+            tierEditor(tier)
+        }
+    }
+
+    @ViewBuilder
+    private func tierLabel(_ tier: AgentWorkerTier) -> some View {
+        let pinned = appState.workerTierFileBinding(tier)
+        HStack {
+            Text(tier.title)
+            Spacer()
+            if let pinned {
+                Image(systemName: pinned.resolved ? "doc.text" : "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(pinned.resolved ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+            }
+            Text(pinned?.entry.model ?? models[tier].model ?? "")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// A tier pinned by the shared config.toml. The editors are not shown at
+    /// all rather than shown disabled: the values here would be the app's
+    /// stored ones, not the file's, so an editable-looking field would be
+    /// displaying one answer while dispatch used another.
+    @ViewBuilder
+    private func pinnedEditor(
+        entry: AgentWorkerTierSharedConfig.Entry,
+        resolved: Bool
+    ) -> some View {
+        LabeledContent(L10n.AgentProfiles.fieldModel) {
+            Text(entry.model ?? "—").textSelection(.enabled)
+        }
+        if let profile = entry.providerProfile {
+            LabeledContent(L10n.AgentProfiles.fieldProvider) {
+                Text(profile).textSelection(.enabled)
+            }
+        }
+        if let window = entry.contextWindowTokens {
+            LabeledContent(L10n.AgentProfiles.fieldContextWindow) {
+                Text(String(window))
+            }
+        }
+        Text(String(
+            localized: "这一档由 ~/.willdeep/config.toml 的 [worker_tiers] 固定，命令行与 App 用同一个答案。要在这里编辑，先从配置文件里删掉这一段。",
+            table: "WorkerArchitecture"
+        ))
+        .font(.caption).foregroundStyle(.secondary)
+        if !resolved, let profile = entry.providerProfile {
+            Text(String(
+                localized: "配置文件指定的提供商 “\(profile)” 在本机没有可用的对应条目，这一档暂时派不出去。补上该提供商，或改用不指定提供商的写法以沿用当前会话的端点。",
+                table: "WorkerArchitecture"
+            ))
+            .font(.caption).foregroundStyle(.orange)
+        }
     }
 
     @ViewBuilder

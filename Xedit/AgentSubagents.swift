@@ -1149,9 +1149,17 @@ enum AgentSubagentRunner {
         }
 
         var round = 1
+        // Merged, not the raw store: a `context_window` pinned in the shared
+        // config.toml has to bound the payload too, or the budget would be
+        // computed against a model this dispatch is not using. No provider
+        // resolver here — budgeting only reads the window, and this type has
+        // no provider library to resolve against.
         let inputLimit = AgentWorkerContextBudget.inputLimit(
             profile: profile, configuration: configuration,
-            models: AgentProfileStore().workerTierModels()
+            models: AgentWorkerTierModels.merging(
+                stored: AgentProfileStore().workerTierModels(),
+                shared: AgentWorkerTierSharedConfig.cached()
+            )
         )
         while round <= roundLimit {
             defer { round += 1 }

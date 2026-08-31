@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-31 | Current version: v1.313.0-rc2
+> Last updated: 2026-08-31 | Current version: v1.314.0-rc1
 
 ## Positioning
 
@@ -17,6 +17,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **三档模型走共享配置（1.314.0-rc1）** —— 三档绑定改为优先读 `~/.willdeep/config.toml` 的 `[worker_tiers.<档>]`，与 willdeep-rs 0.52.0-rc1 同一份 Schema。此前 App 存 UserDefaults、命令行存 config.toml，两条覆盖路径互不知情，同一个人、同一个账号，`worker_tier: expert` 会因为开的是哪个客户端而落到不同模型上。优先级与 `[agent]` 一致：文件里写了的档压过 App 设置，`[worker_tiers.*]` 只读不回写；被文件固定的档在设置面板里改为只读展示并说明去哪里改。配置指定了本机没有的提供商时，该档标记不可用并给出原因，不静默回落到父会话端点——回落等于把点名的模型发到另一个网关上。
 
 - **三档模型 × 五类职责（1.312.0-rc1）** —— 设置中的 Worker 模型集中配置为基础、进阶、专家三档，公开职责为调查、实现、验证、审查、运维；每个职责选择档位，模型品牌不再成为工种。保留旧 ID、独立绑定与用户指令，可展开旧工种兼容配置；私有提供商默认不转发公网。输入预算在 Runner 请求前实际检查，前台升级只上一个已配置档位且不扩权。见 [当前契约](docs/WORKER_LOCAL_PROMPTS.md)。
 
