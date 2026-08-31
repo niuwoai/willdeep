@@ -24,17 +24,19 @@ extension AppState {
         for profile: AgentSubagentProfile,
         parentConfiguration: AgentConfiguration
     ) -> AgentConfiguration {
-        // Managed trades: while the parent itself uses some.im, the model is
-        // pinned to the virtual model that carries this trade's server-side
-        // job prompt, so the prompt and the model tuned for it travel together
-        // (docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3.8).
-        if let hosted = resolvedHostedConfiguration(
+        if let tier = AgentWorkerTierModels.tier(for: profile.modelBinding) {
+            return workerTierConfiguration(tier, parent: parentConfiguration) ?? parentConfiguration
+        }
+        return AgentSubagentModelCompatibility.configuration(resolveSubagentBinding(
             for: profile,
             parentConfiguration: parentConfiguration
-        ) {
-            return hosted
-        }
+        ))
+    }
 
+    private func resolveSubagentBinding(
+        for profile: AgentSubagentProfile,
+        parentConfiguration: AgentConfiguration
+    ) -> AgentConfiguration {
         let binding = profile.modelBinding
         guard !binding.inheritsEverything else { return parentConfiguration }
 
@@ -78,10 +80,15 @@ extension AppState {
         var configuration = materialized.makeConfiguration(
             imageDescription: parentConfiguration.imageDescription
         )
-        if AgentSubagentProfileCatalog.bindingModelApplies(binding, to: entry),
-           let model = binding.model?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !model.isEmpty {
-            configuration.model = model
+        if AgentSubagentProfileCatalog.bindingModelApplies(binding, to: entry) {
+            let model = binding.model?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !model.isEmpty {
+                configuration.model = model
+            } else if let recommended = AgentSubagentModelCompatibility.recommendedModel(
+                for: profile.id, providerID: entry.providerID
+            ) {
+                configuration.model = recommended
+            }
         }
         // A trade that ends up without a usable key would fail every round;
         // the parent's configuration is the safer answer.
@@ -92,58 +99,12 @@ extension AppState {
         return configuration
     }
 
-    /// Whether this trade's model and job prompt are currently owned by
-    /// some.im. Login alone is insufficient: private parent configurations
-    /// remain private.
-    func subagentTradeIsHosted(
-        _ profile: AgentSubagentProfile,
-        parentConfiguration: AgentConfiguration
-    ) -> Bool {
-        parentConfiguration.providerID == AgentProviderPreset.someIMID
-            && profile.usesHostedJobPrompt(
-            someIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-        )
-    }
-
-    /// The pinned configuration for a hosted trade, or nil when the trade is
-    /// not hosted or some.im has no usable entry right now (signed out, key
-    /// revoked, entry deleted) — in which case the caller continues down the
-    /// normal user-configurable path.
-    private func resolvedHostedConfiguration(
-        for profile: AgentSubagentProfile,
-        parentConfiguration: AgentConfiguration
-    ) -> AgentConfiguration? {
-        guard subagentTradeIsHosted(
-            profile,
-            parentConfiguration: parentConfiguration
-        ),
-              let hostedModel = profile.hostedVirtualModel else { return nil }
-        // The hosted model is the *recommendation*, not a lock: an explicit
-        // model in the trade's binding is the user having chosen, so fall
-        // through to the ordinary user-configurable path.
-        guard profile.usesRecommendedHostedModel(
-            someIMAuthenticated: SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults()
-        ) else { return nil }
-        guard let entry = agentProviderLibrary.entries
-            .first(where: { $0.providerID == AgentProviderPreset.someIMID }),
-              entry.isUsableForChatSelection(isSomeIMAuthenticated: true) else { return nil }
-
-        materializeProviderLibraryEntryAPIKey(id: entry.id)
-        let materialized = agentProviderLibrary.entries.first { $0.id == entry.id } ?? entry
-        var configuration = materialized.makeConfiguration(
-            imageDescription: agentConfiguration.imageDescription
-        )
-        configuration.model = hostedModel
-        guard !configuration.normalized.requiresAPIKey
-            || !configuration.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-        return configuration
-    }
-
     /// Whether a trade will actually get its own binding right now. Drives
     /// the settings row's "unavailable — falls back" hint.
     func subagentProfileBindingIsAvailable(_ profile: AgentSubagentProfile) -> Bool {
+        if let tier = AgentWorkerTierModels.tier(for: profile.modelBinding) {
+            return workerTierConfiguration(tier, parent: agentConfiguration) != nil
+        }
         let binding = profile.modelBinding
         if binding.inheritsEverything { return true }
         guard binding.preferredProviderEntryID != nil || binding.preferredProviderID != nil else {

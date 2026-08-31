@@ -64,8 +64,7 @@ final class WorkflowEngine {
     /// `deep` still resolves to the parent's configuration, keeping every
     /// unannotated step byte-identical to before.
     private func resolvedConfiguration(for profile: AgentSubagentProfile) -> AgentConfiguration {
-        guard profile.id != AgentSubagentProfileCatalog.deepID,
-              let appState else { return configuration }
+        guard let appState else { return configuration }
         return appState.resolvedSubagentConfiguration(
             for: profile,
             parentConfiguration: configuration

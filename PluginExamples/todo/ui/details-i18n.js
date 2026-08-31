@@ -1,0 +1,55 @@
+(function () {
+  'use strict';
+  window.TodoDetailStrings = {
+    zh: {
+      details: '待办详情', close: '关闭详情', save: '保存修改', saving: '正在保存…', cancel: '取消',
+      saved: '待办已更新', discard: '放弃尚未保存的修改？', project: '所属项目',
+      keepEditing: '继续编辑', discardChanges: '放弃修改',
+      projectHelp: '选择项目，或设为未归项目', otherProject: '其他项目…',
+      projectPath: '项目文件夹路径', projectPathHint: '输入项目的完整文件夹路径',
+      invalidProject: '请输入以 / 开头的项目文件夹路径。',
+      tags: '标签', tagSearch: '搜索或新建标签', filterTagSearch: '搜索标签',
+      newTag: '新建标签', createTag: function (name) { return '新建“' + name + '”'; },
+      tagHelp: '可多选；输入名称可新建标签', noTags: '无标签', noTagMatches: '没有匹配的标签',
+      tagLimit: '最多 20 个标签，每个标签最多 40 个字符。',
+      removeTag: function (name) { return '移除标签 ' + name; },
+      filterTags: '筛选标签', allTags: '全部标签', anyTag: '任一标签', everyTag: '同时包含',
+      clearFilters: '清除', query: '搜索待办', results: function (shown, total) { return shown + ' 条待办（共 ' + total + ' 条）'; },
+      due: '计划时间', date: '日期', time: '时间', allDay: '全天',
+      noDeadline: '无终止时间', noDeadlineHint: '清空日期和时间', notScheduled: '未安排时间',
+      previousMonth: '上个月', nextMonth: '下个月', today: '今天',
+      invalidDate: '请选择有效的日期和时间。', priority: '优先级', priorityNone: '无优先级',
+      urgent: '紧急', high: '高', normal: '中', low: '低',
+      scopeAll: '全部项目', scopeProject: '当前项目', scopeInbox: '未归项目',
+      statusOpen: '未完成', statusDone: '已完成', statusAll: '全部状态',
+      complete: '标记为已完成', reopen: '标记为未完成', edit: '编辑待办',
+      toggleTag: function (name) { return '标签 ' + name; },
+      weekdays: ['一', '二', '三', '四', '五', '六', '日']
+    },
+    en: {
+      details: 'Todo details', close: 'Close details', save: 'Save changes', saving: 'Saving…', cancel: 'Cancel',
+      saved: 'Todo updated', discard: 'Discard unsaved changes?', project: 'Project',
+      keepEditing: 'Keep editing', discardChanges: 'Discard changes',
+      projectHelp: 'Choose a project or leave this todo unfiled', otherProject: 'Other project…',
+      projectPath: 'Project folder path', projectPathHint: 'Enter the full project folder path',
+      invalidProject: 'Enter an absolute project folder path starting with /.',
+      tags: 'Labels', tagSearch: 'Search or create labels', filterTagSearch: 'Search labels',
+      newTag: 'Create label', createTag: function (name) { return 'Create “' + name + '”'; },
+      tagHelp: 'Select multiple labels, or type a name to create one', noTags: 'No labels', noTagMatches: 'No matching labels',
+      tagLimit: 'Use up to 20 labels, each with at most 40 characters.',
+      removeTag: function (name) { return 'Remove label ' + name; },
+      filterTags: 'Filter labels', allTags: 'All labels', anyTag: 'Any label', everyTag: 'All selected labels',
+      clearFilters: 'Clear', query: 'Search todos', results: function (shown, total) { return shown + ' todos (' + total + ' total)'; },
+      due: 'Due date', date: 'Date', time: 'Time', allDay: 'All day',
+      noDeadline: 'No deadline', noDeadlineHint: 'Clear date and time', notScheduled: 'Not scheduled',
+      previousMonth: 'Previous month', nextMonth: 'Next month', today: 'Today',
+      invalidDate: 'Choose a valid date and time.', priority: 'Priority', priorityNone: 'No priority',
+      urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low',
+      scopeAll: 'All projects', scopeProject: 'Current project', scopeInbox: 'Unfiled',
+      statusOpen: 'Open', statusDone: 'Done', statusAll: 'All statuses',
+      complete: 'Mark as done', reopen: 'Mark as open', edit: 'Edit todo',
+      toggleTag: function (name) { return 'Label ' + name; },
+      weekdays: ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+    }
+  };
+})();

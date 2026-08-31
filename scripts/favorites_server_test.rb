@@ -20,12 +20,17 @@ Encoding.default_internal = Encoding::UTF_8
 
 ROOT = File.expand_path("..", __dir__)
 SERVER = File.join(ROOT, "PluginExamples", "favorites", "server", "favorites.rb")
+PAGE = File.join(ROOT, "PluginExamples", "favorites", "ui", "index.html")
 
 results = []
 
 def check(condition, message, results)
   results << { "ok" => condition, "message" => message }
 end
+
+page_source = File.read(PAGE)
+check(page_source.include?("repeat(auto-fill, minmax(min(100%, 400px), 1fr))"),
+      "收藏卡按页面可用宽度自动填充列，单条内容不会横向拉满。", results)
 
 # 起一个服务端，把 lambda 交给块用；存储文件位置由调用方给。
 def with_server(store_path)

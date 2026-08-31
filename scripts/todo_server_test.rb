@@ -24,12 +24,17 @@ Encoding.default_internal = Encoding::UTF_8
 
 ROOT = File.expand_path("..", __dir__)
 SERVER = File.join(ROOT, "PluginExamples", "todo", "server", "todo.rb")
+PAGE = File.join(ROOT, "PluginExamples", "todo", "ui", "index.html")
 
 results = []
 
 def check(condition, message, results)
   results << { "ok" => condition, "message" => message }
 end
+
+page_source = File.read(PAGE)
+check(page_source.include?("repeat(auto-fill, minmax(min(100%, 400px), 1fr))"),
+      "待办分组按页面可用宽度自动填充卡片列，窄栏自然回到单列。", results)
 
 def with_server(store_path)
   # 复现宿主的启动方式：系统 Ruby、不带 UTF-8 locale
@@ -198,10 +203,10 @@ Dir.mktmpdir do |dir|
 
   check(File.exist?(store), "存储文件按需创建（含中间目录）。", results)
   stored = JSON.parse(File.read(store))
-  check(stored["version"] == 1 && stored["items"].is_a?(Array) && stored["settings"].is_a?(Hash),
+  check(stored["version"] == 2 && stored["items"].is_a?(Array) && stored["settings"].is_a?(Hash),
         "存储文件是 {version, settings, items} 结构。", results)
   check(stored["items"].first.keys.sort ==
-          %w[allDay createdAt done doneAt due id note priority project projectPath source text updatedAt],
+          %w[allDay createdAt done doneAt due id note priority project projectPath source tags text updatedAt],
         "落盘的每条待办字段齐整。", results)
   check(!Dir.glob(File.join(File.dirname(store), "*.tmp")).any?,
         "写盘用的临时文件已经 rename 掉，不留残骸。", results)
@@ -212,6 +217,60 @@ Dir.mktmpdir do |dir|
     tool.call("todo.settings", { "parser" => "ai" })
     check(tool.call("todo.list")["count"] == before, "改设置不会顺手把待办清空。", results)
   end
+
+  with_server(File.join(dir, "labels.json")) do |call, tool|
+    a = tool.call("todo.add", { "text" => "修复项目切换", "tags" => [" 界面 ", "#修复", "界面", "Bug", "bug"], "projectPath" => project })["item"]
+    b = tool.call("todo.add", { "text" => "完善卡片", "tags" => ["界面"], "projectPath" => project })["item"]
+    c = tool.call("todo.add", { "text" => "补测试", "tags" => ["测试"], "projectPath" => "/tmp/workspaces/beta" })["item"]
+    d = tool.call("todo.quick_add", { "text" => "明天整理资料", "tags" => ["文档"] })["item"]
+    untagged = tool.call("todo.add", { "text" => "无标签任务" })["item"]
+    check(a["tags"] == ["界面", "修复", "Bug"], "标签去空白、去前缀并按大小写无关去重。", results)
+    check(d["tags"] == ["文档"], "快速添加也保留显式标签。", results)
+    check(untagged["tags"] == [], "缺失 tags 默认为空数组。", results)
+    check(tool.call("todo.list", { "tags" => ["界面", "测试"] })["count"] == 3, "多标签默认命中任一。", results)
+    check(tool.call("todo.list", { "tags" => ["界面", "修复"], "tagMode" => "all" })["items"].map { |item| item["id"] } == [a["id"]], "同时包含要求所有标签命中。", results)
+    check(tool.call("todo.list", { "tags" => ["BUG"] })["count"] == 1, "标签筛选大小写无关。", results)
+    check(tool.call("todo.list", { "tags" => ["不存在"] })["count"] == 0, "未知标签产生空结果而非放宽范围。", results)
+    check(tool.call("todo.list", { "withoutTags" => true })["items"].map { |item| item["id"] } == [untagged["id"]], "无标签只匹配空数组。", results)
+    check(tool.call("todo.list", { "withoutTags" => true, "tags" => ["界面"] })["count"] == 1, "无标签优先于已选标签。", results)
+    check(tool.call("todo.list", { "scope" => "project", "projectPath" => project, "tags" => ["测试"] })["count"] == 0, "项目与标签采用交集。", results)
+    check(tool.call("todo.list", { "query" => "修复", "tags" => ["界面"] })["count"] == 1, "关键词与标签采用交集。", results)
+    check(tool.call("todo.list", { "query" => "Bug" })["count"] == 1, "关键词检索包含标签。", results)
+    facets = tool.call("todo.list", { "scope" => "project", "projectPath" => project, "tags" => ["修复"] })
+    check(facets["tags"].find { |entry| entry["name"] == "界面" }["count"] == 2, "标签计数基于项目和状态范围，不被标签本身收窄。", results)
+    check(facets["allTags"].any? { |entry| entry["name"] == "文档" }, "编辑建议包含其他项目的标签。", results)
+    changed = tool.call("todo.update", { "id" => a["id"], "projectPath" => "/tmp/workspaces/beta", "due" => "2026-08-31T18:00:00+08:00", "allDay" => true, "tags" => ["测试", "发布"] })["item"]
+    check(changed["project"] == "beta" && changed["tags"] == ["测试", "发布"], "一次保存可以同时切换项目和标签。", results)
+    check(tool.call("todo.update", { "id" => a["id"], "text" => "保留标签" })["item"]["tags"] == ["测试", "发布"], "仅改标题不丢标签。", results)
+    cleared = tool.call("todo.update", { "id" => a["id"], "due" => "", "projectPath" => "" })["item"]
+    check(cleared["due"].nil? && cleared["allDay"] == false, "无终止时间清除 due 与全天标记。", results)
+    check(cleared["projectPath"].nil? && cleared["project"].nil?, "可重新设为未归项目。", results)
+    check(tool.call("todo.update", { "id" => b["id"], "tags" => [] })["item"]["tags"] == [], "空标签数组可清空标签。", results)
+    tool.call("todo.toggle", { "id" => a["id"] })
+    check(tool.call("todo.list", { "status" => "done", "tags" => ["发布"] })["count"] == 1, "已完成状态与标签筛选叠加。", results)
+    removed = tool.call("todo.remove", { "id" => a["id"] })["item"]
+    restored = tool.call("todo.restore", { "item" => removed })["item"]
+    check(restored["tags"] == ["测试", "发布"] && restored["done"], "删除撤销恢复标签与完成状态。", results)
+    tool.call("todo.settings", { "parser" => "local" })
+    check(tool.call("todo.list", { "status" => "done", "tags" => ["发布"] })["count"] == 1, "修改设置不丢标签。", results)
+    ["bad", [1], Array.new(21, "标签"), ["a" * 41], ["bad\nlabel"]].each do |invalid|
+      check(tool.call("todo.update", { "id" => c["id"], "tags" => invalid })["ok"] == false, "非法标签输入被拒绝：#{invalid.class}。", results)
+    end
+    check(tool.call("todo.list", { "tags" => "测试" })["ok"] == false, "非法筛选类型不静默放宽查询。", results)
+    check(tool.call("todo.list", { "tags" => ["测试"] })["items"].any? { |item| item["id"] == c["id"] }, "被拒绝的保存不会破坏旧标签。", results)
+    tools = call.call("tools/list")["result"]["tools"]
+    check(%w[todo.add todo.quick_add todo.update todo.list].all? { |name| tools.find { |entry| entry["name"] == name }["inputSchema"]["properties"].key?("tags") }, "MCP 工具 schema 完整暴露标签字段。", results)
+  end
+
+  legacy = File.join(dir, "legacy.json")
+  File.write(legacy, JSON.generate({ version: 1, settings: { parser: "local" }, items: [{ id: "legacy", text: "旧待办", note: "备注", projectPath: project, priority: "high", allDay: true }] }))
+  with_server(legacy) do |_call, tool|
+    old = tool.call("todo.list")["items"].first
+    check(old["id"] == "legacy" && old["tags"] == [] && old["note"] == "备注", "v1 数据读取兼容且不改变旧任务内容。", results)
+    tool.call("todo.update", { "id" => "legacy", "tags" => ["迁移"] })
+  end
+  migrated = JSON.parse(File.read(legacy))
+  check(migrated["version"] == 2 && migrated["settings"]["parser"] == "local" && migrated["items"].first["tags"] == ["迁移"], "保存时迁移至 v2 并保留设置。", results)
 
   File.write(store, "{ not json")
   with_server(store) do |_call, tool|

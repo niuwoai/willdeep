@@ -141,6 +141,26 @@ struct AgentClient {
     func streamChat(
         messages: [AgentMessage],
         tools: [AgentToolDescriptor] = [],
+        onEmptyResponseRetry: (@MainActor (Int, Int) -> Void)? = nil,
+        onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
+    ) async throws {
+        try await AgentEmptyResponseRetry.run(
+            providerID: configuration.providerID, model: configuration.model,
+            onEvent: onEvent, onRetry: { attempt, limit in
+                // An empty Responses completion may already have committed a
+                // response ID. Retry with the intact history, not that empty
+                // continuation checkpoint.
+                openAIResponsesContinuationState.invalidate()
+                onEmptyResponseRetry?(attempt, limit)
+            }
+        ) { consume in
+            try await streamChatOnce(messages: messages, tools: tools, onEvent: consume)
+        }
+    }
+
+    private func streamChatOnce(
+        messages: [AgentMessage],
+        tools: [AgentToolDescriptor],
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async throws {
         switch configuration.inferenceProviderKind {

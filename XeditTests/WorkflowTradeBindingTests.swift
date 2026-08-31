@@ -96,7 +96,7 @@ nonisolated struct WorkflowTradeBindingTests {
         // deep is now pinned to the 1M tier rather than inheriting whatever
         // the provider's primary model happens to be — that is what makes an
         // escalation to it mean something.
-        #expect(AgentSubagentProfileCatalog.deep.modelBinding.model == "deepseek-v4-flash")
+        #expect(AgentSubagentProfileCatalog.deep.modelBinding.workerTier == .expert)
     }
 
     @Test("automatic coding trades use the real base someim model with client prompts")
@@ -105,8 +105,8 @@ nonisolated struct WorkflowTradeBindingTests {
             AgentSubagentProfileCatalog.smallImplementer,
             AgentSubagentProfileCatalog.smallReviewer,
         ] {
-            #expect(trade.modelBinding.preferredProviderID == AgentProviderPreset.someIMID)
-            #expect(trade.modelBinding.model == "someim-32b")
+            #expect(trade.modelBinding.workerTier == .standard)
+            #expect(AgentWorkerTierModels.defaultBinding(.standard).model == "someim-32b")
             #expect(trade.hostedVirtualModel == nil)
         }
         #expect(AgentSubagentProfileCatalog.smallImplementer.requiresWriteAccess)

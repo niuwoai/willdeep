@@ -334,6 +334,17 @@ final class AppState: ObservableObject {
     /// contain a user message. Sidebar visibility needs that fact before
     /// the session is materialized.
     private var metadataOnlyUserMessageIDs: Set<AgentSession.ID> = []
+    let sessionManagementDefaults: UserDefaults
+    @Published var sessionRetentionSettings = AgentSessionRetentionSettings() {
+        didSet {
+            sessionRetentionSettings.save(defaults: sessionManagementDefaults)
+            if sessionRetentionSettings.enabled { requestAutomaticSessionArchiving() }
+        }
+    }
+    var sessionAutoArchiveTask: Task<Void, Never>?
+    @Published var sessionAutoArchiveRunning = false
+    @Published var sessionAutoArchiveLastCount = 0
+    @Published var sessionAutoArchiveFailedCount = 0
     /// Set only when a metadata-only sidebar row can no longer be
     /// materialized from disk. The row is deliberately retained so a
     /// recovered JSON file can reconnect without losing its visible title.
@@ -665,8 +676,12 @@ final class AppState: ObservableObject {
         editorSettings: EditorSettings = EditorSettingsStore.load(),
         // Test seam: dispatch-board persistence tests must not read or write
         // the real `com.willdeep.agentDispatch.goals.v1` domain.
-        dispatchStore: AgentDispatchStore = AgentDispatchStore()
+        dispatchStore: AgentDispatchStore = AgentDispatchStore(),
+        sessionManagementDefaults: UserDefaults = .standard,
+        loadSessionCatalog: Bool = true
     ) {
+        self.sessionManagementDefaults = sessionManagementDefaults
+        self.sessionRetentionSettings = AgentSessionRetentionSettings.load(defaults: sessionManagementDefaults)
         self.agentDispatchCoordinator = AgentDispatchCoordinator(store: dispatchStore)
         self.openedFileURL = openedFileURL
         self.fileContent = fileContent
@@ -925,6 +940,7 @@ final class AppState: ObservableObject {
                 self.editorTerminalSettings = loaded
                 self.isApplyingExternalTerminalSettings = false
             }
+        guard loadSessionCatalog else { return }
         startAgentSidePanelResourceReaper()
         Task { @MainActor [weak self] in
             let loaded = await Task.detached(priority: .utility) {
@@ -961,6 +977,7 @@ final class AppState: ObservableObject {
             // Must follow the migration: repairing reads `agentProjects` to
             // resolve a leaked `project:<uuid>` back to its folder.
             self.repairAgentSessionsAnchoredToProjectKeys()
+            self.requestAutomaticSessionArchiving()
 
             // Every dispatch-board synchronize before this point was refused
             // (see synchronizeDispatchBoard(): projecting from a partially
@@ -977,6 +994,7 @@ final class AppState: ObservableObject {
     }
 
     deinit {
+        sessionAutoArchiveTask?.cancel()
         gitStatusRefreshTask?.cancel()
         quickOpenRefreshTask?.cancel()
         agentGitWorktreeRefreshTask?.cancel()
@@ -1070,6 +1088,7 @@ final class AppState: ObservableObject {
         let timer = Timer(timeInterval: 5 * 60, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.reapStaleAgentSidePanelResources()
+                self?.requestAutomaticSessionArchiving()
             }
         }
         RunLoop.main.add(timer, forMode: .common)

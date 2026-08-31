@@ -38,11 +38,11 @@ struct AgentSessionSearchTests {
 
     @Test("空查询给的是最近会话：按最后更新时间倒序，不分项目")
     func emptyQueryListsRecentSessionsAcrossProjects() throws {
-        var older = session(title: "旧会话", workspacePath: "/Users/rocky/Sites/a")
+        var older = session(title: "旧会话", workspacePath: "/Users/rocky/Sites/a", messages: conversation())
         older.updatedAt = Date(timeIntervalSince1970: 1_000)
-        var newer = session(title: "新会话", workspacePath: "/Users/rocky/Sites/b")
+        var newer = session(title: "新会话", workspacePath: "/Users/rocky/Sites/b", messages: conversation())
         newer.updatedAt = Date(timeIntervalSince1970: 2_000)
-        var middle = session(title: "中间会话", workspacePath: nil)
+        var middle = session(title: "中间会话", workspacePath: nil, messages: conversation())
         middle.updatedAt = Date(timeIntervalSince1970: 1_500)
 
         let results = AgentSessionSearch.recentSessions([older, newer, middle])
@@ -58,7 +58,7 @@ struct AgentSessionSearchTests {
     @Test("最近会话有条数上限，不把整份历史铺进面板")
     func recentSessionsAreCapped() throws {
         let sessions = (0..<80).map { index -> AgentSession in
-            var value = session(title: "会话 \(index)")
+            var value = session(title: "会话 \(index)", messages: conversation())
             value.updatedAt = Date(timeIntervalSince1970: TimeInterval(index))
             return value
         }
@@ -78,7 +78,8 @@ struct AgentSessionSearchTests {
             title: "支付接口排障",
             workspaceRootPath: "/tmp/payment",
             createdAt: .distantPast,
-            updatedAt: Date(timeIntervalSinceReferenceDate: 10)
+            updatedAt: Date(timeIntervalSinceReferenceDate: 10),
+            messages: conversation()
         )
         let results = AgentSessionSearch.titleResults(
             sessions: [matchingChat, session(title: "无关会话")],
@@ -87,6 +88,70 @@ struct AgentSessionSearchTests {
         )
 
         #expect(results == [.project(project), .session(matchingChat)])
+    }
+
+    @Test("搜索排除空壳但保留有内容的默认标题和归档会话", arguments: [false, true])
+    func emptyConversationsAreExcluded(withQuery: Bool) {
+        let empty = session(title: "新对话")
+        let renamedEmpty = session(title: "新对话：已改名但没发消息")
+        let systemOnly = session(title: "新对话", messages: [AgentMessage(role: .system, content: "配置")])
+        var populated = session(title: "新对话", messages: conversation())
+        populated.archivedAt = .now
+        let candidates = [empty, renamedEmpty, systemOnly, populated]
+        let results = withQuery
+            ? AgentSessionSearch.titleResults(sessions: candidates, projects: [], query: "新对话")
+            : AgentSessionSearch.recentSessions(candidates)
+        #expect(results == [.session(populated)])
+    }
+
+    @Test("搜索用元数据识别未加载的历史，不把真实历史隐藏", arguments: [false, true])
+    func metadataOnlyHistoryIsPreserved(withQuery: Bool) {
+        let history = session(title: "新对话")
+        let empty = session(title: "新对话")
+        let loadedEmpty = session(title: "新对话")
+        let candidates = [empty, loadedEmpty, history]
+        let isMetadataOnly: (UUID) -> Bool = { $0 != loadedEmpty.id }
+        // 即使旧元数据残留，已加载会话也以当前正文为准。
+        let hasUserMessage: (UUID) -> Bool = { $0 == history.id || $0 == loadedEmpty.id }
+        let results = withQuery
+            ? AgentSessionSearch.titleResults(
+                sessions: candidates, projects: [], query: "新对话",
+                isMetadataOnly: isMetadataOnly, metadataOnlyHasUserMessage: hasUserMessage
+            )
+            : AgentSessionSearch.recentSessions(
+                candidates, isMetadataOnly: isMetadataOnly, metadataOnlyHasUserMessage: hasUserMessage
+            )
+        #expect(results == [.session(history)])
+    }
+
+    @Test("空壳不占最近会话额度，全空时返回空列表")
+    func emptyConversationsDoNotConsumeLimit() {
+        var history = session(messages: conversation())
+        history.updatedAt = .distantPast
+        let empty = session()
+        #expect(AgentSessionSearch.recentSessions([empty, history], limit: 1) == [.session(history)])
+        #expect(AgentSessionSearch.recentSessions([empty]).isEmpty)
+        #expect(AgentSessionSearch.titleResults(sessions: [empty], projects: [], query: empty.title).isEmpty)
+    }
+
+    @Test("仅发送图片的会话仍可搜索", arguments: [false, true])
+    func attachmentOnlyConversationIsPreserved(withQuery: Bool) {
+        let image = AgentImageAttachment(mimeType: "image/png", dataBase64: "", filePath: "/tmp/search-fixture.png")
+        var message = AgentMessage(role: .user, content: "")
+        message.images = [image]
+        let value = session(title: "新对话", messages: [message])
+        let results = withQuery
+            ? AgentSessionSearch.titleResults(sessions: [value], projects: [], query: "新对话")
+            : AgentSessionSearch.recentSessions([value])
+        #expect(results == [.session(value)])
+    }
+
+    @Test("没有对话的项目仍可搜索")
+    func projectsWithoutConversationsRemainSearchable() {
+        let project = AgentProject(displayName: "空项目", folderPaths: ["/tmp/empty-project"])
+        #expect(AgentSessionSearch.titleResults(
+            sessions: [session(title: "空项目")], projects: [project], query: "空项目"
+        ) == [.project(project)])
     }
 
     @Test("sidebar reveal requests remain one-shot even for the same target")

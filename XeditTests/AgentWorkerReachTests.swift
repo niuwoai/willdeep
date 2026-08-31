@@ -4,9 +4,7 @@
 //
 //  Guards for the three gaps that kept the worker tier at zero runs on real
 //  sessions: a failure whose command shape says nothing, a test that timed out
-//  instead of failing, a read-only trade with no trigger at all — plus the
-//  hosted-chain fallback that turns a stale `hostedTradeIDs` entry into a
-//  retry rather than a dead spawn.
+//  instead of failing, a read-only trade with no trigger at all.
 //
 
 import Foundation
@@ -170,66 +168,4 @@ nonisolated struct AgentWorkerReachTests {
         ) == nil)
     }
 
-    // MARK: - Hosted chain fallback
-
-    private struct StubError: LocalizedError {
-        let text: String
-        var errorDescription: String? { text }
-    }
-
-    @Test("a missing hosted chain retries on the concrete flash model")
-    func missingHostedChainRetries() {
-        let error = StubError(text: #"HTTP 400: {"error":{"code":"model_not_configured"}}"#)
-        #expect(AgentSubagentHostedModelFallback.retryModel(
-            afterError: error,
-            attemptedModel: "someim-32b-git-detective",
-            hostedModel: "someim-32b-git-detective"
-        ) == AgentSubagentHostedModelFallback.fallbackModel)
-        #expect(AgentSubagentHostedModelFallback.fallbackModel == "deepseek-v4-flash")
-    }
-
-    @Test("an ordinary worker failure is not silently re-run on another model")
-    func ordinaryFailureDoesNotSwapModels() {
-        #expect(AgentSubagentHostedModelFallback.retryModel(
-            afterError: StubError(text: "HTTP 500: upstream timeout"),
-            attemptedModel: "someim-32b-scout",
-            hostedModel: "someim-32b-scout"
-        ) == nil)
-    }
-
-    /// A user-chosen model that happens to fail this way is theirs, not ours
-    /// to replace: the retry only covers the model the roster picked.
-    @Test("a model the trade did not declare as hosted is left alone")
-    func nonHostedModelIsLeftAlone() {
-        #expect(AgentSubagentHostedModelFallback.retryModel(
-            afterError: StubError(text: "model_not_configured"),
-            attemptedModel: "glm-5",
-            hostedModel: nil
-        ) == nil)
-        #expect(AgentSubagentHostedModelFallback.retryModel(
-            afterError: StubError(text: "model_not_configured"),
-            attemptedModel: "glm-5",
-            hostedModel: "someim-32b-scout"
-        ) == nil)
-    }
-
-    @Test("the fallback model failing the same way does not loop")
-    func fallbackModelDoesNotRetryItself() {
-        #expect(AgentSubagentHostedModelFallback.retryModel(
-            afterError: StubError(text: "model_not_configured"),
-            attemptedModel: AgentSubagentHostedModelFallback.fallbackModel,
-            hostedModel: AgentSubagentHostedModelFallback.fallbackModel
-        ) == nil)
-    }
-
-    @Test("the fallback note names both the stale chain and what ran instead")
-    func fallbackNoteNamesBothModels() {
-        let note = AgentSubagentHostedModelFallback.fallbackNote(
-            hostedModel: "someim-32b-git-detective",
-            ranOn: "deepseek-v4-flash"
-        )
-        #expect(note.contains("someim-32b-git-detective"))
-        #expect(note.contains("deepseek-v4-flash"))
-        #expect(note.contains("hostedTradeIDs"))
-    }
 }

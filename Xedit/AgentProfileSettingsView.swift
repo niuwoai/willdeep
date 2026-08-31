@@ -43,7 +43,8 @@ struct AgentProfileSettingsView: View {
 
     @State private var profiles: [AgentProfile] = []
     @State private var selectedID: String?
-    @State private var filter: Filter = .all
+    @State private var filter: Filter = .subagent
+    @State private var showsLegacyProfiles = false
     @State private var deleteTarget: AgentProfile?
 
     private let store = AgentProfileStore()
@@ -54,6 +55,7 @@ struct AgentProfileSettingsView: View {
                 || !profile.usages.contains(.subagent)
                 || profile.usages.contains(.dispatch)
                 || AgentSubagentProfileCatalog.isPublic(id: profile.id)
+                || showsLegacyProfiles
         }
         guard let usage = filter.usage else { return publicProfiles }
         return publicProfiles.filter { $0.usages.contains(usage) }
@@ -66,6 +68,7 @@ struct AgentProfileSettingsView: View {
 
     var body: some View {
         Form {
+            AgentWorkerTierSettingsView(onSave: reload)
             Section {
                 Text(L10n.AgentProfiles.paneDescription)
                     .font(.caption)
@@ -79,6 +82,9 @@ struct AgentProfileSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+
+                Toggle(String(localized: "显示旧工种兼容配置", table: "WorkerArchitecture"), isOn: $showsLegacyProfiles)
+                    .font(.caption)
 
                 ForEach(visibleProfiles) { profile in
                     profileRow(profile)
@@ -153,13 +159,13 @@ struct AgentProfileSettingsView: View {
     }
 
     private func detailLine(_ profile: AgentProfile) -> String {
-        // A hosted trade must advertise the model it will actually run on,
-        // not the binding it would use signed out — the list is where users
-        // check what a trade costs them. An explicit override wins here too,
-        // otherwise the row would keep advertising a model the trade no
-        // longer calls.
+        if let tier = AgentWorkerTierModels.tier(for: profile.runtime.modelBinding) {
+            let model = store.workerTierModels()[tier].model ?? "—"
+            return "\(tier.title) · \(model)"
+        }
+        // Advertise the prompt-free recommendation; an explicit override wins.
         if profile.runtime.modelBinding.model?.isEmpty != false,
-           let hosted = recommendedHostedModel(for: profile) {
+           let hosted = recommendedWorkerModel(for: profile) {
             return "some.im · \(hosted)"
         }
         let model = profile.runtime.modelBinding.model ?? L10n.AgentProfiles.modelPlaceholder
@@ -231,15 +237,26 @@ struct AgentProfileSettingsView: View {
         }
 
         Section(L10n.AgentProfiles.sectionModel) {
-            // A managed trade recommends its relay-hosted model, and used to
-            // be locked to it on the theory that the server-side job prompt
-            // and the model it was tuned for must travel together. They still
-            // do — but that is enforced where it actually happens
-            // (`jobPromptIsHosted` is derived from the model being called, so
-            // pointing a trade elsewhere switches it to the client-side copy
-            // of the same prompt). Locking the row on top of that only took
-            // the choice away.
-            if let hostedModel = recommendedHostedModel(for: profile) {
+            if profile.runtime.isInProcess, profile.usages.contains(.subagent) {
+                Picker(String(localized: "模型档位", table: "WorkerArchitecture"), selection: tierBinding(index)) {
+                    ForEach(AgentWorkerTier.allCases) { tier in
+                        Text(tier.title).tag(Optional(tier))
+                    }
+                    Text(String(localized: "独立配置（兼容）", table: "WorkerArchitecture"))
+                        .tag(Optional<AgentWorkerTier>.none)
+                }
+            }
+            if let tier = AgentWorkerTierModels.tier(for: profile.runtime.modelBinding) {
+                Text(store.workerTierModels()[tier].model ?? "—")
+                    .font(.caption).foregroundStyle(.secondary)
+                if appState.workerTierConfiguration(tier, parent: appState.agentConfiguration) == nil {
+                    Text(String(localized: "此档当前不可用：使用当前会话模型，不自动升级。请检查提供商和模型配置。", table: "WorkerArchitecture"))
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            } else {
+            // Model selection is independent of the local job instructions.
+            // Empty means the prompt-free recommendation, never a model lock.
+            if let hostedModel = recommendedWorkerModel(for: profile) {
                 HStack(spacing: 8) {
                     TextField(
                         hostedModel,
@@ -247,7 +264,7 @@ struct AgentProfileSettingsView: View {
                     )
                     .textFieldStyle(.roundedBorder)
                     Menu {
-                        Button(L10n.AgentProfiles.hostedModelRecommended(hostedModel)) {
+                        Button(L10n.AgentProfiles.workerModelRecommended(hostedModel)) {
                             modelBinding(index).wrappedValue = ""
                         }
                         Divider()
@@ -262,8 +279,8 @@ struct AgentProfileSettingsView: View {
                 }
                 Text(
                     profile.runtime.modelBinding.model?.isEmpty == false
-                        ? L10n.AgentProfiles.hostedModelOverridden
-                        : L10n.AgentProfiles.hostedModelUsingRecommended(hostedModel)
+                        ? L10n.AgentProfiles.workerModelOverridden
+                        : L10n.AgentProfiles.workerModelUsingRecommended(hostedModel)
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -296,6 +313,7 @@ struct AgentProfileSettingsView: View {
             }
 
             contextWindowField(index: index, profile: profile)
+            }
         }
 
         Section(L10n.AgentProfiles.sectionSoul) {
@@ -600,6 +618,13 @@ struct AgentProfileSettingsView: View {
         )
     }
 
+    private func tierBinding(_ index: Int) -> Binding<AgentWorkerTier?> {
+        Binding(get: { AgentWorkerTierModels.tier(for: profiles[index].runtime.modelBinding) }, set: { tier in
+            profiles[index].runtime.modelBinding = .init(workerTier: tier)
+            persist()
+        })
+    }
+
     private func usageBinding(_ index: Int, usage: AgentProfile.Usage) -> Binding<Bool> {
         Binding(
             get: { profiles[index].usages.contains(usage) },
@@ -641,25 +666,22 @@ struct AgentProfileSettingsView: View {
 
     // MARK: - Actions
 
-    /// True while some.im owns this trade's model and job prompt. Only the
-    /// managed worker trades qualify; `deep`, `tester`, `reviewer` and every
-    /// dispatch profile stay user-configurable. Being signed in is not enough:
-    /// a private/on-prem current provider must never be silently rerouted
-    /// (docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3.8).
-    /// The hosted model this trade recommends right now, or nil when the
-    /// recommendation does not apply (not a managed trade, signed out, or the
-    /// session is on a private/on-prem provider that must never be silently
-    /// rerouted — docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3.8).
-    ///
-    /// Leaving the field empty means "use this"; typing a model overrides it.
-    private func recommendedHostedModel(for profile: AgentProfile) -> String? {
+    /// A transitional prompt-free model recommendation, not server-owned job
+    /// instructions. An exact private provider selection must not show some.im.
+    private func recommendedWorkerModel(for profile: AgentProfile) -> String? {
         guard profile.usages.contains(.subagent),
-              AgentSubagentJobPrompts.hostedTradeIDs.contains(profile.id),
-              appState.agentConfiguration.providerID == AgentProviderPreset.someIMID,
+              !AppState.implicitSomeIMBindingFollowsParent(
+                binding: profile.runtime.modelBinding,
+                parentProviderID: appState.agentConfiguration.providerID
+              ),
+              let entryID = providerEntryID(for: profile),
+              let entry = appState.agentProviderLibrary.entries.first(where: { $0.id == entryID }),
               SomeIMIntegrationStore.hasAuthenticatedSessionForAutomaticDefaults() else {
             return nil
         }
-        return AgentSubagentJobPrompts.hostedModel(for: profile.id)
+        return AgentSubagentModelCompatibility.recommendedModel(
+            for: profile.id, providerID: entry.providerID
+        )
     }
 
     private func modelOptions(for profile: AgentProfile) -> [String] {

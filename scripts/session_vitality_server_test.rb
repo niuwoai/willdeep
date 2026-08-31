@@ -256,6 +256,12 @@ initialized_at = handshake.index("ui/notifications/initialized")
 load_at = handshake.index("return load()")
 check(!initialized_at.nil? && !load_at.nil? && initialized_at < load_at,
       "ui/initialize 回来后先声明 initialized 再取数（宿主在这之前会顶回 -32002）。", results)
+check(app_source.include?('<canvas id="trend"') && app_source.include?("Number(day.requests)"),
+      "趋势区同时可视化每日输出 Token 与模型请求密度。", results)
+check(app_source.include?('id="profile-rates"') && app_source.include?('id="profile-stats"'),
+      "工作画像保留比例指标与单会话/单请求效率指标。", results)
+check(app_source.include?('class="rank-grid"') && app_source.include?('class="recent"'),
+      "项目、模型与最近会话使用宽窄视口可重排的信息分区。", results)
 
 failed = results.reject { |result| result["ok"] }
 markdown_path = ARGV[0]

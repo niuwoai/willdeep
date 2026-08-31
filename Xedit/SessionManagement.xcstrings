@@ -1,0 +1,321 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "section": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session management"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会话管理"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestión de conversaciones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestion des conversations"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会話管理"
+          }
+        }
+      }
+    },
+    "enabled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatically archive older project conversations"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动归档项目中的较旧会话"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivar automáticamente las conversaciones antiguas de cada proyecto"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archiver automatiquement les anciennes conversations des projets"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロジェクトの古い会話を自動アーカイブ"
+          }
+        }
+      }
+    },
+    "description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off by default. When enabled, runs immediately and every 5 minutes while the app is open. Each project keeps its newest conversations by last update time; older ones are archived, never deleted. Archived conversations do not count toward the limit."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认关闭。开启后立即执行，应用运行期间每 5 分钟检查一次。每个项目按最后更新时间保留最近的会话，较旧会话只归档、不删除；已归档会话不计入数量。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desactivado por defecto. Al activarlo, se ejecuta inmediatamente y cada 5 minutos mientras la app está abierta. Conserva las conversaciones actualizadas más recientemente de cada proyecto y archiva las anteriores sin eliminarlas. Las archivadas no cuentan para el límite."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé par défaut. Une fois activé, s’exécute immédiatement puis toutes les 5 minutes lorsque l’app est ouverte. Chaque projet conserve ses conversations les plus récemment mises à jour ; les autres sont archivées, jamais supprimées. Les archives ne comptent pas dans la limite."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "初期状態はオフです。有効にすると即時実行し、アプリ起動中は5分ごとに確認します。各プロジェクトで最終更新日時が新しい会話を残し、古い会話は削除せずアーカイブします。アーカイブ済みの会話は件数に含めません。"
+          }
+        }
+      }
+    },
+    "protection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pinned, open, running, queued, draft and awaiting-attention conversations are protected, so a project may temporarily exceed the limit. To keep a restored older conversation visible, pin it or disable automatic archiving."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "置顶、当前打开、正在运行、排队中、含草稿及等待处理的会话会被保护，因此可能暂时超过上限。恢复较旧会话后，如需持续保留，请置顶或关闭自动归档。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se protegen las conversaciones fijadas, abiertas, en ejecución, en cola, con borradores o pendientes de atención; el total puede superar temporalmente el límite. Fija una conversación antigua restaurada o desactiva el archivado para conservarla visible."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les conversations épinglées, ouvertes, en cours, en attente, contenant un brouillon ou nécessitant une intervention sont protégées ; la limite peut donc être temporairement dépassée. Épinglez une ancienne conversation restaurée ou désactivez l’archivage pour la garder visible."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "固定中、表示中、実行中、待機中、下書きがある会話、および対応待ちの会話は保護され、一時的に上限を超える場合があります。復元した古い会話を残すには、固定するか自動アーカイブを無効にしてください。"
+          }
+        }
+      }
+    },
+    "run-now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive now"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即归档"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivar ahora"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archiver maintenant"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今すぐアーカイブ"
+          }
+        }
+      }
+    },
+    "running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archiving…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在归档…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivando…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivage…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アーカイブ中…"
+          }
+        }
+      }
+    },
+    "keep-count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep the newest %d conversations per project"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每个项目保留最近 %d 个会话"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conservar las %d conversaciones más recientes de cada proyecto"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conserver les %d conversations les plus récentes par projet"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "各プロジェクトで最新の会話を %d 件保持"
+          }
+        }
+      }
+    },
+    "last-count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last run archived: %d"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次归档：%d 个"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivadas en la última ejecución: %d"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernière exécution : %d conversations archivées"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前回のアーカイブ：%d 件"
+          }
+        }
+      }
+    },
+    "failed-count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d conversations could not be loaded or changed during processing. They were left untouched and will be retried on the next check."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有 %d 个会话读取失败或处理期间发生变化，已保留原状，下次检查重试。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron cargar %d conversaciones o cambiaron durante el proceso. No se modificaron y se reintentará en la próxima comprobación."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d conversations n’ont pas pu être chargées ou ont changé pendant le traitement. Elles sont restées intactes et seront réessayées à la prochaine vérification."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d 件の会話を読み込めないか処理中に変更されました。変更せずに残し、次回の確認時に再試行します。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

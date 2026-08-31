@@ -28,10 +28,9 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
     enum EscalationPolicy: String, Codable, Equatable, Sendable {
         /// Report the failure to the parent as-is.
         case none
-        /// Re-run the original prompt once on the parent session's model with
-        /// the `deep` tool set. Deliberately a fresh run rather than a
-        /// continuation: a small model's stuck transcript is noise to a
-        /// bigger one.
+        /// Legacy serialized name. Re-run once on the next configured tier,
+        /// preserving the role's exact tools and budgets. Explicit independent
+        /// model bindings do not guess a stronger model from the parent.
         case retryWithParentModel
     }
 
@@ -52,11 +51,13 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         /// Context window of `model`, used for payload budgeting and for
         /// recognizing a context-overflow failure. nil → parent's window.
         var contextWindowTokens: Int?
+        /// A shared model slot; nil preserves legacy explicit model bindings.
+        var workerTier: AgentWorkerTier? = nil
 
         static let inheritsParent = ModelBinding()
 
         var inheritsEverything: Bool {
-            preferredProviderID == nil && model == nil
+            preferredProviderEntryID == nil && preferredProviderID == nil && model == nil && workerTier == nil
         }
     }
 
@@ -86,15 +87,9 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
     /// Skills preloaded into this trade's system prompt at spawn time. Empty
     /// for every built-in trade; filled in from the profile's soul.
     var skillIdentifiers: [String]
-    /// some.im virtual model that hosts this trade's job prompt server-side
-    /// (`someim-32b-<skill>`). Non-nil marks a **managed trade**: while the
-    /// user is signed in to some.im its model is pinned to this id and its job
-    /// prompt is prepended by the relay, so the client sends neither and the
-    /// settings row shows the model as locked. Signed out, the trade falls
-    /// back to the user's own binding (or the session's model) and the client
-    /// sends `capabilityPromptSection`, which is the offline mirror of the
-    /// hosted text — see docs/SOMEIM_WORKER_VIRTUAL_MODELS.md §3.8.
-    /// Nil for `deep` / `tester` / `reviewer`, which stay user-configurable.
+    /// Legacy Codable metadata only. Old saved profiles may contain this key;
+    /// it never selects a model or suppresses local instructions. Built-ins
+    /// leave it nil. Known old model bindings are normalized at request time.
     var hostedVirtualModel: String?
 
     init(
@@ -121,28 +116,6 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
         self.requiresWriteAccess = requiresWriteAccess
         self.skillIdentifiers = skillIdentifiers
         self.hostedVirtualModel = hostedVirtualModel
-    }
-
-    /// Whether this spawn runs against the relay-hosted job prompt right now.
-    /// Resolved at spawn time, never at configuration time, so signing in or
-    /// out changes behaviour without migrating anyone's saved settings.
-    func usesHostedJobPrompt(someIMAuthenticated: Bool) -> Bool {
-        someIMAuthenticated && hostedVirtualModel != nil
-    }
-
-    /// Whether this trade should actually be pinned to its hosted virtual
-    /// model, i.e. whether the recommendation still stands.
-    ///
-    /// An empty `modelBinding.model` means "take the recommendation"; anything
-    /// else is the user having chosen, and their choice wins. The hosted model
-    /// was never meant to be a lock — the job prompt follows whichever model
-    /// is actually called (`jobPromptIsHosted`), so overriding it swaps the
-    /// relay's copy for the client's rather than losing it.
-    func usesRecommendedHostedModel(someIMAuthenticated: Bool) -> Bool {
-        guard usesHostedJobPrompt(someIMAuthenticated: someIMAuthenticated) else { return false }
-        return modelBinding.model?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty ?? true
     }
 
     /// The tools this trade may actually call.
@@ -172,6 +145,7 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
     }
 
     var localizedDisplayName: String {
+        if let role = AgentWorkerRole.matching(id) { return role.title }
         switch id {
         case AgentSubagentProfileCatalog.scoutID: return L10n.AgentDelegation.profileScoutName
         case AgentSubagentProfileCatalog.readerID: return L10n.AgentDelegation.profileReaderName
@@ -252,18 +226,16 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// trades and `tester`, not at `deep`'s 24K.
     static let generalistPayloadCharacterLimit = 8_000
 
-    /// Deployable model tiers. 16K is deliberately absent: the target 16GB
-    /// baseline can run 35B-A3B-class models at 32K and, depending on KV cache
-    /// and quantization, at 48K/64K. 256K is the ordinary multi-file coding
-    /// tier; `deep` remains the exceptional parent-model fallback.
-    static let workerContextWindowTokens = 32_768
-    static let balancedContextWindowTokens = 49_152
-    static let wideContextWindowTokens = 65_536
+    /// Compatibility constants. Active requests use the shared tier's
+    /// configured budget, capped by the model's supported context window.
+    static let workerContextWindowTokens = AgentWorkerTierModels.standardWindow
+    static let balancedContextWindowTokens = AgentWorkerTierModels.standardWindow
+    static let wideContextWindowTokens = AgentWorkerTierModels.standardWindow
     static let implementerContextWindowTokens = 262_144
     /// The L tier. Deliberately spelled out rather than left implicit: a
     /// budget nobody can see is a budget nobody defends. `AgentDeepAdmission`
     /// is what decides whether a spawn may spend it.
-    static let deepContextWindowTokens = 1_048_576
+    static let deepContextWindowTokens = AgentWorkerTierModels.extendedWindow
 
     /// Tools a built-in writing trade adds on top of the read-only set, and
     /// only while its exact file-set workspace grant is held.
@@ -293,92 +265,15 @@ nonisolated enum AgentSubagentProfileCatalog {
         scoutID, readerID, generalistID,
     ]
 
-    /// Default binding for the managed worker trades.
-    ///
-    /// `model` is **nil on purpose**: nil means "use the recommended default",
-    /// which for a managed trade resolves at spawn time to its hosted
-    /// `someim-32b-<trade>` model while signed in, and to the provider's own
-    /// primary model otherwise. A non-nil value here would be indistinguishable
-    /// from a user's explicit choice, and the settings row could no longer
-    /// offer "recommended" as a state — which is exactly the bug this replaces:
-    /// these bindings said `glm-5`, the hosted override ignored them entirely,
-    /// and the user had no say either way.
-    private static let cheapBinding = AgentSubagentProfile.ModelBinding(
-        preferredProviderID: AgentProviderPreset.someIMID,
-        model: nil,
-        contextWindowTokens: workerContextWindowTokens
-    )
-
-    private static let balancedBinding = AgentSubagentProfile.ModelBinding(
-        preferredProviderID: AgentProviderPreset.someIMID,
-        model: nil,
-        contextWindowTokens: balancedContextWindowTokens
-    )
-
-    private static let wideBinding = AgentSubagentProfile.ModelBinding(
-        preferredProviderID: AgentProviderPreset.someIMID,
-        model: nil,
-        contextWindowTokens: wideContextWindowTokens
-    )
-
-    private static let implementerBinding = AgentSubagentProfile.ModelBinding(
-        preferredProviderID: AgentProviderPreset.someIMID,
-        model: "glm-5",
-        contextWindowTokens: implementerContextWindowTokens
-    )
-
-    /// Base someim-32b has no hosted job prompt. These automatic coding-lane
-    /// trades therefore pin the real base model and always send their prompt
-    /// from the client. Do not add them to `hostedTradeIDs` until matching
-    /// relay chains have actually been provisioned and probed.
-    private static let smallCodingBinding = AgentSubagentProfile.ModelBinding(
-        preferredProviderID: AgentProviderPreset.someIMID,
-        model: AgentSubagentJobPrompts.hostedModelPrefix,
-        contextWindowTokens: wideContextWindowTokens
-    )
-
-    /// Deep used to inherit the parent session. Subagents now default to a
-    /// provider of their own as requested by Settings: some.im when present,
-    /// otherwise the active provider. A nil model adopts that provider's
-    /// configured primary model.
-    private static let automaticProviderBinding = AgentSubagentProfile.ModelBinding(
-        preferredProviderID: AgentProviderPreset.someIMID,
-        model: nil,
-        contextWindowTokens: nil
-    )
-
-    /// One size down from the session's model, at the 256K window.
-    ///
-    /// Pinned to the base `someim-32b` rather than left nil: nil resolves to
-    /// the provider's *primary* model, which is the parent's own tier — and a
-    /// catch-all worker that silently costs what the parent costs is not a
-    /// cheaper lane, it is the same lane with extra steps. `.retryWithParentModel`
-    /// is what covers the cases the small model cannot close.
-    ///
-    /// The window is the operator's call, not an inferred property of the
-    /// model: this pairing is deliberate and is the reason per-trade
-    /// `contextWindowTokens` is user-editable in settings. If the pinned model
-    /// turns out not to hold 256K the symptom is a provider overflow, and the
-    /// fix is that field — not a code change.
-    private static let generalistBinding = AgentSubagentProfile.ModelBinding(
-        preferredProviderID: AgentProviderPreset.someIMID,
-        model: AgentSubagentJobPrompts.hostedModelPrefix,
-        contextWindowTokens: implementerContextWindowTokens
-    )
-
-    /// `deep` is the only trade that gets the 1M window, and now it says so.
-    ///
-    /// It used to share `automaticProviderBinding` with tester/reviewer, which
-    /// meant it silently adopted whatever the provider's primary model was.
-    /// That was fine while the primary model *was* the 1M one — but then the
-    /// L tier was simply the default, and "escalate to deep" bought nothing
-    /// the session did not already have. Pinning it makes the escalation real
-    /// and makes the tier visible in the trade settings row.
-    private static let deepBinding = AgentSubagentProfile.ModelBinding(
-        preferredProviderID: AgentProviderPreset.someIMID,
-        model: "deepseek-v4-flash",
-        contextWindowTokens: deepContextWindowTokens
-    )
+    // The model tier is independent of the role and its tool authority.
+    private static let cheapBinding = AgentSubagentProfile.ModelBinding(workerTier: .standard)
+    private static let balancedBinding = cheapBinding
+    private static let wideBinding = cheapBinding
+    private static let smallCodingBinding = cheapBinding
+    private static let generalistBinding = cheapBinding
+    private static let implementerBinding = AgentSubagentProfile.ModelBinding(workerTier: .advanced)
+    private static let automaticProviderBinding = AgentSubagentProfile.ModelBinding(workerTier: .advanced)
+    private static let deepBinding = AgentSubagentProfile.ModelBinding(workerTier: .expert)
 
     static let scout = AgentSubagentProfile(
         id: scoutID,
@@ -388,8 +283,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         capabilityPromptSection: AgentSubagentJobPrompts.scout,
         maxRounds: 8,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
-        escalation: .retryWithParentModel,
-        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: scoutID)
+        escalation: .retryWithParentModel
     )
 
     static let reader = AgentSubagentProfile(
@@ -400,8 +294,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         capabilityPromptSection: AgentSubagentJobPrompts.reader,
         maxRounds: 8,
         toolPayloadCharacterLimit: balancedPayloadCharacterLimit,
-        escalation: .retryWithParentModel,
-        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: readerID)
+        escalation: .retryWithParentModel
     )
 
     /// The full read-only investigation trade. Any spawn that does not name a
@@ -410,13 +303,10 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// routing shared by every subagent trade.
     static let deep = AgentSubagentProfile(
         id: deepID,
-        purpose: "Complex investigation: reasoning across many files, read-only shell commands, and git status. Scarce 1M tier — requires an admission ticket.",
+        purpose: "Legacy complex investigation: reasoning across files and git state. Uses the configured expert tier and retains its legacy admission requirement.",
         modelBinding: deepBinding,
         toolNames: AgentSubagentRunner.allowedToolNames,
-        capabilityPromptSection: """
-        Your trade is INVESTIGATION. Follow the evidence across files, verify claims before \
-        reporting them, and state explicitly what you could not confirm.
-        """,
+        capabilityPromptSection: AgentSubagentJobPrompts.deep,
         maxRounds: AgentSubagentRunner.maxRounds,
         toolPayloadCharacterLimit: 24_000,
         escalation: .none
@@ -431,8 +321,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         maxRounds: 6,
         toolPayloadCharacterLimit: balancedPayloadCharacterLimit,
         escalation: .retryWithParentModel,
-        requiresWriteAccess: true,
-        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: editorID)
+        requiresWriteAccess: true
     )
 
     static let implementer = AgentSubagentProfile(
@@ -452,7 +341,7 @@ nonisolated enum AgentSubagentProfileCatalog {
 
     static let smallImplementer = AgentSubagentProfile(
         id: smallImplementerID,
-        purpose: "Implement a low-risk task across at most three declared paths on the base someim-32b model; a verifier and independent reviewer gate delivery.",
+        purpose: "Implement a low-risk task across at most three declared paths on the configured standard tier; a verifier and independent reviewer gate delivery.",
         modelBinding: smallCodingBinding,
         toolNames: [
             "search_files", "grep_files", "list_directory", "read_file",
@@ -473,14 +362,9 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let tester = AgentSubagentProfile(
         id: testerID,
         purpose: "Run tests and gates, then report evidence: which commands ran, what passed or failed, with the failing output quoted. Never edits code.",
-        modelBinding: automaticProviderBinding,
+        modelBinding: cheapBinding,
         toolNames: AgentSubagentRunner.allowedToolNames,
-        capabilityPromptSection: """
-        Your trade is VERIFICATION. Run the relevant tests or gates and report what actually \
-        happened: the exact commands, their exit status, and the failing output quoted verbatim. \
-        Never repair what you find — a failure you fixed yourself is a failure nobody verified. \
-        If a gate cannot be run, say so and say why instead of inferring the result.
-        """,
+        capabilityPromptSection: AgentSubagentJobPrompts.tester,
         maxRounds: AgentSubagentRunner.maxRounds,
         toolPayloadCharacterLimit: 16_000,
         escalation: .none
@@ -492,14 +376,9 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let reviewer = AgentSubagentProfile(
         id: reviewerID,
         purpose: "Independent read-only review of a change: scope creep, version/CHANGELOG consistency, git hygiene. No shell, no edits.",
-        modelBinding: automaticProviderBinding,
+        modelBinding: deepBinding,
         toolNames: ["read_file", "list_directory", "grep_files", "search_files", "git_status"],
-        capabilityPromptSection: """
-        Your trade is REVIEW. Judge the change in front of you: does it stay inside its declared \
-        scope, are version and CHANGELOG consistent with the code, is anything half-landed. State \
-        an explicit verdict and the evidence for it (paths, line numbers). You did not write this \
-        change and you do not fix it — report what is wrong and let its author repair it.
-        """,
+        capabilityPromptSection: AgentSubagentJobPrompts.reviewer,
         maxRounds: 10,
         toolPayloadCharacterLimit: 16_000,
         escalation: .none
@@ -530,8 +409,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         maxRounds: 6,
         toolPayloadCharacterLimit: widePayloadCharacterLimit,
         escalation: .retryWithParentModel,
-        requiresWriteAccess: true,
-        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: testFixerID)
+        requiresWriteAccess: true
     )
 
     static let buildFixer = AgentSubagentProfile(
@@ -543,8 +421,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         maxRounds: 6,
         toolPayloadCharacterLimit: balancedPayloadCharacterLimit,
         escalation: .retryWithParentModel,
-        requiresWriteAccess: true,
-        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: buildFixerID)
+        requiresWriteAccess: true
     )
 
     /// Reads pre-processed log excerpts. No shell: whoever hands this trade
@@ -558,8 +435,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         capabilityPromptSection: AgentSubagentJobPrompts.logInspector,
         maxRounds: 6,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
-        escalation: .retryWithParentModel,
-        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: logInspectorID)
+        escalation: .retryWithParentModel
     )
 
     static let gitDetective = AgentSubagentProfile(
@@ -570,8 +446,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         capabilityPromptSection: AgentSubagentJobPrompts.gitDetective,
         maxRounds: 8,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
-        escalation: .retryWithParentModel,
-        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: gitDetectiveID)
+        escalation: .retryWithParentModel
     )
 
     /// Judgement trades: no tools at all. They answer a bounded question about
@@ -581,31 +456,29 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let securityGuard = AgentSubagentProfile(
         id: securityGuardID,
         purpose: "Decide whether one command is safe to run unattended. Answers with a verdict and one sentence of reason; has no tools and cannot run anything itself.",
-        modelBinding: cheapBinding,
+        modelBinding: .init(preferredProviderID: AgentProviderPreset.someIMID),
         toolNames: [],
         capabilityPromptSection: AgentSubagentJobPrompts.securityGuard,
         maxRounds: 1,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
-        escalation: .retryWithParentModel,
-        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: securityGuardID)
+        escalation: .retryWithParentModel
     )
 
     static let judge = AgentSubagentProfile(
         id: judgeID,
         purpose: "Return one bounded verdict about material you supply — a routing choice, a quality check, a classification. No tools; answers only from what it is given.",
-        modelBinding: cheapBinding,
+        modelBinding: .init(preferredProviderID: AgentProviderPreset.someIMID),
         toolNames: [],
         capabilityPromptSection: AgentSubagentJobPrompts.judge,
         maxRounds: 1,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
-        escalation: .retryWithParentModel,
-        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: judgeID)
+        escalation: .retryWithParentModel
     )
 
     static let opsRunner = AgentSubagentProfile(
         id: opsRunnerID,
         purpose: "Run operations queries directly; submit bounded modifying commands for smart review or exact human approval. Dangerous, credential-sensitive, rollback, and cleanup commands stay with the parent.",
-        modelBinding: cheapBinding,
+        modelBinding: implementerBinding,
         toolNames: [
             "run_command", "read_file", "grep_files", "list_directory",
             "terminal_list_tabs", "terminal_select_tab",
@@ -617,8 +490,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         // immediately after the decisive command returned.
         maxRounds: 32,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
-        escalation: .retryWithParentModel,
-        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: opsRunnerID)
+        escalation: .retryWithParentModel
     )
 
     static let terminalOperator = AgentSubagentProfile(
@@ -633,8 +505,7 @@ nonisolated enum AgentSubagentProfileCatalog {
         // 每条命令要「snapshot → send → snapshot」三步起，轮次给足。
         maxRounds: 32,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
-        escalation: .retryWithParentModel,
-        hostedVirtualModel: AgentSubagentJobPrompts.hostedModel(for: terminalOperatorID)
+        escalation: .retryWithParentModel
     )
 
     /// The catch-all trade: everything `deep` can read, on a model a size down
@@ -654,7 +525,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// `editor` and `implementer`, which declare their paths and hold a lock.
     static let generalist = AgentSubagentProfile(
         id: generalistID,
-        purpose: "General-purpose read-only work on a smaller, cheaper model than this session's: read files, search, run read-only shell commands, check git state, answer the question. Use it whenever no narrower trade fits and the job does not write.",
+        purpose: "Bounded investigation: locate files and symbols, read and summarize code or documents, analyze logs and git history, and answer with evidence. Read-only shell; no source edits. Model capability comes from the selected tier, not the role name.",
         modelBinding: generalistBinding,
         toolNames: AgentSubagentRunner.allowedToolNames,
         capabilityPromptSection: AgentSubagentJobPrompts.generalist,
@@ -690,12 +561,10 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// Model size is configured by the binding, not encoded as another trade.
     static let publicBuiltIn: [AgentSubagentProfile] = [
         generalist,
-        reader,
         implementer,
         tester,
+        reviewer,
         opsRunner,
-        judge,
-        deep,
     ]
 
     static let publicIDs = Set(publicBuiltIn.map(\.id))
@@ -710,20 +579,16 @@ nonisolated enum AgentSubagentProfileCatalog {
     static func publicID(for rawID: String) -> String {
         let id = rawID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         switch id {
-        case scoutID, readerID, logInspectorID, gitDetectiveID:
-            return readerID
+        case scoutID, readerID, logInspectorID, gitDetectiveID, deepID, generalistID:
+            return generalistID
         case editorID, smallImplementerID, implementerID, testFixerID, buildFixerID:
             return implementerID
-        case testerID, reviewerID, smallReviewerID:
+        case testerID:
             return testerID
+        case reviewerID, smallReviewerID, securityGuardID, judgeID:
+            return reviewerID
         case opsRunnerID, terminalOperatorID:
             return opsRunnerID
-        case securityGuardID, judgeID:
-            return judgeID
-        case deepID:
-            return deepID
-        case generalistID:
-            return generalistID
         default:
             return id
         }

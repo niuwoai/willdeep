@@ -24,8 +24,8 @@ import SwiftUI
 /// a Worker whose colour changed between runs would be worse than no colour.
 ///
 /// Keyed on the *public* trade, not the raw profile id. The catalog carries
-/// eighteen internal trades but shows seven: `publicID(for:)` folds `scout`,
-/// `log_inspector` and `git_detective` all into `reader`. Colouring the raw
+/// eighteen internal trades but shows five: `publicID(for:)` folds `scout`,
+/// `log_inspector` and `git_detective` all into `generalist`. Colouring the raw
 /// id would paint two runs that both say "阅读者" in different colours, which
 /// is worse than not colouring them at all.
 ///
@@ -42,12 +42,10 @@ nonisolated enum AgentSubagentTradePalette {
     ]
 
     private static let publicColors: [String: Color] = [
-        AgentSubagentProfileCatalog.readerID: .blue,
         AgentSubagentProfileCatalog.implementerID: .purple,
         AgentSubagentProfileCatalog.testerID: .green,
+        AgentSubagentProfileCatalog.reviewerID: .pink,
         AgentSubagentProfileCatalog.opsRunnerID: .orange,
-        AgentSubagentProfileCatalog.judgeID: .pink,
-        AgentSubagentProfileCatalog.deepID: .teal,
         AgentSubagentProfileCatalog.generalistID: .indigo,
     ]
 

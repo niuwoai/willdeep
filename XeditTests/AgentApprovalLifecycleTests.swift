@@ -1,0 +1,177 @@
+import Foundation
+import Testing
+@testable import WillDeep
+
+@Suite("审批生命周期", .serialized)
+@MainActor
+struct AgentApprovalLifecycleTests {
+    private func call(status: AgentToolCallStatus = .pendingApproval) -> AgentToolCall {
+        AgentToolCall(
+            messageID: UUID(), externalID: UUID().uuidString,
+            toolName: "terminal_send_command", arguments: ["command": .string("pwd")],
+            risk: .write, status: status, approvalSource: nil
+        )
+    }
+
+    private func waitForRegistration(_ id: UUID, runtime: AgentRuntime) async throws {
+        for _ in 0..<1_000 {
+            if runtime.toolDecisionWaiters[id] != nil { return }
+            await Task.yield()
+        }
+        try #require(runtime.toolDecisionWaiters[id] != nil)
+    }
+
+    private func approved(_ decision: AgentToolDecision) -> Bool {
+        if case .approved = decision { return true }
+        return false
+    }
+
+    @Test("同会话两个审批互不覆盖，终端确认仅消费自己的等待且不能重复批准")
+    func overlappingApprovals() async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        let first = call(), second = call()
+        runtime.toolCalls = [first, second]
+        defer { runtime.cancelToolDecisions(reason: "Test cleanup") }
+        let one = Task { await app.awaitToolDecision(for: runtime, forCallID: first.id) }
+        let two = Task { await app.awaitToolDecision(for: runtime, forCallID: second.id) }
+        try await waitForRegistration(first.id, runtime: runtime)
+        try await waitForRegistration(second.id, runtime: runtime)
+        app.approveAgentToolCall(id: first.id)
+        #expect(approved(await one.value))
+        app.approveAgentToolCall(id: first.id)
+        #expect(runtime.toolDecisionWaiters[second.id] != nil)
+        #expect(runtime.toolCalls[1].status == .pendingApproval)
+        app.approveAgentToolCall(id: second.id)
+        #expect(approved(await two.value))
+        #expect(runtime.toolDecisionWaiters.isEmpty)
+    }
+
+    @Test("发送新消息时关闭全部审批与排队卡，不留下侧栏等待徽标")
+    func closeAllApprovals() async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        let first = call(), second = call(status: .awaitingConfirm)
+        var queued = call(status: .running)
+        queued.arguments[AgentSerialToolApprovalQueue.argumentKey] = .bool(true)
+        runtime.toolCalls = [first, second, queued]
+        defer { runtime.cancelToolDecisions(reason: "Test cleanup") }
+        let one = Task { await app.awaitToolDecision(for: runtime, forCallID: first.id) }
+        let two = Task { await app.awaitToolDecision(for: runtime, forCallID: second.id) }
+        try await waitForRegistration(first.id, runtime: runtime)
+        try await waitForRegistration(second.id, runtime: runtime)
+        #expect(app.closeBlockingAgentToolDecision(for: runtime, reason: "New message sent"))
+        #expect(!approved(await one.value))
+        #expect(!approved(await two.value))
+        #expect(runtime.toolCalls.allSatisfy { $0.status == .denied })
+        #expect(!runtime.toolCalls.contains(where: AgentSerialToolApprovalQueue.contains))
+        #expect(!AgentSessionApprovalBadgeLogic.needsUserApproval(
+            session: session, toolCallStatuses: runtime.toolCalls.map(\.status)
+        ))
+        #expect(runtime.toolDecisionWaiters.isEmpty)
+    }
+
+    @Test("取消一个审批只清理该卡，不影响另一个等待")
+    func cancellationIsScoped() async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        let first = call(), second = call()
+        runtime.toolCalls = [first, second]
+        defer { runtime.cancelToolDecisions(reason: "Test cleanup") }
+        let one = Task { await app.awaitToolDecision(for: runtime, forCallID: first.id) }
+        let two = Task { await app.awaitToolDecision(for: runtime, forCallID: second.id) }
+        try await waitForRegistration(first.id, runtime: runtime)
+        try await waitForRegistration(second.id, runtime: runtime)
+        one.cancel()
+        #expect(!approved(await one.value))
+        #expect(runtime.toolCalls[0].status == .denied)
+        #expect(runtime.toolDecisionWaiters[second.id] != nil)
+        app.approveAgentToolCall(id: second.id)
+        #expect(approved(await two.value))
+    }
+
+    @Test("注册前已取消也会结束待确认状态")
+    func cancellationBeforeRegistration() async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        let pending = call()
+        runtime.toolCalls = [pending]
+        let task = Task { await app.awaitToolDecision(for: runtime, forCallID: pending.id) }
+        task.cancel()
+        #expect(!approved(await task.value))
+        #expect(runtime.toolCalls[0].status == .denied)
+        #expect(runtime.toolDecisionWaiters.isEmpty)
+    }
+
+    @Test("过期取消令牌不能关闭新注册的审批")
+    func staleCancellation() async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        let pending = call()
+        runtime.toolCalls = [pending]
+        defer { runtime.cancelToolDecisions(reason: "Test cleanup") }
+        let task = Task { await app.awaitToolDecision(for: runtime, forCallID: pending.id) }
+        try await waitForRegistration(pending.id, runtime: runtime)
+        runtime.cancelToolDecision(id: pending.id, token: UUID(), reason: "Old task")
+        #expect(runtime.toolDecisionWaiters[pending.id] != nil)
+        app.approveAgentToolCall(id: pending.id)
+        #expect(approved(await task.value))
+    }
+
+    @Test("重复注册不覆盖原来的审批")
+    func duplicateRegistration() async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        let pending = call()
+        runtime.toolCalls = [pending]
+        defer { runtime.cancelToolDecisions(reason: "Test cleanup") }
+        let task = Task { await app.awaitToolDecision(for: runtime, forCallID: pending.id) }
+        try await waitForRegistration(pending.id, runtime: runtime)
+        let originalToken = runtime.toolDecisionWaiters[pending.id]?.token
+        #expect(!approved(await app.awaitToolDecision(for: runtime, forCallID: pending.id)))
+        #expect(runtime.toolDecisionWaiters[pending.id]?.token == originalToken)
+        app.approveAgentToolCall(id: pending.id)
+        #expect(approved(await task.value))
+    }
+
+    @Test("缺失或已完成的卡片不被当作自动批准", arguments: [AgentToolCallStatus.succeeded, .failed, .denied, .running])
+    func settledApprovalIsRejected(status: AgentToolCallStatus) async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        let settled = call(status: status)
+        runtime.toolCalls = [settled]
+        #expect(!approved(await app.awaitToolDecision(for: runtime, forCallID: settled.id)))
+        #expect(!approved(await app.awaitToolDecision(for: runtime, forCallID: UUID())))
+        #expect(runtime.toolDecisionWaiters.isEmpty)
+    }
+
+    @Test("插入用户消息后未决审批仍可交互，已完成旧工具不重新出现", arguments: [true, false])
+    func approvalSurvivesNewMessage(isResponding: Bool) throws {
+        let pending = call(), settled = call(status: .succeeded)
+        let messages = [
+            AgentMessage(role: .user, content: "Inspect workspace"),
+            AgentMessage(id: settled.messageID, role: .assistant, content: "Done"),
+            AgentMessage(id: pending.messageID, role: .assistant, content: "Confirm command"),
+            AgentMessage(role: .user, content: "One more detail")
+        ]
+        let presentation = try #require(AgentActiveTurnToolCallPresentation.make(
+            messages: messages, toolCalls: [settled, pending], isResponding: isResponding
+        ))
+        #expect(presentation.calls.map(\.id) == [pending.id])
+        #expect(presentation.anchorMessageID == pending.messageID)
+    }
+}
