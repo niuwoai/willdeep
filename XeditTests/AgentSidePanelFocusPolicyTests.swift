@@ -90,7 +90,7 @@ struct AgentSidePanelFocusPolicyTests {
         let panelSource = try Self.source(named: "AgentSidePanel.swift")
 
         #expect(modeSource.contains("request.kind == .backgroundTasks"))
-        #expect(modeSource.contains("appState.agentSidePanelKind = request.kind"))
+        #expect(modeSource.contains("appState.openPanelTab(request.kind"))
         #expect(!modeSource.contains("guard request.kind != .backgroundTasks else"))
         #expect(!modeSource.contains("newPanel == .backgroundTasks ? nil : newPanel"))
         #expect(panelSource.contains("AgentBackgroundTasksPanel(width: layoutWidth)"))

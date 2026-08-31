@@ -101,6 +101,10 @@ extension AgentShortDramaPanel {
 
 private struct AgentShortDramaReferenceTile: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     let path: String
     let asset: ShortDramaAssetSummary
 
@@ -214,14 +218,14 @@ private struct AgentShortDramaReferenceTile: View {
 
     private func openImageEditor(operation: AgentImageEditorOperationPreference) {
         guard isImage else { return }
-        appState.agentImageEditorPreferredOperation = operation
-        appState.agentImageEditorContext = AgentImageEditorContext(
+        panelScope.imageOperation = operation
+        panelScope.imageContext = AgentImageEditorContext(
             projectID: asset.projectID.uuidString,
             assetKind: asset.assetKind,
             assetID: asset.id.uuidString
         )
-        appState.agentImageEditorImageURL = fileURL
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .imageEditor)
+        panelScope.imageURL = fileURL
+        panelScope.request = AgentSidePanelOpenRequest(kind: .imageEditor)
     }
 
     private func submitReplicateUpscale() {
@@ -250,7 +254,7 @@ private struct AgentShortDramaReferenceTile: View {
                     statusURL: prediction.urls?.get,
                     cancelURL: prediction.urls?.cancel,
                     sourceImagePath: fileURL.path,
-                    runtimeID: appState.activeRuntime?.id,
+                    runtimeID: panelScope.runtime?.id,
                     projectID: asset.projectID.uuidString,
                     assetKind: asset.assetKind,
                     assetID: asset.id.uuidString,
@@ -260,7 +264,7 @@ private struct AgentShortDramaReferenceTile: View {
                 if !artifacts.isEmpty {
                     appState.agentMediaTaskRegistry.update(id: task.id, progress: 1, artifacts: artifacts)
                 }
-                appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
+                panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks)
             } catch {
                 NSSound.beep()
             }

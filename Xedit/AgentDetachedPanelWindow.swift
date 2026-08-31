@@ -1,183 +1,200 @@
-//
-//  AgentDetachedPanelWindow.swift
-//  WillDeep
-//
-//  1.202.0-rc1：侧边栏面板「分离成独立窗口」。点面板头部的分离按钮，
-//  面板从侧栏搬进一个独立的 WindowGroup 窗口；窗口头部提供「放回
-//  侧栏」。核心不变量：**同一种面板任何时刻只挂载在一处**（侧栏或
-//  窗口），因为终端的 SwiftTerm NSView / 内嵌浏览器的 WKWebView 都是
-//  model 层单实例，双宿主会互相抢 superview。
-//
-//  归位规则：侧栏重新选中某 kind 时（菜单、chat 文件 chip 的
-//  OpenRequest 都会走 agentSidePanelKind），对应分离窗口观察到后自行
-//  dismiss —— 内容自然回到侧栏，无需额外协调。
-//
-
-import SwiftUI
 import AppKit
 import Combine
+import SwiftUI
 
-/// 记录当前哪些面板种类已被分离到独立窗口（计数式：Files 窗口内部
-/// 跳到 Diff 时可能与另一个 Diff 窗口短暂同 kind）。侧栏据此：
-/// 1. 让出终端的常驻挂载（见 `AgentSidePanelHost.shouldKeepTerminalMounted`）；
-/// 2. 资源回收 reaper 豁免分离中的面板 —— 分离窗口不更新任何 session
-///    的 `lastViewedAt`，不豁免的话用户盯着看的终端 tab 会被回收。
+/// Moving a retained hosting view preserves SwiftUI state and native views.
 @MainActor
 final class AgentDetachedPanelRegistry: ObservableObject {
     static let shared = AgentDetachedPanelRegistry()
+    @Published private(set) var windows: [AgentPanelTabID: AgentPanelWindowController] = [:]
+    private var surfaces: [AgentPanelTabID: NSHostingView<AgentPanelTabContent>] = [:]
+    // The app-wide terminal controller has exactly one hosting surface.
+    private var terminalSurface: NSHostingView<AgentPanelTabContent>?
 
-    @Published private(set) var counts: [AgentSidePanelKind: Int] = [:]
+    func isDetached(_ kind: AgentSidePanelKind) -> Bool { windows.values.contains { $0.kind == kind } }
+    func isDetached(_ id: AgentPanelTabID, kind: AgentSidePanelKind) -> Bool { window(for: id, kind: kind) != nil }
+    func hasWindow(sessionID: UUID) -> Bool { windows.keys.contains { $0.sessionID == sessionID } }
 
-    func register(_ kind: AgentSidePanelKind) {
-        counts[kind, default: 0] += 1
+    private func window(for id: AgentPanelTabID, kind: AgentSidePanelKind) -> AgentPanelWindowController? {
+        windows[id] ?? (kind == .terminal ? windows.values.first { $0.kind == .terminal } : nil)
     }
 
-    func unregister(_ kind: AgentSidePanelKind) {
-        guard let current = counts[kind] else { return }
-        if current <= 1 {
-            counts.removeValue(forKey: kind)
-        } else {
-            counts[kind] = current - 1
+    @discardableResult
+    func focus(_ id: AgentPanelTabID, kind: AgentSidePanelKind) -> Bool {
+        guard let controller = window(for: id, kind: kind) else { return false }
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        return true
+    }
+
+    func surface(for id: AgentPanelTabID, appState: AppState, runtime: AgentRuntime,
+                 kind: AgentSidePanelKind) -> NSView {
+        let root = AgentPanelTabContent(appState: appState, runtime: runtime, tabID: id.tabID)
+        if kind == .terminal {
+            if let terminalSurface { terminalSurface.rootView = root; return terminalSurface }
+            let view = NSHostingView(rootView: root)
+            terminalSurface = view
+            return view
+        }
+        if let view = surfaces[id] { return view }
+        let view = NSHostingView(rootView: root)
+        surfaces[id] = view
+        return view
+    }
+
+    func detach(_ id: AgentPanelTabID, appState: AppState) {
+        guard let runtime = appState.loadedRuntime(for: id.sessionID),
+              let tab = runtime.sidePanelState.openTabs.first(where: { $0.id == id.tabID }) else { return }
+        if focus(id, kind: tab.kind) { return }
+        let content = surface(for: id, appState: appState, runtime: runtime, kind: tab.kind)
+        content.removeFromSuperview()
+        let controller = AgentPanelWindowController(id: id, tab: tab, appState: appState,
+                                                    runtime: runtime, content: content, registry: self)
+        windows[id] = controller
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+    }
+
+    func reattach(_ id: AgentPanelTabID, appState: AppState, reveal: Bool = true) {
+        // A Terminal tab in another session can refer to the same app-wide
+        // terminal window. Returning it must not become a silent no-op.
+        if windows[id] == nil,
+           appState.loadedRuntime(for: id.sessionID)?.sidePanelState.openTabs.first(where: { $0.id == id.tabID })?.kind == .terminal,
+           let sharedID = windows.first(where: { $0.value.kind == .terminal })?.key {
+            reattach(sharedID, appState: appState, reveal: false)
+            if let owner = appState.loadedRuntime(for: id.sessionID) {
+                appState.updatePanelTabs(runtime: owner) { $0.selectTab(id.tabID) }
+            }
+            if reveal { _ = appState.selectAndRevealAgentSessionInSidebar(id: id.sessionID) }
+            return
+        }
+        guard let controller = windows.removeValue(forKey: id) else { return }
+        controller.panelContent.removeFromSuperview()
+        controller.close()
+        guard let runtime = appState.loadedRuntime(for: id.sessionID) else { return }
+        appState.updatePanelTabs(runtime: runtime) { $0.selectTab(id.tabID) }
+        if reveal { _ = appState.selectAndRevealAgentSessionInSidebar(id: id.sessionID) }
+    }
+
+    func reattachAll(sessionID: UUID, appState: AppState) {
+        for id in Array(windows.keys).filter({ $0.sessionID == sessionID }) {
+            reattach(id, appState: appState, reveal: false)
+        }
+        if let terminal = appState.loadedRuntime(for: sessionID)?.sidePanelState.openTabs.first(where: { $0.kind == .terminal }) {
+            reattach(.init(sessionID: sessionID, tabID: terminal.id), appState: appState, reveal: false)
         }
     }
 
-    func isDetached(_ kind: AgentSidePanelKind) -> Bool {
-        (counts[kind] ?? 0) > 0
+    func windowClosed(_ id: AgentPanelTabID) {
+        // Closing the native window returns its tab. Stopping a process is
+        // still an explicit action inside the terminal or task manager.
+        windows[id]?.panelContent.removeFromSuperview()
+        windows.removeValue(forKey: id)
+    }
+
+    func closeTab(_ id: AgentPanelTabID) {
+        if let controller = windows.removeValue(forKey: id) {
+            controller.panelContent.removeFromSuperview()
+            controller.close()
+        }
+        surfaces.removeValue(forKey: id)?.removeFromSuperview()
+    }
+
+    func releaseSession(_ sessionID: UUID) {
+        let ids = Set(surfaces.keys.filter { $0.sessionID == sessionID })
+            .union(windows.keys.filter { $0.sessionID == sessionID })
+        for id in ids { closeTab(id) }
+        if terminalSurface?.rootView.runtime.id == sessionID {
+            terminalSurface?.removeFromSuperview()
+            terminalSurface = nil
+        }
     }
 }
 
-/// WindowGroup(for: AgentSidePanelKind.self) 的根视图。照
-/// AgentWindowRootView 的既有约定：不自建
-/// AppState，从 EditorAppStateRegistry.shared.current 取当前的注入，
-/// AppState 切换时整棵重建（`.id(ObjectIdentifier(appState))`）。
-struct AgentDetachedPanelRootView: View {
-    @ObservedObject private var registry = EditorAppStateRegistry.shared
-    @Binding var kind: AgentSidePanelKind?
+@MainActor
+final class AgentPanelWindowController: NSWindowController, NSWindowDelegate {
+    let id: AgentPanelTabID
+    let kind: AgentSidePanelKind
+    let panelContent: NSView
+    private weak var registry: AgentDetachedPanelRegistry?
 
-    var body: some View {
-        Group {
-            if let appState = registry.current, let kind {
-                AgentDetachedPanelContentView(initialKind: kind)
-                    .environmentObject(appState)
-                    .tint(appState.editorSettings.interfaceSkin.palette.accent)
-                    .preferredColorScheme(appState.editorSettings.interfaceSkin.preferredColorScheme)
-                    .id(ObjectIdentifier(appState))
-            } else {
-                Color.clear.onAppear {
-                    EditorAppStateRegistry.shared.ensureHeadlessFallback()
-                }
-            }
-        }
-        .frame(minWidth: 360, minHeight: 320)
+    init(id: AgentPanelTabID, tab: AgentPanelTab, appState: AppState, runtime: AgentRuntime,
+         content: NSView, registry: AgentDetachedPanelRegistry) {
+        self.id = id
+        kind = tab.kind
+        panelContent = content
+        self.registry = registry
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 620),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              backing: .buffered, defer: false)
+        super.init(window: window)
+        window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 360, height: 320)
+        window.title = [tab.title, runtime.workspaceRootPath.map { URL(fileURLWithPath: $0).lastPathComponent }]
+            .compactMap { $0 }.joined(separator: " · ")
+        window.identifier = NSUserInterfaceItemIdentifier("agent-panel-\(id.tabID)")
+        window.delegate = self
+        let root = NSView()
+        let header = NSHostingView(rootView: AgentPanelWindowHeader(appState: appState, runtime: runtime, id: id))
+        window.contentView = root
+        for child in [header, content] { child.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(child) }
+        NSLayoutConstraint.activate([
+            header.leadingAnchor.constraint(equalTo: root.leadingAnchor), header.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            header.topAnchor.constraint(equalTo: root.topAnchor), header.heightAnchor.constraint(equalToConstant: 44),
+            content.leadingAnchor.constraint(equalTo: root.leadingAnchor), content.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            content.topAnchor.constraint(equalTo: header.bottomAnchor), content.bottomAnchor.constraint(equalTo: root.bottomAnchor)
+        ])
+        window.center()
     }
+
+    required init?(coder: NSCoder) { nil }
+    func windowWillClose(_ notification: Notification) { registry?.windowClosed(id) }
 }
 
-private struct AgentDetachedPanelContentView: View {
-    @EnvironmentObject private var appState: AppState
-    @Environment(\.dismiss) private var dismiss
-    let initialKind: AgentSidePanelKind
-    /// 窗口内允许面板自身跳转（如 Files → 查看某文件的 Diff），所以
-    /// 真正展示的 kind 是本地 state；nil = 面板自己请求关闭 → 关窗口。
-    /// 在 init 里初始化而不是 onAppear 赋值 —— 后者会让 onChange 把
-    /// 首次赋值当成一次跳转、向 registry 重复注册。
-    @State private var kind: AgentSidePanelKind?
-
-    init(initialKind: AgentSidePanelKind) {
-        self.initialKind = initialKind
-        _kind = State(initialValue: initialKind)
-    }
-
-    private var displayedKind: AgentSidePanelKind { kind ?? initialKind }
-
-    /// Files / Preview 的选中文件与侧栏共享同一份 per-session 状态，
-    /// 分离/归位来回切时选中不丢。
-    private var selectedFileBinding: Binding<URL?> {
-        Binding(
-            get: { appState.agentSidePanelSelectedFile },
-            set: { appState.agentSidePanelSelectedFile = $0 }
-        )
-    }
+private struct AgentPanelWindowHeader: View {
+    @ObservedObject var appState: AppState
+    @ObservedObject var runtime: AgentRuntime
+    let id: AgentPanelTabID
 
     var body: some View {
-        let palette = appState.editorSettings.interfaceSkin.palette
-        GeometryReader { proxy in
-            VStack(spacing: 0) {
-                header
-                Rectangle().fill(palette.hairline).frame(height: 1)
-                AgentSidePanelKindContent(
-                    kind: displayedKind,
-                    kindSelection: $kind,
-                    selectedFile: selectedFileBinding,
-                    layoutWidth: proxy.size.width
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .background(palette.panelFill)
-        .focusable(false)
-        .navigationTitle(displayedKind.title)
-        .onAppear {
-            AgentDetachedPanelRegistry.shared.register(displayedKind)
-        }
-        .onDisappear {
-            AgentDetachedPanelRegistry.shared.unregister(displayedKind)
-        }
-        .onCompatibleChange(of: kind) { oldKind, newKind in
-            guard oldKind != newKind else { return }
-            if let oldKind {
-                AgentDetachedPanelRegistry.shared.unregister(oldKind)
-            }
-            if let newKind {
-                AgentDetachedPanelRegistry.shared.register(newKind)
-            } else {
-                // 面板自己把 kind 清空（语义上等于「关闭面板」）→ 关窗口。
-                // onDisappear 不再有已注册的 kind 需要退，注册数在上面
-                // 的 unregister 已归零。
-                dismiss()
-            }
-        }
-        // 侧栏重新打开同一种面板 → 本窗口让位归位。覆盖两条路径：
-        // 用户在 AgentChatHeader 菜单里点选，或 chat 里的文件 chip /
-        // OpenRequest 把面板拉起来。
-        .onCompatibleChange(of: appState.agentSidePanelKind) { _, sidebarKind in
-            guard let sidebarKind, sidebarKind == displayedKind else { return }
-            dismiss()
-        }
-    }
-
-    private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: displayedKind.systemImage)
-                .foregroundStyle(.secondary)
-            Text(displayedKind.title)
-                .font(AgentDesign.titleFont)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: 0)
-            Button {
-                reattach()
-            } label: {
-                Image(systemName: "sidebar.trailing")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.primary.opacity(0.78))
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
+            if let tab = runtime.sidePanelState.openTabs.first(where: { $0.id == id.tabID }) {
+                Label(tab.title, systemImage: tab.systemImage)
+                    .lineLimit(1)
+                    .overlay { AgentPanelTabDragHandle(id: id, title: tab.title, onClick: {}, onDetach: {}) }
             }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .layoutPriority(1)
-            .help(L10n.AgentSidePanel.reattach)
+            Spacer(minLength: 8)
+            Button(L10n.PanelTabs.returnToDock) { AgentDetachedPanelRegistry.shared.reattach(id, appState: appState) }
+                .controlSize(.small).focusable(false)
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 12)
-        .frame(height: AgentDesign.headerHeight)
+        .font(.system(size: 12))
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(appState.editorSettings.interfaceSkin.palette.panelFill)
     }
+}
 
-    /// 放回侧栏：把侧栏的当前面板切到本窗口的 kind，再关窗口。关窗
-    /// 顺序不依赖 onChange 竞态 —— 即便 agentSidePanelKind 的 onChange
-    /// 也触发 dismiss，重复 dismiss 无副作用。
-    private func reattach() {
-        appState.agentSidePanelKind = displayedKind
-        dismiss()
+struct AgentPanelDockSurface: NSViewRepresentable {
+    let id: AgentPanelTabID
+    let kind: AgentSidePanelKind
+    let appState: AppState
+    let runtime: AgentRuntime
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+    func updateNSView(_ container: NSView, context: Context) {
+        let registry = AgentDetachedPanelRegistry.shared
+        guard !registry.isDetached(id, kind: kind) else {
+            container.subviews.forEach { $0.removeFromSuperview() }
+            return
+        }
+        let content = registry.surface(for: id, appState: appState, runtime: runtime, kind: kind)
+        guard content.superview !== container else { return }
+        container.subviews.forEach { $0.removeFromSuperview() }
+        content.removeFromSuperview()
+        content.translatesAutoresizingMaskIntoConstraints = true
+        content.frame = container.bounds
+        content.autoresizingMask = [.width, .height]
+        container.addSubview(content)
     }
 }

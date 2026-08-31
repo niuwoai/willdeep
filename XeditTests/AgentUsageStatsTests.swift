@@ -382,12 +382,40 @@ extension WillDeepTests {
         let rows = AgentUsageStats.subagentUsage(for: snapshots)
         let model = AgentUsageStats.dashboardModel(for: snapshots)
 
-        #expect(rows.first { $0.profileID == "scout" } == nil)
-        #expect(rows.first { $0.profileID == "reader" }?.invocationCount == 4)
-        #expect(rows.first { $0.profileID == "reader" }?.sessionCount == 2)
-        #expect(rows.first { $0.profileID == "deep" }?.invocationCount == 2)
-        #expect(rows.first { $0.profileID == "deep" }?.sessionCount == 1)
+        // Execution keeps legacy IDs, while presentation folds them into
+        // the five public responsibilities without losing calls or sessions.
+        #expect(snapshots[0].messages[0].subagentProfileIDs == ["scout", "scout", "deep", "deep"])
+        #expect(snapshots[1].messages[0].subagentProfileIDs == ["scout", "reader"])
+        #expect(rows.map(\.profileID) == ["generalist"])
+        #expect(rows.first?.invocationCount == 6)
+        #expect(rows.first?.sessionCount == 2)
         #expect(model.subagentSessionCount == 2)
+    }
+
+    @Test("AgentUsageStats keeps all five responsibilities and folds only their legacy aliases")
+    func testUsageStatsPreservesFivePublicResponsibilities() {
+        let groups: [(id: String, aliases: [String])] = [
+            ("generalist", ["generalist", "reader", "git_detective"]),
+            ("implementer", ["implementer", "editor", "test_fixer"]),
+            ("tester", ["tester", "TESTER", " tester "]),
+            ("reviewer", ["reviewer", "security_guard", "judge"]),
+            ("ops_runner", ["ops_runner", "terminal_operator", "OPS_RUNNER"]),
+        ]
+        let sessions = groups.map { group in
+            makeSession(modelID: "gpt-5", messages: [
+                AgentMessage(role: .assistant, content: "", toolCalls: group.aliases.enumerated().map { index, profile in
+                    AgentMessageToolCall(externalID: "\(group.id)-\(index)", toolName: "spawn_agent",
+                                         argumentsJSON: #"{"profile":"\#(profile)","prompt":"work"}"#)
+                })
+            ])
+        }
+        let rows = AgentUsageStats.subagentUsage(for: sessions)
+        #expect(Set(rows.map(\.profileID)) == Set(groups.map(\.id)))
+        for group in groups {
+            let row = rows.first { $0.profileID == group.id }
+            #expect(row?.invocationCount == group.aliases.count)
+            #expect(row?.sessionCount == 1)
+        }
     }
 
     @Test("AgentUsageStats current streak counts contiguous days ending today")

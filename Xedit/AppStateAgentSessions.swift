@@ -2260,10 +2260,12 @@ extension AppState {
 
         guard idle.count > maximumIdleRuntimes else { return }
         for runtime in idle.dropFirst(maximumIdleRuntimes) {
+            guard !AgentDetachedPanelRegistry.shared.hasWindow(sessionID: runtime.id) else { continue }
             persistAgentSession(runtime: runtime)
             cancelAllWorkflows(for: runtime)
             agentSubagentRegistry.cancelAll(forParentRuntime: runtime.id)
             cancelAgentKnowledgeFolderWatchers(sessionID: runtime.id)
+            AgentDetachedPanelRegistry.shared.releaseSession(runtime.id)
             AgentEmbeddedBrowserController.release(for: runtime.id)
             agentRuntimes.removeValue(forKey: runtime.id)
         }
@@ -2271,6 +2273,7 @@ extension AppState {
 
     @discardableResult
     func deleteAgentSession(id: AgentSession.ID, removeFromStore: Bool = true) -> Bool {
+        AgentDetachedPanelRegistry.shared.releaseSession(id)
         let persistedImages = agentRuntimes[id]?.messages.flatMap(\.images)
             ?? AgentSessionStore.load(id: id)?.messages.flatMap(\.images)
             ?? []

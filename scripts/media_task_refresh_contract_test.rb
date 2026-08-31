@@ -83,7 +83,8 @@ add_check.call(
     runtime_source + loop_source + refresh_source,
     [
       "@Published var latestMediaTaskRefresh: AgentMediaTaskRefreshContext?",
-      "func recordAgentMediaTaskRefresh(reason: String, scopeLabel: String, tasks: [AgentMediaTask])",
+      "func recordAgentMediaTaskRefresh(reason: String, scopeLabel: String, tasks: [AgentMediaTask], runtime: AgentRuntime? = nil)",
+      "(runtime ?? activeRuntime)?.latestMediaTaskRefresh",
       "if let latestMediaTaskRefresh = runtime.latestMediaTaskRefresh",
       "latestMediaTaskRefresh.systemPromptBlock"
     ]

@@ -33,13 +33,7 @@ struct WillDeepApp: App {
             AgentOnlyCommands()
         }
 
-        // 侧边栏面板分离出的独立窗口:payload 即面板 kind,同 kind 去重
-        // (openWindow(value:) 对相同值聚焦既有窗口)。内容与侧栏面板
-        // 完全同源,详见 AgentDetachedPanelWindow.swift。
-        WindowGroup(for: AgentSidePanelKind.self) { $kind in
-            AgentDetachedPanelRootView(kind: $kind)
-        }
-        .defaultSize(width: 560, height: 640)
+        // Detached panels use retained AppKit hosts (AgentDetachedPanelRegistry).
 
         WindowGroup(for: TerminalShortcutEditorRequest.self) { $request in
             TerminalShortcutEditorWindowRoot(request: $request)

@@ -306,10 +306,8 @@ extension AppState {
         get { activeRuntime?.sidePanelState.kind }
         set {
             updateActiveSidePanelState { state in
-                state.kind = newValue
-                if newValue != nil {
-                    state.lastViewedAt = Date()
-                }
+                if let newValue { state.openTab(kind: newValue) }
+                else { state.kind = nil }
             }
         }
     }
@@ -324,6 +322,7 @@ extension AppState {
         set {
             updateActiveSidePanelState { state in
                 state.selectedFilePath = newValue?.standardizedFileURL.path
+                if let id = state.selectedTab?.id { state.updateTabFile(newValue, tabID: id) }
             }
         }
     }
@@ -400,6 +399,7 @@ extension AppState {
 
         for runtime in agentRuntimes.values {
             guard runtime.id != activeID,
+                  !AgentDetachedPanelRegistry.shared.hasWindow(sessionID: runtime.id),
                   shouldReapSidePanelResources(state: runtime.sidePanelState, now: now, timeout: timeout) else {
                 continue
             }
@@ -413,6 +413,7 @@ extension AppState {
 
         for index in agentSessions.indices {
             guard agentSessions[index].id != activeID,
+                  !AgentDetachedPanelRegistry.shared.hasWindow(sessionID: agentSessions[index].id),
                   shouldReapSidePanelResources(state: agentSessions[index].sidePanelState, now: now, timeout: timeout) else {
                 continue
             }
@@ -439,7 +440,8 @@ extension AppState {
     private func releaseSidePanelResources(for sessionID: AgentSession.ID, kind: AgentSidePanelKind?) {
         // 分离到独立窗口的面板可能正被用户盯着看,且分离窗口不更新任何
         // session 的 lastViewedAt —— 一律豁免,窗口关闭后下轮 reap 再收。
-        if let kind, AgentDetachedPanelRegistry.shared.isDetached(kind) {
+        let registry = AgentDetachedPanelRegistry.shared
+        if registry.hasWindow(sessionID: sessionID) || (kind == .terminal && registry.isDetached(.terminal)) {
             return
         }
         switch kind {

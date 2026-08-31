@@ -12,6 +12,10 @@ import Combine
 
 struct AgentDevServerPanel: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     var width: CGFloat = 320
 
     @State private var logPath: String = ""
@@ -201,7 +205,7 @@ struct AgentDevServerPanel: View {
                 }
                 .buttonStyle(.borderless)
                 .focusable(false)
-                .disabled(logPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || appState.activeRuntime?.id == nil)
+                .disabled(logPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || panelScope.runtime?.id == nil)
 
                 Button {
                     appendPrompt("请根据当前前端/后端 dev server 输出，判断应该 tail -f 哪个日志文件；如果有明确日志文件，请直接启动 tail -f；如果没有日志文件，就用 get_job_output 读取后台任务输出。")
@@ -240,7 +244,7 @@ struct AgentDevServerPanel: View {
                         DevServerJobCard(
                             job: job,
                             output: appState.agentJobRegistry.output(id: job.id, tailLines: 60),
-                            inspect: { appState.prefillAgentJobInspectionPrompt(for: job) },
+                            inspect: { panelScope.inspectJob(job) },
                             restart: { restart(job) },
                             kill: { _ = appState.agentJobRegistry.kill(id: job.id) }
                         )
@@ -251,7 +255,7 @@ struct AgentDevServerPanel: View {
     }
 
     private var workspaceRootURL: URL? {
-        AgentWorkspaceDevServerSupport.workspaceRootURL(from: appState)
+        panelScope.workspaceRoot
     }
 
     private var devJobs: [AgentBackgroundJob] {
@@ -329,13 +333,13 @@ struct AgentDevServerPanel: View {
     private func openPreview() {
         guard let previewURL else { return }
         let controller = AgentEmbeddedBrowserController.controller(
-            for: appState.activeRuntime?.id
+            for: panelScope.runtime?.id
         )
         controller.address = previewURL.absoluteString
         if controller.isReady {
             try? controller.navigate(to: previewURL.absoluteString)
         }
-        appState.agentSidePanelKind = .embeddedBrowser
+        panelScope.kind = .embeddedBrowser
     }
 
     private func restartAllServers() {
@@ -352,7 +356,7 @@ struct AgentDevServerPanel: View {
         sandboxMode: AgentSandboxMode,
         displayCommand: String
     ) {
-        guard let runtime = appState.activeRuntime else {
+        guard let runtime = panelScope.runtime else {
             lastError = "没有可用的 Agent 会话，无法启动后台任务。"
             return
         }
@@ -384,11 +388,11 @@ struct AgentDevServerPanel: View {
     }
 
     private func appendPrompt(_ prompt: String) {
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
+            panelScope.input = prompt
         } else {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }

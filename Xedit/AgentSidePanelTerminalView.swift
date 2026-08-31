@@ -47,6 +47,10 @@ enum TerminalRecordingMetrics {
 
 struct AgentSidePanelTerminalView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
 
     var body: some View {
         AgentSidePanelTerminalContentView(controller: appState.agentTerminalController)
@@ -55,6 +59,10 @@ struct AgentSidePanelTerminalView: View {
 
 private struct AgentSidePanelTerminalContentView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     @Environment(\.openWindow) private var openWindow
     @ObservedObject var controller: AgentInteractiveTerminalController
     @State private var renameDraft: TerminalShortcutRenameDraft?
@@ -136,7 +144,7 @@ private struct AgentSidePanelTerminalContentView: View {
             // Nerd Font or the skin palette) to already-open tabs.
             controller.applyAppearanceToAll(settings, skin: skinColors)
         }
-        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
+        .onCompatibleChange(of: panelScope.sessionID) { _, _ in
             scheduleTerminalBootstrap()
         }
         .onCompatibleChange(of: controller.activeTabID) { _, _ in
@@ -602,7 +610,7 @@ private struct AgentSidePanelTerminalContentView: View {
         Menu {
             Button {
                 controller.openLocalTab(
-                    originAgentSessionID: appState.activeAgentSessionID,
+                    originAgentSessionID: panelScope.sessionID,
                     workingDirectory: workingDirectory,
                     settings: settings,
                     skin: skinColors
@@ -621,7 +629,7 @@ private struct AgentSidePanelTerminalContentView: View {
                     Button {
                         controller.openSSHTab(
                             runtime: runtime,
-                            originAgentSessionID: appState.activeAgentSessionID,
+                            originAgentSessionID: panelScope.sessionID,
                             settings: settings,
                             skin: skinColors
                         )
@@ -847,15 +855,15 @@ private struct AgentSidePanelTerminalContentView: View {
     // MARK: Helpers
 
     private var workingDirectory: String? {
-        if let path = appState.activeRuntime?.workspaceRootPath, !path.isEmpty {
+        if let path = panelScope.runtime?.workspaceRootPath, !path.isEmpty {
             return path
         }
-        return appState.rootDirectory?.standardizedFileURL.path
+        return panelScope.workspaceRoot?.path
     }
 
     private func scheduleTerminalBootstrap() {
         bootstrapTask?.cancel()
-        let originAgentSessionID = appState.activeAgentSessionID
+        let originAgentSessionID = panelScope.sessionID
         let directory = workingDirectory
         let terminalSettings = settings
         let colors = skinColors
@@ -873,7 +881,7 @@ private struct AgentSidePanelTerminalContentView: View {
 
     private func isOpenedByCurrentSession(_ tab: AgentTerminalTab) -> Bool {
         guard let origin = tab.originAgentSessionID,
-              let active = appState.activeAgentSessionID else { return false }
+              let active = panelScope.sessionID else { return false }
         return origin == active
     }
 
