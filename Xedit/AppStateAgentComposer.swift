@@ -219,6 +219,24 @@ extension AppState {
                 risk: .danger,
                 status: .awaitingConfirm
             ),
+            // 中文文件名渲染场景(2026-09-01):transcript 里 `SSO-产品架构设计.key`
+            // 这类名字曾因 fixAttributes 改写字体塌成 `SSO-.key`。这张卡让
+            // #1983# 预览里始终有一组含中文的文件名/路径,肉眼一扫就能发现
+            // 中文又隐形了。TextKit 路径 chip(带下划线)的同款场景由
+            // lsFilenameCJKGlyphsSurviveRealViewLayout 的像素测试锁住。
+            AgentToolCall(
+                messageID: messageID,
+                externalID: "local-confirmation-preview-cjk-filenames",
+                toolName: "run_command",
+                arguments: [
+                    "command": .string(
+                        "open \"SSO-产品架构设计.pptx\" \"TokenHub运营后台统一UI改造规范.md\""
+                    ),
+                    "cwd": .string("~/Sites/中文目录示例"),
+                ],
+                risk: .danger,
+                status: .awaitingConfirm
+            ),
             AgentToolCall(
                 messageID: messageID,
                 externalID: "local-confirmation-preview-web",
