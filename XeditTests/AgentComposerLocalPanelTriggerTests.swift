@@ -79,13 +79,32 @@ struct AgentComposerLocalPanelTriggerTests {
         #expect(runtime.queuedMessages.isEmpty)
         #expect(runtime.localPanelPreviewCalls.map(\.toolName) == [
             "run_command",
+            "run_command",
             "web_fetch",
             "create_user_skills",
             "embedded_browser_navigate",
             "computer_use_click",
             "ask_user",
         ])
-        #expect(runtime.toolCalls.count == 6)
+        #expect(runtime.toolCalls.count == 7)
+
+        // 中文文件名渲染场景:transcript 中文件名里的 CJK 曾被字体改写
+        // 塌成不可见(`SSO-.key`)。#1983# 预览必须始终带一张含中文
+        // 文件名/中文目录的命令卡,让这类回归肉眼可见。
+        let cjkCommand = try #require(runtime.localPanelPreviewCalls.first(where: {
+            $0.externalID == "local-confirmation-preview-cjk-filenames"
+        }))
+        var cjkCommandText = ""
+        if case .string(let value)? = cjkCommand.arguments["command"] {
+            cjkCommandText = value
+        }
+        var cjkCwdText = ""
+        if case .string(let value)? = cjkCommand.arguments["cwd"] {
+            cjkCwdText = value
+        }
+        #expect(cjkCommandText.contains("SSO-产品架构设计.pptx"))
+        #expect(cjkCommandText.contains("TokenHub运营后台统一UI改造规范.md"))
+        #expect(cjkCwdText.contains("中文目录示例"))
     }
 
     @Test("#1984# 安装运行、完成和失败三种 Worker 监控卡")
@@ -183,6 +202,6 @@ struct AgentComposerLocalPanelTriggerTests {
         #expect(runtime.toolCalls.isEmpty)
         runtime.input = "#1983#"
         appState.sendAgentMessage()
-        #expect(runtime.localPanelPreviewCalls.count == 6)
+        #expect(runtime.localPanelPreviewCalls.count == 7)
     }
 }
