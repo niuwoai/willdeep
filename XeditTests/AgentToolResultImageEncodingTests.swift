@@ -1105,6 +1105,44 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 /// A stubbed `URLSession` plus the token its handlers are registered under.
+extension AgentEmptyResponseRetryTests {
+    @Test("real client reissues identical history after an empty HTTP 200 stream")
+    func clientPreservesToolResultsOnRetry() async throws {
+        let stub = StubSession()
+        defer { stub.tearDown() }
+        let recorder = WillDeepResponsesFallbackRecorder()
+        stub.install { request in
+            let attempt = recorder.record(request)
+            let response = try #require(HTTPURLResponse(url: request.url!, statusCode: 200,
+                httpVersion: nil, headerFields: ["Content-Type": "text/event-stream"]))
+            let body = attempt == 1 ? "data: [DONE]\n\n" :
+                "data: {\"choices\":[{\"delta\":{\"content\":\"Recovered\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
+            return (response, Data(body.utf8))
+        }
+        let configuration = AgentConfiguration(providerID: "deepseek",
+            baseURL: "https://fixture.invalid/v1", model: "deepseek-chat", apiKey: "test-placeholder")
+        let messages: [AgentMessage] = [
+            .init(role: .user, content: "Inspect the file"),
+            .init(role: .assistant, content: "", toolCalls: [
+                .init(externalID: "call-1", toolName: "read_file", argumentsJSON: "{}")
+            ]),
+            .init(role: .tool, content: "Previously completed file read", toolCallID: "call-1")
+        ]
+        var retries = 0
+        try await AgentClient(configuration: configuration, session: stub.session).streamChat(
+            messages: messages, onEmptyResponseRetry: { _, _ in retries += 1 }
+        ) { _ in }
+        let requests = recorder.requests
+        try #require(requests.count == 2)
+        #expect(retries == 1)
+        let first = try JSONSerialization.jsonObject(with: Data(requests[0].body.utf8)) as? NSDictionary
+        let second = try JSONSerialization.jsonObject(with: Data(requests[1].body.utf8)) as? NSDictionary
+        #expect(first == second)
+        #expect(requests[1].body.contains("Previously completed file read"))
+        #expect(requests[1].body.contains("call-1"))
+    }
+}
+
 private final class StubSession {
     let session: URLSession
     private let token: String

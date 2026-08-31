@@ -1,6 +1,6 @@
 # some.im Worker 虚拟模型与服务端提示词定义（skill-workers.v1 配套）
 
-> 状态：规划稿（照此在 muchtoken 后台配置）
+> 状态：历史配置稿；自 1.311.0-rc2 起，macOS Worker 提示词由客户端工种定义统一发送。**不要再按本文为新版客户端新增托管工种链**。当前契约与跨端退役顺序见 [WORKER_LOCAL_PROMPTS.md](WORKER_LOCAL_PROMPTS.md)。以下内容保留供旧客户端兼容排查，实测表不是当前生产库存。
 > 日期：2026-08-14
 > 关联文档：`docs/SMALL_MODEL_SKILL_WORKERS_DESIGN.md`（主设计）、`docs/SKILL_WORKERS_TASK_PLAN.md`（任务清单）、`docs/SOME_IM_DEPENDENT_MODELS.md`（既有模型清单）
 > 用途：定义第一批 Skill Worker 的虚拟模型命名、链配置和**逐字可粘贴的服务端 system prompt**。muchtoken 侧零代码，全部走后台 `platform-virtual-model-chains` API。

@@ -3,8 +3,8 @@
 //  WillDeep
 //
 //  Host-owned low-risk coding lane:
-//    scout packet -> someim-32b implementation -> host verifier ->
-//    independent someim-32b review -> straight-through delivery.
+//    scout packet -> configured standard-tier implementation -> host verifier ->
+//    independent standard-tier review -> straight-through delivery.
 //
 //  The parent model is deliberately absent from the happy path. Deterministic
 //  host policy, exact file capabilities, verifier exit status, and a second
@@ -89,9 +89,9 @@ extension AppState {
         // Do not silently turn "small-model-first" into "whatever provider
         // happened to be active". If the base some.im worker is unavailable,
         // the parent route remains the honest fallback.
-        guard smallConfiguration.providerID == AgentProviderPreset.someIMID,
-              smallConfiguration.model == AgentSubagentJobPrompts.hostedModelPrefix,
-              !SomeIMIntegrationStore.loadSessionToken().isEmpty else {
+        guard AgentWorkerTierModels.tier(for: smallProfile.modelBinding) == .standard,
+              let configured = workerTierConfiguration(.standard, parent: parentConfiguration),
+              Self.sameWorkerModel(smallConfiguration, configured) else {
             return .notEligible
         }
 
@@ -294,10 +294,11 @@ extension AppState {
             for: profile,
             parentConfiguration: parentConfiguration
         )
-        guard configuration.providerID == AgentProviderPreset.someIMID,
-              configuration.model == AgentSubagentJobPrompts.hostedModelPrefix else {
+        guard let tier = AgentWorkerTierModels.tier(for: profile.modelBinding),
+              let configured = workerTierConfiguration(tier, parent: parentConfiguration),
+              Self.sameWorkerModel(configuration, configured) else {
             throw AgentAutomaticCodingPipelineError.runFailed(
-                "The independent base some.im reviewer is unavailable.",
+                "The independent review worker's configured model tier is unavailable.",
                 hostRunID: UUID()
             )
         }
@@ -592,7 +593,7 @@ extension AppState {
         - 已修改：\(files)
         - 验证：`\(plan.verifierCommand)` 通过
         - 执行：\(writerRun.profile.localizedDisplayName)（`\(writerRun.configuration.model)`）
-        - 复核：Small Reviewer（`\(AgentSubagentJobPrompts.hostedModelPrefix)`）通过
+        - 复核：Small Reviewer（`\(AgentSubagentModelCompatibility.baseModel)`）通过
 
         本次由小模型流水线直通交付，未调用本会话的高智主模型。
         """

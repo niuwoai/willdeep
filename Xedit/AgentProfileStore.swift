@@ -19,7 +19,7 @@ nonisolated struct AgentProfileStore {
     static let legacySubagentBindingsKey = "com.willdeep.agent.subagent-profile-bindings.v1"
     static let legacyExecutionProfilesKey = "com.willdeep.agentDispatch.executionProfiles.v1"
 
-    private let defaults: UserDefaults
+    let defaults: UserDefaults
 
     /// Same redirect as `AgentDispatchStore`: under XCTest the whole process
     /// writes into a throwaway suite. Profiles are reached through two

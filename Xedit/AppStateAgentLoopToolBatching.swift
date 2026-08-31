@@ -287,8 +287,32 @@ extension AppState {
     ///      this path leaked: the continuation was stored but never resumed,
     ///      hanging the tool dispatch loop on the next user action.
     func awaitToolDecision(for runtime: AgentRuntime, forCallID id: AgentToolCall.ID) async -> AgentToolDecision {
-        await withTaskCancellationHandler {
+        let token = UUID()
+        return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
+                // Cancellation may land between publishing the card and registering its waiter.
+                // Settle the card too; otherwise sidebar badges keep advertising a dead approval.
+                if Task.isCancelled {
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == id }),
+                       runtime.toolCalls[index].status.isBlockingForUserDecision,
+                       runtime.toolDecisionWaiters[id] == nil {
+                        runtime.toolCalls[index].status = .denied
+                        runtime.toolCalls[index].errorMessage = "Cancelled"
+                    }
+                    runtime.pendingToolDecisions.removeValue(forKey: id)
+                    continuation.resume(returning: .denied(reason: "Cancelled"))
+                    return
+                }
+                guard let call = runtime.toolCalls.first(where: { $0.id == id }),
+                      runtime.toolDecisionWaiters[id] == nil else {
+                    continuation.resume(returning: .denied(reason: "Approval is no longer available"))
+                    return
+                }
+                guard call.status.isBlockingForUserDecision else {
+                    runtime.pendingToolDecisions.removeValue(forKey: id)
+                    continuation.resume(returning: .denied(reason: call.errorMessage ?? "Approval is no longer available"))
+                    return
+                }
                 if let decision = runtime.pendingToolDecisions.removeValue(forKey: id) {
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == id }),
                        runtime.toolCalls[index].status.isBlockingForUserDecision {
@@ -303,22 +327,9 @@ extension AppState {
                     continuation.resume(returning: decision)
                     return
                 }
-                if Task.isCancelled {
-                    continuation.resume(returning: .denied(reason: "Cancelled"))
-                    return
-                }
-                if let call = runtime.toolCalls.first(where: { $0.id == id }),
-                   call.status != .pendingApproval, call.status != .awaitingConfirm,
-                   call.status != .awaitingUserAnswer {
-                    if call.status == .denied {
-                        continuation.resume(returning: .denied(reason: call.errorMessage ?? "User denied"))
-                    } else {
-                        continuation.resume(returning: .approved)
-                    }
-                    return
-                }
-                runtime.toolDecisionWaiterCallID = id
-                runtime.toolDecisionWaiter = continuation
+                runtime.toolDecisionWaiters[id] = AgentToolDecisionRegistration(
+                    token: token, continuation: continuation
+                )
             }
         } onCancel: {
             // The cancellation handler runs synchronously off the cancelling
@@ -326,13 +337,7 @@ extension AppState {
             // touch the runtime's continuation slot.
             Task { @MainActor [weak runtime] in
                 guard let runtime else { return }
-                if let waiter = runtime.toolDecisionWaiter,
-                   runtime.toolDecisionWaiterCallID == nil || runtime.toolDecisionWaiterCallID == id {
-                    runtime.toolDecisionWaiter = nil
-                    runtime.toolDecisionWaiterCallID = nil
-                    runtime.pendingToolDecisions.removeValue(forKey: id)
-                    waiter.resume(returning: .denied(reason: "Cancelled"))
-                }
+                runtime.cancelToolDecision(id: id, token: token, reason: "Cancelled")
             }
         }
     }

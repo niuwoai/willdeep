@@ -1490,20 +1490,7 @@ extension AppState {
 
     @discardableResult
     func closeBlockingAgentToolDecision(for runtime: AgentRuntime, reason: String) -> Bool {
-        var closedAny = false
-        for index in runtime.toolCalls.indices where runtime.toolCalls[index].status.isBlockingForUserDecision {
-            runtime.pendingToolDecisions.removeValue(forKey: runtime.toolCalls[index].id)
-            runtime.toolCalls[index].status = .denied
-            runtime.toolCalls[index].errorMessage = reason
-            closedAny = true
-        }
-        if let waiter = runtime.toolDecisionWaiter {
-            runtime.toolDecisionWaiter = nil
-            runtime.toolDecisionWaiterCallID = nil
-            waiter.resume(returning: .denied(reason: reason))
-            closedAny = true
-        }
-        return closedAny
+        runtime.cancelToolDecisions(reason: reason)
     }
 
     func clearAgentQueue() {
@@ -2282,7 +2269,8 @@ extension AppState {
         }
     }
 
-    func deleteAgentSession(id: AgentSession.ID) {
+    @discardableResult
+    func deleteAgentSession(id: AgentSession.ID, removeFromStore: Bool = true) -> Bool {
         let persistedImages = agentRuntimes[id]?.messages.flatMap(\.images)
             ?? AgentSessionStore.load(id: id)?.messages.flatMap(\.images)
             ?? []
@@ -2298,9 +2286,7 @@ extension AppState {
             }
             doomed.stopCleanupTasks.removeAll()
             cancelAllWorkflows(for: doomed)
-            doomed.toolDecisionWaiter?.resume(returning: .denied(reason: "Session deleted"))
-            doomed.toolDecisionWaiter = nil
-            doomed.toolDecisionWaiterCallID = nil
+            doomed.cancelToolDecisions(reason: "Session deleted")
             doomed.pendingToolDecisions.removeAll()
         }
         // Orphaned background subagents must not keep burning tokens
@@ -2310,7 +2296,7 @@ extension AppState {
         // so they don't fire after the session is gone.
         pendingDispatchQueue.removeAll { $0.runtimeID == id }
 
-        AgentSessionStore.delete(id: id)
+        if removeFromStore, !AgentSessionStore.delete(id: id) { return false }
         persistedImages.forEach { $0.removeStoredFileIfNeeded() }
         agentSessions.removeAll { $0.id == id }
         removeAgentUsageSnapshot(id: id)
@@ -2321,6 +2307,7 @@ extension AppState {
             activeAgentSessionID = nil
             subscribeToActiveRuntime()
         }
+        return true
     }
 
     // MARK: - some.im managed routing ("省心托管") selection

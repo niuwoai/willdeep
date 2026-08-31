@@ -226,10 +226,12 @@ struct AgentSubagentUsageAccountingTests {
         // onto. `recordSubagentRunUsage` found no target and returned silently,
         // and planning — several child loops — billed to nobody.
         let rows = AgentUsageStats.subagentUsage(for: [snapshot])
-        let deep = rows.first { $0.profileID == AgentSubagentProfileCatalog.deepID }
-        #expect(deep?.invocationCount == 1)
-        #expect(deep?.runCount == 1)
-        #expect(deep?.sessionCount == 1)
+        // Legacy deep runs retain their actual model cost but share the
+        // public investigation role's dashboard grouping.
+        let investigation = rows.first { $0.profileID == AgentSubagentProfileCatalog.generalist.id }
+        #expect(investigation?.invocationCount == 1)
+        #expect(investigation?.runCount == 1)
+        #expect(investigation?.sessionCount == 1)
 
         // Same attribution rule as the tool-call route: a worker's tokens bill
         // to the model the worker ran on, never to the parent's row.

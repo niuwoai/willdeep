@@ -382,14 +382,17 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// no-change self-checks must pause instead of spinning forever.
     var consecutiveGoalRoundsWithoutChecklistProgress: Int = 0
 
-    /// Continuation resumed when the user resolves a blocking tool
-    /// call (Allow / Deny / Confirm / answer ask_user). Per-runtime
-    /// so concurrent sessions don't race over a single waiter slot.
-    var toolDecisionWaiter: CheckedContinuation<AgentToolDecision, Never>?
-    /// The specific tool call currently backed by `toolDecisionWaiter`.
-    /// Without this guard, clicking a different pending card could resume
-    /// the wrong continuation when multiple approval cards are visible.
-    var toolDecisionWaiterCallID: AgentToolCall.ID?
+    /// Per-call registrations prevent overlapping delegated approvals from
+    /// overwriting another command's continuation within the same session.
+    var toolDecisionWaiters: [AgentToolCall.ID: AgentToolDecisionRegistration] = [:]
+    var toolDecisionWaiter: CheckedContinuation<AgentToolDecision, Never>? {
+        toolDecisionWaiters.values.first?.continuation
+    }
+    /// Compatibility snapshot for single-waiter status consumers. Decisions
+    /// must use toolDecisionWaiters[id], never this arbitrary first entry.
+    var toolDecisionWaiterCallID: AgentToolCall.ID? {
+        toolDecisionWaiters.keys.first
+    }
     /// A proposal-only edit suspends its tool result until the user resolves
     /// the inline patch card. This prevents the provider from receiving a
     /// stale "pending" result while the user's Apply click is still in flight.

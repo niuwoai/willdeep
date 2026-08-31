@@ -101,23 +101,25 @@ extension L10n {
             localized: "agent-profiles.empty-selection",
             defaultValue: "Select a profile to edit it."
         )
-        static func hostedModelRecommended(_ a1: String) -> String {
+        static func workerModelRecommended(_ a1: String) -> String {
             let template = String(
                 localized: "agent-profiles.hosted-model-recommended",
                 defaultValue: "Recommended: %@"
             )
             return String(format: template, a1)
         }
-        static func hostedModelUsingRecommended(_ a1: String) -> String {
+        static func workerModelUsingRecommended(_ a1: String) -> String {
             let template = String(
-                localized: "agent-profiles.hosted-model-using-recommended",
-                defaultValue: "Leave empty to run on %@, whose job prompt is hosted by some.im. Enter another model to override it."
+                localized: "agent-profiles.local-prompt-model-recommended",
+                defaultValue: "Leave empty to run on %@, or enter another model. WillDeep always sends this trade's instructions.",
+                table: "WorkerModelPrompts"
             )
             return String(format: template, a1)
         }
-        static let hostedModelOverridden = String(
-            localized: "agent-profiles.hosted-model-overridden",
-            defaultValue: "Overriding the recommended hosted model. This trade keeps its job prompt — WillDeep sends its own copy whenever the hosted model is not the one being called."
+        static let workerModelOverridden = String(
+            localized: "agent-profiles.local-prompt-model-overridden",
+            defaultValue: "Using a custom model. This trade's instructions and tool permissions stay unchanged.",
+            table: "WorkerModelPrompts"
         )
     }
 }

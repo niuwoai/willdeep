@@ -484,8 +484,23 @@ nonisolated enum AgentApprovalNoticeCopy {
             .flatMap { $0.isEmpty ? nil : $0 }
         return [
             workspaceName.map { "在 \($0) 工作区运行" } ?? "在当前工作区运行",
-            "可能更新工作区文件",
+            commandImpact(arguments: arguments),
         ]
+    }
+
+    private static func commandImpact(arguments: [String: AgentJSONValue]) -> String {
+        guard let command = arguments["command"]?.stringValue() else {
+            return String(localized: "请确认命令的操作范围", table: "WorkerArchitecture")
+        }
+        let root = arguments["cwd"]?.stringValue().map { URL(fileURLWithPath: $0) }
+        let decision = AgentSandboxPolicy.commandDecision(command: command, rootDirectory: root)
+        if decision.credentialSensitive {
+            return String(localized: "可能读取凭据或敏感文件", table: "WorkerArchitecture")
+        }
+        if decision.mode == .readOnly || decision.mode == .readOnlyNetwork {
+            return String(localized: "只读检查，不修改工作区文件", table: "WorkerArchitecture")
+        }
+        return String(localized: "请确认命令的操作范围", table: "WorkerArchitecture")
     }
 
     /// 环境信任声明的确认卡。这张卡是整个特性的防注入闸门：把 Agent 声称的

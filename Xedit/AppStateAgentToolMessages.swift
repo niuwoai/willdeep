@@ -153,10 +153,12 @@ extension AppState {
             "spawn_agent received runtime=\(runtime.id.uuidString, privacy: .public) turn=\(runtime.activeTurnID?.uuidString ?? "none", privacy: .public) call=\(call.externalID, privacy: .public) label=\(label, privacy: .public) requestedProfile=\(arguments["profile"]?.stringValue() ?? "default", privacy: .public) background=\(runInBackground ? "true" : "false", privacy: .public) promptChars=\(prompt.count, privacy: .public)"
         )
 
-        // Which trade to run. An absent profile still means `deep`, which is
-        // what every pre-profile caller expects.
+        // New tool calls default to the bounded investigation role. Explicit
+        // legacy IDs and Workflow catalog lookup retain their own contracts.
         let requestedProfileID = arguments["profile"]?.stringValue()
-        var profile = AgentSubagentProfileStore.resolvedProfile(id: requestedProfileID)
+        var profile = AgentSubagentProfileStore.resolvedProfile(
+            id: requestedProfileID ?? AgentSubagentProfileCatalog.generalistID
+        )
         var profileNotices: [String] = []
         // Validity is decided against the *resolved* trades, not the built-in
         // catalog: since agent-profile.v2 a user-created profile is a real
@@ -247,6 +249,18 @@ extension AppState {
                     "Note: unknown role `\(requestedRoleID)` — ran the `\(profile.id)` trade without role narrowing. Roles in this workspace: \(roster.roles.map(\.id).joined(separator: ", "))."
                 )
             }
+        }
+        // Resolve model capability after goal-role narrowing so it cannot
+        // silently disappear when a goal role projects its tool contract.
+        if let requestedTier = arguments["worker_tier"]?.stringValue() {
+            guard let tier = AgentWorkerTier(rawValue: requestedTier),
+                  AgentWorkerTierModels.tier(for: profile.modelBinding) != nil,
+                  workerTierConfiguration(tier, parent: configuration) != nil else {
+                let message = "The requested worker tier is invalid, unavailable, or conflicts with an explicit model binding. Check the three model tiers in Settings."
+                finishRecord(status: .failed, summary: "unavailable worker tier", payload: message, errorMessage: message)
+                return
+            }
+            profile.modelBinding = .init(workerTier: tier)
         }
         // The `model` parameter is retired: cost policy is the user's
         // configuration now, not something the model re-decides per call.
@@ -380,6 +394,10 @@ extension AppState {
             for: profile,
             parentConfiguration: configuration
         )
+        if let tier = AgentWorkerTierModels.tier(for: profile.modelBinding),
+           workerTierConfiguration(tier, parent: configuration) == nil {
+            profileNotices.append("Configured worker tier \(tier.rawValue) is unavailable; this run uses the current conversation's model and will not auto-escalate.")
+        }
         let resolvedWorkerName = AgentProfileStore()
             .profiles(usage: .subagent)
             .first { $0.id.caseInsensitiveCompare(profile.id) == .orderedSame }?
@@ -723,77 +741,68 @@ extension AppState {
         }
 
         do {
-            // A hosted trade whose relay chain is gone answers
-            // `model_not_configured` and kills the spawn outright. The roster
-            // in `hostedTradeIDs` is hand-maintained, so it goes stale without
-            // anyone noticing — one retry on a concrete model turns that into
-            // a slower success, and the note keeps the stale entry visible.
-            var attemptConfiguration = childConfiguration
-            var hostedFallbackNote: String?
-            var outcome: AgentSubagentRunner.Outcome
-            do {
-                agentSpawnLog.info(
-                    "spawn_agent child attempt runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(attemptConfiguration.model, privacy: .public)"
-                )
-                outcome = try await runChild(configuration: attemptConfiguration, profile: profile)
-            } catch let error where AgentSubagentHostedModelFallback.retryModel(
-                afterError: error,
-                attemptedModel: attemptConfiguration.model,
-                hostedModel: profile.hostedVirtualModel
-            ) != nil {
-                let staleModel = attemptConfiguration.model
-                // Non-nil by the `where` clause above.
-                let fallback = AgentSubagentHostedModelFallback.retryModel(
-                    afterError: error,
-                    attemptedModel: staleModel,
-                    hostedModel: profile.hostedVirtualModel
-                ) ?? AgentSubagentHostedModelFallback.fallbackModel
-                agentSpawnLog.error(
-                    "spawn_agent hosted_model_missing retrying runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) staleModel=\(staleModel, privacy: .public) fallbackModel=\(fallback, privacy: .public) error=\(error.localizedDescription, privacy: .private)"
-                )
-                updateSubagent(model: fallback, progress: "托管模型缺失，改用 \(fallback) 重跑…")
-                attemptConfiguration.model = fallback
-                outcome = try await runChild(configuration: attemptConfiguration, profile: profile)
-                hostedFallbackNote = AgentSubagentHostedModelFallback.fallbackNote(
-                    hostedModel: staleModel,
-                    ranOn: fallback
-                )
-            }
+            let attemptConfiguration = childConfiguration
+            agentSpawnLog.info(
+                "spawn_agent child attempt runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(attemptConfiguration.model, privacy: .public)"
+            )
             var effectiveModel = attemptConfiguration.model
             var effectiveProviderID = attemptConfiguration.providerID
             var escalatedFrom: String?
-
-            // A cheap trade that ran out of rounds without a report is the
-            // failure mode profiles introduce, so it gets the fallback the
-            // design promised: one clean re-run on the parent's model. Not a
-            // continuation — a small model's stuck history is noise to a
-            // bigger one.
-            if profile.escalation == .retryWithParentModel,
-               attemptConfiguration.model != configuration.model,
-               AgentSubagentEscalation.shouldEscalate(outcome: outcome, profile: profile) {
-                agentSpawnLog.info(
-                    "spawn_agent escalating retry runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) fromModel=\(attemptConfiguration.model, privacy: .public) toModel=\(configuration.model, privacy: .public) firstRounds=\(outcome.roundCount, privacy: .public) firstReportChars=\(outcome.report.count, privacy: .public)"
+            var retryNote: String?
+            let nextRoute = nextWorkerTierConfiguration(
+                for: profile, current: attemptConfiguration, parent: configuration
+            )
+            var outcome: AgentSubagentRunner.Outcome
+            do {
+                outcome = try await runChild(configuration: attemptConfiguration, profile: profile)
+            } catch {
+                guard !(error is CancellationError),
+                      profile.escalation == .retryWithParentModel,
+                      AgentSubagentEscalation.isContextOverflow(error),
+                      let nextRoute else { throw error }
+                updateSubagent(model: nextRoute.configuration.model, progress: "升级重跑中…")
+                outcome = try await runChild(
+                    configuration: nextRoute.configuration,
+                    profile: AgentSubagentEscalation.escalatedProfile(from: profile)
                 )
-                updateSubagent(model: configuration.model, progress: "升级重跑中…")
+                escalatedFrom = attemptConfiguration.model
+                effectiveModel = nextRoute.configuration.model
+                effectiveProviderID = nextRoute.configuration.providerID
+                retryNote = "context budget exceeded"
+            }
+
+            // At most one fresh attempt on the next configured tier. The
+            // parent's model is not evidence of greater capability.
+            if escalatedFrom == nil, let nextRoute,
+               AgentSubagentEscalation.shouldEscalate(outcome: outcome, profile: profile) {
+                let escalationConfiguration = nextRoute.configuration
+                agentSpawnLog.info(
+                    "spawn_agent escalating retry runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) fromModel=\(attemptConfiguration.model, privacy: .public) toModel=\(escalationConfiguration.model, privacy: .public) firstRounds=\(outcome.roundCount, privacy: .public) firstReportChars=\(outcome.report.count, privacy: .public)"
+                )
+                updateSubagent(model: escalationConfiguration.model, progress: "升级重跑中…")
                 let escalatedProfile = AgentSubagentEscalation.escalatedProfile(from: profile)
-                if let retried = try? await runChild(
-                    configuration: configuration,
-                    profile: escalatedProfile
-                ) {
+                do {
+                    let retried = try await runChild(
+                        configuration: escalationConfiguration,
+                        profile: escalatedProfile
+                    )
                     escalatedFrom = attemptConfiguration.model
-                    effectiveModel = configuration.model
-                    effectiveProviderID = configuration.providerID
+                    effectiveModel = escalationConfiguration.model
+                    effectiveProviderID = escalationConfiguration.providerID
                     outcome = retried
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    retryNote = "next-tier retry failed; the original report is retained: \(AppState.friendlyMessage(for: error))"
+                    agentSpawnLog.error("spawn_agent next-tier retry failed profile=\(profile.id, privacy: .public)")
                 }
             }
 
             var stats = statsLine(outcome)
-            if let hostedFallbackNote {
-                stats += hostedFallbackNote
-            }
             if let escalatedFrom {
                 stats += "\n(escalated from \(escalatedFrom) to \(effectiveModel) after the first attempt stalled)"
             }
+            if let retryNote { stats += "\n(\(retryNote))" }
             persist(
                 status: .completed,
                 outcome: outcome,

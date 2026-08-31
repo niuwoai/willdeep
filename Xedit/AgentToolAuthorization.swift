@@ -899,6 +899,11 @@ enum AgentSandboxPolicy {
             if credentialScanTokens(head: head, tokens: tokens)
                 .contains(where: { token in
                     referencesSensitivePath(token)
+                        && !AgentWorkspaceTemplatePolicy.isPublicTemplate(
+                            token,
+                            workingDirectory: workingDirectory,
+                            roots: [rootDirectory].compactMap { $0 } + additionalWorkspaceRoots
+                        )
                         && !isWorkspaceLocalMarkerOnlyPath(
                             token,
                             workingDirectory: workingDirectory,

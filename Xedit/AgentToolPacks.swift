@@ -53,7 +53,7 @@ enum AgentToolPackCatalog {
         AgentToolPack(
             id: .sessionAutomation,
             title: "Sessions and automation",
-            summary: "Search or rename sessions, change workspace, run workflows, and manage scheduled tasks."
+            summary: "List projects and their sessions, search or rename sessions, preview and batch archive/delete sessions, change workspace, run workflows, and manage scheduled tasks."
         ),
         AgentToolPack(
             id: .knowledge,
@@ -226,6 +226,7 @@ enum AgentToolPackCatalog {
     ]
 
     private static let sessionAutomationToolNames: Set<String> = [
+        "list_projects", "list_project_sessions", "manage_sessions",
         "list_workspace_sessions", "search_sessions", "suggest_session_title",
         "rename_session", "change_workspace", "run_workflow", "schedule_task",
         "declare_environment_trust", "complete_scheduled_task"

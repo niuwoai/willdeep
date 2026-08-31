@@ -88,11 +88,22 @@
         text-transform: uppercase; letter-spacing: .4px; margin: 0 0 8px;
       }
       .group.overdue h2 { color: var(--danger); }
-      ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+      /*
+       * 分组内部按插件内容区宽度自动排成卡片。auto-fill 刻意保留空轨道，
+       * 所以某个日期组只有一条待办时不会横向拉满；窄栏会自然退回单列。
+       */
+      ul {
+        list-style: none; margin: 0; padding: 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
+        gap: 8px;
+        align-items: start;
+      }
       li.item {
         display: flex; gap: 10px; align-items: flex-start;
         border: 1px solid var(--border); border-radius: var(--radius);
         background: var(--surface); padding: 10px 12px;
+        min-width: 0;
       }
       li.item[data-done="true"] { opacity: .55; }
       li.item[data-priority="urgent"] { border-left: 3px solid var(--urgent); }
@@ -134,7 +145,11 @@
       .state { padding: 40px 12px; text-align: center; color: var(--muted); }
       .state .headline { color: var(--fg); font-size: 14px; margin-bottom: 6px; }
       .state.error .headline { color: var(--danger); }
-      .skeleton { display: flex; flex-direction: column; gap: 8px; }
+      .skeleton {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
+        gap: 8px;
+      }
       .skeleton div { height: 44px; border-radius: var(--radius); background: var(--surface); animation: pulse 1.4s ease-in-out infinite; }
       .skeleton div:nth-child(2) { animation-delay: .16s; }
       .skeleton div:nth-child(3) { animation-delay: .32s; }
@@ -167,11 +182,13 @@
       .toast .undo:hover { text-decoration: underline; }
       @media (prefers-reduced-motion: reduce) { .skeleton div { animation: none; } .toast { transition: none; } }
     </style>
+    <link rel="stylesheet" href="details.css" />
   </head>
   <body>
+    <div class="todo-layout" id="todo-layout">
+    <main class="todo-main" id="todo-main">
     <header>
       <h1 id="title">待办</h1>
-      <span class="count" id="count"></span>
       <div class="toolbar">
         <button class="chip" id="settings-toggle" type="button"></button>
         <button class="chip" id="refresh" type="button"></button>
@@ -200,16 +217,22 @@
     </div>
 
     <div class="filters" id="filters"></div>
+    <div class="filter-count" id="count" aria-live="polite"></div>
 
     <div class="skeleton" id="skeleton"><div></div><div></div><div></div></div>
     <div class="state hidden" id="state"></div>
     <div id="groups"></div>
+    </main>
+    <aside class="todo-details hidden" id="todo-details"></aside>
+    </div>
 
     <div class="toast" id="toast">
       <span id="toast-text"></span>
       <button class="undo hidden" id="toast-undo" type="button"></button>
     </div>
 
+    <script src="details-i18n.js"></script>
+    <script src="details.js"></script>
     <script>
       (function () {
         'use strict';
@@ -334,6 +357,10 @@
           var value = STRINGS[lang()][key];
           return typeof value === 'function' ? value.apply(null, [].slice.call(arguments, 1)) : value;
         }
+        function dt(key) {
+          var value = window.TodoDetailStrings[lang()][key];
+          return typeof value === 'function' ? value.apply(null, [].slice.call(arguments, 1)) : value;
+        }
 
         // ── 宿主桥 ──────────────────────────────────────────
         function runCommand(commandID, args) {
@@ -365,7 +392,8 @@
         // ── 状态 ────────────────────────────────────────────
         var state = {
           items: [], projects: [], buckets: {}, total: 0,
-          scope: 'all', status: 'open', query: '',
+          scope: 'all', status: 'open', query: '', projectPath: '',
+          tags: [], tagMode: 'any', withoutTags: false, tagFacets: [], allTags: [], untaggedCount: 0,
           settings: { parser: 'ai', providerID: null, model: null },
           providers: [],
           loaded: false, editing: null, busy: false
@@ -383,6 +411,20 @@
 
         function workspacePath() {
           return context().workspaceReference || '';
+        }
+
+        var inspector = window.TodoDetails.createInspector({
+          root: document.getElementById('todo-details'), main: document.getElementById('todo-main'),
+          layout: document.getElementById('todo-layout'), t: dt, workspace: workspacePath,
+          locale: function () { return lang() === 'zh' ? 'zh-CN' : 'en-US'; },
+          onClose: function () { render(); },
+          onSelection: function () { render(); },
+          onSave: function (changes) {
+            return runCommand('todo.update', changes).then(function () { toast(dt('saved')); return load(); });
+          }
+        });
+        function openInspector(item, field) {
+          if (inspector.open(item, field)) render();
         }
 
         // ── 一句话 → 结构化 ──────────────────────────────────
@@ -522,9 +564,10 @@
           if (!date) return '';
           var today = new Date();
           var sameYear = date.getFullYear() === today.getFullYear();
-          var day = date.toLocaleDateString([], sameYear ? { month: 'short', day: 'numeric' } : undefined);
+          var locale = lang() === 'zh' ? 'zh-CN' : 'en-US';
+          var day = date.toLocaleDateString(locale, sameYear ? { month: 'short', day: 'numeric' } : undefined);
           if (allDay) return day;
-          return day + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          return day + ' ' + date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
         }
         function isOverdue(item) {
           var date = parseDate(item.due);
@@ -548,8 +591,12 @@
         function renderChrome() {
           document.documentElement.lang = lang() === 'zh' ? 'zh-Hans' : 'en';
           el.title.textContent = t('title');
-          el.refresh.textContent = t('refresh');
-          el['settings-toggle'].textContent = t('settings');
+          el.refresh.textContent = '';
+          el.refresh.appendChild(window.TodoDetails.icon('arrow-path'));
+          el.refresh.appendChild(document.createTextNode(t('refresh')));
+          el['settings-toggle'].textContent = '';
+          el['settings-toggle'].appendChild(window.TodoDetails.icon('cog-6-tooth'));
+          el['settings-toggle'].appendChild(document.createTextNode(t('settings')));
           el['settings-title'].textContent = t('settingsTitle');
           el['parser-label'].textContent = t('parserLabel');
           el['provider-label'].textContent = t('providerLabel');
@@ -559,23 +606,10 @@
         }
 
         function renderFilters() {
-          el.filters.textContent = '';
-          var scopes = [['all', t('scopeAll')], ['project', t('scopeProject')], ['inbox', t('scopeInbox')]];
-          scopes.forEach(function (entry) {
-            if (entry[0] === 'project' && !workspacePath()) return;
-            el.filters.appendChild(filterChip(entry[1], state.scope === entry[0], function () {
-              state.scope = entry[0];
-              load();
-            }));
-          });
-          var sep = document.createElement('span');
-          sep.className = 'sep';
-          el.filters.appendChild(sep);
-          [['open', t('statusOpen')], ['done', t('statusDone')], ['all', t('statusAll')]].forEach(function (entry) {
-            el.filters.appendChild(filterChip(entry[1], state.status === entry[0], function () {
-              state.status = entry[0];
-              load();
-            }));
+          window.TodoDetails.renderFilters(el.filters, {
+            t: dt, state: state, projects: state.projects, workspace: workspacePath(),
+            tags: state.tagFacets, untaggedCount: state.untaggedCount,
+            change: function (patch) { Object.assign(state, patch); load(); }
           });
         }
 
@@ -601,12 +635,11 @@
           if (!state.items.length) {
             showState('', state.total ? t('noMatchTitle') : t('emptyTitle'),
                       state.total ? t('noMatchBody') : t('emptyBody'));
-            el.count.textContent = '';
+            el.count.textContent = dt('results', 0, state.total);
             return;
           }
           el.state.classList.add('hidden');
-          var open = state.items.filter(function (item) { return !item.done; }).length;
-          el.count.textContent = open + ' / ' + state.items.length;
+          el.count.textContent = dt('results', state.items.length, state.total);
 
           var grouped = {};
           state.items.forEach(function (item) {
@@ -631,14 +664,17 @@
         function row(item) {
           var li = document.createElement('li');
           li.className = 'item';
+          li.classList.toggle('selected', inspector.currentId() === item.id);
+          li.dataset.todoId = item.id;
           li.dataset.done = String(!!item.done);
           if (item.priority) li.dataset.priority = item.priority;
 
-          var check = document.createElement('button');
-          check.type = 'button';
+          var check = document.createElement('input');
+          check.type = 'checkbox';
           check.className = 'check';
-          check.textContent = '✓';
-          check.addEventListener('click', function () {
+          check.checked = !!item.done;
+          check.setAttribute('aria-label', (item.done ? dt('reopen') : dt('complete')) + ': ' + item.text);
+          check.addEventListener('change', function () {
             runCommand('todo.toggle', { id: item.id }).then(load).catch(fail);
           });
           li.appendChild(check);
@@ -682,18 +718,19 @@
           var meta = document.createElement('div');
           meta.className = 'meta';
 
-          var due = badge('due' + (isOverdue(item) ? ' overdue' : ''), item.due ? formatDue(item.due, item.allDay) : t('dueNone'));
-          due.addEventListener('click', function () { toggleEditors(li, item, 'due'); });
+          var due = metadataButton('due' + (isOverdue(item) ? ' overdue' : ''), item.due ? formatDue(item.due, item.allDay) : dt('notScheduled'), 'calendar-days');
+          due.addEventListener('click', function () { openInspector(item, 'due'); });
           meta.appendChild(due);
 
-          var priority = badge(item.priority ? 'p-' + item.priority : '', item.priority ? t(item.priority) : t('priorityNone'));
-          priority.addEventListener('click', function () { toggleEditors(li, item, 'priority'); });
+          var priority = metadataButton(item.priority ? 'p-' + item.priority : '', item.priority ? t(item.priority) : dt('priorityNone'), 'flag');
+          priority.addEventListener('click', function () { openInspector(item, 'priority'); });
           meta.appendChild(priority);
 
-          if (item.project) {
-            var project = badge('', item.project);
+          {
+            var project = metadataButton('', item.project || dt('scopeInbox'), 'folder');
             if (item.projectPath) project.title = item.projectPath;
-            meta.appendChild(project);
+            project.addEventListener('click', function () { openInspector(item, 'project'); });
+            meta.insertBefore(project, due);
           }
 
           var spacer = document.createElement('span');
@@ -710,6 +747,7 @@
             remove.disabled = true;
             runCommand('todo.remove', { id: item.id })
               .then(function (payload) {
+                if (inspector.currentId() === item.id) inspector.close(true);
                 lastRemoved = (payload && payload.item) || item;
                 toast(t('removed'), t('undo'), undoRemove);
                 return load();
@@ -720,56 +758,18 @@
           meta.appendChild(actions);
 
           body.appendChild(meta);
+          var labels = document.createElement('div'); labels.className = 'tag-row';
+          (item.tags || []).forEach(function (name) {
+            labels.appendChild(window.TodoDetails.tagChip(name, function () { openInspector(item, 'tags'); }));
+          });
+          if (!(item.tags || []).length) labels.appendChild(window.TodoDetails.button(dt('tags'), 'tag-add', function () { openInspector(item, 'tags'); }, 'plus'));
+          body.appendChild(labels);
           li.appendChild(body);
           return li;
         }
 
-        // 时间与优先级就地改：点 chip 展开一行原生控件，改完立即落盘
-        function toggleEditors(li, item, focus) {
-          var existing = li.querySelector('.editor-row');
-          if (existing) { existing.parentNode.removeChild(existing); return; }
-          var rowEl = document.createElement('div');
-          rowEl.className = 'editor-row';
-
-          var dueInput = document.createElement('input');
-          dueInput.type = 'datetime-local';
-          var date = parseDate(item.due);
-          if (date) {
-            var pad = function (value) { return String(value).padStart(2, '0'); };
-            dueInput.value = date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
-              + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
-          }
-          dueInput.addEventListener('change', function () {
-            var value = dueInput.value ? new Date(dueInput.value).toISOString() : '';
-            runCommand('todo.update', { id: item.id, due: value, allDay: false }).then(load).catch(fail);
-          });
-          rowEl.appendChild(dueInput);
-
-          var clear = document.createElement('button');
-          clear.type = 'button';
-          clear.className = 'chip';
-          clear.textContent = t('dueNone');
-          clear.addEventListener('click', function () {
-            runCommand('todo.update', { id: item.id, due: '' }).then(load).catch(fail);
-          });
-          rowEl.appendChild(clear);
-
-          var select = document.createElement('select');
-          [['', t('priorityNone')], ['urgent', t('urgent')], ['high', t('high')],
-           ['normal', t('normal')], ['low', t('low')]].forEach(function (entry) {
-            var option = document.createElement('option');
-            option.value = entry[0];
-            option.textContent = entry[1];
-            if ((item.priority || '') === entry[0]) option.selected = true;
-            select.appendChild(option);
-          });
-          select.addEventListener('change', function () {
-            runCommand('todo.update', { id: item.id, priority: select.value }).then(load).catch(fail);
-          });
-          rowEl.appendChild(select);
-
-          li.querySelector('.body').appendChild(rowEl);
-          window.setTimeout(function () { (focus === 'priority' ? select : dueInput).focus(); }, 0);
+        function metadataButton(className, label, iconName) {
+          return window.TodoDetails.button(label, 'badge ' + className, null, iconName);
         }
 
         function undoRemove() {
@@ -897,17 +897,23 @@
         }
 
         // ── 载入 ────────────────────────────────────────────
-        var inFlight = null;
+        var loadSequence = 0;
         function load() {
-          if (inFlight) return inFlight;
-          inFlight = runCommand('todo.list', {
+          var sequence = ++loadSequence;
+          return runCommand('todo.list', {
             scope: state.scope,
             status: state.status,
-            projectPath: workspacePath()
+            projectPath: state.projectPath || workspacePath(),
+            tags: state.tags, tagMode: state.tagMode, withoutTags: state.withoutTags
           })
             .then(function (payload) {
+              if (sequence !== loadSequence) return;
               state.items = (payload && payload.items) || [];
               state.projects = (payload && payload.projects) || [];
+              state.tagFacets = (payload && payload.tags) || [];
+              state.allTags = (payload && payload.allTags) || [];
+              state.untaggedCount = (payload && payload.untaggedCount) || 0;
+              inspector.catalogs(state.projects, state.allTags);
               state.buckets = (payload && payload.buckets) || {};
               state.total = (payload && payload.total) || 0;
               if (payload && payload.settings) {
@@ -918,9 +924,7 @@
               el.state.classList.add('hidden');
               render();
             })
-            .catch(fail)
-            .then(function () { inFlight = null; });
-          return inFlight;
+            .catch(function (error) { if (sequence === loadSequence) fail(error); });
         }
 
         // ── 事件 ────────────────────────────────────────────
@@ -954,9 +958,15 @@
 
         window.addEventListener('willdeep:context-changed', function () {
           renderChrome();
+          inspector.refreshLocale();
           load();
         });
 
+        var composerIcon = document.querySelector('.composer .row > span');
+        composerIcon.textContent = ''; composerIcon.appendChild(window.TodoDetails.icon('plus'));
+        document.addEventListener('click', function (event) {
+          document.querySelectorAll('.tag-filter[open]').forEach(function (menu) { if (!menu.contains(event.target)) menu.open = false; });
+        });
         renderChrome();
         renderSettings();
         load();

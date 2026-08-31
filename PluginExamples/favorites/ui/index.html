@@ -90,14 +90,28 @@
       .tagbar .chip { font-size: 11.5px; padding: 3px 9px; }
       .tagbar .chip .n { color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
 
-      /* ── 列表 ────────────────────────────────────────────── */
-      ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--gap); }
+      /* ── 卡片网格 ────────────────────────────────────────── */
+      /*
+       * 用插件内容区自己的宽度排版，而不是拿整块屏幕宽度猜断点。
+       * auto-fill 会保留空轨道：只有一条收藏时，它也只占一张卡，不会再次
+       * 横跨两千像素；容器收窄到放不下两张时则自然退回单列。
+       */
+      ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
+        gap: var(--gap);
+        align-items: start;
+      }
       li.card {
         border: 1px solid var(--border);
         border-radius: var(--radius);
         background: var(--surface);
         padding: 12px 14px 10px;
         position: relative;
+        min-width: 0;
       }
       li.card[data-pinned="true"] { border-color: color-mix(in srgb, var(--pin) 45%, var(--border)); }
       li.card[data-pinned="true"]::before {
@@ -207,7 +221,11 @@
         padding: 1px 5px;
       }
       .state .retry { margin-top: 12px; }
-      .skeleton { display: flex; flex-direction: column; gap: var(--gap); }
+      .skeleton {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
+        gap: var(--gap);
+      }
       .skeleton div {
         height: 64px;
         border-radius: var(--radius);

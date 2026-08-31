@@ -10,7 +10,7 @@ WillDeep 样例插件：在插件中心选择本目录即可进入权限预览�
 - `.willdeep-plugin/locales/` — en / zh-Hans 本地化
 - `mcp.json` — 启动 `session-vitality` MCP 服务（`/usr/bin/ruby`）
 - `server/session_vitality.rb` — stdio MCP server：侧栏资源、`ui://vitality/main` 页面资源、`willdeep-plugin://vitality/stats` 统计资源、`vitality.snapshot` / `vitality.export` 两个工具
-- `server/app.html` — MCP App 仪表盘：概览卡、近 14 天走势、项目与模型排行、最近会话、Markdown 导出
+- `server/app.html` — MCP App 仪表盘：四个主指标、近 14 天输出/请求双维趋势、工作画像、项目与模型排行、最近会话、Markdown 导出
 
 ## 权限
 
@@ -83,5 +83,6 @@ MCP 资源（`ui://vitality/main`），所以不需要额外带前端产物。
 ruby scripts/session_vitality_server_test.rb
 ```
 
-覆盖：工具清单、统计资源的 JSON 契约、真实 token 口径、趋势落桶、项目与模型分组、
-Apple 纪元时间戳、缓存失效、坏文件降级、演示数据回退、Markdown 报告，以及上面两条页面不变量。
+43 项检查覆盖：工具清单、统计资源的 JSON 契约、真实 token 口径、趋势落桶、项目与模型分组、
+双维趋势与工作画像页面契约、响应式信息分区、Apple 纪元时间戳、缓存失效、坏文件降级、
+演示数据回退、Markdown 报告，以及上面两条页面不变量。

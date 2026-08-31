@@ -140,7 +140,7 @@ struct AgentProfileUnificationTests {
             workspaceURL: nil,
             profile: try #require(untouched.asSubagentProfile())
         )
-        #expect(!untouchedPrompt.contains("Your trade is INVESTIGATION."))
+        #expect(untouchedPrompt.contains("Your trade is INVESTIGATION."))
 
         var edited = untouched
         edited.soul.promptSection = "Prefer git history over guessing."

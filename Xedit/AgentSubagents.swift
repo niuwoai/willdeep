@@ -591,6 +591,7 @@ final class AgentSubagentRegistry: ObservableObject {
 nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
     enum Activity: Equatable, Sendable {
         case thinking
+        case retryingEmptyResponse(Int, Int)
         case runningTool(String)
         case verifying
         case preparingReport
@@ -604,6 +605,8 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
                 return ""
             case .thinking:
                 return L10n.AgentDelegation.progressThinking
+            case .retryingEmptyResponse(let attempt, let limit):
+                return String(format: String(localized: "模型空响应，正在重试（%lld/%lld）", table: "WorkerArchitecture"), attempt, limit)
             case .runningTool(let toolName):
                 return L10n.AgentDelegation.progressRunningTool(toolName)
             case .verifying:
@@ -780,27 +783,15 @@ enum AgentSubagentRunner {
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         writeAccess: AgentSubagentWriteAccess? = nil,
         approvedCommand: String? = nil,
-        intelligentCommandReviewAvailable: Bool = false,
-        jobPromptIsHosted: Bool = false
+        intelligentCommandReviewAvailable: Bool = false
     ) -> String {
         var lines: [String] = []
         lines.append("You are a focused subagent spawned by a coding agent to complete one task.")
-        // `deep`'s own section only restates the generic opening, so it is
-        // skipped — but a user-authored soul section on `deep` is not generic
-        // and must still be sent.
-        //
-        // A hosted trade's job section is prepended by the relay, so sending
-        // ours too would stack two copies of the same instructions and burn
-        // the tokens twice. The invariant rules below are never hosted: they
-        // are the client's safety boundary and always ship from here.
-        let capabilitySection = jobPromptIsHosted
-            ? ""
-            : profile.capabilityPromptSection
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        let isRedundantDeepSection = profile.id == AgentSubagentProfileCatalog.deepID
-            && capabilitySection == AgentSubagentProfileCatalog.deep.capabilityPromptSection
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !capabilitySection.isEmpty, !isRedundantDeepSection {
+        // The profile (including user-authored soul instructions) is the only
+        // authority for the job section, independent of provider/model/login.
+        let capabilitySection = profile.capabilityPromptSection
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !capabilitySection.isEmpty {
             lines.append(capabilitySection)
         }
         if let skills = skillPromptSection(for: profile) {
@@ -990,6 +981,7 @@ enum AgentSubagentRunner {
             AgentMessage(role: .system, content: resolvedInstruction),
             AgentMessage(role: .user, content: trimmedPrompt),
         ]
+        let configuration = AgentSubagentModelCompatibility.configuration(configuration)
         let client = AgentClient(configuration: configuration, someIMContext: someIMContext)
 
         return try await AgentSubagentTextStreamPipeline.run(onEvent: onEvent) { consume in
@@ -1057,6 +1049,7 @@ enum AgentSubagentRunner {
         // every request; without them some.im rejects/stalls the call. Workflow
         // subagents used to omit this (unlike the main loop), so a `/code-review`
         // on a some.im model hung as an empty card. Forward it here.
+        let configuration = AgentSubagentModelCompatibility.configuration(configuration)
         let client = AgentClient(configuration: configuration, someIMContext: someIMContext)
         var transcript: [AgentMessage] = [
             AgentMessage(
@@ -1072,15 +1065,7 @@ enum AgentSubagentRunner {
                     // 会把每条被拒的命令当成偶发故障反复重试。
                     intelligentCommandReviewAvailable: commandReviewer != nil
                         && !AgentSubagentProfileCatalog
-                            .strictReadOnlyShellTradeIDs.contains(profile.id),
-                    // Derived rather than passed in: the relay hosts this
-                    // trade's job prompt exactly when we are actually calling
-                    // its hosted virtual model. Signed out, binding resolution
-                    // never pins that model, and an escalated re-run lands on
-                    // the parent's model — both correctly fall back to sending
-                    // our own copy, and the flag cannot drift from reality.
-                    jobPromptIsHosted: profile.hostedVirtualModel != nil
-                        && configuration.model == profile.hostedVirtualModel
+                            .strictReadOnlyShellTradeIDs.contains(profile.id)
                 )
             ),
             AgentMessage(role: .user, content: prompt),
@@ -1164,6 +1149,10 @@ enum AgentSubagentRunner {
         }
 
         var round = 1
+        let inputLimit = AgentWorkerContextBudget.inputLimit(
+            profile: profile, configuration: configuration,
+            models: AgentProfileStore().workerTierModels()
+        )
         while round <= roundLimit {
             defer { round += 1 }
             interventionChannel?.beginRound(round)
@@ -1177,12 +1166,17 @@ enum AgentSubagentRunner {
             var toolCalls: [AgentMessageToolCall] = []
             let collector = SubagentTurnCollector()
 
+            try AgentWorkerContextBudget.validate(messages: transcript, tools: toolList, limit: inputLimit)
+
             do {
                 if let interventionChannel {
                     try await interventionChannel.runCancellableStep {
                         try await client.streamChat(
                             messages: transcript,
-                            tools: toolList
+                            tools: toolList,
+                            onEmptyResponseRetry: { attempt, limit in
+                                publishProgress(round: round, activity: .retryingEmptyResponse(attempt, limit))
+                            }
                         ) { event in
                             await collector.consume(event)
                         }
@@ -1190,7 +1184,10 @@ enum AgentSubagentRunner {
                 } else {
                     try await client.streamChat(
                         messages: transcript,
-                        tools: toolList
+                        tools: toolList,
+                        onEmptyResponseRetry: { attempt, limit in
+                            publishProgress(round: round, activity: .retryingEmptyResponse(attempt, limit))
+                        }
                     ) { event in
                         await collector.consume(event)
                     }

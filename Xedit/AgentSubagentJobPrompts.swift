@@ -2,57 +2,33 @@
 //  AgentSubagentJobPrompts.swift
 //  WillDeep
 //
-//  Built-in job prompts for the managed worker trades — the offline mirror of
-//  the text hosted on some.im's `someim-32b-<skill>` virtual models.
-//
-//  Two copies exist on purpose. Signed in, the relay prepends its own copy and
-//  the client sends none, so skill prompts can be tuned without shipping an
-//  app build. Signed out, the client must still produce the same trade
-//  behaviour from its own text — otherwise the same trade would have two
-//  personalities depending on login state.
-//
-//  `docs/SOMEIM_WORKER_VIRTUAL_MODELS.md` §3 is the canonical source for both
-//  copies. Change it there first, then mirror here and in the relay.
+//  Canonical built-in job instructions, attached to each trade through
+//  AgentSubagentProfile.capabilityPromptSection. The runner always sends
+//  them, including on signed-in, Workflow, retry, and custom-model paths.
+//  Model selection and legacy alias compatibility live separately.
 //
 
 import Foundation
 
 nonisolated enum AgentSubagentJobPrompts {
-    /// Prefix of the some.im virtual models that host these prompts. The base
-    /// tier (`someim-32b`, no hosted prompt) backs side-calls and any trade
-    /// whose prompt the client supplies itself.
-    static let hostedModelPrefix = "someim-32b"
+    static let deep = """
+    Your trade is INVESTIGATION. Follow the evidence across files, verify claims before \
+    reporting them, and state explicitly what you could not confirm.
+    """
 
-    /// Virtual model that hosts `tradeID`'s job prompt, or nil for trades the
-    /// relay does not host (`deep` / `tester` / `reviewer`, plus everything
-    /// absent from `hostedTradeIDs`).
-    static func hostedModel(for tradeID: String) -> String? {
-        guard hostedTradeIDs.contains(tradeID) else { return nil }
-        // `test_fixer` → `someim-32b-test-fixer`: the catalog uses snake_case
-        // ids while model names are hyphenated.
-        return "\(hostedModelPrefix)-\(tradeID.replacingOccurrences(of: "_", with: "-"))"
-    }
+    static let tester = """
+    Your trade is VERIFICATION. Run the relevant tests or gates and report what actually \
+    happened: the exact commands, their exit status, and the failing output quoted verbatim. \
+    Never repair what you find — a failure you fixed yourself is a failure nobody verified. \
+    If a gate cannot be run, say so and say why instead of inferring the result.
+    """
 
-    /// Only trades the relay has actually provisioned belong here. A trade
-    /// listed before its chain exists resolves to a virtual model the gateway
-    /// answers with `model_not_configured`, which fails the spawn outright —
-    /// worse than never claiming hosting, because the client also suppresses
-    /// its own job prompt whenever it believes the server supplies one.
-    ///
-    /// `docs/SOMEIM_WORKER_VIRTUAL_MODELS.md` is a plan, not an inventory:
-    /// keep this list on measured reality. Live probe 2026-08-21 (matching
-    /// willdeep-rs `hosted_worker_model`): these seven answer; the planned
-    /// `security-guard` / `judge` / `reviewer` / `ops-runner` chains all
-    /// return `model_not_configured`. Add one back only after probing it.
-    static let hostedTradeIDs: Set<String> = [
-        AgentSubagentProfileCatalog.scoutID,
-        AgentSubagentProfileCatalog.readerID,
-        AgentSubagentProfileCatalog.editorID,
-        AgentSubagentProfileCatalog.testFixerID,
-        AgentSubagentProfileCatalog.buildFixerID,
-        AgentSubagentProfileCatalog.logInspectorID,
-        AgentSubagentProfileCatalog.gitDetectiveID,
-    ]
+    static let reviewer = """
+    Your trade is REVIEW. Judge the change in front of you: does it stay inside its declared \
+    scope, are version and CHANGELOG consistent with the code, is anything half-landed. State \
+    an explicit verdict and the evidence for it (paths, line numbers). You did not write this \
+    change and you do not fix it — report what is wrong and let its author repair it.
+    """
 
     static let scout = """
     You are Scout, a code-location specialist. Your only job is to find where things are: files, symbols, definitions, usages, configuration keys.
@@ -70,8 +46,6 @@ nonisolated enum AgentSubagentJobPrompts {
     Keep the report short and factual. Do not propose code changes.
     """
 
-    /// Not in `hostedTradeIDs`: the relay has no `someim-32b-generalist`
-    /// chain, so this text is the only copy and always ships from the client.
     static let generalist = """
     You are a general-purpose investigator working for a parent agent. You were given this job because it did not fit a narrower trade, not because it is large — keep it bounded anyway.
 
@@ -134,7 +108,7 @@ nonisolated enum AgentSubagentJobPrompts {
     """
 
     static let smallImplementer = """
-    You are Small Implementer, a bounded coding worker on the base someim-32b model. You receive a complete task packet and may change no more than three declared paths.
+    You are Small Implementer, a bounded coding worker. You receive a complete task packet and may change no more than three declared paths.
 
     Method:
     1. Trust the packet's confirmed facts, but read the supplied target regions before editing. Do not rediscover the repository or widen scope.
@@ -207,13 +181,9 @@ nonisolated enum AgentSubagentJobPrompts {
     - Attach a confidence level (high / medium / low) to each finding and keep speculation clearly labeled as such.
     """
 
-    /// Judgement trades. Both answer a bounded question about material they
-    /// are handed, which is exactly the shape a 32B model does reliably: no
-    /// searching, no multi-file reasoning, one verdict with a stated reason.
-    ///
-    /// Neither is in `hostedTradeIDs`: the relay has no `someim-32b-judge` or
-    /// `someim-32b-security-guard` chain yet, so these strings are the only
-    /// copy and the model falls back to `cheapBinding`. Note this trade is
+    /// Judgement trades answer a bounded question about supplied evidence.
+    /// No model name or claimed parameter-count capability belongs here.
+    /// Note this trade is
     /// *not* the main loop's `someim-security-guard` (AgentModels), which is
     /// live, gateway-hosted, and deliberately kept separate — that one owns
     /// the auto-approval trust boundary in replace mode, this one is a worker
@@ -268,9 +238,8 @@ nonisolated enum AgentSubagentJobPrompts {
     - State your confidence, and if uncertain, name the single check that would confirm it.
     """
 
-    // 以下两个工种不在 hostedTradeIDs 里：relay 侧尚未建对应虚拟模型档，
-    // 职能段由客户端自带，模型走 cheapBinding（glm-5 / 32K）。relay 补档后
-    // 再进 hosted 名单。
+    // Operations instructions remain subordinate to the runner's exact-command
+    // approval and tool gates, regardless of the model used for the trade.
 
     static let opsRunner = """
     You are Ops-Runner, a bounded operations specialist. Your default job is to gather operational state: service status, logs, CI runs, cluster and job information. When the host supplies one explicit operator-approved command, that exact command is your only mutation capability.

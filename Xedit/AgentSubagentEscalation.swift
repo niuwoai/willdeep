@@ -7,7 +7,7 @@
 //  Profiles trade capability for cost. The bill for that trade shows up as
 //  a subagent that burns its rounds without producing a usable report, and
 //  the money saved comes straight back as the parent redoing the work.
-//  This is the ladder that stops it: one clean re-run on the parent's model.
+//  This is the ladder that stops it: one clean re-run on the next configured tier.
 //
 //  Two rules carried over from managed routing:
 //   - Only upward. A run never retries on something cheaper.
@@ -19,13 +19,7 @@
 import Foundation
 
 nonisolated enum AgentSubagentEscalation {
-    /// A report this short is not an answer — it is a small model giving up
-    /// with prose. Deliberately generous: escalating on a real (if terse)
-    /// answer only costs one extra run, while missing a stall costs the
-    /// parent a whole redo.
-    static let minimumUsefulReportCharacters = 40
-
-    /// Whether `outcome` should be retried on the parent's model.
+    /// Whether `outcome` warrants trying the next configured model tier.
     ///
     /// The round cap is the honest signal: the runner returns a partial
     /// report with an explanatory note when a child exhausts its rounds
@@ -45,8 +39,9 @@ nonisolated enum AgentSubagentEscalation {
         // terse the write-up.
         if outcome.verifierPassed == true { return false }
         if outcome.roundCount >= profile.maxRounds { return true }
-        let report = outcome.report.trimmingCharacters(in: .whitespacesAndNewlines)
-        return report.count < minimumUsefulReportCharacters
+        // A concise correct answer is not failure. Only a missing answer
+        // warrants a retry when there is no verifier or round-limit signal.
+        return outcome.report.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Whether a thrown provider error looks like the child overflowing its
@@ -60,23 +55,14 @@ nonisolated enum AgentSubagentEscalation {
             || text.contains("context window")
     }
 
-    /// The profile the retry runs under: the trade's identity is kept for
-    /// reporting, but it gets `deep`'s tools and budgets — retrying the same
-    /// narrow tool set on a bigger model usually reproduces the same dead end.
+    /// Upgrade intelligence, never authority: keep the original role's tools,
+    /// prompts, write scope, and round budget. Only its model tier changes.
     static func escalatedProfile(from profile: AgentSubagentProfile) -> AgentSubagentProfile {
         var escalated = profile
-        escalated.modelBinding = .inheritsParent
-        escalated.toolNames = AgentSubagentProfileCatalog.deep.toolNames
-        escalated.maxRounds = AgentSubagentProfileCatalog.deep.maxRounds
-        escalated.toolPayloadCharacterLimit = AgentSubagentProfileCatalog.deep.toolPayloadCharacterLimit
-        escalated.escalation = .none
-        // The editor trade keeps its single-file write scope through the
-        // retry; the lock and approval are unchanged, so the door stays the
-        // same width.
-        if profile.requiresWriteAccess {
-            escalated.toolNames = AgentSubagentProfileCatalog.editor.toolNames
-            escalated.toolPayloadCharacterLimit = AgentSubagentProfileCatalog.editor.toolPayloadCharacterLimit
+        if let next = AgentWorkerTierModels.tier(for: profile.modelBinding)?.next {
+            escalated.modelBinding = .init(workerTier: next)
         }
+        escalated.escalation = .none
         return escalated
     }
 }

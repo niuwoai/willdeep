@@ -1,0 +1,76 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "agent-profiles.local-prompt-model-recommended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave empty to run on %@, or enter another model. WillDeep always sends this trade's instructions."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "留空使用 %@，也可填写其他模型。WillDeep 始终发送该工种的完整指令。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deja el campo vacío para usar %@ o introduce otro modelo. WillDeep siempre envía las instrucciones de este perfil."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laissez vide pour utiliser %@ ou saisissez un autre modèle. WillDeep envoie toujours les instructions de ce profil."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空欄の場合は %@ を使用します。別のモデルも指定できます。WillDeep は常にこの役割の指示を送信します。"
+          }
+        }
+      }
+    },
+    "agent-profiles.local-prompt-model-overridden": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Using a custom model. This trade's instructions and tool permissions stay unchanged."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用自选模型。该工种的职责指令和工具权限保持不变。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se usa un modelo personalizado. Las instrucciones y los permisos de herramientas del perfil no cambian."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un modèle personnalisé est utilisé. Les instructions et les autorisations des outils de ce profil restent inchangées."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "指定したモデルを使用します。この役割の指示とツールの権限は変わりません。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
