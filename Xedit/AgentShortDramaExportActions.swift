@@ -116,14 +116,14 @@ extension AgentShortDramaPanel {
                     ],
                     context: AgentToolContext(
                         rootDirectory: nil,
-                        runtimeID: appState.activeRuntime?.id,
+                        runtimeID: panelScope.runtime?.id,
                         shortDramaStore: appState.agentShortDramaStore
                     )
                 )
                 await MainActor.run {
                     statusMessage = result.payload
                     if !dryRun {
-                        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .shortDrama)
+                        panelScope.request = AgentSidePanelOpenRequest(kind: .shortDrama)
                     }
                 }
             } catch {
@@ -173,14 +173,14 @@ extension AgentShortDramaPanel {
                     ],
                     context: AgentToolContext(
                         rootDirectory: nil,
-                        runtimeID: appState.activeRuntime?.id,
+                        runtimeID: panelScope.runtime?.id,
                         shortDramaStore: appState.agentShortDramaStore
                     )
                 )
                 await MainActor.run {
                     statusMessage = result.payload
                     if !dryRun {
-                        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .shortDrama)
+                        panelScope.request = AgentSidePanelOpenRequest(kind: .shortDrama)
                         stageImportedReviewCSVPrompt(fileURL: url, result: result)
                     }
                 }
@@ -268,7 +268,7 @@ extension AgentShortDramaPanel {
                     ],
                     context: AgentToolContext(
                         rootDirectory: nil,
-                        runtimeID: appState.activeRuntime?.id,
+                        runtimeID: panelScope.runtime?.id,
                         mediaTaskRegistry: appState.agentMediaTaskRegistry,
                         shortDramaStore: appState.agentShortDramaStore
                     )
@@ -276,7 +276,7 @@ extension AgentShortDramaPanel {
                 await MainActor.run {
                     statusMessage = result.payload
                     if !dryRun || importPendingTasks {
-                        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
+                        panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks)
                         stageImportedProductionPackagePrompt(
                             export: export,
                             importPendingTasks: importPendingTasks,
@@ -319,11 +319,11 @@ extension AgentShortDramaPanel {
 
         请先查看当前短剧项目和媒体任务侧栏状态。若有多个候选图，请打开候选图选择器让用户选主图；若已有可用主图，请继续安排视频生成；若有失败或仍在运行的任务，请说明原因并给出刷新、重试或调整 prompt 的下一步。
         """
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains(export.directory.path) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains(export.directory.path) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }
@@ -338,11 +338,11 @@ extension AgentShortDramaPanel {
 
         请先查看短剧侧栏中新增的待处理检查项。对 continuity/prompt/note 类型，请给出批量修复顺序；对 redraw/erase/upscale/reshoot 类型，请优先使用已有的图片编辑、放大或补拍工具，并保持 project/episode/shot 锚点回填到对应分镜。
         """
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains(fileURL.path) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains(fileURL.path) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }
@@ -391,7 +391,7 @@ extension AgentShortDramaPanel {
             statusMessage = "请先导出短剧制作包。"
             return
         }
-        guard let runtimeID = appState.activeRuntime?.id else {
+        guard let runtimeID = panelScope.runtime?.id else {
             statusMessage = "请先打开或创建一个 Agent 会话，再预览制作包网页。"
             return
         }
@@ -408,7 +408,7 @@ extension AgentShortDramaPanel {
                 contextLines: productionPackageWidgetContextLines(export: export, sourceLabel: "short-drama-side-panel")
             )
             AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
-            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
+            panelScope.request = AgentSidePanelOpenRequest(kind: .widget)
             let kbLabel = byteCount >= 1024 ? "\(byteCount / 1024) KB" : "\(byteCount) B"
             statusMessage = """
             已打开制作包网页预览：
@@ -421,7 +421,7 @@ extension AgentShortDramaPanel {
     }
 
     private func queueProductionWidgetPreview(export: AgentShortDramaProductionExporter.ExportResult) -> String {
-        guard let runtimeID = appState.activeRuntime?.id else {
+        guard let runtimeID = panelScope.runtime?.id else {
             return "未打开：请先打开或创建一个 Agent 会话。"
         }
         do {
@@ -436,7 +436,7 @@ extension AgentShortDramaPanel {
                 contextLines: productionPackageWidgetContextLines(export: export, sourceLabel: "short-drama-side-panel-auto-export")
             )
             AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
-            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
+            panelScope.request = AgentSidePanelOpenRequest(kind: .widget)
             let kbLabel = byteCount >= 1024 ? "\(byteCount / 1024) KB" : "\(byteCount) B"
             return "已打开右侧网页组件（\(kbLabel)）。"
         } catch {
@@ -547,11 +547,11 @@ extension AgentShortDramaPanel {
         security_note: keep real API tokens in a private env file or shell environment; do not write secrets into the package, chat, logs, or git.
         </ruby-media-script-run-handoff>
         """
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains(export.rubyScriptTemplateURL.path) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains(export.rubyScriptTemplateURL.path) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
         statusMessage = """
@@ -584,11 +584,11 @@ extension AgentShortDramaPanel {
 
         请优先用短剧相关 skill 或 Ruby 脚本读取 production-timeline.json 作为剪辑/装配顺序清单；如果要自动补缺口，请读取 production-gap-report.json，它会列出缺主图、缺视频、未解决检查项以及 short_drama_generate_batch_media(target_filter=missing) 的 dry-run/submit 参数。如果要给剪辑软件、表格或审片脚本使用，请读取 production-shot-list.csv，它是一镜一行的平面清单。需要把审片意见回写到分镜时，请填写 production-review-template.csv 里的 review_title/detail/kind/severity/review_status/suggested_action/artifact_paths，再调用 short_drama_import_review_csv(package_directory: \(export.directory.path)) 或让我点击短剧侧栏的“导入审片”。若要批量处理已存在的未解决检查项，请读取 production-review-queue.csv，它按一条 reviewItem 一行列出 kind/severity/detail/suggested_action/artifact_paths。需要完整项目结构时再读取 production-package.json / production-package.md。可以从 ruby-media-script-template.rb 开始改，并参考 media-api.env.example 在环境变量中配置第三方图片/视频 API；该示例支持 WILLDEEP_MEDIA_API_METHOD、WILLDEEP_MEDIA_EXTRA_HEADERS_JSON、自定义轮询/取消 URL，以及 WILLDEEP_MEDIA_REQUEST_FORMAT=multipart。处理擦除、重绘、放大等修复任务时，manifest item 里的 source_image_path / mask_path 可由 Ruby 模板自动转成 data URL 或按 WILLDEEP_MEDIA_SOURCE_IMAGE_FIELD / WILLDEEP_MEDIA_MASK_FIELD 作为 multipart 文件字段上传。生成产物时，把图片/视频写入 outputs/，更新或复用 media-import-manifest-template.json 中的 file_path，然后调用 import_media_manifest 将已生成产物导回 App。可以分批导入，缺失文件会被跳过；如果第三方一次返回多张图片或多个视频 URL，模板会把额外产物保存成 *-candidate-N sibling 文件并追加同锚点 manifest item，导回 App 后可继续走候选图选择流程。如果脚本只提交了远端异步任务、暂时没有 outputs 文件，请把 remote_task_id 或 status_url 写回 manifest，并用 import_pending_tasks: true 先登记到媒体任务侧栏；如果 provider 只返回 id 且需要自定义 some.im 路由，请同时写 status_endpoint_suffix / cancel_endpoint_suffix，保证重启后仍能刷新或取消。脚本运行后可以调用 show_widget 并传入 html_path 指向 widget-preview.html，或让我点击短剧侧栏的“预览网页”打开制作包预览。
         """
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains(export.directory.path) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains(export.directory.path) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }

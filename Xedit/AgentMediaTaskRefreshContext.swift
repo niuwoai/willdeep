@@ -76,9 +76,9 @@ struct AgentMediaTaskRefreshContext: Equatable, Identifiable {
 
 @MainActor
 extension AppState {
-    func recordAgentMediaTaskRefresh(reason: String, scopeLabel: String, tasks: [AgentMediaTask]) {
+    func recordAgentMediaTaskRefresh(reason: String, scopeLabel: String, tasks: [AgentMediaTask], runtime: AgentRuntime? = nil) {
         guard !tasks.isEmpty else { return }
-        activeRuntime?.latestMediaTaskRefresh = AgentMediaTaskRefreshContext(
+        (runtime ?? activeRuntime)?.latestMediaTaskRefresh = AgentMediaTaskRefreshContext(
             reason: reason,
             scopeLabel: scopeLabel,
             tasks: tasks

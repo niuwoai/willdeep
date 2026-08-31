@@ -566,11 +566,11 @@ extension AgentShortDramaPanel {
 
     private func appendPrompt(lines: [String], duplicateGuard: String, status: String) {
         let prompt = lines.joined(separator: "\n")
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains(duplicateGuard) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains(duplicateGuard) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
         statusMessage = status

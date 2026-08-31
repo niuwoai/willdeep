@@ -26,6 +26,10 @@ nonisolated struct AgentImageEditorContext: Codable, Equatable {
 
 struct AgentImageEditPanel: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     var width: CGFloat
 
     @State private var imageInfo: ImageInfo?
@@ -59,13 +63,13 @@ struct AgentImageEditPanel: View {
         .frame(width: width)
         .focusable(false)
         .onAppear(perform: reload)
-        .onCompatibleChange(of: appState.agentImageEditorImageURL) { _, _ in
+        .onCompatibleChange(of: panelScope.imageURL) { _, _ in
             reload()
         }
-        .onCompatibleChange(of: appState.agentImageEditorMaskURL) { _, _ in
+        .onCompatibleChange(of: panelScope.maskURL) { _, _ in
             reloadSeedMask()
         }
-        .onCompatibleChange(of: appState.agentImageEditorPreferredOperation) { _, _ in
+        .onCompatibleChange(of: panelScope.imageOperation) { _, _ in
             applyPreferredOperationIfNeeded()
         }
     }
@@ -91,7 +95,7 @@ struct AgentImageEditPanel: View {
                         _ = maskRects.popLast()
                     } else {
                         seedMaskInfo = nil
-                        appState.agentImageEditorMaskURL = nil
+                        panelScope.maskURL = nil
                     }
                 }
                 lastMaskURL = nil
@@ -110,7 +114,7 @@ struct AgentImageEditPanel: View {
                 maskStrokes.removeAll()
                 maskEraseStrokes.removeAll()
                 seedMaskInfo = nil
-                appState.agentImageEditorMaskURL = nil
+                panelScope.maskURL = nil
                 lastMaskURL = nil
                 statusMessage = ""
             } label: {
@@ -526,7 +530,7 @@ struct AgentImageEditPanel: View {
         statusMessage = ""
         lastMaskURL = nil
         invertMask = false
-        guard let url = appState.agentImageEditorImageURL,
+        guard let url = panelScope.imageURL,
               let image = NSImage(contentsOf: url),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             imageInfo = nil
@@ -544,7 +548,7 @@ struct AgentImageEditPanel: View {
     }
 
     private func reloadSeedMask() {
-        guard let maskURL = appState.agentImageEditorMaskURL,
+        guard let maskURL = panelScope.maskURL,
               let image = NSImage(contentsOf: maskURL),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             seedMaskInfo = nil
@@ -562,14 +566,14 @@ struct AgentImageEditPanel: View {
     }
 
     private func applyPreferredOperationIfNeeded() {
-        guard let preferred = appState.agentImageEditorPreferredOperation else { return }
+        guard let preferred = panelScope.imageOperation else { return }
         switch preferred {
         case .inpaint:
             editOperation = .inpaint
         case .erase:
             editOperation = .erase
         }
-        appState.agentImageEditorPreferredOperation = nil
+        panelScope.imageOperation = nil
     }
 
     @discardableResult
@@ -726,13 +730,13 @@ struct AgentImageEditPanel: View {
                 cancelURL: prediction.urls?.cancel,
                 sourceImagePath: imageInfo.url.path,
                 maskPath: maskURL.path,
-                reviewItemID: appState.agentImageEditorContext?.reviewItemID,
-                runtimeID: appState.activeRuntime?.id,
-                projectID: appState.agentImageEditorContext?.projectID,
-                episodeID: appState.agentImageEditorContext?.episodeID,
-                shotID: appState.agentImageEditorContext?.shotID,
-                assetKind: appState.agentImageEditorContext?.assetKind,
-                assetID: appState.agentImageEditorContext?.assetID,
+                reviewItemID: panelScope.imageContext?.reviewItemID,
+                runtimeID: panelScope.runtime?.id,
+                projectID: panelScope.imageContext?.projectID,
+                episodeID: panelScope.imageContext?.episodeID,
+                shotID: panelScope.imageContext?.shotID,
+                assetKind: panelScope.imageContext?.assetKind,
+                assetID: panelScope.imageContext?.assetID,
                 status: status,
                 statusMessage: ReplicateClient.statusMessage(for: prediction)
             )
@@ -745,9 +749,9 @@ struct AgentImageEditPanel: View {
             if !artifacts.isEmpty {
                 appState.agentMediaTaskRegistry.update(id: task.id, progress: 1, artifacts: artifacts)
             }
-            let submittedTask = appState.agentMediaTaskRegistry.task(matchingHandle: task.displayHandle, runtimeID: appState.activeRuntime?.id) ?? task
+            let submittedTask = appState.agentMediaTaskRegistry.task(matchingHandle: task.displayHandle, runtimeID: panelScope.runtime?.id) ?? task
             appState.recordAgentImageEditSubmission(task: submittedTask)
-            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
+            panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks)
             statusMessage = L10n.AgentImageEditor.submittedReplicate(submittedTask.displayHandle)
             // Contract anchor: appendSubmittedEditTaskToChat(task: task, sourceImagePath: imageInfo.url.path, maskPath: maskURL.path)
             appendSubmittedEditTaskToChat(task: submittedTask, sourceImagePath: imageInfo.url.path, maskPath: maskURL.path)
@@ -788,13 +792,13 @@ struct AgentImageEditPanel: View {
                 cancelEndpointSuffix: endpointSuffix,
                 sourceImagePath: imageInfo.url.path,
                 maskPath: maskURL.path,
-                reviewItemID: appState.agentImageEditorContext?.reviewItemID,
-                runtimeID: appState.activeRuntime?.id,
-                projectID: appState.agentImageEditorContext?.projectID,
-                episodeID: appState.agentImageEditorContext?.episodeID,
-                shotID: appState.agentImageEditorContext?.shotID,
-                assetKind: appState.agentImageEditorContext?.assetKind,
-                assetID: appState.agentImageEditorContext?.assetID,
+                reviewItemID: panelScope.imageContext?.reviewItemID,
+                runtimeID: panelScope.runtime?.id,
+                projectID: panelScope.imageContext?.projectID,
+                episodeID: panelScope.imageContext?.episodeID,
+                shotID: panelScope.imageContext?.shotID,
+                assetKind: panelScope.imageContext?.assetKind,
+                assetID: panelScope.imageContext?.assetID,
                 status: status,
                 statusMessage: SomeIMAsyncMediaClient.statusMessage(for: response)
             )
@@ -807,9 +811,9 @@ struct AgentImageEditPanel: View {
             if !artifacts.isEmpty {
                 appState.agentMediaTaskRegistry.update(id: task.id, progress: 1, artifacts: artifacts)
             }
-            let submittedTask = appState.agentMediaTaskRegistry.task(matchingHandle: task.displayHandle, runtimeID: appState.activeRuntime?.id) ?? task
+            let submittedTask = appState.agentMediaTaskRegistry.task(matchingHandle: task.displayHandle, runtimeID: panelScope.runtime?.id) ?? task
             appState.recordAgentImageEditSubmission(task: submittedTask)
-            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
+            panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks)
             statusMessage = L10n.AgentImageEditor.submittedSomeIM(submittedTask.displayHandle)
             // Contract anchor: appendSubmittedEditTaskToChat(task: task, sourceImagePath: imageInfo.url.path, maskPath: maskURL.path)
             appendSubmittedEditTaskToChat(task: submittedTask, sourceImagePath: imageInfo.url.path, maskPath: maskURL.path)
@@ -818,7 +822,7 @@ struct AgentImageEditPanel: View {
     }
 
     private func appendSubmittedEditTaskToChat(task: AgentMediaTask, sourceImagePath: String, maskPath: String) {
-        let context = appState.agentImageEditorContext
+        let context = panelScope.imageContext
         var lines: [String] = [
             L10n.AgentImageEditor.chatSubmittedLead,
             "",
@@ -882,11 +886,11 @@ struct AgentImageEditPanel: View {
         lines.append("</image-edit-task-submitted>")
 
         let prompt = lines.joined(separator: "\n")
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains(task.displayHandle) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains(task.displayHandle) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }
@@ -970,7 +974,7 @@ struct AgentImageEditPanel: View {
         lines.append("submit_inpaint_arguments: \(imageEditorSubmitArguments(imagePath: imageInfo.url.path, maskPath: currentMaskPath, operation: .inpaint))")
         lines.append("submit_erase_tool: edit_image_with_mask")
         lines.append("submit_erase_arguments: \(imageEditorSubmitArguments(imagePath: imageInfo.url.path, maskPath: currentMaskPath, operation: .erase))")
-        if let context = appState.agentImageEditorContext,
+        if let context = panelScope.imageContext,
            let projectID = cleanOptional(context.projectID ?? ""),
            let shotID = cleanOptional(context.shotID ?? "") {
             let episodeID = cleanOptional(context.episodeID ?? "")
@@ -990,7 +994,7 @@ struct AgentImageEditPanel: View {
                 lines.append("resolve_review_arguments: \(shotArguments), item_id=\(reviewItemID)")
             }
         }
-        if let context = appState.agentImageEditorContext,
+        if let context = panelScope.imageContext,
            let projectID = cleanOptional(context.projectID ?? ""),
            let assetKind = cleanOptional(context.assetKind ?? ""),
            let assetID = cleanOptional(context.assetID ?? "") {
@@ -1005,17 +1009,17 @@ struct AgentImageEditPanel: View {
         lines.append("</image-editor-context>")
 
         let prompt = lines.joined(separator: "\n")
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains("<image-editor-context>") || !appState.agentInput.contains(imageInfo.url.path) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains("<image-editor-context>") || !panelScope.input.contains(imageInfo.url.path) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }
 
     private func appendImageEditorContextAnchorLines(to lines: inout [String]) {
-        let context = appState.agentImageEditorContext
+        let context = panelScope.imageContext
         appendCleanLine("project_id", context?.projectID, to: &lines)
         appendCleanLine("episode_id", context?.episodeID, to: &lines)
         appendCleanLine("shot_id", context?.shotID, to: &lines)
@@ -1025,7 +1029,7 @@ struct AgentImageEditPanel: View {
     }
 
     private func imageEditorSubmitArguments(imagePath: String, maskPath: String?, operation: ImageEditOperation) -> String {
-        let context = appState.agentImageEditorContext
+        let context = panelScope.imageContext
         var pairs: [String] = [
             "image_path=\(imagePath)",
             "mask_path=\(maskPath ?? "<mask_path>")",
@@ -1042,7 +1046,7 @@ struct AgentImageEditPanel: View {
     }
 
     private func imageEditorContextRows() -> [(String, String)] {
-        let context = appState.agentImageEditorContext
+        let context = panelScope.imageContext
         var rows: [(String, String)] = []
         appendContextRow(L10n.AgentImageEditor.contextProject, context?.projectID, to: &rows)
         appendContextRow(L10n.AgentImageEditor.contextEpisode, context?.episodeID, to: &rows)

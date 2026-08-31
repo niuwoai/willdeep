@@ -1105,6 +1105,10 @@ final class AgentShortDramaStore: ObservableObject {
 
 struct AgentShortDramaPanel: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     @ObservedObject var store: AgentShortDramaStore
     var width: CGFloat
 
@@ -1199,8 +1203,8 @@ struct AgentShortDramaPanel: View {
             }
             .buttonStyle(.borderless)
             .focusable(false)
-            .disabled(store.activeProject == nil || appState.activeRuntime == nil)
-            .help(appState.activeRuntime == nil ? "请先创建 Agent 会话" : "生成网页分镜板")
+            .disabled(store.activeProject == nil || panelScope.runtime == nil)
+            .help(panelScope.runtime == nil ? "请先创建 Agent 会话" : "生成网页分镜板")
 
             Button {
                 _ = store.createProject(title: "未命名短剧", logline: nil)
@@ -1508,7 +1512,7 @@ struct AgentShortDramaPanel: View {
     }
 
     private func openMediaTasksPanel(scope: AgentMediaTaskScope?) {
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)
+        panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)
     }
 
     private func taskBadge(label: String, systemImage: String, color: Color) -> some View {
@@ -1776,8 +1780,8 @@ struct AgentShortDramaPanel: View {
                 }
                 .buttonStyle(.borderless)
                 .focusable(false)
-                .disabled(episode.shots.isEmpty || appState.activeRuntime == nil)
-                .help(appState.activeRuntime == nil ? "请先创建 Agent 会话" : "生成本集网页分镜板")
+                .disabled(episode.shots.isEmpty || panelScope.runtime == nil)
+                .help(panelScope.runtime == nil ? "请先创建 Agent 会话" : "生成本集网页分镜板")
             }
             let parts = productionGapParts(
                 missingImages: summary.missingImageCount,
@@ -1878,8 +1882,8 @@ struct AgentShortDramaPanel: View {
                     }
                     .buttonStyle(.borderless)
                     .focusable(false)
-                    .disabled(appState.activeRuntime == nil)
-                    .help(appState.activeRuntime == nil ? "请先创建 Agent 会话" : "在聊天中选择主图")
+                    .disabled(panelScope.runtime == nil)
+                    .help(panelScope.runtime == nil ? "请先创建 Agent 会话" : "在聊天中选择主图")
                 }
             }
 
@@ -1999,7 +2003,7 @@ struct AgentShortDramaPanel: View {
         Task {
             do {
                 let task = try await submitShotMediaTask(project: project, episode: episode, shot: shot, kind: kind, reviewItemID: reviewItemID)
-                appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
+                panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks)
                 statusMessage = "已提交 \(kind.displayName)：\(task.displayHandle)"
             } catch {
                 statusMessage = "提交失败：\(error.localizedDescription)"
@@ -2035,7 +2039,7 @@ struct AgentShortDramaPanel: View {
                     _ = try await submitShotMediaTask(project: project, episode: episode, shot: shot, kind: kind)
                     submitted += 1
                 }
-                appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
+                panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks)
                 statusMessage = "已提交 \(episode.title)：\(submitted) 个\(kind.displayName)任务"
             } catch {
                 statusMessage = "批量提交失败：已提交 \(submitted) 个，错误：\(error.localizedDescription)"
@@ -2055,7 +2059,7 @@ struct AgentShortDramaPanel: View {
         Task {
             do {
                 let task = try await submitAssetMediaTask(project: project, asset: asset)
-                appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
+                panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks)
                 statusMessage = "已提交参考图：\(task.displayHandle)"
             } catch {
                 statusMessage = "参考图提交失败：\(error.localizedDescription)"
@@ -2088,7 +2092,7 @@ struct AgentShortDramaPanel: View {
                     _ = try await submitAssetMediaTask(project: project, asset: asset)
                     submitted += 1
                 }
-                appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
+                panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks)
                 statusMessage = "已提交 \(submitted) 个参考图任务"
             } catch {
                 statusMessage = "补齐参考图失败：已提交 \(submitted) 个，错误：\(error.localizedDescription)"
@@ -2143,7 +2147,7 @@ struct AgentShortDramaPanel: View {
             statusURL: response.statusURL,
             cancelURL: response.cancelURL,
             reviewItemID: reviewItemID,
-            runtimeID: appState.activeRuntime?.id,
+            runtimeID: panelScope.runtime?.id,
             projectID: project.id.uuidString,
             episodeID: episode.id.uuidString,
             shotID: shot.id.uuidString,
@@ -2188,7 +2192,7 @@ struct AgentShortDramaPanel: View {
             remoteTaskID: response.id,
             statusURL: response.statusURL,
             cancelURL: response.cancelURL,
-            runtimeID: appState.activeRuntime?.id,
+            runtimeID: panelScope.runtime?.id,
             projectID: project.id.uuidString,
             assetKind: asset.assetKind,
             assetID: asset.id.uuidString,
@@ -2225,7 +2229,7 @@ struct AgentShortDramaPanel: View {
             statusMessage = "请先选择短剧项目。"
             return
         }
-        guard let runtimeID = appState.activeRuntime?.id else {
+        guard let runtimeID = panelScope.runtime?.id else {
             statusMessage = "请先创建 Agent 会话，再生成网页分镜板。"
             return
         }
@@ -2234,12 +2238,12 @@ struct AgentShortDramaPanel: View {
             mediaTasks: appState.agentMediaTaskRegistry.tasks(forRuntime: runtimeID)
         )
         AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
+        panelScope.request = AgentSidePanelOpenRequest(kind: .widget)
         statusMessage = "已生成网页分镜板：\(project.title)"
     }
 
     private func showEpisodeStoryboardWidget(project: AgentShortDramaProject, episode: AgentShortDramaEpisode) {
-        guard let runtimeID = appState.activeRuntime?.id else {
+        guard let runtimeID = panelScope.runtime?.id else {
             statusMessage = "请先创建 Agent 会话，再生成本集网页分镜板。"
             return
         }
@@ -2249,18 +2253,18 @@ struct AgentShortDramaPanel: View {
             mediaTasks: appState.agentMediaTaskRegistry.tasks(forRuntime: runtimeID)
         )
         AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
+        panelScope.request = AgentSidePanelOpenRequest(kind: .widget)
         statusMessage = "已生成本集网页分镜板：第 \(episode.order) 集 \(episode.title)"
     }
 
     private func showImageChoiceWidget(project: AgentShortDramaProject, episode: AgentShortDramaEpisode, shot: AgentShortDramaShot) {
-        guard let runtimeID = appState.activeRuntime?.id else {
+        guard let runtimeID = panelScope.runtime?.id else {
             statusMessage = "请先创建 Agent 会话，再生成候选图选择器。"
             return
         }
         let widget = AgentShortDramaStoryboardWidgetBuilder.imageChoiceWidget(project: project, episode: episode, shot: shot)
         AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
+        panelScope.request = AgentSidePanelOpenRequest(kind: .widget)
         statusMessage = "已生成候选图选择器：\(shot.title)"
     }
 
@@ -2402,15 +2406,15 @@ struct AgentShortDramaPanel: View {
                 NSSound.beep()
                 return
             }
-            appState.agentImageEditorPreferredOperation = item.kind == .erase ? .erase : .inpaint
-            appState.agentImageEditorContext = AgentImageEditorContext(
+            panelScope.imageOperation = item.kind == .erase ? .erase : .inpaint
+            panelScope.imageContext = AgentImageEditorContext(
                 projectID: project.id.uuidString,
                 episodeID: episode.id.uuidString,
                 shotID: shot.id.uuidString,
                 reviewItemID: item.id.uuidString
             )
-            appState.agentImageEditorImageURL = url
-            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .imageEditor)
+            panelScope.imageURL = url
+            panelScope.request = AgentSidePanelOpenRequest(kind: .imageEditor)
             statusMessage = "已打开蒙版编辑：\(url.lastPathComponent)"
         case .upscale:
             submitReviewItemUpscale(project: project, episode: episode, shot: shot, item: item)
@@ -2475,7 +2479,7 @@ struct AgentShortDramaPanel: View {
                     statusURL: prediction.urls?.get,
                     cancelURL: prediction.urls?.cancel,
                     reviewItemID: item.id.uuidString,
-                    runtimeID: appState.activeRuntime?.id,
+                    runtimeID: panelScope.runtime?.id,
                     projectID: project.id.uuidString,
                     episodeID: episode.id.uuidString,
                     shotID: shot.id.uuidString,
@@ -2485,7 +2489,7 @@ struct AgentShortDramaPanel: View {
                 if !artifacts.isEmpty {
                     appState.agentMediaTaskRegistry.update(id: task.id, progress: 1, artifacts: artifacts)
                 }
-                appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
+                panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks)
                 statusMessage = "已提交 Replicate 放大：\(task.displayHandle)"
             } catch {
                 statusMessage = "放大提交失败：\(error.localizedDescription)"
@@ -2550,12 +2554,12 @@ struct AgentShortDramaPanel: View {
         lines.append("</short-drama-review-item-context>")
 
         let prompt = lines.joined(separator: "\n")
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         let duplicateGuard = "review_item_id: \(item.id.uuidString)"
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains(duplicateGuard) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains(duplicateGuard) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
         statusMessage = "已把检查项结构发送到聊天输入框。"

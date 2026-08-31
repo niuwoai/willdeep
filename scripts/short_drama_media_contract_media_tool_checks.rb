@@ -122,7 +122,7 @@ def short_drama_media_contract_media_tool_checks(
     short_drama_source.include?("generate_asset_reference_dry_run_arguments=project_id=\\(project.id.uuidString), asset_kind=\\(asset.assetKind), asset_id=\\(asset.id.uuidString), dry_run=true") &&
     short_drama_source.include?("generate_asset_reference_arguments=project_id=\\(project.id.uuidString), asset_kind=\\(asset.assetKind), asset_id=\\(asset.id.uuidString), dry_run=false") &&
     short_drama_source.include?("project.episodes.prefix(8)") &&
-    short_drama_source.include?("appState.agentInput += \"\\n\\n\\(prompt)\"") &&
+    short_drama_source.include?("panelScope.input += \"\\n\\n\\(prompt)\"") &&
     short_drama_source.include?("appState.agentComposerFocusRevision += 1"),
   "short drama side panel can hand episode structure to chat" =>
     short_drama_source.include?("func appendEpisodeContextToChat(project: AgentShortDramaProject, episode: AgentShortDramaEpisode)") &&
@@ -476,7 +476,7 @@ def short_drama_media_contract_media_tool_checks(
     image_edit_source.include?("sourceImagePath: imageInfo.url.path") &&
     image_edit_source.include?("maskPath: maskURL.path") &&
     image_edit_source.include?("var reviewItemID: String? = nil") &&
-    image_edit_source.include?("reviewItemID: appState.agentImageEditorContext?.reviewItemID") &&
+    image_edit_source.include?("reviewItemID: panelScope.imageContext?.reviewItemID") &&
     image_edit_source.include?("appendSubmittedEditTaskToChat(task: task, sourceImagePath: imageInfo.url.path, maskPath: maskURL.path)") &&
     image_edit_source.include?("<image-edit-task-submitted>") &&
     image_edit_source.include?("media_task_status_tool: list_media_tasks") &&
@@ -524,8 +524,8 @@ def short_drama_media_contract_media_tool_checks(
   "asset reference images can open anchored mask editor" =>
     image_edit_source.include?("var assetKind: String? = nil") &&
     image_edit_source.include?("var assetID: String? = nil") &&
-    image_edit_source.include?("assetKind: appState.agentImageEditorContext?.assetKind") &&
-    image_edit_source.include?("assetID: appState.agentImageEditorContext?.assetID") &&
+    image_edit_source.include?("assetKind: panelScope.imageContext?.assetKind") &&
+    image_edit_source.include?("assetID: panelScope.imageContext?.assetID") &&
     media_artifact_views_source.include?("assetKind: sourceTask.assetKind") &&
     media_artifact_views_source.include?("assetID: sourceTask.assetID") &&
     asset_views_source.include?("projectID: UUID") &&

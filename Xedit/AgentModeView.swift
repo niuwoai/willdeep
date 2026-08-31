@@ -36,9 +36,9 @@ struct AgentModeView: View {
     @AppStorage("agentSessionsSidebarVisible") private var sessionsSidebarVisible = true
     /// User-resizable width of the right side panel. Persisted so the
     /// choice survives relaunch.
-    @AppStorage("agentSidePanelWidth") private var sidePanelWidth: Double = 320
+    @AppStorage("agentSidePanelWidth") private var sidePanelWidth: Double = 480
     @State private var liveSidePanelWidth: Double?
-    private let sidePanelWidthRange: ClosedRange<Double> = 240...760
+    private let sidePanelWidthRange: ClosedRange<Double> = 320...760
 
     /// 收窄窗口时的列宽规约(rc 用户反馈:最左列被挤出窗体左缘 /
     /// composer 盖住侧栏 / 右侧内容被文件面板遮住):左右两栏(会话列表、
@@ -354,17 +354,15 @@ struct AgentModeView: View {
             // open. Other panels keep their previous selection when no file
             // was supplied.
             if request.kind == .diff {
-                appState.agentSidePanelSelectedFile = request.file
                 sidePanelWidth = max(sidePanelWidth, AgentDesign.reviewPanelPreferredWidth)
             } else if request.kind == .backgroundTasks {
                 sidePanelWidth = max(sidePanelWidth, 520)
-            } else if let url = request.file {
-                appState.agentSidePanelSelectedFile = url
             }
             if request.kind == .mediaTasks {
                 appState.agentMediaTaskPanelScope = request.mediaTaskScope
             }
-            appState.agentSidePanelKind = request.kind
+            appState.openPanelTab(request.kind, file: request.file,
+                                  exactFile: request.file != nil || request.kind == .diff)
             // Consume:让下一次同样的请求(同 kind 同 file)也能再触
             // 发,且不会在 sheet dismiss / 视图重绘时被重放。
             appState.agentSidePanelRequest = nil

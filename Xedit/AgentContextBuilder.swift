@@ -127,20 +127,19 @@ enum AgentContextBuilder {
 
     A fenced ```progress block with the same `1: done` lines still works and is read as a fallback, but it is second choice: it only registers when the reply text is produced, and anything the tool already settled this turn wins over it. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they never update the checklist by themselves.
     """
-    /// v35 = v34 加上 `spawn_agent` 那条 bullet 的审批语义改写(派生内建
-    /// 工种不再问用户、`ops_runner.target_command` 单独确认)。那次改写没有
-    /// 重录哈希,守卫红了一整周:稳定前缀的文本和版本号从此各说各话。版本
-    /// 号是这段契约的身份,改了正文就得改它。
-    static let stablePrefixVersion = "willdeep-agent-system-v35"
+    /// v36 records the three-tier / five-responsibility delegation contract
+    /// introduced in 1.312. The version is part of every profile's prefix,
+    /// so all three snapshots must advance together, including compact.
+    static let stablePrefixVersion = "willdeep-agent-system-v36"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "f53eddbcb8ed38c7"
-    static let compactPrefixSnapshotHash = "df34cf1456ab2f4a"
-    static let extendedPrefixSnapshotHash = "5e4db9cf8e791b83"
+    static let stablePrefixSnapshotHash = "f217c0065418ea4"
+    static let compactPrefixSnapshotHash = "fd64052f49f126eb"
+    static let extendedPrefixSnapshotHash = "6c689d9c2c876d75"
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [

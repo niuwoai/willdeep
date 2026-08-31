@@ -337,12 +337,12 @@ def short_drama_media_contract_media_task_checks(
     side_panel_source.include?("private func openWidgetReviewPanelIfAvailable(_ action: AgentWidgetHandoffAction)") &&
     side_panel_source.include?("openWidgetImageEditorIfAvailable(action)") &&
     side_panel_source.include?("openShortDramaWidgetIfAvailable(action)") &&
-    side_panel_source.include?("appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)") &&
+    side_panel_source.include?("panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)") &&
     side_panel_source.include?("private func mediaTaskScope(from arguments: String?) -> AgentMediaTaskScope?") &&
     side_panel_source.include?("private func refreshWidgetMediaTaskScope(_ scope: AgentMediaTaskScope)") &&
     side_panel_source.include?("appState.agentMediaTaskPoller.refreshNow") &&
     side_panel_source.include?("private func openWidgetImageEditorIfAvailable(_ action: AgentWidgetHandoffAction)") &&
-    side_panel_source.include?("appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .imageEditor)") &&
+    side_panel_source.include?("panelScope.request = AgentSidePanelOpenRequest(kind: .imageEditor)") &&
     side_panel_source.include?("AgentShortDramaStoryboardWidgetBuilder.imageChoiceWidget") &&
     side_panel_source.include?("AgentShortDramaStoryboardWidgetBuilder.widget(for: project") &&
     side_panel_source.include?("<widget-recommended-action>") &&

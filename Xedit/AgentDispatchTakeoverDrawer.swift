@@ -81,7 +81,8 @@ struct AgentDispatchTakeoverDrawer: View {
                     kind: $selectedPanel,
                     selectedFile: $selectedFile,
                     width: drawerWidth,
-                    contentWidth: drawerWidth
+                    contentWidth: drawerWidth,
+                    owner: runtime
                 )
             } else {
                 AgentChatTranscript()
