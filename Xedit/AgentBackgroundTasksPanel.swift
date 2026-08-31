@@ -255,6 +255,10 @@ struct AgentBackgroundTaskRow: Identifiable, Equatable {
 
 struct AgentBackgroundTasksPanel: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     let width: CGFloat
 
     @State private var scope: AgentBackgroundTaskScopeFilter = .currentSession
@@ -286,7 +290,7 @@ struct AgentBackgroundTasksPanel: View {
         .frame(width: width)
         .background(palette.panelFill)
         .onAppear(perform: selectInitialJobIfNeeded)
-        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
+        .onCompatibleChange(of: panelScope.sessionID) { _, _ in
             scope = .currentSession
             selectedJobID = nil
             selectInitialJobIfNeeded()
@@ -672,7 +676,7 @@ struct AgentBackgroundTasksPanel: View {
                 AgentBackgroundTaskPresentation.matches(
                     job: row.job,
                     processName: row.processName,
-                    activeSessionID: appState.activeAgentSessionID,
+                    activeSessionID: panelScope.sessionID,
                     scope: scope,
                     status: status,
                     query: query
@@ -695,7 +699,7 @@ struct AgentBackgroundTasksPanel: View {
     }
 
     private func sessionTitle(for job: AgentBackgroundJob) -> String {
-        if job.runtimeID == appState.activeAgentSessionID {
+        if job.runtimeID == panelScope.sessionID {
             return L10n.AgentJobs.currentSessionBadge
         }
         return appState.agentSessions.first(where: { $0.id == job.runtimeID })?.title

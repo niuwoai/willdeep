@@ -99,7 +99,7 @@ struct AgentChatHeader: View {
         // A detached panel is still an active tool surface. Keep its shortcut
         // highlighted just like the desktop-pet button remains highlighted
         // while its independent window is enabled.
-        let isSelected = sidePanel == item || detachedPanels.isDetached(item)
+        let isSelected = sidePanel == item || appState.activeRuntime?.sidePanelState.openTabs.contains(where: { $0.kind == item }) == true
         return AgentSidePanelShortcutControl(
             systemImage: item.systemImage,
             title: sidePanelTitle(for: item),
@@ -222,7 +222,6 @@ struct AgentChatHeader: View {
         // Agent window should create an unbound draft instead of rendering
         // against nil state and making the click appear to do nothing.
         appState.ensureActiveAgentSessionForInteractiveControl()
-        sidePanel = item
         appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: item)
     }
 

@@ -280,6 +280,8 @@ nonisolated enum SomeIMManagedModel {
 }
 
 nonisolated struct AgentSidePanelState: Codable, Equatable {
+    var tabs: [AgentPanelTab]?
+    var selectedTabID: UUID?
     var kind: AgentSidePanelKind?
     var selectedFilePath: String?
     var mediaTaskScope: AgentMediaTaskScope?

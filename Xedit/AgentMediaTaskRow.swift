@@ -10,6 +10,10 @@ import SwiftUI
 
 struct AgentMediaTaskRow: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     let task: AgentMediaTask
     @State private var isRefreshing = false
     @State private var isCanceling = false
@@ -167,7 +171,7 @@ struct AgentMediaTaskRow: View {
                     .help("发送短剧锚点上下文到聊天")
                     Button {
                         appState.agentShortDramaStore.setActiveProject(id: anchor.projectID)
-                        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .shortDrama)
+                        panelScope.request = AgentSidePanelOpenRequest(kind: .shortDrama)
                     } label: {
                         Image(systemName: "arrowshape.turn.up.right")
                             .font(.caption2)
@@ -400,18 +404,18 @@ struct AgentMediaTaskRow: View {
             return
         }
         appState.agentShortDramaStore.setActiveProject(id: projectID)
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .shortDrama)
+        panelScope.request = AgentSidePanelOpenRequest(kind: .shortDrama)
         reviewResolveMessage = "已解决检查项：\(resolved.title)"
     }
 
     private func showArtifactChoiceWidget() {
-        guard let runtimeID = appState.activeRuntime?.id else {
+        guard let runtimeID = panelScope.runtime?.id else {
             NSSound.beep()
             return
         }
         let widget = AgentMediaTaskChoiceWidgetBuilder.widget(for: task, artifacts: imageArtifacts)
         AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
+        panelScope.request = AgentSidePanelOpenRequest(kind: .widget)
     }
 
     private func appendTaskContextToChat() {
@@ -441,11 +445,11 @@ struct AgentMediaTaskRow: View {
         lines.append("</media-task-short-drama-anchor>")
 
         let prompt = lines.joined(separator: "\n")
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains("<media-task-short-drama-anchor>") || !appState.agentInput.contains(task.id.uuidString) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains("<media-task-short-drama-anchor>") || !panelScope.input.contains(task.id.uuidString) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }
@@ -524,11 +528,11 @@ struct AgentMediaTaskRow: View {
             instruction = "请先调用 short_drama_select_shot_artifact 把 selected_artifact_path 设为该分镜主图，然后调用 generate_video_from_image，image_path 使用 selected_artifact_path，并携带同一组 project_id / episode_id / shot_id；默认视频引擎是 Seedance 2.0，如果用户指定可灵/Kling，加入 video_engine=kling；如果下面有 review_item_id，也必须一并传入。"
         }
         let prompt = ([instruction, ""] + lines).joined(separator: "\n")
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains("generate_video_from_media_task") {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains("generate_video_from_media_task") {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }

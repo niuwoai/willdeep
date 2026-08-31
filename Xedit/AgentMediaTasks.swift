@@ -952,13 +952,17 @@ nonisolated struct AgentMediaTaskScope: Codable, Equatable {
 
 struct AgentMediaTasksPanel: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     var width: CGFloat = 320
     @State private var scope: AgentMediaTaskScope?
     @State private var statusFilter: AgentMediaTaskStatusFilter = .all
     @State private var isRefreshingVisible = false
 
     private var allTasks: [AgentMediaTask] {
-        appState.agentMediaTaskRegistry.tasks(forRuntime: appState.activeRuntime?.id)
+        appState.agentMediaTaskRegistry.tasks(forRuntime: panelScope.runtime?.id)
     }
 
     private var scopedTasks: [AgentMediaTask] {
@@ -1007,9 +1011,9 @@ struct AgentMediaTasksPanel: View {
         .frame(width: width)
         .background(palette.panelFill)
         .onAppear {
-            scope = appState.agentMediaTaskPanelScope
+            scope = panelScope.mediaScope
         }
-        .onCompatibleChange(of: appState.agentMediaTaskPanelScope) { _, newScope in
+        .onCompatibleChange(of: panelScope.mediaScope) { _, newScope in
             scope = newScope
         }
     }
@@ -1085,7 +1089,7 @@ struct AgentMediaTasksPanel: View {
                         .truncationMode(.middle)
                     Spacer(minLength: 4)
                     Button {
-                        appState.agentMediaTaskPanelScope = nil
+                        panelScope.mediaScope = nil
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.caption2)
@@ -1222,12 +1226,13 @@ struct AgentMediaTasksPanel: View {
                 )
             }
             let refreshedIDSet = Set(taskIDs)
-            let refreshedTasks = appState.agentMediaTaskRegistry.tasks(forRuntime: appState.activeRuntime?.id)
+            let refreshedTasks = appState.agentMediaTaskRegistry.tasks(forRuntime: panelScope.runtime?.id)
                 .filter { refreshedIDSet.contains($0.id) }
             appState.recordAgentMediaTaskRefresh(
                 reason: reason,
                 scopeLabel: scope?.label ?? "全部媒体任务",
-                tasks: refreshedTasks
+                tasks: refreshedTasks,
+                runtime: panelScope.runtime
             )
             isRefreshingVisible = false
         }
@@ -1354,11 +1359,11 @@ struct AgentMediaTasksPanel: View {
     }
 
     private func appendPromptToChat(_ prompt: String, duplicateGuard: String) {
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains(duplicateGuard) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains(duplicateGuard) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }

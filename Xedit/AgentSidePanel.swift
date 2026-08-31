@@ -137,6 +137,10 @@ nonisolated enum AgentSidePanelKind: String, CaseIterable, Identifiable, Codable
 /// 处理 terminal，分离窗口则直接经由本视图挂载。
 struct AgentSidePanelKindContent: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     let kind: AgentSidePanelKind
     @Binding var kindSelection: AgentSidePanelKind?
     @Binding var selectedFile: URL?
@@ -154,7 +158,7 @@ struct AgentSidePanelKindContent: View {
             AgentShortDramaPanel(store: appState.agentShortDramaStore, width: layoutWidth)
         case .embeddedBrowser:
             AgentEmbeddedBrowserPanel(
-                runtimeID: appState.activeRuntime?.id,
+                runtimeID: panelScope.runtime?.id,
                 width: layoutWidth
             )
         case .widget:
@@ -177,177 +181,32 @@ struct AgentSidePanelKindContent: View {
 
 struct AgentSidePanelHost: View {
     @EnvironmentObject var appState: AppState
-    @Environment(\.openWindow) private var openWindow
-    @ObservedObject private var detachedRegistry = AgentDetachedPanelRegistry.shared
     @Binding var kind: AgentSidePanelKind?
     @Binding var selectedFile: URL?
-    @State private var hasMountedTerminalPanel = false
-    /// Width is driven by the draggable divider in AgentModeView.
-    var width: CGFloat = 320
-    /// 拖拽调宽期间的「排版宽度」= 拖拽起点的已提交宽度。内容始终按
-    /// 它布局(逐帧稳定,不重折行/不重排 WebView),外层 frame 才跟随
-    /// `width` 移动;内容钉在 trailing(窗口右缘拖拽中不动),分隔条
-    /// 一侧多出的部分裁掉。非拖拽期与 `width` 相等,等价于旧行为。
-    var contentWidth: CGFloat? = nil
-
-    private var layoutWidth: CGFloat { contentWidth ?? width }
+    var width: CGFloat = 480
+    var contentWidth: CGFloat?
+    var owner: AgentRuntime?
 
     var body: some View {
-        let palette = appState.editorSettings.interfaceSkin.palette
-        let hasWallpaper = appState.editorSettings.hasConfiguredAgentWallpaper
-        VStack(spacing: 0) {
-            header
-            Rectangle().fill(palette.hairline).frame(height: 1)
-            content
+        Group {
+            if let runtime = owner ?? appState.activeRuntime {
+                AgentPanelWorkspaceView(runtime: runtime, onHide: { kind = nil })
+                    .onAppear {
+                        if let kind, runtime.sidePanelState.kind != kind || runtime.sidePanelState.selectedTab == nil {
+                            appState.openPanelTab(kind, file: selectedFile, runtime: runtime)
+                        }
+                    }
+                    .onCompatibleChange(of: kind) { _, newKind in
+                        if let newKind, runtime.sidePanelState.selectedTab?.kind != newKind {
+                            appState.openPanelTab(newKind, file: selectedFile, runtime: runtime)
+                        }
+                    }
+            }
         }
-        .frame(width: layoutWidth)
+        .frame(width: contentWidth ?? width)
         .frame(width: width, alignment: .trailing)
         .clipped()
-        .background(
-            palette.panelFill.opacity(
-                hasWallpaper ? appState.editorSettings.agentWallpaperSurfaceOpacity : 1
-            )
-        )
-        // The side-panel shell is mouse-driven chrome. Keeping the shell out
-        // of the keyboard focus chain also prevents popovers from painting an
-        // automatic focus ring around their first action.
         .focusable(false)
-        .onAppear {
-            rememberTerminalMountIfNeeded(kind)
-        }
-        .onCompatibleChange(of: kind) { _, newKind in
-            rememberTerminalMountIfNeeded(newKind)
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            if let kind {
-                Image(systemName: kind.systemImage)
-                    .foregroundStyle(.secondary)
-                Text(kind.title)
-                    .font(AgentDesign.titleFont)
-                    // 窄侧栏时标题先截断,不要把关闭按钮挤出可视区。
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            Spacer(minLength: 0)
-            if let kind {
-                // 分离成独立窗口:面板从侧栏搬走(kind 置 nil),内容进
-                // AgentDetachedPanelWindow。先清侧栏再开窗,保证同一
-                // 面板不出现双挂载(终端 NSView / WKWebView 单实例)。
-                Button {
-                    detach(kind)
-                } label: {
-                    Image(systemName: "macwindow.on.rectangle")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.primary.opacity(0.62))
-                        .frame(width: 22, height: 22)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .layoutPriority(1)
-                .help(L10n.AgentSidePanel.detach)
-            }
-            // rc10 用户反馈:`Image(systemName: "xmark")` + `.secondary`
-            // 在浅色皮肤上颜色弱到几乎看不见,误以为没有关闭按钮。
-            // 给一个 22pt 圆形 hit area + 13pt 加粗字号 + 主文本色,
-            // 至少肉眼第一秒就能看到。窄侧栏时 layoutPriority 保证它
-            // 永远先拿到空间、不被标题挤掉。
-            Button {
-                kind = nil
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.primary.opacity(0.78))
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .layoutPriority(1)
-            .help(L10n.AgentSidePanel.close)
-        }
-        .padding(.leading, 14)
-        .padding(.trailing, 12)
-        .frame(height: AgentDesign.headerHeight)
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        ZStack {
-            nonTerminalContent
-                .opacity(kind == .terminal ? 0 : 1)
-                .allowsHitTesting(kind != .terminal)
-                .accessibilityHidden(kind == .terminal)
-                .zIndex(kind == .terminal ? 0 : 1)
-
-            if shouldKeepTerminalMounted {
-                AgentSidePanelTerminalView()
-                    .opacity(kind == .terminal ? 1 : 0)
-                    .allowsHitTesting(kind == .terminal)
-                    .accessibilityHidden(kind != .terminal)
-                    .zIndex(kind == .terminal ? 2 : 0)
-            }
-        }
-    }
-
-    /// 终端一经打开就常驻挂载（进程不随面板切换销毁）——但终端被分离
-    /// 到独立窗口时必须让位:SwiftTerm 的 NSView 是 tab 单实例,侧栏的
-    /// 隐藏挂载会与分离窗口互抢 superview。窗口关闭(registry 退出)后
-    /// 这里自动恢复常驻挂载。
-    private var shouldKeepTerminalMounted: Bool {
-        (hasMountedTerminalPanel || kind == .terminal)
-            && !detachedRegistry.isDetached(.terminal)
-    }
-
-    private func rememberTerminalMountIfNeeded(_ panelKind: AgentSidePanelKind?) {
-        guard panelKind == .terminal, !hasMountedTerminalPanel else { return }
-        hasMountedTerminalPanel = true
-    }
-
-    private func detach(_ panelKind: AgentSidePanelKind) {
-        kind = nil
-        openWindow(value: panelKind)
-    }
-
-    @ViewBuilder
-    private var nonTerminalContent: some View {
-        switch kind {
-        case .none:
-            comingSoonPlaceholder
-        case .terminal:
-            // 终端在 content 的 ZStack 里常驻挂载,这里只留占位。
-            Color.clear
-        case .some(let panelKind):
-            AgentSidePanelKindContent(
-                kind: panelKind,
-                kindSelection: $kind,
-                selectedFile: $selectedFile,
-                layoutWidth: layoutWidth
-            )
-        }
-    }
-
-    private var comingSoonPlaceholder: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            if let kind {
-                Image(systemName: kind.systemImage)
-                    .font(.system(size: 24))
-                    .foregroundStyle(.secondary.opacity(0.6))
-                Text(kind.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            Text(L10n.AgentSidePanel.comingSoon)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(16)
     }
 }
 
@@ -356,6 +215,10 @@ struct AgentSidePanelHost: View {
 /// boundary explicit and provide the shortest path instead of a dead end.
 struct AgentSidePanelWorkspaceRequiredView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -412,6 +275,10 @@ final class AgentSidePanelWidgetCache {
 
 struct AgentSidePanelWidgetView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     @ObservedObject private var widgetRegistry = AgentWidgetRegistry.shared
     @State private var selectedWidgetID: UUID?
     @State private var expandedHandoffWidgetIDs: Set<UUID> = []
@@ -419,7 +286,7 @@ struct AgentSidePanelWidgetView: View {
     var width: CGFloat
 
     private var widgets: [AgentWidget] {
-        let runtime = appState.activeRuntime
+        let runtime = panelScope.runtime
         var hasher = Hasher()
         hasher.combine(runtime?.id)
         hasher.combine(runtime?.messages.count ?? 0)
@@ -803,8 +670,8 @@ struct AgentSidePanelWidgetView: View {
               let scope = mediaTaskScope(from: action.arguments) else {
             return
         }
-        appState.agentMediaTaskPanelScope = scope
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)
+        panelScope.mediaScope = scope
+        panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)
         if action.tool == "short_drama_refresh_media_tasks" {
             refreshWidgetMediaTaskScope(scope)
         }
@@ -813,8 +680,8 @@ struct AgentSidePanelWidgetView: View {
     private func openWidgetMediaTaskListIfAvailable(_ action: AgentWidgetHandoffAction) {
         guard action.tool == "list_media_tasks" else { return }
         let scope = mediaTaskScope(from: action.arguments)
-        appState.agentMediaTaskPanelScope = scope
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)
+        panelScope.mediaScope = scope
+        panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)
     }
 
     private func openWidgetRemoteTaskRefreshIfAvailable(_ action: AgentWidgetHandoffAction) {
@@ -822,13 +689,13 @@ struct AgentSidePanelWidgetView: View {
         let provider: AgentMediaTaskProvider = action.tool == "replicate_poll_prediction" ? .replicate : .someIM
         let fields = commaSeparatedFields(action.arguments)
         guard let task = widgetMediaTask(from: fields, provider: provider) else {
-            appState.agentMediaTaskPanelScope = nil
-            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
+            panelScope.mediaScope = nil
+            panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks)
             return
         }
         let scope = widgetMediaTaskScope(for: task)
-        appState.agentMediaTaskPanelScope = scope
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)
+        panelScope.mediaScope = scope
+        panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)
         Task {
             await appState.agentMediaTaskPoller.refreshNow(
                 taskID: task.id,
@@ -842,13 +709,13 @@ struct AgentSidePanelWidgetView: View {
         let provider: AgentMediaTaskProvider = action.tool == "replicate_cancel_prediction" ? .replicate : .someIM
         let fields = commaSeparatedFields(action.arguments)
         guard let task = widgetMediaTask(from: fields, provider: provider) else {
-            appState.agentMediaTaskPanelScope = nil
-            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks)
+            panelScope.mediaScope = nil
+            panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks)
             return
         }
         let scope = widgetMediaTaskScope(for: task)
-        appState.agentMediaTaskPanelScope = scope
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)
+        panelScope.mediaScope = scope
+        panelScope.request = AgentSidePanelOpenRequest(kind: .mediaTasks, mediaTaskScope: scope)
     }
 
     private func openWidgetProductionPackagePreviewIfAvailable(_ action: AgentWidgetHandoffAction) {
@@ -876,7 +743,7 @@ struct AgentSidePanelWidgetView: View {
         if let projectID = uuidField("project_id", in: fields) {
             appState.agentShortDramaStore.setActiveProject(id: projectID)
         }
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .shortDrama)
+        panelScope.request = AgentSidePanelOpenRequest(kind: .shortDrama)
     }
 
     private func openWidgetPreview(packageDirectory: String, action: AgentWidgetHandoffAction) -> Bool {
@@ -916,7 +783,7 @@ struct AgentSidePanelWidgetView: View {
     }
 
     private func refreshWidgetMediaTaskScope(_ scope: AgentMediaTaskScope) {
-        let taskIDs = appState.agentMediaTaskRegistry.tasks(forRuntime: appState.activeRuntime?.id)
+        let taskIDs = appState.agentMediaTaskRegistry.tasks(forRuntime: panelScope.runtime?.id)
             .filter { task in
                 scope.matches(task)
                     && task.isActive
@@ -1065,7 +932,7 @@ struct AgentSidePanelWidgetView: View {
     }
 
     private func widgetMediaTask(from fields: [String: String], provider: AgentMediaTaskProvider) -> AgentMediaTask? {
-        let runtimeID = appState.activeRuntime?.id
+        let runtimeID = panelScope.runtime?.id
         for key in ["task_id", "media_task_id"] {
             if let handle = fields[key],
                let task = appState.agentMediaTaskRegistry.task(matchingHandle: handle, runtimeID: runtimeID) {
@@ -1118,8 +985,8 @@ struct AgentSidePanelWidgetView: View {
         guard action.tool == "open_image_editor" || action.tool == "short_drama_open_image_editor" else { return }
         let fields = commaSeparatedFields(action.arguments)
         guard let imagePath = fields["image_path"] ?? fields["artifact_path"] else { return }
-        appState.agentImageEditorPreferredOperation = fields["operation"] == "erase" ? .erase : .inpaint
-        appState.agentImageEditorContext = AgentImageEditorContext(
+        panelScope.imageOperation = fields["operation"] == "erase" ? .erase : .inpaint
+        panelScope.imageContext = AgentImageEditorContext(
             projectID: fields["project_id"],
             episodeID: fields["episode_id"],
             shotID: fields["shot_id"],
@@ -1127,14 +994,14 @@ struct AgentSidePanelWidgetView: View {
             assetID: fields["asset_id"],
             reviewItemID: fields["review_item_id"]
         )
-        appState.agentImageEditorMaskURL = fields["mask_path"].map { URL(fileURLWithPath: $0) }
-        appState.agentImageEditorImageURL = URL(fileURLWithPath: imagePath)
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .imageEditor)
+        panelScope.maskURL = fields["mask_path"].map { URL(fileURLWithPath: $0) }
+        panelScope.imageURL = URL(fileURLWithPath: imagePath)
+        panelScope.request = AgentSidePanelOpenRequest(kind: .imageEditor)
     }
 
     private func openShortDramaWidgetIfAvailable(_ action: AgentWidgetHandoffAction) {
         guard action.tool == "short_drama_show_storyboard_widget" || action.tool == "short_drama_show_image_choice_widget",
-              let runtimeID = appState.activeRuntime?.id else {
+              let runtimeID = panelScope.runtime?.id else {
             return
         }
         let fields = commaSeparatedFields(action.arguments)
@@ -1165,12 +1032,12 @@ struct AgentSidePanelWidgetView: View {
         }
         guard let widget else { return }
         AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
+        panelScope.request = AgentSidePanelOpenRequest(kind: .widget)
     }
 
     private func openGenericImageChoiceWidgetIfAvailable(_ action: AgentWidgetHandoffAction) {
         guard action.tool == "show_image_choice_widget",
-              let runtimeID = appState.activeRuntime?.id else {
+              let runtimeID = panelScope.runtime?.id else {
             return
         }
         let fields = commaSeparatedFields(action.arguments)
@@ -1192,7 +1059,7 @@ struct AgentSidePanelWidgetView: View {
             contextLines: widgetImageChoiceContextLines(action: action, fields: fields, imageCount: imagePaths.count)
         )
         AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
+        panelScope.request = AgentSidePanelOpenRequest(kind: .widget)
     }
 
     private func widgetImageChoicePaths(from fields: [String: String]) -> [String] {
@@ -1242,7 +1109,7 @@ struct AgentSidePanelWidgetView: View {
 
     private func openWidgetHTMLIfAvailable(_ action: AgentWidgetHandoffAction) {
         guard action.tool == "show_widget",
-              let runtimeID = appState.activeRuntime?.id else {
+              let runtimeID = panelScope.runtime?.id else {
             return
         }
         let fields = commaSeparatedFields(action.arguments)
@@ -1267,7 +1134,7 @@ struct AgentSidePanelWidgetView: View {
             sourceBaseURL: url.deletingLastPathComponent()
         )
         AgentWidgetRegistry.shared.add(widget, forRuntime: runtimeID)
-        appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .widget)
+        panelScope.request = AgentSidePanelOpenRequest(kind: .widget)
     }
 
     private func resolvedWidgetHTMLURL(_ rawPath: String) -> URL? {
@@ -1316,10 +1183,10 @@ struct AgentSidePanelWidgetView: View {
     }
 
     private func resolvedWorkspaceRoot() -> URL? {
-        if let path = appState.activeRuntime?.workspaceRootPath, !path.isEmpty {
+        if let path = panelScope.runtime?.workspaceRootPath, !path.isEmpty {
             return URL(fileURLWithPath: path).standardizedFileURL
         }
-        return appState.rootDirectory?.standardizedFileURL
+        return panelScope.workspaceRoot
     }
 
     private func uuidField(_ key: String, in fields: [String: String]) -> UUID? {
@@ -1336,7 +1203,7 @@ struct AgentSidePanelWidgetView: View {
             "side_panel_action_label: \(action.label)",
             "side_panel_action_hint: clicking this row already opened any safe local preview; still inspect arguments and preserve dry-run or user-confirmation requirements before executing provider or mutating tools."
         ].joined(separator: "\n")
-        appState.recordAgentWidgetToolAction(AgentWidgetToolAction(
+        panelScope.runtime?.latestWidgetToolAction = AgentWidgetToolAction(
             widgetID: widget.id,
             widgetTitle: widget.title,
             actionKey: action.key,
@@ -1344,7 +1211,7 @@ struct AgentSidePanelWidgetView: View {
             arguments: action.arguments,
             note: note,
             widgetContext: widget.contextBlock
-        ))
+        )
     }
 
     private func appendWidgetContextToChat(_ widget: AgentWidget) {
@@ -1362,11 +1229,11 @@ struct AgentSidePanelWidgetView: View {
         follow_up: 如果这个 widget 内有 sendPrompt 按钮，按钮消息会附带 <widget-action> 来源上下文；如果需要继续操作，请结合当前聊天、媒体任务侧栏和网页组件内容给出下一步工具调用。
         </widget-panel-context>
         """
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains(widget.id.uuidString) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains(widget.id.uuidString) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }
@@ -1387,11 +1254,11 @@ struct AgentSidePanelWidgetView: View {
         \(widget.contextBlock)
         </widget-handoff-action>
         """
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains("<widget-handoff-action>") || !appState.agentInput.contains(action.key) || !appState.agentInput.contains(widget.id.uuidString) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains("<widget-handoff-action>") || !panelScope.input.contains(action.key) || !panelScope.input.contains(widget.id.uuidString) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }
@@ -1447,21 +1314,21 @@ struct AgentSidePanelWidgetView: View {
         \(widget.contextBlock)
         </widget-recommended-action>
         """
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains("<widget-recommended-action>") || !appState.agentInput.contains(widget.id.uuidString) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains("<widget-recommended-action>") || !panelScope.input.contains(widget.id.uuidString) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }
 
     private func appendWidgetPromptToChat(_ prompt: String, duplicateGuard: String, widgetID: String) {
-        let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmedInput.isEmpty {
-            appState.agentInput = prompt
-        } else if !appState.agentInput.contains(duplicateGuard) || !appState.agentInput.contains(widgetID) {
-            appState.agentInput += "\n\n\(prompt)"
+            panelScope.input = prompt
+        } else if !panelScope.input.contains(duplicateGuard) || !panelScope.input.contains(widgetID) {
+            panelScope.input += "\n\n\(prompt)"
         }
         appState.agentComposerFocusRevision += 1
     }
@@ -1505,6 +1372,10 @@ struct AgentSidePanelWidgetView: View {
 
 struct AgentSidePanelFilesView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     @Environment(\.openWindow) private var openWindow
     @Binding var selectedFile: URL?
     @Binding var kind: AgentSidePanelKind?
@@ -1528,12 +1399,12 @@ struct AgentSidePanelFilesView: View {
         }
         .onAppear {
             rebuildIfNeeded()
-            if let target = appState.agentSidePanelRequest?.revealFolder {
+            if let target = panelScope.request?.revealFolder {
                 revealFolder(target)
             }
         }
-        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in rebuildIfNeeded() }
-        .onCompatibleChange(of: appState.agentSidePanelRequest) { _, request in
+        .onCompatibleChange(of: panelScope.sessionID) { _, _ in rebuildIfNeeded() }
+        .onCompatibleChange(of: panelScope.request) { _, request in
             guard let request, request.kind == .files, let target = request.revealFolder else { return }
             revealFolder(target)
         }
@@ -1553,10 +1424,10 @@ struct AgentSidePanelFilesView: View {
 
     private func rebuildIfNeeded() {
         let resolved: URL? = {
-            if let path = appState.activeRuntime?.workspaceRootPath, !path.isEmpty {
+            if let path = panelScope.runtime?.workspaceRootPath, !path.isEmpty {
                 return URL(fileURLWithPath: path).standardizedFileURL
             }
-            return appState.rootDirectory?.standardizedFileURL
+            return panelScope.workspaceRoot
         }()
         let newPath = resolved?.path
         if newPath == rootPath { return }
@@ -1589,10 +1460,14 @@ struct AgentSidePanelFilesView: View {
 
 struct AgentSidePanelPlanView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
 
     var body: some View {
         Group {
-            if let plan = appState.agentCurrentPlan {
+            if let plan = panelScope.runtime?.currentPlan {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         ForEach(
@@ -1640,6 +1515,10 @@ struct AgentSidePanelPlanView: View {
 
 struct AgentSidePanelPreviewView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     @Binding var selectedFile: URL?
     @State private var loadedURL: URL?
     @State private var content: String = ""
@@ -1663,7 +1542,7 @@ struct AgentSidePanelPreviewView: View {
         }
         .onAppear { syncFromBinding() }
         .onCompatibleChange(of: selectedFile) { _, _ in syncFromBinding() }
-        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
+        .onCompatibleChange(of: panelScope.sessionID) { _, _ in
             selectedFile = nil
             loadedURL = nil
             content = ""
@@ -1866,10 +1745,10 @@ struct AgentSidePanelPreviewView: View {
     }
 
     private func resolvedWorkspaceRoot() -> URL? {
-        if let path = appState.activeRuntime?.workspaceRootPath, !path.isEmpty {
+        if let path = panelScope.runtime?.workspaceRootPath, !path.isEmpty {
             return URL(fileURLWithPath: path).standardizedFileURL
         }
-        return appState.rootDirectory?.standardizedFileURL
+        return panelScope.workspaceRoot
     }
 }
 

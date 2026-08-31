@@ -23,7 +23,7 @@ struct AgentHeaderEditorEntryTests {
         #expect(headerSource.contains("ForEach(visibleKinds)"))
         #expect(!headerSource.contains("return !appState.agentJobRegistry.jobs.isEmpty"))
         #expect(headerSource.contains("@ObservedObject private var detachedPanels = AgentDetachedPanelRegistry.shared"))
-        #expect(headerSource.contains("sidePanel == item || detachedPanels.isDetached(item)"))
+        #expect(headerSource.contains("sidePanelState.openTabs.contains"))
         #expect(headerSource.contains("selectedColor: .black"))
         #expect(headerSource.contains("isHovered ? hoverColor : normalColor"))
         #expect(headerSource.contains("private final class AgentSidePanelHoverButton"))

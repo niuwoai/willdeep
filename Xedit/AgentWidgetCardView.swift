@@ -30,6 +30,7 @@ struct AgentWidgetCardView: View {
     let widget: AgentWidget
 
     @EnvironmentObject var appState: AppState
+    @Environment(\.agentPanelScope) private var panelScope
     @State private var expanded: Bool = true
     @State private var height: CGFloat = 360
     @Environment(\.colorScheme) private var colorScheme
@@ -50,6 +51,7 @@ struct AgentWidgetCardView: View {
                     html: composedHTML,
                     baseURL: widget.sourceBaseURL,
                     appState: appState,
+                    runtimeID: panelScope?.sessionID ?? appState.activeAgentSessionID,
                     onHeightChange: { reported in
                         let clamped = max(Self.minHeight, min(Self.maxAutoHeight, reported))
                         if abs(clamped - height) > 2 {
@@ -228,6 +230,7 @@ private struct AgentWidgetWebView: NSViewRepresentable {
     let html: String
     let baseURL: URL?
     let appState: AppState
+    let runtimeID: UUID?
     let onHeightChange: (CGFloat) -> Void
 
     func makeNSView(context: Context) -> WKWebView {
@@ -256,6 +259,7 @@ private struct AgentWidgetWebView: NSViewRepresentable {
         context.coordinator.widgetContext = widgetContext
         context.coordinator.baseURL = baseURL
         context.coordinator.appState = appState
+        context.coordinator.runtimeID = runtimeID
         context.coordinator.onHeightChange = onHeightChange
         // 只在文档本身变了才重灌。以前这里无条件 loadHTMLString，任何一次无关的
         // SwiftUI 刷新都会把 widget 从头加载一遍，里面的表单、滑块、游戏进度跟着清零。
@@ -282,6 +286,7 @@ private struct AgentWidgetWebView: NSViewRepresentable {
         var widgetContext: String
         var baseURL: URL?
         weak var appState: AppState?
+        var runtimeID: UUID?
         var onHeightChange: (CGFloat) -> Void
         private(set) var loadedHTML: String?
         private(set) var loadedBaseURL: URL?
@@ -389,6 +394,7 @@ private struct AgentWidgetWebView: NSViewRepresentable {
                 guard !trimmed.isEmpty, trimmed.count <= 4096 else { return }
                 Task { @MainActor [weak appState] in
                     guard let appState else { return }
+                    if let id = self.runtimeID, !appState.selectAgentSession(id: id) { return }
                     appState.recordAgentImageChoiceFromWidget(
                         widgetID: self.widgetID,
                         widgetTitle: self.widgetTitle,
@@ -401,6 +407,7 @@ private struct AgentWidgetWebView: NSViewRepresentable {
                 guard let action = widgetToolAction(from: body) else { return }
                 Task { @MainActor [weak appState] in
                     guard let appState else { return }
+                    if let id = self.runtimeID, !appState.selectAgentSession(id: id) { return }
                     appState.recordAgentWidgetToolAction(action)
                     appState.recordAgentImageChoiceFromWidget(
                         widgetID: self.widgetID,

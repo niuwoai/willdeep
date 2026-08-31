@@ -10,6 +10,10 @@ import SwiftUI
 
 struct AgentShortDramaArtifactTile: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     let path: String
     let shotTitle: String
     let isSelected: Bool
@@ -64,10 +68,10 @@ struct AgentShortDramaArtifactTile: View {
                         .help("加入聊天附件")
 
                         Button {
-                            appState.agentImageEditorPreferredOperation = .inpaint
-                            appState.agentImageEditorContext = editorContext
-                            appState.agentImageEditorImageURL = fileURL
-                            appState.agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .imageEditor)
+                            panelScope.imageOperation = .inpaint
+                            panelScope.imageContext = editorContext
+                            panelScope.imageURL = fileURL
+                            panelScope.request = AgentSidePanelOpenRequest(kind: .imageEditor)
                         } label: {
                             Image(systemName: "paintbrush.pointed")
                                 .font(.system(size: 9, weight: .semibold))
@@ -147,11 +151,11 @@ struct AgentShortDramaArtifactTile: View {
             let data = try Data(contentsOf: fileURL)
             appState.addAgentImage(data: data, mimeType: imageMimeType)
             let prompt = "请基于短剧分镜「\(shotTitle)」的这张产物继续处理：\(displayTitle)"
-            let trimmedInput = appState.agentInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedInput = panelScope.input.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmedInput.isEmpty {
-                appState.agentInput = prompt
-            } else if !appState.agentInput.contains(displayTitle) {
-                appState.agentInput += "\n\n\(prompt)"
+                panelScope.input = prompt
+            } else if !panelScope.input.contains(displayTitle) {
+                panelScope.input += "\n\n\(prompt)"
             }
             appState.agentComposerFocusRevision += 1
         } catch {

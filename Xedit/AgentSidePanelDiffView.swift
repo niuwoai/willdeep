@@ -14,6 +14,10 @@ import SwiftUI
 
 struct AgentSidePanelDiffView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.agentPanelScope) private var inheritedPanelScope
+    private var panelScope: AgentPanelScope {
+        inheritedPanelScope ?? AgentPanelScope(appState: appState, runtime: appState.activeRuntime)
+    }
     @Environment(\.colorScheme) private var colorScheme
     @State private var state: LoadState = .idle
     @State private var scope: AgentGitReviewScope = .uncommitted
@@ -65,12 +69,12 @@ struct AgentSidePanelDiffView: View {
         .task(id: selectedPath) {
             await reloadSelectedDiff()
         }
-        .onCompatibleChange(of: appState.activeAgentSessionID) { _, _ in
+        .onCompatibleChange(of: panelScope.sessionID) { _, _ in
             selectedPath = nil
             detailState = .idle
             refreshTick &+= 1
         }
-        .onCompatibleChange(of: appState.agentSidePanelSelectedFile) { _, file in
+        .onCompatibleChange(of: panelScope.selectedFile) { _, file in
             selectRequestedFile(file)
         }
     }
@@ -359,7 +363,7 @@ struct AgentSidePanelDiffView: View {
         guard !Task.isCancelled, scope == requestedScope else { return }
         state = result
         if case .loaded(let snapshot) = result {
-            selectRequestedFile(appState.agentSidePanelSelectedFile, in: snapshot)
+            selectRequestedFile(panelScope.selectedFile, in: snapshot)
         } else {
             selectedPath = nil
             detailState = .idle
@@ -399,7 +403,7 @@ struct AgentSidePanelDiffView: View {
     }
 
     private func clearSelection() {
-        appState.agentSidePanelSelectedFile = nil
+        panelScope.selectedFile = nil
         selectedPath = nil
         detailState = .idle
     }
@@ -419,7 +423,7 @@ struct AgentSidePanelDiffView: View {
     private func select(change: AgentFileChangeSummary, in snapshot: AgentGitReviewSnapshot) {
         selectedPath = change.path
         showsFileList = false
-        appState.agentSidePanelSelectedFile = snapshot.repositoryRoot
+        panelScope.selectedFile = snapshot.repositoryRoot
             .appendingPathComponent(change.path)
             .standardizedFileURL
     }
@@ -431,7 +435,7 @@ struct AgentSidePanelDiffView: View {
         detailState = .idle
         showsFileList = false
         collapsedPaths = []
-        appState.agentSidePanelSelectedFile = nil
+        panelScope.selectedFile = nil
     }
 
     private func allFilesCollapsed(in snapshot: AgentGitReviewSnapshot) -> Bool {
@@ -445,10 +449,10 @@ struct AgentSidePanelDiffView: View {
     }
 
     private func resolveWorkspaceRoot() -> URL? {
-        if let path = appState.activeRuntime?.workspaceRootPath, !path.isEmpty {
+        if let path = panelScope.runtime?.workspaceRootPath, !path.isEmpty {
             return URL(fileURLWithPath: path).standardizedFileURL
         }
-        return appState.rootDirectory?.standardizedFileURL
+        return panelScope.workspaceRoot
     }
 
     private var canShowCommitBar: Bool {
