@@ -912,7 +912,39 @@ enum AgentChatHistoryRenderer {
             index += 1
         }
 
+        stripSwiftUIRuntimeAttributes(from: result)
         return result
+    }
+
+    /// `AttributedString(markdown:)` 桥接出来的 run 上残留着 Markdown
+    /// presentation intent(行内代码的 `.code` 等)和 `SwiftUI.Font` 一类
+    /// SwiftUI 作用域属性。macOS 26 起,字符串进入 `NSTextStorage` 时的
+    /// `fixAttributes` 会按这些残留属性**重新解析字体**——`.code` intent
+    /// 解析成 userFixedPitchFont(Menlo),把我们精心钉好的 SF Mono +
+    /// PingFang CJK fallback 整体覆盖;Menlo 没有中文字形,于是
+    /// `SSO-产品架构设计.key` 在 transcript 里塌成 `SSO-.key`(2026-09-01
+    /// 用户截图,同款塌字第四次复发的真凶;前三次修复都停留在 NSFont 层,
+    /// 在 macOS 26 上被 fixAttributes 这条新通道整体旁路)。渲染管线各
+    /// pass 在此之前已消费完 intent(`isInlineCode`),TextKit 绘制只认
+    /// NSFont/NSColor,所以渲染收尾把这些"会被 fixAttributes 重新解释"
+    /// 的属性整串剥掉,改写便无从发生。
+    private static let markdownParseLeftoverKeys: [NSAttributedString.Key] = [
+        NSAttributedString.Key("NSInlinePresentationIntent"),
+        NSAttributedString.Key("NSPresentationIntent"),
+    ]
+
+    private static func stripSwiftUIRuntimeAttributes(from attributed: NSMutableAttributedString) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        guard fullRange.length > 0 else { return }
+        var keys: Set<NSAttributedString.Key> = Set(markdownParseLeftoverKeys)
+        attributed.enumerateAttributes(in: fullRange, options: []) { attributes, _, _ in
+            for key in attributes.keys where key.rawValue.hasPrefix("SwiftUI.") {
+                keys.insert(key)
+            }
+        }
+        for key in keys {
+            attributed.removeAttribute(key, range: fullRange)
+        }
     }
 
     private static func appendAssistantProcessToAnswerGap(

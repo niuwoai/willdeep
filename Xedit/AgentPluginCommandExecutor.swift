@@ -117,12 +117,22 @@ enum AgentPluginCommandExecutor {
         }
     }
 
-    /// 随 App 一起签名发行的第一方内置插件（`BundledPlugins/`）执行自己的 MCP
-    /// 工具时不再逐条弹确认框。它们和宿主是同一份签名产物，安装时也没有第三方
-    /// 来源可核对，而收藏夹这种默认入口每翻一次页面就要点一次「执行」根本没法用。
-    /// 其它来源（本地安装、Codex 缓存）仍然每次执行都要用户点头。
+    /// 授权在安装那一刻拿到，执行时不再重复问（2026-09-01 用户确认）：
+    /// - `.bundled`：随 App 签名发行的第一方插件，和宿主同一份产物，免确认。
+    /// - `.installed`：安装面板已列出插件要求的全部权限（MCP 服务可能访问
+    ///   文件、进程或网络），用户点「安装」即完成授权——之后每次执行再弹
+    ///   一遍「允许插件命令？」是重复把关，Todo 这类高频入口每点一下都要
+    ///   确认根本没法用。
+    /// - `.draft`（插件草稿，内容随时在改、从没走过安装授权）和
+    ///   `.codexCache`（从 `~/.codex` 外部缓存目录自动发现，同样没向
+    ///   WillDeep 授过权）仍然每次执行都要用户点头。
     nonisolated static func requiresExecutionConfirmation(source: AgentPluginPackageSource?) -> Bool {
-        source != .bundled
+        switch source {
+        case .bundled, .installed:
+            return false
+        case .codexCache, .draft, nil:
+            return true
+        }
     }
 
     private static func confirmMCPCommand(pluginID: String, commandTitle: String) -> Bool {

@@ -1,7 +1,18 @@
 # Changelog
 
-> 当前文件保留最新版本（1.314.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.315.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.315.0-rc1 - 2026-09-01
+
+### Fixed
+
+- transcript 里含中文的文件名 chip 不再塌字（`SSO-产品架构设计.key` 曾显示成 `SSO-.key`，同款问题第四次复发）。根因不在字体指定层：macOS 26 起 `NSTextStorage` 入库时的 `fixAttributes` 会按 `AttributedString(markdown:)` 桥接残留的 presentation intent / `SwiftUI.Font` 属性**重新解析字体**，`.code` intent 被解析成没有中文字形的 Menlo，把渲染管线钉好的 SF Mono + PingFang fallback 整体覆盖——前三次修复都停留在 NSFont 层，所以在 macOS 26 上被这条新通道整体旁路。现在渲染收尾把这类"会被 fixAttributes 重新解释"的残留属性整串剥掉，并新增三层回归：全字体选项的属性级断言、真实 NSTextView 的字形级断言（.notdef 即红）、fixAttributes 抗性断言。
+
+### Added
+
+- 插件命令授权前移到安装时：`.installed` 来源的插件执行自己的 MCP 命令不再每次弹「允许插件命令？」——安装面板已列出插件要求的全部权限，点「安装」即完成授权。插件草稿与 Codex 外部缓存两类来源从未走过安装授权，仍每次执行确认。
+- `#1983#` 本地确认预览新增中文文件名场景卡：命令与工作目录都含中文文件名/目录（`SSO-产品架构设计.pptx` 等），中文渲染再出回归时肉眼一扫即见。
 
 ## 1.314.0-rc1 - 2026-08-31
 

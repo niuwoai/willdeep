@@ -912,12 +912,14 @@ struct AgentPluginSystemTests {
     }
 
     @Test
-    func bundledPluginsSkipThePerCommandConfirmation() {
-        // 随 App 签名发行的第一方插件不再逐条弹确认：收藏夹这种默认入口
-        // 每翻一次页面都要点「执行」根本没法用。其它来源仍然每次都要点头。
+    func installedAndBundledPluginsSkipThePerCommandConfirmation() {
+        // 授权在安装时一次拿到:安装面板已列出插件权限,用户点「安装」即
+        // 授权,执行时不再弹「允许插件命令?」。草稿和 Codex 外部缓存从没
+        // 走过安装授权,仍然每次执行都要点头。
         #expect(AgentPluginCommandExecutor.requiresExecutionConfirmation(source: .bundled) == false)
-        #expect(AgentPluginCommandExecutor.requiresExecutionConfirmation(source: .installed))
+        #expect(AgentPluginCommandExecutor.requiresExecutionConfirmation(source: .installed) == false)
         #expect(AgentPluginCommandExecutor.requiresExecutionConfirmation(source: .codexCache))
+        #expect(AgentPluginCommandExecutor.requiresExecutionConfirmation(source: .draft))
         #expect(AgentPluginCommandExecutor.requiresExecutionConfirmation(source: nil))
     }
 

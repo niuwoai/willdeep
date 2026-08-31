@@ -1505,6 +1505,206 @@ struct AgentChatHistoryRendererGoalTests {
         ) != nil)
     }
 
+    /// 2026-09-01 用户截图复现:侧边栏终端 `ls` 结果里的中文文件名在
+    /// transcript 又塌字——`SSO-产品架构设计.key` 显示成 `SSO-.key`、
+    /// `TokenHub运营后台统一UI改造规范.md` 显示成 `TokenHubUI.md`(CJK
+    /// 隐形、夹在中间的 ASCII 存活)。行内代码 chip(`.key`/`.pptx` 不在
+    /// 路径后缀白名单)和路径 chip(`.md`)两条链路 × 全部聊天字体选项
+    /// 一起锁:CJK 子段的每一次出现都必须顶着非等宽的可见字形字体。
+    @Test(arguments: ["pingfang-sc", "system", "rounded", "serif", "monospaced", "menlo"])
+    func lsFilenameCJKStaysVisibleAcrossChatFonts(fontID: String) throws {
+        // 逐字取自用户会话落盘 JSON(672BC1D2)里那条塌字的 assistant 消息。
+        let content = "已在侧边栏终端（`~/Sites/sso`，本地 fish shell）运行 `ls`，输出为带图标的双栏格式，对应文件如下：\n\n"
+            + "`ARCHITECTURE.md`、`CHANGELOG.md`、`PRODUCT_OVERVIEW.md`、`README.md`、`design-qa.md`、"
+            + "`docker-compose.yml`、`Dockerfile.console`、`Dockerfile.server`、`go.mod`、`go.sum`、`go.work`、"
+            + "`sso`（可执行二进制）、`SSO-产品架构设计.key`、`SSO-产品架构设计.pptx`、"
+            + "`TokenHub运营后台统一UI改造规范.md`，以及目录 `bin/`、`data/`、`deploy/`、`docs/`、"
+            + "`internal/`、`public/`、`scripts/`、`sdk/`、`web/`。"
+        let rendered = AgentChatHistoryRenderer.render(
+            messages: [AgentMessage(role: .assistant, content: content)],
+            isDark: false,
+            baseFontSize: 14,
+            fontID: fontID
+        )
+        let text = rendered.string as NSString
+
+        for cjkSegment in ["产品架构设计", "运营后台统一", "改造规范"] {
+            var searchLocation = 0
+            var occurrences = 0
+            while searchLocation < text.length {
+                let remaining = NSRange(location: searchLocation, length: text.length - searchLocation)
+                let found = text.range(of: cjkSegment, options: [], range: remaining)
+                guard found.location != NSNotFound else { break }
+                occurrences += 1
+                var index = found.location
+                while index < NSMaxRange(found) {
+                    var effective = NSRange(location: 0, length: 0)
+                    let font = try #require(rendered.attribute(
+                        .font,
+                        at: index,
+                        effectiveRange: &effective
+                    ) as? NSFont, "「\(cjkSegment)」在 \(index) 处没有字体(fontID=\(fontID))")
+                    #expect(
+                        !font.fontDescriptor.symbolicTraits.contains(.monoSpace),
+                        "「\(cjkSegment)」在 \(index) 处仍顶着等宽字体 \(font.fontName)(fontID=\(fontID))"
+                    )
+                    index = max(index + 1, NSMaxRange(effective))
+                }
+                searchLocation = NSMaxRange(found)
+            }
+            #expect(occurrences > 0, "「\(cjkSegment)」整段从 transcript 里消失了(fontID=\(fontID))")
+        }
+
+        // macOS 26 的 NSTextStorage.fixAttributes 会按 presentation intent /
+        // SwiftUI 作用域属性重新解析字体(.code → Menlo,无中文字形)。
+        // renderer 输出必须一个这类残留都不带,否则上面的字体断言全是
+        // 假安全——attributed string 层是 PingFang,一进 storage 就被改写。
+        var leftoverKeys: Set<String> = []
+        rendered.enumerateAttributes(
+            in: NSRange(location: 0, length: rendered.length),
+            options: []
+        ) { attributes, _, _ in
+            for key in attributes.keys
+            where key.rawValue.hasPrefix("SwiftUI.")
+                || key.rawValue == "NSInlinePresentationIntent"
+                || key.rawValue == "NSPresentationIntent" {
+                leftoverKeys.insert(key.rawValue)
+            }
+        }
+        #expect(leftoverKeys.isEmpty, "renderer 输出残留可被 fixAttributes 重解析的属性: \(leftoverKeys.sorted())")
+    }
+
+    /// 像素级探针:用真实 AgentChatHistoryNSTextView + 用户报障时的真实设置
+    /// (pingfang-sc / 15pt / 1.3 行高)渲染完整回合,逐 CJK 字符断言布局层
+    /// 字形有效且有非零 advance,并落一张 PNG 供人工比对。
+    @Test
+    @MainActor
+    func lsFilenameCJKGlyphsSurviveRealViewLayout() throws {
+        let startedAt = Date(timeIntervalSince1970: 3_000)
+        let userMsg = AgentMessage(role: .user, content: "在侧边栏运行一下ls 看看结果", createdAt: startedAt)
+        let toolLoop = AgentMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [AgentMessageToolCall(
+                externalID: "spawn-1",
+                toolName: "spawn_subagent",
+                argumentsJSON: #"{"task":"run ls"}"#
+            )],
+            promptTokens: 50,
+            completionTokens: 10,
+            createdAt: startedAt.addingTimeInterval(2)
+        )
+        let toolResult = AgentMessage(
+            role: .tool,
+            content: "`ls` 命令已在侧边栏终端成功执行并返回结果。",
+            toolCallID: "spawn-1",
+            createdAt: startedAt.addingTimeInterval(90)
+        )
+        let final = AgentMessage(
+            role: .assistant,
+            content: "已在侧边栏终端（`~/Sites/sso`，本地 fish shell）运行 `ls`，输出为带图标的双栏格式，对应文件如下：\n\n"
+                + "`ARCHITECTURE.md`、`CHANGELOG.md`、`PRODUCT_OVERVIEW.md`、`README.md`、`design-qa.md`、"
+                + "`docker-compose.yml`、`Dockerfile.console`、`Dockerfile.server`、`go.mod`、`go.sum`、`go.work`、"
+                + "`sso`（可执行二进制）、`SSO-产品架构设计.key`、`SSO-产品架构设计.pptx`、"
+                + "`TokenHub运营后台统一UI改造规范.md`，以及目录 `bin/`、`data/`、`deploy/`、`docs/`、"
+                + "`internal/`、`public/`、`scripts/`、`sdk/`、`web/`。",
+            promptTokens: 477_500,
+            completionTokens: 3_100,
+            cachedPromptTokens: 358_000,
+            elapsedSeconds: 97,
+            createdAt: startedAt.addingTimeInterval(97)
+        )
+        let raw = [userMsg, toolLoop, toolResult, final]
+        let displayed = AgentTranscriptModePresentation.modeInvariantMessages(from: raw)
+
+        let view = AgentChatHistoryNSTextView()
+        view.drawsBackground = true
+        view.backgroundColor = .white
+        view.linkTextAttributes = [
+            .underlineStyle: 0,
+            .cursor: NSCursor.arrow,
+        ]
+        view.textContainerInset = NSSize(width: 32, height: 24)
+        view.frame = NSRect(x: 0, y: 0, width: 1000, height: 900)
+        view.textContainer?.size = NSSize(width: 936, height: CGFloat.greatestFiniteMagnitude)
+        view.applyMessages(
+            displayed,
+            isDark: false,
+            assistantTurnContextMessages: raw,
+            baseFontSize: 15,
+            fontID: "pingfang-sc",
+            lineHeightMultiple: 1.3
+        )
+        view.layoutSubtreeIfNeeded()
+
+        let storage = try #require(view.textStorage)
+        let layoutManager = try #require(view.layoutManager)
+        let container = try #require(view.textContainer)
+        layoutManager.ensureLayout(for: container)
+
+        let text = storage.string as NSString
+        for cjkSegment in ["产品架构设计", "运营后台统一", "改造规范"] {
+            var searchLocation = 0
+            var occurrences = 0
+            while searchLocation < text.length {
+                let remaining = NSRange(location: searchLocation, length: text.length - searchLocation)
+                let found = text.range(of: cjkSegment, options: [], range: remaining)
+                guard found.location != NSNotFound else { break }
+                occurrences += 1
+                for charIndex in found.location..<NSMaxRange(found) {
+                    let glyphIndex = layoutManager.glyphIndexForCharacter(at: charIndex)
+                    let glyph = layoutManager.cgGlyph(at: glyphIndex)
+                    let rect = layoutManager.boundingRect(
+                        forGlyphRange: NSRange(location: glyphIndex, length: 1),
+                        in: container
+                    )
+                    let ch = text.substring(with: NSRange(location: charIndex, length: 1))
+                    #expect(glyph != 0, "「\(ch)」(char \(charIndex)) 拿到 .notdef 字形")
+                    #expect(rect.width > 1, "「\(ch)」(char \(charIndex)) advance 塌成 \(rect.width)")
+                }
+                searchLocation = NSMaxRange(found)
+            }
+            #expect(occurrences > 0, "「\(cjkSegment)」没有进入 text storage")
+        }
+
+        // fixAttributes 抗性:renderer 输出即使再被 AppKit 重新修一遍
+        // 属性,CJK 的可见字形字体也不能被 intent/SwiftUI 残留改写回等宽。
+        let direct = AgentChatHistoryRenderer.render(
+            messages: displayed,
+            isDark: false,
+            assistantTurnContextMessages: raw,
+            baseFontSize: 15,
+            fontID: "pingfang-sc",
+            lineHeightMultiple: 1.3
+        )
+        let fixProbe = NSMutableAttributedString(attributedString: direct)
+        fixProbe.fixAttributes(in: NSRange(location: 0, length: fixProbe.length))
+        let fixText = fixProbe.string as NSString
+        let fixFound = fixText.range(of: "产品架构设计")
+        #expect(fixFound.location != NSNotFound)
+        if fixFound.location != NSNotFound {
+            for charIndex in fixFound.location..<NSMaxRange(fixFound) {
+                let font = try #require(fixProbe.attribute(
+                    .font,
+                    at: charIndex,
+                    effectiveRange: nil
+                ) as? NSFont)
+                #expect(
+                    !font.fontDescriptor.symbolicTraits.contains(.monoSpace),
+                    "fixAttributes 后 CJK 又被改写成等宽 \(font.fontName)"
+                )
+            }
+        }
+
+        let outputPath = ProcessInfo.processInfo.environment[
+            "WILLDEEP_LS_CJK_QA_OUTPUT"
+        ] ?? "/private/tmp/Xedit-ls-cjk-design-qa.png"
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+    }
+
     @Test
     func localPathLinksUseQuietTextStylingWithoutChipBackgrounds() throws {
         let rendered = AgentChatHistoryRenderer.render(
