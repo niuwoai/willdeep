@@ -18,6 +18,17 @@ struct AgentWorkerArchitectureTests {
         #expect(AgentSubagentProfileCatalog.tester.modelBinding.workerTier == .standard)
     }
 
+    @Test("context budgets offer four steps from 64K to 1M")
+    func contextWindowSteps() {
+        #expect(AgentWorkerTierModels.selectableWindows == [65_536, 131_072, 262_144, 1_048_576])
+        #expect(AgentWorkerTierModels.selectableWindows == AgentWorkerTierModels.selectableWindows.sorted())
+        #expect(AgentWorkerTierModels.selectableWindows.map(AgentWorkerTierModels.windowLabel)
+            == ["64K", "128K", "256K", "1M"])
+        // 配置文件可以钉任意值,标签不能把它四舍五入成一个和实际预算对不上的档位名。
+        #expect(AgentWorkerTierModels.windowLabel(400_000) == "400000")
+        #expect(AgentWorkerTierModels.windowLabel(0) == "0")
+    }
+
     @Test("model slots persist separately from role instructions")
     func persistence() throws {
         let suite = "willdeep-profiles-\(UUID().uuidString)"
