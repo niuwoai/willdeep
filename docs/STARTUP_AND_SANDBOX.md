@@ -31,7 +31,11 @@
 4. `AgentSettingsStore.loadKnownModelIDs / …AlwaysAllowedCommands` 等
 5. `AgentRoutineStore.loadAll()` + 启动调度器
 
-会话目录由后台 utility task 调用 `AgentSessionStore.loadCatalog()` 单次扫描，结果回到主线程后与启动期间新建的内存会话合并。空白草稿仅由侧边栏可见性规则隐藏，不再在启动或新建会话时自动删盘。
+会话目录由后台 utility task 调用 `AgentSessionStore.loadCatalog()` 单次扫描，结果回到主线程后与启动期间新建的内存会话合并（ID 冲突时内存赢）。
+
+空白「新对话」自 1.316.0-rc2 起**不在创建时落盘**：会话立刻进内存并可用，由第一次真正的持久化（发消息、绑定工作区、重命名、置顶、被运行时缓存逐出、切走）写盘。调度台／圆桌作用域的会话例外，仍在创建时落盘——那是编排器已承诺的工作，须能在首轮之前崩溃后恢复。
+
+目录合并完成后跑一次 `sweepAbandonedEmptySessions()`，清掉旧版本遗留的空壳（零消息 + 无项目 + 无工作区 + 未置顶 + 未归档 + 普通作用域 + 7 天未改动 + 任一窗口都没在用）。真正的删除由 `AgentSessionStore.deleteIfStillEmptyAndUnattached(id:)` 把关：删前在文件协调下重读并逐条复核，**解不出来的文件一律保留**——这是 1.167.0-rc5 那次「解不出来当成空的」误删真实历史的教训。侧边栏可见性规则仍然负责隐藏尚未到期的空占位。
 
 随后挂订阅与钩子（非阻塞）：registry 的 `objectWillChange` 转发、media task 轮询、终端按需 provider、三条后台完成钩子（job / media / subagent）、会话保存失败通知、终端设置跨实例同步。
 
