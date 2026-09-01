@@ -855,11 +855,15 @@ enum AgentDesign {
     static let composerHeight: CGFloat = 124
     static let headerHeight: CGFloat = 44
     static let statusBarHeight: CGFloat = 26
-    // Codex sidebar reference: 14 pt SF text on a stable 31 pt vertical
-    // rhythm. Keep the geometry as named tokens so workspace rows,
-    // conversation rows, hover surfaces, and visual regression tests do
-    // not drift independently.
-    static let sidebarRowFontSize: CGFloat = 14
+    // Codex sidebar reference: SF text on a stable 31 pt vertical rhythm.
+    // Keep the geometry as named tokens so workspace rows, conversation rows,
+    // hover surfaces, and visual regression tests do not drift independently.
+    //
+    // The row text reads at the chat body size rather than one point under it:
+    // the sidebar sits directly beside the transcript, and a one-point step was
+    // not enough to read as hierarchy — it only read as slightly smaller text.
+    // Hierarchy here comes from color and weight instead.
+    static let sidebarRowFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
     static let sidebarRowHeight: CGFloat = 31
     static let sidebarWorkspaceHorizontalInset: CGFloat = 18
     static let sidebarWorkspaceIconSize: CGFloat = 14
@@ -869,7 +873,9 @@ enum AgentDesign {
     // Workspace children keep their 40 pt text-column alignment on the left,
     // but do not need the same deep indent on the trailing edge. Four points
     // preserves breathing room while returning 28 pt — roughly two CJK
-    // characters at the 14 pt row font — to long conversation titles.
+    // characters at the default row font — to long conversation titles. The
+    // inset is fixed geometry: it no longer tracks the row font, which now
+    // follows the user's chat body size.
     static let sidebarSessionTrailingContentInset: CGFloat = 4
     static let sidebarSessionTrailingActionsWidth: CGFloat = 40
     // Global pins are top-level navigation, so their title column starts at
@@ -898,16 +904,18 @@ enum AgentDesign {
     static let sidebarRowFont = Font.system(size: sidebarRowFontSize)
     static let sidebarWorkspaceFont = Font.system(size: sidebarRowFontSize)
 
-    /// Chrome around the transcript (sidebar rows, composer input) follows the
-    /// chat body size by the same absolute step, so the established hierarchy
-    /// survives scaling: the 15 pt default body pairs with a 14 pt sidebar row
-    /// and a 13 pt composer, and raising the body to 20 pt carries them to
-    /// 19/18 rather than leaving them stranded at their old sizes.
+    /// Chrome around the transcript follows the chat body size by the same
+    /// absolute step, so whatever hierarchy a token expresses survives
+    /// scaling instead of leaving the surface stranded at its old size.
     ///
     /// Deliberately an offset rather than a ratio — these surfaces sit side by
     /// side with the transcript, and a proportional rule would drift them
     /// apart at the extremes. The floor keeps titles and input legible when
     /// the body size is set very small.
+    ///
+    /// Sidebar rows and the composer input pass a token equal to the default
+    /// body size, so they land exactly on the body size at every setting; only
+    /// supporting text (timestamps, status labels) still steps down.
     static func scaledChromeFontSize(
         _ token: CGFloat,
         baseFontSize: CGFloat
@@ -927,9 +935,10 @@ enum AgentDesign {
         scaledSidebarRowFont(baseFontSize: baseFontSize)
     }
 
-    /// Composer input. The `@`-reference tag derives its own size from the
-    /// live input font (one point smaller), so it is not listed here.
-    static let composerInputFontSize: CGFloat = 13
+    /// Composer input, at the chat body size: what the user types is sized
+    /// like what they read. The `@`-reference tag derives its own size from
+    /// the live input font (one point smaller), so it is not listed here.
+    static let composerInputFontSize: CGFloat = AgentSettingsStore.chatBaseFontSizeDefault
 
     static func scaledComposerInputFontSize(baseFontSize: CGFloat) -> CGFloat {
         scaledChromeFontSize(composerInputFontSize, baseFontSize: baseFontSize)
