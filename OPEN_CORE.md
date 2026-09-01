@@ -12,8 +12,8 @@ That means you may use, copy, modify, distribute, and create derivative works fr
 
 The open source core is expected to include:
 
-- The native macOS editor.
-- Local file browsing and editing.
+- The native macOS Agent workbench: sessions, transcripts, and the multi-tab work panel.
+- Read-only file preview and diff review of agent-proposed changes.
 - Bring-your-own-key Agent mode.
 - Local Agent tool execution with approval controls.
 - Keychain-backed local credential storage.
@@ -75,8 +75,8 @@ WillDeep 采用 **Apache 2.0 + Open Core** 模式。
 
 开源核心预期包括：
 
-- 原生 macOS 编辑器。
-- 本地文件浏览与编辑。
+- 原生 macOS Agent 工作台：会话、对话记录与多标签工作面板。
+- 文件的只读预览，以及 Agent 改动的 Diff 审阅。
 - 用户自带 API Key 的 Agent 模式。
 - 带审批控制的本地 Agent 工具执行。
 - 基于 Keychain 的本地凭据存储。

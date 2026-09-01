@@ -3,6 +3,14 @@
 > 当前文件保留最新版本（1.315.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.315.0-rc7 - 2026-09-01
+
+### Docs
+
+- `OPEN_CORE.md` 的「开源核心」清单（中英两版）不再把「原生 macOS 编辑器」和「本地文件浏览与编辑」算作开源内容。通用编辑器场景在 1.249.0 就整个删掉了（`XeditApp.swift` 只剩 Agent 窗口与终端捷径窗口，`XeditTests/AgentHeaderEditorEntryTests.swift` 有源码守卫钉着不许复活），通用编辑归独立的 Qeditor。一份专门用来划开源边界的文档，把一个已经不存在的功能列进承诺清单，比介绍页写错更难解释。两条改成现状：Agent 工作台（会话、对话记录、多标签工作面板），以及文件的只读预览与 Agent 改动的 Diff 审阅。README 已于 1.315.0-rc6 按同一现状重写，这两处是同一批陈述里漏掉的。
+- Help Book「审批与安全」一节（中英两版）的档位名改成 UI 里真正显示的那四个：严格模式 / 智能审核 / 工作区可写 / 完全访问（Strict mode / Smart review / Workspace write / Full access）。旧文写的是「每次询问、智能审批、Workspace 访问、静默」——四个名字没一个对得上，照着帮助去输入区找档位只会一个都找不到。排错一节里那句「把审批档位调到『智能审批』或『Workspace 访问』」同步改名。列表按从紧到松排列并写明顺序；输入区菜单的实际排序另有防误点考虑（`AgentApprovalMode.allCases` 把完全访问放在第二位、严格模式压轴），文档不复述那层排序理由。
+- 改过 Help HTML 后重跑 `scripts/build_help_index.rb`，两个语言的 lsm 与 corespotlight 索引一并提交——缺索引时 Help Viewer 不认这本书，会转去在线帮助库找，然后报「所选内容当前不可用」。
+
 ## 1.315.0-rc5 - 2026-09-01
 
 ### Changed
