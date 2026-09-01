@@ -7,9 +7,12 @@
 //
 
 import AppKit
+import os
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
+
+private let pluginPageLog = Logger(subsystem: "com.willdeep.agent", category: "plugin-page")
 
 struct AgentPluginPageHost: View {
     @EnvironmentObject private var appState: AppState
@@ -175,7 +178,10 @@ private struct AgentPluginWebPage: View {
 
     private var taskIdentity: String {
         let generation = sessionState.refreshGenerations[destination.qualifiedID, default: 0]
-        return "\(destination.qualifiedID):\(generation)"
+        // packageURL 参与身份：注册表刷新把同名插件的激活包从一个副本切到另一个
+        // 副本（内置 ↔ 本地安装同版本并存时会发生）后，必须以新副本重读入口
+        // HTML，否则旧 HTML 配新资源根，哈希对不上的子资源整页白掉。
+        return "\(destination.qualifiedID):\(generation):\(destination.packageURL.path)"
     }
 
     private var destinationContext: AgentPluginDestinationContext {
@@ -315,6 +321,22 @@ private struct AgentPluginWebPage: View {
             if (event.source !== window || !data || data.jsonrpc !== '2.0' || typeof data.method !== 'string') return;
             if (handler) handler.postMessage({type:'mcpMessage', message:data});
           });
+          // 子资源加载失败与 CSP 拦截不会触发任何导航回调，宿主此前完全不可见；
+          // 这里回传给宿主打日志，让"白页"类故障有现场可查。
+          function reportPageDiagnostic(kind, detail) {
+            if (handler) handler.postMessage({type:'pageDiagnostic', kind:String(kind), detail:String(detail).slice(0, 512)});
+          }
+          window.addEventListener('error', function(event) {
+            var target = event.target || {};
+            if (target !== window && target.tagName) {
+              reportPageDiagnostic('resource-error', target.tagName + ' ' + (target.src || target.href || ''));
+            } else if (event.message) {
+              reportPageDiagnostic('js-error', event.message + ' @' + (event.filename || '') + ':' + (event.lineno || 0));
+            }
+          }, true);
+          window.addEventListener('securitypolicyviolation', function(event) {
+            reportPageDiagnostic('csp', event.violatedDirective + ' blocked ' + (event.blockedURI || ''));
+          });
         })();
         </script>
         """
@@ -442,6 +464,7 @@ private struct AgentPluginWebView: NSViewRepresentable {
         coordinator.destination = destination
         coordinator.destinationContext = context
         coordinator.appState = appState
+        coordinator.schemeHandler?.packageURL = destination.packageURL
         if coordinator.loadedHTML != html || coordinator.baseURL != baseURL {
             coordinator.prepareForReload()
             coordinator.loadedHTML = html
@@ -646,6 +669,12 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 runAICompletion(body)
             case "mcpMessage":
                 handleMCPMessage(body["message"])
+            case "pageDiagnostic":
+                let kind = String((body["kind"] as? String ?? "unknown").prefix(64))
+                let detail = String((body["detail"] as? String ?? "").prefix(512))
+                pluginPageLog.error(
+                    "plugin page diagnostic: plugin=\(self.destination.pluginID, privacy: .public) kind=\(kind, privacy: .public) detail=\(detail, privacy: .public)"
+                )
             default:
                 break
             }
@@ -672,17 +701,18 @@ private struct AgentPluginWebView: NSViewRepresentable {
         }
 
         func pluginBaseURL(for localBaseURL: URL?) -> URL? {
-            guard let localBaseURL else { return nil }
-            let packagePath = destination.packageURL.standardizedFileURL.path
-            let localPath = localBaseURL.standardizedFileURL.path
-            let prefix = packagePath.hasSuffix("/") ? packagePath : packagePath + "/"
-            guard localPath == packagePath || localPath.hasPrefix(prefix) else { return nil }
-            let relative = localPath == packagePath ? "" : String(localPath.dropFirst(prefix.count))
-            let encoded = relative
-                .split(separator: "/", omittingEmptySubsequences: true)
-                .map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }
-                .joined(separator: "/")
-            return URL(string: "\(AgentPluginSchemeHandler.scheme)://\(AgentPluginSchemeHandler.host)/\(encoded)/")
+            let mapped = AgentPluginWebResourceResolver.schemeBaseURL(
+                forEntryDirectory: localBaseURL,
+                packageURL: destination.packageURL
+            )
+            if mapped == nil, localBaseURL != nil {
+                // baseURL 落空意味着页面里所有相对子资源都会静默加载失败，
+                // 留一条日志让这类"白页"下次能自己喊出来。
+                pluginPageLog.error(
+                    "plugin page baseURL mismatch: plugin=\(self.destination.pluginID, privacy: .public) entryDir=\(localBaseURL?.path ?? "nil", privacy: .public) package=\(self.destination.packageURL.path, privacy: .public)"
+                )
+            }
+            return mapped
         }
 
         private func executeCommand(_ body: [String: Any]) {
@@ -991,6 +1021,25 @@ private struct AgentPluginWebView: NSViewRepresentable {
 enum AgentPluginWebResourceResolver {
     static let directoryIndexFile = "index.html"
 
+    /// 把入口 HTML 所在目录映射成 `willdeep-plugin://bundle/<相对目录>/` 的
+    /// 文档 baseURL。两侧都先走 `canonicalFileURL`（realpath）再比前缀：
+    /// 入口目录来自 `safeResourceURL`，天生是 realpath 形态；包根若不做同样
+    /// 的规范化，路径里只要有一段软链接前缀就会对不上，静默返回 nil，页面里
+    /// 全部相对子资源随之无声失败——这正是插件页"只剩内联内容"白页的形态。
+    static func schemeBaseURL(forEntryDirectory localBaseURL: URL?, packageURL: URL) -> URL? {
+        guard let localBaseURL else { return nil }
+        let packagePath = AgentPluginPackageLoader.canonicalFileURL(packageURL).path
+        let localPath = AgentPluginPackageLoader.canonicalFileURL(localBaseURL).path
+        let prefix = packagePath.hasSuffix("/") ? packagePath : packagePath + "/"
+        guard localPath == packagePath || localPath.hasPrefix(prefix) else { return nil }
+        let relative = localPath == packagePath ? "" : String(localPath.dropFirst(prefix.count))
+        let encoded = relative
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }
+            .joined(separator: "/")
+        return URL(string: "\(AgentPluginSchemeHandler.scheme)://\(AgentPluginSchemeHandler.host)/\(encoded)/")
+    }
+
     static func fileURL(forRequestPath path: String, packageURL: URL) throws -> URL {
         let decoded = path.removingPercentEncoding ?? path
         let relativePath = decoded.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -1019,11 +1068,30 @@ enum AgentPluginWebResourceResolver {
 private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
     nonisolated static let scheme = "willdeep-plugin"
     nonisolated static let host = "bundle"
-    private let packageURL: URL
+    private let packageURLLock = NSLock()
+    private var lockedPackageURL: URL
     private let maximumResourceBytes = 8 * 1024 * 1024
 
+    /// 资源根必须跟着 destination 的激活包走。它在 `makeNSView` 时创建，而
+    /// 注册表刷新可能把激活包切到另一个副本（内置 ↔ 本地安装同版本并存）；
+    /// 若资源根钉死在创建时的副本上，就会出现"入口 HTML 是 A 副本、子资源
+    /// 从 B 副本取"的混装，带哈希文件名的产物（Vite dist）整页 404 白掉。
+    /// `updateNSView` 每次都回写此值。
+    var packageURL: URL {
+        get {
+            packageURLLock.lock()
+            defer { packageURLLock.unlock() }
+            return lockedPackageURL
+        }
+        set {
+            packageURLLock.lock()
+            defer { packageURLLock.unlock() }
+            lockedPackageURL = newValue
+        }
+    }
+
     init(packageURL: URL) {
-        self.packageURL = packageURL
+        self.lockedPackageURL = packageURL
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
@@ -1035,7 +1103,7 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
             }
             let resourceURL = try AgentPluginWebResourceResolver.fileURL(
                 forRequestPath: requestURL.path,
-                packageURL: packageURL
+                packageURL: self.packageURL
             )
             let values = try resourceURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard values.isRegularFile == true,

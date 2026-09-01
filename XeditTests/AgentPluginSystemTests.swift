@@ -1144,6 +1144,66 @@ struct AgentPluginSystemTests {
         #expect(source.contains("didFailProvisionalNavigation"))
     }
 
+    @Test
+    func pluginPageBaseURLSurvivesSymlinkedPackagePaths() throws {
+        // temporaryDirectory 位于 /var/...，而 /var 是 /private/var 的软链接：
+        // 入口目录经 safeResourceURL 后是 realpath 形态（/private/var/...），
+        // 包根若不做同样的规范化，前缀比较必然落空、baseURL 变 nil，页面里
+        // 所有相对子资源静默失败。这里用未规范化的包根直接调映射函数验证。
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let uiURL = root.appendingPathComponent("ui", isDirectory: true)
+        try FileManager.default.createDirectory(at: uiURL, withIntermediateDirectories: true)
+        try "<html></html>".write(to: uiURL.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+
+        let entry = try AgentPluginPackageLoader.safeResourceURL(relativePath: "ui/index.html", packageURL: root)
+        let baseURL = AgentPluginWebResourceResolver.schemeBaseURL(
+            forEntryDirectory: entry.deletingLastPathComponent(),
+            packageURL: root
+        )
+        #expect(baseURL?.absoluteString == "willdeep-plugin://bundle/ui/")
+
+        let packageRootBase = AgentPluginWebResourceResolver.schemeBaseURL(
+            forEntryDirectory: AgentPluginPackageLoader.canonicalFileURL(root),
+            packageURL: root
+        )
+        #expect(packageRootBase?.absoluteString == "willdeep-plugin://bundle//" || packageRootBase?.absoluteString == "willdeep-plugin://bundle/")
+    }
+
+    @Test
+    func pluginPageBaseURLRejectsEntryDirectoriesOutsideThePackage() throws {
+        let root = try temporaryDirectory()
+        let foreign = try temporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: foreign)
+        }
+        // 入口目录来自另一份副本（内置 ↔ 本地安装混装）时必须落空——调用方
+        // 有责任在落空时重读入口，而不是拿错配的 baseURL 加载。
+        #expect(AgentPluginWebResourceResolver.schemeBaseURL(forEntryDirectory: foreign, packageURL: root) == nil)
+        #expect(AgentPluginWebResourceResolver.schemeBaseURL(forEntryDirectory: nil, packageURL: root) == nil)
+    }
+
+    @Test
+    func pluginPageFollowsActivePackageAcrossRegistryFlips() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentPluginPageHost.swift"),
+            encoding: .utf8
+        )
+
+        // 同名同版本插件在「内置」与「本地安装」两个副本间切换激活包时，
+        // 三处必须一起跟着走，缺一处就是入口 HTML 与子资源来自不同副本的混装白页：
+        // 1) scheme handler 的资源根每次 update 回写；
+        #expect(source.contains("coordinator.schemeHandler?.packageURL = destination.packageURL"))
+        // 2) 页面加载任务的身份含包路径，激活包切换即重读入口 HTML；
+        #expect(source.contains(":\\(destination.packageURL.path)"))
+        // 3) baseURL 映射两侧都走 canonicalFileURL 再比前缀。
+        #expect(source.contains("func schemeBaseURL(forEntryDirectory"))
+    }
+
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("willdeep-plugin-test-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
