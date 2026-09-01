@@ -115,8 +115,9 @@ struct AgentWorkerTierSettingsView: View {
             .disabled(modelOptions(tier).isEmpty)
         }
         Picker(L10n.AgentProfiles.fieldContextWindow, selection: contextBinding(tier)) {
-            Text("128K").tag(AgentWorkerTierModels.standardWindow)
-            Text("256K").tag(AgentWorkerTierModels.extendedWindow)
+            ForEach(contextWindowOptions(tier), id: \.self) { window in
+                Text(AgentWorkerTierModels.windowLabel(window)).tag(window)
+            }
         }
         Text(String(localized: "配置可用不等于实测通过；请使用提供商支持的模型 ID。未配置的私有提供商不会自动转发到 some.im。", table: "WorkerArchitecture"))
             .font(.caption).foregroundStyle(.secondary)
@@ -151,6 +152,19 @@ struct AgentWorkerTierSettingsView: View {
             models[tier].contextWindowTokens = $0
             persist()
         })
+    }
+
+    /// A value stored by an older build, or merged in from config.toml, may
+    /// not be one of the offered budgets. It is kept in the list so the picker
+    /// shows what dispatch actually uses instead of rendering blank.
+    private func contextWindowOptions(_ tier: AgentWorkerTier) -> [Int] {
+        let current = contextBinding(tier).wrappedValue
+        var options = AgentWorkerTierModels.selectableWindows
+        if !options.contains(current) {
+            options.append(current)
+            options.sort()
+        }
+        return options
     }
 
     private func modelOptions(_ tier: AgentWorkerTier) -> [String] {

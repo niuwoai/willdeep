@@ -3,6 +3,31 @@
 > 当前文件保留最新版本（1.315.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.315.0-rc9 - 2026-09-01
+
+### Fixed
+
+- **插件页白屏 / 待办骨架永不消失：激活包副本切换时页面混装两个副本的内容。** 内置（`BundledPlugins`）与本地安装（`~/.willdeep/plugins`）同 ID 同版本并存时（1.315.0 起随 App 发行的待办 1.1.0 与用户此前本地安装的 1.1.0 正好撞上），注册表刷新可能把激活包从一个副本切到另一个副本，而已存在的插件页视图有三处不跟着走，各自留下一种病灶：
+  - `AgentPluginSchemeHandler` 的资源根在 `makeNSView` 时钉死，刷新后入口 HTML 已换副本、子资源仍从旧副本取——Vite dist 的哈希文件名两个副本各不相同，脚本整页 404，俄罗斯方块／经典游戏厅白屏。现在 `updateNSView` 每次回写资源根。
+  - 页面加载任务的身份只含 `qualifiedID:generation`，激活包切换不重读入口 HTML。现在身份追加包路径，切换即重载。
+  - `pluginBaseURL` 用未规范化的包路径和 realpath 形态的入口目录比前缀，路径里有软链接（哪怕只是 `/var` → `/private/var`）就对不上，静默返回 nil baseURL——页面里所有相对子资源无声失败，只剩内联部分：待办页正是骨架与输入行照常渲染、`details.js` 加载失败、取数永远不发生。映射逻辑移入 `AgentPluginWebResourceResolver.schemeBaseURL`，两侧统一走 `canonicalFileURL` 再比较，落空时打 `com.willdeep.agent/plugin-page` 错误日志。
+- **这类故障从此不再无声。** 子资源加载失败与 CSP 拦截不触发任何导航回调，1.307.0 补的 `didFail(Provisional)Navigation` 结构上抓不到它们。桥接引导脚本新增 `error`（捕获阶段）与 `securitypolicyviolation` 监听，回传宿主打进统一日志（`pageDiagnostic`，kind=resource-error / js-error / csp），白页现场一条 `log show` 就能定位。
+- 现场处置记录（2026-09-01，1.315.0-rc5 安装版）：经典游戏厅与待办在一次注册表刷新 + 视图重建后恢复；俄罗斯方块因本地安装副本是旧构建（dist 哈希与内置版不同）持续白屏，卸载本地 `willdeep-tetris-example` 后由内置 1.0.1 接管并恢复。诊断用探针插件（DiagProbe）留存于 `~/.willdeep/plugin-drafts/willdeep-diagprobe`。
+
+### Tests
+
+- `AgentPluginSystemTests` 新增三条：软链接前缀下 `schemeBaseURL` 不落空（testing 临时目录天然在 `/var` 软链下，旧实现在该用例上必红）；入口目录来自包外（另一副本）时必须返回 nil；源码守卫钉住「资源根回写 + 任务身份含包路径 + baseURL 规范化」三件套缺一即红。
+
+## 1.315.0-rc8 - 2026-09-01
+
+### Changed
+
+- 代理档案里每一档的「最大上下文」预算从 128K / 256K 两档扩到 64K / 128K / 256K / 1M 四档。此前上不去也下不来：给 `kimi-k3` 这类 1M 窗口的模型派活，预算被 256K 卡住，模型本来能吃的上下文用不上；反过来想给便宜小模型压一个更省的额度，最低也只有 128K。
+  - 预算仍然只是「我们最多发多少」的上限，不是对模型的声明。派发时照旧和提供商实际支持的窗口取小（`AgentWorkerContextBudget.inputLimit`），所以给 128K 的模型选 1M 不会造出一个必然超长的请求，只是白选。
+  - 档位与标签统一收在 `AgentWorkerTierModels.selectableWindows` / `windowLabel(_:)`，视图不再各写一份字面量。标签只对整除的值做单位换算（65536 → 64K、1048576 → 1M），`~/.willdeep/config.toml` 里钉的任意值（如 400000）按原数字显示，不四舍五入成一个和实际预算对不上的档位名。
+  - 存量配置若不在这四档里（旧版本写入或配置文件合并而来），下拉框会把该值作为一项一并列出，而不是渲染成空白。
+- 未改动：系统提示词与 `spawn_subagent` 工具说明里仍写着「128K/256K 预算」。它们属于稳定前缀，改一次会让全体用户的 prompt cache 失效并需要重录三档快照哈希，收益不抵成本；这两处只是给模型的粗略交代，预算不由模型设置。
+
 ## 1.315.0-rc7 - 2026-09-01
 
 ### Docs

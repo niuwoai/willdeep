@@ -75321,7 +75321,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Archived count"
+            "value" : "Archived"
           }
         },
         "es" : {
@@ -75333,19 +75333,19 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nombre archivé"
+            "value" : "Archivées"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "アーカイブ数"
+            "value" : "アーカイブ"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已归档数"
+            "value" : "已归档"
           }
         }
       }

@@ -31,6 +31,7 @@ xcuserdata/
 .tmp/
 .artifacts/
 .gocache/
+.cache/
 /dist/chrome-extension/
 
 # 本地构建与命令探测残留

@@ -49,8 +49,26 @@ nonisolated enum AgentWorkerRole: String, CaseIterable, Identifiable, Sendable {
 /// An explicit provider entry is authoritative; nil uses only the parent's
 /// provider, never an unrelated signed-in public account.
 nonisolated struct AgentWorkerTierModels: Codable, Equatable, Sendable {
+    static let compactWindow = 65_536
     static let standardWindow = 131_072
     static let extendedWindow = 262_144
+    static let maximumWindow = 1_048_576
+
+    /// The budgets offered in settings, smallest first. A budget is a ceiling
+    /// on what we send, never a claim about the model: dispatch still clamps
+    /// it to the provider's supported window, so picking 1M on a 128K model
+    /// buys nothing rather than producing an over-long request.
+    static let selectableWindows = [compactWindow, standardWindow, extendedWindow, maximumWindow]
+
+    /// Round token counts read as 64K / 1M; anything else (a value pinned in
+    /// config.toml, say) keeps its exact number rather than being rounded into
+    /// a label that no longer matches what dispatch uses.
+    static func windowLabel(_ tokens: Int) -> String {
+        if tokens > 0, tokens % 1_048_576 == 0 { return "\(tokens / 1_048_576)M" }
+        if tokens > 0, tokens % 1_024 == 0 { return "\(tokens / 1_024)K" }
+        return String(tokens)
+    }
+
     var bindings: [String: AgentSubagentProfile.ModelBinding] = [:]
 
     subscript(tier: AgentWorkerTier) -> AgentSubagentProfile.ModelBinding {
