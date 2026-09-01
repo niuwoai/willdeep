@@ -3,6 +3,16 @@
 > 当前文件保留最新版本（1.315.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.315.0-rc2 - 2026-09-01
+
+### Fixed
+
+- 根治 vendor SDK AIPipe 的内存失控（曾把进程堆到 126GB MALLOC_SMALL、打满 24GB 物理内存 + 38GB swap 拖垮整机）。三处并修：
+  - SIGPIPE 不再进信号 handler：它是网络/子进程断开管道的日常信号，不是崩溃，现在直接 `SIG_IGN`。旧实现在 handler 里调 `stringWithFormat`/ObjC alloc/`dispatch_async`/发网络请求（全部非 async-signal-safe），实测两个线程同时死在 handler 内的 malloc 上。
+  - 致命信号（SIGABRT/SIGILL/SIGSEGV/SIGFPE/SIGBUS）的 handler 改为纯 async-signal-safe：栈上缓冲 + `write(2)` 写一行 stderr，随后恢复默认处置并重抛，让系统崩溃流程继续；不再进 ObjC/malloc/dispatch。
+  - 日志队列设 1000 条硬上限（超限丢最旧，重试耗尽回插同样受限），落盘由"每条日志全量序列化 + `synchronize`（O(n²)）"改为 1 秒节流窗口合批；加载旧落盘数据同样按上限截断。
+- 新增 `AIPipeQueueSafetyTests`：SIGPIPE 处置与 raise 免疫、致命信号仍有真实 handler、队列上限丢最旧、落盘节流合批。
+
 ## 1.315.0-rc1 - 2026-09-01
 
 ### Fixed
