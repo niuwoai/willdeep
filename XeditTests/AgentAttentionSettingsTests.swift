@@ -65,7 +65,10 @@ struct AgentAttentionSettingsTests {
             to: "http://127.0.0.1:8787/hook"
         )
 
-        #expect(request.value(forHTTPHeaderField: "User-Agent")?.contains("WillDeep-") == true)
+        #expect(
+            request.value(forHTTPHeaderField: "User-Agent")
+                == AgentNetworkSupport.userAgent(forVersion: event.appVersion)
+        )
         #expect(request.value(forHTTPHeaderField: "X-Agent-Source") == "willdeep")
         #expect(request.value(forHTTPHeaderField: "X-Agent-Executor") == "codex")
         #expect(request.value(forHTTPHeaderField: "X-Webhook-Schema") == "willdeep.webhook.v1")
@@ -110,7 +113,7 @@ struct AgentAttentionSettingsTests {
     func webhookFormatDetection() throws {
         let willDeep = AgentWebhookFormatDetector.detect(
             headers: [
-                "User-Agent": "some.im/WillDeep-1.269.0-rc1 (macOS)",
+                "User-Agent": AgentNetworkSupport.userAgent(forVersion: "1.269.0-rc1"),
                 "X-Agent-Source": "willdeep",
             ],
             body: Data("{\"schema_version\":\"willdeep.webhook.v1\"}".utf8)
@@ -120,6 +123,20 @@ struct AgentAttentionSettingsTests {
             confidence: .high,
             hasConflict: false
         ))
+
+        // The user agent alone is enough, and the retired
+        // `some.im/WillDeep-{version}` form still resolves — older builds and
+        // the CLI keep sending it at their own pace.
+        for userAgent in [
+            AgentNetworkSupport.userAgent(forVersion: "1.315.0-rc5"),
+            "some.im/WillDeep-1.269.0-rc1 (macOS)",
+        ] {
+            let detected = AgentWebhookFormatDetector.detect(
+                headers: ["User-Agent": userAgent],
+                body: Data("{}".utf8)
+            )
+            #expect(detected.source == .willDeep)
+        }
 
         let codex = AgentWebhookFormatDetector.detect(
             headers: [:],

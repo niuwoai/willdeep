@@ -181,7 +181,7 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
             "method": "initialize",
             "params": [
                 "clientInfo": [
-                    "name": "WillDeep",
+                    "name": AgentNetworkSupport.clientNameHeaderValue,
                     "version": Bundle.main.object(
                         forInfoDictionaryKey: "CFBundleShortVersionString"
                     ) as? String ?? "unknown",

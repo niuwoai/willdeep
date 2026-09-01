@@ -676,7 +676,7 @@ enum AgentAttentionWebhookClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(event.appVersion, forHTTPHeaderField: "X-App-Version")
         request.setValue(
-            "some.im/WillDeep-\(event.appVersion) (macOS)",
+            AgentNetworkSupport.userAgent(forVersion: event.appVersion),
             forHTTPHeaderField: "User-Agent"
         )
         request.setValue(event.source, forHTTPHeaderField: "X-Agent-Source")

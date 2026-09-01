@@ -27,7 +27,18 @@ struct SomeIMRequestContext: Equatable {
 }
 
 enum AgentNetworkSupport {
-    static let clientNameHeaderValue = "WillDeep Desktop"
+    /// The one name this client answers to, everywhere it identifies itself:
+    /// `X-Client-Name`, the handshakes that carry their own `version` field
+    /// (MCP / ACP / Codex app-server `clientInfo`), OpenRouter's `X-Title`,
+    /// and the head of the `User-Agent`. Spaces and parentheses, no hyphen —
+    /// the earlier `some.im/WillDeep-{version}` form split the identity across
+    /// a slash and a hyphen, so server-side dashboards kept inventing their
+    /// own spellings.
+    ///
+    /// The name alone, no version: every surface that sends it has a separate
+    /// field for the build (`X-Client-Version`, `clientInfo.version`), and the
+    /// `User-Agent` appends its own.
+    static let clientNameHeaderValue = "WillDeep Desktop (some.im)"
 
     /// "No bytes seen for this long" — not a total budget. Reasoning
     /// models (Qwen3, QwQ, DeepSeek-R1, o-series, Claude extended
@@ -46,14 +57,22 @@ enum AgentNetworkSupport {
     }()
 
     /// Unified client identity sent on every outgoing HTTP request (the
-    /// `User-Agent`). Form: `some.im/WillDeep-{version} (macOS)` — e.g.
-    /// `some.im/WillDeep-1.195.0-rc22 (macOS)`. The `some.im/` prefix brands
-    /// the request as coming from a some.im-family client; the version lets the
-    /// backend / reverse-proxy logs bucket a build. Every request that goes
-    /// through `applyStandardHeaders` (all some.im login/customer/balance/model
-    /// requests included) picks this up. Keep this the single source of truth —
-    /// `AppUpdateChecker` reuses it rather than re-deriving its own UA.
-    static let userAgentHeaderValue: String = "some.im/WillDeep-\(appVersionHeaderValue) (macOS)"
+    /// `User-Agent`). Form: `WillDeep Desktop (some.im) {version} (macOS)` —
+    /// e.g. `WillDeep Desktop (some.im) 1.315.0-rc5 (macOS)`. It opens with
+    /// `X-Client-Name` verbatim, so a log line and a client-name dashboard
+    /// spell the client the same way; the version trails the name because a
+    /// UA has nowhere else to carry the build. Every request that goes through
+    /// `applyStandardHeaders` (all some.im login/customer/balance/model
+    /// requests included) picks this up. Keep this the single source of truth
+    /// — `AppUpdateChecker` and the attention webhook reuse it rather than
+    /// re-deriving their own UA.
+    static let userAgentHeaderValue: String = userAgent(forVersion: appVersionHeaderValue)
+
+    /// Version is a parameter because the attention webhook stamps the version
+    /// captured with the event rather than whatever the bundle reports now.
+    static func userAgent(forVersion version: String) -> String {
+        "\(clientNameHeaderValue) \(version) (macOS)"
+    }
 
     /// some.im managed-routing context header names. Values come from the
     /// Agent session (see `SomeIMRequestContext`) and are only attached to

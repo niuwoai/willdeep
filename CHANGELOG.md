@@ -3,6 +3,18 @@
 > 当前文件保留最新版本（1.315.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.315.0-rc5 - 2026-09-01
+
+### Changed
+
+- 对外请求的客户端标识统一为 `WillDeep Desktop (some.im)`，全部用空格分隔，不再出现连字符或斜杠拼接。
+  - `X-Client-Name`：`WillDeep Desktop (some.im)`（纯名字，版本仍走旁边的 `X-Client-Version`）。
+  - `User-Agent`：`WillDeep Desktop (some.im) 1.315.0-rc5 (macOS)`——UA 没有别处放版本，所以版本跟在名字后面，平台仍在末尾。旧格式 `some.im/WillDeep-{版本} (macOS)` 就此退役。
+  - 协议握手的 `clientInfo.name`（MCP、ACP、Codex app-server）与 OpenRouter 榜单的 `X-Title` 一并改用同一个名字；它们各有独立的 `version` 字段，所以只取纯名字。**注意 OpenRouter 公开榜单上的显示名会随之从 `WillDeep` 变为 `WillDeep Desktop (some.im)`。**
+  - 通知 webhook 的 UA 此前是另写一份的同款字符串，现在改为复用 `AgentNetworkSupport.userAgent(forVersion:)`，避免两处格式再次分叉；webhook payload 里的 `application: "WillDeep"` 字段属于数据 schema，未改动。
+- **服务端注意**：若有按 `some.im/WillDeep-` 前缀做客户端统计或路由的规则，需同步改为匹配 `WillDeep Desktop (some.im)`。客户端侧的 webhook 来源识别仍兼容旧格式（只认 `willdeep` 子串），不受影响。
+- 文档 `docs/WILLDEEP_NOTIFICATIONS_WEBHOOK.md` 的 `User-Agent` 示例同步更新，并标注了变更版本。
+
 ## 1.315.0-rc4 - 2026-09-01
 
 ### Changed

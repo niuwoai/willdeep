@@ -413,7 +413,7 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
             "params": [
                 "protocolVersion": 1,
                 "clientInfo": [
-                    "name": "WillDeep",
+                    "name": AgentNetworkSupport.clientNameHeaderValue,
                     "version": Bundle.main.object(
                         forInfoDictionaryKey: "CFBundleShortVersionString"
                     ) as? String ?? "unknown",

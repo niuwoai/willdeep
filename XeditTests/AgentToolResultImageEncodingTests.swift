@@ -663,7 +663,10 @@ struct AgentToolResultImageEncodingTests {
             #expect(requests[0].stateHeader == stateProtocol)
             #expect(requests[0].sessionID == "session-503")
             #expect(requests[0].relaySessionID == "session-503")
-            #expect(requests[0].userAgent?.hasPrefix("some.im/WillDeep-") == true)
+            #expect(
+                requests[0].userAgent?
+                    .hasPrefix(AgentNetworkSupport.clientNameHeaderValue) == true
+            )
             #expect(requests[0].path == "/v1/responses")
             #expect(requests[1].stateHeader == nil)
             #expect(requests.allSatisfy { !$0.body.contains("previous_response_id") })

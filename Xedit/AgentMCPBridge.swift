@@ -547,7 +547,7 @@ enum AgentMCPBridge {
                     ]
                 ]
             ],
-            "clientInfo": ["name": "WillDeep", "version": "1"]
+            "clientInfo": ["name": AgentNetworkSupport.clientNameHeaderValue, "version": "1"]
         ]
     }
 

@@ -1032,7 +1032,7 @@ struct OpenAIResponsesAdapter {
     private func applyRelayBrandingHeaders(to request: inout URLRequest) {
         guard configuration.providerID == "openrouter" else { return }
         request.setValue("https://willdeep.com", forHTTPHeaderField: "HTTP-Referer")
-        request.setValue("WillDeep", forHTTPHeaderField: "X-Title")
+        request.setValue(AgentNetworkSupport.clientNameHeaderValue, forHTTPHeaderField: "X-Title")
     }
 
     private func responsesEndpoint(from baseURL: String) throws -> URL {

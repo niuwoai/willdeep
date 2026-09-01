@@ -424,16 +424,17 @@ struct OpenAIChatAdapter {
     }
 
     /// OpenRouter ranks apps on its public leaderboard by these two
-    /// headers. Setting them advertises WillDeep / willdeep.com; other
-    /// relays ignore the headers harmlessly so the call site is
-    /// switched by `providerID` rather than dropped behind a feature
+    /// headers. Setting them advertises this client under the same name it
+    /// sends everywhere else (`X-Client-Name`, the `User-Agent`) plus
+    /// willdeep.com; other relays ignore the headers harmlessly so the call
+    /// site is switched by `providerID` rather than dropped behind a feature
     /// flag. If a future relay wants different branding, fan this out
     /// into a `relayHeaders(for:)` table.
     private func applyRelayBrandingHeaders(to request: inout URLRequest) {
         switch configuration.providerID {
         case "openrouter":
             request.setValue("https://willdeep.com", forHTTPHeaderField: "HTTP-Referer")
-            request.setValue("WillDeep", forHTTPHeaderField: "X-Title")
+            request.setValue(AgentNetworkSupport.clientNameHeaderValue, forHTTPHeaderField: "X-Title")
         default:
             break
         }
