@@ -15,7 +15,10 @@ struct AgentPanelWorkspaceView: View {
     }
 
     private var tabs: [AgentPanelTab] { runtime.sidePanelState.openTabs }
-    private var selected: AgentPanelTab? { runtime.sidePanelState.selectedTab }
+    private var dockedTabs: [AgentPanelTab] { AgentPanelTabStrip.docked(tabs, isDetached: isDetached) }
+    private var selected: AgentPanelTab? {
+        AgentPanelTabStrip.active(selected: runtime.sidePanelState.selectedTab, in: tabs, isDetached: isDetached)
+    }
     private var palette: EditorInterfaceSkinPalette { appState.editorSettings.interfaceSkin.palette }
     private func id(_ tab: AgentPanelTab) -> AgentPanelTabID { .init(sessionID: runtime.id, tabID: tab.id) }
     private func isDetached(_ tab: AgentPanelTab) -> Bool { registry.isDetached(id(tab), kind: tab.kind) }
@@ -23,19 +26,17 @@ struct AgentPanelWorkspaceView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            tabStrip
-            Divider()
+            if !dockedTabs.isEmpty {
+                tabStrip
+                Divider()
+            }
             if let selected {
                 contentHeader(selected)
                 Divider().opacity(0.6)
-                if isDetached(selected) { detachedPlaceholder(selected) }
-                else {
-                    AgentPanelDockSurface(id: id(selected), kind: selected.kind, appState: appState, runtime: runtime)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            } else {
-                Text(L10n.PanelTabs.empty).foregroundStyle(.secondary)
+                AgentPanelDockSurface(id: id(selected), kind: selected.kind, appState: appState, runtime: runtime)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                emptyDock
             }
             if selected?.kind == .terminal || selected?.kind == .backgroundTasks {
                 Divider().opacity(0.5)
@@ -81,7 +82,7 @@ struct AgentPanelWorkspaceView: View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 3) {
-                    ForEach(tabs) { tab in tabChip(tab).id(tab.id) }
+                    ForEach(dockedTabs) { tab in tabChip(tab).id(tab.id) }
                 }.padding(.horizontal, 5)
             }
             .frame(height: 36)
@@ -93,7 +94,7 @@ struct AgentPanelWorkspaceView: View {
     }
 
     private func tabChip(_ tab: AgentPanelTab) -> some View {
-        let active = selected?.id == tab.id && !isDetached(tab)
+        let active = selected?.id == tab.id
         return HStack(spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: tab.systemImage)
@@ -102,7 +103,6 @@ struct AgentPanelWorkspaceView: View {
                     let count = appState.agentJobRegistry.jobs.filter { $0.runtimeID == runtime.id && $0.isAlive }.count
                     if count > 0 { Text(count.formatted()).foregroundStyle(.secondary).monospacedDigit() }
                 }
-                if isDetached(tab) { Image(systemName: "arrow.up.right").foregroundStyle(.secondary) }
             }
             .padding(.leading, 10).padding(.vertical, 9)
             .overlay {
@@ -122,7 +122,6 @@ struct AgentPanelWorkspaceView: View {
         .help(tab.file?.path ?? tab.title)
         .contextMenu {
             Button(L10n.AgentSidePanel.detach) { detach(tab) }
-            if isDetached(tab) { Button(L10n.PanelTabs.returnToDock) { registry.reattach(id(tab), appState: appState) } }
             Divider()
             Button(L10n.PanelTabs.closeTab) { appState.closePanelTab(id(tab)) }
         }
@@ -148,18 +147,28 @@ struct AgentPanelWorkspaceView: View {
             ScrollView {
                 VStack(spacing: 2) {
                     ForEach(tabs) { tab in
-                        Button { select(tab); showsOverview = false } label: {
-                            HStack(spacing: 9) {
-                                Image(systemName: tab.systemImage).frame(width: 18)
-                                Text(tab.title).lineLimit(1)
-                                Spacer(minLength: 12)
-                                Text(isDetached(tab) ? L10n.PanelTabs.window : L10n.PanelTabs.dock)
-                                    .font(.system(size: 10)).foregroundStyle(.secondary)
-                                if isDetached(tab) { Image(systemName: "arrow.up.right").font(.system(size: 10)) }
+                        HStack(spacing: 0) {
+                            Button { select(tab); showsOverview = false } label: {
+                                HStack(spacing: 9) {
+                                    Image(systemName: tab.systemImage).frame(width: 18)
+                                    Text(tab.title).lineLimit(1)
+                                    Spacer(minLength: 12)
+                                    Text(isDetached(tab) ? L10n.PanelTabs.window : L10n.PanelTabs.dock)
+                                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                                }
+                                .font(.system(size: 12)).padding(.leading, 12).frame(height: 34)
+                                .contentShape(Rectangle())
                             }
-                            .font(.system(size: 12)).padding(.horizontal, 12).frame(height: 34)
-                            .contentShape(Rectangle())
-                        }.buttonStyle(.plain).focusable(false)
+                            .buttonStyle(.plain).focusable(false)
+                            .help(isDetached(tab) ? L10n.PanelTabs.focusWindow : tab.title)
+                            if isDetached(tab) {
+                                Button { registry.reattach(id(tab), appState: appState, reveal: false) } label: {
+                                    Image(systemName: "arrow.down.right.and.arrow.up.left").font(.system(size: 10))
+                                }
+                                .buttonStyle(.plain).focusable(false).foregroundStyle(.secondary)
+                                .frame(width: 30, height: 34).help(L10n.PanelTabs.returnToDock)
+                            }
+                        }.padding(.trailing, isDetached(tab) ? 0 : 12)
                     }
                 }
             }.frame(height: min(CGFloat(tabs.count) * 36, 300))
@@ -173,13 +182,22 @@ struct AgentPanelWorkspaceView: View {
         }.frame(width: 310)
     }
 
-    private func detachedPlaceholder(_ tab: AgentPanelTab) -> some View {
-        VStack(spacing: 12) {
-            Image(systemName: "macwindow.on.rectangle").font(.system(size: 28)).foregroundStyle(.secondary)
-            Text(L10n.PanelTabs.inWindow).font(.system(size: 12)).foregroundStyle(.secondary)
-            Button(L10n.PanelTabs.focusWindow) { registry.focus(id(tab), kind: tab.kind) }
-            Button(L10n.PanelTabs.returnToDock) { registry.reattach(id(tab), appState: appState) }
-        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    /// Every tab of this session sits in its own window: the dock has nothing to
+    /// render, so it offers the way back instead of an empty strip.
+    @ViewBuilder private var emptyDock: some View {
+        if tabs.isEmpty {
+            Text(L10n.PanelTabs.empty).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: "macwindow.on.rectangle").font(.system(size: 28)).foregroundStyle(.secondary)
+                Text(L10n.PanelTabs.allInWindows).font(.system(size: 12)).foregroundStyle(.secondary)
+                Button(L10n.PanelTabs.returnAll) { registry.reattachAll(sessionID: runtime.id, appState: appState) }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onDrop(of: [.willDeepPanelTab], isTargeted: nil) { receiveDrop($0, before: nil) }
+        }
     }
 
     private func select(_ tab: AgentPanelTab) {
@@ -189,7 +207,11 @@ struct AgentPanelWorkspaceView: View {
 
     private func detach(_ tab: AgentPanelTab) {
         registry.detach(id(tab), appState: appState)
-        if selected?.id == tab.id, let next = tabs.first(where: { !isDetached($0) }) { select(next) }
+        // Keep the stored selection on a tab the dock can still render, so the
+        // panel kind the rest of the app reads matches what is on screen.
+        if let current = runtime.sidePanelState.selectedTab, isDetached(current), let next = dockedTabs.first {
+            select(next)
+        }
     }
 
     private func receiveDrop(_ providers: [NSItemProvider], before target: UUID?) -> Bool {

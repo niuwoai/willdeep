@@ -49,6 +49,41 @@ struct AgentPanelWindowTests {
         #expect(runtime.sidePanelState.openTabs.count == 1)
     }
 
+    @Test("分离出去的标签不再占用侧栏标签条")
+    func detachedTabsLeaveTheStrip() throws {
+        let (app, runtime) = fixture()
+        let registry = AgentDetachedPanelRegistry.shared
+        defer { registry.releaseSession(runtime.id) }
+        let plan = try #require(app.openPanelTab(.plan))
+        let files = try #require(app.openPanelTab(.files))
+        let isDetached: (AgentPanelTab) -> Bool = {
+            registry.isDetached(.init(sessionID: runtime.id, tabID: $0.id), kind: $0.kind)
+        }
+        func docked() -> [UUID] {
+            AgentPanelTabStrip.docked(runtime.sidePanelState.openTabs, isDetached: isDetached).map(\.id)
+        }
+        func active() -> UUID? {
+            AgentPanelTabStrip.active(selected: runtime.sidePanelState.selectedTab,
+                                      in: runtime.sidePanelState.openTabs, isDetached: isDetached)?.id
+        }
+
+        registry.detach(plan, appState: app)
+        #expect(runtime.sidePanelState.openTabs.count == 2)
+        #expect(docked() == [files.tabID])
+
+        // 选中项仍可能指向窗口里的标签（打开同类面板只是定位窗口），此时 dock 回落到还在侧栏的那个。
+        app.updatePanelTabs(runtime: runtime) { $0.selectTab(plan.tabID) }
+        #expect(active() == files.tabID)
+
+        registry.detach(files, appState: app)
+        #expect(docked().isEmpty)
+        #expect(active() == nil)
+
+        registry.reattach(plan, appState: app, reveal: false)
+        #expect(docked() == [plan.tabID])
+        #expect(active() == plan.tabID)
+    }
+
     @Test("关闭标签不清空任务或终端控制器")
     func closingTabOnlyRemovesPresentation() throws {
         let (app, runtime) = fixture()
