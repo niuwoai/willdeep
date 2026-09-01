@@ -385,11 +385,83 @@ module HistoryRecall
 
   # ---------------------------------------------------------------- 检索
 
-  # 查询串按空白拆词，逐词 AND 子串匹配。
-  # 中文不需要分词——连续子串天然可搜；"SSH 穿透" 这类多词查询才需要拆。
+  # 中文查询没有空格，只按空白拆词等于不拆：「我有提到过frp吗?」会被当成一整个词去
+  # 做子串匹配，必然 0 命中——哪怕 frp 明明搜得到。用户不会先替我们分好词。
+  #
+  # 所以先做规范化：标点转空格 → 在 ASCII 与 CJK 的边界处断开 → 剥掉中文里的疑问、
+  # 指代、动作等虚词，只留实词。
+  #   「我有提到过frp吗?」  → ["frp"]
+  #   「上次聊 SSH 穿透那次」 → ["ssh", "穿透"]
+  #   「frp 穿透」（已经干净） → ["frp", "穿透"]
+
+  PUNCTUATION = /[，。？！、；：""''（）《》〈〉【】〔〕…—～·,.?!;:()\[\]{}"'`~|\/\\]+/.freeze
+
+  # 多字虚词，按长度降序做子串剥离（先长后短，免得「提到」把「提到过」吃掉半截）。
+  # 这些词整体出现在实词内部的概率很低，剥掉是安全的。
+  STOP_PHRASES = %w[
+    有没有 是不是 为什么 什么时候 讨论过 提到过 说起过 聊起过 谈起过 提起过
+    上一次 这一次 哪一次 什么样 怎么样 有关于
+    上次 上回 那次 这次 哪次 之前 以前 后来 当时 曾经 刚才 最近
+    提过 说过 聊过 谈过 问过 讲过 写过 做过 用过 试过 见过 提到 说起 聊起
+    讨论 什么 怎么 哪个 哪些 哪里 那个 这个 一下 一个 关于 有关
+    我们 你们 咱们 他们 它们 我有 我要 我想 你有 帮我 记得 忘了 想找 找找
+    看看 查查 搜搜 时候
+  ].sort_by { |word| -word.length }.freeze
+
+  # 单字虚词只保留几乎不可能做实词首字的那批，并且是**切开**不是删除。
+  #
+  # 这里刻意收得很紧：早先把「对/和/给/要/会/在/有」也算进来，结果「对话」被咬成
+  # 「话」、「会话」被咬成「话」——而「会话」正是这个插件最核心的词。单字虚词做子串
+  # 剥离的误伤面远大于收益。剩下的噪声交给下面的渐进放宽兜。
+  STOP_CHARS = /[的了吗呢么吧啊呀哦嘛]/.freeze
+
+  # CJK 汉字区间（含扩展 A），不含假名——日文混排场景本插件不特别处理。
+  CJK = /[一-鿿㐀-䶿]/.freeze
+
+  def split_script_boundaries(text)
+    # 在汉字与 ASCII 字母数字相邻处插空格，让 "提到过frp吗" 断成 "提到过 frp 吗"。
+    text.gsub(/(#{CJK})([A-Za-z0-9])/, '\1 \2').gsub(/([A-Za-z0-9])(#{CJK})/, '\1 \2')
+  end
+
+  def strip_stop_words(chunk)
+    # 只对中文块剥虚词。ASCII 词原样保留——技术名词不该被动。
+    return chunk unless chunk =~ CJK
+
+    remaining = chunk.dup
+    STOP_PHRASES.each { |word| remaining = remaining.gsub(word, " ") }
+    remaining.gsub(STOP_CHARS, " ")
+  end
+
+  # 词的信号强度，渐进放宽时按它挑最值得单独一搜的词。
+  # ASCII 技术名词最有辨识度（frp / xcstrings / SwiftUI），其次是长中文词。
+  def term_signal(term)
+    ascii = term.match?(/\A[a-z0-9._-]+\z/)
+    (ascii ? 100 : 0) + term.length
+  end
+
   def parse_terms(query)
-    query.to_s.split(/\s+/).each_with_object([]) do |term, list|
-      cleaned = term.strip.downcase
+    text = query.to_s.downcase.gsub(PUNCTUATION, " ")
+    text = split_script_boundaries(text)
+
+    terms = []
+    text.split(/\s+/).each do |chunk|
+      cleaned = chunk.strip
+      next if cleaned.empty?
+
+      strip_stop_words(cleaned).split(/\s+/).each do |piece|
+        word = piece.strip
+        # 单字中文噪声太大（「透」能匹配到一堆无关的），ASCII 单字符同理。
+        terms << word if word.length >= 2
+      end
+    end
+
+    terms.uniq!
+    return terms unless terms.empty?
+
+    # 全被剥光了（比如用户只打了「上次那个」），退回原始拆词，宁可搜不到也不要
+    # 把一次有意的查询变成一次空查询。
+    query.to_s.downcase.split(/\s+/).each_with_object([]) do |term, list|
+      cleaned = term.strip
       list << cleaned unless cleaned.empty?
     end
   end
@@ -505,17 +577,56 @@ module HistoryRecall
     capped = [[limit.to_i, 1].max, MAX_LIMIT].min
     now = Time.now
 
-    scanned = 0
-    results = []
-    disambiguate_labels(all_digests).each do |digest|
-      next if scope == "project" && digest["group_key"] != group
-      next if !include_archived && digest["archived"]
+    candidates = disambiguate_labels(all_digests).select do |digest|
+      next false if scope == "project" && digest["group_key"] != group
+      next false if !include_archived && digest["archived"]
 
       updated = digest["updated_at"]
-      next if since_time && updated.is_a?(Time) && updated < since_time
-      next if until_at && updated.is_a?(Time) && updated > until_at
+      next false if since_time && updated.is_a?(Time) && updated < since_time
+      next false if until_at && updated.is_a?(Time) && updated > until_at
 
-      scanned += 1
+      true
+    end
+
+    results = match_against(candidates, terms, now)
+    relaxed_from = nil
+
+    # 渐进放宽：全词 AND 落空时，用信号最强的那个词再搜一次。
+    # 没有分词器，中文查询难免被拆出「我有」这类噪声词，一个噪声词就能让 AND 全灭。
+    # 与其让用户对着「没找到」猜是自己没聊过还是查询被拆坏了，不如给出候选并说清楚
+    # 放宽了什么。
+    if results.empty? && terms.size > 1
+      best = terms.max_by { |term| term_signal(term) }
+      relaxed = match_against(candidates, [best], now)
+      unless relaxed.empty?
+        relaxed_from = terms
+        terms = [best]
+        results = relaxed
+      end
+    end
+
+    capped_results = results.sort_by { |item| -item["score"] }
+    truncated = capped_results.size > capped
+
+    return {
+      "ok" => true,
+      "query" => query,
+      # terms 是规范化之后真正拿去匹配的词。命中 0 时页面要把它显示出来，
+      # 否则用户无从判断是「确实没聊过」还是「查询被拆错了」。
+      "terms" => terms,
+      # 非 nil 表示做了放宽，值是原本那组更严格的词。
+      "relaxed_from" => relaxed_from,
+      "scope" => scope,
+      "scanned_sessions" => candidates.size,
+      "matched_sessions" => capped_results.size,
+      "truncated" => truncated,
+      "results" => capped_results.first(capped)
+    }
+  end
+
+  def match_against(candidates, terms, now)
+    results = []
+    candidates.each do |digest|
       collected = collect_hits(digest, terms)
       hits = collected["hits"]
       kind = collected["kind"]
@@ -541,22 +652,7 @@ module HistoryRecall
         "hits" => hits
       }
     end
-
-    results.sort_by! { |item| -item["score"] }
-    truncated = results.size > capped
-
-    {
-      "ok" => true,
-      "query" => query,
-      "terms" => terms,
-      "scope" => scope,
-      # 报清楚扫了多少、命中多少、有没有截断——用户必须能区分「确实没聊过」
-      # 和「聊过但没显示出来」，这正是宿主 search_sessions 缺的那一环。
-      "scanned_sessions" => scanned,
-      "matched_sessions" => results.size,
-      "truncated" => truncated,
-      "results" => results.first(capped)
-    }
+    results
   end
 
   # 取某条命中前后的原文，供「展开看看」。

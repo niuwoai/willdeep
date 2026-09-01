@@ -66,7 +66,7 @@ extension WillDeepTests {
             assistantMessage("hi", usage: 100, at: now)
         ])
         // A "新对话" the user opened and never typed into. Builds before
-        // 1.316.0-rc2 wrote one of these to disk per new chat, and counting
+        // 1.316.0-rc3 wrote one of these to disk per new chat, and counting
         // them inflated the dashboard's session tile by more than 2× on a
         // long-lived install.
         let placeholder = makeSession(modelID: nil, messages: [])

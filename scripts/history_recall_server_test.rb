@@ -332,11 +332,33 @@ Dir.mktmpdir("history-recall-test") do |dir|
     multi = server.call_tool("history.search", { "query" => "frp 穿透" })
     check("多词按 AND 匹配") { multi["matched_sessions"] == 1 }
 
-    none = server.call_tool("history.search", { "query" => "frp 完全不存在的词" })
-    check("AND 匹配不到时返回空而非报错") { none["ok"] == true && none["matched_sessions"] == 0 }
+    none = server.call_tool("history.search", { "query" => "完全不存在甲 完全不存在乙" })
+    check("全都匹配不到时返回空而非报错") { none["ok"] == true && none["matched_sessions"] == 0 }
+    check("没得可放宽时不谎称放宽了") { none["relaxed_from"].nil? }
 
     empty = server.call_tool("history.search", { "query" => "   " })
     check("空查询被拒") { empty["ok"] == false }
+
+    puts "\n[中文整句查询]"
+    # 真实用户打的是整句话，不会先替我们分好词。中文没有空格，只按空白拆词的话
+    # 「我有提到过frp吗?」会被当成一整个词，必然 0 命中——哪怕 frp 明明搜得到。
+    sentence = server.call_tool("history.search", { "query" => "我有提到过frp吗?" })
+    check("中文整句能问出结果") { sentence["ok"] == true && sentence["matched_sessions"] == 2 }
+    check("整句被规范化成实词") { sentence["terms"] == ["frp"] }
+
+    mixed = server.call_tool("history.search", { "query" => "上次聊 frp 穿透那次" })
+    check("剥掉时间指代词与语气词") { mixed["terms"].sort == %w[frp 穿透] }
+
+    # 单字虚词只能切分不能当子串剥——早先「对话」被咬成「话」、「会话」被咬成「话」。
+    kept = server.call_tool("history.search", { "query" => "会话对话的问题" })
+    check("会话/对话不被单字虚词咬碎") { kept["terms"].sort == %w[会话对话 问题] }
+
+    puts "\n[渐进放宽]"
+    # 没有分词器，中文查询难免拆出噪声词，一个噪声词就能让 AND 全灭。
+    relaxed = server.call_tool("history.search", { "query" => "frp 完全不存在的词" })
+    check("AND 落空后用最强词放宽重试") { relaxed["matched_sessions"] == 2 }
+    check("放宽时如实报告原本的词") { relaxed["relaxed_from"].to_a.sort == ["frp", "完全不存在"] }
+    check("放宽后 terms 换成实际用的词") { relaxed["terms"] == ["frp"] }
 
     puts "\n[筛选]"
     no_archive = server.call_tool("history.search", { "query" => "frp", "include_archived" => false })

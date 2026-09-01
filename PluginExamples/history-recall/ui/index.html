@@ -206,6 +206,8 @@
         searching: "正在翻…",
         noHits: "没找到。换个说法试试——检索按词匹配，词越具体越准。",
         scanned: function (n, m) { return "扫了 " + n + " 个会话，命中 " + m + " 个。"; },
+        searchedFor: function (terms) { return "搜的是：" + terms; },
+        relaxed: function (terms) { return "「" + terms + "」全中的没有，放宽了。"; },
         truncated: "结果较多，只列出最相关的几个。",
         openSession: "打开这个会话",
         showContext: "看上下文",
@@ -229,6 +231,8 @@
         searching: "Searching…",
         noHits: "Nothing found. Try different words — matching is term-based, so be specific.",
         scanned: function (n, m) { return "Scanned " + n + " sessions, matched " + m + "."; },
+        searchedFor: function (terms) { return "Searched for: " + terms; },
+        relaxed: function (terms) { return "Nothing matched all of \"" + terms + "\", so this is broader."; },
         truncated: "Many matches; showing the most relevant ones.",
         openSession: "Open session",
         showContext: "Show context",
@@ -538,11 +542,18 @@
       return null;
     }
 
-    // 把「上次聊 SSH 穿透那次」变成检索词。模型不可用就原样用用户输入——
+    // 把「上次聊 SSH 穿透那次」变成检索词。模型不可用就退回服务端的查询规范化——
     // 定位功能在没有模型时必须照常可用。
     function deriveTerms(sentence) {
       if (!aiAvailable()) return Promise.resolve(null);
-      return window.willdeep.ai.complete({
+      // 加超时：ai.complete 没有流式也没有取消，宿主那边模型不可用时它可能既不
+      // resolve 也不 reject。没有这道闸，整个检索会永远停在「正在归纳…」，用户
+      // 看到的就是一个什么也不发生的页面。
+      var timer = null;
+      var guard = new Promise(function (resolve) {
+        timer = setTimeout(function () { resolve(null); }, 8000);
+      });
+      var ask = window.willdeep.ai.complete({
         system: QUERY_SYSTEM,
         messages: [{ role: "user", content: sentence }],
         maxOutputTokens: 128
@@ -555,6 +566,11 @@
           .slice(0, 3);
         return terms.length ? terms.join(" ") : null;
       }).catch(function () { return null; });
+
+      return Promise.race([ask, guard]).then(function (value) {
+        if (timer !== null) clearTimeout(timer);
+        return value;
+      });
     }
 
     // ---------------------------------------------------------------- 主流程
@@ -614,7 +630,13 @@
 
         var summary = el("div", "note");
         summary.textContent = t("scanned", payload.scanned_sessions, payload.matched_sessions);
-        if (outcome.derived) summary.textContent += "　检索词：" + outcome.query;
+        // 实际匹配用的是规范化之后的词，跟用户打的整句话往往不一样。命中 0 时
+        // 不把它显示出来，用户无从判断是自己没聊过还是查询被拆坏了。
+        var used = (payload.terms || []).join(" ");
+        if (used) summary.textContent += "　" + t("searchedFor", used);
+        if (payload.relaxed_from && payload.relaxed_from.length) {
+          summary.textContent += "　" + t("relaxed", payload.relaxed_from.join(" "));
+        }
         if (payload.truncated) summary.textContent += "　" + t("truncated");
         block.appendChild(summary);
 
