@@ -1373,7 +1373,7 @@ nonisolated enum L10n {
 
     enum Sidebar {
         static func archivedSessionsHeader(_ a1: String) -> String {
-            let template = String(localized: "sidebar.archived-sessions.header", defaultValue: "Archived count")
+            let template = String(localized: "sidebar.archived-sessions.header", defaultValue: "Archived")
             return String(format: template, a1)
         }
         static let chatsHeader = String(localized: "sidebar.chats-header", defaultValue: "Chats")
