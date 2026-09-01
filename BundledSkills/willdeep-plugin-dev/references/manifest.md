@@ -77,7 +77,7 @@ JSON Schema 在仓库的 `docs/plugin-schema/willdeep-plugin.schema.json`，本�
 { "type": "navigate", "destination": "issues" }
 ```
 
-`host` 的 `action` 只有四个合法值，其它一律拒绝：
+`host` 的 `action` 只有五个合法值，其它一律拒绝：
 
 | action | 效果 |
 | --- | --- |
@@ -85,8 +85,11 @@ JSON Schema 在仓库的 `docs/plugin-schema/willdeep-plugin.schema.json`，本�
 | `destination.select` | 设置侧栏选中项，参数取 `itemID` 或 `id` |
 | `settings.mcp` | 打开设置里的 MCP 分区 |
 | `plugins.open-center` | 跳到插件中心 |
+| `session.open` | 切换并打开指定 Agent 会话，参数 `sessionID`（UUID 字符串）；**要求插件声明 `conversation.read`** |
 
 任意 selector、类名、脚本文本都会被拒绝——这里不是执行任意代码的地方。
+
+`session.open` 是目前唯一带权限门的 host action：其它四个是零权限的导航动作，它要读会话所以复用 `conversation.read`。四种失败会给出可区分的错误：没声明权限、`sessionID` 缺失或不是合法 UUID、会话目录尚未装载完成（App 刚启动那几秒）、会话不存在或已损坏。跳转成功后主区会切到聊天，插件页被顶掉——这正是「打开会话」的语义。
 
 `mcpTool` 命令在执行前会弹确认，显示插件名和命令名。**例外**：随 App 签名发行的 `bundled` 插件不逐条确认（它们和宿主是同一份签名产物）。本地安装与 Codex 缓存来源每次执行都要用户点头。
 

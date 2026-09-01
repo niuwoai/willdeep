@@ -3,6 +3,40 @@
 > 当前文件保留最新版本（1.315.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.316.0-rc1 - 2026-09-01
+
+### Added
+
+- **新插件「历史回溯」（`PluginExamples/history-recall`）：按聊过的内容跨项目找回旧会话，不再只能按标题找。** 此前两个手段都够不着这个需求：侧栏搜索（⌘⇧P）只匹配标题，源码注释写明 `no message full-text indexing here`；`search_sessions` 工具虽然是跨项目全文，但每次只打开最近 40 个会话（`AgentSessionSearch.Limits.sessionsScanned`），答案落在第 41 个之后就静默返回空——用户分不清是「确实没聊过」还是「聊过但超出了扫描窗口」。本插件每次扫全部会话，并如实报告扫了多少、命中多少、有没有截断。
+  - 聊天式页面提问，命中列表带项目标签、时间与摘录高亮，可展开原文上下文，点一下直接跳到那个会话。
+  - MCP 服务的工具会自动并入宿主全局工具清单，所以主 Agent 在任意普通会话里也能直接调用（「我之前在哪聊过 frp 穿透」），不受插件页面单轮问答的限制。两个入口共用一套实现，边际成本为零。
+  - 提问经 `window.willdeep.ai.complete`（flash 档）转成检索词；**模型不可用时完整降级**为拿用户原话直接搜，定位功能照常可用。
+  - 匹配分三档并在结果里标出：`message`（单条消息内所有词都出现）、`session`（词分散在会话各处——用户记得的常是「那次既聊了 A 又聊了 B」，未必在同一句话里）、`title`（只有标题命中，而标题往往是最容易记住的线索）。排序按匹配强度加权新鲜度，不是纯按时间倒序——纯时间序正是那个 40 条窗口的病根。
+- **新增 `session.open` host action**，插件页面可请求宿主切换并打开指定 Agent 会话。这是本次唯一的宿主改动，此前 host action 只有写死的四个（`plugin.refresh` / `destination.select` / `settings.mcp` / `plugins.open-center`），没有打开会话的通道。
+  - 走 `selectAndRevealAgentSessionInSidebar` 而不是裸的 `selectAgentSession`：本机有 102 个归档会话，归档会话虽然能被打开，但侧栏行会藏在折叠的归档组里，reveal 版会自动展开。
+  - 四种失败报成四条可区分的错：缺权限、sessionID 无效、**会话目录尚未装载完成**、会话不存在或已损坏。第三条不能与第四条混为一谈——目录是异步装载的，App 刚启动那几秒查什么都查不到，报成「会话不存在」会把用户带沟里。
+  - 执行时要求插件声明 `conversation.read`。这道门是新加的：`executeHost` 此前完全没有权限校验，另外三个导航类 action 至今是零权限的。为此 `executeHost` 签名新增 `pluginID` 参数（没有它就查不了权限）。`handler.action` 在 schema 里是自由字符串，白名单只在 Swift 侧，所以 `willdeep-plugin.schema.json` 一行未动。
+
+### Changed
+
+- 插件开发文档中四处硬编码的「host action 只有四个合法值」同步更新（`docs/WILLDEEP_PLUGIN_SYSTEM_DESIGN.md`、`BundledSkills/willdeep-plugin-dev/SKILL.md` 及其 `references/manifest.md`、`references/page-api.md`）。
+
+### Notes
+
+实现期间在真实数据（474 个会话、79 MB）上量到几件事，都写进了 `docs/CROSS_PROJECT_HISTORY_RECALL_DESIGN.md`：
+
+- **不建索引是量出来的结论，不是偷懒。** 全量解析 474 个文件 494 ms，内存内检索 38 ms，冷启动约 1 秒、热态 6–10 毫秒。SQLite FTS5 或向量库在这个体量上只增加维护面。也刻意不落盘缓存：检索必须扫正文，而正文缓存的体积就等于原始数据，落盘只省下一次解析却要换来一致性、占用、损坏降级三份复杂度。
+- **宿主注入块必须从检索正文里剥掉。** 916 条 user 消息里有 171 条（18.7%）混进了宿主追加的内容，其中 skill 路由候选列表最毒——它把每个已安装 skill 的完整描述都塞进正文。不剥的话检索「SwiftUI 卡死」命中 27 个会话且全是假阳性（剥掉后是 1 个真命中）。
+- **近一半会话是空壳。** 474 个里有 221 个是 0 消息、标题「新对话」、无任何工作区归属的文件，真正可检索的只有 201 个。插件侧直接跳过；空壳堆积本身是独立的数据卫生问题，未在本次处理。
+- **宿主用的是 `/usr/bin/ruby`（系统 Ruby 2.6）**，`filter_map` 等 2.7+ 方法不可用；且宿主拉起 MCP server 时不带 locale，Ruby 默认外部编码退成 US-ASCII，读中文会话直接抛 `Encoding::InvalidByteSequenceError`——服务端起手即钉死 UTF-8，测试也刻意删掉 `LANG`/`LC_ALL` 复现该环境。
+- **跨项目检索默认关闭。** 宿主的 `search_sessions` 把 `scope: "all"` 归为写风险要走审批卡，而插件直接读磁盘绕过了那道门，所以插件自带这个开关作为替代，第一次用在页面上出一张说明卡由用户当场决定。开关刻意不走 manifest 的 `settings` + `${setting:}` 通道——那条路只在 mcp.json 的 env/headers 里展开，仓库里没有任何在用的先例，一旦展开不出来整条 MCP 服务会被拒载、插件直接哑掉；改由服务端自持久化到 `plugin-data/history-recall/settings.json`。
+
+### Tests
+
+- 新增 `scripts/history_recall_server_test.rb`（92 项）：协议分帧与通知不回包、检索与排序、标题/正文/会话级三档匹配、注入块剥离、中文与多词、时间与归档筛选、截断如实上报、摘录与锚点、分组统计与同名分组消歧（含幂等）、跨项目开关的三种优先级（环境变量 > 持久化 > 默认关）、设置跨进程持久化与坏文件降级、缓存增量（新增立刻可见、删除即逐出）、无 locale 环境下的中文检索、空目录与目录不存在。
+- 新增 `scripts/history_recall_preview_server.cjs`：拉起真实 Ruby MCP 子进程并注入假的 `window.willdeep`，浏览器里即可验收页面，免去每次改动都要 bump 版本重装插件。默认让 `ai.complete` 必定失败以验证降级路径，`--ai` 启用假模型验证另一条分支。
+- `AgentPluginSystemTests` 新增两条：`session.open` 过生产加载器且权限门按 `conversation.read` 生效（含停用插件后权限即失效）；源码守卫钉住「权限检查 + reveal 版打开 + 目录未装载与会话不存在分开报」三件套。`repositoryExamplesPassTheProductionLoader` 的样例名单加入 `history-recall`。
+
 ## 1.315.0-rc9 - 2026-09-01
 
 ### Fixed

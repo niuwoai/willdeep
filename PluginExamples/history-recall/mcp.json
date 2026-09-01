@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "history-recall": {
+      "command": "/usr/bin/ruby",
+      "args": ["${pluginRoot}/server/history_recall.rb"],
+      "startup_timeout_sec": 10
+    }
+  }
+}

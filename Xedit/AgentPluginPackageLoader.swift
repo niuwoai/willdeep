@@ -69,6 +69,9 @@ nonisolated enum AgentPluginPackageLoader {
         "destination.select",
         "settings.mcp",
         "plugins.open-center",
+        // 打开指定 Agent 会话。执行时要求插件声明 conversation.read，
+        // 见 AgentPluginCommandExecutor.executeHost。
+        "session.open",
     ]
     static let allowedPermissions: Set<AgentPluginPermission> = [
         .conversationRead,
