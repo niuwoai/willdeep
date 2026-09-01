@@ -87,6 +87,20 @@ NS_ASSUME_NONNULL_BEGIN
  */
 + (instancetype)sharedInstance;
 
+#pragma mark - Test Support（仅供单元测试使用，业务代码不得调用）
+
+/// 当前内存队列长度（在内部串行队列上同步读取）
++ (NSUInteger)pendingLogCountForTesting;
+
+/// 当前内存队列各条日志的 content
++ (NSArray<NSString *> *)pendingLogContentsForTesting;
+
+/// 进程内累计的队列落盘次数
++ (NSUInteger)queueSaveCountForTesting;
+
+/// 清空内存队列、落盘队列与落盘计数
++ (void)resetQueueForTesting;
+
 @end
 
 NS_ASSUME_NONNULL_END

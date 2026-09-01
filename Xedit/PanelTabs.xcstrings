@@ -154,19 +154,19 @@
         }
       }
     },
-    "panel-tabs.in-window": {
+    "panel-tabs.all-in-windows": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This tab is open in a separate window."
+            "value": "Every tab of this session is open in its own window."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "此标签已在独立窗口中打开"
+            "value": "这个会话的标签都在独立窗口里"
           }
         }
       }

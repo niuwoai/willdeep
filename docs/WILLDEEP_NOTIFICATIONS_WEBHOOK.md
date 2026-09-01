@@ -119,7 +119,7 @@ WillDeep 会发送以下主要请求头：
 | 请求头 | 示例 | 说明 |
 |---|---|---|
 | `Content-Type` | `application/json` | 请求体格式 |
-| `User-Agent` | `some.im/WillDeep-1.270.0-rc1 (macOS)` | WillDeep 客户端及版本 |
+| `User-Agent` | `WillDeep Desktop (some.im) 1.315.0-rc5 (macOS)` | WillDeep 客户端及版本（1.315.0-rc5 起；此前为 `some.im/WillDeep-{版本} (macOS)`） |
 | `X-App-Version` | `1.270.0-rc1` | App 版本 |
 | `X-Agent-Source` | `willdeep` | 事件发送方 |
 | `X-Agent-Executor` | `codex` | 实际执行器类型 |

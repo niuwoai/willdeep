@@ -39,8 +39,18 @@ struct AgentSidebarListVisualMetricsTests {
                 == AgentDesign.composerInputFontSize
         )
 
-        // Raising the body carries both surfaces by the same absolute step,
-        // preserving the 1 pt / 2 pt hierarchy below the transcript.
+        // Both surfaces sit exactly on the body size, at the default and at
+        // every other setting — that is what "flat" has to mean here, and a
+        // token drifting off the body size would silently reintroduce the old
+        // one-point step.
+        for size in [AgentSettingsStore.chatBaseFontSizeMin, base, AgentSettingsStore.chatBaseFontSizeMax] {
+            #expect(AgentDesign.scaledComposerInputFontSize(baseFontSize: size) == size)
+            #expect(
+                AgentDesign.scaledChromeFontSize(AgentDesign.sidebarRowFontSize, baseFontSize: size) == size
+            )
+        }
+
+        // Raising the body carries both surfaces by the same absolute step.
         let raised = base + 5
         #expect(
             AgentDesign.scaledChromeFontSize(AgentDesign.sidebarRowFontSize, baseFontSize: raised)
@@ -104,7 +114,11 @@ struct AgentSidebarListVisualMetricsTests {
 
     @Test("conversation sidebar follows the Codex typography and vertical rhythm")
     func codexReferenceMetricsStaySynchronized() {
-        #expect(AgentDesign.sidebarRowFontSize == 14)
+        // Sidebar rows and the composer read at the chat body size — the old
+        // 15/14/13 step was small enough to look like a mistake rather than a
+        // hierarchy, so hierarchy lives in color and weight instead.
+        #expect(AgentDesign.sidebarRowFontSize == AgentSettingsStore.chatBaseFontSizeDefault)
+        #expect(AgentDesign.composerInputFontSize == AgentSettingsStore.chatBaseFontSizeDefault)
         #expect(AgentDesign.sidebarRowHeight == 31)
         #expect(AgentDesign.sidebarSelectionCornerRadius == 10)
         #expect(AgentDesign.sidebarWorkspaceGroupSpacing == 6)
@@ -377,10 +391,12 @@ struct AgentSidebarListVisualMetricsTests {
                 + AgentDesign.sidebarPinnedSessionContentHorizontalInset
                 == 12
         )
+        // Fixed geometry: the trailing trim is 28 pt of title width, and no
+        // longer tracks the row font (which follows the chat body size).
         #expect(
             AgentDesign.sidebarSessionContentHorizontalInset
                 - AgentDesign.sidebarSessionTrailingContentInset
-                == AgentDesign.sidebarRowFontSize * 2
+                == 28
         )
     }
 

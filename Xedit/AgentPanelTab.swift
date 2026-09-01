@@ -87,3 +87,22 @@ extension AgentSidePanelState {
         tabs = items
     }
 }
+
+/// A detached tab lives in its own window, so the sidebar strip must not keep a
+/// placeholder chip for it: the chip would be a second surface for content that
+/// is already visible somewhere else. The full list (dock + windows) stays
+/// reachable from the overview popover.
+nonisolated enum AgentPanelTabStrip {
+    static func docked(_ tabs: [AgentPanelTab], isDetached: (AgentPanelTab) -> Bool) -> [AgentPanelTab] {
+        tabs.filter { !isDetached($0) }
+    }
+
+    /// Selection may still point at a detached tab (opening a panel kind focuses
+    /// its window without moving it back), so the dock falls back to the first
+    /// tab it can actually render.
+    static func active(selected: AgentPanelTab?, in tabs: [AgentPanelTab],
+                       isDetached: (AgentPanelTab) -> Bool) -> AgentPanelTab? {
+        if let selected, !isDetached(selected) { return selected }
+        return docked(tabs, isDetached: isDetached).first
+    }
+}

@@ -3,6 +3,47 @@
 > 当前文件保留最新版本（1.315.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.315.0-rc5 - 2026-09-01
+
+### Changed
+
+- 对外请求的客户端标识统一为 `WillDeep Desktop (some.im)`，全部用空格分隔，不再出现连字符或斜杠拼接。
+  - `X-Client-Name`：`WillDeep Desktop (some.im)`（纯名字，版本仍走旁边的 `X-Client-Version`）。
+  - `User-Agent`：`WillDeep Desktop (some.im) 1.315.0-rc5 (macOS)`——UA 没有别处放版本，所以版本跟在名字后面，平台仍在末尾。旧格式 `some.im/WillDeep-{版本} (macOS)` 就此退役。
+  - 协议握手的 `clientInfo.name`（MCP、ACP、Codex app-server）与 OpenRouter 榜单的 `X-Title` 一并改用同一个名字；它们各有独立的 `version` 字段，所以只取纯名字。**注意 OpenRouter 公开榜单上的显示名会随之从 `WillDeep` 变为 `WillDeep Desktop (some.im)`。**
+  - 通知 webhook 的 UA 此前是另写一份的同款字符串，现在改为复用 `AgentNetworkSupport.userAgent(forVersion:)`，避免两处格式再次分叉；webhook payload 里的 `application: "WillDeep"` 字段属于数据 schema，未改动。
+- **服务端注意**：若有按 `some.im/WillDeep-` 前缀做客户端统计或路由的规则，需同步改为匹配 `WillDeep Desktop (some.im)`。客户端侧的 webhook 来源识别仍兼容旧格式（只认 `willdeep` 子串），不受影响。
+- 文档 `docs/WILLDEEP_NOTIFICATIONS_WEBHOOK.md` 的 `User-Agent` 示例同步更新，并标注了变更版本。
+
+## 1.315.0-rc4 - 2026-09-01
+
+### Changed
+
+- 侧边栏会话行与 composer 输入框的字号拉平到聊天正文同号。此前是 15/14/13 的三级梯度（正文 15、侧栏 14、输入 13），一个点的差距不构成层级，只让人觉得输入框的字"莫名小一号"；现在层级交给颜色和字重表达。
+  - 两处仍走 `scaledChromeFontSize` 同一条换算通道，只是 token 取默认正文字号，因此在设置里把正文调到 11–20 的任何一档，侧栏和输入框都精确落在正文字号上。
+  - 时间戳、状态标签等 supporting text 保持原来的 -2pt 梯度不变。
+  - 侧栏会话行的尾部缩进（32 − 4 = 28pt）此前用 `sidebarRowFontSize * 2` 表达，行字号跟随正文后这个绑定不再成立，改回固定几何值。
+
+## 1.315.0-rc3 - 2026-09-01
+
+### Changed
+
+- 工作面板里已经分离成独立窗口的标签，不再在侧栏标签条上继续占位。此前它只是加了个 ↗ 角标留在原处，点它也只能看到一张"此标签在独立窗口中打开"的占位页——等于同一份内容占了两个位置，标签多的时候把真正还在侧栏的标签挤出可视区。
+  - 标签条只渲染还在侧栏的标签；选中项若指向窗口里的标签（打开同类面板只是把窗口拉到前面，并不搬回来），侧栏回落到第一个还能渲染的标签，并同步真实选中态，避免面板类型与屏幕上显示的内容对不上。
+  - 全部标签都分离出去时，侧栏不再留空标签条，改为直接给出"收回所有窗口"的出口，并保留拖放落点（把窗口标题拖回来仍可收回）。
+  - "全部标签"弹层仍是完整清单（侧边栏 / 独立窗口分别标注），并给每个独立窗口加了单独的"收回侧栏"按钮，不必先找到窗口再点收回。
+- 新增 `AgentPanelTabStrip` 纯函数（侧栏可见标签、选中回落）与回归用例 `分离出去的标签不再占用侧栏标签条`。
+
+## 1.315.0-rc2 - 2026-09-01
+
+### Fixed
+
+- 根治 vendor SDK AIPipe 的内存失控（曾把进程堆到 126GB MALLOC_SMALL、打满 24GB 物理内存 + 38GB swap 拖垮整机）。三处并修：
+  - SIGPIPE 不再进信号 handler：它是网络/子进程断开管道的日常信号，不是崩溃，现在直接 `SIG_IGN`。旧实现在 handler 里调 `stringWithFormat`/ObjC alloc/`dispatch_async`/发网络请求（全部非 async-signal-safe），实测两个线程同时死在 handler 内的 malloc 上。
+  - 致命信号（SIGABRT/SIGILL/SIGSEGV/SIGFPE/SIGBUS）的 handler 改为纯 async-signal-safe：栈上缓冲 + `write(2)` 写一行 stderr，随后恢复默认处置并重抛，让系统崩溃流程继续；不再进 ObjC/malloc/dispatch。
+  - 日志队列设 1000 条硬上限（超限丢最旧，重试耗尽回插同样受限），落盘由"每条日志全量序列化 + `synchronize`（O(n²)）"改为 1 秒节流窗口合批；加载旧落盘数据同样按上限截断。
+- 新增 `AIPipeQueueSafetyTests`：SIGPIPE 处置与 raise 免疫、致命信号仍有真实 handler、队列上限丢最旧、落盘节流合批。
+
 ## 1.315.0-rc1 - 2026-09-01
 
 ### Fixed

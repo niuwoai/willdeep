@@ -7,11 +7,17 @@
 
 #import "AIPipe.h"
 #import <signal.h>
+#import <unistd.h>
 
 static NSString *const kUserDefaultsKeyQueue = @"AIPipeLogQueue";
 static NSString *const kUserDefaultsKeyConfig = @"AIPipeConfig";
 static const NSUInteger kMaxBatchSize = 50;
 static const NSTimeInterval kDefaultBatchTimeout = 5.0;
+// 内存队列硬上限：超限丢最旧。无上限的 logQueue + 每条全量落盘曾把进程
+// 推到 126GB MALLOC_SMALL(见 handleSendFailure 无丢弃回插 + O(n²) 落盘)。
+static const NSUInteger kMaxQueueSize = 1000;
+// 落盘节流窗口：窗口内多次入队只落盘一次。
+static const NSTimeInterval kQueueSaveThrottleInterval = 1.0;
 static NSUncaughtExceptionHandler *AIPipePreviousExceptionHandler = NULL;
 
 static void AIPipeUncaughtExceptionHandler(NSException *exception);
@@ -25,6 +31,8 @@ static void AIPipeUncaughtExceptionHandler(NSException *exception);
 @property (nonatomic, strong) dispatch_queue_t queue;
 @property (nonatomic, assign) NSUncaughtExceptionHandler *previousExceptionHandler;
 @property (nonatomic, assign) BOOL isInitialized;
+// 仅在 self.queue 上读写：标记本节流窗口内已有一次落盘被排期。
+@property (nonatomic, assign) BOOL queueSaveScheduled;
 
 static void AIPipeSignalHandler(int signal);
 
@@ -165,12 +173,36 @@ static void AIPipeSignalHandler(int signal);
 - (void)addLogToQueue:(AIPipeLogItem *)item {
     dispatch_async(self.queue, ^{
         [self.logQueue addObject:item];
-        [self saveQueueToUserDefaults];
-        
+        [self trimQueueToLimit];
+        [self scheduleQueueSave];
+
         // 如果达到批量大小，立即上报
         if (self.logQueue.count >= self.config.batchSize) {
             [self flushQueue];
         }
+    });
+}
+
+// 仅在 self.queue 上调用。
+- (void)trimQueueToLimit {
+    if (self.logQueue.count > kMaxQueueSize) {
+        NSUInteger overflow = self.logQueue.count - kMaxQueueSize;
+        [self.logQueue removeObjectsInRange:NSMakeRange(0, overflow)];
+    }
+}
+
+// 仅在 self.queue 上调用。节流窗口内的多次入队合并为一次全量落盘，
+// 避免每条日志 O(n) 序列化叠成 O(n²)。
+- (void)scheduleQueueSave {
+    if (self.queueSaveScheduled) {
+        return;
+    }
+    self.queueSaveScheduled = YES;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                 (int64_t)(kQueueSaveThrottleInterval * NSEC_PER_SEC)),
+                   self.queue, ^{
+        self.queueSaveScheduled = NO;
+        [self saveQueueToUserDefaults];
     });
 }
 
@@ -255,10 +287,12 @@ static void AIPipeSignalHandler(int signal);
             [self sendBatch:logs retryCount:retryCount + 1];
         });
     } else {
-        // 达到最大重试次数，重新加入队列
+        // 达到最大重试次数，重新插回队头；超出上限时丢最旧，防止
+        // 网络长期不可用时整批日志无限回插堆积。
         dispatch_async(self.queue, ^{
             [self.logQueue insertObjects:logs atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, logs.count)]];
-            [self saveQueueToUserDefaults];
+            [self trimQueueToLimit];
+            [self scheduleQueueSave];
         });
     }
 }
@@ -279,28 +313,46 @@ static void AIPipeUncaughtExceptionHandler(NSException *exception) {
 }
 
 - (void)setupSignalHandler {
+    // SIGPIPE 是网络/子进程断开管道的日常信号，不是崩溃：直接忽略，绝不进
+    // handler。曾因 handler 内 malloc/dispatch 在高频 SIGPIPE 下堆出 126GB。
+    signal(SIGPIPE, SIG_IGN);
+
     signal(SIGABRT, AIPipeSignalHandler);
     signal(SIGILL, AIPipeSignalHandler);
     signal(SIGSEGV, AIPipeSignalHandler);
     signal(SIGFPE, AIPipeSignalHandler);
     signal(SIGBUS, AIPipeSignalHandler);
-    signal(SIGPIPE, AIPipeSignalHandler);
 }
 
-static void AIPipeSignalHandler(int signal) {
-    NSString *signalName = @"UNKNOWN";
-    switch (signal) {
-        case SIGABRT: signalName = @"SIGABRT"; break;
-        case SIGILL: signalName = @"SIGILL"; break;
-        case SIGSEGV: signalName = @"SIGSEGV"; break;
-        case SIGFPE: signalName = @"SIGFPE"; break;
-        case SIGBUS: signalName = @"SIGBUS"; break;
-        case SIGPIPE: signalName = @"SIGPIPE"; break;
+// 致命信号 handler：只允许 async-signal-safe 操作（栈上缓冲 + write(2)）。
+// 禁止 ObjC 消息、malloc、dispatch、网络——实测曾有两个线程同时死锁在
+// handler 内的 malloc 上。写完立即恢复默认处置并重抛，让系统崩溃流程继续。
+static void AIPipeSignalHandler(int sig) {
+    const char *name = "UNKNOWN";
+    switch (sig) {
+        case SIGABRT: name = "SIGABRT"; break;
+        case SIGILL: name = "SIGILL"; break;
+        case SIGSEGV: name = "SIGSEGV"; break;
+        case SIGFPE: name = "SIGFPE"; break;
+        case SIGBUS: name = "SIGBUS"; break;
     }
-    
-    NSString *content = [NSString stringWithFormat:@"Signal received: %@ (%d)", signalName, signal];
-    [AIPipe logWithLevel:@"ERROR" content:content];
-    [AIPipe flush];
+
+    char buf[64];
+    size_t len = 0;
+    const char *prefix = "[AIPipe] fatal signal: ";
+    for (const char *p = prefix; *p != '\0' && len < sizeof(buf) - 1; p++) {
+        buf[len++] = *p;
+    }
+    for (const char *p = name; *p != '\0' && len < sizeof(buf) - 1; p++) {
+        buf[len++] = *p;
+    }
+    if (len < sizeof(buf) - 1) {
+        buf[len++] = '\n';
+    }
+    (void)write(STDERR_FILENO, buf, len);
+
+    signal(sig, SIG_DFL);
+    raise(sig);
 }
 
 - (void)startBatchTimer {
@@ -331,7 +383,10 @@ static void AIPipeSignalHandler(int signal) {
     }
 }
 
+static NSUInteger AIPipeQueueSaveCount = 0;
+
 - (void)saveQueueToUserDefaults {
+    AIPipeQueueSaveCount += 1;
     NSMutableArray *queueData = [NSMutableArray array];
     for (AIPipeLogItem *item in self.logQueue) {
         NSDictionary *dict = [item toDictionary];
@@ -339,16 +394,20 @@ static void AIPipeSignalHandler(int signal) {
             [queueData addObject:dict];
         }
     }
-    
+
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setObject:queueData forKey:kUserDefaultsKeyQueue];
-    [defaults synchronize];
 }
 
 - (void)loadQueueFromUserDefaults {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSArray *queueData = [defaults arrayForKey:kUserDefaultsKeyQueue];
-    
+
+    // 落盘数据可能来自未设上限的旧版本：只取最新 kMaxQueueSize 条。
+    if (queueData.count > kMaxQueueSize) {
+        queueData = [queueData subarrayWithRange:NSMakeRange(queueData.count - kMaxQueueSize, kMaxQueueSize)];
+    }
+
     if (queueData) {
         for (NSDictionary *dict in queueData) {
             AIPipeLogItem *item = [[AIPipeLogItem alloc] init];
@@ -378,6 +437,48 @@ static void AIPipeSignalHandler(int signal) {
     };
     [defaults setObject:configDict forKey:kUserDefaultsKeyConfig];
     [defaults synchronize];
+}
+
+#pragma mark - Test Support
+
++ (NSUInteger)pendingLogCountForTesting {
+    AIPipe *instance = [self sharedInstance];
+    __block NSUInteger count = 0;
+    dispatch_sync(instance.queue, ^{
+        count = instance.logQueue.count;
+    });
+    return count;
+}
+
++ (NSArray<NSString *> *)pendingLogContentsForTesting {
+    AIPipe *instance = [self sharedInstance];
+    __block NSArray<NSString *> *contents = @[];
+    dispatch_sync(instance.queue, ^{
+        NSMutableArray<NSString *> *result = [NSMutableArray arrayWithCapacity:instance.logQueue.count];
+        for (AIPipeLogItem *item in instance.logQueue) {
+            [result addObject:item.content ?: @""];
+        }
+        contents = [result copy];
+    });
+    return contents;
+}
+
++ (NSUInteger)queueSaveCountForTesting {
+    AIPipe *instance = [self sharedInstance];
+    __block NSUInteger count = 0;
+    dispatch_sync(instance.queue, ^{
+        count = AIPipeQueueSaveCount;
+    });
+    return count;
+}
+
++ (void)resetQueueForTesting {
+    AIPipe *instance = [self sharedInstance];
+    dispatch_sync(instance.queue, ^{
+        [instance.logQueue removeAllObjects];
+        AIPipeQueueSaveCount = 0;
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:kUserDefaultsKeyQueue];
+    });
 }
 
 + (NSString *)currentTimestamp {

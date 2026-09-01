@@ -247,7 +247,7 @@ enum AppUpdateChecker {
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         // Reuse the single source of truth so the update-check UA matches every
-        // other outgoing request (`some.im/WillDeep-{version} (macOS)`).
+        // other outgoing request (`WillDeep Desktop (some.im) {version} (macOS)`).
         request.setValue(AgentNetworkSupport.userAgentHeaderValue, forHTTPHeaderField: "User-Agent")
         request.setValue(appVersion, forHTTPHeaderField: "X-App-Version")
         return request
