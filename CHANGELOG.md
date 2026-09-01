@@ -3,6 +3,23 @@
 > 当前文件保留最新版本（1.315.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.315.0-rc7 - 2026-09-01
+
+### Docs
+
+- `OPEN_CORE.md` 的「开源核心」清单（中英两版）不再把「原生 macOS 编辑器」和「本地文件浏览与编辑」算作开源内容。通用编辑器场景在 1.249.0 就整个删掉了（`XeditApp.swift` 只剩 Agent 窗口与终端捷径窗口，`XeditTests/AgentHeaderEditorEntryTests.swift` 有源码守卫钉着不许复活），通用编辑归独立的 Qeditor。一份专门用来划开源边界的文档，把一个已经不存在的功能列进承诺清单，比介绍页写错更难解释。两条改成现状：Agent 工作台（会话、对话记录、多标签工作面板），以及文件的只读预览与 Agent 改动的 Diff 审阅。README 已于 1.315.0-rc6 按同一现状重写，这两处是同一批陈述里漏掉的。
+- Help Book「审批与安全」一节（中英两版）的档位名改成 UI 里真正显示的那四个：严格模式 / 智能审核 / 工作区可写 / 完全访问（Strict mode / Smart review / Workspace write / Full access）。旧文写的是「每次询问、智能审批、Workspace 访问、静默」——四个名字没一个对得上，照着帮助去输入区找档位只会一个都找不到。排错一节里那句「把审批档位调到『智能审批』或『Workspace 访问』」同步改名。列表按从紧到松排列并写明顺序；输入区菜单的实际排序另有防误点考虑（`AgentApprovalMode.allCases` 把完全访问放在第二位、严格模式压轴），文档不复述那层排序理由。
+- 改过 Help HTML 后重跑 `scripts/build_help_index.rb`，两个语言的 lsm 与 corespotlight 索引一并提交——缺索引时 Help Viewer 不认这本书，会转去在线帮助库找，然后报「所选内容当前不可用」。
+## 1.315.0-rc6 - 2026-09-01
+
+### Changed
+
+- README 中英两版按现状重写。旧版还停在编辑器时代：整章介绍语法高亮、代码折叠、Minimap、分屏、Inspector 和一张以 ⌘O / ⌘P / ⌘F / ⌘⌥\ 为主的编辑器快捷键表——而通用编辑器场景早在 1.249.0 就整个删除了（`XeditApp.swift` 只剩 Agent 窗口与终端捷径窗口，`AgentHeaderEditorEntryTests` 钉着不许复活）。照着旧 README 下载的人，打开 App 会找不到文档里一半的功能。
+  - 开篇新增「这里已经没有编辑器了」一节，直说通用编辑归独立 Qeditor（自己的 Bundle ID、容器、设置与更新通道，不迁移数据），WillDeep 侧保留只读预览与 Diff 审阅，并给出这么切的理由。
+  - 主体换成当前真正的差异化机制：会话级并发运行时、三档模型 × 五类职责的派工与运行中干预、四档审批的确定性判定顺序与 seatbelt 沙箱（环境脱敏、沙箱拒绝转审批、凭据读取即使无网络出口也照问）、锚定 `prompt_tokens` 的上下文核算与跑道交接、`update_plan` 工具化进度、可分离成独立窗口的多标签工作面板、SSH/daemon 远端 runtime、技能／MCP／工作流／插件四类扩展、已安排任务，以及 Goal、专家圆桌、外部执行器任务契约、手机端与会话归档。
+  - 修掉的具体错误：审批档位名（原写「每次询问／智能审批／Workspace 访问／静默」，实际 UI 是严格模式／智能审核／工作区可写／完全访问）、命令行工具名（`willdeep` → `willdeep-app`）、顶层模式（Plan 模式已于 1.211.0-rc6 退役，现为普通与 Goal 两种）、项目状态（`1.165.x` → `1.315.x`）。快捷键表收敛为实际还存在的五条。
+  - 未改动的部分：Open Core 与许可章节、构建与 dev_install 流程、日语版仍为占位。
+
 ## 1.315.0-rc5 - 2026-09-01
 
 ### Changed

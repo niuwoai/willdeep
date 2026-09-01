@@ -6,14 +6,12 @@
 
 # WillDeep（中文版）
 
-**一个 macOS 原生 Agent 工作台：理解项目、调用工具、推进任务，并把结果交付到你手上。**
+**macOS 上的原生 Agent 工作台。你交代一件事，它读现场、动手、验证，把改动和证据摆回你面前。**
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.315.0--rc5-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.315.0--rc7-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
-
-*它不只是坐在编辑器旁边回答问题。它会看现场、做事情、留下证据，也知道什么时候该停下来问你。*
 
 [willdeep.com](https://willdeep.com)
 
@@ -23,54 +21,61 @@
 
 ---
 
-## 这不是另一个“带 AI 的编辑器”
+## 先说一件事：这里已经没有编辑器了
 
-编辑器以文件和 tab 为中心；WillDeep 以**任务、工作区、会话和交付物**为中心。
+从 1.249.0 起，WillDeep 删除了通用编辑器场景——文本/源码文件类型注册、编辑器设置入口、编辑器窗口，全部下线。通用文件编辑交给独立的 **Qeditor**，它有自己的 Bundle ID、沙盒容器、设置和更新通道，不迁移 WillDeep 的数据。
 
-你告诉它“修掉这个 bug”“把这套设计落成页面”“检查服务器为什么卡住”“把本周工作整理出来”，它会读取项目、搜索代码、操作终端或浏览器、拆解计划、调用技能，必要时创建隔离 worktree，然后持续推进到可以验证的结果。
+WillDeep 这边留下的是**只读预览**和 **Diff 审阅**：Agent 改完文件，你在 Diff 面板逐段核对，再决定应用还是拒绝；想手改就用你惯用的编辑器打开。
 
-所以，WillDeep 现在更准确的定义是：
-
-> **一个运行在 macOS 上、能接入本地与远端工作现场的通用 Agent。**
-
-它仍然带着一个很快的原生编辑器，但编辑器已经不是舞台中央的主角，而是 Agent 用来查看、比较和修正现场的工具之一。
+这么切是因为两件事的注意力落点不同。编辑器围着文件和光标转，Agent 工作台围着任务、工作区、会话和交付物转。一个 App 兼顾两头，最后哪头都不透。
 
 ---
 
-## 它怎么工作
+## 它强在哪
 
-### 从一句话到可验收结果
+下面每一条都是已经落地的机制，不是路线图。
 
-- **Normal / Plan / Goal 三种工作方式。** 小事直接做，复杂任务先形成计划，长期目标则带清单持续推进。
-- **真正的多轮执行。** Agent 可以连续调用工具、处理结果、修正方案并继续，不会把“给你一段建议”冒充“已经完成”。
-- **任务排队与自动化。** 当前回复还在运行时可以继续发送；例行任务可按计划执行，后台任务、媒体任务和构建队列都有可见状态。
-- **会话属于工作区。** 对话、文件引用、运行位置、Git 分支、终端和交付物围绕同一个项目组织，不靠你反复解释上下文。
-- **隔离工作。** 新任务可以进入独立 worktree；高风险 Git 操作前会重新核对仓库 revision，避免覆盖人类或其他 Agent 刚做的改动。
+### 会话各跑各的
 
-### 不止会聊天，是真的能动手
+每个会话独占一个运行时——消息、请求任务、工具等待、输入草稿、模式状态各自一份。切走不打断，上一个会话继续在后台推进，侧栏的状态点告诉你它是在想、在等你点头，还是停了。
 
-WillDeep 的 Agent 可以使用：
+同一个服务商的并发有上限（默认 3，可在设置里调到 1–8），不同服务商互不影响：三个 DashScope 会话堵不住 OpenAI 那条线。
 
-- 文件读取、全文搜索、精确编辑、diff 审查与 Git 状态；
-- shell 命令、可见终端、构建、测试和长任务；
-- 网页搜索、内置浏览器与 macOS Computer Use；
-- Codex Skills、MCP servers，以及 Claude Code / Codex CLI / Cursor Agent 等外部执行器；
-- 图片理解、图片编辑、媒体任务、网页组件和结构化工作流；
-- SSH 或 remote daemon，把同一套 Agent 工作流带到远端 macOS / Linux 工作区。
+### 派工：三档模型 × 五类职责
 
-工具不是烟花。每次调用都应该让任务离完成更近一点——否则只是机器在很努力地表演忙碌。
+模型收敛成基础、进阶、专家三档，职责收敛成调查、实现、验证、审查、运维五类，哪类活用哪档由你配。三档绑定优先读 `~/.willdeep/config.toml`，和命令行版共用同一份 schema——同一个账号不会因为开的是哪个客户端而落到不同模型上。配置点名了本机没有的提供商，那一档直接标为不可用并说明原因，不会静默把请求发去另一个网关。
 
-### 你仍然握着方向盘
+子代理跑起来之后你还能插话：**下轮生效**把你的原话排进下一轮；**打断并发送**只取消它当前那一个子步骤，不杀掉整个子任务。派工卡上的工具标签带宾语——「运行命令 `ruby sync.rb`」「读取文件 `.env.local`」——你才判断得出要不要打断；宾语先脱敏再截断，`${secret:…}` 在被省略号吃掉之前就已经换成 `[secret]`。
 
-- **安全命令可以自动放行。** 明确只读的操作直接执行；边界命令可交给审批模型判断。
-- **危险动作必须确认。** 破坏性命令、敏感操作和外部副作用会升级审批，必要时要求手动输入 `confirm`。
-- **改动可以审。** 文件变更以 diff 呈现，可逐项 Apply / Reject，也可查看当前 worktree 的完整变化。
-- **机密不进对话。** API Key 存在 Keychain；受保护的 secret 以占位符进入上下文，只在本机执行边界解析，并对结果继续脱敏。
-- **上下文用量不是玄学。** token 统计按真实请求体计算；长会话可手动或自动压缩，历史仍保留为可读数据。
+### 审批分四档，判定顺序是死的
 
-### 本地、远端，都是同一个工作现场
+四档：严格模式、智能审核、工作区可写、完全访问。判定确定性优先——恶意命令黑名单在任何档位都拦；常见只读命令直接放行；你记过的授权直接生效；都不命中，才轮得到 AI 裁判说话。智能审核档下裁判判不了就回落人工确认；完全访问档根本不过裁判这一关，它的保护全部来自那份确定性黑名单，以及必须由你本人回答的交互边界。
 
-在 Settings → Runtimes 中配置 SSH 主机或 `willdeep-agent` daemon 后，一个会话可以绑定到远端 workspace。文件搜索、Git、shell、构建、测试和委派任务都在远端执行，本机保留原生界面、审批与结果审查。
+破坏性操作在任何档位都要你亲手键入确认，没有例外。
+
+命令默认套 seatbelt 沙箱执行：没有网络出口，不许越界写，环境里名字像 token / secret / api_key 的变量在传进去之前就被删掉，`HOME` 指向临时目录，`SSH_AUTH_SOCK` 和 `GITHUB_TOKEN` 一并清空。命令因为沙箱被拒时不会当成普通失败丢回给模型反复重试，而是停下来问你要不要无沙箱重跑一次。读凭据这件事就算不带网络出口也照样问——私钥一旦进了回复，它已经离开这台机器去了模型服务商。执行记录写入审计日志，密钥已脱敏。
+
+### 上下文按真实用量算
+
+窗口占用锚定 provider 回的 `prompt_tokens`，不用本地估算凑数（实测本地估算能低到三倍差）。超过阈值自动压缩老对话，请求体里的旧工具结果折叠成占位符，最近几轮保持原样。
+
+快到窗口尽头时走**上下文跑道交接**：模型有序停机，写清停在哪、剩什么没做，末尾挂两个接力图标——一个在当前会话继续，一个开新会话带着交接词继续。交接只在显示层收拢，消息原文一个字节没动。
+
+### 进度上报走工具通道
+
+计划进度由常驻的 `update_plan` 工具上报，不再让模型在回复里写围栏块。落盘复盘的结论是：80% 的围栏块只在回合收尾才出现，长回合里那份清单能一直卡在「第 1 步」直到结束——工具调用是模型在回合中段唯一稳定使用的通道。
+
+普通模式不强制先写计划。宿主自己测量：一个回合真跑满 4 个工具轮，或落地 3 次以上写级调用，才要求补一份只含剩余工作的计划。小任务零开销。
+
+### 工作面板：多标签，能拖成独立窗口
+
+右侧面板承载终端、文件、Diff、网页预览、媒体任务、图片编辑等视图。多个标签并存，终端和后台任务不会因为你切个标签就被顶掉。标签可以拖出来变成原生独立窗口，也能定位、拖回、批量收回；关掉标签不等于终止进程。
+
+终端面板是真实终端——Agent 跑的命令和你手敲的命令，看到的是同一个环境。
+
+### 本地和远端是同一套工作流
+
+在设置 → Runtimes 里加 SSH 主机或 `willdeep-agent` daemon，会话就能绑到远端工作区。文件搜索、Git、shell、构建、测试、派工全在远端执行，界面、审批、结果审查留在本机。SSH 只保存密钥文件路径，不保存私钥内容；daemon token 存在钥匙串里。
 
 ```bash
 willdeep-agent serve \
@@ -78,21 +83,39 @@ willdeep-agent serve \
   --token-file ~/.willdeep-agent-token
 ```
 
-### 内置编辑器还在，而且依然很快
+Git 仓库里还可以直接从输入区的工作区菜单创建、切换和清理 worktree；高风险 Git 操作前会重新核对仓库 revision，避免覆盖人或另一个 Agent 刚落地的改动。
 
-需要直接看文件时，WillDeep 提供原生 AppKit + SwiftUI 编辑体验：
+### 四种扩展，各管一段
 
-- 文件立即显示，语法高亮在主线程之外增量完成；
-- 大文件只优先高亮可见区域，滚动到哪处理到哪；
-- 代码折叠、括号配对、Minimap、结构 inspector、跨文件查找替换、Markdown / HTML 预览、分屏和 Focus 模式；
-- Swift、Ruby、PHP、Java、JavaScript / TypeScript、Go、Python、Rust、C / C++ / C#、SQL、YAML、TOML、Dockerfile、Makefile、shell 等 25 种以上语言；
-- 只有显式打开文件夹时才加载文件树，不会因为双击一个文本文件就擅自扫描整个目录。
+| 扩展 | 管什么 | 说明 |
+| --- | --- | --- |
+| **技能** | 改变 AI 的做事方法 | 随 App 内置 40+ 个；用户技能放 `~/.willdeep/skills`，兼容旧的 `~/.codex/skills` |
+| **MCP 服务** | 给 AI 新的真实能力 | stdio 与 streamable-http 都支持；服务发现合并 App 自有、Cursor `mcp.json` 与 Codex `config.toml`，敏感 header 显示前脱敏 |
+| **工作流** | 可重复的多步编排 | `/code-review`、`/pr-review`、`/bug-hunt`、`/release-notes`、`/deep-research`、`/db-explore` 等；fan-out 的维度审查绑小模型工种，可随时停止 |
+| **插件** | 在主导航里加一块你直接操作的界面 | 页面跑在隔离环境（无网络、无文件、拿不到密钥），要做真事必须走清单里声明过的命令，安装时一次性授权 |
 
-换句话说：编辑器从“产品定义”退到了“基础能力”，但没有被扔进地下室吃灰。
+内置的第一方插件包括经典游戏厅、俄罗斯方块、收藏夹、待办、会话体检中心和项目概览。插件开发文档随 App 发行，在应用包的 `Contents/Resources/BundledSkills/willdeep-plugin-dev/` 下；直接在 WillDeep 里问「怎么开发 WillDeep 插件」，AI 会读这份文档回答你。
+
+### 定时自己干活
+
+左侧栏的「已安排」按周期跑任务：间隔、每天 HH:MM、工作日、指定星期。到点自动开一个新会话执行指定提示词，绑定工作区和模型档位。暂停的任务明确标注「已暂停」，不会假装还有下次运行。近期运行列出结果和失败原因，点一下回到对应会话。
+
+### 其余值得一提的
+
+- **Goal 模式**——长任务先拆成最多 6 个阶段，每阶段只展开当前 6 步计划，做完一段再规划下一段。验收标准由 AI 维护成内部契约，你只负责描述目标。阶段结束时宿主会静默终止该阶段起的进程树，跨阶段常驻必须显式声明。
+- **专家圆桌**——十位内置专家。先进准备室精炼决策问题、按理由推荐 2–4 人，讨论真流式呈现，终稿自动规范化并落盘成 Markdown。
+- **外部执行器**——Claude Code、Codex CLI、Cursor Agent、Cline 可以接手一轮任务，但要进宿主的任务契约：限定目标、验收标准、允许路径、禁止动作、验证命令、最多三轮。执行器先交证据包，再由只读上下文复核，最后 WillDeep 独立重跑安全检查，不过就拒收。
+- **手机端**——Mobile Gateway 配对后可在手机上继续对话、审批工具、发图片；默认走互联网中继，也支持自建 WebSocket 中继。
+- **模型来源随你**——登录 some.im 托管服务开箱即用，或在设置里配自己的 provider 与 API Key（key 存钥匙串，托管模型只是推荐值，随时可覆盖）。
+- **会话不会越攒越乱**——按项目分组，可搜索、批量归档/恢复/删除；开启自动归档后按项目保留最近 N 个，置顶、正在跑、排队中和有未发草稿的会话受保护。
 
 ---
 
 ## 开始使用
+
+### 装一个用
+
+到 [willdeep.com](https://willdeep.com) 下载官方签名版，或者从源码编译。需要 macOS 13.7+。
 
 ### 从源码编译
 
@@ -103,115 +126,108 @@ open Xedit.xcodeproj
 # ⌘R
 ```
 
-需要 Xcode 和 macOS 13.7+。产物名为 **WillDeep.app**。
+需要 Xcode。产物名为 **WillDeep.app**。
 
-日常命令行编译优先使用共享热缓存入口：
+日常命令行编译走共享热缓存入口：
 
 ```bash
 ruby scripts/build_fast.rb             # Debug 增量编译，默认不生成索引、不签名
-ruby scripts/build_fast.rb --sign      # 需要运行签名链路时
 ruby scripts/build_fast.rb --release   # Release 编译
-ruby scripts/build_fast.rb --index     # 这次 CLI 编译也生成索引
-ruby scripts/build_fast.rb --release --destination 'generic/platform=macOS'
-                                      # 为正式 archive 预热全部目标架构
+ruby scripts/build_fast.rb --sign      # 需要走签名链路时
 ```
 
-默认缓存位于 `~/Library/Caches/WillDeep/Xcode/Xedit`，DerivedData、SwiftPM checkout、package 下载缓存与 Xcode compilation cache 会跨终端和 Codex 任务复用；脚本不会修改 Xcode IDE 的索引设置。构建报告写入 `build/local/build_report.md` 与 `build/local/build_report.json`。
+缓存默认在 `~/Library/Caches/WillDeep/Xcode/Xedit`，DerivedData、SwiftPM checkout 与 Xcode compilation cache 跨终端复用；构建报告写到 `build/local/build_report.md`。完整的缓存布局、测试入口与 CI 边界见 [本地构建与测试提速](docs/BUILD_TEST_ACCELERATION.md)。
 
-完整的缓存布局、测试入口、CI Runner 与正式发布边界见 [本地构建与测试提速](docs/BUILD_TEST_ACCELERATION.md)。
-
-开发阶段优先通过仓库测试入口执行单测，避免多个 Agent 或 Git worktree 同时冷构建：
+跑测试优先用快速入口，避免多个 Agent 或 worktree 同时冷构建：
 
 ```bash
 ruby scripts/run_tests_fast.rb -only-testing:XeditTests/YourTestSuite
-ruby scripts/run_tests_fast.rb --without-building -only-testing:XeditTests/YourTestSuite
-scripts/run_tests.sh
+scripts/run_tests.sh                   # 完整本地门禁
 ```
 
-快速入口与本地编译共用稳定的 DerivedData、SwiftPM 和 compilation cache，只构建 `XeditTests` Scheme；`--without-building` 会核对源码指纹，源码变化后拒绝运行旧测试二进制。完整本地门禁仍使用 `scripts/run_tests.sh`。
-
-要把当前 worktree 的 Debug 版本直接装进 `/Applications`，先在不会提交的 `.env.local` 中配置登录密钥：
+要把当前 worktree 的 Debug 版直接装进 `/Applications`，先在不会提交的 `.env.local` 里配好登录密钥：
 
 ```dotenv
 WILLDEEP_CLIENT_LOGIN_SECRET=你的本地开发密钥
 ```
 
-然后执行：
+然后：
 
 ```bash
 ruby dev_install.rb --dry-run
 ruby dev_install.rb
 ```
 
-脚本不会输出密钥；它会完成干净构建、签名、原子安装，以及版本、签名和密钥注入校验。已经运行的 WillDeep 不会自动重载覆盖后的 App，请彻底退出后重新打开。
+脚本不打印密钥，会完成干净构建、签名、原子安装，以及版本、签名和密钥注入校验。已经在跑的 WillDeep 不会自动重载，请彻底退出后重开。
 
 ### 第一个任务
 
-1. 打开 WillDeep，创建一个新对话。
-2. 选择本地工作区；如果任务在服务器上，选择已配置的远端 runtime。
-3. 登录 some.im 托管服务，或在 Settings → AI Providers 中配置自己的模型与 API Key。
-4. 直接描述想要的结果。复杂任务可切到 Plan，长期任务可使用 Goal。
-5. Agent 需要授权、选择或补充信息时会明确停下来找你；完成后检查 diff、测试结果和交付物。
+1. 给它一个模型来源：登录 some.im 托管服务，或在「设置 → AI 服务商」里配自己的 provider 和 key。
+2. 在输入区左侧选工作区（一个本地目录，或已配置的远端 runtime）。Agent 的读写和命令都以它为边界。
+3. 把想要的结果直接写进输入框发送。需要你点头的地方它会停下来问。
+4. 完事后检查 Diff、测试结果和产物。
 
-Settings → Command Line Tool 可以安装 `willdeep` CLI：
+在「设置 → 工具」里装命令行工具后：
 
 ```bash
-willdeep .
-willdeep path/to/file.go
+willdeep-app .
 ```
+
+命令装在 `~/.local/bin`，必要时把它加进 `PATH`。
 
 ---
 
-## 常用快捷键
+## 快捷键
+
+App 是 Agent 专用的，快捷键也就这几个：
 
 | 快捷键 | 动作 |
 | --- | --- |
-| ⌘⇧A | 打开 Agent 窗口 |
-| ⌥⌘A | 显示 / 隐藏项目 Agent 面板 |
-| ⌘O / ⇧⌘O | 打开文件 / 打开文件夹 |
-| ⌘P | Quick Open |
-| ⌘⇧P | 命令面板 |
-| ⌘F / ⌘G | 查找 / 查找下一个 |
-| ⌘L | 跳到行 |
-| ⌘⇧O | 跳到当前文件符号 |
-| ⌘⌥R | 切换 Markdown / HTML 预览 |
-| ⌘⌥\ | 打开分屏文件 |
-| ⌘⌥I | 切换 Inspector |
-| ⌘1..9 / ⌘[ ] | 切换编辑器 tab |
-| ⌘⇧T | 恢复刚关闭的 tab |
+| ⌘N | 新建会话 |
+| Return | 发送 |
+| ⇧/⌥/⌃ + Return | 换行 |
+| Esc | 收起搜索 / 关闭当前弹层 |
+| ⌘? | 打开内置帮助 |
+
+其余操作（审批档位、工作区、模型、执行器、面板标签）都在输入区和右侧面板上，鼠标可达。
 
 ---
 
-## 设计哲学
+## 设计取向
 
-> 软件不该只告诉你怎么做，它应该在边界清楚的前提下，陪你把事情做完。
+任务优先于文件——用户要的是结果，不是围着 tab 转的仪式。
 
-- **任务优先于文件。** 用户要的是结果，不是一场围绕 tab 的仪式。
-- **证据优先于自信。** 跑过测试、看过 diff、核对过状态，再说完成。
-- **上下文属于工作区。** 会话、终端、分支和产物不该互相串台。
-- **自动化必须可控。** 越有能力的 Agent，越应该清楚审批、机密和副作用的边界。
-- **原生性能仍是底线。** Agent 再聪明，窗口卡成彩虹圈也只能算赛博盆栽。
+跑过测试、看过 diff、核对过状态，才叫完成；没验证的事不说成已完成。
+
+会话、终端、分支和产物属于各自的工作区，不互相串台。
+
+Agent 能力越强，审批、机密和副作用的边界越要写死在确定性规则里，而不是交给模型临场判断。
+
+窗口卡成彩虹圈的话，模型再聪明也没用——原生性能是底线，不是加分项。
 
 ---
 
 ## 项目状态
 
-WillDeep 当前在 `1.165.x` 上活跃迭代。Agent 工作台是主产品界面，原生编辑器作为文件查看、轻量编辑和 Agent 协作能力继续维护。
-
-每次发布的具体变化见 [CHANGELOG.md](CHANGELOG.md)，完整能力矩阵与未决问题见 [product-overview.md](product-overview.md)。Release Candidate tag 使用 `vMAJOR.MINOR.PATCH-rcN` 格式。
+当前在 `1.315.x` 上活跃迭代。每次发布的具体变化见 [CHANGELOG.md](CHANGELOG.md)，完整能力矩阵与未决问题见 [product-overview.md](product-overview.md)。Release Candidate tag 使用 `vMAJOR.MINOR.PATCH-rcN`。
 
 ---
 
 ## 参与贡献
 
-欢迎 Issue 和 PR。理解 Agent 主链路可以从 [AgentModeView.swift](Xedit/AgentModeView.swift)、[AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift)、[AgentToolRegistry.swift](Xedit/AgentToolRegistry.swift) 和 [AgentContextBuilder.swift](Xedit/AgentContextBuilder.swift) 开始；编辑器入口仍在 [ContentView.swift](Xedit/ContentView.swift)。
+欢迎 Issue 和 PR。理解主链路可以从这几个文件开始：
+
+- [AgentModeView.swift](Xedit/AgentModeView.swift)——Agent 主界面
+- [AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift)——回合循环、工具决策、上下文压缩
+- [AgentToolRegistry.swift](Xedit/AgentToolRegistry.swift)——工具目录
+- [AgentContextBuilder.swift](Xedit/AgentContextBuilder.swift)——系统提示与上下文组装
 
 提 PR 时请：
 
 1. 按仓库规则更新版本号：bugfix 只递增 `-rcN`，功能新增才提升正式版本位。
-2. 同步 CHANGELOG，并说明为什么改，而不只是改了什么。
-3. 新增界面文案必须走本地化资源。
-4. 不要让启动、聊天输入或长会话性能退化；触碰热路径时请先 profile。
+2. 同步 CHANGELOG，说明为什么改，而不只是改了什么。
+3. 新增界面文案一律走本地化资源。
+4. 不要让启动、输入或长会话性能退化；碰热路径先 profile。
 
 ---
 
@@ -223,16 +239,6 @@ WillDeep 采用 [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) 模式
 
 ---
 
-<div align="center">
-
-**不是替你说“应该怎么做”，而是和你一起把它做完。**
-
-⭐ 如果你也觉得 Agent 应该交付结果，而不只是交付一段语气坚定的文字，欢迎点个 Star。
-
-</div>
-
----
-
 <a id="willdeep"></a>
 
 <div align="center">
@@ -241,14 +247,12 @@ WillDeep 采用 [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) 模式
 
 # WillDeep
 
-**A native macOS agent workspace that understands projects, uses tools, advances tasks, and delivers verifiable results.**
+**A native macOS agent workspace. Describe an outcome; it inspects the work, acts, verifies, and puts the changes and the evidence back in front of you.**
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.315.0--rc5-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.315.0--rc7-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
-
-*It does not merely answer questions beside an editor. It inspects the work, takes action, leaves evidence, and knows when to stop and ask.*
 
 [willdeep.com](https://willdeep.com)
 
@@ -258,54 +262,61 @@ WillDeep 采用 [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) 模式
 
 ---
 
-## This is not another editor with AI attached
+## First, the editor is gone
 
-Editors are organized around files and tabs. WillDeep is organized around **tasks, workspaces, sessions, and deliverables**.
+As of 1.249.0, WillDeep removed the general-purpose editor entirely — the editor scene, text/source file type registration, and editor settings are all retired. General file editing belongs to the standalone **Qeditor**, which has its own bundle ID, sandbox container, settings, and update feed, and does not migrate WillDeep data.
 
-Ask it to fix a bug, implement a design, diagnose a server, or summarize a week of work. It can inspect the project, search code, operate terminals and browsers, build a plan, load skills, create an isolated worktree when needed, and keep going until the outcome can be verified.
+What remains here is **read-only preview** and **diff review**: the agent edits files, you inspect the diff hunk by hunk, then apply or reject. To hand-edit, open the file in whatever editor you already use.
 
-The more accurate definition of WillDeep today is:
-
-> **A general-purpose agent for macOS that can work across local and remote environments.**
-
-It still includes a fast native editor, but the editor is no longer the center of the product. It is one of the tools the agent and its user share to inspect, compare, and correct the work.
+The split exists because the two jobs put attention in different places. An editor is organized around files and the caret; an agent workspace is organized around tasks, workspaces, sessions, and deliverables. One app doing both does neither well.
 
 ---
 
-## How it works
+## What it is good at
 
-### From one request to a verifiable outcome
+Everything below already ships. None of it is roadmap.
 
-- **Normal, Plan, and Goal modes.** Do small jobs directly, plan complex work before execution, or keep a checklist alive for a longer-running goal.
-- **Real multi-step execution.** The agent can call tools, inspect results, revise its approach, and continue instead of presenting advice as completed work.
-- **Queues and automations.** Send the next request while a turn is running. Scheduled routines, background jobs, media tasks, and build queues expose visible state.
-- **Workspace-owned context.** Conversations, referenced files, runtime location, Git branch, terminal, and deliverables stay organized around the same project.
-- **Isolated work.** Tasks can run in dedicated worktrees. Before high-risk Git mutations, WillDeep rechecks the repository revision so it does not overwrite changes made by a person or another agent.
+### Sessions run independently
 
-### Tools, not just chat
+Each session owns its runtime — messages, request task, tool waiter, composer draft, mode state. Switching away does not interrupt anything; the previous session keeps working in the background, and the sidebar status dot tells you whether it is thinking, waiting on your approval, or stopped.
 
-The WillDeep agent can use:
+Concurrency is capped per provider (default 3, tunable 1–8). Providers are isolated, so three DashScope sessions never block an OpenAI one.
 
-- file reads, full-text search, precise edits, diff review, and Git status;
-- shell commands, visible terminals, builds, tests, and long-running jobs;
-- web search, an embedded browser, and macOS Computer Use;
-- Codex Skills, MCP servers, and external executors such as Claude Code, Codex CLI, and Cursor Agent;
-- image understanding, image editing, media tasks, web widgets, and structured workflows;
-- SSH or the remote daemon to bring the same workflow to remote macOS and Linux workspaces.
+### Delegation: three model tiers × five roles
 
-Tools are not decoration. Every call should move the task closer to done.
+Models collapse into base, advanced, and expert tiers; roles collapse into investigate, implement, verify, review, and operate. You decide which tier serves which role. Tier bindings are read from `~/.willdeep/config.toml` first, sharing one schema with the CLI — the same account will not land on different models depending on which client you happened to open. If the config names a provider this machine does not have, that tier is marked unavailable with a reason instead of silently sending the request to a different gateway.
 
-### You keep control
+You can also correct a running subagent: **next round** queues your words for its next turn; **interrupt and send** cancels only its current substep without killing the subagent. Tool chips on the delegation card carry objects — "run command `ruby sync.rb`", "read file `.env.local`" — because that is what you need in order to decide whether to interrupt. Objects are redacted before truncation, so `${secret:…}` becomes `[secret]` before an ellipsis could ever expose which credential it pointed at.
 
-- **Safe commands can run automatically.** Clearly read-only operations are allowlisted; borderline commands may be evaluated by an approval model.
-- **Risky actions require confirmation.** Destructive commands, sensitive operations, and external side effects escalate to approval and may require typed `confirm`.
-- **Changes are reviewable.** File edits arrive as diffs that can be applied or rejected individually, with a full worktree review available at any time.
-- **Secrets stay out of chat.** API keys live in Keychain. Protected secrets enter context as placeholders, resolve only at the local execution boundary, and remain redacted from results.
-- **Context accounting is real.** Token usage is calculated from the actual request payload. Long conversations can be compressed manually or automatically without turning history into an opaque blob.
+### Four approval levels, deterministic ordering
 
-### Local or remote, one working context
+The levels are strict mode, smart review, workspace write, and full access. Determinism comes first — a malicious-command blocklist stops the command at every level; common read-only commands run immediately; approvals you already remembered apply directly; only when nothing matches does an AI judge get a say. Under smart review, a judge that cannot decide falls back to asking you. Full access never reaches the judge at all: its protection comes entirely from that deterministic blocklist plus the interactions only you can answer.
 
-Configure an SSH host or a `willdeep-agent` daemon in Settings → Runtimes and bind a session to a remote workspace. File search, Git, shell commands, builds, tests, and delegated tasks run remotely while the native UI, approvals, and result review remain local.
+Destructive operations require typed confirmation at every level, without exception.
+
+Commands run under a seatbelt sandbox by default: no network egress, no writes outside the workspace, environment variables whose names look like token / secret / api_key stripped before the process starts, `HOME` pointed at a temporary directory, `SSH_AUTH_SOCK` and `GITHUB_TOKEN` cleared. When the sandbox denies a command, that is not handed back to the model as an ordinary failure to retry blindly — it pauses and asks whether to re-run without the sandbox. Reading credentials still prompts even with no network egress: once a private key lands in a reply it has already left this machine for the model provider. Executions are written to an audit log with secrets redacted.
+
+### Context accounting uses real usage
+
+Window utilization is anchored to the provider's reported `prompt_tokens`, not local estimation (measured local estimates ran up to 3× low). Past a threshold, older transcript is compressed automatically and stale tool results collapse to placeholders in the request payload while recent turns stay verbatim.
+
+Near the end of the window it performs a **context runway handoff**: the model stops in an orderly way, records where it stopped and what remains, and the reply gets two relay buttons — continue in this session, or open a new session carrying the handoff prompt. The trimming is display-only; the stored message is unchanged.
+
+### Plan progress goes through a tool
+
+Plan progress is reported by the always-on `update_plan` tool instead of a fenced block in the reply. Post-mortems on persisted sessions showed 80% of fenced progress blocks only appeared at the very end of a turn, leaving the checklist frozen on step 1 for the whole run — tool calls are the one channel a model uses reliably mid-turn.
+
+Normal mode does not force a plan up front. The host measures instead: only after a turn actually spends 4 tool rounds or lands 3+ write-level calls does it ask for a plan covering the remaining work. Small tasks pay nothing.
+
+### The work panel: tabs that detach into windows
+
+The right-hand panel holds terminal, files, diff, web preview, media tasks, and image editing views. Tabs coexist, so a terminal or a background job is not evicted because you switched views. A tab can be dragged out into a native standalone window, then located, dragged back, or recalled in bulk. Closing a tab does not kill the process.
+
+The terminal panel is a real terminal — commands the agent runs and commands you type see the same environment.
+
+### Local and remote are the same workflow
+
+Add an SSH host or a `willdeep-agent` daemon under Settings → Runtimes and bind a session to a remote workspace. File search, Git, shell, builds, tests, and delegation all execute remotely while the UI, approvals, and result review stay local. SSH stores only the key file path, never key material; daemon tokens live in Keychain.
 
 ```bash
 willdeep-agent serve \
@@ -313,21 +324,39 @@ willdeep-agent serve \
   --token-file ~/.willdeep-agent-token
 ```
 
-### The built-in editor is still fast
+Inside a Git repository you can create, switch, and clean up worktrees straight from the composer's workspace menu. Before high-risk Git mutations WillDeep re-checks the repository revision so it cannot overwrite what a person — or another agent — just landed.
 
-When direct file work is useful, WillDeep provides a native AppKit + SwiftUI editor:
+### Four extension points
 
-- text appears immediately and syntax highlighting is applied incrementally off the main thread;
-- large files prioritize the visible range;
-- code folding, bracket matching, minimap, structure inspector, project search and replace, Markdown / HTML preview, split view, and focus mode;
-- 25+ languages including Swift, Ruby, PHP, Java, JavaScript / TypeScript, Go, Python, Rust, C / C++ / C#, SQL, YAML, TOML, Dockerfile, Makefile, and shell;
-- the file tree loads only when you explicitly open a folder.
+| Extension | Scope | Notes |
+| --- | --- | --- |
+| **Skills** | Change how the AI works | 40+ bundled; user skills in `~/.willdeep/skills`, legacy `~/.codex/skills` still read |
+| **MCP servers** | Give the AI new real capabilities | stdio and streamable-http; discovery merges app servers, Cursor `mcp.json`, and Codex `config.toml`, with sensitive headers redacted before display |
+| **Workflows** | Repeatable multi-step orchestration | `/code-review`, `/pr-review`, `/bug-hunt`, `/release-notes`, `/deep-research`, `/db-explore`, and more; fan-out review dimensions bind to small-model roles and can be stopped anytime |
+| **Plugins** | Add a surface you operate directly in the main navigation | Pages run isolated — no network, no file access, no secrets — and must go through commands declared in the manifest, authorized once at install |
 
-The editor has moved from the product definition to the capability layer. It has not been abandoned.
+Bundled first-party plugins include the arcade, Tetris, favorites, todos, the session vitality dashboard, and project overview. Plugin development docs ship inside the app bundle at `Contents/Resources/BundledSkills/willdeep-plugin-dev/`; asking WillDeep how to build a plugin makes it read that same document.
+
+### Scheduled work
+
+The Scheduled section runs tasks on an interval, daily at HH:MM, on weekdays, or on a specific weekday. Each run opens a fresh session with the configured prompt, workspace, and model tier. Paused tasks say so instead of pretending a next run exists. Recent runs list outcomes and failure reasons and link back to the session that produced them.
+
+### Also worth knowing
+
+- **Goal mode** — long work is split into up to 6 phases, expanding only the current phase's 6-step plan before planning the next. Acceptance criteria are an AI-maintained internal contract; you describe the goal. When a phase ends the host terminates that phase's process tree, so anything that must outlive it has to say so explicitly.
+- **Expert roundtable** — ten built-in experts. A prep room sharpens the decision question and recommends 2–4 of them with reasons; the discussion streams for real, and the final document is normalized and saved as Markdown.
+- **External executors** — Claude Code, Codex CLI, Cursor Agent, and Cline can take over a turn, but only inside the host's task contract: bounded goal, acceptance criteria, allowed paths, forbidden actions, verification commands, three attempts max. The executor submits an evidence package, a read-only context reviews it, and WillDeep independently re-runs its own safety checks before accepting.
+- **Phone** — pair through Mobile Gateway to continue conversations, approve tools, and send images from a phone. Internet relay by default; self-hosted WebSocket relays are supported.
+- **Your choice of models** — sign in to the some.im managed service, or configure your own providers and API keys in Settings (keys in Keychain; managed model picks are recommendations you can override).
+- **Sessions stay manageable** — grouped by project, searchable, with batch archive/restore/delete. Auto-archive keeps the most recent N per project and protects pinned, running, queued, and unsent-draft sessions.
 
 ---
 
 ## Get started
+
+### Install
+
+Download the officially signed build from [willdeep.com](https://willdeep.com), or build from source. Requires macOS 13.7+.
 
 ### Build from source
 
@@ -338,15 +367,32 @@ open Xedit.xcodeproj
 # ⌘R
 ```
 
-Requires Xcode and macOS 13.7+. The product builds as **WillDeep.app**.
+Requires Xcode. The product builds as **WillDeep.app**.
 
-To install the current worktree's Debug build directly into `/Applications`, put the local development credential in the ignored `.env.local` file:
+For day-to-day command-line builds, use the shared warm-cache entry point:
+
+```bash
+ruby scripts/build_fast.rb             # incremental debug build; no index, no signing
+ruby scripts/build_fast.rb --release
+ruby scripts/build_fast.rb --sign
+```
+
+Caches default to `~/Library/Caches/WillDeep/Xcode/Xedit`; DerivedData, SwiftPM checkouts, and the Xcode compilation cache are reused across terminals. Build reports land in `build/local/build_report.md`. See [local build and test acceleration](docs/BUILD_TEST_ACCELERATION.md) for the full layout.
+
+Run tests through the fast entry point so parallel agents and worktrees do not each pay for a cold build:
+
+```bash
+ruby scripts/run_tests_fast.rb -only-testing:XeditTests/YourTestSuite
+scripts/run_tests.sh                   # full local gate
+```
+
+To install the current worktree's debug build into `/Applications`, put the development credential in the ignored `.env.local`:
 
 ```dotenv
 WILLDEEP_CLIENT_LOGIN_SECRET=your-local-development-secret
 ```
 
-Then run:
+Then:
 
 ```bash
 ruby dev_install.rb --dry-run
@@ -355,66 +401,67 @@ ruby dev_install.rb
 
 The script never prints the secret. It performs a clean build, signing, atomic installation, and version/signature/injection verification. Fully quit and relaunch WillDeep after replacing a running build.
 
-### Run your first task
+### Your first task
 
-1. Open WillDeep and create a new conversation.
-2. Choose a local workspace, or a configured remote runtime for server-side work.
-3. Sign in to the some.im managed service, or configure your own model and API key in Settings → AI Providers.
-4. Describe the outcome you want. Use Plan for complex work and Goal for longer-running objectives.
-5. The agent pauses when it needs approval, a decision, or more context. Review its diffs, test results, and deliverables when it finishes.
+1. Give it a model source: sign in to some.im, or configure your own provider and key under Settings → AI Providers.
+2. Pick a workspace on the left of the composer — a local directory, or a configured remote runtime. It is the boundary for every read, write, and command.
+3. Describe the outcome you want. The agent stops and asks when it needs a decision.
+4. When it finishes, review the diff, the test output, and the artifacts.
 
-Install the `willdeep` CLI from Settings → Command Line Tool:
+After installing the command line tool from Settings → Tools:
 
 ```bash
-willdeep .
-willdeep path/to/file.go
+willdeep-app .
 ```
+
+It installs into `~/.local/bin`; add that to `PATH` if needed.
 
 ---
 
-## Common shortcuts
+## Shortcuts
+
+It is an agent-only app, so the list is short:
 
 | Shortcut | Action |
 | --- | --- |
-| ⌘⇧A | Open Agent window |
-| ⌥⌘A | Show / hide the project Agent panel |
-| ⌘O / ⇧⌘O | Open file / open folder |
-| ⌘P | Quick Open |
-| ⌘⇧P | Command Palette |
-| ⌘F / ⌘G | Find / find next |
-| ⌘L | Go to line |
-| ⌘⇧O | Go to symbol in the active file |
-| ⌘⌥R | Toggle Markdown / HTML preview |
-| ⌘⌥\ | Open split file |
-| ⌘⌥I | Toggle Inspector |
-| ⌘1..9 / ⌘[ ] | Switch editor tabs |
-| ⌘⇧T | Reopen the last closed tab |
+| ⌘N | New session |
+| Return | Send |
+| ⇧/⌥/⌃ + Return | Newline |
+| Esc | Dismiss search or the current overlay |
+| ⌘? | Open built-in help |
+
+Everything else — approval level, workspace, model, executor, panel tabs — is reachable from the composer and the side panel.
 
 ---
 
-## Philosophy
+## Design stance
 
-> Software should not only tell you how. Within clear boundaries, it should help you finish the work.
+Tasks come before files. People want outcomes, not a ceremony organized around tabs.
 
-- **Tasks over files.** Users want outcomes, not a ceremony organized around tabs.
-- **Evidence over confidence.** Run the tests, inspect the diff, verify the state, then call it done.
-- **Context belongs to the workspace.** Sessions, terminals, branches, and deliverables must not leak into one another.
-- **Automation must remain controllable.** The more capable an agent becomes, the clearer its approval, secret, and side-effect boundaries must be.
-- **Native performance remains the floor.** A brilliant agent inside a beachball is still a houseplant.
+Run the tests, read the diff, check the state — then call it done. Unverified work is not reported as finished.
+
+Sessions, terminals, branches, and artifacts belong to their workspace and must not leak into one another.
+
+The more capable the agent, the more its approval, secret, and side-effect boundaries need to live in deterministic rules rather than in a model's judgment of the moment.
+
+A beachballed window makes a brilliant model useless. Native performance is the floor, not a bonus.
 
 ---
 
 ## Status
 
-WillDeep is in active `1.165.x` development. The agent workspace is the primary product surface; the native editor continues as a maintained capability for file inspection, lightweight editing, and agent collaboration.
-
-See [CHANGELOG.md](CHANGELOG.md) for release details and [product-overview.md](product-overview.md) for the full capability matrix and open questions. Release Candidate tags follow `vMAJOR.MINOR.PATCH-rcN`.
+Active development on `1.315.x`. See [CHANGELOG.md](CHANGELOG.md) for release details and [product-overview.md](product-overview.md) for the full capability matrix and open questions. Release candidate tags follow `vMAJOR.MINOR.PATCH-rcN`.
 
 ---
 
 ## Contributing
 
-Issues and PRs are welcome. Start with [AgentModeView.swift](Xedit/AgentModeView.swift), [AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift), [AgentToolRegistry.swift](Xedit/AgentToolRegistry.swift), and [AgentContextBuilder.swift](Xedit/AgentContextBuilder.swift) for the primary agent flow. The editor entry point remains in [ContentView.swift](Xedit/ContentView.swift).
+Issues and PRs are welcome. Start here:
+
+- [AgentModeView.swift](Xedit/AgentModeView.swift) — the agent UI
+- [AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift) — turn loop, tool decisions, context compression
+- [AgentToolRegistry.swift](Xedit/AgentToolRegistry.swift) — the tool catalog
+- [AgentContextBuilder.swift](Xedit/AgentContextBuilder.swift) — system prompt and context assembly
 
 When opening a PR:
 
@@ -433,16 +480,6 @@ Unless a file states otherwise, code in this repository is released under Apache
 
 ---
 
-<div align="center">
-
-**Not just telling you what should be done. Working with you until it is done.**
-
-⭐ Star the repo if you believe agents should deliver results, not merely confident prose.
-
-</div>
-
----
-
 <a id="willdeep-日本語版"></a>
 
 <div align="center">
@@ -451,7 +488,7 @@ Unless a file states otherwise, code in this repository is released under Apache
 
 # WillDeep（日本語版）
 
-**プロジェクトを理解し、ツールを使い、タスクを進め、検証可能な成果を届ける macOS ネイティブのエージェント・ワークスペース。**
+**macOS ネイティブのエージェント・ワークスペース。目的を伝えると、現場を読み、手を動かし、検証し、変更と根拠を目の前に戻します。**
 
 [English](#willdeep) · [简体中文](#willdeep-中文版) · **日本語**
 

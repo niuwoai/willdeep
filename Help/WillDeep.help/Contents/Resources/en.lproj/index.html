@@ -52,7 +52,7 @@
     <section id="approvals">
       <h2>Approvals and safety</h2>
       <ul>
-        <li>The composer sets a per-session approval tier: ask every time, smart approval, workspace access, or silent.</li>
+        <li>The composer sets a per-session approval tier, from tightest to loosest: Strict mode, Smart review, Workspace write, Full access.</li>
         <li>Decisions are deterministic first: a malicious-command blocklist stops everything in every tier, common read-only commands pass automatically, remembered grants apply, and only what is left may go to an AI judge.</li>
         <li>Destructive operations always require you to type a confirmation. No tier auto-approves them.</li>
         <li>Read-only commands run in a restricted environment with networking and out-of-scope writes disabled. Execution is written to an audit log in the app support directory with secrets redacted.</li>
@@ -120,7 +120,7 @@
         <dt>A message seems to go nowhere.</dt>
         <dd>Check whether the composer shows a queued state — requests to one provider queue up. If you use the managed service, confirm you are still signed in.</dd>
         <dt>The agent keeps asking about the same kind of command.</dt>
-        <dd>Move the approval tier to smart approval or workspace access, or choose to remember that command on the authorization card. Destructive operations always ask; that is by design.</dd>
+        <dd>Move the approval tier to Smart review or Workspace write, or choose to remember that command on the authorization card. Destructive operations always ask; that is by design.</dd>
         <dt>A plugin page is blank.</dt>
         <dd>Use the refresh button in the page toolbar. If it stays blank, check in the plugin center that the plugin is enabled and its minimum version is met; load failures now state the reason on the page itself.</dd>
         <dt>I want to edit a file directly, but I cannot.</dt>
