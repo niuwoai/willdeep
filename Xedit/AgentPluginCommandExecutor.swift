@@ -48,6 +48,7 @@ enum AgentPluginCommandExecutor {
                 return nil
             }
             return try executeHost(
+                pluginID: pluginID,
                 action: command.handler.action ?? "",
                 arguments: stringArguments,
                 destinationID: destinationID,
@@ -89,6 +90,7 @@ enum AgentPluginCommandExecutor {
     }
 
     private static func executeHost(
+        pluginID: AgentPluginID,
         action: String,
         arguments: [String: String],
         destinationID: AgentPluginDestinationID,
@@ -111,6 +113,31 @@ enum AgentPluginCommandExecutor {
             appState.agentPrimaryDestination = .pluginCenter
             appState.agentSidePanelKind = nil
             appState.agentSidePanelRequest = nil
+            return nil
+        case "session.open":
+            // 能拿到 sessionID 的插件才有理由打开它，所以这道门复用
+            // conversation.read，不新增权限（见
+            // docs/CROSS_PROJECT_HISTORY_RECALL_DESIGN.md 第 7 节）。
+            // 另外三个导航类 action 是零权限的，这是本 action 独有的校验。
+            guard AgentPluginRegistry.shared.hasPermission(.conversationRead, pluginID: pluginID) else {
+                throw AgentPluginPackageError.invalidContribution(
+                    "session.open requires the conversation.read permission"
+                )
+            }
+            guard let rawSessionID = arguments["sessionID"], !rawSessionID.isEmpty else {
+                throw AgentPluginPackageError.invalidContribution("session.open requires a sessionID argument")
+            }
+            guard let sessionID = UUID(uuidString: rawSessionID) else {
+                throw AgentPluginPackageError.invalidContribution("session.open received an invalid sessionID")
+            }
+            // 会话目录是异步装载的，App 刚启动那几秒查什么都查不到。这一条
+            // 必须与「会话不存在」分开报，否则用户看到的错误是误导。
+            guard appState.hasLoadedAgentSessionCatalog else {
+                throw AgentPluginPackageError.invalidContribution("会话目录尚未装载完成，请稍后重试")
+            }
+            guard appState.selectAndRevealAgentSessionInSidebar(id: sessionID) else {
+                throw AgentPluginPackageError.invalidContribution("会话不存在或已损坏：\(rawSessionID)")
+            }
             return nil
         default:
             throw AgentPluginPackageError.invalidContribution("unsupported host action \(action)")

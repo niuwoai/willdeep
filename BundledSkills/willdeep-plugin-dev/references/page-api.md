@@ -28,7 +28,7 @@ window.addEventListener('willdeep:context-changed', (e) => {
 });
 ```
 
-`workspaceReference` 只在声明了 `workspace.read` / `workspace.write` 时给，`sessionReference` 只在声明了 `conversation.read` 时给，其余情况是 `null`。永远不会给聊天正文或文件内容。
+`workspaceReference` 只在声明了 `workspace.read` / `workspace.write` 时给，`sessionReference` 只在声明了 `conversation.read` 时给，其余情况是 `null`。永远不会给聊天正文或文件内容。`conversation.read` 还是 `session.open` host 命令的通行证——没声明就打不开会话。
 
 ## 通知宿主
 
@@ -49,6 +49,19 @@ try {
   // err.message 是宿主给的失败原因
 }
 ```
+
+host 命令一律返回 `undefined`——包括 `session.open`。它是否成功只能靠 catch 判断：
+
+```js
+try {
+  await window.willdeep.executeCommand('recall.openSession', { sessionID: hit.sessionID });
+  // 跳转成功，主区已经切到那个会话，插件页被顶掉
+} catch (err) {
+  // err.message 区分得出：没权限 / sessionID 非法 / 会话目录尚未装载完成 / 会话不存在
+}
+```
+
+`session.open` 要求插件声明 `conversation.read`；`sessionID` 传 UUID 字符串（参数值到宿主一律按字符串处理，别传对象或数字）。
 
 约束（超了直接静默丢弃，不会执行）：
 

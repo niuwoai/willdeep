@@ -497,6 +497,96 @@ struct AgentPluginSystemTests {
         #expect(registry.command(pluginID: "menus", commandID: "page.refresh") == nil)
     }
 
+    @Test @MainActor
+    func sessionOpenHostActionLoadsAndIsGatedOnConversationRead() async throws {
+        // 声明 conversation.read 的插件：session.open 过生产加载器，
+        // 且执行时那道权限门读到的值为真。
+        let allowedRoot = try makePackage(
+            id: "recall-allowed",
+            destinations: [("home", "sessionList")],
+            permissions: ["conversation.read"]
+        )
+        // 没声明 conversation.read 的插件：加载器照样放行（白名单只管
+        // action 合法性），把关全落在 executeHost 的运行时权限门上。
+        let deniedRoot = try makePackage(
+            id: "recall-denied",
+            destinations: [("home", "sessionList")]
+        )
+        let stateRoot = try temporaryDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: allowedRoot)
+            try? FileManager.default.removeItem(at: deniedRoot)
+            try? FileManager.default.removeItem(at: stateRoot)
+        }
+        for root in [allowedRoot, deniedRoot] {
+            let manifestURL = root.appendingPathComponent(".willdeep-plugin/plugin.json")
+            var manifest = try jsonObject(at: manifestURL)
+            var contributes = try #require(manifest["contributes"] as? [String: Any])
+            contributes["commands"] = [
+                [
+                    "id": "session.open",
+                    "titleKey": "command.session.open",
+                    "handler": ["type": "host", "action": "session.open"],
+                ],
+            ]
+            manifest["contributes"] = contributes
+            try writeJSON(manifest, to: manifestURL)
+            let localesURL = root.appendingPathComponent(".willdeep-plugin/locales/en.json")
+            var locales = try jsonObject(at: localesURL)
+            locales["command.session.open"] = "Open session"
+            try writeJSON(locales, to: localesURL)
+
+            let package = try AgentPluginPackageLoader.load(
+                packageURL: root,
+                source: .installed,
+                currentWillDeepVersion: "1.280.0"
+            )
+            let manifestModel = try #require(package.manifest)
+            let handler = try #require(manifestModel.contributes.commands.first?.handler)
+            #expect(handler.action == "session.open")
+        }
+        #expect(AgentPluginPackageLoader.allowedHostCommands.contains("session.open"))
+
+        let registry = AgentPluginRegistry(
+            roots: [
+                .init(url: allowedRoot, source: .bundled, maximumDepth: 1),
+                .init(url: deniedRoot, source: .bundled, maximumDepth: 1),
+            ],
+            currentWillDeepVersion: "1.280.0",
+            stateURL: stateRoot.appendingPathComponent("registry-state.json"),
+            autoRefresh: false
+        )
+        await registry.refresh()
+        #expect(registry.hasPermission(.conversationRead, pluginID: "recall-allowed"))
+        #expect(!registry.hasPermission(.conversationRead, pluginID: "recall-denied"))
+        // 停用之后连声明过权限的插件也拿不到这道门。
+        registry.setEnabled(false, pluginID: "recall-allowed")
+        #expect(!registry.hasPermission(.conversationRead, pluginID: "recall-allowed"))
+    }
+
+    @Test
+    func sessionOpenHostActionChecksPermissionAndDistinguishesFailures() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentPluginCommandExecutor.swift"),
+            encoding: .utf8
+        )
+
+        // 权限门是本 action 独有的：executeHost 必须拿到 pluginID 才查得了权限。
+        #expect(source.contains("case \"session.open\":"))
+        #expect(source.contains("hasPermission(.conversationRead, pluginID: pluginID)"))
+        #expect(source.contains("private static func executeHost("))
+        // 归档会话的侧栏行藏在折叠组里，必须走 reveal 版而不是裸的 selectAgentSession。
+        #expect(source.contains("selectAndRevealAgentSessionInSidebar"))
+        // 目录未装载与会话不存在必须报成两条不同的错，否则 App 刚启动时的
+        // 报错会把用户带沟里。
+        #expect(source.contains("hasLoadedAgentSessionCatalog"))
+        #expect(source.contains("会话目录尚未装载完成"))
+        #expect(source.contains("会话不存在或已损坏"))
+    }
+
     @Test
     func uninstallRemovesEveryInstalledVersion() throws {
         let installedRoot = try temporaryDirectory()
@@ -664,15 +754,19 @@ struct AgentPluginSystemTests {
             from: repositoryRoot.appendingPathComponent("PluginExamples/arcade")
         )
         defer { try? FileManager.default.removeItem(at: arcadeRuntimePackage) }
-        for name in ["project-overview", "issue-panel", "tetris", "arcade", "session-vitality", "favorites", "todo"] {
+        for name in [
+            "project-overview", "issue-panel", "tetris", "arcade",
+            "session-vitality", "favorites", "todo", "history-recall",
+        ] {
             let packageURL = name == "arcade"
                 ? arcadeRuntimePackage
                 : repositoryRoot.appendingPathComponent("PluginExamples/\(name)")
             let package = try AgentPluginPackageLoader.load(
                 packageURL: packageURL,
                 source: .installed,
-                // 收藏夹与会话体检要求的宿主版本比其它样例新
-                currentWillDeepVersion: "1.300.0-rc5"
+                // 收藏夹与会话体检要求的宿主版本比其它样例新；翻旧账
+                // (history-recall) 又更新一档（它依赖 session.open host action）
+                currentWillDeepVersion: "1.316.0-rc1"
             )
             #expect(package.destinations.count == 1)
         }

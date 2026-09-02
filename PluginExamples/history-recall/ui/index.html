@@ -1,0 +1,713 @@
+<meta charset="utf-8" />
+<title>History Recall</title>
+<style>
+  :root {
+    --fg: var(--willdeep-fg, #1a1a1c);
+    --muted: var(--willdeep-secondary, #6c6c70);
+    --accent: var(--willdeep-accent, #2f6fed);
+    --surface: color-mix(in srgb, var(--fg) 5%, transparent);
+    --surface-strong: color-mix(in srgb, var(--fg) 9%, transparent);
+    --border: color-mix(in srgb, var(--fg) 15%, transparent);
+    --border-strong: color-mix(in srgb, var(--fg) 32%, transparent);
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font: 13px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .transcript {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 20px 8px;
+  }
+
+  .composer {
+    border-top: 1px solid var(--border);
+    padding: 10px 20px 14px;
+    background: var(--surface);
+  }
+
+  .composer-row { display: flex; gap: 8px; align-items: flex-end; }
+
+  textarea {
+    flex: 1;
+    resize: none;
+    min-height: 34px;
+    max-height: 120px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--fg);
+    font: inherit;
+  }
+
+  textarea:focus { outline: none; border-color: var(--accent); }
+
+  button {
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--fg);
+    border-radius: var(--radius);
+    padding: 7px 13px;
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  button:hover:not(:disabled) { background: var(--surface-strong); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+
+  .scope-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  select {
+    font: inherit;
+    font-size: 12px;
+    color: var(--fg);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 3px 6px;
+    max-width: 220px;
+  }
+
+  .msg { margin-bottom: 16px; }
+  .msg-you { text-align: right; }
+
+  .bubble {
+    display: inline-block;
+    max-width: 82%;
+    text-align: left;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    background: var(--surface-strong);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .msg-you .bubble { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+  .note { color: var(--muted); font-size: 12px; margin: 6px 0 10px; }
+
+  .result {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    margin: 8px 0;
+    background: var(--surface);
+  }
+
+  .result-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+
+  .result-title { font-weight: 600; }
+
+  .tag {
+    font-size: 11px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0 5px;
+  }
+
+  .excerpt {
+    color: var(--muted);
+    font-size: 12px;
+    margin: 4px 0;
+    padding-left: 9px;
+    border-left: 2px solid var(--border-strong);
+  }
+
+  .excerpt mark {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+    color: inherit;
+    border-radius: 2px;
+  }
+
+  .result-actions { margin-top: 7px; display: flex; gap: 7px; flex-wrap: wrap; }
+  .result-actions button { font-size: 12px; padding: 4px 9px; }
+
+  .context-block {
+    position: relative;
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--surface-strong);
+    border-radius: 7px;
+    font-size: 12px;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .context-msg { margin-bottom: 8px; white-space: pre-wrap; word-break: break-word; }
+  .context-msg:last-child { margin-bottom: 0; }
+  .context-role { color: var(--muted); font-size: 11px; }
+  .context-anchor { border-left: 2px solid var(--accent); padding-left: 8px; }
+
+  .gate {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin: 8px 0;
+  }
+
+  .gate h3 { margin: 0 0 6px; font-size: 13px; }
+  .gate p { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+
+  .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+  .error { color: #d9483b; }
+</style>
+
+<div class="transcript" id="transcript"></div>
+
+<div class="composer">
+  <div class="scope-row">
+    <label>
+      范围
+      <select id="scope"></select>
+    </label>
+    <label><input type="checkbox" id="archived" checked /> 含归档</label>
+    <span id="status"></span>
+  </div>
+  <div class="composer-row">
+    <textarea id="input" rows="1" placeholder="想找哪段对话？比如：上次聊 SSH 穿透那次"></textarea>
+    <button class="primary" id="send">找</button>
+  </div>
+</div>
+
+<script>
+  (function () {
+    "use strict";
+
+    var STRINGS = {
+      zh: {
+        bridgeMissing: "这个页面需要在 WillDeep 里打开。",
+        searching: "正在翻…",
+        noHits: "没找到。换个说法试试——检索按词匹配，词越具体越准。",
+        scanned: function (n, m) { return "扫了 " + n + " 个会话，命中 " + m + " 个。"; },
+        searchedFor: function (terms) { return "搜的是：" + terms; },
+        relaxed: function (terms) { return "「" + terms + "」全中的没有，放宽了。"; },
+        truncated: "结果较多，只列出最相关的几个。",
+        openSession: "打开这个会话",
+        showContext: "看上下文",
+        hideContext: "收起",
+        opening: "正在打开…",
+        opened: "已跳转到该会话。",
+        titleOnly: "标题命中",
+        sessionWide: "分散命中",
+        archived: "已归档",
+        gateTitle: "跨项目检索默认是关的",
+        gateBody: "打开后，本插件会读取你全部项目的历史会话正文来做检索。所有检索都在本机完成，不会把会话内容发到任何外部服务。",
+        gateEnable: "打开跨项目检索",
+        gateScoped: "只搜当前范围",
+        gateLocked: "跨项目检索被环境变量锁定，页面上的开关不生效。",
+        scopeAll: "全部项目",
+        summarizing: "正在归纳…",
+        emptyHint: "在下面问一句，比如「上次聊 frp 穿透是哪次」。检索的是你全部项目的历史对话。"
+      },
+      en: {
+        bridgeMissing: "Open this page inside WillDeep.",
+        searching: "Searching…",
+        noHits: "Nothing found. Try different words — matching is term-based, so be specific.",
+        scanned: function (n, m) { return "Scanned " + n + " sessions, matched " + m + "."; },
+        searchedFor: function (terms) { return "Searched for: " + terms; },
+        relaxed: function (terms) { return "Nothing matched all of \"" + terms + "\", so this is broader."; },
+        truncated: "Many matches; showing the most relevant ones.",
+        openSession: "Open session",
+        showContext: "Show context",
+        hideContext: "Hide",
+        opening: "Opening…",
+        opened: "Jumped to that session.",
+        titleOnly: "title match",
+        sessionWide: "spread match",
+        archived: "archived",
+        gateTitle: "Cross-project search is off by default",
+        gateBody: "Turning it on lets this plugin read the transcripts of every project to search them. All searching happens locally; nothing is sent to any external service.",
+        gateEnable: "Turn on cross-project search",
+        gateScoped: "Search current scope only",
+        gateLocked: "Cross-project search is locked by an environment variable; this toggle has no effect.",
+        scopeAll: "All projects",
+        summarizing: "Summarizing…",
+        emptyHint: "Ask below, e.g. \"which session did we discuss frp tunneling in\". It searches history across all your projects.",
+        titleOnlyEn: true
+      }
+    };
+
+    var state = {
+      projects: [],
+      settings: null,
+      busy: false,
+      seq: 0
+    };
+
+    var elTranscript = document.getElementById("transcript");
+    var elInput = document.getElementById("input");
+    var elSend = document.getElementById("send");
+    var elScope = document.getElementById("scope");
+    var elArchived = document.getElementById("archived");
+    var elStatus = document.getElementById("status");
+
+    // ---------------------------------------------------------------- 桥接
+
+    function context() {
+      return (window.willdeep && window.willdeep.getContext) ? (window.willdeep.getContext() || {}) : {};
+    }
+
+    function lang() {
+      var locale = String(context().locale || navigator.language || "en").toLowerCase();
+      return locale.indexOf("zh") === 0 ? "zh" : "en";
+    }
+
+    function t(key) {
+      var table = STRINGS[lang()] || STRINGS.en;
+      var value = table[key];
+      if (value === undefined) value = STRINGS.en[key];
+      return typeof value === "function" ? value.apply(null, Array.prototype.slice.call(arguments, 1)) : value;
+    }
+
+    function parseJSON(raw) {
+      if (raw === null || raw === undefined) return null;
+      if (typeof raw === "object") return raw;
+      try { return JSON.parse(String(raw)); } catch (error) { return null; }
+    }
+
+    // executeCommand 回的是完整的 MCP result，要剥掉 content[] 那层包装。
+    function unwrap(raw) {
+      var payload = parseJSON(raw);
+      if (payload && Object.prototype.toString.call(payload.content) === "[object Array]") {
+        var text = null;
+        payload.content.forEach(function (entry) {
+          if (text === null && entry && typeof entry.text === "string") text = entry.text;
+        });
+        payload = parseJSON(text);
+      }
+      if (payload && payload.ok === false) {
+        var error = new Error(String(payload.error || "unknown error"));
+        error.payload = payload;
+        throw error;
+      }
+      return payload;
+    }
+
+    function runCommand(commandID, args) {
+      if (!window.willdeep || typeof window.willdeep.executeCommand !== "function") {
+        return Promise.reject(new Error(t("bridgeMissing")));
+      }
+      return window.willdeep.executeCommand(commandID, args || {}).then(unwrap);
+    }
+
+    function aiAvailable() {
+      return !!(window.willdeep && window.willdeep.ai && typeof window.willdeep.ai.complete === "function");
+    }
+
+    // ---------------------------------------------------------------- 渲染
+
+    function el(tag, className, text) {
+      var node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined && text !== null) node.textContent = String(text);
+      return node;
+    }
+
+    function scrollToEnd() {
+      elTranscript.scrollTop = elTranscript.scrollHeight;
+    }
+
+    function addYou(text) {
+      var wrap = el("div", "msg msg-you");
+      wrap.appendChild(el("div", "bubble", text));
+      elTranscript.appendChild(wrap);
+      scrollToEnd();
+      return wrap;
+    }
+
+    function addBlock(className) {
+      var node = el("div", className || "msg");
+      elTranscript.appendChild(node);
+      scrollToEnd();
+      return node;
+    }
+
+    function setStatus(text, isError) {
+      elStatus.textContent = text || "";
+      elStatus.className = isError ? "error" : "";
+    }
+
+    // 高亮：把命中词标出来。用文本节点拼装，不碰 innerHTML。
+    function renderExcerpt(container, text, terms) {
+      var lower = String(text).toLowerCase();
+      var marks = [];
+      terms.forEach(function (term) {
+        if (!term) return;
+        var from = 0;
+        for (;;) {
+          var at = lower.indexOf(term, from);
+          if (at < 0) break;
+          marks.push([at, at + term.length]);
+          from = at + term.length;
+        }
+      });
+      if (!marks.length) {
+        container.appendChild(document.createTextNode(text));
+        return;
+      }
+      marks.sort(function (a, b) { return a[0] - b[0]; });
+      var merged = [];
+      marks.forEach(function (span) {
+        var last = merged[merged.length - 1];
+        if (last && span[0] <= last[1]) {
+          last[1] = Math.max(last[1], span[1]);
+        } else {
+          merged.push([span[0], span[1]]);
+        }
+      });
+      var cursor = 0;
+      merged.forEach(function (span) {
+        if (span[0] > cursor) container.appendChild(document.createTextNode(text.slice(cursor, span[0])));
+        var mark = document.createElement("mark");
+        mark.textContent = text.slice(span[0], span[1]);
+        container.appendChild(mark);
+        cursor = span[1];
+      });
+      if (cursor < text.length) container.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+
+    function renderResult(item, terms) {
+      var card = el("div", "result");
+
+      var head = el("div", "result-head");
+      head.appendChild(el("span", "result-title", item.title || "(无标题)"));
+      head.appendChild(el("span", "tag", item.group_label || ""));
+      if (item.archived) head.appendChild(el("span", "tag", t("archived")));
+      if (item.match_kind === "title") head.appendChild(el("span", "tag", t("titleOnly")));
+      if (item.match_kind === "session") head.appendChild(el("span", "tag", t("sessionWide")));
+      if (item.updated_at) head.appendChild(el("span", "tag", String(item.updated_at).slice(0, 10)));
+      card.appendChild(head);
+
+      (item.hits || []).forEach(function (hit) {
+        var line = el("div", "excerpt");
+        renderExcerpt(line, hit.excerpt || "", terms);
+        card.appendChild(line);
+      });
+
+      var actions = el("div", "result-actions");
+      var openBtn = el("button", null, t("openSession"));
+      openBtn.addEventListener("click", function () { openSession(item, openBtn); });
+      actions.appendChild(openBtn);
+
+      var firstHit = (item.hits || [])[0];
+      if (firstHit) {
+        var ctxBtn = el("button", null, t("showContext"));
+        var ctxBox = null;
+        ctxBtn.addEventListener("click", function () {
+          if (ctxBox) {
+            ctxBox.parentNode.removeChild(ctxBox);
+            ctxBox = null;
+            ctxBtn.textContent = t("showContext");
+            return;
+          }
+          ctxBtn.disabled = true;
+          runCommand("historyRecall.excerpt", {
+            session_id: item.session_id,
+            index: firstHit.index,
+            radius: 2
+          }).then(function (payload) {
+            ctxBox = el("div", "context-block");
+            var anchorNode = null;
+            (payload.messages || []).forEach(function (message) {
+              var block = el("div", "context-msg" + (message.is_anchor ? " context-anchor" : ""));
+              block.appendChild(el("div", "context-role",
+                (message.role === "user" ? "你" : "助手") + "  " + String(message.at || "").slice(0, 16)));
+              block.appendChild(document.createTextNode(message.content || ""));
+              ctxBox.appendChild(block);
+              if (message.is_anchor) anchorNode = block;
+            });
+            card.appendChild(ctxBox);
+            // 前一条消息可能很长，展开后默认停在顶部的话，用户点开「看上下文」
+            // 看到的却是命中之前的无关内容。把命中那条滚进视野。
+            if (anchorNode) {
+              ctxBox.scrollTop = Math.max(0, anchorNode.offsetTop - ctxBox.clientHeight / 3);
+            }
+            ctxBtn.textContent = t("hideContext");
+          }).catch(function (error) {
+            card.appendChild(el("div", "note error", error.message));
+          }).then(function () {
+            ctxBtn.disabled = false;
+          });
+        });
+        actions.appendChild(ctxBtn);
+      }
+
+      card.appendChild(actions);
+      return card;
+    }
+
+    function openSession(item, button) {
+      button.disabled = true;
+      var original = button.textContent;
+      button.textContent = t("opening");
+      runCommand("historyRecall.openSession", { sessionID: item.session_id })
+        .then(function () {
+          setStatus(t("opened"), false);
+        })
+        .catch(function (error) {
+          setStatus(error.message, true);
+        })
+        .then(function () {
+          button.disabled = false;
+          button.textContent = original;
+        });
+    }
+
+    // ---------------------------------------------------------------- 跨项目门禁
+
+    function renderGate(container) {
+      var gate = el("div", "gate");
+      gate.appendChild(el("h3", null, t("gateTitle")));
+      gate.appendChild(el("p", null, t("gateBody")));
+
+      if (state.settings && state.settings.locked_by_env) {
+        gate.appendChild(el("div", "note error", t("gateLocked")));
+        container.appendChild(gate);
+        return;
+      }
+
+      var actions = el("div", "result-actions");
+      var enable = el("button", "primary", t("gateEnable"));
+      enable.addEventListener("click", function () {
+        enable.disabled = true;
+        runCommand("historyRecall.settings", { allow_cross_project: true })
+          .then(function (payload) {
+            state.settings = payload.settings;
+            gate.parentNode.removeChild(gate);
+            refreshProjects();
+            setStatus("");
+          })
+          .catch(function (error) {
+            gate.appendChild(el("div", "note error", error.message));
+            enable.disabled = false;
+          });
+      });
+      actions.appendChild(enable);
+      gate.appendChild(actions);
+      container.appendChild(gate);
+    }
+
+    // ---------------------------------------------------------------- 模型辅助
+
+    var QUERY_SYSTEM = [
+      "You turn a natural-language request about past chat sessions into search terms.",
+      "Reply with ONLY a JSON object, no prose, no code fence.",
+      "Keys: terms (array of 1-3 short keyword strings, in the language the user wrote).",
+      "Drop filler words like 'last time', 'which session', 'I remember'.",
+      "Keep proper nouns and technical terms exactly as written. Never invent terms."
+    ].join(" ");
+
+    function extractJSON(text) {
+      if (!text) return null;
+      try { return JSON.parse(text); } catch (error) { /* 继续尝试括号配平 */ }
+      var start = String(text).indexOf("{");
+      if (start < 0) return null;
+      var depth = 0;
+      for (var i = start; i < text.length; i += 1) {
+        if (text[i] === "{") depth += 1;
+        if (text[i] === "}") {
+          depth -= 1;
+          if (depth === 0) {
+            try { return JSON.parse(text.slice(start, i + 1)); } catch (error) { return null; }
+          }
+        }
+      }
+      return null;
+    }
+
+    // 把「上次聊 SSH 穿透那次」变成检索词。模型不可用就退回服务端的查询规范化——
+    // 定位功能在没有模型时必须照常可用。
+    function deriveTerms(sentence) {
+      if (!aiAvailable()) return Promise.resolve(null);
+      // 加超时：ai.complete 没有流式也没有取消，宿主那边模型不可用时它可能既不
+      // resolve 也不 reject。没有这道闸，整个检索会永远停在「正在归纳…」，用户
+      // 看到的就是一个什么也不发生的页面。
+      var timer = null;
+      var guard = new Promise(function (resolve) {
+        timer = setTimeout(function () { resolve(null); }, 8000);
+      });
+      var ask = window.willdeep.ai.complete({
+        system: QUERY_SYSTEM,
+        messages: [{ role: "user", content: sentence }],
+        maxOutputTokens: 128
+      }).then(function (result) {
+        var payload = extractJSON(result && result.text);
+        if (!payload || Object.prototype.toString.call(payload.terms) !== "[object Array]") return null;
+        var terms = payload.terms
+          .map(function (term) { return String(term || "").trim(); })
+          .filter(function (term) { return term.length > 0; })
+          .slice(0, 3);
+        return terms.length ? terms.join(" ") : null;
+      }).catch(function () { return null; });
+
+      return Promise.race([ask, guard]).then(function (value) {
+        if (timer !== null) clearTimeout(timer);
+        return value;
+      });
+    }
+
+    // ---------------------------------------------------------------- 主流程
+
+    function refreshProjects() {
+      return runCommand("historyRecall.projects", {}).then(function (payload) {
+        state.projects = payload.projects || [];
+        var previous = elScope.value;
+        elScope.innerHTML = "";
+        var all = document.createElement("option");
+        all.value = "";
+        all.textContent = t("scopeAll") + " (" + (payload.total_sessions || 0) + ")";
+        elScope.appendChild(all);
+        state.projects.forEach(function (project) {
+          var option = document.createElement("option");
+          option.value = project.group_key;
+          option.textContent = project.group_label + " (" + project.session_count + ")";
+          elScope.appendChild(option);
+        });
+        if (previous) elScope.value = previous;
+        return payload;
+      });
+    }
+
+    function search(sentence) {
+      if (state.busy) return;
+      state.busy = true;
+      elSend.disabled = true;
+      var mySeq = (state.seq += 1);
+
+      addYou(sentence);
+      var pending = addBlock("note");
+      pending.textContent = aiAvailable() ? t("summarizing") : t("searching");
+
+      var scope = elScope.value;
+      deriveTerms(sentence).then(function (derived) {
+        if (mySeq !== state.seq) return null;
+        pending.textContent = t("searching");
+        var query = derived || sentence;
+        var args = {
+          query: query,
+          include_archived: elArchived.checked,
+          limit: 8
+        };
+        if (scope) {
+          args.scope = "project";
+          args.group = scope;
+        }
+        return runCommand("historyRecall.search", args).then(function (payload) {
+          return { payload: payload, query: query, derived: !!derived };
+        });
+      }).then(function (outcome) {
+        if (!outcome || mySeq !== state.seq) return;
+        pending.parentNode.removeChild(pending);
+        var payload = outcome.payload;
+        var block = addBlock();
+
+        var summary = el("div", "note");
+        summary.textContent = t("scanned", payload.scanned_sessions, payload.matched_sessions);
+        // 实际匹配用的是规范化之后的词，跟用户打的整句话往往不一样。命中 0 时
+        // 不把它显示出来，用户无从判断是自己没聊过还是查询被拆坏了。
+        var used = (payload.terms || []).join(" ");
+        if (used) summary.textContent += "　" + t("searchedFor", used);
+        if (payload.relaxed_from && payload.relaxed_from.length) {
+          summary.textContent += "　" + t("relaxed", payload.relaxed_from.join(" "));
+        }
+        if (payload.truncated) summary.textContent += "　" + t("truncated");
+        block.appendChild(summary);
+
+        if (!payload.results || !payload.results.length) {
+          block.appendChild(el("div", "note", t("noHits")));
+        } else {
+          payload.results.forEach(function (item) {
+            block.appendChild(renderResult(item, payload.terms || []));
+          });
+        }
+        scrollToEnd();
+      }).catch(function (error) {
+        if (mySeq !== state.seq) return;
+        if (pending.parentNode) pending.parentNode.removeChild(pending);
+        var block = addBlock();
+        // 跨项目被关掉是最常见的一种「失败」，它不是错误而是一道门，
+        // 所以直接把门画出来让用户当场决定，而不是丢一句红字了事。
+        if (error.payload && error.payload.error === "cross-project search is disabled") {
+          renderGate(block);
+        } else {
+          block.appendChild(el("div", "note error", error.message));
+        }
+        scrollToEnd();
+      }).then(function () {
+        if (mySeq !== state.seq) return;
+        state.busy = false;
+        elSend.disabled = false;
+        elInput.focus();
+      });
+    }
+
+    function submit() {
+      var sentence = elInput.value.trim();
+      if (!sentence) return;
+      elInput.value = "";
+      elInput.style.height = "auto";
+      search(sentence);
+    }
+
+    elSend.addEventListener("click", submit);
+    elInput.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        submit();
+      }
+    });
+    elInput.addEventListener("input", function () {
+      elInput.style.height = "auto";
+      elInput.style.height = Math.min(elInput.scrollHeight, 120) + "px";
+    });
+
+    window.addEventListener("willdeep:context-changed", function () {
+      // 主题变量由宿主直接改 CSS 变量，这里只需跟着换语言文案。
+      elInput.placeholder = lang() === "zh"
+        ? "想找哪段对话？比如：上次聊 SSH 穿透那次"
+        : "Which conversation? e.g. the one about SSH tunneling";
+    });
+
+    function boot() {
+      elTranscript.appendChild(el("div", "empty", t("emptyHint")));
+      runCommand("historyRecall.settings", {})
+        .then(function (payload) {
+          state.settings = payload.settings;
+          return refreshProjects();
+        })
+        .catch(function (error) {
+          setStatus(error.message, true);
+        });
+      elInput.focus();
+    }
+
+    boot();
+  })();
+</script>

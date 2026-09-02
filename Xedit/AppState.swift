@@ -345,6 +345,9 @@ final class AppState: ObservableObject {
     @Published var sessionAutoArchiveRunning = false
     @Published var sessionAutoArchiveLastCount = 0
     @Published var sessionAutoArchiveFailedCount = 0
+    /// How many abandoned empty placeholders the last launch sweep removed.
+    /// Observability only — nothing in the UI depends on it.
+    @Published var sweptAbandonedEmptySessionCount = 0
     /// Set only when a metadata-only sidebar row can no longer be
     /// materialized from disk. The row is deliberately retained so a
     /// recovered JSON file can reconnect without losing its visible title.
@@ -1021,9 +1024,13 @@ final class AppState: ObservableObject {
             // wake them; no phantom user message is created.
             self.resumePersistedAgentKernelEvents()
 
-            // Empty placeholders are filtered by sidebar visibility instead
-            // of being deleted from disk. Automatic deletion previously made
-            // a stale/cross-process index capable of erasing real history.
+            // Sidebar visibility hides empty placeholders; it cannot stop them
+            // accumulating. New chats are no longer written at creation, so
+            // this only has to clear what older builds left behind — and it
+            // deletes nothing it cannot re-verify as empty on disk first.
+            // Last: every other step above must land whether or not files are
+            // still being removed.
+            await self.sweepAbandonedEmptySessions()
         }
     }
 

@@ -1,0 +1,10 @@
+{
+  "name": "willdeep-history-recall",
+  "version": "1.0.0",
+  "description": "Cross-project chat history recall: search every past Agent session by what was said, not just by title, and jump straight to the conversation you were looking for.",
+  "interface": {
+    "displayName": "History Recall",
+    "shortDescription": "历史回溯：忘了那段话是在哪个会话聊的，就在这里按内容找回来，点一下直接跳过去。",
+    "composerIcon": "sf:clock.arrow.circlepath"
+  }
+}

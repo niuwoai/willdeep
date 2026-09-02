@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-02 | Current version: v1.315.0-rc17
+> Last updated: 2026-09-02 | Current version: v1.317.0-rc1
 
 ## Positioning
 

@@ -154,12 +154,15 @@ struct AgentSessionStoreAsyncWriteTests {
         #expect(listedAgain?.title == "catalog-after-with-a-different-file-size")
     }
 
-    @Test("starting a new chat hides old empty placeholders without deleting their files")
-    func startingNewChatKeepsOlderEmptySessionOnDisk() throws {
+    @Test("starting a new chat never touches an older chat's history file")
+    func startingNewChatKeepsOlderSessionWithHistoryOnDisk() throws {
         let appState = AppState(rootDirectory: nil)
         let first = appState.startNewAgentSession()
-        AgentSessionStore.flushPendingWrites()
         defer { AgentSessionStore.delete(id: first.id) }
+        // Give it substance, which is what makes it worth protecting.
+        appState.agentMessages = [AgentMessage(role: .user, content: "real history")]
+        appState.persistActiveAgentSession()
+        AgentSessionStore.flushPendingWrites()
 
         let firstURL = AgentSessionStore.directory
             .appendingPathComponent("\(first.id.uuidString).json")
@@ -171,8 +174,46 @@ struct AgentSessionStoreAsyncWriteTests {
         let second = appState.startNewAgentSession()
         defer { AgentSessionStore.delete(id: second.id) }
 
-        #expect(AgentSessionStore.load(id: first.id) != nil)
+        #expect(AgentSessionStore.load(id: first.id)?.messages.count == 1)
         #expect(appState.agentSessions.contains(where: { $0.id == first.id }))
+    }
+
+    @Test("a brand-new chat exists in memory but not yet on disk")
+    func newChatIsNotPersistedUntilItHasSubstance() {
+        let appState = AppState(rootDirectory: nil)
+        let session = appState.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        AgentSessionStore.flushPendingWrites()
+
+        // The row is live and selectable; only the file is absent.
+        #expect(appState.agentSessions.contains(where: { $0.id == session.id }))
+        #expect(appState.activeAgentSessionID == session.id)
+        #expect(AgentSessionStore.load(id: session.id) == nil)
+        #expect(!FileManager.default.fileExists(
+            atPath: AgentSessionStore.fileURL(for: session.id).path
+        ))
+
+        // The first real persist is what creates it.
+        appState.agentMessages = [AgentMessage(role: .user, content: "now it matters")]
+        appState.persistActiveAgentSession()
+        AgentSessionStore.flushPendingWrites()
+
+        #expect(AgentSessionStore.load(id: session.id)?.messages.count == 1)
+    }
+
+    @Test("dispatch-scoped sessions are still persisted at creation")
+    func dispatchScopedSessionIsPersistedImmediately() {
+        let appState = AppState(rootDirectory: nil)
+        let session = appState.startNewAgentSession(
+            inWorkspaceAt: nil,
+            makeActive: false,
+            presentationScope: .dispatchBoard
+        )
+        defer { AgentSessionStore.delete(id: session.id) }
+        AgentSessionStore.flushPendingWrites()
+
+        // Orchestrator-owned work must survive a crash before its first turn.
+        #expect(AgentSessionStore.load(id: session.id) != nil)
     }
 
     @Test("missing history file reports a recoverable session-switch failure")
@@ -243,6 +284,168 @@ struct AgentSessionStoreAsyncWriteTests {
         #expect(appState.loadedRuntime(for: session.id) == nil)
         #expect(appState.selectAgentSession(id: session.id))
         #expect(appState.loadedRuntime(for: session.id)?.messages.first?.content == "history is still here")
+    }
+
+    // MARK: - Abandoned empty-session sweep
+
+    /// Builds an on-disk session the sweep should consider abandoned:
+    /// zero messages, no workspace, no project, and last touched `age` ago.
+    private func seedAbandonedPlaceholder(
+        age: TimeInterval,
+        mutate: (inout AgentSession) -> Void = { _ in }
+    ) -> AgentSession {
+        var session = AgentSession(title: "新对话", workspaceRootPath: nil)
+        session.updatedAt = Date(timeIntervalSinceNow: -age)
+        mutate(&session)
+        AgentSessionStore.saveAsync(session)
+        AgentSessionStore.flushPendingWrites()
+        return session
+    }
+
+    private func attach(_ session: AgentSession, to appState: AppState) {
+        appState.agentSessions.insert(session, at: 0)
+    }
+
+    /// Sweep tests must own the catalog. With the launch load enabled, its
+    /// task also calls `sweepAbandonedEmptySessions()` and can win the race at
+    /// the first `await` here, leaving the assertions reading someone else's
+    /// result (`sweptAbandonedEmptySessionCount == 0` because it already ran).
+    private func sweepTestAppState() -> AppState {
+        AppState(rootDirectory: nil, loadSessionCatalog: false)
+    }
+
+    @Test("the launch sweep removes an abandoned placeholder and both its sidecars")
+    func sweepRemovesAbandonedPlaceholder() async {
+        let appState = sweepTestAppState()
+        let stale = seedAbandonedPlaceholder(age: 30 * 24 * 60 * 60)
+        defer { AgentSessionStore.delete(id: stale.id) }
+        attach(stale, to: appState)
+
+        await appState.sweepAbandonedEmptySessions()
+
+        #expect(appState.sweptAbandonedEmptySessionCount == 1)
+        #expect(!appState.agentSessions.contains { $0.id == stale.id })
+        #expect(!FileManager.default.fileExists(
+            atPath: AgentSessionStore.fileURL(for: stale.id).path
+        ))
+        // A leftover sidecar would keep costing a decode on every launch.
+        #expect(!FileManager.default.fileExists(
+            atPath: AgentSessionStore.catalogURL(for: stale.id).path
+        ))
+        #expect(!FileManager.default.fileExists(
+            atPath: AgentSessionStore.usageCatalogURL(for: stale.id).path
+        ))
+    }
+
+    @Test("the sweep spares placeholders that are recent, bound, pinned, or scoped")
+    func sweepSparesEverythingButAbandonedPlaceholders() async {
+        let appState = sweepTestAppState()
+        let old = 30.0 * 24 * 60 * 60
+
+        let recent = seedAbandonedPlaceholder(age: 60)
+        let workspaceBound = seedAbandonedPlaceholder(age: old) {
+            $0.workspaceRootPath = "/tmp/xedit-sweep-probe"
+            $0.workspaceLocation = .local(path: "/tmp/xedit-sweep-probe")
+        }
+        let projectBound = seedAbandonedPlaceholder(age: old) { $0.projectID = UUID() }
+        let pinned = seedAbandonedPlaceholder(age: old) { $0.pinnedAt = Date() }
+        let archived = seedAbandonedPlaceholder(age: old) { $0.archivedAt = Date() }
+        let dispatch = seedAbandonedPlaceholder(age: old) { $0.presentationScope = .dispatchBoard }
+        let survivors = [recent, workspaceBound, projectBound, pinned, archived, dispatch]
+        defer { survivors.forEach { AgentSessionStore.delete(id: $0.id) } }
+        survivors.forEach { attach($0, to: appState) }
+
+        await appState.sweepAbandonedEmptySessions()
+
+        #expect(appState.sweptAbandonedEmptySessionCount == 0)
+        for survivor in survivors {
+            #expect(appState.agentSessions.contains { $0.id == survivor.id })
+            #expect(FileManager.default.fileExists(
+                atPath: AgentSessionStore.fileURL(for: survivor.id).path
+            ))
+        }
+    }
+
+    @Test("a session with history is never swept, however old and unbound")
+    func sweepNeverRemovesRealHistory() async {
+        let appState = sweepTestAppState()
+        let withHistory = seedAbandonedPlaceholder(age: 365 * 24 * 60 * 60) {
+            $0.messages = [AgentMessage(role: .user, content: "do not delete me")]
+        }
+        defer { AgentSessionStore.delete(id: withHistory.id) }
+        attach(withHistory, to: appState)
+
+        await appState.sweepAbandonedEmptySessions()
+
+        #expect(appState.agentSessions.contains { $0.id == withHistory.id })
+        #expect(AgentSessionStore.load(id: withHistory.id)?.messages.count == 1)
+    }
+
+    @Test("the disk gate refuses to delete a file that gained history after the scan")
+    func deleteGateRefusesSessionThatGainedHistory() {
+        var session = AgentSession(title: "新对话", workspaceRootPath: nil)
+        let id = session.id
+        defer { AgentSessionStore.delete(id: id) }
+        AgentSessionStore.saveAsync(session)
+        AgentSessionStore.flushPendingWrites()
+
+        // Simulates another WillDeep process flushing a real turn into this id
+        // between the caller's in-memory scan and the delete attempt.
+        session.messages = [AgentMessage(role: .user, content: "typed in another window")]
+        AgentSessionStore.saveAsync(session)
+        AgentSessionStore.flushPendingWrites()
+
+        #expect(!AgentSessionStore.deleteIfStillEmptyAndUnattached(id: id))
+        #expect(AgentSessionStore.load(id: id)?.messages.count == 1)
+    }
+
+    @Test("a session whose only message is a workflow report is never swept")
+    func sweepSparesSessionWithNonUserMessagesOnly() async {
+        let appState = sweepTestAppState()
+        // Found on the reference install: three files with a lone
+        // `workflowReport` or `system` row and no user turn. The sidebar does
+        // not surface them, and a "no user message" gate would delete them.
+        let reportOnly = seedAbandonedPlaceholder(age: 30 * 24 * 60 * 60) {
+            $0.messages = [AgentMessage(role: .workflowReport, content: "workflow output")]
+        }
+        defer { AgentSessionStore.delete(id: reportOnly.id) }
+        attach(reportOnly, to: appState)
+
+        await appState.sweepAbandonedEmptySessions()
+
+        #expect(appState.sweptAbandonedEmptySessionCount == 0)
+        #expect(AgentSessionStore.load(id: reportOnly.id)?.messages.count == 1)
+        // Even asked directly, the gate must refuse.
+        #expect(!AgentSessionStore.deleteIfStillEmptyAndUnattached(id: reportOnly.id))
+    }
+
+    @Test("the disk gate keeps a file it cannot decode")
+    func deleteGateKeepsUndecodableFile() throws {
+        // The 1.167.0-rc5 prune treated "failed to decode" as "empty" and
+        // deleted real history behind a momentarily unreadable file.
+        let id = UUID()
+        let url = AgentSessionStore.fileURL(for: id)
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data("{ this is not a session }".utf8).write(to: url)
+
+        #expect(!AgentSessionStore.deleteIfStillEmptyAndUnattached(id: id))
+        #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test("a resident runtime protects an otherwise abandoned placeholder")
+    func sweepSparesPlaceholderWithResidentRuntime() async {
+        let appState = sweepTestAppState()
+        let stale = seedAbandonedPlaceholder(age: 30 * 24 * 60 * 60)
+        defer { AgentSessionStore.delete(id: stale.id) }
+        attach(stale, to: appState)
+        let runtime = AgentRuntime(session: stale)
+        runtime.input = "half-typed thought"
+        appState.agentRuntimes[stale.id] = runtime
+
+        await appState.sweepAbandonedEmptySessions()
+
+        #expect(appState.agentSessions.contains { $0.id == stale.id })
+        #expect(AgentSessionStore.load(id: stale.id) != nil)
     }
 
     @Test("pin/archive survive the runtime's next persist")
