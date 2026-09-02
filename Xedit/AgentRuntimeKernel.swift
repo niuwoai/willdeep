@@ -74,12 +74,23 @@ nonisolated enum AgentKernelEventTrust: String, Codable, Sendable {
     case untrusted
 }
 
-/// Scheduling authority and payload provenance are deliberately independent.
-/// A host-owned terminal/job adapter may be allowed to wake a runtime while
-/// still carrying bytes that came from a repository, shell, model, or network.
+/// Legacy rc15 field retained only for decoding existing journals. New events
+/// use `AgentKernelEventContentProvenance` instead of collapsing provenance to
+/// a trusted/untrusted bit.
 nonisolated enum AgentKernelEventContentTrust: String, Codable, Sendable {
     case trusted
     case untrusted
+}
+
+/// Scheduling authority and payload provenance are deliberately independent.
+/// A host-owned adapter may be allowed to wake a runtime while the bytes it
+/// carries still came from a model, tool, file, or external network.
+nonisolated enum AgentKernelEventContentProvenance: String, Codable, Sendable {
+    case host
+    case model
+    case tool
+    case file
+    case network
 }
 
 nonisolated enum AgentKernelEventDedupeScope: String, Codable, Sendable {
@@ -100,6 +111,18 @@ nonisolated enum AgentKernelUserActionState: String, Codable, Sendable {
     case none
     case pending
     case dismissed
+}
+
+nonisolated enum AgentKernelEventResolutionActor: String, Codable, Sendable {
+    case model
+    case user
+    case host
+}
+
+nonisolated enum AgentKernelEventResolutionOutcome: String, Codable, Sendable {
+    case processedByModel = "processed_by_model"
+    case dismissedByUser = "dismissed_by_user"
+    case resolvedAtSource = "resolved_at_source"
 }
 
 nonisolated enum AgentKernelEventAudience: String, Codable, Sendable {
@@ -126,9 +149,9 @@ nonisolated struct AgentKernelEvent: Identifiable, Codable, Equatable, Sendable 
     var priority: AgentKernelEventPriority
     var interruptPolicy: AgentKernelInterruptPolicy
     var trust: AgentKernelEventTrust
-    /// Optional for backward decoding of the rc14 journal prototype. Missing
-    /// values are conservatively treated as untrusted content.
+    /// Optional only for backward decoding of rc14/rc15 journals.
     var contentTrust: AgentKernelEventContentTrust?
+    var contentProvenance: AgentKernelEventContentProvenance?
     var audience: AgentKernelEventAudience
     var title: String
     var payload: String
@@ -144,9 +167,29 @@ nonisolated struct AgentKernelEvent: Identifiable, Codable, Equatable, Sendable 
     var deliveredAt: Date?
     var acknowledgedAt: Date?
     var coalescedCount: Int
+    var resolutionActor: AgentKernelEventResolutionActor?
+    var resolutionOutcome: AgentKernelEventResolutionOutcome?
+    var resolvedAt: Date?
 
     var resolvedContentTrust: AgentKernelEventContentTrust {
-        contentTrust ?? .untrusted
+        resolvedContentProvenance == .host ? .trusted : .untrusted
+    }
+
+    var resolvedContentProvenance: AgentKernelEventContentProvenance {
+        if let contentProvenance { return contentProvenance }
+        if contentTrust == .trusted { return .host }
+        switch source {
+        case .worker:
+            return .model
+        case .terminal, .backgroundJob, .mediaTask, .workflow:
+            return .tool
+        case .fileSystem:
+            return .file
+        case .webhook, .email, .connector:
+            return .network
+        case .user, .timer, .approval, .system:
+            return .host
+        }
     }
 
     var resolvedDedupeScope: AgentKernelEventDedupeScope {
@@ -187,7 +230,7 @@ nonisolated struct AgentKernelEvent: Identifiable, Codable, Equatable, Sendable 
         priority: AgentKernelEventPriority = .normal,
         interruptPolicy: AgentKernelInterruptPolicy = .yieldAtBoundary,
         trust: AgentKernelEventTrust = .host,
-        contentTrust: AgentKernelEventContentTrust = .untrusted,
+        contentProvenance: AgentKernelEventContentProvenance = .network,
         audience: AgentKernelEventAudience = .both,
         title: String,
         payload: String,
@@ -209,7 +252,8 @@ nonisolated struct AgentKernelEvent: Identifiable, Codable, Equatable, Sendable 
         self.priority = priority
         self.interruptPolicy = interruptPolicy
         self.trust = trust
-        self.contentTrust = contentTrust
+        self.contentTrust = nil
+        self.contentProvenance = contentProvenance
         self.audience = audience
         self.title = title
         self.payload = payload
@@ -227,6 +271,9 @@ nonisolated struct AgentKernelEvent: Identifiable, Codable, Equatable, Sendable 
         self.deliveredAt = deliveredAt
         self.acknowledgedAt = acknowledgedAt
         self.coalescedCount = max(coalescedCount, 1)
+        self.resolutionActor = nil
+        self.resolutionOutcome = nil
+        self.resolvedAt = nil
     }
 }
 
@@ -280,6 +327,7 @@ nonisolated enum AgentKernelEventPolicy {
     static let maximumMetadataValueCharacters = 1_000
     static let maximumEventsPerRuntime = 200
     static let maximumEventsAcrossKernel = 1_000
+    static let maximumPendingExternalUserActionsPerRuntime = 20
     static let coalescingWindow: TimeInterval = 5
 
     static func normalized(_ raw: AgentKernelEvent, now: Date) -> AgentKernelEvent {
@@ -300,7 +348,8 @@ nonisolated enum AgentKernelEventPolicy {
             return value.isEmpty ? nil : value
         }
         event.coalescedCount = max(event.coalescedCount, 1)
-        event.contentTrust = event.resolvedContentTrust
+        event.contentProvenance = event.resolvedContentProvenance
+        event.contentTrust = nil
         event.dedupeScope = event.resolvedDedupeScope
         event.modelDeliveryState = event.resolvedModelDeliveryState
         event.userActionState = event.resolvedUserActionState
@@ -328,7 +377,7 @@ nonisolated enum AgentKernelEventStore {
         let events: [AgentKernelEvent]
     }
 
-    private static let currentSchemaVersion = 2
+    private static let currentSchemaVersion = 3
     private static let maximumJournalBytes = 64 * 1024 * 1024
     private static let writeQueue = DispatchQueue(
         label: "com.willdeep.agent-runtime-kernel.events",
@@ -492,6 +541,15 @@ final class AgentRuntimeKernel: ObservableObject {
             persist(runtimeID: event.runtimeID)
             return existing
         }
+        if event.trust != .host,
+           event.isAwaitingUserAction,
+           pendingExternalUserActionCount(for: event.runtimeID)
+                >= AgentKernelEventPolicy.maximumPendingExternalUserActionsPerRuntime {
+            event.requiresUserAction = false
+            event.userActionState = .none
+            event.metadata["attention_suppressed"] = "pending_attention_limit"
+            refreshLegacyState(of: &event)
+        }
         if let dedupeKey = event.dedupeKey,
            let index = events.firstIndex(where: {
                $0.runtimeID == event.runtimeID
@@ -539,6 +597,14 @@ final class AgentRuntimeKernel: ObservableObject {
         }.count
     }
 
+    private func pendingExternalUserActionCount(for runtimeID: UUID) -> Int {
+        events.lazy.filter {
+            $0.runtimeID == runtimeID
+                && $0.trust != .host
+                && $0.isAwaitingUserAction
+        }.count
+    }
+
     func hasPendingEvent(
         runtimeID: UUID,
         source: AgentKernelEventSource,
@@ -568,6 +634,9 @@ final class AgentRuntimeKernel: ObservableObject {
             && events[index].isAwaitingUserAction {
             guard let key = events[index].dedupeKey, !keepingDedupeKeys.contains(key) else { continue }
             events[index].userActionState = .dismissed
+            events[index].resolutionActor = .host
+            events[index].resolutionOutcome = .resolvedAtSource
+            events[index].resolvedAt = timestamp
             refreshLegacyState(at: index)
             events[index].updatedAt = timestamp
             changed = true
@@ -587,10 +656,13 @@ final class AgentRuntimeKernel: ObservableObject {
                 if lhs.isAwaitingUserAction != rhs.isAwaitingUserAction {
                     return lhs.isAwaitingUserAction
                 }
-                if lhs.isAwaitingUserAction, lhs.priority != rhs.priority {
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt > rhs.updatedAt
+                }
+                if lhs.priority != rhs.priority {
                     return lhs.priority > rhs.priority
                 }
-                return lhs.updatedAt > rhs.updatedAt
+                return lhs.createdAt > rhs.createdAt
             }
             .prefix(limit)
             .map { $0 }
@@ -603,15 +675,8 @@ final class AgentRuntimeKernel: ObservableObject {
                 $0.element.runtimeID == runtimeID
                     && $0.element.isPendingForModel
             }
-            .sorted { lhs, rhs in
-                if lhs.element.priority != rhs.element.priority {
-                    return lhs.element.priority > rhs.element.priority
-                }
-                return lhs.element.createdAt < rhs.element.createdAt
-            }
-            .prefix(limit)
+        let indexes = fairDeliveryIndexes(from: candidates, limit: limit)
         let timestamp = now()
-        let indexes = candidates.map(\.offset)
         for index in indexes {
             events[index].modelDeliveryState = .leased
             events[index].deliveredAt = timestamp
@@ -630,6 +695,11 @@ final class AgentRuntimeKernel: ObservableObject {
         for index in events.indices where idSet.contains(events[index].id) {
             events[index].modelDeliveryState = .handled
             events[index].acknowledgedAt = timestamp
+            if !events[index].isAwaitingUserAction {
+                events[index].resolutionActor = .model
+                events[index].resolutionOutcome = .processedByModel
+                events[index].resolvedAt = timestamp
+            }
             refreshLegacyState(at: index)
             events[index].updatedAt = timestamp
             changedRuntimeIDs.insert(events[index].runtimeID)
@@ -640,8 +710,11 @@ final class AgentRuntimeKernel: ObservableObject {
     func dismiss(_ id: UUID) {
         guard let index = events.firstIndex(where: { $0.id == id }) else { return }
         events[index].userActionState = .dismissed
+        events[index].resolutionActor = .user
+        events[index].resolutionOutcome = .dismissedByUser
+        events[index].resolvedAt = now()
         refreshLegacyState(at: index)
-        events[index].updatedAt = now()
+        events[index].updatedAt = events[index].resolvedAt ?? now()
         persist(runtimeID: events[index].runtimeID)
     }
 
@@ -690,7 +763,7 @@ final class AgentRuntimeKernel: ObservableObject {
     }
 
     func modelNotice(for event: AgentKernelEvent) -> String {
-        let contentIsUntrusted = event.resolvedContentTrust == .untrusted
+        let contentIsUntrusted = event.resolvedContentProvenance != .host
         let safePayload = Self.escapeRuntimeFrame(event.payload, neutralizeInjection: contentIsUntrusted)
         let safeTitle = Self.escapeRuntimeFrame(event.title, neutralizeInjection: contentIsUntrusted)
         let trustWarning = contentIsUntrusted
@@ -700,7 +773,7 @@ final class AgentRuntimeKernel: ObservableObject {
             ? "\nCoalesced occurrences: \(event.coalescedCount)."
             : ""
         return """
-        <runtime-event id="\(event.id.uuidString)" source="\(event.source.rawValue)" kind="\(event.kind.rawValue)" priority="\(event.priority.rawValue)" authority="\(event.trust.rawValue)" content_trust="\(event.resolvedContentTrust.rawValue)">
+        <runtime-event id="\(event.id.uuidString)" source="\(event.source.rawValue)" kind="\(event.kind.rawValue)" priority="\(event.priority.rawValue)" authority="\(event.trust.rawValue)" content_provenance="\(event.resolvedContentProvenance.rawValue)">
         Title: \(safeTitle)
         Payload:
         \(safePayload)\(coalesced)\(trustWarning)
@@ -784,6 +857,49 @@ final class AgentRuntimeKernel: ObservableObject {
             events[index].state = .acknowledged
         }
     }
+
+    private func refreshLegacyState(of event: inout AgentKernelEvent) {
+        let modelState = event.resolvedModelDeliveryState
+        let userState = event.resolvedUserActionState
+        if modelState == .pending {
+            event.state = .pending
+        } else if modelState == .leased || userState == .pending {
+            event.state = .delivered
+        } else if userState == .dismissed {
+            event.state = .dismissed
+        } else {
+            event.state = .acknowledged
+        }
+    }
+
+    private func fairDeliveryIndexes(
+        from candidates: [(offset: Int, element: AgentKernelEvent)],
+        limit: Int
+    ) -> [Int] {
+        let priorities: [AgentKernelEventPriority] = [
+            .critical, .urgent, .critical, .normal, .critical, .urgent, .background
+        ]
+        var buckets: [AgentKernelEventPriority: [Int]] = [:]
+        for candidate in candidates {
+            buckets[candidate.element.priority, default: []].append(candidate.offset)
+        }
+        for priority in Set(priorities) {
+            buckets[priority]?.sort { events[$0].createdAt < events[$1].createdAt }
+        }
+
+        var selected: [Int] = []
+        while selected.count < limit {
+            var madeProgress = false
+            for priority in priorities where selected.count < limit {
+                guard var bucket = buckets[priority], !bucket.isEmpty else { continue }
+                selected.append(bucket.removeFirst())
+                buckets[priority] = bucket
+                madeProgress = true
+            }
+            if !madeProgress { break }
+        }
+        return selected
+    }
 }
 
 nonisolated struct AgentExternalEventIngress: Sendable {
@@ -840,7 +956,7 @@ nonisolated struct AgentExternalEventIngress: Sendable {
             priority: urgent ? .urgent : .normal,
             interruptPolicy: authenticated ? .yieldAtBoundary : .enqueue,
             trust: authenticated ? .authenticated : .untrusted,
-            contentTrust: .untrusted,
+            contentProvenance: .network,
             audience: .both,
             title: title,
             payload: body,

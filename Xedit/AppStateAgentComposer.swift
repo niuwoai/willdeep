@@ -2500,7 +2500,22 @@ extension AppState {
                 ?? activeRuntime?.workspaceRootPath
                 ?? rootDirectory?.path)
             : nil
-        let arguments = Self.chatSelectionArguments(text: text, workspace: workspace)
+        let sourceMessage = activeRuntime?.messages.last(where: { message in
+            (message.role == .user || message.role == .assistant)
+                && message.copyableContent.contains(text)
+        })
+        let sourceTurn = sourceMessage.flatMap { selected in
+            activeRuntime?.messages
+                .prefix(while: { $0.id != selected.id })
+                .last(where: { $0.isOperatorInput })
+        }
+        let arguments = Self.chatSelectionArguments(
+            text: text,
+            workspace: workspace,
+            sessionID: activeRuntime?.id,
+            messageID: sourceMessage?.id,
+            turnID: sourceTurn?.id
+        )
         Task { @MainActor in
             do {
                 let result = try await AgentPluginCommandExecutor.execute(
@@ -2521,11 +2536,23 @@ extension AppState {
     /// 外加可选的 `workspace`（仅当插件声明了 workspace.read）。
     nonisolated static func chatSelectionArguments(
         text: String,
-        workspace: String?
+        workspace: String?,
+        sessionID: UUID? = nil,
+        messageID: UUID? = nil,
+        turnID: UUID? = nil
     ) -> [String: String] {
         var arguments = ["text": text, "source": "chat.selection"]
         if let workspace, !workspace.isEmpty {
             arguments["workspace"] = workspace
+        }
+        if let sessionID {
+            arguments["source_session_id"] = sessionID.uuidString
+        }
+        if let messageID {
+            arguments["source_message_id"] = messageID.uuidString
+        }
+        if let turnID {
+            arguments["source_turn_id"] = turnID.uuidString
         }
         return arguments
     }

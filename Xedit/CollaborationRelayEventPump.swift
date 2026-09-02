@@ -85,6 +85,10 @@ nonisolated private struct CollaborationRelayPollEnvelope: Decodable {
     struct Payload: Decodable {
         var events: [CollaborationRelayIncomingEvent]
         var remaining: Int
+        var received: Int?
+        var acknowledged: Int?
+        var dropped: Int?
+        var deduplicated: Int?
     }
     var ok: Bool
     var data: Payload?
@@ -107,6 +111,10 @@ nonisolated private struct CollaborationRelayAckEnvelope: Encodable {
 nonisolated struct CollaborationRelayPollBatch {
     var events: [CollaborationRelayIncomingEvent]
     var remaining: Int
+    var received: Int?
+    var acknowledged: Int?
+    var dropped: Int?
+    var deduplicated: Int?
 }
 
 nonisolated struct CollaborationRelayEventClient {
@@ -147,7 +155,11 @@ nonisolated struct CollaborationRelayEventClient {
         }
         return CollaborationRelayPollBatch(
             events: envelope.data?.events ?? [],
-            remaining: max(envelope.data?.remaining ?? 0, 0)
+            remaining: max(envelope.data?.remaining ?? 0, 0),
+            received: envelope.data?.received,
+            acknowledged: envelope.data?.acknowledged,
+            dropped: envelope.data?.dropped,
+            deduplicated: envelope.data?.deduplicated
         )
     }
 
@@ -199,11 +211,14 @@ final class CollaborationRelayEventPump: ObservableObject {
     static let shared = CollaborationRelayEventPump()
 
     @Published private(set) var state: CollaborationRelayPumpState = .disabled
+    @Published private(set) var lastPollAt: Date?
     @Published private(set) var lastSuccessAt: Date?
     @Published private(set) var lastError: String?
     @Published private(set) var receivedEventCount = 0
     @Published private(set) var acknowledgedEventCount = 0
     @Published private(set) var relayPendingEventCount = 0
+    @Published private(set) var relayDroppedEventCount = 0
+    @Published private(set) var relayDeduplicatedEventCount = 0
 
     private weak var fallbackAppState: AppState?
     private var task: Task<Void, Never>?
@@ -268,9 +283,23 @@ final class CollaborationRelayEventPump: ObservableObject {
             while !Task.isCancelled {
                 guard let self else { return }
                 do {
+                    self.lastPollAt = Date()
                     let batch = try await self.client.poll(baseURL: baseURL, token: token)
                     failureDelay = 2
-                    self.receivedEventCount += batch.events.count
+                    if let received = batch.received {
+                        self.receivedEventCount = received
+                    } else {
+                        self.receivedEventCount += batch.events.count
+                    }
+                    if let acknowledged = batch.acknowledged {
+                        self.acknowledgedEventCount = acknowledged
+                    }
+                    if let dropped = batch.dropped {
+                        self.relayDroppedEventCount = dropped
+                    }
+                    if let deduplicated = batch.deduplicated {
+                        self.relayDeduplicatedEventCount = deduplicated
+                    }
                     self.relayPendingEventCount = batch.remaining + batch.events.count
                     var acceptedEventIDs: [String] = []
                     var acceptedRuntimeIDs: Set<UUID> = []

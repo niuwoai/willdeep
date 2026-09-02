@@ -945,7 +945,20 @@ private struct AgentScrollToLatestButton: View {
             }
             return resultPresentationMessage(message, receipts: toolReceipts)
         }
-        return AgentTranscriptModePresentation.modeInvariantMessages(from: visible)
+        let protectedAssistantMessageIDs = Set(
+            visible.lazy
+                .filter { message in
+                    message.role == .assistant
+                        && toolCalls(for: message.id).contains(where: isWorkingToolCall)
+                }
+                .map(\.id)
+        )
+        return AgentTranscriptModePresentation.projectedMessages(
+            from: visible,
+            isLatestTurnActive: appState.isAgentResponding,
+            revealsIntermediateMessages: isConversationSearchActive,
+            protectedAssistantMessageIDs: protectedAssistantMessageIDs
+        )
     }
 
     private func scrollToBottom(using proxy: ScrollViewProxy) {

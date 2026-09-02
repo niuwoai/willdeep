@@ -12,8 +12,8 @@ import AppKit
 import Combine
 
 /// One session that is blocked on the user. Feeds the sidebar quick-jump
-/// strip and the Dock icon menu — both of which have to agree with the Dock
-/// badge count, so both are built from `needsUserApproval` below.
+/// strip and the Dock icon menu; the process monitor merges approval records
+/// and Runtime Event user actions into one count before publishing either UI.
 struct AgentPendingApprovalEntry: Identifiable, Equatable {
     let sessionID: AgentSession.ID
     let title: String
@@ -62,6 +62,27 @@ enum AgentSessionApprovalBadgeLogic {
         let patchRequests = patchStatuses.filter { $0 == .pending }.count
         let planRequests = (planStatus ?? session.currentPlan?.status) == .proposed ? 1 : 0
         return toolRequests + patchRequests + planRequests
+    }
+
+    @MainActor
+    static func pendingAttentionRequestCount(
+        session: AgentSession,
+        runtime: AgentRuntime?,
+        kernel: AgentRuntimeKernel
+    ) -> Int {
+        let approvalRequests: Int
+        if let runtime {
+            approvalRequests = pendingApprovalRequestCount(
+                session: runtime.session,
+                toolCallStatuses: runtime.toolCalls.map(\.status),
+                patchStatuses: runtime.patchProposals.map(\.status),
+                planStatus: runtime.currentPlan?.status
+            )
+        } else {
+            approvalRequests = pendingApprovalRequestCount(session: session)
+        }
+        return approvalRequests
+            + kernel.pendingUserActionCount(for: session.id, excluding: .approval)
     }
 
     nonisolated private static func toolCallNeedsUserApproval(_ status: AgentToolCallStatus) -> Bool {
@@ -243,26 +264,11 @@ final class AgentDockBadgeCoordinator: ObservableObject {
             var blocked: [AgentPendingApprovalEntry] = []
             for session in appState.agentSessions {
                 let runtime = appState.agentRuntimes[session.id]
-                let requestCount: Int
-                if let runtime {
-                    let projectedApprovalCount = AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(
-                        session: runtime.session,
-                        toolCallStatuses: runtime.toolCalls.map(\.status),
-                        patchStatuses: runtime.patchProposals.map(\.status),
-                        planStatus: runtime.currentPlan?.status
-                    )
-                    requestCount = projectedApprovalCount
-                        + appState.agentRuntimeKernel.pendingUserActionCount(
-                            for: session.id,
-                            excluding: .approval
-                        )
-                } else {
-                    requestCount = AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(session: session)
-                        + appState.agentRuntimeKernel.pendingUserActionCount(
-                            for: session.id,
-                            excluding: .approval
-                        )
-                }
+                let requestCount = AgentSessionApprovalBadgeLogic.pendingAttentionRequestCount(
+                    session: session,
+                    runtime: runtime,
+                    kernel: appState.agentRuntimeKernel
+                )
                 approvalRequestCountBySessionID[session.id] = max(
                     approvalRequestCountBySessionID[session.id, default: 0],
                     requestCount

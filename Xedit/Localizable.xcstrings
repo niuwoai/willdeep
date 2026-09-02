@@ -76830,7 +76830,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "等你确认"
+            "value" : "等你处理"
           }
         }
       }
@@ -76872,73 +76872,73 @@
       }
     },
     "sidebar.session-row.waiting-approval" : {
-      "comment" : "compact badge shown on a session row when a tool, patch, plan, or ask_user prompt is waiting for the user",
+      "comment" : "compact badge shown when a session has a request, event, approval, or answer waiting for the user",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Waiting approval"
+            "value" : "Needs attention"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esperando aprobación"
+            "value" : "Necesita atención"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "En attente d'approbation"
+            "value" : "Attention requise"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "承認待ち"
+            "value" : "要対応"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "等待批准"
+            "value" : "待处理"
           }
         }
       }
     },
     "sidebar.session-row.waiting-approval-tooltip" : {
-      "comment" : ".help() for the waiting-approval badge on a session row",
+      "comment" : ".help() for the attention badge on a session row",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This session is waiting for your approval or answer."
+            "value" : "This session is waiting for you to handle a request, approval, or answer."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esta sesión está esperando tu aprobación o respuesta."
+            "value" : "Esta sesión espera que atiendas una solicitud, aprobación o respuesta."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cette session attend votre approbation ou votre réponse."
+            "value" : "Cette session attend que vous traitiez une demande, une approbation ou une réponse."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このセッションはあなたの承認または回答を待っています。"
+            "value" : "このセッションには、対応、承認、または回答が必要な項目があります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此会话正在等待你的批准或回答。"
+            "value" : "此会话有请求、确认或回答正在等你处理。"
           }
         }
       }

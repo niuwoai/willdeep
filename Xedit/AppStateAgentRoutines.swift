@@ -126,7 +126,7 @@ extension AppState {
                 priority: .normal,
                 interruptPolicy: .enqueue,
                 trust: .host,
-                contentTrust: .trusted,
+                contentProvenance: .host,
                 audience: .user,
                 title: routine.name,
                 payload: "Scheduled routine fired.",

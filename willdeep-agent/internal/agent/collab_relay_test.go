@@ -216,6 +216,14 @@ func TestCollaborationRelayQueuesAndPollsEventsWithAuth(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("poll without auth status = %d, want 401", resp.StatusCode)
 	}
+	queryAuthPoll, err := http.Get(server.URL + "/events/poll?token=relay-secret")
+	if err != nil {
+		t.Fatalf("GET poll with query token: %v", err)
+	}
+	_ = queryAuthPoll.Body.Close()
+	if queryAuthPoll.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("poll with query token status = %d, want 401", queryAuthPoll.StatusCode)
+	}
 
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/events/poll", nil)
 	if err != nil {
@@ -238,6 +246,9 @@ func TestCollaborationRelayQueuesAndPollsEventsWithAuth(t *testing.T) {
 	data, ok := body.Data.(map[string]any)
 	if !ok {
 		t.Fatalf("poll data = %#v", body.Data)
+	}
+	if data["received"] != float64(2) || data["deduplicated"] != float64(1) || data["dropped"] != float64(0) {
+		t.Fatalf("poll counters = %#v", data)
 	}
 	events, ok := data["events"].([]any)
 	if !ok || len(events) != 1 {
@@ -294,6 +305,9 @@ func TestCollaborationRelayQueuesAndPollsEventsWithAuth(t *testing.T) {
 	if finalEvents := finalData["events"].([]any); len(finalEvents) != 0 {
 		t.Fatalf("final poll events = %#v, want empty after ack", finalEvents)
 	}
+	if finalData["acknowledged"] != float64(1) {
+		t.Fatalf("final acknowledged = %#v, want 1", finalData["acknowledged"])
+	}
 }
 
 func TestCollaborationRelayPersistsUnacknowledgedEventsAcrossRestart(t *testing.T) {
@@ -331,6 +345,16 @@ func TestCollaborationRelayPersistsUnacknowledgedEventsAcrossRestart(t *testing.
 	if got := info.Mode().Perm(); got != 0o600 {
 		t.Fatalf("journal permissions = %o, want 600", got)
 	}
+	pollRequest, err := http.NewRequest(http.MethodGet, "/events/poll", nil)
+	if err != nil {
+		t.Fatalf("new poll request: %v", err)
+	}
+	pollRequest.Header.Set("Authorization", "Bearer relay-secret")
+	pollRecorder := httptest.NewRecorder()
+	first.withAuth(false, first.handlePollEvents)(pollRecorder, pollRequest)
+	if pollRecorder.Code != http.StatusOK {
+		t.Fatalf("poll before restart status = %d", pollRecorder.Code)
+	}
 
 	second := NewCollaborationRelay(cfg)
 	if second.startupError != nil {
@@ -340,6 +364,46 @@ func TestCollaborationRelayPersistsUnacknowledgedEventsAcrossRestart(t *testing.
 	defer second.mu.Unlock()
 	if len(second.events) != 1 || second.events[0].ID != event.ID {
 		t.Fatalf("restored events = %#v", second.events)
+	}
+}
+
+func TestCollaborationRelayPersistsDeliveryCountersAndQueueEvictions(t *testing.T) {
+	journalPath := filepath.Join(t.TempDir(), "relay-events.json")
+	cfg, err := NewCollaborationRelayConfig(CollaborationRelayConfigInput{
+		Host:           "127.0.0.1",
+		Port:           8898,
+		PublicBaseURL:  "https://fly.niuwoai.com",
+		Token:          "relay-secret",
+		MaxEvents:      1,
+		EventStoreFile: journalPath,
+	})
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	relay := NewCollaborationRelay(cfg)
+	eventA := CollaborationRelayEvent{ID: "evt-a", Platform: "feishu", Kind: "message"}
+	eventB := CollaborationRelayEvent{ID: "evt-b", Platform: "feishu", Kind: "message"}
+	if _, err := relay.enqueue(eventA); err != nil {
+		t.Fatalf("enqueue A: %v", err)
+	}
+	if queued, err := relay.enqueue(eventA); err != nil || queued {
+		t.Fatalf("duplicate enqueue = %t, %v", queued, err)
+	}
+	if _, err := relay.enqueue(eventB); err != nil {
+		t.Fatalf("enqueue B: %v", err)
+	}
+
+	restored := NewCollaborationRelay(cfg)
+	if restored.startupError != nil {
+		t.Fatalf("restore: %v", restored.startupError)
+	}
+	restored.mu.Lock()
+	defer restored.mu.Unlock()
+	if restored.counters.Received != 3 || restored.counters.Deduplicated != 1 || restored.counters.Dropped != 1 {
+		t.Fatalf("restored counters = %#v", restored.counters)
+	}
+	if len(restored.events) != 1 || restored.events[0].ID != "evt-b" {
+		t.Fatalf("restored events = %#v", restored.events)
 	}
 }
 
@@ -416,7 +480,7 @@ func TestCollaborationRelayFeishuLongConnectionQueuesEvents(t *testing.T) {
 	}
 	req.Header.Set("Authorization", "Bearer relay-secret")
 	recorder := httptest.NewRecorder()
-	relay.withAuth(relay.handlePollEvents)(recorder, req)
+	relay.withAuth(false, relay.handlePollEvents)(recorder, req)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("poll status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}

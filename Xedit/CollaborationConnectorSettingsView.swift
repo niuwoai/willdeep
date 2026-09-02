@@ -136,6 +136,12 @@ struct CollaborationConnectorSettingsView: View {
                 Text(relayStatusText)
                     .foregroundStyle(relayStatusColor)
             }
+            if let lastPollAt = relayPump.lastPollAt {
+                LabeledContent(L10n.Settings.Connectors.runtimeEventLastPoll) {
+                    Text(lastPollAt.formatted(date: .abbreviated, time: .shortened))
+                        .foregroundStyle(.secondary)
+                }
+            }
             if let lastSuccessAt = relayPump.lastSuccessAt {
                 LabeledContent(L10n.Settings.Connectors.runtimeEventLastSuccess) {
                     Text(lastSuccessAt.formatted(date: .abbreviated, time: .shortened))
@@ -147,6 +153,8 @@ struct CollaborationConnectorSettingsView: View {
                     L10n.Settings.Connectors.runtimeEventCounterValues(
                         received: relayPump.receivedEventCount,
                         acknowledged: relayPump.acknowledgedEventCount,
+                        dropped: relayPump.relayDroppedEventCount,
+                        deduplicated: relayPump.relayDeduplicatedEventCount,
                         pending: relayPump.relayPendingEventCount
                     )
                 )

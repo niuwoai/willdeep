@@ -39,12 +39,25 @@ extension AppState {
               !runtime.isAwaitingProviderSlot,
               !runtime.isCompressingContext,
               runtime.requestTask == nil else { return }
-        guard hasPendingBackgroundWakeups(for: runtime) else { return }
+        let pendingEvents = agentRuntimeKernel.events.filter {
+            $0.runtimeID == runtime.id && $0.isPendingForModel
+        }
+        let wakeDecision = AgentAutomaticWakePolicy.decision(
+            pendingEvents: pendingEvents,
+            hasHostCompletion: hasPendingHostBackgroundCompletions(for: runtime),
+            externalWakeHistory: agentExternalWakeHistoryByRuntime[runtime.id, default: []],
+            now: Date()
+        )
+        guard let wakeDecision else { return }
 
         repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID
         guard acquireProviderSlotIfPossible(providerID: providerID) else { return }
+
+        if wakeDecision.kind == .authenticatedExternal {
+            agentExternalWakeHistoryByRuntime[runtime.id] = wakeDecision.externalWakeHistory
+        }
 
         runtime.isAwaitingProviderSlot = false
         runtime.clearTurnError()
@@ -75,7 +88,12 @@ extension AppState {
     @MainActor
     func hasPendingBackgroundWakeups(for runtime: AgentRuntime) -> Bool {
         agentRuntimeKernel.pendingModelEventCount(for: runtime.id) > 0
-            || agentJobRegistry.pendingCompletionCount(forRuntime: runtime.id) > 0
+            || hasPendingHostBackgroundCompletions(for: runtime)
+    }
+
+    @MainActor
+    private func hasPendingHostBackgroundCompletions(for runtime: AgentRuntime) -> Bool {
+        agentJobRegistry.pendingCompletionCount(forRuntime: runtime.id) > 0
             || agentMediaTaskRegistry.pendingCompletionCount(forRuntime: runtime.id) > 0
             || agentSubagentRegistry.pendingReportCount(forParentRuntime: runtime.id) > 0
             || !runtime.pendingWorkflowCompletionReportIDs.isEmpty

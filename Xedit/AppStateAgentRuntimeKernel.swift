@@ -32,6 +32,42 @@ nonisolated enum AgentExternalWakePolicy {
     }
 }
 
+nonisolated enum AgentAutomaticWakeKind: Equatable, Sendable {
+    case host
+    case authenticatedExternal
+}
+
+nonisolated struct AgentAutomaticWakeDecision: Equatable, Sendable {
+    var kind: AgentAutomaticWakeKind
+    var externalWakeHistory: [Date]
+}
+
+/// Every path that can turn an idle runtime back into a provider request must
+/// pass through this policy. In particular, provider-slot release and startup
+/// recovery must not bypass the external-event budget used at initial ingress.
+nonisolated enum AgentAutomaticWakePolicy {
+    static func decision(
+        pendingEvents: [AgentKernelEvent],
+        hasHostCompletion: Bool,
+        externalWakeHistory: [Date],
+        now: Date
+    ) -> AgentAutomaticWakeDecision? {
+        let wakeable = pendingEvents.filter {
+            $0.isPendingForModel && $0.interruptPolicy != .enqueue
+        }
+        if hasHostCompletion || wakeable.contains(where: { $0.trust == .host }) {
+            return AgentAutomaticWakeDecision(kind: .host, externalWakeHistory: externalWakeHistory)
+        }
+        guard wakeable.contains(where: { $0.trust == .authenticated }) else { return nil }
+        let reservation = AgentExternalWakePolicy.reserve(history: externalWakeHistory, now: now)
+        guard reservation.allowed else { return nil }
+        return AgentAutomaticWakeDecision(
+            kind: .authenticatedExternal,
+            externalWakeHistory: reservation.history
+        )
+    }
+}
+
 extension AppState {
     func configureAgentRuntimeKernel() {
         runtimeKernelSubscription = agentRuntimeKernel.objectWillChange
@@ -55,8 +91,12 @@ extension AppState {
 
     @discardableResult
     func receiveExternalAgentEvent(_ ingress: AgentExternalEventIngress) -> Bool {
-        guard agentSessions.contains(where: { $0.id == ingress.runtimeID && $0.archivedAt == nil })
-                || agentRuntimes[ingress.runtimeID] != nil else { return false }
+        if let catalogSession = agentSessions.first(where: { $0.id == ingress.runtimeID }) {
+            guard catalogSession.archivedAt == nil else { return false }
+        } else {
+            guard let runtime = agentRuntimes[ingress.runtimeID],
+                  runtime.session.archivedAt == nil else { return false }
+        }
         publishAgentKernelEvent(ingress.kernelEvent())
         return true
     }
@@ -144,7 +184,7 @@ extension AppState {
         priority: AgentKernelEventPriority = .normal,
         interruptPolicy: AgentKernelInterruptPolicy = .yieldAtBoundary,
         audience: AgentKernelEventAudience = .both,
-        contentTrust: AgentKernelEventContentTrust = .trusted,
+        contentProvenance: AgentKernelEventContentProvenance = .host,
         dedupeKey: String? = nil,
         requiresUserAction: Bool = false,
         metadata: [String: String] = [:]
@@ -157,7 +197,7 @@ extension AppState {
                 priority: priority,
                 interruptPolicy: interruptPolicy,
                 trust: .host,
-                contentTrust: contentTrust,
+                contentProvenance: contentProvenance,
                 audience: audience,
                 title: title,
                 payload: payload,
@@ -212,7 +252,7 @@ extension AppState {
                 priority: failed ? .urgent : .normal,
                 interruptPolicy: .yieldAtBoundary,
                 trust: .host,
-                contentTrust: .untrusted,
+                contentProvenance: .tool,
                 audience: .both,
                 title: job.command,
                 payload: Self.backgroundJobCompletionNotice(for: job, recentOutput: recentOutput),
@@ -233,7 +273,7 @@ extension AppState {
                 priority: failed ? .urgent : .normal,
                 interruptPolicy: .yieldAtBoundary,
                 trust: .host,
-                contentTrust: .untrusted,
+                contentProvenance: .tool,
                 audience: .both,
                 title: task.title,
                 payload: Self.mediaTaskCompletionNotice(for: task),
@@ -254,7 +294,7 @@ extension AppState {
                 priority: failed ? .urgent : .normal,
                 interruptPolicy: .yieldAtBoundary,
                 trust: .host,
-                contentTrust: .untrusted,
+                contentProvenance: .model,
                 audience: .both,
                 title: run.label,
                 payload: Self.subagentReportNotice(for: run),
@@ -275,7 +315,7 @@ extension AppState {
                 priority: failed ? .urgent : .normal,
                 interruptPolicy: .yieldAtBoundary,
                 trust: .host,
-                contentTrust: .untrusted,
+                contentProvenance: .tool,
                 audience: .both,
                 title: report.displayTitle,
                 payload: Self.workflowCompletionNotice(for: report),
@@ -308,7 +348,7 @@ extension AppState {
                 priority: priority,
                 interruptPolicy: .yieldAtBoundary,
                 trust: .host,
-                contentTrust: .untrusted,
+                contentProvenance: .tool,
                 audience: .both,
                 title: terminalEvent.title,
                 payload: terminalEvent.summary,
@@ -337,7 +377,7 @@ extension AppState {
                     priority: .urgent,
                     interruptPolicy: .enqueue,
                     trust: .host,
-                    contentTrust: .trusted,
+                    contentProvenance: .host,
                     audience: .user,
                     title: call.toolName,
                     payload: "A tool decision is waiting for the operator.",
@@ -359,7 +399,7 @@ extension AppState {
                     priority: .urgent,
                     interruptPolicy: .enqueue,
                     trust: .host,
-                    contentTrust: .trusted,
+                    contentProvenance: .host,
                     audience: .user,
                     title: patch.title,
                     payload: "A patch decision is waiting for the operator.",
@@ -381,7 +421,7 @@ extension AppState {
                         priority: .urgent,
                         interruptPolicy: .enqueue,
                         trust: .host,
-                        contentTrust: .trusted,
+                        contentProvenance: .host,
                         audience: .user,
                         title: L10n.RuntimeEvents.planReview,
                         payload: "A proposed plan is waiting for the operator.",
@@ -421,7 +461,6 @@ extension AppState {
         case .queued, .yieldAfterCurrentStep:
             break
         case .wakeIdleRuntime:
-            guard reserveExternalWakeIfAllowed(for: event) else { return }
             resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         case .preemptCurrentStep:
             agentKernelPreemptedRuntimeIDs.insert(runtime.id)
@@ -429,14 +468,4 @@ extension AppState {
         }
     }
 
-    private func reserveExternalWakeIfAllowed(for event: AgentKernelEvent, now: Date = Date()) -> Bool {
-        guard event.trust != .host else { return true }
-        guard event.trust == .authenticated else { return false }
-        let reservation = AgentExternalWakePolicy.reserve(
-            history: agentExternalWakeHistoryByRuntime[event.runtimeID, default: []],
-            now: now
-        )
-        agentExternalWakeHistoryByRuntime[event.runtimeID] = reservation.history
-        return reservation.allowed
-    }
 }

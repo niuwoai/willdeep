@@ -1847,10 +1847,10 @@ private struct AgentRailRuntimeEventRow: View {
                     .font(.system(size: 12, weight: event.requiresUserAction ? .semibold : .regular))
                     .foregroundStyle(.primary)
                     .lineLimit(2)
-                if event.isAwaitingUserAction {
-                    Text(L10n.RuntimeEvents.needsAction)
+                if let handlingStatus = L10n.RuntimeEvents.handlingStatus(event) {
+                    Text(handlingStatus)
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(event.isAwaitingUserAction ? .orange : .secondary)
                 }
             }
             Spacer(minLength: 2)

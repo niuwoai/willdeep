@@ -1,7 +1,8 @@
 # 收藏夹（Favorites）
 
 在聊天正文里选中一段文字，气泡上就多一个「收藏」；点一下这段文字进收藏夹，
-左侧「收藏夹」页面里可以搜索、加标签、写备注、置顶、删除，删错了还能撤销。
+左侧「收藏夹」页面里可以搜索、加标签、写备注、置顶、删除，删错了还能撤销；
+新收藏还可用「查看原文」打开对应的完整会话消息，包括主对话已收拢的中间过程。
 
 这是 `chat.selection` 菜单挂载点的参考实现——插件往聊天选区气泡与右键菜单里加动作，
 宿主把选中的原文交给插件命令执行。**它随 App 一起发行**（`BundledPlugins/favorites`），
@@ -24,7 +25,7 @@ WKWebView 里（`connect-src 'none'`）。配色从宿主注入的 `--willdeep-*
 
 | 工具 | 参数 | 说明 |
 | --- | --- | --- |
-| `favorites.add` | `text` / `note` / `tags` / `source` | 收藏一段文字。同一段文字重复收藏会合并到已有那条并顶到最前，返回 `duplicate: true` |
+| `favorites.add` | `text` / `note` / `tags` / `source` / `source_session_id` / `source_message_id` / `source_turn_id` | 收藏一段文字。同一段文字重复收藏会合并到已有那条并顶到最前，返回 `duplicate: true` |
 | `favorites.list` | `query` / `tag` / `limit` | 置顶优先、其余按更新时间倒序；附带标签直方图与存储路径 |
 | `favorites.update` | `id` + `note` / `tags` / `pinned` | 只改传进来的字段 |
 | `favorites.remove` | `id` | 删一条，并把删掉的整条原样回传（页面据此做撤销） |
@@ -41,9 +42,10 @@ WKWebView 里（`connect-src 'none'`）。配色从宿主注入的 `--willdeep-*
 ~/Library/Application Support/WillDeep/plugin-data/favorites.json
 ```
 
-结构是 `{"version": 2, "items": [...]}`，每条收藏带
-`id` / `text` / `note` / `tags` / `source` / `pinned` / `createdAt` / `updatedAt`。
-v1 的老文件读进来会自动补齐新字段，不需要单独迁移。写盘走「临时文件 + rename」，
+结构是 `{"version": 3, "items": [...]}`，每条收藏带
+`id` / `text` / `note` / `tags` / `source` / `sourceSessionID` / `sourceMessageID` /
+`sourceTurnID` / `pinned` / `createdAt` / `updatedAt`。
+v1/v2 的老文件读进来会自动补齐新字段，不需要单独迁移。写盘走「临时文件 + rename」，
 中途被杀不会留下半截文件；文件被写坏时服务端按空列表继续跑，不会把插件页面拖死。
 最多保留 500 条，单条文本上限 20KB。
 
@@ -51,12 +53,13 @@ v1 的老文件读进来会自动补齐新字段，不需要单独迁移。写�
 
 ## 选区动作的契约
 
-宿主执行 `chat.selection` 里的命令时，固定传两个参数：
+宿主执行 `chat.selection` 里的命令时，固定传选区参数，并在能定位来源时附带稳定标识：
 
 - `text`：选中的原文（已按聊天导出的净化规则处理）
 - `source`：`"chat.selection"`，插件据此区分入口
+- `source_session_id` / `source_message_id` / `source_turn_id`：原会话、原消息和所属用户回合；旧记录没有这些字段时保持兼容
 
-命令的 handler 是 `mcpTool` 时，这两个参数原样进工具调用的 `arguments`。
+命令的 handler 是 `mcpTool` 时，这些参数原样进工具调用的 `arguments`。
 执行完气泡会就地变成「✓ 收藏」或「⚠︎ 收藏」停一下再收起，所以点完不会毫无反应。
 
 ## 随 App 发行
@@ -76,5 +79,5 @@ ruby scripts/favorites_server_test.rb
 ```
 
 覆盖：initialize / tools/list 契约、收藏 → 列出 → 改 → 删 → 撤销闭环、空文本拒绝、
-重复收藏合并、标签规范化与直方图、关键词过滤、置顶排序、清空要显式确认、
-v1 存储向后兼容、落盘格式与临时文件清理、响应式卡片网格，以及存储损坏时的降级。
+重复收藏合并、原文标识、标签规范化与直方图、关键词过滤、置顶排序、清空要显式确认、
+v1/v2 存储向后兼容、落盘格式与临时文件清理、响应式卡片网格，以及存储损坏时的降级。

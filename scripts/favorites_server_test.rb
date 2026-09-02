@@ -87,11 +87,20 @@ Dir.mktmpdir do |dir|
     check(empty && empty["ok"] == true && empty["items"] == [],
           "存储文件还不存在时，list 返回空列表而不是报错。", results)
 
-    added = tool.call("favorites.add", { "text" => "  选中的一段中文  ", "source" => "chat.selection" })
+    added = tool.call("favorites.add", {
+      "text" => "  选中的一段中文  ",
+      "source" => "chat.selection",
+      "source_session_id" => "session-1",
+      "source_message_id" => "message-1",
+      "source_turn_id" => "turn-1"
+    })
     check(added && added["ok"] == true, "add 收下文本并返回 ok。", results)
     item = added && added["item"]
     check(item && item["text"] == "选中的一段中文", "add 会去掉首尾空白。", results)
     check(item && item["source"] == "chat.selection", "add 记下来源。", results)
+    check(item && item["sourceSessionID"] == "session-1" &&
+          item["sourceMessageID"] == "message-1" && item["sourceTurnID"] == "turn-1",
+          "add 记下可返回原会话的稳定定位信息。", results)
     check(item && !item["id"].to_s.empty?, "add 生成 id。", results)
     check(item && !item["createdAt"].to_s.empty?, "add 记下时间戳。", results)
 
@@ -166,11 +175,11 @@ Dir.mktmpdir do |dir|
 
   check(File.exist?(store), "存储文件按需创建（含中间目录）。", results)
   stored = JSON.parse(File.read(store))
-  check(stored["version"] == 2 && stored["items"].is_a?(Array),
+  check(stored["version"] == 3 && stored["items"].is_a?(Array),
         "存储文件是 {version, items} 结构。", results)
   check(stored["items"].first.keys.sort ==
-          %w[createdAt id note pinned source tags text updatedAt],
-        "落盘的每条收藏字段齐整（含 tags / pinned / updatedAt）。", results)
+          %w[createdAt id note pinned source sourceMessageID sourceSessionID sourceTurnID tags text updatedAt],
+        "落盘的每条收藏字段齐整（含来源定位、tags / pinned / updatedAt）。", results)
   check(!Dir.glob(File.join(File.dirname(store), "*.tmp")).any?,
         "写盘用的临时文件已经 rename 掉，不留残骸。", results)
 

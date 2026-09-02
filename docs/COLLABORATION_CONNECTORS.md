@@ -1,6 +1,6 @@
 # Collaboration Connectors
 
-> Last updated: 2026-09-02 | Current version: v1.315.0-rc15
+> Last updated: 2026-09-02 | Current version: v1.315.0-rc17
 
 WillDeep treats Feishu, DingTalk, WeCom, and WeChat/Claw as collaboration
 connectors. The Mac app owns local user intent, preview, and Keychain-backed
@@ -87,7 +87,8 @@ Sensitive values stay out of the app settings and source tree:
 - Feishu setup QR requires only the public app id on the relay
   (`WILLDEEP_FEISHU_APP_ID` or `--feishu-app-id`). It does not require Redis or
   a database. Callback events are retained in the Relay's mode-0600 durable
-  journal until the desktop explicitly acknowledges them.
+  journal until the desktop explicitly acknowledges them; the same journal
+  persists received, acknowledged, dropped, and deduplicated counters.
 
 ### Feishu Event Delivery
 
@@ -257,7 +258,7 @@ platform retry does not append a second unacknowledged copy.
 
 ### Desktop Runtime Event Routing
 
-WillDeep 1.315.0-rc15 can poll this endpoint from **Settings → Connectors →
+WillDeep 1.315.0-rc17 can poll this endpoint from **Settings → Connectors →
 Runtime Event Routing**. The relay token is stored in macOS Keychain. Incoming
 events are routed to a dedicated background Event Orchestrator session and
 enter the host-owned Runtime event kernel; see
