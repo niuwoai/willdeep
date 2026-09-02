@@ -183,7 +183,9 @@ v1 菜单位置：
 - `navigate`：跳转到已安装并启用的插件目的地。
 - `mcpTool`：调用已配置 MCP Tool；执行前显示插件名和命令名确认。随 App 签名发行的第一方内置插件（`bundled` 来源）例外，不再逐条确认——它们与宿主是同一份签名产物，也没有第三方来源可核对，而收藏夹这类默认入口每翻一次页面就要点一次确认根本无法使用；本地安装与 Codex 缓存来源仍然每次执行都要用户点头。
 
-公开 Host Command v1：`plugin.refresh`、`destination.select`、`settings.mcp`、`plugins.open-center`。任意 selector、类名和脚本文本均被拒绝。
+公开 Host Command v1：`plugin.refresh`、`destination.select`、`settings.mcp`、`plugins.open-center`、`session.open`。任意 selector、类名和脚本文本均被拒绝。
+
+其中 `session.open`（参数 `sessionID`，UUID 字符串）切换并打开指定 Agent 会话，是唯一带权限门的 host action——执行时要求插件声明 `conversation.read`，未声明直接报错。会话目录尚未装载完成与会话不存在是两条不同的错误，便于页面区分提示。
 
 ## 8. 注册、安装与生命周期
 

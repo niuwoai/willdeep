@@ -291,7 +291,11 @@ extension AppState {
               notifyAgentOnCompletion,
               !runtime.pendingWorkflowCompletionReportIDs.contains(reportID) else { return }
         runtime.pendingWorkflowCompletionReportIDs.append(reportID)
-        resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+        if let report = runtime.messages.compactMap(\.workflowReport).first(where: { $0.id == reportID }) {
+            publishWorkflowKernelEvent(report, runtime: runtime)
+        } else {
+            resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+        }
     }
 
     func consumePendingWorkflowCompletions(for runtime: AgentRuntime) -> [WorkflowReport] {

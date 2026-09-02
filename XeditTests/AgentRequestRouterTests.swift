@@ -69,14 +69,14 @@ struct AgentRequestRouterTests {
         #expect(AgentRequestRouter.classify("implement the retry backoff").profileID == "implementer")
     }
 
-    @Test("an ambiguous request gets no steering rather than a guess")
-    func ambiguousRequestGetsNoProfile() {
+    @Test("an ambiguous request falls back to the general-purpose utility worker")
+    func ambiguousRequestFallsBackToGeneralist() {
         let decision = AgentRequestRouter.classify("嗯，接着上次那个继续吧")
 
-        #expect(decision.profileID == nil)
-        #expect(decision.tier == .standard)
-        // Nothing to say beats saying the wrong thing confidently.
-        #expect(decision.steering == nil)
+        #expect(decision.profileID == AgentSubagentProfileCatalog.generalistID)
+        #expect(decision.tier == .worker)
+        #expect(decision.requiresDelegatedExecution)
+        #expect(decision.steering?.contains("profile=\"generalist\"") == true)
     }
 
     // MARK: Steering

@@ -26,6 +26,54 @@ struct AgentApprovalLifecycleTests {
         return false
     }
 
+    @Test("原生 Worker 的特权工具在父会话等待确认并进入 Dock 计数")
+    func nativeWorkerApprovalUsesParentQueueAndDockCount() async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        defer { runtime.cancelToolDecisions(reason: "Test cleanup") }
+
+        let approval = Task {
+            await app.resolveSubagentToolApproval(
+                toolName: "call_mcp_tool",
+                arguments: [
+                    "server": .string("test-server"),
+                    "tool": .string("mutate")
+                ],
+                risk: .danger,
+                workerName: "通用工具",
+                runtime: runtime,
+                messageID: UUID(),
+                rootDirectory: nil
+            )
+        }
+
+        var recordID: UUID?
+        for _ in 0..<1_000 {
+            if let record = runtime.toolCalls.first(where: { $0.externalID.hasPrefix("subagent:") }) {
+                recordID = record.id
+                if runtime.toolDecisionWaiters[record.id] != nil { break }
+            }
+            await Task.yield()
+        }
+        let id = try #require(recordID)
+        try await waitForRegistration(id, runtime: runtime)
+        #expect(runtime.toolCalls.first(where: { $0.id == id })?.subagentWorkerName == "通用工具")
+        #expect(AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(
+            session: runtime.session,
+            toolCallStatuses: runtime.toolCalls.map(\.status)
+        ) == 1)
+
+        app.approveAgentToolCall(id: id)
+        #expect(await approval.value)
+        #expect(runtime.toolCalls.first(where: { $0.id == id })?.status == .succeeded)
+        #expect(AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(
+            session: runtime.session,
+            toolCallStatuses: runtime.toolCalls.map(\.status)
+        ) == 0)
+    }
+
     @Test("同会话两个审批互不覆盖，终端确认仅消费自己的等待且不能重复批准")
     func overlappingApprovals() async throws {
         let app = AppState()

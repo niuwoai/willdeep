@@ -1,0 +1,10 @@
+{
+  "destination.historyRecall": "历史回溯",
+  "command.search": "检索历史",
+  "command.excerpt": "查看上下文",
+  "command.projects": "列出项目",
+  "command.settings": "设置",
+  "command.open": "打开历史回溯",
+  "command.openSession": "打开那个会话",
+  "command.refresh": "刷新"
+}

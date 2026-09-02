@@ -298,7 +298,10 @@ nonisolated enum AgentGlobalRulesStore {
         fileText: String?
     ) -> Bool {
         settings.normalized.filePath == AgentGlobalRulesSettings.defaultFilePath
-            && fileText == legacyDefaultRulesTemplate
+            && (
+                fileText == legacyDefaultRulesTemplate
+                    || fileText == AgentBundledRules.previousDefaultGlobalRulesTemplate
+            )
     }
 
     private static func rulesCacheKey(for url: URL) -> NSString {

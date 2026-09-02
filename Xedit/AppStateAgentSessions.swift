@@ -1777,13 +1777,34 @@ extension AppState {
         agentApprovalMode = .smart
         agentCurrentPlan = nil
         agentCurrentGoal = nil
-        // saveAsync, not save: sync save can beachball behind another
-        // instance's NSFileCoordinator hold on the session directory.
-        AgentSessionStore.saveAsync(session)
+        // Deliberately NOT written to disk here — see the MARK block below.
         upsertAgentUsageSnapshot(for: session)
         refreshAgentGitWorktrees()
         return session
     }
+
+    // MARK: - Why a brand-new session is not written to disk at creation
+    //
+    // Until 1.167.0-rc5 an empty "新对话" row was saved immediately and
+    // `pruneEmptyAgentSessions()` garbage-collected the leftovers on the next
+    // creation. That prune was removed because it could permanently delete a
+    // session whose file merely failed to decode, and the replacement only hid
+    // empty rows behind `AgentSidebarVisibility.visibleSessions`. Nothing
+    // stopped them accumulating: on a real install 221 of 474 session files
+    // (47%) were zero-message, workspace-less shells the user could neither
+    // see nor delete, and every launch paid a stat + sidecar decode for each.
+    //
+    // Creating the row in memory and letting the FIRST real persist write it
+    // removes the shells at the source without reintroducing a delete path —
+    // a session that was never written cannot be lost by deleting it. Every
+    // route that gives a session substance (a user message, a workspace
+    // binding, a rename, a pin, being evicted from the runtime cache, being
+    // switched away from) already funnels through `persistAgentSession`, which
+    // calls `AgentRuntime.persist()` and saves unconditionally.
+    //
+    // The launch catalog merge in `AppState` treats in-memory sessions as
+    // newer than disk on ID collision, so a session created while the catalog
+    // is still loading survives the merge even with no file behind it.
 
     /// Start a new session bound to a specific workspace. 1.85.0-rc11 起
     /// 不再顺手把 editor 窗口的 `rootDirectory` 切过去 —— agent runtime 自
@@ -1864,9 +1885,20 @@ extension AppState {
             // internal dispatch task.
             evictInactiveAgentRuntimesIfNeeded(protecting: session.id)
         }
-        // saveAsync, not save: sync save can beachball behind another
-        // instance's NSFileCoordinator hold on the session directory.
-        AgentSessionStore.saveAsync(session)
+        // Deliberately NOT written to disk here — see the MARK block above.
+        //
+        // Non-workspace scopes are the exception. A dispatch task or roundtable
+        // seat is not "a chat the user might never type into": it represents
+        // work already committed to by the orchestrator, it never reaches the
+        // sidebar's empty-row filter, and it should survive a crash between
+        // creation and its first turn. Empirically these are also not the
+        // problem — of 266 zero-message files on the reference install, 7 were
+        // dispatchBoard and 0 roundtable, against 220 workspace shells.
+        if presentationScope != .workspace {
+            // saveAsync, not save: sync save can beachball behind another
+            // instance's NSFileCoordinator hold on the session directory.
+            AgentSessionStore.saveAsync(session)
+        }
         upsertAgentUsageSnapshot(for: session)
         if !isManagedBackgroundWorkspace {
             unhideWorkspace(key: session.workspaceSidebarGroupKey)
@@ -2300,6 +2332,11 @@ extension AppState {
         pendingDispatchQueue.removeAll { $0.runtimeID == id }
 
         if removeFromStore, !AgentSessionStore.delete(id: id) { return false }
+        if removeFromStore {
+            agentRuntimeKernel.removeEvents(for: id)
+            agentExternalWakeRetryTasks.removeValue(forKey: id)?.cancel()
+            agentKernelPreemptedRuntimeIDs.remove(id)
+        }
         persistedImages.forEach { $0.removeStoredFileIfNeeded() }
         agentSessions.removeAll { $0.id == id }
         removeAgentUsageSnapshot(id: id)

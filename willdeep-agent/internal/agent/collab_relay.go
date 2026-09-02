@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -12,18 +13,23 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-const CollaborationRelayProtocolVersion = "collab-relay.v1"
+const CollaborationRelayProtocolVersion = "collab-relay.v2"
 
 const (
 	defaultCollaborationRelayBaseURL   = "https://fly.niuwoai.com"
 	defaultCollaborationRelayMaxEvents = 500
 	collaborationRelayMaxBodyBytes     = 1 * 1024 * 1024
+	collaborationRelayMaxJournalBytes  = 64 * 1024 * 1024
+	collaborationRelayJournalVersion   = 2
 )
 
 type CollaborationRelayConfigInput struct {
@@ -38,6 +44,7 @@ type CollaborationRelayConfigInput struct {
 	FeishuLongConnectionEnabled    bool
 	FeishuLongConnectionEventTypes string
 	MaxEvents                      int
+	EventStoreFile                 string
 }
 
 type CollaborationRelayConfig struct {
@@ -50,6 +57,7 @@ type CollaborationRelayConfig struct {
 	FeishuLongConnectionEnabled    bool
 	FeishuLongConnectionEventTypes []string
 	MaxEvents                      int
+	EventStoreFile                 string
 }
 
 type CollaborationRelay struct {
@@ -57,18 +65,34 @@ type CollaborationRelay struct {
 
 	mu                         sync.Mutex
 	events                     []CollaborationRelayEvent
+	counters                   CollaborationRelayCounters
 	feishuLongConnectionStatus CollaborationRelayTransportStatus
 	now                        func() time.Time
+	startupError               error
+}
+
+type CollaborationRelayCounters struct {
+	Received     uint64 `json:"received"`
+	Acknowledged uint64 `json:"acknowledged"`
+	Dropped      uint64 `json:"dropped"`
+	Deduplicated uint64 `json:"deduplicated"`
 }
 
 type CollaborationRelayEvent struct {
-	ID         string          `json:"id"`
-	Platform   string          `json:"platform"`
-	Kind       string          `json:"kind"`
-	ReceivedAt time.Time       `json:"received_at"`
-	RemoteAddr string          `json:"remote_addr"`
-	Headers    map[string]any  `json:"headers,omitempty"`
-	Body       json.RawMessage `json:"body,omitempty"`
+	ID                   string          `json:"id"`
+	Platform             string          `json:"platform"`
+	Kind                 string          `json:"kind"`
+	ReceivedAt           time.Time       `json:"received_at"`
+	RemoteAddr           string          `json:"remote_addr"`
+	Headers              map[string]any  `json:"headers,omitempty"`
+	Body                 json.RawMessage `json:"body,omitempty"`
+	AuthenticatedIngress bool            `json:"authenticated_ingress"`
+}
+
+type collaborationRelayEventJournal struct {
+	Version  int                        `json:"version"`
+	Events   []CollaborationRelayEvent  `json:"events"`
+	Counters CollaborationRelayCounters `json:"counters,omitempty"`
 }
 
 type CollaborationRelayTransportStatus struct {
@@ -89,6 +113,10 @@ var collaborationRelayPlatforms = map[string]collaborationRelayPlatform{
 	"dingtalk": {name: "dingtalk"},
 	"wecom":    {name: "wecom"},
 }
+
+var collaborationRelayEventSequence atomic.Uint64
+
+var errCollaborationRelayQueueFull = errors.New("collaboration relay event queue is full")
 
 func NewCollaborationRelayConfig(input CollaborationRelayConfigInput) (CollaborationRelayConfig, error) {
 	host := strings.TrimSpace(input.Host)
@@ -148,11 +176,15 @@ func NewCollaborationRelayConfig(input CollaborationRelayConfigInput) (Collabora
 		FeishuLongConnectionEnabled:    input.FeishuLongConnectionEnabled,
 		FeishuLongConnectionEventTypes: feishuLongConnectionEventTypes,
 		MaxEvents:                      maxEvents,
+		EventStoreFile:                 strings.TrimSpace(input.EventStoreFile),
 	}, nil
 }
 
 func ServeCollaborationRelay(ctx context.Context, config CollaborationRelayConfig) error {
 	relay := NewCollaborationRelay(config)
+	if relay.startupError != nil {
+		return relay.startupError
+	}
 	if err := relay.StartBackgroundTransports(ctx); err != nil {
 		return err
 	}
@@ -185,6 +217,7 @@ func NewCollaborationRelay(config CollaborationRelayConfig) *CollaborationRelay 
 		config: config,
 		now:    time.Now,
 	}
+	relay.startupError = relay.preparePersistentEventStore()
 	relay.setFeishuLongConnectionStatus("disabled", "")
 	return relay
 }
@@ -194,20 +227,25 @@ func (r *CollaborationRelay) routes() http.Handler {
 	mux.HandleFunc("GET /collab/health", r.handleHealth)
 	mux.HandleFunc("GET /connectors/feishu/setup", r.handleFeishuSetup)
 	mux.HandleFunc("GET /oauth/{platform}/callback", r.handleOAuthCallback)
-	mux.HandleFunc("POST /events/{platform}", r.handleEvent)
-	mux.HandleFunc("GET /events/poll", r.withAuth(r.handlePollEvents))
+	mux.HandleFunc("POST /events/{platform}", r.withAuth(true, r.handleEvent))
+	mux.HandleFunc("GET /events/poll", r.withAuth(false, r.handlePollEvents))
+	mux.HandleFunc("POST /events/ack", r.withAuth(false, r.handleAckEvents))
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		writeCollaborationRelayVersionHeaders(w)
 		mux.ServeHTTP(w, req)
 	})
 }
 
-func (r *CollaborationRelay) withAuth(next http.HandlerFunc) http.HandlerFunc {
+func (r *CollaborationRelay) withAuth(allowQueryToken bool, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		auth := strings.TrimSpace(req.Header.Get("Authorization"))
-		queryToken := req.URL.Query().Get("token")
-		want := r.config.Token
-		if auth != "Bearer "+want && subtle.ConstantTimeCompare([]byte(queryToken), []byte(want)) != 1 {
+		headerToken := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+		queryToken := strings.TrimSpace(req.URL.Query().Get("token"))
+		want := []byte(r.config.Token)
+		headerMatches := strings.HasPrefix(auth, "Bearer ") &&
+			subtle.ConstantTimeCompare([]byte(headerToken), want) == 1
+		queryMatches := allowQueryToken && subtle.ConstantTimeCompare([]byte(queryToken), want) == 1
+		if !headerMatches && !queryMatches {
 			writeCollaborationRelayError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
@@ -218,6 +256,7 @@ func (r *CollaborationRelay) withAuth(next http.HandlerFunc) http.HandlerFunc {
 func (r *CollaborationRelay) handleHealth(w http.ResponseWriter, req *http.Request) {
 	r.mu.Lock()
 	queued := len(r.events)
+	counters := r.counters
 	feishuLongConnectionStatus := r.feishuLongConnectionStatus
 	r.mu.Unlock()
 	writeCollaborationRelayOK(w, map[string]any{
@@ -240,7 +279,8 @@ func (r *CollaborationRelay) handleHealth(w http.ResponseWriter, req *http.Reque
 		"event_transports": map[string]any{
 			"feishu_long_connection": feishuLongConnectionStatus,
 		},
-		"queued_events": queued,
+		"queued_events":  queued,
+		"event_counters": counters,
 	})
 }
 
@@ -321,16 +361,25 @@ func (r *CollaborationRelay) handleEvent(w http.ResponseWriter, req *http.Reques
 	}
 
 	event := CollaborationRelayEvent{
-		ID:         newRelayEventID(platform.name, r.now()),
-		Platform:   platform.name,
-		Kind:       relayEventKind(envelope),
-		ReceivedAt: r.now().UTC(),
-		RemoteAddr: req.RemoteAddr,
-		Headers:    relayHeaders(req),
-		Body:       append(json.RawMessage(nil), body...),
+		ID:                   relayEventID(platform.name, envelope, r.now()),
+		Platform:             platform.name,
+		Kind:                 relayEventKind(envelope),
+		ReceivedAt:           r.now().UTC(),
+		RemoteAddr:           req.RemoteAddr,
+		Headers:              relayHeaders(req),
+		Body:                 append(json.RawMessage(nil), body...),
+		AuthenticatedIngress: true,
 	}
-	r.enqueue(event)
-	writeCollaborationRelayOK(w, map[string]any{"event_id": event.ID, "queued": true})
+	queued, err := r.enqueue(event)
+	if err != nil {
+		if errors.Is(err, errCollaborationRelayQueueFull) {
+			writeCollaborationRelayError(w, http.StatusTooManyRequests, "event queue is full; retry after events are acknowledged")
+			return
+		}
+		writeCollaborationRelayError(w, http.StatusServiceUnavailable, "event queue persistence failed")
+		return
+	}
+	writeCollaborationRelayOK(w, map[string]any{"event_id": event.ID, "queued": queued})
 }
 
 func (r *CollaborationRelay) handlePollEvents(w http.ResponseWriter, req *http.Request) {
@@ -339,26 +388,284 @@ func (r *CollaborationRelay) handlePollEvents(w http.ResponseWriter, req *http.R
 	if limit > len(r.events) {
 		limit = len(r.events)
 	}
-	events := append([]CollaborationRelayEvent(nil), r.events[:limit]...)
-	r.events = append([]CollaborationRelayEvent(nil), r.events[limit:]...)
-	remaining := len(r.events)
+	events := make([]CollaborationRelayEvent, limit)
+	copy(events, r.events[:limit])
+	remaining := len(r.events) - limit
+	counters := r.counters
 	r.mu.Unlock()
 
 	writeCollaborationRelayOK(w, map[string]any{
-		"events":    events,
-		"remaining": remaining,
+		"events":       events,
+		"remaining":    remaining,
+		"received":     counters.Received,
+		"acknowledged": counters.Acknowledged,
+		"dropped":      counters.Dropped,
+		"deduplicated": counters.Deduplicated,
 	})
 }
 
-func (r *CollaborationRelay) enqueue(event CollaborationRelayEvent) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.events = append(r.events, event)
-	if len(r.events) <= r.config.MaxEvents {
+func (r *CollaborationRelay) handleAckEvents(w http.ResponseWriter, req *http.Request) {
+	var input struct {
+		EventIDs []string `json:"event_ids"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, req.Body, 64*1024))
+	if err := decoder.Decode(&input); err != nil {
+		writeCollaborationRelayError(w, http.StatusBadRequest, "invalid acknowledgement body")
 		return
 	}
-	drop := len(r.events) - r.config.MaxEvents
-	r.events = append([]CollaborationRelayEvent(nil), r.events[drop:]...)
+	if len(input.EventIDs) == 0 || len(input.EventIDs) > 100 {
+		writeCollaborationRelayError(w, http.StatusBadRequest, "event_ids must contain 1 to 100 ids")
+		return
+	}
+	requested := make(map[string]struct{}, len(input.EventIDs))
+	for _, id := range input.EventIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			requested[id] = struct{}{}
+		}
+	}
+	if len(requested) == 0 {
+		writeCollaborationRelayError(w, http.StatusBadRequest, "event_ids contains no valid ids")
+		return
+	}
+
+	r.mu.Lock()
+	previous := append([]CollaborationRelayEvent(nil), r.events...)
+	previousCounters := r.counters
+	remainingEvents := make([]CollaborationRelayEvent, 0, len(r.events))
+	acknowledged := 0
+	acknowledgedIDs := make(map[string]struct{}, len(requested))
+	for _, event := range r.events {
+		if _, ok := requested[event.ID]; ok {
+			acknowledged++
+			acknowledgedIDs[event.ID] = struct{}{}
+			continue
+		}
+		remainingEvents = append(remainingEvents, event)
+	}
+	r.events = remainingEvents
+	r.counters.Acknowledged += uint64(acknowledged)
+	if err := r.persistEventsLocked(); err != nil {
+		r.events = previous
+		r.counters = previousCounters
+		r.mu.Unlock()
+		writeCollaborationRelayError(w, http.StatusServiceUnavailable, "event queue persistence failed")
+		return
+	}
+	remaining := len(r.events)
+	counters := r.counters
+	r.mu.Unlock()
+	missing := make([]string, 0, len(requested)-len(acknowledgedIDs))
+	for id := range requested {
+		if _, ok := acknowledgedIDs[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	sort.Strings(missing)
+
+	writeCollaborationRelayOK(w, map[string]any{
+		"acknowledged":       acknowledged,
+		"remaining":          remaining,
+		"received":           counters.Received,
+		"acknowledged_total": counters.Acknowledged,
+		"dropped":            counters.Dropped,
+		"deduplicated":       counters.Deduplicated,
+		"not_found":          missing,
+	})
+}
+
+func (r *CollaborationRelay) enqueue(event CollaborationRelayEvent) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	previous := append([]CollaborationRelayEvent(nil), r.events...)
+	previousCounters := r.counters
+	r.counters.Received++
+	for _, existing := range r.events {
+		if existing.ID == event.ID {
+			r.counters.Deduplicated++
+			if err := r.persistEventsLocked(); err != nil {
+				r.counters = previousCounters
+				return false, err
+			}
+			return false, nil
+		}
+	}
+	r.events = append(r.events, event)
+	if len(r.events) > r.config.MaxEvents {
+		r.events = previous
+		r.counters.Dropped++
+		if err := r.persistEventsLocked(); err != nil {
+			r.counters = previousCounters
+			return false, err
+		}
+		return false, errCollaborationRelayQueueFull
+	}
+	if err := r.persistEventsLocked(); err != nil {
+		r.events = previous
+		r.counters = previousCounters
+		return false, err
+	}
+	return true, nil
+}
+
+func (r *CollaborationRelay) loadPersistedEvents() error {
+	path := strings.TrimSpace(r.config.EventStoreFile)
+	if path == "" {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("stat collaboration relay event store: %w", err)
+	}
+	if info.Size() > collaborationRelayMaxJournalBytes {
+		return r.quarantineCorruptEventStore(path, "oversized")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read collaboration relay event store: %w", err)
+	}
+	var journal collaborationRelayEventJournal
+	if err := json.Unmarshal(data, &journal); err != nil {
+		return r.quarantineCorruptEventStore(path, "invalid-json")
+	}
+	if journal.Version < 1 || journal.Version > collaborationRelayJournalVersion {
+		return r.quarantineCorruptEventStore(path, "unsupported-version")
+	}
+	if len(journal.Events) > r.config.MaxEvents {
+		return fmt.Errorf("collaboration relay event store contains %d events, exceeding configured max %d", len(journal.Events), r.config.MaxEvents)
+	}
+	r.events = append([]CollaborationRelayEvent(nil), journal.Events...)
+	r.counters.Received += journal.Counters.Received
+	r.counters.Acknowledged += journal.Counters.Acknowledged
+	r.counters.Dropped += journal.Counters.Dropped
+	r.counters.Deduplicated += journal.Counters.Deduplicated
+	return nil
+}
+
+func (r *CollaborationRelay) preparePersistentEventStore() error {
+	path := strings.TrimSpace(r.config.EventStoreFile)
+	if path == "" {
+		return nil
+	}
+	directory := filepath.Dir(path)
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return fmt.Errorf("create collaboration relay event store directory: %w", err)
+	}
+	stale, _ := filepath.Glob(filepath.Join(directory, ".collab-relay-events-*"))
+	for _, candidate := range stale {
+		_ = os.Remove(candidate)
+	}
+	if err := r.loadPersistedEvents(); err != nil {
+		return err
+	}
+	probe, err := os.CreateTemp(directory, ".collab-relay-probe-*")
+	if err != nil {
+		return fmt.Errorf("probe collaboration relay event store: %w", err)
+	}
+	probePath := probe.Name()
+	defer os.Remove(probePath)
+	if err := probe.Chmod(0o600); err != nil {
+		probe.Close()
+		return fmt.Errorf("secure collaboration relay event store probe: %w", err)
+	}
+	if _, err := probe.Write([]byte("ok")); err != nil {
+		probe.Close()
+		return fmt.Errorf("write collaboration relay event store probe: %w", err)
+	}
+	if err := probe.Sync(); err != nil {
+		probe.Close()
+		return fmt.Errorf("sync collaboration relay event store probe: %w", err)
+	}
+	if err := probe.Close(); err != nil {
+		return fmt.Errorf("close collaboration relay event store probe: %w", err)
+	}
+	return nil
+}
+
+func (r *CollaborationRelay) quarantineCorruptEventStore(path string, reason string) error {
+	target := fmt.Sprintf("%s.corrupt-%d-%s", path, r.now().UTC().UnixMilli(), reason)
+	if err := os.Rename(path, target); err != nil {
+		return fmt.Errorf("quarantine corrupt collaboration relay event store: %w", err)
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
+func (r *CollaborationRelay) persistEventsLocked() error {
+	path := strings.TrimSpace(r.config.EventStoreFile)
+	if path == "" {
+		return nil
+	}
+	journal := collaborationRelayEventJournal{
+		Version:  collaborationRelayJournalVersion,
+		Events:   r.events,
+		Counters: r.counters,
+	}
+	data, err := r.encodeJournalWithinLimitLocked(journal)
+	if err != nil {
+		return err
+	}
+	directory := filepath.Dir(path)
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return fmt.Errorf("create collaboration relay event store directory: %w", err)
+	}
+	temporary, err := os.CreateTemp(directory, ".collab-relay-events-*")
+	if err != nil {
+		return fmt.Errorf("create collaboration relay event store temp file: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return fmt.Errorf("secure collaboration relay event store temp file: %w", err)
+	}
+	if _, err := temporary.Write(data); err != nil {
+		temporary.Close()
+		return fmt.Errorf("write collaboration relay event store: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		temporary.Close()
+		return fmt.Errorf("sync collaboration relay event store: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close collaboration relay event store: %w", err)
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return fmt.Errorf("replace collaboration relay event store: %w", err)
+	}
+	return syncDirectory(directory)
+}
+
+func (r *CollaborationRelay) encodeJournalWithinLimitLocked(
+	journal collaborationRelayEventJournal,
+) ([]byte, error) {
+	journal.Events = r.events
+	journal.Counters = r.counters
+	data, err := json.Marshal(journal)
+	if err != nil {
+		return nil, fmt.Errorf("encode collaboration relay event store: %w", err)
+	}
+	if len(data) > collaborationRelayMaxJournalBytes {
+		return nil, fmt.Errorf(
+			"collaboration relay event store exceeds %d bytes",
+			collaborationRelayMaxJournalBytes,
+		)
+	}
+	return data, nil
+}
+
+func syncDirectory(path string) error {
+	directory, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open collaboration relay event store directory: %w", err)
+	}
+	defer directory.Close()
+	if err := directory.Sync(); err != nil {
+		return fmt.Errorf("sync collaboration relay event store directory: %w", err)
+	}
+	return nil
 }
 
 func (r *CollaborationRelay) setFeishuLongConnectionStatus(state string, lastError string) {
@@ -392,6 +699,7 @@ func writeCollaborationRelayAPI(w http.ResponseWriter, status int, response APIR
 func writeCollaborationRelayVersionHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-WillDeep-App-Version", Version)
 	w.Header().Set("X-WillDeep-Server-Version", Version)
+	w.Header().Set("X-WillDeep-Relay-Protocol", CollaborationRelayProtocolVersion)
 }
 
 func collaborationRelayPlatformFor(value string) (collaborationRelayPlatform, bool) {
@@ -432,7 +740,50 @@ func relayEventKind(envelope map[string]any) string {
 }
 
 func newRelayEventID(platform string, now time.Time) string {
-	return fmt.Sprintf("%s-%d", platform, now.UTC().UnixNano())
+	return fmt.Sprintf(
+		"%s-%d-%d",
+		platform,
+		now.UTC().UnixNano(),
+		collaborationRelayEventSequence.Add(1),
+	)
+}
+
+func relayEventID(platform string, envelope map[string]any, now time.Time) string {
+	if externalID := relayExternalEventID(envelope); externalID != "" {
+		digest := sha256.Sum256([]byte(platform + "\x00" + externalID))
+		return fmt.Sprintf("%s-external-%x", platform, digest[:16])
+	}
+	return newRelayEventID(platform, now)
+}
+
+func relayExternalEventID(envelope map[string]any) string {
+	for _, path := range [][]string{
+		{"header", "event_id"},
+		{"event_id"},
+		{"eventId"},
+		{"msgId"},
+		{"messageId"},
+		{"event", "message", "message_id"},
+		{"event", "event_id"},
+	} {
+		if value := nestedRelayString(envelope, path...); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func nestedRelayString(envelope map[string]any, path ...string) string {
+	var current any = envelope
+	for _, key := range path {
+		object, ok := current.(map[string]any)
+		if !ok {
+			return ""
+		}
+		current = object[key]
+	}
+	value, _ := stringValue(current)
+	return strings.TrimSpace(value)
 }
 
 func feishuAuthorizationURL(appID string, redirectURI string, state string) string {

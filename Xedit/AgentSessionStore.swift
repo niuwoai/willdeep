@@ -273,6 +273,12 @@ nonisolated enum AgentSessionStore {
         let archivedAt: Date?
         let titleIsUserSet: Bool
         let hasUserMessage: Bool
+        /// Any message at all, whatever its role. `hasUserMessage` is the
+        /// sidebar's question ("did a conversation happen here?"); this is the
+        /// deletion gate's ("is this file completely empty?"). They differ for
+        /// sessions holding only a `workflowReport` or `system` row — real
+        /// output with no user turn, which must never be swept.
+        let hasAnyMessage: Bool
 
         enum CodingKeys: String, CodingKey {
             case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, presentationScope, localWorkspaceIdentity, modelID
@@ -318,6 +324,7 @@ nonisolated enum AgentSessionStore {
             titleIsUserSet = try c.decodeIfPresent(Bool.self, forKey: .titleIsUserSet) ?? false
             let messageIndex = try c.decodeIfPresent([MessageIndex].self, forKey: .messages) ?? []
             hasUserMessage = messageIndex.contains { $0.role == AgentRole.user.rawValue }
+            hasAnyMessage = !messageIndex.isEmpty
             presentationScope = try c.decodeIfPresent(
                 AgentSessionPresentationScope.self,
                 forKey: .presentationScope
@@ -1036,6 +1043,10 @@ nonisolated enum AgentSessionStore {
         let sessions: [AgentSession]
         let metadataOnlyIDs: Set<UUID>
         let metadataOnlyUserMessageIDs: Set<UUID>
+        /// False means the catalog directory existed but could not be
+        /// enumerated. Callers must not interpret that failure as an
+        /// authoritative empty catalog and prune other durable state.
+        let catalogReadSucceeded: Bool
     }
 
     static func loadAll() -> [AgentSession] {
@@ -1063,12 +1074,15 @@ nonisolated enum AgentSessionStore {
 
         let dir = directory
         var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue,
+        let directoryExists = FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir)
+        var catalogReadSucceeded = !directoryExists
+        if directoryExists, isDir.boolValue,
            let entries = try? FileManager.default.contentsOfDirectory(
-               at: dir,
-               includingPropertiesForKeys: nil,
-               options: [.skipsHiddenFiles]
+            at: dir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
            ) {
+            catalogReadSucceeded = true
             for url in entries where url.pathExtension == "json" {
                 guard let entry = loadOrRebuildCatalogEntry(for: url) else { continue }
                 let session = entry.session
@@ -1105,7 +1119,8 @@ nonisolated enum AgentSessionStore {
         return LoadedSessions(
             sessions: sessions.sorted { $0.updatedAt > $1.updatedAt },
             metadataOnlyIDs: metadataOnlyIDs,
-            metadataOnlyUserMessageIDs: metadataOnlyUserMessageIDs
+            metadataOnlyUserMessageIDs: metadataOnlyUserMessageIDs,
+            catalogReadSucceeded: catalogReadSucceeded
         )
     }
 
@@ -1293,16 +1308,95 @@ nonisolated enum AgentSessionStore {
         }
     }
 
-    /// Deletes the session file ONLY if its on-disk copy is (still) empty
-    /// — has no user message. Guards the startup prune against a
-    /// cross-process lost delete: another running WillDeep may have
-    /// flushed a real user message into this id AFTER our in-memory scan
-    /// classified it as a prunable "New Chat" placeholder. We re-read the
-    /// file under file coordination and bail if it now holds history.
-    /// Returns true iff a file was actually removed.
+    /// Deletes a session and its sidecars ONLY if the on-disk copy is (still)
+    /// an abandoned placeholder: **no messages at all**, no workspace of any
+    /// kind, not pinned, ordinary workspace scope. Returns true iff a file was
+    /// actually removed.
+    ///
+    /// "No messages at all" rather than "no user message" on purpose. Three
+    /// files on the reference install carried a lone `workflowReport` or
+    /// `system` row with no user turn — real output the sidebar happens not to
+    /// show, which the looser predicate would have deleted.
+    ///
+    /// This is the hard safety gate for `AppState.sweepAbandonedEmptySessions`.
+    /// The caller's decision is made against an in-memory catalog that can be
+    /// seconds stale and, with several WillDeep processes sharing one library,
+    /// belong to a session another process has since typed into. So nothing
+    /// the caller believes is trusted here: the file is re-read under
+    /// coordination and re-checked against every condition, and **anything
+    /// that cannot be decoded is kept**.
+    ///
+    /// That last rule is the lesson from 1.167.0-rc5. The prune this replaces
+    /// treated "failed to decode" as "empty" and permanently deleted real
+    /// history behind a momentarily unreadable file; it was removed outright
+    /// rather than fixed, which is why empty placeholders then accumulated
+    /// forever. Undecodable means unknown, and unknown means keep.
     ///
     /// The unconditional `delete(id:)` above stays for user-initiated
     /// deletions where the caller owns the session and truly means it.
+    @discardableResult
+    static func deleteIfStillEmptyAndUnattached(
+        id: UUID,
+        protectedSessionIDs: Set<UUID> = []
+    ) -> Bool {
+        guard !protectedSessionIDs.contains(id) else { return false }
+        // Our own not-yet-flushed snapshot is the freshest truth, and it is
+        // newer than anything on disk. If it has substance, stop here.
+        if let pending = pendingWrites.peek(id), !isAbandonedPlaceholder(pending) {
+            return false
+        }
+        return writeQueue.sync {
+            let url = fileURL(for: id)
+            var safeToDelete = true
+            coordinatedRead(at: url) { readURL in
+                guard let data = try? Data(contentsOf: readURL) else {
+                    // File already gone — nothing to remove and nothing lost.
+                    // Leave `safeToDelete` true so we no-op cleanly through
+                    // the sidecar removal below.
+                    return
+                }
+                guard let index = try? decoder.decode(SessionIndex.self, from: data) else {
+                    // Unreadable, mid-write from another process, or written by
+                    // a newer schema. Keep it.
+                    safeToDelete = false
+                    return
+                }
+                if index.hasAnyMessage
+                    || index.workspaceRootPath != nil
+                    || index.workspaceLocation != nil
+                    || index.pinnedAt != nil
+                    || index.presentationScope != .workspace {
+                    safeToDelete = false
+                }
+            }
+            guard safeToDelete else { return false }
+            pendingWrites.cancel(id)
+            do {
+                try coordinatedRemove(at: url)
+                try coordinatedRemove(at: catalogURL(for: id))
+                try coordinatedRemove(at: usageCatalogURL(for: id))
+                metadataOnlySessions.remove(id)
+                return true
+            } catch {
+                print("AgentSessionStore: failed to delete empty session \(id): \(error)")
+                return false
+            }
+        }
+    }
+
+    /// In-memory half of the same predicate, for callers holding a session
+    /// value rather than a file. Deliberately does NOT look at `projectID`:
+    /// `SessionIndex` cannot see that field, so keeping both halves to what
+    /// the disk gate can verify avoids a rule that only one side enforces.
+    /// `AppState` adds the `projectID == nil` requirement on top.
+    static func isAbandonedPlaceholder(_ session: AgentSession) -> Bool {
+        session.messages.isEmpty
+            && session.workspaceRootPath == nil
+            && session.workspaceLocation == nil
+            && session.pinnedAt == nil
+            && session.presentationScope == .workspace
+    }
+
     private static func ensureDirectory() throws {
         let dir = directory
         var isDir: ObjCBool = false

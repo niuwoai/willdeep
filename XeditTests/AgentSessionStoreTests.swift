@@ -21,6 +21,16 @@ import Foundation
 @MainActor
 struct AgentSessionStoreTests {
 
+    @Test
+    func protectedSessionIsNeverSweptAsAnEmptyPlaceholder() {
+        let sessionID = UUID()
+
+        #expect(!AgentSessionStore.deleteIfStillEmptyAndUnattached(
+            id: sessionID,
+            protectedSessionIDs: [sessionID]
+        ))
+    }
+
     // MARK: - deriveTitle
 
     /// Empty message list → fallback title. New chats land here.
@@ -109,6 +119,20 @@ struct AgentSessionStoreTests {
         )
 
         #expect(count == 1)
+    }
+
+    @Test
+    func dockBadgeCountsParentAndDelegatedWorkerRequestsSeparately() {
+        let session = AgentSession(title: "Several approvals")
+        let count = AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(
+            session: session,
+            toolCallStatuses: [.pendingApproval, .awaitingConfirm, .running, .succeeded],
+            patchStatuses: [.pending, .applied],
+            planStatus: .proposed
+        )
+
+        // Parent approval + delegated Worker confirmation + patch + Plan.
+        #expect(count == 4)
     }
 
     @Test

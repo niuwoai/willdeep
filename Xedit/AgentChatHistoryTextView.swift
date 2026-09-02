@@ -53,7 +53,7 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     /// 插件经 `menus["chat.selection"]` 贡献的选区动作被点中（选中文本, 插件, 命令,
     /// 执行完成回调）。回调带着成功与否，气泡据此给一个「✓ / ⚠︎」的即时反馈。
     var onSelectionPluginAction: (
-        (String, AgentPluginID, AgentPluginCommandID, @escaping (Bool) -> Void) -> Void
+        (String, UUID?, AgentPluginID, AgentPluginCommandID, @escaping (Bool) -> Void) -> Void
     )? = nil
     var onOpenFilePath: ((String) -> Void)? = nil
     var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)? = nil
@@ -216,7 +216,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
                 completion(false)
                 return
             }
-            handler(text, pluginID, commandID, completion)
+            handler(text, self?.currentSelectedMessageID(), pluginID, commandID, completion)
         }
         return presenter
     }()
@@ -227,7 +227,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     var onReferenceGeneratedImage: ((String) -> Void)?
     var onAddSelectionToTask: ((String) -> Void)?
     var onSelectionPluginAction: (
-        (String, AgentPluginID, AgentPluginCommandID, @escaping (Bool) -> Void) -> Void
+        (String, UUID?, AgentPluginID, AgentPluginCommandID, @escaping (Bool) -> Void) -> Void
     )?
     var onOpenFilePath: ((String) -> Void)?
     var onOpenAttachmentCitation: ((AgentAttachmentCitationPayload) -> Void)?
@@ -420,6 +420,24 @@ final class AgentChatHistoryNSTextView: NSTextView {
         return selectedText.isEmpty ? nil : selectedText
     }
 
+    private func currentSelectedMessageID() -> UUID? {
+        let selection = selectedRange()
+        guard selection.location != NSNotFound,
+              selection.length > 0,
+              NSMaxRange(selection) <= (textStorage?.length ?? 0),
+              let textStorage else { return nil }
+        var ids = Set<String>()
+        textStorage.enumerateAttribute(
+            .agentChatHistoryMessageID,
+            in: selection,
+            options: []
+        ) { value, _, _ in
+            if let value = value as? String { ids.insert(value) }
+        }
+        guard ids.count == 1, let raw = ids.first else { return nil }
+        return UUID(uuidString: raw)
+    }
+
     @discardableResult
     func addCurrentSelectionToTask() -> Bool {
         guard let selectedText = currentSelectedConversationText() else { return false }
@@ -438,7 +456,12 @@ final class AgentChatHistoryNSTextView: NSTextView {
     @objc private func runSelectionPluginActionFromMenu(_ sender: NSMenuItem) {
         guard let payload = sender.representedObject as? AgentChatSelectionPluginMenuPayload else { return }
         // 右键菜单没有可反馈的载体，执行结果只走命令执行器自己的提示。
-        onSelectionPluginAction?(payload.text, payload.pluginID, payload.commandID) { _ in }
+        onSelectionPluginAction?(
+            payload.text,
+            currentSelectedMessageID(),
+            payload.pluginID,
+            payload.commandID
+        ) { _ in }
     }
 
     @objc private func quoteGeneratedImageFromMenu(_ sender: NSMenuItem) {

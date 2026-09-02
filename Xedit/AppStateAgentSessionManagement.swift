@@ -216,4 +216,93 @@ extension AppState {
             self.sessionAutoArchiveFailedCount = failed
         }
     }
+
+    // MARK: - Abandoned empty-session sweep
+
+    /// How long an empty, workspace-less placeholder must sit untouched before
+    /// the launch sweep will remove it. Generous on purpose: the only cost of
+    /// waiting is a few stale files, while the cost of being too eager is
+    /// deleting a session someone is still using from another process.
+    static let abandonedEmptySessionGracePeriod: TimeInterval = 7 * 24 * 60 * 60
+
+    /// Placeholders the launch sweep may remove: no user message, no workspace
+    /// binding of any kind, no project, not pinned or archived, ordinary
+    /// workspace scope, untouched for `abandonedEmptySessionGracePeriod`, and
+    /// not protected by any window's live state.
+    ///
+    /// These rows are invisible: `AgentSidebarVisibility.visibleSessions` hides
+    /// them and chat search skips them, so the user cannot open or delete them
+    /// by hand — which is exactly why they need sweeping rather than a button.
+    ///
+    /// Retention settings do not cover them either: that policy groups by
+    /// `projectID`, and every session here has none.
+    func abandonedEmptySessionCandidates(now: Date = Date()) -> [AgentSession.ID] {
+        let cutoff = now.addingTimeInterval(-Self.abandonedEmptySessionGracePeriod)
+        let orchestratorSessionID = AgentRuntimeEventSettingsStore.load().orchestratorSessionID
+        return agentSessions.filter { session in
+            guard session.updatedAt < cutoff,
+                  session.id != orchestratorSessionID,
+                  session.projectID == nil,
+                  session.workspaceRootPath == nil,
+                  session.workspaceLocation == nil,
+                  session.presentationScope == .workspace,
+                  !session.isPinned,
+                  !session.isArchived,
+                  agentRuntimes[session.id] == nil
+            else { return false }
+            // A catalog skeleton always has empty `messages`, so asking the
+            // session value directly would call every unmaterialized row empty.
+            // The launch scan's per-id answer is the only correct source.
+            //
+            // This is the loose half of the predicate: it only knows about USER
+            // messages, so a session holding just a `workflowReport` row still
+            // reaches the disk gate — which rejects it, because that gate
+            // requires no messages of any role. Erring loose here costs one
+            // futile file read; erring loose there would delete real output.
+            let hasUserMessage = agentSessionIsMetadataOnly(session.id)
+                ? agentSessionMetadataOnlyHasUserMessage(session.id)
+                : session.messages.contains { $0.role == .user }
+            guard !hasUserMessage else { return false }
+            // Covers active/pinned/scope again plus everything only the live
+            // state knows: in-flight turns, queued dispatches, background jobs,
+            // unsent composer drafts — in this window and in every other one.
+            return sessionManagementProtectionReason(session) == nil
+        }.map(\.id)
+    }
+
+    /// Remove abandoned placeholders left by builds that persisted every new
+    /// chat at creation. Runs once per launch, after the catalog lands.
+    ///
+    /// Deleting is delegated to `deleteIfStillEmptyAndUnattached`, which
+    /// re-reads each file under coordination and refuses anything it cannot
+    /// decode. Nothing decided here is trusted at the point of deletion.
+    func sweepAbandonedEmptySessions(now: Date = Date()) async {
+        let candidates = abandonedEmptySessionCandidates(now: now)
+        guard !candidates.isEmpty else { return }
+        let protectedSessionIDs = Set(
+            [AgentRuntimeEventSettingsStore.load().orchestratorSessionID].compactMap { $0 }
+        )
+        let removed = await Task.detached(priority: .utility) {
+            candidates.filter {
+                AgentSessionStore.deleteIfStillEmptyAndUnattached(
+                    id: $0,
+                    protectedSessionIDs: protectedSessionIDs
+                )
+            }
+        }.value
+        // The sweep ran off-main; re-check before dropping rows so a session
+        // that came alive in between keeps its (now file-less) in-memory row
+        // rather than vanishing from under an open window.
+        let dropped = Set(removed.filter { activeAgentSessionID != $0 && agentRuntimes[$0] == nil })
+        guard !dropped.isEmpty else { return }
+        agentSessions.removeAll { dropped.contains($0.id) }
+        agentUsageSnapshots.removeAll { dropped.contains($0.id) }
+        // Other windows hold their own copy of the same catalog; leaving the
+        // rows there would let one of them persist a deleted id back to disk.
+        for peer in sessionManagementPeers {
+            peer.agentSessions.removeAll { dropped.contains($0.id) }
+            peer.agentUsageSnapshots.removeAll { dropped.contains($0.id) }
+        }
+        sweptAbandonedEmptySessionCount = dropped.count
+    }
 }

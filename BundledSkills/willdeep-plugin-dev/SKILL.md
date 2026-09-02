@@ -34,7 +34,7 @@ description: WillDeep 宿主机理说明与插件开发指南。解释 WillDeep 
 
 ## 常见误判
 
-- **「我的命令没执行，也没报错」**：多半是 `handler.type` 写了 `host` 但 `action` 不在白名单里（只有 `plugin.refresh`、`destination.select`、`settings.mcp`、`plugins.open-center` 四条）。
+- **「我的命令没执行，也没报错」**：多半是 `handler.type` 写了 `host` 但 `action` 不在白名单里（只有 `plugin.refresh`、`destination.select`、`settings.mcp`、`plugins.open-center`、`session.open` 五条）。`session.open` 还要插件声明 `conversation.read`，否则加载能过、执行时报权限错。
 - **「页面白屏」**：先看是不是 `entryPath` 指到了目录而不是文件，其次看资源有没有超过单文件 8 MiB 的页面上限。
 - **「fetch 不通」**：这是设计，不是 bug。页面要联网只能经由 MCP 工具，或者用 `ai.chat` 问模型。
 - **「插件想常驻后台 / 秒级定时」**：不提供，也不打算提供。到点唤醒（`schedule`）目前只有设计没有实现，见 `references/architecture.md` 末节。

@@ -143,6 +143,20 @@ struct WorkflowWorkerBindingTests {
         #expect(!rogue.effectiveToolNames().contains("terminal_send_command"))
     }
 
+    @Test("ops_runner 未获写命令授权时仍可读取可见终端")
+    func opsRunnerKeepsTerminalInspectionBeforeCommandApproval() {
+        let unapproved = AgentSubagentProfileCatalog.opsRunner.effectiveToolNames()
+        let approved = AgentSubagentProfileCatalog.opsRunner.effectiveToolNames(
+            approvedCommandGranted: true
+        )
+
+        #expect(AgentSubagentProfileCatalog.terminalOperatorToolNames.isSubset(of: unapproved))
+        #expect(unapproved == approved)
+        #expect(!AgentSubagentProfileCatalog.deep.effectiveToolNames(
+            approvedCommandGranted: true
+        ).contains("terminal_snapshot"))
+    }
+
     @Test("运维子代理只把非敏感的模糊修改命令送智能审核")
     @MainActor
     func terminalOperatorIntelligentReviewBoundary() {

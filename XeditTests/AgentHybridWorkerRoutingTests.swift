@@ -82,11 +82,13 @@ struct AgentHybridWorkerRoutingTests {
         ) == nil)
     }
 
-    @Test("approved ops worker can use the visible terminal without widening other workers")
+    @Test("ops worker can inspect the visible terminal before exact command approval")
     @MainActor
     func approvedOpsWorkerGetsBoundedTerminalCapability() {
         let opsRunner = AgentSubagentProfileCatalog.opsRunner
-        #expect(!opsRunner.effectiveToolNames().contains("terminal_send_command"))
+        for tool in AgentSubagentProfileCatalog.terminalOperatorToolNames {
+            #expect(opsRunner.effectiveToolNames().contains(tool), "ops_runner 缺 \(tool)")
+        }
         #expect(opsRunner.effectiveToolNames(
             approvedCommandGranted: true
         ).contains("terminal_send_command"))

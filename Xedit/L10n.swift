@@ -12,6 +12,12 @@ import Foundation
 // would otherwise be unusable from nonisolated model code (e.g. the
 // persisted session graph's displayName helpers).
 nonisolated enum L10n {
+    enum AgentTools {
+        static let readBundledRule = String(
+            localized: "agent-tools.read-bundled-rule",
+            defaultValue: "Read bundled rule"
+        )
+    }
     enum About {
         static let appName = String(localized: "about.app-name", defaultValue: "WillDeep")
         static let buildLabel = String(localized: "about.build-label", defaultValue: "Build")
@@ -1447,8 +1453,8 @@ nonisolated enum L10n {
         static let sessionRowUnpinTooltip = String(localized: "sidebar.session-row.unpin-tooltip", defaultValue: "Unpin")
         static let pendingApprovalHeader = String(localized: "sidebar.pending-approval.header", defaultValue: "Waiting for you")
         static let pendingApprovalRowTooltip = String(localized: "sidebar.pending-approval.row-tooltip", defaultValue: "Jump to this session")
-        static let sessionRowWaitingApproval = String(localized: "sidebar.session-row.waiting-approval", defaultValue: "Waiting approval")
-        static let sessionRowWaitingApprovalTooltip = String(localized: "sidebar.session-row.waiting-approval-tooltip", defaultValue: "This session is waiting for your approval or answer.")
+        static let sessionRowWaitingApproval = String(localized: "sidebar.session-row.waiting-approval", defaultValue: "Needs attention")
+        static let sessionRowWaitingApprovalTooltip = String(localized: "sidebar.session-row.waiting-approval-tooltip", defaultValue: "This session is waiting for you to handle a request, approval, or answer.")
         static let sessionUnreadIndicator = String(localized: "sidebar.session-row.unread-indicator", defaultValue: "Unread chat")
         static func sessionTodoPlanTooltip(_ a1: String, _ a2: String, _ a3: String) -> String {
             let template = String(localized: "sidebar.session-todo.plan-tooltip", defaultValue: "Plan progress: %@ of %@ done. Current: %@")

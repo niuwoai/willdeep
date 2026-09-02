@@ -348,113 +348,6 @@ extension AppState {
         }
     }
 
-    func consumeNextQueuedMessageIfNeeded(for runtime: AgentRuntime) {
-        // Wait for any in-flight compression to finish — otherwise the
-        // user's queued message would race a compression that just got
-        // kicked off in the same defer block.
-        guard !runtime.isResponding, !runtime.isCompressingContext else { return }
-        guard let next = runtime.queuedMessages.first else { return }
-        runtime.queuedMessages.removeFirst()
-        // Re-stage the queued turn's delegation directive: dispatch reads it
-        // off the runtime, and it was cleared when the previous turn started.
-        runtime.pendingDelegationPolicy = next.delegationPolicy
-        dispatchAgentMessageUsingSelectedExecutor(
-            next.executionAgent,
-            for: runtime,
-            text: next.text,
-            images: next.images,
-            textAttachments: next.textAttachments,
-            attachedSkills: next.attachedSkills,
-            source: next.source
-        )
-    }
-
-    /// Auto-resume the agent when a background `run_command` job finishes
-    /// AFTER the turn that spawned it has already ended.
-    ///
-    /// Background completions are pull-based: they're queued into the
-    /// registry's `pendingCompletionEvents` and only surfaced when
-    /// `runAgentLoop` drains them at the top of a round. But the model
-    /// typically says "I'll run this and check the results" and then ends
-    /// its turn — so when the job (often a FAILURE) finishes seconds or
-    /// minutes later, no turn is active to drain it, and the result just
-    /// sits there until the user happens to send another message. From the
-    /// user's side: "nothing happened." This kicks a fresh turn so the
-    /// model actually sees the completion and reacts.
-    ///
-    /// An active turn already drains completions itself, so we only kick
-    /// when the runtime is fully idle. Every guard that makes us bow out
-    /// here has a matching re-trigger later, so a completion can never be
-    /// stranded: `isResponding`/`requestTask` → the turn's defer resumes;
-    /// `isAwaitingProviderSlot` → the queued dispatch drains completions
-    /// at the top of its loop; `isCompressingContext` → compression's
-    /// defer resumes; slot saturation → `releaseProviderSlot` sweeps all
-    /// runtimes via `resumeAgentLoopsWithPendingBackgroundCompletions()`.
-    /// (Never enqueue a phantom user message for this.)
-    @MainActor
-    func resumeAgentLoopForPendingBackgroundCompletions(for runtime: AgentRuntime) {
-        guard !runtime.isResponding,
-              !runtime.isAwaitingProviderSlot,
-              !runtime.isCompressingContext,
-              runtime.requestTask == nil else { return }
-        guard hasPendingBackgroundWakeups(for: runtime) else { return }
-
-        repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
-        let configuration = configurationForCurrentTurn(for: runtime)
-        let providerID = configuration.providerID
-        guard acquireProviderSlotIfPossible(providerID: providerID) else { return }
-
-        runtime.isAwaitingProviderSlot = false
-        runtime.clearTurnError()
-        runtime.latestComputerUseActivity = nil
-        runtime.isResponding = true
-        runtime.turnStartedAt = Date()
-        let turnID = UUID()
-        runtime.activeTurnID = turnID
-        runtime.activeTurnConfiguration = configuration
-        runtime.userStoppedTurnID = nil
-        let providerSlotClaim = claimProviderSlot(for: runtime, providerID: providerID)
-
-        runtime.requestTask = Task { [weak self, weak runtime] in
-            guard let self else { return }
-            guard let runtime else {
-                self.releaseProviderSlot(providerID: providerID)
-                return
-            }
-            await self.runAgentLoop(
-                for: runtime,
-                configuration: configuration,
-                providerSlotClaimID: providerSlotClaim.id,
-                turnID: turnID
-            )
-        }
-    }
-
-    /// True when any background channel has a finished-but-unsurfaced
-    /// event for this runtime: shell jobs, media tasks, or subagent
-    /// reports. All three ride the same top-of-round drain in
-    /// `runAgentLoop`, so any of them justifies a wake-up turn.
-    @MainActor
-    func hasPendingBackgroundWakeups(for runtime: AgentRuntime) -> Bool {
-        agentJobRegistry.pendingCompletionCount(forRuntime: runtime.id) > 0
-            || agentMediaTaskRegistry.pendingCompletionCount(forRuntime: runtime.id) > 0
-            || agentSubagentRegistry.pendingReportCount(forParentRuntime: runtime.id) > 0
-            || !runtime.pendingWorkflowCompletionReportIDs.isEmpty
-    }
-
-    /// Sweep every live runtime and kick a wake-up turn for any with
-    /// stranded background completions. Called from `releaseProviderSlot`
-    /// so completions that lost the slot race (their resume bailed while
-    /// another session held the slot) surface as soon as capacity frees
-    /// up — without this, a job finishing for an idle session B while
-    /// session A monopolizes the provider stayed silent forever.
-    @MainActor
-    func resumeAgentLoopsWithPendingBackgroundCompletions() {
-        for runtime in agentRuntimes.values where hasPendingBackgroundWakeups(for: runtime) {
-            resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
-        }
-    }
-
     func clearAgentConversation() {
         agentRequestTask?.cancel()
         if let runtime = activeRuntime {
@@ -555,8 +448,17 @@ extension AppState {
                 hasAPIKey: !configuration.apiKey.isEmpty
             )
         )
+        var shouldResumePendingEventsAtTurnEnd = true
         defer {
             AgentTelemetry.recordTurnFinished(turnTelemetry)
+            // Any event still leased here was not acknowledged by a completed
+            // provider request. Put it back before the final wakeup probe so a
+            // cancellation, transport failure, or host preemption can retry in
+            // this process rather than waiting for an app restart.
+            agentRuntimeKernel.releaseModelDeliveryLeases(
+                for: runtime.id,
+                leaseID: turnID
+            )
             let computerUseLeaseID: AgentComputerUseLease.ID? = {
                 guard let lease = AgentComputerUseCoordinator.shared.state.lease,
                       lease.owner.runtimeID == runtime.id,
@@ -634,7 +536,10 @@ extension AppState {
             // turn's last drain and its end. If one did — and no queued
             // user message just claimed the runtime above — kick a fresh
             // turn so the completion isn't stranded until the next message.
-            resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+            let wasKernelPreempted = agentKernelPreemptedRuntimeIDs.remove(runtime.id) != nil
+            if shouldResumePendingEventsAtTurnEnd || wasKernelPreempted {
+                resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+            }
         }
 
         // some.im context headers (session id + workspace id) ride on every
@@ -758,6 +663,7 @@ extension AppState {
         do {
             workspaceURL = try runtime.localWorkspaceURLForOptimisticUse()
         } catch {
+            shouldResumePendingEventsAtTurnEnd = false
             runtime.errorMessage = error.localizedDescription
             runtime.errorDetails = nil
             runtime.messages.append(
@@ -844,6 +750,34 @@ extension AppState {
         let planOnDemandToolCallBaseline = runtime.toolCalls.count
 
         for toolRound in 0..<Self.maxAgentToolRounds {
+            // The host kernel is the single prioritized interrupt queue. It
+            // persists events across restarts and delivers them only at a
+            // model/tool boundary. Legacy registries are still drained below
+            // for compatibility; resource ids prevent double delivery while
+            // producers migrate onto the kernel.
+            let kernelEvents = agentRuntimeKernel.consumePendingModelEvents(
+                for: runtime.id,
+                leaseID: turnID
+            )
+            let kernelResourceKeys = Set(kernelEvents.compactMap { event -> String? in
+                guard let resourceID = event.metadata["resource_id"] else { return nil }
+                return "\(event.source.rawValue):\(resourceID)"
+            })
+            for event in kernelEvents {
+                let marker = "<runtime-event id=\"\(event.id.uuidString)\""
+                if !runtime.messages.contains(where: {
+                    $0.source == .hostInstruction && $0.content.contains(marker)
+                }) {
+                    runtime.messages.append(
+                        AgentMessage(
+                            role: .user,
+                            content: agentRuntimeKernel.modelNotice(for: event),
+                            source: .hostInstruction
+                        )
+                    )
+                }
+            }
+
             // `run_workflow` is asynchronous, but unlike the workflow card its
             // final report must return to the model that delegated the work.
             // Consume the owning runtime's pending ids into normal system
@@ -851,6 +785,12 @@ extension AppState {
             // exposing the raw card object itself.
             let finishedWorkflows = consumePendingWorkflowCompletions(for: runtime)
             for report in finishedWorkflows {
+                guard !kernelResourceKeys.contains("workflow:\(report.id.uuidString)"),
+                      !agentRuntimeKernel.hasPendingEvent(
+                          runtimeID: runtime.id,
+                          source: .workflow,
+                          resourceID: report.id
+                      ) else { continue }
                 runtime.messages.append(
                     AgentMessage(
                         role: .system,
@@ -869,6 +809,14 @@ extension AppState {
             // field; Gemini / Responses do the same coalescing).
             let pendingCompletions = agentJobRegistry.consumePendingCompletions(forRuntime: runtime.id)
             for finishedJob in pendingCompletions {
+                guard !kernelResourceKeys.contains("background_job:\(finishedJob.id.uuidString)"),
+                      !agentRuntimeKernel.hasPendingEvent(
+                          runtimeID: runtime.id,
+                          source: .backgroundJob,
+                          resourceID: finishedJob.id
+                      ) else {
+                    continue
+                }
                 // For jobs that need attention (failed / timed out / launch
                 // failed) inline a secret-redacted tail of the captured
                 // output so the model can diagnose the failure in this same
@@ -896,6 +844,14 @@ extension AppState {
             let finishedMediaTasks = agentMediaTaskRegistry.consumePendingCompletions(forRuntime: runtime.id)
             for task in finishedMediaTasks {
                 recordAgentMediaTaskCompletion(task: task, runtimeID: runtime.id)
+                guard !kernelResourceKeys.contains("media_task:\(task.id.uuidString)"),
+                      !agentRuntimeKernel.hasPendingEvent(
+                          runtimeID: runtime.id,
+                          source: .mediaTask,
+                          resourceID: task.id
+                      ) else {
+                    continue
+                }
                 runtime.messages.append(
                     AgentMessage(
                         role: .system,
@@ -913,6 +869,14 @@ extension AppState {
             // a system message at the top of the next round.
             let finishedSubagents = agentSubagentRegistry.consumePendingReports(forParentRuntime: runtime.id)
             for finishedRun in finishedSubagents {
+                guard !kernelResourceKeys.contains("worker:\(finishedRun.id.uuidString)"),
+                      !agentRuntimeKernel.hasPendingEvent(
+                          runtimeID: runtime.id,
+                          source: .worker,
+                          resourceID: finishedRun.id
+                      ) else {
+                    continue
+                }
                 runtime.messages.append(
                     AgentMessage(
                         role: .system,
@@ -1286,7 +1250,23 @@ extension AppState {
                     }
                 }
                 streamBuffer.flushPending()
+                // A delivery lease becomes handled only after the provider has
+                // accepted and completed a request containing the event. If the
+                // process dies earlier, kernel reconstruction returns the lease
+                // to pending; the stable event id prevents a duplicate system
+                // carrier in the transcript.
+                agentRuntimeKernel.acknowledge(
+                    agentRuntimeKernel.leasedModelEventIDs(
+                        for: runtime.id,
+                        leaseID: turnID
+                    ),
+                    leaseID: turnID
+                )
             } catch is CancellationError {
+                shouldResumePendingEventsAtTurnEnd = false
+                if runtime.userStoppedTurnID == turnID {
+                    agentKernelPreemptedRuntimeIDs.remove(runtime.id)
+                }
                 streamBuffer.flushPending()
                 turnTelemetry.noteCancelled()
                 finalizeInterruptedAssistantMessage(
@@ -1296,8 +1276,10 @@ extension AppState {
                 )
                 return
             } catch {
+                shouldResumePendingEventsAtTurnEnd = false
                 streamBuffer.flushPending()
                 if Self.isStoppedTurnCancellation(error, runtime: runtime, turnID: turnID) {
+                    agentKernelPreemptedRuntimeIDs.remove(runtime.id)
                     turnTelemetry.noteCancelled()
                     finalizeInterruptedAssistantMessage(
                         id: assistantID,
@@ -2774,6 +2756,7 @@ extension AppState {
                         }
                     }
                 } catch is CancellationError {
+                    shouldResumePendingEventsAtTurnEnd = false
                     workspaceMutationLease = nil
                     if let delegatedControl {
                         updateDelegatedTaskRun(

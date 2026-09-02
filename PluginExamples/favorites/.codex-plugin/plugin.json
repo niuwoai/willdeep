@@ -1,6 +1,6 @@
 {
   "name": "willdeep-favorites",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Save snippets from the chat transcript into a personal favorites list.",
   "interface": {
     "displayName": "Favorites",

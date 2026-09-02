@@ -21,12 +21,7 @@ extension AppState {
     }
 
     func releaseProviderSlot(providerID: String) {
-        let current = inFlightCountByProvider[providerID] ?? 0
-        if current <= 1 {
-            inFlightCountByProvider.removeValue(forKey: providerID)
-        } else {
-            inFlightCountByProvider[providerID] = current - 1
-        }
+        abandonProviderSlotReservation(providerID: providerID)
         // Drain any pending entries that can now grab the freshly
         // released slot. Walk once: each released slot can promote at
         // most one queued entry for the same provider; entries for
@@ -37,6 +32,18 @@ extension AppState {
         // (jobs / media tasks / subagent reports) were stranded because
         // their resume attempt lost an earlier slot race.
         resumeAgentLoopsWithPendingBackgroundCompletions()
+    }
+
+    /// Undo a tentative capacity reservation without recursively probing the
+    /// wake queue. Used when the kernel rejects an external wake after the
+    /// provider slot was checked.
+    func abandonProviderSlotReservation(providerID: String) {
+        let current = inFlightCountByProvider[providerID] ?? 0
+        if current <= 1 {
+            inFlightCountByProvider.removeValue(forKey: providerID)
+        } else {
+            inFlightCountByProvider[providerID] = current - 1
+        }
     }
 
     func claimProviderSlot(for runtime: AgentRuntime, providerID: String) -> AgentProviderSlotClaim {

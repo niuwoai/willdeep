@@ -247,11 +247,12 @@ nonisolated enum AgentRequestRouter {
             )
         }
         return Decision(
-            tier: .standard,
-            profileID: nil,
+            tier: .worker,
+            profileID: AgentSubagentProfileCatalog.generalistID,
             confidence: 70,
             autoDispatchEligible: false,
-            reason: "ambiguous work stays on the standard tier; decompose before escalating"
+            requiresDelegatedExecution: true,
+            reason: "no narrower trade fits, so the general-purpose utility worker owns the task"
         )
     }
 

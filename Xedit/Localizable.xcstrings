@@ -10483,12 +10483,18 @@
     "agent-terminal.shortcut-editor.secrets-search" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Search name or JSON reference" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Buscar nombre o referencia JSON" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Rechercher un nom ou une référence JSON" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "名前または JSON 参照で検索" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索名称或 JSON 引用" } } } },
     "agent-terminal.shortcut-editor.secrets-status" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Secret status" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Estado del secreto" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "État du secret" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "シークレットの状態" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "密钥状态" } } } },
     "agent-terminal.shortcut-editor.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit Terminal Shortcut" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Editar atajo de terminal" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Modifier le raccourci de terminal" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "ターミナルショートカットを編集" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑终端捷径" } } } },
+    "agent-tools.read-bundled-rule" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Read bundled rule" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Leer regla integrada" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Lire la règle intégrée" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "内蔵ルールを読み取る" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "读取内置规则" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "讀取內建規則" } } } },
     "app-termination.active-task.keep-working" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Keep Working" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Seguir trabajando" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Continuer à travailler" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "作業を続ける" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "继续任务" } } } },
     "app-termination.active-task.message" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quitting now may interrupt active work and stop progress updates. Do you still want to quit WillDeep?" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Salir ahora puede interrumpir el trabajo activo y detener las actualizaciones de progreso. ¿Aún quieres salir de WillDeep?" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Quitter maintenant risque d'interrompre le travail en cours et d'arrêter les mises à jour de progression. Voulez-vous tout de même quitter WillDeep ?" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "今終了すると、進行中の作業が中断され、進捗の更新が停止する可能性があります。それでも WillDeep を終了しますか？" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "现在退出可能会中断正在进行的工作，并停止更新任务进度。仍要退出 WillDeep 吗？" } } } },
     "app-termination.active-task.quit-anyway" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Quit Anyway" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Salir de todos modos" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Quitter quand même" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "このまま終了" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仍要退出" } } } },
     "app-termination.active-task.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Tasks are still running" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Aún hay tareas en ejecución" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Des tâches sont encore en cours" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクがまだ実行中です" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仍有任务正在进行" } } } },
     "agent-delegation.activity.delegated-to-worker" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Delegated to %@ Worker" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Delegado al Worker «%@»" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Délégué au Worker « %@ »" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "「%@」Worker に委任" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "委派给「%@」Worker" } } } },
-    "agent-delegation.activity.fleet-running" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$d Workers running · %2$@" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "%1$d Workers en ejecución · %2$@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "%1$d Workers en cours · %2$@" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%1$d 個の Worker が実行中 · %2$@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$d 个工种在跑 · %2$@" } } } },
+    "agent-delegation.activity.fleet-running" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$d background Workers running · %2$@" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "%1$d Workers en segundo plano · %2$@" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "%1$d Workers en arrière-plan · %2$@" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%1$d 個のバックグラウンド Worker が実行中 · %2$@" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$d 个后台 Worker 在跑 · %2$@" } } } },
+    "agent-delegation.fleet-panel-help" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Show every running background Worker" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar todos los Workers en segundo plano" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Afficher tous les Workers en arrière-plan" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "実行中のバックグラウンド Worker をすべて表示" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看全部运行中的后台 Worker" } } } },
+    "agent-delegation.fleet-panel-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "%d background Workers running" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "%d Workers en segundo plano" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "%d Workers en arrière-plan" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "%d 個のバックグラウンド Worker が実行中" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%d 个后台 Worker 正在运行" } } } },
+    "agent-delegation.round-progress-with-maximum" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "R%1$d/%2$d" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "R%1$d/%2$d" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "R%1$d/%2$d" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "第%1$d/%2$dラウンド" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "第%1$d/%2$d轮" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "第%1$d/%2$d輪" } } } },
+    "agent-delegation.worker-tool-request-approved" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Worker tool request approved" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Solicitud de herramienta del Worker aprobada" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Demande d’outil du Worker approuvée" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "Worker のツール要求を承認しました" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已批准 Worker 工具请求" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已批准 Worker 工具請求" } } } },
+    "agent-delegation.worker-tool-request-denied" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "User denied Worker tool request" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "El usuario rechazó la solicitud de herramienta del Worker" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "L’utilisateur a refusé la demande d’outil du Worker" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "ユーザーが Worker のツール要求を拒否しました" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用户已拒绝 Worker 工具请求" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "使用者已拒絕 Worker 工具請求" } } } },
     "agent-delegation.monitor-current-phase" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Current phase" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Fase actual" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Phase actuelle" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "現在のフェーズ" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "当前阶段" } } } },
     "agent-delegation.monitor-elapsed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Elapsed" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Duración" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Durée" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "実行時間" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "运行时长" } } } },
     "agent-delegation.monitor-finished" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Worker finished" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Worker finalizado" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Worker terminé" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "Worker が完了しました" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "子代理已完成" } } } },
@@ -10551,7 +10557,7 @@
     "agent-delegation.profile-pick-fetched-model" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a configured or fetched model" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Elige un modelo configurado u obtenido" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Choisissez un modèle configuré ou récupéré" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "設定済みまたは取得済みのモデルを選択" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择已配置或已拉取的模型" } } } },
     "agent-delegation.profile-provider-label" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Provider" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Proveedor" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Fournisseur" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "プロバイダ" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Provider" } } } },
     "agent-delegation.profile-generalist-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Generalist" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Generalista" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Généraliste" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "汎用" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通用" } } } },
-    "agent-delegation.profile-generalist-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "General-purpose read-only work on a smaller model than this session's: reads files, searches, runs read-only commands, checks git state. Use it when no narrower trade fits." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Trabajo general de solo lectura en un modelo más pequeño que el de esta sesión: lee archivos, busca, ejecuta comandos de solo lectura y consulta el estado de git. Úsalo cuando ningún oficio más específico encaje." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Travail generaliste en lecture seule sur un modele plus petit que celui de cette session : lit des fichiers, recherche, execute des commandes en lecture seule, consulte l'etat git. A utiliser quand aucun metier plus etroit ne convient." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "このセッションより小さいモデルで行う汎用の読み取り専用作業: ファイルを読み、検索し、読み取り専用コマンドを実行し、git の状態を確認します。より狭い職種が合わないときに使います。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用比本会话更小的模型干通用只读活：读文件、搜索、跑只读命令、看 git 状态。没有更合适的工种时就用它。" } } } },
+    "agent-delegation.profile-generalist-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "General-purpose fallback when no narrower trade fits: declared file patches, visible terminal, logged-in Chrome, and configured MCP tools, all under the parent session's approval policy." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Recurso general cuando no encaja un oficio más específico: parches en archivos declarados, terminal visible, sesión iniciada de Chrome y herramientas MCP configuradas, todo bajo la política de aprobación de la sesión principal." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Solution généraliste quand aucun métier plus précis ne convient : correctifs sur les fichiers déclarés, terminal visible, session Chrome connectée et outils MCP configurés, le tout soumis à la politique d’approbation de la session parente." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "より適切な職種がない場合の汎用フォールバックです。宣言済みファイルへのパッチ、表示中のターミナル、ログイン済み Chrome、設定済み MCP ツールを、親セッションの承認ポリシー下で利用できます。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有更合适工种时的通用兜底：可修改已声明文件、使用可见终端、登录态 Chrome 和已配置的 MCP 工具，所有操作仍遵循父会话审批策略。" } } } },
     "agent-delegation.profile-reader-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Reader" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Lector" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Lecteur" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "読解" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "阅读" } } } },
     "agent-delegation.profile-reader-purpose" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Read and summarize: digest long files, docs, or public web pages and answer questions about their content. Read-only shell for locating and listing the material." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Leer y resumir: procesa archivos largos, documentos o páginas web públicas y responde preguntas sobre su contenido. Shell de solo lectura para localizar y listar el material." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Lecture et synthèse : digère des fichiers longs, des documents ou des pages web publiques et répond à des questions sur leur contenu. Shell en lecture seule pour localiser et lister le matériel." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "読解と要約: 長いファイルやドキュメント、公開ウェブページを読み込んで内容に関する質問に答えます。対象の特定と一覧表示のための読み取り専用 shell を使えます。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "阅读归纳：消化长文件、文档或公开网页并回答内容问题。可用只读 shell 定位和列举材料。" } } } },
     "agent-delegation.profile-scout-name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Scout" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Explorador" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Éclaireur" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "偵察" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "侦察" } } } },
@@ -76828,7 +76834,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "等你确认"
+            "value" : "等你处理"
           }
         }
       }
@@ -76870,73 +76876,73 @@
       }
     },
     "sidebar.session-row.waiting-approval" : {
-      "comment" : "compact badge shown on a session row when a tool, patch, plan, or ask_user prompt is waiting for the user",
+      "comment" : "compact badge shown when a session has a request, event, approval, or answer waiting for the user",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Waiting approval"
+            "value" : "Needs attention"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esperando aprobación"
+            "value" : "Necesita atención"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "En attente d'approbation"
+            "value" : "Attention requise"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "承認待ち"
+            "value" : "要対応"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "等待批准"
+            "value" : "待处理"
           }
         }
       }
     },
     "sidebar.session-row.waiting-approval-tooltip" : {
-      "comment" : ".help() for the waiting-approval badge on a session row",
+      "comment" : ".help() for the attention badge on a session row",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This session is waiting for your approval or answer."
+            "value" : "This session is waiting for you to handle a request, approval, or answer."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Esta sesión está esperando tu aprobación o respuesta."
+            "value" : "Esta sesión espera que atiendas una solicitud, aprobación o respuesta."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cette session attend votre approbation ou votre réponse."
+            "value" : "Cette session attend que vous traitiez une demande, une approbation ou une réponse."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このセッションはあなたの承認または回答を待っています。"
+            "value" : "このセッションには、対応、承認、または回答が必要な項目があります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此会话正在等待你的批准或回答。"
+            "value" : "此会话有请求、确认或回答正在等你处理。"
           }
         }
       }

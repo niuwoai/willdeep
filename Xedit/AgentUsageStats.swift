@@ -659,7 +659,13 @@ enum AgentUsageStats {
     ) -> AgentUsageOverview {
         let allMessages = sessions.flatMap(\.messages)
         let messageCount = allMessages.count
-        let sessionCount = sessions.count
+        // Only conversations that actually happened. A session row exists on
+        // disk from the moment a chat is opened, so a plain `sessions.count`
+        // also counts every "新对话" placeholder the user never typed into —
+        // on a long-lived install that inflated the dashboard's session tile
+        // by more than 2×. `monthlySessionCount` in the calendar view has
+        // always counted this way; this brings the all-time tile in line.
+        let sessionCount = sessions.count { !$0.messages.isEmpty }
         let userTurnCount = allMessages.count { $0.role == .user }
         let toolCallCount = allMessages.reduce(0) { $0 + $1.toolCallNames.count }
         let editedFileCount = sessions.reduce(0) { $0 + $1.editedFileCount }

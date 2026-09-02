@@ -31,7 +31,7 @@ Encoding.default_internal = Encoding::UTF_8
 $stdout.set_encoding(Encoding::UTF_8)
 $stderr.set_encoding(Encoding::UTF_8)
 
-STORE_VERSION = 2
+STORE_VERSION = 3
 MAX_ITEMS = 500
 MAX_TEXT_BYTES = 20_000
 MAX_NOTE_BYTES = 2_000
@@ -59,6 +59,9 @@ def normalize_item(raw)
     "note" => clip(raw["note"], MAX_NOTE_BYTES).strip,
     "tags" => normalize_tags(raw["tags"]),
     "source" => clip(raw["source"], 200).strip,
+    "sourceSessionID" => valid_id(raw["sourceSessionID"]),
+    "sourceMessageID" => valid_id(raw["sourceMessageID"]),
+    "sourceTurnID" => valid_id(raw["sourceTurnID"]),
     "pinned" => raw["pinned"] == true,
     "createdAt" => created,
     "updatedAt" => timestamp(raw["updatedAt"]) || created
@@ -186,6 +189,9 @@ def add_item(arguments)
     "note" => arguments["note"],
     "tags" => arguments["tags"],
     "source" => arguments["source"],
+    "sourceSessionID" => arguments["source_session_id"],
+    "sourceMessageID" => arguments["source_message_id"],
+    "sourceTurnID" => arguments["source_turn_id"],
     "pinned" => arguments["pinned"],
     "createdAt" => now_iso
   )
@@ -199,6 +205,9 @@ def add_item(arguments)
     existing["updatedAt"] = now_iso
     existing["note"] = candidate["note"] unless candidate["note"].empty?
     existing["tags"] = normalize_tags(existing["tags"] + candidate["tags"]) unless candidate["tags"].empty?
+    existing["sourceSessionID"] = candidate["sourceSessionID"] unless candidate["sourceSessionID"].nil?
+    existing["sourceMessageID"] = candidate["sourceMessageID"] unless candidate["sourceMessageID"].nil?
+    existing["sourceTurnID"] = candidate["sourceTurnID"] unless candidate["sourceTurnID"].nil?
     saved = save_items(items)
     return { "ok" => true, "duplicate" => true, "item" => existing, "count" => saved.length }
   end
@@ -296,7 +305,10 @@ TOOLS = [
         text: { type: "string", description: "The snippet to save." },
         note: { type: "string", description: "Optional note." },
         tags: { type: "array", items: { type: "string" }, description: "Optional tags." },
-        source: { type: "string", description: "Where the snippet came from." }
+        source: { type: "string", description: "Where the snippet came from." },
+        source_session_id: { type: "string", description: "Stable source conversation id." },
+        source_message_id: { type: "string", description: "Stable source message id." },
+        source_turn_id: { type: "string", description: "Stable source user-turn id." }
       },
       required: ["text"]
     }
@@ -364,7 +376,7 @@ ARGF.each_line do |line|
            when "initialize"
              { protocolVersion: "2025-06-18",
                capabilities: { tools: {} },
-               serverInfo: { name: "favorites", version: "2.0.0" } }
+               serverInfo: { name: "favorites", version: "2.1.0" } }
            when "tools/list"
              { tools: TOOLS }
            when "tools/call"
