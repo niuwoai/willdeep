@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-02 | Current version: v1.315.0-rc12
+> Last updated: 2026-09-02 | Current version: v1.315.0-rc13
 
 ## Positioning
 
@@ -17,6 +17,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **五路 Worker 舰队与统一待确认徽标（1.315.0-rc13）** —— 主 Agent 每个会话最多并行五个后台 Worker；composer 状态条可展开舰队面板，集中查看每个工种的模型、动作、轮次、工具数、耗时及独立详情。带写集合的 Worker 继续前台串行并受精确路径锁保护。Dock 徽标按待处理请求而非阻塞会话计数，主 Agent 和子 Worker 上报到父会话的工具审批、危险确认、问答、补丁与 Plan 均进入同一个数字，跨窗口按会话去重。
 
 - **通用 Worker 的完整打杂工具面（1.315.0-rc12）** —— 无法明确归入窄工种的请求统一落到 `generalist`。它可在父任务声明的精确文件集合内创建文件和应用补丁，读取/操作用户可见终端，使用保留现有登录态的 Chrome 工具，并通过 `list_mcp_servers` / `list_mcp_tools` / `call_mcp_tool` 发现和调用所有已配置 MCP 工具。只读调用直接执行；终端命令、Chrome 变更和 MCP 写调用仍复用父会话当前审批档位、MCP 信任级别与安全裁判，未获批时回报精确动作，不绕过用户授权。
 

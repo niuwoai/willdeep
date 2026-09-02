@@ -3,6 +3,18 @@
 > 当前文件保留最新版本（1.315.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.315.0-rc13 - 2026-09-02
+
+### Changed
+
+- **单个主 Agent 会话的后台 Worker 并发上限由 3 提升到 5。** `spawn_agent` 工具说明与主提示词同步明确：2–5 个互不依赖的任务应在同一轮使用 `run_in_background: true` 一起派发；带精确写文件集合的 Worker 仍保持前台锁定，不用扩容换取文件冲突。
+- **composer 的 Worker 状态条升级为可点击舰队面板。** 状态条即使在父回合结束后也能继续识别后台 Worker，显示运行总数、最新进度和该 Worker 自己的耗时；点击后一次列出全部运行中的工种、模型、当前动作、轮次、工具数与耗时，并可进入各自运行详情。
+- **Dock 数字徽标改为统计全部待用户处理的请求。** 主 Agent 的工具审批、危险确认与问答，以及子 Worker 通过父会话上报的终端、浏览器、MCP 等确认都按独立请求计数；同一会话有多条待确认时不再缩水成 `1`，同一会话开在多个窗口时仍只取一份状态，处理完成后随运行时状态刷新消除。
+
+### Tests
+
+- `AgentSubagentLiveActivityTests` 覆盖 5 Worker 上限、舰队成员列表与主状态选择；`AgentSessionStoreTests` 覆盖主 Agent、委派 Worker、补丁和 Plan 待确认的逐请求 Dock 计数；`AgentApprovalLifecycleTests` 覆盖子 Worker 通过父会话等待批准、批准后继续执行及 Dock 徽标归零。相关 Worker、状态、Dock 快捷入口和审批生命周期测试共 146 项通过。
+
 ## 1.315.0-rc12 - 2026-09-02
 
 ### Changed

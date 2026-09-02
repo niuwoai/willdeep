@@ -112,6 +112,20 @@ struct AgentSessionStoreTests {
     }
 
     @Test
+    func dockBadgeCountsParentAndDelegatedWorkerRequestsSeparately() {
+        let session = AgentSession(title: "Several approvals")
+        let count = AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(
+            session: session,
+            toolCallStatuses: [.pendingApproval, .awaitingConfirm, .running, .succeeded],
+            patchStatuses: [.pending, .applied],
+            planStatus: .proposed
+        )
+
+        // Parent approval + delegated Worker confirmation + patch + Plan.
+        #expect(count == 4)
+    }
+
+    @Test
     func sidebarKeepsOneEmptyPlaceholderPerNewWorkspace() {
         let firstWorkspace = "/tmp/willdeep-sidebar-project-a"
         let secondWorkspace = "/tmp/willdeep-sidebar-project-b"

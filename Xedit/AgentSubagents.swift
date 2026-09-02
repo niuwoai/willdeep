@@ -154,9 +154,9 @@ final class AgentSubagentRegistry: ObservableObject {
     @Published private(set) var runs: [AgentSubagentRun] = []
 
     /// Parallel fan-out cap per parent session. Provider rate limits
-    /// are the real constraint — three concurrent child loops plus the
-    /// parent is already aggressive for most API plans.
-    static let maxConcurrentPerRuntime = 3
+    /// are the real constraint — five concurrent child loops plus the
+    /// parent is the upper bound exposed by the main Agent and UI.
+    static let maxConcurrentPerRuntime = 5
 
     /// Finished runs older than this per runtime get evicted so a
     /// long-lived session can't grow the array without bound.

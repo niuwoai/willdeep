@@ -151,6 +151,98 @@ extension AppState {
         return decision
     }
 
+    /// Native Worker equivalent of delegated-executor approval. A Worker has
+    /// no window of its own, so privileged terminal / Chrome / MCP calls are
+    /// represented by an ordinary tool card in the parent runtime and wait on
+    /// the same decision queue. Because the record is ordinary runtime state,
+    /// the sidebar, mobile gateway, notifications and Dock badge all observe
+    /// it without a parallel approval store.
+    func resolveSubagentToolApproval(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        risk: AgentToolRisk,
+        workerName: String,
+        runtime: AgentRuntime,
+        messageID: UUID,
+        rootDirectory: URL?
+    ) async -> Bool {
+        if runtime.isUnattendedDispatchTask {
+            return true
+        }
+
+        let autoApproval: AgentToolApprovalSource?
+        if risk == .write {
+            autoApproval = await autoApprovalSource(
+                toolName: toolName,
+                arguments: arguments,
+                risk: risk,
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: Array(
+                    agentWorkspaceRoots(for: runtime.session).dropFirst()
+                ),
+                interactionMode: runtime.interactionMode,
+                approvalMode: runtime.approvalMode,
+                conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                environmentTrustDeclarations: runtime.environmentTrustDeclarations,
+                latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
+            )
+        } else {
+            autoApproval = nil
+        }
+
+        let initialStatus: AgentToolCallStatus
+        if autoApproval != nil {
+            initialStatus = .running
+        } else {
+            initialStatus = risk == .danger ? .awaitingConfirm : .pendingApproval
+        }
+        let record = AgentToolCall(
+            messageID: messageID,
+            externalID: "subagent:\(UUID().uuidString)",
+            toolName: toolName,
+            arguments: arguments,
+            risk: risk,
+            status: initialStatus,
+            approvalSource: autoApproval,
+            subagentWorkerName: workerName
+        )
+        runtime.toolCalls.append(record)
+        AgentToolApprovalNotifier.notifyIfBackgrounded(
+            toolName: toolName,
+            arguments: arguments,
+            status: initialStatus,
+            runtimeID: runtime.id,
+            sessionTitle: runtime.session.title,
+            executor: workerName
+        )
+
+        let approved: Bool
+        if autoApproval != nil {
+            approved = true
+        } else {
+            switch await awaitToolDecision(for: runtime, forCallID: record.id) {
+            case .approved:
+                approved = true
+            case .denied, .answered:
+                approved = false
+            }
+        }
+
+        if let index = runtime.toolCalls.firstIndex(where: { $0.id == record.id }) {
+            if approved {
+                runtime.toolCalls[index].status = .succeeded
+                runtime.toolCalls[index].result = AgentToolResult(
+                    summary: "Worker tool request approved",
+                    payload: "\(workerName) · \(toolName)"
+                )
+            } else {
+                runtime.toolCalls[index].status = .denied
+                runtime.toolCalls[index].errorMessage = "User denied Worker tool request"
+            }
+        }
+        return approved
+    }
+
     func approveAgentToolCall(id: AgentToolCall.ID) {
         resolveAgentToolCallDecision(id: id, decision: .approved)
     }

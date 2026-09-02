@@ -360,6 +360,19 @@ extension L10n {
             return String(format: template, count, primaryWorkerName)
         }
 
+        static func fleetPanelTitle(_ count: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.fleet-panel-title",
+                defaultValue: "%d Workers running"
+            )
+            return String(format: template, count)
+        }
+
+        static let fleetPanelHelp = String(
+            localized: "agent-delegation.fleet-panel-help",
+            defaultValue: "Show every running Worker"
+        )
+
         /// Round marker in front of one Worker utterance, matching the
         /// inspector's numbering so the two surfaces can be read together.
         static func speechRoundMarker(_ round: Int) -> String {

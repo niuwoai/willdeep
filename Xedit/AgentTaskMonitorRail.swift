@@ -724,11 +724,14 @@ struct AgentSemanticActivityStatusLine: View {
     }
 
     @EnvironmentObject var appState: AppState
+    @State private var isFleetPopoverPresented = false
     var style: Style
 
     @ViewBuilder
     var body: some View {
-        if style == .composer,
+        if style == .composer, let fleet = currentFleet {
+            fleetComposerCard(fleet)
+        } else if style == .composer,
            AgentBackgroundTaskComposerCardVisibility.shouldShow(
                runningJobCount: currentSessionAliveJobs.count
            ) {
@@ -770,6 +773,51 @@ struct AgentSemanticActivityStatusLine: View {
                             .stroke(phase.tint.opacity(0.16), lineWidth: 1)
                     }
                 }
+        }
+    }
+
+    private func fleetComposerCard(_ fleet: AgentSubagentFleetStatus) -> some View {
+        Button {
+            isFleetPopoverPresented.toggle()
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                AgentActivitySweepLabel(
+                    text: fleet.composerLabel,
+                    font: .system(size: 12, weight: .semibold),
+                    isActive: shouldAnimateCurrentAction,
+                    baseColor: .secondary
+                )
+                .layoutPriority(1)
+                if let startedAt = fleet.primaryStartedAt {
+                    Spacer(minLength: 4)
+                    AgentStripElapsedLabel(startedAt: startedAt, tint: .secondary)
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.secondary.opacity(0.10))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .accessibilityLabel(Text(L10n.AgentDelegation.fleetPanelTitle(fleet.runningCount)))
+        .accessibilityHint(Text(L10n.AgentDelegation.fleetPanelHelp))
+        .popover(isPresented: $isFleetPopoverPresented, arrowEdge: .top) {
+            AgentSubagentFleetPopover(fleet: fleet)
         }
     }
 
@@ -857,6 +905,18 @@ struct AgentSemanticActivityStatusLine: View {
         currentSessionJobs.filter(\.isAlive)
     }
 
+    private var currentFleet: AgentSubagentFleetStatus? {
+        AgentSubagentFleetStatus.make(
+            from: appState.agentToolCalls,
+            fallbackWorkerName: { call in
+                L10n.AgentDelegation.profileName(
+                    for: call.arguments["profile"]?.stringValue()
+                        ?? AgentSubagentProfileCatalog.generalistID
+                )
+            }
+        )
+    }
+
     private var shouldAnimateCurrentAction: Bool {
         // 有可识别动作标题时扫光，没有时泛化"思考中"兜底同样扫光——
         // 进行中反馈由动画文字承担，所以只要回合在响应且不处于压缩/
@@ -884,6 +944,14 @@ struct AgentSemanticActivityStatusLine: View {
             call.status == .pendingApproval || call.status == .awaitingConfirm || call.status == .awaitingUserAnswer
         }) {
             return AgentActivityPhase(label: waitingLabel(for: waiting), systemImage: "hand.raised", tint: .orange)
+        }
+        if let fleet = currentFleet {
+            return AgentActivityPhase(
+                label: fleet.composerLabel,
+                systemImage: "person.2",
+                tint: .secondary,
+                elapsedStartOverride: fleet.primaryStartedAt
+            )
         }
         if let running = appState.agentToolCalls.last(where: { $0.status == .running }) {
             return phase(for: running)
@@ -935,18 +1003,7 @@ struct AgentSemanticActivityStatusLine: View {
             // tool call，另外几个工种连存在都看不出来；现在先报数量，再
             // 详述状态最新的那一个，并且用这个工种自己的起跑时间计时——
             // 回合跑了八分钟才派出去的工种，不该显示成八分钟。
-            if let fleet = AgentSubagentFleetStatus.make(
-                from: appState.agentToolCalls,
-                // The bare trade name, not `delegatedActivityBaseLabel` —
-                // that one returns the whole "委派给「X」Worker" sentence, and
-                // feeding it back in would nest the sentence inside itself.
-                fallbackWorkerName: { fallbackCall in
-                    L10n.AgentDelegation.profileName(
-                        for: fallbackCall.arguments["profile"]?.stringValue()
-                            ?? AgentSubagentProfileCatalog.deepID
-                    )
-                }
-            ) {
+            if let fleet = currentFleet {
                 return AgentActivityPhase(
                     label: fleet.composerLabel,
                     systemImage: "person.2",
@@ -1039,6 +1096,131 @@ private struct AgentActivityPhase {
     /// When set, the strip's clock times this instead of the whole turn.
     /// A Worker spawned late in a long turn should report its own age.
     var elapsedStartOverride: Date?
+}
+
+private struct AgentSubagentFleetPopover: View {
+    let fleet: AgentSubagentFleetStatus
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "person.2.fill")
+                    .foregroundStyle(.secondary)
+                Text(L10n.AgentDelegation.fleetPanelTitle(fleet.runningCount))
+                    .font(.headline)
+                Spacer(minLength: 12)
+                Text("\(fleet.runningCount)/\(AgentSubagentRegistry.maxConcurrentPerRuntime)")
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(fleet.members) { member in
+                        memberRow(member)
+                    }
+                }
+                .padding(10)
+            }
+            .frame(maxHeight: 390)
+        }
+        .frame(width: 410)
+        .accessibilityIdentifier("subagent-fleet-popover")
+    }
+
+    @ViewBuilder
+    private func memberRow(_ member: AgentSubagentFleetStatus.Member) -> some View {
+        if let runID = member.runID {
+            Button {
+                AgentSubagentInspectorWindowRegistry.shared.open(
+                    runID: runID,
+                    fallbackLabel: member.workerName
+                )
+            } label: {
+                memberRowContent(member, showsDisclosure: true)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(L10n.AgentDelegation.inspectorTitle)
+        } else {
+            memberRowContent(member, showsDisclosure: false)
+        }
+    }
+
+    private func memberRowContent(
+        _ member: AgentSubagentFleetStatus.Member,
+        showsDisclosure: Bool
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Circle()
+                .fill(Color.green)
+                .frame(width: 7, height: 7)
+                .padding(.top, 5)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(member.workerName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                    if let model = member.model, !model.isEmpty {
+                        Text(model)
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+
+                if !member.detail.isEmpty {
+                    Text(member.detail)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                }
+
+                HStack(spacing: 7) {
+                    if member.maximumRounds > 0 {
+                        Text("R\(member.round)/\(member.maximumRounds)")
+                    } else {
+                        Text("R\(member.round)")
+                    }
+                    Label("\(member.completedToolInvocations)", systemImage: "wrench.and.screwdriver")
+                    if let startedAt = member.startedAt {
+                        TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                            Text(AgentSemanticActivityStatusLine.formatElapsed(
+                                context.date.timeIntervalSince(startedAt)
+                            ))
+                        }
+                    }
+                }
+                .font(.system(size: 10.5, design: .monospaced))
+                .foregroundStyle(.tertiary)
+            }
+
+            Spacer(minLength: 6)
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 3)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.secondary.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+        )
+    }
 }
 
 private struct AgentRailTodoItem: Identifiable {

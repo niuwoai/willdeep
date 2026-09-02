@@ -671,20 +671,11 @@ extension AppState {
                         || effectiveTools.contains("terminal_send_command") else {
                     return nil
                 }
-                // Strict mode is the one setting that means "ask me every
-                // time". Handing it a reviewer would answer on the user's
-                // behalf, which is the whole thing they turned off.
-                guard runtime.approvalMode != .requestEveryTime else { return nil }
-                let latestUserMessage = runtime.messages
-                    .last(where: { $0.isOperatorInput })?.content ?? ""
                 return { [weak self] toolName, command in
-                    guard let self else { return false }
-                    guard AgentSubagentRunner.subagentCommandMayBeReviewedByParent(
-                        command,
-                        approvalMode: runtime.approvalMode,
-                        workspaceURL: workspaceURL,
-                        additionalWorkspaceRoots: workspaceRoots
-                    ) else { return false }
+                    guard let self,
+                          let hostMessageID = runtime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
+                        return false
+                    }
                     let arguments: [String: AgentJSONValue] = ["command": .string(command)]
                     let risk = AgentToolRegistry.risk(
                         for: toolName,
@@ -692,44 +683,38 @@ extension AppState {
                         rootDirectory: workspaceURL,
                         additionalWorkspaceRoots: workspaceRoots
                     )
-                    return await self.autoApprovalSource(
+                    return await self.resolveSubagentToolApproval(
                         toolName: toolName,
                         arguments: arguments,
                         risk: risk,
+                        workerName: resolvedWorkerName,
+                        runtime: runtime,
+                        messageID: hostMessageID,
                         rootDirectory: workspaceURL,
-                        additionalWorkspaceRoots: workspaceRoots,
-                        interactionMode: runtime.interactionMode,
-                        approvalMode: runtime.approvalMode,
-                        conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
-                        environmentTrustDeclarations: runtime.environmentTrustDeclarations,
-                        latestUserMessage: latestUserMessage
-                    ) != nil
+                    )
                 }
             }()
             let toolReviewer: AgentSubagentRunner.ToolReviewer? = {
                 guard profile.id == AgentSubagentProfileCatalog.generalistID,
                       !effectiveTools.isDisjoint(
                         with: AgentSubagentProfileCatalog.generalistExtraToolNames
-                      ),
-                      runtime.approvalMode != .requestEveryTime else {
+                      ) else {
                     return nil
                 }
-                let latestUserMessage = runtime.messages
-                    .last(where: { $0.isOperatorInput })?.content ?? ""
                 return { [weak self] toolName, arguments, risk in
-                    guard let self else { return false }
-                    return await self.autoApprovalSource(
+                    guard let self,
+                          let hostMessageID = runtime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
+                        return false
+                    }
+                    return await self.resolveSubagentToolApproval(
                         toolName: toolName,
                         arguments: arguments,
                         risk: risk,
+                        workerName: resolvedWorkerName,
+                        runtime: runtime,
+                        messageID: hostMessageID,
                         rootDirectory: workspaceURL,
-                        additionalWorkspaceRoots: workspaceRoots,
-                        interactionMode: runtime.interactionMode,
-                        approvalMode: runtime.approvalMode,
-                        conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
-                        environmentTrustDeclarations: runtime.environmentTrustDeclarations,
-                        latestUserMessage: latestUserMessage
-                    ) != nil
+                    )
                 }
             }()
             return try await AgentSubagentRunner.run(

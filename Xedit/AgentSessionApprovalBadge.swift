@@ -46,6 +46,24 @@ enum AgentSessionApprovalBadgeLogic {
         return (planStatus ?? session.currentPlan?.status) == .proposed
     }
 
+    /// Number shown on the Dock icon. Unlike the sidebar quick-jump list,
+    /// this counts actionable requests rather than sessions: two parent tool
+    /// approvals plus one delegated Worker approval must read as 3, not 1.
+    /// Delegated approvals are ordinary tool-call records with a stable
+    /// `subagent:` external id, so counting interactive records includes
+    /// them without a second source of truth or double counting.
+    static func pendingApprovalRequestCount(
+        session: AgentSession,
+        toolCallStatuses: [AgentToolCallStatus] = [],
+        patchStatuses: [AgentPatchStatus] = [],
+        planStatus: AgentPlan.Status? = nil
+    ) -> Int {
+        let toolRequests = toolCallStatuses.filter(toolCallNeedsUserApproval(_:)).count
+        let patchRequests = patchStatuses.filter { $0 == .pending }.count
+        let planRequests = (planStatus ?? session.currentPlan?.status) == .proposed ? 1 : 0
+        return toolRequests + patchRequests + planRequests
+    }
+
     nonisolated private static func toolCallNeedsUserApproval(_ status: AgentToolCallStatus) -> Bool {
         switch status {
         case .pendingApproval, .awaitingConfirm, .awaitingUserAnswer:
@@ -205,7 +223,7 @@ final class AgentDockBadgeCoordinator: ObservableObject {
 
     private func refreshNow() {
         refreshRuntimeSubscriptions()
-        var approvalBySessionID: [AgentSession.ID: Bool] = [:]
+        var approvalRequestCountBySessionID: [AgentSession.ID: Int] = [:]
         var archivedBySessionID: [AgentSession.ID: Bool] = [:]
         // Uncapped per window; the strip and the Dock menu apply their own
         // (different) caps once the full picture is in.
@@ -214,20 +232,23 @@ final class AgentDockBadgeCoordinator: ObservableObject {
             var blocked: [AgentPendingApprovalEntry] = []
             for session in appState.agentSessions {
                 let runtime = appState.agentRuntimes[session.id]
-                let sessionNeedsApproval: Bool
+                let requestCount: Int
                 if let runtime {
-                    sessionNeedsApproval = AgentSessionApprovalBadgeLogic.needsUserApproval(
+                    requestCount = AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(
                         session: runtime.session,
                         toolCallStatuses: runtime.toolCalls.map(\.status),
                         patchStatuses: runtime.patchProposals.map(\.status),
                         planStatus: runtime.currentPlan?.status
                     )
                 } else {
-                    sessionNeedsApproval = AgentSessionApprovalBadgeLogic.needsUserApproval(session: session)
+                    requestCount = AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(session: session)
                 }
-                approvalBySessionID[session.id, default: false] = approvalBySessionID[session.id, default: false] || sessionNeedsApproval
+                approvalRequestCountBySessionID[session.id] = max(
+                    approvalRequestCountBySessionID[session.id, default: 0],
+                    requestCount
+                )
                 archivedBySessionID[session.id] = archivedBySessionID[session.id, default: true] && session.archivedAt != nil
-                if sessionNeedsApproval, session.archivedAt == nil {
+                if requestCount > 0, session.archivedAt == nil {
                     blocked.append(
                         AgentPendingApprovalEntry(
                             sessionID: session.id,
@@ -241,9 +262,9 @@ final class AgentDockBadgeCoordinator: ObservableObject {
             }
             blockedByAppState[appStateID] = blocked
         }
-        let count = approvalBySessionID.reduce(into: 0) { partial, entry in
-            if entry.value, archivedBySessionID[entry.key] != true {
-                partial += 1
+        let count = approvalRequestCountBySessionID.reduce(into: 0) { partial, entry in
+            if archivedBySessionID[entry.key] != true {
+                partial += entry.value
             }
         }
         updateDockBadge(label: count > 0 ? String(count) : nil)
