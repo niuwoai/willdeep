@@ -138,6 +138,19 @@ nonisolated enum AgentTerminalInputState: String, Equatable, Sendable {
     }
 }
 
+nonisolated struct AgentTerminalStateEvent: Equatable, Sendable {
+    enum Transition: String, Equatable, Sendable {
+        case commandCompleted = "command_completed"
+        case exited
+    }
+
+    let tabID: UUID
+    let runtimeID: UUID?
+    let transition: Transition
+    let title: String
+    let summary: String
+}
+
 nonisolated enum AgentTerminalCommandDispatchPolicy {
     static func refusalMessage(for inputState: AgentTerminalInputState) -> String? {
         guard inputState == .foregroundTask else { return nil }
@@ -1275,6 +1288,10 @@ final class AgentInteractiveTerminalController: ObservableObject {
     /// terminal settings and the active session's workspace. Returns nil
     /// only if there's no AppState to ask.
     var defaultLocalTabProvider: ((UUID?) -> (settings: EditorTerminalSettings, workingDirectory: String?, originAgentSessionID: UUID?, skin: TerminalSkinColors?)?)?
+    /// Low-frequency semantic transitions for the runtime event kernel. Raw
+    /// PTY bytes never cross this boundary: a repaint or prompt echo must not
+    /// become an interrupt storm.
+    var onStateEvent: ((AgentTerminalStateEvent) -> Void)?
 
     /// Tabs idle longer than this are auto-terminated and removed. The
     /// currently-visible tab is exempt so we never close what the user is
@@ -1284,6 +1301,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
     private var inputStateTimer: Timer?
     private var localShellCounter = 0
     private var tabChangePublishScheduled = false
+    private var lastReportedInputStates: [UUID: AgentTerminalInputState] = [:]
     /// Closing the visible SSH tab must not silently retarget a later,
     /// unqualified agent command to a local shell. Keep a short-lived routing
     /// tombstone until the user or agent explicitly chooses another tab.
@@ -1415,6 +1433,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         }
         tabSubscriptions[tab.id] = cancellable
         tabs.append(tab)
+        lastReportedInputStates[tab.id] = tab.inputState
         activeTabID = tab.id
         startInputStateMonitorIfNeeded()
     }
@@ -1436,7 +1455,43 @@ final class AgentInteractiveTerminalController: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.tabChangePublishScheduled = false
+            self.publishSemanticTerminalTransitions()
             self.objectWillChange.send()
+        }
+    }
+
+    private func publishSemanticTerminalTransitions() {
+        for tab in tabs {
+            let previous = lastReportedInputStates[tab.id] ?? .starting
+            let current = tab.inputState
+            guard previous != current else { continue }
+            lastReportedInputStates[tab.id] = current
+            let transition: AgentTerminalStateEvent.Transition?
+            if current == .exited {
+                transition = .exited
+            } else if current == .shellReady,
+                      previous == .foregroundTask || previous == .interactiveProgram {
+                transition = .commandCompleted
+            } else {
+                transition = nil
+            }
+            guard let transition else { continue }
+            let summary: String
+            switch transition {
+            case .commandCompleted:
+                summary = "Terminal \(tab.title) returned to a ready shell."
+            case .exited:
+                summary = "Terminal \(tab.title) exited."
+            }
+            onStateEvent?(
+                AgentTerminalStateEvent(
+                    tabID: tab.id,
+                    runtimeID: tab.originAgentSessionID,
+                    transition: transition,
+                    title: tab.title,
+                    summary: summary
+                )
+            )
         }
     }
 
@@ -1454,6 +1509,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
         closingTab.terminate()
         tabSubscriptions[id]?.cancel()
         tabSubscriptions[id] = nil
+        lastReportedInputStates[id] = nil
         tabs.remove(at: index)
         stopInputStateMonitorIfIdle()
         if activeTabID == id {

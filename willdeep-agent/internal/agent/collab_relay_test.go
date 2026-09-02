@@ -1,11 +1,12 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,9 @@ func TestCollaborationRelayHealthIncludesCallbacks(t *testing.T) {
 	}
 	if got := resp.Header.Get("X-App-Version"); got != "" {
 		t.Fatalf("X-App-Version = %q, want empty for relay responses", got)
+	}
+	if got := resp.Header.Get("X-WillDeep-Relay-Protocol"); got != CollaborationRelayProtocolVersion {
+		t.Fatalf("X-WillDeep-Relay-Protocol = %q, want %q", got, CollaborationRelayProtocolVersion)
 	}
 
 	var body APIResponse
@@ -139,14 +143,13 @@ func TestCollaborationRelayFeishuChallengeReturnsRawChallenge(t *testing.T) {
 	server := httptest.NewServer(relay.routes())
 	defer server.Close()
 
-	resp, err := http.Post(
-		server.URL+"/events/feishu",
-		"application/json",
-		strings.NewReader(`{"challenge":"verify-me","type":"url_verification"}`),
+	resp := authorizedRelayJSONRequest(
+		t,
+		server,
+		http.MethodPost,
+		"/events/feishu",
+		`{"challenge":"verify-me","type":"url_verification"}`,
 	)
-	if err != nil {
-		t.Fatalf("POST feishu challenge: %v", err)
-	}
 	defer resp.Body.Close()
 
 	var body map[string]string
@@ -163,17 +166,46 @@ func TestCollaborationRelayQueuesAndPollsEventsWithAuth(t *testing.T) {
 	server := httptest.NewServer(relay.routes())
 	defer server.Close()
 
-	resp, err := http.Post(
+	unauthorized, err := http.Post(
 		server.URL+"/events/dingtalk",
 		"application/json",
-		bytes.NewBufferString(`{"EventType":"chat_update","conversationId":"cid"}`),
+		strings.NewReader(`{"EventType":"chat_update"}`),
 	)
 	if err != nil {
-		t.Fatalf("POST dingtalk event: %v", err)
+		t.Fatalf("POST unauthorized event: %v", err)
 	}
+	_ = unauthorized.Body.Close()
+	if unauthorized.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthorized event status = %d, want 401", unauthorized.StatusCode)
+	}
+
+	resp := authorizedRelayJSONRequest(
+		t,
+		server,
+		http.MethodPost,
+		"/events/dingtalk",
+		`{"EventType":"chat_update","eventId":"evt-42","conversationId":"cid"}`,
+	)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("event status = %d, want 200", resp.StatusCode)
+	}
+
+	duplicate := authorizedRelayJSONRequest(
+		t,
+		server,
+		http.MethodPost,
+		"/events/dingtalk",
+		`{"EventType":"chat_update","eventId":"evt-42","conversationId":"cid"}`,
+	)
+	var duplicateBody APIResponse
+	if err := json.NewDecoder(duplicate.Body).Decode(&duplicateBody); err != nil {
+		t.Fatalf("decode duplicate event response: %v", err)
+	}
+	_ = duplicate.Body.Close()
+	duplicateData, ok := duplicateBody.Data.(map[string]any)
+	if !ok || duplicateData["queued"] != false {
+		t.Fatalf("duplicate event response = %#v, want queued=false", duplicateBody.Data)
 	}
 
 	resp, err = http.Get(server.URL + "/events/poll")
@@ -217,6 +249,97 @@ func TestCollaborationRelayQueuesAndPollsEventsWithAuth(t *testing.T) {
 	}
 	if event["platform"] != "dingtalk" || event["kind"] != "chat_update" {
 		t.Fatalf("event = %#v", event)
+	}
+	if event["authenticated_ingress"] != true {
+		t.Fatalf("authenticated_ingress = %#v, want true", event["authenticated_ingress"])
+	}
+	eventID, ok := event["id"].(string)
+	if !ok || eventID == "" {
+		t.Fatalf("event id = %#v", event["id"])
+	}
+	_ = resp.Body.Close()
+
+	// Polling leases nothing and deletes nothing. A consumer must persist the
+	// event locally and explicitly acknowledge it.
+	secondPoll := authorizedRelayJSONRequest(t, server, http.MethodGet, "/events/poll", "")
+	var secondBody APIResponse
+	if err := json.NewDecoder(secondPoll.Body).Decode(&secondBody); err != nil {
+		t.Fatalf("decode second poll: %v", err)
+	}
+	_ = secondPoll.Body.Close()
+	secondData := secondBody.Data.(map[string]any)
+	if secondEvents := secondData["events"].([]any); len(secondEvents) != 1 {
+		t.Fatalf("second poll events = %#v, want one retained event", secondEvents)
+	}
+
+	ack := authorizedRelayJSONRequest(
+		t,
+		server,
+		http.MethodPost,
+		"/events/ack",
+		`{"event_ids":["`+eventID+`"]}`,
+	)
+	if ack.StatusCode != http.StatusOK {
+		t.Fatalf("ack status = %d", ack.StatusCode)
+	}
+	_ = ack.Body.Close()
+
+	finalPoll := authorizedRelayJSONRequest(t, server, http.MethodGet, "/events/poll", "")
+	var finalBody APIResponse
+	if err := json.NewDecoder(finalPoll.Body).Decode(&finalBody); err != nil {
+		t.Fatalf("decode final poll: %v", err)
+	}
+	_ = finalPoll.Body.Close()
+	finalData := finalBody.Data.(map[string]any)
+	if finalEvents := finalData["events"].([]any); len(finalEvents) != 0 {
+		t.Fatalf("final poll events = %#v, want empty after ack", finalEvents)
+	}
+}
+
+func TestCollaborationRelayPersistsUnacknowledgedEventsAcrossRestart(t *testing.T) {
+	journalPath := filepath.Join(t.TempDir(), "relay-events.json")
+	cfg, err := NewCollaborationRelayConfig(CollaborationRelayConfigInput{
+		Host:           "127.0.0.1",
+		Port:           8898,
+		PublicBaseURL:  "https://fly.niuwoai.com",
+		Token:          "relay-secret",
+		MaxEvents:      10,
+		EventStoreFile: journalPath,
+	})
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	first := NewCollaborationRelay(cfg)
+	if first.startupError != nil {
+		t.Fatalf("first startup: %v", first.startupError)
+	}
+	event := CollaborationRelayEvent{
+		ID:                   "evt-persisted",
+		Platform:             "feishu",
+		Kind:                 "im.message.receive_v1",
+		ReceivedAt:           time.Now().UTC(),
+		Body:                 json.RawMessage(`{"message":"hello"}`),
+		AuthenticatedIngress: true,
+	}
+	if _, err := first.enqueue(event); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	info, err := os.Stat(journalPath)
+	if err != nil {
+		t.Fatalf("stat journal: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("journal permissions = %o, want 600", got)
+	}
+
+	second := NewCollaborationRelay(cfg)
+	if second.startupError != nil {
+		t.Fatalf("second startup: %v", second.startupError)
+	}
+	second.mu.Lock()
+	defer second.mu.Unlock()
+	if len(second.events) != 1 || second.events[0].ID != event.ID {
+		t.Fatalf("restored events = %#v", second.events)
 	}
 }
 
@@ -277,9 +400,14 @@ func TestCollaborationRelayFeishuLongConnectionQueuesEvents(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("long connection client did not start")
 	}
-	_, err = handler.Do(context.Background(), []byte(`{"schema":"2.0","header":{"event_type":"im.message.receive_v1"},"event":{"message":{"chat_id":"oc_test"}}}`))
+	longConnectionEvent := []byte(`{"schema":"2.0","header":{"event_id":"evt-long-1","event_type":"im.message.receive_v1"},"event":{"message":{"chat_id":"oc_test"}}}`)
+	_, err = handler.Do(context.Background(), longConnectionEvent)
 	if err != nil {
 		t.Fatalf("dispatch event: %v", err)
+	}
+	_, err = handler.Do(context.Background(), longConnectionEvent)
+	if err != nil {
+		t.Fatalf("dispatch duplicate event: %v", err)
 	}
 
 	req, err := http.NewRequest(http.MethodGet, "/events/poll", nil)
@@ -331,6 +459,35 @@ func newTestCollaborationRelay(t *testing.T) *CollaborationRelay {
 		t.Fatalf("config: %v", err)
 	}
 	return NewCollaborationRelay(cfg)
+}
+
+func authorizedRelayJSONRequest(
+	t *testing.T,
+	server *httptest.Server,
+	method string,
+	path string,
+	body string,
+) *http.Response {
+	t.Helper()
+	var reader *strings.Reader
+	if body == "" {
+		reader = strings.NewReader("")
+	} else {
+		reader = strings.NewReader(body)
+	}
+	req, err := http.NewRequest(method, server.URL+path, reader)
+	if err != nil {
+		t.Fatalf("new %s %s request: %v", method, path, err)
+	}
+	req.Header.Set("Authorization", "Bearer relay-secret")
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, path, err)
+	}
+	return resp
 }
 
 type fakeFeishuLongConnectionClient struct {

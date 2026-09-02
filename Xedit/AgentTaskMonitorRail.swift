@@ -28,6 +28,7 @@ struct AgentTaskMonitorRail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 monitorSection
+                runtimeEventsSection
                 delegatedTasksSection
                 todoSection
                 deliverablesSection
@@ -46,6 +47,29 @@ struct AgentTaskMonitorRail: View {
             }.value
             cachedArtifacts = resolved
         }
+    }
+
+    @ViewBuilder
+    private var runtimeEventsSection: some View {
+        let events = activeRuntimeEvents
+        AgentRailSection(title: L10n.RuntimeEvents.sectionTitle, systemImage: "bell.and.waves.left.and.right") {
+            if events.isEmpty {
+                AgentRailEmptyRow(text: L10n.RuntimeEvents.empty)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(events.prefix(8)) { event in
+                        AgentRailRuntimeEventRow(event: event) {
+                            appState.agentRuntimeKernel.dismiss(event.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var activeRuntimeEvents: [AgentKernelEvent] {
+        guard let runtimeID = appState.activeAgentSessionID else { return [] }
+        return appState.agentRuntimeKernel.recentEvents(for: runtimeID, limit: 20)
     }
 
     private var monitorSection: some View {
@@ -1792,6 +1816,86 @@ private struct AgentRailSection<Content: View>: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(palette.hairline.opacity(0.7), lineWidth: 1)
         )
+    }
+}
+
+private struct AgentRailRuntimeEventRow: View {
+    let event: AgentKernelEvent
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 18, height: 18)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Text(L10n.RuntimeEvents.source(event.source))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(tint)
+                    Text(event.updatedAt, style: .relative)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    if event.coalescedCount > 1 {
+                        Text(L10n.RuntimeEvents.occurrences(event.coalescedCount))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                Text(event.title)
+                    .font(.system(size: 12, weight: event.requiresUserAction ? .semibold : .regular))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                if event.isAwaitingUserAction {
+                    Text(L10n.RuntimeEvents.needsAction)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
+            }
+            Spacer(minLength: 2)
+            if event.isAwaitingUserAction, event.source != .approval {
+                Button(action: dismiss) {
+                    Image(systemName: "xmark.circle")
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.RuntimeEvents.dismiss)
+            } else if event.isAwaitingUserAction, event.source == .approval {
+                Image(systemName: "arrow.left")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .help(L10n.RuntimeEvents.handledInConversation)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var systemImage: String {
+        switch event.source {
+        case .worker: return "person.2.fill"
+        case .terminal: return "terminal.fill"
+        case .backgroundJob: return "gearshape.2.fill"
+        case .mediaTask: return "photo.stack.fill"
+        case .workflow: return "point.3.filled.connected.trianglepath.dotted"
+        case .webhook: return "arrow.triangle.branch"
+        case .email: return "envelope.fill"
+        case .connector: return "link"
+        case .timer: return "clock.fill"
+        case .fileSystem: return "folder.fill"
+        case .approval: return "hand.raised.fill"
+        case .user: return "person.fill"
+        case .system: return "cpu.fill"
+        }
+    }
+
+    private var tint: Color {
+        if event.isAwaitingUserAction { return .orange }
+        switch event.priority {
+        case .critical: return .red
+        case .urgent: return .orange
+        case .normal: return .blue
+        case .background: return .secondary
+        }
     }
 }
 

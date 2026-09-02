@@ -170,6 +170,7 @@ final class AgentDockBadgeCoordinator: ObservableObject {
 
     private var trackedAppStates: [ObjectIdentifier: AppState] = [:]
     private var appStateSubscriptions: [ObjectIdentifier: AnyCancellable] = [:]
+    private var kernelSubscriptions: [ObjectIdentifier: AnyCancellable] = [:]
     private var runtimeSubscriptions: [ObjectIdentifier: [AgentSession.ID: AnyCancellable]] = [:]
     private var refreshTask: Task<Void, Never>?
     private var lastBadgeLabel: String?
@@ -185,6 +186,8 @@ final class AgentDockBadgeCoordinator: ObservableObject {
         for id in Array(appStateSubscriptions.keys) where uniqueAppStates[id] == nil {
             appStateSubscriptions[id]?.cancel()
             appStateSubscriptions.removeValue(forKey: id)
+            kernelSubscriptions[id]?.cancel()
+            kernelSubscriptions.removeValue(forKey: id)
             runtimeSubscriptions[id]?.values.forEach { $0.cancel() }
             runtimeSubscriptions.removeValue(forKey: id)
         }
@@ -198,6 +201,12 @@ final class AgentDockBadgeCoordinator: ObservableObject {
                         self?.scheduleRefresh()
                     }
                 }
+            kernelSubscriptions[id] = appState.agentRuntimeKernel.objectWillChange
+                .sink { [weak self] _ in
+                    Task { @MainActor in
+                        self?.scheduleRefresh()
+                    }
+                }
         }
 
         scheduleRefresh()
@@ -205,8 +214,10 @@ final class AgentDockBadgeCoordinator: ObservableObject {
 
     func clear() {
         appStateSubscriptions.values.forEach { $0.cancel() }
+        kernelSubscriptions.values.forEach { $0.cancel() }
         runtimeSubscriptions.values.flatMap(\.values).forEach { $0.cancel() }
         appStateSubscriptions.removeAll()
+        kernelSubscriptions.removeAll()
         runtimeSubscriptions.removeAll()
         trackedAppStates.removeAll()
         updateDockBadge(label: nil)
@@ -234,14 +245,23 @@ final class AgentDockBadgeCoordinator: ObservableObject {
                 let runtime = appState.agentRuntimes[session.id]
                 let requestCount: Int
                 if let runtime {
-                    requestCount = AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(
+                    let projectedApprovalCount = AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(
                         session: runtime.session,
                         toolCallStatuses: runtime.toolCalls.map(\.status),
                         patchStatuses: runtime.patchProposals.map(\.status),
                         planStatus: runtime.currentPlan?.status
                     )
+                    requestCount = projectedApprovalCount
+                        + appState.agentRuntimeKernel.pendingUserActionCount(
+                            for: session.id,
+                            excluding: .approval
+                        )
                 } else {
                     requestCount = AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(session: session)
+                        + appState.agentRuntimeKernel.pendingUserActionCount(
+                            for: session.id,
+                            excluding: .approval
+                        )
                 }
                 approvalRequestCountBySessionID[session.id] = max(
                     approvalRequestCountBySessionID[session.id, default: 0],
@@ -249,13 +269,20 @@ final class AgentDockBadgeCoordinator: ObservableObject {
                 )
                 archivedBySessionID[session.id] = archivedBySessionID[session.id, default: true] && session.archivedAt != nil
                 if requestCount > 0, session.archivedAt == nil {
+                    let latestKernelAction = appState.agentRuntimeKernel.latestPendingUserAction(
+                        for: session.id
+                    )
                     blocked.append(
                         AgentPendingApprovalEntry(
                             sessionID: session.id,
-                            title: AgentUserInputPreview.latest(
-                                in: runtime?.messages ?? session.messages
-                            ) ?? "",
-                            waitingSince: runtime?.turnStartedAt ?? session.updatedAt
+                            title: latestKernelAction?.title
+                                ?? AgentUserInputPreview.latest(
+                                    in: runtime?.messages ?? session.messages
+                                )
+                                ?? "",
+                            waitingSince: latestKernelAction?.updatedAt
+                                ?? runtime?.turnStartedAt
+                                ?? session.updatedAt
                         )
                     )
                 }

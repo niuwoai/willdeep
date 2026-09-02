@@ -112,15 +112,19 @@ func (r *CollaborationRelay) handleFeishuLongConnectionEvent(ctx context.Context
 		kind = eventType
 	}
 	now := r.now()
-	r.enqueue(CollaborationRelayEvent{
-		ID:         newRelayEventID("feishu", now),
-		Platform:   "feishu",
-		Kind:       kind,
-		ReceivedAt: now.UTC(),
-		RemoteAddr: "feishu-long-connection",
-		Headers:    headers,
-		Body:       json.RawMessage(body),
+	_, err := r.enqueue(CollaborationRelayEvent{
+		ID:                   relayEventID("feishu", envelope, now),
+		Platform:             "feishu",
+		Kind:                 kind,
+		ReceivedAt:           now.UTC(),
+		RemoteAddr:           "feishu-long-connection",
+		Headers:              headers,
+		Body:                 json.RawMessage(body),
+		AuthenticatedIngress: true,
 	})
+	if err != nil {
+		return err
+	}
 	_ = ctx
 	return nil
 }

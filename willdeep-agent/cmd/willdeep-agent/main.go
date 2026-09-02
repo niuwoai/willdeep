@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -157,6 +158,7 @@ func newServeCollabRelayCommand() *cobra.Command {
 	var feishuLongConnection bool
 	var feishuLongConnectionEventTypes string
 	var maxEvents int
+	var eventStoreFile string
 
 	cmd := &cobra.Command{
 		Use:   "serve-collab-relay",
@@ -174,6 +176,7 @@ func newServeCollabRelayCommand() *cobra.Command {
 				FeishuLongConnectionEnabled:    feishuLongConnection,
 				FeishuLongConnectionEventTypes: feishuLongConnectionEventTypes,
 				MaxEvents:                      maxEvents,
+				EventStoreFile:                 eventStoreFile,
 			})
 			if err != nil {
 				return err
@@ -194,8 +197,20 @@ func newServeCollabRelayCommand() *cobra.Command {
 	cmd.Flags().StringVar(&feishuAppSecretFile, "feishu-app-secret-file", os.Getenv("WILLDEEP_FEISHU_APP_SECRET_FILE"), "file containing Feishu app_secret for long connection")
 	cmd.Flags().BoolVar(&feishuLongConnection, "feishu-long-connection", envBool("WILLDEEP_FEISHU_LONG_CONNECTION"), "receive Feishu events through the official SDK long connection instead of requiring a public event callback")
 	cmd.Flags().StringVar(&feishuLongConnectionEventTypes, "feishu-long-connection-event-types", os.Getenv("WILLDEEP_FEISHU_LONG_CONNECTION_EVENT_TYPES"), "comma-separated Feishu event types registered on the long connection client")
-	cmd.Flags().IntVar(&maxEvents, "max-events", 500, "maximum in-memory callback events retained for polling")
+	cmd.Flags().IntVar(&maxEvents, "max-events", 500, "maximum callback events retained for polling")
+	cmd.Flags().StringVar(&eventStoreFile, "event-store-file", defaultCollaborationRelayEventStoreFile(), "durable callback event journal")
 	return cmd
+}
+
+func defaultCollaborationRelayEventStoreFile() string {
+	if value := os.Getenv("WILLDEEP_COLLAB_RELAY_EVENT_STORE"); value != "" {
+		return value
+	}
+	configDirectory, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(configDirectory, "WillDeep", "collab-relay-events.json")
 }
 
 func envBool(name string) bool {

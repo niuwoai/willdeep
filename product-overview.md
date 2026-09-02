@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-02 | Current version: v1.315.0-rc13
+> Last updated: 2026-09-02 | Current version: v1.315.0-rc15
 
 ## Positioning
 
@@ -17,6 +17,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **宿主级 Agent Runtime 事件内核（1.315.0-rc15）** —— Worker、终端、后台 Job、媒体、Workflow、审批、定时器、Webhook、邮件与连接器信号统一进入进程级共享的持久化事件信封；宿主按调度权限、正文信任、优先级和 enqueue / 边界让出 / 强制抢占三档策略调度，主 Agent 作为 `init/systemd + 调度器` 理解信号并协调后续工作。事件采用 provider 成功后才确认的可恢复 lease，模型处理与用户待办互不冒充；认证外部事件有唤醒预算。Collaboration Relay v2 使用持久化非破坏 poll + 明确 ACK，设置页展示连接、ACK 与积压状态；需要用户处理的外部消息进入 Dock 数字徽标且不与审批投影重复计数。完整契约见 [Agent Runtime Kernel](docs/AGENT_RUNTIME_KERNEL.md)。
 
 - **五路 Worker 舰队与统一待确认徽标（1.315.0-rc13）** —— 主 Agent 每个会话最多并行五个后台 Worker；composer 状态条可展开舰队面板，集中查看每个工种的模型、动作、轮次、工具数、耗时及独立详情。带写集合的 Worker 继续前台串行并受精确路径锁保护。Dock 徽标按待处理请求而非阻塞会话计数，主 Agent 和子 Worker 上报到父会话的工具审批、危险确认、问答、补丁与 Plan 均进入同一个数字，跨窗口按会话去重。
 

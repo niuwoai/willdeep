@@ -19,12 +19,15 @@ enum ConnectorHubSelection: Hashable {
 }
 
 struct CollaborationConnectorSettingsView: View {
+    @ObservedObject private var relayPump = CollaborationRelayEventPump.shared
     @State private var settings = CollaborationConnectorSettingsStore.load()
     @State private var selection: ConnectorHubSelection
     @State private var statusMessage = L10n.Settings.allChangesSaved
     @State private var authorizationRequest: CollaborationConnectorOAuthRequest?
     @State private var larkCLIAuthorizationURL: URL?
     @State private var larkCLIIsWorking = false
+    @State private var runtimeEventSettings = AgentRuntimeEventSettingsStore.load()
+    @State private var relayToken = AgentRuntimeEventSettingsStore.relayToken()
     @AppStorage("com.willdeep.connectors.showAdvancedConfiguration") private var showAdvancedConfiguration = false
 
     /// Deep-links (e.g. the image-edit panel's "configure Replicate")
@@ -58,6 +61,8 @@ struct CollaborationConnectorSettingsView: View {
                 }
             }
 
+            runtimeEventRoutingSection
+
             Section {
                 ForEach(settings.connectors) { connector in
                     connectorRow(connector)
@@ -89,6 +94,91 @@ struct CollaborationConnectorSettingsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: CollaborationConnectorSettingsStore.didChangeNotification)) { _ in
             settings = CollaborationConnectorSettingsStore.load()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AgentRuntimeEventSettingsStore.didChangeNotification)) { _ in
+            runtimeEventSettings = AgentRuntimeEventSettingsStore.load()
+        }
+        .onDisappear {
+            AgentRuntimeEventSettingsStore.save(runtimeEventSettings)
+        }
+    }
+
+    private var runtimeEventRoutingSection: some View {
+        Section {
+            Toggle(L10n.Settings.Connectors.runtimeEventPolling, isOn: Binding(
+                get: { runtimeEventSettings.relayPollingEnabled },
+                set: { enabled in
+                    runtimeEventSettings.relayPollingEnabled = enabled
+                    AgentRuntimeEventSettingsStore.save(runtimeEventSettings)
+                }
+            ))
+            TextField(
+                L10n.Settings.Connectors.runtimeEventRelayURL,
+                text: Binding(
+                    get: { runtimeEventSettings.relayBaseURL },
+                    set: { value in runtimeEventSettings.relayBaseURL = value }
+                )
+            )
+            .onSubmit {
+                AgentRuntimeEventSettingsStore.save(runtimeEventSettings)
+            }
+            HStack {
+                SecureField(L10n.Settings.Connectors.runtimeEventRelayToken, text: $relayToken)
+                Button(L10n.Settings.Connectors.runtimeEventSaveToken) {
+                    AgentRuntimeEventSettingsStore.saveRelayToken(relayToken)
+                    statusMessage = L10n.Settings.allChangesSaved
+                }
+            }
+            Text(L10n.Settings.Connectors.runtimeEventHelp)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            LabeledContent(L10n.Settings.Connectors.runtimeEventStatus) {
+                Text(relayStatusText)
+                    .foregroundStyle(relayStatusColor)
+            }
+            if let lastSuccessAt = relayPump.lastSuccessAt {
+                LabeledContent(L10n.Settings.Connectors.runtimeEventLastSuccess) {
+                    Text(lastSuccessAt.formatted(date: .abbreviated, time: .shortened))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            LabeledContent(L10n.Settings.Connectors.runtimeEventCounters) {
+                Text(
+                    L10n.Settings.Connectors.runtimeEventCounterValues(
+                        received: relayPump.receivedEventCount,
+                        acknowledged: relayPump.acknowledgedEventCount,
+                        pending: relayPump.relayPendingEventCount
+                    )
+                )
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            }
+            if let lastError = relayPump.lastError, !lastError.isEmpty {
+                Text(String(lastError.prefix(240)))
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+            }
+        } header: {
+            Text(L10n.Settings.Connectors.runtimeEventSection)
+        }
+    }
+
+    private var relayStatusText: String {
+        switch relayPump.state {
+        case .disabled: return L10n.Settings.Connectors.runtimeEventStatusDisabled
+        case .configurationRequired: return L10n.Settings.Connectors.runtimeEventStatusConfigurationRequired
+        case .connecting: return L10n.Settings.Connectors.runtimeEventStatusConnecting
+        case .connected: return L10n.Settings.Connectors.runtimeEventStatusConnected
+        case .backingOff: return L10n.Settings.Connectors.runtimeEventStatusBackingOff
+        }
+    }
+
+    private var relayStatusColor: Color {
+        switch relayPump.state {
+        case .connected: return .green
+        case .backingOff: return .red
+        case .disabled, .configurationRequired, .connecting: return .secondary
         }
     }
 

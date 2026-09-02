@@ -48,6 +48,14 @@ extension AppState {
         if let runtime = agentRuntimes[id] {
             runtime.session.archivedAt = agentSessions[index].archivedAt
         }
+        if willArchive {
+            // Runtime-event journals may contain mail, webhook, terminal, or
+            // worker payloads. Archiving is the retention boundary: discard
+            // those payloads immediately instead of waiting for relaunch.
+            agentRuntimeKernel.removeEvents(for: id)
+            agentExternalWakeHistoryByRuntime.removeValue(forKey: id)
+            agentKernelPreemptedRuntimeIDs.remove(id)
+        }
         // Archiving the currently-active session shouldn't kick the
         // user out — the chat stays selected. They can pick another
         // session whenever they want; in the meantime the row simply
@@ -175,6 +183,7 @@ extension AppState {
         moveToFront: Bool = true
     ) {
         guard let index = agentSessions.firstIndex(where: { $0.id == runtime.id }) else { return }
+        synchronizeApprovalKernelEvents(for: runtime)
         if runtime.managedRouting != nil {
             // Managed routing resolves a model per-turn; there is no single
             // session model. Keep modelID clear so nothing downstream mistakes
