@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-02 | Current version: v1.317.0-rc2
+> Last updated: 2026-09-02 | Current version: v1.317.0-rc3
 
 ## Positioning
 
@@ -17,6 +17,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Composer 与回合建议收口（1.317.0-rc3）** —— 回合末学习建议紧贴最终回答，打开一次后持久记为已查看并从当前会话底部消失。`@` 弹层继续以工作区和文件为首要候选，五类 Worker 保留为其后的点名入口，候选区加高后可同时展示更多条目。已登录 some.im 的新会话默认使用 `someim-auto-flash`，历史会话的固定模型不迁移。
 
 - **宿主级 Agent Runtime 事件内核（1.317.0-rc2）** —— Worker、终端、后台 Job、媒体、Workflow、审批、定时器、Webhook、邮件与连接器信号统一进入进程级共享的持久化事件信封；宿主分别记录调度权限与 `host/model/tool/file/network` 正文来源，并按 enqueue / 边界让出 / 强制抢占三档策略调度。多窗口只有会话 owner 可唤醒模型，lease 绑定具体 provider turn，外部唤醒额度在整个进程共享且到期自动重试。冷启动先异步恢复会话与事件日志再启动 Relay，坏日志自动隔离。用户手敲终端不进入事件流，后台 Worker 则继承父会话的可见终端与审批回调。Collaboration Relay v2 使用持久化非破坏 poll + 明确 ACK，队列满时拒收新事件而不淘汰未 ACK 旧事件；设置页展示在线状态、轮询时间、错误及接收/ACK/丢弃/去重/积压统计，事件中心展示处理人和处理结果。完整契约见 [Agent Runtime Kernel](docs/AGENT_RUNTIME_KERNEL.md)。
 

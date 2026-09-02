@@ -26,8 +26,8 @@ struct AgentModelDiscovery: Codable, Equatable {
 }
 
 enum AgentDefaultModelModePreference: String, Equatable {
-    /// No explicit choice yet. Fresh installs default to some.im's concrete
-    /// DeepSeek V4 Flash model; managed routing remains an explicit opt-in.
+    /// No explicit choice yet. Authenticated some.im sessions default to the
+    /// relay's automatic Flash route; managed routing remains an opt-in mode.
     case automatic
     /// The user explicitly selected some.im managed routing.
     case managed
@@ -247,7 +247,7 @@ enum AgentSettingsStore {
            let preference = AgentDefaultModelModePreference(rawValue: raw) {
             return preference
         }
-        // Fresh installs and upgrades default to some.im's concrete text
+        // Fresh installs and upgrades default to some.im's automatic Flash
         // model. Composer picks remain conversation-scoped; only the some.im
         // Settings control persists an explicit managed-routing preference.
         return .automatic

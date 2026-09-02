@@ -972,6 +972,37 @@ struct AgentSelfLearningTests {
     }
 
     @Test
+    func openingLearningSuggestionsHidesOnlyReviewedItems() throws {
+        let suiteName = "com.willdeep.tests.learningReview.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        AgentLearningReviewStore._setTestDefaultsOverride(defaults)
+        defer {
+            AgentLearningReviewStore._setTestDefaultsOverride(nil)
+            TestDefaultsHygiene.cleanup(suite: defaults, named: suiteName)
+        }
+
+        let reviewed = AgentLearningEvent(
+            kind: .memory,
+            status: .suggested,
+            title: "Review me once",
+            detail: "Do not keep showing this suggestion."
+        )
+        let pending = AgentLearningEvent(
+            kind: .mcpSuggestion,
+            status: .suggested,
+            title: "Still pending",
+            detail: "This suggestion was not opened."
+        )
+        AgentLearningReviewStore.enqueue(events: [reviewed, pending], sessionID: nil)
+
+        AgentLearningReviewStore.markReviewed(events: [reviewed])
+
+        #expect(AgentLearningReviewStore.pendingEvents(from: [reviewed, pending]) == [pending])
+        #expect(AgentLearningReviewStore.load().first(where: { $0.id == reviewed.id })?.decision == .reviewed)
+        #expect(AgentLearningReviewStore.load().first(where: { $0.id == pending.id })?.decision == .pending)
+    }
+
+    @Test
     func learningReviewStoreExpiresOnlyUnhandledItemsAfterFifteenDays() throws {
         let suiteName = "com.willdeep.tests.learningReview.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

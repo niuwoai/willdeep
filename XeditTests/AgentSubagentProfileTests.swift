@@ -49,16 +49,14 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentProfileCatalog.terminalOperator.maxRounds == 32)
     }
 
-    @Test("a new session opens on the standard tier, not the scarce one")
-    func newSessionsDefaultToTheStandardTier() {
-        // The whole admission mechanism is theatre if the session already
-        // starts on the model `deep` would escalate to.
-        #expect(SomeIMIntegrationSettings.defaultTextModel == "glm-5")
+    @Test("a new some.im session opens on the automatic Flash route")
+    func newSessionsDefaultToAutoFlash() {
+        #expect(SomeIMIntegrationSettings.defaultTextModel == SomeIMManagedModel.autoFlash)
         #expect(SomeIMIntegrationSettings.defaultTextModel
             != AgentSubagentProfileCatalog.deep.modelBinding.model)
 
         let preset = AgentProviderPreset.preset(id: AgentProviderPreset.someIMID)
-        #expect(preset?.defaultModel == "glm-5")
+        #expect(preset?.defaultModel == SomeIMManagedModel.autoFlash)
         // Vision must not follow the text default down: some.im has its own
         // multimodal model and the picker reads it through the preset.
         #expect(preset?.defaultVisionModel == SomeIMIntegrationSettings.defaultVisionModel)

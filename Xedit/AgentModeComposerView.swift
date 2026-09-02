@@ -746,18 +746,6 @@ private struct ComposerCard: View {
         let q = atMenuQuery.lowercased()
         var entries: [AtPickerEntry] = []
 
-        // 工种排在最前：`@` 的语义是「引用一个东西」，而点名谁来干活是
-        // 这里最有分量的一种引用。匹配 id 与本地化名字，"@scout" 和
-        // "@读" 都能找到。
-        let workers = AgentSubagentProfileCatalog.publicBuiltIn.filter { profile in
-            guard !q.isEmpty else { return true }
-            return profile.id.lowercased().contains(q)
-                || profile.localizedDisplayName.lowercased().contains(q)
-        }
-        entries.append(contentsOf: workers.map {
-            .worker(id: $0.id, name: $0.localizedDisplayName, purpose: $0.localizedPurpose)
-        })
-
         // Workspace shortcut — only shows when a folder is open, and
         // either the query is empty or matches "workspace".
         if appState.activeRuntime?.workspaceLocation?.localPath != nil,
@@ -794,7 +782,19 @@ private struct ComposerCard: View {
             entries.append(contentsOf: files)
         }
 
-        return entries
+        // Keep the original @ file picker visible in the first screen. Worker
+        // mentions remain available after workspace/files, and a worker-name
+        // query still filters directly to the matching trade.
+        let workers = AgentSubagentProfileCatalog.publicBuiltIn.filter { profile in
+            guard !q.isEmpty else { return true }
+            return profile.id.lowercased().contains(q)
+                || profile.localizedDisplayName.lowercased().contains(q)
+        }
+        let workerEntries: [AtPickerEntry] = workers.map {
+            .worker(id: $0.id, name: $0.localizedDisplayName, purpose: $0.localizedPurpose)
+        }
+
+        return AtPickerEntry.contextFirst(entries, workers: workerEntries)
     }
 
     /// `$` picker entries are only skills / reusable capability packs.

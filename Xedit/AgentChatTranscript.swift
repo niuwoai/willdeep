@@ -551,6 +551,10 @@ struct AgentChatTranscript: View {
                             appState.applyAgentMemoryDrafts(for: event)
                         }
                     )
+                    // This is metadata for the prose immediately above, not a
+                    // separate chat message. Keep a compact 6 pt relationship
+                    // instead of inheriting the stack's full 20 pt turn gap.
+                    .padding(.top, 6 - AgentDesign.messageVerticalSpacing)
                     .frame(maxWidth: AgentDesign.chatMaxContentWidth, alignment: .leading)
 
                     // 排队消息钉在 transcript 最底部，紧贴 composer 的

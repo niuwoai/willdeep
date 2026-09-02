@@ -75,8 +75,12 @@ struct AgentTurnPostStrip: View {
 
     @State private var showLearning = false
     @State private var showSources = false
+    @State private var learningReviewRevision = 0
 
-    private var hasLearning: Bool { !learningEvents.isEmpty }
+    private var pendingLearningEvents: [AgentLearningEvent] {
+        _ = learningReviewRevision
+        return AgentLearningReviewStore.pendingEvents(from: learningEvents)
+    }
     private var sourceReferences: [AgentSourceReference] {
         guard let report else { return [] }
         return Array(report.sourceReferences.prefix(16))
@@ -84,19 +88,20 @@ struct AgentTurnPostStrip: View {
     private var hasSources: Bool { !sourceReferences.isEmpty }
 
     var body: some View {
-        if hasLearning || hasSources {
+        let reviewableEvents = pendingLearningEvents
+        if !reviewableEvents.isEmpty || hasSources {
             HStack(spacing: 14) {
                 if hasSources {
                     sourcesButton
                 }
-                learningButton
+                learningButton(events: reviewableEvents)
                 Spacer(minLength: 0)
             }
             // Keep the source/learning strip on the same text column as
             // assistant prose in both TextKit history and live messages.
             .padding(.leading, AgentChatHistoryLayoutMetrics.assistantContentHeadIndent)
             .padding(.trailing, AgentChatHistoryLayoutMetrics.assistantContentTailInset)
-            .padding(.vertical, 6)
+            .padding(.vertical, 2)
         }
     }
 
@@ -138,8 +143,8 @@ struct AgentTurnPostStrip: View {
     }
 
     @ViewBuilder
-    private var learningButton: some View {
-        if hasLearning {
+    private func learningButton(events: [AgentLearningEvent]) -> some View {
+        if !events.isEmpty {
             Button {
                 showLearning.toggle()
             } label: {
@@ -147,7 +152,7 @@ struct AgentTurnPostStrip: View {
                     Image(systemName: "brain.head.profile")
                         .font(.system(size: 12, weight: .medium))
                     Text(L10n.Transcript.postTurnLearningOneLiner(
-                        String(AgentSelfLearning.suggestionItemCount(learningEvents))
+                        String(AgentSelfLearning.suggestionItemCount(events))
                     ))
                         .agentChatSupportingFont()
                         .lineLimit(1)
@@ -163,7 +168,7 @@ struct AgentTurnPostStrip: View {
                 // 这里给定 maxHeight,溢出走原生滚动条。
                 ScrollView {
                     AgentLearningEventsCard(
-                        events: learningEvents,
+                        events: events,
                         onReject: { event in
                             AgentLearningReviewStore.mark(id: event.id, decision: .dismissed)
                         },
@@ -175,6 +180,10 @@ struct AgentTurnPostStrip: View {
                 }
                 .frame(width: 480)
                 .frame(maxHeight: 520)
+                .onDisappear {
+                    AgentLearningReviewStore.markReviewed(events: events)
+                    learningReviewRevision &+= 1
+                }
             }
         }
     }

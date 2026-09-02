@@ -124,6 +124,39 @@ nonisolated enum AgentLearningReviewStore {
         save(items)
     }
 
+    /// Returns only events that still need the operator's attention. Events
+    /// may briefly reach the transcript before their review-queue write lands,
+    /// so a missing row is treated as pending rather than silently hidden.
+    static func pendingEvents(from events: [AgentLearningEvent]) -> [AgentLearningEvent] {
+        let decisions = Dictionary(uniqueKeysWithValues: load().map { ($0.id, $0.decision) })
+        return events.filter { decisions[$0.id] == nil || decisions[$0.id] == .pending }
+    }
+
+    /// Opening the post-turn suggestion popover counts as reviewing every
+    /// item it showed. Preserve explicit dismiss/approve decisions and create
+    /// a reviewed row when rendering raced ahead of `enqueue`.
+    static func markReviewed(events: [AgentLearningEvent]) {
+        guard !events.isEmpty else { return }
+        var items = load()
+        let now = Date()
+        for event in events {
+            if let index = items.firstIndex(where: { $0.id == event.id }) {
+                guard items[index].decision == .pending else { continue }
+                items[index].decision = .reviewed
+                items[index].updatedAt = now
+                items[index].reviewedAt = now
+            } else {
+                items.append(AgentLearningReviewItem(
+                    event: event,
+                    decision: .reviewed,
+                    updatedAt: now,
+                    reviewedAt: now
+                ))
+            }
+        }
+        save(items)
+    }
+
     static func updateSkillDraft(id: UUID, draft: AgentLearningSkillDraft) {
         var items = load()
         guard let index = items.firstIndex(where: { $0.id == id }),

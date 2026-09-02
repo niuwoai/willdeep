@@ -247,9 +247,7 @@ struct AgentProviderPreset: Identifiable, Equatable {
             id: "some-im",
             displayName: "some.im",
             baseURL: "https://some.im/v1",
-            // M tier by default; the 1M `deepseek-v4-flash` is now what `deep`
-            // escalates to, not where every session starts.
-            defaultModel: "glm-5",
+            defaultModel: SomeIMManagedModel.autoFlash,
             defaultProModel: "deepseek-v4-pro",
             supportsModelFetch: true,
             modelHints: []
