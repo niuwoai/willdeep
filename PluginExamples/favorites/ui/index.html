@@ -197,6 +197,7 @@
         padding: 0 5px;
         background: var(--surface-strong);
       }
+      .meta button.source:hover { color: var(--fg); }
       .actions { display: flex; gap: 4px; opacity: 0; transition: opacity .12s ease; }
       li.card:hover .actions, li.card:focus-within .actions { opacity: 1; }
       .actions button {
@@ -329,6 +330,7 @@
             notePlaceholder: '写点备注…（⌘↩ 保存，Esc 取消）',
             expand: '展开',
             collapse: '收起',
+            openSource: '查看原文',
             addTag: '＋ 标签',
             removed: '已删除 1 条收藏',
             cleared: function (n) { return '已清空 ' + n + ' 条收藏'; },
@@ -367,6 +369,7 @@
             notePlaceholder: 'Add a note… (⌘↩ to save, Esc to cancel)',
             expand: 'Expand',
             collapse: 'Collapse',
+            openSource: 'View source',
             addTag: '+ tag',
             removed: 'Favorite deleted',
             cleared: function (n) { return 'Cleared ' + n + ' favorites'; },
@@ -748,11 +751,21 @@
           time.title = absoluteTime(item.createdAt);
           meta.appendChild(time);
 
-          if (item.source) {
-            var source = document.createElement('span');
+          if (item.sourceSessionID && item.sourceMessageID && window.willdeep
+              && typeof window.willdeep.openConversation === 'function') {
+            var source = document.createElement('button');
+            source.type = 'button';
             source.className = 'source';
-            source.textContent = item.source;
+            source.textContent = t('openSource');
+            source.addEventListener('click', function () {
+              window.willdeep.openConversation(item.sourceSessionID, item.sourceMessageID);
+            });
             meta.appendChild(source);
+          } else if (item.source) {
+            var sourceLabel = document.createElement('span');
+            sourceLabel.className = 'source';
+            sourceLabel.textContent = item.source;
+            meta.appendChild(sourceLabel);
           }
 
           var spacer = document.createElement('span');

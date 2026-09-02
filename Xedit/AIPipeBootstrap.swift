@@ -78,6 +78,7 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         AIPipe.flush()
+        _ = AgentKernelEventStore.flushPendingWrites()
         MainActor.assumeIsolated {
             AgentTelemetry.flushBeforeTermination()
         }
@@ -97,6 +98,7 @@ final class WillDeepAppDelegate: NSObject, NSApplicationDelegate {
         // main run loop remains responsive instead of showing a beachball.
         DispatchQueue.global(qos: .utility).async {
             AgentSessionStore.flushPendingWrites()
+            _ = AgentKernelEventStore.flushPendingWrites()
             DispatchQueue.main.async {
                 sender.reply(toApplicationShouldTerminate: true)
             }

@@ -36,11 +36,69 @@ struct AgentGlobalRulesTests {
 
         #expect(template.contains("# WillDeep 全局规则（精简索引）"))
         #expect(template.contains(AgentBundledRules.rootPlaceholder))
+        #expect(template.contains(AgentBundledRules.readerToolName))
         #expect(template.contains("ai-guardrails.md"))
         #expect(template.contains("version-control.md"))
         #expect(template.contains("不要一次性读取整个目录"))
         #expect(!template.contains("<!-- BEGIN ALMA AGENTRULES SYNC -->"))
         #expect(template.count < 2_000)
+    }
+
+    @Test
+    func bundledRuleReaderReadsManifestFileWithoutWorkspaceAccess() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let rulesRoot = try #require(AgentBundledRules.rootURL(sourceRoot: repositoryRoot))
+
+        let result = try AgentBundledRules.readRule(named: "programming.md", rootURL: rulesRoot)
+
+        #expect(result.summary == "Read bundled rule programming.md")
+        #expect(result.payload.contains("编程最佳实践"))
+    }
+
+    @Test
+    func bundledRuleReaderRejectsUnknownAndTraversalPaths() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let rulesRoot = try #require(AgentBundledRules.rootURL(sourceRoot: repositoryRoot))
+
+        #expect(throws: AgentToolError.self) {
+            try AgentBundledRules.readRule(named: "../AGENTS.md", rootURL: rulesRoot)
+        }
+        #expect(throws: AgentToolError.self) {
+            try AgentBundledRules.readRule(named: "not-a-rule.md", rootURL: rulesRoot)
+        }
+    }
+
+    @Test
+    func untouchedCompactIndexMigratesToNativeRuleReaderInstructions() {
+        #expect(AgentGlobalRulesStore.shouldMigrateLegacyDefaultRulesFile(
+            settings: .default,
+            fileText: AgentBundledRules.previousDefaultGlobalRulesTemplate
+        ))
+        #expect(!AgentGlobalRulesStore.shouldMigrateLegacyDefaultRulesFile(
+            settings: .default,
+            fileText: AgentBundledRules.previousDefaultGlobalRulesTemplate + "\n个人偏好"
+        ))
+    }
+
+    @Test
+    func bundledRuleReaderIsAReadOnlyCoreToolAvailableToFileReadingWorkers() throws {
+        let descriptor = try #require(AgentToolRegistry.all.first {
+            $0.name == AgentBundledRules.readerToolName
+        })
+
+        #expect(descriptor.risk == .read)
+        #expect(AgentToolPackCatalog.coreToolNames.contains(AgentBundledRules.readerToolName))
+        #expect(AgentSubagentRunner.allowedToolNames.contains(AgentBundledRules.readerToolName))
+        #expect(AgentSubagentProfileCatalog.reader.effectiveToolNames().contains(
+            AgentBundledRules.readerToolName
+        ))
+        #expect(!AgentSubagentProfileCatalog.smallReviewer.effectiveToolNames().contains(
+            AgentBundledRules.readerToolName
+        ))
     }
 
     @Test

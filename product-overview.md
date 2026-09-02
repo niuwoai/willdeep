@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-31 | Current version: v1.316.0-rc3
+> Last updated: 2026-09-02 | Current version: v1.317.0-rc2
 
 ## Positioning
 
@@ -17,6 +17,18 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **宿主级 Agent Runtime 事件内核（1.317.0-rc2）** —— Worker、终端、后台 Job、媒体、Workflow、审批、定时器、Webhook、邮件与连接器信号统一进入进程级共享的持久化事件信封；宿主分别记录调度权限与 `host/model/tool/file/network` 正文来源，并按 enqueue / 边界让出 / 强制抢占三档策略调度。多窗口只有会话 owner 可唤醒模型，lease 绑定具体 provider turn，外部唤醒额度在整个进程共享且到期自动重试。冷启动先异步恢复会话与事件日志再启动 Relay，坏日志自动隔离。用户手敲终端不进入事件流，后台 Worker 则继承父会话的可见终端与审批回调。Collaboration Relay v2 使用持久化非破坏 poll + 明确 ACK，队列满时拒收新事件而不淘汰未 ACK 旧事件；设置页展示在线状态、轮询时间、错误及接收/ACK/丢弃/去重/积压统计，事件中心展示处理人和处理结果。完整契约见 [Agent Runtime Kernel](docs/AGENT_RUNTIME_KERNEL.md)。
+
+- **完成回合收口与原文回溯（1.315.0-rc17）** —— Agent 工作中的过程消息仍实时显示；回合完成后，主对话只保留最终结论，并继续汇总整轮耗时、Token 与文件变更概览。会话内搜索会暂时展开完整过程，收藏项则保存会话、消息与回合标识，可从收藏夹打开对应的原始消息；正文仍是原生可选择、可复制文本。
+
+- **五路 Worker 舰队与统一待确认徽标（1.315.0-rc13）** —— 主 Agent 每个会话最多并行五个后台 Worker；composer 状态条可展开舰队面板，集中查看每个工种的模型、动作、轮次、工具数、耗时及独立详情。带写集合的 Worker 继续前台串行并受精确路径锁保护。Dock 徽标按待处理请求而非阻塞会话计数，主 Agent 和子 Worker 上报到父会话的工具审批、危险确认、问答、补丁与 Plan 均进入同一个数字，跨窗口按会话去重。
+
+- **通用 Worker 的完整打杂工具面（1.315.0-rc12）** —— 无法明确归入窄工种的请求统一落到 `generalist`。它可在父任务声明的精确文件集合内创建文件和应用补丁，读取/操作用户可见终端，使用保留现有登录态的 Chrome 工具，并通过 `list_mcp_servers` / `list_mcp_tools` / `call_mcp_tool` 发现和调用所有已配置 MCP 工具。只读调用直接执行；终端命令、Chrome 变更和 MCP 写调用仍复用父会话当前审批档位、MCP 信任级别与安全裁判，未获批时回报精确动作，不绕过用户授权。
+
+- **运维 Worker 的可见终端基线（1.315.0-rc11）** —— `ops_runner` 的终端可见性与写命令授权解耦：它始终可列出/选择标签、读取快照并提交受执行闸门保护的终端命令，因而能在生产变更前先完成只读基线；静态只读命令直接通过，修改命令仍由父会话智能审核或精确 `target_command` 人工授权，普通窄工种不会因此获得用户终端。
+
+- **内置规则原生读取通道（1.315.0-rc10）** —— 精简全局规则索引引用的 Markdown 不再借用受项目工作区约束的 `read_file`，改由宿主只读工具 `read_bundled_rule` 从已签名 App 资源读取。工具只接受 `manifest.json` 白名单中的根目录文件名，并在软链接解析后复核边界；主 Agent 和具备文件读取能力的 Worker 自动获得该工具，无工具判断档保持隔离。读取发生在宿主侧，所以本地、SSH 与 daemon 会话行为一致。旧版未修改的默认索引自动迁移到新指令，用户定制文件不覆盖。
 
 - **三档模型走共享配置（1.314.0-rc1）** —— 三档绑定改为优先读 `~/.willdeep/config.toml` 的 `[worker_tiers.<档>]`，与 willdeep-rs 0.52.0-rc1 同一份 Schema。此前 App 存 UserDefaults、命令行存 config.toml，两条覆盖路径互不知情，同一个人、同一个账号，`worker_tier: expert` 会因为开的是哪个客户端而落到不同模型上。优先级与 `[agent]` 一致：文件里写了的档压过 App 设置，`[worker_tiers.*]` 只读不回写；被文件固定的档在设置面板里改为只读展示并说明去哪里改。配置指定了本机没有的提供商时，该档标记不可用并给出原因，不静默回落到父会话端点——回落等于把点名的模型发到另一个网关上。
 

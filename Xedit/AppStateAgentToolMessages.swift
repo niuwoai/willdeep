@@ -279,22 +279,24 @@ extension AppState {
         // parents that want a narrower write set than the read context.
         let taskPacket = AgentSubagentTaskPacket.parse(arguments["task"])
 
-        // Writing trades need a bounded, locked target set before anything
-        // runs. Smart / Workspace Access inherit the parent workspace grant;
-        // Strict still gates the whole spawn. Every path stays enforced here.
+        // Dedicated writing trades require a bounded target set. The
+        // generalist accepts the same capability when routing fell through
+        // but the parent supplied target_files/task.write_files; without a
+        // declared set it remains a non-writing catch-all.
         var writeAccess: AgentSubagentWriteAccess?
-        if profile.requiresWriteAccess {
-            var rawTargets: [String] = []
-            if case .array(let values)? = arguments["target_files"] {
-                rawTargets = values.compactMap { $0.stringValue() }
-            } else if let single = arguments["target_file"]?.stringValue() {
-                rawTargets = [single]
-            } else if profile.id != AgentSubagentProfileCatalog.editorID {
-                // `write_files` when the packet declares it, else the legacy
-                // combined set. Context in `read_files` never lands here —
-                // that is the whole point of the split.
-                rawTargets = taskPacket?.requestedWriteFiles ?? []
-            }
+        var rawTargets: [String] = []
+        if case .array(let values)? = arguments["target_files"] {
+            rawTargets = values.compactMap { $0.stringValue() }
+        } else if let single = arguments["target_file"]?.stringValue() {
+            rawTargets = [single]
+        } else if profile.id != AgentSubagentProfileCatalog.editorID {
+            // `write_files` when the packet declares it, else the legacy
+            // combined set. Context in `read_files` never lands here.
+            rawTargets = taskPacket?.requestedWriteFiles ?? []
+        }
+        let optionalGeneralistWriteRequested = profile.id == AgentSubagentProfileCatalog.generalistID
+            && !rawTargets.isEmpty
+        if profile.requiresWriteAccess || optionalGeneralistWriteRequested {
             guard !rawTargets.isEmpty,
                   let access = AgentSubagentWriteAccess(targetRelativePaths: rawTargets) else {
                 agentSpawnLog.error(
@@ -350,7 +352,7 @@ extension AppState {
         // parent to integrate or repair after the bounded worker attempt. An
         // ops inspection alone does not unlock a mutating command: that route
         // must carry the exact approved command.
-        if profile.requiresWriteAccess
+        if writeAccess != nil
             || (profile.id == AgentSubagentProfileCatalog.opsRunnerID && approvedCommand != nil) {
             runtime.currentTurnAttemptedWorkerProfiles.insert(profile.id)
         }
@@ -412,18 +414,81 @@ extension AppState {
             progress: "启动中…"
         )
 
+        let backgroundWorkspaceRoots = Array(
+            agentWorkspaceRoots(for: runtime.session).dropFirst()
+        )
+        let backgroundEffectiveTools = profile.effectiveToolNames(
+            writeAccessGranted: false,
+            approvedCommandGranted: approvedCommand != nil
+        )
+        let backgroundCommandReviewer: AgentSubagentRunner.CommandReviewer? = {
+            guard backgroundEffectiveTools.contains("run_command")
+                    || backgroundEffectiveTools.contains("terminal_send_command") else {
+                return nil
+            }
+            let runtimeID = runtime.id
+            return { [weak self] toolName, command in
+                guard let self,
+                      let liveRuntime = self.loadedRuntime(for: runtimeID),
+                      let hostMessageID = liveRuntime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
+                    return false
+                }
+                let toolArguments: [String: AgentJSONValue] = ["command": .string(command)]
+                let risk = AgentToolRegistry.risk(
+                    for: toolName,
+                    arguments: toolArguments,
+                    rootDirectory: workspaceURL,
+                    additionalWorkspaceRoots: backgroundWorkspaceRoots
+                )
+                return await self.resolveSubagentToolApproval(
+                    toolName: toolName,
+                    arguments: toolArguments,
+                    risk: risk,
+                    workerName: resolvedWorkerName,
+                    runtime: liveRuntime,
+                    messageID: hostMessageID,
+                    rootDirectory: workspaceURL
+                )
+            }
+        }()
+        let backgroundToolReviewer: AgentSubagentRunner.ToolReviewer? = {
+            guard profile.id == AgentSubagentProfileCatalog.generalistID,
+                  !backgroundEffectiveTools.isDisjoint(
+                    with: AgentSubagentProfileCatalog.generalistExtraToolNames
+                  ) else {
+                return nil
+            }
+            let runtimeID = runtime.id
+            return { [weak self] toolName, toolArguments, risk in
+                guard let self,
+                      let liveRuntime = self.loadedRuntime(for: runtimeID),
+                      let hostMessageID = liveRuntime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
+                    return false
+                }
+                return await self.resolveSubagentToolApproval(
+                    toolName: toolName,
+                    arguments: toolArguments,
+                    risk: risk,
+                    workerName: resolvedWorkerName,
+                    runtime: liveRuntime,
+                    messageID: hostMessageID,
+                    rootDirectory: workspaceURL
+                )
+            }
+        }()
+
         if runInBackground {
             // Editor trades are synchronous by construction: the file lock
             // and the approval are scoped to a turn the user is watching.
-            if profile.requiresWriteAccess {
+            if writeAccess != nil {
                 agentSpawnLog.error(
                     "spawn_agent rejected reason=write_trade_background runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public)"
                 )
                 finishRecord(
                     status: .failed,
-                    summary: "editor cannot run in background",
-                    payload: "Tool error: the `editor` trade cannot run in the background — its file lock and approval are scoped to this turn. Re-spawn without `run_in_background`.",
-                    errorMessage: "Editor trade requires foreground"
+                    summary: "writing Worker cannot run in background",
+                    payload: "Tool error: the `\(profile.id)` trade requested bounded file writes and cannot run in the background — its file lock and approval are scoped to this turn. Re-spawn without `run_in_background`.",
+                    errorMessage: "Writing Worker requires foreground"
                 )
                 return
             }
@@ -437,7 +502,17 @@ extension AppState {
                     workspaceLocation: workspaceLocation,
                     parentRuntimeID: runtime.id,
                     originatingTurnID: runtime.activeTurnID,
-                    profile: profile
+                    profile: profile,
+                    executionContext: AgentSubagentRegistry.BackgroundExecutionContext(
+                        additionalWorkspaceRoots: backgroundWorkspaceRoots,
+                        verifierCommand: verifierCommand,
+                        verifierMaxAttempts: taskPacket?.maxAttempts
+                            ?? AgentSubagentTaskPacket.defaultMaxAttempts,
+                        terminalController: agentTerminalController,
+                        approvedCommand: approvedCommand,
+                        commandReviewer: backgroundCommandReviewer,
+                        toolReviewer: backgroundToolReviewer
+                    )
                 )
                 bindSubagentRun(run.id)
                 // Seed the activity before any heartbeat arrives, so the
@@ -669,20 +744,11 @@ extension AppState {
                         || effectiveTools.contains("terminal_send_command") else {
                     return nil
                 }
-                // Strict mode is the one setting that means "ask me every
-                // time". Handing it a reviewer would answer on the user's
-                // behalf, which is the whole thing they turned off.
-                guard runtime.approvalMode != .requestEveryTime else { return nil }
-                let latestUserMessage = runtime.messages
-                    .last(where: { $0.isOperatorInput })?.content ?? ""
                 return { [weak self] toolName, command in
-                    guard let self else { return false }
-                    guard AgentSubagentRunner.subagentCommandMayBeReviewedByParent(
-                        command,
-                        approvalMode: runtime.approvalMode,
-                        workspaceURL: workspaceURL,
-                        additionalWorkspaceRoots: workspaceRoots
-                    ) else { return false }
+                    guard let self,
+                          let hostMessageID = runtime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
+                        return false
+                    }
                     let arguments: [String: AgentJSONValue] = ["command": .string(command)]
                     let risk = AgentToolRegistry.risk(
                         for: toolName,
@@ -690,18 +756,38 @@ extension AppState {
                         rootDirectory: workspaceURL,
                         additionalWorkspaceRoots: workspaceRoots
                     )
-                    return await self.autoApprovalSource(
+                    return await self.resolveSubagentToolApproval(
                         toolName: toolName,
                         arguments: arguments,
                         risk: risk,
+                        workerName: resolvedWorkerName,
+                        runtime: runtime,
+                        messageID: hostMessageID,
                         rootDirectory: workspaceURL,
-                        additionalWorkspaceRoots: workspaceRoots,
-                        interactionMode: runtime.interactionMode,
-                        approvalMode: runtime.approvalMode,
-                        conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
-                        environmentTrustDeclarations: runtime.environmentTrustDeclarations,
-                        latestUserMessage: latestUserMessage
-                    ) != nil
+                    )
+                }
+            }()
+            let toolReviewer: AgentSubagentRunner.ToolReviewer? = {
+                guard profile.id == AgentSubagentProfileCatalog.generalistID,
+                      !effectiveTools.isDisjoint(
+                        with: AgentSubagentProfileCatalog.generalistExtraToolNames
+                      ) else {
+                    return nil
+                }
+                return { [weak self] toolName, arguments, risk in
+                    guard let self,
+                          let hostMessageID = runtime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
+                        return false
+                    }
+                    return await self.resolveSubagentToolApproval(
+                        toolName: toolName,
+                        arguments: arguments,
+                        risk: risk,
+                        workerName: resolvedWorkerName,
+                        runtime: runtime,
+                        messageID: hostMessageID,
+                        rootDirectory: workspaceURL,
+                    )
                 }
             }()
             return try await AgentSubagentRunner.run(
@@ -721,11 +807,12 @@ extension AppState {
                 verifierMaxAttempts: taskPacket?.maxAttempts
                     ?? AgentSubagentTaskPacket.defaultMaxAttempts,
                 patchProposalSink: editorPatchSink,
-                // terminal_operator 与带 target_command 的 ops_runner 需要
-                // 父会话侧栏终端；其余工种在执行层拿不到这个 controller。
+                // terminal_operator / ops_runner / generalist 共用父会话
+                // 可见终端；命令权限仍在执行层逐条判定。
                 terminalController: agentTerminalController,
                 approvedCommand: approvedCommand,
                 commandReviewer: commandReviewer,
+                toolReviewer: toolReviewer,
                 interventionChannel: interventionChannel,
                 onProgress: { [weak self] progress in
                     self?.applySubagentLiveProgress(

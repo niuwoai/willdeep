@@ -419,11 +419,24 @@ nonisolated enum AgentSubagentSpeechTimeline {
 /// This states the count first and then details the one Worker whose status
 /// is freshest, so the line never claims to be the whole story when it isn't.
 nonisolated struct AgentSubagentFleetStatus: Equatable {
+    struct Member: Identifiable, Equatable {
+        let id: UUID
+        let workerName: String
+        let model: String?
+        let detail: String
+        let startedAt: Date?
+        let runID: UUID?
+        let round: Int
+        let maximumRounds: Int
+        let completedToolInvocations: Int
+    }
+
     let runningCount: Int
     let primaryWorkerName: String
     let primaryDetail: String
     /// The primary Worker's own start time, for the strip's elapsed clock.
     let primaryStartedAt: Date?
+    let members: [Member]
 
     /// Nil when no Worker is running, which leaves the strip on whatever
     /// phase it would otherwise show.
@@ -445,16 +458,34 @@ nonisolated struct AgentSubagentFleetStatus: Equatable {
             ($0.subagentLiveActivity?.round ?? 0) < ($1.subagentLiveActivity?.round ?? 0)
         } ?? running[running.count - 1]
 
-        let name = primary.subagentLiveActivity?.workerName
-            ?? primary.subagentWorkerName
-            ?? fallbackWorkerName(primary)
+        func workerName(for call: AgentToolCall) -> String {
+            call.subagentLiveActivity?.workerName
+                ?? call.subagentWorkerName
+                ?? fallbackWorkerName(call)
+        }
+        let name = workerName(for: primary)
+        let members = running.map { call in
+            let activity = call.subagentLiveActivity
+            return Member(
+                id: call.id,
+                workerName: workerName(for: call),
+                model: call.subagentModel,
+                detail: activity?.detailLine ?? call.subagentProgress ?? "",
+                startedAt: activity?.startedAt ?? call.startedAt,
+                runID: call.subagentRunID,
+                round: activity?.round ?? 0,
+                maximumRounds: activity?.maximumRounds ?? 0,
+                completedToolInvocations: activity?.completedToolInvocations ?? 0
+            )
+        }
         return AgentSubagentFleetStatus(
             runningCount: running.count,
             primaryWorkerName: name,
             primaryDetail: primary.subagentLiveActivity?.detailLine
                 ?? primary.subagentProgress
                 ?? "",
-            primaryStartedAt: primary.subagentLiveActivity?.startedAt
+            primaryStartedAt: primary.subagentLiveActivity?.startedAt,
+            members: members
         )
     }
 

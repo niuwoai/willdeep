@@ -117,13 +117,29 @@ extension AppState {
         upsertAgentUsageSnapshot(for: session)
         let runtime = AgentRuntime(session: session)
         agentRuntimes[session.id] = runtime
+        let startedAt = Date()
+        publishAgentKernelEvent(
+            AgentKernelEvent(
+                runtimeID: session.id,
+                source: .timer,
+                kind: .scheduledWake,
+                priority: .normal,
+                interruptPolicy: .enqueue,
+                trust: .host,
+                contentProvenance: .host,
+                audience: .user,
+                title: routine.name,
+                payload: "Scheduled routine fired.",
+                metadata: ["resource_id": routine.id.uuidString],
+                dedupeKey: "routine:\(routine.id.uuidString):\(Int(startedAt.timeIntervalSince1970))",
+                requiresUserAction: false
+            )
+        )
         // Routine session stays a background runtime — no activeRuntime
         // forward subscription. Sidebar status dot observes it directly.
         if let modelID = routine.modelID, !modelID.isEmpty {
             runtime.sessionModelOverride = modelID
         }
-
-        let startedAt = Date()
         agentRoutines[index].lastRunAt = startedAt
         agentRoutines[index].lastSessionID = session.id
         agentRoutines[index].updatedAt = startedAt

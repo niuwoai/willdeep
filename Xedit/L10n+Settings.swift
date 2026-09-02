@@ -831,6 +831,38 @@ extension L10n {
         }
 
         enum Connectors {
+            static let runtimeEventSection = String(localized: "settings.connectors.runtime-events.section", defaultValue: "Runtime Event Routing", table: "RuntimeEvents")
+            static let runtimeEventPolling = String(localized: "settings.connectors.runtime-events.polling", defaultValue: "Poll incoming relay events", table: "RuntimeEvents")
+            static let runtimeEventRelayURL = String(localized: "settings.connectors.runtime-events.relay-url", defaultValue: "Relay base URL", table: "RuntimeEvents")
+            static let runtimeEventRelayToken = String(localized: "settings.connectors.runtime-events.relay-token", defaultValue: "Relay access token", table: "RuntimeEvents")
+            static let runtimeEventSaveToken = String(localized: "settings.connectors.runtime-events.save-token", defaultValue: "Save Token", table: "RuntimeEvents")
+            static let runtimeEventHelp = String(localized: "settings.connectors.runtime-events.help", defaultValue: "Incoming events enter a dedicated Event Orchestrator session. The token stays in Keychain, payloads remain untrusted data, and external events cannot hard-preempt an active model step.", table: "RuntimeEvents")
+            static let runtimeEventStatus = String(localized: "settings.connectors.runtime-events.status", defaultValue: "Relay status", table: "RuntimeEvents")
+            static let runtimeEventLastPoll = String(localized: "settings.connectors.runtime-events.last-poll", defaultValue: "Last poll attempt", table: "RuntimeEvents")
+            static let runtimeEventLastSuccess = String(localized: "settings.connectors.runtime-events.last-success", defaultValue: "Last successful sync", table: "RuntimeEvents")
+            static let runtimeEventCounters = String(localized: "settings.connectors.runtime-events.counters", defaultValue: "Delivery counters", table: "RuntimeEvents")
+            static let runtimeEventStatusDisabled = String(localized: "settings.connectors.runtime-events.status.disabled", defaultValue: "Disabled", table: "RuntimeEvents")
+            static let runtimeEventStatusConfigurationRequired = String(localized: "settings.connectors.runtime-events.status.configuration-required", defaultValue: "Configuration required", table: "RuntimeEvents")
+            static let runtimeEventStatusConnecting = String(localized: "settings.connectors.runtime-events.status.connecting", defaultValue: "Connecting", table: "RuntimeEvents")
+            static let runtimeEventStatusConnected = String(localized: "settings.connectors.runtime-events.status.connected", defaultValue: "Connected", table: "RuntimeEvents")
+            static let runtimeEventStatusBackingOff = String(localized: "settings.connectors.runtime-events.status.backing-off", defaultValue: "Retrying after an error", table: "RuntimeEvents")
+
+            static func runtimeEventCounterValues(
+                received: Int,
+                acknowledged: Int,
+                dropped: Int,
+                deduplicated: Int,
+                pending: Int
+            ) -> String {
+                String(
+                    format: String(localized: "settings.connectors.runtime-events.counter-values", defaultValue: "Received %lld · ACKed %lld · Dropped %lld · Deduplicated %lld · Relay pending %lld", table: "RuntimeEvents"),
+                    Int64(received),
+                    Int64(acknowledged),
+                    Int64(dropped),
+                    Int64(deduplicated),
+                    Int64(pending)
+                )
+            }
             static let description = String(localized: "settings.connectors.description", defaultValue: "Manage team collaboration platforms that WillDeep can use for notifications, commands, and document publishing.")
             static let replicateSummary = String(localized: "settings.connectors.replicate-summary", defaultValue: "Image upscale, erase, inpaint, and prediction tasks. Token stays in Keychain.")
             static let statusConfigured = String(localized: "settings.connectors.status-configured", defaultValue: "Configured")

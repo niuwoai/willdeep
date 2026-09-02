@@ -15,6 +15,94 @@ import Testing
 @Suite
 struct AgentChatHistoryRendererGoalTests {
     @Test
+    func settledTurnFoldsIntermediateAssistantUpdatesIntoFinalAnswer() {
+        let user = AgentMessage(role: .user, content: "请完成修改")
+        let planning = AgentMessage(role: .assistant, content: "我先检查相关文件。")
+        let editing = AgentMessage(role: .assistant, content: "正在修改并运行测试。")
+        let final = AgentMessage(role: .assistant, content: "已完成，测试通过。")
+
+        let displayed = AgentTranscriptModePresentation.projectedMessages(
+            from: [user, planning, editing, final],
+            isLatestTurnActive: false
+        )
+
+        #expect(displayed.map(\.id) == [user.id, final.id])
+    }
+
+    @Test
+    func activeTurnKeepsEveryIntermediateAssistantUpdateVisible() {
+        let user = AgentMessage(role: .user, content: "继续")
+        let planning = AgentMessage(role: .assistant, content: "正在分析。")
+        let editing = AgentMessage(role: .assistant, content: "正在修改。")
+
+        let displayed = AgentTranscriptModePresentation.projectedMessages(
+            from: [user, planning, editing],
+            isLatestTurnActive: true
+        )
+
+        #expect(displayed.map(\.id) == [user.id, planning.id, editing.id])
+    }
+
+    @Test
+    func searchRevealRestoresFoldedProcessWithoutRewritingMessages() {
+        let user = AgentMessage(role: .user, content: "查问题")
+        let diagnosis = AgentMessage(role: .assistant, content: "唯一搜索词 needle-process")
+        let final = AgentMessage(role: .assistant, content: "问题已解决。")
+        let raw = [user, diagnosis, final]
+
+        let displayed = AgentTranscriptModePresentation.projectedMessages(
+            from: raw,
+            isLatestTurnActive: false,
+            revealsIntermediateMessages: true
+        )
+
+        #expect(displayed == raw)
+        #expect(displayed.contains { $0.content.contains("needle-process") })
+    }
+
+    @Test
+    func settledTurnKeepsArtifactsFailuresAndProtectedApprovals() {
+        let user = AgentMessage(role: .user, content: "交付")
+        let artifact = AgentMessage(
+            role: .assistant,
+            content: "",
+            images: [AgentImageAttachment(
+                mimeType: "image/png",
+                dataBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+            )]
+        )
+        var failure = AgentMessage(role: .assistant, content: "部署失败，保留错误供检查。")
+        failure.settledToolReceipts = ["deploy": .failed]
+        let approval = AgentMessage(role: .assistant, content: "等待确认生产发布。")
+        let final = AgentMessage(role: .assistant, content: "已停止，未执行发布。")
+
+        let displayed = AgentTranscriptModePresentation.projectedMessages(
+            from: [user, artifact, failure, approval, final],
+            isLatestTurnActive: false,
+            protectedAssistantMessageIDs: [approval.id]
+        )
+
+        #expect(displayed.map(\.id) == [user.id, artifact.id, failure.id, approval.id, final.id])
+    }
+
+    @Test
+    func eachCompletedUserTurnKeepsItsOwnFinalAnswer() {
+        let firstUser = AgentMessage(role: .user, content: "第一轮")
+        let firstProgress = AgentMessage(role: .assistant, content: "第一轮处理中")
+        let firstFinal = AgentMessage(role: .assistant, content: "第一轮完成")
+        let secondUser = AgentMessage(role: .user, content: "第二轮")
+        let secondProgress = AgentMessage(role: .assistant, content: "第二轮处理中")
+        let secondFinal = AgentMessage(role: .assistant, content: "第二轮完成")
+
+        let displayed = AgentTranscriptModePresentation.projectedMessages(
+            from: [firstUser, firstProgress, firstFinal, secondUser, secondProgress, secondFinal],
+            isLatestTurnActive: false
+        )
+
+        #expect(displayed.map(\.id) == [firstUser.id, firstFinal.id, secondUser.id, secondFinal.id])
+    }
+
+    @Test
     func goalModeKeepsEveryVisibleMessageWhenNoSummaryExists() {
         let user = AgentMessage(role: .user, content: "继续")
         let planning = AgentMessage(role: .assistant, content: "Planning next pass")

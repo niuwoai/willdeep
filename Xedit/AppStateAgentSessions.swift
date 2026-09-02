@@ -2332,6 +2332,11 @@ extension AppState {
         pendingDispatchQueue.removeAll { $0.runtimeID == id }
 
         if removeFromStore, !AgentSessionStore.delete(id: id) { return false }
+        if removeFromStore {
+            agentRuntimeKernel.removeEvents(for: id)
+            agentExternalWakeRetryTasks.removeValue(forKey: id)?.cancel()
+            agentKernelPreemptedRuntimeIDs.remove(id)
+        }
         persistedImages.forEach { $0.removeStoredFileIfNeeded() }
         agentSessions.removeAll { $0.id == id }
         removeAgentUsageSnapshot(id: id)

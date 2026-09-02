@@ -364,6 +364,11 @@ enum AgentToolRunner {
                 result = try await AgentFileTools.grepFiles(arguments: activeArguments, context: activeContext)
             case "read_file":
                 result = try await AgentFileTools.readFile(arguments: activeArguments, context: activeContext)
+            case AgentBundledRules.readerToolName:
+                guard let file = activeArguments["file"]?.stringValue() else {
+                    throw AgentToolError.missingArgument("file")
+                }
+                result = try AgentBundledRules.readRule(named: file)
             case "list_directory":
                 result = try await AgentFileTools.listDirectory(arguments: activeArguments, context: activeContext)
             case "glob":

@@ -183,10 +183,16 @@ func (r *JobRegistry) Kill(id string) error {
 func (j *Job) Snapshot() Job {
 	j.buffer.mu.Lock()
 	defer j.buffer.mu.Unlock()
-	copy := *j
-	copy.cancel = nil
-	copy.buffer = jobBuffer{}
-	return copy
+	return Job{
+		ID:         j.ID,
+		Command:    j.Command,
+		Cwd:        j.Cwd,
+		PID:        j.PID,
+		StartedAt:  j.StartedAt,
+		FinishedAt: j.FinishedAt,
+		ExitCode:   j.ExitCode,
+		Error:      j.Error,
+	}
 }
 
 func (j *Job) EventsSince(index int) ([]JobEvent, int) {

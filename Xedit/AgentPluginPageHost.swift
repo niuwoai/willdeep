@@ -281,6 +281,9 @@ private struct AgentPluginWebPage: View {
           window.willdeep.getContext = function() { return window.__WILLDEEP_CONTEXT__ || {}; };
           window.willdeep.selectItem = function(itemID) { if (handler) handler.postMessage({type:'selectItem', itemID:itemID}); };
           window.willdeep.refresh = function() { if (handler) handler.postMessage({type:'refresh'}); };
+          window.willdeep.openConversation = function(sessionID, messageID) {
+            if (handler) handler.postMessage({type:'openConversation', sessionID:sessionID, messageID:messageID});
+          };
           window.willdeep.executeCommand = function(commandID, args) {
             var requestID = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random();
             if (handler) handler.postMessage({type:'executeCommand', requestID:requestID, commandID:commandID, arguments:args || {}});
@@ -663,6 +666,8 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 }
             case "executeCommand":
                 executeCommand(body)
+            case "openConversation":
+                openConversation(body)
             case "aiProviders":
                 listAIProviders(body)
             case "aiComplete":
@@ -738,6 +743,28 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 } catch {
                     self.sendCommandResult(requestID: requestID, result: nil, error: error.localizedDescription)
                 }
+            }
+        }
+
+        private func openConversation(_ body: [String: Any]) {
+            guard AgentPluginRegistry.shared.hasPermission(
+                .conversationRead,
+                pluginID: destination.pluginID
+            ),
+                  let sessionString = body["sessionID"] as? String,
+                  let messageString = body["messageID"] as? String,
+                  let sessionID = UUID(uuidString: sessionString),
+                  let messageID = UUID(uuidString: messageString),
+                  let session = AgentSessionStore.load(id: sessionID),
+                  let message = session.messages.first(where: { $0.id == messageID }) else {
+                return
+            }
+            Task { @MainActor [weak self] in
+                guard let appState = self?.appState else { return }
+                appState.isAgentPanelVisible = true
+                appState.agentPrimaryDestination = .conversation
+                _ = appState.selectAndRevealAgentSessionInSidebar(id: sessionID)
+                AgentTranscriptReader.openSingleMessage(message, sessionTitle: session.title)
             }
         }
 

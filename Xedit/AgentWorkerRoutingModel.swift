@@ -13,7 +13,9 @@
 //  So the keyword decision keeps the fast path it is good at — every branch
 //  that actually matched a marker scores 86 or above and is taken verbatim,
 //  costing nothing — and only the fallback branches are escalated to a
-//  model. That split matters: consulting a model on every turn would add
+//  model. The unmatched keyword fallback is the generalist, so a model
+//  `none` verdict still keeps a real catch-all destination. That split
+//  matters: consulting a model on every turn would add
 //  1.3–2.0s to the 14.4% of requests the keywords already get right.
 //
 //  The shared client streams chat and takes no response-format argument,
@@ -90,8 +92,8 @@ nonisolated enum AgentWorkerRoutingModel {
                   purpose: "跨多个文件的常规实现与修改")
     ]
 
-    /// The model may also decline: "none" means nothing fits and the
-    /// standard tier should proceed without a trade.
+    /// The model may also decline. `none` preserves the keyword fallback,
+    /// which routes otherwise unclassified work to the generalist.
     static let noneChoice = "none"
 
     static var choiceIDs: [String] { candidates.map(\.id) + [noneChoice] }
@@ -104,7 +106,7 @@ nonisolated enum AgentWorkerRoutingModel {
         你是任务派发分类器。根据用户请求，从候选 worker 中选出最合适的一个。
         候选：
         \(menu)
-        - \(noneChoice): 以上都不合适，或请求过于宽泛无法归类
+        - \(noneChoice): 以上都不合适；保留通用工具兜底
 
         判断依据是请求要做的事，不是它提到的词。只输出 JSON，不要解释。
         格式：{"worker":"候选ID或none","confidence":0到100的整数}

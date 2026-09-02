@@ -1,6 +1,6 @@
 # Collaboration Connectors
 
-> Last updated: 2026-06-20 | Current version: v1.93.0-rc4
+> Last updated: 2026-09-02 | Current version: v1.315.0-rc17
 
 WillDeep treats Feishu, DingTalk, WeCom, and WeChat/Claw as collaboration
 connectors. The Mac app owns local user intent, preview, and Keychain-backed
@@ -60,6 +60,7 @@ willdeep-agent serve-collab-relay \
   --feishu-app-id "$WILLDEEP_FEISHU_APP_ID" \
   --feishu-app-secret-file /opt/willdeep/feishu-app-secret \
   --feishu-long-connection \
+  --event-store-file /var/lib/willdeep/collab-relay-events.json \
   --token-file /opt/willdeep/collab-relay.token
 ```
 
@@ -79,11 +80,18 @@ Sensitive values stay out of the app settings and source tree:
 - Feishu/DingTalk app secret: macOS Keychain for desktop tokens, or a server
   secret file/environment for relay long-connection mode.
 - OAuth access/refresh tokens: macOS Keychain.
-- SaaS event verification secrets: future server-side secret store, not
-  UserDefaults.
+- SaaS HTTPS callbacks must carry the Relay token as a Bearer token or protected
+  query parameter at the edge. Prefer the authenticated Feishu long connection;
+  production signature/encryption verification remains required before exposing
+  a platform callback directly.
 - Feishu setup QR requires only the public app id on the relay
   (`WILLDEEP_FEISHU_APP_ID` or `--feishu-app-id`). It does not require Redis or
-  a database; callback events are retained in the relay's in-memory queue.
+  a database. Callback events are retained in the Relay's mode-0600 durable
+  journal until the desktop explicitly acknowledges them; the same journal
+  persists received, acknowledged, dropped, and deduplicated counters. The
+  journal is capped at 64 MiB and never evicts an unacknowledged event: when
+  either the configured event count or byte cap is full, new callbacks are
+  rejected so the sender can retry after the desktop acknowledges backlog.
 
 ### Feishu Event Delivery
 
@@ -95,9 +103,11 @@ Feishu can deliver robot events in two ways:
   `--feishu-app-secret-file`, then queues events for `/events/poll`. This mode
   does not require a public event callback URL or callback encryption strategy.
 - **HTTPS callback**: select "send events to developer server" and register
-  `https://fly.niuwoai.com/events/feishu`. This remains useful when the relay
-  should receive events through a public edge, but it requires reachable HTTPS
-  and production signature/encryption verification.
+  `https://fly.niuwoai.com/events/feishu?token=<relay-token>`. This remains useful
+  when the relay should receive events through a public edge, but it requires
+  reachable HTTPS, edge log redaction for the query token, and production
+  signature/encryption verification. A reverse proxy that injects a Bearer token
+  after platform verification is preferable.
 
 The relay defaults long-connection subscriptions to `im.message.receive_v1` and
 `application.bot.menu_v6`. Override with
@@ -151,11 +161,11 @@ GitHub issue -> generate Feishu PRD -> send review request -> collect comments
 -> update document -> generate implementation tasks
 ```
 
-The relay receives Feishu events, queues them, and exposes authenticated polling
-for the Mac side or a future worker. Feishu events may arrive through either the
-public `/events/feishu` callback or the official SDK long connection. The
-current relay intentionally keeps an in-memory queue; production storage can
-become PostgreSQL/Redis once callback volume justifies it.
+The relay receives Feishu events, writes them to a durable local journal, and
+exposes authenticated poll/ACK delivery for the Mac side or a future worker.
+Feishu events may arrive through either the protected `/events/feishu` callback
+or the official SDK long connection. PostgreSQL/Redis can replace the journal
+once multi-instance callback volume justifies it.
 
 ## DingTalk Target Depth
 
@@ -218,11 +228,12 @@ Use `format=json` during tests to return the desktop redirect URL as JSON.
 
 ```http
 POST /events/{platform}
+Authorization: Bearer <relay-token>
 ```
 
-The relay accepts JSON bodies up to 1 MiB. If the body contains a top-level
-`challenge`, it returns the raw challenge response for platform URL
-verification.
+The relay accepts authenticated JSON bodies up to 1 MiB. A top-level
+`challenge` receives the platform's raw verification response after transport
+authentication succeeds.
 
 ### Poll Events
 
@@ -231,20 +242,52 @@ GET /events/poll
 Authorization: Bearer <relay-token>
 ```
 
-Returns queued events and removes the returned batch from memory.
+Returns up to the requested number of queued events without removing them.
+Consumers must durably persist each event before acknowledging it:
+
+```http
+POST /events/ack
+Authorization: Bearer <relay-token>
+Content-Type: application/json
+
+{"event_ids":["event-id"]}
+```
+
+Only acknowledged IDs are removed from the durable journal. Poll and ACK
+responses expose `X-WillDeep-Relay-Protocol: collab-relay.v2`; the current Mac
+client rejects older destructive-poll relays. When a platform supplies its own
+event or message id, the relay hashes it into a stable opaque relay id so a
+platform retry does not append a second unacknowledged copy.
+ACK responses include `not_found` IDs so consumers can distinguish an
+idempotent replay from a removal that actually happened in this request.
+
+### Desktop Runtime Event Routing
+
+WillDeep 1.315.0-rc17 can poll this endpoint from **Settings → Connectors →
+Runtime Event Routing**. The relay token is stored in macOS Keychain. Incoming
+events are routed to a dedicated background Event Orchestrator session and
+enter the host-owned Runtime event kernel; see
+[`AGENT_RUNTIME_KERNEL.md`](AGENT_RUNTIME_KERNEL.md).
+
+Transport authentication does not make the platform payload trusted. The
+desktop always treats relay bodies as untrusted data, prevents them from
+requesting hard preemption, and keeps every terminal/file/browser/MCP action
+behind the existing approval policy.
 
 ## Production Checklist
 
 - [ ] DNS `fly.niuwoai.com` points to the relay edge.
 - [ ] TLS certificate is active.
 - [ ] `/collab/health` returns `X-WillDeep-App-Version` and
-  `X-WillDeep-Server-Version`; upstream proxies may add their own
+  `X-WillDeep-Server-Version` plus `X-WillDeep-Relay-Protocol`; upstream proxies may add their own
   `X-App-Version` / `X-Server-Version` headers.
 - [ ] OAuth redirect URLs are registered in Feishu and DingTalk app consoles.
 - [ ] Feishu event delivery is configured as either long connection or HTTPS
   callback.
 - [ ] Event callback URLs are registered in Feishu and DingTalk app consoles
   when HTTPS callback delivery is selected.
+- [ ] `--event-store-file` points to a persistent, mode-0600-capable volume and
+  survives Relay restarts.
 - [ ] Relay token is stored outside git.
 - [ ] Feishu/DingTalk app secrets are stored in macOS Keychain.
 - [ ] Feishu app secret is stored outside git when long connection is enabled.

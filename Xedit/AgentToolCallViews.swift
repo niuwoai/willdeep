@@ -91,7 +91,9 @@ struct AgentToolCallCard: View {
                 .help("\(riskBadge): \(argumentsSummary)")
             }
 
-            if subagentBadgeText != nil || call.subagentRunID != nil {
+            if subagentBadgeText != nil
+                || call.subagentRunID != nil
+                || call.subagentWorkerName != nil {
                 HStack(spacing: 5) {
                     Image(systemName: "person.2.fill")
                         .font(.system(size: 9, weight: .semibold))
@@ -106,6 +108,15 @@ struct AgentToolCallCard: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                    } else if let workerName = call.subagentWorkerName {
+                        Text(workerName)
+                            .font(AgentDesign.chatSupportingFont(
+                                baseFontSize: appState.agentChatBaseFontSize,
+                                visualMinimum: 10,
+                                weight: .medium
+                            ))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                     // Entry point into the per-round record. Present as soon

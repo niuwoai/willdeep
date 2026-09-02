@@ -17,6 +17,11 @@ final class AppState: ObservableObject {
     nonisolated static let maxAgentToolRounds = 256
     nonisolated static let agentSidePanelResourceIdleTimeout: TimeInterval = 60 * 60
 
+    /// Stable for this process lifetime so two windows that reference the
+    /// same runtime make the same fallback ownership decision. Dictionary
+    /// iteration order is deliberately not used for runtime event delivery.
+    let agentRuntimeKernelOwnerID = UUID()
+
     @Published var openedFileURL: URL?
     @Published var fileContent: String {
         didSet {
@@ -436,6 +441,18 @@ final class AppState: ObservableObject {
     /// for the lifecycle contract.
     let agentSubagentRegistry = AgentSubagentRegistry()
 
+    /// Host-owned event bus and interrupt scheduler. Registries, terminals,
+    /// connectors, mail adapters, and timers publish here instead of waking
+    /// the language model independently.
+    let agentRuntimeKernel: AgentRuntimeKernel
+    /// One delayed retry per runtime when authenticated external wakeups hit
+    /// their process-wide sliding-window budget.
+    var agentExternalWakeRetryTasks: [UUID: Task<Void, Never>] = [:]
+    /// Marks cancellation initiated by a host-trusted critical kernel event.
+    /// A normal stop/provider failure must not auto-retry forever, while a
+    /// real preemption must restart from the preserved transcript.
+    var agentKernelPreemptedRuntimeIDs: Set<UUID> = []
+
     /// Memoizes the live activity headline across the several views that read
     /// it, and holds its text steady while reasoning streams. Deliberately
     /// not `@Published`: it is a render-cost optimization, and publishing it
@@ -593,6 +610,8 @@ final class AppState: ObservableObject {
     /// updates can `@ObservedObject` the registry directly.
     private var jobRegistrySubscription: AnyCancellable?
     private var mediaTaskRegistrySubscription: AnyCancellable?
+    var runtimeKernelSubscription: AnyCancellable?
+    var runtimeKernelSaveFailureSubscription: AnyCancellable?
     private var sessionSaveFailureSubscription: AnyCancellable?
     /// Reconciles the some.im agent provider whenever the shared login session
     /// changes — including logins/logouts made by another app sharing the
@@ -680,12 +699,17 @@ final class AppState: ObservableObject {
         // Test seam: dispatch-board persistence tests must not read or write
         // the real `com.willdeep.agentDispatch.goals.v1` domain.
         dispatchStore: AgentDispatchStore = AgentDispatchStore(),
+        runtimeKernel: AgentRuntimeKernel? = nil,
         sessionManagementDefaults: UserDefaults = .standard,
         loadSessionCatalog: Bool = true
     ) {
         self.sessionManagementDefaults = sessionManagementDefaults
         self.sessionRetentionSettings = AgentSessionRetentionSettings.load(defaults: sessionManagementDefaults)
         self.agentDispatchCoordinator = AgentDispatchCoordinator(store: dispatchStore)
+        // One process, one event kernel. Several editor/settings/headless
+        // AppState instances coexist and must never keep divergent snapshots
+        // of the same per-session journal.
+        self.agentRuntimeKernel = runtimeKernel ?? AgentRuntimeKernel.shared
         self.openedFileURL = openedFileURL
         self.fileContent = fileContent
         self.isEdited = isEdited
@@ -789,6 +813,7 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
+        configureAgentRuntimeKernel()
         // A cross-app some.im login/logout (shared Keychain group) posts this on
         // the main queue; reconcile our agent provider so the change is live
         // without a relaunch. Login done inside this app also round-trips here —
@@ -861,7 +886,7 @@ final class AppState: ObservableObject {
             // eviction dropped it while the job was still running — a plain
             // `agentRuntimes[...]` lookup would silently strand the result.
             if let runtime = self.runtime(for: job.runtimeID) {
-                self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+                self.publishBackgroundJobKernelEvent(job, runtime: runtime)
             }
         }
         // Same wake-up contract for the other two background channels:
@@ -871,7 +896,7 @@ final class AppState: ObservableObject {
         agentMediaTaskRegistry.onTaskFinished = { [weak self] task in
             guard let self, let runtimeID = task.runtimeID,
                   let runtime = self.runtime(for: runtimeID) else { return }
-            self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+            self.publishMediaTaskKernelEvent(task, runtime: runtime)
         }
         agentSubagentRegistry.onRunProgress = { [weak self] runID, update in
             self?.applyBackgroundSubagentProgress(runID: runID, update)
@@ -910,7 +935,7 @@ final class AppState: ObservableObject {
             }
             guard
                   let runtime = self.runtime(for: run.parentRuntimeID) else { return }
-            self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+            self.publishSubagentKernelEvent(run, runtime: runtime)
         }
         // Session writes ride a background queue now; when one fails
         // (disk full, permission lost) surface it on the owning session's
@@ -950,6 +975,8 @@ final class AppState: ObservableObject {
                 AgentSessionStore.loadAllWithMetadata()
             }.value
             guard let self, !Task.isCancelled else { return }
+            await self.agentRuntimeKernel.ensurePersistedEventsLoaded()
+            guard !Task.isCancelled else { return }
 
             // A user can create a session while the disk index is loading.
             // In-memory state is newer and therefore wins on ID collisions.
@@ -967,6 +994,7 @@ final class AppState: ObservableObject {
             self.metadataOnlySessionIDs = metadataOnlyIDs
             self.metadataOnlyUserMessageIDs = metadataOnlyUserMessageIDs
             self.hasLoadedAgentSessionCatalog = true
+            CollaborationRelayEventPump.shared.attach(to: self)
             // Older builds promoted Dispatch task worktrees into named
             // projects. Remove those catalog rows before migration runs, or
             // they would keep rendering as empty `dispatch-*` sidebar groups.
@@ -990,6 +1018,21 @@ final class AppState: ObservableObject {
             // waiting for the next user interaction.
             self.synchronizeDispatchBoardInBackground()
 
+            // Event journals follow the session retention boundary. Archived
+            // and deleted conversations must not leave mail/webhook payloads
+            // behind indefinitely or compete with active sessions for the
+            // global queue budget.
+            if loaded.catalogReadSucceeded {
+                self.agentRuntimeKernel.retainEvents(
+                    for: Set(self.agentSessions.lazy.filter { $0.archivedAt == nil }.map(\.id))
+                )
+            }
+
+            // Pending kernel events survived an app restart. Materialize only
+            // their owning sessions and let the normal provider-slot scheduler
+            // wake them; no phantom user message is created.
+            self.resumePersistedAgentKernelEvents()
+
             // Sidebar visibility hides empty placeholders; it cannot stop them
             // accumulating. New chats are no longer written at creation, so
             // this only has to clear what older builds left behind — and it
@@ -1001,6 +1044,7 @@ final class AppState: ObservableObject {
     }
 
     deinit {
+        agentExternalWakeRetryTasks.values.forEach { $0.cancel() }
         sessionAutoArchiveTask?.cancel()
         gitStatusRefreshTask?.cancel()
         quickOpenRefreshTask?.cancel()
@@ -1010,6 +1054,8 @@ final class AppState: ObservableObject {
         activeRuntimeForwardTask?.cancel()
         jobRegistrySubscription?.cancel()
         mediaTaskRegistrySubscription?.cancel()
+        runtimeKernelSubscription?.cancel()
+        runtimeKernelSaveFailureSubscription?.cancel()
         sessionSaveFailureSubscription?.cancel()
         someIMCodingPlanRefreshTask?.cancel()
         someIMCodingPlanRefreshTimer?.invalidate()

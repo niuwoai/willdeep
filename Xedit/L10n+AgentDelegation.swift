@@ -360,6 +360,39 @@ extension L10n {
             return String(format: template, count, primaryWorkerName)
         }
 
+        static func fleetPanelTitle(_ count: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.fleet-panel-title",
+                defaultValue: "%d Workers running"
+            )
+            return String(format: template, count)
+        }
+
+        static let fleetPanelHelp = String(
+            localized: "agent-delegation.fleet-panel-help",
+            defaultValue: "Show every running Worker"
+        )
+
+        static func roundProgress(_ round: Int, _ maximumRounds: Int?) -> String {
+            if let maximumRounds {
+                let template = String(
+                    localized: "agent-delegation.round-progress-with-maximum",
+                    defaultValue: "R%1$d/%2$d"
+                )
+                return String(format: template, round, maximumRounds)
+            }
+            return speechRoundMarker(round)
+        }
+
+        static let workerToolRequestApproved = String(
+            localized: "agent-delegation.worker-tool-request-approved",
+            defaultValue: "Worker tool request approved"
+        )
+        static let workerToolRequestDenied = String(
+            localized: "agent-delegation.worker-tool-request-denied",
+            defaultValue: "User denied Worker tool request"
+        )
+
         /// Round marker in front of one Worker utterance, matching the
         /// inspector's numbering so the two surfaces can be read together.
         static func speechRoundMarker(_ round: Int) -> String {
@@ -509,7 +542,7 @@ extension L10n {
         )
         static let profileGeneralistPurpose = String(
             localized: "agent-delegation.profile-generalist-purpose",
-            defaultValue: "General-purpose read-only work on a smaller model than this session's: reads files, searches, runs read-only commands, checks git state. Use it when no narrower trade fits."
+            defaultValue: "General-purpose fallback when no narrower trade fits: declared file patches, visible terminal, logged-in Chrome, and configured MCP tools, all under the parent session's approval policy."
         )
         static let profileDeepPurpose = String(
             localized: "agent-delegation.profile-deep-purpose",

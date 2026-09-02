@@ -17,9 +17,9 @@ extension AppState {
     ) -> AgentToolApprovalSource? {
         guard isUnattendedDispatchTask else { return nil }
         switch risk {
-        case .write, .danger:
+        case .write:
             return .dispatchTask
-        case .read, .userInput:
+        case .read, .danger, .userInput:
             return nil
         }
     }
@@ -30,9 +30,6 @@ extension AppState {
         messageID: UUID,
         rootDirectory: URL?
     ) async -> AgentDelegatedApprovalDecision {
-        if runtime.isUnattendedDispatchTask {
-            return request.allowsSessionApproval ? .acceptForSession : .accept
-        }
         let toolName: String
         var arguments: [String: AgentJSONValue] = [
             "_delegated_executor": .string(request.executor.rawValue),
@@ -73,6 +70,23 @@ extension AppState {
             if arguments["command"] == nil {
                 arguments["command"] = .string("Request additional executor permissions")
             }
+        }
+
+        if runtime.isUnattendedDispatchTask {
+            guard risk == .write,
+                  request.kind != .permissions else {
+                return .decline
+            }
+            let sandboxDecision = AgentSandboxPolicy.decision(
+                toolName: toolName,
+                arguments: arguments,
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: Array(
+                    agentWorkspaceRoots(for: runtime.session).dropFirst()
+                )
+            )
+            guard !sandboxDecision.requiresTypedConfirmation else { return .decline }
+            return request.allowsSessionApproval ? .acceptForSession : .accept
         }
 
         let autoApproval: AgentToolApprovalSource?
@@ -149,6 +163,124 @@ extension AppState {
             }
         }
         return decision
+    }
+
+    /// Native Worker equivalent of delegated-executor approval. A Worker has
+    /// no window of its own, so privileged terminal / Chrome / MCP calls are
+    /// represented by an ordinary tool card in the parent runtime and wait on
+    /// the same decision queue. Because the record is ordinary runtime state,
+    /// the sidebar, mobile gateway, notifications and Dock badge all observe
+    /// it without a parallel approval store.
+    func resolveSubagentToolApproval(
+        toolName: String,
+        arguments: [String: AgentJSONValue],
+        risk: AgentToolRisk,
+        workerName: String,
+        runtime: AgentRuntime,
+        messageID: UUID,
+        rootDirectory: URL?
+    ) async -> Bool {
+        if runtime.isUnattendedDispatchTask {
+            guard risk == .write,
+                  !AgentSessionManagementTools.requiresConfirmation(
+                    tool: toolName,
+                    arguments: arguments
+                  ),
+                  !AgentEnvironmentTrust.neverAutoApprovedToolNames.contains(toolName) else {
+                return false
+            }
+            let sandboxDecision = AgentSandboxPolicy.decision(
+                toolName: toolName,
+                arguments: arguments,
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: Array(
+                    agentWorkspaceRoots(for: runtime.session).dropFirst()
+                )
+            )
+            guard !sandboxDecision.requiresTypedConfirmation else { return false }
+            if toolName == "call_mcp_tool" {
+                guard let server = arguments["server"]?.stringValue(),
+                      AgentMCPSettingsStore.trustLevel(name: server) != .untrusted else {
+                    return false
+                }
+            }
+            return Self.unattendedDispatchApprovalSource(
+                risk: risk,
+                isUnattendedDispatchTask: true
+            ) != nil
+        }
+
+        let autoApproval: AgentToolApprovalSource?
+        if risk == .write {
+            autoApproval = await autoApprovalSource(
+                toolName: toolName,
+                arguments: arguments,
+                risk: risk,
+                rootDirectory: rootDirectory,
+                additionalWorkspaceRoots: Array(
+                    agentWorkspaceRoots(for: runtime.session).dropFirst()
+                ),
+                interactionMode: runtime.interactionMode,
+                approvalMode: runtime.approvalMode,
+                conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                environmentTrustDeclarations: runtime.environmentTrustDeclarations,
+                latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
+            )
+        } else {
+            autoApproval = nil
+        }
+
+        let initialStatus: AgentToolCallStatus
+        if autoApproval != nil {
+            initialStatus = .running
+        } else {
+            initialStatus = risk == .danger ? .awaitingConfirm : .pendingApproval
+        }
+        let record = AgentToolCall(
+            messageID: messageID,
+            externalID: "subagent:\(UUID().uuidString)",
+            toolName: toolName,
+            arguments: arguments,
+            risk: risk,
+            status: initialStatus,
+            approvalSource: autoApproval,
+            subagentWorkerName: workerName
+        )
+        runtime.toolCalls.append(record)
+        AgentToolApprovalNotifier.notifyIfBackgrounded(
+            toolName: toolName,
+            arguments: arguments,
+            status: initialStatus,
+            runtimeID: runtime.id,
+            sessionTitle: runtime.session.title,
+            executor: workerName
+        )
+
+        let approved: Bool
+        if autoApproval != nil {
+            approved = true
+        } else {
+            switch await awaitToolDecision(for: runtime, forCallID: record.id) {
+            case .approved:
+                approved = true
+            case .denied, .answered:
+                approved = false
+            }
+        }
+
+        if let index = runtime.toolCalls.firstIndex(where: { $0.id == record.id }) {
+            if approved {
+                runtime.toolCalls[index].status = .succeeded
+                runtime.toolCalls[index].result = AgentToolResult(
+                    summary: L10n.AgentDelegation.workerToolRequestApproved,
+                    payload: "\(workerName) · \(toolName)"
+                )
+            } else {
+                runtime.toolCalls[index].status = .denied
+                runtime.toolCalls[index].errorMessage = L10n.AgentDelegation.workerToolRequestDenied
+            }
+        }
+        return approved
     }
 
     func approveAgentToolCall(id: AgentToolCall.ID) {

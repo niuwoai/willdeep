@@ -264,6 +264,117 @@ struct AgentSubagentLiveActivityTests {
         #expect(fleet.primaryWorkerName == "测试员")
         #expect(fleet.composerLabel.contains("3"))
         #expect(fleet.composerLabel.contains("测试员"))
+        #expect(fleet.members.count == 3)
+        #expect(fleet.members.map(\.workerName) == ["侦察兵", "测试员", "阅读者"])
+    }
+
+    @Test("one parent session exposes five concurrent Worker slots")
+    func fleetConcurrencyLimitIsFive() throws {
+        #expect(AgentSubagentRegistry.maxConcurrentPerRuntime == 5)
+
+        let calls = (1...5).map { index in
+            spawnCall(
+                status: .running,
+                activity: activity(workerName: "Worker \(index)", round: index)
+            )
+        }
+        let fleet = try #require(
+            AgentSubagentFleetStatus.make(from: calls, fallbackWorkerName: { _ in "X" })
+        )
+
+        #expect(fleet.runningCount == 5)
+        #expect(fleet.members.count == 5)
+        #expect(fleet.primaryWorkerName == "Worker 5")
+    }
+
+    @Test("a sixth background Worker is rejected while five remain active")
+    func sixthBackgroundWorkerIsRejected() throws {
+        let registry = AgentSubagentRegistry()
+        let parentID = UUID()
+        registry.runOperation = { _, _, _, _, _, _, _, _, _, _, _ in
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+            return .init(report: "done", usageTokens: 0, roundCount: 0, toolInvocationCount: 0)
+        }
+        let configuration = AgentConfiguration(
+            providerID: "test",
+            baseURL: "https://example.invalid",
+            model: "test-model",
+            flashModel: "",
+            proModel: "",
+            routingMode: .pro,
+            apiKey: "test"
+        )
+        defer { registry.cancelAll(forParentRuntime: parentID) }
+
+        for index in 1...5 {
+            _ = try registry.startBackground(
+                prompt: "task \(index)",
+                label: "Worker \(index)",
+                configuration: configuration,
+                workspaceURL: nil,
+                parentRuntimeID: parentID
+            )
+        }
+        #expect(registry.activeCount(forParentRuntime: parentID) == 5)
+        #expect(throws: AgentSubagentError.self) {
+            _ = try registry.startBackground(
+                prompt: "task 6",
+                label: "Worker 6",
+                configuration: configuration,
+                workspaceURL: nil,
+                parentRuntimeID: parentID
+            )
+        }
+    }
+
+    @Test("background Workers receive the parent terminal, command approval and tool review context")
+    func backgroundWorkerReceivesExecutionContext() async throws {
+        let registry = AgentSubagentRegistry()
+        let parentID = UUID()
+        let controller = AgentInteractiveTerminalController()
+        var receivedContext: AgentSubagentRegistry.BackgroundExecutionContext?
+        registry.runOperation = { _, _, _, _, _, _, _, _, _, executionContext, _ in
+            receivedContext = executionContext
+            return .init(report: "done", usageTokens: 0, roundCount: 0, toolInvocationCount: 0)
+        }
+        let configuration = AgentConfiguration(
+            providerID: "test",
+            baseURL: "https://example.invalid",
+            model: "test-model",
+            flashModel: "",
+            proModel: "",
+            routingMode: .pro,
+            apiKey: "test"
+        )
+        let context = AgentSubagentRegistry.BackgroundExecutionContext(
+            additionalWorkspaceRoots: [URL(fileURLWithPath: "/tmp/worker-root")],
+            verifierCommand: "swift test",
+            verifierMaxAttempts: 2,
+            terminalController: controller,
+            approvedCommand: "git status",
+            commandReviewer: { _, _ in true },
+            toolReviewer: { _, _, _ in true }
+        )
+
+        _ = try registry.startBackground(
+            prompt: "inspect",
+            label: "Worker",
+            configuration: configuration,
+            workspaceURL: nil,
+            parentRuntimeID: parentID,
+            executionContext: context
+        )
+        for _ in 0..<20 where receivedContext == nil {
+            await Task.yield()
+        }
+
+        let received = try #require(receivedContext)
+        #expect(received.terminalController === controller)
+        #expect(received.approvedCommand == "git status")
+        #expect(received.verifierCommand == "swift test")
+        #expect(received.verifierMaxAttempts == 2)
+        #expect(received.commandReviewer != nil)
+        #expect(received.toolReviewer != nil)
     }
 
     @Test("a single Worker keeps the familiar delegation wording")

@@ -798,6 +798,7 @@ struct AgentPluginSystemTests {
         #expect(add.handler.server == "favorites")
         #expect(add.handler.tool == "favorites.add")
         #expect(manifest.dependencies.mcpServers.contains("favorites"))
+        #expect(manifest.permissions.contains(.conversationRead))
     }
 
     @Test
@@ -973,6 +974,20 @@ struct AgentPluginSystemTests {
         #expect(withWorkspace["source"] == "chat.selection")
         // 空字符串不算工作区，不能塞个空值进去让插件误判
         #expect(AppState.chatSelectionArguments(text: "x", workspace: "")["workspace"] == nil)
+
+        let sessionID = UUID()
+        let messageID = UUID()
+        let turnID = UUID()
+        let linked = AppState.chatSelectionArguments(
+            text: "可回到原文",
+            workspace: nil,
+            sessionID: sessionID,
+            messageID: messageID,
+            turnID: turnID
+        )
+        #expect(linked["source_session_id"] == sessionID.uuidString)
+        #expect(linked["source_message_id"] == messageID.uuidString)
+        #expect(linked["source_turn_id"] == turnID.uuidString)
     }
 
     @Test
