@@ -51,4 +51,21 @@ nonisolated struct AgentWorkspaceFileSearchTests {
         #expect(AgentWorkspaceFileSearch.search(root: root, query: "ignored.swift").isEmpty)
         #expect(AgentWorkspaceFileSearch.search(root: root, query: "hidden.swift").isEmpty)
     }
+
+    @Test("Worker 候选不会遮住原有工作区与文件候选")
+    @MainActor
+    func contextEntriesStayAheadOfWorkers() {
+        let root = URL(fileURLWithPath: "/tmp/willdeep-at-order")
+        let context: [AtPickerEntry] = [
+            .workspace,
+            .file(url: root.appendingPathComponent("README.md"), relativePath: "README.md"),
+        ]
+        let workers: [AtPickerEntry] = [
+            .worker(id: "generalist", name: "通用工具", purpose: "General utility"),
+        ]
+
+        let ordered = AtPickerEntry.contextFirst(context, workers: workers)
+
+        #expect(ordered.map(\.id) == ["@workspace", "file:/tmp/willdeep-at-order/README.md", "worker:generalist"])
+    }
 }

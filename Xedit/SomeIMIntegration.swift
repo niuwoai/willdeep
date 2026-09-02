@@ -140,17 +140,10 @@ struct SomeIMIntegrationSettings: Codable, Equatable {
     static let defaultBaseURL = SomeIMRelayRegion.internationalBaseURL
     static let defaultImageModel = "gpt-image-2"
     static let defaultVideoModel = "seedance-2.0"
-    /// New sessions open on the M tier (256K), not the L tier.
-    ///
-    /// This used to be `deepseek-v4-flash` — a 1M-context model — which made
-    /// the scarcest tier the default one. Every "escalate to deep only when
-    /// the work cannot be bounded" rule downstream was then arguing about a
-    /// door that was already open: there was nothing to escalate *to*.
-    /// See docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md §4 step 1.
-    ///
-    /// Only new sessions are affected. A session that carries an explicit
-    /// model override keeps it, so nobody's running work changes underfoot.
-    static let defaultTextModel = "glm-5"
+    /// Authenticated some.im sessions begin on the relay's automatic Flash
+    /// route. It remains the low tier and can escalate through the managed
+    /// model family, while historical sessions keep their persisted model.
+    static let defaultTextModel = SomeIMManagedModel.autoFlash
     static let defaultVisionModel = "qwen3-vl-plus"
 
     var enabled: Bool

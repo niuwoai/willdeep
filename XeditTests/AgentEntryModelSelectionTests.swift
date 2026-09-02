@@ -296,7 +296,7 @@ struct AgentEntryModelSelectionTests {
     }
 
     @Test
-    func signedInSomeIMDefaultsNewChatsToTheStandardTier() {
+    func signedInSomeIMDefaultsNewChatsToAutoFlash() {
         let _sandbox = installKeychainSandbox(); _ = _sandbox
         let app = AppState()
         let previousPreference = AgentSettingsStore.loadDefaultModelModePreference()
@@ -313,12 +313,10 @@ struct AgentEntryModelSelectionTests {
         let session = app.startNewAgentSession()
 
         #expect(app.agentProviderLibrary.active?.providerID == AgentProviderPreset.someIMID)
-        // New sessions open on the M tier. The 1M deepseek-v4-flash is what
-        // `deep` escalates to now, not where every chat starts.
-        #expect(session.modelID == "glm-5")
+        #expect(session.modelID == SomeIMManagedModel.autoFlash)
         #expect(session.managedRouting == nil)
         #expect(app.activeRuntime?.managedRouting == nil)
-        #expect(app.activeAgentModelID == "glm-5")
+        #expect(app.activeAgentModelID == SomeIMManagedModel.autoFlash)
         #expect(AgentSettingsStore.loadDefaultModelModePreference() == .automatic)
     }
 

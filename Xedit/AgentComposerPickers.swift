@@ -2692,13 +2692,12 @@ struct ModelPickerPill: View {
 
     static let codingRecommendations: [CodingRecommendation] = [
         // First place tracks `SomeIMIntegrationSettings.defaultTextModel`, and
-        // a test enforces that. The two had come apart when the default moved
-        // down to the M tier: the picker still recommended the 1M model first,
-        // which reopened the door the routing work had just closed.
+        // a test enforces that so login defaults and picker ordering cannot
+        // drift apart again.
         CodingRecommendation(
             providerID: AgentProviderPreset.someIMID,
-            title: "GLM 5",
-            model: "glm-5",
+            title: "some.im Auto Flash",
+            model: SomeIMManagedModel.autoFlash,
             note: L10n.AgentModelPicker.dailyCodingNote,
             tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.fast],
             tier: .flash

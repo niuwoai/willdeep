@@ -11,6 +11,7 @@ import AppKit
 
 nonisolated enum ComposerPaletteLayout {
     static let maximumListHeight: CGFloat = 440
+    static let maximumAtListHeight: CGFloat = 560
 }
 
 // MARK: - Slash commands
@@ -456,6 +457,16 @@ enum AtPickerEntry: Identifiable, Equatable {
         case .worker(_, _, let purpose): return purpose
         }
     }
+
+    /// Preserve the attachment picker's established context-first ordering.
+    /// Worker mentions are additive; they must not occupy the first screen and
+    /// make the existing workspace/file list appear to have disappeared.
+    static func contextFirst(
+        _ contextEntries: [AtPickerEntry],
+        workers: [AtPickerEntry]
+    ) -> [AtPickerEntry] {
+        contextEntries + workers
+    }
 }
 
 /// 操作员点名的工种，显示在输入框上方。它是「这一回合派给谁」的唯一可见处，
@@ -589,7 +600,7 @@ struct AtPickerMenu: View {
                             }
                         }
                     }
-                    .frame(maxHeight: ComposerPaletteLayout.maximumListHeight)
+                    .frame(maxHeight: ComposerPaletteLayout.maximumAtListHeight)
                     .onCompatibleChange(of: selection) { _, newSelection in
                         guard entries.indices.contains(newSelection) else { return }
                         withAnimation(.easeOut(duration: 0.12)) {
