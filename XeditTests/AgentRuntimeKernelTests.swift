@@ -183,6 +183,22 @@ struct AgentRuntimeKernelTests {
         #expect(event.requiresUserAction)
     }
 
+    @Test("external ingress without a source id only deduplicates inside the coalescing window")
+    func externalIngressWithoutIDDoesNotCreatePermanentDedupe() {
+        let event = AgentExternalEventIngress(
+            runtimeID: UUID(),
+            source: .email,
+            kind: "mail.received",
+            title: "Same subject",
+            body: "second message",
+            sender: "ops@example.test",
+            authenticated: true
+        ).kernelEvent(now: Date(timeIntervalSince1970: 2_000))
+
+        #expect(event.dedupeKey == "external:email:ops@example.test:mail.received:Same subject")
+        #expect(event.resolvedDedupeScope == .window)
+    }
+
     @Test("terminal events stay isolated to their owning session")
     func terminalEventsDoNotFanOutAcrossSessions() throws {
         let kernel = AgentRuntimeKernel(loadPersisted: false, persistsEvents: false)
@@ -300,6 +316,54 @@ struct AgentRuntimeKernelTests {
 
         #expect(kernel.leasedModelEventIDs(for: runtimeID).isEmpty)
         #expect(kernel.pendingModelEventCount(for: runtimeID) == 1)
+    }
+
+    @Test("a provider turn cannot acknowledge or release another window's lease")
+    func deliveryLeaseIsBoundToExactTurn() throws {
+        let runtimeID = UUID()
+        let firstTurnID = UUID()
+        let secondTurnID = UUID()
+        let kernel = AgentRuntimeKernel(loadPersisted: false, persistsEvents: false)
+        kernel.publish(AgentKernelEvent(
+            runtimeID: runtimeID,
+            source: .worker,
+            kind: .workerCompleted,
+            title: "worker",
+            payload: "done"
+        ))
+        let leased = try #require(
+            kernel.consumePendingModelEvents(for: runtimeID, leaseID: firstTurnID).first
+        )
+
+        kernel.acknowledge([leased.id], leaseID: secondTurnID)
+        kernel.releaseModelDeliveryLeases(for: runtimeID, leaseID: secondTurnID)
+        #expect(kernel.leasedModelEventIDs(for: runtimeID, leaseID: firstTurnID) == [leased.id])
+
+        kernel.acknowledge([leased.id], leaseID: firstTurnID)
+        #expect(kernel.leasedModelEventIDs(for: runtimeID).isEmpty)
+        #expect(kernel.pendingModelEventCount(for: runtimeID) == 0)
+    }
+
+    @Test("corrupt event journals are quarantined instead of retried forever")
+    func corruptJournalIsQuarantined() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agent-kernel-corrupt-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        AgentKernelEventStore.directoryOverride = directory
+        defer {
+            AgentKernelEventStore.directoryOverride = nil
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let journal = directory.appendingPathComponent("broken.json")
+        try Data("not-json".utf8).write(to: journal)
+
+        #expect(AgentKernelEventStore.loadAll().isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: journal.path))
+        let quarantined = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent.hasPrefix("broken.json.corrupt-") }
+        #expect(quarantined.count == 1)
     }
 
     @Test("journal idempotency survives model acknowledgement")
@@ -465,6 +529,39 @@ struct AgentRuntimeKernelTests {
         #expect(afterWindow.history.count == 1)
     }
 
+    @Test("external wake quota is shared by every window using the process kernel")
+    func externalWakeBudgetIsProcessShared() {
+        let runtimeID = UUID()
+        let now = Date(timeIntervalSince1970: 12_000)
+        let event = AgentExternalEventIngress(
+            runtimeID: runtimeID,
+            source: .connector,
+            kind: "message",
+            title: "external",
+            body: "payload",
+            authenticated: true
+        ).kernelEvent(now: now)
+        let kernel = AgentRuntimeKernel(loadPersisted: false, persistsEvents: false)
+
+        for offset in 0..<AgentExternalWakeBudget.maximumWakeupsPerRuntime {
+            let reservation = kernel.reserveAutomaticWake(
+                for: runtimeID,
+                pendingEvents: [event],
+                hasHostCompletion: false,
+                at: now.addingTimeInterval(TimeInterval(offset))
+            )
+            #expect(reservation.decision?.kind == .authenticatedExternal)
+        }
+        let blocked = kernel.reserveAutomaticWake(
+            for: runtimeID,
+            pendingEvents: [event],
+            hasHostCompletion: false,
+            at: now.addingTimeInterval(10)
+        )
+        #expect(blocked.decision == nil)
+        #expect(blocked.retryAt == now.addingTimeInterval(AgentExternalWakeBudget.window))
+    }
+
     @Test("automatic wake policy blocks untrusted and budget-exhausted recovery scans")
     func automaticWakePolicyCoversEveryIdleResumePath() {
         let runtimeID = UUID()
@@ -510,6 +607,28 @@ struct AgentRuntimeKernelTests {
             now: now
         )
         #expect(hostDecision?.kind == .host)
+    }
+
+    @Test("routine terminal transitions never wake an idle runtime")
+    func terminalEventsDoNotWakeIdleRuntime() {
+        let runtimeID = UUID()
+        for kind in [AgentKernelEventKind.terminalCommandCompleted, .terminalExited] {
+            let event = AgentKernelEvent(
+                runtimeID: runtimeID,
+                source: .terminal,
+                kind: kind,
+                trust: .host,
+                contentProvenance: .tool,
+                title: "terminal",
+                payload: "state changed"
+            )
+            #expect(AgentAutomaticWakePolicy.decision(
+                pendingEvents: [event],
+                hasHostCompletion: false,
+                externalWakeHistory: [],
+                now: Date(timeIntervalSince1970: 20_000)
+            ) == nil)
+        }
     }
 
     @Test("AppState applies trusted critical preemption to the active provider step")

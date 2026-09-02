@@ -30,6 +30,7 @@ extension NSAttributedString.Key {
     static let agentChatHistoryImageReferenceMarker = NSAttributedString.Key("AgentChatHistoryImageReferenceMarker")
     static let agentChatHistoryToolGroupID = NSAttributedString.Key("AgentChatHistoryToolGroupID")
     static let agentChatHistoryUserMessageID = NSAttributedString.Key("AgentChatHistoryUserMessageID")
+    static let agentChatHistoryMessageID = NSAttributedString.Key("AgentChatHistoryMessageID")
     static let agentChatHistoryHeadingLevel = NSAttributedString.Key("AgentChatHistoryHeadingLevel")
     static let agentChatHistoryListDepth = NSAttributedString.Key("AgentChatHistoryListDepth")
     static let agentChatHistoryProgressBlockID = NSAttributedString.Key("AgentChatHistoryProgressBlockID")

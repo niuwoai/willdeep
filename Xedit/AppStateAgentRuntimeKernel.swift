@@ -21,14 +21,14 @@ nonisolated enum AgentExternalWakePolicy {
         now: Date,
         window: TimeInterval = AgentExternalWakeBudget.window,
         maximumWakeups: Int = AgentExternalWakeBudget.maximumWakeupsPerRuntime
-    ) -> (allowed: Bool, history: [Date]) {
+    ) -> (allowed: Bool, history: [Date], nextAllowedAt: Date?) {
         let cutoff = now.addingTimeInterval(-window)
         var recent = history.filter { $0 >= cutoff }
         guard recent.count < maximumWakeups else {
-            return (false, recent)
+            return (false, recent, recent.min().map { $0.addingTimeInterval(window) })
         }
         recent.append(now)
-        return (true, recent)
+        return (true, recent, nil)
     }
 }
 
@@ -55,7 +55,12 @@ nonisolated enum AgentAutomaticWakePolicy {
         let wakeable = pendingEvents.filter {
             $0.isPendingForModel && $0.interruptPolicy != .enqueue
         }
-        if hasHostCompletion || wakeable.contains(where: { $0.trust == .host }) {
+        let hasWakeableHostEvent = wakeable.contains {
+            $0.trust == .host
+                && $0.kind != .terminalCommandCompleted
+                && $0.kind != .terminalExited
+        }
+        if hasHostCompletion || hasWakeableHostEvent {
             return AgentAutomaticWakeDecision(kind: .host, externalWakeHistory: externalWakeHistory)
         }
         guard wakeable.contains(where: { $0.trust == .authenticated }) else { return nil }
@@ -86,7 +91,6 @@ extension AppState {
         agentTerminalController.onStateEvent = { [weak self] terminalEvent in
             self?.publishTerminalKernelEvent(terminalEvent)
         }
-        CollaborationRelayEventPump.shared.attach(to: self)
     }
 
     @discardableResult
@@ -103,6 +107,7 @@ extension AppState {
 
     @discardableResult
     func receiveCollaborationRelayEvent(_ relayEvent: CollaborationRelayIncomingEvent) -> UUID? {
+        guard hasLoadedAgentSessionCatalog else { return nil }
         // The sidebar catalog is process-wide, but each editor window owns a
         // separate runtime object. Keep the dedicated orchestrator on one
         // live owner when focus moves between windows; otherwise two idle
@@ -112,7 +117,7 @@ extension AppState {
            owner !== self {
             return owner.receiveCollaborationRelayEvent(relayEvent)
         }
-        let runtime = eventOrchestratorRuntime()
+        guard let runtime = eventOrchestratorRuntime() else { return nil }
         let body: String = {
             guard let value = relayEvent.body,
                   let data = try? JSONEncoder().encode(value),
@@ -144,19 +149,27 @@ extension AppState {
     }
 
     private func existingEventOrchestratorOwner(for runtimeID: UUID) -> AppState? {
-        let owners = EditorAppStateRegistry.shared.appStatesForTerminationCheck.filter {
+        let registry = EditorAppStateRegistry.shared
+        let owners = registry.appStatesForTerminationCheck.filter {
             $0.agentRuntimes[runtimeID] != nil
+        }.sorted {
+            $0.agentRuntimeKernelOwnerID.uuidString < $1.agentRuntimeKernelOwnerID.uuidString
         }
-        return owners.first {
+        let busyOwners = owners.filter {
             guard let runtime = $0.agentRuntimes[runtimeID] else { return false }
             return runtime.isResponding
                 || runtime.isAwaitingProviderSlot
                 || runtime.isCompressingContext
                 || runtime.requestTask != nil
-        } ?? owners.first
+        }
+        return busyOwners.first(where: { $0 === registry.current })
+            ?? busyOwners.first
+            ?? owners.first(where: { $0 === registry.current })
+            ?? owners.first
     }
 
-    private func eventOrchestratorRuntime() -> AgentRuntime {
+    private func eventOrchestratorRuntime() -> AgentRuntime? {
+        guard hasLoadedAgentSessionCatalog else { return nil }
         var settings = AgentRuntimeEventSettingsStore.load()
         if let sessionID = settings.orchestratorSessionID,
            agentSessions.contains(where: { $0.id == sessionID && $0.archivedAt == nil }),
@@ -166,7 +179,7 @@ extension AppState {
 
         let session = startNewAgentSession(inWorkspaceAt: nil, makeActive: false)
         guard let runtime = agentRuntimes[session.id] else {
-            preconditionFailure("new event orchestrator session must have a runtime")
+            return nil
         }
         runtime.session.title = L10n.RuntimeEvents.orchestratorTitle
         runtime.session.titleIsUserSet = true
@@ -450,6 +463,7 @@ extension AppState {
     }
 
     private func scheduleAgentKernelEvent(_ event: AgentKernelEvent) {
+        guard ownsAgentRuntimeKernelDelivery(for: event.runtimeID) else { return }
         guard let runtime = runtime(for: event.runtimeID), runtime.session.archivedAt == nil else { return }
         let snapshot = AgentKernelRuntimeSnapshot(
             isResponding: runtime.isResponding,
@@ -466,6 +480,30 @@ extension AppState {
             agentKernelPreemptedRuntimeIDs.insert(runtime.id)
             runtime.requestTask?.cancel()
         }
+    }
+
+    func ownsAgentRuntimeKernelDelivery(for runtimeID: UUID) -> Bool {
+        let registry = EditorAppStateRegistry.shared
+        let owners = registry.appStatesForTerminationCheck.filter {
+            $0.loadedRuntime(for: runtimeID) != nil
+        }.sorted {
+            $0.agentRuntimeKernelOwnerID.uuidString < $1.agentRuntimeKernelOwnerID.uuidString
+        }
+        guard !owners.isEmpty else { return true }
+        let busyOwners = owners.filter {
+            guard let runtime = $0.loadedRuntime(for: runtimeID) else { return false }
+            return runtime.isResponding
+                || runtime.isAwaitingProviderSlot
+                || runtime.isCompressingContext
+                || runtime.requestTask != nil
+        }
+        let owner = busyOwners.first(where: { $0 === registry.current })
+            ?? busyOwners.first
+            ?? owners.first { $0 === registry.current && $0.activeAgentSessionID == runtimeID }
+            ?? owners.first { $0.activeAgentSessionID == runtimeID }
+            ?? owners.first(where: { $0 === registry.current })
+            ?? owners[0]
+        return owner === self
     }
 
 }

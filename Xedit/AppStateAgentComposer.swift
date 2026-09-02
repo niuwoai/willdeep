@@ -2482,6 +2482,7 @@ extension AppState {
     /// 不打断聊天。
     func runAgentChatSelectionPluginAction(
         text rawText: String,
+        messageID: UUID? = nil,
         pluginID: AgentPluginID,
         commandID: AgentPluginCommandID,
         completion: @escaping (Bool) -> Void = { _ in }
@@ -2500,12 +2501,15 @@ extension AppState {
                 ?? activeRuntime?.workspaceRootPath
                 ?? rootDirectory?.path)
             : nil
-        let sourceMessage = activeRuntime?.messages.last(where: { message in
+        let sourceMessage = messageID.flatMap { selectedID in
+            activeRuntime?.messages.first { $0.id == selectedID }
+        } ?? activeRuntime?.messages.last(where: { message in
             (message.role == .user || message.role == .assistant)
                 && message.copyableContent.contains(text)
         })
         let sourceTurn = sourceMessage.flatMap { selected in
-            activeRuntime?.messages
+            if selected.isOperatorInput { return selected }
+            return activeRuntime?.messages
                 .prefix(while: { $0.id != selected.id })
                 .last(where: { $0.isOperatorInput })
         }

@@ -35,6 +35,7 @@ extension AppState {
     /// a phantom user message and never races a live provider request.
     @MainActor
     func resumeAgentLoopForPendingBackgroundCompletions(for runtime: AgentRuntime) {
+        guard ownsAgentRuntimeKernelDelivery(for: runtime.id) else { return }
         guard !runtime.isResponding,
               !runtime.isAwaitingProviderSlot,
               !runtime.isCompressingContext,
@@ -42,22 +43,24 @@ extension AppState {
         let pendingEvents = agentRuntimeKernel.events.filter {
             $0.runtimeID == runtime.id && $0.isPendingForModel
         }
-        let wakeDecision = AgentAutomaticWakePolicy.decision(
-            pendingEvents: pendingEvents,
-            hasHostCompletion: hasPendingHostBackgroundCompletions(for: runtime),
-            externalWakeHistory: agentExternalWakeHistoryByRuntime[runtime.id, default: []],
-            now: Date()
-        )
-        guard let wakeDecision else { return }
-
         repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID
         guard acquireProviderSlotIfPossible(providerID: providerID) else { return }
-
-        if wakeDecision.kind == .authenticatedExternal {
-            agentExternalWakeHistoryByRuntime[runtime.id] = wakeDecision.externalWakeHistory
+        let wakeReservation = agentRuntimeKernel.reserveAutomaticWake(
+            for: runtime.id,
+            pendingEvents: pendingEvents,
+            hasHostCompletion: hasPendingHostBackgroundCompletions(for: runtime),
+            at: Date()
+        )
+        guard wakeReservation.decision != nil else {
+            abandonProviderSlotReservation(providerID: providerID)
+            if let retryAt = wakeReservation.retryAt {
+                scheduleExternalAgentWakeRetry(for: runtime.id, at: retryAt)
+            }
+            return
         }
+        agentExternalWakeRetryTasks.removeValue(forKey: runtime.id)?.cancel()
 
         runtime.isAwaitingProviderSlot = false
         runtime.clearTurnError()
@@ -104,6 +107,19 @@ extension AppState {
     func resumeAgentLoopsWithPendingBackgroundCompletions() {
         for runtime in agentRuntimes.values where hasPendingBackgroundWakeups(for: runtime) {
             resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+        }
+    }
+
+    private func scheduleExternalAgentWakeRetry(for runtimeID: UUID, at date: Date) {
+        guard agentExternalWakeRetryTasks[runtimeID] == nil else { return }
+        let delay = max(date.timeIntervalSinceNow, 0.05)
+        agentExternalWakeRetryTasks[runtimeID] = Task { @MainActor [weak self] in
+            defer { self?.agentExternalWakeRetryTasks[runtimeID] = nil }
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled,
+                  let self,
+                  let runtime = self.loadedRuntime(for: runtimeID) else { return }
+            self.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
         }
     }
 }

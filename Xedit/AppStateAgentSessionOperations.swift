@@ -53,7 +53,7 @@ extension AppState {
             // worker payloads. Archiving is the retention boundary: discard
             // those payloads immediately instead of waiting for relaunch.
             agentRuntimeKernel.removeEvents(for: id)
-            agentExternalWakeHistoryByRuntime.removeValue(forKey: id)
+            agentExternalWakeRetryTasks.removeValue(forKey: id)?.cancel()
             agentKernelPreemptedRuntimeIDs.remove(id)
         }
         // Archiving the currently-active session shouldn't kick the

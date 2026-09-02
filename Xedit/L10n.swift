@@ -12,6 +12,12 @@ import Foundation
 // would otherwise be unusable from nonisolated model code (e.g. the
 // persisted session graph's displayName helpers).
 nonisolated enum L10n {
+    enum AgentTools {
+        static let readBundledRule = String(
+            localized: "agent-tools.read-bundled-rule",
+            defaultValue: "Read bundled rule"
+        )
+    }
     enum About {
         static let appName = String(localized: "about.app-name", defaultValue: "WillDeep")
         static let buildLabel = String(localized: "about.build-label", defaultValue: "Build")

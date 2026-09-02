@@ -224,7 +224,7 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
     private static func operationName(for call: AgentToolCall) -> String {
         switch call.toolName {
         case "read_file": return "读取文件"
-        case AgentBundledRules.readerToolName: return "读取内置规则"
+        case AgentBundledRules.readerToolName: return L10n.AgentTools.readBundledRule
         case "list_directory": return "浏览目录"
         case "grep_files", "search_files": return "搜索代码"
         case "git_status": return "查看 Git 状态"

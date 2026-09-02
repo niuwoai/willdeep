@@ -1209,9 +1209,9 @@ private struct AgentSubagentFleetPopover: View {
 
                 HStack(spacing: 7) {
                     if member.maximumRounds > 0 {
-                        Text("R\(member.round)/\(member.maximumRounds)")
+                        Text(L10n.AgentDelegation.roundProgress(member.round, member.maximumRounds))
                     } else {
-                        Text("R\(member.round)")
+                        Text(L10n.AgentDelegation.roundProgress(member.round, nil))
                     }
                     Label("\(member.completedToolInvocations)", systemImage: "wrench.and.screwdriver")
                     if let startedAt = member.startedAt {

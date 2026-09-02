@@ -373,6 +373,26 @@ extension L10n {
             defaultValue: "Show every running Worker"
         )
 
+        static func roundProgress(_ round: Int, _ maximumRounds: Int?) -> String {
+            if let maximumRounds {
+                let template = String(
+                    localized: "agent-delegation.round-progress-with-maximum",
+                    defaultValue: "R%1$d/%2$d"
+                )
+                return String(format: template, round, maximumRounds)
+            }
+            return speechRoundMarker(round)
+        }
+
+        static let workerToolRequestApproved = String(
+            localized: "agent-delegation.worker-tool-request-approved",
+            defaultValue: "Worker tool request approved"
+        )
+        static let workerToolRequestDenied = String(
+            localized: "agent-delegation.worker-tool-request-denied",
+            defaultValue: "User denied Worker tool request"
+        )
+
         /// Round marker in front of one Worker utterance, matching the
         /// inspector's numbering so the two surfaces can be read together.
         static func speechRoundMarker(_ round: Int) -> String {

@@ -182,7 +182,7 @@ nonisolated enum AgentToolDisplay {
         "grep_files": "正则搜索",
         "glob": "通配查找",
         "read_file": "读取文件",
-        AgentBundledRules.readerToolName: "读取内置规则",
+        AgentBundledRules.readerToolName: L10n.AgentTools.readBundledRule,
         "list_directory": "浏览目录",
         "git_status": "查看 Git 状态",
         "rename_session": "重命名会话",

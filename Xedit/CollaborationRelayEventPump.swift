@@ -225,6 +225,8 @@ final class CollaborationRelayEventPump: ObservableObject {
     private var settingsObserver: NSObjectProtocol?
     private var connectorObserver: NSObjectProtocol?
     private let client: CollaborationRelayEventClient
+    private var fallbackCountedEventIDs: Set<String> = []
+    private var fallbackCountedEventOrder: [String] = []
 
     init(client: CollaborationRelayEventClient = CollaborationRelayEventClient()) {
         self.client = client
@@ -250,6 +252,7 @@ final class CollaborationRelayEventPump: ObservableObject {
 
     func attach(to appState: AppState) {
         fallbackAppState = appState
+        guard task == nil else { return }
         restartIfNeeded()
     }
 
@@ -289,7 +292,16 @@ final class CollaborationRelayEventPump: ObservableObject {
                     if let received = batch.received {
                         self.receivedEventCount = received
                     } else {
-                        self.receivedEventCount += batch.events.count
+                        for event in batch.events where self.fallbackCountedEventIDs.insert(event.id).inserted {
+                            self.fallbackCountedEventOrder.append(event.id)
+                            self.receivedEventCount += 1
+                        }
+                        if self.fallbackCountedEventOrder.count > 5_000 {
+                            let overflow = self.fallbackCountedEventOrder.count - 5_000
+                            let expired = self.fallbackCountedEventOrder.prefix(overflow)
+                            expired.forEach { self.fallbackCountedEventIDs.remove($0) }
+                            self.fallbackCountedEventOrder.removeFirst(overflow)
+                        }
                     }
                     if let acknowledged = batch.acknowledged {
                         self.acknowledgedEventCount = acknowledged

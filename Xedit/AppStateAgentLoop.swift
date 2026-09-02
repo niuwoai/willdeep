@@ -455,7 +455,10 @@ extension AppState {
             // provider request. Put it back before the final wakeup probe so a
             // cancellation, transport failure, or host preemption can retry in
             // this process rather than waiting for an app restart.
-            agentRuntimeKernel.releaseModelDeliveryLeases(for: runtime.id)
+            agentRuntimeKernel.releaseModelDeliveryLeases(
+                for: runtime.id,
+                leaseID: turnID
+            )
             let computerUseLeaseID: AgentComputerUseLease.ID? = {
                 guard let lease = AgentComputerUseCoordinator.shared.state.lease,
                       lease.owner.runtimeID == runtime.id,
@@ -752,7 +755,10 @@ extension AppState {
             // model/tool boundary. Legacy registries are still drained below
             // for compatibility; resource ids prevent double delivery while
             // producers migrate onto the kernel.
-            let kernelEvents = agentRuntimeKernel.consumePendingModelEvents(for: runtime.id)
+            let kernelEvents = agentRuntimeKernel.consumePendingModelEvents(
+                for: runtime.id,
+                leaseID: turnID
+            )
             let kernelResourceKeys = Set(kernelEvents.compactMap { event -> String? in
                 guard let resourceID = event.metadata["resource_id"] else { return nil }
                 return "\(event.source.rawValue):\(resourceID)"
@@ -760,10 +766,14 @@ extension AppState {
             for event in kernelEvents {
                 let marker = "<runtime-event id=\"\(event.id.uuidString)\""
                 if !runtime.messages.contains(where: {
-                    $0.role == .system && $0.content.contains(marker)
+                    $0.source == .hostInstruction && $0.content.contains(marker)
                 }) {
                     runtime.messages.append(
-                        AgentMessage(role: .system, content: agentRuntimeKernel.modelNotice(for: event))
+                        AgentMessage(
+                            role: .user,
+                            content: agentRuntimeKernel.modelNotice(for: event),
+                            source: .hostInstruction
+                        )
                     )
                 }
             }
@@ -1246,7 +1256,11 @@ extension AppState {
                 // to pending; the stable event id prevents a duplicate system
                 // carrier in the transcript.
                 agentRuntimeKernel.acknowledge(
-                    agentRuntimeKernel.leasedModelEventIDs(for: runtime.id)
+                    agentRuntimeKernel.leasedModelEventIDs(
+                        for: runtime.id,
+                        leaseID: turnID
+                    ),
+                    leaseID: turnID
                 )
             } catch is CancellationError {
                 shouldResumePendingEventsAtTurnEnd = false
@@ -2742,6 +2756,7 @@ extension AppState {
                         }
                     }
                 } catch is CancellationError {
+                    shouldResumePendingEventsAtTurnEnd = false
                     workspaceMutationLease = nil
                     if let delegatedControl {
                         updateDelegatedTaskRun(

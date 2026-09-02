@@ -414,6 +414,69 @@ extension AppState {
             progress: "启动中…"
         )
 
+        let backgroundWorkspaceRoots = Array(
+            agentWorkspaceRoots(for: runtime.session).dropFirst()
+        )
+        let backgroundEffectiveTools = profile.effectiveToolNames(
+            writeAccessGranted: false,
+            approvedCommandGranted: approvedCommand != nil
+        )
+        let backgroundCommandReviewer: AgentSubagentRunner.CommandReviewer? = {
+            guard backgroundEffectiveTools.contains("run_command")
+                    || backgroundEffectiveTools.contains("terminal_send_command") else {
+                return nil
+            }
+            let runtimeID = runtime.id
+            return { [weak self] toolName, command in
+                guard let self,
+                      let liveRuntime = self.loadedRuntime(for: runtimeID),
+                      let hostMessageID = liveRuntime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
+                    return false
+                }
+                let toolArguments: [String: AgentJSONValue] = ["command": .string(command)]
+                let risk = AgentToolRegistry.risk(
+                    for: toolName,
+                    arguments: toolArguments,
+                    rootDirectory: workspaceURL,
+                    additionalWorkspaceRoots: backgroundWorkspaceRoots
+                )
+                return await self.resolveSubagentToolApproval(
+                    toolName: toolName,
+                    arguments: toolArguments,
+                    risk: risk,
+                    workerName: resolvedWorkerName,
+                    runtime: liveRuntime,
+                    messageID: hostMessageID,
+                    rootDirectory: workspaceURL
+                )
+            }
+        }()
+        let backgroundToolReviewer: AgentSubagentRunner.ToolReviewer? = {
+            guard profile.id == AgentSubagentProfileCatalog.generalistID,
+                  !backgroundEffectiveTools.isDisjoint(
+                    with: AgentSubagentProfileCatalog.generalistExtraToolNames
+                  ) else {
+                return nil
+            }
+            let runtimeID = runtime.id
+            return { [weak self] toolName, toolArguments, risk in
+                guard let self,
+                      let liveRuntime = self.loadedRuntime(for: runtimeID),
+                      let hostMessageID = liveRuntime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
+                    return false
+                }
+                return await self.resolveSubagentToolApproval(
+                    toolName: toolName,
+                    arguments: toolArguments,
+                    risk: risk,
+                    workerName: resolvedWorkerName,
+                    runtime: liveRuntime,
+                    messageID: hostMessageID,
+                    rootDirectory: workspaceURL
+                )
+            }
+        }()
+
         if runInBackground {
             // Editor trades are synchronous by construction: the file lock
             // and the approval are scoped to a turn the user is watching.
@@ -423,9 +486,9 @@ extension AppState {
                 )
                 finishRecord(
                     status: .failed,
-                    summary: "editor cannot run in background",
-                    payload: "Tool error: the `editor` trade cannot run in the background — its file lock and approval are scoped to this turn. Re-spawn without `run_in_background`.",
-                    errorMessage: "Editor trade requires foreground"
+                    summary: "writing Worker cannot run in background",
+                    payload: "Tool error: the `\(profile.id)` trade requested bounded file writes and cannot run in the background — its file lock and approval are scoped to this turn. Re-spawn without `run_in_background`.",
+                    errorMessage: "Writing Worker requires foreground"
                 )
                 return
             }
@@ -439,7 +502,17 @@ extension AppState {
                     workspaceLocation: workspaceLocation,
                     parentRuntimeID: runtime.id,
                     originatingTurnID: runtime.activeTurnID,
-                    profile: profile
+                    profile: profile,
+                    executionContext: AgentSubagentRegistry.BackgroundExecutionContext(
+                        additionalWorkspaceRoots: backgroundWorkspaceRoots,
+                        verifierCommand: verifierCommand,
+                        verifierMaxAttempts: taskPacket?.maxAttempts
+                            ?? AgentSubagentTaskPacket.defaultMaxAttempts,
+                        terminalController: agentTerminalController,
+                        approvedCommand: approvedCommand,
+                        commandReviewer: backgroundCommandReviewer,
+                        toolReviewer: backgroundToolReviewer
+                    )
                 )
                 bindSubagentRun(run.id)
                 // Seed the activity before any heartbeat arrives, so the

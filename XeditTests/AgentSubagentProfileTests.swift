@@ -548,22 +548,6 @@ struct AgentSubagentProfileTests {
         #expect(!isolated.workspaceRoots.contains(second))
     }
 
-    @Test("full access widens what the parent will review, strict mode never does")
-    func approvalModeReachesTheSubagentCommandGate() {
-        let root = URL(fileURLWithPath: "/tmp/willdeep-approval")
-        // Something that is plainly not statically read-only.
-        let command = "npm install left-pad"
-
-        #expect(AgentSubagentRunner.subagentCommandMayBeReviewedByParent(
-            command, approvalMode: .fullAccess, workspaceURL: root
-        ))
-        // "Ask me every time" means exactly that: no reviewer answers for the
-        // user, whatever the parent's own latitude is.
-        #expect(!AgentSubagentRunner.subagentCommandMayBeReviewedByParent(
-            command, approvalMode: .requestEveryTime, workspaceURL: root
-        ))
-    }
-
     @Test("a round budget can be tuned but not set to something unrunnable")
     func roundBudgetOverrideIsClamped() {
         let range = AgentProfileCapability.roundBudgetRange

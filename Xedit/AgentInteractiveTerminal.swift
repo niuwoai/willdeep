@@ -1302,6 +1302,13 @@ final class AgentInteractiveTerminalController: ObservableObject {
     private var localShellCounter = 0
     private var tabChangePublishScheduled = false
     private var lastReportedInputStates: [UUID: AgentTerminalInputState] = [:]
+    /// A ready-shell transition is meaningful to the Agent only when an
+    /// Agent tool actually dispatched the foreground command. User typing in
+    /// a tab that merely belongs to the same session must stay UI-local.
+    private var pendingAgentCommandTabIDs: Set<UUID> = []
+    /// Only tabs created by Agent automation may publish an exit event. A
+    /// user-created side-panel tab keeps its lifecycle in the terminal UI.
+    private var agentCreatedTabIDs: Set<UUID> = []
     /// Closing the visible SSH tab must not silently retarget a later,
     /// unqualified agent command to a local shell. Keep a short-lived routing
     /// tombstone until the user or agent explicitly chooses another tab.
@@ -1397,6 +1404,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
             settings: settings
         )
         tab.start(settings: settings, workingDirectory: workingDirectory, profile: nil, skin: skin)
+        agentCreatedTabIDs.insert(tab.id)
         register(tab)
         return tab
     }
@@ -1466,14 +1474,16 @@ final class AgentInteractiveTerminalController: ObservableObject {
             let current = tab.inputState
             guard previous != current else { continue }
             lastReportedInputStates[tab.id] = current
-            let transition: AgentTerminalStateEvent.Transition?
-            if current == .exited {
-                transition = .exited
-            } else if current == .shellReady,
-                      previous == .foregroundTask || previous == .interactiveProgram {
-                transition = .commandCompleted
-            } else {
-                transition = nil
+            let transition = Self.semanticTransition(
+                from: previous,
+                to: current,
+                hasPendingAgentCommand: pendingAgentCommandTabIDs.contains(tab.id),
+                isAgentCreatedTab: agentCreatedTabIDs.contains(tab.id)
+            )
+            if transition == .exited {
+                pendingAgentCommandTabIDs.remove(tab.id)
+            } else if transition == .commandCompleted {
+                pendingAgentCommandTabIDs.remove(tab.id)
             }
             guard let transition else { continue }
             let summary: String
@@ -1495,6 +1505,23 @@ final class AgentInteractiveTerminalController: ObservableObject {
         }
     }
 
+    nonisolated static func semanticTransition(
+        from previous: AgentTerminalInputState,
+        to current: AgentTerminalInputState,
+        hasPendingAgentCommand: Bool,
+        isAgentCreatedTab: Bool
+    ) -> AgentTerminalStateEvent.Transition? {
+        if current == .exited, isAgentCreatedTab {
+            return .exited
+        }
+        if current == .shellReady,
+           previous == .foregroundTask || previous == .interactiveProgram,
+           hasPendingAgentCommand {
+            return .commandCompleted
+        }
+        return nil
+    }
+
     func closeTab(id: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
         // A delegated Claude/Codex task owns this tab until its wrapper reports
@@ -1510,6 +1537,8 @@ final class AgentInteractiveTerminalController: ObservableObject {
         tabSubscriptions[id]?.cancel()
         tabSubscriptions[id] = nil
         lastReportedInputStates[id] = nil
+        pendingAgentCommandTabIDs.remove(id)
+        agentCreatedTabIDs.remove(id)
         tabs.remove(at: index)
         stopInputStateMonitorIfIdle()
         if activeTabID == id {
@@ -2120,11 +2149,13 @@ final class AgentInteractiveTerminalController: ObservableObject {
             sessionID: sessionID,
             opensLocalTabIfNeeded: true
         )
-        return try tab.sendApprovedCommandDispatch(
+        let dispatch = try tab.sendApprovedCommandDispatch(
             command,
             zmodemPathSelection: zmodemPathSelection,
             secretRedactionValues: secretRedactionValues
         )
+        pendingAgentCommandTabIDs.insert(tab.id)
+        return dispatch
     }
 
     func sendApprovedControl(
@@ -2199,13 +2230,15 @@ final class AgentInteractiveTerminalController: ObservableObject {
               let config = defaultLocalTabProvider?(sessionID) else {
             throw AgentToolError.invalidArgument(noRoutableTabGuidance())
         }
-        return openLocalTab(
+        let tab = openLocalTab(
             originAgentSessionID: config.originAgentSessionID,
             workingDirectory: config.workingDirectory,
             settings: config.settings,
             skin: config.skin,
             clearsClosedRemoteRoute: false
         )
+        agentCreatedTabIDs.insert(tab.id)
+        return tab
     }
 
     private func isImplicitlyRoutable(_ tab: AgentTerminalTab) -> Bool {
@@ -2287,6 +2320,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
             artifacts.removeAll()
         }
         try tab.sendAutomationCommand(artifacts.invocation, displayCommand: displayCommand)
+        pendingAgentCommandTabIDs.insert(tab.id)
         ownsAutomation = true
 
         let startupDeadline = Date().addingTimeInterval(15)

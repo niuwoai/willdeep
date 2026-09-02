@@ -88,7 +88,10 @@ Sensitive values stay out of the app settings and source tree:
   (`WILLDEEP_FEISHU_APP_ID` or `--feishu-app-id`). It does not require Redis or
   a database. Callback events are retained in the Relay's mode-0600 durable
   journal until the desktop explicitly acknowledges them; the same journal
-  persists received, acknowledged, dropped, and deduplicated counters.
+  persists received, acknowledged, dropped, and deduplicated counters. The
+  journal is capped at 64 MiB and never evicts an unacknowledged event: when
+  either the configured event count or byte cap is full, new callbacks are
+  rejected so the sender can retry after the desktop acknowledges backlog.
 
 ### Feishu Event Delivery
 
@@ -255,6 +258,8 @@ responses expose `X-WillDeep-Relay-Protocol: collab-relay.v2`; the current Mac
 client rejects older destructive-poll relays. When a platform supplies its own
 event or message id, the relay hashes it into a stable opaque relay id so a
 platform retry does not append a second unacknowledged copy.
+ACK responses include `not_found` IDs so consumers can distinguish an
+idempotent replay from a removal that actually happened in this request.
 
 ### Desktop Runtime Event Routing
 

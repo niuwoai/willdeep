@@ -17,6 +17,11 @@ final class AppState: ObservableObject {
     nonisolated static let maxAgentToolRounds = 256
     nonisolated static let agentSidePanelResourceIdleTimeout: TimeInterval = 60 * 60
 
+    /// Stable for this process lifetime so two windows that reference the
+    /// same runtime make the same fallback ownership decision. Dictionary
+    /// iteration order is deliberately not used for runtime event delivery.
+    let agentRuntimeKernelOwnerID = UUID()
+
     @Published var openedFileURL: URL?
     @Published var fileContent: String {
         didSet {
@@ -440,10 +445,9 @@ final class AppState: ObservableObject {
     /// connectors, mail adapters, and timers publish here instead of waking
     /// the language model independently.
     let agentRuntimeKernel: AgentRuntimeKernel
-    /// Sliding-window accounting for non-host events that are allowed to wake
-    /// an idle model. This is host state, not event payload metadata, so an
-    /// external sender cannot reset or enlarge its own budget.
-    var agentExternalWakeHistoryByRuntime: [UUID: [Date]] = [:]
+    /// One delayed retry per runtime when authenticated external wakeups hit
+    /// their process-wide sliding-window budget.
+    var agentExternalWakeRetryTasks: [UUID: Task<Void, Never>] = [:]
     /// Marks cancellation initiated by a host-trusted critical kernel event.
     /// A normal stop/provider failure must not auto-retry forever, while a
     /// real preemption must restart from the preserved transcript.
@@ -971,6 +975,8 @@ final class AppState: ObservableObject {
                 AgentSessionStore.loadAllWithMetadata()
             }.value
             guard let self, !Task.isCancelled else { return }
+            await self.agentRuntimeKernel.ensurePersistedEventsLoaded()
+            guard !Task.isCancelled else { return }
 
             // A user can create a session while the disk index is loading.
             // In-memory state is newer and therefore wins on ID collisions.
@@ -988,6 +994,7 @@ final class AppState: ObservableObject {
             self.metadataOnlySessionIDs = metadataOnlyIDs
             self.metadataOnlyUserMessageIDs = metadataOnlyUserMessageIDs
             self.hasLoadedAgentSessionCatalog = true
+            CollaborationRelayEventPump.shared.attach(to: self)
             // Older builds promoted Dispatch task worktrees into named
             // projects. Remove those catalog rows before migration runs, or
             // they would keep rendering as empty `dispatch-*` sidebar groups.
@@ -1015,9 +1022,11 @@ final class AppState: ObservableObject {
             // and deleted conversations must not leave mail/webhook payloads
             // behind indefinitely or compete with active sessions for the
             // global queue budget.
-            self.agentRuntimeKernel.retainEvents(
-                for: Set(self.agentSessions.lazy.filter { $0.archivedAt == nil }.map(\.id))
-            )
+            if loaded.catalogReadSucceeded {
+                self.agentRuntimeKernel.retainEvents(
+                    for: Set(self.agentSessions.lazy.filter { $0.archivedAt == nil }.map(\.id))
+                )
+            }
 
             // Pending kernel events survived an app restart. Materialize only
             // their owning sessions and let the normal provider-slot scheduler
@@ -1035,6 +1044,7 @@ final class AppState: ObservableObject {
     }
 
     deinit {
+        agentExternalWakeRetryTasks.values.forEach { $0.cancel() }
         sessionAutoArchiveTask?.cancel()
         gitStatusRefreshTask?.cancel()
         quickOpenRefreshTask?.cancel()

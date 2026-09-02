@@ -138,6 +138,16 @@ nonisolated struct AgentSubagentStreamingTextOutcome: Equatable, Sendable {
 /// uses for background shell jobs.
 @MainActor
 final class AgentSubagentRegistry: ObservableObject {
+    struct BackgroundExecutionContext {
+        var additionalWorkspaceRoots: [URL] = []
+        var verifierCommand: String?
+        var verifierMaxAttempts = AgentSubagentTaskPacket.defaultMaxAttempts
+        var terminalController: AgentInteractiveTerminalController?
+        var approvedCommand: String?
+        var commandReviewer: AgentSubagentRunner.CommandReviewer?
+        var toolReviewer: AgentSubagentRunner.ToolReviewer?
+    }
+
     typealias RunOperation = @MainActor (
         _ prompt: String,
         _ configuration: AgentConfiguration,
@@ -148,6 +158,7 @@ final class AgentSubagentRegistry: ObservableObject {
         _ outputSchema: AgentStructuredSchema?,
         _ profile: AgentSubagentProfile,
         _ interventionChannel: AgentSubagentInterventionChannel?,
+        _ executionContext: BackgroundExecutionContext,
         _ onProgress: ((AgentSubagentProgressUpdate) -> Void)?
     ) async throws -> AgentSubagentRunner.Outcome
 
@@ -176,16 +187,23 @@ final class AgentSubagentRegistry: ObservableObject {
     private var coordinatorOwnedRunIDs: Set<UUID> = []
     /// Injectable only so coordinator orchestration can be covered without a
     /// live provider. Production keeps the real read-only runner.
-    var runOperation: RunOperation = { prompt, configuration, workspaceURL, runtimeDescriptor, workspaceLocation, someIMContext, outputSchema, profile, interventionChannel, onProgress in
+    var runOperation: RunOperation = { prompt, configuration, workspaceURL, runtimeDescriptor, workspaceLocation, someIMContext, outputSchema, profile, interventionChannel, executionContext, onProgress in
         try await AgentSubagentRunner.run(
             prompt: prompt,
             configuration: configuration,
             workspaceURL: workspaceURL,
+            additionalWorkspaceRoots: executionContext.additionalWorkspaceRoots,
             runtimeDescriptor: runtimeDescriptor,
             workspaceLocation: workspaceLocation,
             someIMContext: someIMContext,
             outputSchema: outputSchema,
             profile: profile,
+            verifierCommand: executionContext.verifierCommand,
+            verifierMaxAttempts: executionContext.verifierMaxAttempts,
+            terminalController: executionContext.terminalController,
+            approvedCommand: executionContext.approvedCommand,
+            commandReviewer: executionContext.commandReviewer,
+            toolReviewer: executionContext.toolReviewer,
             interventionChannel: interventionChannel,
             onProgress: onProgress
         )
@@ -278,6 +296,7 @@ final class AgentSubagentRegistry: ObservableObject {
         someIMContext: SomeIMRequestContext? = nil,
         outputSchema: AgentStructuredSchema? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
+        executionContext: BackgroundExecutionContext = BackgroundExecutionContext(),
         queuesParentReport: Bool = true
     ) throws -> AgentSubagentRun {
         guard activeCount(forParentRuntime: parentRuntimeID) < Self.maxConcurrentPerRuntime else {
@@ -329,6 +348,7 @@ final class AgentSubagentRegistry: ObservableObject {
                     outputSchema,
                     profile,
                     interventionChannel,
+                    executionContext,
                     { [weak self] update in
                         self?.onRunProgress?(id, update)
                     }
@@ -420,6 +440,7 @@ final class AgentSubagentRegistry: ObservableObject {
             // optimization — it stays on the parent's model and tool set.
             AgentSubagentProfileCatalog.deep,
             nil,
+            BackgroundExecutionContext(),
             // Deliberately silent: goal-planning members are aggregated by
             // their coordinator and never surface as individual Workers.
             nil
@@ -1823,46 +1844,6 @@ enum AgentSubagentRunner {
     nonisolated static func approvedCommandMatches(_ candidate: String, approved: String) -> Bool {
         candidate.trimmingCharacters(in: .whitespacesAndNewlines)
             == approved.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Only ambiguous, non-sensitive terminal commands may reach the AI
-    /// judge. Deterministically dangerous or typed-confirmation operations
-    /// remain outside model authority and must be approved by the operator as
-    /// an exact `ops_runner.target_command` on a new spawn.
-    /// Whether a Worker's command may be resolved by the parent's approval
-    /// ladder instead of a human approval card.
-    ///
-    /// The ladder itself is the user's `approvalMode` and lives in the
-    /// parent; this only answers whether to consult it:
-    ///
-    ///  - **Strict** means "ask me every time", so nothing is consulted —
-    ///    consulting would answer on the user's behalf.
-    ///  - **Full Access** consults for everything. The user has already
-    ///    granted that level to the parent; a Worker running the same
-    ///    command is not a second decision, and the deterministic malicious
-    ///    denylist remains the hard floor on the parent side.
-    ///  - Everything else keeps the narrower floor below: a command needing
-    ///    typed confirmation, or one touching credentials, is never put to
-    ///    the judge. A terminal is the user's real shell and seatbelt does
-    ///    not reach it.
-    nonisolated static func subagentCommandMayBeReviewedByParent(
-        _ command: String,
-        approvalMode: AgentApprovalMode,
-        workspaceURL: URL?,
-        additionalWorkspaceRoots: [URL] = []
-    ) -> Bool {
-        switch approvalMode {
-        case .requestEveryTime:
-            return false
-        case .fullAccess:
-            return true
-        case .smart, .workspaceAccess:
-            return subagentCommandCanUseIntelligentReview(
-                command,
-                workspaceURL: workspaceURL,
-                additionalWorkspaceRoots: additionalWorkspaceRoots
-            )
-        }
     }
 
     nonisolated static func subagentCommandCanUseIntelligentReview(

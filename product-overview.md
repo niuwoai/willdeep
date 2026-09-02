@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-02 | Current version: v1.317.0-rc1
+> Last updated: 2026-09-02 | Current version: v1.317.0-rc2
 
 ## Positioning
 
@@ -18,7 +18,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
-- **宿主级 Agent Runtime 事件内核（1.315.0-rc16）** —— Worker、终端、后台 Job、媒体、Workflow、审批、定时器、Webhook、邮件与连接器信号统一进入进程级共享的持久化事件信封；宿主分别记录调度权限与 `host/model/tool/file/network` 正文来源，并按 enqueue / 边界让出 / 强制抢占三档策略调度。事件采用 provider 成功后才确认的可恢复 lease；所有空闲恢复路径共用外部唤醒预算，外部待用户提醒有界，模型投递采用防饥饿公平队列。Collaboration Relay v2 使用持久化非破坏 poll + 明确 ACK，设置页展示在线状态、轮询时间、错误及接收/ACK/丢弃/去重/积压统计；事件中心展示处理人和处理结果。完整契约见 [Agent Runtime Kernel](docs/AGENT_RUNTIME_KERNEL.md)。
+- **宿主级 Agent Runtime 事件内核（1.317.0-rc2）** —— Worker、终端、后台 Job、媒体、Workflow、审批、定时器、Webhook、邮件与连接器信号统一进入进程级共享的持久化事件信封；宿主分别记录调度权限与 `host/model/tool/file/network` 正文来源，并按 enqueue / 边界让出 / 强制抢占三档策略调度。多窗口只有会话 owner 可唤醒模型，lease 绑定具体 provider turn，外部唤醒额度在整个进程共享且到期自动重试。冷启动先异步恢复会话与事件日志再启动 Relay，坏日志自动隔离。用户手敲终端不进入事件流，后台 Worker 则继承父会话的可见终端与审批回调。Collaboration Relay v2 使用持久化非破坏 poll + 明确 ACK，队列满时拒收新事件而不淘汰未 ACK 旧事件；设置页展示在线状态、轮询时间、错误及接收/ACK/丢弃/去重/积压统计，事件中心展示处理人和处理结果。完整契约见 [Agent Runtime Kernel](docs/AGENT_RUNTIME_KERNEL.md)。
 
 - **完成回合收口与原文回溯（1.315.0-rc17）** —— Agent 工作中的过程消息仍实时显示；回合完成后，主对话只保留最终结论，并继续汇总整轮耗时、Token 与文件变更概览。会话内搜索会暂时展开完整过程，收藏项则保存会话、消息与回合标识，可从收藏夹打开对应的原始消息；正文仍是原生可选择、可复制文本。
 

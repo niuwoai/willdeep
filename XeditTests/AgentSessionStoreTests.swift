@@ -21,6 +21,16 @@ import Foundation
 @MainActor
 struct AgentSessionStoreTests {
 
+    @Test
+    func protectedSessionIsNeverSweptAsAnEmptyPlaceholder() {
+        let sessionID = UUID()
+
+        #expect(!AgentSessionStore.deleteIfStillEmptyAndUnattached(
+            id: sessionID,
+            protectedSessionIDs: [sessionID]
+        ))
+    }
+
     // MARK: - deriveTitle
 
     /// Empty message list → fallback title. New chats land here.

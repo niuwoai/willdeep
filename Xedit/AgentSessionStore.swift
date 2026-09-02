@@ -1043,6 +1043,10 @@ nonisolated enum AgentSessionStore {
         let sessions: [AgentSession]
         let metadataOnlyIDs: Set<UUID>
         let metadataOnlyUserMessageIDs: Set<UUID>
+        /// False means the catalog directory existed but could not be
+        /// enumerated. Callers must not interpret that failure as an
+        /// authoritative empty catalog and prune other durable state.
+        let catalogReadSucceeded: Bool
     }
 
     static func loadAll() -> [AgentSession] {
@@ -1070,12 +1074,15 @@ nonisolated enum AgentSessionStore {
 
         let dir = directory
         var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue,
+        let directoryExists = FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir)
+        var catalogReadSucceeded = !directoryExists
+        if directoryExists, isDir.boolValue,
            let entries = try? FileManager.default.contentsOfDirectory(
-               at: dir,
-               includingPropertiesForKeys: nil,
-               options: [.skipsHiddenFiles]
+            at: dir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
            ) {
+            catalogReadSucceeded = true
             for url in entries where url.pathExtension == "json" {
                 guard let entry = loadOrRebuildCatalogEntry(for: url) else { continue }
                 let session = entry.session
@@ -1112,7 +1119,8 @@ nonisolated enum AgentSessionStore {
         return LoadedSessions(
             sessions: sessions.sorted { $0.updatedAt > $1.updatedAt },
             metadataOnlyIDs: metadataOnlyIDs,
-            metadataOnlyUserMessageIDs: metadataOnlyUserMessageIDs
+            metadataOnlyUserMessageIDs: metadataOnlyUserMessageIDs,
+            catalogReadSucceeded: catalogReadSucceeded
         )
     }
 
@@ -1327,7 +1335,11 @@ nonisolated enum AgentSessionStore {
     /// The unconditional `delete(id:)` above stays for user-initiated
     /// deletions where the caller owns the session and truly means it.
     @discardableResult
-    static func deleteIfStillEmptyAndUnattached(id: UUID) -> Bool {
+    static func deleteIfStillEmptyAndUnattached(
+        id: UUID,
+        protectedSessionIDs: Set<UUID> = []
+    ) -> Bool {
+        guard !protectedSessionIDs.contains(id) else { return false }
         // Our own not-yet-flushed snapshot is the freshest truth, and it is
         // newer than anything on disk. If it has substance, stop here.
         if let pending = pendingWrites.peek(id), !isAbandonedPlaceholder(pending) {

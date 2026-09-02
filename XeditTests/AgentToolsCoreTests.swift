@@ -349,7 +349,7 @@ struct AgentToolsCoreTests {
         #expect(AppState.delegatedComposerApprovalSource(risk: .danger) == .user)
     }
 
-    @Test("调度子任务的写入和高风险工具不再等待人工审批")
+    @Test("调度子任务只自动批准不需要确认的普通写入")
     func unattendedDispatchTasksBypassInteractiveApproval() {
         #expect(AppState.unattendedDispatchApprovalSource(
             risk: .write,
@@ -358,7 +358,7 @@ struct AgentToolsCoreTests {
         #expect(AppState.unattendedDispatchApprovalSource(
             risk: .danger,
             isUnattendedDispatchTask: true
-        ) == .dispatchTask)
+        ) == nil)
         #expect(AppState.unattendedDispatchApprovalSource(
             risk: .read,
             isUnattendedDispatchTask: true

@@ -528,6 +528,7 @@ enum AgentChatHistoryRenderer {
                     )
                 }
             }
+            let renderedMessageStart = result.length
 
             // Role header.
             let isToolCallOnly = message.role == .assistant
@@ -907,6 +908,16 @@ enum AgentChatHistoryRenderer {
                         )
                     )
                 }
+            }
+            if result.length > renderedMessageStart {
+                result.addAttribute(
+                    .agentChatHistoryMessageID,
+                    value: message.id.uuidString,
+                    range: NSRange(
+                        location: renderedMessageStart,
+                        length: result.length - renderedMessageStart
+                    )
+                )
             }
 
             index += 1

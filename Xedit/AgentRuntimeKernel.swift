@@ -165,6 +165,10 @@ nonisolated struct AgentKernelEvent: Identifiable, Codable, Equatable, Sendable 
     var createdAt: Date
     var updatedAt: Date
     var deliveredAt: Date?
+    /// Binds a leased event to the exact provider turn that consumed it.
+    /// Another window running the same session cannot acknowledge or release
+    /// this lease with its own successful request.
+    var modelDeliveryLeaseID: UUID?
     var acknowledgedAt: Date?
     var coalescedCount: Int
     var resolutionActor: AgentKernelEventResolutionActor?
@@ -269,6 +273,7 @@ nonisolated struct AgentKernelEvent: Identifiable, Codable, Equatable, Sendable 
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.deliveredAt = deliveredAt
+        self.modelDeliveryLeaseID = nil
         self.acknowledgedAt = acknowledgedAt
         self.coalescedCount = max(coalescedCount, 1)
         self.resolutionActor = nil
@@ -411,6 +416,7 @@ nonisolated enum AgentKernelEventStore {
                   let byteCount = values.fileSize,
                   byteCount <= maximumJournalBytes,
                   let data = try? Data(contentsOf: url) else {
+                quarantineCorruptJournal(at: url)
                 return nil
             }
             if let journal = try? JSONDecoder().decode(Journal.self, from: data),
@@ -418,9 +424,20 @@ nonisolated enum AgentKernelEventStore {
                 return journal.events
             }
             // Backward compatibility with the unreleased rc14 array format.
-            return try? JSONDecoder().decode([AgentKernelEvent].self, from: data)
+            if let legacy = try? JSONDecoder().decode([AgentKernelEvent].self, from: data) {
+                return legacy
+            }
+            quarantineCorruptJournal(at: url)
+            return nil
         }
         return batches.flatMap { $0 }
+    }
+
+    private static func quarantineCorruptJournal(at url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let suffix = String(Int(Date().timeIntervalSince1970 * 1_000))
+        let target = url.appendingPathExtension("corrupt-\(suffix)")
+        try? FileManager.default.moveItem(at: url, to: target)
     }
 
     static func saveAsync(_ events: [AgentKernelEvent], for runtimeID: UUID) {
@@ -506,12 +523,18 @@ nonisolated enum AgentKernelEventStore {
 
 @MainActor
 final class AgentRuntimeKernel: ObservableObject {
-    static let shared = AgentRuntimeKernel()
+    /// The app-wide instance loads its journals off the main actor after the
+    /// session catalog begins loading. Test/local instances retain the
+    /// synchronous initializer for deterministic fixtures.
+    static let shared = AgentRuntimeKernel(loadPersisted: false)
 
     @Published private(set) var events: [AgentKernelEvent]
 
     private let persistsEvents: Bool
     private let now: () -> Date
+    private var externalWakeHistoryByRuntime: [UUID: [Date]] = [:]
+    private var persistenceLoadTask: Task<[AgentKernelEvent], Never>?
+    private(set) var isPersistenceLoaded: Bool
 
     init(
         loadPersisted: Bool = true,
@@ -520,7 +543,46 @@ final class AgentRuntimeKernel: ObservableObject {
     ) {
         self.persistsEvents = persistsEvents
         self.now = now
+        self.isPersistenceLoaded = loadPersisted
         events = loadPersisted ? AgentKernelEventStore.loadAll() : []
+        let recoveredRuntimeIDs = recoverAbandonedModelDeliveryLeases()
+            .union(enforceBounds())
+        recoveredRuntimeIDs.forEach(persist(runtimeID:))
+    }
+
+    func ensurePersistedEventsLoaded() async {
+        guard persistsEvents, !isPersistenceLoaded else { return }
+        let task: Task<[AgentKernelEvent], Never>
+        if let persistenceLoadTask {
+            task = persistenceLoadTask
+        } else {
+            task = Task.detached(priority: .utility) {
+                AgentKernelEventStore.loadAll()
+            }
+            persistenceLoadTask = task
+        }
+        let persisted = await task.value
+        guard !isPersistenceLoaded else { return }
+        let liveIDs = Set(events.map(\.id))
+        let liveJournalKeys = Set(events.compactMap { event -> String? in
+            guard event.resolvedDedupeScope == .journal,
+                  let dedupeKey = event.dedupeKey else {
+                return nil
+            }
+            return "\(event.runtimeID.uuidString)\u{0}\(dedupeKey)"
+        })
+        events = persisted.filter { event in
+            guard !liveIDs.contains(event.id) else { return false }
+            guard event.resolvedDedupeScope == .journal,
+                  let dedupeKey = event.dedupeKey else {
+                return true
+            }
+            return !liveJournalKeys.contains(
+                "\(event.runtimeID.uuidString)\u{0}\(dedupeKey)"
+            )
+        } + events
+        isPersistenceLoaded = true
+        persistenceLoadTask = nil
         let recoveredRuntimeIDs = recoverAbandonedModelDeliveryLeases()
             .union(enforceBounds())
         recoveredRuntimeIDs.forEach(persist(runtimeID:))
@@ -575,6 +637,34 @@ final class AgentRuntimeKernel: ObservableObject {
         events.lazy.filter {
             $0.runtimeID == runtimeID && $0.isPendingForModel
         }.count
+    }
+
+    func reserveAutomaticWake(
+        for runtimeID: UUID,
+        pendingEvents: [AgentKernelEvent],
+        hasHostCompletion: Bool,
+        at timestamp: Date
+    ) -> (decision: AgentAutomaticWakeDecision?, retryAt: Date?) {
+        let history = externalWakeHistoryByRuntime[runtimeID, default: []]
+        let decision = AgentAutomaticWakePolicy.decision(
+            pendingEvents: pendingEvents,
+            hasHostCompletion: hasHostCompletion,
+            externalWakeHistory: history,
+            now: timestamp
+        )
+        if let decision, decision.kind == .authenticatedExternal {
+            externalWakeHistoryByRuntime[runtimeID] = decision.externalWakeHistory
+            return (decision, nil)
+        }
+        if decision != nil { return (decision, nil) }
+        let hasAuthenticatedWake = pendingEvents.contains {
+            $0.isPendingForModel
+                && $0.interruptPolicy != .enqueue
+                && $0.trust == .authenticated
+        }
+        guard hasAuthenticatedWake else { return (nil, nil) }
+        let blocked = AgentExternalWakePolicy.reserve(history: history, now: timestamp)
+        return (nil, blocked.allowed ? nil : blocked.nextAllowedAt)
     }
 
     func pendingUserActionCount(for runtimeID: UUID) -> Int {
@@ -668,7 +758,11 @@ final class AgentRuntimeKernel: ObservableObject {
             .map { $0 }
     }
 
-    func consumePendingModelEvents(for runtimeID: UUID, limit: Int = 20) -> [AgentKernelEvent] {
+    func consumePendingModelEvents(
+        for runtimeID: UUID,
+        limit: Int = 20,
+        leaseID: UUID? = nil
+    ) -> [AgentKernelEvent] {
         guard limit > 0 else { return [] }
         let candidates = events.enumerated()
             .filter {
@@ -679,6 +773,7 @@ final class AgentRuntimeKernel: ObservableObject {
         let timestamp = now()
         for index in indexes {
             events[index].modelDeliveryState = .leased
+            events[index].modelDeliveryLeaseID = leaseID
             events[index].deliveredAt = timestamp
             events[index].updatedAt = timestamp
             refreshLegacyState(at: index)
@@ -687,13 +782,15 @@ final class AgentRuntimeKernel: ObservableObject {
         return indexes.map { events[$0] }
     }
 
-    func acknowledge(_ ids: some Sequence<UUID>) {
+    func acknowledge(_ ids: some Sequence<UUID>, leaseID: UUID? = nil) {
         let idSet = Set(ids)
         guard !idSet.isEmpty else { return }
         let timestamp = now()
         var changedRuntimeIDs: Set<UUID> = []
-        for index in events.indices where idSet.contains(events[index].id) {
+        for index in events.indices where idSet.contains(events[index].id)
+            && (leaseID == nil || events[index].modelDeliveryLeaseID == leaseID) {
             events[index].modelDeliveryState = .handled
+            events[index].modelDeliveryLeaseID = nil
             events[index].acknowledgedAt = timestamp
             if !events[index].isAwaitingUserAction {
                 events[index].resolutionActor = .model
@@ -718,18 +815,22 @@ final class AgentRuntimeKernel: ObservableObject {
         persist(runtimeID: events[index].runtimeID)
     }
 
-    func leasedModelEventIDs(for runtimeID: UUID) -> [UUID] {
+    func leasedModelEventIDs(for runtimeID: UUID, leaseID: UUID? = nil) -> [UUID] {
         events.lazy.filter {
-            $0.runtimeID == runtimeID && $0.isLeasedForModel
+            $0.runtimeID == runtimeID
+                && $0.isLeasedForModel
+                && (leaseID == nil || $0.modelDeliveryLeaseID == leaseID)
         }.map(\.id)
     }
 
-    func releaseModelDeliveryLeases(for runtimeID: UUID) {
+    func releaseModelDeliveryLeases(for runtimeID: UUID, leaseID: UUID? = nil) {
         let timestamp = now()
         var changed = false
         for index in events.indices where events[index].runtimeID == runtimeID
-            && events[index].isLeasedForModel {
+            && events[index].isLeasedForModel
+            && (leaseID == nil || events[index].modelDeliveryLeaseID == leaseID) {
             events[index].modelDeliveryState = .pending
+            events[index].modelDeliveryLeaseID = nil
             events[index].deliveredAt = nil
             events[index].updatedAt = timestamp
             refreshLegacyState(at: index)
@@ -745,6 +846,7 @@ final class AgentRuntimeKernel: ObservableObject {
     }
 
     func removeEvents(for runtimeID: UUID) {
+        externalWakeHistoryByRuntime.removeValue(forKey: runtimeID)
         guard events.contains(where: { $0.runtimeID == runtimeID }) else {
             if persistsEvents { AgentKernelEventStore.deleteAsync(runtimeID: runtimeID) }
             return
@@ -837,6 +939,7 @@ final class AgentRuntimeKernel: ObservableObject {
         var affectedRuntimeIDs: Set<UUID> = []
         for index in events.indices where events[index].resolvedModelDeliveryState == .leased {
             events[index].modelDeliveryState = .pending
+            events[index].modelDeliveryLeaseID = nil
             events[index].deliveredAt = nil
             refreshLegacyState(at: index)
             affectedRuntimeIDs.insert(events[index].runtimeID)
@@ -948,7 +1051,9 @@ nonisolated struct AgentExternalEventIngress: Sendable {
         var metadata = ["external_kind": kind]
         if let sender, !sender.isEmpty { metadata["sender"] = sender }
         if let externalID, !externalID.isEmpty { metadata["external_id"] = externalID }
-        let sourceKey = externalID ?? "\(sender ?? "unknown"):\(kind):\(title)"
+        let stableExternalID = externalID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceKey = stableExternalID.flatMap { $0.isEmpty ? nil : $0 }
+            ?? "\(sender ?? "unknown"):\(kind):\(title)"
         return AgentKernelEvent(
             runtimeID: runtimeID,
             source: source,
@@ -962,7 +1067,7 @@ nonisolated struct AgentExternalEventIngress: Sendable {
             payload: body,
             metadata: metadata,
             dedupeKey: "external:\(source.rawValue):\(sourceKey)",
-            dedupeScope: .journal,
+            dedupeScope: stableExternalID?.isEmpty == false ? .journal : .window,
             requiresUserAction: requiresUserAction,
             createdAt: now
         )

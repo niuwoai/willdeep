@@ -61,6 +61,34 @@ struct AgentTerminalInputStateTests {
         #expect(AgentTerminalCommandDispatchPolicy.refusalMessage(for: .interactiveProgram) == nil)
         #expect(AgentTerminalCommandDispatchPolicy.refusalMessage(for: .unknown) == nil)
     }
+
+    @Test("only Agent-owned commands and tabs publish semantic terminal events")
+    func semanticTransitionsRequireAgentOwnership() {
+        #expect(AgentInteractiveTerminalController.semanticTransition(
+            from: .foregroundTask,
+            to: .shellReady,
+            hasPendingAgentCommand: false,
+            isAgentCreatedTab: false
+        ) == nil)
+        #expect(AgentInteractiveTerminalController.semanticTransition(
+            from: .foregroundTask,
+            to: .shellReady,
+            hasPendingAgentCommand: true,
+            isAgentCreatedTab: false
+        ) == .commandCompleted)
+        #expect(AgentInteractiveTerminalController.semanticTransition(
+            from: .shellReady,
+            to: .exited,
+            hasPendingAgentCommand: false,
+            isAgentCreatedTab: false
+        ) == nil)
+        #expect(AgentInteractiveTerminalController.semanticTransition(
+            from: .shellReady,
+            to: .exited,
+            hasPendingAgentCommand: false,
+            isAgentCreatedTab: true
+        ) == .exited)
+    }
 }
 
 @Suite(.serialized)

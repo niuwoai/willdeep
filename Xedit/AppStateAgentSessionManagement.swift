@@ -238,8 +238,10 @@ extension AppState {
     /// `projectID`, and every session here has none.
     func abandonedEmptySessionCandidates(now: Date = Date()) -> [AgentSession.ID] {
         let cutoff = now.addingTimeInterval(-Self.abandonedEmptySessionGracePeriod)
+        let orchestratorSessionID = AgentRuntimeEventSettingsStore.load().orchestratorSessionID
         return agentSessions.filter { session in
             guard session.updatedAt < cutoff,
+                  session.id != orchestratorSessionID,
                   session.projectID == nil,
                   session.workspaceRootPath == nil,
                   session.workspaceLocation == nil,
@@ -277,8 +279,16 @@ extension AppState {
     func sweepAbandonedEmptySessions(now: Date = Date()) async {
         let candidates = abandonedEmptySessionCandidates(now: now)
         guard !candidates.isEmpty else { return }
+        let protectedSessionIDs = Set(
+            [AgentRuntimeEventSettingsStore.load().orchestratorSessionID].compactMap { $0 }
+        )
         let removed = await Task.detached(priority: .utility) {
-            candidates.filter { AgentSessionStore.deleteIfStillEmptyAndUnattached(id: $0) }
+            candidates.filter {
+                AgentSessionStore.deleteIfStillEmptyAndUnattached(
+                    id: $0,
+                    protectedSessionIDs: protectedSessionIDs
+                )
+            }
         }.value
         // The sweep ran off-main; re-check before dropping rows so a session
         // that came alive in between keeps its (now file-less) in-memory row

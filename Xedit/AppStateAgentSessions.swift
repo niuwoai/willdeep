@@ -2334,7 +2334,7 @@ extension AppState {
         if removeFromStore, !AgentSessionStore.delete(id: id) { return false }
         if removeFromStore {
             agentRuntimeKernel.removeEvents(for: id)
-            agentExternalWakeHistoryByRuntime.removeValue(forKey: id)
+            agentExternalWakeRetryTasks.removeValue(forKey: id)?.cancel()
             agentKernelPreemptedRuntimeIDs.remove(id)
         }
         persistedImages.forEach { $0.removeStoredFileIfNeeded() }

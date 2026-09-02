@@ -339,9 +339,10 @@ struct AgentChatTranscript: View {
                                 onShowTurnReport: { showTurnReportPopover = true },
                                 onReferenceGeneratedImage: appState.appendGeneratedImageReferenceToAgentInput,
                                 onAddSelectionToTask: appState.addAgentChatSelectionToTask,
-                                onSelectionPluginAction: { text, pluginID, commandID, completion in
+                                onSelectionPluginAction: { text, messageID, pluginID, commandID, completion in
                                     appState.runAgentChatSelectionPluginAction(
                                         text: text,
+                                        messageID: messageID,
                                         pluginID: pluginID,
                                         commandID: commandID,
                                         completion: completion
@@ -901,6 +902,7 @@ private struct AgentScrollToLatestButton: View {
         var hasher = Hasher()
         hasher.combine(appState.agentInteractionMode)
         hasher.combine(appState.isAgentResponding)
+        hasher.combine(isConversationSearchActive)
         for call in appState.agentToolCalls {
             hasher.combine(call.id)
             hasher.combine(call.status)

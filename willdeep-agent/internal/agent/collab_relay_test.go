@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -367,7 +368,7 @@ func TestCollaborationRelayPersistsUnacknowledgedEventsAcrossRestart(t *testing.
 	}
 }
 
-func TestCollaborationRelayPersistsDeliveryCountersAndQueueEvictions(t *testing.T) {
+func TestCollaborationRelayRejectsNewEventsWithoutEvictingDurableQueue(t *testing.T) {
 	journalPath := filepath.Join(t.TempDir(), "relay-events.json")
 	cfg, err := NewCollaborationRelayConfig(CollaborationRelayConfigInput{
 		Host:           "127.0.0.1",
@@ -389,8 +390,8 @@ func TestCollaborationRelayPersistsDeliveryCountersAndQueueEvictions(t *testing.
 	if queued, err := relay.enqueue(eventA); err != nil || queued {
 		t.Fatalf("duplicate enqueue = %t, %v", queued, err)
 	}
-	if _, err := relay.enqueue(eventB); err != nil {
-		t.Fatalf("enqueue B: %v", err)
+	if queued, err := relay.enqueue(eventB); queued || !errors.Is(err, errCollaborationRelayQueueFull) {
+		t.Fatalf("full enqueue = %t, %v", queued, err)
 	}
 
 	restored := NewCollaborationRelay(cfg)
@@ -402,8 +403,64 @@ func TestCollaborationRelayPersistsDeliveryCountersAndQueueEvictions(t *testing.
 	if restored.counters.Received != 3 || restored.counters.Deduplicated != 1 || restored.counters.Dropped != 1 {
 		t.Fatalf("restored counters = %#v", restored.counters)
 	}
-	if len(restored.events) != 1 || restored.events[0].ID != "evt-b" {
+	if len(restored.events) != 1 || restored.events[0].ID != "evt-a" {
 		t.Fatalf("restored events = %#v", restored.events)
+	}
+}
+
+func TestCollaborationRelayAckReportsUnknownEventIDs(t *testing.T) {
+	relay := newTestCollaborationRelay(t)
+	if _, err := relay.enqueue(CollaborationRelayEvent{ID: "evt-known", Platform: "feishu", Kind: "message"}); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	server := httptest.NewServer(relay.routes())
+	defer server.Close()
+
+	resp := authorizedRelayJSONRequest(
+		t,
+		server,
+		http.MethodPost,
+		"/events/ack",
+		`{"event_ids":["evt-missing-b","evt-known","evt-missing-a"]}`,
+	)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("ack status = %d", resp.StatusCode)
+	}
+	var body APIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode ack: %v", err)
+	}
+	data := body.Data.(map[string]any)
+	missing := data["not_found"].([]any)
+	if len(missing) != 2 || missing[0] != "evt-missing-a" || missing[1] != "evt-missing-b" {
+		t.Fatalf("not_found = %#v", missing)
+	}
+}
+
+func TestCollaborationRelayQuarantinesCorruptJournalAndStartsEmpty(t *testing.T) {
+	directory := t.TempDir()
+	journalPath := filepath.Join(directory, "relay-events.json")
+	if err := os.WriteFile(journalPath, []byte("not json"), 0o600); err != nil {
+		t.Fatalf("write corrupt journal: %v", err)
+	}
+	cfg, err := NewCollaborationRelayConfig(CollaborationRelayConfigInput{
+		Host: "127.0.0.1", Port: 8898, PublicBaseURL: "https://fly.niuwoai.com",
+		Token: "relay-secret", MaxEvents: 10, EventStoreFile: journalPath,
+	})
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	relay := NewCollaborationRelay(cfg)
+	if relay.startupError != nil {
+		t.Fatalf("startup: %v", relay.startupError)
+	}
+	if len(relay.events) != 0 {
+		t.Fatalf("events = %#v, want empty", relay.events)
+	}
+	matches, err := filepath.Glob(journalPath + ".corrupt-*")
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("quarantine matches = %#v, err = %v", matches, err)
 	}
 }
 
