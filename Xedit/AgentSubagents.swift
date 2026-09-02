@@ -667,9 +667,9 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
 }
 
 /// The child agent loop. It has no independent UI: bounded file writes are
-/// granted at spawn, and ambiguous operations commands can only call back to
-/// the parent's safety judge. Human approval remains a new parent-level
-/// `ops_runner.target_command` spawn.
+/// granted at spawn. Privileged generalist calls (Chrome and MCP) and
+/// ambiguous commands call back into the parent's approval policy; the child
+/// never invents an approval mode of its own.
 @MainActor
 enum AgentSubagentRunner {
     static let maxRounds = 12
@@ -679,6 +679,11 @@ enum AgentSubagentRunner {
     /// and Workspace Access semantics: the child reports the command so the
     /// parent can request an explicit `ops_runner.target_command` approval.
     typealias CommandReviewer = (_ toolName: String, _ command: String) async -> Bool
+    typealias ToolReviewer = (
+        _ toolName: String,
+        _ arguments: [String: AgentJSONValue],
+        _ risk: AgentToolRisk
+    ) async -> Bool
 
     /// The only tools a subagent may call. Deliberately excludes:
     /// `spawn_agent` (no nesting), `ask_user` (nobody to ask),
@@ -687,7 +692,8 @@ enum AgentSubagentRunner {
     /// locally validated, GET-only `web_fetch` are read-tier so research
     /// children can follow an exact public result without an approval UI.
     static let allowedToolNames: Set<String> = [
-        "search_files", "grep_files", "read_file", "list_directory",
+        "search_files", "grep_files", "read_file", AgentBundledRules.readerToolName,
+        "list_directory",
         "git_status", "run_command", "list_skills", "read_skill",
         "web_search", "web_fetch",
     ]
@@ -831,7 +837,7 @@ enum AgentSubagentRunner {
             // contradicted rule is worse than no rule.
             var rules = """
             Rules:
-            - You have READ access plus bounded write tools (`create_file` / `apply_patch`) carried by your trade, scoped to the files named above. Everything else is denied.
+            - You have READ access plus bounded write tools (`create_file` / `apply_patch`) carried by your trade, scoped to the files named above. Any terminal, browser, or MCP mutation remains subject to the parent conversation's approval and trust policy.
             - You cannot ask the user anything. Make reasonable assumptions and note them.
             - Read a file before patching it. Keep the change minimal and consistent with surrounding code.
             - Work autonomously until the edit is done, then STOP calling tools and write your final report as a normal message.
@@ -1042,6 +1048,7 @@ enum AgentSubagentRunner {
         /// verifier 循环靠这一点重试。
         approvedCommand: String? = nil,
         commandReviewer: CommandReviewer? = nil,
+        toolReviewer: ToolReviewer? = nil,
         interventionChannel: AgentSubagentInterventionChannel? = nil,
         onProgress: ((AgentSubagentProgressUpdate) -> Void)? = nil
     ) async throws -> Outcome {
@@ -1509,6 +1516,7 @@ enum AgentSubagentRunner {
                                 terminalController: terminalController,
                                 approvedCommand: approvedCommand,
                                 commandReviewer: commandReviewer,
+                                toolReviewer: toolReviewer,
                                 patchProposalSink: patchProposalSink
                             )
                         }
@@ -1524,6 +1532,7 @@ enum AgentSubagentRunner {
                             terminalController: terminalController,
                             approvedCommand: approvedCommand,
                             commandReviewer: commandReviewer,
+                            toolReviewer: toolReviewer,
                             patchProposalSink: patchProposalSink
                         )
                     }
@@ -1888,6 +1897,7 @@ enum AgentSubagentRunner {
         terminalController: AgentInteractiveTerminalController? = nil,
         approvedCommand: String? = nil,
         commandReviewer: CommandReviewer? = nil,
+        toolReviewer: ToolReviewer? = nil,
         patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil
     ) async -> String {
         let permitted = profile.effectiveToolNames(
@@ -1939,14 +1949,14 @@ enum AgentSubagentRunner {
         // capability. Everything else stays read-only.
         let isApprovedWrite = writeAccess != nil
             && AgentSubagentProfileCatalog.writeToolNames.contains(call.toolName)
-        // terminal_operator 的 send_command 是 .write 档，但放行的口子开得
+        // terminal_operator / ops_runner 的 send_command 是 .write 档，但放行的口子开得
         // 很窄：静态只读直接通过；Smart/Goal 可把非敏感、非确定性危险的
         // 模糊命令送父会话安全裁判一次。裁判不放行时仍由父会话通过
         // ops_runner.target_command 向用户申请精确授权。终端是用户的真实
         // shell，seatbelt 管不到那里，所以危险与敏感命令绝不能交给模型越权。
-        let isTerminalOperatorReadOnlySend: Bool = {
+        let isTerminalReadOnlySend: Bool = {
             guard call.toolName == "terminal_send_command",
-                  profile.id == AgentSubagentProfileCatalog.terminalOperatorID,
+                  AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(profile.id),
                   let command = argsDict["command"]?.stringValue() else { return false }
             return AgentSandboxPolicy.commandDecision(
                 command: command,
@@ -1964,7 +1974,7 @@ enum AgentSubagentRunner {
         // unless the command classified `.needsJudgment`, so Full Access
         // could not reach commands it plainly authorizes. The reviewer
         // returning false still lands in the same denial below.
-        // 严格只读工种（scout / reader / generalist）不参与智能审核这条口子。
+        // 严格只读工种（scout / reader）不参与智能审核这条口子。
         // 它们拿到 shell 是为了 `ls` / `head` / `git log` 这类静态只读命令，
         // 不必再经过父会话裁判；一旦允许裁判为它们放行修改类命令，"只读
         // 工种"这个词就没有意义了，而这些工种恰恰跑在最小的模型上。
@@ -1977,6 +1987,19 @@ enum AgentSubagentRunner {
            let commandReviewer {
             isJudgeApprovedCommand = await commandReviewer(call.toolName, command)
         }
+        // Chrome mutations and dynamic MCP calls are real host capabilities,
+        // but a child has no approval UI of its own. The catch-all generalist
+        // therefore asks the parent to evaluate the exact tool + arguments
+        // under the conversation's current approval mode and MCP trust level.
+        // Read calls never need this path; bounded file writes and terminal
+        // commands keep their narrower, purpose-built gates above.
+        var isParentApprovedGeneralistTool = false
+        if profile.id == AgentSubagentProfileCatalog.generalistID,
+           AgentSubagentProfileCatalog.generalistExtraToolNames.contains(call.toolName),
+           risk != .read,
+           let toolReviewer {
+            isParentApprovedGeneralistTool = await toolReviewer(call.toolName, argsDict, risk)
+        }
         // 单命令授权：用户在 spawn 审批卡上批准的那条确切命令（仅
         // ops_runner）。精确文本匹配——多一个字符都不放。
         let isApprovedCommandInvocation: Bool = {
@@ -1988,11 +2011,12 @@ enum AgentSubagentRunner {
         }()
         guard risk == .read
             || isApprovedWrite
-            || isTerminalOperatorReadOnlySend
+            || isTerminalReadOnlySend
             || isJudgeApprovedCommand
+            || isParentApprovedGeneralistTool
             || isApprovedCommandInvocation else {
             if call.toolName == "terminal_send_command",
-               profile.id == AgentSubagentProfileCatalog.terminalOperatorID {
+               AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(profile.id) {
                 return "Denied: this command was neither statically read-only nor approved by intelligent safety review. Report the exact command to the parent. If it still needs to run, the parent must re-spawn `profile=\"ops_runner\"` with this exact `target_command`, which asks the operator for approval instead of silently discarding the request."
             }
             if call.toolName == "run_command", isStrictReadOnlyShellTrade {
@@ -2000,6 +2024,10 @@ enum AgentSubagentRunner {
             }
             if call.toolName == "run_command" {
                 return "Denied: this subagent command was neither statically read-only nor approved by intelligent safety review. Report the exact command to the parent. If it still needs to run, the parent must request exact human approval, using `profile=\"ops_runner\"` with this `target_command` for an operations command."
+            }
+            if profile.id == AgentSubagentProfileCatalog.generalistID,
+               AgentSubagentProfileCatalog.generalistExtraToolNames.contains(call.toolName) {
+                return "Denied: the generalist has this tool, but the exact `\(call.toolName)` call was not approved by the parent conversation's current approval mode or MCP trust policy. Report the intended action and arguments to the parent so it can request the user's decision."
             }
             return "Denied: subagents may only run read-only operations, and this call classified as `\(risk.rawValue)`. Report the suggested change to the parent agent instead of performing it."
         }
@@ -2038,10 +2066,9 @@ enum AgentSubagentRunner {
             runtimeDescriptor: runtimeDescriptor,
             sandboxMode: sandboxMode,
             patchProposalSink: writeAccess == nil ? nil : patchProposalSink,
-            // 终端 controller 只随 terminal_operator 或已获单命令授权的
-            // ops_runner 下发；其他工种拿不到用户终端。
-            terminalController: (profile.id == AgentSubagentProfileCatalog.terminalOperatorID
-                || (profile.id == AgentSubagentProfileCatalog.opsRunnerID && approvedCommand != nil))
+            // controller 随两个终端工种下发；执行闸门另行保证修改命令必须
+            // 经过智能审核或匹配 ops_runner 的精确 target_command。
+            terminalController: AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(profile.id)
                 ? terminalController : nil
         )
         do {

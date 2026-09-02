@@ -93,6 +93,8 @@ enum AgentChatToolSummaryFormatter {
             preferredKeys = ["query", "path"]
         case "read_file", "list_directory":
             preferredKeys = ["path", "limit", "offset"]
+        case AgentBundledRules.readerToolName:
+            preferredKeys = ["file"]
         case "ask_user":
             preferredKeys = ["question", "options"]
         case "read_skill":
@@ -281,6 +283,11 @@ enum AgentCollapsedToolActivitySummary {
                 } else {
                     readFiles.insert(path: path, fallbackIdentity: call.identity)
                 }
+            case AgentBundledRules.readerToolName:
+                let rule = call.arguments["file"]
+                    .map(AgentJSONValue.wrap)
+                    .flatMap { $0.stringValue() } ?? path
+                readFiles.insert(path: rule, fallbackIdentity: call.identity)
             case "view_image", "read_image", "load_image":
                 readImages.insert(path: path, fallbackIdentity: call.identity)
             case "list_directory":

@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-08-31 | Current version: v1.315.0-rc9
+> Last updated: 2026-09-02 | Current version: v1.315.0-rc12
 
 ## Positioning
 
@@ -17,6 +17,12 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **通用 Worker 的完整打杂工具面（1.315.0-rc12）** —— 无法明确归入窄工种的请求统一落到 `generalist`。它可在父任务声明的精确文件集合内创建文件和应用补丁，读取/操作用户可见终端，使用保留现有登录态的 Chrome 工具，并通过 `list_mcp_servers` / `list_mcp_tools` / `call_mcp_tool` 发现和调用所有已配置 MCP 工具。只读调用直接执行；终端命令、Chrome 变更和 MCP 写调用仍复用父会话当前审批档位、MCP 信任级别与安全裁判，未获批时回报精确动作，不绕过用户授权。
+
+- **运维 Worker 的可见终端基线（1.315.0-rc11）** —— `ops_runner` 的终端可见性与写命令授权解耦：它始终可列出/选择标签、读取快照并提交受执行闸门保护的终端命令，因而能在生产变更前先完成只读基线；静态只读命令直接通过，修改命令仍由父会话智能审核或精确 `target_command` 人工授权，普通窄工种不会因此获得用户终端。
+
+- **内置规则原生读取通道（1.315.0-rc10）** —— 精简全局规则索引引用的 Markdown 不再借用受项目工作区约束的 `read_file`，改由宿主只读工具 `read_bundled_rule` 从已签名 App 资源读取。工具只接受 `manifest.json` 白名单中的根目录文件名，并在软链接解析后复核边界；主 Agent 和具备文件读取能力的 Worker 自动获得该工具，无工具判断档保持隔离。读取发生在宿主侧，所以本地、SSH 与 daemon 会话行为一致。旧版未修改的默认索引自动迁移到新指令，用户定制文件不覆盖。
 
 - **三档模型走共享配置（1.314.0-rc1）** —— 三档绑定改为优先读 `~/.willdeep/config.toml` 的 `[worker_tiers.<档>]`，与 willdeep-rs 0.52.0-rc1 同一份 Schema。此前 App 存 UserDefaults、命令行存 config.toml，两条覆盖路径互不知情，同一个人、同一个账号，`worker_tier: expert` 会因为开的是哪个客户端而落到不同模型上。优先级与 `[agent]` 一致：文件里写了的档压过 App 设置，`[worker_tiers.*]` 只读不回写；被文件固定的档在设置面板里改为只读展示并说明去哪里改。配置指定了本机没有的提供商时，该档标记不可用并给出原因，不静默回落到父会话端点——回落等于把点名的模型发到另一个网关上。
 

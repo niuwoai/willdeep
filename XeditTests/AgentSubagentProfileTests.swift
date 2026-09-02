@@ -132,8 +132,8 @@ struct AgentSubagentProfileTests {
 
     // MARK: Write access
 
-    @Test("only built-in writing trades can reach their scoped write tools")
-    func writeToolsOnlyForWritingTrades() {
+    @Test("dedicated writers and the scoped generalist can reach write tools")
+    func writeToolsRequireABoundedWriteCapability() {
         // Even with the grant flag set, a read-only trade gets nothing extra.
         let scout = AgentSubagentProfileCatalog.scout.effectiveToolNames(writeAccessGranted: true)
         #expect(!scout.contains("apply_patch"))
@@ -148,6 +148,11 @@ struct AgentSubagentProfileTests {
             .effectiveToolNames(writeAccessGranted: true)
         #expect(implementer.contains("apply_patch"))
         #expect(implementer.contains("create_file"))
+
+        let generalist = AgentSubagentProfileCatalog.generalist
+        #expect(!generalist.effectiveToolNames().contains("apply_patch"))
+        #expect(generalist.effectiveToolNames(writeAccessGranted: true).contains("apply_patch"))
+        #expect(generalist.effectiveToolNames(writeAccessGranted: true).contains("create_file"))
     }
 
     @Test("writing trades remain write-tier for policy and audit")
@@ -160,10 +165,18 @@ struct AgentSubagentProfileTests {
             for: "spawn_agent",
             arguments: ["profile": .string("scout")]
         )
+        let scopedGeneralistRisk = AgentToolRegistry.risk(
+            for: "spawn_agent",
+            arguments: [
+                "profile": .string("generalist"),
+                "target_files": .array([.string("Sources/Utility.swift")]),
+            ]
+        )
         let defaultRisk = AgentToolRegistry.risk(for: "spawn_agent", arguments: [:])
 
         #expect(editorRisk == .write)
         #expect(scoutRisk == .read)
+        #expect(scopedGeneralistRisk == .write)
         #expect(defaultRisk == .read)
     }
 
@@ -463,15 +476,15 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentProfileCatalog.bindingModelApplies(binding, to: selected))
     }
 
-    // MARK: Generalist and the read-only shell
+    // MARK: Generalist utility surface
 
-    @Test("the generalist is a catch-all that is cheaper than deep and cannot write")
+    @Test("the generalist is a broad catch-all that stays cheaper than deep")
     func generalistFillsTheGapBetweenNarrowTradesAndDeep() {
         let generalist = AgentSubagentProfileCatalog.generalist
         let deep = AgentSubagentProfileCatalog.deep
 
-        // Same reach as deep — that is the point of a catch-all.
-        #expect(generalist.effectiveToolNames() == deep.effectiveToolNames())
+        // It retains deep's ordinary read surface and adds host integrations.
+        #expect(deep.effectiveToolNames().isSubset(of: generalist.effectiveToolNames()))
         // ...on a smaller window, and without deep's 1M ticket.
         #expect(generalist.modelBinding.workerTier == .standard)
         #expect(deep.modelBinding.workerTier == .expert)
@@ -480,21 +493,25 @@ struct AgentSubagentProfileTests {
         #expect(AgentWorkerTierModels.defaultBinding(.standard).model == AgentSubagentModelCompatibility.baseModel)
         // A small model that gives up must still have an exit.
         #expect(generalist.escalation == .retryWithParentModel)
-        // "General-purpose" means "no need to pick a trade", not "may write".
+        // Writes stay unavailable until the parent supplies an exact file set.
         #expect(!generalist.requiresWriteAccess)
-        #expect(generalist.effectiveToolNames(writeAccessGranted: true)
-            .isDisjoint(with: AgentSubagentProfileCatalog.writeToolNames))
+        #expect(generalist.supportsBoundedWrites)
+        #expect(AgentSubagentProfileCatalog.writeToolNames.isSubset(
+            of: generalist.effectiveToolNames(writeAccessGranted: true)
+        ))
+        #expect(AgentSubagentProfileCatalog.terminalOperatorToolNames.isSubset(
+            of: generalist.effectiveToolNames()
+        ))
+        #expect(AgentSubagentProfileCatalog.generalistExtraToolNames.isSubset(
+            of: generalist.effectiveToolNames()
+        ))
     }
 
-    @Test("the reading trades got a shell, and it is a strictly read-only one")
+    @Test("scout and reader stay strict while the generalist uses parent review")
     func readingTradesCarryAReadOnlyShell() {
         let strict = AgentSubagentProfileCatalog.strictReadOnlyShellTradeIDs
 
-        for profile in [
-            AgentSubagentProfileCatalog.scout,
-            AgentSubagentProfileCatalog.reader,
-            AgentSubagentProfileCatalog.generalist,
-        ] {
+        for profile in [AgentSubagentProfileCatalog.scout, AgentSubagentProfileCatalog.reader] {
             // The shell is why `ls`/`head` no longer need `ops_runner`.
             #expect(profile.effectiveToolNames().contains("run_command"), "\(profile.id) has no shell")
             // And the strict list is what stops the parent's safety judge from
@@ -502,6 +519,10 @@ struct AgentSubagentProfileTests {
             #expect(strict.contains(profile.id), "\(profile.id) missing from the strict list")
             #expect(!profile.requiresWriteAccess)
         }
+
+        let generalist = AgentSubagentProfileCatalog.generalist
+        #expect(generalist.effectiveToolNames().contains("run_command"))
+        #expect(!strict.contains(generalist.id))
 
         // The acting trades stay out of it: judged escalation is their job.
         #expect(!strict.contains(AgentSubagentProfileCatalog.opsRunnerID))

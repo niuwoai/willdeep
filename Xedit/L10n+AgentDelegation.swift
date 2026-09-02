@@ -509,7 +509,7 @@ extension L10n {
         )
         static let profileGeneralistPurpose = String(
             localized: "agent-delegation.profile-generalist-purpose",
-            defaultValue: "General-purpose read-only work on a smaller model than this session's: reads files, searches, runs read-only commands, checks git state. Use it when no narrower trade fits."
+            defaultValue: "General-purpose fallback when no narrower trade fits: declared file patches, visible terminal, logged-in Chrome, and configured MCP tools, all under the parent session's approval policy."
         )
         static let profileDeepPurpose = String(
             localized: "agent-delegation.profile-deep-purpose",

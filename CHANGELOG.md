@@ -3,6 +3,39 @@
 > 当前文件保留最新版本（1.315.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.315.0-rc12 - 2026-09-02
+
+### Changed
+
+- **`generalist` 现在是真正的通用打杂 Worker。** 它新增 `create_file` / `apply_patch` 的可选精确文件范围、用户可见终端四项受限工具、保留现有登录态的完整 Chrome 工具面，以及 `list_mcp_servers` / `list_mcp_tools` / `call_mcp_tool` MCP 动态网关；`call_mcp_tool` 可覆盖所有已配置服务器公开的工具，不再把“不属于窄工种”的任务打回父 Agent。
+- **无法确定工种的请求统一由 `generalist` 兜底。** 关键词路由的 70 分含糊分支不再返回空 profile；辅助路由模型选择 `none` 时也保留这一兜底判决，并要求先尝试通用 Worker。
+- 工具变多不等于静默扩权：文件写入仍需 `target_files` / `task.write_files` 并受逐路径锁保护；终端命令沿用静态分类与父会话智能审核；Chrome 变更和 MCP 调用把完整工具参数交回父会话当前审批档位、会话授权签名及 MCP 信任级别判定，未获批则报告精确动作供父会话申请人工批准。
+
+### Tests
+
+- `AgentSubagentProfileTests` 覆盖通用 Worker 的文件、终端、Chrome、MCP 工具集合、无写范围时不可修改、声明写范围后的风险档；`AgentRequestRouterTests` 覆盖含糊请求强制落到 `generalist`。相关 Worker 路由与绑定套件共 75 项测试通过。
+
+## 1.315.0-rc11 - 2026-09-02
+
+### Fixed
+
+- **`ops_runner` 不再在只读基线阶段丢失可见终端工具。** 其档案本来声明了 `terminal_list_tabs`、`terminal_select_tab`、`terminal_snapshot` 与 `terminal_send_command`，运行时却错误地把整套工具和终端 controller 都绑在 `target_command` 是否已获授权上，导致生产操作在申请写授权前无法读取终端基线；Worker 会空耗一轮模型请求后才报告“没有终端工具”。现在 `ops_runner` 与 `terminal_operator` 始终获得受限终端能力：静态只读命令可直接执行，修改命令仍必须通过父会话智能审核或精确匹配人工批准的 `target_command`，`terminal_send_control` 仍不下放。
+
+### Tests
+
+- `AgentHybridWorkerRoutingTests` 与 `WorkflowWorkerBindingTests` 新增未授权 `ops_runner` 的终端工具面回归：四项受限终端工具在基线阶段必须可见，授权前后工具集合保持一致，`deep` 与伪造终端声明的其他工种仍不得获得终端能力。
+
+## 1.315.0-rc10 - 2026-09-02
+
+### Fixed
+
+- **内置规则索引现在能真正读取所引用的 Markdown。** 新增宿主原生只读工具 `read_bundled_rule`：主 Agent 与具备文件读取能力的 Worker 可按清单文件名读取 App 包中的 `BundledAgentRules`，不再把 App 包路径误交给受工作区限制的 `read_file`，也不依赖本地 shell 兜底。因此本地、SSH 与 daemon 会话走同一条读取路径；无工具的判断型 Worker 仍保持原权限边界。
+- 读取只接受 `manifest.json` 白名单中的根目录文件名，并在解析软链接后再次校验目录，拒绝未知文件、绝对路径、路径穿越与逃逸软链接。旧版未修改的精简索引会自动迁移到明确使用新工具的模板；用户追加过内容的规则文件不自动覆盖。
+
+### Tests
+
+- `AgentGlobalRulesTests` 新增规则正文读取、未知文件与路径穿越拒绝、核心工具注册、Worker 权限继承、无工具档案隔离，以及默认索引安全迁移覆盖；`scripts/bundled_agent_rules_contract_test.rb` 继续校验随包规则库契约。
+
 ## 1.315.0-rc9 - 2026-09-01
 
 ### Fixed

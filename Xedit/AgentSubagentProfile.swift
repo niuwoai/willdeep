@@ -16,9 +16,10 @@
 //   - Cost policy belongs to the user's configuration, not to whether the
 //     model remembers to pick a cheap model this time.
 //
-//  A profile may only NARROW the global read-only whitelist. Built-in
-//  writing trades are the exception: their write access is constrained by
-//  the parent's workspace policy plus an exact file-set lock.
+//  Most profiles may only NARROW the global read-only whitelist. Built-in
+//  writing trades and the utility generalist are explicit exceptions:
+//  writes use an exact file-set lock, while terminal, Chrome and MCP actions
+//  remain constrained by the parent conversation's approval policy.
 //
 
 import Foundation
@@ -80,9 +81,9 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
     /// window.
     var toolPayloadCharacterLimit: Int
     var escalation: EscalationPolicy
-    /// True only for built-in writing trades. Gates write tools through the
-    /// workspace policy + exact file-set lock path instead of the read-only
-    /// whitelist.
+    /// True for dedicated writing trades. The built-in generalist may also
+    /// accept an optional bounded write set; unlike a dedicated writer it
+    /// remains usable without one for catch-all investigation work.
     var requiresWriteAccess: Bool
     /// Skills preloaded into this trade's system prompt at spawn time. Empty
     /// for every built-in trade; filled in from the profile's soul.
@@ -120,28 +121,42 @@ nonisolated struct AgentSubagentProfile: Codable, Equatable, Identifiable, Senda
 
     /// The tools this trade may actually call.
     ///
-    /// Intersection, never union: a profile can only take tools away from
-    /// the global read-only set. `writeAccessGranted` is the writing trades'
-    /// narrow door, opened only once the workspace policy and file lock are
-    /// satisfied.
+    /// Narrow trades intersect the global read-only set. The built-in
+    /// generalist additionally receives an audited host-capability set;
+    /// `writeAccessGranted` opens file tools only after the workspace policy
+    /// and exact file lock are satisfied.
     func effectiveToolNames(
         writeAccessGranted: Bool = false,
         approvedCommandGranted: Bool = false
     ) -> Set<String> {
         var allowed = AgentSubagentRunner.allowedToolNames
-        if requiresWriteAccess, writeAccessGranted {
+        var requested = toolNames
+        if requested.contains("read_file") {
+            requested.insert(AgentBundledRules.readerToolName)
+        }
+        if id == AgentSubagentProfileCatalog.generalistID {
+            allowed.formUnion(AgentSubagentProfileCatalog.generalistExtraToolNames)
+        }
+        if supportsBoundedWrites, writeAccessGranted {
             allowed.formUnion(AgentSubagentProfileCatalog.writeToolNames)
         }
         // 终端工具照 editor 写工具的先例走**按工种放行**，不进全局白名单：
         // 进了全局名单，deep/tester 会静默获得读用户终端屏幕的能力。
         // send_command 虽在此放行，执行层仍有第二道闸：静态只读直接走；
         // Smart/Goal 只把非敏感、非确定性危险命令交父安全裁判；其余必须
-        // 通过 ops_runner 的精确 target_command 人工授权。
-        if id == AgentSubagentProfileCatalog.terminalOperatorID
-            || (id == AgentSubagentProfileCatalog.opsRunnerID && approvedCommandGranted) {
+        // 通过 ops_runner 的精确 target_command 人工授权。工具可见性不能
+        // 绑在 target_command 上，否则 ops_runner 连批准前的只读基线都查不了。
+        if AgentSubagentProfileCatalog.terminalToolTradeIDs.contains(id) {
             allowed.formUnion(AgentSubagentProfileCatalog.terminalOperatorToolNames)
         }
-        return toolNames.intersection(allowed)
+        return requested.intersection(allowed)
+    }
+
+    /// Dedicated writers require a declared file set. The generalist accepts
+    /// one when the router cannot identify a narrower writing trade, but does
+    /// not require one for ordinary catch-all work.
+    var supportsBoundedWrites: Bool {
+        requiresWriteAccess || id == AgentSubagentProfileCatalog.generalistID
     }
 
     var localizedDisplayName: String {
@@ -250,6 +265,28 @@ nonisolated enum AgentSubagentProfileCatalog {
         "terminal_snapshot", "terminal_send_command",
     ]
 
+    /// Broad host capabilities carried only by the catch-all generalist.
+    /// `call_mcp_tool` is the gateway to every tool exposed by every
+    /// configured MCP server; individual calls still use the parent's trust
+    /// and approval policy. Chrome tools operate the user's existing profile,
+    /// preserving its logged-in session without exposing cookies directly.
+    static let generalistExtraToolNames: Set<String> = [
+        "chrome_status", "chrome_read_page", "chrome_read_selection",
+        "chrome_snapshot", "chrome_list_tabs", "chrome_activate_tab",
+        "chrome_navigate", "chrome_history", "chrome_click", "chrome_type",
+        "chrome_hover", "chrome_select_option", "chrome_press_key",
+        "chrome_scroll", "chrome_wait_for", "chrome_capture_tab",
+        "chrome_debugger_command",
+        "list_mcp_servers", "list_mcp_tools", "call_mcp_tool",
+    ]
+
+    /// Only these trades may see or drive the user's visible terminal.
+    /// Exact-command approval narrows what `ops_runner` may send; it must not
+    /// decide whether the terminal exists in that Worker's tool table.
+    static let terminalToolTradeIDs: Set<String> = [
+        opsRunnerID, terminalOperatorID, generalistID,
+    ]
+
     /// Trades whose shell is read-only and stays read-only: their
     /// `run_command` passes the static read classifier or it is denied, full
     /// stop. No intelligent-review escalation, no approved-command channel.
@@ -262,7 +299,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// laundering `ls` and `head` through `ops_runner` — widening them into
     /// quiet writers would trade one mis-routing problem for a worse one.
     static let strictReadOnlyShellTradeIDs: Set<String> = [
-        scoutID, readerID, generalistID,
+        scoutID, readerID,
     ]
 
     // The model tier is independent of the role and its tool authority.
@@ -520,14 +557,19 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// one people took — `ops_runner` ran 60% of all spawns, a third of them on
     /// jobs with nothing operational about them.
     ///
-    /// Read-only on purpose. "General-purpose" here means "you do not have to
-    /// pick a trade", not "you may do anything": writes keep going through
-    /// `editor` and `implementer`, which declare their paths and hold a lock.
+    /// This is the deliberate catch-all. It has the user's visible terminal,
+    /// logged-in Chrome bridge and configured MCP gateway, and can accept the
+    /// same exact-file write lock as a dedicated writer when the task packet
+    /// declares paths. Execution still flows through the parent's approval
+    /// policy; broad tool visibility is not broad silent authority.
     static let generalist = AgentSubagentProfile(
         id: generalistID,
-        purpose: "Bounded investigation: locate files and symbols, read and summarize code or documents, analyze logs and git history, and answer with evidence. Read-only shell; no source edits. Model capability comes from the selected tier, not the role name.",
+        purpose: "General-purpose fallback for work that does not clearly belong to another trade. Can inspect and patch declared files, use the visible terminal, operate the user's logged-in Chrome profile, and discover or call configured MCP tools; parent approval and exact file scopes still apply.",
         modelBinding: generalistBinding,
-        toolNames: AgentSubagentRunner.allowedToolNames,
+        toolNames: AgentSubagentRunner.allowedToolNames
+            .union(writeToolNames)
+            .union(terminalOperatorToolNames)
+            .union(generalistExtraToolNames),
         capabilityPromptSection: AgentSubagentJobPrompts.generalist,
         maxRounds: 14,
         toolPayloadCharacterLimit: generalistPayloadCharacterLimit,

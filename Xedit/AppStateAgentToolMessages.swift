@@ -279,22 +279,24 @@ extension AppState {
         // parents that want a narrower write set than the read context.
         let taskPacket = AgentSubagentTaskPacket.parse(arguments["task"])
 
-        // Writing trades need a bounded, locked target set before anything
-        // runs. Smart / Workspace Access inherit the parent workspace grant;
-        // Strict still gates the whole spawn. Every path stays enforced here.
+        // Dedicated writing trades require a bounded target set. The
+        // generalist accepts the same capability when routing fell through
+        // but the parent supplied target_files/task.write_files; without a
+        // declared set it remains a non-writing catch-all.
         var writeAccess: AgentSubagentWriteAccess?
-        if profile.requiresWriteAccess {
-            var rawTargets: [String] = []
-            if case .array(let values)? = arguments["target_files"] {
-                rawTargets = values.compactMap { $0.stringValue() }
-            } else if let single = arguments["target_file"]?.stringValue() {
-                rawTargets = [single]
-            } else if profile.id != AgentSubagentProfileCatalog.editorID {
-                // `write_files` when the packet declares it, else the legacy
-                // combined set. Context in `read_files` never lands here —
-                // that is the whole point of the split.
-                rawTargets = taskPacket?.requestedWriteFiles ?? []
-            }
+        var rawTargets: [String] = []
+        if case .array(let values)? = arguments["target_files"] {
+            rawTargets = values.compactMap { $0.stringValue() }
+        } else if let single = arguments["target_file"]?.stringValue() {
+            rawTargets = [single]
+        } else if profile.id != AgentSubagentProfileCatalog.editorID {
+            // `write_files` when the packet declares it, else the legacy
+            // combined set. Context in `read_files` never lands here.
+            rawTargets = taskPacket?.requestedWriteFiles ?? []
+        }
+        let optionalGeneralistWriteRequested = profile.id == AgentSubagentProfileCatalog.generalistID
+            && !rawTargets.isEmpty
+        if profile.requiresWriteAccess || optionalGeneralistWriteRequested {
             guard !rawTargets.isEmpty,
                   let access = AgentSubagentWriteAccess(targetRelativePaths: rawTargets) else {
                 agentSpawnLog.error(
@@ -350,7 +352,7 @@ extension AppState {
         // parent to integrate or repair after the bounded worker attempt. An
         // ops inspection alone does not unlock a mutating command: that route
         // must carry the exact approved command.
-        if profile.requiresWriteAccess
+        if writeAccess != nil
             || (profile.id == AgentSubagentProfileCatalog.opsRunnerID && approvedCommand != nil) {
             runtime.currentTurnAttemptedWorkerProfiles.insert(profile.id)
         }
@@ -415,7 +417,7 @@ extension AppState {
         if runInBackground {
             // Editor trades are synchronous by construction: the file lock
             // and the approval are scoped to a turn the user is watching.
-            if profile.requiresWriteAccess {
+            if writeAccess != nil {
                 agentSpawnLog.error(
                     "spawn_agent rejected reason=write_trade_background runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public)"
                 )
@@ -704,6 +706,32 @@ extension AppState {
                     ) != nil
                 }
             }()
+            let toolReviewer: AgentSubagentRunner.ToolReviewer? = {
+                guard profile.id == AgentSubagentProfileCatalog.generalistID,
+                      !effectiveTools.isDisjoint(
+                        with: AgentSubagentProfileCatalog.generalistExtraToolNames
+                      ),
+                      runtime.approvalMode != .requestEveryTime else {
+                    return nil
+                }
+                let latestUserMessage = runtime.messages
+                    .last(where: { $0.isOperatorInput })?.content ?? ""
+                return { [weak self] toolName, arguments, risk in
+                    guard let self else { return false }
+                    return await self.autoApprovalSource(
+                        toolName: toolName,
+                        arguments: arguments,
+                        risk: risk,
+                        rootDirectory: workspaceURL,
+                        additionalWorkspaceRoots: workspaceRoots,
+                        interactionMode: runtime.interactionMode,
+                        approvalMode: runtime.approvalMode,
+                        conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+                        environmentTrustDeclarations: runtime.environmentTrustDeclarations,
+                        latestUserMessage: latestUserMessage
+                    ) != nil
+                }
+            }()
             return try await AgentSubagentRunner.run(
                 prompt: prompt,
                 configuration: configuration,
@@ -721,11 +749,12 @@ extension AppState {
                 verifierMaxAttempts: taskPacket?.maxAttempts
                     ?? AgentSubagentTaskPacket.defaultMaxAttempts,
                 patchProposalSink: editorPatchSink,
-                // terminal_operator 与带 target_command 的 ops_runner 需要
-                // 父会话侧栏终端；其余工种在执行层拿不到这个 controller。
+                // terminal_operator / ops_runner / generalist 共用父会话
+                // 可见终端；命令权限仍在执行层逐条判定。
                 terminalController: agentTerminalController,
                 approvedCommand: approvedCommand,
                 commandReviewer: commandReviewer,
+                toolReviewer: toolReviewer,
                 interventionChannel: interventionChannel,
                 onProgress: { [weak self] progress in
                     self?.applySubagentLiveProgress(

@@ -224,6 +224,7 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
     private static func operationName(for call: AgentToolCall) -> String {
         switch call.toolName {
         case "read_file": return "读取文件"
+        case AgentBundledRules.readerToolName: return "读取内置规则"
         case "list_directory": return "浏览目录"
         case "grep_files", "search_files": return "搜索代码"
         case "git_status": return "查看 Git 状态"
@@ -251,7 +252,7 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
 
     private static func systemImage(for call: AgentToolCall) -> String {
         switch call.toolName {
-        case "read_file": return "book.pages"
+        case "read_file", AgentBundledRules.readerToolName: return "book.pages"
         case "list_directory": return "folder"
         case "grep_files", "search_files": return "magnifyingglass"
         case "edit_file", "create_file", "write_file", "apply_patch": return "pencil"
@@ -263,6 +264,8 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
         switch call.toolName {
         case "read_file", "list_directory", "edit_file", "create_file", "write_file":
             return fileName(call.arguments["path"]?.stringValue())
+        case AgentBundledRules.readerToolName:
+            return fileName(call.arguments["file"]?.stringValue())
         case "grep_files":
             return compact(call.arguments["pattern"]?.stringValue())
                 ?? fileName(call.arguments["path"]?.stringValue())
@@ -450,7 +453,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return .runCommand
         case _ where AgentTerminalToolNames.isVisibleTerminalOperation(call.toolName):
             return .terminalOperation
-        case "read_file", "list_directory",
+        case "read_file", AgentBundledRules.readerToolName, "list_directory",
              "grep_files", "search_files",
              "git_status":
             return .fileExploration

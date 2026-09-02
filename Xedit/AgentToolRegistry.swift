@@ -55,6 +55,14 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: AgentBundledRules.readerToolName,
+            description: "Read one trusted Markdown rule shipped inside WillDeep by its manifest filename. Use this whenever the global rules index names a relevant bundled rule; unlike read_file, it works for local, SSH, and daemon workspaces because the host reads its own app resource. Relative Markdown references in a returned rule must be followed with another read_bundled_rule call. Only manifest-listed root files are accepted; absolute paths and traversal are rejected.",
+            risk: .read,
+            parameters: [
+                AgentToolParameter(name: "file", type: .string, description: "Exact manifest filename such as ai-guardrails.md, programming.md, frontend.md, or version-control.md.", required: true)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "list_directory",
             description: "List the immediate entries of a workspace directory. Returns names and whether each entry is a directory.",
             risk: .read,
@@ -1789,16 +1797,16 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "spawn_agent",
-            description: "Spawn a focused worker with one of five responsibilities: investigation, implementation, verification, review, or operations. Model capability is selected separately through the configured standard/advanced/expert tier; context budgets are configured independently at 128K/256K and capped by the supported model window. Prefer the lowest adequate tier. Writing workers can create or edit only declared paths; children cannot ask the user or spawn agents. Supply a self-contained task.",
+            description: "Spawn a worker with one of five responsibilities: general utility, implementation, verification, review, or operations. Model capability is selected separately through the configured standard/advanced/expert tier; context budgets are configured independently at 128K/256K and capped by the supported model window. Prefer the lowest adequate tier. The generalist is the fallback when no narrower role fits and carries declared file patches, visible terminal, logged-in Chrome, and configured MCP tools. All writes remain scoped and parent-approved; children cannot ask the user or spawn agents. Supply a self-contained task.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description for the subagent. Include all needed context — it cannot see the parent conversation or ask questions.", required: true),
                 AgentToolParameter(name: "label", type: .string, description: "Short display label for the UI (e.g. `explore-auth-flow`). Defaults to a prompt prefix.", required: false),
                 AgentToolParameter(name: "run_in_background", type: .boolean, description: "When true, return immediately with an agent handle (agent_xxxxxx); the report is injected as a system message when the subagent finishes. Up to 3 subagents may run in parallel per session. Defaults to false (wait for the report inline).", required: false),
-                AgentToolParameter(name: "profile", type: .string, description: "Select the responsibility, independently of model capability. Public roles: \(AgentSubagentProfileStore.toolDescriptionCatalog) Defaults to `generalist` (investigation). Legacy IDs remain compatible with their narrower tools.", required: false),
+                AgentToolParameter(name: "profile", type: .string, description: "Select the responsibility, independently of model capability. Public roles: \(AgentSubagentProfileStore.toolDescriptionCatalog) Defaults to `generalist`, the broad utility fallback. Legacy IDs remain compatible with their narrower tools.", required: false),
                 AgentToolParameter(name: "worker_tier", type: .string, description: "Optional capability tier: standard, advanced, or expert. Defaults to the role's configured tier. Select the lowest sufficient tier; explain complex work in the task packet. It never expands tools, write scope, or command approval. Profiles with an explicit legacy/custom model binding cannot be overridden this way.", required: false),
                 AgentToolParameter(name: "target_file", type: .string, description: "Required for `profile=\"editor\"`, ignored otherwise. Workspace-relative path of the single file the child may edit. Scheduling the worker never asks for approval in any mode; the declared path is enforced as its exact write boundary, and every other path is rejected.", required: false),
-                AgentToolParameter(name: "target_files", type: .stringArray, description: "Write set for `implementer`, `test_fixer`, and `build_fixer`: 1–16 workspace-relative existing or new paths. If omitted, those trades use `task.write_files` (or the legacy `task.relevant_files`). Scheduling the worker never asks for approval in any mode; every undeclared path and all file deletion are rejected.", required: false),
+                AgentToolParameter(name: "target_files", type: .stringArray, description: "Write set for `generalist`, `implementer`, `test_fixer`, and `build_fixer`: 1–16 workspace-relative existing or new paths. The generalist remains non-writing when no write set is declared. If omitted, these trades use `task.write_files` (or the legacy `task.relevant_files`). Scheduling the worker never asks for approval in any mode; every undeclared path and all file deletion are rejected.", required: false),
                 AgentToolParameter(name: "target_command", type: .string, description: "Only for `profile=\"ops_runner\"`, ignored otherwise. The EXACT shell command the worker may execute despite it being write-tier (a release/deploy script, typically). Spawning a worker never needs approval by itself; this field instead opens a human-readable confirmation for the specific external write command. The worker may run the approved text repeatedly (retry loops need idempotent scripts), but any different write command is denied. Combine with a `task` whose `verifier.command` is a read-only health/status check so success is decided by exit code, not the worker's claim. Keep rollback and other irreversible decisions in this session.", required: false),
                 AgentToolParameter(name: "task", type: .string, description: "Structured task packet, as a JSON STRING. Strongly preferred for the fixer trades and useful for any trade: it lets the worker start hot instead of spending its window searching. Fields: `goal` (string, what done looks like), `skill` (string, an installed skill's identifier — its SKILL.md body is inlined into the worker's first message, so use it for tier=worker skills instead of pasting their steps), `read_files` (array of workspace-relative paths inlined as context — readable, never writable), `write_files` (array — the exact paths a writing trade may create or edit when `target_files` is omitted; also inlined), `relevant_files` (deprecated combined read+write set, kept for older callers — prefer `read_files` plus `write_files` so giving a worker context does not widen what it may change), `known_facts` (array of strings you already established), `constraints` (array of strings it must not violate), `verifier` (object with `command`: a read-only test/build/lint command whose exit code decides success — with it, the worker's own claim of success is not accepted), `max_attempts` (integer, default 4).", required: false),
                 AgentToolParameter(name: "role", type: .string, description: "Optional goal-team role to run as (`developer` / `tester` / `reviewer`). A role binds a trade and may only narrow it further — a reviewer loses the shell, and no role can grant a write tool its trade lacks. Use it when the goal has a roles file; otherwise pick a `profile` directly.", required: false),
@@ -2000,6 +2008,16 @@ enum AgentToolRegistry {
                 id: arguments["profile"]?.stringValue()
             )
             if profile.requiresWriteAccess { return .write }
+            if profile.id == AgentSubagentProfileCatalog.generalistID {
+                let explicitTargets = arguments["target_files"]?.stringArrayValue() ?? []
+                let singleTarget = arguments["target_file"]?.stringValue()?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let packetTargets = AgentSubagentTaskPacket.parse(arguments["task"])?
+                    .requestedWriteFiles ?? []
+                if !explicitTargets.isEmpty || !singleTarget.isEmpty || !packetTargets.isEmpty {
+                    return .write
+                }
+            }
             // 单命令授权：带 target_command 的 spawn 走审批卡——用户批准
             // 的正是那条命令本身（等同在主会话批准一条 write 命令）。
             if let command = arguments["target_command"]?.stringValue(),
