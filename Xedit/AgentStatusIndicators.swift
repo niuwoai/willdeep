@@ -913,7 +913,9 @@ struct AgentStatsDashboard: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
-                Text(formatPercentage(Double(row.totalTokens) / Double(maximumTokens)))
+                Text(L10n.StatsDashboard.dailyModelRelativeUsage(
+                    formatPercentage(Double(row.totalTokens) / Double(maximumTokens))
+                ))
                     .font(supportingFont(
                         visualMinimum: AgentStatsDashboardTypography.metricLabel,
                         design: .monospaced
