@@ -71,6 +71,14 @@ extension L10n {
             return String(format: template, tokens, cache)
         }
 
+        static func dailyModelRelativeUsage(_ percentage: String) -> String {
+            let template = String(
+                localized: "stats-dashboard.daily-detail.model-relative-usage",
+                defaultValue: "Relative usage %@"
+            )
+            return String(format: template, percentage)
+        }
+
         static func dailyTaskChatSummary(_ tasks: String, _ chats: String) -> String {
             let template = String(
                 localized: "stats-dashboard.daily-detail.task-chat-summary",

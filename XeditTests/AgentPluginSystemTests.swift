@@ -1254,6 +1254,35 @@ struct AgentPluginSystemTests {
     }
 
     @Test
+    func pluginPageAndBuiltInProductivityPagesFollowChatBodyFontSize() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let host = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AgentPluginPageHost.swift"),
+            encoding: .utf8
+        )
+        let favorites = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("PluginExamples/favorites/ui/index.html"),
+            encoding: .utf8
+        )
+        let todo = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("PluginExamples/todo/ui/index.html"),
+            encoding: .utf8
+        )
+        let todoDetails = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("PluginExamples/todo/ui/details.css"),
+            encoding: .utf8
+        )
+
+        #expect(host.contains("appState.agentChatBaseFontSize.rounded()"))
+        #expect(host.contains("--willdeep-body-font-size: \\(bodyFontSize)px"))
+        #expect(favorites.contains("font: var(--willdeep-body-font-size, 15px)/1.55"))
+        #expect(todo.contains("font: var(--willdeep-body-font-size, 15px)/1.55"))
+        #expect(todoDetails.contains(".title { font-size: var(--willdeep-body-font-size, 15px)"))
+    }
+
+    @Test
     func pluginPageBaseURLSurvivesSymlinkedPackagePaths() throws {
         // temporaryDirectory 位于 /var/...，而 /var 是 /private/var 的软链接：
         // 入口目录经 safeResourceURL 后是 realpath 形态（/private/var/...），

@@ -890,6 +890,26 @@ extension WillDeepTests {
         #expect(external?.estimatedCostUSD == nil)
     }
 
+    @Test("model cache hit rate uses all prompt tokens while the legend separates uncached input")
+    func testModelCacheHitRateMatchesDashboardLegend() throws {
+        let session = makeSession(
+            modelID: "someim-code-high",
+            providerID: "some-im",
+            messages: [
+                meteredAssistantMessage(
+                    prompt: 53_000,
+                    completion: 3_024,
+                    cachedPrompt: 28_000
+                )
+            ]
+        )
+
+        let row = try #require(AgentUsageStats.modelUsage(for: [session]).first)
+        #expect(row.promptTokens - row.cachedPromptTokens == 25_000)
+        #expect(row.totalTokens == 56_024)
+        #expect(abs(row.cacheHitRate - (28_000.0 / 53_000.0)) < 0.000_001)
+    }
+
     // MARK: - Dashboard model bundle & memoization
 
     @Test("dashboardModel bundles the same aggregates as the individual helpers")

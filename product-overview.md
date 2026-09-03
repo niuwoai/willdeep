@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-02 | Current version: v1.317.0-rc3
+> Last updated: 2026-09-03 | Current version: v1.317.0-rc4
 
 ## Positioning
 
@@ -17,6 +17,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **统计语义与插件正文排版修复（1.317.0-rc4）** —— 模型效率行明确区分缓存命中率与相对最大模型的 Token 用量比例；收藏夹和待办的主内容字号由宿主注入并跟随 Agent 聊天正文字号设置，层级标题与辅助文字维持各自语义尺寸。
 
 - **Composer 与回合建议收口（1.317.0-rc3）** —— 回合末学习建议紧贴最终回答，打开一次后持久记为已查看并从当前会话底部消失。`@` 弹层继续以工作区和文件为首要候选，五类 Worker 保留为其后的点名入口，候选区加高后可同时展示更多条目。已登录 some.im 的新会话默认使用 `someim-auto-flash`，历史会话的固定模型不迁移。
 
