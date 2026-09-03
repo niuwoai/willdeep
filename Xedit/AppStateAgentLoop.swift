@@ -337,6 +337,18 @@ extension AppState {
                         break
                     }
                 }
+                // The serial preflight (when enabled) already delivered its
+                // findings above. Otherwise a read-only route gets its scout
+                // in parallel with the first provider request: the root model
+                // streams immediately and reads the report at a tool boundary.
+                if codingPlan == nil {
+                    self.startSpeculativeScoutIfEligible(
+                        for: runtime,
+                        requestText: text,
+                        configuration: configuration,
+                        userMessageID: userMessage.id
+                    )
+                }
             }
             await self.runAgentLoop(
                 for: runtime,
@@ -447,9 +459,34 @@ extension AppState {
                 hasAPIKey: !configuration.apiKey.isEmpty
             )
         )
+        // Local turn-timing probe. A background wake-up mints a fresh turn id
+        // and therefore a fresh probe; `turnStartedAt` was stamped at dispatch
+        // (or at the wake-up), so the pre-stream span includes routing, the
+        // optional preflight and prompt assembly.
+        if runtime.currentTurnTiming?.turnID != turnID {
+            runtime.currentTurnTiming = AgentTurnTimingProbe(
+                sessionID: runtime.id,
+                turnID: turnID,
+                dispatchedAt: runtime.turnStartedAt ?? Date(),
+                providerID: configuration.providerID,
+                model: configuration.model,
+                routeProfileID: runtime.currentTurnRouteDecision?.profileID,
+                routeConfidence: runtime.currentTurnRouteDecision?.confidence,
+                delegationPolicy: runtime.currentTurnDelegationPolicy.rawValue
+            )
+        }
         var shouldResumePendingEventsAtTurnEnd = true
         defer {
             AgentTelemetry.recordTurnFinished(turnTelemetry)
+            // The parallel scout belongs to this turn: cancel it if it is
+            // still running, drop an undelivered report, then write the
+            // turn's timing line. Runs before the wake-up probes below so a
+            // scout can never be mistaken for pending background work.
+            finalizeTurnTiming(
+                for: runtime,
+                turnID: turnID,
+                outcome: String(describing: turnTelemetry.status)
+            )
             // Any event still leased here was not acknowledged by a completed
             // provider request. Put it back before the final wakeup probe so a
             // cancellation, transport failure, or host preemption can retry in
@@ -884,6 +921,13 @@ extension AppState {
                 )
             }
 
+            // The turn's own parallel scout reports through here too — never
+            // through the registry's pending-report queue, so it can never
+            // wake this runtime once the turn has ended.
+            if let scoutReport = takeSpeculativeScoutReportIfReady(for: runtime) {
+                runtime.messages.append(AgentMessage(role: .system, content: scoutReport))
+            }
+
             // 1.84.0-rc1: drain `show_widget` queue the same way. Each
             // queued AgentWidget becomes a `.widget` message; the card
             // view renders it inline in the transcript and the LLM
@@ -1181,6 +1225,7 @@ extension AppState {
             do {
                 var retryCount = 0
                 turnTelemetry.noteRequestStarted()
+                runtime.currentTurnTiming?.noteRequestSent()
                 while true {
                     do {
                         try await client.streamChat(
@@ -1196,11 +1241,13 @@ extension AppState {
                                 case .textDelta(let delta):
                                     if !delta.isEmpty, runtime.messages[index].firstResponseSeconds == nil {
                                         runtime.messages[index].firstResponseSeconds = Date().timeIntervalSince(turnStartedAt)
+                                        runtime.currentTurnTiming?.noteFirstToken()
                                     }
                                     streamBuffer.appendTextDelta(delta)
                                 case .reasoningDelta(let delta):
                                     if !delta.isEmpty, runtime.messages[index].firstResponseSeconds == nil {
                                         runtime.messages[index].firstResponseSeconds = Date().timeIntervalSince(turnStartedAt)
+                                        runtime.currentTurnTiming?.noteFirstToken()
                                     }
                                     streamBuffer.appendReasoningDelta(delta)
                                 case .toolCallsUpdated(let calls):
@@ -1708,6 +1755,7 @@ extension AppState {
             }
 
             // Execute every tool call, gating on the user when necessary.
+            runtime.currentTurnTiming?.noteToolBoundary()
             var anyDenied = false
             var changedWorkspacePath: String?
             // Git status refreshes are coalesced: instead of one blocking

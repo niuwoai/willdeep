@@ -1,7 +1,31 @@
 # Changelog
 
-> 当前文件保留最新版本（1.317.0-rc8 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.318.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.318.0-rc1 - 2026-09-03
+
+### Added
+
+- **并行 scout。** 高置信只读请求（定位、阅读、日志、回归归因、评审等）在主模型首个请求发出的同时启动只读 Worker，主模型立即流式输出；Worker 在本回合的下一个工具边界以 `<runtime-parallel-scout-report>` 系统消息交付，回合先结束则取消或丢弃报告，**永不在回合结束后唤醒主 Agent**（刻意不走后台 Worker 的 pending report / 内核事件 / 槽位扫描三条唤醒通道）。上限 4 轮 / 45 秒。`/no-subagent` 关闭本轮并行 scout；点名 `@Worker` 与显式开启的串行预检（`auto_dispatch_read_only = true`）优先；写入类路由不投机。共享配置新增 `agent.speculative_scout`（缺省开，`false` 关闭），见 `docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md` §6。
+- **Worker 计时本地日志。** 新增 `~/Library/Application Support/WillDeep/AgentAudit/worker-timing.jsonl`：每个 Worker 运行一行（前台 `spawn_agent`、后台 spawn、串行预检、并行 scout、失败命令修复、自动编码流水线，含排队/运行秒数、轮次、工具数、token、是否被采纳），每个主回合一行（派发→首个请求发出→首字→首个工具边界→结束，含路由判决、委派策略、Worker 数与并行 scout 结局）。不记提示词与正文，16 MB 轮转一次，写入走后台 actor 不阻塞主线程。schema 与 `jq` 用法见 `docs/WORKER_TIMING_LOG.md`。
+- **本地模型：启动预热并常驻。** “本地辅助模型”新增开关“启动 WillDeep 时预热 LLM 模型并常驻内存”：启动即向 Ollama 加载 LLM 模型（`keep_alive = -1`），每 4 分钟续一次驻留以抵消 OpenAI 兼容端点把卸载计时器重置回 5 分钟；关闭或换模型时把旧模型交还 Ollama 默认卸载策略。开关开启时，判路的懒预热同样使用常驻 keep_alive。单元测试进程内不会启动守护循环。
+
+### Fixed
+
+- 判路探针（`/api/ps`）与预热（`/api/generate`）改走无代理的 loopback 会话（与移动网关同一套 `loopbackSession`），系统代理不再可能把 127.0.0.1 探针拖成 350ms 超时、把预热拖到永远失败；会话用完即 `finishTasksAndInvalidate`。
+- Ollama 不可达时记 60 秒负缓存，不再让每一次含糊请求都白等探针超时并重复起预热。
+- 设置页 Worker 派发判断说明补充“仅支持本机 Ollama”（en / zh-Hans / ja / es / fr）。
+- 1.317.0-rc7 的 CHANGELOG 描述范围修正：Worker 只读命令弹审批卡是 1.317.0-rc1 五工种舰队引入的回归，影响全部审批档位，不只是完全访问。
+
+### Tests
+
+- 新增 `AgentSpeculativeScoutTests`（`/no-subagent`、点名、串行预检优先、写入路由排除、引导与报告文案、一次交付、回合结束丢弃/取消、计时探针只消费一次）、`AgentWorkerTimingLogTests`（行格式、回合跨度、追加与轮转、默认位置）、`AgentLocalModelResidencyTests`（旧设置解码默认关、往返、keep-alive 载荷、负缓存、无代理会话、守护者启停）；`AgentSharedRuntimeConfigTests` 覆盖 `speculative_scout` 解析。本地定向 10 套件 **141** 项：三个新套件 **23** 项全绿，路由/预检/审批/共享配置七个既有套件全绿。
+- 功能版本从 **1.317.0-rc8** 提升为 **1.318.0-rc1**，内部构建号 **600 → 601**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
+
+### Known issues
+
+- `AgentProviderLibraryTests` 两条存量红在 develop 基线同样存在，与本次改动零交集：`someIMPresetDefaultsToTheStandardTierForChat` 仍断言默认模型为 `glm-5`，而 some.im 预设早已改为 `someim-auto-flash`；`requestEntryPointsRepairSomeIMCredentials` 要求 `AppStateAgentLoop.swift` 里"凭据修复 → 取当轮配置"两行片段出现两次，develop 上只出现一次。两条都该改断言而不是改代码，留待单独处理。
 
 ## 1.317.0-rc8 - 2026-09-03
 
@@ -21,7 +45,7 @@
 
 ### Fixed
 
-- 修复 Worker 在“完全访问”模式下仍反复弹出终端审批：只读 `sed`、`grep` 等命令不再提前进入父会话审批队列；普通写入和高风险命令继承父会话的完全访问策略，仍保留恶意命令黑名单、环境信任、会话管理和需用户回答操作等硬闸门。
+- 修复 Worker 的只读终端命令反复弹出审批卡（1.317.0-rc1 五工种舰队引入的回归，影响**全部审批档位**，完全访问下最明显）：只读 `sed`、`grep` 等命令不再提前进入父会话审批队列；普通写入和高风险命令继承父会话的完全访问策略，仍保留恶意命令黑名单、环境信任、会话管理和需用户回答操作等硬闸门。
 - 原生 Worker 与 Codex/Claude 等委派执行器统一使用同一权限语义，避免主 Agent 静默执行而子执行器对同类命令逐条询问。
 
 ### Tests

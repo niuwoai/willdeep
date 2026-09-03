@@ -347,6 +347,10 @@ extension AppState {
 
     func syncLocalModelComposerProvider(settings rawSettings: AgentLocalModelSettings) {
         let settings = rawSettings.normalized
+        // Same two moments — launch and every save — decide whether the local
+        // LLM is kept resident, so the keeper rides along here instead of
+        // growing a second observer of the settings store.
+        AgentLocalModelResidencyKeeper.shared.apply(settings: settings)
         let entryID = AgentLocalModelSettings.composerProviderEntryID
         guard settings.enabled, settings.exposeAsComposerModel else {
             if agentProviderLibrary.entries.contains(where: { $0.id == entryID }) {

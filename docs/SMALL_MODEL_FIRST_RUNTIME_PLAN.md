@@ -225,6 +225,7 @@ rs 0.37.0-rc1 新增的三个路由开关落在 `[agent]` 段，因此 Xedit 也
 |---|---|---|
 | `small_model_routing` | 是否做请求级路由 | `false` 即不注入引导；缺省=开（对齐 rs 默认） |
 | `auto_dispatch_read_only` | 高置信请求是否先跑 bounded preflight | 已生效；Xedit 缺省=关以保护首字延迟，显式 `true` 才开启串行预检；显式 `/subagent`、点名 Worker 与 ops 的 delegate-first 工具闸门仍由路由策略控制 |
+| `speculative_scout` | 高置信只读请求是否与主模型首个请求**并行**跑只读 Worker | Xedit 1.318.0-rc1 起生效，缺省=开，`false` 关闭；报告只在本回合的工具边界注入，回合先结束则取消/丢弃，不进入后台唤醒通道；`/no-subagent`、点名 Worker、显式开启的串行预检都会让它让路。rs 侧尚未实现该键，写在这里是为了两端不要各起一个名字 |
 | `max_deep_calls_per_harness` | L 档准入预算 | 直接作为 deep 预算；rs 的单位是 harness，Xedit 用会话，是它最接近的等价单位 |
 
 优先级：`config.toml` 显式值 > Xedit 自身设置 > 内置默认。手工编辑过的文件是更审慎的配置，

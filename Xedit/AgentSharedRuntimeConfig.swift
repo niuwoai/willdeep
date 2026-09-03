@@ -36,6 +36,14 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
     /// keeps an absent value off for first-token latency; an explicit true
     /// enables the serial preflight for large-repository workflows.
     var autoDispatchReadOnly: Bool?
+    /// `agent.speculative_scout` — whether a high-confidence read-only request
+    /// starts its routed read-only worker *in parallel* with the root model
+    /// instead of before it. The report lands at the next tool boundary and
+    /// the worker is cancelled when the turn ends first. Absent means on;
+    /// `false` turns the parallel scout off. WillDeep-only for now; documented
+    /// in docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md §6 so willdeep-rs can adopt
+    /// the same key.
+    var speculativeScout: Bool?
     /// `agent.max_deep_calls_per_harness` — the 1M-tier admission budget. The
     /// rs name says "harness"; WillDeep applies it per session, which is the
     /// closest equivalent unit it has.
@@ -84,6 +92,7 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
         var config = AgentSharedRuntimeConfig()
         config.smallModelRouting = values["small_model_routing"].flatMap(parseBool)
         config.autoDispatchReadOnly = values["auto_dispatch_read_only"].flatMap(parseBool)
+        config.speculativeScout = values["speculative_scout"].flatMap(parseBool)
         config.maxDeepCallsPerHarness = values["max_deep_calls_per_harness"].flatMap { Int($0) }
         return config
     }
