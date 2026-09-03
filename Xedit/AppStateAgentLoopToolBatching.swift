@@ -84,6 +84,80 @@ extension AppState {
         let context: AgentToolContext
     }
 
+    struct AgentPendingParallelSpawn {
+        let call: AgentMessageToolCall
+        let arguments: [String: AgentJSONValue]
+        let recordID: AgentToolCall.ID
+        let messageBuffer: AgentSpawnToolMessageBuffer
+    }
+
+    func executeParallelSpawnBatch(
+        _ batch: inout [AgentPendingParallelSpawn],
+        runtime: AgentRuntime,
+        configuration: AgentConfiguration,
+        workspaceURL: URL?,
+        runtimeDescriptor: RuntimeDescriptor?,
+        workspaceLocation: WorkspaceLocation?,
+        executor: (@MainActor (AgentPendingParallelSpawn) async -> Void)? = nil
+    ) async -> Bool {
+        guard !batch.isEmpty else { return false }
+        let entries = batch
+        batch.removeAll()
+
+        func execute(_ entry: AgentPendingParallelSpawn) async {
+            if let executor {
+                await executor(entry)
+                return
+            }
+            await executeSpawnAgentToolCall(
+                entry.call,
+                recordID: entry.recordID,
+                arguments: entry.arguments,
+                runtime: runtime,
+                configuration: configuration,
+                workspaceURL: workspaceURL,
+                runtimeDescriptor: runtimeDescriptor,
+                workspaceLocation: workspaceLocation,
+                deferredToolMessage: entry.messageBuffer
+            )
+        }
+
+        if entries.count == 1 {
+            let entry = entries[0]
+            await execute(entry)
+        } else {
+            await withTaskGroup(of: Int.self) { group in
+                var nextIndex = 0
+                let initialCount = min(entries.count, AgentSubagentRegistry.maxConcurrentPerRuntime)
+                for index in 0..<initialCount {
+                    let entry = entries[index]
+                    group.addTask { @MainActor in
+                        await execute(entry)
+                        return index
+                    }
+                    nextIndex += 1
+                }
+                while await group.next() != nil {
+                    guard nextIndex < entries.count else { continue }
+                    let index = nextIndex
+                    let entry = entries[index]
+                    group.addTask { @MainActor in
+                        await execute(entry)
+                        return index
+                    }
+                    nextIndex += 1
+                }
+            }
+        }
+
+        for entry in entries {
+            if let message = entry.messageBuffer.message {
+                appendDeferredSpawnToolMessage(message, runtime: runtime)
+            }
+        }
+        return Task.isCancelled
+    }
+
     /// Execute a collected batch of read-tier tool calls concurrently and
     /// fold the outcomes back in the model's original call order — records
     /// in `runtime.toolCalls` were already appended in order during staging,

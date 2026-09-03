@@ -84,8 +84,32 @@ struct AgentSharedRuntimeConfigTests {
     func missingFileIsEmpty() {
         let missing = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("willdeep-\(UUID().uuidString)/config.toml")
+        var reads = 0
+        let reader: (URL) throws -> String = { fileURL in
+            reads += 1
+            return try String(contentsOf: fileURL, encoding: .utf8)
+        }
 
-        #expect(AgentSharedRuntimeConfig.load(from: missing) == AgentSharedRuntimeConfig())
+        #expect(AgentSharedRuntimeConfig.load(from: missing, reader: reader) == AgentSharedRuntimeConfig())
+        #expect(AgentSharedRuntimeConfig.load(from: missing, reader: reader) == AgentSharedRuntimeConfig())
+        #expect(reads == 1)
+    }
+
+    @Test("unchanged config.toml is read once and served from the mtime cache")
+    func unchangedFileUsesLoadCache() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-config-\(UUID().uuidString).toml")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data("[agent]\nspeculative_scout = false\n".utf8).write(to: url)
+        var reads = 0
+        let reader: (URL) throws -> String = { fileURL in
+            reads += 1
+            return try String(contentsOf: fileURL, encoding: .utf8)
+        }
+
+        #expect(AgentSharedRuntimeConfig.load(from: url, reader: reader).speculativeScout == false)
+        #expect(AgentSharedRuntimeConfig.load(from: url, reader: reader).speculativeScout == false)
+        #expect(reads == 1)
     }
 
     // MARK: Precedence

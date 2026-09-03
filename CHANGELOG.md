@@ -1,7 +1,29 @@
 # Changelog
 
-> 当前文件保留最新版本（1.318.0-rc1 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.319.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.319.0-rc1 - 2026-09-03
+
+### Added
+
+- **同轮只读 Worker 并行扇出。** 主模型在同一工具轮连续发出的前台只读 `spawn_agent` 最多五路并发执行，完成结果仍按模型原始调用顺序写回；后台与写入 Worker 保持原有串行、审批和文件锁边界，`/no-subagent` 继续硬禁自动派工。
+- `worker-timing.jsonl` 的前台 Worker 行新增 `inlinedFiles` 与 `inlinedCharacters`，可直接判断任务包是否真正把文件正文带进 Worker 开场消息。
+
+### Changed
+
+- some.im 托管回合只读取当前套餐缓存，过期刷新改为后台触发；托管判路裁判使用独立 8 秒上限，超时按现有 floor 档回退。
+- 回合基线与每轮工作区修订的 Git 子进程和提示组装并行，`AgentSharedRuntimeConfig` 按文件 mtime 与大小缓存，避免首字路径重复同步读取配置。
+- Worker 判路的三条 OSLog 从 `info` 升为 `notice`，便于统一日志检索。
+
+### Fixed
+
+- 修正 `AgentProviderLibraryTests` 两条过时断言：some.im 默认聊天模型与当前 `someim-auto-flash` 预设一致；凭据修复入口数量与事件内核合并后的单一共享派发路径一致，不改生产代码迎合旧结构。
+
+### Tests
+
+- 新增同轮两个 300ms 只读 Worker 的并行与有序回填测试、托管裁判超时回退测试、共享配置缓存命中测试，并扩展 Worker 计时序列化覆盖；相关 7 套件共 **89** 项通过。
+- 功能版本从 **1.318.0-rc1** 提升为 **1.319.0-rc1**，内部构建号 **601 → 602**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.318.0-rc1 - 2026-09-03
 

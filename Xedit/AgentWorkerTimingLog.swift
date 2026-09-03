@@ -57,6 +57,11 @@ nonisolated enum AgentWorkerTimingLog {
         let completionTokens: Int?
         let totalTokens: Int?
         let acceptedOutput: Bool?
+        /// Model-requested foreground workers only: files whose contents
+        /// actually reached the opening task packet.
+        let inlinedFiles: Int?
+        /// Characters of file content included in that opening packet.
+        let inlinedCharacters: Int?
         /// Parallel scout only: whether the report reached the parent at a
         /// tool boundary before the turn ended.
         let deliveredAtToolBoundary: Bool?
@@ -81,6 +86,8 @@ nonisolated enum AgentWorkerTimingLog {
             completionTokens: Int? = nil,
             totalTokens: Int? = nil,
             acceptedOutput: Bool? = nil,
+            inlinedFiles: Int? = nil,
+            inlinedCharacters: Int? = nil,
             deliveredAtToolBoundary: Bool? = nil,
             note: String? = nil
         ) {
@@ -104,6 +111,8 @@ nonisolated enum AgentWorkerTimingLog {
             self.completionTokens = completionTokens
             self.totalTokens = totalTokens
             self.acceptedOutput = acceptedOutput
+            self.inlinedFiles = inlinedFiles
+            self.inlinedCharacters = inlinedCharacters
             self.deliveredAtToolBoundary = deliveredAtToolBoundary
             self.note = note
         }

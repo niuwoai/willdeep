@@ -656,8 +656,9 @@ struct AgentProviderLibraryTests {
         let preset = AgentProviderPreset.preset(id: "some-im")
 
         #expect(preset?.displayName == "some.im")
-        // The flash/default slot is the 256K M tier; pro stays DeepSeek.
-        #expect(preset?.defaultModel == "glm-5")
+        // The default slot enters the managed auto family; pro remains the
+        // explicit DeepSeek escape hatch for non-managed selection.
+        #expect(preset?.defaultModel == SomeIMManagedModel.autoFlash)
         #expect(preset?.defaultProModel == "deepseek-v4-pro")
     }
 
@@ -889,7 +890,9 @@ struct AgentProviderLibraryTests {
                 let configuration = configurationForCurrentTurn(for: runtime)
         """
 
-        #expect(loopSource.components(separatedBy: repairBeforeSnapshot).count - 1 == 2)
+        // Background wakeups now re-enter the same durable-kernel dispatch
+        // path, so AppStateAgentLoop has one shared request entry point.
+        #expect(loopSource.components(separatedBy: repairBeforeSnapshot).count - 1 == 1)
         #expect(retrySource.contains(repairBeforeSnapshot))
     }
 

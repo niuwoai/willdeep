@@ -27,6 +27,8 @@ struct AgentWorkerTimingLogTests {
             finishedAt: requestedAt.addingTimeInterval(12.5),
             rounds: 3,
             toolInvocations: 7,
+            inlinedFiles: 2,
+            inlinedCharacters: 4_096,
             deliveredAtToolBoundary: true
         )
 
@@ -37,6 +39,8 @@ struct AgentWorkerTimingLogTests {
         #expect(line.contains("\"kind\":\"worker_run\""))
         #expect(line.contains("\"profileID\":\"scout\""))
         #expect(line.contains("\"deliveredAtToolBoundary\":true"))
+        #expect(line.contains("\"inlinedFiles\":2"))
+        #expect(line.contains("\"inlinedCharacters\":4096"))
         // No prose fields: identifiers, timestamps, counts and model names only.
         let object = try #require(
             JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any]

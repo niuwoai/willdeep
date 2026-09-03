@@ -49,7 +49,7 @@ extension AppState {
         runtime.currentTurnRouteSteering = merged.steering(
             for: runtime.currentTurnDelegationPolicy
         )
-        Self.workerRoutingLog.info(
+        Self.workerRoutingLog.notice(
             """
             routing model overrode keyword verdict: \
             keyword=\(keyword.profileID ?? "none", privacy: .public) \
@@ -73,7 +73,7 @@ extension AppState {
                 runtimeID: runtimeID
             )
             guard let verdict = AgentWorkerRoutingModel.parseVerdict(raw) else {
-                Self.workerRoutingLog.info(
+                Self.workerRoutingLog.notice(
                     "routing model returned an unusable reply; model=\(configuration.model, privacy: .public)"
                 )
                 return nil
@@ -82,7 +82,7 @@ extension AppState {
         } catch is CancellationError {
             return nil
         } catch {
-            Self.workerRoutingLog.info(
+            Self.workerRoutingLog.notice(
                 """
                 routing model call failed; model=\(configuration.model, privacy: .public) \
                 error=\(String(describing: type(of: error)), privacy: .public)
