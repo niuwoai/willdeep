@@ -1,7 +1,24 @@
 # Changelog
 
-> 当前文件保留最新版本（1.319.0-rc2 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.319.0-rc3 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.319.0-rc3 - 2026-09-03
+
+### Fixed
+
+- 并行 scout 卡片绑定独立的 Worker run ID、实时轮次和可检查的完成 transcript，因此会出现在舰队面板；它仍由当前回合持有，不进入后台 registry、pending report 或回合后唤醒通道。
+- 本地判路请求结束后异步重申 `keep_alive=10m`（常驻开关开启时为 `-1`），抵消 Ollama `/v1/chat/completions` 把驻留窗口重置为默认 5 分钟，且不在主模型首字前增加等待。
+- `ops_runner.target_command` 中静态只读的全局 Git 配置列表查询不再被字段本身误判为写操作或弹授权卡；沙箱仍使用临时 HOME，仅为已证明只读的 `git config --global --list/-l` 指定真实 `.gitconfig`，不继承 SSH agent、Token 或写权限。
+
+### Changed
+
+- 补齐审批/沙箱说明：已静态证明的本地只读命令本来就跳过 seatbelt；网络、用户凭证和写操作按所需能力分档。沙箱造成的 EPERM、权限拒绝及 deny-network 伪装出的 DNS 失败继续自动识别，智能审核/完全访问会对已通过正常审核的同一命令自动无沙箱重试。
+
+### Tests
+
+- 新增 scout 前台可见性、Ollama 驻留策略、只读 `target_command` 风险与全局 Git 配置窄上下文测试；Worker 路由、scout、驻留和命令安全定向套件通过。
+- Bugfix 版本从 **1.319.0-rc2** 递增为 **1.319.0-rc3**，内部构建号 **603 → 604**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.319.0-rc2 - 2026-09-03
 

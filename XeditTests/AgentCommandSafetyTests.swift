@@ -89,6 +89,9 @@ extension WillDeepTests {
         #expect(SafeCommand.classify(command: "git grep -n alwaysSafe") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "git merge-base HEAD develop") == .alwaysSafe)
         #expect(SafeCommand.classify(command: "git version") == .alwaysSafe)
+        #expect(SafeCommand.classify(
+            command: "git config --global --list --show-origin 2>&1 | head -20; echo \"---exit:$?\""
+        ) == .alwaysSafe)
 
         // A local commit is reversible and runs inside the workspace sandbox.
         #expect(SafeCommand.classify(command: "git commit -m 'fix: retry'") == .alwaysSafe)
@@ -1377,6 +1380,58 @@ struct AgentSandboxNetworkPolicyTests {
                 "\(command) should not prompt for approval"
             )
         }
+    }
+
+    @Test("global Git config inspection sees the real config without inheriting the real HOME")
+    func globalGitConfigInspectionUsesNarrowUserContext() {
+        let command = "git config --global --list --show-origin 2>&1 | head -20"
+        let realHome = FileManager.default.homeDirectoryForCurrentUser.path
+        #expect(AgentSandboxPolicy.isReadOnlyGlobalGitConfigInspection(command))
+        #expect(!AgentSandboxPolicy.isReadOnlyGlobalGitConfigInspection(
+            "git config --global user.email rocky@example.com"
+        ))
+        #expect(!AgentSandboxPolicy.isReadOnlyGlobalGitConfigInspection(
+            "git config --global --get user.email"
+        ))
+
+        let environment = AgentSandboxPolicy.sandboxedEnvironment(
+            mode: .readOnly,
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit"),
+            command: command,
+            base: ["HOME": realHome, "SSH_AUTH_SOCK": "/tmp/agent.sock"]
+        )
+        #expect(environment["HOME"] != realHome)
+        #expect(environment["SSH_AUTH_SOCK"] == nil)
+        #expect(environment["GIT_CONFIG_GLOBAL"] == URL(fileURLWithPath: realHome)
+            .appendingPathComponent(".gitconfig").path)
+    }
+
+    @Test("a read-only delegated target command does not become a write operation")
+    func readOnlyDelegatedCommandStaysReadOnly() {
+        let arguments: [String: AgentJSONValue] = [
+            "profile": .string(AgentSubagentProfileCatalog.opsRunnerID),
+            "target_command": .string("git config --global --list --show-origin")
+        ]
+        #expect(AgentToolRegistry.risk(
+            for: "spawn_agent",
+            arguments: arguments,
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        ) == .read)
+        #expect(!AppState.subagentHasExactCommandAuthorization(arguments: arguments))
+
+        let sensitiveArguments: [String: AgentJSONValue] = [
+            "profile": .string(AgentSubagentProfileCatalog.opsRunnerID),
+            "target_command": .string("cat ~/.ssh/id_ed25519")
+        ]
+        #expect(AgentToolRegistry.risk(
+            for: "spawn_agent",
+            arguments: sensitiveArguments,
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        ) != .read)
+        #expect(AppState.subagentHasExactCommandAuthorization(
+            arguments: sensitiveArguments,
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit")
+        ))
     }
 
     /// Seatbelt reports a denied connection as a name-resolution failure, so

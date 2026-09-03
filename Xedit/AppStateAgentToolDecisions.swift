@@ -522,7 +522,11 @@ extension AppState {
         // state. If present, the confirmation is for the command, not for
         // spawning the worker that will execute it.
         if toolName == "spawn_agent",
-           !Self.subagentHasExactCommandAuthorization(arguments: arguments) {
+           !Self.subagentHasExactCommandAuthorization(
+               arguments: arguments,
+               rootDirectory: rootDirectory,
+               additionalWorkspaceRoots: additionalWorkspaceRoots
+           ) {
             if interactionMode == .goal { return .goalMode }
             return approvalMode == .workspaceAccess ? .workspaceAccess : .staticAllowlist
         }
@@ -592,7 +596,11 @@ extension AppState {
         // reach this function; untrusted MCP servers still hit the per-call
         // gate below.
         if interactionMode == .goal,
-           !Self.subagentHasExactCommandAuthorization(arguments: arguments),
+           !Self.subagentHasExactCommandAuthorization(
+               arguments: arguments,
+               rootDirectory: rootDirectory,
+               additionalWorkspaceRoots: additionalWorkspaceRoots
+           ),
            !sandboxDecision.requiresTypedConfirmation,
            !Self.isCommandShapedTool(toolName),
            sandboxDecision.mode != .escalated || Self.goalPlanningCanAutoApprove(
@@ -1193,12 +1201,20 @@ extension AppState {
     }
 
     nonisolated static func subagentHasExactCommandAuthorization(
-        arguments: [String: AgentJSONValue]
+        arguments: [String: AgentJSONValue],
+        rootDirectory: URL? = nil,
+        additionalWorkspaceRoots: [URL] = []
     ) -> Bool {
         guard let command = arguments["target_command"]?.stringValue() else {
             return false
         }
-        return !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return AgentSandboxPolicy.commandDecision(
+            command: trimmed,
+            rootDirectory: rootDirectory,
+            additionalWorkspaceRoots: additionalWorkspaceRoots
+        ).risk != .read
     }
 
     /// Remote media-generation lifecycle tools (submit / poll / cancel an

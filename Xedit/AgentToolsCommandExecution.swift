@@ -183,6 +183,7 @@ extension AgentToolRunner {
             var environment = AgentSandboxPolicy.sandboxedEnvironment(
                 mode: context.sandboxMode,
                 rootDirectory: context.rootDirectory,
+                command: command,
                 base: baseEnvironment
             )
             // `shellEnvironment()` 复制宿主进程的环境,里面带着宿主的

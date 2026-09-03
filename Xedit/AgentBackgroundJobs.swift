@@ -268,6 +268,7 @@ final class AgentJobRegistry: ObservableObject {
         var processEnvironment = AgentSandboxPolicy.sandboxedEnvironment(
             mode: sandboxMode,
             rootDirectory: workingDirectory,
+            command: trimmed,
             base: environment ?? AgentToolRunner.shellEnvironment()
         )
         processEnvironment["PWD"] = workingDirectory?.path

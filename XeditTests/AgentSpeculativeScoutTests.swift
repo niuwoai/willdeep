@@ -5,6 +5,27 @@ import Testing
 @Suite("Parallel scout")
 @MainActor
 struct AgentSpeculativeScoutTests {
+    @Test("the turn-owned scout card is visible without entering the background registry")
+    func visibleCardIsNotBackground() {
+        let runID = UUID()
+        let profile = AgentSubagentProfileStore.resolvedProfile(
+            id: AgentSubagentProfileCatalog.scoutID
+        )
+        let call = AppState.speculativeScoutToolCall(
+            hostRunID: runID,
+            cardRecordID: UUID(),
+            userMessageID: UUID(),
+            profile: profile,
+            workerName: "Scout",
+            model: "someim-32b-scout"
+        )
+
+        #expect(call.subagentRunID == runID)
+        #expect(call.subagentLiveActivity != nil)
+        #expect(call.subagentLiveActivity?.isBackground == false)
+        #expect(call.subagentIsWorking)
+    }
+
     @Test("the parallel scout is on unless the shared config says otherwise")
     func enabledDefaults() {
         #expect(AppState.speculativeScoutEnabled(sharedConfig: AgentSharedRuntimeConfig()))
@@ -246,7 +267,8 @@ struct AgentSpeculativeScoutTests {
             providerID: "some-im",
             hostRunID: hostRunID,
             cardRecordID: UUID(),
-            userMessageID: UUID()
+            userMessageID: UUID(),
+            prompt: "Locate the permission gate."
         )
     }
 }

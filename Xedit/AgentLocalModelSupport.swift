@@ -727,9 +727,9 @@ extension AppState {
         // keep-alive from the lazy path, so a warm-up triggered by routing
         // does not shorten the residency the launch keeper established.
         let settings = AgentSettingsStore.loadLocalModelSettings()
-        let keepAlive = settings.warmOnLaunchAndKeepResident
-            ? AgentLocalModelRoutingReadiness.residentKeepAlive
-            : AgentLocalModelRoutingReadiness.keepAlive
+        let keepAlive = AgentLocalModelRoutingReadiness.routingKeepAlive(
+            warmOnLaunchAndKeepResident: settings.warmOnLaunchAndKeepResident
+        )
         let isWarm = await AgentLocalModelResidency.shared.isWarmOrSchedule(
             baseURL: configuration.baseURL,
             model: configuration.model,

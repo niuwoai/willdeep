@@ -62,13 +62,15 @@
 
 核心策略集中在 [AgentToolAuthorization.swift](../Xedit/AgentToolAuthorization.swift)（`AgentSandboxMode` / `AgentSandboxPolicy`）。
 
-### 1. 四档沙箱模式（`AgentSandboxMode`，行 25-30）
+### 1. 六档执行模式（`AgentSandboxMode`）
 
 | 模式 | 写 | 网络 | 凭证/HOME |
 | --- | --- | --- | --- |
 | `readOnly` | ✗ | ✗ | 屏蔽 |
+| `readOnlyNetwork` | ✗ | ✓ | 屏蔽 |
 | `workspaceWrite` | 仅 workspace + temp | ✗ | 屏蔽 |
 | `workspaceWriteNetwork` | 仅 workspace + temp | ✓ | 屏蔽 |
+| `workspaceWriteNetworkCredentialed` | 仅 workspace + temp | ✓ | 真实 HOME / SSH agent，敏感环境变量仍剥离 |
 | `escalated` | 不沙箱 | ✓ | 真实 HOME/凭证 |
 
 最终用哪档由 [AppStateAgentToolDecisions.swift](../Xedit/AppStateAgentToolDecisions.swift) `sandboxModeForToolExecution()` 依据「命令风险 + 审批来源」决定。
@@ -78,7 +80,7 @@
 `AgentSandboxPolicy.shellLaunch()`：下列情况**不套** `sandbox-exec`，直接 `/bin/sh -c`：
 
 1. `escalated` 模式  
-2. `readOnly` 且 `SafeCommand` 判定为 `.alwaysSafe`、且命令头不是网络/凭据工具（`git log` / `status` / `diff`、`rg`、`pwd` 等）——只读白名单命令读写本就不受限，seatbelt 只会误伤 `/dev/null`、xcrun 缓存之类
+2. `readOnly` / `readOnlyNetwork` 且 `SafeCommand` 判定为 `.alwaysSafe`、命令头不是网络/凭据工具（`git log` / `status` / `diff`、`rg`、`pwd` 等）——只读白名单命令不会写，seatbelt 只会误伤 `/dev/null`、xcrun 缓存之类
 
 其余非 escalated 且系统有 `/usr/bin/sandbox-exec` 时，命令包成
 
@@ -104,7 +106,18 @@
 
 **事后提权（sandbox denial → 授权重跑）**：本地前台 `run_command` 若已在非 `escalated` 沙箱里跑过、且失败输出像 seatbelt 拒绝（`Operation not permitted` / `sandbox-exec:` / 尾部 `permission denied` 等），不会直接当普通工具失败丢给模型瞎重试，而是暂停弹审批卡：「允许无沙箱重跑？」同意后用 `.escalated` 再跑同一条命令；拒绝则记为 denied。Always Allow 签名命中时跳过二次询问、直接提权重跑。远端 SSH workspace 不走此路径（本地 seatbelt 管不到远端）。实现见 `AgentSandboxPolicy.looksLikeSandboxDenial` 与 `AppStateAgentSandboxEscalation.swift`。
 
-环境沙箱化 `sandboxedEnvironment()`（行 459-481）：删掉所有名字像 token/secret/password/api_key/credential 的变量；非 escalated 下把 `HOME` 指到临时目录、清空 `SSH_AUTH_SOCK` / `GITHUB_TOKEN` / `GH_TOKEN`。
+环境沙箱化 `sandboxedEnvironment()`：删掉所有名字像 token/secret/password/api_key/credential 的变量；非 escalated 且非 credentialed 档把 `HOME` 指到临时目录、清空 `SSH_AUTH_SOCK` / `GITHUB_TOKEN` / `GH_TOKEN`。唯一的窄例外是静态证明为只读的 `git config --global --list/-l`：仍保留临时 HOME 与空 SSH agent，只通过 `GIT_CONFIG_GLOBAL` 指向真实 `.gitconfig`，避免查询成功却拿到一份空的“假结果”；单键查询与写配置不走例外。
+
+### 2.5 何时不应再弹一次授权
+
+- 风险为 read 的工具直接执行；`target_command` 只是 Worker 参数，里面若是静态只读命令，不能凭字段名把整个 spawn 升成 write。
+- 智能审核已静态放行或裁判放行的命令，如果随后仅因 seatbelt 拒绝而失败，应自动用同一命令重跑；不能把一次逻辑授权拆成两张卡。
+- 完全访问遵循确定性恶意命令底线，其余命令不重复询问。工作区可写与严格模式仍保留各自明确边界，不能用模糊自然语言永久扩权。
+- 用户原话会作为智能裁判的任务上下文，裁判判断命令是否确为当前任务的正常翻译；`rm`、force push、敏感路径/凭据等确定性高风险项不会被这段上下文冲掉。
+
+### 2.6 沙箱失真识别
+
+`looksLikeSandboxDenial` 除了识别 `sandbox-exec`、EPERM/EACCES、read-only filesystem 和 permission denied，也会在当前 profile 明确 deny network 时，把 `no such host`、`ENOTFOUND`、`Could not resolve host` 等解释成沙箱拒绝，而不是贸然诊断为真实 DNS 故障；同样文本在 network-enabled / escalated 档不会误报。成功但空输出无法靠退出码通用判断，因此对依赖用户上下文的已知查询应在执行前给最小必要上下文（本次先覆盖全局 Git 配置），而不是等空结果后猜。
 
 ### 3. 命令审批的三层闸门
 
