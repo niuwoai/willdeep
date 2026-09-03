@@ -1,13 +1,19 @@
 import Foundation
 
-/// A tab describes content, not a running process. Removing it never stops jobs.
+/// A tab describes one session-scoped workbench surface. Live terminal and
+/// browser resources are released by AppState when their owning tab closes;
+/// background jobs remain managed by their dedicated registry.
 nonisolated struct AgentPanelTab: Codable, Equatable, Identifiable {
     var id = UUID()
     let kind: AgentSidePanelKind
     var selectedFilePath: String?
+    /// Identity of live content hosted by this outer tab (a PTY tab or an
+    /// embedded-browser controller). Nil keeps legacy session JSON readable.
+    var resourceID: UUID? = nil
+    var customTitle: String? = nil
 
     var file: URL? { selectedFilePath.map { URL(fileURLWithPath: $0) } }
-    var title: String { file?.lastPathComponent ?? kind.title }
+    var title: String { customTitle ?? file?.lastPathComponent ?? kind.title }
     var systemImage: String { kind == .preview && file != nil ? "doc.text" : kind.systemImage }
 }
 
@@ -47,6 +53,26 @@ extension AgentSidePanelState {
         return tab
     }
 
+    @discardableResult
+    mutating func createTab(
+        kind: AgentSidePanelKind,
+        file: URL? = nil,
+        resourceID: UUID? = nil,
+        title: String? = nil
+    ) -> AgentPanelTab {
+        var items = openTabs
+        let tab = AgentPanelTab(
+            kind: kind,
+            selectedFilePath: file?.standardizedFileURL.path,
+            resourceID: resourceID,
+            customTitle: title
+        )
+        items.append(tab)
+        tabs = items
+        selectTab(tab.id)
+        return tab
+    }
+
     mutating func selectTab(_ id: UUID) {
         guard let tab = openTabs.first(where: { $0.id == id }) else { return }
         tabs = openTabs
@@ -76,6 +102,14 @@ extension AgentSidePanelState {
         items[index].selectedFilePath = file?.standardizedFileURL.path
         tabs = items
         if selectedTab?.id == tabID { selectedFilePath = items[index].selectedFilePath }
+    }
+
+    mutating func updateTabResource(_ resourceID: UUID?, title: String?, tabID: UUID) {
+        var items = openTabs
+        guard let index = items.firstIndex(where: { $0.id == tabID }) else { return }
+        items[index].resourceID = resourceID
+        if let title, !title.isEmpty { items[index].customTitle = title }
+        tabs = items
     }
 
     mutating func moveTab(_ id: UUID, before target: UUID) {

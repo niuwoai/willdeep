@@ -153,6 +153,8 @@ struct AgentStatsDashboard: View {
         case overview = "Overview"
         case models = "Models"
         case workers = "Workers"
+        case localRequests = "LocalRequests"
+        case apiRequests = "APIRequests"
         case calendar = "Calendar"
         case day = "Day"
         var id: String { rawValue }
@@ -161,6 +163,8 @@ struct AgentStatsDashboard: View {
             case .overview: return L10n.StatsDashboard.tabsOverview
             case .models: return L10n.StatsDashboard.tabsModels
             case .workers: return L10n.StatsDashboard.tabsWorkers
+            case .localRequests: return L10n.StatsDashboard.tabsLocalRequests
+            case .apiRequests: return L10n.StatsDashboard.tabsAPIRequests
             case .calendar: return L10n.StatsDashboard.usageCalendarTitle
             case .day: return L10n.StatsDashboard.dailyDetailTitle
             }
@@ -223,6 +227,8 @@ struct AgentStatsDashboard: View {
                     profileHeader
                         .padding(.bottom, 43)
                     overviewSummaryBand
+                        .padding(.bottom, 14)
+                    requestSummaryBand
                         .padding(.bottom, 39)
                     activitySection
                         .padding(.bottom, 40)
@@ -242,6 +248,22 @@ struct AgentStatsDashboard: View {
                     workerCodingKPIBand
                     workerUsageList
                 }
+            case .localRequests:
+                requestDetail(
+                    title: L10n.StatsDashboard.localRequestsTitle,
+                    subtitle: L10n.StatsDashboard.localRequestsSubtitle,
+                    summary: dashboardModel.requestAnalytics.localAllTime,
+                    rows: dashboardModel.requestAnalytics.localModels,
+                    showsFirstResponse: false
+                )
+            case .apiRequests:
+                requestDetail(
+                    title: L10n.StatsDashboard.apiRequestsTitle,
+                    subtitle: L10n.StatsDashboard.apiRequestsSubtitle,
+                    summary: dashboardModel.requestAnalytics.recentAPI,
+                    rows: dashboardModel.requestAnalytics.recentAPIModels,
+                    showsFirstResponse: true
+                )
             case .calendar:
                 usageCalendar
             case .day:
@@ -428,6 +450,163 @@ struct AgentStatsDashboard: View {
             RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
                 .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
         )
+    }
+
+    private var requestSummaryBand: some View {
+        let local = dashboardModel.requestAnalytics.localAllTime
+        let recent = dashboardModel.requestAnalytics.recentAPI
+        return HStack(spacing: 0) {
+            Button { selectedTab = .localRequests } label: {
+                CodexDashboardMetric(
+                    value: formatInteger(local.requestCount),
+                    title: L10n.StatsDashboard.metricLocalRequests,
+                    showsDisclosure: true
+                )
+            }
+            .buttonStyle(.plain)
+            .help(L10n.StatsDashboard.localRequestsOpenHelp)
+            metricDivider
+            Button { selectedTab = .apiRequests } label: {
+                CodexDashboardMetric(
+                    value: formatInteger(recent.requestCount),
+                    title: L10n.StatsDashboard.metricAPIRequests7d,
+                    showsDisclosure: true
+                )
+            }
+            .buttonStyle(.plain)
+            .help(L10n.StatsDashboard.apiRequestsOpenHelp)
+        }
+        .frame(height: AgentStatsDashboardLayout.metricStripHeight)
+        .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
+                .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+        )
+    }
+
+    private func requestDetail(
+        title: String,
+        subtitle: String,
+        summary: AgentRequestUsageSummary,
+        rows: [AgentRequestModelUsageRow],
+        showsFirstResponse: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            detailHeader(title: title)
+            Text(subtitle)
+                .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                .foregroundStyle(.secondary)
+            requestMetricBand([
+                (formatInteger(summary.requestCount), L10n.StatsDashboard.requestMetricRequests),
+                (formatInteger(summary.sessionCount), L10n.StatsDashboard.requestMetricSessions),
+                (formatOptionalRate(summary.averageTokensPerSecond), L10n.StatsDashboard.requestMetricTokensPerSecond),
+            ])
+            requestMetricBand([
+                (formatOptionalDuration(summary.averageLatencySeconds), L10n.StatsDashboard.requestMetricLatency),
+                (
+                    showsFirstResponse
+                        ? formatOptionalDuration(summary.averageFirstResponseSeconds)
+                        : formatOptionalTokens(summary.averagePromptTokens),
+                    showsFirstResponse
+                        ? L10n.StatsDashboard.requestMetricFirstResponse
+                        : L10n.StatsDashboard.requestMetricAverageInput
+                ),
+                (
+                    showsFirstResponse
+                        ? formatAverageTokenPair(summary)
+                        : formatOptionalTokens(summary.averageCompletionTokens),
+                    showsFirstResponse
+                        ? L10n.StatsDashboard.requestMetricAverageInputOutput
+                        : L10n.StatsDashboard.requestMetricAverageOutput
+                ),
+            ])
+            requestModelList(rows)
+            Text(L10n.StatsDashboard.requestMetricsFootnote)
+                .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func requestMetricBand(_ metrics: [(String, String)]) -> some View {
+        HStack(spacing: 0) {
+            ForEach(Array(metrics.enumerated()), id: \.offset) { index, metric in
+                if index > 0 { metricDivider }
+                CodexDashboardMetric(value: metric.0, title: metric.1, titleLineLimit: 2)
+            }
+        }
+        .frame(height: AgentStatsDashboardLayout.metricStripHeight)
+        .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
+                .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func requestModelList(_ rows: [AgentRequestModelUsageRow]) -> some View {
+        if rows.isEmpty {
+            Text(L10n.StatsDashboard.requestModelsEmpty)
+                .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.body))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 100)
+        } else {
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(row.modelID)
+                                    .font(supportingFont(
+                                        visualMinimum: AgentStatsDashboardTypography.body,
+                                        weight: .semibold
+                                    ))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Text(row.providerName)
+                                    .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.metricLabel))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            requestModelFact(formatInteger(row.sessionCount), L10n.StatsDashboard.requestMetricSessions)
+                            requestModelFact(formatInteger(row.requestCount), L10n.StatsDashboard.requestMetricRequests)
+                            requestModelFact(formatOptionalRate(row.averageTokensPerSecond), L10n.StatsDashboard.requestMetricTokensPerSecond)
+                            requestModelFact(
+                                "\(formatOptionalTokens(row.averagePromptTokens)) / \(formatOptionalTokens(row.averageCompletionTokens))",
+                                L10n.StatsDashboard.requestMetricAverageInputOutput
+                            )
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        if index < rows.count - 1 { Divider().padding(.horizontal, 12) }
+                    }
+                }
+                .background(dashboardSummaryFill.opacity(0.55))
+                .clipShape(RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AgentStatsDashboardLayout.summaryCornerRadius)
+                        .stroke(appState.editorSettings.interfaceSkin.palette.hairline, lineWidth: 1)
+                )
+            }
+            .frame(maxHeight: 260)
+        }
+    }
+
+    private func requestModelFact(_ value: String, _ title: String) -> some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text(value)
+                .font(supportingFont(
+                    visualMinimum: AgentStatsDashboardTypography.body,
+                    weight: .semibold,
+                    design: .monospaced
+                ))
+                .lineLimit(1)
+            Text(title)
+                .font(supportingFont(visualMinimum: AgentStatsDashboardTypography.metricLabel))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(minWidth: 72, alignment: .trailing)
     }
 
     private var metricDivider: some View {
@@ -1840,6 +2019,26 @@ struct AgentStatsDashboard: View {
         if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
         if count >= 1_000 { return "\(count / 1_000)k" }
         return "\(count)"
+    }
+
+    private func formatOptionalTokens(_ value: Double?) -> String {
+        guard let value, value.isFinite else { return "—" }
+        return formatTokenCount(Int(value.rounded()))
+    }
+
+    private func formatOptionalDuration(_ value: Double?) -> String {
+        guard let value, value.isFinite else { return "—" }
+        if value < 1 { return String(format: "%.0f ms", value * 1_000) }
+        return String(format: value < 10 ? "%.2f s" : "%.1f s", value)
+    }
+
+    private func formatOptionalRate(_ value: Double?) -> String {
+        guard let value, value.isFinite else { return "—" }
+        return String(format: "%.1f", value)
+    }
+
+    private func formatAverageTokenPair(_ summary: AgentRequestUsageSummary) -> String {
+        "\(formatOptionalTokens(summary.averagePromptTokens)) / \(formatOptionalTokens(summary.averageCompletionTokens))"
     }
 
     private func formatPercent(_ value: Double) -> String {

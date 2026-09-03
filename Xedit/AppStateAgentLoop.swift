@@ -920,6 +920,7 @@ extension AppState {
             let assistantMessage = AgentMessage(
                 role: .assistant,
                 content: "",
+                requestIsLocal: AgentLocalModelPrompting.isLocalProvider(turnConfiguration),
                 origin: .nativeModel,
                 requestModelID: turnConfiguration.model,
                 requestProviderID: turnConfiguration.providerID,
@@ -1194,8 +1195,14 @@ extension AppState {
                                 }
                                 switch event {
                                 case .textDelta(let delta):
+                                    if !delta.isEmpty, runtime.messages[index].firstResponseSeconds == nil {
+                                        runtime.messages[index].firstResponseSeconds = Date().timeIntervalSince(turnStartedAt)
+                                    }
                                     streamBuffer.appendTextDelta(delta)
                                 case .reasoningDelta(let delta):
+                                    if !delta.isEmpty, runtime.messages[index].firstResponseSeconds == nil {
+                                        runtime.messages[index].firstResponseSeconds = Date().timeIntervalSince(turnStartedAt)
+                                    }
                                     streamBuffer.appendReasoningDelta(delta)
                                 case .toolCallsUpdated(let calls):
                                     // Rides the streaming buffer's overlay/slow
@@ -1322,6 +1329,7 @@ extension AppState {
                 runtime.messages[index].requestModelID = managedRouteDecision?.selectedModel
                     ?? turnConfiguration.model
                 runtime.messages[index].requestProviderID = turnConfiguration.providerID
+                runtime.messages[index].requestIsLocal = AgentLocalModelPrompting.isLocalProvider(turnConfiguration)
                 runtime.messages[index].requestProviderDisplayName = AgentProviderPreset.normalizedDisplayName(
                     providerID: turnConfiguration.providerID,
                     storedDisplayName: runtime.session.providerDisplayName
@@ -2698,6 +2706,7 @@ extension AppState {
                     }
                     if let createdTab = agentCreatedTerminalTabs.last {
                         _ = try? agentTerminalController.selectTab(id: createdTab.id)
+                        _ = openPanelTab(for: createdTab, runtime: runtime)
                         agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .terminal)
                     } else if call.toolName == "terminal_create_shortcut",
                               !terminalShortcutResultRequiresChatPasswordCard(result) {
@@ -2960,8 +2969,13 @@ extension AppState {
             agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .terminal)
         }
 
+        if let activeTerminal = agentTerminalController.activeTab,
+           activeTerminal.originAgentSessionID == runtime.id {
+            _ = openPanelTab(for: activeTerminal, runtime: runtime)
+        } else {
+            _ = openPanelTab(.terminal, runtime: runtime)
+        }
         var sidePanelState = runtime.sidePanelState
-        sidePanelState.kind = .terminal
         sidePanelState.lastViewedAt = now
         runtime.sidePanelState = sidePanelState
         persistAgentSidePanelState(runtime: runtime)

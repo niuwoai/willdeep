@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-03 | Current version: v1.317.0-rc5
+> Last updated: 2026-09-03 | Current version: v1.317.0-rc6
 
 ## Positioning
 
@@ -17,6 +17,8 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **本地/API 请求统计与会话级统一工作台（1.317.0-rc6）** —— 新会话空状态新增本地模型调用与近 7 天全部 AI 请求入口，按真实持久化的主 Agent、Worker、标题、上下文压缩、图片理解和 Worker 路由请求汇总涉及会话、请求数、平均输入/输出、时延、首字符时间及有测量样本时的生成 Token/s；旧数据缺少测量字段时显示不可用，不用零值粉饰，也不把提示词正文写进统计。工作面板将每个本地/SSH 终端和内置浏览器实例提升为统一外层标签，文件等既有多实例面板继续沿用同一标签栏；标签、选中项和资源绑定随会话持久化，关闭标签会释放对应实例，忙碌中的自动化终端则拒绝误关。
 
 - **README 转化路径重写（1.317.0-rc5）** —— 仓库首屏以“像运行系统服务一样运行 Agent”为定位，用会话即进程、事件即信号、主 Agent 即 `init + systemd + 调度器` 解释 Runtime Kernel，同时明确它是 Agent 运行时与控制面而非完整操作系统；随后承接用户收益、真实界面、三步上手及下载、Star、Fork 与源码构建入口。中、英、日三种语言均提供完整介绍；编辑器边界下移为异议说明，项目内营销上下文约束目标用户、品牌语气和证据边界。
 

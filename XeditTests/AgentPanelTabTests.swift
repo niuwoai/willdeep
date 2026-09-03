@@ -24,6 +24,54 @@ struct AgentPanelTabTests {
         #expect(state.openTabs.count == 3)
     }
 
+    @Test("终端和浏览器可创建多个资源绑定标签")
+    func createsMultipleLiveResourceTabs() throws {
+        var state = AgentSidePanelState.empty
+        let firstTerminalResource = UUID()
+        let secondTerminalResource = UUID()
+        let browserResource = UUID()
+
+        let first = state.createTab(
+            kind: .terminal,
+            resourceID: firstTerminalResource,
+            title: "Shell A"
+        )
+        let second = state.createTab(
+            kind: .terminal,
+            resourceID: secondTerminalResource,
+            title: "Shell B"
+        )
+        let browser = state.createTab(kind: .embeddedBrowser, resourceID: browserResource)
+
+        #expect(state.openTabs.count == 3)
+        #expect(first.resourceID == firstTerminalResource)
+        #expect(second.resourceID == secondTerminalResource)
+        #expect(first.id != second.id)
+        #expect(browser.resourceID == browserResource)
+        #expect(state.selectedTab?.id == browser.id)
+
+        let decoded = try JSONDecoder().decode(
+            AgentSidePanelState.self,
+            from: JSONEncoder().encode(state)
+        )
+        #expect(decoded == state)
+    }
+
+    @Test("不同会话的面板状态不会共享标签")
+    func panelTabsRemainSessionScoped() {
+        var firstSession = AgentSidePanelState.empty
+        var secondSession = AgentSidePanelState.empty
+        let firstResource = UUID()
+        let secondResource = UUID()
+
+        firstSession.createTab(kind: .terminal, resourceID: firstResource, title: "A")
+        secondSession.createTab(kind: .terminal, resourceID: secondResource, title: "B")
+
+        #expect(firstSession.openTabs.map(\.resourceID) == [firstResource])
+        #expect(secondSession.openTabs.map(\.resourceID) == [secondResource])
+        #expect(firstSession != secondSession)
+    }
+
     @Test("不同文件各有标签，相同文件定位已有标签")
     func fileIdentity() {
         var state = AgentSidePanelState.empty

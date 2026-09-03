@@ -157,8 +157,11 @@ struct AgentSidePanelKindContent: View {
         case .shortDrama:
             AgentShortDramaPanel(store: appState.agentShortDramaStore, width: layoutWidth)
         case .embeddedBrowser:
+            let browserResourceID = panelScope.runtime?.sidePanelState.openTabs
+                .first(where: { $0.id == panelScope.tabID })?.resourceID
             AgentEmbeddedBrowserPanel(
                 runtimeID: panelScope.runtime?.id,
+                tabID: browserResourceID,
                 width: layoutWidth
             )
         case .widget:

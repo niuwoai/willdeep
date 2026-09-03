@@ -107,11 +107,21 @@ private struct AgentSidePanelTerminalContentView: View {
         appState.editorSettings.interfaceSkin.palette
     }
 
+    /// The workbench's outer tab is now the only terminal tab controller.
+    /// A legacy tab without a resource id falls back once during migration.
+    private var scopedTerminalTabID: UUID? {
+        guard let runtime = panelScope.runtime, let panelTabID = panelScope.tabID else { return nil }
+        return runtime.sidePanelState.openTabs.first(where: { $0.id == panelTabID })?.resourceID
+    }
+
+    private var currentTab: AgentTerminalTab? {
+        if let scopedTerminalTabID { return controller.tab(id: scopedTerminalTabID) }
+        return controller.activeTab
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             shortcutsBar
-            Divider().opacity(0.5)
-            tabBar
             Divider().opacity(0.5)
             sessionIdentityBar
             Divider().opacity(0.35)
@@ -123,6 +133,9 @@ private struct AgentSidePanelTerminalContentView: View {
         // surface and manages its own AppKit first responder.
         .focusable(false)
         .onAppear {
+            if let scopedTerminalTabID {
+                controller.activateTab(id: scopedTerminalTabID)
+            }
             scheduleTerminalBootstrap()
         }
         .onDisappear {
@@ -310,9 +323,9 @@ private struct AgentSidePanelTerminalContentView: View {
             }
             .disabled(
                 (!isRunning && controller.isRecording) ||
-                    controller.activeTab?.isRunning != true ||
-                    (!isRunning && controller.activeTab?.inputState == .foregroundTask) ||
-                    (!isRunning && controller.activeTab?.isPlayingShortcut == true) ||
+                    currentTab?.isRunning != true ||
+                    (!isRunning && currentTab?.inputState == .foregroundTask) ||
+                    (!isRunning && currentTab?.isPlayingShortcut == true) ||
                     shortcut.hasPendingProtectedInput
             )
             .buttonStyle(.plain)
@@ -485,91 +498,6 @@ private struct AgentSidePanelTerminalContentView: View {
         openWindow(value: TerminalShortcutEditorRequest(shortcutID: shortcut.id))
     }
 
-    private var tabBar: some View {
-        HStack(spacing: 4) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    ForEach(controller.tabs) { tab in
-                        tabChip(tab)
-                    }
-                }
-                .padding(.horizontal, 6)
-            }
-            // 让 tab 滚动区只吃「剩余」宽度,窄侧栏时长标签横向滚动,
-            // 不会把右侧「+」挤出可视区。`+` 用 layoutPriority 先拿空间。
-            .frame(maxWidth: .infinity, alignment: .leading)
-            addTabMenu
-                .layoutPriority(1)
-        }
-        .frame(height: 30)
-        .padding(.trailing, 6)
-        .background(interfacePalette.panelFill.opacity(0.72))
-    }
-
-    private func tabChip(_ tab: AgentTerminalTab) -> some View {
-        let isActive = controller.activeTabID == tab.id
-        let isOwned = isOpenedByCurrentSession(tab)
-        return HStack(spacing: 5) {
-            Image(systemName: tab.kind.isSSH ? "network" : "terminal")
-                .font(.system(size: 9))
-                .foregroundStyle(
-                    tab.isRunning
-                        ? interfacePalette.primaryText.opacity(TerminalTabChrome.runningIconOpacity)
-                        : interfacePalette.secondaryText.opacity(TerminalTabChrome.idleIconOpacity)
-                )
-            Text(tab.title)
-                .font(.system(size: 11))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .foregroundStyle(isActive ? interfacePalette.primaryText : interfacePalette.secondaryText)
-                // 标题封顶,避免 `rocky@host:/` 这种长 OSC 标题把
-                // 整个 chip 撑得占满侧栏、把 `+` 顶出去。
-                .frame(maxWidth: tab.shortcutBadgeTitle == nil ? 130 : 92)
-            if let shortcutBadgeTitle = tab.shortcutBadgeTitle {
-                shortcutBadge(shortcutBadgeTitle, isActive: isActive)
-            }
-            if isOwned {
-                Image(systemName: "link")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(interfacePalette.secondaryText)
-            }
-            Button {
-                controller.closeTab(id: tab.id)
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .semibold))
-            }
-            .buttonStyle(.plain)
-            .disabled(tab.isAutomationBusy)
-            .focusable(false)
-            .foregroundStyle(interfacePalette.secondaryText)
-            .help(
-                tab.isAutomationBusy
-                    ? L10n.AgentTerminal.sessionAutomationBusy
-                    : L10n.AgentTerminal.closeTab
-            )
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(
-                    isActive
-                        ? interfacePalette.primaryText.opacity(TerminalTabChrome.activeFillOpacity)
-                        : interfacePalette.controlFill.opacity(0.42)
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(tabBorderColor(tab, isActive: isActive), lineWidth: 1)
-        )
-        .help(tabTooltip(tab))
-        .contentShape(Rectangle())
-        .onTapGesture {
-            controller.activateTab(id: tab.id)
-        }
-    }
-
     private func shortcutBadge(_ title: String, isActive: Bool) -> some View {
         Text(title)
             .font(.system(size: 9, weight: .semibold))
@@ -606,60 +534,9 @@ private struct AgentSidePanelTerminalContentView: View {
             )
     }
 
-    private var addTabMenu: some View {
-        Menu {
-            Button {
-                controller.openLocalTab(
-                    originAgentSessionID: panelScope.sessionID,
-                    workingDirectory: workingDirectory,
-                    settings: settings,
-                    skin: skinColors
-                )
-            } label: {
-                Label(L10n.AgentTerminal.newLocalTab, systemImage: "terminal")
-            }
-            .focusable(false)
-            Divider()
-            Text(L10n.AgentTerminal.sshHostsSection)
-            if controller.runtimeOptions.isEmpty {
-                Text(L10n.AgentTerminal.noSSHHostsConfigured)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(controller.runtimeOptions) { runtime in
-                    Button {
-                        controller.openSSHTab(
-                            runtime: runtime,
-                            originAgentSessionID: panelScope.sessionID,
-                            settings: settings,
-                            skin: skinColors
-                        )
-                    } label: {
-                        Label(L10n.AgentTerminal.newSSHTab(runtime.displayName), systemImage: "network")
-                    }
-                    .focusable(false)
-                }
-            }
-            Button {
-                EditorSettingsNavigation.shared.open(.remoteRuntimes, appState: appState)
-            } label: {
-                Label(L10n.AgentTerminal.manageSSHHosts, systemImage: "gearshape")
-            }
-            .focusable(false)
-        } label: {
-            Image(systemName: "plus")
-                .foregroundStyle(interfacePalette.secondaryText)
-        }
-        .menuStyle(.borderlessButton)
-        .agentQuietMenuChrome(interfacePalette.secondaryText)
-        .menuIndicator(.hidden)
-        .focusable(false)
-        .fixedSize()
-        .help(L10n.AgentTerminal.newTab)
-    }
-
     private var sessionIdentityBar: some View {
         HStack(spacing: 0) {
-            if let tab = controller.activeTab {
+            if let tab = currentTab {
                 HStack(spacing: 6) {
                     Image(systemName: tab.kind.isSSH ? "network" : "terminal")
                         .font(.system(size: 11, weight: .semibold))
@@ -832,7 +709,7 @@ private struct AgentSidePanelTerminalContentView: View {
 
     @ViewBuilder
     private var terminalSurface: some View {
-        if let tab = controller.activeTab {
+        if let tab = currentTab {
             AgentTerminalViewRepresentable(terminalView: tab.terminalView)
                 .padding(.horizontal, 8)
                 .background(terminalBackground)
@@ -870,12 +747,22 @@ private struct AgentSidePanelTerminalContentView: View {
         bootstrapTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 60_000_000)
             guard !Task.isCancelled else { return }
-            controller.bootstrapSidePanel(
+            if let scopedTerminalTabID, controller.tab(id: scopedTerminalTabID) != nil {
+                controller.activateTab(id: scopedTerminalTabID)
+                controller.applyAppearanceToAll(terminalSettings, skin: colors)
+                return
+            }
+            let terminal = controller.openLocalTab(
                 originAgentSessionID: originAgentSessionID,
                 workingDirectory: directory,
                 settings: terminalSettings,
                 skin: colors
             )
+            guard let runtime = panelScope.runtime,
+                  let panelTabID = panelScope.tabID else { return }
+            appState.updatePanelTabs(runtime: runtime) {
+                $0.updateTabResource(terminal.id, title: terminal.title, tabID: panelTabID)
+            }
         }
     }
 

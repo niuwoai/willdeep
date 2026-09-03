@@ -58,7 +58,8 @@ extension AppState {
 
         let description = try await describeImagesForTextOnlyProvider(
             images,
-            configuration: imageDescriptionConfiguration
+            configuration: imageDescriptionConfiguration,
+            runtimeID: runtime.id
         )
 
         guard !Task.isCancelled,
@@ -77,14 +78,19 @@ extension AppState {
 
     func describeImagesForTextOnlyProvider(
         _ images: [AgentImageAttachment],
-        configuration: AgentConfiguration
+        configuration: AgentConfiguration,
+        runtimeID: UUID? = nil
     ) async throws -> String {
         var lastError: Error?
         var retryCount = 0
         for candidate in imageDescriptionConfigurationCandidates(fallback: configuration) {
             while true {
                 do {
-                    return try await requestImageDescription(images, configuration: candidate)
+                    return try await requestImageDescription(
+                        images,
+                        configuration: candidate,
+                        runtimeID: runtimeID
+                    )
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
@@ -105,7 +111,11 @@ extension AppState {
             throw lastError
         }
         do {
-            return try await requestImageDescription(images, configuration: configuration)
+            return try await requestImageDescription(
+                images,
+                configuration: configuration,
+                runtimeID: runtimeID
+            )
         } catch {
             throw Self.imageDescriptionStageError(error)
         }
@@ -120,7 +130,8 @@ extension AppState {
 
     private func requestImageDescription(
         _ images: [AgentImageAttachment],
-        configuration: AgentConfiguration
+        configuration: AgentConfiguration,
+        runtimeID: UUID?
     ) async throws -> String {
         let normalized = configuration.normalized
         guard normalized.supportsImageInput else {
@@ -155,16 +166,44 @@ extension AppState {
             messages = [message]
         }
         let collector = CompressionSummaryCollector()
-        try await AgentClient(configuration: normalized).streamChat(messages: messages) { event in
-            if case .textDelta(let delta) = event {
-                await collector.append(delta)
+        let measurement = AgentAuxiliaryRequestMeasurement()
+        do {
+            try await AgentClient(configuration: normalized).streamChat(messages: messages) { event in
+                await measurement.consume(event)
+                if case .textDelta(let delta) = event {
+                    await collector.append(delta)
+                }
             }
+            let result = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !result.isEmpty else { throw AgentClientError.invalidResponse }
+            if let runtimeID {
+                recordAuxiliaryModelRequest(
+                    await measurement.record(
+                        purpose: .imageDescription,
+                        providerID: normalized.providerID,
+                        modelID: normalized.model,
+                        isLocal: AgentLocalModelPrompting.isLocalProvider(normalized),
+                        succeeded: true
+                    ),
+                    runtimeID: runtimeID
+                )
+            }
+            return result
+        } catch {
+            if let runtimeID {
+                recordAuxiliaryModelRequest(
+                    await measurement.record(
+                        purpose: .imageDescription,
+                        providerID: normalized.providerID,
+                        modelID: normalized.model,
+                        isLocal: AgentLocalModelPrompting.isLocalProvider(normalized),
+                        succeeded: false
+                    ),
+                    runtimeID: runtimeID
+                )
+            }
+            throw error
         }
-        let result = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !result.isEmpty else {
-            throw AgentClientError.invalidResponse
-        }
-        return result
     }
 
     nonisolated static func contentByAppendingImageDescription(
