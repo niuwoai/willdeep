@@ -782,9 +782,8 @@ private struct ComposerCard: View {
             entries.append(contentsOf: files)
         }
 
-        // Keep the original @ file picker visible in the first screen. Worker
-        // mentions remain available after workspace/files, and a worker-name
-        // query still filters directly to the matching trade.
+        // Worker mentions lead the @ menu; workspace and file context follow.
+        // A query still filters both groups independently.
         let workers = AgentSubagentProfileCatalog.publicBuiltIn.filter { profile in
             guard !q.isEmpty else { return true }
             return profile.id.lowercased().contains(q)
@@ -794,7 +793,7 @@ private struct ComposerCard: View {
             .worker(id: $0.id, name: $0.localizedDisplayName, purpose: $0.localizedPurpose)
         }
 
-        return AtPickerEntry.contextFirst(entries, workers: workerEntries)
+        return AtPickerEntry.workersFirst(entries, workers: workerEntries)
     }
 
     /// `$` picker entries are only skills / reusable capability packs.

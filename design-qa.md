@@ -65,3 +65,29 @@
 final result: blocked
 
 此处 blocked 仅指视觉／鼠标验收：真实拖拽、Escape 取消及窄宽度操作仍缺少可靠窗口定位；自动化回归的 3 项失败已修复并全量通过，不再阻塞提交合并。不以单元测试成功代替真实鼠标验收，未发布或安装到 /Applications。
+
+---
+
+# @ 选择器排序与高度验收
+
+日期：2026-09-03。界面实现版本：1.319.0-rc2（build 603）。
+
+## 目标与证据
+
+- 用户参考截图：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-214b382b-a9bf-4229-a03f-69bd92c1496c.png`（1232×365）。目标是 Worker 先于 workspace／文件，并显著提高弹层可见高度。
+- 首轮实现截图：`build/visual-qa/mention-picker/implementation-13-rows.png`（525×592），来自实际 Debug 版 WillDeep 的 Xedit 工作区会话，输入 `@` 后捕获；用户随后将目标收紧为约六行。
+- 最终实现截图：`build/visual-qa/mention-picker/implementation.png`（525×300），同样来自实际 Debug 版；同屏比较为 `build/visual-qa/mention-picker/comparison.png`。原截图和最终实现截图已作为同一比较输入检查。
+
+## 可见结果
+
+- 首屏顺序为 `@generalist`、`@implementer`、`@tester`、`@reviewer`、`@ops_runner`，其后才是 workspace 和文件。
+- 弹层不再被输入区压成约三行；最终按用户反馈收口为六行（252pt），完整展示 5 个 Worker，并让 workspace 紧随其后；更多文件继续由原有滚动区承载。
+- 搜索框、圆角、阴影、选中态、图标、字号与现有原生样式一致；未新增图片资产或硬编码 UI 文案。
+- Escape 正常关闭选择器，验收产生的临时 `@` 草稿已清空；未发送消息或修改会话内容。
+
+## 自动化验证
+
+- `AgentRequestRouterTests` 与 `AgentWorkspaceFileSearchTests` 共 25 项通过。
+- 高度计算覆盖 3、6、30、100 条目，分别为 126、252、252、252 pt；排序断言覆盖 Worker 在上下文条目前。
+
+final result: passed

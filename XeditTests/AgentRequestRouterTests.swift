@@ -192,6 +192,25 @@ struct AgentRequestRouterTests {
         }
     }
 
+    @Test("host skill metadata cannot reroute a plugin-development question to operations")
+    func attachedSkillMetadataDoesNotVote() {
+        let composed = """
+        \(AgentAttachedPromptProtocol.preludeHeader)
+
+        ### Skill routing candidates — metadata only
+
+        - `go-react-embed-deploy` — 生产部署、发布和 systemd 运维
+
+        \(AgentAttachedPromptProtocol.userTextBoundary)
+
+        怎么开发 WillDeep 插件
+        """
+
+        let decision = AgentRequestRouter.classify(composed)
+        #expect(decision.profileID == "implementer")
+        #expect(decision.preflightProfileID == "scout")
+    }
+
     @Test("operations get a read-only ops preflight and delegate-first execution")
     func operationsRouteToOpsRunner() {
         let decision = AgentRequestRouter.classify("部署到生产环境并确认服务状态")

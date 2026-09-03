@@ -11,7 +11,11 @@ import AppKit
 
 nonisolated enum ComposerPaletteLayout {
     static let maximumListHeight: CGFloat = 440
-    static let maximumAtListHeight: CGFloat = 560
+    static let maximumAtListHeight: CGFloat = 252
+
+    static func atListHeight(entryCount: Int) -> CGFloat {
+        min(CGFloat(max(entryCount, 1)) * 42, maximumAtListHeight)
+    }
 }
 
 // MARK: - Slash commands
@@ -458,14 +462,13 @@ enum AtPickerEntry: Identifiable, Equatable {
         }
     }
 
-    /// Preserve the attachment picker's established context-first ordering.
-    /// Worker mentions are additive; they must not occupy the first screen and
-    /// make the existing workspace/file list appear to have disappeared.
-    static func contextFirst(
+    /// `@` is primarily the Worker mention entry point. Keep the five public
+    /// responsibilities visible before the longer workspace/file result set.
+    static func workersFirst(
         _ contextEntries: [AtPickerEntry],
         workers: [AtPickerEntry]
     ) -> [AtPickerEntry] {
-        contextEntries + workers
+        workers + contextEntries
     }
 }
 
@@ -600,7 +603,11 @@ struct AtPickerMenu: View {
                             }
                         }
                     }
-                    .frame(maxHeight: ComposerPaletteLayout.maximumAtListHeight)
+                    // A max-only frame lets the surrounding composer squeeze
+                    // ScrollView down to roughly three rows. Give it a real
+                    // content-derived height, capped at six 42pt rows, so the
+                    // Worker list is visible without covering most of the chat.
+                    .frame(height: ComposerPaletteLayout.atListHeight(entryCount: entries.count))
                     .onCompatibleChange(of: selection) { _, newSelection in
                         guard entries.indices.contains(newSelection) else { return }
                         withAnimation(.easeOut(duration: 0.12)) {
