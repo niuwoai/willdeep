@@ -25,8 +25,13 @@ struct AgentWorkerRoutingModelTests {
     }
 
     @Test
-    func fallbackBranchesAreEscalatedToModel() {
-        // 兜底只有两档：implementer(78) 与「什么都不匹配」(70)。
+    func onlyAmbiguousGeneralistFallbackIsEscalatedToModel() {
+        // 常规实现已有正确工种，不能为了微调再多付一次模型延迟。
+        let implementation = AgentRequestRouter.classify("实现新的重试策略")
+        #expect(implementation.confidence < AgentWorkerRoutingModel.keywordTrustThreshold)
+        #expect(!AgentWorkerRoutingModel.shouldConsultModel(for: implementation))
+
+        // 真正无从判断的兜底才允许温热的本地模型补判。
         let ambiguous = AgentRequestRouter.classify("这个需求要不要做，你看着办")
         #expect(ambiguous.confidence < AgentWorkerRoutingModel.keywordTrustThreshold)
         #expect(AgentWorkerRoutingModel.shouldConsultModel(for: ambiguous))
@@ -138,6 +143,32 @@ struct AgentWorkerRoutingModelTests {
 
 @Suite("Local model worker routing settings")
 struct AgentLocalModelWorkerRoutingSettingsTests {
+
+    @Test
+    func ollamaRoutingReadinessBuildsNativeEndpoints() throws {
+        let endpoint = try #require(AgentLocalModelRoutingReadiness.ollamaEndpoint(
+            baseURL: "http://127.0.0.1:11434/v1",
+            path: "/api/ps"
+        ))
+        #expect(endpoint.absoluteString == "http://127.0.0.1:11434/api/ps")
+        #expect(AgentLocalModelRoutingReadiness.ollamaEndpoint(
+            baseURL: "https://example.com/v1",
+            path: "/api/ps"
+        ) == nil)
+    }
+
+    @Test
+    func routingReadinessRecognizesLoadedModelNames() {
+        let payload = Data(#"{"models":[{"name":"gemma4:e4b-it-qat"}]}"#.utf8)
+        #expect(AgentLocalModelRoutingReadiness.containsLoadedModel(
+            payload,
+            model: "gemma4:e4b-it-qat:latest"
+        ))
+        #expect(!AgentLocalModelRoutingReadiness.containsLoadedModel(
+            payload,
+            model: "qwen3.5:4b"
+        ))
+    }
 
     @Test
     func routingReusesSummaryModelAndHasNoSeparateField() {

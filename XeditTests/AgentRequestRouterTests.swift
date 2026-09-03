@@ -92,6 +92,30 @@ struct AgentRequestRouterTests {
         #expect(steering.contains("write_files"))
     }
 
+    @Test("automatic routing is advisory but explicit delegation is mandatory")
+    func steeringStrengthFollowsDelegationPolicy() throws {
+        let decision = AgentRequestRouter.classify("实现新的重试策略")
+        let automatic = try #require(decision.steering(for: .automatic))
+        let required = try #require(decision.steering(for: .required))
+
+        #expect(automatic.contains("routing hint"))
+        #expect(automatic.contains("proceed directly"))
+        #expect(!automatic.contains("may refuse direct execution"))
+        #expect(required.contains("delegate it before direct execution"))
+        #expect(required.contains("may refuse direct execution"))
+    }
+
+    @Test("ops and pinned routes stay mandatory without a slash command")
+    func privilegedAndPinnedRoutesStayMandatory() throws {
+        let ops = AgentRequestRouter.classify("部署到生产环境")
+        let pinned = AgentRequestRouter.pinnedDecision(profileID: "editor")
+
+        #expect(ops.enforcesDelegatedExecution(for: .automatic))
+        #expect(pinned.enforcesDelegatedExecution(for: .automatic))
+        #expect(try #require(ops.steering).contains("delegate it before direct execution"))
+        #expect(try #require(pinned.steering).contains("delegate it before direct execution"))
+    }
+
     @Test("/no-subagent suppresses steering entirely")
     func forbiddenPolicySuppressesSteering() {
         // `spawn_agent` is gone from the tool table that turn; pointing the

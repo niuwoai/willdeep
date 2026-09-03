@@ -11,12 +11,10 @@
 //  markers cannot read intent; they can only spot vocabulary.
 //
 //  So the keyword decision keeps the fast path it is good at — every branch
-//  that actually matched a marker scores 86 or above and is taken verbatim,
-//  costing nothing — and only the fallback branches are escalated to a
-//  model. The unmatched keyword fallback is the generalist, so a model
-//  `none` verdict still keeps a real catch-all destination. That split
-//  matters: consulting a model on every turn would add
-//  1.3–2.0s to the 14.4% of requests the keywords already get right.
+//  that matched a marker and ordinary implementation are taken verbatim.
+//  Only the genuinely ambiguous generalist fallback may ask the local model.
+//  A model `none` verdict still keeps the real catch-all destination. This
+//  avoids adding even a warm 1.3–2.0s judge call to routine coding requests.
 //
 //  The shared client streams chat and takes no response-format argument,
 //  and threading a JSON schema through every provider adapter to constrain
@@ -37,10 +35,9 @@ import Foundation
 
 nonisolated enum AgentWorkerRoutingModel {
     /// Keyword decisions at or above this confidence matched an actual
-    /// marker list and are taken as-is. Below it live exactly the two
-    /// fallback branches of `AgentRequestRouter.classify` — `implementer`
-    /// (78) and the ambiguous standard-tier decision (70) — which is what
-    /// the model is here to improve on.
+    /// marker list and are taken as-is. The threshold remains part of the
+    /// shared contract, while `shouldConsultModel` narrows the paid path to
+    /// the genuinely ambiguous generalist fallback.
     static let keywordTrustThreshold = 86
 
     /// Local small models answer a classification in 1–2s warm. Past this
@@ -160,6 +157,7 @@ nonisolated enum AgentWorkerRoutingModel {
     /// Whether this keyword decision should be escalated to the model.
     static func shouldConsultModel(for decision: AgentRequestRouter.Decision) -> Bool {
         decision.confidence < keywordTrustThreshold
+            && decision.profileID == AgentSubagentProfileCatalog.generalistID
     }
 
     /// Fold a model verdict into the keyword decision. The model only ever

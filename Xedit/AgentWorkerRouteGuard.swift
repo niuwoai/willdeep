@@ -2,8 +2,9 @@
 //  AgentWorkerRouteGuard.swift
 //  WillDeep
 //
-//  Host enforcement for high-confidence mixed-model routes. A prompt can ask
-//  the parent to delegate; only a tool boundary can ensure it actually does.
+//  Host enforcement for explicit and privileged mixed-model routes. Automatic
+//  coding routes stay advisory; only a tool boundary can enforce the routes
+//  whose turn policy genuinely requires delegation.
 //
 
 import Foundation
@@ -29,7 +30,7 @@ nonisolated enum AgentWorkerRouteGuard {
     ) -> String? {
         guard delegationPolicy != .forbidden,
               let decision,
-              decision.requiresDelegatedExecution,
+              decision.enforcesDelegatedExecution(for: delegationPolicy),
               let profileID = decision.profileID,
               !attemptedProfiles.contains(profileID) else { return nil }
 
