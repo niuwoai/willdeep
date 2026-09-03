@@ -262,6 +262,7 @@ private struct AgentPluginWebPage: View {
         let foreground = colorScheme == .dark ? "#f2f2f4" : "#1a1a1c"
         let secondary = colorScheme == .dark ? "#a1a1a6" : "#6c6c70"
         let accent = colorScheme == .dark ? "#f2f2f4" : "#111111"
+        let bodyFontSize = Int(appState.agentChatBaseFontSize.rounded())
         let csp = "default-src 'self' 'unsafe-inline' data: blob:; "
             + "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
             + "img-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; "
@@ -269,8 +270,8 @@ private struct AgentPluginWebPage: View {
         let bootstrap = """
         <meta http-equiv="Content-Security-Policy" content="\(csp)">
         <style>
-        :root { --willdeep-bg: \(background); --willdeep-fg: \(foreground); --willdeep-secondary: \(secondary); --willdeep-accent: \(accent); color-scheme: \(colorScheme == .dark ? "dark" : "light"); }
-        html, body { margin: 0; min-height: 100%; background: var(--willdeep-bg); color: var(--willdeep-fg); font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        :root { --willdeep-bg: \(background); --willdeep-fg: \(foreground); --willdeep-secondary: \(secondary); --willdeep-accent: \(accent); --willdeep-body-font-size: \(bodyFontSize)px; color-scheme: \(colorScheme == .dark ? "dark" : "light"); }
+        html, body { margin: 0; min-height: 100%; background: var(--willdeep-bg); color: var(--willdeep-fg); font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: var(--willdeep-body-font-size); }
         input, button, select, textarea { accent-color: var(--willdeep-accent); }
         a { color: var(--willdeep-accent); }
         </style>
