@@ -709,7 +709,8 @@ extension AppState {
                 let configuration = agentConfiguration.normalized.imageDescription.agentConfiguration
                 imageDescriptions = try await describeImagesForTextOnlyProvider(
                     images,
-                    configuration: configuration
+                    configuration: configuration,
+                    runtimeID: runtime.id
                 )
             } catch {
                 imageDescriptions = nil

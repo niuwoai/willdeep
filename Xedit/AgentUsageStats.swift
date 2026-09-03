@@ -326,6 +326,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
     /// Runs the coordinator started without a `spawn_agent` tool call.
     /// See `AgentSession.coordinatorWorkerRuns`.
     var coordinatorWorkerRuns: [AgentSubagentRunUsage]?
+    var auxiliaryModelRequests: [AgentAuxiliaryModelRequestRecord]
     var workspaceIdentifier: String?
     var editedFileCount: Int
     var artifactCount: Int
@@ -349,6 +350,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
         messages: [AgentUsageMessageSnapshot],
         hostWorkerRuns: [AgentHostWorkerRunRecord]? = nil,
         coordinatorWorkerRuns: [AgentSubagentRunUsage]? = nil,
+        auxiliaryModelRequests: [AgentAuxiliaryModelRequestRecord] = [],
         workspaceIdentifier: String? = nil,
         editedFileCount: Int = 0,
         artifactCount: Int = 0,
@@ -364,6 +366,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
         self.messages = messages
         self.hostWorkerRuns = hostWorkerRuns
         self.coordinatorWorkerRuns = coordinatorWorkerRuns
+        self.auxiliaryModelRequests = auxiliaryModelRequests
         self.workspaceIdentifier = workspaceIdentifier
         self.editedFileCount = editedFileCount
         self.artifactCount = artifactCount
@@ -382,6 +385,7 @@ nonisolated struct AgentUsageSessionSnapshot: Identifiable, Equatable, Codable {
             messages: session.messages.map { AgentUsageMessageSnapshot(message: $0) },
             hostWorkerRuns: session.hostWorkerRuns,
             coordinatorWorkerRuns: session.coordinatorWorkerRuns,
+            auxiliaryModelRequests: session.auxiliaryModelRequests,
             workspaceIdentifier: Self.workspaceIdentifier(
                 for: session.sidebarWorkspaceRootPath.map { .local(path: $0) }
                     ?? session.workspaceLocation
@@ -444,6 +448,9 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
     var requestProviderID: String?
     var requestProviderDisplayName: String?
     var requestStablePrefixCharacters: Int?
+    var elapsedSeconds: Double?
+    var firstResponseSeconds: Double?
+    var requestIsLocal: Bool?
     var createdAt: Date
 
     init(
@@ -474,6 +481,9 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
         requestProviderID: String? = nil,
         requestProviderDisplayName: String? = nil,
         requestStablePrefixCharacters: Int? = nil,
+        elapsedSeconds: Double? = nil,
+        firstResponseSeconds: Double? = nil,
+        requestIsLocal: Bool? = nil,
         createdAt: Date
     ) {
         self.id = id
@@ -503,6 +513,9 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
         self.requestProviderID = requestProviderID
         self.requestProviderDisplayName = requestProviderDisplayName
         self.requestStablePrefixCharacters = requestStablePrefixCharacters
+        self.elapsedSeconds = elapsedSeconds
+        self.firstResponseSeconds = firstResponseSeconds
+        self.requestIsLocal = requestIsLocal
         self.createdAt = createdAt
     }
 
@@ -543,6 +556,9 @@ nonisolated struct AgentUsageMessageSnapshot: Equatable, Codable {
             requestProviderID: message.requestProviderID,
             requestProviderDisplayName: message.requestProviderDisplayName,
             requestStablePrefixCharacters: message.requestStablePrefixCharacters,
+            elapsedSeconds: message.elapsedSeconds,
+            firstResponseSeconds: message.firstResponseSeconds,
+            requestIsLocal: message.requestIsLocal,
             createdAt: message.createdAt
         )
     }
@@ -577,6 +593,7 @@ nonisolated struct AgentUsageDashboardModel: Equatable {
     let managedRoutingRate: Double
     let reasoningUsageRate: Double
     let uniqueToolCount: Int
+    let requestAnalytics: AgentRequestAnalyticsSnapshot
 }
 
 enum AgentUsageStats {
@@ -628,7 +645,8 @@ enum AgentUsageStats {
             peakTaskTokenCount: peakTaskTokenCount,
             managedRoutingRate: managedRoutingRate,
             reasoningUsageRate: reasoningUsageRate,
-            uniqueToolCount: Set(allMessages.flatMap(\.toolCallNames)).count
+            uniqueToolCount: Set(allMessages.flatMap(\.toolCallNames)).count,
+            requestAnalytics: AgentRequestAnalytics.snapshot(for: sessions, now: now)
         )
     }
 

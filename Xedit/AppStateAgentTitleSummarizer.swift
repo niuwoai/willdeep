@@ -91,11 +91,17 @@ extension AppState {
                     self?.titleSummarizationsInFlight.remove(runtimeID)
                 }
             }
-            let title = await Self.requestTitleSummary(
+            let result = await Self.requestTitleSummaryWithMetrics(
                 configurations: configurations,
                 firstUser: firstUser,
                 firstAssistant: firstAssistant
             )
+            await MainActor.run {
+                result.records.forEach {
+                    self?.recordAuxiliaryModelRequest($0, runtimeID: runtimeID)
+                }
+            }
+            let title = result.title
             guard let title, !title.isEmpty else { return }
             await MainActor.run {
                 guard let self else { return }
@@ -156,14 +162,15 @@ extension AppState {
         let nearbyAssistant = messages[..<latestUserIndex]
             .last(where: { $0.role == .assistant })?
             .content ?? messages.last(where: { $0.role == .assistant })?.content ?? ""
-        let title = await Self.requestTitleSummary(
+        let result = await Self.requestTitleSummaryWithMetrics(
             configurations: configurations,
             firstUser: latestUser,
             firstAssistant: nearbyAssistant
         )
+        result.records.forEach { recordAuxiliaryModelRequest($0, runtimeID: runtime.id) }
         return AgentSessionTitleSuggestionSnapshot(
             currentTitle: currentTitle,
-            suggestedTitle: title,
+            suggestedTitle: result.title,
             modelID: modelID
         )
     }
@@ -176,6 +183,18 @@ extension AppState {
         firstUser: String,
         firstAssistant: String
     ) async -> String? {
+        await requestTitleSummaryWithMetrics(
+            configurations: configurations,
+            firstUser: firstUser,
+            firstAssistant: firstAssistant
+        ).title
+    }
+
+    nonisolated static func requestTitleSummaryWithMetrics(
+        configurations: [AgentConfiguration],
+        firstUser: String,
+        firstAssistant: String
+    ) async -> (title: String?, records: [AgentAuxiliaryModelRequestRecord]) {
         // Trim both sides to keep prompt size predictable. We intentionally
         // include just enough assistant context to disambiguate, not enough
         // for the model to start writing essays about it.
@@ -200,9 +219,11 @@ extension AppState {
             content: "USER:\n\(userClip)\n\nASSISTANT:\n\(assistantClip)"
         )
 
+        var records: [AgentAuxiliaryModelRequestRecord] = []
         for configuration in configurations {
             let client = await AgentClient(configuration: configuration)
             let collector = CompressionSummaryCollector()
+            let measurement = AgentAuxiliaryRequestMeasurement()
             let messages = AgentLocalModelPrompting.messagesWithLanguageInstruction(
                 systemPrompt: system.content,
                 userMessages: [payload],
@@ -210,19 +231,34 @@ extension AppState {
             )
             do {
                 try await client.streamChat(messages: messages) { event in
+                    await measurement.consume(event)
                     if case .textDelta(let delta) = event {
                         await collector.append(delta)
                     }
                 }
+                records.append(await measurement.record(
+                    purpose: .title,
+                    providerID: configuration.providerID,
+                    modelID: configuration.model,
+                    isLocal: AgentLocalModelPrompting.isLocalProvider(configuration),
+                    succeeded: true
+                ))
                 let raw = await collector.value
                 if let title = Self.sanitizeAutoTitle(raw), !title.isEmpty {
-                    return title
+                    return (title, records)
                 }
             } catch {
+                records.append(await measurement.record(
+                    purpose: .title,
+                    providerID: configuration.providerID,
+                    modelID: configuration.model,
+                    isLocal: AgentLocalModelPrompting.isLocalProvider(configuration),
+                    succeeded: false
+                ))
                 continue
             }
         }
-        return nil
+        return (nil, records)
     }
 
     /// Defensive cleanup on whatever the model returned. Strip

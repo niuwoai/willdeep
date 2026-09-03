@@ -250,7 +250,8 @@ extension AppState {
                 let trimmed = try await summarizeForCompression(
                     segments: segments,
                     configuration: configuration,
-                    someIMContext: someIMContext
+                    someIMContext: someIMContext,
+                    runtimeID: runtime.id
                 )
                 guard !trimmed.isEmpty else {
                     lastError = AgentClientError.serverStatus(
@@ -356,7 +357,8 @@ extension AppState {
     private func summarizeForCompression(
         segments: [String],
         configuration: AgentConfiguration,
-        someIMContext: SomeIMRequestContext?
+        someIMContext: SomeIMRequestContext?,
+        runtimeID: UUID
     ) async throws -> String {
         let window = Self.agentContextWindow(
             model: configuration.model,
@@ -373,7 +375,8 @@ extension AppState {
                 let summaries = try await summarizeChunks(
                     chunks,
                     configuration: configuration,
-                    someIMContext: someIMContext
+                    someIMContext: someIMContext,
+                    runtimeID: runtimeID
                 )
                 if chunks.count == 1 || summaries.count <= 1 {
                     return summaries.first ?? ""
@@ -447,13 +450,15 @@ extension AppState {
     private func summarizeChunks(
         _ chunks: [String],
         configuration: AgentConfiguration,
-        someIMContext: SomeIMRequestContext?
+        someIMContext: SomeIMRequestContext?,
+        runtimeID: UUID
     ) async throws -> [String] {
         if chunks.count == 1 {
             let summary = try await requestCompressionSummary(
                 transcript: chunks[0],
                 configuration: configuration,
                 someIMContext: someIMContext,
+                runtimeID: runtimeID,
                 part: 1,
                 partCount: 1
             )
@@ -471,6 +476,7 @@ extension AppState {
                         transcript: transcript,
                         configuration: configuration,
                         someIMContext: someIMContext,
+                        runtimeID: runtimeID,
                         part: index + 1,
                         partCount: partCount
                     )
@@ -497,6 +503,7 @@ extension AppState {
         transcript: String,
         configuration: AgentConfiguration,
         someIMContext: SomeIMRequestContext?,
+        runtimeID: UUID,
         part: Int,
         partCount: Int
     ) async throws -> String {
@@ -505,18 +512,45 @@ extension AppState {
             : nil
         let client = AgentClient(configuration: configuration, someIMContext: context)
         let collector = CompressionSummaryCollector()
+        let measurement = AgentAuxiliaryRequestMeasurement()
         let messages = Self.compressionRequestMessages(
             transcript: transcript,
             configuration: configuration,
             part: part,
             partCount: partCount
         )
-        try await client.streamChat(messages: messages) { event in
-            if case .textDelta(let delta) = event {
-                await collector.append(delta)
+        do {
+            try await client.streamChat(messages: messages) { event in
+                await measurement.consume(event)
+                if case .textDelta(let delta) = event {
+                    await collector.append(delta)
+                }
             }
+            let summary = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            recordAuxiliaryModelRequest(
+                await measurement.record(
+                    purpose: .contextCompression,
+                    providerID: configuration.providerID,
+                    modelID: configuration.model,
+                    isLocal: AgentLocalModelPrompting.isLocalProvider(configuration),
+                    succeeded: !summary.isEmpty
+                ),
+                runtimeID: runtimeID
+            )
+            return summary
+        } catch {
+            recordAuxiliaryModelRequest(
+                await measurement.record(
+                    purpose: .contextCompression,
+                    providerID: configuration.providerID,
+                    modelID: configuration.model,
+                    isLocal: AgentLocalModelPrompting.isLocalProvider(configuration),
+                    succeeded: false
+                ),
+                runtimeID: runtimeID
+            )
+            throw error
         }
-        return await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// The exact messages one compression request carries.

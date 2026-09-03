@@ -38,7 +38,7 @@ struct AgentPanelWorkspaceView: View {
             } else {
                 emptyDock
             }
-            if selected?.kind == .terminal || selected?.kind == .backgroundTasks {
+            if selected?.kind == .backgroundTasks {
                 Divider().opacity(0.5)
                 Label(L10n.PanelTabs.keepsRunning, systemImage: "info.circle")
                     .font(.system(size: 10)).foregroundStyle(.secondary)
@@ -55,8 +55,45 @@ struct AgentPanelWorkspaceView: View {
             Text(L10n.PanelTabs.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
             Spacer(minLength: 0)
             Menu {
-                ForEach(AgentSidePanelKind.allCases.filter { $0.isAvailable(activeExperts: runtime.activeExperts) }) { kind in
-                    Button { appState.openPanelTab(kind, runtime: runtime) } label: { Label(kind.title, systemImage: kind.systemImage) }
+                Button {
+                    appState.createPanelTab(.terminal, runtime: runtime)
+                } label: {
+                    Label(L10n.AgentTerminal.newLocalTab, systemImage: "terminal")
+                }
+                Menu {
+                    if appState.agentTerminalController.runtimeOptions.isEmpty {
+                        Text(L10n.AgentTerminal.noSSHHostsConfigured)
+                    } else {
+                        ForEach(appState.agentTerminalController.runtimeOptions) { remote in
+                            Button {
+                                appState.createRemoteTerminalPanelTab(remote, runtime: runtime)
+                            } label: {
+                                Label(L10n.AgentTerminal.newSSHTab(remote.displayName), systemImage: "network")
+                            }
+                        }
+                    }
+                    Divider()
+                    Button {
+                        EditorSettingsNavigation.shared.open(.remoteRuntimes, appState: appState)
+                    } label: {
+                        Label(L10n.AgentTerminal.manageSSHHosts, systemImage: "gearshape")
+                    }
+                } label: {
+                    Label(L10n.AgentTerminal.sshHostsSection, systemImage: "network")
+                }
+                Button {
+                    appState.createPanelTab(.embeddedBrowser, runtime: runtime)
+                } label: {
+                    Label(AgentSidePanelKind.embeddedBrowser.title, systemImage: AgentSidePanelKind.embeddedBrowser.systemImage)
+                }
+                Divider()
+                ForEach(AgentSidePanelKind.allCases.filter {
+                    $0 != .terminal && $0 != .embeddedBrowser
+                        && $0.isAvailable(activeExperts: runtime.activeExperts)
+                }) { kind in
+                    Button { appState.openPanelTab(kind, runtime: runtime) } label: {
+                        Label(kind.title, systemImage: kind.systemImage)
+                    }
                 }
             } label: { Image(systemName: "plus").frame(width: 22, height: 24) }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().focusable(false)
@@ -112,7 +149,11 @@ struct AgentPanelWorkspaceView: View {
             Button { appState.closePanelTab(id(tab)) } label: {
                 Image(systemName: "xmark").font(.system(size: 9)).frame(width: 18, height: 26)
             }
-            .buttonStyle(.plain).focusable(false).foregroundStyle(.secondary).help(L10n.PanelTabs.closeTab)
+            .buttonStyle(.plain)
+            .disabled(isCloseProtected(tab))
+            .focusable(false)
+            .foregroundStyle(.secondary)
+            .help(isCloseProtected(tab) ? L10n.AgentTerminal.sessionAutomationBusy : L10n.PanelTabs.closeTab)
         }
         .font(.system(size: 11, weight: active ? .semibold : .regular))
         .frame(maxWidth: 220).frame(height: 35)
@@ -124,8 +165,14 @@ struct AgentPanelWorkspaceView: View {
             Button(L10n.AgentSidePanel.detach) { detach(tab) }
             Divider()
             Button(L10n.PanelTabs.closeTab) { appState.closePanelTab(id(tab)) }
+                .disabled(isCloseProtected(tab))
         }
         .onDrop(of: [.willDeepPanelTab], isTargeted: nil) { receiveDrop($0, before: tab.id) }
+    }
+
+    private func isCloseProtected(_ tab: AgentPanelTab) -> Bool {
+        guard tab.kind == .terminal, let resourceID = tab.resourceID else { return false }
+        return appState.agentTerminalController.tab(id: resourceID)?.isAutomationBusy == true
     }
 
     private func contentHeader(_ tab: AgentPanelTab) -> some View {
@@ -201,6 +248,7 @@ struct AgentPanelWorkspaceView: View {
     }
 
     private func select(_ tab: AgentPanelTab) {
+        appState.activatePanelResource(tab, runtime: runtime)
         guard !registry.focus(id(tab), kind: tab.kind) else { return }
         appState.updatePanelTabs(runtime: runtime) { $0.selectTab(tab.id) }
     }
