@@ -706,6 +706,17 @@ enum AgentSubagentRunner {
         _ risk: AgentToolRisk
     ) async -> Bool
 
+    /// Read-tier commands are already admitted by the execution guard below;
+    /// asking the parent to review them first creates a redundant approval
+    /// card. Strict read-only trades also never get an escalation path for
+    /// mutations, regardless of the parent mode.
+    nonisolated static func shouldRequestParentCommandReview(
+        risk: AgentToolRisk,
+        isStrictReadOnlyShellTrade: Bool
+    ) -> Bool {
+        risk != .read && !isStrictReadOnlyShellTrade
+    }
+
     /// The only tools a subagent may call. Deliberately excludes:
     /// `spawn_agent` (no nesting), `ask_user` (nobody to ask),
     /// MCP tools (server side effects unknowable) and background-job tools
@@ -1963,7 +1974,10 @@ enum AgentSubagentRunner {
             .strictReadOnlyShellTradeIDs.contains(profile.id)
         var isJudgeApprovedCommand = false
         if isReviewableCommandTool,
-           !isStrictReadOnlyShellTrade,
+           Self.shouldRequestParentCommandReview(
+                risk: risk,
+                isStrictReadOnlyShellTrade: isStrictReadOnlyShellTrade
+           ),
            let command = argsDict["command"]?.stringValue(),
            let commandReviewer {
             isJudgeApprovedCommand = await commandReviewer(call.toolName, command)

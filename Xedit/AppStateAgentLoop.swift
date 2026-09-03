@@ -70,7 +70,7 @@ extension AppState {
                 : nil
         }
         runtime.currentTurnRouteDecision = routeDecision
-        runtime.currentTurnRouteSteering = routeDecision?.steering
+        runtime.currentTurnRouteSteering = routeDecision?.steering(for: delegationPolicy)
         if source == .operatorInput {
             runtime.consecutiveGoalRoundsWithoutChecklistProgress = 0
             // A human steering the session starts a fresh budget of automatic
@@ -298,12 +298,11 @@ extension AppState {
             // assembles the system prompt.
             if source == .operatorInput {
                 // Keyword routing already produced a decision synchronously.
-                // Where it fell back rather than matched, a model gets a say
-                // before the preflight reads the decision.
+                // Only a genuinely ambiguous fallback may consult an already
+                // warm local model before the optional preflight reads it.
                 await self.refineRouteDecisionWithModelIfNeeded(
                     for: runtime,
-                    requestText: text,
-                    fallback: configuration
+                    requestText: text
                 )
                 let codingPlan = await self.runReadOnlyPreflightIfNeeded(
                     for: runtime,

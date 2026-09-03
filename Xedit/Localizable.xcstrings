@@ -6068,31 +6068,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The LLM model handles local chat, session titles, context compression, and Worker routing decisions; the vision model is used only for image understanding. Requests classified by keywords skip the model; ambiguous requests ask the LLM, adding about 1–2 seconds. When disabled, routing uses the session's default model."
+            "value" : "The LLM model handles local chat, session titles, context compression, and Worker routing decisions; the vision model is used only for image understanding. Only ambiguous requests consult an already loaded local LLM. Cold models warm in the background while the current turn keeps the keyword route. When disabled, routing also stays keyword-only and never calls the remote session model."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El modelo LLM se usa para el chat local, los títulos de sesión, la compresión de contexto y las decisiones de enrutamiento de Worker; el modelo de visión solo procesa imágenes. Las solicitudes clasificadas por palabras clave omiten el modelo; las ambiguas consultan al LLM y añaden unos 1–2 segundos. Si se desactiva, se usa el modelo predeterminado de la sesión."
+            "value" : "El modelo LLM se usa para el chat local, los títulos de sesión, la compresión de contexto y las decisiones de enrutamiento de Worker; el modelo de visión solo procesa imágenes. Solo las solicitudes ambiguas consultan un LLM local ya cargado. Los modelos fríos se precalientan en segundo plano mientras el turno actual conserva la ruta por palabras clave. Si se desactiva, el enrutamiento también usa solo palabras clave y nunca llama al modelo remoto de la sesión."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le modèle LLM gère le chat local, les titres de session, la compression du contexte et les décisions de routage Worker ; le modèle de vision sert uniquement à comprendre les images. Les requêtes classées par mots-clés ignorent le modèle ; les requêtes ambiguës interrogent le LLM, avec environ 1 à 2 secondes supplémentaires. Si cette option est désactivée, le modèle par défaut de la session est utilisé."
+            "value" : "Le modèle LLM gère le chat local, les titres de session, la compression du contexte et les décisions de routage Worker ; le modèle de vision sert uniquement à comprendre les images. Seules les requêtes ambiguës consultent un LLM local déjà chargé. Les modèles froids sont préchauffés en arrière-plan tandis que le tour courant conserve le routage par mots-clés. Si l’option est désactivée, le routage reste également limité aux mots-clés et n’appelle jamais le modèle distant de la session."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "LLM モデルはローカルチャット、セッションタイトル、コンテキスト圧縮、Worker の振り分け判断に使用し、画像理解モデルは画像処理だけに使用します。キーワードで判定できる要求はモデルを使わず、曖昧な場合のみ LLM に問い合わせるため約 1～2 秒かかります。オフにするとセッションの既定モデルで判断します。"
+            "value" : "LLM モデルはローカルチャット、セッションタイトル、コンテキスト圧縮、Worker の振り分け判断に使用し、画像理解モデルは画像処理だけに使用します。曖昧な要求だけが、すでに読み込まれているローカル LLM に問い合わせます。コールドモデルはバックグラウンドで予熱し、現在のターンはキーワード判定をそのまま使います。オフの場合もキーワード判定だけを使い、セッションのリモートモデルは呼び出しません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "LLM 模型用于本地聊天、会话标题、上下文压缩和 Worker 派发判断；图片理解模型只处理图片。关键词能判定的派发请求直接走，判不准时才问 LLM，约多花 1–2 秒；关闭后改用会话默认模型判断。"
+            "value" : "LLM 模型用于本地聊天、会话标题、上下文压缩和 Worker 派发判断；图片理解模型只处理图片。只有含糊请求会询问已驻留的本地 LLM；冷模型后台预热，本轮直接走关键词。关闭后也直接走关键词，不调用会话远程模型。"
           }
         }
       }

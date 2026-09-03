@@ -11,13 +11,11 @@
 //     the turn's tool table, so the model cannot delegate even if it
 //     decides it wants to. Nothing depends on the model complying.
 //
-//   - `.required` is deliberately a soft constraint. No provider lets us
-//     pin a specific tool call across a multi-round agent loop without
-//     hijacking the model's first-round planning (`tool_choice` by name
-//     applies to a single request and would force delegation before the
-//     model has read anything). So we inject a strong instruction and
-//     then record whether delegation actually happened — an honest
-//     "requested, not honored" marker beats pretending it was enforced.
+//   - `.required` strongly steers the model and enforces delegate-first at
+//     direct write boundaries for routes that declare that requirement. No
+//     provider lets us pin a specific tool call across a multi-round loop,
+//     so read-only work remains auditable rather than universally forced.
+//     An honest "requested, not honored" marker still covers that case.
 //
 
 import Foundation
@@ -25,7 +23,8 @@ import Foundation
 nonisolated enum AgentDelegationPolicy: String, Codable, Equatable, Sendable {
     /// Default. The model decides whether to spawn subagents.
     case automatic
-    /// `/subagent` — the user asked for delegation. Soft: instruction + audit.
+    /// `/subagent` — instruction + audit, with write-boundary enforcement for
+    /// routes that require delegated execution.
     case required
     /// `/no-subagent` — the user forbade delegation. Hard: tool removed.
     case forbidden

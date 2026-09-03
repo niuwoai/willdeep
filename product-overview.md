@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-03 | Current version: v1.317.0-rc6
+> Last updated: 2026-09-03 | Current version: v1.317.0-rc8
 
 ## Positioning
 
@@ -17,6 +17,10 @@ Official product domain: [willdeep.com](https://willdeep.com).
 WillDeep is configured for non-App-Store distribution without App Sandbox so it can access local project files with fewer permission interruptions.
 
 ## 架构概览
+
+- **Worker 首字延迟优化（1.317.0-rc8）** —— 常规实现不再额外调用判路模型，只有真正含糊的通用请求才交给已驻留的本地 Ollama 补判；冷模型以短探针识别后在后台去重预热，本轮直接走关键词，不调用远程会话模型。串行只读预检默认关闭，普通自动路由只作建议，小型单责任任务可由主 Agent 直接完成；显式 `/subagent`、`@Worker` 和生产运维仍强制先委派。
+
+- **Worker 完全访问权限继承修复（1.317.0-rc7）** —— 原生 Worker 与 Codex/Claude 等委派执行器不再为静态只读终端命令创建审批卡；写入与普通高风险动作在“完全访问”下复用父会话的统一授权结果，主 Agent 与 Worker 不再出现同命令两套权限语义。确定性恶意命令、环境信任声明、敏感会话管理以及需要用户作答的工具仍不可被完全访问代答或绕过。
 
 - **本地/API 请求统计与会话级统一工作台（1.317.0-rc6）** —— 新会话空状态新增本地模型调用与近 7 天全部 AI 请求入口，按真实持久化的主 Agent、Worker、标题、上下文压缩、图片理解和 Worker 路由请求汇总涉及会话、请求数、平均输入/输出、时延、首字符时间及有测量样本时的生成 Token/s；旧数据缺少测量字段时显示不可用，不用零值粉饰，也不把提示词正文写进统计。工作面板将每个本地/SSH 终端和内置浏览器实例提升为统一外层标签，文件等既有多实例面板继续沿用同一标签栏；标签、选中项和资源绑定随会话持久化，关闭标签会释放对应实例，忙碌中的自动化终端则拒绝误关。
 

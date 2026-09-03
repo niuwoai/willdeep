@@ -35,7 +35,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
     var preferForTitles: Bool
     var preferForContextSummaries: Bool
     /// Worker 路由判决是否先问本地模型。关掉（或整个本地加速关掉）时，
-    /// 路由回落到会话默认模型；两者都不可用时回落纯关键词判决。
+    /// 路由直接回落纯关键词判决，不会为辅助判断调用会话远程模型。
     /// 刻意不给它单独的模型字段：文本辅助任务统一复用 `summaryModel`
     /// 持久化字段（设置页对用户展示为“LLM 模型”）；图片理解独立使用
     /// `visionModel`，不会进入文本聊天的备用模型列表。
@@ -174,6 +174,107 @@ enum AgentLocalAuxiliaryPurpose {
     case title
     case contextSummary
     case workerRouting
+}
+
+/// Latency-first readiness check for Ollama-backed routing. A cold local
+/// model is warmed in the background and never blocks the current turn.
+nonisolated enum AgentLocalModelRoutingReadiness {
+    static let probeTimeout: TimeInterval = 0.35
+    static let warmupTimeout: TimeInterval = 120
+    static let keepAlive = "10m"
+
+    static func ollamaEndpoint(baseURL: String, path: String) -> URL? {
+        guard var components = URLComponents(string: baseURL),
+              let host = components.host?.lowercased(),
+              ["localhost", "127.0.0.1", "::1"].contains(host),
+              ["http", "https"].contains(components.scheme?.lowercased() ?? "") else {
+            return nil
+        }
+        components.path = path
+        components.query = nil
+        components.fragment = nil
+        return components.url
+    }
+
+    static func containsLoadedModel(_ data: Data, model: String) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let models = object["models"] as? [[String: Any]] else { return false }
+        let expected = canonicalModelID(model)
+        return models.contains { item in
+            [item["name"] as? String, item["model"] as? String]
+                .compactMap { $0 }
+                .map(canonicalModelID)
+                .contains(expected)
+        }
+    }
+
+    private static func canonicalModelID(_ value: String) -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.hasSuffix(":latest") ? String(normalized.dropLast(7)) : normalized
+    }
+}
+
+private actor AgentLocalModelRoutingWarmup {
+    static let shared = AgentLocalModelRoutingWarmup()
+    private var warmingKeys: Set<String> = []
+
+    func isWarmOrSchedule(baseURL: String, model: String) async -> Bool {
+        let key = "\(baseURL)\u{1F}\(model)"
+        guard !warmingKeys.contains(key) else { return false }
+        guard let psURL = AgentLocalModelRoutingReadiness.ollamaEndpoint(
+            baseURL: baseURL,
+            path: "/api/ps"
+        ) else { return false }
+
+        if await Self.isWarm(psURL: psURL, model: model) {
+            return true
+        }
+
+        guard warmingKeys.insert(key).inserted else { return false }
+        Task { [baseURL, model, key] in
+            await Self.warm(baseURL: baseURL, model: model)
+            self.finish(key: key)
+        }
+        return false
+    }
+
+    private func finish(key: String) {
+        warmingKeys.remove(key)
+    }
+
+    private nonisolated static func isWarm(psURL: URL, model: String) async -> Bool {
+        var request = URLRequest(url: psURL)
+        request.timeoutInterval = AgentLocalModelRoutingReadiness.probeTimeout
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = AgentLocalModelRoutingReadiness.probeTimeout
+        configuration.timeoutIntervalForResource = AgentLocalModelRoutingReadiness.probeTimeout
+        do {
+            let (data, response) = try await URLSession(configuration: configuration).data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return false }
+            return AgentLocalModelRoutingReadiness.containsLoadedModel(data, model: model)
+        } catch {
+            return false
+        }
+    }
+
+    private nonisolated static func warm(baseURL: String, model: String) async {
+        guard let url = AgentLocalModelRoutingReadiness.ollamaEndpoint(
+            baseURL: baseURL,
+            path: "/api/generate"
+        ) else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = AgentLocalModelRoutingReadiness.warmupTimeout
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "model": model,
+            "keep_alive": AgentLocalModelRoutingReadiness.keepAlive,
+        ])
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = AgentLocalModelRoutingReadiness.warmupTimeout
+        configuration.timeoutIntervalForResource = AgentLocalModelRoutingReadiness.warmupTimeout
+        _ = try? await URLSession(configuration: configuration).data(for: request)
+    }
 }
 
 nonisolated enum AgentLocalModelPrompting {
@@ -701,13 +802,18 @@ extension AppState {
         }
     }
 
-    /// 路由判决的模型候选：本地辅助模型（启用且勾选时）→ 会话默认模型。
-    /// 两者都拿不到时调用方回落到纯关键词判决。
-    func workerRoutingConfigurationCandidates(fallback: AgentConfiguration) -> [AgentConfiguration] {
-        auxiliaryConfigurationCandidates(
-            local: localAuxiliaryConfiguration(for: .workerRouting),
-            fallback: fallback
+    /// Only a warm local model may refine a Worker route. A cold Ollama is
+    /// warmed in the background while this turn immediately keeps the keyword
+    /// verdict. The session's remote model is never charged for classification.
+    func readyWorkerRoutingConfiguration() async -> AgentConfiguration? {
+        guard let configuration = localAuxiliaryConfiguration(for: .workerRouting) else {
+            return nil
+        }
+        let isWarm = await AgentLocalModelRoutingWarmup.shared.isWarmOrSchedule(
+            baseURL: configuration.baseURL,
+            model: configuration.model
         )
+        return isWarm ? configuration : nil
     }
 
     func imageDescriptionConfigurationCandidates(fallback: AgentConfiguration) -> [AgentConfiguration] {

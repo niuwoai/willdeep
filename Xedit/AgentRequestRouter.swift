@@ -11,11 +11,10 @@
 //  momentum.
 //
 //  So the runtime forms its own opinion first, from the request text alone.
-//  Read/preparation work can run as a bounded preflight. For a high-confidence
-//  writing route, the host also requires the matching writing trade to be
-//  attempted before the parent may use direct file-edit tools. Classification
-//  remains deliberately narrow because keyword matching will sometimes be
-//  wrong; `/no-subagent` is the explicit per-turn escape hatch.
+//  Read/preparation work can run as an explicitly enabled bounded preflight.
+//  Automatic routes are advisory so a small, single-owner request does not
+//  pay for a second model before useful work starts. Explicitly named workers,
+//  `/subagent`, and privileged ops routes remain delegate-first policy.
 //
 //  What it is NOT: a dispatcher. willdeep-rs runs the high-confidence
 //  read-only cases as a worker *before* the root model sees the repository
@@ -24,11 +23,8 @@
 //  on questions as ordinary as "where is this function", and a Chinese
 //  false positive is visible rather than merely wasteful. So the eligibility
 //  is computed and recorded here, behind a setting that the Deep Share
-//  numbers were meant to decide. They decided: the read-only trades scored
-//  zero runs while the setting was off, because the note above is the only
-//  other way to reach them and the model follows it selectively. The setting
-//  now defaults on (see AppStateAgentReadOnlyPreflight), so a high-confidence
-//  read-only classification is executed rather than merely mentioned.
+//  numbers were meant to decide. It remains opt-in because serial preflight
+//  increases time-to-first-token even when the root could answer directly.
 //  See docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md §4 step 4 and §5.
 //
 
@@ -57,9 +53,9 @@ nonisolated enum AgentRequestRouter {
         /// For read-only requests this is normally the routed profile itself;
         /// for mutations it is a read-only scout that prepares the write task.
         var preflightProfileID: String? = nil
-        /// Direct file/ops execution is held until this routed profile has
-        /// been attempted. This turns delegation from advice into policy for
-        /// the cases where routing confidence is high.
+        /// This route is eligible for delegate-first enforcement. The actual
+        /// enforcement also considers the per-turn policy: automatic coding
+        /// routes are advisory, while explicit and privileged routes are hard.
         var requiresDelegatedExecution: Bool = false
         var reason: String
 
@@ -71,18 +67,44 @@ nonisolated enum AgentRequestRouter {
                 && reason == "operator named this worker in the composer"
         }
 
+        /// Whether the host must observe a matching worker attempt before a
+        /// direct write/ops tool may run.
+        func enforcesDelegatedExecution(for delegationPolicy: AgentDelegationPolicy) -> Bool {
+            guard requiresDelegatedExecution else { return false }
+            return isOperatorPinned
+                || delegationPolicy == .required
+                || profileID == AgentSubagentProfileCatalog.opsRunnerID
+        }
+
+        /// Compatibility view for call sites that do not carry a turn policy.
+        var steering: String? { steering(for: .automatic) }
+
         /// The paragraph appended to the user's message, or nil when there is
         /// nothing useful to say.
-        var steering: String? {
+        func steering(for delegationPolicy: AgentDelegationPolicy) -> String? {
             guard let profileID else { return nil }
+            let enforced = enforcesDelegatedExecution(for: delegationPolicy)
+            let instruction: String
+            if enforced {
+                instruction = """
+                Compile a task packet — keep `read_files` separate from `write_files` — and delegate \
+                it before direct execution. Supply a verifier whenever completion is decidable by a \
+                command. The host may refuse direct execution until the routed worker has been attempted.
+                """
+            } else {
+                instruction = """
+                Treat this as a routing hint, not a mandatory extra stage. Delegate only when the work is \
+                independently bounded and doing so avoids duplicate context or can run in parallel. For a \
+                small single-owner task, proceed directly. If you delegate, keep `read_files` separate from \
+                `write_files` and supply a verifier when a command can decide completion.
+                """
+            }
             return """
             <runtime-route tier="\(tier.rawValue)" profile="\(profileID)" confidence="\(confidence)">
             \(isOperatorPinned
                 ? "The operator named `\(profileID)` for this request in the composer. This is an instruction, not a classification — do not re-route it."
                 : "WillDeep classified this request as bounded `\(profileID)` work before you read it.") \
-            Compile a task packet — keep `read_files` separate from `write_files` — and delegate \
-            it rather than doing the work here. Supply a verifier whenever completion is decidable \
-            by a command.\(requiresDelegatedExecution ? " The host will refuse direct execution until the routed worker has been attempted; use /no-subagent on a new turn only when the operator explicitly wants inline execution." : " If the classification is wrong, say why before choosing a different bounded trade.")
+            \(instruction)
             </runtime-route>
             """
         }
@@ -273,7 +295,7 @@ nonisolated enum AgentRequestRouter {
             for: request,
             delegationPolicy: delegationPolicy,
             sharedConfig: sharedConfig
-        )?.steering
+        )?.steering(for: delegationPolicy)
     }
 
     static func routedDecision(

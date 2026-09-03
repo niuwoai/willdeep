@@ -10,9 +10,9 @@
 //  model the report as evidence, so the expensive model spends its window on
 //  synthesis and decisions instead of re-deriving repository facts.
 //
-//  It defaults on after production telemetry showed that prompt-only routing
-//  was not enough: the root model commonly performed the work itself. The
-//  shared `agent.auto_dispatch_read_only` switch remains the emergency brake.
+//  It is opt-in: a serial worker before the root model is useful for large
+//  repository reads, but is also a visible time-to-first-token tax on small
+//  requests. Set `agent.auto_dispatch_read_only = true` to enable it.
 //
 //  Read-only by construction: the tester may execute read-tier gates, but no
 //  preflight receives write access, an editor lock, a verifier, or a patch
@@ -25,22 +25,11 @@ import Foundation
 
 extension AppState {
     /// Whether request-level preflight may run at all. The shared config.toml
-    /// wins; absent, it is on.
-    ///
-    /// It originally shipped off, on the theory that the Deep Share numbers
-    /// should decide. They did: the trades this path feeds — `scout`,
-    /// `reader`, `git_detective`, `log_inspector` — recorded no runs at all,
-    /// because the only other way to reach them is the parent model choosing
-    /// to delegate, and the parent reliably does the work itself instead
-    /// (see the note at the top of AgentRequestRouter). A cheap tier that
-    /// never receives work is not a cheap tier. The cost is a slower first
-    /// token on the requests that match, which is the trade this was always
-    /// going to be; `auto_dispatch_read_only = false` in config.toml turns it
-    /// back off for both clients.
+    /// wins; absent, it stays off to protect first-token latency.
     static func readOnlyPreflightEnabled(
         sharedConfig: AgentSharedRuntimeConfig = .load()
     ) -> Bool {
-        sharedConfig.autoDispatchReadOnly ?? true
+        sharedConfig.autoDispatchReadOnly ?? false
     }
 
     /// Run the preflight for this turn if it applies, and fold the report into
