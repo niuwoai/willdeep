@@ -7,7 +7,7 @@
 //
 //    - dispatchAgentMessage
 //    - prepareImagesForTextOnlyProvider / describe helpers
-//    - consumeNextQueuedMessageIfNeeded / clearAgentConversation
+//    - consumeNextQueuedMessageIfNeeded
 //    - tool-call approve / deny / always-allow / confirm / answer
 //    - awaitToolDecision continuation + appendToolMessage
 //    - runAgentLoop async streaming loop
@@ -28,7 +28,9 @@
 //  and the serial tool-decision handoff — lives in
 //  AppStateAgentLoopToolBatching.swift; the background-job completion
 //  notice lives in AppStateAgentBackgroundJobNotices.swift and the
-//  media-task one in AppStateAgentMediaTaskNotices.swift.
+//  media-task one in AppStateAgentMediaTaskNotices.swift. Conversation reset,
+//  context-runway handoff, and terminal-reveal lifecycle helpers live in
+//  AppStateAgentLoopLifecycle.swift.
 //
 
 import AppKit
@@ -337,87 +339,24 @@ extension AppState {
                         break
                     }
                 }
+                // The serial preflight (when enabled) already delivered its
+                // findings above. Otherwise a read-only route gets its scout
+                // in parallel with the first provider request: the root model
+                // streams immediately and reads the report at a tool boundary.
+                if codingPlan == nil {
+                    self.startSpeculativeScoutIfEligible(
+                        for: runtime,
+                        requestText: text,
+                        configuration: configuration,
+                        userMessageID: userMessage.id
+                    )
+                }
             }
             await self.runAgentLoop(
                 for: runtime,
                 configuration: configuration,
                 providerSlotClaimID: providerSlotClaim.id,
                 turnID: turnID
-            )
-        }
-    }
-
-    func clearAgentConversation() {
-        agentRequestTask?.cancel()
-        if let runtime = activeRuntime {
-            for cleanupTask in runtime.stopCleanupTasks.values {
-                cleanupTask.cancel()
-            }
-            runtime.stopCleanupTasks.removeAll()
-            runtime.activeTurnID = nil
-            runtime.activeTurnConfiguration = nil
-            runtime.userStoppedTurnID = nil
-            cancelAllWorkflows(for: runtime)
-            let runtimeID = runtime.id
-            agentSubagentRegistry.cancelAll(forParentRuntime: runtimeID)
-        }
-        agentMessages.removeAll()
-        agentPatchProposals.removeAll()
-        activeRuntime?.clearLocalPanelPreview()
-        agentToolCalls.removeAll()
-        agentQueuedMessages.removeAll()
-        agentPendingImages.removeAll()
-        agentPendingTextAttachments.removeAll()
-        activeRuntime?.latestComputerUseActivity = nil
-        activeRuntime?.clearTurnError()
-        activeRuntime?.cancelToolDecisions(reason: "Conversation cleared")
-        activeRuntime?.pendingToolDecisions.removeAll()
-        isAgentResponding = false
-        agentTurnStartedAt = nil
-        persistActiveAgentSession()
-    }
-
-    /// Stable local key for a runtime's workspace, mirroring
-    /// `AgentSession.workspaceSidebarGroupKey` but from the live runtime
-    /// location. Fed only to `AgentWorkspaceIdentityStore` for local UUID
-    /// lookup — never transmitted.
-    // Not `private`: WorkflowEngine wiring in AppStateAgentWorkflows.swift builds
-    // the same some.im context and needs this key.
-    static func managedWorkspaceKey(for runtime: AgentRuntime) -> String {
-        if let sidebarWorkspaceRootPath = runtime.session.sidebarWorkspaceRootPath,
-           !sidebarWorkspaceRootPath.isEmpty {
-            return sidebarWorkspaceRootPath
-        }
-        let location = runtime.workspaceLocation ?? runtime.workspaceRootPath.map { .local(path: $0) }
-        switch location {
-        case .local(let path):
-            return path.isEmpty ? AgentSession.noWorkspaceSidebarGroupKey : path
-        case .remote(let runtimeID, let path):
-            return "remote:\(runtimeID.uuidString):\(RemotePathValidator.normalizedWorkspaceRoot(path))"
-        case .none:
-            return AgentSession.noWorkspaceSidebarGroupKey
-        }
-    }
-
-    /// Ends a turn that stopped for context runway.
-    ///
-    /// Plan/Goal auto-continuation must not immediately undo the ordered stop,
-    /// but any honest status block the handover carried is still ingested. The
-    /// turn-level defer then force-compresses and, if the resume ceiling
-    /// allows, hands the work back to the model on its own.
-    @MainActor
-    private func concludeContextRunwayHandoff(
-        for runtime: AgentRuntime,
-        finishReason: String?
-    ) {
-        if runtime.contextRunwayResumeCount < AgentContextRunwayPolicy.maximumAutomaticResumes {
-            runtime.pendingContextRunwayResume = true
-        }
-        _ = captureAgentPlanFromLatestMessage(for: runtime)
-        if runtime.interactionMode == .goal {
-            _ = captureAgentGoalEvaluationFromLatestMessage(
-                for: runtime,
-                finishReason: finishReason
             )
         }
     }
@@ -447,9 +386,34 @@ extension AppState {
                 hasAPIKey: !configuration.apiKey.isEmpty
             )
         )
+        // Local turn-timing probe. A background wake-up mints a fresh turn id
+        // and therefore a fresh probe; `turnStartedAt` was stamped at dispatch
+        // (or at the wake-up), so the pre-stream span includes routing, the
+        // optional preflight and prompt assembly.
+        if runtime.currentTurnTiming?.turnID != turnID {
+            runtime.currentTurnTiming = AgentTurnTimingProbe(
+                sessionID: runtime.id,
+                turnID: turnID,
+                dispatchedAt: runtime.turnStartedAt ?? Date(),
+                providerID: configuration.providerID,
+                model: configuration.model,
+                routeProfileID: runtime.currentTurnRouteDecision?.profileID,
+                routeConfidence: runtime.currentTurnRouteDecision?.confidence,
+                delegationPolicy: runtime.currentTurnDelegationPolicy.rawValue
+            )
+        }
         var shouldResumePendingEventsAtTurnEnd = true
         defer {
             AgentTelemetry.recordTurnFinished(turnTelemetry)
+            // The parallel scout belongs to this turn: cancel it if it is
+            // still running, drop an undelivered report, then write the
+            // turn's timing line. Runs before the wake-up probes below so a
+            // scout can never be mistaken for pending background work.
+            finalizeTurnTiming(
+                for: runtime,
+                turnID: turnID,
+                outcome: String(describing: turnTelemetry.status)
+            )
             // Any event still leased here was not acknowledged by a completed
             // provider request. Put it back before the final wakeup probe so a
             // cancellation, transport failure, or host preemption can retry in
@@ -585,7 +549,13 @@ extension AppState {
                 conversationSummary: runtime.contextSummary
             )
             let judgeClient = AgentClient(configuration: configuration, someIMContext: someIMContext)
-            let hasCodingPlan = await refreshedSomeIMCodingPlanStatusIfNeeded().isActiveNow
+            // Routing must never wait on the account control plane. The
+            // launch timer owns refreshes; a stale value is still a better
+            // latency trade than blocking the first provider request.
+            let hasCodingPlan = someIMCodingPlanStatus.isActiveNow
+            if someIMCodingPlanStatus.isStale {
+                refreshSomeIMCodingPlanStatus(force: false)
+            }
             let resolution = await SomeIMManagedRouting.route(
                 input: judgeInput,
                 floor: floor,
@@ -677,12 +647,9 @@ extension AppState {
         let remoteRuntimeDescriptor: RuntimeDescriptor? = workspaceLocation?.remoteRuntimeID.flatMap {
             AgentRuntimeStore.descriptor(id: $0)
         }
-        let turnBaselineSnapshot = await Self.loadAgentWorktreeSnapshot(
+        async let turnBaselineSnapshotTask = Self.loadAgentWorktreeSnapshot(
             for: workspaceURL
         )
-        if workspaceURL != nil {
-            runtime.worktreeChanges = turnBaselineSnapshot.changes.filtering(paths: runtime.agentEditedPaths)
-        }
         let memoryState = AgentMemoryState()
         defer {
             captureTurnEndLearning(
@@ -717,6 +684,13 @@ extension AppState {
             settings: memoryState.settings,
             rootDirectory: workspaceURL
         )
+        // Git status and memory retrieval are independent. Let the subprocess
+        // run while the host scores local memories instead of serializing both
+        // ahead of the first provider request.
+        let turnBaselineSnapshot = await turnBaselineSnapshotTask
+        if workspaceURL != nil {
+            runtime.worktreeChanges = turnBaselineSnapshot.changes.filtering(paths: runtime.agentEditedPaths)
+        }
 
         // Managed-routing output quality caps its escalation at one retry per
         // user turn (design doc §"重试限制").
@@ -884,6 +858,13 @@ extension AppState {
                 )
             }
 
+            // The turn's own parallel scout reports through here too — never
+            // through the registry's pending-report queue, so it can never
+            // wake this runtime once the turn has ended.
+            if let scoutReport = takeSpeculativeScoutReportIfReady(for: runtime) {
+                runtime.messages.append(AgentMessage(role: .system, content: scoutReport))
+            }
+
             // 1.84.0-rc1: drain `show_widget` queue the same way. Each
             // queued AgentWidget becomes a `.widget` message; the card
             // view renders it inline in the transcript and the LLM
@@ -914,7 +895,7 @@ extension AppState {
             // repository lease. This is intentionally per model round, not
             // per user turn: edits from earlier tools in the same turn become
             // the next round's legitimate baseline.
-            let roundWorkspaceRevision = await AgentWorkspaceRevisionCapture.capture(for: workspaceURL)
+            async let roundWorkspaceRevisionTask = AgentWorkspaceRevisionCapture.capture(for: workspaceURL)
 
             let assistantMessage = AgentMessage(
                 role: .assistant,
@@ -1173,6 +1154,10 @@ extension AppState {
                 }
             }
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
+            // Capture starts at the round boundary but joins only after prompt
+            // assembly, preserving the guarded-mutation CAS point without
+            // putting the Git subprocess wholly on the critical path.
+            let roundWorkspaceRevision = await roundWorkspaceRevisionTask
 
             var finishReason: String?
             var latestToolCalls: [AgentMessageToolCall] = []
@@ -1181,6 +1166,7 @@ extension AppState {
             do {
                 var retryCount = 0
                 turnTelemetry.noteRequestStarted()
+                runtime.currentTurnTiming?.noteRequestSent()
                 while true {
                     do {
                         try await client.streamChat(
@@ -1196,11 +1182,13 @@ extension AppState {
                                 case .textDelta(let delta):
                                     if !delta.isEmpty, runtime.messages[index].firstResponseSeconds == nil {
                                         runtime.messages[index].firstResponseSeconds = Date().timeIntervalSince(turnStartedAt)
+                                        runtime.currentTurnTiming?.noteFirstToken()
                                     }
                                     streamBuffer.appendTextDelta(delta)
                                 case .reasoningDelta(let delta):
                                     if !delta.isEmpty, runtime.messages[index].firstResponseSeconds == nil {
                                         runtime.messages[index].firstResponseSeconds = Date().timeIntervalSince(turnStartedAt)
+                                        runtime.currentTurnTiming?.noteFirstToken()
                                     }
                                     streamBuffer.appendReasoningDelta(delta)
                                 case .toolCallsUpdated(let calls):
@@ -1708,6 +1696,7 @@ extension AppState {
             }
 
             // Execute every tool call, gating on the user when necessary.
+            runtime.currentTurnTiming?.noteToolBoundary()
             var anyDenied = false
             var changedWorkspacePath: String?
             // Git status refreshes are coalesced: instead of one blocking
@@ -2055,6 +2044,11 @@ extension AppState {
             // were appended during staging, so collection here only defers
             // execution — order in `runtime.toolCalls` is already fixed.
             var pendingParallelReads: [AgentPendingParallelRead] = []
+            // Foreground read-only workers are turn-owned just like ordinary
+            // read tools. Run consecutive spawns together, but defer their
+            // tool messages until every result is ready so provider history
+            // retains the model's original call order.
+            var pendingParallelSpawns: [AgentPendingParallelSpawn] = []
             // Shared AgentToolContext builder for the concurrent read batch
             // and the serial path below. Captures this round's workspace
             // binding plus the `changedWorkspacePath` slot the
@@ -2240,6 +2234,28 @@ extension AppState {
                     }
                 }
 
+                let isParallelForegroundReadOnlySpawn = changedWorkspacePath == nil
+                    && call.toolName == "spawn_agent"
+                    && risk == .read
+                    && argsDict["run_in_background"]?.boolValue() != true
+                    && runtime.currentTurnDelegationPolicy != .forbidden
+
+                // A write worker, interactive tool, or ordinary read marks a
+                // hard ordering boundary. Finish the preceding read-only
+                // workers before allowing that call to run.
+                if !isParallelForegroundReadOnlySpawn,
+                   await executeParallelSpawnBatch(
+                       &pendingParallelSpawns,
+                       runtime: runtime,
+                       configuration: turnConfiguration,
+                       workspaceURL: workspaceURL,
+                       runtimeDescriptor: remoteRuntimeDescriptor,
+                       workspaceLocation: workspaceLocation
+                   ) {
+                    settleUnexecutedStagedCalls(from: stagedIndex, reason: "Response stopped")
+                    return
+                }
+
                 // Fan out consecutive read-tier calls instead of paying each
                 // one serially. Only whitelisted pure local workspace reads
                 // qualify: they always auto-run (`.read` never awaits an
@@ -2278,6 +2294,18 @@ extension AppState {
                 if await executeParallelReadBatch(&pendingParallelReads, runtime: runtime) {
                     settleUnexecutedStagedCalls(from: stagedIndex, reason: "Response stopped")
                     return
+                }
+
+                if isParallelForegroundReadOnlySpawn {
+                    pendingParallelSpawns.append(
+                        AgentPendingParallelSpawn(
+                            call: call,
+                            arguments: argsDict,
+                            recordID: recordID,
+                            messageBuffer: AgentSpawnToolMessageBuffer()
+                        )
+                    )
+                    continue
                 }
 
                 // A successful workspace rebind invalidates the root captured
@@ -2901,6 +2929,16 @@ extension AppState {
             if await executeParallelReadBatch(&pendingParallelReads, runtime: runtime) {
                 return
             }
+            if await executeParallelSpawnBatch(
+                &pendingParallelSpawns,
+                runtime: runtime,
+                configuration: turnConfiguration,
+                workspaceURL: workspaceURL,
+                runtimeDescriptor: remoteRuntimeDescriptor,
+                workspaceLocation: workspaceLocation
+            ) {
+                return
+            }
 
             // A round ending with file edits has no following non-patch tool
             // to create the review boundary. Wait here after every adjacent
@@ -2946,40 +2984,6 @@ extension AppState {
 
         runtime.errorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
         runtime.errorDetails = nil
-    }
-
-    /// Make Agent-driven terminal mutations observable before dispatch.
-    /// Background conversations also reveal the shared Terminal panel in the
-    /// conversation the user is currently viewing, without switching chats,
-    /// so no command/control activity runs behind a hidden panel.
-    @discardableResult
-    func revealTerminalPanelForToolExecution(
-        toolName: String,
-        runtime: AgentRuntime,
-        now: Date = Date()
-    ) -> Bool {
-        guard AgentTerminalAutomationPolicy.requiresVisiblePanel(toolName: toolName) else {
-            return false
-        }
-
-        let canRevealPanel = activeRuntime != nil
-        if canRevealPanel {
-            agentSidePanelKind = .terminal
-            agentSidePanelRequest = AgentSidePanelOpenRequest(kind: .terminal)
-        }
-
-        if let activeTerminal = agentTerminalController.activeTab,
-           activeTerminal.originAgentSessionID == runtime.id {
-            _ = openPanelTab(for: activeTerminal, runtime: runtime)
-        } else {
-            _ = openPanelTab(.terminal, runtime: runtime)
-        }
-        var sidePanelState = runtime.sidePanelState
-        sidePanelState.lastViewedAt = now
-        runtime.sidePanelState = sidePanelState
-        persistAgentSidePanelState(runtime: runtime)
-
-        return canRevealPanel
     }
 
 }

@@ -52,9 +52,9 @@ nonisolated struct AgentWorkspaceFileSearchTests {
         #expect(AgentWorkspaceFileSearch.search(root: root, query: "hidden.swift").isEmpty)
     }
 
-    @Test("Worker 候选不会遮住原有工作区与文件候选")
+    @Test("Worker 候选排在工作区与文件候选之前")
     @MainActor
-    func contextEntriesStayAheadOfWorkers() {
+    func workerEntriesLeadContext() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-at-order")
         let context: [AtPickerEntry] = [
             .workspace,
@@ -64,8 +64,16 @@ nonisolated struct AgentWorkspaceFileSearchTests {
             .worker(id: "generalist", name: "通用工具", purpose: "General utility"),
         ]
 
-        let ordered = AtPickerEntry.contextFirst(context, workers: workers)
+        let ordered = AtPickerEntry.workersFirst(context, workers: workers)
 
-        #expect(ordered.map(\.id) == ["@workspace", "file:/tmp/willdeep-at-order/README.md", "worker:generalist"])
+        #expect(ordered.map(\.id) == ["worker:generalist", "@workspace", "file:/tmp/willdeep-at-order/README.md"])
+    }
+
+    @Test("@ 菜单默认列表高度最多展示六行")
+    func atMenuUsesExpandedHeight() {
+        #expect(ComposerPaletteLayout.atListHeight(entryCount: 3) == 126)
+        #expect(ComposerPaletteLayout.atListHeight(entryCount: 6) == 252)
+        #expect(ComposerPaletteLayout.atListHeight(entryCount: 30) == 252)
+        #expect(ComposerPaletteLayout.atListHeight(entryCount: 100) == 252)
     }
 }

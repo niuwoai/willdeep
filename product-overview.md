@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-03 | Current version: v1.317.0-rc8
+> Last updated: 2026-09-03 | Current version: v1.319.0-rc3
 
 ## Positioning
 
@@ -18,6 +18,10 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **投机 Worker 可见性、模型驻留与只读审核收口（1.319.0-rc3）** —— 并行 scout 以回合自持的 run ID 和实时活动进入舰队面板并保存可检查 transcript，但不注册为后台 Worker，也不产生回合后唤醒。Ollama 判路请求结束后异步恢复 10 分钟或永久驻留。静态只读的 `ops_runner.target_command` 不再升级成写审批；全局 Git 配置查询在隔离 HOME 下通过精确 `GIT_CONFIG_GLOBAL` 读取真实配置，不继承 SSH、Token 或写权限。
+- **Worker 判路输入隔离与 `@` 菜单修正（1.319.0-rc2）** —— 自动分类只读取附件协议边界后的用户原文；宿主生成的 Skill 候选、文件内容和工作区说明仅供模型参考，不再以其中的“部署”等词改变 Worker 工种。`@` 菜单先列 Worker、再列工作区和文件，默认长列表拥有六行（252pt）的实际可视高度。
+- **同轮 Worker 并行与首字路径收口（1.319.0-rc1）** —— 同一模型轮中的前台只读 `spawn_agent` 最多五路并发，结果仍按工具调用原序回填；写入与后台 Worker 不改变既有串行和唤醒语义。some.im 套餐刷新移出首字阻塞路径，托管裁判以 8 秒为上限并按 floor 回退；Git 快照与提示组装重叠执行，共享 `config.toml` 按 mtime 缓存。Worker 计时行新增实际内联文件数和字符数，便于持续校准任务包质量。
+- **并行 scout、Worker 计时日志与本地模型常驻（1.318.0-rc1）** —— 高置信只读请求在主模型首个请求发出的同时启动只读 Worker，报告在本回合下一个工具边界以系统消息交付，回合先结束则取消或丢弃，绝不在回合后唤醒主 Agent；`/no-subagent`、点名 `@Worker` 与显式串行预检优先，共享配置 `agent.speculative_scout` 可关闭。每个 Worker 运行与每个主回合的计时（派发→请求发出→首字→首个工具边界→结束）追加写入本地 `AgentAudit/worker-timing.jsonl`。“本地辅助模型”新增“启动 WillDeep 时预热 LLM 模型并常驻内存”开关；判路探针与预热改走无代理 loopback 会话并对不可达的 Ollama 做 60 秒负缓存。
 - **Worker 首字延迟优化（1.317.0-rc8）** —— 常规实现不再额外调用判路模型，只有真正含糊的通用请求才交给已驻留的本地 Ollama 补判；冷模型以短探针识别后在后台去重预热，本轮直接走关键词，不调用远程会话模型。串行只读预检默认关闭，普通自动路由只作建议，小型单责任任务可由主 Agent 直接完成；显式 `/subagent`、`@Worker` 和生产运维仍强制先委派。
 
 - **Worker 完全访问权限继承修复（1.317.0-rc7）** —— 原生 Worker 与 Codex/Claude 等委派执行器不再为静态只读终端命令创建审批卡；写入与普通高风险动作在“完全访问”下复用父会话的统一授权结果，主 Agent 与 Worker 不再出现同命令两套权限语义。确定性恶意命令、环境信任声明、敏感会话管理以及需要用户作答的工具仍不可被完全访问代答或绕过。

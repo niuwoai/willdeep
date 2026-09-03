@@ -28,6 +28,43 @@
 import Foundation
 
 nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
+    private final class LoadCache: @unchecked Sendable {
+        struct Signature: Equatable {
+            let modifiedAt: Date?
+            let fileSize: Int?
+        }
+
+        struct Entry {
+            let signature: Signature
+            let config: AgentSharedRuntimeConfig
+        }
+
+        private let lock = NSLock()
+        private var entries: [URL: Entry] = [:]
+
+        func value(
+            for url: URL,
+            reader: (URL) throws -> String
+        ) -> AgentSharedRuntimeConfig {
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+            let signature = Signature(modifiedAt: values?.contentModificationDate, fileSize: values?.fileSize)
+            lock.lock()
+            defer { lock.unlock() }
+            if let entry = entries[url], entry.signature == signature {
+                return entry.config
+            }
+            guard let text = try? reader(url) else {
+                let empty = AgentSharedRuntimeConfig()
+                entries[url] = Entry(signature: signature, config: empty)
+                return empty
+            }
+            let config = AgentSharedRuntimeConfig.parse(text)
+            entries[url] = Entry(signature: signature, config: config)
+            return config
+        }
+    }
+
+    private static let loadCache = LoadCache()
     /// `agent.small_model_routing` — whether the runtime classifies requests
     /// and steers bounded work toward a trade. Absent means "not configured".
     var smallModelRouting: Bool?
@@ -36,6 +73,14 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
     /// keeps an absent value off for first-token latency; an explicit true
     /// enables the serial preflight for large-repository workflows.
     var autoDispatchReadOnly: Bool?
+    /// `agent.speculative_scout` — whether a high-confidence read-only request
+    /// starts its routed read-only worker *in parallel* with the root model
+    /// instead of before it. The report lands at the next tool boundary and
+    /// the worker is cancelled when the turn ends first. Absent means on;
+    /// `false` turns the parallel scout off. WillDeep-only for now; documented
+    /// in docs/SMALL_MODEL_FIRST_RUNTIME_PLAN.md §6 so willdeep-rs can adopt
+    /// the same key.
+    var speculativeScout: Bool?
     /// `agent.max_deep_calls_per_harness` — the 1M-tier admission budget. The
     /// rs name says "harness"; WillDeep applies it per session, which is the
     /// closest equivalent unit it has.
@@ -44,12 +89,10 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
     static let sectionName = "agent"
 
     static func load(
-        from url: URL = AgentAttentionPreferencesStore.defaultConfigURL()
+        from url: URL = AgentAttentionPreferencesStore.defaultConfigURL(),
+        reader: (URL) throws -> String = { try String(contentsOf: $0, encoding: .utf8) }
     ) -> AgentSharedRuntimeConfig {
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
-            return AgentSharedRuntimeConfig()
-        }
-        return parse(text)
+        loadCache.value(for: url.standardizedFileURL, reader: reader)
     }
 
     /// Line-oriented, matching how `[notifications]` is already read. A real
@@ -84,6 +127,7 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
         var config = AgentSharedRuntimeConfig()
         config.smallModelRouting = values["small_model_routing"].flatMap(parseBool)
         config.autoDispatchReadOnly = values["auto_dispatch_read_only"].flatMap(parseBool)
+        config.speculativeScout = values["speculative_scout"].flatMap(parseBool)
         config.maxDeepCallsPerHarness = values["max_deep_calls_per_harness"].flatMap { Int($0) }
         return config
     }

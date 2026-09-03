@@ -49,7 +49,7 @@ extension AppState {
         runtime.currentTurnRouteSteering = merged.steering(
             for: runtime.currentTurnDelegationPolicy
         )
-        Self.workerRoutingLog.info(
+        Self.workerRoutingLog.notice(
             """
             routing model overrode keyword verdict: \
             keyword=\(keyword.profileID ?? "none", privacy: .public) \
@@ -73,7 +73,7 @@ extension AppState {
                 runtimeID: runtimeID
             )
             guard let verdict = AgentWorkerRoutingModel.parseVerdict(raw) else {
-                Self.workerRoutingLog.info(
+                Self.workerRoutingLog.notice(
                     "routing model returned an unusable reply; model=\(configuration.model, privacy: .public)"
                 )
                 return nil
@@ -82,7 +82,7 @@ extension AppState {
         } catch is CancellationError {
             return nil
         } catch {
-            Self.workerRoutingLog.info(
+            Self.workerRoutingLog.notice(
                 """
                 routing model call failed; model=\(configuration.model, privacy: .public) \
                 error=\(String(describing: type(of: error)), privacy: .public)
@@ -107,6 +107,13 @@ extension AppState {
         ]
         let collector = AgentTextCollector()
         let measurement = AgentAuxiliaryRequestMeasurement()
+        let keepAlive = AgentLocalModelRoutingReadiness.routingKeepAlive(
+            warmOnLaunchAndKeepResident: AgentSettingsStore
+                .loadLocalModelSettings()
+                .warmOnLaunchAndKeepResident
+        )
+        let baseURL = normalized.baseURL
+        let model = normalized.model
         let work = Task {
             try await AgentClient(configuration: normalized)
                 .streamChat(messages: messages) { event in
@@ -120,7 +127,19 @@ extension AppState {
             try await Task.sleep(nanoseconds: UInt64(AgentWorkerRoutingModel.timeout * 1_000_000_000))
             work.cancel()
         }
-        defer { timeoutTask.cancel() }
+        defer {
+            timeoutTask.cancel()
+            // Ollama's OpenAI-compatible endpoint resets residency to its
+            // five-minute default. Restore the lazy 10-minute window (or
+            // permanent residency) out of band so routing adds no new wait.
+            Task.detached(priority: .utility) {
+                _ = await AgentLocalModelResidency.shared.assertResident(
+                    baseURL: baseURL,
+                    model: model,
+                    keepAlive: keepAlive
+                )
+            }
+        }
         do {
             try await work.value
             recordAuxiliaryModelRequest(

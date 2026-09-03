@@ -19,6 +19,7 @@ struct AgentSharedRuntimeConfigTests {
     language = "zh-Hans"
     small_model_routing = true
     auto_dispatch_read_only = false
+    speculative_scout = false
     max_deep_calls_per_harness = 2   # keep the 1M tier rare
     safety_judge = true
 
@@ -35,6 +36,7 @@ struct AgentSharedRuntimeConfigTests {
 
         #expect(config.smallModelRouting == true)
         #expect(config.autoDispatchReadOnly == false)
+        #expect(config.speculativeScout == false)
         // Trailing inline comment must not become part of the number.
         #expect(config.maxDeepCallsPerHarness == 2)
     }
@@ -74,6 +76,7 @@ struct AgentSharedRuntimeConfigTests {
         // values the user never wrote.
         #expect(config.smallModelRouting == nil)
         #expect(config.autoDispatchReadOnly == nil)
+        #expect(config.speculativeScout == nil)
         #expect(config.maxDeepCallsPerHarness == nil)
     }
 
@@ -81,8 +84,32 @@ struct AgentSharedRuntimeConfigTests {
     func missingFileIsEmpty() {
         let missing = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("willdeep-\(UUID().uuidString)/config.toml")
+        var reads = 0
+        let reader: (URL) throws -> String = { fileURL in
+            reads += 1
+            return try String(contentsOf: fileURL, encoding: .utf8)
+        }
 
-        #expect(AgentSharedRuntimeConfig.load(from: missing) == AgentSharedRuntimeConfig())
+        #expect(AgentSharedRuntimeConfig.load(from: missing, reader: reader) == AgentSharedRuntimeConfig())
+        #expect(AgentSharedRuntimeConfig.load(from: missing, reader: reader) == AgentSharedRuntimeConfig())
+        #expect(reads == 1)
+    }
+
+    @Test("unchanged config.toml is read once and served from the mtime cache")
+    func unchangedFileUsesLoadCache() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-config-\(UUID().uuidString).toml")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data("[agent]\nspeculative_scout = false\n".utf8).write(to: url)
+        var reads = 0
+        let reader: (URL) throws -> String = { fileURL in
+            reads += 1
+            return try String(contentsOf: fileURL, encoding: .utf8)
+        }
+
+        #expect(AgentSharedRuntimeConfig.load(from: url, reader: reader).speculativeScout == false)
+        #expect(AgentSharedRuntimeConfig.load(from: url, reader: reader).speculativeScout == false)
+        #expect(reads == 1)
     }
 
     // MARK: Precedence

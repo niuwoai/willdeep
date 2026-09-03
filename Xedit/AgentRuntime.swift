@@ -334,6 +334,15 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// removes `spawn_agent` from this turn's tool table; `.required` only
     /// injects an instruction (see `AgentDelegationPolicy`).
     var currentTurnDelegationPolicy: AgentDelegationPolicy = .automatic
+    /// Wall-clock anchors of the turn in flight, folded into one line of the
+    /// local worker-timing log when the turn ends. Keyed by turn id so a
+    /// background wake-up that mints a fresh turn gets a fresh probe.
+    var currentTurnTiming: AgentTurnTimingProbe?
+    /// The read-only worker started in parallel with this turn's first
+    /// provider request, if any. Owned by the turn: its report is only ever
+    /// injected at one of this turn's tool boundaries and it is cancelled
+    /// when the turn ends. Never touches the background wake-up channels.
+    var speculativeScout: AgentSpeculativeScout?
     /// Policy staged by a slash command for the *next* dispatch. Consumed
     /// (and reset) by `dispatchAgentMessage`, or carried into the queued
     /// message when the runtime is still responding.

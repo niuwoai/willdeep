@@ -2022,6 +2022,12 @@ enum AgentToolRegistry {
             // 的正是那条命令本身（等同在主会话批准一条 write 命令）。
             if let command = arguments["target_command"]?.stringValue(),
                !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let commandDecision = AgentSandboxPolicy.commandDecision(
+                    command: command,
+                    rootDirectory: rootDirectory,
+                    additionalWorkspaceRoots: additionalWorkspaceRoots
+                )
+                if commandDecision.risk == .read { return .read }
                 return .write
             }
             return .read

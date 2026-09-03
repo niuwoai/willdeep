@@ -45,15 +45,29 @@ extension AppState {
         }
     }
 
+    /// `recordsTiming` is false only for the parallel scout, whose timing line
+    /// is written once its delivery outcome is known rather than at finish.
     func finishHostWorkerRun(
         _ id: UUID,
         status: AgentHostWorkerRunRecord.Status,
         outcome: AgentSubagentRunner.Outcome? = nil,
-        runtime: AgentRuntime
+        runtime: AgentRuntime,
+        recordsTiming: Bool = true
     ) {
+        let finishedAt = Date()
+        defer {
+            if recordsTiming,
+               let record = runtime.session.hostWorkerRuns?.first(where: { $0.id == id }) {
+                AgentWorkerTimingLog.record(AgentWorkerTimingLog.WorkerRunEntry(
+                    hostRecord: record,
+                    sessionID: runtime.id,
+                    finishedAt: finishedAt
+                ))
+            }
+        }
         updateHostWorkerRun(id, runtime: runtime) { record in
             record.status = status
-            record.finishedAt = Date()
+            record.finishedAt = finishedAt
             guard let outcome else { return }
             record.usage = AgentSubagentRunUsage(
                 profileID: record.profileID,

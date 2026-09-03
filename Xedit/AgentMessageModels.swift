@@ -547,6 +547,10 @@ nonisolated struct AgentHostWorkerRunRecord: Identifiable, Codable, Equatable, S
         case automaticCoding
         case automaticCodingEscalation
         case automaticCodingReview
+        /// Read-only worker started in parallel with the root model's first
+        /// request; its report is injected at a tool boundary of the same
+        /// turn or dropped when the turn ends first.
+        case speculativeScout
     }
 
     enum Status: String, Codable, Equatable, Sendable {

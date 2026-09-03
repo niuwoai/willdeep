@@ -186,7 +186,13 @@ nonisolated enum AgentRequestRouter {
 
     /// Classify a request. Pure and cheap — no I/O, no model call.
     static func classify(_ request: String) -> Decision {
-        let sample = String(request.prefix(classifiedPrefixLength)).lowercased()
+        // Composer context is model input, not operator intent. Skill/file
+        // metadata can contain words such as "部署" or "生产环境" and used to
+        // steal the route before the user's actual sentence was considered.
+        // The attached-prompt protocol already has an unambiguous boundary;
+        // reuse its parser so only text authored by the operator gets a vote.
+        let operatorText = AgentAttachedPromptDisplay.transform(request).userAuthoredText
+        let sample = String(operatorText.prefix(classifiedPrefixLength)).lowercased()
         let mutating = contains(sample, mutatingMarkers)
 
         if contains(sample, terminalMarkers) {

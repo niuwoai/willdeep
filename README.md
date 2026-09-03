@@ -12,7 +12,7 @@ WillDeep 是开源、原生的 macOS Agent Runtime。它把会话当作彼此隔
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.317.0--rc8-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.319.0--rc3-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/niuwoai/willdeep?style=social)](https://github.com/niuwoai/willdeep/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/niuwoai/willdeep?style=social)](https://github.com/niuwoai/willdeep/forks)
@@ -296,7 +296,7 @@ WillDeep is an open-source, native Agent Runtime for macOS. It treats sessions a
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.317.0--rc8-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.319.0--rc3-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/niuwoai/willdeep?style=social)](https://github.com/niuwoai/willdeep/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/niuwoai/willdeep?style=social)](https://github.com/niuwoai/willdeep/forks)

@@ -6068,31 +6068,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The LLM model handles local chat, session titles, context compression, and Worker routing decisions; the vision model is used only for image understanding. Only ambiguous requests consult an already loaded local LLM. Cold models warm in the background while the current turn keeps the keyword route. When disabled, routing also stays keyword-only and never calls the remote session model."
+            "value" : "The LLM model handles local chat, session titles, context compression, and Worker routing decisions; the vision model is used only for image understanding. Only ambiguous requests consult an already loaded local LLM. Cold models warm in the background while the current turn keeps the keyword route. When disabled, routing also stays keyword-only and never calls the remote session model. Routing decisions support local Ollama only."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "El modelo LLM se usa para el chat local, los títulos de sesión, la compresión de contexto y las decisiones de enrutamiento de Worker; el modelo de visión solo procesa imágenes. Solo las solicitudes ambiguas consultan un LLM local ya cargado. Los modelos fríos se precalientan en segundo plano mientras el turno actual conserva la ruta por palabras clave. Si se desactiva, el enrutamiento también usa solo palabras clave y nunca llama al modelo remoto de la sesión."
+            "value" : "El modelo LLM se usa para el chat local, los títulos de sesión, la compresión de contexto y las decisiones de enrutamiento de Worker; el modelo de visión solo procesa imágenes. Solo las solicitudes ambiguas consultan un LLM local ya cargado. Los modelos fríos se precalientan en segundo plano mientras el turno actual conserva la ruta por palabras clave. Si se desactiva, el enrutamiento también usa solo palabras clave y nunca llama al modelo remoto de la sesión. Las decisiones de enrutamiento solo admiten Ollama local."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le modèle LLM gère le chat local, les titres de session, la compression du contexte et les décisions de routage Worker ; le modèle de vision sert uniquement à comprendre les images. Seules les requêtes ambiguës consultent un LLM local déjà chargé. Les modèles froids sont préchauffés en arrière-plan tandis que le tour courant conserve le routage par mots-clés. Si l’option est désactivée, le routage reste également limité aux mots-clés et n’appelle jamais le modèle distant de la session."
+            "value" : "Le modèle LLM gère le chat local, les titres de session, la compression du contexte et les décisions de routage Worker ; le modèle de vision sert uniquement à comprendre les images. Seules les requêtes ambiguës consultent un LLM local déjà chargé. Les modèles froids sont préchauffés en arrière-plan tandis que le tour courant conserve le routage par mots-clés. Si l’option est désactivée, le routage reste également limité aux mots-clés et n’appelle jamais le modèle distant de la session. Les décisions de routage ne prennent en charge qu’Ollama en local."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "LLM モデルはローカルチャット、セッションタイトル、コンテキスト圧縮、Worker の振り分け判断に使用し、画像理解モデルは画像処理だけに使用します。曖昧な要求だけが、すでに読み込まれているローカル LLM に問い合わせます。コールドモデルはバックグラウンドで予熱し、現在のターンはキーワード判定をそのまま使います。オフの場合もキーワード判定だけを使い、セッションのリモートモデルは呼び出しません。"
+            "value" : "LLM モデルはローカルチャット、セッションタイトル、コンテキスト圧縮、Worker の振り分け判断に使用し、画像理解モデルは画像処理だけに使用します。曖昧な要求だけが、すでに読み込まれているローカル LLM に問い合わせます。コールドモデルはバックグラウンドで予熱し、現在のターンはキーワード判定をそのまま使います。オフの場合もキーワード判定だけを使い、セッションのリモートモデルは呼び出しません。振り分け判断はローカルの Ollama のみ対応です。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "LLM 模型用于本地聊天、会话标题、上下文压缩和 Worker 派发判断；图片理解模型只处理图片。只有含糊请求会询问已驻留的本地 LLM；冷模型后台预热，本轮直接走关键词。关闭后也直接走关键词，不调用会话远程模型。"
+            "value" : "LLM 模型用于本地聊天、会话标题、上下文压缩和 Worker 派发判断；图片理解模型只处理图片。只有含糊请求会询问已驻留的本地 LLM；冷模型后台预热，本轮直接走关键词。关闭后也直接走关键词，不调用会话远程模型。派发判断仅支持本机 Ollama。"
           }
         }
       }
@@ -6128,6 +6128,76 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "图片理解模型"
+          }
+        }
+      }
+    },
+    "settings.local-model.warm-on-launch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warm the LLM model at WillDeep launch and keep it resident"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Precalentar el modelo LLM al iniciar WillDeep y mantenerlo residente"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Préchauffer le modèle LLM au lancement de WillDeep et le garder résident"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WillDeep 起動時に LLM モデルを予熱し、メモリに常駐させる"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动 WillDeep 时预热 LLM 模型并常驻内存"
+          }
+        }
+      }
+    },
+    "settings.local-model.warm-on-launch-hint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When enabled, WillDeep loads the LLM model at launch and renews residency every 4 minutes so Ollama does not unload it after 5 minutes; routing decisions, titles, and compression no longer wait for a cold start. When disabled, Ollama returns to loading on demand. Local Ollama only."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si se activa, WillDeep carga el modelo LLM al iniciar y renueva la residencia cada 4 minutos para que Ollama no lo descargue a los 5 minutos; las decisiones de enrutamiento, los títulos y la compresión ya no esperan un arranque en frío. Si se desactiva, Ollama vuelve a cargar bajo demanda. Solo Ollama local."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une fois activé, WillDeep charge le modèle LLM au lancement et renouvelle la résidence toutes les 4 minutes pour qu’Ollama ne le décharge pas après 5 minutes ; les décisions de routage, les titres et la compression n’attendent plus un démarrage à froid. Désactivé, Ollama revient au chargement à la demande. Ollama local uniquement."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オンにすると、WillDeep は起動時に LLM モデルを読み込み、4 分ごとに常駐を更新して Ollama が 5 分後にアンロードしないようにします。振り分け判断、タイトル、圧縮はコールドスタートを待ちません。オフにすると Ollama は既定のオンデマンド読み込みに戻ります。ローカルの Ollama のみ対応です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启后，WillDeep 启动即加载 LLM 模型，并每 4 分钟续一次驻留，避免 Ollama 5 分钟后卸载；派发判断、标题和压缩不再等待冷启动。关闭后恢复 Ollama 默认的按需加载。仅支持本机 Ollama。"
           }
         }
       }
