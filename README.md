@@ -6,14 +6,18 @@
 
 # WillDeep（中文版）
 
-**macOS 上的原生 Agent 工作台。你交代一件事，它读现场、动手、验证，把改动和证据摆回你面前。**
+**像运行系统服务一样运行 Agent，而不是开一堆聊天框。**
+
+WillDeep 是开源、原生的 macOS Agent Runtime。它把会话当作彼此隔离的任务，把 Worker、终端、后台 Job、Webhook 和审批变成可路由的事件；该唤醒时唤醒，该中断时中断，最后把 Diff、测试和产物交给你验收。
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.317.0--rc4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.317.0--rc5-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/niuwoai/willdeep?style=social)](https://github.com/niuwoai/willdeep/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/niuwoai/willdeep?style=social)](https://github.com/niuwoai/willdeep/forks)
 
-[willdeep.com](https://willdeep.com)
+**[下载 macOS 签名版](https://willdeep.com)** · [3 分钟上手](docs/willdeep-tutorial/01-quick-start.md) · [从源码构建](#从源码编译)
 
 [English](#willdeep) · **简体中文** · [日本語](#willdeep-日本語版)
 
@@ -21,19 +25,58 @@
 
 ---
 
-## 先说一件事：这里已经没有编辑器了
+## Agent 不缺模型，缺的是运行它的系统
 
-从 1.249.0 起，WillDeep 删除了通用编辑器场景——文本/源码文件类型注册、编辑器设置入口、编辑器窗口，全部下线。通用文件编辑交给独立的 **Qeditor**，它有自己的 Bundle ID、沙盒容器、设置和更新通道，不迁移 WillDeep 的数据。
+一次问答很简单。真正的 Agent 任务会持续几分钟甚至更久：它要派 Worker、等命令、接收外部信号、请求审批、从失败中恢复，还不能把两个项目的事件串台。没有生命周期、调度和权限边界，所谓多 Agent 往往只是一排更难盯的聊天窗口。
 
-WillDeep 这边留下的是**只读预览**和 **Diff 审阅**：Agent 改完文件，你在 Diff 面板逐段核对，再决定应用还是拒绝；想手改就用你惯用的编辑器打开。
+WillDeep 借鉴 OS 和 systemd 的机制，把模型放在一个真正能长期运行的宿主里：
 
-这么切是因为两件事的注意力落点不同。编辑器围着文件和光标转，Agent 工作台围着任务、工作区、会话和交付物转。一个 App 兼顾两头，最后哪头都不透。
+- **会话像进程一样隔离**——每个任务拥有自己的工作区、终端、Worker、事件和恢复状态；最多五路 Worker 并行，切走不打断，也不会串台。
+- **事件像信号一样精确投递**——Worker 完成、终端变化、后台 Job、Webhook、邮件和审批进入统一事件内核，只唤醒目标会话；普通事件排队，紧急宿主事件可以在安全边界抢占。
+- **主 Agent 像 `init + systemd + 调度器`**——它不必死盯一个工具调用，而是响应信号、协调 Worker、释放资源、恢复任务，并把需要你的决定送到 Dock 徽标和事件中心。
+- **权限和日志属于系统，不靠模型自觉**——审批、确定性拦截、seatbelt 沙箱、Keychain、持久化事件日志和审计记录共同约束副作用；模型不能给自己提权。
+
+你不必迁移编辑器，也不必押注一个模型。WillDeep 支持 some.im 托管模型、BYOK、自定义 Provider、本地模型，以及 Codex CLI、Claude Code 等外部执行器。
+
+### 这套“Agent OS”具体管什么
+
+| OS / systemd 概念 | WillDeep 中的对应机制 | 你得到什么 |
+| --- | --- | --- |
+| 进程与服务 | 独立会话、最多五路 Worker、后台终端与 Job | 多件事并行推进，互不串台 |
+| 信号与中断 | Runtime 事件信封、排队／边界让出／安全抢占 | 不用轮询盯梢，任务在正确时机醒来 |
+| `init` 与调度器 | 主 Agent 协调 Worker、工具、外部连接器和恢复流程 | 长任务可以持续运行，不靠人肉接力 |
+| 权限边界 | 四档审批、沙箱、凭据隔离与确定性规则 | Agent 能动手，但不能自行扩权 |
+| journal 与状态中心 | 持久化事件、审计、Dock 徽标、Diff、测试和产物 | 发生了什么、谁处理的、结果如何，都能追溯 |
+
+它不是一套新的 macOS，也不是给“Agent OS”换个时髦名字。它是一层专门承载长生命周期 Agent 的运行时与控制面。
+
+## 这不是聊天框，是工作现场
+
+| 从一句目标开始 | 在同一个现场看终端 | 自由选择模型来源 |
+| --- | --- | --- |
+| <img src="docs/willdeep-tutorial/assets/interface/composer-controls.png" alt="WillDeep 任务输入区" /> | <img src="docs/willdeep-tutorial/assets/interface/terminal-panel.png" alt="WillDeep 可见终端" /> | <img src="docs/willdeep-tutorial/assets/interface/model-picker.png" alt="WillDeep 模型选择器" /> |
+
+## 三步开始
+
+1. **安装**：从 [willdeep.com](https://willdeep.com) 下载签名版，或直接 Fork 本仓库从源码构建。
+2. **选择现场**：绑定本地目录、SSH 主机或 `willdeep-agent` daemon，再选择你自己的模型来源。
+3. **描述结果**：告诉它你最终想得到什么；需要决策时它会停下来，完成后你检查 Diff、测试和产物。
+
+**[下载 WillDeep](https://willdeep.com)** · [查看图文教程](docs/willdeep-tutorial/README.md) · [⭐ 关注项目](https://github.com/niuwoai/willdeep) · [🍴 Fork 并改成你的工作台](https://github.com/niuwoai/willdeep/fork)
+
+## 为什么它值得开源
+
+WillDeep 会接触真实代码、命令和凭据。对这类工具，“请相信我们”不够——执行边界应该能被检查。核心代码按 Apache 2.0 开源；你可以审查、构建、Fork，也可以只用自己的模型和 runtime。
 
 ---
 
 ## 它强在哪
 
 下面每一条都是已经落地的机制，不是路线图。
+
+### 它为什么不是另一个编辑器
+
+WillDeep 主动退出了通用编辑器场景。你继续用熟悉的编辑器处理光标和文本；WillDeep 围绕任务、工作区、会话和交付物运转。这里保留只读预览与 **Diff 审阅**：Agent 改完文件，你逐段核对，再决定接受还是拒绝。
 
 ### 会话各跑各的
 
@@ -120,7 +163,7 @@ Git 仓库里还可以直接从输入区的工作区菜单创建、切换和清�
 ### 从源码编译
 
 ```bash
-git clone https://github.com/xurenlu/willdeep.git
+git clone https://github.com/niuwoai/willdeep.git
 cd willdeep
 open Xedit.xcodeproj
 # ⌘R
@@ -209,7 +252,7 @@ Agent 能力越强，审批、机密和副作用的边界越要写死在确定�
 
 ## 项目状态
 
-当前在 `1.315.x` 上活跃迭代。每次发布的具体变化见 [CHANGELOG.md](CHANGELOG.md)，完整能力矩阵与未决问题见 [product-overview.md](product-overview.md)。Release Candidate tag 使用 `vMAJOR.MINOR.PATCH-rcN`。
+当前在 `1.317.x` 上活跃迭代。每次发布的具体变化见 [CHANGELOG.md](CHANGELOG.md)，完整能力矩阵与未决问题见 [product-overview.md](product-overview.md)。Release Candidate tag 使用 `vMAJOR.MINOR.PATCH-rcN`。
 
 ---
 
@@ -247,14 +290,18 @@ WillDeep 采用 [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) 模式
 
 # WillDeep
 
-**A native macOS agent workspace. Describe an outcome; it inspects the work, acts, verifies, and puts the changes and the evidence back in front of you.**
+**Run agents like services—not a pile of chat tabs.**
+
+WillDeep is an open-source, native Agent Runtime for macOS. It treats sessions as isolated jobs and turns workers, terminals, background jobs, webhooks, and approvals into routed events—waking or interrupting the right task, then returning the diff, tests, and artifacts for review.
 
 [![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
-[![Version](https://img.shields.io/badge/version-1.317.0--rc4-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.317.0--rc5-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/niuwoai/willdeep?style=social)](https://github.com/niuwoai/willdeep/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/niuwoai/willdeep?style=social)](https://github.com/niuwoai/willdeep/forks)
 
-[willdeep.com](https://willdeep.com)
+**[Download the signed macOS build](https://willdeep.com)** · [3-minute quick start](docs/willdeep-tutorial/01-quick-start.md) · [Build from source](#build-from-source)
 
 **English** · [简体中文](#willdeep-中文版) · [日本語](#willdeep-日本語版)
 
@@ -262,19 +309,58 @@ WillDeep 采用 [Apache License 2.0](LICENSE) + [Open Core](OPEN_CORE.md) 模式
 
 ---
 
-## First, the editor is gone
+## Agents have models. They still need a system.
 
-As of 1.249.0, WillDeep removed the general-purpose editor entirely — the editor scene, text/source file type registration, and editor settings are all retired. General file editing belongs to the standalone **Qeditor**, which has its own bundle ID, sandbox container, settings, and update feed, and does not migrate WillDeep data.
+One answer is easy. A real agent task lasts: it delegates work, waits for commands, receives external signals, asks for approval, recovers from failure, and must never deliver one project's events to another. Without lifecycle, scheduling, and permission boundaries, multi-agent work becomes a row of chat windows that is harder to supervise.
 
-What remains here is **read-only preview** and **diff review**: the agent edits files, you inspect the diff hunk by hunk, then apply or reject. To hand-edit, open the file in whatever editor you already use.
+WillDeep borrows the mechanics of operating systems and systemd to give models a host built for long-running work:
 
-The split exists because the two jobs put attention in different places. An editor is organized around files and the caret; an agent workspace is organized around tasks, workspaces, sessions, and deliverables. One app doing both does neither well.
+- **Sessions are isolated like processes** — each task owns its workspace, terminals, workers, events, and recovery state. Up to five workers can run in parallel without crossing session boundaries.
+- **Events are delivered like signals** — worker completion, terminal changes, jobs, webhooks, mail, and approvals enter one runtime kernel and wake only the target session. Ordinary events queue; trusted critical events can safely preempt.
+- **The main agent acts like `init + systemd + scheduler`** — it responds to signals, coordinates workers, releases resources, resumes work, and surfaces decisions through the Dock badge and Event Center.
+- **Permissions and journals belong to the host** — approvals, deterministic blocks, seatbelt sandboxing, Keychain, durable event logs, and audit records constrain side effects. A model cannot promote itself.
+
+You do not have to replace your editor or bet on one model. Use the some.im managed service, BYOK providers, local models, or external executors such as Codex CLI and Claude Code.
+
+### What this “Agent OS” layer manages
+
+| OS / systemd concept | WillDeep mechanism | What you get |
+| --- | --- | --- |
+| Processes and services | Isolated sessions, up to five workers, background terminals and jobs | Parallel work without crossed wires |
+| Signals and interrupts | Runtime event envelopes with queue, yield, and safe preemption | Tasks wake at the right moment—no manual polling |
+| `init` and scheduler | Main-agent coordination across workers, tools, connectors, and recovery | Long-running work without human relay duty |
+| Permission boundary | Four approval levels, sandboxing, credential isolation, deterministic rules | Agents can act, but cannot grant themselves access |
+| Journal and status center | Durable events, audit trail, Dock badge, diffs, tests, and artifacts | A traceable record of what happened and how it ended |
+
+This is not a replacement operating system, and “Agent OS” is not a costume for another chat app. It is the runtime and control plane for long-lived agents.
+
+## A workbench, not a chat tab
+
+| Start with an outcome | Watch the real terminal | Choose your model source |
+| --- | --- | --- |
+| <img src="docs/willdeep-tutorial/assets/interface/composer-controls.png" alt="WillDeep task composer" /> | <img src="docs/willdeep-tutorial/assets/interface/terminal-panel.png" alt="WillDeep visible terminal" /> | <img src="docs/willdeep-tutorial/assets/interface/model-picker.png" alt="WillDeep model picker" /> |
+
+## Start in three steps
+
+1. **Install** — download the signed build from [willdeep.com](https://willdeep.com), or fork this repository and build it yourself.
+2. **Choose the worksite** — bind a local folder, SSH host, or `willdeep-agent` daemon, then choose your own model source.
+3. **Describe the result** — WillDeep pauses when it needs your decision and returns the diff, tests, and artifacts when the work is ready to review.
+
+**[Download WillDeep](https://willdeep.com)** · [Read the visual guide](docs/willdeep-tutorial/README.md) · [⭐ Follow the project](https://github.com/niuwoai/willdeep) · [🍴 Fork your own workbench](https://github.com/niuwoai/willdeep/fork)
+
+## Why open source matters here
+
+WillDeep touches real code, commands, and credentials. “Trust us” is not a sufficient security model for that kind of tool. The core is Apache 2.0: inspect it, build it, fork it, and keep using your own models and runtimes.
 
 ---
 
 ## What it is good at
 
 Everything below already ships. None of it is roadmap.
+
+### Why it is not another editor
+
+WillDeep deliberately stepped away from general-purpose editing. Keep the editor you already know for text and cursor work; use WillDeep for tasks, workspaces, sessions, and deliverables. It retains read-only preview and **diff review**, so every agent change can be inspected hunk by hunk before you accept or reject it.
 
 ### Sessions run independently
 
@@ -361,7 +447,7 @@ Download the officially signed build from [willdeep.com](https://willdeep.com), 
 ### Build from source
 
 ```bash
-git clone https://github.com/xurenlu/willdeep.git
+git clone https://github.com/niuwoai/willdeep.git
 cd willdeep
 open Xedit.xcodeproj
 # ⌘R
@@ -450,7 +536,7 @@ A beachballed window makes a brilliant model useless. Native performance is the 
 
 ## Status
 
-Active development on `1.315.x`. See [CHANGELOG.md](CHANGELOG.md) for release details and [product-overview.md](product-overview.md) for the full capability matrix and open questions. Release candidate tags follow `vMAJOR.MINOR.PATCH-rcN`.
+Active development on `1.317.x`. See [CHANGELOG.md](CHANGELOG.md) for release details and [product-overview.md](product-overview.md) for the full capability matrix and open questions. Release candidate tags follow `vMAJOR.MINOR.PATCH-rcN`.
 
 ---
 
@@ -488,7 +574,17 @@ Unless a file states otherwise, code in this repository is released under Apache
 
 # WillDeep（日本語版）
 
-**macOS ネイティブのエージェント・ワークスペース。目的を伝えると、現場を読み、手を動かし、検証し、変更と根拠を目の前に戻します。**
+**チャットタブを増やすのではなく、システムサービスのようにエージェントを動かす。**
+
+WillDeep は、OS と systemd の仕組みを取り入れたオープンソースの macOS Agent Runtime です。セッションを独立したジョブとして扱い、Worker、ターミナル、Webhook、承認を正しいタスクへ届けます。
+
+[![macOS](https://img.shields.io/badge/macOS-13.7%2B-black?logo=apple)](https://www.apple.com/macos/)
+[![Swift](https://img.shields.io/badge/Swift-SwiftUI-orange?logo=swift)](https://developer.apple.com/swift/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/niuwoai/willdeep?style=social)](https://github.com/niuwoai/willdeep/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/niuwoai/willdeep?style=social)](https://github.com/niuwoai/willdeep/forks)
+
+**[署名済み macOS 版をダウンロード](https://willdeep.com)** · [3分で始める](docs/willdeep-tutorial/01-quick-start.md) · [ソースからビルド](#ソースからビルド)
 
 [English](#willdeep) · [简体中文](#willdeep-中文版) · **日本語**
 
@@ -496,4 +592,249 @@ Unless a file states otherwise, code in this repository is released under Apache
 
 ---
 
-*日本語版の README は準備中です。しばらくお待ちください。*
+## Agent にはモデルがある。それでも、動かすためのシステムが必要です
+
+一度の回答なら簡単です。しかし実際の Agent タスクは、Worker への委任、コマンドの完了待ち、外部シグナルの受信、承認の要求、失敗からの復帰まで続きます。しかも、別プロジェクトのイベントを誤ったセッションへ届けてはいけません。ライフサイクル、スケジューリング、権限境界がなければ、マルチ Agent は監視しにくいチャット画面が増えるだけです。
+
+WillDeep は OS と systemd の考え方を取り入れ、長時間動く Agent のためのホストを提供します。
+
+- **セッションをプロセスのように分離** — 各タスクがワークスペース、ターミナル、Worker、イベント、復帰状態を所有します。最大5つの Worker を並列実行しても、セッションをまたいで混線しません。
+- **イベントをシグナルのように配信** — Worker の完了、ターミナルの変化、バックグラウンド Job、Webhook、メール、承認を一つの Runtime Kernel に集約し、対象セッションだけを起動します。通常イベントは待機し、ホストが署名した緊急イベントだけが安全境界内で割り込みできます。
+- **メイン Agent は `init + systemd + scheduler`** — シグナルに応答し、Worker を調整し、リソースを解放し、タスクを再開します。ユーザーの判断が必要なときは Dock バッジとイベントセンターに集約します。
+- **権限と記録はホストが管理** — 4段階の承認、決定論的な遮断、seatbelt サンドボックス、Keychain、永続イベントログ、監査記録が副作用を制御します。モデルが自分で権限を昇格することはできません。
+
+エディタを乗り換える必要も、一つのモデルに賭ける必要もありません。some.im のマネージドモデル、BYOK、独自 Provider、ローカルモデルに加え、Codex CLI や Claude Code などの外部実行系も利用できます。
+
+### この「Agent OS」レイヤーが管理するもの
+
+| OS / systemd の概念 | WillDeep の仕組み | 得られるもの |
+| --- | --- | --- |
+| プロセスとサービス | 分離されたセッション、最大5つの Worker、バックグラウンドのターミナルと Job | 複数タスクを混線させずに並列実行 |
+| シグナルと割り込み | queue／yield／安全な preempt を備えたイベントエンベロープ | 人が監視し続けなくても、必要な時点でタスクが再開 |
+| `init` と scheduler | メイン Agent が Worker、ツール、コネクタ、復帰処理を調整 | 長時間タスクを人手で中継しなくてよい |
+| 権限境界 | 4段階の承認、サンドボックス、資格情報の分離、決定論的ルール | Agent は実行できるが、自分で権限を増やせない |
+| journal と状態センター | 永続イベント、監査、Dock バッジ、Diff、テスト、成果物 | 何が起き、誰が処理し、どう終わったかを追跡可能 |
+
+これは macOS を置き換える OS ではなく、単なるチャットアプリを「Agent OS」と呼び替えたものでもありません。長いライフサイクルを持つ Agent のためのランタイム兼コントロールプレーンです。
+
+## チャット欄ではなく、作業現場
+
+| 目標から始める | 同じ現場でターミナルを見る | モデルの接続先を選ぶ |
+| --- | --- | --- |
+| <img src="docs/willdeep-tutorial/assets/interface/composer-controls.png" alt="WillDeep のタスク入力欄" /> | <img src="docs/willdeep-tutorial/assets/interface/terminal-panel.png" alt="WillDeep の可視ターミナル" /> | <img src="docs/willdeep-tutorial/assets/interface/model-picker.png" alt="WillDeep のモデル選択" /> |
+
+## 3ステップで開始
+
+1. **インストール** — [willdeep.com](https://willdeep.com) から署名済み版をダウンロードするか、このリポジトリを Fork してビルドします。
+2. **作業場所を選択** — ローカルフォルダ、SSH ホスト、または `willdeep-agent` daemon を接続し、利用するモデルを選びます。
+3. **ほしい結果を伝える** — 判断が必要な場面では WillDeep が停止して確認し、完了時には Diff、テスト、成果物を返します。
+
+**[WillDeep をダウンロード](https://willdeep.com)** · [図解チュートリアル](docs/willdeep-tutorial/README.md) · [⭐ プロジェクトをフォロー](https://github.com/niuwoai/willdeep) · [🍴 自分用に Fork](https://github.com/niuwoai/willdeep/fork)
+
+## なぜオープンソースなのか
+
+WillDeep は実際のコード、コマンド、資格情報を扱います。この種類のツールに「私たちを信じてください」だけでは不十分です。コアは Apache 2.0 で公開されており、コードと実行境界を確認し、自分でビルドし、Fork し、自分のモデルと Runtime だけで使えます。
+
+---
+
+## WillDeep が得意なこと
+
+以下はロードマップではなく、すでに実装されている機能です。
+
+### もう一つのエディタではありません
+
+WillDeep は汎用編集機能を意図的に切り離しました。テキストやカーソル操作には使い慣れたエディタを使い、WillDeep はタスク、ワークスペース、セッション、成果物を管理します。ファイルは読み取り専用でプレビューでき、Agent の変更は **Diff レビュー**で hunk ごとに確認してから採用または拒否できます。
+
+### セッションは独立して動きます
+
+各セッションは、メッセージ、Provider リクエスト、ツール待機、入力中の下書き、モード状態を含む独立 Runtime を持ちます。別のセッションへ移動しても処理は止まらず、サイドバーで実行中、承認待ち、停止を確認できます。
+
+同一 Provider の同時実行数は既定で3、設定では1〜8に変更できます。Provider ごとに枠が分かれているため、DashScope の混雑が OpenAI の処理を止めることはありません。
+
+### 委任：3段階のモデル × 5つの役割
+
+モデルは基本・上位・エキスパートの3段階、役割は調査・実装・検証・レビュー・運用の5種類に整理されています。どの役割にどの段階を使うかはユーザーが設定できます。設定は `~/.willdeep/config.toml` を優先し、CLI と同じ Schema を共有します。存在しない Provider を指定した場合、別 Gateway へ黙ってフォールバックせず、利用不可の理由を表示します。
+
+実行中の子 Agent にも介入できます。「次のラウンドで反映」は指示を次ターンへ追加し、「割り込んで送信」は子 Agent 全体を終了せず現在のサブステップだけをキャンセルします。委任カードには「`ruby sync.rb` を実行」「`.env.local` を読む」のように対象も表示され、機密情報は省略前にマスクされます。
+
+### 4段階の承認と決定論的な判定順序
+
+承認レベルは厳格、スマート審査、ワークスペース書き込み、フルアクセスの4段階です。どの段階でも悪意あるコマンドの遮断が最優先され、一般的な読み取り専用コマンドと記憶済みの承認を先に処理し、それでも決まらない場合だけ AI 判定を使います。破壊的操作はどの段階でもユーザーによる入力確認が必要です。
+
+コマンドは既定で seatbelt サンドボックス内に入り、ネットワーク送信、ワークスペース外への書き込み、Token や Secret に見える環境変数を制限します。サンドボックスで拒否された場合、モデルに盲目的な再試行をさせず、サンドボックスなしで再実行するかをユーザーに確認します。実行履歴は機密情報をマスクして監査ログへ保存します。
+
+### 実際の使用量でコンテキストを管理
+
+コンテキスト使用率はローカル推定ではなく、Provider が返す `prompt_tokens` を基準にします。しきい値を超えると古い会話を圧縮し、古いツール結果をプレースホルダーへ畳みますが、直近のターンはそのまま保持します。
+
+上限に近づくと **context runway handoff** を実行し、現在位置と残作業を記録して、同じセッションまたは新しいセッションへ引き継げます。保存済みメッセージの原文は変更しません。
+
+### 進捗はツール経由で報告
+
+計画の進捗は、回答内のコードブロックではなく常設の `update_plan` ツールで更新します。通常モードでは最初から計画作成を強制せず、実際に長いツール実行や複数の書き込みが発生した場合だけ、残作業の計画を求めます。小さなタスクに儀式を増やしません。
+
+### タブを独立ウインドウにできる作業パネル
+
+右側のパネルにはターミナル、ファイル、Diff、Web プレビュー、メディアタスク、画像編集を並べられます。タブは共存し、ドラッグして macOS の独立ウインドウにしたり、元へ戻したりできます。タブを閉じてもプロセスは終了しません。
+
+ターミナルは実物です。Agent が実行したコマンドとユーザーが入力したコマンドは、同じ環境で動きます。
+
+### ローカルとリモートで同じワークフロー
+
+設定の Runtimes に SSH ホストまたは `willdeep-agent` daemon を追加すると、リモートのワークスペースへセッションを接続できます。ファイル検索、Git、Shell、ビルド、テスト、委任はリモートで実行し、UI、承認、結果レビューは Mac に残ります。SSH は秘密鍵のパスだけを保存し、daemon Token は Keychain に保存します。
+
+```bash
+willdeep-agent serve \
+  --workspace /path/to/project \
+  --token-file ~/.willdeep-agent-token
+```
+
+Git リポジトリでは入力欄から worktree の作成、切り替え、整理ができます。危険度の高い Git 操作の前には revision を再確認し、人や別 Agent が直前に行った変更を上書きしないようにします。
+
+### 4つの拡張ポイント
+
+| 拡張 | 役割 | 内容 |
+| --- | --- | --- |
+| **Skills** | AI の作業方法を変える | 40以上を内蔵。ユーザー Skill は `~/.willdeep/skills` に配置し、従来の `~/.codex/skills` も読み込みます |
+| **MCP servers** | AI に実際の機能を追加 | stdio と streamable-http に対応。App、Cursor `mcp.json`、Codex `config.toml` の設定を統合し、機密 Header は表示前にマスクします |
+| **Workflows** | 複数ステップを再利用 | `/code-review`、`/pr-review`、`/bug-hunt`、`/release-notes`、`/deep-research`、`/db-explore` など。並列レビューはいつでも停止できます |
+| **Plugins** | メインナビゲーションに操作画面を追加 | ページはネットワーク、ファイル、Secret から隔離され、Manifest で宣言してインストール時に許可されたコマンドだけを利用します |
+
+同梱の公式 Plugin にはゲームセンター、テトリス、お気に入り、Todo、セッション診断、プロジェクト概要があります。Plugin 開発資料は App Bundle の `Contents/Resources/BundledSkills/willdeep-plugin-dev/` に含まれています。
+
+### スケジュール実行
+
+「スケジュール済み」では、一定間隔、毎日、平日、指定曜日にタスクを実行できます。実行ごとに設定済みの Prompt、ワークスペース、モデル段階を持つ新しいセッションを作ります。一時停止中のタスクは明示され、最近の実行結果と失敗理由から元セッションへ戻れます。
+
+### そのほかの主な機能
+
+- **Goal モード** — 長い仕事を最大6フェーズに分け、現在のフェーズだけを最大6ステップで展開します。フェーズ完了時には、そのフェーズで開始したプロセスツリーを安全に終了します。
+- **専門家ラウンドテーブル** — 10人の組み込み専門家から2〜4人を理由付きで推薦し、議論をストリーミング表示して、最終結果を Markdown に保存します。
+- **外部実行系** — Claude Code、Codex CLI、Cursor Agent、Cline を、目標、受入条件、許可パス、禁止操作、検証コマンド、最大3回の試行を持つタスク契約の中で利用できます。
+- **スマートフォン連携** — Mobile Gateway とペアリングして、会話の継続、ツール承認、画像送信ができます。公式 Relay とセルフホスト WebSocket Relay に対応します。
+- **モデルを自由に選択** — some.im へログインするか、自分の Provider と API Key を設定できます。Key は Keychain に保存されます。
+- **セッション管理** — プロジェクト別のグループ、検索、一括アーカイブ／復元／削除、自動アーカイブに対応し、実行中や下書きのあるセッションを保護します。
+
+---
+
+## 使い始める
+
+### インストール
+
+[willdeep.com](https://willdeep.com) から公式署名済み版をダウンロードするか、ソースからビルドします。macOS 13.7 以降が必要です。
+
+### ソースからビルド
+
+```bash
+git clone https://github.com/niuwoai/willdeep.git
+cd willdeep
+open Xedit.xcodeproj
+# ⌘R
+```
+
+Xcode が必要です。生成される App は **WillDeep.app** です。
+
+日常のコマンドラインビルドには、共有ウォームキャッシュを使う入口を利用します。
+
+```bash
+ruby scripts/build_fast.rb             # Debug の増分ビルド。Index と署名は省略
+ruby scripts/build_fast.rb --release   # Release ビルド
+ruby scripts/build_fast.rb --sign      # 署名が必要な場合
+```
+
+キャッシュは既定で `~/Library/Caches/WillDeep/Xcode/Xedit` に保存され、DerivedData、SwiftPM checkout、Xcode compilation cache を再利用します。詳細は[ローカルビルドとテストの高速化](docs/BUILD_TEST_ACCELERATION.md)を参照してください。
+
+テストも高速入口を優先してください。
+
+```bash
+ruby scripts/run_tests_fast.rb -only-testing:XeditTests/YourTestSuite
+scripts/run_tests.sh                   # ローカルの完全なテストゲート
+```
+
+現在の worktree の Debug 版を `/Applications` へインストールする場合は、Git 管理外の `.env.local` に開発用資格情報を設定します。
+
+```dotenv
+WILLDEEP_CLIENT_LOGIN_SECRET=your-local-development-secret
+```
+
+```bash
+ruby dev_install.rb --dry-run
+ruby dev_install.rb
+```
+
+スクリプトは Secret を表示せず、クリーンビルド、署名、アトミックなインストール、バージョンと署名の検証を行います。実行中の WillDeep を置き換えた場合は、完全に終了してから再起動してください。
+
+### 最初のタスク
+
+1. some.im にログインするか、設定 → AI Provider で自分の Provider と Key を登録します。
+2. 入力欄の左側でローカルディレクトリまたは設定済みのリモート Runtime を選びます。ここが読み取り、書き込み、コマンドの境界になります。
+3. 欲しい結果をそのまま入力します。判断が必要なときは Agent が停止して確認します。
+4. 完了後に Diff、テスト結果、成果物を確認します。
+
+設定 → ツールからコマンドラインツールをインストールすると、次のように起動できます。
+
+```bash
+willdeep-app .
+```
+
+ツールは `~/.local/bin` にインストールされます。必要に応じて `PATH` に追加してください。
+
+---
+
+## ショートカット
+
+| ショートカット | 操作 |
+| --- | --- |
+| ⌘N | 新しいセッション |
+| Return | 送信 |
+| ⇧/⌥/⌃ + Return | 改行 |
+| Esc | 検索または現在のポップアップを閉じる |
+| ⌘? | 組み込みヘルプを開く |
+
+承認レベル、ワークスペース、モデル、外部実行系、パネルタブは入力欄とサイドパネルから操作できます。
+
+---
+
+## 設計方針
+
+ファイルよりタスクを優先します。ユーザーが欲しいのは、タブを巡回する儀式ではなく結果です。
+
+テストを実行し、Diff を読み、状態を確認してから完了とします。未検証の仕事を完了とは報告しません。
+
+セッション、ターミナル、ブランチ、成果物はそれぞれのワークスペースに属し、別の作業へ漏れてはいけません。
+
+Agent が強力になるほど、承認、Secret、副作用の境界はモデルのその場の判断ではなく、決定論的ルールで管理する必要があります。
+
+優秀なモデルでも、画面が応答しなければ役に立ちません。Native Performance は付加価値ではなく最低条件です。
+
+---
+
+## 開発状況
+
+現在は `1.317.x` 系を開発中です。各リリースの変更は [CHANGELOG.md](CHANGELOG.md)、機能一覧と未解決事項は [product-overview.md](product-overview.md) を参照してください。Release Candidate の Tag は `vMAJOR.MINOR.PATCH-rcN` 形式です。
+
+---
+
+## コントリビューション
+
+Issue と Pull Request を歓迎します。最初に読む場所：
+
+- [AgentModeView.swift](Xedit/AgentModeView.swift) — Agent UI
+- [AppStateAgentLoop.swift](Xedit/AppStateAgentLoop.swift) — ターンループ、ツール判定、コンテキスト圧縮
+- [AgentToolRegistry.swift](Xedit/AgentToolRegistry.swift) — ツールカタログ
+- [AgentContextBuilder.swift](Xedit/AgentContextBuilder.swift) — System Prompt とコンテキスト生成
+
+Pull Request を作成するとき：
+
+1. リポジトリのバージョン規則に従います。Bugfix は `-rcN` だけを増やし、新機能の場合だけ正式バージョン部分を変更します。
+2. CHANGELOG を更新し、何を変えたかだけでなく、なぜ必要だったかも説明します。
+3. 新しい UI 文言は必ずローカライズリソースを使います。
+4. 起動、入力、長いセッションの性能を悪化させないでください。Hot Path を変更する場合は Profile を確認します。
+
+---
+
+## ライセンスと Open Core
+
+WillDeep は [Apache License 2.0](LICENSE) と [Open Core](OPEN_CORE.md) のモデルを採用しています。
+
+個別ファイルに別記がない限り、このリポジトリのコードは Apache 2.0 で公開されます。WillDeep の名称、Logo、公式署名済み Build、ホスティングサービス、Cloud Sync、Managed Runtime、Team 機能、Marketplace、Enterprise Support は別の製品またはサービスとして提供される場合があります。すでに Apache 2.0 で公開されたコードは、今後も Apache 2.0 のままです。
