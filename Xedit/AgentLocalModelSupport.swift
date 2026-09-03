@@ -40,6 +40,10 @@ struct AgentLocalModelSettings: Codable, Equatable {
     /// 持久化字段（设置页对用户展示为“LLM 模型”）；图片理解独立使用
     /// `visionModel`，不会进入文本聊天的备用模型列表。
     var preferForWorkerRouting: Bool
+    /// 启动 WillDeep 时就把 `summaryModel` 装进 Ollama 并常驻内存。默认关：
+    /// 常驻要占几 GB 内存，只有明确要"派发判断、标题、压缩不等冷启动"的
+    /// 用户才该为它付这份代价。关掉时 Ollama 回到默认的按需加载。
+    var warmOnLaunchAndKeepResident: Bool
     var exposeAsComposerModel: Bool
     var composerDisplayName: String
 
@@ -52,6 +56,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         preferForTitles: true,
         preferForContextSummaries: false,
         preferForWorkerRouting: true,
+        warmOnLaunchAndKeepResident: false,
         exposeAsComposerModel: false,
         composerDisplayName: defaultComposerDisplayName
     )
@@ -65,6 +70,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         preferForTitles: Bool,
         preferForContextSummaries: Bool,
         preferForWorkerRouting: Bool = AgentLocalModelSettings.defaultPreferForWorkerRouting,
+        warmOnLaunchAndKeepResident: Bool = AgentLocalModelSettings.defaultWarmOnLaunchAndKeepResident,
         exposeAsComposerModel: Bool,
         composerDisplayName: String
     ) {
@@ -76,12 +82,14 @@ struct AgentLocalModelSettings: Codable, Equatable {
         self.preferForTitles = preferForTitles
         self.preferForContextSummaries = preferForContextSummaries
         self.preferForWorkerRouting = preferForWorkerRouting
+        self.warmOnLaunchAndKeepResident = warmOnLaunchAndKeepResident
         self.exposeAsComposerModel = exposeAsComposerModel
         self.composerDisplayName = composerDisplayName
     }
 
     /// `default` 自己要用它初始化，所以不能从 `Self.default` 取。
     static let defaultPreferForWorkerRouting = true
+    static let defaultWarmOnLaunchAndKeepResident = false
 
     enum CodingKeys: String, CodingKey {
         case enabled
@@ -93,6 +101,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         case preferForTitles
         case preferForContextSummaries
         case preferForWorkerRouting
+        case warmOnLaunchAndKeepResident
         case exposeAsComposerModel
         case composerDisplayName
     }
@@ -114,6 +123,8 @@ struct AgentLocalModelSettings: Codable, Equatable {
             ?? defaults.preferForContextSummaries
         self.preferForWorkerRouting = try c.decodeIfPresent(Bool.self, forKey: .preferForWorkerRouting)
             ?? defaults.preferForWorkerRouting
+        self.warmOnLaunchAndKeepResident = try c.decodeIfPresent(Bool.self, forKey: .warmOnLaunchAndKeepResident)
+            ?? defaults.warmOnLaunchAndKeepResident
         self.exposeAsComposerModel = try c.decodeIfPresent(Bool.self, forKey: .exposeAsComposerModel)
             ?? defaults.exposeAsComposerModel
         self.composerDisplayName = try c.decodeIfPresent(String.self, forKey: .composerDisplayName)
@@ -130,6 +141,7 @@ struct AgentLocalModelSettings: Codable, Equatable {
         try c.encode(preferForTitles, forKey: .preferForTitles)
         try c.encode(preferForContextSummaries, forKey: .preferForContextSummaries)
         try c.encode(preferForWorkerRouting, forKey: .preferForWorkerRouting)
+        try c.encode(warmOnLaunchAndKeepResident, forKey: .warmOnLaunchAndKeepResident)
         try c.encode(exposeAsComposerModel, forKey: .exposeAsComposerModel)
         try c.encode(composerDisplayName, forKey: .composerDisplayName)
     }
@@ -176,106 +188,8 @@ enum AgentLocalAuxiliaryPurpose {
     case workerRouting
 }
 
-/// Latency-first readiness check for Ollama-backed routing. A cold local
-/// model is warmed in the background and never blocks the current turn.
-nonisolated enum AgentLocalModelRoutingReadiness {
-    static let probeTimeout: TimeInterval = 0.35
-    static let warmupTimeout: TimeInterval = 120
-    static let keepAlive = "10m"
-
-    static func ollamaEndpoint(baseURL: String, path: String) -> URL? {
-        guard var components = URLComponents(string: baseURL),
-              let host = components.host?.lowercased(),
-              ["localhost", "127.0.0.1", "::1"].contains(host),
-              ["http", "https"].contains(components.scheme?.lowercased() ?? "") else {
-            return nil
-        }
-        components.path = path
-        components.query = nil
-        components.fragment = nil
-        return components.url
-    }
-
-    static func containsLoadedModel(_ data: Data, model: String) -> Bool {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let models = object["models"] as? [[String: Any]] else { return false }
-        let expected = canonicalModelID(model)
-        return models.contains { item in
-            [item["name"] as? String, item["model"] as? String]
-                .compactMap { $0 }
-                .map(canonicalModelID)
-                .contains(expected)
-        }
-    }
-
-    private static func canonicalModelID(_ value: String) -> String {
-        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return normalized.hasSuffix(":latest") ? String(normalized.dropLast(7)) : normalized
-    }
-}
-
-private actor AgentLocalModelRoutingWarmup {
-    static let shared = AgentLocalModelRoutingWarmup()
-    private var warmingKeys: Set<String> = []
-
-    func isWarmOrSchedule(baseURL: String, model: String) async -> Bool {
-        let key = "\(baseURL)\u{1F}\(model)"
-        guard !warmingKeys.contains(key) else { return false }
-        guard let psURL = AgentLocalModelRoutingReadiness.ollamaEndpoint(
-            baseURL: baseURL,
-            path: "/api/ps"
-        ) else { return false }
-
-        if await Self.isWarm(psURL: psURL, model: model) {
-            return true
-        }
-
-        guard warmingKeys.insert(key).inserted else { return false }
-        Task { [baseURL, model, key] in
-            await Self.warm(baseURL: baseURL, model: model)
-            self.finish(key: key)
-        }
-        return false
-    }
-
-    private func finish(key: String) {
-        warmingKeys.remove(key)
-    }
-
-    private nonisolated static func isWarm(psURL: URL, model: String) async -> Bool {
-        var request = URLRequest(url: psURL)
-        request.timeoutInterval = AgentLocalModelRoutingReadiness.probeTimeout
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = AgentLocalModelRoutingReadiness.probeTimeout
-        configuration.timeoutIntervalForResource = AgentLocalModelRoutingReadiness.probeTimeout
-        do {
-            let (data, response) = try await URLSession(configuration: configuration).data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return false }
-            return AgentLocalModelRoutingReadiness.containsLoadedModel(data, model: model)
-        } catch {
-            return false
-        }
-    }
-
-    private nonisolated static func warm(baseURL: String, model: String) async {
-        guard let url = AgentLocalModelRoutingReadiness.ollamaEndpoint(
-            baseURL: baseURL,
-            path: "/api/generate"
-        ) else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = AgentLocalModelRoutingReadiness.warmupTimeout
-        request.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "model": model,
-            "keep_alive": AgentLocalModelRoutingReadiness.keepAlive,
-        ])
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = AgentLocalModelRoutingReadiness.warmupTimeout
-        configuration.timeoutIntervalForResource = AgentLocalModelRoutingReadiness.warmupTimeout
-        _ = try? await URLSession(configuration: configuration).data(for: request)
-    }
-}
+// Ollama readiness, lazy warm-up and launch-time residency live in
+// AgentLocalModelResidency.swift.
 
 nonisolated enum AgentLocalModelPrompting {
     static func isLocalProvider(_ configuration: AgentConfiguration) -> Bool {
@@ -809,9 +723,17 @@ extension AppState {
         guard let configuration = localAuxiliaryConfiguration(for: .workerRouting) else {
             return nil
         }
-        let isWarm = await AgentLocalModelRoutingWarmup.shared.isWarmOrSchedule(
+        // A user who asked for a resident LLM gets the same "never unload"
+        // keep-alive from the lazy path, so a warm-up triggered by routing
+        // does not shorten the residency the launch keeper established.
+        let settings = AgentSettingsStore.loadLocalModelSettings()
+        let keepAlive = settings.warmOnLaunchAndKeepResident
+            ? AgentLocalModelRoutingReadiness.residentKeepAlive
+            : AgentLocalModelRoutingReadiness.keepAlive
+        let isWarm = await AgentLocalModelResidency.shared.isWarmOrSchedule(
             baseURL: configuration.baseURL,
-            model: configuration.model
+            model: configuration.model,
+            keepAlive: keepAlive
         )
         return isWarm ? configuration : nil
     }

@@ -51,6 +51,12 @@ struct AgentLocalModelSettingsSection: View {
             Text(L10n.Settings.LocalModel.workerRoutingHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Toggle(L10n.Settings.LocalModel.warmOnLaunch, isOn: $settings.warmOnLaunchAndKeepResident)
+                .onCompatibleChange(of: settings.warmOnLaunchAndKeepResident) { _, _ in save() }
+            Text(L10n.Settings.LocalModel.warmOnLaunchHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Toggle(L10n.Settings.LocalModel.exposeComposerModel, isOn: $settings.exposeAsComposerModel)
                 .onCompatibleChange(of: settings.exposeAsComposerModel) { _, _ in save() }
 

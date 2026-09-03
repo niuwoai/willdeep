@@ -19,6 +19,7 @@ struct AgentSharedRuntimeConfigTests {
     language = "zh-Hans"
     small_model_routing = true
     auto_dispatch_read_only = false
+    speculative_scout = false
     max_deep_calls_per_harness = 2   # keep the 1M tier rare
     safety_judge = true
 
@@ -35,6 +36,7 @@ struct AgentSharedRuntimeConfigTests {
 
         #expect(config.smallModelRouting == true)
         #expect(config.autoDispatchReadOnly == false)
+        #expect(config.speculativeScout == false)
         // Trailing inline comment must not become part of the number.
         #expect(config.maxDeepCallsPerHarness == 2)
     }
@@ -74,6 +76,7 @@ struct AgentSharedRuntimeConfigTests {
         // values the user never wrote.
         #expect(config.smallModelRouting == nil)
         #expect(config.autoDispatchReadOnly == nil)
+        #expect(config.speculativeScout == nil)
         #expect(config.maxDeepCallsPerHarness == nil)
     }
 

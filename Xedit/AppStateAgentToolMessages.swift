@@ -648,6 +648,28 @@ extension AppState {
                 runID: runID,
                 runtime: runtime
             )
+            // Local timing ledger: one line per foreground Worker run so turn
+            // duration can be compared against the workers it waited on.
+            AgentWorkerTimingLog.record(AgentWorkerTimingLog.WorkerRunEntry(
+                runID: runID,
+                sessionID: runtime.id,
+                userMessageID: runtime.toolCalls.first(where: { $0.id == recordID })?.messageID,
+                profileID: profile.id,
+                source: "modelSpawn",
+                status: status.rawValue,
+                model: model,
+                providerID: providerID,
+                requestedAt: startedAt,
+                startedAt: startedAt,
+                finishedAt: Date(),
+                rounds: outcome?.roundCount,
+                toolInvocations: outcome?.toolInvocationCount,
+                promptTokens: outcome?.usageSplit.prompt,
+                completionTokens: outcome?.usageSplit.completion,
+                totalTokens: outcome?.usageTokens,
+                acceptedOutput: outcome?.verifierPassed,
+                note: escalatedFrom.map { "escalated from \($0)" }
+            ))
             AppState.persistSubagentTranscript(
                 AgentSubagentTranscript(
                     runID: runID,

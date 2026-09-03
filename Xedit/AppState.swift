@@ -930,6 +930,9 @@ final class AppState: ObservableObject {
                 runID: run.id,
                 parentRuntimeID: run.parentRuntimeID
             )
+            // Local timing ledger for every background Worker, whatever it
+            // was spawned for; the foreground path records its own line.
+            AgentWorkerTimingLog.record(AgentWorkerTimingLog.WorkerRunEntry(backgroundRun: run))
             if self.handleAgentGoalPlanningSubagentCompletion(run) {
                 return
             }

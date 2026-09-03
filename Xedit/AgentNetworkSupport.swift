@@ -104,10 +104,13 @@ enum AgentNetworkSupport {
     /// stranded on "Starting…" (command-line curl bypasses proxies for
     /// localhost, which is why the gateway looked healthy from a shell but
     /// not from the app). Short timeouts so a dead gateway fails fast.
-    static func loopbackSession() -> URLSession {
+    static func loopbackSession(
+        requestTimeout: TimeInterval = 5,
+        resourceTimeout: TimeInterval = 10
+    ) -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 5
-        configuration.timeoutIntervalForResource = 10
+        configuration.timeoutIntervalForRequest = requestTimeout
+        configuration.timeoutIntervalForResource = resourceTimeout
         configuration.waitsForConnectivity = false
         // Documented CFProxySupport dictionary keys; setting the *Enable
         // flags to 0 disables each proxy type for this session only.
