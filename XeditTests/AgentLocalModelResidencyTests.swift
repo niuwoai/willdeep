@@ -71,6 +71,12 @@ struct AgentLocalModelResidencyTests {
         #expect(object["keep_alive"] as? String == "-1")
         #expect(AgentLocalModelRoutingReadiness.keepAlive == "10m")
         #expect(AgentLocalModelRoutingReadiness.releasedKeepAlive == "5m")
+        #expect(AgentLocalModelRoutingReadiness.routingKeepAlive(
+            warmOnLaunchAndKeepResident: false
+        ) == "10m")
+        #expect(AgentLocalModelRoutingReadiness.routingKeepAlive(
+            warmOnLaunchAndKeepResident: true
+        ) == "-1")
     }
 
     @Test("an unreachable Ollama is not probed again inside the back-off window")

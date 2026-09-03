@@ -48,6 +48,7 @@ final class AgentSpeculativeScout {
     let hostRunID: UUID
     let cardRecordID: UUID
     let userMessageID: UUID
+    let prompt: String
     let requestedAt = Date()
     var startedAt: Date?
     var finishedAt: Date?
@@ -63,7 +64,8 @@ final class AgentSpeculativeScout {
         providerID: String,
         hostRunID: UUID,
         cardRecordID: UUID,
-        userMessageID: UUID
+        userMessageID: UUID,
+        prompt: String
     ) {
         self.profileID = profileID
         self.model = model
@@ -71,6 +73,7 @@ final class AgentSpeculativeScout {
         self.hostRunID = hostRunID
         self.cardRecordID = cardRecordID
         self.userMessageID = userMessageID
+        self.prompt = prompt
     }
 }
 
@@ -151,6 +154,49 @@ extension AppState {
         """
     }
 
+    /// A turn-owned scout gets the same live card and inspector identity as
+    /// other foreground Workers, without entering the background registry.
+    /// `hostRunID` is already unique and durable, so it also keys the
+    /// transcript sidecar used by the fleet panel.
+    static func speculativeScoutToolCall(
+        hostRunID: UUID,
+        cardRecordID: UUID,
+        userMessageID: UUID,
+        profile: AgentSubagentProfile,
+        workerName: String,
+        model: String,
+        startedAt: Date = Date()
+    ) -> AgentToolCall {
+        var call = AgentToolCall(
+            id: cardRecordID,
+            messageID: userMessageID,
+            externalID: "parallel-scout-\(cardRecordID.uuidString)",
+            toolName: "spawn_agent",
+            arguments: [
+                "profile": .string(profile.id),
+                "_runtime_parallel_scout": .bool(true),
+            ],
+            risk: .read,
+            status: .running,
+            startedAt: startedAt,
+            subagentModel: model,
+            subagentWorkerName: workerName,
+            subagentRunID: hostRunID
+        )
+        call.subagentLiveActivity = AgentSubagentLiveActivity(
+            profileID: profile.id,
+            workerName: workerName,
+            model: model,
+            round: 0,
+            maximumRounds: profile.maxRounds,
+            completedToolInvocations: 0,
+            activityText: "",
+            startedAt: startedAt,
+            isBackground: false
+        )
+        return call
+    }
+
     /// Start the scout for this turn if the route, the policy and the
     /// workspace binding all allow it. Never throws, never blocks: on any
     /// missing precondition the turn simply proceeds without a scout.
@@ -211,19 +257,18 @@ extension AppState {
             providerID: childConfiguration.providerID,
             runtime: runtime
         )
-        // Visible in the ledger from the start, like the preflight card.
+        let prompt = Self.preflightPrompt(requestText: requestText, profileID: profile.id)
+        let workerName = L10n.AgentDelegation.profileName(for: profile.id)
+        // Visible in the ledger and fleet panel from the start, like the
+        // preflight card, but deliberately absent from the background registry.
         let cardRecordID = UUID()
-        runtime.toolCalls.append(AgentToolCall(
-            id: cardRecordID,
-            messageID: userMessageID,
-            externalID: "parallel-scout-\(cardRecordID.uuidString)",
-            toolName: "spawn_agent",
-            arguments: [
-                "profile": .string(profile.id),
-                "_runtime_parallel_scout": .bool(true),
-            ],
-            risk: .read,
-            status: .running
+        runtime.toolCalls.append(Self.speculativeScoutToolCall(
+            hostRunID: hostRunID,
+            cardRecordID: cardRecordID,
+            userMessageID: userMessageID,
+            profile: profile,
+            workerName: workerName,
+            model: childConfiguration.model
         ))
 
         let scout = AgentSpeculativeScout(
@@ -232,7 +277,8 @@ extension AppState {
             providerID: childConfiguration.providerID,
             hostRunID: hostRunID,
             cardRecordID: cardRecordID,
-            userMessageID: userMessageID
+            userMessageID: userMessageID,
+            prompt: prompt
         )
         runtime.speculativeScout = scout
         runtime.currentTurnRouteSteering = Self.steeringWithParallelScout(
@@ -246,7 +292,6 @@ extension AppState {
             "parallel scout started runtime=\(runtime.id.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(childConfiguration.model, privacy: .public)"
         )
 
-        let prompt = Self.preflightPrompt(requestText: requestText, profileID: profile.id)
         let terminalController = profile.id == AgentSubagentProfileCatalog.terminalOperatorID
             ? agentTerminalController
             : nil
@@ -265,7 +310,18 @@ extension AppState {
                     writeAccess: nil,
                     verifierCommand: nil,
                     patchProposalSink: nil,
-                    terminalController: terminalController
+                    terminalController: terminalController,
+                    onProgress: { [weak self, weak runtime] update in
+                        guard let self, let runtime else { return }
+                        self.applySubagentLiveProgress(
+                            update,
+                            recordID: cardRecordID,
+                            runtime: runtime,
+                            profileID: runProfile.id,
+                            workerName: workerName,
+                            model: childConfiguration.model
+                        )
+                    }
                 )
                 result = .success(outcome)
             } catch {
@@ -351,6 +407,10 @@ extension AppState {
         scout.finishedAt = Date()
         func settle(_ status: AgentToolCallStatus, summary: String, error: String? = nil) {
             guard let index = runtime.toolCalls.firstIndex(where: { $0.id == scout.cardRecordID }) else { return }
+            if runtime.toolCalls[index].subagentLiveActivity?.finishedAt == nil {
+                runtime.toolCalls[index].subagentLiveActivity?.finishedAt = scout.finishedAt
+            }
+            runtime.toolCalls[index].subagentProgress = nil
             runtime.toolCalls[index].status = status
             runtime.toolCalls[index].errorMessage = error
             runtime.toolCalls[index].subagentModel = scout.model
@@ -372,6 +432,12 @@ extension AppState {
                 runtime: runtime,
                 recordsTiming: false
             )
+            persistSpeculativeScoutTranscript(
+                scout,
+                status: .completed,
+                outcome: outcome,
+                report: outcome.report
+            )
             // A success that arrives after the turn already released the
             // scout (phase != .reported) has nobody left to deliver to.
             if scout.phase != .reported {
@@ -384,11 +450,49 @@ extension AppState {
             let label = scout.phase.rawValue
             settle(.failed, summary: "parallel scout \(label)", error: error is CancellationError ? nil : error.localizedDescription)
             finishHostWorkerRun(scout.hostRunID, status: .failed, runtime: runtime, recordsTiming: false)
+            persistSpeculativeScoutTranscript(
+                scout,
+                status: .failed,
+                outcome: nil,
+                report: error is CancellationError ? label : error.localizedDescription
+            )
             recordSpeculativeScoutTiming(scout, runtime: runtime, deliveredAtToolBoundary: false)
             Self.parallelScoutLog.notice(
                 "parallel scout \(label, privacy: .public) runtime=\(runtime.id.uuidString, privacy: .public) profile=\(scout.profileID, privacy: .public)"
             )
         }
+    }
+
+    private func persistSpeculativeScoutTranscript(
+        _ scout: AgentSpeculativeScout,
+        status: AgentSubagentRun.Status,
+        outcome: AgentSubagentRunner.Outcome?,
+        report: String
+    ) {
+        AppState.persistSubagentTranscript(AgentSubagentTranscript(
+            runID: scout.hostRunID,
+            label: L10n.AgentDelegation.profileName(for: scout.profileID),
+            prompt: AgentSubagentTranscript.clamped(
+                scout.prompt,
+                to: AgentSubagentTranscript.Limits.promptCharacters
+            ).text,
+            model: scout.model,
+            status: status,
+            rounds: outcome?.rounds ?? [],
+            report: AgentSubagentTranscript.clamped(
+                report,
+                to: AgentSubagentTranscript.Limits.reportCharacters
+            ).text,
+            usageTokens: outcome?.usageTokens ?? 0,
+            startedAt: scout.startedAt ?? scout.requestedAt,
+            finishedAt: scout.finishedAt,
+            didTruncate: outcome?.didTruncate ?? false,
+            profileID: scout.profileID,
+            citationsChecked: (outcome?.citationsChecked).flatMap { $0 > 0 ? $0 : nil },
+            citationsUnverifiable: (outcome?.citationsChecked).flatMap {
+                $0 > 0 ? (outcome?.citationsUnverifiable ?? 0) : nil
+            }
+        ))
     }
 
     private func recordSpeculativeScoutTiming(

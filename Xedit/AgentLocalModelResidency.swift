@@ -35,6 +35,10 @@ nonisolated enum AgentLocalModelRoutingReadiness {
     /// What the keeper hands back when residency is switched off: Ollama's
     /// own default unload timer.
     static let releasedKeepAlive = "5m"
+
+    static func routingKeepAlive(warmOnLaunchAndKeepResident: Bool) -> String {
+        warmOnLaunchAndKeepResident ? residentKeepAlive : keepAlive
+    }
     /// Ollama unloads after 5 minutes by default and the OpenAI-compatible
     /// endpoint resets the timer on every request, so residency has to be
     /// re-asserted more often than that.

@@ -1287,6 +1287,7 @@ enum AgentSandboxPolicy {
     nonisolated static func sandboxedEnvironment(
         mode: AgentSandboxMode,
         rootDirectory: URL?,
+        command: String? = nil,
         base: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String: String] {
         var environment = base
@@ -1312,6 +1313,18 @@ enum AgentSandboxPolicy {
             if mode != .workspaceWriteNetworkCredentialed {
                 environment["HOME"] = sandboxHome.path
             }
+            // A synthetic HOME makes a successful global Git inspection
+            // return somebody else's answer: usually an empty config. Keep
+            // HOME isolated, but point Git at the operator's real global file
+            // only for a statically proven read-only `git config --global`
+            // command. This grants neither SSH context nor write permission.
+            if let command,
+               isReadOnlyGlobalGitConfigInspection(command) {
+                environment["GIT_CONFIG_GLOBAL"] = FileManager.default
+                    .homeDirectoryForCurrentUser
+                    .appendingPathComponent(".gitconfig")
+                    .path
+            }
             // Node/Playwright inherit the GUI process' TMPDIR by default. On
             // macOS that path can be a parent of Foundation's actual
             // temporaryDirectory, while the seatbelt profile only allows the
@@ -1332,6 +1345,30 @@ enum AgentSandboxPolicy {
             environment["GH_TOKEN"] = nil
         }
         return environment
+    }
+
+    nonisolated static func isReadOnlyGlobalGitConfigInspection(_ command: String) -> Bool {
+        guard SafeCommand.classify(command: command) == .alwaysSafe,
+              let resolution = SafeCommand.resolveProvablySafeShellExpansions(in: command),
+              !resolution.requiresJudgment,
+              let chain = AgentShellCommandParser.parse(resolution.command),
+              !chain.segments.isEmpty else {
+            return false
+        }
+        return chain.segments.contains { segment in
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text),
+                  let invocation = shellInvocation(from: rawTokens) else {
+                return false
+            }
+            let tokens = invocation.commandTokens.map { $0.lowercased() }
+            guard invocation.head == "git",
+                  let subcommandIndex = gitSubcommandIndex(tokens: tokens),
+                  tokens[subcommandIndex] == "config" else {
+                return false
+            }
+            return tokens.contains("--global")
+                && (tokens.contains("--list") || tokens.contains("-l"))
+        }
     }
 
     nonisolated static func shellLaunch(
