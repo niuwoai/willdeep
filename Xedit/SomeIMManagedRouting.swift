@@ -141,6 +141,14 @@ nonisolated struct SomeIMRouteResolution: Equatable {
 // MARK: - Routing strategy
 
 nonisolated enum SomeIMManagedRouting {
+    /// The routing verdict is advisory. A slow control-plane model must not
+    /// hold the user's first token behind the safety judge's longer timeout.
+    static let routeJudgeTimeout: TimeInterval = 8
+
+    private enum RouteJudgeOutcome: Sendable {
+        case response(String?)
+        case timedOut
+    }
     private static let judgeLogger = Logger(subsystem: "com.willdeep.agent", category: "someim-judge")
 
     /// Judge output budget. Comfortably larger than the strict-JSON verdict
@@ -300,9 +308,30 @@ nonisolated enum SomeIMManagedRouting {
         input: SomeIMRouteJudgeInput,
         floor: AgentManagedCapabilityTier,
         hasCodingPlan: Bool,
-        judge: (String, String, Int) async -> String?
+        timeout: TimeInterval = routeJudgeTimeout,
+        judge: @escaping @Sendable (String, String, Int) async -> String?
     ) async -> SomeIMRouteResolution {
-        let raw = await judge(judgeSystemPrompt(), encodeJudgePayload(input), judgeMaxTokens)
+        let systemPrompt = judgeSystemPrompt()
+        let userPayload = encodeJudgePayload(input)
+        let raw = await withTaskGroup(of: RouteJudgeOutcome.self) { group in
+            group.addTask {
+                .response(await judge(systemPrompt, userPayload, judgeMaxTokens))
+            }
+            group.addTask {
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
+                } catch {
+                    return .response(nil)
+                }
+                return .timedOut
+            }
+            let first = await group.next() ?? .timedOut
+            group.cancelAll()
+            switch first {
+            case .response(let response): return response
+            case .timedOut: return nil
+            }
+        }
         if let raw, let verdict = decodeVerdict(fromRaw: raw) {
             return resolution(for: verdict, floor: floor, usedFallback: false, hasCodingPlan: hasCodingPlan)
         }

@@ -27,6 +27,7 @@
 | `queueSeconds` | `startedAt - requestedAt`，卡在审批或 provider 槽上的时间 |
 | `runSeconds` | `finishedAt - startedAt`，Worker 自己的墙钟 |
 | `rounds` / `toolInvocations` | 模型轮次与工具调用数 |
+| `inlinedFiles` / `inlinedCharacters` | 仅前台 `modelSpawn`：任务包在 Worker 开场消息里实际内联的文件数与字符数；受总字符预算裁剪后的真实值，不是请求里的路径数 |
 | `promptTokens` / `completionTokens` / `totalTokens` | 用量 |
 | `acceptedOutput` | 报告是否被采纳（并行 scout 交付即视为采纳） |
 | `deliveredAtToolBoundary` | 仅并行 scout：报告是否在回合结束前赶上了某个工具边界 |

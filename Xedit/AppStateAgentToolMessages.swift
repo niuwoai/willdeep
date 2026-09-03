@@ -12,6 +12,24 @@ import OSLog
 
 private let agentSpawnLog = Logger(subsystem: "com.willdeep.agent", category: "spawn-agent")
 
+nonisolated struct AgentComposedTaskPacketPrompt: Sendable {
+    let text: String
+    let inlinedFiles: Int
+    let inlinedCharacters: Int
+}
+
+nonisolated struct AgentDeferredSpawnToolMessage: Sendable {
+    let toolCallID: String
+    let payload: String
+    let source: AgentInjectionDefense.ToolMessageSource
+    let outcomeStatus: AgentToolCallStatus
+    let errorMessage: String?
+}
+
+@MainActor final class AgentSpawnToolMessageBuffer {
+    var message: AgentDeferredSpawnToolMessage?
+}
+
 extension AppState {
     func denyPlanProgressReconciliationToolCall(
         _ call: AgentMessageToolCall,
@@ -72,7 +90,8 @@ extension AppState {
         configuration: AgentConfiguration,
         workspaceURL: URL?,
         runtimeDescriptor: RuntimeDescriptor?,
-        workspaceLocation: WorkspaceLocation?
+        workspaceLocation: WorkspaceLocation?,
+        deferredToolMessage: AgentSpawnToolMessageBuffer? = nil
     ) async {
         // Counted before any validation: a `/subagent` turn that tried to
         // delegate and failed still honored the directive.
@@ -87,14 +106,18 @@ extension AppState {
                     runtime.toolCalls[index].result = AgentToolResult(summary: summary, payload: payload)
                 }
             }
-            appendToolMessage(
-                for: runtime,
+            let message = AgentDeferredSpawnToolMessage(
                 toolCallID: call.externalID,
                 payload: payload,
                 source: status == .succeeded ? .toolOutput : .systemNotice,
                 outcomeStatus: status,
                 errorMessage: errorMessage
             )
+            if let deferredToolMessage {
+                deferredToolMessage.message = message
+            } else {
+                appendDeferredSpawnToolMessage(message, runtime: runtime)
+            }
         }
 
         // Stamp the child's effective model + a live progress line onto the
@@ -278,6 +301,8 @@ extension AppState {
         // older packets. An explicit `target_files` remains authoritative for
         // parents that want a narrower write set than the read context.
         let taskPacket = AgentSubagentTaskPacket.parse(arguments["task"])
+        var inlinedFiles = 0
+        var inlinedCharacters = 0
 
         // Dedicated writing trades require a bounded target set. The
         // generalist accepts the same capability when routing fell through
@@ -361,13 +386,16 @@ extension AppState {
         // which files matter, so their contents ride along instead of costing
         // the worker half its window to rediscover.
         if let taskPacket {
-            prompt = await composedTaskPacketPrompt(
+            let composed = await composedTaskPacketPrompt(
                 packet: taskPacket,
                 fallbackPrompt: prompt,
                 workspaceURL: workspaceURL,
                 runtimeDescriptor: runtimeDescriptor,
                 workspaceLocation: workspaceLocation
             )
+            prompt = composed.text
+            inlinedFiles = composed.inlinedFiles
+            inlinedCharacters = composed.inlinedCharacters
         }
         // The verifier runs unattended and repeatedly, so it needs a gate —
         // but "read-only" is the wrong gate. Plenty of honest verifiers write
@@ -668,6 +696,8 @@ extension AppState {
                 completionTokens: outcome?.usageSplit.completion,
                 totalTokens: outcome?.usageTokens,
                 acceptedOutput: outcome?.verifierPassed,
+                inlinedFiles: inlinedFiles,
+                inlinedCharacters: inlinedCharacters,
                 note: escalatedFrom.map { "escalated from \($0)" }
             ))
             AppState.persistSubagentTranscript(
@@ -979,6 +1009,20 @@ extension AppState {
         }
     }
 
+    func appendDeferredSpawnToolMessage(
+        _ message: AgentDeferredSpawnToolMessage,
+        runtime: AgentRuntime
+    ) {
+        appendToolMessage(
+            for: runtime,
+            toolCallID: message.toolCallID,
+            payload: message.payload,
+            source: message.source,
+            outcomeStatus: message.outcomeStatus,
+            errorMessage: message.errorMessage
+        )
+    }
+
     /// Workspace HEAD, short form, for anchoring a transcript as a replayable
     /// case. Nil outside a git checkout — a case without a commit is still a
     /// useful record, just not a reproducible one.
@@ -1003,7 +1047,7 @@ extension AppState {
         workspaceURL: URL?,
         runtimeDescriptor: RuntimeDescriptor?,
         workspaceLocation: WorkspaceLocation?
-    ) async -> String {
+    ) async -> AgentComposedTaskPacketPrompt {
         var contents: [String: String] = [:]
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
@@ -1018,7 +1062,21 @@ extension AppState {
             ) else { continue }
             contents[path] = result.payload
         }
-        return packet.openingMessage(fallbackPrompt: fallbackPrompt) { contents[$0] }
+        var remainingCharacters = AgentSubagentTaskPacket.inlineCharacterBudget
+        var inlinedFileCount = 0
+        var inlinedCharacterCount = 0
+        for path in packet.inlineFiles {
+            guard remainingCharacters > 0, let content = contents[path] else { continue }
+            let count = min(content.count, remainingCharacters)
+            remainingCharacters -= count
+            inlinedFileCount += 1
+            inlinedCharacterCount += count
+        }
+        return AgentComposedTaskPacketPrompt(
+            text: packet.openingMessage(fallbackPrompt: fallbackPrompt) { contents[$0] },
+            inlinedFiles: inlinedFileCount,
+            inlinedCharacters: inlinedCharacterCount
+        )
     }
 
     /// Copy the run id onto the persisted assistant tool call so reopening

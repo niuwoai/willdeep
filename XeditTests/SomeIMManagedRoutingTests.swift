@@ -302,6 +302,25 @@ struct SomeIMRouteOrchestrationTests {
     }
 
     @Test
+    func judgeTimeoutFallsBackToFloor() async {
+        let input = SomeIMRouteJudgeInput(latestUserMessage: "Explain this code", workspaceAvailable: true)
+        let startedAt = Date()
+        let res = await SomeIMManagedRouting.route(
+            input: input,
+            floor: .high,
+            hasCodingPlan: true,
+            timeout: 0.05
+        ) { _, _, _ in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            return nil
+        }
+
+        #expect(res.usedFallback)
+        #expect(res.effectiveTier == .high)
+        #expect(Date().timeIntervalSince(startedAt) < 0.2)
+    }
+
+    @Test
     func fallbackDoesNotDropBelowFloor() async {
         // Even a general fallback must respect an existing premium floor.
         let input = SomeIMRouteJudgeInput(latestUserMessage: "hello")
