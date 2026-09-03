@@ -28,12 +28,9 @@ extension AppState {
     /// decision already matched a marker, or when no model answers usably —
     /// the keyword decision then stands exactly as it was.
     ///
-    /// `fallback` is the session's own configuration: the model used when
-    /// local acceleration is off, or is on but not preferred for routing.
     func refineRouteDecisionWithModelIfNeeded(
         for runtime: AgentRuntime,
-        requestText: String,
-        fallback: AgentConfiguration
+        requestText: String
     ) async {
         guard let keyword = runtime.currentTurnRouteDecision else { return }
         // 操作员点了名就别再问模型了：模型是用来补关键词认不出的意图的，
@@ -42,7 +39,6 @@ extension AppState {
         guard AgentWorkerRoutingModel.shouldConsultModel(for: keyword) else { return }
         guard let verdict = await routingVerdict(
             for: requestText,
-            fallback: fallback,
             runtimeID: runtime.id
         ) else { return }
 
@@ -50,7 +46,9 @@ extension AppState {
         guard merged.profileID != keyword.profileID else { return }
 
         runtime.currentTurnRouteDecision = merged
-        runtime.currentTurnRouteSteering = merged.steering
+        runtime.currentTurnRouteSteering = merged.steering(
+            for: runtime.currentTurnDelegationPolicy
+        )
         Self.workerRoutingLog.info(
             """
             routing model overrode keyword verdict: \
@@ -61,41 +59,37 @@ extension AppState {
         )
     }
 
-    /// Ask the first usable routing model. Returns nil when no candidate
-    /// answers usably — the caller then keeps the keyword decision.
+    /// Ask the warm local routing model. Cold/unavailable local models are
+    /// skipped and warmed in the background; there is no remote judge call.
     private func routingVerdict(
         for requestText: String,
-        fallback: AgentConfiguration,
         runtimeID: UUID
     ) async -> AgentWorkerRoutingModel.Verdict? {
-        let candidates = workerRoutingConfigurationCandidates(fallback: fallback)
-        for configuration in candidates {
-            do {
-                let raw = try await requestRoutingVerdict(
-                    requestText: requestText,
-                    configuration: configuration,
-                    runtimeID: runtimeID
-                )
-                if let verdict = AgentWorkerRoutingModel.parseVerdict(raw) {
-                    return verdict
-                }
-                // An empty or unparsable body is the documented local-model
-                // failure mode, not an exception. Try the next candidate.
+        guard let configuration = await readyWorkerRoutingConfiguration() else { return nil }
+        do {
+            let raw = try await requestRoutingVerdict(
+                requestText: requestText,
+                configuration: configuration,
+                runtimeID: runtimeID
+            )
+            guard let verdict = AgentWorkerRoutingModel.parseVerdict(raw) else {
                 Self.workerRoutingLog.info(
                     "routing model returned an unusable reply; model=\(configuration.model, privacy: .public)"
                 )
-            } catch is CancellationError {
                 return nil
-            } catch {
-                Self.workerRoutingLog.info(
-                    """
-                    routing model call failed; model=\(configuration.model, privacy: .public) \
-                    error=\(String(describing: type(of: error)), privacy: .public)
-                    """
-                )
             }
+            return verdict
+        } catch is CancellationError {
+            return nil
+        } catch {
+            Self.workerRoutingLog.info(
+                """
+                routing model call failed; model=\(configuration.model, privacy: .public) \
+                error=\(String(describing: type(of: error)), privacy: .public)
+                """
+            )
+            return nil
         }
-        return nil
     }
 
     /// One bounded, non-streaming-shaped call. The turn is already waiting

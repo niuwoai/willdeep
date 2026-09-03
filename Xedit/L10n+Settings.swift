@@ -378,7 +378,7 @@ extension L10n {
             static let preferTitle = String(localized: "settings.local-model.prefer-title", defaultValue: "会话标题先用本地")
             static let preferContextSummary = String(localized: "settings.local-model.prefer-context-summary", defaultValue: "上下文压缩先用本地")
             static let preferWorkerRouting = String(localized: "settings.local-model.prefer-worker-routing", defaultValue: "Worker 派发判断先用本地")
-            static let workerRoutingHint = String(localized: "settings.local-model.worker-routing-hint", defaultValue: "LLM 模型用于本地聊天、会话标题、上下文压缩和 Worker 派发判断；图片理解模型只处理图片。关键词能判定的派发请求直接走，判不准时才问 LLM，约多花 1-2 秒；关闭后改用会话默认模型判断。")
+            static let workerRoutingHint = String(localized: "settings.local-model.worker-routing-hint", defaultValue: "LLM 模型用于本地聊天、会话标题、上下文压缩和 Worker 派发判断；图片理解模型只处理图片。只有含糊请求会询问已驻留的本地 LLM；冷模型后台预热，本轮直接走关键词。关闭后也直接走关键词，不调用会话远程模型。")
             static let exposeComposerModel = String(localized: "settings.local-model.expose-composer-model", defaultValue: "加入 composer 模型备选")
             static let composerModelName = String(localized: "settings.local-model.composer-model-name", defaultValue: "composer 显示名称")
             static let composerModelNamePlaceholder = String(localized: "settings.local-model.composer-model-name-placeholder", defaultValue: "Local Chat (Ollama)")

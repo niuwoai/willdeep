@@ -72,6 +72,15 @@ extension AppState {
             }
         }
 
+        // Read-only work never needs an approval record. In particular, a
+        // delegated executor configured with `on-request` may still ask the
+        // host about a harmless inspection command; turning that callback
+        // into a card makes Full Access (and every other mode) prompt for
+        // `sed`, `grep`, and friends even though the parent runs them silently.
+        if risk == .read {
+            return request.allowsSessionApproval ? .acceptForSession : .accept
+        }
+
         if runtime.isUnattendedDispatchTask {
             guard risk == .write,
                   request.kind != .permissions else {
@@ -89,25 +98,24 @@ extension AppState {
             return request.allowsSessionApproval ? .acceptForSession : .accept
         }
 
-        let autoApproval: AgentToolApprovalSource?
-        if risk == .write {
-            autoApproval = await autoApprovalSource(
-                toolName: toolName,
-                arguments: arguments,
-                risk: risk,
-                rootDirectory: rootDirectory,
-                additionalWorkspaceRoots: Array(
-                    agentWorkspaceRoots(for: runtime.session).dropFirst()
-                ),
-                interactionMode: runtime.interactionMode,
-                approvalMode: runtime.approvalMode,
-                conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
-                environmentTrustDeclarations: runtime.environmentTrustDeclarations,
-                latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
-            )
-        } else {
-            autoApproval = nil
-        }
+        // Do not pre-filter to `.write`: Full Access is deliberately allowed
+        // to authorize ordinary danger-tier commands too, while
+        // `autoApprovalSource` itself preserves the malicious-command,
+        // session-management, and environment-trust hard stops.
+        let autoApproval = await autoApprovalSource(
+            toolName: toolName,
+            arguments: arguments,
+            risk: risk,
+            rootDirectory: rootDirectory,
+            additionalWorkspaceRoots: Array(
+                agentWorkspaceRoots(for: runtime.session).dropFirst()
+            ),
+            interactionMode: runtime.interactionMode,
+            approvalMode: runtime.approvalMode,
+            conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+            environmentTrustDeclarations: runtime.environmentTrustDeclarations,
+            latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
+        )
 
         let initialStatus: AgentToolCallStatus
         if autoApproval != nil {
@@ -180,6 +188,10 @@ extension AppState {
         messageID: UUID,
         rootDirectory: URL?
     ) async -> Bool {
+        // Pure reads are already admitted by the Worker execution gate. They
+        // must not enter the parent's approval queue or create a Dock badge.
+        guard risk != .read else { return true }
+
         if runtime.isUnattendedDispatchTask {
             guard risk == .write,
                   !AgentSessionManagementTools.requiresConfirmation(
@@ -210,25 +222,22 @@ extension AppState {
             ) != nil
         }
 
-        let autoApproval: AgentToolApprovalSource?
-        if risk == .write {
-            autoApproval = await autoApprovalSource(
-                toolName: toolName,
-                arguments: arguments,
-                risk: risk,
-                rootDirectory: rootDirectory,
-                additionalWorkspaceRoots: Array(
-                    agentWorkspaceRoots(for: runtime.session).dropFirst()
-                ),
-                interactionMode: runtime.interactionMode,
-                approvalMode: runtime.approvalMode,
-                conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
-                environmentTrustDeclarations: runtime.environmentTrustDeclarations,
-                latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
-            )
-        } else {
-            autoApproval = nil
-        }
+        // Full Access also covers normal danger-tier Worker operations. The
+        // shared resolver keeps the few explicit never-auto-approve cases.
+        let autoApproval = await autoApprovalSource(
+            toolName: toolName,
+            arguments: arguments,
+            risk: risk,
+            rootDirectory: rootDirectory,
+            additionalWorkspaceRoots: Array(
+                agentWorkspaceRoots(for: runtime.session).dropFirst()
+            ),
+            interactionMode: runtime.interactionMode,
+            approvalMode: runtime.approvalMode,
+            conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
+            environmentTrustDeclarations: runtime.environmentTrustDeclarations,
+            latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
+        )
 
         let initialStatus: AgentToolCallStatus
         if autoApproval != nil {

@@ -224,7 +224,7 @@ rs 0.37.0-rc1 新增的三个路由开关落在 `[agent]` 段，因此 Xedit 也
 | key | 含义 | Xedit 侧行为 |
 |---|---|---|
 | `small_model_routing` | 是否做请求级路由 | `false` 即不注入引导；缺省=开（对齐 rs 默认） |
-| `auto_dispatch_read_only` | 高置信请求是否先跑 bounded preflight | 已生效；缺省=开，`false` 可关闭自动预检，delegate-first 工具闸门仍由 `small_model_routing` 控制 |
+| `auto_dispatch_read_only` | 高置信请求是否先跑 bounded preflight | 已生效；Xedit 缺省=关以保护首字延迟，显式 `true` 才开启串行预检；显式 `/subagent`、点名 Worker 与 ops 的 delegate-first 工具闸门仍由路由策略控制 |
 | `max_deep_calls_per_harness` | L 档准入预算 | 直接作为 deep 预算；rs 的单位是 harness，Xedit 用会话，是它最接近的等价单位 |
 
 优先级：`config.toml` 显式值 > Xedit 自身设置 > 内置默认。手工编辑过的文件是更审慎的配置，

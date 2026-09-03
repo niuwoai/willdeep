@@ -33,8 +33,8 @@ nonisolated struct AgentSharedRuntimeConfig: Equatable, Sendable {
     var smallModelRouting: Bool?
     /// `agent.auto_dispatch_read_only` — whether a high-confidence read-only
     /// request may be run as a worker before the root model answers. WillDeep
-    /// does not act on this yet (the executing half is not wired), but it is
-    /// parsed so the two clients cannot drift on the key's name or meaning.
+    /// keeps an absent value off for first-token latency; an explicit true
+    /// enables the serial preflight for large-repository workflows.
     var autoDispatchReadOnly: Bool?
     /// `agent.max_deep_calls_per_harness` — the 1M-tier admission budget. The
     /// rs name says "harness"; WillDeep applies it per session, which is the

@@ -74,6 +74,144 @@ struct AgentApprovalLifecycleTests {
         ) == 0)
     }
 
+    @Test("原生 Worker 的只读命令不创建审批卡")
+    func nativeWorkerReadSkipsApprovalQueue() async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+
+        let approved = await app.resolveSubagentToolApproval(
+            toolName: "run_command",
+            arguments: ["command": .string("sed -n '1,70p' vendor/example.php")],
+            risk: .read,
+            workerName: "实现",
+            runtime: runtime,
+            messageID: UUID(),
+            rootDirectory: nil
+        )
+
+        #expect(approved)
+        #expect(runtime.toolCalls.isEmpty)
+        #expect(runtime.toolDecisionWaiters.isEmpty)
+    }
+
+    @Test("Worker 只把非只读命令送交父会话审核")
+    func workerCommandReviewBoundary() {
+        #expect(!AgentSubagentRunner.shouldRequestParentCommandReview(
+            risk: .read,
+            isStrictReadOnlyShellTrade: false
+        ))
+        #expect(AgentSubagentRunner.shouldRequestParentCommandReview(
+            risk: .write,
+            isStrictReadOnlyShellTrade: false
+        ))
+        #expect(AgentSubagentRunner.shouldRequestParentCommandReview(
+            risk: .danger,
+            isStrictReadOnlyShellTrade: false
+        ))
+        #expect(!AgentSubagentRunner.shouldRequestParentCommandReview(
+            risk: .write,
+            isStrictReadOnlyShellTrade: true
+        ))
+    }
+
+    @Test("完全访问自动批准原生 Worker 的普通高风险命令")
+    func nativeWorkerFullAccessApprovesDangerWithoutPrompt() async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        runtime.approvalMode = .fullAccess
+
+        let approved = await app.resolveSubagentToolApproval(
+            toolName: "run_command",
+            arguments: ["command": .string("rm -rf ./build")],
+            risk: .danger,
+            workerName: "实现",
+            runtime: runtime,
+            messageID: UUID(),
+            rootDirectory: nil
+        )
+
+        #expect(approved)
+        let record = try #require(runtime.toolCalls.last)
+        #expect(record.approvalSource == .fullAccess)
+        #expect(record.status == .succeeded)
+        #expect(runtime.toolDecisionWaiters.isEmpty)
+    }
+
+    @Test("委派执行器的只读命令不创建审批卡")
+    func delegatedExecutorReadSkipsApprovalQueue() async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        let request = AgentDelegatedApprovalRequest(
+            id: UUID().uuidString,
+            executor: .codexCLI,
+            kind: .command,
+            command: "grep -n 'function items' vendor/example.php",
+            cwd: nil,
+            reason: nil,
+            filePaths: [],
+            requestedPermissions: nil,
+            allowsSessionApproval: false
+        )
+
+        let decision = await app.resolveDelegatedExecutorApproval(
+            request,
+            runtime: runtime,
+            messageID: UUID(),
+            rootDirectory: nil
+        )
+
+        if case .accept = decision {
+            // Expected.
+        } else {
+            Issue.record("只读命令应直接接受")
+        }
+        #expect(runtime.toolCalls.isEmpty)
+        #expect(runtime.toolDecisionWaiters.isEmpty)
+    }
+
+    @Test("完全访问自动批准委派执行器的普通高风险命令")
+    func delegatedExecutorFullAccessApprovesDangerWithoutPrompt() async throws {
+        let app = AppState()
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        runtime.approvalMode = .fullAccess
+        let request = AgentDelegatedApprovalRequest(
+            id: UUID().uuidString,
+            executor: .codexCLI,
+            kind: .command,
+            command: "rm -rf ./build",
+            cwd: nil,
+            reason: nil,
+            filePaths: [],
+            requestedPermissions: nil,
+            allowsSessionApproval: false
+        )
+
+        let decision = await app.resolveDelegatedExecutorApproval(
+            request,
+            runtime: runtime,
+            messageID: UUID(),
+            rootDirectory: nil
+        )
+
+        if case .accept = decision {
+            // Expected.
+        } else {
+            Issue.record("完全访问应自动接受普通高风险命令")
+        }
+        let record = try #require(runtime.toolCalls.last)
+        #expect(record.approvalSource == .fullAccess)
+        #expect(record.status == .succeeded)
+        #expect(runtime.toolDecisionWaiters.isEmpty)
+    }
+
     @Test("同会话两个审批互不覆盖，终端确认仅消费自己的等待且不能重复批准")
     func overlappingApprovals() async throws {
         let app = AppState()

@@ -4,24 +4,32 @@ import Testing
 
 @Suite
 struct AgentHybridWorkerRoutingTests {
-    @Test("delegate-first implementation blocks direct edits until the routed worker is attempted")
-    func implementationGuardRequiresWorkerAttempt() throws {
+    @Test("automatic implementation is advisory while explicit delegation is enforced")
+    func implementationGuardRespectsTurnPolicy() throws {
         let decision = AgentRequestRouter.classify("实现新的重试策略")
-
-        let refusal = AgentWorkerRouteGuard.refusal(
-            toolName: "apply_patch",
-            risk: .write,
-            decision: decision,
-            delegationPolicy: .automatic,
-            attemptedProfiles: []
-        )
-        #expect(try #require(refusal).contains("implementer"))
 
         #expect(AgentWorkerRouteGuard.refusal(
             toolName: "apply_patch",
             risk: .write,
             decision: decision,
             delegationPolicy: .automatic,
+            attemptedProfiles: []
+        ) == nil)
+
+        let requiredRefusal = AgentWorkerRouteGuard.refusal(
+            toolName: "apply_patch",
+            risk: .write,
+            decision: decision,
+            delegationPolicy: .required,
+            attemptedProfiles: []
+        )
+        #expect(try #require(requiredRefusal).contains("implementer"))
+
+        #expect(AgentWorkerRouteGuard.refusal(
+            toolName: "apply_patch",
+            risk: .write,
+            decision: decision,
+            delegationPolicy: .required,
             attemptedProfiles: ["implementer"]
         ) == nil)
 
@@ -32,6 +40,19 @@ struct AgentHybridWorkerRoutingTests {
             delegationPolicy: .forbidden,
             attemptedProfiles: []
         ) == nil)
+    }
+
+    @Test("operator-pinned worker remains delegate-first under automatic policy")
+    func pinnedWorkerIsEnforced() {
+        let decision = AgentRequestRouter.pinnedDecision(profileID: "implementer")
+
+        #expect(AgentWorkerRouteGuard.refusal(
+            toolName: "apply_patch",
+            risk: .write,
+            decision: decision,
+            delegationPolicy: .automatic,
+            attemptedProfiles: []
+        ) != nil)
     }
 
     @Test("production mutation requires an exact ops worker attempt")
