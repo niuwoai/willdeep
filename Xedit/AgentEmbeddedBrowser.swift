@@ -18,7 +18,9 @@ import WebKit
 final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNavigationDelegate, WKScriptMessageHandler {
     static let shared = AgentEmbeddedBrowserController()
     static let diagnosticsMessageHandlerName = "willdeepBrowserDiagnostics"
-    private static var runtimeControllers: [UUID: AgentEmbeddedBrowserController] = [:]
+    private static var runtimeControllers: [UUID: [UUID: AgentEmbeddedBrowserController]] = [:]
+    private static var activeTabIDs: [UUID: UUID] = [:]
+    private static let legacyTabID = UUID(uuidString: "444EF006-70D0-498C-A796-6F41BE10D2F0")!
 
     @Published var address: String = "https://example.com"
     @Published private(set) var currentURL: String = ""
@@ -41,22 +43,42 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         super.init()
     }
 
-    static func controller(for runtimeID: UUID?) -> AgentEmbeddedBrowserController {
+    static func controller(for runtimeID: UUID?, tabID: UUID? = nil) -> AgentEmbeddedBrowserController {
         guard let runtimeID else { return shared }
-        if let existing = runtimeControllers[runtimeID] {
+        let resolvedTabID = tabID ?? activeTabIDs[runtimeID] ?? legacyTabID
+        activeTabIDs[runtimeID] = resolvedTabID
+        if let existing = runtimeControllers[runtimeID]?[resolvedTabID] {
             return existing
         }
         let controller = AgentEmbeddedBrowserController()
-        runtimeControllers[runtimeID] = controller
+        runtimeControllers[runtimeID, default: [:]][resolvedTabID] = controller
         return controller
     }
 
+    static func activate(tabID: UUID, for runtimeID: UUID) {
+        activeTabIDs[runtimeID] = tabID
+    }
+
     static func release(for runtimeID: UUID) {
-        runtimeControllers.removeValue(forKey: runtimeID)?.resetForResourceReaper()
+        if let controllers = runtimeControllers.removeValue(forKey: runtimeID) {
+            controllers.values.forEach { $0.resetForResourceReaper() }
+        }
+        activeTabIDs.removeValue(forKey: runtimeID)
+    }
+
+    static func release(tabID: UUID, for runtimeID: UUID) {
+        guard let controller = runtimeControllers[runtimeID]?.removeValue(forKey: tabID) else { return }
+        controller.resetForResourceReaper()
+        if runtimeControllers[runtimeID]?.isEmpty == true {
+            runtimeControllers.removeValue(forKey: runtimeID)
+        }
+        if activeTabIDs[runtimeID] == tabID {
+            activeTabIDs[runtimeID] = runtimeControllers[runtimeID]?.keys.first
+        }
     }
 
     static func hasController(for runtimeID: UUID) -> Bool {
-        runtimeControllers[runtimeID] != nil
+        runtimeControllers[runtimeID]?.isEmpty == false
     }
 
     @discardableResult
@@ -1391,10 +1413,15 @@ struct AgentEmbeddedBrowserPanel: View {
     @State private var screenshotError: String?
     let width: CGFloat
 
-    init(runtimeID: UUID? = nil, width: CGFloat) {
+    private let runtimeID: UUID?
+    private let tabID: UUID?
+
+    init(runtimeID: UUID? = nil, tabID: UUID? = nil, width: CGFloat) {
         self.width = width
+        self.runtimeID = runtimeID
+        self.tabID = tabID
         _controller = ObservedObject(
-            wrappedValue: AgentEmbeddedBrowserController.controller(for: runtimeID)
+            wrappedValue: AgentEmbeddedBrowserController.controller(for: runtimeID, tabID: tabID)
         )
     }
 
@@ -1409,6 +1436,11 @@ struct AgentEmbeddedBrowserPanel: View {
         }
         .frame(width: width)
         .focusable(false)
+        .onAppear {
+            if let runtimeID, let tabID {
+                AgentEmbeddedBrowserController.activate(tabID: tabID, for: runtimeID)
+            }
+        }
     }
 
     private var toolbar: some View {

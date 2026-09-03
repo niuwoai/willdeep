@@ -954,6 +954,175 @@ extension WillDeepTests {
         #expect(model.subagentUsage.isEmpty)
         #expect(model.subagentSessionCount == 0)
         #expect(model.uniqueToolCount == 0)
+        #expect(model.requestAnalytics.localAllTime.requestCount == 0)
+        #expect(model.requestAnalytics.recentAPI.requestCount == 0)
+    }
+
+    @Test("request analytics separates local traffic and limits API totals to seven days")
+    func testRequestAnalyticsLocalAndRecentWindows() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = ISO8601DateFormatter().date(from: "2026-09-03T08:00:00Z")!
+        let oldDate = calendar.date(byAdding: .day, value: -8, to: now)!
+        let localWorker = AgentSubagentRunUsage(
+            profileID: "generalist",
+            model: "gemma4:e4b-it-qat4b",
+            providerID: "ollama",
+            usageTokens: 500,
+            promptTokens: 400,
+            completionTokens: 100,
+            roundCount: 2,
+            toolInvocationCount: 1
+        )
+        let localSession = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: "gemma4:e4b-it-qat4b",
+            providerID: "ollama",
+            providerDisplayName: "Local",
+            createdAt: now,
+            updatedAt: now,
+            messages: [
+                AgentUsageMessageSnapshot(
+                    role: .assistant,
+                    contentCharacterCount: 2,
+                    subagentRuns: [localWorker],
+                    promptTokens: 1_000,
+                    completionTokens: 200,
+                    origin: .nativeModel,
+                    requestModelID: "gemma4:e4b-it-qat4b",
+                    requestProviderID: "ollama",
+                    elapsedSeconds: 10,
+                    firstResponseSeconds: 2,
+                    requestIsLocal: true,
+                    createdAt: now
+                )
+            ]
+        )
+        let remoteSession = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: "someim-code-high",
+            providerID: "some-im",
+            providerDisplayName: "some.im",
+            createdAt: oldDate,
+            updatedAt: now,
+            messages: [
+                AgentUsageMessageSnapshot(
+                    role: .assistant,
+                    contentCharacterCount: 2,
+                    promptTokens: 900,
+                    completionTokens: 90,
+                    origin: .nativeModel,
+                    requestModelID: "someim-code-high",
+                    requestProviderID: "some-im",
+                    elapsedSeconds: 9,
+                    firstResponseSeconds: 1,
+                    requestIsLocal: false,
+                    createdAt: oldDate
+                ),
+                AgentUsageMessageSnapshot(
+                    role: .assistant,
+                    contentCharacterCount: 2,
+                    promptTokens: 500,
+                    completionTokens: 100,
+                    origin: .nativeModel,
+                    requestModelID: "someim-code-high",
+                    requestProviderID: "some-im",
+                    elapsedSeconds: 4,
+                    firstResponseSeconds: 1,
+                    requestIsLocal: false,
+                    createdAt: now
+                )
+            ]
+        )
+
+        let analytics = AgentRequestAnalytics.snapshot(
+            for: [localSession, remoteSession],
+            now: now,
+            calendar: calendar
+        )
+
+        #expect(analytics.localAllTime.requestCount == 3)
+        #expect(analytics.localAllTime.sessionCount == 1)
+        #expect(analytics.localAllTime.promptTokens == 1_400)
+        #expect(analytics.localAllTime.completionTokens == 300)
+        #expect(analytics.localAllTime.averageTokensPerSecond == 25)
+        #expect(analytics.localModels.count == 1)
+        #expect(analytics.recentAPI.requestCount == 4)
+        #expect(analytics.recentAPI.sessionCount == 2)
+        #expect(analytics.recentAPI.promptTokens == 1_900)
+        #expect(analytics.recentAPI.completionTokens == 400)
+        #expect(analytics.recentAPI.measuredLatencyRequestCount == 2)
+        #expect(analytics.recentAPI.measuredFirstResponseRequestCount == 2)
+        #expect(abs(try #require(analytics.recentAPI.averageLatencySeconds) - 7) < 0.000_001)
+        #expect(abs(try #require(analytics.recentAPI.averageFirstResponseSeconds) - 1.5) < 0.000_001)
+    }
+
+    @Test("legacy Ollama requests remain identifiable as local without the new flag")
+    func testRequestAnalyticsLegacyLocalFallback() {
+        let now = Date()
+        let session = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: "gemma4:e4b-it-qat4b",
+            providerID: "ollama",
+            providerDisplayName: nil,
+            createdAt: now,
+            updatedAt: now,
+            messages: [
+                AgentUsageMessageSnapshot(
+                    role: .assistant,
+                    contentCharacterCount: 2,
+                    usageTokens: 12,
+                    requestModelID: "gemma4:e4b-it-qat4b",
+                    requestProviderID: "ollama",
+                    createdAt: now
+                )
+            ]
+        )
+
+        let analytics = AgentRequestAnalytics.snapshot(for: [session], now: now)
+
+        #expect(analytics.localAllTime.requestCount == 1)
+        #expect(analytics.localModels.first?.modelID == "gemma4:e4b-it-qat4b")
+    }
+
+    @Test("session helper calls participate in local and seven-day request totals")
+    func testRequestAnalyticsIncludesAuxiliaryCalls() throws {
+        let now = Date()
+        let configuration = AgentConfiguration(
+            providerID: "ollama",
+            baseURL: "http://127.0.0.1:11434/v1",
+            model: "gemma4:e4b-it-qat4b",
+            apiKey: ""
+        )
+        let record = AgentAuxiliaryModelRequestRecord(
+            purpose: .contextCompression,
+            providerID: configuration.providerID,
+            modelID: configuration.model,
+            isLocal: true,
+            createdAt: now,
+            promptTokens: 600,
+            completionTokens: 120,
+            elapsedSeconds: 5,
+            firstResponseSeconds: 1,
+            succeeded: true
+        )
+        let session = AgentUsageSessionSnapshot(
+            id: UUID(),
+            modelID: nil,
+            providerID: nil,
+            providerDisplayName: nil,
+            createdAt: now,
+            updatedAt: now,
+            messages: [],
+            auxiliaryModelRequests: [record]
+        )
+
+        let analytics = AgentRequestAnalytics.snapshot(for: [session], now: now)
+
+        #expect(analytics.localAllTime.requestCount == 1)
+        #expect(analytics.recentAPI.requestCount == 1)
+        #expect(analytics.localAllTime.averagePromptTokens == 600)
+        #expect(analytics.localAllTime.averageCompletionTokens == 120)
+        #expect(abs(try #require(analytics.localAllTime.averageTokensPerSecond) - 30) < 0.000_001)
     }
 
     @Test("AppState memoizes the dashboard model until snapshots change")

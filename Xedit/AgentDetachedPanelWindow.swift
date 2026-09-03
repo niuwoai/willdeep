@@ -8,15 +8,13 @@ final class AgentDetachedPanelRegistry: ObservableObject {
     static let shared = AgentDetachedPanelRegistry()
     @Published private(set) var windows: [AgentPanelTabID: AgentPanelWindowController] = [:]
     private var surfaces: [AgentPanelTabID: NSHostingView<AgentPanelTabContent>] = [:]
-    // The app-wide terminal controller has exactly one hosting surface.
-    private var terminalSurface: NSHostingView<AgentPanelTabContent>?
 
     func isDetached(_ kind: AgentSidePanelKind) -> Bool { windows.values.contains { $0.kind == kind } }
     func isDetached(_ id: AgentPanelTabID, kind: AgentSidePanelKind) -> Bool { window(for: id, kind: kind) != nil }
     func hasWindow(sessionID: UUID) -> Bool { windows.keys.contains { $0.sessionID == sessionID } }
 
     private func window(for id: AgentPanelTabID, kind: AgentSidePanelKind) -> AgentPanelWindowController? {
-        windows[id] ?? (kind == .terminal ? windows.values.first { $0.kind == .terminal } : nil)
+        windows[id]
     }
 
     @discardableResult
@@ -31,12 +29,6 @@ final class AgentDetachedPanelRegistry: ObservableObject {
     func surface(for id: AgentPanelTabID, appState: AppState, runtime: AgentRuntime,
                  kind: AgentSidePanelKind) -> NSView {
         let root = AgentPanelTabContent(appState: appState, runtime: runtime, tabID: id.tabID)
-        if kind == .terminal {
-            if let terminalSurface { terminalSurface.rootView = root; return terminalSurface }
-            let view = NSHostingView(rootView: root)
-            terminalSurface = view
-            return view
-        }
         if let view = surfaces[id] { return view }
         let view = NSHostingView(rootView: root)
         surfaces[id] = view
@@ -57,18 +49,6 @@ final class AgentDetachedPanelRegistry: ObservableObject {
     }
 
     func reattach(_ id: AgentPanelTabID, appState: AppState, reveal: Bool = true) {
-        // A Terminal tab in another session can refer to the same app-wide
-        // terminal window. Returning it must not become a silent no-op.
-        if windows[id] == nil,
-           appState.loadedRuntime(for: id.sessionID)?.sidePanelState.openTabs.first(where: { $0.id == id.tabID })?.kind == .terminal,
-           let sharedID = windows.first(where: { $0.value.kind == .terminal })?.key {
-            reattach(sharedID, appState: appState, reveal: false)
-            if let owner = appState.loadedRuntime(for: id.sessionID) {
-                appState.updatePanelTabs(runtime: owner) { $0.selectTab(id.tabID) }
-            }
-            if reveal { _ = appState.selectAndRevealAgentSessionInSidebar(id: id.sessionID) }
-            return
-        }
         guard let controller = windows.removeValue(forKey: id) else { return }
         controller.panelContent.removeFromSuperview()
         controller.close()
@@ -80,9 +60,6 @@ final class AgentDetachedPanelRegistry: ObservableObject {
     func reattachAll(sessionID: UUID, appState: AppState) {
         for id in Array(windows.keys).filter({ $0.sessionID == sessionID }) {
             reattach(id, appState: appState, reveal: false)
-        }
-        if let terminal = appState.loadedRuntime(for: sessionID)?.sidePanelState.openTabs.first(where: { $0.kind == .terminal }) {
-            reattach(.init(sessionID: sessionID, tabID: terminal.id), appState: appState, reveal: false)
         }
     }
 
@@ -105,10 +82,6 @@ final class AgentDetachedPanelRegistry: ObservableObject {
         let ids = Set(surfaces.keys.filter { $0.sessionID == sessionID })
             .union(windows.keys.filter { $0.sessionID == sessionID })
         for id in ids { closeTab(id) }
-        if terminalSurface?.rootView.runtime.id == sessionID {
-            terminalSurface?.removeFromSuperview()
-            terminalSurface = nil
-        }
     }
 }
 

@@ -142,6 +142,10 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// dropped them. Planning a goal is one of the more expensive things the
     /// app does, and it was billing to nobody.
     var coordinatorWorkerRuns: [AgentSubagentRunUsage]?
+    /// Prompt-free request measurements for session-associated helper calls
+    /// such as title generation, compression, vision fallback, and route
+    /// classification. Main and Worker rounds live in their existing ledgers.
+    var auxiliaryModelRequests: [AgentAuxiliaryModelRequestRecord]
     /// Model-facing summary of older messages. This is intentionally
     /// separate from `messages`: context compression must shrink only the
     /// next provider request, never the user's local transcript.
@@ -273,6 +277,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         messages: [AgentMessage] = [],
         hostWorkerRuns: [AgentHostWorkerRunRecord]? = nil,
         coordinatorWorkerRuns: [AgentSubagentRunUsage]? = nil,
+        auxiliaryModelRequests: [AgentAuxiliaryModelRequestRecord] = [],
         contextSummary: String? = nil,
         contextSummaryThroughMessageID: AgentMessage.ID? = nil,
         didEditFiles: Bool = false,
@@ -324,6 +329,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.messages = messages
         self.hostWorkerRuns = hostWorkerRuns
         self.coordinatorWorkerRuns = coordinatorWorkerRuns
+        self.auxiliaryModelRequests = auxiliaryModelRequests
         self.contextSummary = contextSummary
         self.contextSummaryThroughMessageID = contextSummaryThroughMessageID
         self.didEditFiles = didEditFiles
@@ -466,7 +472,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, worktreeRecoveryInfo, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
         case providerEntryID, providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
-        case createdAt, updatedAt, messages, contextSummary, contextSummaryThroughMessageID
+        case createdAt, updatedAt, messages, hostWorkerRuns, coordinatorWorkerRuns, auxiliaryModelRequests, contextSummary, contextSummaryThroughMessageID
         case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
         case originRoutineID, lastTurnFailure
@@ -500,6 +506,12 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decode(Date.self, forKey: .updatedAt)
         self.messages = try c.decode([AgentMessage].self, forKey: .messages)
+        self.hostWorkerRuns = try c.decodeIfPresent([AgentHostWorkerRunRecord].self, forKey: .hostWorkerRuns)
+        self.coordinatorWorkerRuns = try c.decodeIfPresent([AgentSubagentRunUsage].self, forKey: .coordinatorWorkerRuns)
+        self.auxiliaryModelRequests = try c.decodeIfPresent(
+            [AgentAuxiliaryModelRequestRecord].self,
+            forKey: .auxiliaryModelRequests
+        ) ?? []
         self.contextSummary = try c.decodeIfPresent(String.self, forKey: .contextSummary)
         self.contextSummaryThroughMessageID = try c.decodeIfPresent(AgentMessage.ID.self, forKey: .contextSummaryThroughMessageID)
         self.didEditFiles = try c.decodeIfPresent(Bool.self, forKey: .didEditFiles) ?? false

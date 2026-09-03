@@ -411,7 +411,7 @@ nonisolated enum AgentSessionStore {
     /// the full decode and repairs the sidecar, so this stays a cache and
     /// never becomes a second source of truth.
     private struct UsageCatalogEntry: Codable {
-        static let currentSchemaVersion = 1
+        static let currentSchemaVersion = 3
 
         let schemaVersion: Int
         let snapshot: AgentUsageSessionSnapshot
@@ -513,6 +513,9 @@ nonisolated enum AgentSessionStore {
         let requestProviderDisplayName: String?
         let managedRoute: AgentManagedRouteDecision?
         let requestStablePrefixCharacters: Int?
+        let elapsedSeconds: Double?
+        let firstResponseSeconds: Double?
+        let requestIsLocal: Bool?
         let createdAt: Date?
 
         enum CodingKeys: String, CodingKey {
@@ -523,6 +526,7 @@ nonisolated enum AgentSessionStore {
             case origin, originLabel, source, delegationPolicy
             case requestModelID, requestProviderID, requestProviderDisplayName
             case managedRoute, requestStablePrefixCharacters
+            case elapsedSeconds, firstResponseSeconds, requestIsLocal
             case createdAt
         }
 
@@ -556,6 +560,9 @@ nonisolated enum AgentSessionStore {
             )
             managedRoute = try c.decodeIfPresent(AgentManagedRouteDecision.self, forKey: .managedRoute)
             requestStablePrefixCharacters = try c.decodeIfPresent(Int.self, forKey: .requestStablePrefixCharacters)
+            elapsedSeconds = try c.decodeIfPresent(Double.self, forKey: .elapsedSeconds)
+            firstResponseSeconds = try c.decodeIfPresent(Double.self, forKey: .firstResponseSeconds)
+            requestIsLocal = try c.decodeIfPresent(Bool.self, forKey: .requestIsLocal)
             createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
         }
 
@@ -616,6 +623,9 @@ nonisolated enum AgentSessionStore {
                 requestProviderID: requestProviderID,
                 requestProviderDisplayName: requestProviderDisplayName,
                 requestStablePrefixCharacters: requestStablePrefixCharacters,
+                elapsedSeconds: elapsedSeconds,
+                firstResponseSeconds: firstResponseSeconds,
+                requestIsLocal: requestIsLocal,
                 createdAt: createdAt
             )
         }
@@ -637,11 +647,12 @@ nonisolated enum AgentSessionStore {
         let managedRouting: AgentManagedRoutingState?
         let hostWorkerRuns: [AgentHostWorkerRunRecord]?
         let coordinatorWorkerRuns: [AgentSubagentRunUsage]?
+        let auxiliaryModelRequests: [AgentAuxiliaryModelRequestRecord]
 
         enum CodingKeys: String, CodingKey {
             case id, modelID, providerID, providerDisplayName, createdAt, updatedAt, messages
             case workspaceLocation, workspaceRootPath, sidebarWorkspaceRootPath, agentEditedPaths, agentArtifactPaths
-            case managedRouting, hostWorkerRuns, coordinatorWorkerRuns
+            case managedRouting, hostWorkerRuns, coordinatorWorkerRuns, auxiliaryModelRequests
         }
 
         init(from decoder: Decoder) throws {
@@ -661,6 +672,10 @@ nonisolated enum AgentSessionStore {
             managedRouting = try c.decodeIfPresent(AgentManagedRoutingState.self, forKey: .managedRouting)
             hostWorkerRuns = try c.decodeIfPresent([AgentHostWorkerRunRecord].self, forKey: .hostWorkerRuns)
             coordinatorWorkerRuns = try c.decodeIfPresent([AgentSubagentRunUsage].self, forKey: .coordinatorWorkerRuns)
+            auxiliaryModelRequests = try c.decodeIfPresent(
+                [AgentAuxiliaryModelRequestRecord].self,
+                forKey: .auxiliaryModelRequests
+            ) ?? []
         }
 
         var snapshot: AgentUsageSessionSnapshot {
@@ -674,6 +689,7 @@ nonisolated enum AgentSessionStore {
                 messages: messages.compactMap(\.snapshot),
                 hostWorkerRuns: hostWorkerRuns,
                 coordinatorWorkerRuns: coordinatorWorkerRuns,
+                auxiliaryModelRequests: auxiliaryModelRequests,
                 workspaceIdentifier: workspaceIdentifier,
                 editedFileCount: agentEditedPaths.count,
                 artifactCount: agentArtifactPaths.count,

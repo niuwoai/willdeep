@@ -40,7 +40,11 @@ extension AppState {
         // 不是用来推翻明确指令的。
         guard !keyword.isOperatorPinned else { return }
         guard AgentWorkerRoutingModel.shouldConsultModel(for: keyword) else { return }
-        guard let verdict = await routingVerdict(for: requestText, fallback: fallback) else { return }
+        guard let verdict = await routingVerdict(
+            for: requestText,
+            fallback: fallback,
+            runtimeID: runtime.id
+        ) else { return }
 
         let merged = AgentWorkerRoutingModel.merged(keyword: keyword, verdict: verdict)
         guard merged.profileID != keyword.profileID else { return }
@@ -61,14 +65,16 @@ extension AppState {
     /// answers usably — the caller then keeps the keyword decision.
     private func routingVerdict(
         for requestText: String,
-        fallback: AgentConfiguration
+        fallback: AgentConfiguration,
+        runtimeID: UUID
     ) async -> AgentWorkerRoutingModel.Verdict? {
         let candidates = workerRoutingConfigurationCandidates(fallback: fallback)
         for configuration in candidates {
             do {
-                let raw = try await Self.requestRoutingVerdict(
+                let raw = try await requestRoutingVerdict(
                     requestText: requestText,
-                    configuration: configuration
+                    configuration: configuration,
+                    runtimeID: runtimeID
                 )
                 if let verdict = AgentWorkerRoutingModel.parseVerdict(raw) {
                     return verdict
@@ -95,18 +101,22 @@ extension AppState {
     /// One bounded, non-streaming-shaped call. The turn is already waiting
     /// on this, so it is capped by `AgentWorkerRoutingModel.timeout` rather
     /// than the provider's own generous defaults.
-    private nonisolated static func requestRoutingVerdict(
+    private func requestRoutingVerdict(
         requestText: String,
-        configuration: AgentConfiguration
+        configuration: AgentConfiguration,
+        runtimeID: UUID
     ) async throws -> String {
+        let normalized = configuration.normalized
         let messages = [
             AgentMessage(role: .system, content: AgentWorkerRoutingModel.systemPrompt()),
             AgentMessage(role: .user, content: AgentWorkerRoutingModel.userPrompt(for: requestText))
         ]
         let collector = AgentTextCollector()
+        let measurement = AgentAuxiliaryRequestMeasurement()
         let work = Task {
-            try await AgentClient(configuration: configuration.normalized)
+            try await AgentClient(configuration: normalized)
                 .streamChat(messages: messages) { event in
+                    await measurement.consume(event)
                     if case .textDelta(let delta) = event {
                         await collector.append(delta)
                     }
@@ -117,8 +127,32 @@ extension AppState {
             work.cancel()
         }
         defer { timeoutTask.cancel() }
-        try await work.value
-        return await collector.value
+        do {
+            try await work.value
+            recordAuxiliaryModelRequest(
+                await measurement.record(
+                    purpose: .workerRouting,
+                    providerID: normalized.providerID,
+                    modelID: normalized.model,
+                    isLocal: AgentLocalModelPrompting.isLocalProvider(normalized),
+                    succeeded: true
+                ),
+                runtimeID: runtimeID
+            )
+            return await collector.value
+        } catch {
+            recordAuxiliaryModelRequest(
+                await measurement.record(
+                    purpose: .workerRouting,
+                    providerID: normalized.providerID,
+                    modelID: normalized.model,
+                    isLocal: AgentLocalModelPrompting.isLocalProvider(normalized),
+                    succeeded: false
+                ),
+                runtimeID: runtimeID
+            )
+            throw error
+        }
     }
 }
 
