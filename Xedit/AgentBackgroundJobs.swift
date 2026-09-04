@@ -756,10 +756,20 @@ final class AgentJobRegistry: ObservableObject {
             case .running, .failed, .timedOut, .launchFailed:
                 eventStatus = .failed
             }
+            // 失败收尾时，别用无信息的 "exit N" 当合成完成事件的 detail——
+            // executorResultText 会优先取最后一条 .finished 的 detail，那会把前面
+            // 记着真实原因的 .warning 永久遮蔽，用户只看到 "exit -1"。这里失败时
+            // 先从前面的 warning / 失败 message 里捞真实原因，捞不到才回落 exit 码。
+            let failureReason: String? = eventStatus == .failed
+                ? collectedEvents.reversed().first(where: { event in
+                    (event.kind == .warning || event.kind == .message)
+                        && (event.detail?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                })?.detail?.trimmingCharacters(in: .whitespacesAndNewlines)
+                : nil
             let finished = AgentExecutorEvent(
                 kind: .finished,
                 sessionID: updated.executorSessionID,
-                detail: "exit \(exitCode)",
+                detail: failureReason ?? "exit \(exitCode)",
                 status: eventStatus
             )
             managedExecutorEvents[id, default: []].append(finished)

@@ -58,6 +58,7 @@ nonisolated enum AgentCodexAppServerError: LocalizedError {
     case protocolFailure(String)
     case processExited(Int32, String)
     case missingThreadID
+    case idleTimeout(TimeInterval)
 
     var errorDescription: String? {
         switch self {
@@ -69,6 +70,8 @@ nonisolated enum AgentCodexAppServerError: LocalizedError {
             return "Codex app-server exited with code \(code): \(detail)"
         case .missingThreadID:
             return "Codex app-server did not return a thread id."
+        case .idleTimeout(let seconds):
+            return "Codex app-server went silent for \(Int(seconds))s and was stopped. It may have stalled waiting on a reply, an approval, or the network."
         }
     }
 }
@@ -86,6 +89,34 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
     private let processHandler: ProcessHandler
     private let processLock = NSLock()
     private var process: Process?
+
+    /// 静默看门狗：app-server 握手成功后若长时间不再吐任何一行（模型卡住、
+    /// 等一个永不返回的审批、网络挂起、协议方言对不上），原来的等待循环会无限
+    /// 阻塞，唯一兜底是 6 小时前台墙钟，用户视角约等于永远卡住。这里对「完全无
+    /// 输出」的时长设一个上限，超了就 kill 进程并报可读原因。
+    static let idleTimeout: TimeInterval = 180
+    private let activityLock = NSLock()
+    private var lastActivityAt = Date()
+    private var idleTimedOut = false
+
+    private func noteActivity() {
+        activityLock.withLock { lastActivityAt = Date() }
+    }
+
+    private func startIdleWatchdog() -> Task<Void, Never> {
+        Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard let self else { return }
+                let idle = self.activityLock.withLock { Date().timeIntervalSince(self.lastActivityAt) }
+                if idle >= Self.idleTimeout {
+                    self.activityLock.withLock { self.idleTimedOut = true }
+                    self.cancel()
+                    return
+                }
+            }
+        }
+    }
 
     init(
         configuration: AgentCodexAppServerConfiguration,
@@ -196,8 +227,13 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
         var didCompleteTurn = false
         var completionStatus = AgentExecutorEventStatus.failed
 
+        activityLock.withLock { lastActivityAt = Date(); idleTimedOut = false }
+        let watchdog = startIdleWatchdog()
+        defer { watchdog.cancel() }
+
         do {
             for await line in lines.stream {
+                noteActivity()
                 try Task.checkCancellation()
                 guard let object = AgentCodexJSON.object(from: line) else {
                     throw AgentCodexAppServerError.invalidMessage(line)
@@ -263,6 +299,11 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
 
         try? writer.close()
         cancel()
+        // 看门狗踢掉进程时，流会以 EOF 正常结束、走到这里而不是 catch。此时给出
+        // 明确的静默超时原因，而不是笼统的 processExited。
+        if activityLock.withLock({ idleTimedOut }) {
+            throw AgentCodexAppServerError.idleTimeout(Self.idleTimeout)
+        }
         guard didCompleteTurn else {
             let code = process.isRunning ? -1 : process.terminationStatus
             throw AgentCodexAppServerError.processExited(

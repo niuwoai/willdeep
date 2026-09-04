@@ -381,6 +381,8 @@ enum ComposerOverflowControl: Hashable {
 }
 
 struct ComposerAdaptiveControlStrip: View {
+    @EnvironmentObject private var appState: AppState
+
     // rc482 perf: 改为固定单套布局，去掉 ViewThatFits。原先用 ViewThatFits
     // 在三套布局变体间按窗口宽度挑一套显示，代价是**每次重渲染都要把每个
     // 变体整建一遍来测量**——composer pill 重建因此成为主线程热点（打字、
@@ -390,7 +392,12 @@ struct ComposerAdaptiveControlStrip: View {
     // 布局不再随宽度变化，每次重建只建一套。
     var body: some View {
         HStack(spacing: 6) {
-            ModelPickerPill()
+            // 只有 WillDeep 执行器时才显示模型选择器。委派给 Claude Code / Codex
+            // 等外部执行器时，这个选择器设的是 WillDeep 外层编排模型，不是真正
+            // 交给外部 CLI 的模型（后者来自工具调用参数），暴露它会误导用户。
+            if appState.agentExecutionAgent == .willDeep {
+                ModelPickerPill()
+            }
             AgentModePickerPill()
             AgentApprovalModePickerPill()
             ComposerOverflowPill(controls: [.plugins, .experts])
