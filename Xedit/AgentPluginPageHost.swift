@@ -126,6 +126,9 @@ private struct AgentPluginWebPage: View {
     @State private var baseURL: URL?
     @State private var errorMessage: String?
     @State private var isLoading = false
+    /// 手动重新载入的可见反馈。和 isLoading 分开：isLoading 只在首次没有
+    /// html 时用来占位，重载时 html 一直在，那条路走不到。
+    @State private var isReloading = false
 
     var body: some View {
         Group {
@@ -137,6 +140,19 @@ private struct AgentPluginWebPage: View {
                     context: destinationContext,
                     appState: appState
                 )
+                // 重新载入时旧页面还挂着，下面那个 isLoading 分支根本走不到，
+                // 用户点完「重新载入」屏幕纹丝不动，只能以为没反应。这里在
+                // 顶部叠一条细进度条，不遮挡内容。
+                .overlay(alignment: .top) {
+                    if isReloading {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                            .controlSize(.small)
+                            .tint(.accentColor)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeOut(duration: 0.15), value: isReloading)
             } else if isLoading {
                 VStack(spacing: 10) {
                     ProgressView()
@@ -159,7 +175,17 @@ private struct AgentPluginWebPage: View {
             }
         }
         .task(id: taskIdentity) {
-            await loadPage()
+            // 第一次进来 html 还是 nil，走占位视图；之后每次 generation 变化
+            // 都是一次手动重载，改用顶部进度条给反馈。
+            let isManualReload = html != nil
+            if isManualReload { isReloading = true }
+            await loadPage(keepingPreviousHTML: isManualReload)
+            if isManualReload {
+                // 本地入口文件读起来只要几毫秒，进度条一闪而过等于没有。
+                // 压到最短可见时长，让「点了有反应」这件事成立。
+                try? await Task.sleep(nanoseconds: 320_000_000)
+                isReloading = false
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .agentMCPResourcesDidChange)) { notification in
             guard destination.mainPage.runtime == .mcpApp,
@@ -205,9 +231,10 @@ private struct AgentPluginWebPage: View {
         )
     }
 
-    private func loadPage() async {
+    private func loadPage(keepingPreviousHTML: Bool = false) async {
         isLoading = true
-        html = nil
+        // 重载时留着旧页面，避免整块内容闪成空白再长回来。
+        if !keepingPreviousHTML { html = nil }
         errorMessage = nil
         do {
             switch destination.mainPage.runtime {
@@ -845,9 +872,17 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 Task { @MainActor [weak self] in
                     guard let self, let appState = self.appState else { return }
                     do {
+                        // 有 streamID 就把增量回推给页面，让它一边等一边显示。
+                        // 页面自己生成这个 id，宿主只负责原样带回。
+                        let streamID = request.streamID
                         let result = try await appState.runPluginAICompletion(
                             pluginID: self.destination.pluginID,
-                            request: request
+                            request: request,
+                            onDelta: streamID.map { id in
+                                { [weak self] delta in
+                                    Task { @MainActor in self?.sendAIDelta(streamID: id, delta: delta) }
+                                }
+                            }
                         )
                         self.sendBridgeResult(
                             requestID: requestID,
@@ -904,6 +939,21 @@ private struct AgentPluginWebView: NSViewRepresentable {
                     }
                 }
             }
+        }
+
+        /// 流式增量。和 bridge-result 分开一条事件，避免页面把中间态当成结果。
+        /// 单条增量截断，防止一次极长的 delta 把注入的 JS 撑爆。
+        private func sendAIDelta(streamID: String, delta: String) {
+            let detail: [String: Any] = ["streamID": streamID, "delta": String(delta.prefix(4_000))]
+            guard let webView,
+                  JSONSerialization.isValidJSONObject(detail),
+                  let data = try? JSONSerialization.data(withJSONObject: detail),
+                  let json = String(data: data, encoding: .utf8) else {
+                return
+            }
+            webView.evaluateJavaScript(
+                "window.dispatchEvent(new CustomEvent('willdeep:ai-delta', {detail: \(json)}));"
+            )
         }
 
         private func sendBridgeResult(requestID: String, result: [String: Any]?, error: String?) {

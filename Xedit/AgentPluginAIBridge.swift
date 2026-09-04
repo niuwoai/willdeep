@@ -29,6 +29,9 @@ nonisolated struct AgentPluginAIRequest: Equatable, Sendable {
     /// 页面用 `$` 选中的技能。这里只存 identifier，正文由宿主读取并注入——
     /// 页面既拿不到 SKILL.md 全文，也拿不到它在磁盘上的位置。
     var skillIdentifiers: [String] = []
+    /// 页面自己生成的流式标识。非空时宿主把模型的增量文本按这个 id 回推给
+    /// 页面，让它能一边等一边显示，而不是对着一个转圈等十几秒。
+    var streamID: String?
 
     static let maximumMessages = 24
     static let maximumCharacters = 32_000
@@ -218,6 +221,11 @@ nonisolated enum AgentPluginAIRequestValidator {
             return .failure(.tooManySkills)
         }
         request.skillIdentifiers = identifiers
+        request.streamID = (raw["streamID"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .prefix(160)
+            .description
+            .nilWhenEmpty
         return .success(request)
     }
 }
@@ -269,6 +277,8 @@ extension AppState {
     private static func modelList(for entry: AgentProviderEntry) -> [String] {
         var models = [entry.flashPrimary, entry.proPrimary]
         models.append(contentsOf: entry.flashAlternates)
+        // proAlternates 早先漏了，页面的模型下拉只能看到 flash 那几个。
+        models.append(contentsOf: entry.proAlternates)
         let cleaned = models
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -325,7 +335,8 @@ extension AppState {
     /// 页面那侧只负责把文字递进来。
     func runPluginAICompletion(
         pluginID: AgentPluginID,
-        request: AgentPluginAIRequest
+        request: AgentPluginAIRequest,
+        onDelta: (@Sendable (String) -> Void)? = nil
     ) async throws -> AgentPluginAIResult {
         guard AgentPluginRegistry.shared.hasPermission(.aiChat, pluginID: pluginID) else {
             throw AgentPluginAIError.permissionDenied
@@ -346,6 +357,7 @@ extension AppState {
         try await AgentClient(configuration: configuration).streamChat(messages: messages) { event in
             if case .textDelta(let delta) = event {
                 await buffer.append(delta)
+                onDelta?(delta)
             }
         }
         let text = await buffer.value().trimmingCharacters(in: .whitespacesAndNewlines)

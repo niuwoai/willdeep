@@ -99,7 +99,11 @@ nonisolated enum AgentPluginRuntimeSnapshotStore {
 @MainActor
 final class AgentPluginRegistry: ObservableObject {
     static let shared = AgentPluginRegistry()
-    nonisolated static let maximumPinnedDestinations = 5
+    /// 内置插件声明的 `defaultPinned` 固定位和用户手动固定的入口共用这一个额度
+    /// （见 makeSnapshot 的 remainingCapacity）。装了三个自带固定位的内置插件
+    /// 之后，用户只剩两格，第三个插件的「固定到侧栏」就变灰了。10 给内置留够
+    /// 余量。
+    nonisolated static let maximumPinnedDestinations = 10
 
     @Published private(set) var snapshot: AgentPluginRegistrySnapshot = .empty
     @Published private(set) var isRefreshing = false
