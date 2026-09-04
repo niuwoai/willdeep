@@ -365,6 +365,9 @@ struct AgentChatTranscript: View {
                                 searchQuery: conversationSearchQuery,
                                 activeSearchMatchIndex: conversationSearchActiveIndex,
                                 onSearchResultCountChange: updateConversationSearchMatchCount,
+                                allowsLocalCommandButtons: appState.allowsLocalAgentChatCommandButtons,
+                                onRunShellCommand: appState.runAgentChatShellCommand,
+                                onSendShellCommandToTerminal: appState.sendAgentChatShellCommandToTerminal,
                                 scrollToUserMessageToken: minimapScrollToken,
                                 scrollToUserMessageID: minimapScrollUserMessageID
                             )
