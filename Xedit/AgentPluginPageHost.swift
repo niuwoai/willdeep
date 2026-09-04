@@ -404,6 +404,17 @@ private struct AgentPluginWebPage: View {
           window.willdeep.fs.write = function(path, text) {
             return willdeepBridgeRequest('fsWrite', {path: path || '', text: text || ''});
           };
+          // 改一段而不是整文件覆盖。找不到、不唯一、改了个寂寞,三种失败的
+          // 判定与报错跟 Agent 的 edit_file 完全一致。
+          window.willdeep.fs.patch = function(path, oldString, newString, options) {
+            var opts = options || {};
+            return willdeepBridgeRequest('fsPatch', {
+              path: path || '',
+              oldString: oldString || '',
+              newString: typeof newString === 'string' ? newString : '',
+              replaceAll: !!opts.replaceAll
+            });
+          };
           // 跑命令（需要 process.execute）。只读命令直接跑,其余一律弹确认框,
           // 恶意名单上的连问都不问。
           window.willdeep.process = {
@@ -583,6 +594,11 @@ private struct AgentPluginWebView: NSViewRepresentable {
         configuration.defaultWebpagePreferences = preferences
         configuration.userContentController.add(coordinatorContext.coordinator, name: "willdeepPlugin")
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        // 网页检查器：默认关，插件作者在设置里自己开。开着不多给页面任何
+        // 能力，但检查器能读到页面内存里的一切，不该是所有用户的默认状态。
+        if #available(macOS 13.3, *) {
+            webView.isInspectable = AgentSettingsStore.loadPluginPageInspectable()
+        }
         webView.navigationDelegate = coordinatorContext.coordinator
         webView.uiDelegate = coordinatorContext.coordinator
         webView.setValue(false, forKey: "drawsBackground")
@@ -822,6 +838,8 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 handleChatRequest(type: type, body: body)
             case "fsWrite":
                 handleFileWrite(body)
+            case "fsPatch":
+                handleFilePatch(body)
             case "processRun":
                 handleProcessRun(body)
             case "netFetch":
@@ -1264,6 +1282,30 @@ private struct AgentPluginWebView: NSViewRepresentable {
                     let result = try appState.pluginWriteWorkspaceFile(
                         path: path,
                         text: text,
+                        pluginID: pluginID
+                    )
+                    self.sendBridgeResult(requestID: requestID, result: result, error: nil)
+                } catch {
+                    self.sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
+                }
+            }
+        }
+
+        private func handleFilePatch(_ body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let path = String((body["path"] as? String ?? "").prefix(4_096))
+            let oldString = body["oldString"] as? String ?? ""
+            let newString = body["newString"] as? String ?? ""
+            let replaceAll = body["replaceAll"] as? Bool ?? false
+            let pluginID = destination.pluginID
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                do {
+                    let result = try appState.pluginPatchWorkspaceFile(
+                        path: path,
+                        oldString: oldString,
+                        newString: newString,
+                        replaceAll: replaceAll,
                         pluginID: pluginID
                     )
                     self.sendBridgeResult(requestID: requestID, result: result, error: nil)

@@ -168,3 +168,111 @@ struct AgentPluginWebsiteDataStoreTests {
         #expect(bytes[8] & 0xC0 == 0x80)      // RFC 4122 variant
     }
 }
+
+@Suite
+struct AgentPluginCommandApprovalStoreTests {
+    private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
+        // 前缀已登记进 TestDefaultsHygiene，残留壳会被清理
+        let suiteName = "willdeep-plugin-approvals-\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else { return }
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        try body(defaults)
+    }
+
+    @Test
+    func remembersOneExactCommandOnly() {
+        withDefaults { defaults in
+            AgentPluginCommandApprovalStore.remember(
+                command: "git status",
+                pluginID: "demo.plugin",
+                packageDigest: "sha-1",
+                defaults: defaults
+            )
+            #expect(AgentPluginCommandApprovalStore.isRemembered(
+                command: "git status",
+                pluginID: "demo.plugin",
+                packageDigest: "sha-1",
+                defaults: defaults
+            ))
+            // 记住的是这一条的完整原文，不是前缀：别让 git status 替
+            // git push --force 开门
+            #expect(!AgentPluginCommandApprovalStore.isRemembered(
+                command: "git status --short",
+                pluginID: "demo.plugin",
+                packageDigest: "sha-1",
+                defaults: defaults
+            ))
+            // 也不跨插件
+            #expect(!AgentPluginCommandApprovalStore.isRemembered(
+                command: "git status",
+                pluginID: "other.plugin",
+                packageDigest: "sha-1",
+                defaults: defaults
+            ))
+        }
+    }
+
+    @Test
+    func aNewPackageDigestInvalidatesEveryMemory() {
+        withDefaults { defaults in
+            AgentPluginCommandApprovalStore.remember(
+                command: "git status",
+                pluginID: "demo.plugin",
+                packageDigest: "sha-1",
+                defaults: defaults
+            )
+            // 插件升级 = 代码换了人，上一版拿到的信任不该自动过继
+            #expect(!AgentPluginCommandApprovalStore.isRemembered(
+                command: "git status",
+                pluginID: "demo.plugin",
+                packageDigest: "sha-2",
+                defaults: defaults
+            ))
+        }
+    }
+
+    @Test
+    func forgettingOnePluginLeavesTheOthersAlone() {
+        withDefaults { defaults in
+            for plugin in ["a.plugin", "b.plugin"] {
+                AgentPluginCommandApprovalStore.remember(
+                    command: "ls",
+                    pluginID: plugin,
+                    packageDigest: "d",
+                    defaults: defaults
+                )
+            }
+            AgentPluginCommandApprovalStore.forget(pluginID: "a.plugin", defaults: defaults)
+            #expect(AgentPluginCommandApprovalStore.rememberedCount(pluginID: "a.plugin", defaults: defaults) == 0)
+            #expect(AgentPluginCommandApprovalStore.rememberedCount(pluginID: "b.plugin", defaults: defaults) == 1)
+        }
+    }
+
+    @Test
+    func perPluginMemoryIsCapped() {
+        withDefaults { defaults in
+            let limit = AgentPluginCommandApprovalStore.maximumPerPlugin
+            for index in 0...(limit + 5) {
+                AgentPluginCommandApprovalStore.remember(
+                    command: "echo \(index)",
+                    pluginID: "loud.plugin",
+                    packageDigest: "d",
+                    defaults: defaults
+                )
+            }
+            // 上不封顶会让一个话痨插件把确认疲劳变成永久白名单
+            #expect(AgentPluginCommandApprovalStore.rememberedCount(
+                pluginID: "loud.plugin",
+                defaults: defaults
+            ) <= limit)
+            // 裁剪从最旧的开始，最近记住的还在
+            #expect(AgentPluginCommandApprovalStore.isRemembered(
+                command: "echo \(limit + 5)",
+                pluginID: "loud.plugin",
+                packageDigest: "d",
+                defaults: defaults
+            ))
+        }
+    }
+}

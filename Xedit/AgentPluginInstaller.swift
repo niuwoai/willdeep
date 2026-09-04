@@ -226,6 +226,7 @@ nonisolated enum AgentPluginInstaller {
         // 删包删不到它。留着既占地方，也让「删了再装」拿到上一次的残留
         // 状态——那是最难查的一类故障。
         let removedPluginID = pluginID
+        AgentPluginCommandApprovalStore.forget(pluginID: removedPluginID)
         Task { @MainActor in
             AgentPluginWebsiteDataStore.remove(for: removedPluginID)
         }
