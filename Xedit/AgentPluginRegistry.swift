@@ -187,6 +187,19 @@ final class AgentPluginRegistry: ObservableObject {
         return record.activePackage.manifest?.permissions.contains(permission) ?? false
     }
 
+    /// 插件在 manifest 里声明的可访问主机。`network.access` 只是开关，
+    /// 真正决定「能连谁」的是这份清单；停用的插件返回空。
+    func networkDomains(for pluginID: AgentPluginID) -> [String] {
+        guard let record = record(pluginID: pluginID), record.isEnabled else { return [] }
+        return record.activePackage.manifest?.networkDomains ?? []
+    }
+
+    /// 插件的展示名，用在确认框与通知抬头上——用户要认的是名字，
+    /// 不是 `com.example.plugin` 这种标识符。
+    func displayName(for pluginID: AgentPluginID) -> String? {
+        record(pluginID: pluginID)?.activePackage.displayName
+    }
+
     func commands(for pluginID: AgentPluginID) -> [AgentPluginCommandContribution] {
         guard let record = record(pluginID: pluginID), record.isEnabled else { return [] }
         return record.activePackage.manifest?.contributes.commands ?? []

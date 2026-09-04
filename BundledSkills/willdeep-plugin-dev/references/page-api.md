@@ -166,7 +166,9 @@ await window.willdeep.storage.remove('draft');
 
 值是任意可 JSON 序列化的东西。单值上限 64 KiB，单插件总量上限 1 MiB，超了**报错**而不是静默丢弃。
 
-为什么需要它：插件页跑在 `nonPersistent()` 的 WebView 里，`localStorage` 刷新一次就空了。
+`localStorage` 现在也活得下来了（1.327.0-rc1 起）：每个插件有自己的持久化 WebKit 仓，刷新、重开页面、重启 App 都不丢。**但仍然优先用 `storage`**——所有插件页面共用同一个源（`willdeep-plugin://bundle/`），隔离全靠分仓这一层，而 `storage` 的边界是宿主按插件 ID 划的，更硬；`storage` 还有明确的容量上限和报错，`localStorage` 满了只会抛一个含糊的异常。macOS 13 上没有分仓 API，那里 `localStorage` 依旧刷新即空，`storage` 则一切照常。
+
+插件被卸载时，它的 WebKit 仓会一并删掉——留着会让「删了再装」拿到上一次的残留状态。
 
 ## 宿主事件
 
@@ -183,6 +185,57 @@ window.willdeep.events.off('turn.finished');           // 或传入具体回调
 | `workspace.changed` | 当前会话的工作区根变了 | `workspace.read` |
 
 没声明对应权限的插件，`events.on` 直接报错。订阅前宿主一个观察者都不挂，别为「可能会用」提前订。
+
+## 写工作区文件（需要 `workspace.write`）
+
+```js
+const { path, byteSize } = await window.willdeep.fs.write('docs/draft.md', text);
+```
+
+走的是 Agent 改文件同一条路：路径守卫、打开中的编辑器同步刷新、改动登记进 Changes 面板，全都继承。只能写当前会话的主工作区根，单次 512 KiB 封顶。
+
+## 跑命令（需要 `process.execute`）
+
+```js
+const { summary, output } = await window.willdeep.process.run('git status --short');
+```
+
+三道门，顺序固定：
+
+1. 恶意命令名单是硬地板，命中的**连确认框都不弹**——用户在一个插件页面上没有足够上下文判断 `curl … | sh` 到底在装什么；
+2. 只读命令（`SafeCommand` 判为 `alwaysSafe`）直接跑；
+3. 其余一律弹确认框，把插件名、完整命令、工作目录摊开给用户看。
+
+这道确认框**不看审批档位**：完全访问是用户对自己指挥的 Agent 的授权，不是对第三方页面的授权。执行时带与 Agent 同款的沙箱，前台运行，120 秒封顶。
+
+## 代发网络请求（需要 `network.access` + `networkDomains`）
+
+```js
+const { status, headers, body } = await window.willdeep.net.fetch('https://api.example.com/v1/items', {
+  method: 'POST',
+  headers: { 'X-Trace': 'abc' },
+  body: JSON.stringify({ a: 1 })
+});
+```
+
+页面自己发不出请求（自定义 scheme + CSP），所以由宿主代发。`network.access` 只是开关，真正决定「能连谁」的是 manifest 里的 `networkDomains`：
+
+- 只走 https，明文和其它 scheme 一律拒；
+- 主机必须命中白名单，`*.example.com` 匹配子域但**不匹配裸域名**，两个都要就写两条；
+- 回环与内网地址一律拒，**哪怕写进了白名单**——插件页不该成为打本机服务的跳板；
+- 跳转会重新过一遍白名单，`Host` 之类的头由宿主接管，页面改不了；
+- 请求体 512 KiB、响应体 2 MiB、超时 20 秒。
+
+白名单空着等于一个请求都发不出去：声明了权限却没写域名，不是「随便连」。
+
+## 剪贴板与通知
+
+```js
+await window.willdeep.clipboard.write('复制走的文本');      // 需要 clipboard.write
+await window.willdeep.notify({ title: '导出完成', body: '3 个文件' });  // 需要 notifications
+```
+
+通知抬头会自动带上插件名，否则用户没法把噪音关到具体某个插件头上。
 
 ## 把活交给 Agent（需要 `conversation.write`）
 

@@ -436,6 +436,13 @@ nonisolated struct AgentPluginManifest: Codable, Equatable, Sendable {
     var contributes: AgentPluginContributions
     var permissions: [AgentPluginPermission]
     var dependencies: AgentPluginDependencies
+    /// 页面用 `window.willdeep.net.fetch` 能访问的主机白名单。
+    ///
+    /// 单靠 `network.access` 不够：那个权限回答「这插件要不要联网」，
+    /// 而用户在安装面板上有权知道**联的是谁**。白名单空着就等于页面
+    /// 一个请求都发不出去——声明了权限却没写域名不是「随便连」。
+    /// 支持 `api.example.com` 与 `*.example.com` 两种写法。
+    var networkDomains: [String]
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion
@@ -443,6 +450,7 @@ nonisolated struct AgentPluginManifest: Codable, Equatable, Sendable {
         case contributes
         case permissions
         case dependencies
+        case networkDomains
     }
 
     init(
@@ -450,13 +458,15 @@ nonisolated struct AgentPluginManifest: Codable, Equatable, Sendable {
         minimumWillDeepVersion: String? = nil,
         contributes: AgentPluginContributions = .init(),
         permissions: [AgentPluginPermission] = [],
-        dependencies: AgentPluginDependencies = .init()
+        dependencies: AgentPluginDependencies = .init(),
+        networkDomains: [String] = []
     ) {
         self.schemaVersion = schemaVersion
         self.minimumWillDeepVersion = minimumWillDeepVersion
         self.contributes = contributes
         self.permissions = permissions
         self.dependencies = dependencies
+        self.networkDomains = networkDomains
     }
 
     init(from decoder: Decoder) throws {
@@ -466,6 +476,7 @@ nonisolated struct AgentPluginManifest: Codable, Equatable, Sendable {
         contributes = try container.decodeIfPresent(AgentPluginContributions.self, forKey: .contributes) ?? .init()
         permissions = try container.decodeIfPresent([AgentPluginPermission].self, forKey: .permissions) ?? []
         dependencies = try container.decodeIfPresent(AgentPluginDependencies.self, forKey: .dependencies) ?? .init()
+        networkDomains = try container.decodeIfPresent([String].self, forKey: .networkDomains) ?? []
     }
 }
 

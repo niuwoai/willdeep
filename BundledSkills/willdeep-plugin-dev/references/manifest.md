@@ -18,12 +18,14 @@ JSON Schema 在仓库的 `docs/plugin-schema/willdeep-plugin.schema.json`，本�
   "minimumWillDeepVersion": "1.280.0",
   "contributes": { },
   "permissions": [],
+  "networkDomains": [],
   "dependencies": { "mcpServers": [], "skills": [] }
 }
 ```
 
 - `schemaVersion` **必填**，当前只接受常量 `1`。更高的值会被拒载（不是忽略）。
 - `contributes` **必填**。
+- `networkDomains`：`net.fetch` 的主机白名单，见下面同名一节。
 - `minimumWillDeepVersion`：不满足时保留记录但拒绝启用。
 - ID 的格式是 `^[A-Za-z0-9][A-Za-z0-9_.-]{0,159}$`；本地化 key 不能含空白字符。
 
@@ -117,6 +119,16 @@ JSON Schema 在仓库的 `docs/plugin-schema/willdeep-plugin.schema.json`，本�
 - `secret` 写 macOS Keychain，不进清单、日志和 UserDefaults。
 - 在 `mcp.json` 里引用设置值用 `${setting:<id>}`。
 
+## networkDomains
+
+数组，可选。`window.willdeep.net.fetch` 能访问的主机白名单，要与 `network.access` 权限一起用：
+
+```json
+{ "networkDomains": ["api.example.com", "*.cdn.example.org"] }
+```
+
+`network.access` 只回答「这插件要不要联网」，用户在安装面板上还有权知道**联的是谁**。所以空着（或不写）等于页面一个请求都发不出去，声明了权限不等于随便连。`*.example.com` 匹配子域但不匹配裸域名，两个都要就写两条。回环与内网地址写进来也没用，宿主一律拒。
+
 ## permissions
 
 数组，可选值：
@@ -126,15 +138,15 @@ JSON Schema 在仓库的 `docs/plugin-schema/willdeep-plugin.schema.json`，本�
 | `conversation.read` | 页面上下文里多一个 `sessionReference`；`events.on` 订阅会话与回合事件 | 已实现 |
 | `conversation.write` | `window.willdeep.chat.insert` / `chat.send`：把一句话递给主 Agent | 1.326.0-rc1 |
 | `workspace.read` | 页面上下文里多一个 `workspaceReference`；`window.willdeep.fs.list/read/search` | 已实现 |
-| `workspace.write` | 页面上下文里多一个 `workspaceReference` | 已实现 |
-| `process.execute` | 允许加载会起本地进程的 MCP 服务 | 已实现 |
-| `network.access` | 允许加载会联网的 MCP 服务 | 已实现 |
+| `workspace.write` | 页面上下文里多一个 `workspaceReference`；`window.willdeep.fs.write` | 已实现 |
+| `process.execute` | 允许加载会起本地进程的 MCP 服务；`window.willdeep.process.run`（非只读命令一律弹确认框） | 已实现 |
+| `network.access` | 允许加载会联网的 MCP 服务；`window.willdeep.net.fetch`，**能连谁由 `networkDomains` 决定** | 已实现 |
 | `credentials.use` | 使用 Keychain 中的凭据引用 | 已实现 |
 | `ai.chat` | `window.willdeep.ai.complete` | 1.300.0-rc5 |
 | `ai.image` | `window.willdeep.ai.generateImage`（some.im 白名单模型） | 1.321.0-rc1 |
 | `providers.read` | `window.willdeep.ai.providers` | 1.300.0-rc5 |
 | `skills.read` | `window.willdeep.skills.list`，以及在 `ai.complete` 里按 identifier 引用技能 | 1.322.0-rc1 |
-| `clipboard.write` | 写剪贴板 | 已实现 |
+| `clipboard.write` | 写剪贴板；`window.willdeep.clipboard.write` | 已实现 |
 | `notifications` | 发通知 | 已实现 |
 
 权限是**现场核**的：页面调用时按当前启用状态检查，插件被停用即刻失效。安装预览会显示与上一版的权限差异，新增权限需要重新批准。

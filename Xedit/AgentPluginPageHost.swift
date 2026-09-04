@@ -398,6 +398,36 @@ private struct AgentPluginWebPage: View {
                 : [];
             }
           };
+          // 写工作区文件（需要 workspace.write）。走的是 Agent 改文件同一条
+          // 路：路径守卫、编辑器同步、改动登记全都继承,写完能在 Changes
+          // 面板里看到。
+          window.willdeep.fs.write = function(path, text) {
+            return willdeepBridgeRequest('fsWrite', {path: path || '', text: text || ''});
+          };
+          // 跑命令（需要 process.execute）。只读命令直接跑,其余一律弹确认框,
+          // 恶意名单上的连问都不问。
+          window.willdeep.process = {
+            run: function(command) { return willdeepBridgeRequest('processRun', {command: command || ''}); }
+          };
+          // 宿主代发的 HTTP（需要 network.access + manifest 里的 networkDomains）。
+          window.willdeep.net = {
+            fetch: function(url, init) {
+              var options = init || {};
+              return willdeepBridgeRequest('netFetch', {
+                url: url || '',
+                method: options.method || 'GET',
+                headers: options.headers || {},
+                body: typeof options.body === 'string' ? options.body : null
+              });
+            }
+          };
+          window.willdeep.clipboard = {
+            write: function(text) { return willdeepBridgeRequest('clipboardWrite', {text: text || ''}); }
+          };
+          window.willdeep.notify = function(notification) {
+            var payload = notification || {};
+            return willdeepBridgeRequest('notify', {title: payload.title || '', body: payload.body || ''});
+          };
           // 把活交给主 Agent。insert 只填输入框,send 才真的起回合。
           // 需要 conversation.write。
           window.willdeep.chat = {
@@ -538,7 +568,10 @@ private struct AgentPluginWebView: NSViewRepresentable {
 
     func makeNSView(context coordinatorContext: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
+        // 一个插件一个持久化仓：页面刷新不再丢 localStorage，同时因为
+        // 所有插件页面共用同一个源（willdeep-plugin://bundle/），必须靠
+        // 分仓而不是靠源隔离来防止互相读取。详见 AgentPluginWebsiteDataStore。
+        configuration.websiteDataStore = AgentPluginWebsiteDataStore.store(for: destination.pluginID)
         let schemeHandler = AgentPluginSchemeHandler(
             packageURL: destination.packageURL,
             pluginID: destination.pluginID
@@ -787,6 +820,14 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 handleEventSubscription(body)
             case "chatInsert", "chatSend":
                 handleChatRequest(type: type, body: body)
+            case "fsWrite":
+                handleFileWrite(body)
+            case "processRun":
+                handleProcessRun(body)
+            case "netFetch":
+                handleNetworkFetch(body)
+            case "clipboardWrite", "notify":
+                handleDeviceRequest(type: type, body: body)
             case "mcpMessage":
                 handleMCPMessage(body["message"])
             case "pageDiagnostic":
@@ -1208,6 +1249,92 @@ private struct AgentPluginWebView: NSViewRepresentable {
             webView.evaluateJavaScript(
                 "window.dispatchEvent(new CustomEvent('willdeep:host-event', {detail: \(json)}));"
             )
+        }
+
+        // MARK: 写文件 / 跑命令 / 代发网络 / 剪贴板与通知
+
+        private func handleFileWrite(_ body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let path = String((body["path"] as? String ?? "").prefix(4_096))
+            let text = body["text"] as? String ?? ""
+            let pluginID = destination.pluginID
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                do {
+                    let result = try appState.pluginWriteWorkspaceFile(
+                        path: path,
+                        text: text,
+                        pluginID: pluginID
+                    )
+                    self.sendBridgeResult(requestID: requestID, result: result, error: nil)
+                } catch {
+                    self.sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
+                }
+            }
+        }
+
+        private func handleProcessRun(_ body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let command = String((body["command"] as? String ?? "").prefix(4_096))
+            let pluginID = destination.pluginID
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                do {
+                    let result = try await appState.pluginRunCommand(command, pluginID: pluginID)
+                    self.sendBridgeResult(requestID: requestID, result: result, error: nil)
+                } catch {
+                    self.sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
+                }
+            }
+        }
+
+        private func handleNetworkFetch(_ body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let url = String((body["url"] as? String ?? "").prefix(4_096))
+            let method = String((body["method"] as? String ?? "GET").prefix(16))
+            let headers = (body["headers"] as? [String: String]) ?? [:]
+            let payload = body["body"] as? String
+            let pluginID = destination.pluginID
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                do {
+                    let result = try await appState.pluginFetch(
+                        url: url,
+                        method: method,
+                        headers: headers,
+                        body: payload,
+                        pluginID: pluginID
+                    )
+                    self.sendBridgeResult(requestID: requestID, result: result, error: nil)
+                } catch {
+                    self.sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
+                }
+            }
+        }
+
+        private func handleDeviceRequest(type: String, body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let pluginID = destination.pluginID
+            let text = String((body["text"] as? String ?? "").prefix(120_000))
+            let title = String((body["title"] as? String ?? "").prefix(400))
+            let notificationBody = String((body["body"] as? String ?? "").prefix(2_000))
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                do {
+                    if type == "clipboardWrite" {
+                        try appState.pluginWriteClipboard(text, pluginID: pluginID)
+                    } else {
+                        try appState.pluginPostNotification(
+                            title: title,
+                            body: notificationBody,
+                            pluginID: pluginID
+                        )
+                    }
+                    self.sendBridgeResult(requestID: requestID, result: ["ok": true], error: nil)
+                } catch {
+                    self.sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
+                }
+            }
         }
 
         // MARK: 把活交给 Agent
