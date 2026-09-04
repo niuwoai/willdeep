@@ -308,3 +308,19 @@ struct AgentPluginBridgeContractTests {
         #expect(AgentPluginPackageLoader.allowedPermissions.contains(.conversationWrite))
     }
 }
+
+@Suite
+struct AgentPrimaryDestinationSidebarTests {
+    @Test
+    func onlyConversationLikeDestinationsKeepTheSessionList() {
+        // 自成一屏的页面跟「当前是哪个会话」无关，底下再挂一长串会话列表，
+        // 点了也不会切过去，只是把侧边栏撑长
+        #expect(AgentPrimaryDestination.conversation.showsSessionSidebar)
+        #expect(!AgentPrimaryDestination.scheduledTasks.showsSessionSidebar)
+        #expect(!AgentPrimaryDestination.roundtable.showsSessionSidebar)
+        #expect(!AgentPrimaryDestination.dispatchBoard.showsSessionSidebar)
+        #expect(!AgentPrimaryDestination.pluginCenter.showsSessionSidebar)
+        // 插件目的地由清单里的 companionSidebar 决定，不在这一层拍板
+        #expect(AgentPrimaryDestination.plugin("demo.plugin/page").showsSessionSidebar)
+    }
+}

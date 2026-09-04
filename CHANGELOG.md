@@ -3,6 +3,12 @@
 > 当前文件保留最新版本（1.321.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.329.0-rc2 - 2026-09-04
+
+### Fixed
+
+- 选中「已安排」或「专家圆桌」时，侧边栏下半部还在列工作区与会话。这两个页面都自成一屏、跟当前是哪个会话无关，那串列表点了也不会切过去，只是把侧边栏撑长。调度台与插件中心早就各自处理过，这次把这两个补齐，判断收进 `AgentPrimaryDestination.showsSessionSidebar` 一处，插件目的地仍由清单里的 `companionSidebar` 自己决定。
+
 ## 1.329.0-rc1 - 2026-09-04
 
 ### Added
