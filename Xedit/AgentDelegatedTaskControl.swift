@@ -65,6 +65,9 @@ nonisolated struct AgentDelegatedTaskContract: Codable, Equatable, Identifiable,
     let timeoutSeconds: Int
     let requiresFreshSelfReview: Bool
     let requiresWillDeepVerification: Bool
+    /// 这次交付要不要走验收。寒暄类消息为 false：不要证据块、不复核、
+    /// 不复跑。判定见 `AgentDelegatedAcceptancePolicy`。
+    let requiresAcceptanceEvidence: Bool
 
     init(
         id: UUID = UUID(),
@@ -86,6 +89,7 @@ nonisolated struct AgentDelegatedTaskContract: Codable, Equatable, Identifiable,
         timeoutSeconds: Int = 21_600,
         requiresFreshSelfReview: Bool = true,
         requiresWillDeepVerification: Bool = true,
+        requiresAcceptanceEvidence: Bool = true,
         createdAt: Date = Date()
     ) {
         self.schemaVersion = Self.currentSchemaVersion
@@ -101,8 +105,9 @@ nonisolated struct AgentDelegatedTaskContract: Codable, Equatable, Identifiable,
         self.verificationCommands = Array(verificationCommands.prefix(6))
         self.maxAttempts = min(max(maxAttempts, 1), 3)
         self.timeoutSeconds = min(max(timeoutSeconds, 60), 21_600)
-        self.requiresFreshSelfReview = requiresFreshSelfReview
-        self.requiresWillDeepVerification = requiresWillDeepVerification
+        self.requiresAcceptanceEvidence = requiresAcceptanceEvidence
+        self.requiresFreshSelfReview = requiresFreshSelfReview && requiresAcceptanceEvidence
+        self.requiresWillDeepVerification = requiresWillDeepVerification && requiresAcceptanceEvidence
     }
 }
 
@@ -274,13 +279,23 @@ nonisolated enum AgentDelegatedTaskControl {
         allowedPaths: [String] = ["**"],
         verificationCommands: [String] = [],
         maxAttempts: Int = 2,
-        timeoutSeconds: Int = 21_600
+        timeoutSeconds: Int = 21_600,
+        requiresAcceptanceEvidence: Bool = true
     ) -> AgentDelegatedTaskContract {
         let objective = clipped(rawObjective.trimmingCharacters(in: .whitespacesAndNewlines), limit: 12_000)
         let goalCriteria = goal?.checklist.map(\.text) ?? []
-        let sourceCriteria = !explicitCriteria.isEmpty
-            ? explicitCriteria
-            : (!goalCriteria.isEmpty ? goalCriteria : defaultCriteria)
+        // 不需要验收时连条款都不生成。留着空壳条款只会让后面每一层都得
+        // 记得跳过它们，漏一层就又冒出「AC-01 缺证据」。
+        let sourceCriteria: [String]
+        if !requiresAcceptanceEvidence {
+            sourceCriteria = []
+        } else if !explicitCriteria.isEmpty {
+            sourceCriteria = explicitCriteria
+        } else if !goalCriteria.isEmpty {
+            sourceCriteria = goalCriteria
+        } else {
+            sourceCriteria = defaultCriteria
+        }
         let criteria: [AgentDelegatedAcceptanceCriterion] = sourceCriteria.enumerated().compactMap {
             offset, raw -> AgentDelegatedAcceptanceCriterion? in
             let statement = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -295,9 +310,11 @@ nonisolated enum AgentDelegatedTaskControl {
             executor: executor,
             acceptanceCriteria: criteria,
             allowedPaths: normalizedPaths(allowedPaths),
-            verificationCommands: sanitizedCommands(verificationCommands),
-            maxAttempts: maxAttempts,
-            timeoutSeconds: timeoutSeconds
+            verificationCommands: requiresAcceptanceEvidence ? sanitizedCommands(verificationCommands) : [],
+            // 寒暄不必复跑：第一次没交付什么，第二次也不会。
+            maxAttempts: requiresAcceptanceEvidence ? maxAttempts : 1,
+            timeoutSeconds: timeoutSeconds,
+            requiresAcceptanceEvidence: requiresAcceptanceEvidence
         )
     }
 
@@ -314,7 +331,19 @@ nonisolated enum AgentDelegatedTaskControl {
     }
 
     static func executorInstructions(contract: AgentDelegatedTaskContract) -> String {
-        """
+        // 寒暄不发合同。把「列出改动文件、说明已做验证、报告遗留风险」
+        // 交给一句「你好」，执行器只能去翻一遍工作区，翻完无可奉告——
+        // 五分钟就是这么花掉的。
+        guard contract.requiresAcceptanceEvidence else {
+            return """
+            ### WillDeep note
+
+            This turn is conversational, not a delegated task. Answer briefly and directly.             Do not survey the workspace, do not run verification, and do not emit an evidence block.
+
+            Report style: plain prose. No emoji, no decorative bold, no headings.
+            """
+        }
+        return """
         ### WillDeep delegated-task contract
 
         The JSON contract below is host-owned. Do not weaken, replace, or silently ignore its acceptance criteria, allowed paths, forbidden actions, retry limit, or verification requirements.
@@ -432,6 +461,23 @@ nonisolated enum AgentDelegatedTaskControl {
         /// 而真正的问题可能是它压根没启动。
         evidenceFailure: String? = nil
     ) -> AgentDelegatedWillDeepAcceptance {
+        // 寒暄没有可验收的东西。此前这里照样要求证据块，于是一句问候
+        // 稳定产出六条问题：一条「没有证据块」，四条「AC-0x 缺证据」，
+        // 外加一条复跑失败。
+        guard contract.requiresAcceptanceEvidence else {
+            return AgentDelegatedWillDeepAcceptance(
+                accepted: true,
+                summary: "Conversational turn: no acceptance contract applies.",
+                checks: [.init(
+                    id: "acceptance-skipped",
+                    label: "Acceptance contract",
+                    status: .skipped,
+                    detail: "The request was conversational, so no acceptance criteria were issued."
+                )],
+                findings: [],
+                verifiedAt: Date()
+            )
+        }
         var checks: [AgentDelegatedHostCheck] = []
         var findings: [String] = []
 
