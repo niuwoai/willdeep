@@ -129,6 +129,7 @@ JSON Schema 在仓库的 `docs/plugin-schema/willdeep-plugin.schema.json`，本�
 | `network.access` | 允许加载会联网的 MCP 服务 | 已实现 |
 | `credentials.use` | 使用 Keychain 中的凭据引用 | 已实现 |
 | `ai.chat` | `window.willdeep.ai.complete` | 1.300.0-rc5 |
+| `ai.image` | `window.willdeep.ai.generateImage`（some.im 白名单模型） | 1.321.0-rc1 |
 | `providers.read` | `window.willdeep.ai.providers` | 1.300.0-rc5 |
 | `clipboard.write` | 写剪贴板 | 已实现 |
 | `notifications` | 发通知 | 已实现 |

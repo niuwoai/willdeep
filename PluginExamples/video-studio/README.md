@@ -1,9 +1,12 @@
-# WillDeep Video Studio
+# WillDeep 短剧工坊
 
-Video Studio 是一个完整的本地 WillDeep 插件：聊天模型负责把创意整理成镜头方案，视频 Provider 负责异步生成，Ruby MCP 服务负责保存任务、轮询状态和下载成品。
+短剧工坊是一个完整的本地 WillDeep 插件：从短剧策划、角色固化、分集剧本和分镜台词一路走到首尾帧候选与异步视频生成。
 
 ## 能力
 
+- 短剧项目：首页按剧名管理；AI 策划只在用户确认 `short_drama_plan` 卡片后落库。
+- 角色与剧本：角色定妆独立于分镜帧；分集可切换，剧本、分镜剧情和逐句台词都可编辑。
+- 图片候选：宿主通过 some.im 调用用户选择的 `gpt-image-2` 或 `nano_banana_2`，支持一次生成多张角色定妆、首帧和尾帧候选；密钥不出宿主。
 - 文生视频：不提供参考图时提交 `t2va`。
 - 首帧图生视频：提供本地 PNG、JPEG 或 WebP 时提交 `fl2va` 与 `input_reference`。
 - AI 导演：读取 WillDeep 已启用的聊天 Provider 和模型；默认沿用当前 Provider 的 Flash 档，也可在页面中固定 Provider/模型。
@@ -13,12 +16,12 @@ Video Studio 是一个完整的本地 WillDeep 插件：聊天模型负责把创
 
 ## 安装与配置
 
-1. 运行 `ruby scripts/package_video_studio.rb`，在 WillDeep 插件中心选择生成的 `build/plugins/willdeep-video-studio-0.1.0.zip`。安装包只包含运行文件，不含前端开发依赖。未安装过前端依赖时也可直接选择源码目录。
-2. 审核插件声明的进程、网络、凭据、AI 聊天和 Provider 读取权限后安装。
+1. 运行 `ruby scripts/package_video_studio.rb`，在 WillDeep 插件中心选择生成的 `build/plugins/willdeep-video-studio-0.2.0.zip`。安装包只包含运行文件，不含前端开发依赖和设计稿。
+2. 审核插件声明的进程、网络、凭据、AI 聊天、图片生成和 Provider 读取权限后安装。
 3. 在插件设置中填写 `Video API Key`。该字段为 `secret`，由宿主安全存储，不写入任务文件或页面。
 4. 默认 API Base 为 `https://hub.tsingfly.com`，默认视频模型为 `MiniMax-H3`，默认输出目录为 `~/Movies/WillDeep Video Studio`。
 
-聊天模型的密钥仍由 WillDeep 宿主管理。插件页面只选择 Provider ID 与模型名，并通过 `window.willdeep.ai.complete` 发起创意整理，不接触聊天凭据。
+聊天模型和 some.im 图片模型的密钥都由 WillDeep 宿主管理。插件页面只选择允许的 Provider ID 与模型名，不接触凭据。
 
 ## Provider 抽象
 
@@ -53,7 +56,9 @@ ruby scripts/video_studio_server_test.rb build/ci/video_studio_server_report.md 
 
 ## 数据与安全边界
 
-- 任务默认保存在 `~/Library/Application Support/WillDeep/plugin-data/video-studio/jobs.json`，最多保留 500 条。
+- 数据都落在宿主按 pluginID 分的同一个目录 `~/Library/Application Support/WillDeep/plugin-data/willdeep-video-studio/`：任务 `jobs.json`（最多 500 条）、短剧 `dramas.json`（最多 100 部）、生成图片 `generated-images/`。旧版本的 `plugin-data/video-studio/jobs.json` 会在首次启动时复制过来，原文件保留不删。
+- 存档读不出来时插件拒绝写入并原样保留文件，不会按空档覆盖。遇到 `-32002` 错误请先去看那个 JSON 文件。
+- 模型递上来的图片路径必须落在 `generated-images/` 内，符号链接一律拒绝。
 - API Key 只通过插件 secret 设置注入 MCP 进程，状态接口和持久化文件均不返回它。
 - API Base 只接受 HTTPS；仅测试时允许 localhost HTTP。
 - 参考图限制为 PNG/JPEG/WebP 且不超过 32 MiB；单个视频下载上限 1 GiB。

@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require "fileutils"
 require "json"
 
 Encoding.default_external = Encoding::UTF_8
@@ -12,10 +13,40 @@ $stderr.set_encoding(Encoding::UTF_8)
 require_relative "adapters/openai_videos_async"
 require_relative "lib/video_store"
 require_relative "lib/video_service"
+require_relative "lib/drama_store"
+require_relative "lib/drama_service"
+
+# 宿主按 pluginID 给每个插件分一个目录，本插件的 pluginID 是
+# willdeep-video-studio，生成的图片也由宿主写进这个目录。任务存档早先落在
+# plugin-data/video-studio/，同一个插件占两个目录，卸载清理和备份会漏掉一半。
+def plugin_data_directory
+  File.expand_path("~/Library/Application Support/WillDeep/plugin-data/willdeep-video-studio")
+end
+
+def legacy_video_store_path
+  File.expand_path("~/Library/Application Support/WillDeep/plugin-data/video-studio/jobs.json")
+end
 
 def video_store_path
-  ENV["VIDEO_STUDIO_STORE"] ||
-    File.expand_path("~/Library/Application Support/WillDeep/plugin-data/video-studio/jobs.json")
+  ENV["VIDEO_STUDIO_STORE"] || File.join(plugin_data_directory, "jobs.json")
+end
+
+# 只在新路径还没有存档时把旧存档搬过来，且不删旧文件——万一搬错了，用户的
+# 任务记录还在原处。
+def migrate_legacy_video_store
+  return if ENV["VIDEO_STUDIO_STORE"]
+  return if File.exist?(video_store_path)
+  return unless File.exist?(legacy_video_store_path)
+
+  FileUtils.mkdir_p(File.dirname(video_store_path))
+  FileUtils.cp(legacy_video_store_path, video_store_path)
+  warn "video-studio: copied legacy job store into #{File.dirname(video_store_path)}"
+rescue SystemCallError => error
+  warn "video-studio: legacy job store migration skipped (#{error.class}: #{error.message})"
+end
+
+def generated_media_directory
+  File.join(plugin_data_directory, "generated-images")
 end
 
 def video_output_directory
@@ -24,6 +55,11 @@ def video_output_directory
   File.expand_path(value)
 end
 
+def drama_store_path
+  ENV["VIDEO_STUDIO_DRAMA_STORE"] || File.join(plugin_data_directory, "dramas.json")
+end
+
+migrate_legacy_video_store
 STORE = VideoStore.new(video_store_path)
 ADAPTER_FACTORY = lambda do
   OpenAIVideosAsyncAdapter.new(
@@ -35,8 +71,62 @@ ADAPTER_FACTORY = lambda do
   )
 end
 SERVICE = VideoService.new(store: STORE, adapter_factory: ADAPTER_FACTORY)
+DRAMA_SERVICE = DramaService.new(
+  store: DramaStore.new(drama_store_path),
+  media_root: ENV["VIDEO_STUDIO_MEDIA_ROOT"] || generated_media_directory
+)
 
 TOOLS = [
+  {
+    name: "drama.list",
+    description: "List local short-drama projects.",
+    inputSchema: { type: "object", properties: {} }
+  },
+  {
+    name: "drama.get",
+    description: "Get one short-drama project with characters, episodes, shots, and frame candidates.",
+    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] }
+  },
+  {
+    name: "drama.confirm_plan",
+    description: "Persist a structured short-drama planning card only after the user confirms it. Pass a stable requestID so a retry after a timeout returns the same drama instead of creating a duplicate.",
+    inputSchema: { type: "object", properties: { plan: { type: "object" }, requestID: { type: "string" } }, required: ["plan"] }
+  },
+  {
+    name: "drama.save_character",
+    description: "Create or update a character identity specification.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, characterID: { type: "string" }, name: { type: "string" }, description: { type: "string" }, visualPrompt: { type: "string" }, identityVersion: { type: "integer" } }, required: ["dramaID", "name"] }
+  },
+  {
+    name: "drama.save_episode",
+    description: "Update an episode outline or script.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, episodeID: { type: "string" }, title: { type: "string" }, summary: { type: "string" }, script: { type: "string" } }, required: ["dramaID", "episodeID"] }
+  },
+  {
+    name: "drama.save_shot",
+    description: "Create or update a storyboard shot, including editable dialogue and separate start/end frame prompts.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, order: { type: "integer" }, title: { type: "string" }, summary: { type: "string" }, dialogue: { type: "array", items: { type: "object" } }, actionStart: { type: "string" }, actionEnd: { type: "string" }, cameraIntent: { type: "string" }, duration: { type: "integer" }, startPrompt: { type: "string" }, endPrompt: { type: "string" } }, required: ["dramaID", "episodeID"] }
+  },
+  {
+    name: "drama.record_image",
+    description: "Record an image returned by the host some.im image bridge as a frame candidate.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, kind: { type: "string", enum: %w[start end] }, mediaURL: { type: "string" }, filePath: { type: "string" }, prompt: { type: "string" }, model: { type: "string", enum: DramaService::IMAGE_MODELS } }, required: %w[dramaID episodeID shotID kind mediaURL filePath prompt model] }
+  },
+  {
+    name: "drama.record_character_image",
+    description: "Record a some.im image as a character identity candidate.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, characterID: { type: "string" }, mediaURL: { type: "string" }, filePath: { type: "string" }, prompt: { type: "string" }, model: { type: "string", enum: DramaService::IMAGE_MODELS } }, required: %w[dramaID characterID mediaURL filePath prompt model] }
+  },
+  {
+    name: "drama.select_character_image",
+    description: "Select the canonical identity image for a character.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, characterID: { type: "string" }, candidateID: { type: "string" } }, required: %w[dramaID characterID candidateID] }
+  },
+  {
+    name: "drama.select_image",
+    description: "Select a start or end frame candidate for a storyboard shot.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, kind: { type: "string", enum: %w[start end] }, candidateID: { type: "string" } }, required: %w[dramaID episodeID shotID kind candidateID] }
+  },
   {
     name: "video.status",
     description: "Return the safe Video Studio provider configuration and local job counts. Never returns credentials.",
@@ -145,6 +235,16 @@ TOOLS = [
 
 def call_tool(name, arguments)
   case name
+  when "drama.list" then DRAMA_SERVICE.list
+  when "drama.get" then DRAMA_SERVICE.get(arguments)
+  when "drama.confirm_plan" then DRAMA_SERVICE.confirm_plan(arguments)
+  when "drama.save_character" then DRAMA_SERVICE.save_character(arguments)
+  when "drama.save_episode" then DRAMA_SERVICE.save_episode(arguments)
+  when "drama.save_shot" then DRAMA_SERVICE.save_shot(arguments)
+  when "drama.record_image" then DRAMA_SERVICE.record_image(arguments)
+  when "drama.select_image" then DRAMA_SERVICE.select_image(arguments)
+  when "drama.record_character_image" then DRAMA_SERVICE.record_character_image(arguments)
+  when "drama.select_character_image" then DRAMA_SERVICE.select_character_image(arguments)
   when "video.status" then SERVICE.status
   when "video.create_draft" then SERVICE.create_draft(arguments)
   when "video.list" then SERVICE.list(arguments)
@@ -161,6 +261,14 @@ def call_tool(name, arguments)
   end
 end
 
+UnknownMethod = Class.new(StandardError)
+
+def respond_error(request, code, message)
+  return unless request.is_a?(Hash) && request["id"]
+
+  puts JSON.generate(jsonrpc: "2.0", id: request["id"], error: { code: code, message: message })
+end
+
 ARGF.each_line do |line|
   request = JSON.parse(line)
   next unless request["id"]
@@ -170,7 +278,7 @@ ARGF.each_line do |line|
              {
                protocolVersion: "2025-06-18",
                capabilities: { tools: {} },
-               serverInfo: { name: "video-studio", version: "0.1.0" }
+               serverInfo: { name: "video-studio", version: "0.2.0" }
              }
            when "tools/list"
              { tools: TOOLS }
@@ -179,19 +287,27 @@ ARGF.each_line do |line|
              payload = call_tool(request.dig("params", "name"), arguments)
              { content: [{ type: "text", text: JSON.generate(payload) }] }
            else
-             {}
+             raise UnknownMethod, request["method"].to_s
            end
 
   puts JSON.generate(jsonrpc: "2.0", id: request["id"], result: result)
 rescue JSON::ParserError
   warn "video-studio: invalid JSON-RPC request"
+rescue UnknownMethod => error
+  respond_error(defined?(request) ? request : nil, -32_601, "Method not found: #{error.message}")
+rescue VideoStore::Unavailable, DramaStore::Unavailable => error
+  # 存档读不出来时刻意不静默重建：写入是全量覆写，一次误判就会把用户的
+  # 短剧和任务记录抹平。把原因如实告诉调用方，让人去看那个文件。
+  warn "video-studio: #{error.class}: #{error.message}"
+  respond_error(
+    defined?(request) ? request : nil,
+    -32_002,
+    "Local Video Studio archive could not be read; it was left untouched. #{error.message}"
+  )
 rescue StandardError => error
-  warn "video-studio: #{error.class}"
-  if defined?(request) && request.is_a?(Hash) && request["id"]
-    puts JSON.generate(
-      jsonrpc: "2.0",
-      id: request["id"],
-      error: { code: -32_000, message: "Video Studio internal error" }
-    )
-  end
+  # 只打 error.class 的话，线上报障时 stderr 全部内容就是一行
+  # "video-studio: NoMethodError"，没有文件也没有行号。
+  warn "video-studio: #{error.class}: #{error.message}"
+  Array(error.backtrace).first(5).each { |line| warn "video-studio:   #{line}" }
+  respond_error(defined?(request) ? request : nil, -32_000, "Video Studio internal error")
 end

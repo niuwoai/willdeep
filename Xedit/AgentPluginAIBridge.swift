@@ -39,6 +39,23 @@ nonisolated struct AgentPluginAIResult: Equatable, Sendable {
     let providerID: String
 }
 
+nonisolated struct AgentPluginImageRequest: Equatable, Sendable {
+    let prompt: String
+    let model: String
+    let size: String
+
+    static let allowedModels = ["gpt-image-2", "nano_banana_2"]
+    static let allowedSizes = ["1024x1024", "1536x1024", "1024x1536"]
+    static let maximumCharacters = 8_000
+}
+
+nonisolated struct AgentPluginImageResult: Equatable, Sendable {
+    let mediaURL: String
+    let filePath: String
+    let model: String
+    let providerID: String
+}
+
 /// 递给页面的 provider 描述。刻意不带 baseURL 与任何密钥字段。
 nonisolated struct AgentPluginAIProviderDescriptor: Equatable, Sendable {
     let providerID: String
@@ -62,6 +79,7 @@ nonisolated struct AgentPluginAIProviderDescriptor: Equatable, Sendable {
 
 nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
     case permissionDenied
+    case imagePermissionDenied
     case emptyRequest
     case tooManyMessages
     case tooLong
@@ -69,10 +87,14 @@ nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
     case unknownModel(String)
     case unavailable
     case emptyResponse
+    case invalidImageRequest
+    case invalidImageModel(String)
+    case invalidImageSize(String)
 
     var errorDescription: String? {
         switch self {
         case .permissionDenied: return "This plugin did not declare the ai.chat permission."
+        case .imagePermissionDenied: return "This plugin did not declare the ai.image permission."
         case .emptyRequest: return "The request carried no messages."
         case .tooManyMessages: return "Too many messages in one request."
         case .tooLong: return "The request is too long."
@@ -80,7 +102,33 @@ nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
         case .unknownModel(let model): return "Model is not in this provider's list: \(model)"
         case .unavailable: return "No usable model is configured."
         case .emptyResponse: return "The model returned nothing."
+        case .invalidImageRequest: return "The image prompt is empty or too long."
+        case .invalidImageModel(let model): return "Unsupported some.im image model: \(model)"
+        case .invalidImageSize(let size): return "Unsupported image size: \(size)"
         }
+    }
+}
+
+nonisolated enum AgentPluginImageRequestValidator {
+    static func request(from raw: [String: Any]) -> Result<AgentPluginImageRequest, AgentPluginAIError> {
+        let prompt = (raw["prompt"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty, prompt.count <= AgentPluginImageRequest.maximumCharacters else {
+            return .failure(.invalidImageRequest)
+        }
+        let provider = (raw["provider"] as? String ?? raw["providerID"] as? String ?? "some-im")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard provider == "some-im" else { return .failure(.unknownProvider(provider)) }
+        let model = (raw["model"] as? String ?? AgentPluginImageRequest.allowedModels[0])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard AgentPluginImageRequest.allowedModels.contains(model) else {
+            return .failure(.invalidImageModel(model))
+        }
+        let size = (raw["size"] as? String ?? AgentPluginImageRequest.allowedSizes[0])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard AgentPluginImageRequest.allowedSizes.contains(size) else {
+            return .failure(.invalidImageSize(size))
+        }
+        return .success(AgentPluginImageRequest(prompt: prompt, model: model, size: size))
     }
 }
 
@@ -129,7 +177,7 @@ nonisolated enum AgentPluginAIRequestValidator {
     }
 }
 
-private extension String {
+nonisolated private extension String {
     var nilWhenEmpty: String? { isEmpty ? nil : self }
 }
 
@@ -206,6 +254,35 @@ extension AppState {
             text: text,
             model: configuration.model,
             providerID: configuration.providerID
+        )
+    }
+
+    func runPluginImageGeneration(
+        pluginID: AgentPluginID,
+        request: AgentPluginImageRequest
+    ) async throws -> AgentPluginImageResult {
+        guard AgentPluginRegistry.shared.hasPermission(.aiImage, pluginID: pluginID) else {
+            throw AgentPluginAIError.imagePermissionDenied
+        }
+        let outputDirectory = try AgentPluginGeneratedMediaResolver.directory(pluginID: pluginID)
+        try FileManager.default.createDirectory(
+            at: outputDirectory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        let image = try await SomeIMClient.generateImage(
+            prompt: request.prompt,
+            size: request.size,
+            model: request.model,
+            outputDirectory: outputDirectory
+        )
+        let filename = image.fileURL.lastPathComponent
+        let encoded = filename.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlPathAllowed) ?? filename
+        return AgentPluginImageResult(
+            mediaURL: "willdeep-plugin://bundle/__media__/\(encoded)",
+            filePath: image.fileURL.path,
+            model: image.model,
+            providerID: "some-im"
         )
     }
 

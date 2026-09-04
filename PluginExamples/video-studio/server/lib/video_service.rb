@@ -99,7 +99,16 @@ class VideoService
 
   def refresh_active
     jobs = @store.jobs.select { |job| ACTIVE_STATES.include?(job["state"]) && !job["remoteID"].to_s.empty? }
-    refreshed = jobs.first(20).map { |job| refresh_job(job)["job"] || job }
+    # 每个任务单独兜底：refresh_job 只 rescue 了 VideoProviderError，一个任务
+    # 抛别的异常会让这一整批 20 个刷新全废。
+    refreshed = jobs.first(20).map do |job|
+      begin
+        refresh_job(job)["job"] || job
+      rescue StandardError => error
+        warn "video-studio: refresh skipped for #{job['id']} (#{error.class}: #{error.message})"
+        job
+      end
+    end
     { "ok" => true, "jobs" => refreshed, "counts" => counts(@store.jobs) }
   end
 
@@ -273,9 +282,12 @@ class VideoService
 
   def download_if_ready(job, force: false)
     return job unless job["state"] == "completed"
-    return job unless job["outputPath"].to_s.empty?
     return job if job["outputURL"].to_s.empty?
     return job unless force || @store.settings["autoDownload"]
+    # 手动重下时要认「文件其实已经被用户删了」这种情况，否则只看 outputPath
+    # 非空就返回成功，用户拿到的是一条指向不存在文件的路径。
+    existing = job["outputPath"].to_s
+    return job unless existing.empty? || (force && !File.exist?(existing))
 
     path = @adapter_factory.call.download(job["outputURL"], job["remoteID"] || job["id"])
     @store.update_job(job["id"], "outputPath" => path, "downloadError" => nil)

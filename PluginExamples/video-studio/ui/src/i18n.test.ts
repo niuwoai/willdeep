@@ -5,10 +5,10 @@ describe('i18n', () => {
   it('selects Chinese variants and falls back to English', () => {
     expect(localeFromContext('zh-Hans-CN')).toBe('zh-Hans');
     expect(localeFromContext('fr')).toBe('en');
-    expect(createTranslator('zh-Hans')('appTitle')).toBe('视频工坊');
+    expect(createTranslator('zh-Hans')('appName')).toBe('短剧工坊');
   });
 
   it('interpolates values', () => {
-    expect(createTranslator('en')('progress', { value: 42 })).toBe('42%');
+    expect(createTranslator('en')('episodeCount', { count: 42 })).toBe('42 episodes');
   });
 });

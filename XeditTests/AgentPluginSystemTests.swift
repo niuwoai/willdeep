@@ -767,7 +767,7 @@ struct AgentPluginSystemTests {
                 source: .installed,
                 // 收藏夹与会话体检要求的宿主版本比其它样例新；翻旧账
                 // (history-recall) 又更新一档（它依赖 session.open host action）
-                currentWillDeepVersion: "1.320.0-rc1"
+                currentWillDeepVersion: "1.321.0-rc1"
             )
             #expect(package.destinations.count == 1)
         }
@@ -963,6 +963,51 @@ struct AgentPluginSystemTests {
     }
 
     @Test
+    func pluginImageRequestValidatorAllowsOnlyTheSomeIMContract() {
+        #expect(AgentPluginImageRequestValidator.request(from: [:]) == .failure(.invalidImageRequest))
+        #expect(
+            AgentPluginImageRequestValidator.request(from: ["prompt": "portrait", "provider": "other"])
+                == .failure(.unknownProvider("other"))
+        )
+        #expect(
+            AgentPluginImageRequestValidator.request(from: ["prompt": "portrait", "model": "unknown"])
+                == .failure(.invalidImageModel("unknown"))
+        )
+        #expect(
+            AgentPluginImageRequestValidator.request(from: ["prompt": "portrait", "size": "8192x8192"])
+                == .failure(.invalidImageSize("8192x8192"))
+        )
+        guard case .success(let request) = AgentPluginImageRequestValidator.request(from: [
+            "prompt": "  cinematic portrait  ",
+            "provider": "some-im",
+            "model": "nano_banana_2",
+            "size": "1024x1536",
+        ]) else {
+            Issue.record("合法图片请求不该被拒")
+            return
+        }
+        #expect(request.prompt == "cinematic portrait")
+        #expect(request.model == "nano_banana_2")
+        #expect(request.size == "1024x1536")
+    }
+
+    @Test
+    func pluginGeneratedMediaResolverRejectsPathTraversal() throws {
+        let safe = try AgentPluginGeneratedMediaResolver.fileURL(
+            forRequestPath: "/__media__/frame.png",
+            pluginID: "willdeep-video-studio"
+        )
+        #expect(safe.lastPathComponent == "frame.png")
+        #expect(safe.path.contains("plugin-data/willdeep-video-studio/generated-images"))
+        #expect(throws: (any Error).self) {
+            _ = try AgentPluginGeneratedMediaResolver.fileURL(
+                forRequestPath: "/__media__/../secret.txt",
+                pluginID: "willdeep-video-studio"
+            )
+        }
+    }
+
+    @Test
     func chatSelectionArgumentsCarryWorkspaceOnlyWhenThereIsOne() {
         let withoutWorkspace = AppState.chatSelectionArguments(text: "选中的一段话", workspace: nil)
         #expect(withoutWorkspace == ["text": "选中的一段话", "source": "chat.selection"])
@@ -1030,7 +1075,7 @@ struct AgentPluginSystemTests {
         let package = try AgentPluginPackageLoader.load(
             packageURL: packageURL,
             source: .installed,
-            currentWillDeepVersion: "1.320.0-rc1"
+            currentWillDeepVersion: "1.321.0-rc1"
         )
         let manifest = try #require(package.manifest)
 

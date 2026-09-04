@@ -1,7 +1,7 @@
 {
   "$schema": "../../../docs/plugin-schema/willdeep-plugin.schema.json",
   "schemaVersion": 1,
-  "minimumWillDeepVersion": "1.320.0-rc1",
+  "minimumWillDeepVersion": "1.321.0-rc1",
   "contributes": {
     "destinations": [{
       "id": "studio",
@@ -21,6 +21,16 @@
       "entryPath": "ui/dist/index.html"
     }],
     "commands": [
+      {"id":"drama.list","titleKey":"command.drama.list","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.list"}},
+      {"id":"drama.get","titleKey":"command.drama.get","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.get"}},
+      {"id":"drama.confirmPlan","titleKey":"command.drama.confirmPlan","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.confirm_plan"}},
+      {"id":"drama.saveCharacter","titleKey":"command.drama.saveCharacter","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.save_character"}},
+      {"id":"drama.saveEpisode","titleKey":"command.drama.saveEpisode","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.save_episode"}},
+      {"id":"drama.saveShot","titleKey":"command.drama.saveShot","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.save_shot"}},
+      {"id":"drama.recordImage","titleKey":"command.drama.recordImage","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.record_image"}},
+      {"id":"drama.selectImage","titleKey":"command.drama.selectImage","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.select_image"}},
+      {"id":"drama.recordCharacterImage","titleKey":"command.drama.recordCharacterImage","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.record_character_image"}},
+      {"id":"drama.selectCharacterImage","titleKey":"command.drama.selectCharacterImage","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.select_character_image"}},
       {
         "id": "video.open",
         "titleKey": "command.open",
@@ -129,6 +139,6 @@
       }
     ]
   },
-  "permissions": ["process.execute", "network.access", "credentials.use", "ai.chat", "providers.read"],
+  "permissions": ["process.execute", "network.access", "credentials.use", "ai.chat", "ai.image", "providers.read"],
   "dependencies": {"mcpServers": ["video-studio"], "skills": ["video-studio"]}
 }

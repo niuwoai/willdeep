@@ -96,6 +96,20 @@ const { providers } = await window.willdeep.ai.providers();
 
 只读，只给能标识和展示的字段，没有 baseURL 和 key。用它渲染模型选择器。
 
+## 生成图片（需要 `ai.image`）
+
+```js
+const image = await window.willdeep.ai.generateImage({
+  prompt: '电影感竖屏人物定妆照，冷色侧光',
+  provider: 'some-im',
+  model: 'gpt-image-2', // 或 nano_banana_2
+  size: '1024x1536'
+});
+// { mediaURL, filePath, model, providerID: 'some-im' }
+```
+
+宿主只接受 `some-im`、`gpt-image-2` / `nano_banana_2` 和三种受控尺寸；提示词最多 8000 字。API Key 始终留在 Keychain。生成文件写入当前插件隔离的数据目录，页面通过只读 `mediaURL` 展示；单个媒体文件上限 32 MiB。
+
 ## MCP App 页面
 
 `runtime: "mcpApp"` 的页面用标准 MCP App 协议跟宿主通话，走 `window.postMessage`（宿主已经把 `message` 事件桥到原生侧）：

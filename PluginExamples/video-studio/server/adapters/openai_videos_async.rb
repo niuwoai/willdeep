@@ -3,6 +3,7 @@
 require "fileutils"
 require "json"
 require "net/http"
+require "openssl"
 require "securerandom"
 require "uri"
 
@@ -74,6 +75,7 @@ class OpenAIVideosAsyncAdapter
   end
 
   def download(url, remote_id)
+    temporary = nil
     uri = validate_download_url(url)
     FileUtils.mkdir_p(output_directory)
     filename = "#{safe_filename(remote_id)}.mp4"
@@ -81,13 +83,17 @@ class OpenAIVideosAsyncAdapter
     temporary = "#{destination}.part"
     stream_download(uri, temporary, 0)
     File.rename(temporary, destination)
+    temporary = nil
     destination
   rescue VideoProviderError
     raise
   rescue StandardError => error
     raise VideoProviderError, "Output download failed: #{error.class}"
   ensure
-    File.delete(temporary) if defined?(temporary) && File.exist?(temporary)
+    # 早先写的是 `defined?(temporary) && ...`：validate_download_url 抛错时
+    # temporary 还是 nil，File.exist?(nil) 的 TypeError 会把真正的
+    # VideoProviderError 顶掉，调用方的 rescue 就接不住了。
+    File.delete(temporary) if temporary && File.exist?(temporary)
   end
 
   private
@@ -195,7 +201,10 @@ class OpenAIVideosAsyncAdapter
     JSON.parse(response.body)
   rescue JSON::ParserError
     raise VideoProviderError.new("Video provider returned invalid JSON.", ambiguous_submission: ambiguous_submission)
-  rescue Timeout::Error, EOFError, IOError, SocketError, SystemCallError => error
+  rescue Timeout::Error, EOFError, IOError, SocketError, SystemCallError,
+         OpenSSL::OpenSSLError => error
+    # OpenSSL::SSL::SSLError 不是 SystemCallError 的后代。漏掉它，握手失败就会
+    # 越过 retrieve 的调用方一路冲到顶层，退避时间也不会写回任务。
     raise VideoProviderError.new(
       "Video provider request failed: #{error.class}",
       ambiguous_submission: ambiguous_submission
@@ -214,7 +223,11 @@ class OpenAIVideosAsyncAdapter
   end
 
   def handle_http_error(response)
-    parsed = JSON.parse(response.body) rescue {}
+    parsed = begin
+      JSON.parse(response.body)
+    rescue JSON::ParserError, TypeError
+      {}
+    end
     raw_error = parsed.is_a?(Hash) ? parsed["error"] : nil
     message = raw_error.is_a?(Hash) ? (raw_error["message"] || raw_error["code"]) : raw_error
     message = "Video provider HTTP #{response.code}" if message.to_s.strip.empty?

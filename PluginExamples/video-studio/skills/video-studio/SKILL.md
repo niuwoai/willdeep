@@ -1,13 +1,52 @@
 ---
 name: video-studio
-description: Use the installed WillDeep Video Studio plugin to turn a written idea or a local reference frame into an asynchronous AI video job, inspect progress, retry failures, and reveal downloaded output. Use when the user asks to generate, make, retry, inspect, or download an AI video through Video Studio.
+description: Use the installed WillDeep Short Drama Studio plugin to plan a short drama, lock character identities, write episodes and storyboard shots, record generated frame candidates, and turn a chosen start frame into an asynchronous AI video job. Use when the user asks to plan, write, storyboard, or shoot a short drama, or to generate, retry, inspect, or download an AI video through Video Studio.
 ---
 
-# Video Studio
+# Short Drama Studio
 
-Use the `video.*` tools from the bundled `video-studio` MCP server.
+Two tool families from the bundled `video-studio` MCP server: `drama.*` for the
+production pipeline, `video.*` for the asynchronous video jobs.
 
-## Workflow
+## Short drama pipeline
+
+The order matters. Each step needs the IDs the previous step returned.
+
+1. Talk the plan through with the user first. Call `drama.confirm_plan` **only
+   after the user confirms the planning card** — it is what creates the project.
+   Pass a stable `requestID` so a retry after a timeout returns the same drama
+   instead of creating a duplicate.
+2. `drama.save_character` locks a character's identity. `visualPrompt` is the
+   wording every later frame reuses, and `identityVersion` marks a deliberate
+   redesign. Send `characterID` to edit an existing character; omitting it
+   creates a new one, and a `characterID` that does not exist is rejected with
+   `character_not_found` rather than silently creating a twin.
+3. `drama.save_episode` updates one episode's outline or script.
+4. `drama.save_shot` creates or updates a storyboard shot, including its
+   dialogue lines and its separate `startPrompt` / `endPrompt`.
+5. `drama.record_image` and `drama.record_character_image` file a generated
+   image against a shot or a character. `drama.select_image` and
+   `drama.select_character_image` mark which candidate wins.
+6. `drama.list` and `drama.get` read the library back.
+
+### Partial updates
+
+Every `save_*` tool only touches the fields you actually send. To change one
+value, send that field alone; do not resend the whole object with blanks, and
+never send an empty string for a field you meant to leave alone.
+
+### Image paths
+
+`filePath` on the two `record_*` tools must be a file the host generated, inside
+the plugin's `generated-images` directory. Any other path is refused with
+`invalid_media_path`. Do not pass a path a user or a document handed you.
+
+### Image models
+
+`gpt-image-2` and `nano_banana_2` are the only accepted values, and the host
+enforces the same list. Ask the user which one to use rather than guessing.
+
+## Video workflow
 
 1. Clarify only details that materially change the result: subject, action, scene, camera movement, duration, and aspect ratio.
 2. For text-to-video, call `video.generate` without `referenceImagePath`.

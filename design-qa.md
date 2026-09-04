@@ -1,93 +1,57 @@
-# 第4版多标签工作面板验收
+# Video Studio Design QA
 
-日期：2026-08-31。界面实现版本：1.313.0-rc1（build 574）；回归修正版：1.313.0-rc2（build 575）。
+- source visual truth: `docs/design/video-studio/current/01-short-drama-library.png` and `docs/design/video-studio/current/02-short-drama-planning.png`
+- implementation screenshot path: Codex in-app browser inline capture of `http://127.0.0.1:5173/` (the CUA surface returns image bytes but does not expose a filesystem screenshot path)
+- comparison surface: temporary local `qa-compare.html`, removed after QA so it is not shipped
+- viewport: source and implementation each rendered at 1536 × 1092 CSS px, device density 1x, then uniformly scaled to 25% in one 778 px comparison canvas
+- source pixels: 1536 × 1092 for both selected references
+- implementation pixels: 1536 × 1092 CSS capture for library and planning states
+- state: realistic three-project library; planning page after one user message and one generated `short_drama_plan` card
 
-## 目标与证据
+**Findings**
 
-- source visual truth：`/Users/rocky/.codex/generated_images/01a048c6-0f5d-7312-b46b-f96f088e9069/exec-b0cec3ec-90b5-4bfb-985e-027662fdc6dc.png`。
-- 原图 1487×1058；仅改右侧工作面板及独立窗口，不改左侧会话布局。
-- 对照裁剪：`build/visual-qa/panel-tabs/reference-panel.png`，从原图 (747,57) 裁剪 740×1000。
-- implementation screenshots：`build/visual-qa/panel-tabs/workspace.png`（1480×2000，740×1000 pt，2×）、`document-window.png`（1280×1240，640×620 pt，2×）。使用真实 SwiftUI/AppKit 内容宿主，不是重新绘制的效果图。
-- 状态：终端、后台任务、README、Diff 共四个标签；文档与 Diff 已分离，终端选中。
-- 原图和实现截图已在同一比较输入中打开；最终归一化图为 `workspace-1x.png`（740×1000）、`document-window-1x.png`（640×620）及 `overview-1x.png`（336×263）。2×截图下采样并铺白底，消除透明位图缓存的黑底显示，不改变实际内容。
-- 局部比较：`reference-header.png` 与 `workspace-header.png`，另与 `overview-1x.png` 同批检查标签栏、选中线、类型图标、标题、位置标记和收回按钮。概念图字号较大，实际使用现有原生控件密度，不声称逐像素一致。
+- No actionable P0, P1, or P2 differences remain in the compared library and planning states.
+- [P3] The implementation intentionally omits the mockup's account/profile footer and decorative icon column because those are host-owned chrome, while the plugin page keeps only its local navigation and language toggle.
+- [P3] The planning transcript is less text-dense than the illustrative source because the QA state contains one real interaction round; additional rounds use the same message layout and scroll region.
 
-## 已实现的交互
+**Required Fidelity Surfaces**
 
-- 标签采用 SF Symbols 类型图标、内容标题、关闭按钮及选中下划线；后台任务显示当前会话运行数量，分离标签显示 ↗。
-- 不同文档按文件身份去重，打开其他类型不会覆盖已打开标签；标签列表和选择随会话持久化，兼容旧单面板数据。
-- 全部标签总览用于定位已分离窗口、返回标签及收回本会话窗口；标签支持原生拖动分离、拖回、排序。
-- 分离和收回迁移同一个 NSHostingView；终端保留全应用唯一宿主，浏览器继续使用原会话 WKWebView。
-- 关闭标签不终止进程；关闭原生窗口保留对应标签。独立窗口的文件、输入、媒体筛选与工具操作绑定所属会话。
+- Fonts and typography: uses the macOS system stack, compact 10–13 px metadata, 17–31 px titles, source-like dark optical weight, controlled wrapping and row truncation. The 805 px narrow-window capture also retained readable hierarchy without horizontal clipping.
+- Spacing and layout rhythm: persistent 224 px desktop sidebar, white/gray surfaces, compact 7–11 px radii, low elevation, list-row density, recent-work region, planning split view, and responsive single-column fallback align with the source structure.
+- Colors and visual tokens: final tokens use neutral macOS whites/grays and black primary actions; semantic planning/production/completed pills remain restrained. No gradients or decorative CSS art remain.
+- Image quality and asset fidelity: three original, text-free generated covers were resized without stretching from 1086 × 1448 PNG to 600 × 800 WebP (28–71 KiB). Crops stay readable at project-row size; no placeholders, emoji, inline SVG, or text-glyph icons are used as visible artwork.
+- Copy and content: all React interface copy is routed through i18n. The library exposes short-drama titles, search, status filters and continuation; planning preserves multi-round AI context and separates generated card confirmation from persistence.
 
-## 五类视觉检查
+**Interaction Evidence**
 
-1. 字体：使用现有 macOS 系统字体、SF Symbols 与应用 11–13 pt 工具栏层级。设计图的放大概念字号不用于覆盖整应用字号；文档内容保留现有 Markdown 样式。
-2. 布局：保留工作面板顶栏、横向标签、内容标题与底部说明；原终端录制、快捷命令和终端内部标签继续保留，不能为匹配简化图而删除现有操作。默认侧栏宽 480 pt，最小 320 pt，横向标签可滚动。
-3. 颜色：使用已有皮肤 palette，而不是硬编码样图颜色；活动标签用强调色。最终 system + aqua 截图确认工作面板和独立文档窗口为统一浅色，未再出现黑色工具栏。终端沿用用户配置的浅色方案，不为匹配样图强制改为深色。
-4. 图像：此界面无新增位图资产；图标为 SF Symbols，文档/终端是实际控件。截图缩放仅用于密度归一化，不改生产图片。
-5. 文案：新增文案通过 `PanelTabs.xcstrings` 提供中英文；标题使用真实文件名、既有类型名称。底部明确关闭展示不会停止任务，不伪造“运行中”状态。
+- Opened the library in the Codex in-app browser, switched locale, searched/filtered through automated UI tests, and opened planning from the primary CTA.
+- Entered a story idea, generated a structured planning card through the development bridge, and verified that the transcript and card update independently.
+- Frontend tests pass 8/8; Ruby short-drama flow passes 6/6; Ruby asynchronous video server flow passes 40/40.
+- The clean development bridge produced no bridge-unavailable error state. No console-warning surface was exposed by the selected in-app browser; production build and interaction checks reported no runtime error.
 
-## 比较迭代
+**Full-view Comparison Evidence**
 
-- 第一轮发现文档窗口工具栏背景在截图中呈黑色；修正内容根背景，并统一测试窗口浅色 appearance 后复验。
-- 第二轮明确 rice-paper 皮肤能正常渲染，但与目标系统浅色不同；测试改为 system + aqua，避免把皮肤差异误当设计漂移。
-- 第三轮统一浅色/密度对照完成：文档、标签条和总览弹层的文字与图标均可读，终端已真实渲染 fish 欢迎输出；没有使用样图终端文本伪装运行结果。
-- 鼠标控制工具首次报 native pipe closed；重试能读取应用，但完整 app 路径仍定位到同 bundle 的主窗口，即使测试窗口置前也无法可靠操作它。因此没有点击用户主会话，未把真实拖拽/Escape 取消及窄宽度操作标为验收通过。
+- A single browser-rendered QA canvas placed library source/implementation and planning source/implementation together at the same 1536 × 1092 viewport and 25% scale. This exposed and verified the sidebar width, header hierarchy, filters, recent-work block, project-row density, transcript/card split, button hierarchy, and page-level whitespace.
 
-## 自动化测试
+**Focused Region Comparison Evidence**
 
-- 55 项定向 Swift 测试通过（7 个 suite）：标签迁移/去重/排序/持久化、内容宿主身份、窗口关闭与收回、跨会话隔离、Diff 加载、侧栏焦点策略、浏览器宿主及会话持久化。
-- 随后窗口 suite 的 7 项测试通过，包含新增的非活动会话媒体筛选隔离测试；本轮共覆盖 56 个不同的定向测试。
-- Ruby 契约检查：widget 7、media refresh 4、short drama/media 292，共 303 项通过。
-- 首轮全量 3294 项测试报告有 8 个断言失败：其中 2 个 Diff 源码契约断言已随作用域改造更新并定向通过；另有提示词快照 2 个、Worker 统计 4 个失败，涉及的提示词/统计实现与测试文件未在本次修改。未声称全量通过，也未仅为变绿改写这些期望。
-- 报告：`build/visual-qa/panel-tabs/targeted-tests.{json,md}`、`full-tests-first.{json,md}`。
-- rc1 最终全量测试：3295 项中 3 项失败（6 个断言），其余通过；仍为上述提示词快照 2 项及 Worker 统计 1 项。本次改造对应的 Diff 契约检查已经通过。历史报告另存 `full-tests-final.{json,md}`，窗口补充测试为 `window-tests.{json,md}`。
-- 计数口径：3295 来自 Swift Testing 日志；xcresult 报告计入包装/其他记录后为 3302（3298 passed / 3 failed / 1 skipped）。两个口径均确认 3 项失败，xcodebuild exit 65；不将报告汇总计数当成更多新增覆盖。
-- 版本一致性和 `git diff --check` 通过。
+- Separate full-resolution in-app browser inspections were used for the 805 px narrow library and planning states because the combined canvas already contained all major desktop regions. No additional crop was required: the relevant controls, type hierarchy, cover crops, status pills, transcript bubbles, provider/model selects, and card actions were directly inspected at readable size.
 
-## rc2 回归修正与复验
+**Comparison History**
 
-- 用户确认一并修复上述 3 项失败后，核对 Git 历史：1.312.0-rc3 提交已将标准／扩展提示词迁移为三档模型、五类职责，但未更新 v35 版本及快照；统计实现已将 reader/deep/scout 的展示归类为 generalist，旧断言未同步。
-- 提示词契约改为 v36；用真实 Swift 前缀生成函数及 FNV 哈希函数重算三个档位，保留提示词正文和 capability appendix。compact 快照也随版本头更新。
-- 更新统计断言，并补测旧执行 ID 保持不变、6 次历史调用汇总为 2 个会话、五类职责及大小写／空白／旧别名的汇总。新增提示词职责与权限边界守卫；未删除或跳过原失败测试。
-- 使用 build-test-acceleration 技能复用外部 DerivedData/SwiftPM 缓存，通过 `ruby scripts/run_tests_fast.rb -jobs 4` 完整编译并运行，没有以缓存命中代替测试。
-- Swift Testing：3297 项 / 283 suites 全部通过，测试阶段 50.001 秒；xcodebuild exit 0。xcresult 计数含包装记录：3304 total / 3303 passed / 0 failed / 1 skipped。
-- Ruby 契约检查再次通过：7 + 4 + 292 = 303；版本一致性为 1.313.0-rc2，构建号 575。变更的新增文本及新增文件未匹配私钥／常见服务 Token 模式。
-- 当前通过报告：`build/visual-qa/panel-tabs/rc2-full-tests.json`、`rc2-full-tests.md`；原失败报告保留作为前后对照。
+- Pass 1 found [P1] dark cinematic theme/top pipeline versus the approved light macOS sidebar and [P2] sparse desktop empty state. Fix: rebuilt the shell with theme tokens and persistent sidebar; added search, status filters, recent continuation and dense project rows. Post-fix evidence: the combined library comparison shows matching macro hierarchy and above-the-fold density.
+- Pass 2 found [P1] one-shot planning textarea versus the source's continuing AI conversation. Fix: added a persistent role-based transcript, contextual multi-round request history, bottom composer, revision flow and separately confirmable structure card. Post-fix evidence: the combined planning comparison shows the transcript/card split populated from a real interaction.
+- Pass 3 found [P2] purple primary actions and accent states versus the source's neutral black/gray system. Fix: remapped accent and primary-action tokens to black/gray with a dark-theme contrast pair. No actionable P0/P1/P2 finding remained.
 
-## 待完成检查
+**Implementation Checklist**
 
-- [x] 最终统一浅色与密度的截图对照，包含全部标签弹层。
-- [ ] 真实鼠标拖出、拖回、Esc 取消及窄宽度操作验收。
-- [x] 修复 3 项回归失败并运行最新代码全量测试，通过后进入提交合并流程。
+- [x] Match the approved sidebar, light surfaces, desktop density, typography hierarchy and primary-action treatment.
+- [x] Make search, filters, primary CTA, project continuation, provider/model selection, multi-round planning and card generation interactive.
+- [x] Replace temporary cover blocks with real optimized raster assets.
+- [x] Verify narrow-window responsiveness, build/tests, Ruby workflows and final runtime ZIP.
 
-final result: blocked
+**Follow-up Polish**
 
-此处 blocked 仅指视觉／鼠标验收：真实拖拽、Escape 取消及窄宽度操作仍缺少可靠窗口定位；自动化回归的 3 项失败已修复并全量通过，不再阻塞提交合并。不以单元测试成功代替真实鼠标验收，未发布或安装到 /Applications。
-
----
-
-# @ 选择器排序与高度验收
-
-日期：2026-09-03。界面实现版本：1.319.0-rc2（build 603）。
-
-## 目标与证据
-
-- 用户参考截图：`/var/folders/np/rjc0y5w52x324x21pv6g33440000gp/T/codex-clipboard-214b382b-a9bf-4229-a03f-69bd92c1496c.png`（1232×365）。目标是 Worker 先于 workspace／文件，并显著提高弹层可见高度。
-- 首轮实现截图：`build/visual-qa/mention-picker/implementation-13-rows.png`（525×592），来自实际 Debug 版 WillDeep 的 Xedit 工作区会话，输入 `@` 后捕获；用户随后将目标收紧为约六行。
-- 最终实现截图：`build/visual-qa/mention-picker/implementation.png`（525×300），同样来自实际 Debug 版；同屏比较为 `build/visual-qa/mention-picker/comparison.png`。原截图和最终实现截图已作为同一比较输入检查。
-
-## 可见结果
-
-- 首屏顺序为 `@generalist`、`@implementer`、`@tester`、`@reviewer`、`@ops_runner`，其后才是 workspace 和文件。
-- 弹层不再被输入区压成约三行；最终按用户反馈收口为六行（252pt），完整展示 5 个 Worker，并让 workspace 紧随其后；更多文件继续由原有滚动区承载。
-- 搜索框、圆角、阴影、选中态、图标、字号与现有原生样式一致；未新增图片资产或硬编码 UI 文案。
-- Escape 正常关闭选择器，验收产生的临时 `@` 草稿已清空；未发送消息或修改会话内容。
-
-## 自动化验证
-
-- `AgentRequestRouterTests` 与 `AgentWorkspaceFileSearchTests` 共 25 项通过。
-- 高度计算覆盖 3、6、30、100 条目，分别为 126、252、252、252 pt；排序断言覆盖 Worker 在上下文条目前。
+- Capture a second QA set inside the upgraded WillDeep plugin host after the user installs the compatible host build; host-owned window chrome and real persisted project data cannot be evidenced before that upgrade.
 
 final result: passed
