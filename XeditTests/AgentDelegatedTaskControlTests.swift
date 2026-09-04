@@ -187,4 +187,36 @@ nonisolated struct AgentDelegatedTaskControlTests {
 
         #expect(restored.delegatedTaskRuns == [run])
     }
+
+    @Test("a review run that never started says so instead of blaming the evidence block")
+    func surfacesReviewRunFailure() {
+        let contract = AgentDelegatedTaskContract(
+            objective: "Say hello",
+            executor: .codexCLI,
+            acceptanceCriteria: [.init(id: "AC-01", statement: "Answers the user")]
+        )
+
+        let acceptance = AgentDelegatedTaskControl.structuralAcceptance(
+            contract: contract,
+            evidence: nil,
+            changedPaths: [],
+            rerunChecks: [],
+            evidenceFailure: "codex exited without returning any output"
+        )
+
+        #expect(acceptance.accepted == false)
+        // 用户此前看到的是「没产出结构化证据块」，于是去查执行器的输出格式；
+        // 真正的事实是那一趟根本没跑成，原因必须原样带出来。
+        #expect(acceptance.findings.contains(where: { $0.contains("without returning any output") }))
+        #expect(!acceptance.findings.contains("The fresh executor review did not produce a valid structured evidence block."))
+    }
+
+    @Test("an executor that exits silently is reported as a failure, not an empty success")
+    func emptyExecutorOutputReadsAsFailure() {
+        let message = AgentStructuredExecutorDiagnostics.emptyOutputMessage(executor: "codex_cli")
+        #expect(message.contains("codex_cli"))
+        #expect(message.contains("without returning any output"))
+        // 别再让用户从一串验收条目里反推「执行器没装好 / 没登录」
+        #expect(message.contains("signed in"))
+    }
 }

@@ -1091,6 +1091,7 @@ extension AppState {
             }
 
             let executorEvidence: AgentDelegatedExecutorEvidence?
+            var reviewFailure: String?
             if contract.requiresFreshSelfReview {
                 let reviewPrompt = AgentDelegatedTaskControl.freshReviewPrompt(
                     contract: contract,
@@ -1113,13 +1114,21 @@ extension AppState {
                     "\(executionAgent.displayName) · \(L10n.DelegatedTask.selfReview)"
                 )
                 reviewArguments["timeout_seconds"] = .number(Double(contract.timeoutSeconds))
-                let reviewResult = try? await AgentToolRunner.run(
-                    name: toolName,
-                    arguments: reviewArguments,
-                    context: context
-                )
-                executorEvidence = reviewResult.flatMap {
-                    AgentDelegatedTaskControl.parseExecutorEvidence(from: $0.payload)
+                // 这一趟失败过去被 try? 吞掉，验收层只好报「执行器没产出
+                // 结构化证据块」——把「复核根本没跑起来」说成了「跑了但没
+                // 交作业」，排查方向整个偏掉。现在把真实原因带下去。
+                do {
+                    let reviewResult = try await AgentToolRunner.run(
+                        name: toolName,
+                        arguments: reviewArguments,
+                        context: context
+                    )
+                    executorEvidence = AgentDelegatedTaskControl.parseExecutorEvidence(
+                        from: reviewResult.payload
+                    )
+                } catch {
+                    executorEvidence = nil
+                    reviewFailure = error.localizedDescription
                 }
             } else {
                 executorEvidence = AgentDelegatedTaskControl.parseExecutorEvidence(
@@ -1142,7 +1151,8 @@ extension AppState {
                 contract: contract,
                 evidence: executorEvidence,
                 changedPaths: changedPaths,
-                rerunChecks: rerunChecks
+                rerunChecks: rerunChecks,
+                evidenceFailure: reviewFailure
             )
             lastAcceptance = acceptance
 
