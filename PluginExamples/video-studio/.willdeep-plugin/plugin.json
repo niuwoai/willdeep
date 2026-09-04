@@ -139,6 +139,6 @@
       }
     ]
   },
-  "permissions": ["process.execute", "network.access", "credentials.use", "ai.chat", "ai.image", "providers.read"],
+  "permissions": ["process.execute", "network.access", "credentials.use", "ai.chat", "ai.image", "providers.read", "skills.read"],
   "dependencies": {"mcpServers": ["video-studio"], "skills": ["video-studio"]}
 }

@@ -26,11 +26,39 @@ nonisolated struct AgentPluginAIRequest: Equatable, Sendable {
     var providerID: String?
     var model: String?
     var maxOutputTokens: Int?
+    /// 页面用 `$` 选中的技能。这里只存 identifier，正文由宿主读取并注入——
+    /// 页面既拿不到 SKILL.md 全文，也拿不到它在磁盘上的位置。
+    var skillIdentifiers: [String] = []
 
     static let maximumMessages = 24
     static let maximumCharacters = 32_000
     static let maximumOutputTokens = 4_096
     static let defaultOutputTokens = 512
+    /// 主聊天那条路对「一条消息挂几个技能」没有上限，用户从 popover 连点就能
+    /// 挂 N 个，N × 24k 全进 prompt。这条通道是给插件页面的，一开始就封死。
+    static let maximumSkills = 3
+    static let maximumSkillCharacters = 8_000
+}
+
+/// 递给页面的技能描述。刻意不带 `url`：技能在磁盘上的位置是宿主的事，
+/// 页面只需要一个能回传的 identifier。
+nonisolated struct AgentPluginSkillDescriptor: Equatable, Sendable {
+    let identifier: String
+    let name: String
+    let description: String
+    let source: String
+    let tier: String?
+
+    var jsonObject: [String: Any] {
+        var object: [String: Any] = [
+            "identifier": identifier,
+            "name": name,
+            "description": description,
+            "source": source,
+        ]
+        if let tier { object["tier"] = tier }
+        return object
+    }
 }
 
 nonisolated struct AgentPluginAIResult: Equatable, Sendable {
@@ -80,6 +108,9 @@ nonisolated struct AgentPluginAIProviderDescriptor: Equatable, Sendable {
 nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
     case permissionDenied
     case imagePermissionDenied
+    case skillPermissionDenied
+    case tooManySkills
+    case unknownSkill(String)
     case emptyRequest
     case tooManyMessages
     case tooLong
@@ -95,6 +126,9 @@ nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
         switch self {
         case .permissionDenied: return "This plugin did not declare the ai.chat permission."
         case .imagePermissionDenied: return "This plugin did not declare the ai.image permission."
+        case .skillPermissionDenied: return "This plugin did not declare the skills.read permission."
+        case .tooManySkills: return "At most \(AgentPluginAIRequest.maximumSkills) skills can be attached to one request."
+        case .unknownSkill(let identifier): return "No enabled skill matches: \(identifier)"
         case .emptyRequest: return "The request carried no messages."
         case .tooManyMessages: return "Too many messages in one request."
         case .tooLong: return "The request is too long."
@@ -173,6 +207,17 @@ nonisolated enum AgentPluginAIRequestValidator {
                 AgentPluginAIRequest.maximumOutputTokens
             )
         }
+        var identifiers: [String] = []
+        for entry in raw["skills"] as? [Any] ?? [] {
+            guard let token = (entry as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !token.isEmpty, token.count <= 200 else { continue }
+            // 去重，否则页面可以把同一个技能挂三遍来绕过条数上限。
+            if !identifiers.contains(token) { identifiers.append(token) }
+        }
+        guard identifiers.count <= AgentPluginAIRequest.maximumSkills else {
+            return .failure(.tooManySkills)
+        }
+        request.skillIdentifiers = identifiers
         return .success(request)
     }
 }
@@ -231,6 +276,51 @@ extension AppState {
         return cleaned.filter { seen.insert($0).inserted }
     }
 
+    /// 页面能引用的技能：用户当前启用的那些，含插件自带的。刻意不返回 url。
+    nonisolated static func pluginSkills(limit: Int = 200) async -> [AgentPluginSkillDescriptor] {
+        await AgentSkillDirectory.listAsync(includeDisabled: false)
+            .prefix(limit)
+            .map { entry in
+                AgentPluginSkillDescriptor(
+                    identifier: entry.identifier,
+                    name: entry.name,
+                    description: entry.description,
+                    source: entry.source.rawValue,
+                    tier: entry.tier?.rawValue
+                )
+            }
+    }
+
+    /// 把页面引用的技能读成一条 system 消息。正文由宿主从磁盘读取并截断，
+    /// 页面全程只见 identifier。找不到的 identifier 直接报错，不静默跳过——
+    /// 否则模型会在缺了技能的情况下若无其事地照答。
+    nonisolated static func pluginSkillPreamble(
+        identifiers: [String]
+    ) async throws -> AgentPluginAIMessage? {
+        guard !identifiers.isEmpty else { return nil }
+        let catalog = await AgentSkillDirectory.listAsync(includeDisabled: false)
+        var blocks: [String] = []
+        for identifier in identifiers {
+            guard let entry = catalog.first(where: { $0.identifier == identifier || $0.name == identifier }) else {
+                throw AgentPluginAIError.unknownSkill(identifier)
+            }
+            let body = AgentSkillDirectory.loadBody(
+                for: entry,
+                maxCharacters: AgentPluginAIRequest.maximumSkillCharacters
+            ) ?? "(skill body unavailable)"
+            blocks.append("""
+            ### Skill: \(entry.identifier)
+            > \(entry.description)
+
+            \(body)
+            """)
+        }
+        return AgentPluginAIMessage(
+            role: .system,
+            content: "The user attached these skills to this request.\n\n" + blocks.joined(separator: "\n\n")
+        )
+    }
+
     /// 执行一次插件发起的模型对话。权限、路由、上限都在这里收口，
     /// 页面那侧只负责把文字递进来。
     func runPluginAICompletion(
@@ -240,8 +330,18 @@ extension AppState {
         guard AgentPluginRegistry.shared.hasPermission(.aiChat, pluginID: pluginID) else {
             throw AgentPluginAIError.permissionDenied
         }
+        if !request.skillIdentifiers.isEmpty {
+            guard AgentPluginRegistry.shared.hasPermission(.skillsRead, pluginID: pluginID) else {
+                throw AgentPluginAIError.skillPermissionDenied
+            }
+        }
         let configuration = try pluginAIConfiguration(for: request)
-        let messages = request.messages.map { AgentMessage(role: $0.role, content: $0.content) }
+        // 技能正文另算预算，不占页面自己那 32000 字的额度，也不参与条数上限。
+        var outbound = request.messages
+        if let preamble = try await Self.pluginSkillPreamble(identifiers: request.skillIdentifiers) {
+            outbound.insert(preamble, at: 0)
+        }
+        let messages = outbound.map { AgentMessage(role: $0.role, content: $0.content) }
         let buffer = AgentPluginAITextBuffer()
         try await AgentClient(configuration: configuration).streamChat(messages: messages) { event in
             if case .textDelta(let delta) = event {

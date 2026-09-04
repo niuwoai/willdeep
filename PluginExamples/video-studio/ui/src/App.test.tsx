@@ -1,9 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import App from './App';
+import App, { skillQueryAt } from './App';
 
 const executeCommand = vi.fn();
 const complete = vi.fn();
+const listSkills = vi.fn();
 let dramas: Array<Record<string, unknown>> = [];
 
 beforeEach(() => {
@@ -17,6 +18,12 @@ beforeEach(() => {
     model: 'fast', providerID: 'chat-a',
   });
   dramas = [];
+  listSkills.mockReset().mockResolvedValue({
+    skills: [
+      { identifier: 'hongguo-drama', name: 'hongguo-drama', description: '红果短剧爽剧剧本生成器', source: 'bundled' },
+      { identifier: 'video-studio', name: 'video-studio', description: 'Short drama studio plugin skill', source: 'plugin' },
+    ],
+  });
   window.willdeep = {
     getContext: () => ({ locale: 'zh-Hans' }), executeCommand,
     ai: {
@@ -24,6 +31,7 @@ beforeEach(() => {
       providers: async () => ({ providers: [{ providerID: 'chat-a', displayName: 'Chat A', isActive: true, isLocal: false, models: ['fast'], flashModel: 'fast' }] }),
       generateImage: vi.fn(),
     },
+    skills: { list: listSkills },
   };
 });
 
@@ -67,6 +75,38 @@ describe('Short Drama Studio', () => {
       expect(document.activeElement).toBe(search);
     }
     expect((search as HTMLInputElement).value).toBe('月港追');
+  });
+
+  it('only treats $ as a skill trigger at a word boundary', () => {
+    expect(skillQueryAt('$vid', 4)).toBe('vid');
+    expect(skillQueryAt('写一段 $short', 10)).toBe('short');
+    expect(skillQueryAt('$', 1)).toBe('');
+    // 价格、shell 变量、路径里的 $ 不该弹菜单
+    expect(skillQueryAt('定价 US$20', 8)).toBeNull();
+    expect(skillQueryAt('echo a$HOME', 11)).toBeNull();
+    // 查询词里出现空白说明用户已经写下去了
+    expect(skillQueryAt('$short drama', 12)).toBeNull();
+    expect(skillQueryAt('没有触发字符', 6)).toBeNull();
+  });
+
+  it('picks a skill with $, drops the token, and sends only its identifier', async () => {
+    render(<App />);
+    await waitFor(() => expect(listSkills).toHaveBeenCalled());
+    fireEvent.click((await screen.findAllByRole('button', { name: '策划新短剧' }))[0]!);
+
+    const composer = await screen.findByPlaceholderText(/一个落魄程序员/);
+    fireEvent.change(composer, { target: { value: '写个短剧 $hong', selectionStart: 10 } });
+    fireEvent.mouseDown((await screen.findAllByText('hongguo-drama'))[0]!);
+
+    // $token 从输入框里消失，技能变成一枚标签
+    expect((composer as HTMLTextAreaElement).value).toBe('写个短剧 ');
+    expect(screen.getByLabelText('已引用的技能')).toBeTruthy();
+
+    fireEvent.change(composer, { target: { value: '写个短剧 一个程序员的故事', selectionStart: 12 } });
+    fireEvent.click(screen.getByRole('button', { name: '生成短剧策划卡' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    // 页面只回传 identifier，正文由宿主读取注入
+    expect(complete.mock.calls[0]![0].skills).toEqual(['hongguo-drama']);
   });
 
   it('filters dramas by keyword and status', async () => {

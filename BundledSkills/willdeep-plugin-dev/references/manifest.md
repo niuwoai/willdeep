@@ -131,6 +131,7 @@ JSON Schema 在仓库的 `docs/plugin-schema/willdeep-plugin.schema.json`，本�
 | `ai.chat` | `window.willdeep.ai.complete` | 1.300.0-rc5 |
 | `ai.image` | `window.willdeep.ai.generateImage`（some.im 白名单模型） | 1.321.0-rc1 |
 | `providers.read` | `window.willdeep.ai.providers` | 1.300.0-rc5 |
+| `skills.read` | `window.willdeep.skills.list`，以及在 `ai.complete` 里按 identifier 引用技能 | 1.322.0-rc1 |
 | `clipboard.write` | 写剪贴板 | 已实现 |
 | `notifications` | 发通知 | 已实现 |
 

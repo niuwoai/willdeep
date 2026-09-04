@@ -318,6 +318,12 @@ private struct AgentPluginWebPage: View {
             complete: function(request) { return willdeepBridgeRequest('aiComplete', {request: request || {}}); },
             generateImage: function(request) { return willdeepBridgeRequest('aiGenerateImage', {request: request || {}}); }
           };
+          // 已启用技能的只读清单。页面拿到的是 identifier / 名称 / 描述，
+          // SKILL.md 正文和它的磁盘路径都不出宿主：把 identifier 放进
+          // ai.complete 的 skills 数组，宿主会替你把正文读出来注入。
+          window.willdeep.skills = {
+            list: function() { return willdeepBridgeRequest('skillsList', {}); }
+          };
           window.__willdeepDeliverMCPMessage = function(message) {
             window.dispatchEvent(new MessageEvent('message', {data:message, source:null}));
           };
@@ -679,6 +685,8 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 runAICompletion(body)
             case "aiGenerateImage":
                 runAIImageGeneration(body)
+            case "skillsList":
+                listSkills(body)
             case "mcpMessage":
                 handleMCPMessage(body["message"])
             case "pageDiagnostic":
@@ -772,6 +780,29 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 appState.agentPrimaryDestination = .conversation
                 _ = appState.selectAndRevealAgentSessionInSidebar(id: sessionID)
                 AgentTranscriptReader.openSingleMessage(message, sessionTitle: session.title)
+            }
+        }
+
+        /// 已启用技能的只读清单，给页面自己实现 `$` 选择器用。技能正文不经手
+        /// 页面：它把选中的 identifier 放进 ai.complete 的 skills，由宿主注入。
+        private func listSkills(_ body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            guard AgentPluginRegistry.shared.hasPermission(
+                .skillsRead,
+                pluginID: destination.pluginID
+            ) else {
+                sendBridgeResult(
+                    requestID: requestID,
+                    result: nil,
+                    error: AgentPluginAIError.skillPermissionDenied.localizedDescription
+                )
+                return
+            }
+            Task { [weak self] in
+                let skills = await AppState.pluginSkills().map(\.jsonObject)
+                await MainActor.run {
+                    self?.sendBridgeResult(requestID: requestID, result: ["skills": skills], error: nil)
+                }
             }
         }
 

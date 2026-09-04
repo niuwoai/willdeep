@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { callCommand, loadDramas, loadProviders, parseDramaPlan } from './bridge';
 import { createTranslator, localeFromContext } from './i18n';
-import type { Drama, DramaPlan, ImageModel, ProviderEntry, Shot, Stage } from './types';
+import type { Drama, DramaPlan, ImageModel, ProviderEntry, Shot, SkillEntry, Stage } from './types';
 import './styles.css';
 
 const imageModels: ImageModel[] = ['gpt-image-2', 'nano-banana-2'];
@@ -15,12 +15,26 @@ function localID(): string {
   if (source && typeof source.randomUUID === 'function') return source.randomUUID();
   return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
+// 宿主对一次请求最多接受 3 个技能，这里跟它保持一致，超了不如早点拦住。
+const MAX_ATTACHED_SKILLS = 3;
 const stageOrder: Stage[] = ['planning', 'characters', 'script', 'storyboard', 'frames', 'video'];
 type DramaStatusFilter = 'all' | 'planning' | 'production' | 'completed';
 type PlannerMessage = { id: string; role: 'user' | 'assistant'; content: string; display: string };
 
 function emptyShot(order: number): Shot {
   return { id: '', order, title: '', summary: '', dialogue: [{ id: localID(), speaker: '', text: '' }], actionStart: '', actionEnd: '', cameraIntent: '', duration: 4, startPrompt: '', endPrompt: '', startCandidates: [], endCandidates: [] };
+}
+
+// 光标前最近的一个 `$` 到光标之间的文字，就是技能查询词。要求 `$` 在开头或
+// 紧跟空白，避免把 shell 变量、价格、路径里的 $ 当成触发；查询词里出现空白就
+// 说明用户已经写下去了，收起菜单。宿主主聊天框的判定规则与此一致。
+export function skillQueryAt(value: string, caret: number): string | null {
+  const before = value.slice(0, Math.max(0, Math.min(caret, value.length)));
+  const dollar = before.lastIndexOf('$');
+  if (dollar < 0) return null;
+  if (dollar > 0 && !/\s/.test(before[dollar - 1] ?? '')) return null;
+  const query = before.slice(dollar + 1);
+  return /\s/.test(query) ? null : query;
 }
 
 function selectedCandidate(shot: Shot | undefined, kind: 'start' | 'end') {
@@ -62,6 +76,29 @@ export default function App() {
   const [failure, setFailure] = useState('');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<DramaStatusFilter>('all');
+  const [skills, setSkills] = useState<SkillEntry[]>([]);
+  const [skillQuery, setSkillQuery] = useState<string | null>(null);
+  const [attachedSkills, setAttachedSkills] = useState<SkillEntry[]>([]);
+
+  const skillMatches = skillQuery === null ? [] : skills.filter((item) => {
+    if (attachedSkills.some((entry) => entry.identifier === item.identifier)) return false;
+    const needle = skillQuery.toLocaleLowerCase(locale);
+    if (!needle) return true;
+    return `${item.identifier} ${item.name} ${item.description}`.toLocaleLowerCase(locale).includes(needle);
+  }).slice(0, 8);
+
+  function attachSkill(entry: SkillEntry) {
+    // 和宿主聊天框一样：选中后把 $token 从输入框里删掉，技能变成上方的一枚
+    // 标签，而不是留一串字面量在正文里。
+    setIdea((current) => {
+      const dollar = current.lastIndexOf('$');
+      return dollar < 0 ? current : current.slice(0, dollar) + current.slice(dollar + 1 + (skillQuery ?? '').length);
+    });
+    setAttachedSkills((current) => current.length >= MAX_ATTACHED_SKILLS || current.some((item) => item.identifier === entry.identifier)
+      ? current
+      : [...current, entry]);
+    setSkillQuery(null);
+  }
 
   function errorMessage(error: unknown) {
     if (!(error instanceof Error)) return t('operationFailed');
@@ -78,6 +115,9 @@ export default function App() {
   // provider 列表重新拉一遍。
   useEffect(() => {
     void reload().catch((error) => setFailure(errorMessage(error)));
+    void window.willdeep?.skills?.list()
+      .then((payload) => setSkills(payload.skills ?? []))
+      .catch(() => setSkills([]));
     void loadProviders().then((items) => {
       setProviders(items);
       const active = items.find((item) => item.isActive) ?? items[0];
@@ -143,6 +183,7 @@ export default function App() {
       const response = await window.willdeep?.ai?.complete({
         system: t('plannerSystem'), messages: requestMessages.map(({ role, content }) => ({ role, content })),
         provider: assistantProvider || undefined, model: assistantModel || undefined, maxOutputTokens: 3000,
+        skills: attachedSkills.map((item) => item.identifier),
       });
       const parsed = response && parseDramaPlan(response.text);
       if (!parsed) throw new Error(t('planInvalid'));
@@ -340,7 +381,7 @@ export default function App() {
   }
 
   function Planning() {
-    return AppShell(<main className="planning-shell"><header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{t('planningTitle')}</span></div></header><div className="planning-grid"><section className="chat-panel"><div className="section-title"><p className="eyebrow">{t('aiPlanning')}</p><h1>{t('tellStory')}</h1><p>{t('planningHint')}</p></div><div className="chat-history" aria-live="polite"><div className="chat-message assistant"><strong>{t('plannerName')}</strong><p>{t('plannerWelcome')}</p></div>{plannerMessages.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'plannerName')}</strong><p>{message.display}</p></div>)}</div><div className="composer"><textarea className="idea-box" value={idea} onChange={(event) => setIdea(event.target.value)} placeholder={t(plan ? 'revisionPlaceholder' : 'ideaPlaceholder')} /><div className="routing"><label>{t('chatProvider')}<select value={assistantProvider} onChange={(event) => { setAssistantProvider(event.target.value); setAssistantModel(''); }}>{providers.map((item) => <option key={item.providerID} value={item.providerID}>{item.displayName}</option>)}</select></label><label>{t('chatModel')}<select value={assistantModel} onChange={(event) => setAssistantModel(event.target.value)}>{provider?.models.map((item) => <option key={item}>{item}</option>)}</select></label></div><button className="primary wide" disabled={busy === 'plan'} onClick={() => void askPlanner()}>{busy === 'plan' ? t('planningBusy') : t(plan ? 'revisePlan' : 'generatePlan')}</button><small>{t('markdownContract')}</small></div></section><section className="plan-card">{plan ? <><div className="plan-summary"><span>{plan.genre}</span><h2>{plan.title}</h2><small>{plan.format}</small></div><div className="plan-body"><div className="facts"><span>{t('episodeCount', { count: plan.episodeCount })}</span><span>{t('minutesPerEpisode', { count: Math.round(plan.episodeDurationSeconds / 60) })}</span><span>{plan.audience}</span></div><h3>{t('logline')}</h3><p>{plan.logline}</p><h3>{t('coreConflict')}</h3><p>{plan.coreConflict}</p><h3>{t('seriesArc')}</h3><p>{plan.arc}</p><div className="actions"><button className="ghost" onClick={() => setIdea(t('revisionStarter'))}>{t('revise')}</button><button className="primary" disabled={busy === 'confirm'} onClick={() => void confirmPlan()}>{t('confirmAndSave')}</button></div></div></> : <div className="empty-plan"><h2>{t('planWaiting')}</h2><p>{t('planWaitingHint')}</p></div>}</section></div></main>);
+    return AppShell(<main className="planning-shell"><header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{t('planningTitle')}</span></div></header><div className="planning-grid"><section className="chat-panel"><div className="section-title"><p className="eyebrow">{t('aiPlanning')}</p><h1>{t('tellStory')}</h1><p>{t('planningHint')}</p></div><div className="chat-history" aria-live="polite"><div className="chat-message assistant"><strong>{t('plannerName')}</strong><p>{t('plannerWelcome')}</p></div>{plannerMessages.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'plannerName')}</strong><p>{message.display}</p></div>)}</div><div className="composer">{attachedSkills.length > 0 && <div className="skill-strip" aria-label={t('attachedSkills')}>{attachedSkills.map((item) => <span className="skill-chip" key={item.identifier}>{item.name}<button type="button" onClick={() => setAttachedSkills((current) => current.filter((entry) => entry.identifier !== item.identifier))} aria-label={t('detachSkill', { name: item.name })}>\u00d7</button></span>)}</div>}<div className="composer-input"><textarea className="idea-box" value={idea} placeholder={t(plan ? 'revisionPlaceholder' : 'ideaPlaceholder')} onChange={(event) => { setIdea(event.target.value); setSkillQuery(skills.length > 0 ? skillQueryAt(event.target.value, event.target.selectionStart ?? event.target.value.length) : null); }} onKeyDown={(event) => { if (event.key === 'Escape' && skillQuery !== null) { event.preventDefault(); setSkillQuery(null); } if (event.key === 'Enter' && skillQuery !== null && skillMatches[0]) { event.preventDefault(); attachSkill(skillMatches[0]); } }} onBlur={() => window.setTimeout(() => setSkillQuery(null), 120)} />{skillQuery !== null && <div className="skill-menu" role="listbox" aria-label={t('skillPicker')}>{skillMatches.length === 0 ? <p className="skill-empty">{t('noSkillMatch')}</p> : skillMatches.map((item) => <button type="button" role="option" aria-selected={false} key={item.identifier} onMouseDown={(event) => { event.preventDefault(); attachSkill(item); }}><strong>{item.name}</strong><span>{item.description}</span><small>{item.identifier}</small></button>)}</div>}</div><div className="routing"><label>{t('chatProvider')}<select value={assistantProvider} onChange={(event) => { setAssistantProvider(event.target.value); setAssistantModel(''); }}>{providers.map((item) => <option key={item.providerID} value={item.providerID}>{item.displayName}</option>)}</select></label><label>{t('chatModel')}<select value={assistantModel} onChange={(event) => setAssistantModel(event.target.value)}>{provider?.models.map((item) => <option key={item}>{item}</option>)}</select></label></div><button className="primary wide" disabled={busy === 'plan'} onClick={() => void askPlanner()}>{busy === 'plan' ? t('planningBusy') : t(plan ? 'revisePlan' : 'generatePlan')}</button><small>{t('markdownContract')}</small></div></section><section className="plan-card">{plan ? <><div className="plan-summary"><span>{plan.genre}</span><h2>{plan.title}</h2><small>{plan.format}</small></div><div className="plan-body"><div className="facts"><span>{t('episodeCount', { count: plan.episodeCount })}</span><span>{t('minutesPerEpisode', { count: Math.round(plan.episodeDurationSeconds / 60) })}</span><span>{plan.audience}</span></div><h3>{t('logline')}</h3><p>{plan.logline}</p><h3>{t('coreConflict')}</h3><p>{plan.coreConflict}</p><h3>{t('seriesArc')}</h3><p>{plan.arc}</p><div className="actions"><button className="ghost" onClick={() => setIdea(t('revisionStarter'))}>{t('revise')}</button><button className="primary" disabled={busy === 'confirm'} onClick={() => void confirmPlan()}>{t('confirmAndSave')}</button></div></div></> : <div className="empty-plan"><h2>{t('planWaiting')}</h2><p>{t('planWaitingHint')}</p></div>}</section></div></main>);
   }
 
   function Characters() {

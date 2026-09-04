@@ -87,6 +87,7 @@ nonisolated enum AgentPluginPackageLoader {
         .aiChat,
         .aiImage,
         .providersRead,
+        .skillsRead,
     ]
 
     static func load(
