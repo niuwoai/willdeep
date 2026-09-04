@@ -1642,8 +1642,11 @@ extension AppState {
         isLoadingAgentUsageSnapshots = true
         defer { isLoadingAgentUsageSnapshots = false }
 
-        let persisted = await Task.detached(priority: .utility) {
-            AgentSessionStore.loadUsageSnapshots()
+        // `.userInitiated`, not `.utility`: nothing schedules this except a
+        // user opening the stats panel, and until it lands the panel shows
+        // zeroes. The scan itself now fans out across cores.
+        let persisted = await Task.detached(priority: .userInitiated) {
+            await AgentSessionStore.loadUsageSnapshotsConcurrently()
         }.value
         guard !Task.isCancelled else { return }
 

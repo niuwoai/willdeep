@@ -402,19 +402,26 @@ extension WillDeepTests {
         let model = AgentUsageStats.dashboardModel(for: snapshots)
 
         // Execution keeps legacy IDs, while presentation folds them into
-        // the five public responsibilities without losing calls or sessions.
+        // the public responsibilities without losing calls or sessions.
+        // scout / reader / deep 都是只读查证，归到 scout 这一格；generalist
+        // 不在这里，它是能改文件的兜底工种，混进来面板就分不出「查了多少」
+        // 和「兜了多少底」。
         #expect(snapshots[0].messages[0].subagentProfileIDs == ["scout", "scout", "deep", "deep"])
         #expect(snapshots[1].messages[0].subagentProfileIDs == ["scout", "reader"])
-        #expect(rows.map(\.profileID) == ["generalist"])
+        #expect(rows.map(\.profileID) == ["scout"])
         #expect(rows.first?.invocationCount == 6)
         #expect(rows.first?.sessionCount == 2)
         #expect(model.subagentSessionCount == 2)
     }
 
-    @Test("AgentUsageStats keeps all five responsibilities and folds only their legacy aliases")
-    func testUsageStatsPreservesFivePublicResponsibilities() {
+    @Test("AgentUsageStats keeps all six responsibilities and folds only their legacy aliases")
+    func testUsageStatsPreservesPublicResponsibilities() {
+        // 调查（scout）与通用（generalist）是两个工种，不是一个。前者只读，
+        // 后者能在声明范围内改文件；reader / git_detective 这些老别名属于
+        // 调查那一边。
         let groups: [(id: String, aliases: [String])] = [
-            ("generalist", ["generalist", "reader", "git_detective"]),
+            ("scout", ["scout", "reader", "git_detective"]),
+            ("generalist", ["generalist"]),
             ("implementer", ["implementer", "editor", "test_fixer"]),
             ("tester", ["tester", "TESTER", " tester "]),
             ("reviewer", ["reviewer", "security_guard", "judge"]),
@@ -958,6 +965,35 @@ extension WillDeepTests {
         #expect(model.requestAnalytics.recentAPI.requestCount == 0)
     }
 
+    /// 这条用例的价值全在「能编译过」上。
+    ///
+    /// 本模块默认 MainActor 隔离，`AgentUsageStats` 一旦漏标 nonisolated，
+    /// 整个聚合就被静默钉回主线程——它要走完每个会话的每一条消息，一年
+    /// 的量级是三百个会话两万八千条，在画面线程上跑就是用户进统计面板时
+    /// 那一下卡顿。这里在 detached task 里调它，谁把隔离改回去，这行直接
+    /// 编译失败。
+    @Test("dashboard aggregation stays callable off the main actor")
+    func testDashboardModelRunsOffTheMainActor() async {
+        let now = Date()
+        let sessions = [
+            makeSession(modelID: "gpt-4.1", messages: [userMessage("hi", at: now)])
+        ].map { AgentUsageSessionSnapshot(session: $0) }
+
+        let model = await Task.detached {
+            AgentUsageStats.dashboardModel(for: sessions, heatmapWeekCount: 2, now: now)
+        }.value
+
+        #expect(model.overview.messageCount == 1)
+    }
+
+    /// 首帧占位不能把热力图撑成别的宽度，否则真数据落地时整块会跳一下。
+    @Test("the placeholder dashboard keeps the real heatmap width")
+    func testEmptyDashboardModelKeepsHeatmapGeometry() {
+        let placeholder = AgentUsageDashboardModel.empty
+        #expect(placeholder.overview.messageCount == 0)
+        #expect(placeholder.heatmapCells.count == AgentStatsDashboardLayout.maximumHeatmapWeeks)
+    }
+
     @Test("request analytics separates local traffic and limits API totals to seven days")
     func testRequestAnalyticsLocalAndRecentWindows() throws {
         let calendar = Calendar(identifier: .gregorian)
@@ -1125,8 +1161,13 @@ extension WillDeepTests {
         #expect(abs(try #require(analytics.localAllTime.averageTokensPerSecond) - 30) < 0.000_001)
     }
 
-    @Test("AppState memoizes the dashboard model until snapshots change")
-    func testAppStateDashboardModelMemoization() {
+    /// 面板读到的聚合是上一次算完的那份，新的一份在后台算。
+    ///
+    /// 这条用例以前是同步的：写完快照立刻读，就该拿到新数字。那正是要
+    /// 修掉的行为——聚合要走完每个会话的每条消息，同步做等于在画面线程
+    /// 上做。现在写完快照先拿到的仍是旧值，等后台那一轮落地才更新。
+    @Test("dashboard aggregates refresh in the background after snapshots change")
+    func testAppStateDashboardModelRefreshesOffTheMainThread() async throws {
         let appState = AppState()
         let baseline = appState.agentUsageStatsRevision
         let session = makeSession(modelID: "gpt-4.1", messages: [
@@ -1135,13 +1176,21 @@ extension WillDeepTests {
 
         let emptyModel = appState.agentUsageDashboardModel()
         #expect(emptyModel.overview.sessionCount == 0)
-        // Cache hit: same revision, no snapshot writes in between.
         #expect(appState.agentUsageDashboardModel() == emptyModel)
         #expect(appState.agentUsageStatsRevision == baseline)
 
         appState.agentUsageSnapshots = [AgentUsageSessionSnapshot(session: session)]
         #expect(appState.agentUsageStatsRevision > baseline)
-        let updated = appState.agentUsageDashboardModel()
+        // 读一次，触发后台那一轮；这一次拿到的还是旧值。
+        #expect(appState.agentUsageDashboardModel().overview.sessionCount == 0)
+
+        // 轮询到新值落地。断言的是「会更新」，不是「多久更新」——把时限
+        // 写死会让这条用例在忙的机器上变成随机红。
+        var updated = appState.agentUsageDashboard
+        for _ in 0..<200 where updated.overview.sessionCount == 0 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+            updated = appState.agentUsageDashboard
+        }
         #expect(updated.overview.sessionCount == 1)
         #expect(updated.overview.userTurnCount == 1)
     }

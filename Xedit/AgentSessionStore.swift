@@ -885,6 +885,33 @@ nonisolated enum AgentSessionStore {
         return decoder
     }()
 
+    /// 统计专用库。惰性打开，打不开就一直是 nil——读取路径回落侧车扫描，
+    /// 统计是派生数据，不该因为一个缓存打不开就让功能不可用。
+    ///
+    /// 目录会被测试重定向，所以缓存里连路径一起记：路径一变就重开，
+    /// 否则测试会写到上一个沙盒的库里去。
+    private nonisolated(unsafe) static var usageDatabaseCache: (url: URL, database: AgentUsageDatabase?)?
+    private static let usageDatabaseLock = NSLock()
+
+    static func usageDatabase() -> AgentUsageDatabase? {
+        let url = AgentUsageDatabase.defaultURL(in: directory)
+        usageDatabaseLock.lock()
+        defer { usageDatabaseLock.unlock() }
+        if let cached = usageDatabaseCache, cached.url == url { return cached.database }
+        try? ensureDirectory()
+        let database = AgentUsageDatabase(url: url)
+        usageDatabaseCache = (url, database)
+        return database
+    }
+
+    /// A decoder configured exactly like the shared one, for callers that
+    /// run in parallel and must not share it.
+    private static func makeUsageCoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+
     private static func loadOrRebuildCatalogEntry(for sourceURL: URL) -> CatalogEntry? {
         if let id = UUID(uuidString: sourceURL.deletingPathExtension().lastPathComponent),
            let signature = sourceSignature(for: sourceURL),
@@ -951,6 +978,11 @@ nonisolated enum AgentSessionStore {
     }
 
     private static func loadOrRebuildUsageSnapshot(for sourceURL: URL) -> AgentUsageSessionSnapshot? {
+        // Own coders, not the shared statics: this runs concurrently from
+        // `loadUsageSnapshotsConcurrently()` and `JSONDecoder` promises
+        // nothing about concurrent use. One allocation per file is nothing
+        // next to decoding a 70 KB document.
+        let decoder = makeUsageCoder()
         if let id = UUID(uuidString: sourceURL.deletingPathExtension().lastPathComponent),
            let signature = sourceSignature(for: sourceURL),
            let data = try? Data(contentsOf: usageCatalogURL(for: id)),
@@ -970,7 +1002,7 @@ nonisolated enum AgentSessionStore {
         coordinatedRead(at: sourceURL) { readURL in
             do {
                 let data = try Data(contentsOf: readURL)
-                let snapshot = try decodeUsageSnapshot(from: data)
+                let snapshot = try decoder.decode(UsageSessionIndex.self, from: data).snapshot
                 guard let signature = sourceSignature(for: readURL) else { return }
                 rebuilt = UsageCatalogEntry(snapshot: snapshot, sourceSignature: signature)
             } catch {
@@ -995,10 +1027,16 @@ nonisolated enum AgentSessionStore {
     /// equivalence against the full-decode result.
     private static func writeUsageCatalogEntryBestEffort(for session: AgentSession, sourceURL: URL) {
         guard let signature = sourceSignature(for: sourceURL) else { return }
+        let snapshot = AgentUsageSessionSnapshot(session: session)
         writeUsageCatalogEntryBestEffort(
-            UsageCatalogEntry(
-                snapshot: AgentUsageSessionSnapshot(session: session),
-                sourceSignature: signature
+            UsageCatalogEntry(snapshot: snapshot, sourceSignature: signature)
+        )
+        // 双写：库是快路径，侧车是退路。两边都写，任何一边坏掉统计都还在。
+        usageDatabase()?.upsert(
+            snapshot,
+            signature: AgentUsageSourceStamp(
+                fileSize: signature.fileSize,
+                modificationTime: signature.modificationTime
             )
         )
     }
@@ -1006,6 +1044,12 @@ nonisolated enum AgentSessionStore {
     private static func writeUsageCatalogEntryBestEffort(_ entry: UsageCatalogEntry) {
         do {
             try ensureUsageCatalogDirectory()
+            // Local encoder for the same reason the read path uses a local
+            // decoder: the concurrent scan reaches here whenever a sidecar
+            // is stale and has to be rebuilt.
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(entry)
             try coordinatedWrite(data, to: usageCatalogURL(for: entry.snapshot.id))
         } catch {
@@ -1169,6 +1213,123 @@ nonisolated enum AgentSessionStore {
         return snapshots.sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    /// Same scan, spread across cores.
+    ///
+    /// The sidecars are independent files with no ordering between them, but
+    /// this used to walk them one at a time: on a year-old install that is
+    /// 299 files and 21 MB of JSON, and the stats panel sat empty for about
+    /// a second on first open waiting for it. Decoding is the whole cost —
+    /// the reads are page-cache hits after the first — so it parallelizes
+    /// almost linearly.
+    ///
+    /// Each child task builds its own coders. `JSONDecoder` makes no
+    /// concurrency promise, and the shared static instances are used by the
+    /// serial paths elsewhere in this file.
+    static func loadUsageSnapshotsConcurrently() async -> [AgentUsageSessionSnapshot] {
+        // 库命中就直接走库：没有 JSON 要解析，字段名在表结构里只存一次。
+        if let fromDatabase = await loadUsageSnapshotsFromDatabase() { return fromDatabase }
+        return await scanUsageSidecarsConcurrently()
+    }
+
+    /// 从统计库读，顺带把过期的会话补回去。
+    ///
+    /// 判据与侧车完全一致：源文件的大小加修改时间。库里缺的、指纹对不上
+    /// 的会话，从侧车（或全量解码）重建后写回库；一次都建不起来就返回
+    /// nil，让调用方老老实实扫侧车。
+    ///
+    /// 返回 nil 的每一种情形都不是错误，只是「这次走退路」：库打不开、
+    /// 目录还不存在、一个会话都没有。统计是派生数据，正确性由源文件保证，
+    /// 库只是让它快。
+    private static func loadUsageSnapshotsFromDatabase() async -> [AgentUsageSessionSnapshot]? {
+        importLegacySessionsIfNeeded()
+        guard let database = usageDatabase() else { return nil }
+        guard let urls = sessionFileURLs(), !urls.isEmpty else { return nil }
+
+        let stored = database.storedSignatures()
+        var stale: [URL] = []
+        var liveIDs: Set<UUID> = []
+        for url in urls {
+            guard let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent) else { continue }
+            liveIDs.insert(id)
+            guard let stamp = AgentUsageSourceStamp.read(at: url) else { continue }
+            if stored[id] != stamp { stale.append(url) }
+        }
+
+        if !stale.isEmpty {
+            let rebuilt = await withTaskGroup(
+                of: (AgentUsageSessionSnapshot, AgentUsageSourceStamp)?.self,
+                returning: [(snapshot: AgentUsageSessionSnapshot, signature: AgentUsageSourceStamp)].self
+            ) { group in
+                for url in stale {
+                    group.addTask {
+                        guard let snapshot = loadOrRebuildUsageSnapshot(for: url),
+                              let stamp = AgentUsageSourceStamp.read(at: url) else { return nil }
+                        return (snapshot, stamp)
+                    }
+                }
+                var collected: [(snapshot: AgentUsageSessionSnapshot, signature: AgentUsageSourceStamp)] = []
+                for await entry in group {
+                    if let entry { collected.append((entry.0, entry.1)) }
+                }
+                return collected
+            }
+            guard !rebuilt.isEmpty else { return nil }
+            for entry in rebuilt {
+                database.upsert(entry.snapshot, signature: entry.signature)
+            }
+        }
+
+        // 磁盘上已经没有的会话，把库里的残留清掉，免得统计里留着幽灵。
+        for id in stored.keys where !liveIDs.contains(id) {
+            database.delete(id: id)
+        }
+
+        let snapshots = database.loadAll()
+        return snapshots.isEmpty ? nil : snapshots
+    }
+
+    private static func sessionFileURLs() -> [URL]? {
+        let dir = directory
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else {
+            return nil
+        }
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+        return entries.filter { $0.pathExtension == "json" }
+    }
+
+    /// 纯侧车扫描，不碰库。库不可用时的退路，也是库回填的数据来源。
+    static func scanUsageSidecarsConcurrently() async -> [AgentUsageSessionSnapshot] {
+        importLegacySessionsIfNeeded()
+
+        let urls = sessionFileURLs() ?? []
+
+        var snapshots = await withTaskGroup(
+            of: AgentUsageSessionSnapshot?.self,
+            returning: [AgentUsageSessionSnapshot].self
+        ) { group in
+            for url in urls {
+                group.addTask { loadOrRebuildUsageSnapshot(for: url) }
+            }
+            var collected: [AgentUsageSessionSnapshot] = []
+            collected.reserveCapacity(urls.count)
+            for await snapshot in group {
+                if let snapshot { collected.append(snapshot) }
+            }
+            return collected
+        }
+        // The task group yields in completion order, so the sort is what
+        // makes the result deterministic, not an optimization.
+        snapshots.sort { $0.updatedAt > $1.updatedAt }
+        return snapshots
+    }
+
     /// Shared decode seam for the lazy dashboard scan and its regression
     /// tests. Keeping this on the production path prevents the lightweight
     /// usage schema from silently dropping newly added session metadata.
@@ -1315,6 +1476,7 @@ nonisolated enum AgentSessionStore {
                 try coordinatedRemove(at: url)
                 try coordinatedRemove(at: catalogURL(for: id))
                 try coordinatedRemove(at: usageCatalogURL(for: id))
+                usageDatabase()?.delete(id: id)
                 metadataOnlySessions.remove(id)
                 return true
             } catch {
@@ -1391,6 +1553,7 @@ nonisolated enum AgentSessionStore {
                 try coordinatedRemove(at: url)
                 try coordinatedRemove(at: catalogURL(for: id))
                 try coordinatedRemove(at: usageCatalogURL(for: id))
+                usageDatabase()?.delete(id: id)
                 metadataOnlySessions.remove(id)
                 return true
             } catch {
