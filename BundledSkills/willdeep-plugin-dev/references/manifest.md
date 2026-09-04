@@ -123,8 +123,10 @@ JSON Schema 在仓库的 `docs/plugin-schema/willdeep-plugin.schema.json`，本�
 
 | 权限 | 给什么 | 状态 |
 | --- | --- | --- |
-| `conversation.read` | 页面上下文里多一个 `sessionReference` | 已实现 |
-| `workspace.read` / `workspace.write` | 页面上下文里多一个 `workspaceReference` | 已实现 |
+| `conversation.read` | 页面上下文里多一个 `sessionReference`；`events.on` 订阅会话与回合事件 | 已实现 |
+| `conversation.write` | `window.willdeep.chat.insert` / `chat.send`：把一句话递给主 Agent | 1.326.0-rc1 |
+| `workspace.read` | 页面上下文里多一个 `workspaceReference`；`window.willdeep.fs.list/read/search` | 已实现 |
+| `workspace.write` | 页面上下文里多一个 `workspaceReference` | 已实现 |
 | `process.execute` | 允许加载会起本地进程的 MCP 服务 | 已实现 |
 | `network.access` | 允许加载会联网的 MCP 服务 | 已实现 |
 | `credentials.use` | 使用 Keychain 中的凭据引用 | 已实现 |

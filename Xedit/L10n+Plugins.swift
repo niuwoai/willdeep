@@ -15,6 +15,7 @@ extension L10n {
             static let workspaceWrite = String(localized: "plugins.permission.workspace-write", defaultValue: "Change files in your workspace")
             static let workspaceRead = String(localized: "plugins.permission.workspace-read", defaultValue: "Read files in your workspace")
             static let conversationRead = String(localized: "plugins.permission.conversation-read", defaultValue: "Read your conversations")
+            static let conversationWrite = String(localized: "plugins.permission.conversation-write", defaultValue: "Send messages to the agent for you")
             static let networkAccess = String(localized: "plugins.permission.network-access", defaultValue: "Reach the network")
             static let aiChat = String(localized: "plugins.permission.ai-chat", defaultValue: "Ask a chat model")
             static let aiImage = String(localized: "plugins.permission.ai-image", defaultValue: "Generate images")

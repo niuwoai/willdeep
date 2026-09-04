@@ -7,6 +7,7 @@
 //
 
 import AppKit
+import Combine
 import os
 import SwiftUI
 import UniformTypeIdentifiers
@@ -351,6 +352,62 @@ private struct AgentPluginWebPage: View {
           window.willdeep.skills = {
             list: function() { return willdeepBridgeRequest('skillsList', {}); }
           };
+          // 工作区文件的只读通道。路径可以是相对当前工作区根的，也可以是
+          // fs.list 回给你的绝对路径；越界的一律拒。需要 workspace.read。
+          window.willdeep.fs = {
+            list: function(path) { return willdeepBridgeRequest('fsList', {path: path || ''}); },
+            read: function(path) { return willdeepBridgeRequest('fsRead', {path: path || ''}); },
+            search: function(request) {
+              var req = request || {};
+              return willdeepBridgeRequest('fsSearch', {
+                query: req.query || '',
+                path: req.path || '',
+                regex: !!req.regex,
+                limit: req.limit || 0
+              });
+            }
+          };
+          // 插件自己的小仓库。页面跑在 nonPersistent 的 WebView 里,
+          // localStorage 刷新一次就空了,要跨刷新记住东西就用这个。
+          window.willdeep.storage = {
+            get: function(key) { return willdeepBridgeRequest('storageGet', {key: key}); },
+            set: function(key, value) { return willdeepBridgeRequest('storageSet', {key: key, value: value}); },
+            remove: function(key) { return willdeepBridgeRequest('storageRemove', {key: key}); },
+            keys: function() { return willdeepBridgeRequest('storageKeys', {}); }
+          };
+          // 宿主事件。willdeep.events.on('turn.finished', cb) 之后,宿主每次
+          // 推事件都会调你的回调,不用再拿定时器扫。
+          var willdeepEventListeners = {};
+          window.addEventListener('willdeep:host-event', function(event) {
+            var detail = event.detail || {};
+            var listeners = willdeepEventListeners[detail.name] || [];
+            for (var i = 0; i < listeners.length; i++) {
+              try { listeners[i](detail.payload || {}); } catch (error) { /* 插件的回调炸了不该带塌桥 */ }
+            }
+          });
+          window.willdeep.events = {
+            on: function(name, callback) {
+              if (typeof callback !== 'function') return Promise.reject(new Error('callback must be a function'));
+              willdeepEventListeners[name] = (willdeepEventListeners[name] || []).concat([callback]);
+              return willdeepBridgeRequest('eventsSubscribe', {name: name});
+            },
+            off: function(name, callback) {
+              var listeners = willdeepEventListeners[name] || [];
+              willdeepEventListeners[name] = callback
+                ? listeners.filter(function(entry) { return entry !== callback; })
+                : [];
+            }
+          };
+          // 把活交给主 Agent。insert 只填输入框,send 才真的起回合。
+          // 需要 conversation.write。
+          window.willdeep.chat = {
+            insert: function(text) { return willdeepBridgeRequest('chatInsert', {text: text || ''}); },
+            send: function(text) { return willdeepBridgeRequest('chatSend', {text: text || ''}); }
+          };
+          // 桥的版本与能力清单。插件据此降级,而不是在旧宿主上白屏:
+          //   if ((window.willdeep.capabilities || []).indexOf('fs.search') >= 0) { … }
+          window.willdeep.version = '\(AgentPluginPageBridge.version)';
+          window.willdeep.capabilities = \(AgentPluginPageBridge.capabilitiesJSONLiteral);
           window.__willdeepDeliverMCPMessage = function(message) {
             window.dispatchEvent(new MessageEvent('message', {data:message, source:null}));
           };
@@ -542,6 +599,14 @@ private struct AgentPluginWebView: NSViewRepresentable {
         var crashResetWorkItem: DispatchWorkItem?
         var navigationFailureRetries = 0
         var isShowingFailureDocument = false
+        /// 页面订阅了哪些宿主事件。没订阅的事件不推——省掉一次
+        /// evaluateJavaScript，也避免插件收到自己没要的东西。
+        var subscribedHostEvents: Set<AgentPluginHostEvent> = []
+        var hostEventSubscriptions: [AnyCancellable] = []
+        /// 上一次推给页面的会话与回合状态，用于把 @Published 的重复发布
+        /// 收敛成「真的变了才推」。
+        var lastPublishedSessionID: UUID?
+        var lastPublishedResponding = false
 
         init(
             destination: AgentPluginDestinationDescriptor,
@@ -714,6 +779,14 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 runAIImageGeneration(body)
             case "skillsList":
                 listSkills(body)
+            case "fsList", "fsRead", "fsSearch":
+                handleFileRequest(type: type, body: body)
+            case "storageGet", "storageSet", "storageRemove", "storageKeys":
+                handleStorageRequest(type: type, body: body)
+            case "eventsSubscribe":
+                handleEventSubscription(body)
+            case "chatInsert", "chatSend":
+                handleChatRequest(type: type, body: body)
             case "mcpMessage":
                 handleMCPMessage(body["message"])
             case "pageDiagnostic":
@@ -954,6 +1027,206 @@ private struct AgentPluginWebView: NSViewRepresentable {
             webView.evaluateJavaScript(
                 "window.dispatchEvent(new CustomEvent('willdeep:ai-delta', {detail: \(json)}));"
             )
+        }
+
+        // MARK: 工作区只读通道
+
+        private func handleFileRequest(type: String, body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            guard AgentPluginRegistry.shared.hasPermission(
+                .workspaceRead,
+                pluginID: destination.pluginID
+            ) else {
+                sendBridgeResult(
+                    requestID: requestID,
+                    result: nil,
+                    error: AgentPluginCapabilityError
+                        .permissionDenied(AgentPluginPermission.workspaceRead.rawValue)
+                        .localizedDescription
+                )
+                return
+            }
+            let path = String((body["path"] as? String ?? "").prefix(4_096))
+            let query = String((body["query"] as? String ?? "").prefix(512))
+            let isRegex = body["regex"] as? Bool ?? false
+            let rawLimit = body["limit"] as? Int
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                let roots = appState.pluginAccessibleWorkspaceRoots
+                guard !roots.isEmpty else {
+                    self.sendBridgeResult(
+                        requestID: requestID,
+                        result: nil,
+                        error: AgentPluginCapabilityError.noWorkspace.localizedDescription
+                    )
+                    return
+                }
+                // 目录遍历与搜索会打磁盘，别占着主线程。
+                let outcome: Result<[String: Any], Error> = await Task.detached(priority: .userInitiated) {
+                    do {
+                        switch type {
+                        case "fsList":
+                            return .success(try AgentPluginFileAccess.list(path: path, roots: roots))
+                        case "fsRead":
+                            return .success(try AgentPluginFileAccess.read(path: path, roots: roots))
+                        default:
+                            return .success(try AgentPluginFileAccess.search(
+                                query: query,
+                                path: path,
+                                isRegularExpression: isRegex,
+                                limit: (rawLimit ?? 0) > 0 ? rawLimit : nil,
+                                roots: roots
+                            ))
+                        }
+                    } catch {
+                        return .failure(error)
+                    }
+                }.value
+                switch outcome {
+                case .success(let result):
+                    self.sendBridgeResult(requestID: requestID, result: result, error: nil)
+                case .failure(let error):
+                    self.sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
+                }
+            }
+        }
+
+        // MARK: 插件自己的存储
+
+        private func handleStorageRequest(type: String, body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let pluginID = destination.pluginID
+            let key = String((body["key"] as? String ?? "").prefix(AgentPluginStorageStore.maximumKeyLength))
+            let value = body["value"]
+            do {
+                switch type {
+                case "storageGet":
+                    let stored = AgentPluginStorageStore.value(forKey: key, pluginID: pluginID)
+                    sendBridgeResult(requestID: requestID, result: ["value": stored ?? NSNull()], error: nil)
+                case "storageSet":
+                    guard let value else { throw AgentPluginCapabilityError.invalidArgument("value") }
+                    try AgentPluginStorageStore.setValue(value, forKey: key, pluginID: pluginID)
+                    sendBridgeResult(requestID: requestID, result: ["ok": true], error: nil)
+                case "storageRemove":
+                    try AgentPluginStorageStore.removeValue(forKey: key, pluginID: pluginID)
+                    sendBridgeResult(requestID: requestID, result: ["ok": true], error: nil)
+                default:
+                    sendBridgeResult(
+                        requestID: requestID,
+                        result: ["keys": AgentPluginStorageStore.keys(pluginID: pluginID)],
+                        error: nil
+                    )
+                }
+            } catch {
+                sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
+            }
+        }
+
+        // MARK: 宿主事件
+
+        private func handleEventSubscription(_ body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            guard let name = body["name"] as? String,
+                  let event = AgentPluginHostEvent.named(name) else {
+                sendBridgeResult(
+                    requestID: requestID,
+                    result: nil,
+                    error: AgentPluginCapabilityError.invalidArgument("name").localizedDescription
+                )
+                return
+            }
+            guard AgentPluginRegistry.shared.hasPermission(
+                event.requiredPermission,
+                pluginID: destination.pluginID
+            ) else {
+                sendBridgeResult(
+                    requestID: requestID,
+                    result: nil,
+                    error: AgentPluginCapabilityError
+                        .permissionDenied(event.requiredPermission.rawValue)
+                        .localizedDescription
+                )
+                return
+            }
+            subscribedHostEvents.insert(event)
+            startHostEventObservationIfNeeded()
+            sendBridgeResult(requestID: requestID, result: ["subscribed": event.rawValue], error: nil)
+        }
+
+        /// 第一次有人订阅时才挂观察者。没插件关心的时候，宿主一个
+        /// publisher 都不订。
+        func startHostEventObservationIfNeeded() {
+            guard hostEventSubscriptions.isEmpty, let appState else { return }
+            lastPublishedSessionID = appState.activeAgentSessionID
+            lastPublishedResponding = appState.isAgentResponding
+            // objectWillChange 是 AppState 唯一一个稳定的「有东西变了」信号；
+            // 真正的去重在 publishHostEventsIfChanged 里按值比对，所以这里
+            // 收到多少次无所谓。
+            appState.objectWillChange
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    // objectWillChange 在写入之前发，读值要等这一拍过去。
+                    DispatchQueue.main.async { self?.publishHostEventsIfChanged() }
+                }
+                .store(in: &hostEventSubscriptions)
+        }
+
+        private func publishHostEventsIfChanged() {
+            guard let appState, !subscribedHostEvents.isEmpty else { return }
+            let sessionID = appState.activeAgentSessionID
+            if sessionID != lastPublishedSessionID {
+                lastPublishedSessionID = sessionID
+                lastPublishedResponding = appState.isAgentResponding
+                sendHostEvent(.sessionChanged, payload: [
+                    "sessionID": sessionID?.uuidString ?? NSNull(),
+                ])
+                sendHostEvent(.workspaceChanged, payload: [
+                    "workspaceRoot": appState.activeRuntime?.workspaceRootPath ?? NSNull(),
+                ])
+                return
+            }
+            let responding = appState.isAgentResponding
+            if responding != lastPublishedResponding {
+                lastPublishedResponding = responding
+                sendHostEvent(responding ? .turnStarted : .turnFinished, payload: [
+                    "sessionID": sessionID?.uuidString ?? NSNull(),
+                ])
+            }
+        }
+
+        private func sendHostEvent(_ event: AgentPluginHostEvent, payload: [String: Any]) {
+            guard subscribedHostEvents.contains(event),
+                  AgentPluginRegistry.shared.hasPermission(
+                      event.requiredPermission,
+                      pluginID: destination.pluginID
+                  ),
+                  let webView else { return }
+            let detail: [String: Any] = ["name": event.rawValue, "payload": payload]
+            guard JSONSerialization.isValidJSONObject(detail),
+                  let data = try? JSONSerialization.data(withJSONObject: detail),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            webView.evaluateJavaScript(
+                "window.dispatchEvent(new CustomEvent('willdeep:host-event', {detail: \(json)}));"
+            )
+        }
+
+        // MARK: 把活交给 Agent
+
+        private func handleChatRequest(type: String, body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let text = String((body["text"] as? String ?? "").prefix(AppState.pluginChatMaximumLength + 1))
+            let pluginID = destination.pluginID
+            Task { @MainActor [weak self] in
+                guard let self, let appState = self.appState else { return }
+                do {
+                    let delivered = type == "chatInsert"
+                        ? try appState.pluginPrefillAgentInput(text, pluginID: pluginID)
+                        : try appState.pluginSendAgentMessage(text, pluginID: pluginID)
+                    self.sendBridgeResult(requestID: requestID, result: ["ok": delivered], error: nil)
+                } catch {
+                    self.sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
+                }
+            }
         }
 
         private func sendBridgeResult(requestID: String, result: [String: Any]?, error: String?) {

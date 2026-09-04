@@ -3,6 +3,25 @@
 > 当前文件保留最新版本（1.321.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.326.0-rc1 - 2026-09-04
+
+### Added
+
+- 插件页面新拿到四样宿主能力，都在 `window.willdeep.*` 下。此前插件想读文件、想记住东西、想知道会话变了没，只能自带一个 MCP 服务进程去干，而那等于绕开宿主的全部闸门：路径守卫、只读语义、体积上限一条都不生效，用户在安装面板上点的权限也就成了摆设。
+- **`fs.list` / `fs.read` / `fs.search`**（要 `workspace.read`）：只读工作区。路径经宿主的工作区守卫，`../` 越界、绝对路径越界、解析后指向根外的软链接一律拒；远端会话直接不给（本机解析出来的是另一台机器的答案）。单次读 256 KiB 封顶、列目录 500 条封顶、搜索 200 条封顶。装了 ripgrep 走 ripgrep，没装回落逐文件扫描。
+- **`storage.get/set/remove/keys`**（不要权限）：每个插件一个命名空间的持久化。插件页跑在 nonPersistent 的 WebView 里，`localStorage` 刷新一次就空，没有这个，插件想记住任何东西都得反过来求宿主加功能。单值 64 KiB、单插件 1 MiB，超了报错而不是静默丢弃。
+- **`events.on/off`**：宿主事件订阅（`session.changed`、`turn.started`、`turn.finished`、`workspace.changed`），替掉此前只能拿定时器扫 `refresh` 的做法。事件按内容分别要 `conversation.read` 或 `workspace.read`，没订阅时宿主一个观察者都不挂。
+- **`chat.insert` / `chat.send`**（要新权限 `conversation.write`）：把一句话递给主 Agent，只填输入框或直接起一个回合。这条的杠杆最大——Agent 能做的事都不必再等宿主开新 API。因为会花钱、会动工作区，它与只读的 `conversation.read` 是两个权限，按敏感档呈现；递过去的文本走与用户输入完全相同的发送路径，审批档位与沙箱一个都不绕。
+- **`window.willdeep.version` 与 `capabilities`**：桥的版本号和能力清单。用了新 API 的插件装到旧宿主上，此前只会在调用那一刻抛 `undefined is not a function`，用户看到白屏；现在可以先探再用，自己降级。清单只增不减。
+
+### Tests
+
+- 新增 17 项：越界路径与越界软链接必须被拒、读超限截断、隐藏文件不列、绝对路径回读、搜索空查询报错；存储的往返、插件间隔离、插件 id 不能穿越目录、超限报错而非静默丢弃；事件的权限映射、能力清单是合法 JSON 且不丢旧能力、`conversation.write` 属敏感档且在安装白名单里。
+
+### Docs
+
+- `BundledSkills/willdeep-plugin-dev/references/page-api.md` 补齐四组 API 与版本探测的写法，`manifest.md` 权限表和 `plugin-schema` 同步 `conversation.write`。
+
 ## 1.325.0-rc2 - 2026-09-04
 
 ### Fixed

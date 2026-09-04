@@ -56,6 +56,11 @@ nonisolated struct AgentPluginPermission: RawRepresentable, Codable, Hashable, S
     }
 
     static let conversationRead = Self(rawValue: "conversation.read")
+    /// 插件可以把一句话递给主 Agent：填进输入框，或直接起一个回合
+    /// （`window.willdeep.chat.*`）。与只读的 `conversation.read` 分开，
+    /// 因为它会花钱、会让 Agent 动工作区。递进去的文本走与用户输入完全
+    /// 相同的发送路径，审批档位与沙箱一个都不绕。
+    static let conversationWrite = Self(rawValue: "conversation.write")
     static let workspaceRead = Self(rawValue: "workspace.read")
     static let workspaceWrite = Self(rawValue: "workspace.write")
     static let processExecute = Self(rawValue: "process.execute")
@@ -94,7 +99,7 @@ nonisolated enum AgentPluginPermissionRisk: Int, Comparable, Sendable {
 nonisolated extension AgentPluginPermission {
     var risk: AgentPluginPermissionRisk {
         switch self {
-        case .processExecute, .credentialUse, .workspaceWrite:
+        case .processExecute, .credentialUse, .workspaceWrite, .conversationWrite:
             return .sensitive
         case .networkAccess, .aiChat, .aiImage, .clipboardWrite, .notifications:
             return .standard
@@ -112,6 +117,7 @@ nonisolated extension AgentPluginPermission {
         case .workspaceWrite: return L10n.Plugins.Permission.workspaceWrite
         case .workspaceRead: return L10n.Plugins.Permission.workspaceRead
         case .conversationRead: return L10n.Plugins.Permission.conversationRead
+        case .conversationWrite: return L10n.Plugins.Permission.conversationWrite
         case .networkAccess: return L10n.Plugins.Permission.networkAccess
         case .aiChat: return L10n.Plugins.Permission.aiChat
         case .aiImage: return L10n.Plugins.Permission.aiImage

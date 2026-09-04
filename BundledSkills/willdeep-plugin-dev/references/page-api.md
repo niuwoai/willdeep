@@ -134,6 +134,82 @@ await window.willdeep.ai.complete({
 否则模型会在缺了技能的情况下若无其事地照答。没声明 `skills.read` 时，
 `skills.list` 和带 `skills` 的 `ai.complete` 都会被拒。
 
+## 读工作区文件（需要 `workspace.read`）
+
+只读，且只在**本机**工作区里。远端会话（工作区在服务器上）一律拒——本机解析出来的路径是另一台机器的答案。
+
+```js
+const { entries } = await window.willdeep.fs.list('src');
+// [{ name, path, isDirectory, byteSize }]，点开头的条目不列
+
+const { text, truncated } = await window.willdeep.fs.read('README.md');
+// 单次最多 256 KiB，超了 truncated 为 true
+
+const { matches } = await window.willdeep.fs.search({ query: 'TODO', path: 'src', limit: 50 });
+// ["<绝对路径>:<行号>:<该行内容>", …]；regex: true 时 query 按正则解释
+```
+
+路径可以是相对当前工作区根的，也可以是 `fs.list` 回给你的绝对路径。三个入口都经宿主的工作区守卫：`../` 越界、绝对路径越界、以及**解析后指向根外的软链接**都会被拒，报错文案能区分「没权限」和「路径不对」。
+
+装了 ripgrep 就走 ripgrep（尊重 `.gitignore`，快得多），没装则回落到逐文件扫描。
+
+## 自己的存储
+
+不需要权限：每个插件一个命名空间，互相读不到，写的是宿主的 Application Support，不碰用户工作区。
+
+```js
+await window.willdeep.storage.set('draft', { title: '第三集', beats: [] });
+const { value } = await window.willdeep.storage.get('draft');
+const { keys } = await window.willdeep.storage.keys();
+await window.willdeep.storage.remove('draft');
+```
+
+值是任意可 JSON 序列化的东西。单值上限 64 KiB，单插件总量上限 1 MiB，超了**报错**而不是静默丢弃。
+
+为什么需要它：插件页跑在 `nonPersistent()` 的 WebView 里，`localStorage` 刷新一次就空了。
+
+## 宿主事件
+
+```js
+await window.willdeep.events.on('turn.finished', ({ sessionID }) => refresh());
+window.willdeep.events.off('turn.finished');           // 或传入具体回调
+```
+
+| 事件 | 何时触发 | 需要权限 |
+| --- | --- | --- |
+| `session.changed` | 当前会话切换（含新建、关到空） | `conversation.read` |
+| `turn.started` | 一个回合开始跑 | `conversation.read` |
+| `turn.finished` | 一个回合跑完（无论成败） | `conversation.read` |
+| `workspace.changed` | 当前会话的工作区根变了 | `workspace.read` |
+
+没声明对应权限的插件，`events.on` 直接报错。订阅前宿主一个观察者都不挂，别为「可能会用」提前订。
+
+## 把活交给 Agent（需要 `conversation.write`）
+
+```js
+await window.willdeep.chat.insert('把这三集的分镜整理成表格');  // 只填输入框
+await window.willdeep.chat.send('把这三集的分镜整理成表格');    // 直接起一个回合
+```
+
+这是最省事的扩展路径：Agent 能做的事（读写文件、跑命令、调工具、委派子代理）都不必再等宿主开新 API，写成一句话递过去就行。
+
+代价是它**会花钱、会让 Agent 动工作区**，所以 `conversation.write` 与只读的 `conversation.read` 是两个权限，在安装面板上按敏感档呈现。递过去的文本上限 8000 字，且当成普通用户输入走同一条发送路径——审批档位、沙箱、委派策略一个都不绕。
+
+## 版本与能力探测
+
+```js
+window.willdeep.version;        // '2.0.0'，加能力升 minor，改签名升 major
+window.willdeep.capabilities;   // ['fs.search', 'storage', 'events', 'chat.send', …]
+```
+
+用了新 API 的插件装到旧宿主上，调用那一刻只会抛 `undefined is not a function`，用户看到白屏。**先探再用**：
+
+```js
+if ((window.willdeep.capabilities || []).includes('fs.search')) { … } else { /* 降级 */ }
+```
+
+清单只增不减：某个能力真要下线，会先在清单里消失一个版本，再抽掉函数。
+
 ## MCP App 页面
 
 `runtime: "mcpApp"` 的页面用标准 MCP App 协议跟宿主通话，走 `window.postMessage`（宿主已经把 `message` 事件桥到原生侧）：
