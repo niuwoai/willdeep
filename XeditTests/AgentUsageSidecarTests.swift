@@ -139,6 +139,35 @@ struct AgentUsageSidecarTests {
         #expect(sidecar.snapshot == fullDecode)
     }
 
+    /// 并行扫描必须和串行扫描给出同一批数据。
+    ///
+    /// 并行版本是首次打开统计面板的正路——串行走 299 个侧车要一秒上下，
+    /// 面板在那一秒里显示的是零。并行之后每个子任务用自己的编解码器，
+    /// 这条用例同时兜住「结果集一致」和「并发解码没把数据搅坏」。
+    @Test("并行扫描与串行扫描返回同一批快照")
+    func concurrentScanMatchesTheSerialScan() async throws {
+        var ids: [UUID] = []
+        defer { for id in ids { AgentSessionStore.delete(id: id) } }
+        for index in 0..<12 {
+            var session = makeRichSession()
+            session.title = "usage-parallel-\(index)"
+            ids.append(session.id)
+            #expect(AgentSessionStore.save(session))
+        }
+
+        let serial = AgentSessionStore.loadUsageSnapshots()
+        let concurrent = await AgentSessionStore.loadUsageSnapshotsConcurrently()
+
+        // 按 id 排序再比：两边都按 updatedAt 倒序，而 Swift 的 sort 不
+        // 稳定，同一毫秒创建的会话之间谁在前是没有保证的。这里要钉的是
+        // 「同一批数据」，不是那个本来就不存在的顺序保证。
+        #expect(concurrent.sorted { $0.id.uuidString < $1.id.uuidString }
+            == serial.sorted { $0.id.uuidString < $1.id.uuidString })
+        for id in ids {
+            #expect(concurrent.contains { $0.id == id })
+        }
+    }
+
     @Test("签名匹配时冷扫描走侧车快路径，不做全量解码")
     func validSidecarServesFastPathWithoutFullDecode() throws {
         let session = makeRichSession()

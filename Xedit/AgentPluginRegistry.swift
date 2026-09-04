@@ -417,8 +417,10 @@ final class AgentPluginRegistry: ObservableObject {
         for pluginID in grouped.keys.sorted() {
             let versions = (grouped[pluginID] ?? []).sorted(by: packageVersionDescending)
             guard !versions.isEmpty else { continue }
-            let requestedVersion = normalized.activeVersions[pluginID]
-            let active = versions.first(where: { $0.version == requestedVersion }) ?? versions[0]
+            let active = resolveActivePackage(
+                versions: versions,
+                requestedVersion: normalized.activeVersions[pluginID]
+            ) ?? versions[0]
             let isApproved: Bool
             if active.source == .bundled {
                 isApproved = true
@@ -476,6 +478,42 @@ final class AgentPluginRegistry: ObservableObject {
         )
     }
 
+    /// 这个插件当前该跑哪一版。`versions` 必须已按 `packageVersionDescending`
+    /// 排好序。
+    ///
+    /// 规则只有一条特殊的：**内置的更高版本压过旧的版本钉选**。
+    ///
+    /// `activeVersions` 记的是用户在插件中心手动切过的版本，此前它会一直
+    /// 生效，包括在 App 升级、内置包带来新版之后。实测的后果是：用户几周前
+    /// 装过一次某插件的本地副本，之后 App 升了好几版，内置包里的新功能一次
+    /// 也没到过他面前，他只会觉得「这功能是不是没做」。内置包是随 App 一起
+    /// 装的，用户点了升级就等于同意了它，所以这里让钉选让路。
+    ///
+    /// 只对内置来源破例。非内置的更高版本不动钉选——那是用户自己装进来的，
+    /// 升不升由他决定，这也是版本切换功能存在的意义。
+    ///
+    /// 钉选本身不清除：App 若降级回旧版本，内置包不再更高，用户原来的选择
+    /// 自动恢复。
+    nonisolated static func resolveActivePackage(
+        versions: [AgentPluginPackage],
+        requestedVersion: String?
+    ) -> AgentPluginPackage? {
+        guard let newest = versions.first else { return nil }
+        guard let requestedVersion,
+              let pinned = versions.first(where: { $0.version == requestedVersion })
+        else { return newest }
+        if let bundled = versions.first(where: { $0.source == .bundled }),
+           isVersion(bundled.version, newerThan: pinned.version) {
+            return bundled
+        }
+        return pinned
+    }
+
+    private nonisolated static func isVersion(_ lhs: String, newerThan rhs: String) -> Bool {
+        guard let left = AppVersion(lhs), let right = AppVersion(rhs) else { return lhs > rhs }
+        return left > right
+    }
+
     private nonisolated static func packageVersionDescending(
         _ lhs: AgentPluginPackage,
         _ rhs: AgentPluginPackage
@@ -490,10 +528,17 @@ final class AgentPluginRegistry: ObservableObject {
         return lhs.packageURL.path < rhs.packageURL.path
     }
 
+    /// 版号打平时谁排前面。
+    ///
+    /// 内置排第一，是因为版号一样、内容却不一样的两份包里，陈旧的那份几乎
+    /// 总是本地安装的——插件作者改了内容忘了升版号，用户装过一次就再也换
+    /// 不掉。此前 `.installed` 排在前面，实测让一份三个月前的本地副本永久
+    /// 遮住了内置包，而且因为两边版号一模一样，用户在插件中心翻版本列表也
+    /// 看不出哪里不对。内置包与当前 App 同期，拿它兜底才对得上用户的预期。
     private nonisolated static func sourceRank(_ source: AgentPluginPackageSource) -> Int {
         switch source {
-        case .installed: return 0
-        case .bundled: return 1
+        case .bundled: return 0
+        case .installed: return 1
         case .codexCache: return 2
         case .draft: return 3
         }

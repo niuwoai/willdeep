@@ -594,9 +594,25 @@ nonisolated struct AgentUsageDashboardModel: Equatable {
     let reasoningUsageRate: Double
     let uniqueToolCount: Int
     let requestAnalytics: AgentRequestAnalyticsSnapshot
+
+    /// What the panel shows before the first aggregation lands. Built from
+    /// no sessions at all, so every tile reads zero and the heatmap keeps
+    /// its full width — the grid must not resize when the real numbers
+    /// arrive a frame later.
+    static let empty = AgentUsageStats.dashboardModel(
+        for: [],
+        heatmapWeekCount: AgentStatsDashboardLayout.maximumHeatmapWeeks,
+        now: Date()
+    )
 }
 
-enum AgentUsageStats {
+/// Pure aggregation over persisted usage snapshots. Nothing in here touches
+/// UI state, so it is `nonisolated` — and it has to be: the module defaults
+/// to MainActor isolation, which silently pinned this whole fold to the main
+/// thread. On a year-old install that is ~28k messages across ~300 sessions
+/// walked on the thread that draws, which is what the stats panel's entry
+/// stutter turned out to be.
+nonisolated enum AgentUsageStats {
     /// Gather every dashboard aggregate in one call so callers can memoize
     /// the result. Pure function like the individual helpers it wraps.
     static func dashboardModel(
@@ -604,12 +620,28 @@ enum AgentUsageStats {
         heatmapWeekCount: Int = 12,
         now: Date = Date()
     ) -> AgentUsageDashboardModel {
-        let allMessages = sessions.flatMap(\.messages)
-
-        let peakTaskTokenCount = sessions.map { session in
-            session.messages.reduce(0) { $0 + displayTokenCount(for: $1) }
-        }.max() ?? 0
-
+        // One pass over the messages in place. This used to build
+        // `sessions.flatMap(\.messages)` — a full copy of every message of
+        // every session — and then filter it again for the assistant subset.
+        // At ~28k messages that is two large allocations for three counters.
+        var peakTaskTokenCount = 0
+        var assistantCount = 0
+        var reasonedCount = 0
+        var toolNames: Set<String> = []
+        for session in sessions {
+            var sessionTokens = 0
+            for message in session.messages {
+                sessionTokens += displayTokenCount(for: message)
+                if message.role == .assistant {
+                    assistantCount += 1
+                    if (message.reasoningTokens ?? 0) > 0 || message.reasoningCharacterCount > 0 {
+                        reasonedCount += 1
+                    }
+                }
+                toolNames.formUnion(message.toolCallNames)
+            }
+            peakTaskTokenCount = max(peakTaskTokenCount, sessionTokens)
+        }
 
         let managedRoutingRate: Double
         if sessions.isEmpty {
@@ -619,16 +651,9 @@ enum AgentUsageStats {
             managedRoutingRate = Double(managed) / Double(sessions.count)
         }
 
-        let assistantMessages = allMessages.filter { $0.role == .assistant }
-        let reasoningUsageRate: Double
-        if assistantMessages.isEmpty {
-            reasoningUsageRate = 0
-        } else {
-            let reasoned = assistantMessages.count {
-                ($0.reasoningTokens ?? 0) > 0 || $0.reasoningCharacterCount > 0
-            }
-            reasoningUsageRate = Double(reasoned) / Double(assistantMessages.count)
-        }
+        let reasoningUsageRate = assistantCount == 0
+            ? 0
+            : Double(reasonedCount) / Double(assistantCount)
 
         return AgentUsageDashboardModel(
             overview: overview(for: sessions, now: now),
@@ -645,7 +670,7 @@ enum AgentUsageStats {
             peakTaskTokenCount: peakTaskTokenCount,
             managedRoutingRate: managedRoutingRate,
             reasoningUsageRate: reasoningUsageRate,
-            uniqueToolCount: Set(allMessages.flatMap(\.toolCallNames)).count,
+            uniqueToolCount: toolNames.count,
             requestAnalytics: AgentRequestAnalytics.snapshot(for: sessions, now: now)
         )
     }

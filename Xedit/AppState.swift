@@ -366,27 +366,73 @@ final class AppState: ObservableObject {
     /// dashboard aggregates so cache checks never have to compare the
     /// snapshot payloads themselves.
     private(set) var agentUsageStatsRevision: UInt64 = 0
-    private var agentUsageDashboardCache:
-        (revision: UInt64, day: Date, model: AgentUsageDashboardModel)?
+    /// Last computed dashboard aggregates. Views read this directly; it is
+    /// never computed inside a SwiftUI body.
+    @Published private(set) var agentUsageDashboard: AgentUsageDashboardModel = .empty
+    /// What `agentUsageDashboard` was computed from. Nil until the first
+    /// pass lands.
+    private var agentUsageDashboardKey: (revision: UInt64, day: Date)?
+    /// What the in-flight pass is computing. Distinct from
+    /// `agentUsageDashboardKey`, and it has to be: the panel reads the model
+    /// from ~19 places in one body evaluation, so keying "should I start a
+    /// pass?" off the *finished* key would have all 19 cancel and restart
+    /// each other and the aggregation would never finish.
+    private var agentUsageDashboardRequestedKey: (revision: UInt64, day: Date)?
+    private var agentUsageDashboardTask: Task<Void, Never>?
 
-    /// Memoized dashboard aggregates. Recomputed only when the snapshots
-    /// change or the local calendar day rolls over (streaks and the heatmap
-    /// are day-anchored); every other SwiftUI body evaluation gets the
-    /// cached value instead of re-walking all messages of all sessions.
+    /// Dashboard aggregates, computed off the main thread.
+    ///
+    /// The aggregation is a fold over **every message of every session** —
+    /// on a year-old install that is ~28k messages across ~300 sessions,
+    /// with half a dozen full array copies along the way. It used to run
+    /// synchronously right here, which was fine as long as the memo held.
+    /// It didn't: `agentUsageStatsRevision` bumps on every turn save, so
+    /// any chat activity invalidated it, and the next time the stats panel
+    /// mounted — switching back from a plugin to 新对话 is exactly that —
+    /// the whole walk happened on the main thread mid-transition. The user
+    /// felt it as a stutter on the switch.
+    ///
+    /// So this returns whatever was computed last and kicks off a refresh
+    /// when it's stale. Recomputation happens on a detached task; the
+    /// result is published, and SwiftUI redraws when it lands. Stale
+    /// numbers for a frame or two are a much better deal than a dropped
+    /// frame on every panel entry.
+    ///
+    /// Two things invalidate: the snapshots changed, or the local calendar
+    /// day rolled over (streaks and the heatmap are day-anchored).
+    @discardableResult
     func agentUsageDashboardModel(now: Date = Date()) -> AgentUsageDashboardModel {
         let day = Calendar.current.startOfDay(for: now)
-        if let cache = agentUsageDashboardCache,
-           cache.revision == agentUsageStatsRevision,
-           cache.day == day {
-            return cache.model
+        if agentUsageDashboardKey?.revision != agentUsageStatsRevision
+            || agentUsageDashboardKey?.day != day {
+            scheduleAgentUsageDashboardRefresh(revision: agentUsageStatsRevision, day: day, now: now)
         }
-        let model = AgentUsageStats.dashboardModel(
-            for: agentUsageSnapshots,
-            heatmapWeekCount: AgentStatsDashboardLayout.maximumHeatmapWeeks,
-            now: now
-        )
-        agentUsageDashboardCache = (agentUsageStatsRevision, day, model)
-        return model
+        return agentUsageDashboard
+    }
+
+    private func scheduleAgentUsageDashboardRefresh(revision: UInt64, day: Date, now: Date) {
+        if agentUsageDashboardRequestedKey?.revision == revision,
+           agentUsageDashboardRequestedKey?.day == day {
+            return
+        }
+        agentUsageDashboardRequestedKey = (revision, day)
+        // A burst of turn saves would otherwise queue one full walk each.
+        // The newest request wins; the ones it laps were going to produce
+        // superseded numbers anyway.
+        agentUsageDashboardTask?.cancel()
+        let snapshots = agentUsageSnapshots
+        agentUsageDashboardTask = Task { [weak self] in
+            let model = await Task.detached(priority: .userInitiated) {
+                AgentUsageStats.dashboardModel(
+                    for: snapshots,
+                    heatmapWeekCount: AgentStatsDashboardLayout.maximumHeatmapWeeks,
+                    now: now
+                )
+            }.value
+            guard !Task.isCancelled, let self else { return }
+            self.agentUsageDashboardKey = (revision, day)
+            self.agentUsageDashboard = model
+        }
     }
 
     @Published var hasLoadedAgentUsageSnapshots = false
