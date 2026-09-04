@@ -38,7 +38,7 @@ const dict: Record<Locale, MarbleStrings> = {
     colorsUnit: '色',
     trackNames: {
       spiral: '神庙螺旋',
-      wave: '潮汐波道',
+      valley: '深谷 V 道',
       switchback: '山路折返',
     },
     totalLabel: '累计',
@@ -59,14 +59,14 @@ const dict: Record<Locale, MarbleStrings> = {
     fieldLabel: '印加弹珠场地',
     legendBomb: '炸弹：连它一起消掉，会炸飞周围一整片',
     legendReverse: '闪光：连它一起消掉，整条链往回倒退一段',
-    help: '每关会轮换螺旋、波浪和折返轨迹，洞口位于轨迹终点。用中央发射器把同色弹珠打进链条：三颗同色即消除，缺口合拢还能触发连锁。链条上带 💣 的是炸弹珠，消掉时炸飞周围一片，还能引爆别的炸弹；带 ⚡ 的是闪光珠，消掉时把已经跑到前面的珠子整条拉回来。鼠标/触屏瞄准点击发射，键盘用 ← → 瞄准、空格发射、S 换色。',
+    help: '每关会轮换螺旋、V 形谷道和折返轨迹，洞口位于轨迹终点。队首弹珠逼近洞口时整条链会立刻冲刺，洞口金环也会急促胀缩报警。用中央发射器把同色弹珠打进链条：三颗同色即消除，缺口合拢还能触发连锁。链条上带 💣 的是炸弹珠，消掉时炸飞周围一片，还能引爆别的炸弹；带 ⚡ 的是闪光珠，消掉时把已经跑到前面的珠子整条拉回来。鼠标/触屏瞄准点击发射，键盘用 ← → 瞄准、空格发射、S 换色。',
   },
   en: {
     stageLabel: 'Stage',
     colorsUnit: 'colors',
     trackNames: {
       spiral: 'Temple Spiral',
-      wave: 'Tidal Wave',
+      valley: 'Deep Valley',
       switchback: 'Mountain Switchback',
     },
     totalLabel: 'Total',
@@ -87,7 +87,7 @@ const dict: Record<Locale, MarbleStrings> = {
     fieldLabel: 'Inca marbles field',
     legendBomb: 'Bomb: clearing it blows up everything nearby',
     legendReverse: 'Flash: clearing it rolls the whole chain backwards',
-    help: 'Stages rotate among spiral, wave and switchback tracks, with the hole at each track endpoint. Shoot matching colors into the chain: three of a kind clears, and closing gaps can chain. Marbles marked 💣 blow up a patch around them (and set off other bombs); marbles marked ⚡ roll the chain back, dragging the leaders away from the hole. Aim with pointer or touch and click to shoot; on a keyboard use ← → to aim, space to shoot and S to swap.',
+    help: 'Stages rotate among spiral, valley and switchback tracks, with the hole at each track endpoint. Once the leading marble nears the hole the whole chain dashes, and the golden ring around the hole pulses fast to warn you. Shoot matching colors into the chain: three of a kind clears, and closing gaps can chain. Marbles marked 💣 blow up a patch around them (and set off other bombs); marbles marked ⚡ roll the chain back, dragging the leaders away from the hole. Aim with pointer or touch and click to shoot; on a keyboard use ← → to aim, space to shoot and S to swap.',
   },
 };
 
