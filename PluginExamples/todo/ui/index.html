@@ -246,6 +246,14 @@
           zh: {
             title: '待办',
             quickPlaceholder: '一句话记个待办，比如「明天下午三点前把发布验一遍，很急」',
+            attach: '附件', detach: '移除附件', attachments: '附件',
+            attachTooLarge: '附件超过 10 MB，服务端不收。',
+            attachReadFailed: '读取文件失败。',
+            sendToChat: '发到聊天',
+            chatBridgeMissing: '当前宿主版本不支持把待办发到聊天。',
+            dueLabel: '截止',
+            pickProjectTitle: '这条待办还没归属项目，发到哪个项目的聊天？',
+            pickProjectSkip: '不归项目，直接发',
             add: '记下',
             adding: '正在理解…',
             refresh: '刷新',
@@ -299,6 +307,14 @@
           en: {
             title: 'Todo',
             quickPlaceholder: 'One sentence, e.g. “verify the release by 3pm tomorrow, urgent”',
+            attach: 'Attach', detach: 'Remove attachment', attachments: 'Attachments',
+            attachTooLarge: 'That file is over 10 MB; the server will not take it.',
+            attachReadFailed: 'Could not read that file.',
+            sendToChat: 'Send to chat',
+            chatBridgeMissing: 'This host build cannot send todos to chat.',
+            dueLabel: 'Due',
+            pickProjectTitle: 'This todo has no project yet. Which project should the chat use?',
+            pickProjectSkip: 'Send without a project',
             add: 'Add',
             adding: 'Reading…',
             refresh: 'Refresh',
@@ -610,6 +626,89 @@
           if (!state.busy) el['quick-add'].textContent = t('add');
         }
 
+        var MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+        function readAsBase64(file) {
+          return new Promise(function (resolve, reject) {
+            var reader = new FileReader();
+            reader.onerror = function () { reject(new Error(t('attachReadFailed'))); };
+            reader.onload = function () {
+              // FileReader 给的是 data:<mime>;base64,<payload>，服务端只要后半段。
+              var text = String(reader.result || '');
+              var comma = text.indexOf(',');
+              resolve(comma >= 0 ? text.slice(comma + 1) : text);
+            };
+            reader.readAsDataURL(file);
+          });
+        }
+
+        function formatBytes(size) {
+          var value = Number(size) || 0;
+          if (value < 1024) return value + ' B';
+          if (value < 1024 * 1024) return Math.round(value / 1024) + ' KB';
+          return (value / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        /**
+         * 发到聊天：把待办整理成一段文字送进输入框，然后切到聊天界面，
+         * **不替用户按发送**——他多半还想再补一句上下文。
+         *
+         * 没归属项目的待办先问一次：聊天在哪个项目里开，决定了 Agent 能看到
+         * 哪个工作区，选错了后面全白搭。已经有项目的就直接走，不多问一步。
+         */
+        function sendItemToChat(item, trigger) {
+          if (!window.willdeep || !window.willdeep.chat || typeof window.willdeep.chat.insert !== 'function') {
+            fail(new Error(t('chatBridgeMissing')));
+            return;
+          }
+          var known = (state.projects || []).filter(function (entry) { return entry && entry.path; });
+          if (item.projectPath || !known.length) {
+            deliverToChat(item, item.projectPath || '', trigger);
+            return;
+          }
+          pickProject(known, function (path) { deliverToChat(item, path, trigger); });
+        }
+
+        function deliverToChat(item, projectPath, trigger) {
+          var lines = [item.text];
+          if (item.note) lines.push(item.note);
+          if (item.due) lines.push(t('dueLabel') + ' ' + new Date(item.due).toLocaleString());
+          if ((item.attachments || []).length) {
+            lines.push(t('attachments') + ': ' + item.attachments.map(function (f) { return f.path; }).join('\n'));
+          }
+          if (trigger) trigger.disabled = true;
+          var deliver = projectPath && item.projectPath !== projectPath
+            ? runCommand('todo.update', { id: item.id, projectPath: projectPath }).then(function () { return load(); })
+            : Promise.resolve();
+          deliver
+            .then(function () { return window.willdeep.chat.insert(lines.join('\n')); })
+            .catch(fail)
+            .then(function () { if (trigger) trigger.disabled = false; });
+        }
+
+        /** 项目选择：一个就地的小列表，选完即走，不做成对话框。 */
+        function pickProject(projects, done) {
+          var host = document.createElement('div');
+          host.className = 'project-picker';
+          var title = document.createElement('p');
+          title.textContent = t('pickProjectTitle');
+          host.appendChild(title);
+          projects.forEach(function (entry) {
+            var option = document.createElement('button');
+            option.type = 'button';
+            option.textContent = entry.name || entry.path;
+            option.addEventListener('click', function () { host.remove(); done(entry.path); });
+            host.appendChild(option);
+          });
+          var skip = document.createElement('button');
+          skip.type = 'button';
+          skip.className = 'ghost';
+          skip.textContent = t('pickProjectSkip');
+          skip.addEventListener('click', function () { host.remove(); done(''); });
+          host.appendChild(skip);
+          document.body.appendChild(host);
+        }
+
         function renderFilters() {
           window.TodoDetails.renderFilters(el.filters, {
             t: dt, state: state, projects: state.projects, workspace: workspacePath(),
@@ -744,6 +843,47 @@
 
           var actions = document.createElement('div');
           actions.className = 'actions';
+
+          // 附件：页面读成 base64 递给服务端，服务端落盘、只回元数据。
+          // 10 MiB 是服务端的硬上限，这里先拦一道，省得白读一遍大文件。
+          var attach = document.createElement('button');
+          attach.type = 'button';
+          attach.textContent = t('attach');
+          attach.addEventListener('click', function () {
+            var picker = document.createElement('input');
+            picker.type = 'file';
+            picker.multiple = true;
+            picker.addEventListener('change', function () {
+              var files = Array.prototype.slice.call(picker.files || []);
+              if (!files.length) return;
+              attach.disabled = true;
+              files.reduce(function (chain, file) {
+                return chain.then(function () {
+                  if (file.size > MAX_ATTACHMENT_BYTES) {
+                    return Promise.reject(new Error(t('attachTooLarge')));
+                  }
+                  return readAsBase64(file).then(function (data) {
+                    return runCommand('todo.attach', {
+                      id: item.id, name: file.name, mimeType: file.type || '', dataBase64: data
+                    });
+                  });
+                });
+              }, Promise.resolve())
+                .then(function () { return load(); })
+                .catch(fail)
+                .then(function () { attach.disabled = false; });
+            });
+            picker.click();
+          });
+          actions.appendChild(attach);
+
+          // 发到聊天：只把内容送进输入框并切到聊天，不替用户按发送。
+          var toChat = document.createElement('button');
+          toChat.type = 'button';
+          toChat.textContent = t('sendToChat');
+          toChat.addEventListener('click', function () { sendItemToChat(item, toChat); });
+          actions.appendChild(toChat);
+
           var remove = document.createElement('button');
           remove.type = 'button';
           remove.className = 'danger';
@@ -768,6 +908,24 @@
             labels.appendChild(window.TodoDetails.tagChip(name, function () { openInspector(item, 'tags'); }));
           });
           if (!(item.tags || []).length) labels.appendChild(window.TodoDetails.button(dt('tags'), 'tag-add', function () { openInspector(item, 'tags'); }, 'plus'));
+          (item.attachments || []).forEach(function (file) {
+            var chip = document.createElement('span');
+            chip.className = 'attachment-chip';
+            chip.title = file.name + ' · ' + formatBytes(file.size);
+            chip.appendChild(document.createTextNode(file.name));
+            var drop = document.createElement('button');
+            drop.type = 'button';
+            drop.setAttribute('aria-label', t('detach'));
+            drop.textContent = '\u00d7';
+            drop.addEventListener('click', function () {
+              drop.disabled = true;
+              runCommand('todo.detach', { id: item.id, attachmentID: file.id })
+                .then(function () { return load(); })
+                .catch(function (error) { drop.disabled = false; fail(error); });
+            });
+            chip.appendChild(drop);
+            labels.appendChild(chip);
+          });
           body.appendChild(labels);
           li.appendChild(body);
           return li;

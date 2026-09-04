@@ -222,14 +222,18 @@ nonisolated enum AgentPluginInstaller {
         if FileManager.default.fileExists(atPath: target.path) {
             try FileManager.default.removeItem(at: target)
         }
-        // 页面自己的 WebKit 仓（localStorage / IndexedDB）不在包目录里，
-        // 删包删不到它。留着既占地方，也让「删了再装」拿到上一次的残留
-        // 状态——那是最难查的一类故障。
-        let removedPluginID = pluginID
-        AgentPluginCommandApprovalStore.forget(pluginID: removedPluginID)
-        Task { @MainActor in
-            await AgentPluginWebsiteDataStore.remove(for: removedPluginID)
-        }
+        AgentPluginCommandApprovalStore.forget(pluginID: pluginID)
+        // 这里**故意不删**插件页自己的 WebKit 仓。
+        //
+        // `WKWebsiteDataStore.remove(forIdentifier:)` 在自己的 IO 队列上收尾，
+        // 回调那一跳会解到一个已经不在的 RunLoop，整个进程 SIGSEGV 在
+        // `WTF::RunLoop::dispatch`——三次都栽在同一个地方：先是测试里的清理，
+        // 改成 await 等回调没用，最后连卸载这条正路也照崩。用户卸个插件把
+        // App 崩掉，比在磁盘上留几 KB 残留严重得多。
+        //
+        // 代价是「删了再装」会拿到上一次的 localStorage。插件要干净的起点，
+        // 应该自己用 `window.willdeep.storage` 存版本号并在启动时比对，
+        // 别指望宿主替它抹地。
     }
 
     static func cleanup(proposal: AgentPluginInstallProposal) {

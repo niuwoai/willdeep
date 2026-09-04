@@ -84,9 +84,47 @@ Dir.mktmpdir do |dir|
           "initialize 返回 todo 服务端信息。", results)
 
     names = (call.call("tools/list", {})&.dig("result", "tools") || []).map { |t| t["name"] }.sort
-    check(names == ["todo.add", "todo.list", "todo.quick_add", "todo.remove", "todo.restore",
-                    "todo.settings", "todo.stats", "todo.toggle", "todo.update"],
-          "tools/list 暴露九个工具。", results)
+    check(names == ["todo.add", "todo.attach", "todo.detach", "todo.list", "todo.quick_add",
+                    "todo.remove", "todo.restore", "todo.settings", "todo.stats",
+                    "todo.toggle", "todo.update"],
+          "tools/list 暴露十一个工具。", results)
+
+    attached = tool.call("todo.add", { "text" => "带附件的待办" })
+    attach = tool.call("todo.attach", {
+      "id" => attached["item"]["id"], "name" => "shot.png",
+      "mimeType" => "image/png", "dataBase64" => ["hello".b].pack("m0")
+    })
+    check(attach && attach["ok"] == true && attach["item"]["attachments"].length == 1,
+          "附件挂上去了，条目里记着它。", results)
+    stored = attach && attach["attachment"]
+    check(stored && File.file?(stored["path"]) && File.binread(stored["path"]) == "hello",
+          "附件字节落到了磁盘上。", results)
+    check(stored && stored["size"] == 5, "附件记的是解码后的字节数。", results)
+
+    # 文件名来自页面，是不可信输入：不能写出附件目录之外去
+    escaping = tool.call("todo.attach", {
+      "id" => attached["item"]["id"], "name" => "../../escape.txt",
+      "dataBase64" => ["x".b].pack("m0")
+    })
+    escaped_path = escaping && escaping["attachment"] && escaping["attachment"]["path"]
+    check(escaped_path && !escaped_path.include?("/../"),
+          "带 ../ 的文件名被清洗，写不出附件目录。", results)
+
+    oversize = tool.call("todo.attach", {
+      "id" => attached["item"]["id"], "name" => "big.bin",
+      "dataBase64" => ["a".b * (10 * 1024 * 1024 + 1)].pack("m0")
+    })
+    check(oversize && oversize["ok"] == false && oversize["error"] == "attachment_too_large",
+          "超过 10 MiB 的附件被拒。", results)
+
+    detached = tool.call("todo.detach", {
+      "id" => attached["item"]["id"], "attachmentID" => stored["id"]
+    })
+    check(detached && detached["ok"] == true &&
+          detached["item"]["attachments"].none? { |a| a["id"] == stored["id"] },
+          "取消附件后条目里不再有它。", results)
+    check(!File.exist?(stored["path"]), "取消附件会把文件一起删掉。", results)
+    tool.call("todo.remove", { "id" => attached["item"]["id"] })
 
     empty = tool.call("todo.list")
     check(empty && empty["ok"] == true && empty["items"] == [],
@@ -206,7 +244,8 @@ Dir.mktmpdir do |dir|
   check(stored["version"] == 2 && stored["items"].is_a?(Array) && stored["settings"].is_a?(Hash),
         "存储文件是 {version, settings, items} 结构。", results)
   check(stored["items"].first.keys.sort ==
-          %w[allDay createdAt done doneAt due id note priority project projectPath source tags text updatedAt],
+          %w[allDay attachments createdAt done doneAt due id note priority project projectPath
+             source tags text updatedAt],
         "落盘的每条待办字段齐整。", results)
   check(!Dir.glob(File.join(File.dirname(store), "*.tmp")).any?,
         "写盘用的临时文件已经 rename 掉，不留残骸。", results)

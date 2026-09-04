@@ -140,3 +140,31 @@ li.item.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acce
 .tag-inline { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tag-inline .chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .tag-inline .chip .n { color: var(--muted); margin-left: 5px; font-variant-numeric: tabular-nums; }
+
+/* 附件片：跟标签片同一行排，右边一个叉直接移除。 */
+.attachment-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px 6px 2px 10px; font-size: .78em; color: var(--muted);
+  max-width: 220px;
+}
+.attachment-chip button {
+  border: none; background: none; color: inherit; cursor: pointer;
+  line-height: 1; padding: 0 2px;
+}
+.attachment-chip button:hover { color: var(--danger); }
+
+/* 项目选择：就地一张小卡，选完即走，不做成模态对话框。 */
+.project-picker {
+  position: fixed; z-index: 60; right: 20px; bottom: 20px; width: 280px;
+  display: flex; flex-direction: column; gap: 4px; padding: 12px;
+  border: 1px solid var(--border-strong); border-radius: 10px;
+  background: var(--page); box-shadow: 0 14px 32px rgba(0, 0, 0, 0.16);
+}
+.project-picker p { margin: 0 0 4px; color: var(--muted); font-size: .85em; }
+.project-picker button {
+  text-align: left; border: 1px solid transparent; border-radius: 7px;
+  padding: 7px 9px; cursor: pointer; background: none; color: inherit;
+}
+.project-picker button:hover { background: var(--surface-strong); border-color: var(--border); }
+.project-picker button.ghost { color: var(--muted); }

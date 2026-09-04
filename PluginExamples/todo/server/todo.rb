@@ -109,6 +109,107 @@ def project_name_for(path, fallback = nil)
   File.basename(path.to_s.sub(%r{/+\z}, ""))
 end
 
+# ── 附件 ───────────────────────────────────────────────────
+# 文件落在 plugin-data/todo-attachments/<条目 id>/ 下，条目里只记
+# 元数据。上限刻意定死：页面把文件读成 base64 从桥上递过来，超过这个
+# 量级会把 WebView 和宿主一起拖住，与其那样不如早点拒绝。
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+MAX_ATTACHMENTS_PER_ITEM = 10
+
+def attachments_root
+  File.join(File.dirname(store_path), "todo-attachments")
+end
+
+def attachment_dir(item_id)
+  File.join(attachments_root, item_id.to_s.gsub(/[^A-Za-z0-9_-]/, "_"))
+end
+
+# 文件名来自页面，必须当成不可信输入：只留基名，再把危险字符换掉，
+# 免得写出 ../ 或者把点开头的隐藏文件塞进来。
+def safe_attachment_name(raw)
+  base = File.basename(raw.to_s.strip)
+  base = base.gsub(/[^\w\-. ]/, "_").sub(/\A\.+/, "")
+  base = "attachment" if base.empty?
+  clip(base, 120)
+end
+
+def normalize_attachments(raw)
+  return [] unless raw.is_a?(Array)
+  # 不用 filter_map：插件服务端跑的是系统 Ruby（2.6），那个方法 2.7 才有。
+  # 测试特意用 /usr/bin/ruby 起服务端，就是为了逮住这类版本假设。
+  raw.map do |entry|
+    next nil unless entry.is_a?(Hash)
+    path = entry["path"].to_s
+    next nil if path.empty?
+    {
+      "id" => (entry["id"].to_s.strip.empty? ? SecureRandom.uuid : entry["id"].to_s.strip[0, 64]),
+      "name" => safe_attachment_name(entry["name"]),
+      "type" => clip(entry["type"], 120).strip,
+      "size" => entry["size"].to_i,
+      "path" => path
+    }
+  end.compact.first(MAX_ATTACHMENTS_PER_ITEM)
+end
+
+def attach_file(arguments)
+  items = load_items
+  index = items.index { |item| item["id"] == arguments["id"].to_s }
+  return { "ok" => false, "error" => "not_found" } if index.nil?
+
+  data = arguments["dataBase64"].to_s
+  return { "ok" => false, "error" => "empty_attachment" } if data.empty?
+  begin
+    bytes = data.unpack1("m")
+  rescue ArgumentError
+    return { "ok" => false, "error" => "invalid_base64" }
+  end
+  return { "ok" => false, "error" => "attachment_too_large" } if bytes.bytesize > MAX_ATTACHMENT_BYTES
+
+  item = items[index]
+  existing = normalize_attachments(item["attachments"])
+  return { "ok" => false, "error" => "too_many_attachments" } if existing.length >= MAX_ATTACHMENTS_PER_ITEM
+
+  name = safe_attachment_name(arguments["name"])
+  id = SecureRandom.uuid
+  directory = attachment_dir(item["id"])
+  FileUtils.mkdir_p(directory)
+  path = File.join(directory, "#{id}-#{name}")
+  File.binwrite(path, bytes)
+
+  entry = {
+    "id" => id, "name" => name,
+    "type" => clip(arguments["mimeType"], 120).to_s.strip,
+    "size" => bytes.bytesize, "path" => path
+  }
+  item["attachments"] = existing + [entry]
+  item["updatedAt"] = now_iso
+  items[index] = item
+  save_items(items)
+  { "ok" => true, "item" => item, "attachment" => entry }
+end
+
+def detach_file(arguments)
+  items = load_items
+  index = items.index { |item| item["id"] == arguments["id"].to_s }
+  return { "ok" => false, "error" => "not_found" } if index.nil?
+
+  item = items[index]
+  keep, drop = normalize_attachments(item["attachments"])
+    .partition { |entry| entry["id"] != arguments["attachmentID"].to_s }
+  return { "ok" => false, "error" => "attachment_not_found" } if drop.empty?
+
+  # 只删我们自己写进附件目录的文件，别顺着记录去删别处的路径。
+  drop.each do |entry|
+    next unless entry["path"].to_s.start_with?(attachments_root + File::SEPARATOR)
+    File.delete(entry["path"]) if File.file?(entry["path"])
+  end
+  item["attachments"] = keep
+  item["updatedAt"] = now_iso
+  items[index] = item
+  save_items(items)
+  { "ok" => true, "item" => item }
+end
+
 def normalize_item(raw)
   return nil unless raw.is_a?(Hash)
   text = clip(raw["text"], MAX_TEXT_BYTES).strip
@@ -129,6 +230,7 @@ def normalize_item(raw)
     "priority" => normalize_priority(raw["priority"]),
     "done" => raw["done"] == true,
     "doneAt" => parse_time(raw["doneAt"]) ? parse_time(raw["doneAt"]).utc.iso8601 : nil,
+    "attachments" => normalize_attachments(raw["attachments"]),
     "source" => clip(raw["source"], 200).strip,
     "createdAt" => created.utc.iso8601,
     "updatedAt" => (parse_time(raw["updatedAt"]) || created).utc.iso8601
@@ -704,6 +806,8 @@ def call_tool(name, arguments)
   when "todo.remove" then remove_item(arguments)
   when "todo.restore" then restore_item(arguments)
   when "todo.stats" then stats(arguments)
+  when "todo.attach" then attach_file(arguments)
+  when "todo.detach" then detach_file(arguments)
   when "todo.settings" then settings_tool(arguments)
   else { "ok" => false, "error" => "unknown tool #{name}" }
   end
@@ -797,6 +901,32 @@ TOOLS = [
     description: "Put a previously removed todo back, keeping its id and timestamps.",
     inputSchema: { type: "object", properties: { item: { type: "object" } }, required: ["item"] }
   },
+  {
+    name: "todo.attach",
+    description: "Attach one file (screenshot, PDF, Word…) to a todo. The page reads the file and passes base64; the server stores it beside the todo store and records only metadata.",
+    inputSchema: {
+      type: "object",
+      required: %w[id name dataBase64],
+      properties: {
+        id: { type: "string", description: "Todo id" },
+        name: { type: "string", description: "Original file name" },
+        mimeType: { type: "string", description: "MIME type reported by the page" },
+        dataBase64: { type: "string", description: "Base64 file bytes, at most 10 MiB decoded" }
+      }
+    }
+  }.freeze,
+  {
+    name: "todo.detach",
+    description: "Remove one attachment from a todo and delete its file.",
+    inputSchema: {
+      type: "object",
+      required: %w[id attachmentID],
+      properties: {
+        id: { type: "string", description: "Todo id" },
+        attachmentID: { type: "string", description: "Attachment id" }
+      }
+    }
+  }.freeze,
   {
     name: "todo.settings",
     description: "Read or update the plugin's own preferences: whether one-sentence input is " \
