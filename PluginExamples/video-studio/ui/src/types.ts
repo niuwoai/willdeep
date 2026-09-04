@@ -30,7 +30,7 @@ declare global {
       getContext(): { locale?: string; colorScheme?: string };
       executeCommand(command: string, arguments?: Record<string, unknown>): Promise<string | undefined>;
       ai?: {
-        complete(request: { system: string; messages: Array<{ role: 'user' | 'assistant'; content: string }>; provider?: string; model?: string; maxOutputTokens?: number; skills?: string[] }): Promise<{ text: string; model: string; providerID: string }>;
+        complete(request: { system: string; messages: Array<{ role: 'user' | 'assistant'; content: string }>; provider?: string; model?: string; maxOutputTokens?: number; skills?: string[]; streamID?: string }): Promise<{ text: string; model: string; providerID: string }>;
         providers(): Promise<{ providers: ProviderEntry[] }>;
         generateImage(request: { prompt: string; provider: 'some-im'; model: ImageModel; size: '1024x1024' | '1536x1024' | '1024x1536' }): Promise<ImageResult>;
       };

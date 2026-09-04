@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.1] - 2026-09-04
+
+### Fixed
+
+- Every command failed against a real host. The page treated the host's MCP result envelope as the business payload, so `payload.ok` was always undefined and the library never loaded.
+
+### Added
+
+- The planner shows a live line of generated text above the composer while it waits, and the model picker now lists every model configured on the provider.
+
 ## [0.3.0] - 2026-09-04
 
 ### Added

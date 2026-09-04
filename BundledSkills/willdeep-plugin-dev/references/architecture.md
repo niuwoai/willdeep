@@ -17,7 +17,7 @@ pluginCenter      插件中心
 
 对应 `AgentPrimaryDestination`。插件那一项只存一个 qualified destination ID（`<plugin-id>:<destination-id>`）。左下侧栏和中央页面都从 `AgentPluginRegistry` 的同一份不可变快照解析描述符，所以不会出现"入口属于 A、侧栏属于 B"的半切换状态。插件在选中时被停用或卸载，宿主切回插件中心并说明原因。
 
-最多 5 个插件目的地可以固定在导航里，支持拖拽排序。随 App 签名发行的第一方插件（`BundledPlugins/`）可以声明 `defaultPinned: true` 占据固定位；非 `bundled` 来源声明这个字段会被忽略，第三方插件抢不到导航。
+最多 10 个插件目的地可以固定在导航里（内置插件的 defaultPinned 固定位与用户手动固定共用这个额度），支持拖拽排序。随 App 签名发行的第一方插件（`BundledPlugins/`）可以声明 `defaultPinned: true` 占据固定位；非 `bundled` 来源声明这个字段会被忽略，第三方插件抢不到导航。
 
 ## 2. 会话与 Agent 回合
 

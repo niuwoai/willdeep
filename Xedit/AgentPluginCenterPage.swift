@@ -7,6 +7,48 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// 权限清单的唯一渲染入口，安装确认框和已安装卡片共用。
+///
+/// 七八条 raw identifier 平铺成一列时，`process.execute` 和 `providers.read`
+/// 一个字重、一个图标，用户看不出该警惕哪条。这里按风险档排序：能跑命令、
+/// 动凭据、改文件的排在最前并标红，联网与花钱的居中，只读的收成一行灰字。
+/// 分档只影响呈现，不改变任何授权语义——该批的还是全部要批。
+struct AgentPluginPermissionList: View {
+    let permissions: [AgentPluginPermission]
+
+    var body: some View {
+        let ordered = AgentPluginPermission.ordered(permissions)
+        let emphasized = ordered.filter { $0.risk != .readOnly }
+        let readOnly = ordered.filter { $0.risk == .readOnly }
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(emphasized, id: \.rawValue) { permission in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: permission.symbolName)
+                        .font(.system(size: permission.risk == .sensitive ? 10 : 6))
+                        .foregroundStyle(permission.risk == .sensitive ? Color.orange : Color.secondary)
+                        .frame(width: 12)
+                    Text(permission.localizedSummary)
+                        .font(.system(size: 11, weight: permission.risk == .sensitive ? .medium : .regular))
+                    Text(permission.rawValue)
+                        .font(.system(size: 9).monospaced())
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            if !readOnly.isEmpty {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "eye")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 12)
+                    Text("\(L10n.Plugins.Permission.readOnlyPrefix)\(L10n.Plugins.Permission.separator)\(readOnly.map(\.localizedSummary).joined(separator: L10n.Plugins.Permission.separator))")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
 struct AgentPluginCenterPage: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject private var registry = AgentPluginRegistry.shared
@@ -287,17 +329,24 @@ struct AgentPluginCenterPage: View {
         .frame(height: 28)
     }
 
+    /// 卡片上的权限胶囊。和安装确认框同一套排序：敏感的排在最前并换个底色，
+    /// 一眼能看出这个插件能不能在本机跑东西、动不动凭据。
     private func permissionChips(_ permissions: [AgentPluginPermission]) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(L10n.Plugins.permissions)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
-            ForEach(permissions, id: \.rawValue) { permission in
+            ForEach(AgentPluginPermission.ordered(permissions), id: \.rawValue) { permission in
+                let sensitive = permission.risk == .sensitive
                 Text(permission.rawValue)
                     .font(.system(size: 9).monospaced())
+                    .foregroundStyle(sensitive ? Color.orange : Color.primary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(Capsule().fill(Color.primary.opacity(0.07)))
+                    .background(
+                        Capsule().fill(sensitive ? Color.orange.opacity(0.14) : Color.primary.opacity(0.07))
+                    )
+                    .help(permission.localizedSummary)
             }
         }
     }
@@ -486,10 +535,7 @@ private struct AgentPluginApprovalSheet: View {
             } else {
                 Text(L10n.Plugins.addedPermissions)
                     .font(.system(size: 12, weight: .semibold))
-                ForEach(proposal.addedPermissions, id: \.rawValue) { permission in
-                    Label(permission.rawValue, systemImage: "exclamationmark.shield")
-                        .font(.system(size: 11))
-                }
+                AgentPluginPermissionList(permissions: proposal.addedPermissions)
             }
             if !proposal.package.destinations.isEmpty {
                 Divider()
