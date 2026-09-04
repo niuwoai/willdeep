@@ -156,7 +156,7 @@ struct AgentUsageSidecarTests {
         }
 
         let serial = AgentSessionStore.loadUsageSnapshots()
-        let concurrent = await AgentSessionStore.loadUsageSnapshotsConcurrently()
+        let concurrent = await AgentSessionStore.scanUsageSidecarsConcurrently()
 
         // 按 id 排序再比：两边都按 updatedAt 倒序，而 Swift 的 sort 不
         // 稳定，同一毫秒创建的会话之间谁在前是没有保证的。这里要钉的是
@@ -166,6 +166,58 @@ struct AgentUsageSidecarTests {
         for id in ids {
             #expect(concurrent.contains { $0.id == id })
         }
+    }
+
+    /// 统计库与侧车必须给出逐字段相同的快照。
+    ///
+    /// 库是快路径，侧车是退路，两者随时可能互相替换。任何一个字段在库
+    /// 里丢了或变了形，面板上的数字就会悄悄变小，而且没有任何报错——
+    /// 这是这类缓存最难查的一种坏法。样本用的是同一份富会话，覆盖正文、
+    /// 思考痕迹、工具调用、token 计数、编辑与产物路径。
+    @Test("统计库往返与侧车逐字段等价")
+    func databaseRoundTripMatchesTheSidecar() async throws {
+        var ids: [UUID] = []
+        defer { for id in ids { AgentSessionStore.delete(id: id) } }
+        for index in 0..<5 {
+            var session = makeRichSession()
+            session.title = "usage-db-\(index)"
+            ids.append(session.id)
+            #expect(AgentSessionStore.save(session))
+        }
+
+        let fromSidecars = await AgentSessionStore.scanUsageSidecarsConcurrently()
+        let fromDatabase = await AgentSessionStore.loadUsageSnapshotsConcurrently()
+
+        let sidecarByID = Dictionary(uniqueKeysWithValues: fromSidecars.map { ($0.id, $0) })
+        let databaseByID = Dictionary(uniqueKeysWithValues: fromDatabase.map { ($0.id, $0) })
+        #expect(Set(databaseByID.keys) == Set(sidecarByID.keys))
+        for id in ids {
+            let sidecar = try #require(sidecarByID[id])
+            let stored = try #require(databaseByID[id])
+            #expect(stored == sidecar)
+        }
+    }
+
+    /// 会话被外部改动后，库要跟着重建那一条，而不是端出旧数字。
+    @Test("源文件指纹变了，统计库重建该会话")
+    func databaseRebuildsWhenTheSourceChanges() async throws {
+        var session = makeRichSession()
+        let id = session.id
+        defer { AgentSessionStore.delete(id: id) }
+        #expect(AgentSessionStore.save(session))
+        _ = await AgentSessionStore.loadUsageSnapshotsConcurrently()
+
+        // 绕过 store 直接改写会话文件，模拟另一个进程写入。
+        session.messages.append(AgentMessage(role: .user, content: "外部进程补写的一条消息"))
+        session.updatedAt = session.updatedAt.addingTimeInterval(60)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(session).write(to: sessionFileURL(for: id), options: .atomic)
+
+        let reloaded = await AgentSessionStore.loadUsageSnapshotsConcurrently()
+        let stored = try #require(reloaded.first { $0.id == id })
+        #expect(stored.messages.count == session.messages.count)
     }
 
     @Test("签名匹配时冷扫描走侧车快路径，不做全量解码")
