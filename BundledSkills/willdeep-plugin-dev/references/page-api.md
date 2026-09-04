@@ -194,6 +194,19 @@ const { path, byteSize } = await window.willdeep.fs.write('docs/draft.md', text)
 
 走的是 Agent 改文件同一条路：路径守卫、打开中的编辑器同步刷新、改动登记进 Changes 面板，全都继承。只能写当前会话的主工作区根，单次 512 KiB 封顶。
 
+改一段而不是整文件覆盖，用 `patch`：
+
+```js
+const { occurrences } = await window.willdeep.fs.patch(
+  'docs/draft.md',
+  '## 旧标题',
+  '## 新标题',
+  { replaceAll: false }
+);
+```
+
+与 Agent 的 `edit_file` 共用同一套实现，所以「找不到」「不唯一」「改了个寂寞」三种失败的判定和报错跟 Agent 完全一致。**优先用 `patch`**：`fs.read` 会在 256 KiB 处截断，拿截断过的文本回 `write` 等于把超出部分悄悄删掉；`patch` 没有这个问题，也不会踩掉别人同时对同一文件做的其它修改。文件在编辑器里开着时以缓冲区为准，用户没存盘的改动不会被当成不存在。
+
 ## 跑命令（需要 `process.execute`）
 
 ```js
@@ -207,6 +220,14 @@ const { summary, output } = await window.willdeep.process.run('git status --shor
 3. 其余一律弹确认框，把插件名、完整命令、工作目录摊开给用户看。
 
 这道确认框**不看审批档位**：完全访问是用户对自己指挥的 Agent 的授权，不是对第三方页面的授权。执行时带与 Agent 同款的沙箱，前台运行，120 秒封顶。
+
+确认框上有「这条命令以后不再询问」。勾上记住的是**这一条命令的完整原文**，不是前缀、更不是「这个插件以后随便跑」：`git status` 被记住，不会让 `git push --force` 跟着免检。记忆绑在包摘要上，插件一升级全部失效；卸载插件时一并清掉；每个插件最多记 40 条。
+
+## 调试插件页面
+
+插件页默认拿不到 devtools。插件中心底部「给插件作者」里有一个开关，打开后页面就能被 Safari 的网页检查器连上（还要在 Safari 里启用「开发」菜单，且切换后要重新打开页面）。
+
+开关默认关，也不会给页面多一分能力——但检查器能读到页面内存里的一切，包括它刚从 `ai.complete` 拿回来的内容，所以别长期开着。
 
 ## 代发网络请求（需要 `network.access` + `networkDomains`）
 
@@ -287,4 +308,4 @@ window.postMessage({ jsonrpc: '2.0', id: 1, method: 'ui/initialize' }, '*');
 
 - 页面加载失败时宿主会自动重灌一次，仍失败则在页面上写明错误。看到白页先查 `entryPath` 和资源体积。
 - 单个包内资源上限 8 MiB，超过的资源请求会失败。
-- 页面拿不到 devtools。把中间状态渲染到 DOM 上，或用 `executeCommand` 把信息回传给宿主命令，是可行的排查手段。
+- 需要 devtools 时在插件中心「给插件作者」里打开网页检查器（见上）。不想开检查器时，把中间状态渲染到 DOM 上，或用 `executeCommand` 把信息回传给宿主命令，也是可行的排查手段。

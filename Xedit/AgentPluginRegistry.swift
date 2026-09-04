@@ -194,6 +194,12 @@ final class AgentPluginRegistry: ObservableObject {
         return record.activePackage.manifest?.networkDomains ?? []
     }
 
+    /// 当前启用版本的包摘要。命令免询问记忆绑在它上面：插件一升级，
+    /// 代码就换了人，上一版拿到的信任不该自动过继给新版本。
+    func packageDigest(for pluginID: AgentPluginID) -> String? {
+        record(pluginID: pluginID)?.activePackage.digest
+    }
+
     /// 插件的展示名，用在确认框与通知抬头上——用户要认的是名字，
     /// 不是 `com.example.plugin` 这种标识符。
     func displayName(for pluginID: AgentPluginID) -> String? {

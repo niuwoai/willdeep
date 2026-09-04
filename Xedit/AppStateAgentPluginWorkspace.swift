@@ -48,6 +48,58 @@ extension AppState {
         return ["path": destination.path, "byteSize": Data(text.utf8).count]
     }
 
+    /// 按「找一段、换一段」改文件，而不是整文件覆盖。
+    ///
+    /// 与 Agent 的 `edit_file` 共用 `AgentEditFileSupport.makeEdit`，所以
+    /// 「找不到」「不唯一」「改了个寂寞」这三种失败的判定和报错跟 Agent
+    /// 完全一致——插件作者读到的错误消息，和他在聊天里看到的是同一套。
+    ///
+    /// 为什么不是整文件覆盖就够了：页面拿到的是被 `fs.read` 截断过的文本
+    /// （256 KiB 封顶），拿它回写等于把超出部分悄悄删掉。改一段就没有这个
+    /// 问题，也不会踩掉别人同时对同一文件做的其它修改。
+    func pluginPatchWorkspaceFile(
+        path: String,
+        oldString: String,
+        newString: String,
+        replaceAll: Bool,
+        pluginID: AgentPluginID
+    ) throws -> [String: Any] {
+        guard AgentPluginRegistry.shared.hasPermission(.workspaceWrite, pluginID: pluginID) else {
+            throw AgentPluginCapabilityError.permissionDenied(AgentPluginPermission.workspaceWrite.rawValue)
+        }
+        let roots = pluginAccessibleWorkspaceRoots
+        guard let runtime = activeRuntime, let root = roots.first else {
+            throw AgentPluginCapabilityError.noWorkspace
+        }
+        let url = try AgentPluginFileAccess.resolve(path: path, roots: [root])
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw AgentPluginCapabilityError.notFound(url.path)
+        }
+        // 编辑器里开着这个文件时以缓冲区为准，否则会把用户没存盘的改动
+        // 当成不存在。
+        let current: String
+        if let buffered = try? editableContent(forAgentPatchURL: url) {
+            current = buffered
+        } else {
+            current = AppState.decodeText(from: try Data(contentsOf: url))
+        }
+        let relative = url.path == root.path
+            ? url.lastPathComponent
+            : String(url.path.dropFirst(root.path.count + 1))
+        let edit = try AgentEditFileSupport.makeEdit(
+            path: relative,
+            oldContent: current,
+            oldString: oldString,
+            newString: newString,
+            replaceAll: replaceAll
+        )
+        guard Data(edit.newContent.utf8).count <= Self.pluginFileWriteMaximumBytes else {
+            throw AgentPluginCapabilityError.payloadTooLarge(Self.pluginFileWriteMaximumBytes)
+        }
+        try writeDelegatedAgentContent(edit.newContent, to: url, runtime: runtime, workspaceRoot: root)
+        return ["path": url.path, "occurrences": edit.occurrences]
+    }
+
     // MARK: 跑命令
 
     /// 命令执行的墙钟上限。前台执行，不登记后台任务——插件页要的是
@@ -76,12 +128,25 @@ extension AppState {
             throw AgentPluginCapabilityError.noWorkspace
         }
 
-        // 只读命令直接跑；其余一律弹确认框，**不看审批档位**。
-        // 完全访问是用户对「自己指挥的 Agent」的授权，不是对第三方页面的
-        // 授权，两者不该共用一个开关。
-        if SafeCommand.classify(command: trimmed) != .alwaysSafe {
-            guard confirmPluginCommand(trimmed, pluginID: pluginID, workspaceRoot: root) else {
+        // 只读命令直接跑；其余要么此前被记住过，要么弹确认框。
+        // 一律**不看审批档位**：完全访问是用户对「自己指挥的 Agent」的
+        // 授权，不是对第三方页面的授权，两者不该共用一个开关。
+        if SafeCommand.classify(command: trimmed) != .alwaysSafe,
+           !AgentPluginCommandApprovalStore.isRemembered(
+               command: trimmed,
+               pluginID: pluginID,
+               packageDigest: AgentPluginRegistry.shared.packageDigest(for: pluginID)
+           ) {
+            let outcome = confirmPluginCommand(trimmed, pluginID: pluginID, workspaceRoot: root)
+            guard outcome.approved else {
                 throw AgentPluginCapabilityError.commandDeclined
+            }
+            if outcome.remember {
+                AgentPluginCommandApprovalStore.remember(
+                    command: trimmed,
+                    pluginID: pluginID,
+                    packageDigest: AgentPluginRegistry.shared.packageDigest(for: pluginID)
+                )
             }
         }
 
@@ -126,11 +191,15 @@ extension AppState {
 
     /// 非只读命令的确认框。把插件名、完整命令和工作目录摊开给用户看——
     /// 他要判断的是「这个页面替我跑这条命令，行不行」。
+    ///
+    /// 勾上「以后不再询问」记住的是**这一条命令的完整原文**，不是前缀、
+    /// 更不是「这个插件以后随便跑」：`git status` 被记住，不该让
+    /// `git push --force` 跟着免检。
     private func confirmPluginCommand(
         _ command: String,
         pluginID: AgentPluginID,
         workspaceRoot: URL
-    ) -> Bool {
+    ) -> (approved: Bool, remember: Bool) {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = L10n.PluginCommandConfirm.title(
@@ -139,7 +208,11 @@ extension AppState {
         alert.informativeText = "\(command)\n\n\(workspaceRoot.path)"
         alert.addButton(withTitle: L10n.PluginCommandConfirm.run)
         alert.addButton(withTitle: L10n.PluginCommandConfirm.cancel)
-        return alert.runModal() == .alertFirstButtonReturn
+        let remember = NSButton(checkboxWithTitle: L10n.PluginCommandConfirm.remember, target: nil, action: nil)
+        remember.state = .off
+        alert.accessoryView = remember
+        let approved = alert.runModal() == .alertFirstButtonReturn
+        return (approved, approved && remember.state == .on)
     }
 
     // MARK: 代发网络请求

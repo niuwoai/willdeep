@@ -57,6 +57,8 @@ struct AgentPluginCenterPage: View {
     @State private var isGitSheetPresented = false
     @State private var isWorking = false
     @State private var errorMessage: String?
+    /// 插件页面的网页检查器开关。默认关，见 AgentSettingsStore 的说明。
+    @State private var isPluginPageInspectable = AgentSettingsStore.loadPluginPageInspectable()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -74,6 +76,7 @@ struct AgentPluginCenterPage: View {
                             pluginCard(record)
                         }
                     }
+                    developerSection
                     if !registry.snapshot.issues.isEmpty {
                         diagnosticsSection
                     }
@@ -349,6 +352,30 @@ struct AgentPluginCenterPage: View {
                     .help(permission.localizedSummary)
             }
         }
+    }
+
+    /// 给插件作者的开关。收在 DisclosureGroup 里，普通用户不会误开。
+    private var developerSection: some View {
+        DisclosureGroup(L10n.Plugins.developerSection) {
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle(L10n.Plugins.inspectPluginPages, isOn: Binding(
+                    get: { isPluginPageInspectable },
+                    set: { newValue in
+                        isPluginPageInspectable = newValue
+                        AgentSettingsStore.savePluginPageInspectable(newValue)
+                    }
+                ))
+                .toggleStyle(.switch)
+                .font(.system(size: 11))
+                Text(L10n.Plugins.inspectPluginPagesHint)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 8)
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.035)))
     }
 
     private var diagnosticsSection: some View {
