@@ -215,7 +215,10 @@ extension AgentToolRunner {
 
     // MARK: codex_cli / hermes_cli / cursor_agent / cline_cli
 
-    nonisolated static let delegatedAgentForegroundTimeout: TimeInterval = 3600 * 6
+    // 前台委派的墙钟兜底。原来是 6 小时，用户视角约等于「永远卡住」。真正拦
+    // 静默挂起的是各执行器的 idle 看门狗（见 AgentCodexAppServer.idleTimeout）；
+    // 这个墙钟只当合理上限。需要更长的任务应转后台运行（后台无此墙钟）。
+    nonisolated static let delegatedAgentForegroundTimeout: TimeInterval = 3600
     nonisolated static let codexCLIPermissionModes: Set<String> = ["plan", "workspaceWrite", "default"]
     nonisolated static let cursorAgentPermissionModes: Set<String> = ["plan", "ask", "default"]
     nonisolated static let clineCLIPermissionModes: Set<String> = ["plan", "act", "default"]
