@@ -23,6 +23,52 @@
 
 import AppKit
 
+/// 围栏代码块头上「运行」与「送进终端」两个图标，排在复制图标左边。
+///
+/// 只有 `AgentChatRunnableCommand` 点头的块才会拿到它们——判据见那边的
+/// 文件头。图标不带文字标签：一行里已经有「语言名 + ⧉ Copy」，再塞两段
+/// 文字会把头部撑成一条按钮栏，含义交给 tooltip。
+enum AgentChatHistoryCodeRunChrome {
+    static let runLinkValue = "agent-chat-history-run-code"
+    static let terminalLinkValue = "agent-chat-history-run-code-in-terminal"
+
+    /// 图标之间的间隔。用普通空格而不是排版空格，复制整段时不会带进
+    /// 奇怪的字符。
+    static let separator = "  "
+
+    static func runButton(command: String, font: NSFont, color: NSColor) -> NSAttributedString {
+        let result = NSMutableAttributedString(
+            attributedString: runSymbolString(pointSize: font.pointSize, color: color)
+        )
+        result.addAttributes([
+            .link: runLinkValue,
+            .agentChatHistoryRunCommandText: command,
+            .toolTip: L10n.AgentChatCommandBlock.runTooltip,
+        ], range: NSRange(location: 0, length: result.length))
+        result.append(NSAttributedString(string: separator, attributes: [
+            .font: font,
+            .foregroundColor: color,
+        ]))
+        return result
+    }
+
+    static func terminalButton(command: String, font: NSFont, color: NSColor) -> NSAttributedString {
+        let result = NSMutableAttributedString(
+            attributedString: terminalSymbolString(pointSize: font.pointSize, color: color)
+        )
+        result.addAttributes([
+            .link: terminalLinkValue,
+            .agentChatHistoryTerminalCommandText: command,
+            .toolTip: L10n.AgentChatCommandBlock.terminalTooltip,
+        ], range: NSRange(location: 0, length: result.length))
+        result.append(NSAttributedString(string: separator, attributes: [
+            .font: font,
+            .foregroundColor: color,
+        ]))
+        return result
+    }
+}
+
 enum AgentChatHistoryCodeCopyChrome {
     static let idleText = " Copy"
     static let copiedLabel = "✓ Done"
@@ -255,6 +301,17 @@ enum AgentChatHistoryFooterChrome {
 
 private func copySymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
     symbolAttachmentString(named: "square.on.square", fallback: "⧉", pointSize: pointSize, color: color)
+}
+
+/// 「就地跑一下」——实心播放三角，和交接那颗 `play.circle` 区分开：
+/// 那颗是「继续这轮对话」，这颗是「执行这条命令」。
+private func runSymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
+    symbolAttachmentString(named: "play.fill", fallback: "▶", pointSize: pointSize, color: color)
+}
+
+/// 「拿去终端跑」——与右侧终端面板同一个图标语义。
+private func terminalSymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {
+    symbolAttachmentString(named: "terminal", fallback: ">_", pointSize: pointSize, color: color)
 }
 
 private func checkmarkSymbolString(pointSize: CGFloat, color: NSColor) -> NSAttributedString {

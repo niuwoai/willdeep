@@ -66,6 +66,13 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
     var searchQuery: String = ""
     var activeSearchMatchIndex: Int? = nil
     var onSearchResultCountChange: ((Int) -> Void)? = nil
+    /// 围栏 shell 代码块上的「运行 / 送进终端」两个图标是否登场。
+    /// 远端工作区一律关掉：本机跑出来的结果是另一台机器的答案。
+    var allowsLocalCommandButtons: Bool = true
+    /// 点「运行」：在本机就地跑一条确定安全的只读命令，输出落成一条消息。
+    var onRunShellCommand: ((String) -> Void)? = nil
+    /// 点「送进终端」：打开侧边终端面板并把命令送过去执行。
+    var onSendShellCommandToTerminal: ((String) -> Void)? = nil
     /// Imperative "scroll to this user message" trigger from the left-edge
     /// user-input minimap. The token debounces so the same target can be
     /// re-selected: bump the token to fire again with the same id.
@@ -87,6 +94,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         view.onResumeHandoff = onResumeHandoff
         view.onStartHandoffInNewSession = onStartHandoffInNewSession
         view.onSearchResultCountChange = onSearchResultCountChange
+        view.onRunShellCommand = onRunShellCommand
+        view.onSendShellCommandToTerminal = onSendShellCommandToTerminal
         configure(view)
         view.applyMessages(
             messages,
@@ -97,7 +106,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
             fontID: fontID,
             lineHeightMultiple: lineHeightMultiple,
             progressPlan: progressPlan,
-            latestTurnReportToolCount: latestTurnReportToolCount
+            latestTurnReportToolCount: latestTurnReportToolCount,
+            allowsLocalCommandButtons: allowsLocalCommandButtons
         )
         view.applySearch(
             query: searchQuery,
@@ -119,6 +129,8 @@ struct AgentChatHistoryTextView: NSViewRepresentable {
         nsView.onResumeHandoff = onResumeHandoff
         nsView.onStartHandoffInNewSession = onStartHandoffInNewSession
         nsView.onSearchResultCountChange = onSearchResultCountChange
+        nsView.onRunShellCommand = onRunShellCommand
+        nsView.onSendShellCommandToTerminal = onSendShellCommandToTerminal
         nsView.applyMessages(
             messages,
             isDark: colorScheme == .dark,
@@ -187,6 +199,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
     private var currentLineHeightMultiple = AgentSettingsStore.chatLineHeightMultipleDefault
     private var currentProgressPlan: AgentPlan?
     private var currentLatestTurnReportToolCount: Int? = nil
+    private var currentAllowsLocalCommandButtons = true
     private var currentLayoutWidth = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth
     private var currentBaseAttributedString = NSAttributedString()
     private var currentSearchQuery = ""
@@ -235,6 +248,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
     var onResumeHandoff: (() -> Void)?
     var onStartHandoffInNewSession: ((String) -> Void)?
     var onSearchResultCountChange: ((Int) -> Void)?
+    var onRunShellCommand: ((String) -> Void)?
+    var onSendShellCommandToTerminal: ((String) -> Void)?
 
     init() {
         let textStorage = NSTextStorage()
@@ -481,7 +496,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         fontID: String = AgentSettingsStore.chatFontIDDefault,
         lineHeightMultiple: CGFloat = AgentSettingsStore.chatLineHeightMultipleDefault,
         progressPlan: AgentPlan? = nil,
-        latestTurnReportToolCount: Int? = nil
+        latestTurnReportToolCount: Int? = nil,
+        allowsLocalCommandButtons: Bool = true
     ) {
         let turnContextMessages = assistantTurnContextMessages ?? messages
         let fp = Self.inputFingerprint(
@@ -493,7 +509,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             fontID: fontID,
             lineHeightMultiple: lineHeightMultiple,
             progressPlan: progressPlan,
-            latestTurnReportToolCount: latestTurnReportToolCount
+            latestTurnReportToolCount: latestTurnReportToolCount,
+            allowsLocalCommandButtons: allowsLocalCommandButtons
         )
         if fp == lastInputFingerprint {
             return
@@ -509,6 +526,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         currentLineHeightMultiple = lineHeightMultiple
         currentProgressPlan = progressPlan
         currentLatestTurnReportToolCount = latestTurnReportToolCount
+        currentAllowsLocalCommandButtons = allowsLocalCommandButtons
         renderCurrentMessages()
     }
 
@@ -528,7 +546,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
         fontID: String,
         lineHeightMultiple: CGFloat,
         progressPlan: AgentPlan?,
-        latestTurnReportToolCount: Int?
+        latestTurnReportToolCount: Int?,
+        allowsLocalCommandButtons: Bool
     ) -> Int {
         var hasher = Hasher()
         hasher.combine(isDark)
@@ -538,6 +557,7 @@ final class AgentChatHistoryNSTextView: NSTextView {
         hasher.combine(messages.count)
         hasher.combine(isAssistantTurnActive)
         hasher.combine(latestTurnReportToolCount ?? -1)
+        hasher.combine(allowsLocalCommandButtons)
         if let progressPlan {
             hasher.combine(progressPlan.status.rawValue)
             hasher.combine(progressPlan.steps.count)
@@ -628,7 +648,8 @@ final class AgentChatHistoryNSTextView: NSTextView {
             lineHeightMultiple: currentLineHeightMultiple,
             layoutWidth: currentLayoutWidth,
             progressPlan: currentProgressPlan,
-            latestTurnReportToolCount: currentLatestTurnReportToolCount
+            latestTurnReportToolCount: currentLatestTurnReportToolCount,
+            allowsLocalCommandButtons: currentAllowsLocalCommandButtons
         )
         var hasher = Hasher()
         hasher.combine(attr.string)
@@ -885,6 +906,28 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
             return isInternalActionLink(link)
         }
 
+        // 「运行」与「送进终端」排在复制左边,先认这两个:它们和复制共处
+        // 一行,谁先判都行,但放前面读起来跟渲染顺序一致。命令原文挂在
+        // 属性上,再判一次是否够格由 AppState 那边做——按钮上的载荷不是
+        // 唯一把关点。
+        if let command = textStorage.attribute(
+            .agentChatHistoryRunCommandText,
+            at: charIndex,
+            effectiveRange: nil
+        ) as? String {
+            onRunShellCommand?(command)
+            return true
+        }
+
+        if let command = textStorage.attribute(
+            .agentChatHistoryTerminalCommandText,
+            at: charIndex,
+            effectiveRange: nil
+        ) as? String {
+            onSendShellCommandToTerminal?(command)
+            return true
+        }
+
         var codeButtonRange = NSRange(location: 0, length: 0)
         if let code = textStorage.attribute(
             .agentChatHistoryCodeCopyText,
@@ -1052,6 +1095,8 @@ extension AgentChatHistoryNSTextView: NSTextViewDelegate {
         guard let value else { return false }
         return [
             AgentChatHistoryCodeCopyChrome.linkValue,
+            AgentChatHistoryCodeRunChrome.runLinkValue,
+            AgentChatHistoryCodeRunChrome.terminalLinkValue,
             AgentChatHistoryFooterChrome.copyLinkValue,
             AgentChatHistoryFooterChrome.retryLinkValue,
             AgentChatHistoryFooterChrome.reportLinkValue,
