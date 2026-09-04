@@ -16,10 +16,15 @@ h1 { font-size: 24px; }
 .composer input[type="text"] { font-size: var(--willdeep-body-font-size, 15px); }
 .composer .hint:empty { display: none; }
 .filters { gap: 10px; margin-bottom: 12px; }
-.filters .chip, .filters select, .filters summary { font-size: 14px; padding: 7px 11px; }
+/* 筛选行的控件必须同高同字号：select 此前靠 min-height:36 撑，标签按钮只有
+   padding，两者差几个像素，一行摆开就是台阶。字号也别钉死 px，跟着宿主正文走。 */
+.filters .chip, .filters select, .filters summary, .filters .filter-select {
+  font-size: 1em; padding: 0 11px; min-height: 34px; display: inline-flex;
+  align-items: center; box-sizing: border-box;
+}
 .filter-select, .detail-control, .tag-search, .query-input {
   border: 1px solid var(--border); border-radius: 8px; background: var(--page);
-  padding: 8px 10px; font: inherit; color: var(--fg); min-height: 36px;
+  padding: 8px 10px; font: inherit; color: var(--fg); min-height: 34px;
 }
 .filter-select { max-width: 220px; }
 .filter-count { color: var(--muted); font-size: 13px; margin: 20px 0 22px; }
@@ -128,3 +133,10 @@ li.item.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acce
   .toolbar { gap: 5px; }
   .no-deadline { flex-wrap: wrap; }
 }
+
+
+/* 标签直接铺在筛选行里，而不是全都藏在一个要点开的 details 后面。
+   常用的几个一眼可见、可直接点；剩下的仍然收在「更多」里带搜索。 */
+.tag-inline { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tag-inline .chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.tag-inline .chip .n { color: var(--muted); margin-left: 5px; font-variant-numeric: tabular-nums; }
