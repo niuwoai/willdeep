@@ -64,7 +64,6 @@ struct AgentPluginLocalStoragePersistenceTests {
     func localStorageSurvivesANewWebViewOnTheSameStore() async throws {
         guard #available(macOS 14.0, *) else { return } // 13.x 上仍是 nonPersistent，见实现注释
         let pluginID = "test.persistence.\(UUID().uuidString.prefix(8))"
-        defer { AgentPluginWebsiteDataStore.remove(for: pluginID) }
 
         let writer = makeWebView(pluginID: pluginID)
         let written = try await evaluate(
@@ -77,6 +76,10 @@ struct AgentPluginLocalStoragePersistenceTests {
         let reader = makeWebView(pluginID: pluginID)
         let readBack = try await evaluate("localStorage.getItem('probe') || 'MISSING';", in: reader)
         #expect(readBack == "kept")
+
+        // 用 await 收尾而不是 defer：WebKit 的删除回调要跳回主 RunLoop，
+        // 用例结束后才回来的话就会崩在 WTF::RunLoop::dispatch 上。
+        await AgentPluginWebsiteDataStore.remove(for: pluginID)
     }
 
     @Test
@@ -84,10 +87,6 @@ struct AgentPluginLocalStoragePersistenceTests {
         guard #available(macOS 14.0, *) else { return }
         let first = "test.isolation.a.\(UUID().uuidString.prefix(8))"
         let second = "test.isolation.b.\(UUID().uuidString.prefix(8))"
-        defer {
-            AgentPluginWebsiteDataStore.remove(for: first)
-            AgentPluginWebsiteDataStore.remove(for: second)
-        }
 
         _ = try await evaluate(
             "localStorage.setItem('secret', 'a-only'); localStorage.getItem('secret');",
@@ -99,5 +98,8 @@ struct AgentPluginLocalStoragePersistenceTests {
             in: makeWebView(pluginID: second)
         )
         #expect(leaked == "MISSING")
+
+        await AgentPluginWebsiteDataStore.remove(for: first)
+        await AgentPluginWebsiteDataStore.remove(for: second)
     }
 }
