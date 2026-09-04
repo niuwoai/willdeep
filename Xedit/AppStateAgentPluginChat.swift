@@ -21,7 +21,11 @@ extension AppState {
     /// 真有大段材料应该写进文件再让 Agent 去读。
     static let pluginChatMaximumLength = 8_000
 
-    /// 把文本填进当前会话的输入框，不发送。
+    /// 把文本填进当前会话的输入框，并切到聊天界面，但不发送。
+    ///
+    /// 必须跟着切过去：插件页是自己占满主区的一张页面，只把字填进输入框而
+    /// 人还停在插件页上，用户看到的就是「点了没反应」。发送与否仍留给用户，
+    /// 他多半还要再补一句上下文。
     @discardableResult
     func pluginPrefillAgentInput(_ text: String, pluginID: AgentPluginID) throws -> Bool {
         let trimmed = try validatedPluginChatText(text, pluginID: pluginID)
@@ -29,6 +33,7 @@ extension AppState {
             return false
         }
         runtime.input = trimmed
+        agentPrimaryDestination = .conversation
         return true
     }
 
@@ -40,6 +45,7 @@ extension AppState {
             return false
         }
         runtime.input = trimmed
+        agentPrimaryDestination = .conversation
         sendAgentMessage()
         return true
     }

@@ -95,6 +95,7 @@
     },
     "settings": []
   },
-  "permissions": ["process.execute", "workspace.read", "ai.chat", "providers.read"],
+  "permissions": ["process.execute", "workspace.read",
+    "conversation.write", "ai.chat", "providers.read"],
   "dependencies": {"mcpServers": ["todo"], "skills": []}
 }
