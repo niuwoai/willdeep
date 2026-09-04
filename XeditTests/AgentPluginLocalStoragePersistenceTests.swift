@@ -12,6 +12,14 @@
 //  跨插件那一半同样重要：所有插件页面共用同一个源，分仓是它们之间**唯一**
 //  的隔离，这条要是破了，持久化就是把一个漏洞打开。
 //
+//  这里**不删**用完的数据仓，是踩过两次才定下来的：
+//  `WKWebsiteDataStore.remove(forIdentifier:)` 在自己的 IO 队列上收尾，
+//  而本用例创建的 WKWebView 仍持有那个仓，WebKit 拆仓后回调那一跳会解到
+//  已经没了的 RunLoop，整个测试进程 SIGSEGV 在 `WTF::RunLoop::dispatch`。
+//  症状很有迷惑性：报出来的失败用例是崩溃时恰好在跑的那个，跟本文件无关。
+//  改成 await 等回调也没用——崩的是 WebKit 自己的工作项。
+//  代价只是每跑一轮在磁盘上留两个几 KB 的测试仓，标识符带 `test.` 前缀。
+//
 
 import Foundation
 import Testing
@@ -77,9 +85,6 @@ struct AgentPluginLocalStoragePersistenceTests {
         let readBack = try await evaluate("localStorage.getItem('probe') || 'MISSING';", in: reader)
         #expect(readBack == "kept")
 
-        // 用 await 收尾而不是 defer：WebKit 的删除回调要跳回主 RunLoop，
-        // 用例结束后才回来的话就会崩在 WTF::RunLoop::dispatch 上。
-        await AgentPluginWebsiteDataStore.remove(for: pluginID)
     }
 
     @Test
@@ -98,8 +103,5 @@ struct AgentPluginLocalStoragePersistenceTests {
             in: makeWebView(pluginID: second)
         )
         #expect(leaked == "MISSING")
-
-        await AgentPluginWebsiteDataStore.remove(for: first)
-        await AgentPluginWebsiteDataStore.remove(for: second)
     }
 }
