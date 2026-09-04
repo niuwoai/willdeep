@@ -228,7 +228,7 @@ nonisolated enum AgentPluginInstaller {
         let removedPluginID = pluginID
         AgentPluginCommandApprovalStore.forget(pluginID: removedPluginID)
         Task { @MainActor in
-            AgentPluginWebsiteDataStore.remove(for: removedPluginID)
+            await AgentPluginWebsiteDataStore.remove(for: removedPluginID)
         }
     }
 

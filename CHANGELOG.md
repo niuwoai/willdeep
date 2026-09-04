@@ -3,6 +3,12 @@
 > 当前文件保留最新版本（1.321.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.329.0-rc3 - 2026-09-04
+
+### Fixed
+
+- 卸载插件后清理它的 WebKit 数据仓会崩掉进程。`WKWebsiteDataStore.remove(forIdentifier:)` 把删除放在自己的 IO 队列上做，做完再跳回主 RunLoop 调回调；上一版是发射后不管，调用方（App 退出、测试进程收尾）可能已经把主 RunLoop 拆了，那一跳就解空指针崩在 `WTF::RunLoop::dispatch`。改成 async 并等到回调返回，调用方自己决定在哪儿等。本地测试进程就是被这个崩掉的，症状是随机某个用例报 `Crash: WillDeep at <external symbol>`，与那个用例本身无关。
+
 ## 1.329.0-rc2 - 2026-09-04
 
 ### Fixed
