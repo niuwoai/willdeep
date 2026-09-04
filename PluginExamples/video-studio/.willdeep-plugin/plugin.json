@@ -118,6 +118,14 @@
     },
     "settings": [
       {
+        "id": "videoProvider",
+        "type": "enum",
+        "titleKey": "setting.videoProvider",
+        "descriptionKey": "setting.videoProvider.description",
+        "options": ["tsingfly", "openai", "custom"],
+        "defaultValue": "tsingfly"
+      },
+      {
         "id": "videoApiBase",
         "type": "string",
         "titleKey": "setting.videoApiBase",

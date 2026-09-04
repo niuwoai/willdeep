@@ -1148,6 +1148,19 @@ struct AgentPluginSystemTests {
         #expect(manifest.dependencies.mcpServers == ["video-studio"])
         #expect(manifest.dependencies.skills == ["video-studio"])
 
+        // 服务商是插件级设置：枚举三选一，默认青蜂；API Base 只在选
+        // custom 时才生效，密钥仍是 secret 类型（进钥匙串，不落配置）。
+        let provider = try #require(
+            manifest.contributes.settings.first { $0.id == "videoProvider" }
+        )
+        #expect(provider.type == .enumeration)
+        #expect(provider.options == ["tsingfly", "openai", "custom"])
+        #expect(provider.defaultValue == "tsingfly")
+        let apiKey = try #require(
+            manifest.contributes.settings.first { $0.id == "videoApiKey" }
+        )
+        #expect(apiKey.type == .secret)
+
         let selection = manifest.contributes.menus[AgentPluginMenuLocation.chatSelection] ?? []
         #expect(selection == ["video.createDraft"])
         let createDraft = try #require(

@@ -24,9 +24,14 @@
   "command.pickReference": "Choose reference image",
   "command.revealOutput": "Reveal generated video",
   "setting.videoApiBase": "Video API base URL",
-  "setting.videoApiBase.description": "Defaults to the Tsingfly Hub gateway. HTTPS is required except for local development.",
+  "setting.videoApiBase.description": "Defaults to the Tsingfly Hub gateway. HTTPS is required except for local development. Only used when the provider is set to Custom.",
   "setting.videoApiKey": "Video API key",
   "setting.videoApiKey.description": "Stored in macOS Keychain and passed only to the local Video Studio MCP process.",
   "setting.outputDirectory": "Video output directory",
-  "setting.outputDirectory.description": "Completed MP4 files are downloaded here. A leading tilde is supported."
+  "setting.outputDirectory.description": "Completed MP4 files are downloaded here. A leading tilde is supported.",
+  "setting.videoProvider": "Video provider",
+  "setting.videoProvider.description": "Which video service to call. Pick Custom to use the API Base field below. tsingfly = hub.tsingfly.com, openai = api.openai.com.",
+  "tsingfly": "Tsingfly Hub (hub.tsingfly.com)",
+  "openai": "OpenAI (api.openai.com)",
+  "custom": "Custom (use the API base below)"
 }
