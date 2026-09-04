@@ -52,7 +52,10 @@ enum AgentStatsDashboardTypography {
     static let compactBadge: CGFloat = body
 }
 
-enum AgentStatsDashboardLayout {
+/// 纯布局常量与算式，不碰任何 UI 状态。标成 nonisolated 是因为
+/// `AgentUsageDashboardModel.empty` 要用 `maximumHeatmapWeeks`，而它在
+/// 主线程之外构造——本模块默认 MainActor 隔离，不标就够不着。
+nonisolated enum AgentStatsDashboardLayout {
     static let panelPadding: CGFloat = 0
     /// 单栏页面的内容宽度。行宽再大，一行中文就长得不好读了。
     static let defaultMaxWidth: CGFloat = 568

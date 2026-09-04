@@ -885,6 +885,14 @@ nonisolated enum AgentSessionStore {
         return decoder
     }()
 
+    /// A decoder configured exactly like the shared one, for callers that
+    /// run in parallel and must not share it.
+    private static func makeUsageCoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+
     private static func loadOrRebuildCatalogEntry(for sourceURL: URL) -> CatalogEntry? {
         if let id = UUID(uuidString: sourceURL.deletingPathExtension().lastPathComponent),
            let signature = sourceSignature(for: sourceURL),
@@ -951,6 +959,11 @@ nonisolated enum AgentSessionStore {
     }
 
     private static func loadOrRebuildUsageSnapshot(for sourceURL: URL) -> AgentUsageSessionSnapshot? {
+        // Own coders, not the shared statics: this runs concurrently from
+        // `loadUsageSnapshotsConcurrently()` and `JSONDecoder` promises
+        // nothing about concurrent use. One allocation per file is nothing
+        // next to decoding a 70 KB document.
+        let decoder = makeUsageCoder()
         if let id = UUID(uuidString: sourceURL.deletingPathExtension().lastPathComponent),
            let signature = sourceSignature(for: sourceURL),
            let data = try? Data(contentsOf: usageCatalogURL(for: id)),
@@ -970,7 +983,7 @@ nonisolated enum AgentSessionStore {
         coordinatedRead(at: sourceURL) { readURL in
             do {
                 let data = try Data(contentsOf: readURL)
-                let snapshot = try decodeUsageSnapshot(from: data)
+                let snapshot = try decoder.decode(UsageSessionIndex.self, from: data).snapshot
                 guard let signature = sourceSignature(for: readURL) else { return }
                 rebuilt = UsageCatalogEntry(snapshot: snapshot, sourceSignature: signature)
             } catch {
@@ -1006,6 +1019,12 @@ nonisolated enum AgentSessionStore {
     private static func writeUsageCatalogEntryBestEffort(_ entry: UsageCatalogEntry) {
         do {
             try ensureUsageCatalogDirectory()
+            // Local encoder for the same reason the read path uses a local
+            // decoder: the concurrent scan reaches here whenever a sidecar
+            // is stale and has to be rebuilt.
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(entry)
             try coordinatedWrite(data, to: usageCatalogURL(for: entry.snapshot.id))
         } catch {
@@ -1167,6 +1186,55 @@ nonisolated enum AgentSessionStore {
             snapshots.append(snapshot)
         }
         return snapshots.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    /// Same scan, spread across cores.
+    ///
+    /// The sidecars are independent files with no ordering between them, but
+    /// this used to walk them one at a time: on a year-old install that is
+    /// 299 files and 21 MB of JSON, and the stats panel sat empty for about
+    /// a second on first open waiting for it. Decoding is the whole cost —
+    /// the reads are page-cache hits after the first — so it parallelizes
+    /// almost linearly.
+    ///
+    /// Each child task builds its own coders. `JSONDecoder` makes no
+    /// concurrency promise, and the shared static instances are used by the
+    /// serial paths elsewhere in this file.
+    static func loadUsageSnapshotsConcurrently() async -> [AgentUsageSessionSnapshot] {
+        importLegacySessionsIfNeeded()
+
+        let dir = directory
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else {
+            return []
+        }
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+        let urls = entries.filter { $0.pathExtension == "json" }
+
+        var snapshots = await withTaskGroup(
+            of: AgentUsageSessionSnapshot?.self,
+            returning: [AgentUsageSessionSnapshot].self
+        ) { group in
+            for url in urls {
+                group.addTask { loadOrRebuildUsageSnapshot(for: url) }
+            }
+            var collected: [AgentUsageSessionSnapshot] = []
+            collected.reserveCapacity(urls.count)
+            for await snapshot in group {
+                if let snapshot { collected.append(snapshot) }
+            }
+            return collected
+        }
+        // The task group yields in completion order, so the sort is what
+        // makes the result deterministic, not an optimization.
+        snapshots.sort { $0.updatedAt > $1.updatedAt }
+        return snapshots
     }
 
     /// Shared decode seam for the lazy dashboard scan and its regression
