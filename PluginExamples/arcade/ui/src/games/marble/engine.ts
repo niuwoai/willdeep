@@ -19,7 +19,7 @@ export interface Vec {
 }
 
 /** 关卡轨迹：每关轮换，洞口就是对应轨迹的终点，不要求位于场地中央。 */
-export type MarbleTrackId = 'spiral' | 'wave' | 'switchback';
+export type MarbleTrackId = 'spiral' | 'valley' | 'switchback';
 
 /**
  * 弹珠道具（只长在链条上的珠子身上，发射出去的弹珠永远没有道具）：
@@ -88,7 +88,7 @@ export interface MarbleLevel {
 
 export const LEVELS: readonly MarbleLevel[] = [
   { id: 'easy', colors: 4, supply: 40, opening: 12, speed: 3.2, bombs: 3, reverses: 2, track: 'spiral' },
-  { id: 'medium', colors: 5, supply: 55, opening: 16, speed: 4.4, bombs: 4, reverses: 3, track: 'wave' },
+  { id: 'medium', colors: 5, supply: 55, opening: 16, speed: 4.4, bombs: 4, reverses: 3, track: 'valley' },
   { id: 'hard', colors: 6, supply: 70, opening: 20, speed: 5.6, bombs: 6, reverses: 4, track: 'switchback' },
 ];
 
@@ -137,6 +137,13 @@ export const BOMB_RADIUS = SPACING * 3.2;
 export const REVERSE_DISTANCE = SPACING * 10;
 /** 断口合拢又凑成三连时的回退距离（比闪光珠温和些，但足够看出「被顶回去了」）。 */
 export const CHAIN_PULLBACK = SPACING * 6;
+/**
+ * 危险区：队首弹珠离洞口不足这个距离，整条链立刻进入冲刺。
+ * 约 4 个身位——够玩家看清「要掉了」，又来不及慢慢磨。
+ */
+export const DANGER_DISTANCE = SPACING * 4;
+/** 危险冲刺倍率：进危险区就是这个速度，没有渐进过渡，要的就是那一下惊。 */
+export const DANGER_SPEED = 3.2;
 /** 特效停留时长（秒），渲染层按它换算扩散进度。 */
 export const EFFECT_SECONDS = 0.45;
 /** 开局弹簧入场：整条链在这段时间里被「甩」上轨道，中途会过冲再回弹。 */
@@ -195,6 +202,8 @@ export interface MarbleState {
   pullbackSpeed: number;
   /** 落洞阶段已经过去的时间（秒）。 */
   falling: number;
+  /** 队首弹珠已经进危险区：链条正在冲刺，渲染层据此加急洞口金环并报警。 */
+  danger: boolean;
   /** 断口合拢连锁消除的累计次数：组件据此放庆祝特效。 */
   chains: number;
   /** 已推进的时间（秒），用于特效寿命与道具闪烁节拍。 */
@@ -209,7 +218,7 @@ interface Track {
   length: number;
 }
 
-const TRACK_ORDER: readonly MarbleTrackId[] = ['spiral', 'wave', 'switchback'];
+const TRACK_ORDER: readonly MarbleTrackId[] = ['spiral', 'valley', 'switchback'];
 
 const TRACK_TURNS = 2.6;
 const TRACK_OUTER = 45;
@@ -242,14 +251,40 @@ function buildSpiralTrack(): Track {
   return finishTrack(points);
 }
 
-/** 横向波浪：入口在左上，洞口落在右上，中央发射器不再与洞口重合。 */
-function buildWaveTrack(): Track {
+/**
+ * V 形谷道的四角与谷底圆角系数。
+ * 两端不顶到场地边上：洞口外的呼吸金环要留得下（见 index.tsx 的 RING_BASE）。
+ */
+const VALLEY_LEFT = 10;
+const VALLEY_RIGHT = 90;
+const VALLEY_TOP = 10;
+const VALLEY_BOTTOM = 92;
+/**
+ * 谷底圆角系数：0 就是尖角 V，越大折角越圆。
+ * 0.75 对应约 8.5 个世界单位的转弯半径（比珠子直径还大），弹珠过谷底不会被硬掰方向。
+ */
+const VALLEY_ROUND = 0.75;
+
+/**
+ * V 形谷道：入口在左上，一路斜下到谷底，再斜上到右上的洞口。
+ *
+ * 谷底不是尖角——用 sqrt(u² + r²) 把绝对值函数磨圆，
+ * 两条边基本是直线，只有谷底那一小段是大半径的圆弧。
+ * 旧的双周期正弦波（"W"）折角曲率半径只有 1.4 个世界单位，比弹珠还小，
+ * 珠子到那儿等于原地掉头，瞄准全靠猜；这里放大到约 8，过弯是顺的。
+ */
+function buildValleyTrack(): Track {
+  const smoothAbs = (u: number): number => Math.hypot(u, VALLEY_ROUND) - VALLEY_ROUND;
+  const norm = smoothAbs(1);
   const points: Vec[] = [];
   for (let i = 0; i <= TRACK_STEPS; i += 1) {
     const t = i / TRACK_STEPS;
+    // u ∈ [-1, 1]：-1 是左上入口，0 是谷底，1 是右上洞口
+    const u = t * 2 - 1;
+    const depth = 1 - smoothAbs(u) / norm;
     points.push({
-      x: 7 + t * 86,
-      y: 50 + Math.sin(-Math.PI / 2 + t * Math.PI * 4) * 34,
+      x: VALLEY_LEFT + t * (VALLEY_RIGHT - VALLEY_LEFT),
+      y: VALLEY_TOP + depth * (VALLEY_BOTTOM - VALLEY_TOP),
     });
   }
   return finishTrack(points);
@@ -303,7 +338,7 @@ function buildSwitchbackTrack(): Track {
 
 const TRACKS: Readonly<Record<MarbleTrackId, Track>> = {
   spiral: buildSpiralTrack(),
-  wave: buildWaveTrack(),
+  valley: buildValleyTrack(),
   switchback: buildSwitchbackTrack(),
 };
 
@@ -440,6 +475,7 @@ export function createInitialState(
     pullback: 0,
     pullbackSpeed: 0,
     falling: 0,
+    danger: false,
     chains: 0,
     time: 0,
     nextId: opening + 1,
@@ -805,11 +841,16 @@ export function step(state: MarbleState, dt: number): MarbleState {
     };
   }
 
+  // 危险冲刺：队首挨到洞口边上就整条链提速，玩家还没反应过来珠子已经在往里冲了
+  const leading = state.balls[0];
+  const danger = leading !== undefined && leading.dist >= currentPathLength - DANGER_DISTANCE;
+  const chainSpeed = danger ? config.speed * DANGER_SPEED : config.speed;
+
   // 入场弹簧：整体位移（含过冲回弹），不改变彼此间距，插珠也不受影响
   const entry = state.entry + dt;
   const shift = entryShift(state.entry, entry, state.entryTarget);
   const entering = shift === 0 ? state.balls : state.balls.map((ball) => ({ ...ball, dist: ball.dist + shift }));
-  const advanced = advance(entering, dt, config.speed);
+  const advanced = advance(entering, dt, chainSpeed);
   let balls = advanced.balls;
   let score = state.score;
   let combo = state.combo;
@@ -894,6 +935,7 @@ export function step(state: MarbleState, dt: number): MarbleState {
     entry,
     pullback,
     pullbackSpeed,
+    danger,
     chains,
     time,
     nextId,

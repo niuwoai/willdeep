@@ -40,6 +40,7 @@ export type CueName =
   | 'shoot'
   | 'blast'
   | 'reverse'
+  | 'alarm'
   | 'eat'
   | 'rotate'
   | 'lock'
@@ -75,6 +76,11 @@ const CUES: Record<CueName, readonly Tone[]> = {
     { freq: 320, duration: 0.16, sweepTo: 90, type: 'square', gain: 0.12 },
   ],
   reverse: [{ freq: 880, duration: 0.3, sweepTo: 300, type: 'sine', gain: 0.16 }],
+  // 弹珠冲到洞口边上：两声急促下滑的警报
+  alarm: [
+    { freq: 920, duration: 0.13, sweepTo: 520, type: 'square', gain: 0.17 },
+    { freq: 920, duration: 0.18, delay: 0.15, sweepTo: 400, type: 'square', gain: 0.17 },
+  ],
   // 贪吃蛇 / 俄罗斯方块 / 乒乓 / 扫雷
   eat: [{ freq: 720, duration: 0.07, sweepTo: 980, type: 'square', gain: 0.12 }],
   rotate: [{ freq: 420, duration: 0.05, type: 'square', gain: 0.08 }],

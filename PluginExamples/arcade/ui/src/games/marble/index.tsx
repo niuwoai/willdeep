@@ -184,6 +184,72 @@ function drawMarble(
   context.fill();
 }
 
+/** 洞口金环：平时的呼吸节拍与幅度（弧度/秒、相对洞口半径）。 */
+const RING_CALM_RATE = 2.1;
+const RING_CALM_SWELL = 0.14;
+/** 危险冲刺时：呼吸更急、张得更大。 */
+const RING_DANGER_RATE = 9.5;
+const RING_DANGER_SWELL = 0.24;
+/** 金环基准半径（相对洞口半径）：涨到最大也要留在场地里，轨迹端点据此收边。 */
+const RING_BASE = 1.52;
+
+/** 洞口金环这一刻的呼吸相位（0 → 1）。 */
+function ringBreath(time: number, danger: boolean): number {
+  return 0.5 + 0.5 * Math.sin(time * (danger ? RING_DANGER_RATE : RING_CALM_RATE));
+}
+
+/**
+ * 洞口金环这一刻的半径：纯函数，单测据此核对呼吸幅度与「涨到最大也不出界」。
+ * radius 传洞口半径，返回值是金环半径。
+ */
+export function holeRingRadius(radius: number, time: number, danger: boolean): number {
+  const swell = danger ? RING_DANGER_SWELL : RING_CALM_SWELL;
+  return radius * (RING_BASE + swell * ringBreath(time, danger));
+}
+
+/** 金环涨到最大时的半径（危险冲刺那一档），轨迹端点要按它留边。 */
+export const HOLE_RING_MAX = RING_BASE + RING_DANGER_SWELL;
+
+/**
+ * 洞口外的金环：半径随时间一涨一缩地呼吸，像洞口在喘气。
+ * 队首弹珠冲进危险区时呼吸骤然加快、张得更大，配合警报音提示「要掉了」。
+ */
+function drawHoleRing(
+  context: CanvasRenderingContext2D,
+  center: Vec,
+  radius: number,
+  time: number,
+  danger: boolean,
+): void {
+  const breath = ringBreath(time, danger);
+  const ring = holeRingRadius(radius, time, danger);
+
+  // 外圈晕光：跟着一起胀缩，让金环看起来在发热而不是一条硬线
+  const halo = context.createRadialGradient(center.x, center.y, ring * 0.72, center.x, center.y, ring * 1.32);
+  halo.addColorStop(0, 'rgba(255, 214, 118, 0)');
+  halo.addColorStop(0.55, `rgba(255, 214, 118, ${(danger ? 0.34 : 0.2) * (0.45 + 0.55 * breath)})`);
+  halo.addColorStop(1, 'rgba(255, 214, 118, 0)');
+  context.beginPath();
+  context.arc(center.x, center.y, ring * 1.32, 0, Math.PI * 2);
+  context.fillStyle = halo;
+  context.fill();
+
+  const gold = context.createLinearGradient(
+    center.x - ring,
+    center.y - ring,
+    center.x + ring,
+    center.y + ring,
+  );
+  gold.addColorStop(0, '#fff2c4');
+  gold.addColorStop(0.45, '#e8b84a');
+  gold.addColorStop(1, '#8a5d16');
+  context.beginPath();
+  context.arc(center.x, center.y, ring, 0, Math.PI * 2);
+  context.lineWidth = radius * (danger ? 0.3 : 0.2) * (0.8 + 0.4 * breath);
+  context.strokeStyle = gold;
+  context.stroke();
+}
+
 /** 洞口的黄金浮雕骷髅：一眼就知道珠子滚到这儿就结束了。 */
 function drawSkull(context: CanvasRenderingContext2D, center: Vec, radius: number): void {
   const gold = context.createLinearGradient(
@@ -283,6 +349,7 @@ function draw(
 
   // 洞口：黄金浮雕骷髅，珠子滚到这儿就是终局
   const hole = pointAt(currentPathLength, track);
+  drawHoleRing(context, hole, BALL_RADIUS * 1.75, state.time, state.danger);
   drawSkull(context, hole, BALL_RADIUS * 1.75);
 
   // 链条（带道具的珠子额外画标记：炸弹是深色芯 + 引信，闪光是脉动白环 + 回退箭头）
@@ -430,6 +497,8 @@ export default function MarbleGame({ seed, onWin, onStage }: GameProps) {
   const scoredRef = useRef(false);
   const effectsRef = useRef(0);
   const chainsRef = useRef(0);
+  // 危险冲刺的上一帧状态：只在「刚进危险区」那一下报警，不是每帧都叫
+  const dangerRef = useRef(false);
   const [hud, setHud] = useState<Hud>(() => toHud(stateRef.current));
   // 主循环只建一次，回调用 ref 取最新的，避免把循环重挂
   const onWinRef = useRef(onWin);
@@ -448,6 +517,7 @@ export default function MarbleGame({ seed, onWin, onStage }: GameProps) {
       scoredRef.current = false;
       effectsRef.current = 0;
       chainsRef.current = 0;
+      dangerRef.current = false;
       setHud(toHud(stateRef.current));
     },
     [baseSeed],
@@ -497,6 +567,10 @@ export default function MarbleGame({ seed, onWin, onStage }: GameProps) {
         if (fresh.some((effect) => effect.kind === 'reverse')) playCue('reverse');
       }
       effectsRef.current = next.effects.length;
+
+      // 队首弹珠冲进危险区：报一次警，链条同时提速（见引擎 DANGER_SPEED）
+      if (next.danger && !dangerRef.current) playCue('alarm');
+      dangerRef.current = next.danger;
 
       // 断口撞在一起又消掉：庆祝一下（音效 + 外壳撒花）
       if (next.chains > chainsRef.current) {
@@ -605,6 +679,7 @@ export default function MarbleGame({ seed, onWin, onStage }: GameProps) {
           scoredRef.current = false;
           effectsRef.current = 0;
           chainsRef.current = 0;
+          dangerRef.current = false;
           playCue('select');
           setHud(toHud(stateRef.current));
         }}>
