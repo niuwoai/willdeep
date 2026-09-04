@@ -6,6 +6,23 @@
 import Foundation
 
 extension L10n {
+    enum PluginCommandConfirm {
+        /// %@ 是插件展示名。
+        static func title(_ pluginName: String) -> String {
+            String(
+                format: String(
+                    localized: "plugins.command-confirm.title",
+                    defaultValue: "Let %@ run this command?"
+                ),
+                pluginName
+            )
+        }
+        static let run = String(localized: "plugins.command-confirm.run", defaultValue: "Run")
+        static let cancel = String(localized: "plugins.command-confirm.cancel", defaultValue: "Cancel")
+    }
+}
+
+extension L10n {
     nonisolated enum Plugins {
         /// 权限的人话描述。安装确认框按风险分档呈现，这里只负责「这条权限
         /// 让插件能做什么」，不掺杂风险判断。

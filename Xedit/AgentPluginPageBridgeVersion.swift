@@ -19,7 +19,7 @@ import Foundation
 
 nonisolated enum AgentPluginPageBridge {
     /// 桥的语义化版本。加能力升 minor，改既有调用签名升 major。
-    static let version = "2.0.0"
+    static let version = "2.1.0"
 
     /// 页面可用的能力标识。与注入的 `window.willdeep.*` 一一对应。
     static let capabilities: [String] = [
@@ -37,6 +37,11 @@ nonisolated enum AgentPluginPageBridge {
         "events",
         "chat.insert",
         "chat.send",
+        "fs.write",
+        "process.run",
+        "net.fetch",
+        "clipboard.write",
+        "notify",
     ]
 
     /// 直接嵌进注入脚本的 JSON 字面量。

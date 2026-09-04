@@ -3,6 +3,29 @@
 > 当前文件保留最新版本（1.321.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.327.0-rc1 - 2026-09-04
+
+### Added
+
+- 插件页面第二批宿主能力：写工作区文件、跑命令、代发网络请求、写剪贴板、发通知。加上上一版的只读文件、存储、事件与交给 Agent，插件想做点新东西基本不用再等宿主升级。
+- **`fs.write`**（要 `workspace.write`）：走 Agent 改文件同一条路，路径守卫、编辑器同步、改动登记进 Changes 面板全都继承。只能写主工作区根，单次 512 KiB 封顶。
+- **`process.run`**（要 `process.execute`）：三道门。恶意命令名单是硬地板，命中的连确认框都不弹；只读命令直接跑；其余一律弹确认框，把插件名、完整命令、工作目录摊开。这道确认框**不看审批档位**——完全访问是用户对自己指挥的 Agent 的授权，不是对第三方页面的授权。执行时带与 Agent 同款的沙箱。
+- **`net.fetch`**（要 `network.access` + manifest 新字段 `networkDomains`）：页面自己发不出请求，由宿主代发。只走 https；主机必须命中白名单（`*.example.com` 匹配子域但不匹配裸域名）；回环与内网地址一律拒，哪怕写进了白名单；跳转重新过一遍白名单；`Host` 等头由宿主接管。白名单空着等于发不出去，声明权限不等于随便连。
+- **`clipboard.write` 与 `notify`**：两个权限早就声明了却一直没有对应的页面 API，这次补上。通知抬头自动带插件名，否则用户没法把噪音关到具体插件头上。
+
+### Fixed
+
+- 插件页面的 `localStorage` 刷新一次就空。根因是数据仓用的 `nonPersistent()`，而**不能简单换成持久仓**：所有插件页面共用同一个源 `willdeep-plugin://bundle/`，一持久化，A 插件就能原样读到 B 插件存的东西。改成一个插件一个 `WKWebsiteDataStore(forIdentifier:)`，标识符由插件 ID 稳定哈希得到，同源不同仓。插件卸载时连仓一起删，免得「删了再装」拿到上次的残留状态。macOS 13 没有分仓 API，那里保持 nonPersistent——刷新仍会丢，但绝不会把两个插件的数据混在一起。
+
+### Tests
+
+- 新增 13 项：网络白名单的精确与通配匹配、通配符不覆盖裸域名、空白名单发不出请求、回环与内网识别、非 https 拒绝、越权头被剥、请求体超限；以及数据仓标识符的稳定性与 UUID 形制。
+- 新增两项真跑 WKWebView 的验证：用与线上同款的自定义 scheme 写 `localStorage`，换一个 WebView 用同仓读回来确实还在；另一个插件的仓里读同一个键则读不到。「换持久仓就好了」是关于 WebKit 行为的断言，不实测不能算数。
+
+### Docs
+
+- `page-api.md` 补齐第二批 API 与 `localStorage` 现状说明，`manifest.md` 新增 `networkDomains` 一节并更新权限表，`plugin-schema` 同步该字段。
+
 ## 1.326.0-rc1 - 2026-09-04
 
 ### Added

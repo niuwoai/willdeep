@@ -30,6 +30,12 @@ nonisolated enum AgentPluginCapabilityError: LocalizedError, Equatable {
     case notADirectory(String)
     case invalidArgument(String)
     case storageFull(Int)
+    case payloadTooLarge(Int)
+    case networkSchemeRefused(String)
+    case networkHostRefused(String)
+    case networkHostNotDeclared(String)
+    case commandRefused(String)
+    case commandDeclined
 
     var errorDescription: String? {
         switch self {
@@ -49,6 +55,18 @@ nonisolated enum AgentPluginCapabilityError: LocalizedError, Equatable {
             return "Missing or invalid argument: \(name)"
         case .storageFull(let limit):
             return "Plugin storage is full (limit \(limit) bytes)"
+        case .payloadTooLarge(let limit):
+            return "Payload exceeds \(limit) bytes"
+        case .networkSchemeRefused(let scheme):
+            return "Only https is allowed; got \(scheme)"
+        case .networkHostRefused(let host):
+            return "Loopback and private hosts are never reachable from a plugin page: \(host)"
+        case .networkHostNotDeclared(let host):
+            return "\(host) is not listed in the plugin's networkDomains"
+        case .commandRefused(let reason):
+            return "Command refused: \(reason)"
+        case .commandDeclined:
+            return "The user declined the command"
         }
     }
 }
