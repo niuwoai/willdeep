@@ -880,8 +880,10 @@ struct AgentChatEmptyState: View {
                         .frame(maxWidth: 360)
                 }
             } else {
+                // 宽度由面板自己按当前页决定（单日详情要更宽），这里只给
+                // 一个不让它铺满整个窗口的上限。
                 AgentStatsDashboard()
-                    .frame(maxWidth: 568)
+                    .frame(maxWidth: AgentStatsDashboardLayout.dayDetailMaxWidth)
             }
         }
         .foregroundStyle(.secondary)
