@@ -54,6 +54,11 @@ enum AgentStatsDashboardTypography {
 
 enum AgentStatsDashboardLayout {
     static let panelPadding: CGFloat = 0
+    /// 单栏页面的内容宽度。行宽再大，一行中文就长得不好读了。
+    static let defaultMaxWidth: CGFloat = 568
+    /// 单日详情用的宽度。它是唯一的双栏页，右栏钉死 230，剩给左栏的必须
+    /// 够放下「输入 / 输出 / 缓存」三组数字加一条占比条。
+    static let dayDetailMaxWidth: CGFloat = 760
     static let profileAvatarSize: CGFloat = 80
     static let summaryCornerRadius: CGFloat = 15
     static let metricStripHeight: CGFloat = 61
@@ -185,6 +190,18 @@ struct AgentStatsDashboard: View {
         }
     }
 
+    /// 面板自己决定内容宽度，宿主只给一个上限。
+    ///
+    /// 单日详情是唯一的双栏页：右边成就栏钉死 230，左边模型行要放下
+    /// 「输入 / 输出 / 缓存」三组数字加一条占比条。568 的总宽只剩三百出头
+    /// 给左栏，中文数字挤成两行、缓存命中率被截成「缓存命…」。其余几页都
+    /// 是单栏，568 的行宽读起来正好，不跟着一起变宽。
+    private var contentMaxWidth: CGFloat {
+        selectedTab == .day
+            ? AgentStatsDashboardLayout.dayDetailMaxWidth
+            : AgentStatsDashboardLayout.defaultMaxWidth
+    }
+
     var body: some View {
         Group {
             if appState.hasLoadedAgentUsageSnapshots {
@@ -195,6 +212,7 @@ struct AgentStatsDashboard: View {
                     .frame(maxWidth: .infinity, minHeight: 160)
             }
         }
+        .frame(maxWidth: contentMaxWidth)
         .padding(AgentStatsDashboardLayout.panelPadding)
         .task {
             await appState.loadAgentUsageSnapshotsIfNeeded()

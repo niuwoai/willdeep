@@ -602,6 +602,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     /// automatic routing, hosted relay chains, saved workflows, and history.
     /// Model size is configured by the binding, not encoded as another trade.
     static let publicBuiltIn: [AgentSubagentProfile] = [
+        scout,
         generalist,
         implementer,
         tester,
@@ -621,7 +622,12 @@ nonisolated enum AgentSubagentProfileCatalog {
     static func publicID(for rawID: String) -> String {
         let id = rawID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         switch id {
-        case scoutID, readerID, logInspectorID, gitDetectiveID, deepID, generalistID:
+        // 调查家族全部归到 scout：它们的共同点是只读查证。generalist 单独
+        // 成格——它是兜底工种，能在已声明范围内改文件，与只读的调查不是
+        // 一回事，混在一格里统计面板就看不出「查了多少」和「兜了多少底」。
+        case scoutID, readerID, logInspectorID, gitDetectiveID, deepID:
+            return scoutID
+        case generalistID:
             return generalistID
         case editorID, smallImplementerID, implementerID, testFixerID, buildFixerID:
             return implementerID
