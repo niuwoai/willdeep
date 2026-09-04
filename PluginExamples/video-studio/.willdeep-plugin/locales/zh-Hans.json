@@ -1,0 +1,22 @@
+{
+  "command.download": "下载视频",
+  "destination.studio": "视频工坊",
+  "command.open": "打开视频工坊",
+  "command.refreshPage": "重新载入视频工坊",
+  "command.createDraft": "发送到视频工坊",
+  "command.list": "列出视频任务",
+  "command.generate": "生成视频",
+  "command.refresh": "刷新视频任务",
+  "command.refreshActive": "刷新进行中的视频任务",
+  "command.retry": "重试视频任务",
+  "command.remove": "移除视频任务",
+  "command.settings": "视频工坊偏好设置",
+  "command.pickReference": "选择参考图",
+  "command.revealOutput": "在访达中显示视频",
+  "setting.videoApiBase": "视频 API 地址",
+  "setting.videoApiBase.description": "默认连接 Tsingfly Hub 网关；除本地开发外必须使用 HTTPS。",
+  "setting.videoApiKey": "视频 API Key",
+  "setting.videoApiKey.description": "保存在 macOS Keychain，只会传给本地视频工坊 MCP 进程。",
+  "setting.outputDirectory": "视频输出目录",
+  "setting.outputDirectory.description": "完成后的 MP4 会下载到这里，支持以波浪号开头的路径。"
+}

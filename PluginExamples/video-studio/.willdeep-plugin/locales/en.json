@@ -1,0 +1,22 @@
+{
+  "command.download": "Download video",
+  "destination.studio": "Video Studio",
+  "command.open": "Open Video Studio",
+  "command.refreshPage": "Reload Video Studio",
+  "command.createDraft": "Send to Video Studio",
+  "command.list": "List video jobs",
+  "command.generate": "Generate video",
+  "command.refresh": "Refresh video job",
+  "command.refreshActive": "Refresh active video jobs",
+  "command.retry": "Retry video job",
+  "command.remove": "Remove video job",
+  "command.settings": "Video Studio preferences",
+  "command.pickReference": "Choose reference image",
+  "command.revealOutput": "Reveal generated video",
+  "setting.videoApiBase": "Video API base URL",
+  "setting.videoApiBase.description": "Defaults to the Tsingfly Hub gateway. HTTPS is required except for local development.",
+  "setting.videoApiKey": "Video API key",
+  "setting.videoApiKey.description": "Stored in macOS Keychain and passed only to the local Video Studio MCP process.",
+  "setting.outputDirectory": "Video output directory",
+  "setting.outputDirectory.description": "Completed MP4 files are downloaded here. A leading tilde is supported."
+}

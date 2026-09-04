@@ -1,0 +1,21 @@
+{
+  "name": "willdeep-video-studio",
+  "version": "0.1.0",
+  "description": "Turn ideas and reference frames into locally tracked asynchronous AI video jobs, with an optional WillDeep chat model acting as the creative director.",
+  "author": {
+    "name": "WillDeep Contributors"
+  },
+  "interface": {
+    "displayName": "Video Studio",
+    "shortDescription": "AI 视频工坊：用聊天模型策划镜头，再通过可替换的视频 Provider 异步生成、跟踪并下载视频。",
+    "longDescription": "Use a WillDeep chat provider as the creative director, then submit text-to-video or first-frame image-to-video jobs through a provider-neutral asynchronous workflow. Track progress locally and download completed MP4 files.",
+    "developerName": "WillDeep Contributors",
+    "category": "Creativity",
+    "capabilities": ["AI video generation", "Asynchronous job tracking", "Local media download"],
+    "defaultPrompt": [
+      "把这个创意整理成镜头并生成短视频",
+      "使用一张首帧参考图生成视频",
+      "查看正在生成的视频任务"
+    ]
+  }
+}

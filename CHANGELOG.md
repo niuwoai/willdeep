@@ -1,7 +1,22 @@
 # Changelog
 
-> 当前文件保留最新版本（1.319.0-rc3 至 1.109.0-rc340）。
+> 当前文件保留最新版本（1.320.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
+
+## 1.320.0-rc1 - 2026-09-04
+
+### Added
+
+- 新增可安装的本地 `video-studio` 插件：聊天选区可先进入可编辑草稿；React 工作台支持文生视频、首帧图生视频、任务筛选、活动任务轮询、失败显式重试、成品自动下载和访达定位，并提供中英双语界面。
+- 新增 AI 导演桥接：页面读取 WillDeep 已启用的聊天 Provider 与模型，默认沿用当前 Provider 的 Flash 档，也可固定具体 Provider/模型；聊天凭据始终留在宿主侧，插件只接收模型输出。
+- 新增 Provider 中立的异步视频边界与默认 Tsingfly Hub 适配器：`MiniMax-H3` 通过 multipart `POST /v1/videos` 提交 `t2va` / `fl2va`，再以 `GET /v1/videos/{id}` 轮询；提交结果不明确时禁止自动重发，429 保留 `Retry-After`，完成后以 1 GiB 上限流式下载 MP4。
+- 新增 `video.*` Ruby MCP 工具、视频 Agent Skill、双清单、本地化插件设置与安全边界文档；API Key 使用 secret 设置注入，不写入任务仓库或状态响应。
+
+### Tests
+
+- 新增 Ruby 本地假网关闭环，覆盖文生视频、首帧上传、24 FPS、异步状态、MP4 下载、429、失败重试、参数拒绝、原子持久化与密钥不落盘；前端补充 AI JSON 契约和 i18n 测试，并验证 TypeScript 与 Vite 生产构建。
+- 补齐关闭自动下载后的手动下载、页面内删除/付费重试确认、顺序轮询与 Retry-After 退避、非法创建响应/进程中断后的不明确状态恢复；新增 7 项 React 用户流程测试与仅包含运行文件的安装 ZIP 打包器。
+- 功能版本从 **1.319.0-rc3** 提升为 **1.320.0-rc1**，内部构建号 **604 → 605**；App、Go agent、Help、Helper、浏览器扩展、README、响应头契约与产品文档保持一致。
 
 ## 1.319.0-rc3 - 2026-09-03
 
