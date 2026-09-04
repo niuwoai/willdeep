@@ -992,6 +992,62 @@ struct AgentPluginSystemTests {
     }
 
     @Test
+    func pluginAIRequestKeepsSkillReferencesWithinBudget() {
+        guard case .success(let plain) = AgentPluginAIRequestValidator.request(from: [
+            "messages": [["role": "user", "content": "写个短剧"]],
+        ]) else {
+            Issue.record("不带技能的请求不该被拒")
+            return
+        }
+        #expect(plain.skillIdentifiers.isEmpty)
+
+        // 同一个技能挂三遍不能用来绕过条数上限
+        guard case .success(let deduped) = AgentPluginAIRequestValidator.request(from: [
+            "messages": [["role": "user", "content": "写个短剧"]],
+            "skills": ["hongguo-drama", "hongguo-drama", "  ", 42, "video-studio"],
+        ]) else {
+            Issue.record("合法技能引用不该被拒")
+            return
+        }
+        #expect(deduped.skillIdentifiers == ["hongguo-drama", "video-studio"])
+
+        #expect(
+            AgentPluginAIRequestValidator.request(from: [
+                "messages": [["role": "user", "content": "写个短剧"]],
+                "skills": ["a", "b", "c", "d"],
+            ]) == .failure(.tooManySkills)
+        )
+    }
+
+    @Test
+    func pluginSkillPreambleRefusesAnIdentifierThatIsNotInstalled() async {
+        // 静默跳过找不到的技能，模型会在缺了它的情况下若无其事地照答。
+        await #expect(throws: AgentPluginAIError.unknownSkill("no-such-skill-xyz")) {
+            _ = try await AppState.pluginSkillPreamble(identifiers: ["no-such-skill-xyz"])
+        }
+        let empty = try? await AppState.pluginSkillPreamble(identifiers: [])
+        #expect(empty == nil)
+    }
+
+    @Test
+    func pluginSkillDescriptorNeverCarriesAnOnDiskPath() {
+        let descriptor = AgentPluginSkillDescriptor(
+            identifier: "hongguo-drama",
+            name: "hongguo-drama",
+            description: "短剧剧本生成器",
+            source: "bundled",
+            tier: nil
+        )
+        let json = descriptor.jsonObject
+        #expect(json["identifier"] as? String == "hongguo-drama")
+        #expect(json["tier"] == nil)
+        // 磁盘路径是宿主的事，页面只需要一个能回传的 identifier
+        #expect(json["url"] == nil)
+        #expect(json["path"] == nil)
+        #expect(json.keys.sorted() == ["description", "identifier", "name", "source"])
+    }
+
+    @Test
     func pluginGeneratedMediaResolverRejectsPathTraversal() throws {
         let safe = try AgentPluginGeneratedMediaResolver.fileURL(
             forRequestPath: "/__media__/frame.png",

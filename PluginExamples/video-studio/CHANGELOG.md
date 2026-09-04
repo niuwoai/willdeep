@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.0] - 2026-09-04
+
+### Added
+
+- The planning conversation now supports `$` to reference a WillDeep skill. Typing `$` opens a picker, choosing an entry removes the token and adds a chip above the composer, and the request carries only the skill identifier. The host reads the skill body and injects it; the page never sees it.
+
 ## [0.2.1] - 2026-09-04
 
 ### Fixed
