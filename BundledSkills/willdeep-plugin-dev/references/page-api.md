@@ -96,6 +96,44 @@ const { providers } = await window.willdeep.ai.providers();
 
 只读，只给能标识和展示的字段，没有 baseURL 和 key。用它渲染模型选择器。
 
+## 生成图片（需要 `ai.image`）
+
+```js
+const image = await window.willdeep.ai.generateImage({
+  prompt: '电影感竖屏人物定妆照，冷色侧光',
+  provider: 'some-im',
+  model: 'gpt-image-2', // 或 nano-banana-2
+  size: '1024x1536'
+});
+// { mediaURL, filePath, model, providerID: 'some-im' }
+```
+
+宿主只接受 `some-im`、`gpt-image-2` / `nano-banana-2` 和三种受控尺寸；提示词最多 8000 字。API Key 始终留在 Keychain。生成文件写入当前插件隔离的数据目录，页面通过只读 `mediaURL` 展示；单个媒体文件上限 32 MiB。
+
+## 引用技能（需要 `skills.read`）
+
+页面自己实现 `$` 选择器，宿主负责给清单和做注入：
+
+```js
+const { skills } = await window.willdeep.skills.list();
+// [{ identifier, name, description, source: 'bundled'|'user'|'plugin', tier? }]
+
+await window.willdeep.ai.complete({
+  system: '你是短剧总策划。',
+  messages: [{ role: 'user', content: '写个复仇题材的开篇' }],
+  skills: ['hongguo-drama']   // 只递 identifier
+});
+```
+
+清单只含用户当前**启用**的技能，包含插件自带的那些。页面拿不到 SKILL.md 正文，
+也拿不到它在磁盘上的路径：宿主按 identifier 读出正文、截断、拼成一条 system
+消息插在最前面。
+
+一次请求最多引用 3 个技能，每个技能正文截断到 8000 字符，且这部分不占页面自己
+那 32000 字的额度。引用了目录里不存在的 identifier 会直接报错而不是静默跳过——
+否则模型会在缺了技能的情况下若无其事地照答。没声明 `skills.read` 时，
+`skills.list` 和带 `skills` 的 `ai.complete` 都会被拒。
+
 ## MCP App 页面
 
 `runtime: "mcpApp"` 的页面用标准 MCP App 协议跟宿主通话，走 `window.postMessage`（宿主已经把 `message` 事件桥到原生侧）：

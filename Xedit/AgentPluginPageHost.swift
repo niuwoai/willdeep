@@ -315,7 +315,14 @@ private struct AgentPluginWebPage: View {
           // 页面递上来的 baseURL 一律不认。需要 ai.chat / providers.read 权限。
           window.willdeep.ai = {
             providers: function() { return willdeepBridgeRequest('aiProviders', {}); },
-            complete: function(request) { return willdeepBridgeRequest('aiComplete', {request: request || {}}); }
+            complete: function(request) { return willdeepBridgeRequest('aiComplete', {request: request || {}}); },
+            generateImage: function(request) { return willdeepBridgeRequest('aiGenerateImage', {request: request || {}}); }
+          };
+          // 已启用技能的只读清单。页面拿到的是 identifier / 名称 / 描述，
+          // SKILL.md 正文和它的磁盘路径都不出宿主：把 identifier 放进
+          // ai.complete 的 skills 数组，宿主会替你把正文读出来注入。
+          window.willdeep.skills = {
+            list: function() { return willdeepBridgeRequest('skillsList', {}); }
           };
           window.__willdeepDeliverMCPMessage = function(message) {
             window.dispatchEvent(new MessageEvent('message', {data:message, source:null}));
@@ -448,7 +455,10 @@ private struct AgentPluginWebView: NSViewRepresentable {
     func makeNSView(context coordinatorContext: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
-        let schemeHandler = AgentPluginSchemeHandler(packageURL: destination.packageURL)
+        let schemeHandler = AgentPluginSchemeHandler(
+            packageURL: destination.packageURL,
+            pluginID: destination.pluginID
+        )
         configuration.setURLSchemeHandler(schemeHandler, forURLScheme: AgentPluginSchemeHandler.scheme)
         coordinatorContext.coordinator.schemeHandler = schemeHandler
         let preferences = WKWebpagePreferences()
@@ -673,6 +683,10 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 listAIProviders(body)
             case "aiComplete":
                 runAICompletion(body)
+            case "aiGenerateImage":
+                runAIImageGeneration(body)
+            case "skillsList":
+                listSkills(body)
             case "mcpMessage":
                 handleMCPMessage(body["message"])
             case "pageDiagnostic":
@@ -769,6 +783,29 @@ private struct AgentPluginWebView: NSViewRepresentable {
             }
         }
 
+        /// 已启用技能的只读清单，给页面自己实现 `$` 选择器用。技能正文不经手
+        /// 页面：它把选中的 identifier 放进 ai.complete 的 skills，由宿主注入。
+        private func listSkills(_ body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            guard AgentPluginRegistry.shared.hasPermission(
+                .skillsRead,
+                pluginID: destination.pluginID
+            ) else {
+                sendBridgeResult(
+                    requestID: requestID,
+                    result: nil,
+                    error: AgentPluginAIError.skillPermissionDenied.localizedDescription
+                )
+                return
+            }
+            Task { [weak self] in
+                let skills = await AppState.pluginSkills().map(\.jsonObject)
+                await MainActor.run {
+                    self?.sendBridgeResult(requestID: requestID, result: ["skills": skills], error: nil)
+                }
+            }
+        }
+
         private func listAIProviders(_ body: [String: Any]) {
             let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
             Task { @MainActor [weak self] in
@@ -827,6 +864,43 @@ private struct AgentPluginWebView: NSViewRepresentable {
                             result: nil,
                             error: error.localizedDescription
                         )
+                    }
+                }
+            }
+        }
+
+        private func runAIImageGeneration(_ body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let raw = body["request"] as? [String: Any] ?? [:]
+            guard JSONSerialization.isValidJSONObject(raw),
+                  let encoded = try? JSONSerialization.data(withJSONObject: raw),
+                  encoded.count <= 65_536 else {
+                sendBridgeResult(requestID: requestID, result: nil, error: "Invalid image request")
+                return
+            }
+            switch AgentPluginImageRequestValidator.request(from: raw) {
+            case .failure(let error):
+                sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
+            case .success(let request):
+                Task { @MainActor [weak self] in
+                    guard let self, let appState = self.appState else { return }
+                    do {
+                        let result = try await appState.runPluginImageGeneration(
+                            pluginID: self.destination.pluginID,
+                            request: request
+                        )
+                        self.sendBridgeResult(
+                            requestID: requestID,
+                            result: [
+                                "mediaURL": result.mediaURL,
+                                "filePath": result.filePath,
+                                "model": result.model,
+                                "providerID": result.providerID,
+                            ],
+                            error: nil
+                        )
+                    } catch {
+                        self.sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
                     }
                 }
             }
@@ -1099,6 +1173,8 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
     private let packageURLLock = NSLock()
     private var lockedPackageURL: URL
     private let maximumResourceBytes = 8 * 1024 * 1024
+    private let pluginID: String
+    private let maximumMediaBytes = 32 * 1024 * 1024
 
     /// 资源根必须跟着 destination 的激活包走。它在 `makeNSView` 时创建，而
     /// 注册表刷新可能把激活包切到另一个副本（内置 ↔ 本地安装同版本并存）；
@@ -1118,8 +1194,9 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
         }
     }
 
-    init(packageURL: URL) {
+    init(packageURL: URL, pluginID: String) {
         self.lockedPackageURL = packageURL
+        self.pluginID = pluginID
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
@@ -1129,13 +1206,13 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
                   requestURL.host == Self.host else {
                 throw AgentPluginPackageError.resourceOutsidePackage(urlSchemeTask.request.url?.absoluteString ?? "")
             }
-            let resourceURL = try AgentPluginWebResourceResolver.fileURL(
-                forRequestPath: requestURL.path,
-                packageURL: self.packageURL
-            )
+            let isGeneratedMedia = requestURL.path.hasPrefix("/__media__/")
+            let resourceURL = try (isGeneratedMedia
+                ? AgentPluginGeneratedMediaResolver.fileURL(forRequestPath: requestURL.path, pluginID: pluginID)
+                : AgentPluginWebResourceResolver.fileURL(forRequestPath: requestURL.path, packageURL: self.packageURL))
             let values = try resourceURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard values.isRegularFile == true,
-                  (values.fileSize ?? 0) <= maximumResourceBytes else {
+                  (values.fileSize ?? 0) <= (isGeneratedMedia ? maximumMediaBytes : maximumResourceBytes) else {
                 throw AgentPluginPackageError.oversizedManifest(requestURL.path)
             }
             let data = try Data(contentsOf: resourceURL, options: [.mappedIfSafe])
@@ -1156,4 +1233,31 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
+}
+
+enum AgentPluginGeneratedMediaResolver {
+    static func directory(pluginID: String) throws -> URL {
+        guard pluginID.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"#, options: .regularExpression) != nil,
+              let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            throw AgentPluginPackageError.resourceOutsidePackage(pluginID)
+        }
+        return base
+            .appendingPathComponent("WillDeep/plugin-data", isDirectory: true)
+            .appendingPathComponent(pluginID, isDirectory: true)
+            .appendingPathComponent("generated-images", isDirectory: true)
+    }
+
+    static func fileURL(forRequestPath path: String, pluginID: String) throws -> URL {
+        let decoded = path.removingPercentEncoding ?? path
+        let filename = String(decoded.dropFirst("/__media__/".count))
+        guard !filename.isEmpty, filename == URL(fileURLWithPath: filename).lastPathComponent else {
+            throw AgentPluginPackageError.resourceOutsidePackage(path)
+        }
+        let root = try directory(pluginID: pluginID).standardizedFileURL
+        let candidate = root.appendingPathComponent(filename, isDirectory: false).standardizedFileURL
+        guard candidate.deletingLastPathComponent() == root else {
+            throw AgentPluginPackageError.resourceOutsidePackage(path)
+        }
+        return candidate
+    }
 }

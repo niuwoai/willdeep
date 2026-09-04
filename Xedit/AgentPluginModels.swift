@@ -64,8 +64,15 @@ nonisolated struct AgentPluginPermission: RawRepresentable, Codable, Hashable, S
     /// 插件页面可以问模型（`window.willdeep.ai.complete`）。密钥不出宿主，
     /// provider 与模型必须落在用户自己的库里，见 AgentPluginAIBridge。
     static let aiChat = Self(rawValue: "ai.chat")
+    /// 插件页面可以请求宿主通过 some.im 生成图片。密钥留在钥匙串中，
+    /// 页面只能选择宿主白名单内的模型并取得受控媒体 URL。
+    static let aiImage = Self(rawValue: "ai.image")
     /// 只读地拿 provider 与模型清单（`window.willdeep.ai.providers`）。
     static let providersRead = Self(rawValue: "providers.read")
+    /// 只读地拿已启用的技能清单（`window.willdeep.skills.list`），并在
+    /// `ai.complete` 里按 identifier 引用它们。页面拿不到 SKILL.md 正文，
+    /// 也拿不到技能在磁盘上的路径；正文由宿主读取并注入，见 AgentPluginAIBridge。
+    static let skillsRead = Self(rawValue: "skills.read")
     static let clipboardWrite = Self(rawValue: "clipboard.write")
     static let notifications = Self(rawValue: "notifications")
 }

@@ -757,6 +757,7 @@ struct AgentPluginSystemTests {
         for name in [
             "project-overview", "issue-panel", "tetris", "arcade",
             "session-vitality", "favorites", "todo", "history-recall",
+            "video-studio",
         ] {
             let packageURL = name == "arcade"
                 ? arcadeRuntimePackage
@@ -766,7 +767,7 @@ struct AgentPluginSystemTests {
                 source: .installed,
                 // 收藏夹与会话体检要求的宿主版本比其它样例新；翻旧账
                 // (history-recall) 又更新一档（它依赖 session.open host action）
-                currentWillDeepVersion: "1.316.0-rc1"
+                currentWillDeepVersion: "1.321.0-rc1"
             )
             #expect(package.destinations.count == 1)
         }
@@ -962,6 +963,107 @@ struct AgentPluginSystemTests {
     }
 
     @Test
+    func pluginImageRequestValidatorAllowsOnlyTheSomeIMContract() {
+        #expect(AgentPluginImageRequestValidator.request(from: [:]) == .failure(.invalidImageRequest))
+        #expect(
+            AgentPluginImageRequestValidator.request(from: ["prompt": "portrait", "provider": "other"])
+                == .failure(.unknownProvider("other"))
+        )
+        #expect(
+            AgentPluginImageRequestValidator.request(from: ["prompt": "portrait", "model": "unknown"])
+                == .failure(.invalidImageModel("unknown"))
+        )
+        #expect(
+            AgentPluginImageRequestValidator.request(from: ["prompt": "portrait", "size": "8192x8192"])
+                == .failure(.invalidImageSize("8192x8192"))
+        )
+        guard case .success(let request) = AgentPluginImageRequestValidator.request(from: [
+            "prompt": "  cinematic portrait  ",
+            "provider": "some-im",
+            "model": "nano-banana-2",
+            "size": "1024x1536",
+        ]) else {
+            Issue.record("合法图片请求不该被拒")
+            return
+        }
+        #expect(request.prompt == "cinematic portrait")
+        #expect(request.model == "nano-banana-2")
+        #expect(request.size == "1024x1536")
+    }
+
+    @Test
+    func pluginAIRequestKeepsSkillReferencesWithinBudget() {
+        guard case .success(let plain) = AgentPluginAIRequestValidator.request(from: [
+            "messages": [["role": "user", "content": "写个短剧"]],
+        ]) else {
+            Issue.record("不带技能的请求不该被拒")
+            return
+        }
+        #expect(plain.skillIdentifiers.isEmpty)
+
+        // 同一个技能挂三遍不能用来绕过条数上限
+        guard case .success(let deduped) = AgentPluginAIRequestValidator.request(from: [
+            "messages": [["role": "user", "content": "写个短剧"]],
+            "skills": ["hongguo-drama", "hongguo-drama", "  ", 42, "video-studio"],
+        ]) else {
+            Issue.record("合法技能引用不该被拒")
+            return
+        }
+        #expect(deduped.skillIdentifiers == ["hongguo-drama", "video-studio"])
+
+        #expect(
+            AgentPluginAIRequestValidator.request(from: [
+                "messages": [["role": "user", "content": "写个短剧"]],
+                "skills": ["a", "b", "c", "d"],
+            ]) == .failure(.tooManySkills)
+        )
+    }
+
+    @Test
+    func pluginSkillPreambleRefusesAnIdentifierThatIsNotInstalled() async {
+        // 静默跳过找不到的技能，模型会在缺了它的情况下若无其事地照答。
+        await #expect(throws: AgentPluginAIError.unknownSkill("no-such-skill-xyz")) {
+            _ = try await AppState.pluginSkillPreamble(identifiers: ["no-such-skill-xyz"])
+        }
+        let empty = try? await AppState.pluginSkillPreamble(identifiers: [])
+        #expect(empty == nil)
+    }
+
+    @Test
+    func pluginSkillDescriptorNeverCarriesAnOnDiskPath() {
+        let descriptor = AgentPluginSkillDescriptor(
+            identifier: "hongguo-drama",
+            name: "hongguo-drama",
+            description: "短剧剧本生成器",
+            source: "bundled",
+            tier: nil
+        )
+        let json = descriptor.jsonObject
+        #expect(json["identifier"] as? String == "hongguo-drama")
+        #expect(json["tier"] == nil)
+        // 磁盘路径是宿主的事，页面只需要一个能回传的 identifier
+        #expect(json["url"] == nil)
+        #expect(json["path"] == nil)
+        #expect(json.keys.sorted() == ["description", "identifier", "name", "source"])
+    }
+
+    @Test
+    func pluginGeneratedMediaResolverRejectsPathTraversal() throws {
+        let safe = try AgentPluginGeneratedMediaResolver.fileURL(
+            forRequestPath: "/__media__/frame.png",
+            pluginID: "willdeep-video-studio"
+        )
+        #expect(safe.lastPathComponent == "frame.png")
+        #expect(safe.path.contains("plugin-data/willdeep-video-studio/generated-images"))
+        #expect(throws: (any Error).self) {
+            _ = try AgentPluginGeneratedMediaResolver.fileURL(
+                forRequestPath: "/__media__/../secret.txt",
+                pluginID: "willdeep-video-studio"
+            )
+        }
+    }
+
+    @Test
     func chatSelectionArgumentsCarryWorkspaceOnlyWhenThereIsOne() {
         let withoutWorkspace = AppState.chatSelectionArguments(text: "选中的一段话", workspace: nil)
         #expect(withoutWorkspace == ["text": "选中的一段话", "source": "chat.selection"])
@@ -1018,6 +1120,43 @@ struct AgentPluginSystemTests {
         )
         #expect(page.contains("window.willdeep.ai.complete"))
         #expect(page.contains("todo.quick_add"), "模型不可用时页面要能回落到本地规则解析")
+    }
+
+    @Test
+    func videoStudioExampleDeclaresItsProviderAndAsyncVideoBoundary() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let packageURL = repositoryRoot.appendingPathComponent("PluginExamples/video-studio")
+        let package = try AgentPluginPackageLoader.load(
+            packageURL: packageURL,
+            source: .installed,
+            currentWillDeepVersion: "1.321.0-rc1"
+        )
+        let manifest = try #require(package.manifest)
+
+        #expect(manifest.permissions.contains(.aiChat))
+        #expect(manifest.permissions.contains(.providersRead))
+        #expect(manifest.permissions.contains(.processExecute))
+        #expect(manifest.permissions.contains(.networkAccess))
+        #expect(manifest.permissions.contains(.credentialUse))
+        #expect(manifest.dependencies.mcpServers == ["video-studio"])
+        #expect(manifest.dependencies.skills == ["video-studio"])
+
+        let selection = manifest.contributes.menus[AgentPluginMenuLocation.chatSelection] ?? []
+        #expect(selection == ["video.createDraft"])
+        let createDraft = try #require(
+            manifest.contributes.commands.first { $0.id == "video.createDraft" }
+        )
+        #expect(createDraft.handler.type == .mcpTool)
+        #expect(createDraft.handler.server == "video-studio")
+        #expect(createDraft.handler.tool == "video.create_draft")
+
+        let page = try #require(manifest.contributes.pages.first)
+        #expect(page.runtime == .localWeb)
+        let entryPath = try #require(page.entryPath)
+        #expect(entryPath == "ui/dist/index.html")
+        #expect(FileManager.default.fileExists(atPath: packageURL.appendingPathComponent(entryPath).path))
     }
 
     @Test
