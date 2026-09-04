@@ -61,9 +61,28 @@ end
 
 migrate_legacy_video_store
 STORE = VideoStore.new(video_store_path)
+# 选定 provider 就用它自己的地址，选「自定义」才回落到手填的 API Base。
+# 三家走的是同一套 OpenAI 兼容异步视频接口，所以只换地址、不换适配器。
+PROVIDER_BASE_URLS = {
+  "tsingfly" => "https://hub.tsingfly.com",
+  "openai" => "https://api.openai.com"
+}.freeze
+DEFAULT_API_BASE = PROVIDER_BASE_URLS.fetch("tsingfly")
+
+# 没有 VIDEO_STUDIO_PROVIDER 的老装机（设置里还没有这一项）继续按
+# VIDEO_STUDIO_API_BASE 走，行为与加这个设置之前一致。
+def resolved_api_base
+  provider = ENV["VIDEO_STUDIO_PROVIDER"].to_s.strip
+  known = PROVIDER_BASE_URLS[provider]
+  return known if known
+
+  base = ENV["VIDEO_STUDIO_API_BASE"].to_s.strip
+  base.empty? ? DEFAULT_API_BASE : base
+end
+
 ADAPTER_FACTORY = lambda do
   OpenAIVideosAsyncAdapter.new(
-    base_url: ENV["VIDEO_STUDIO_API_BASE"] || "https://hub.tsingfly.com",
+    base_url: resolved_api_base,
     api_key: ENV["VIDEO_STUDIO_API_KEY"],
     output_directory: video_output_directory,
     open_timeout: (ENV["VIDEO_STUDIO_OPEN_TIMEOUT"] || 20).to_i,

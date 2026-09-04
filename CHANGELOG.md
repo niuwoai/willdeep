@@ -3,6 +3,16 @@
 > 当前文件保留最新版本（1.321.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.331.0-rc1 - 2026-09-04
+
+### Added
+
+- 短剧工坊的插件设置里可以选视频服务商了：青蜂 Hub、OpenAI 官方、自定义三选一，默认青蜂。选定就用它自己的地址，选「自定义」才回落到手填的 API Base。三家走同一套 OpenAI 兼容异步视频接口，所以只换地址、不换适配器。API Key 本来就有（secret 类型，进钥匙串，不落配置文件）。没有 `VIDEO_STUDIO_PROVIDER` 的老装机继续按 API Base 走，行为不变。
+
+### Changed
+
+- 记一个插件清单的契约：`enum` 类型设置的每个 option 同时也是本地化键，漏了对应文案会让整个插件以 `missing English localization key` 装载失败，而不是只掉一行文案。
+
 ## 1.330.0-rc2 - 2026-09-04
 
 ### Fixed
