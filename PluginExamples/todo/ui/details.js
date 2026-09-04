@@ -137,9 +137,32 @@
     var status = selectControl([['open', t('statusOpen')], ['done', t('statusDone')], ['all', t('statusAll')]], state.status, t('statusAll'), function (value) { options.change({ status: value }); });
     status.className = 'filter-select'; container.appendChild(status);
 
+    // 常用标签直接铺出来，不必先点开一个 details 才知道有哪些。铺几个
+    // 取决于筛选行还剩多少地方，多了会把这一行撑成两行；剩下的仍在「更多」里。
+    var INLINE_TAGS = 6;
+    var inlineSource = options.tags.slice(0, INLINE_TAGS);
+    if (inlineSource.length) {
+      var inline = node('div', 'tag-inline');
+      inlineSource.forEach(function (entry) {
+        var active = state.tags.some(function (name) { return key(name) === key(entry.name); });
+        var chip = node('button', 'chip');
+        chip.type = 'button';
+        chip.setAttribute('aria-pressed', String(active));
+        chip.appendChild(node('span', '', entry.name));
+        if (entry.count) chip.appendChild(node('span', 'n', String(entry.count)));
+        chip.addEventListener('click', function () {
+          var next = state.tags.filter(function (name) { return key(name) !== key(entry.name); });
+          if (!active) next.push(entry.name);
+          if (next.length <= MAX_TAGS) options.change({ tags: next, withoutTags: false });
+        });
+        inline.appendChild(chip);
+      });
+      container.appendChild(inline);
+    }
+
     var details = node('details', 'tag-filter'); details.open = reopenTags;
     var summary = node('summary', 'chip'); summary.appendChild(icon('tag'));
-    summary.appendChild(node('span', '', t('tags') + (state.tags.length ? ' ' + state.tags.length : '')));
+    summary.appendChild(node('span', '', (inlineSource.length ? t('moreTags') : t('tags')) + (state.tags.length ? ' ' + state.tags.length : '')));
     summary.setAttribute('aria-label', t('filterTags')); details.appendChild(summary);
     var menu = node('div', 'tag-filter-menu');
     var search = node('input', 'tag-search'); search.type = 'search'; search.placeholder = t('filterTagSearch');

@@ -27,6 +27,8 @@
         --normal: #4c8cf5;
         --low: #8a8f98;
         --radius: 10px;
+        /* 占位文字比次要文字再浅一档：它是提示，不该跟真内容抢注意力。 */
+        --placeholder: color-mix(in srgb, var(--muted) 62%, transparent);
       }
       * { box-sizing: border-box; }
       body {
@@ -44,11 +46,11 @@
 
       header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
       h1 { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: .2px; }
-      .count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+      .count { color: var(--muted); font-size: .8em; font-variant-numeric: tabular-nums; }
       .toolbar { margin-left: auto; display: flex; align-items: center; gap: 6px; }
       .chip {
         border: 1px solid var(--border); border-radius: 7px;
-        padding: 4px 10px; font-size: 12px; white-space: nowrap;
+        padding: 4px 10px; font-size: .8em; white-space: nowrap;
       }
       .chip:hover { border-color: var(--border-strong); }
       .chip[aria-pressed="true"] { background: var(--surface-strong); border-color: var(--border-strong); }
@@ -62,10 +64,11 @@
       .composer.busy { border-color: var(--border-strong); }
       .composer .row { display: flex; align-items: center; gap: 8px; }
       .composer input[type="text"] { flex: 1; outline: none; font-size: var(--willdeep-body-font-size, 15px); }
-      .composer input::placeholder { color: var(--muted); }
-      .composer .hint { margin-top: 7px; font-size: 11.5px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+      .composer input::placeholder { color: var(--placeholder); }
+      input::placeholder, textarea::placeholder { color: var(--placeholder); }
+      .composer .hint { margin-top: 7px; font-size: .78em; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
       .badge {
-        border-radius: 999px; padding: 1px 8px; font-size: 11px;
+        border-radius: 999px; padding: 1px 8px; font-size: .75em;
         border: 1px solid var(--border); color: var(--muted);
       }
       .badge.due { border-color: color-mix(in srgb, var(--normal) 45%, var(--border)); }
@@ -78,7 +81,7 @@
       /* ── 过滤条 ───────────────────────────────────────────── */
       .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; align-items: center; }
       .filters .sep { width: 1px; height: 16px; background: var(--border); margin: 0 4px; }
-      .filters .chip { font-size: 11.5px; padding: 3px 9px; }
+      .filters .chip { font-size: .78em; padding: 3px 9px; }
       .filters .chip .n { color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
 
       /* ── 列表 ─────────────────────────────────────────────── */
@@ -97,7 +100,9 @@
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
         gap: 8px;
-        align-items: start;
+        /* stretch 而不是 start：同一行的卡片拉到等高。带截止日/标签的那条
+           会比光秃秃的一条高，逐条按内容走就成了参差不齐的锯齿。 */
+        align-items: stretch;
       }
       li.item {
         display: flex; gap: 10px; align-items: flex-start;
@@ -132,7 +137,7 @@
       .meta .spacer { margin-left: auto; }
       .actions { display: flex; gap: 4px; opacity: 0; transition: opacity .12s ease; }
       li.item:hover .actions, li.item:focus-within .actions { opacity: 1; }
-      .actions button { color: var(--muted); font-size: 11.5px; border-radius: 6px; padding: 2px 7px; }
+      .actions button { color: var(--muted); font-size: .78em; border-radius: 6px; padding: 2px 7px; }
       .actions button:hover { color: var(--fg); background: var(--surface-strong); }
       .actions button.danger:hover { color: var(--danger); }
       .editor-row { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; align-items: center; }
