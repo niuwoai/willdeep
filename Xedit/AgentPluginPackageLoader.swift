@@ -75,6 +75,7 @@ nonisolated enum AgentPluginPackageLoader {
     ]
     static let allowedPermissions: Set<AgentPluginPermission> = [
         .conversationRead,
+        .conversationWrite,
         .workspaceRead,
         .workspaceWrite,
         .processExecute,
