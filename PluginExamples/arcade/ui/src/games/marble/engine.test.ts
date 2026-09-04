@@ -9,6 +9,8 @@ import {
   BALL_RADIUS,
   BOMB_RADIUS,
   CONTACT_EPS,
+  DANGER_DISTANCE,
+  DANGER_SPEED,
   DEFAULT_LEVEL,
   FIELD,
   LEVELS,
@@ -96,9 +98,10 @@ describe('印加弹珠：轨道', () => {
   });
 
   it('三种轨迹都留在场地内，长度足够且洞口位置各不相同', () => {
-    const ids: readonly MarbleTrackId[] = ['spiral', 'wave', 'switchback'];
+    const ids: readonly MarbleTrackId[] = ['spiral', 'valley', 'switchback'];
     const holes = ids.map((id) => {
-      expect(pathLength(id)).toBeGreaterThan(250);
+      // V 形谷道是三条里最短的一条（约 196），门槛按它定
+      expect(pathLength(id)).toBeGreaterThan(180);
       for (const point of trackPoints(id)) {
         expect(point.x).toBeGreaterThanOrEqual(0);
         expect(point.x).toBeLessThanOrEqual(FIELD);
@@ -111,10 +114,45 @@ describe('印加弹珠：轨道', () => {
     expect(holes.some((hole) => Math.hypot(hole.x - SHOOTER.x, hole.y - SHOOTER.y) > 25)).toBe(true);
   });
 
-  it('关卡依次轮换螺旋、波浪与折返轨迹', () => {
+  it('V 形谷道两端在上、谷底在下，折角比一个身位还圆', () => {
+    const points = trackPoints('valley');
+    const first = points[0] as { x: number; y: number };
+    const last = points[points.length - 1] as { x: number; y: number };
+    const middle = points[Math.floor(points.length / 2)] as { x: number; y: number };
+    // y 向下为正：入口与洞口都在上方，谷底在中间下方，这就是「V」
+    expect(first.y).toBeLessThan(middle.y);
+    expect(last.y).toBeLessThan(middle.y);
+    expect(Math.abs(first.y - last.y)).toBeLessThan(0.5);
+
+    // 每隔一个身位量一次切向变化，换算出全程最小的转弯半径
+    let sharpest = 0;
+    const total = pathLength('valley');
+    for (let dist = 0; dist + SPACING <= total; dist += SPACING) {
+      const from = tangentAt(dist, 'valley');
+      const to = tangentAt(dist + SPACING, 'valley');
+      sharpest = Math.max(sharpest, Math.acos(Math.min(1, from.x * to.x + from.y * to.y)));
+    }
+    // 旧的双周期正弦波折角半径只有约 1.4，比弹珠直径还小；现在至少一个身位
+    expect(SPACING / sharpest).toBeGreaterThan(SPACING);
+  });
+
+  it('队首逼近洞口时整条链立刻冲刺，并置起危险标记', () => {
+    const calm = withChain([0, 1, 2], PATH_LENGTH - DANGER_DISTANCE - 20);
+    const calmNext = step(calm, 0.1);
+    const calmMove = (calmNext.balls[0] as MarbleBall).dist - (calm.balls[0] as MarbleBall).dist;
+    expect(calmNext.danger).toBe(false);
+
+    const scared = withChain([0, 1, 2], PATH_LENGTH - DANGER_DISTANCE + 1);
+    const scaredNext = step(scared, 0.1);
+    const scaredMove = (scaredNext.balls[0] as MarbleBall).dist - (scared.balls[0] as MarbleBall).dist;
+    expect(scaredNext.danger).toBe(true);
+    expect(scaredMove).toBeCloseTo(calmMove * DANGER_SPEED, 5);
+  });
+
+  it('关卡依次轮换螺旋、V 形谷道与折返轨迹', () => {
     expect([1, 2, 3, 4].map((stage) => levelForStage(stage).track)).toEqual([
       'spiral',
-      'wave',
+      'valley',
       'switchback',
       'spiral',
     ]);

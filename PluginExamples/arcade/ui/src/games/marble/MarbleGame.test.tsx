@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { App } from '../../App';
 import { HashRouter } from '../../core/hashRouter';
 import { I18nProvider } from '../../core/i18n';
+import { HOLE_RING_MAX, holeRingRadius } from './index';
+import { BALL_RADIUS, FIELD, pathLength, pointAt } from './engine';
+import type { MarbleTrackId } from './engine';
 
 /**
  * 印加弹珠集成回归（jsdom）。
@@ -107,5 +110,48 @@ describe('印加弹珠集成', () => {
     await user.click(screen.getByTestId('marble-restart-run'));
     await waitFor(() => expect(screen.getByTestId('marble-stage')).toHaveTextContent('关卡 1'));
     expect(screen.getByTestId('marble-score-value')).toHaveTextContent('0');
+  });
+});
+
+describe('印加弹珠：洞口金环', () => {
+  // 洞口半径与 draw() 里传给 drawHoleRing 的一致
+  const HOLE_RADIUS = BALL_RADIUS * 1.75;
+
+  it('金环半径随时间一涨一缩，危险时张得更大、喘得更急', () => {
+    const calm: number[] = [];
+    const danger: number[] = [];
+    for (let time = 0; time < 3; time += 0.05) {
+      calm.push(holeRingRadius(HOLE_RADIUS, time, false));
+      danger.push(holeRingRadius(HOLE_RADIUS, time, true));
+    }
+    const span = (values: readonly number[]): number => Math.max(...values) - Math.min(...values);
+    // 平时也在呼吸
+    expect(span(calm)).toBeGreaterThan(HOLE_RADIUS * 0.1);
+    // 危险时幅度更大
+    expect(span(danger)).toBeGreaterThan(span(calm));
+    // 危险时节拍更急：同样 3 秒里过零（穿过均值）的次数更多
+    const crossings = (values: readonly number[]): number => {
+      const middle = (Math.max(...values) + Math.min(...values)) / 2;
+      let count = 0;
+      for (let i = 1; i < values.length; i += 1) {
+        const before = (values[i - 1] as number) - middle;
+        const after = (values[i] as number) - middle;
+        if (before <= 0 && after > 0) count += 1;
+      }
+      return count;
+    };
+    expect(crossings(danger)).toBeGreaterThan(crossings(calm));
+  });
+
+  it('金环涨到最大也不会被场地边缘切掉', () => {
+    const ids: readonly MarbleTrackId[] = ['spiral', 'valley', 'switchback'];
+    for (const id of ids) {
+      const hole = pointAt(pathLength(id), id);
+      const outer = HOLE_RADIUS * HOLE_RING_MAX;
+      expect(hole.x - outer).toBeGreaterThanOrEqual(0);
+      expect(hole.y - outer).toBeGreaterThanOrEqual(0);
+      expect(hole.x + outer).toBeLessThanOrEqual(FIELD);
+      expect(hole.y + outer).toBeLessThanOrEqual(FIELD);
+    }
   });
 });
