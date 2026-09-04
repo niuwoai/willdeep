@@ -3,6 +3,12 @@
 > 当前文件保留最新版本（1.321.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.330.0-rc2 - 2026-09-04
+
+### Fixed
+
+- 测试进程会随机崩掉，报出来的失败用例每次都不一样（`Crash: WillDeep at <external symbol>`）。真凶是 localStorage 持久化那两个用例结束时去删自己的 WebKit 数据仓：`WKWebsiteDataStore.remove(forIdentifier:)` 在自己的 IO 队列上收尾，而用例创建的 WKWebView 仍持有那个仓，WebKit 拆完仓回调那一跳解到已经没了的 RunLoop，整个进程 SIGSEGV 在 `WTF::RunLoop::dispatch`。上一版改成 await 等回调并没有解决——崩的是 WebKit 自己的工作项，跟等不等无关。现在测试不再删仓，每轮在磁盘上留两个几 KB、带 `test.` 前缀的仓。卸载插件时的清理保持不变。
+
 ## 1.330.0-rc1 - 2026-09-04
 
 ### Changed
