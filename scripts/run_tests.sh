@@ -19,6 +19,7 @@
 #   - roundtable_interaction_contract_report.* 专家圆桌交互契约报告
 #   - image_edit_report.* 图片蒙版编辑/聊天接力契约报告
 #   - media_task_refresh_report.* 媒体任务刷新/聊天接力契约报告
+#   - video_studio_server_report.* Video Studio 异步提交/轮询/下载契约报告
 #   - media_import_context_report.* manifest 导回/聊天接力契约报告
 #   - production_gap_actions_report.* 短剧制作缺口动作/聊天接力契约报告
 #   - short_drama_mvp_tryout_package_report.* 短剧 MVP 本地试用包生成报告
@@ -64,6 +65,7 @@ ruby "${ROOT_DIR}/scripts/widget_side_panel_contract_test.rb" "${OUT_DIR}/widget
 ruby "${ROOT_DIR}/scripts/roundtable_interaction_contract_test.rb" "${OUT_DIR}/roundtable_interaction_contract_report.md" "${OUT_DIR}/roundtable_interaction_contract_report.json"
 ruby "${ROOT_DIR}/scripts/image_edit_contract_test.rb" "${OUT_DIR}/image_edit_report.md" "${OUT_DIR}/image_edit_report.json"
 ruby "${ROOT_DIR}/scripts/media_task_refresh_contract_test.rb" "${OUT_DIR}/media_task_refresh_report.md" "${OUT_DIR}/media_task_refresh_report.json"
+ruby "${ROOT_DIR}/scripts/video_studio_server_test.rb" "${OUT_DIR}/video_studio_server_report.md" "${OUT_DIR}/video_studio_server_report.json"
 ruby "${ROOT_DIR}/scripts/media_import_context_contract_test.rb" "${OUT_DIR}/media_import_context_report.md" "${OUT_DIR}/media_import_context_report.json"
 ruby "${ROOT_DIR}/scripts/production_gap_actions_contract_test.rb" "${OUT_DIR}/production_gap_actions_report.md" "${OUT_DIR}/production_gap_actions_report.json"
 ruby "${ROOT_DIR}/scripts/short_drama_mvp_tryout_package.rb" "${OUT_DIR}/short_drama_mvp_tryout_package" "${OUT_DIR}/short_drama_mvp_tryout_package_report.md" "${OUT_DIR}/short_drama_mvp_tryout_package_report.json"

@@ -1,0 +1,134 @@
+{
+  "$schema": "../../../docs/plugin-schema/willdeep-plugin.schema.json",
+  "schemaVersion": 1,
+  "minimumWillDeepVersion": "1.320.0-rc1",
+  "contributes": {
+    "destinations": [{
+      "id": "studio",
+      "titleKey": "destination.studio",
+      "icon": "sf:film.stack",
+      "mainPage": "studio.main",
+      "companionSidebar": "studio.sidebar",
+      "toolbarCommandIDs": ["video.refreshPage"]
+    }],
+    "sidebars": [{
+      "id": "studio.sidebar",
+      "mode": "none"
+    }],
+    "pages": [{
+      "id": "studio.main",
+      "runtime": "localWeb",
+      "entryPath": "ui/dist/index.html"
+    }],
+    "commands": [
+      {
+        "id": "video.open",
+        "titleKey": "command.open",
+        "icon": "sf:film.stack",
+        "handler": {"type": "navigate", "destination": "studio"}
+      },
+      {
+        "id": "video.refreshPage",
+        "titleKey": "command.refreshPage",
+        "icon": "sf:arrow.clockwise",
+        "handler": {"type": "host", "action": "plugin.refresh"}
+      },
+      {
+        "id": "video.createDraft",
+        "titleKey": "command.createDraft",
+        "icon": "sf:text.badge.plus",
+        "handler": {"type": "mcpTool", "server": "video-studio", "tool": "video.create_draft"}
+      },
+      {
+        "id": "video.list",
+        "titleKey": "command.list",
+        "icon": "sf:list.bullet.rectangle",
+        "handler": {"type": "mcpTool", "server": "video-studio", "tool": "video.list"}
+      },
+      {
+        "id": "video.generate",
+        "titleKey": "command.generate",
+        "icon": "sf:play.rectangle.on.rectangle",
+        "handler": {"type": "mcpTool", "server": "video-studio", "tool": "video.generate"}
+      },
+      {
+        "id": "video.refresh",
+        "titleKey": "command.refresh",
+        "icon": "sf:arrow.triangle.2.circlepath",
+        "handler": {"type": "mcpTool", "server": "video-studio", "tool": "video.refresh"}
+      },
+      {
+        "id": "video.refreshActive",
+        "titleKey": "command.refreshActive",
+        "icon": "sf:clock.arrow.trianglehead.counterclockwise.rotate.90",
+        "handler": {"type": "mcpTool", "server": "video-studio", "tool": "video.refresh_active"}
+      },
+      {
+        "id": "video.retry",
+        "titleKey": "command.retry",
+        "icon": "sf:arrow.clockwise.circle",
+        "handler": {"type": "mcpTool", "server": "video-studio", "tool": "video.retry"}
+      },
+      {
+        "id": "video.download",
+        "titleKey": "command.download",
+        "icon": "sf:arrow.down.circle",
+        "handler": {"type": "mcpTool", "server": "video-studio", "tool": "video.download"}
+      },
+      {
+        "id": "video.remove",
+        "titleKey": "command.remove",
+        "icon": "sf:trash",
+        "handler": {"type": "mcpTool", "server": "video-studio", "tool": "video.remove"}
+      },
+      {
+        "id": "video.settings",
+        "titleKey": "command.settings",
+        "icon": "sf:gearshape",
+        "handler": {"type": "mcpTool", "server": "video-studio", "tool": "video.settings"}
+      },
+      {
+        "id": "video.pickReference",
+        "titleKey": "command.pickReference",
+        "icon": "sf:photo",
+        "handler": {"type": "mcpTool", "server": "video-studio", "tool": "video.pick_reference"}
+      },
+      {
+        "id": "video.revealOutput",
+        "titleKey": "command.revealOutput",
+        "icon": "sf:folder",
+        "handler": {"type": "mcpTool", "server": "video-studio", "tool": "video.reveal_output"}
+      }
+    ],
+    "menus": {
+      "chat.selection": ["video.createDraft"],
+      "commandPalette": ["video.open", "video.refreshPage"],
+      "composer.more": ["video.open"],
+      "plugin.page.toolbar": ["video.refreshPage"]
+    },
+    "settings": [
+      {
+        "id": "videoApiBase",
+        "type": "string",
+        "titleKey": "setting.videoApiBase",
+        "descriptionKey": "setting.videoApiBase.description",
+        "defaultValue": "https://hub.tsingfly.com"
+      },
+      {
+        "id": "videoApiKey",
+        "type": "secret",
+        "titleKey": "setting.videoApiKey",
+        "descriptionKey": "setting.videoApiKey.description"
+      },
+      {
+        "id": "outputDirectory",
+        "type": "string",
+        "titleKey": "setting.outputDirectory",
+        "descriptionKey": "setting.outputDirectory.description",
+        "defaultValue": "~/Movies/WillDeep Video Studio"
+      }
+    ]
+  },
+  "permissions": ["process.execute", "network.access", "credentials.use", "ai.chat", "providers.read"],
+  "dependencies": {"mcpServers": ["video-studio"], "skills": ["video-studio"]}
+}

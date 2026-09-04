@@ -757,6 +757,7 @@ struct AgentPluginSystemTests {
         for name in [
             "project-overview", "issue-panel", "tetris", "arcade",
             "session-vitality", "favorites", "todo", "history-recall",
+            "video-studio",
         ] {
             let packageURL = name == "arcade"
                 ? arcadeRuntimePackage
@@ -766,7 +767,7 @@ struct AgentPluginSystemTests {
                 source: .installed,
                 // 收藏夹与会话体检要求的宿主版本比其它样例新；翻旧账
                 // (history-recall) 又更新一档（它依赖 session.open host action）
-                currentWillDeepVersion: "1.316.0-rc1"
+                currentWillDeepVersion: "1.320.0-rc1"
             )
             #expect(package.destinations.count == 1)
         }
@@ -1018,6 +1019,43 @@ struct AgentPluginSystemTests {
         )
         #expect(page.contains("window.willdeep.ai.complete"))
         #expect(page.contains("todo.quick_add"), "模型不可用时页面要能回落到本地规则解析")
+    }
+
+    @Test
+    func videoStudioExampleDeclaresItsProviderAndAsyncVideoBoundary() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let packageURL = repositoryRoot.appendingPathComponent("PluginExamples/video-studio")
+        let package = try AgentPluginPackageLoader.load(
+            packageURL: packageURL,
+            source: .installed,
+            currentWillDeepVersion: "1.320.0-rc1"
+        )
+        let manifest = try #require(package.manifest)
+
+        #expect(manifest.permissions.contains(.aiChat))
+        #expect(manifest.permissions.contains(.providersRead))
+        #expect(manifest.permissions.contains(.processExecute))
+        #expect(manifest.permissions.contains(.networkAccess))
+        #expect(manifest.permissions.contains(.credentialUse))
+        #expect(manifest.dependencies.mcpServers == ["video-studio"])
+        #expect(manifest.dependencies.skills == ["video-studio"])
+
+        let selection = manifest.contributes.menus[AgentPluginMenuLocation.chatSelection] ?? []
+        #expect(selection == ["video.createDraft"])
+        let createDraft = try #require(
+            manifest.contributes.commands.first { $0.id == "video.createDraft" }
+        )
+        #expect(createDraft.handler.type == .mcpTool)
+        #expect(createDraft.handler.server == "video-studio")
+        #expect(createDraft.handler.tool == "video.create_draft")
+
+        let page = try #require(manifest.contributes.pages.first)
+        #expect(page.runtime == .localWeb)
+        let entryPath = try #require(page.entryPath)
+        #expect(entryPath == "ui/dist/index.html")
+        #expect(FileManager.default.fileExists(atPath: packageURL.appendingPathComponent(entryPath).path))
     }
 
     @Test
