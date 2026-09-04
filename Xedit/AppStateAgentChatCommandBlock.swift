@@ -183,7 +183,7 @@ nonisolated enum AgentChatCommandRunner {
         // 先起看门狗再读管道:反过来的话读操作会把我们卡住,超时永远不
         // 会生效。
         let deadline = DispatchTime.now() + .seconds(timeoutSeconds)
-        let timedOut = UnfairBox(false)
+        let timedOut = TimeoutFlag(false)
         let watchdog = DispatchWorkItem {
             guard process.isRunning else { return }
             timedOut.value = true
@@ -225,15 +225,21 @@ nonisolated enum AgentChatCommandRunner {
 }
 
 /// 看门狗线程与调用线程之间就传一个 Bool，用锁包一下够了。
-private final class UnfairBox<Value>: @unchecked Sendable {
+///
+/// 刻意**不做成泛型**：泛型版本会让 Release/x86_64 的 EarlyPerfInliner 在
+/// 它的 deinit 上崩掉 swift-frontend（Swift 6.3.3，
+/// `isCallerAndCalleeLayoutConstraintsCompatible` 无限递归），而 Debug/arm64
+/// 一切正常——本地单测全绿、发布构建当场崩，就是这么来的。这里只用来装
+/// 一个 Bool，去掉泛型没有任何损失。
+private final class TimeoutFlag: @unchecked Sendable {
     private let lock = NSLock()
-    private var storage: Value
+    private var storage: Bool
 
-    init(_ value: Value) {
+    init(_ value: Bool) {
         storage = value
     }
 
-    var value: Value {
+    var value: Bool {
         get {
             lock.lock()
             defer { lock.unlock() }
