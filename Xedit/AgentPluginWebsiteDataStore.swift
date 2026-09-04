@@ -51,9 +51,20 @@ nonisolated enum AgentPluginWebsiteDataStore {
 
     /// 卸载插件时把它的仓一并删掉。留着既占地方，也让「删了再装」拿到
     /// 上一次的残留状态——那是最难查的一类故障。
+    ///
+    /// **必须等它回来**。WebKit 把删除放在自己的 IO 队列上做，做完再跳回
+    /// 主 RunLoop 调回调；发射后不管的话，调用方（测试进程收尾、App 退出）
+    /// 可能已经把主 RunLoop 拆了，回调那一跳就会解空指针崩在
+    /// `WTF::RunLoop::dispatch` 上。改成 async 并等到回调，让调用方自己
+    /// 决定在哪儿等。
     @MainActor
-    static func remove(for pluginID: AgentPluginID) {
+    static func remove(for pluginID: AgentPluginID) async {
         guard #available(macOS 14.0, *) else { return }
-        WKWebsiteDataStore.remove(forIdentifier: identifier(for: pluginID)) { _ in }
+        let id = identifier(for: pluginID)
+        await withCheckedContinuation { continuation in
+            WKWebsiteDataStore.remove(forIdentifier: id) { _ in
+                continuation.resume()
+            }
+        }
     }
 }
