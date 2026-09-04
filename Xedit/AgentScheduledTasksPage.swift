@@ -30,6 +30,23 @@ enum AgentPrimaryDestination: Equatable {
         return id
     }
 
+    /// 这个目的地要不要在侧边栏下半部继续列工作区与会话。
+    ///
+    /// 「已安排」和「专家圆桌」都是自成一屏的页面，跟当前是哪个会话没有
+    /// 关系；底下再挂一长串会话列表，点了也不会切过去，只是把侧边栏撑长。
+    /// 调度台与插件中心早就各自处理过，这里把这两个补齐。
+    var showsSessionSidebar: Bool {
+        switch self {
+        case .conversation:
+            return true
+        case .scheduledTasks, .roundtable, .dispatchBoard, .pluginCenter:
+            return false
+        case .plugin:
+            // 插件自己在清单里声明伴随侧栏要什么（会话列表 / 声明式 / 无）。
+            return true
+        }
+    }
+
     var hostsDedicatedCenterSurface: Bool {
         switch self {
         case .conversation:
