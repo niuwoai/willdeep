@@ -3,6 +3,12 @@
 > 当前文件保留最新版本（1.321.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.328.0-rc2 - 2026-09-04
+
+### Fixed
+
+- 发布构建当场崩：`AppStateAgentChatCommandBlock.swift` 里那个泛型的一次性 Bool 容器，会让 Release / x86_64 的 `EarlyPerfInliner` 在它的 deinit 上把 swift-frontend 崩掉（Swift 6.3.3，`isCallerAndCalleeLayoutConstraintsCompatible` 无限递归）。Debug / arm64 一切正常，所以本地单测全绿、发布一构建就挂。改成非泛型的 `TimeoutFlag`——它本来就只装一个 Bool，去掉泛型没有任何损失。
+
 ## 1.328.0-rc1 - 2026-09-04
 
 ### Added
