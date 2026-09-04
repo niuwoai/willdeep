@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.2.1] - 2026-09-04
+
+### Fixed
+
+- Every input field was unusable: the workspace defined its sections as functions inside the component and rendered them as JSX elements, so each keystroke remounted the whole tree and dropped focus after one character.
+- The English dictionary spread the Chinese one and only overrode part of it, leaving 89 keys, including the planner system prompt sent to the model, showing Chinese to English users.
+- The image model is now `nano-banana-2`. The underscore spelling does not match the gateway's routing prefix and would have been rejected as an unconfigured model.
+- `crypto.randomUUID` is only defined in a secure context, and the plugin page is served from a custom scheme. A guarded fallback replaces every call, including the one on first render.
+- Candidate draws run concurrently and report per-item outcomes, so a failure partway through no longer hides the images that were already generated and billed.
+- Generating frames no longer unlocks its own button mid-run, which used to let a second click start another paid round.
+- Each draw in a batch varies its prompt, since the gateway forces `n` to 1 for the gpt-image family and drops `seed` on some upstream paths.
+- Drafting a new shot no longer shows the first shot's candidates, and picking one no longer writes back to that shot.
+- The theme now follows the host when only the color scheme changes, notifications are announced and keyboard dismissible, the page no longer forces a 700px minimum width, and status pills have dark-theme colors.
+- Saving the first shot moves a drama from planning into production, so the library's status filters are no longer permanently empty. Filter chips show counts and disable themselves when empty.
+- Development-only cover images are no longer copied into the production bundle.
+
+## [0.2.0] - 2026-09-04
+
+### Fixed
+
+- Storyboard saves no longer crash on the pinned `/usr/bin/ruby` 2.6 interpreter; dialogue normalization dropped the Ruby 2.7 `filter_map` call.
+- Partial saves keep untouched fields. Renaming a character no longer wipes its description, identity prompt, and identity version.
+- An unreadable archive now refuses the write instead of overwriting it with an empty one, so a truncated file no longer costs the user every drama and job record.
+- Generated-image paths are confined to the host's `generated-images` directory and symlinks are rejected.
+- Stale `characterID` / `shotID` values are reported instead of silently creating duplicates, and `drama.confirm_plan` accepts a `requestID` for idempotent retries.
+- Job and drama archives now share the host's per-plugin directory, with a non-destructive copy of any legacy job store on startup.
+
+### Added
+
+- Added a named short-drama library, AI planning confirmation cards, character identity locking, episode switching, editable scripts/dialogue, and per-shot start/end frame design.
+- Added permission-scoped some.im image generation with selectable `gpt-image-2` and `nano-banana-2` models plus configurable candidate counts.
+- Added multiple video draws per shot and explicit capability messaging when the default Tsingfly adapter cannot accept an end frame.
+
+### Changed
+
+- Redesigned the React workspace around the full short-drama production pipeline with the approved light macOS sidebar, searchable/status-filtered drama list, recent-work continuation, and responsive narrow-window layout.
+- Reworked planning from a one-shot form into contextual AI chat with a persistent transcript and a separately confirmable structured card; all visible copy remains in i18n dictionaries.
+- Added three optimized 600×800 WebP cover assets for development previews without increasing the host plugin-size limit.
+
 ## [0.1.0] - 2026-09-04
 
 ### Added

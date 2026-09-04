@@ -1,23 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { activeStates, parseVideoPlan } from './bridge';
+import { parseDramaPlan } from './bridge';
 
-describe('parseVideoPlan', () => {
-  it('accepts plain JSON and fenced JSON', () => {
-    expect(parseVideoPlan('{"title":"海边","prompt":"缓慢推进","negativePrompt":"模糊"}')?.prompt).toBe('缓慢推进');
-    expect(parseVideoPlan('```json\n{"title":"A","prompt":"B","negativePrompt":""}\n```')?.title).toBe('A');
+describe('parseDramaPlan', () => {
+  it('accepts the short_drama_plan fenced contract', () => {
+    const raw = '```short_drama_plan\n{"title":"错时来信","episodeCount":8,"episodeDurationSeconds":80,"logline":"来自未来的短信"}\n```';
+    expect(parseDramaPlan(raw)).toMatchObject({ title: '错时来信', episodeCount: 8, episodeDurationSeconds: 80 });
   });
 
-  it('rejects prose and objects without a prompt', () => {
-    expect(parseVideoPlan('I would do this')).toBeNull();
-    expect(parseVideoPlan('{"title":"missing"}')).toBeNull();
-  });
-});
-
-describe('job states', () => {
-  it('polls only non-terminal submitted states', () => {
-    expect(activeStates.has('queued')).toBe(true);
-    expect(activeStates.has('in_progress')).toBe(true);
-    expect(activeStates.has('completed')).toBe(false);
-    expect(activeStates.has('failed')).toBe(false);
+  it('rejects prose and plans without a title', () => {
+    expect(parseDramaPlan('just prose')).toBeNull();
+    expect(parseDramaPlan('{"genre":"悬疑"}')).toBeNull();
   });
 });

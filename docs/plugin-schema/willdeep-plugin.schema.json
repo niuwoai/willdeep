@@ -18,7 +18,7 @@
           "workspace.write",
           "process.execute",
           "network.access",
-          "credentials.use", "ai.chat", "providers.read",
+          "credentials.use", "ai.chat", "ai.image", "providers.read",
           "clipboard.write",
           "notifications"
         ]

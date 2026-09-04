@@ -85,6 +85,7 @@ nonisolated enum AgentPluginPackageLoader {
         // 插件页面借宿主的手问模型 / 读 provider 清单，见
         // docs/PLUGIN_HOST_CAPABILITIES_DESIGN.md 与 AgentPluginAIBridge。
         .aiChat,
+        .aiImage,
         .providersRead,
     ]
 

@@ -1,539 +1,384 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { activeStates, callCommand, loadProviders, loadStudio, parseVideoPlan } from './bridge';
+import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { callCommand, loadDramas, loadProviders, parseDramaPlan } from './bridge';
 import { createTranslator, localeFromContext } from './i18n';
-import type { JobState, ListResponse, ProviderEntry, ProviderStatus, StudioSettings, VideoJob } from './types';
+import type { Drama, DramaPlan, ImageModel, ProviderEntry, Shot, Stage } from './types';
 import './styles.css';
 
-type Filter = 'all' | 'draft' | 'active' | 'completed' | 'failed';
+const imageModels: ImageModel[] = ['gpt-image-2', 'nano-banana-2'];
 
-type FormState = {
-  draftID: string;
-  title: string;
-  prompt: string;
-  negativePrompt: string;
-  referenceImagePath: string;
-  seed: string;
-};
+// crypto.randomUUID 标了 [SecureContext]，插件页跑在自定义 scheme
+// willdeep-plugin:// 下，非安全上下文里这个方法根本不存在。宿主自己注入的
+// bootstrap 两处都写了同样的降级，页面这边不能少——首屏就会同步调用它。
+function localID(): string {
+  const source = globalThis.crypto;
+  if (source && typeof source.randomUUID === 'function') return source.randomUUID();
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+const stageOrder: Stage[] = ['planning', 'characters', 'script', 'storyboard', 'frames', 'video'];
+type DramaStatusFilter = 'all' | 'planning' | 'production' | 'completed';
+type PlannerMessage = { id: string; role: 'user' | 'assistant'; content: string; display: string };
 
-const defaultSettings: StudioSettings = {
-  assistantProviderID: null,
-  assistantModel: null,
-  videoModel: 'MiniMax-H3',
-  duration: 4,
-  width: 832,
-  height: 480,
-  inferenceSteps: 20,
-  autoDownload: true,
-};
-
-const emptyForm: FormState = {
-  draftID: '',
-  title: '',
-  prompt: '',
-  negativePrompt: '',
-  referenceImagePath: '',
-  seed: '',
-};
-
-function resultError(payload: { error?: { message?: string; details?: { message?: string } } }): string {
-  return payload.error?.details?.message ?? payload.error?.message ?? '';
+function emptyShot(order: number): Shot {
+  return { id: '', order, title: '', summary: '', dialogue: [{ id: localID(), speaker: '', text: '' }], actionStart: '', actionEnd: '', cameraIntent: '', duration: 4, startPrompt: '', endPrompt: '', startCandidates: [], endCandidates: [] };
 }
 
-function stateTranslationKey(state: JobState): string {
-  const keys: Record<JobState, string> = {
-    draft: 'stateDraft',
-    submitting: 'stateSubmitting',
-    queued: 'stateQueued',
-    in_progress: 'stateInProgress',
-    completed: 'stateCompleted',
-    failed: 'stateFailed',
-  };
-  return keys[state];
-}
-
-function errorSummary(error: unknown): string {
-  if (!error) return '';
-  if (typeof error === 'string') return error;
-  if (typeof error !== 'object') return String(error);
-  const object = error as Record<string, unknown>;
-  if (typeof object.message === 'string') return object.message;
-  if (object.details && typeof object.details === 'object') {
-    const details = object.details as Record<string, unknown>;
-    if (typeof details.message === 'string') return details.message;
-  }
-  return JSON.stringify(error);
+function selectedCandidate(shot: Shot | undefined, kind: 'start' | 'end') {
+  if (!shot) return undefined;
+  const list = kind === 'start' ? shot.startCandidates : shot.endCandidates;
+  const id = kind === 'start' ? shot.selectedStartID : shot.selectedEndID;
+  return list.find((candidate) => candidate.id === id);
 }
 
 export default function App() {
-  const contextLocale = window.willdeep?.getContext().locale;
-  const [locale, setLocale] = useState(localeFromContext(contextLocale));
+  const [locale, setLocale] = useState(localeFromContext(window.willdeep?.getContext().locale));
   const t = useMemo(() => createTranslator(locale), [locale]);
-  const [jobs, setJobs] = useState<VideoJob[]>([]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [settings, setSettings] = useState<StudioSettings>(defaultSettings);
-  const [provider, setProvider] = useState<ProviderStatus>({ id: 'openai-videos-async', apiConfigured: false });
+  const [stage, setStage] = useState<Stage>('library');
+  const [dramas, setDramas] = useState<Drama[]>([]);
+  const [dramaID, setDramaID] = useState('');
+  const drama = dramas.find((item) => item.id === dramaID);
+  const [episodeID, setEpisodeID] = useState('');
+  const episode = drama?.episodes.find((item) => item.id === episodeID) ?? drama?.episodes[0];
+  const [shotID, setShotID] = useState('');
+  // 正在起草一个还没落库的新分镜时，shot 必须是 undefined。早先 shotID 为空就
+  // 回落到 shots[0]，于是首尾帧页同时显示「第 1 个分镜的候选图」和「空白草稿的
+  // 提示词」，选图还会写回第 1 个分镜。
+  const [draftingNewShot, setDraftingNewShot] = useState(false);
+  const shot = draftingNewShot ? undefined : (episode?.shots.find((item) => item.id === shotID) ?? episode?.shots[0]);
   const [providers, setProviders] = useState<ProviderEntry[]>([]);
-  const [filter, setFilter] = useState<Filter>('all');
-  const [form, setForm] = useState<FormState>(emptyForm);
-  const [busy, setBusy] = useState(false);
-  const [aiBusy, setAIBusy] = useState(false);
+  const [assistantProvider, setAssistantProvider] = useState('');
+  const [assistantModel, setAssistantModel] = useState('');
+  const [imageModel, setImageModel] = useState<ImageModel>('gpt-image-2');
+  const [candidateCount, setCandidateCount] = useState(4);
+  const [videoCount, setVideoCount] = useState(2);
+  const [idea, setIdea] = useState('');
+  const [plannerMessages, setPlannerMessages] = useState<PlannerMessage[]>([]);
+  const [plan, setPlan] = useState<DramaPlan | null>(null);
+  const [character, setCharacter] = useState({ id: '', name: '', description: '', visualPrompt: '' });
+  const [episodeDraft, setEpisodeDraft] = useState({ title: '', summary: '', script: '' });
+  const [shotDraft, setShotDraft] = useState<Shot>(emptyShot(1));
+  const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState('');
   const [failure, setFailure] = useState('');
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [confirmation, setConfirmation] = useState<{ command: string; job: VideoJob } | null>(null);
-  const [jobBusy, setJobBusy] = useState(false);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<DramaStatusFilter>('all');
 
+  function errorMessage(error: unknown) {
+    if (!(error instanceof Error)) return t('operationFailed');
+    return t(error.message) === error.message ? error.message : t(error.message);
+  }
+
+  async function reload(preferredID?: string) {
+    const next = await loadDramas();
+    setDramas(next);
+    if (preferredID) setDramaID(preferredID);
+  }
+
+  // 只在挂载时拉一次。早先这个 effect 依赖 [t]，切一次语言就把短剧列表和
+  // provider 列表重新拉一遍。
   useEffect(() => {
-    document.title = t('appTitle');
-  }, [t]);
-
-  const applyList = useCallback((payload: ListResponse) => {
-    if (!payload.ok) throw new Error(resultError(payload) || 'list_failed');
-    setJobs(payload.jobs ?? []);
-    setCounts(payload.counts ?? {});
-    setSettings(payload.settings ?? defaultSettings);
-    setProvider(payload.provider ?? { id: 'openai-videos-async', apiConfigured: false });
+    void reload().catch((error) => setFailure(errorMessage(error)));
+    void loadProviders().then((items) => {
+      setProviders(items);
+      const active = items.find((item) => item.isActive) ?? items[0];
+      if (active) { setAssistantProvider(active.providerID); setAssistantModel(active.flashModel || active.models[0] || ''); }
+    }).catch(() => setProviders([]));
   }, []);
 
-  const reload = useCallback(async (silent = false) => {
-    try {
-      const payload = await loadStudio();
-      applyList(payload);
-      if (!silent) setFailure('');
-    } catch (error) {
-      if (!silent) setFailure(error instanceof Error ? t(error.message) : t('unknownError'));
-    }
-  }, [applyList, t]);
+  useEffect(() => { document.title = t('appName'); }, [t]);
 
+  // 语言和深浅色都从同一次 context 读。早先主题只在依赖 [t] 的 effect 里读，
+  // 宿主切主题但语言没变时 React 会 bail out，页面永远停在挂载时那一档。
   useEffect(() => {
-    void reload();
-    void loadProviders().then(setProviders).catch(() => setProviders([]));
-  }, [reload]);
-
-  useEffect(() => {
-    const listener = (event: Event) => {
-      const detail = (event as CustomEvent<{ locale?: string }>).detail;
-      setLocale(localeFromContext(detail?.locale));
+    const apply = () => {
+      const context = window.willdeep?.getContext();
+      setLocale(localeFromContext(context?.locale));
+      document.documentElement.dataset.theme = context?.colorScheme === 'dark' ? 'dark' : 'light';
     };
-    window.addEventListener('willdeep:context-changed', listener);
-    return () => window.removeEventListener('willdeep:context-changed', listener);
+    apply();
+    window.addEventListener('willdeep:context-changed', apply);
+    return () => window.removeEventListener('willdeep:context-changed', apply);
   }, []);
 
-  const hasActiveJobs = jobs.some((job) => activeStates.has(job.state));
   useEffect(() => {
-    if (!hasActiveJobs) return undefined;
-    let stopped = false;
-    let timer: number;
-    const poll = async () => {
-      try {
-        await callCommand<{ ok: boolean }>('video.refreshActive');
-        if (!stopped) await reload(true);
-      } catch {
-        if (!stopped) setFailure(t('pollFailed'));
-      } finally {
-        if (!stopped) timer = window.setTimeout(() => void poll(), 5_000);
+    if (!episode) return;
+    setEpisodeID(episode.id);
+    setEpisodeDraft({ title: episode.title, summary: episode.summary, script: episode.script });
+  }, [episode?.id]);
+
+  useEffect(() => {
+    if (!shot) { setShotDraft(emptyShot((episode?.shots.length ?? 0) + 1)); return; }
+    setShotID(shot.id);
+    setShotDraft(structuredClone(shot));
+  }, [shot?.id, episode?.id]);
+
+  const provider = providers.find((item) => item.providerID === assistantProvider);
+
+  function enterProject(item: Drama, nextStage: Stage = 'characters') {
+    setDramaID(item.id);
+    setEpisodeID(item.episodes[0]?.id ?? '');
+    setDraftingNewShot(false);
+    setShotID(item.episodes[0]?.shots[0]?.id ?? '');
+    setStage(nextStage);
+    setFailure('');
+  }
+
+  function openPlanning() {
+    setDramaID('');
+    setPlan(null);
+    setIdea('');
+    setPlannerMessages([]);
+    setFailure('');
+    setStage('planning');
+  }
+
+  async function askPlanner() {
+    if (!idea.trim()) { setFailure(t('ideaRequired')); return; }
+    const userMessage: PlannerMessage = { id: localID(), role: 'user', content: idea.trim(), display: idea.trim() };
+    const requestMessages = [...plannerMessages, userMessage];
+    setPlannerMessages(requestMessages);
+    setIdea('');
+    setBusy('plan'); setFailure('');
+    try {
+      const response = await window.willdeep?.ai?.complete({
+        system: t('plannerSystem'), messages: requestMessages.map(({ role, content }) => ({ role, content })),
+        provider: assistantProvider || undefined, model: assistantModel || undefined, maxOutputTokens: 3000,
+      });
+      const parsed = response && parseDramaPlan(response.text);
+      if (!parsed) throw new Error(t('planInvalid'));
+      setPlan(parsed);
+      setPlannerMessages([...requestMessages, { id: localID(), role: 'assistant', content: response.text, display: t('planGeneratedMessage', { title: parsed.title }) }]);
+    } catch (error) { setFailure(errorMessage(error)); }
+    finally { setBusy(''); }
+  }
+
+  async function confirmPlan() {
+    if (!plan) return;
+    setBusy('confirm');
+    try {
+      const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { message?: string } }>('drama.confirmPlan', { plan });
+      if (!payload.ok || !payload.drama) throw new Error(payload.error?.message || t('operationFailed'));
+      await reload(payload.drama.id); enterProject(payload.drama, 'characters'); setNotice(t('planSaved'));
+    } catch (error) { setFailure(errorMessage(error)); }
+    finally { setBusy(''); }
+  }
+
+  async function saveCharacter() {
+    if (!drama || !character.name.trim()) return;
+    setBusy('character');
+    try {
+      // 刻意不传 identityVersion。服务端只改收到的字段，硬传 1 会把用户
+      // 刻意升过的身份版本每次都打回去。
+      const payload = await callCommand<{ ok: boolean; drama?: Drama }>('drama.saveCharacter', { dramaID: drama.id, characterID: character.id || undefined, ...character });
+      if (payload.drama) {
+        setDramas((items) => items.map((item) => item.id === payload.drama?.id ? payload.drama : item));
+        const saved = payload.drama.characters.find((item) => item.id === character.id) ?? payload.drama.characters.at(-1);
+        if (saved) setCharacter({ id: saved.id, name: saved.name, description: saved.description, visualPrompt: saved.visualPrompt });
       }
-    };
-    timer = window.setTimeout(() => void poll(), 5_000);
-    return () => { stopped = true; window.clearTimeout(timer); };
-  }, [hasActiveJobs, reload]);
-
-  const visibleJobs = useMemo(() => jobs.filter((job) => {
-    if (filter === 'all') return true;
-    if (filter === 'active') return activeStates.has(job.state);
-    return job.state === filter;
-  }), [filter, jobs]);
-
-  const selectedProvider = providers.find((entry) => entry.providerID === settings.assistantProviderID);
-
-  function resetForm() {
-    setForm(emptyForm);
-    setNotice('');
-    setFailure('');
+      setNotice(t('characterSaved'));
+    } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
   }
 
-  function editJob(job: VideoJob) {
-    setForm({
-      draftID: job.state === 'draft' ? job.id : '',
-      title: job.title ?? '',
-      prompt: job.prompt ?? '',
-      negativePrompt: job.negativePrompt ?? '',
-      referenceImagePath: job.referenceImagePath ?? '',
-      seed: job.seed == null ? '' : String(job.seed),
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // 抽卡的前提是每张不一样。some.im 网关对 gpt-image 系会把 n 强制改成 1，
+  // seed 在部分上游路径上会被静默丢弃，所以差异只能落在 prompt 本身。
+  function variedPrompt(prompt: string, index: number) {
+    return index === 0 ? prompt : `${prompt}\n\n(variation ${index + 1})`;
   }
 
-  async function chooseReference() {
-    setFailure('');
+  // 并发发起，逐个收口。早先是串行 for 循环，六张要等六倍时间；中途抛错还会
+  // 跳过循环之后的刷新，前面已经扣过费的图一张也显示不出来。
+  async function drawImages(prompt: string, count: number) {
+    const bridge = window.willdeep?.ai?.generateImage;
+    if (!bridge) throw new Error('imageBridgeMissing');
+    const settled = await Promise.allSettled(
+      Array.from({ length: count }, (_, index) => bridge({
+        prompt: variedPrompt(prompt, index), provider: 'some-im', model: imageModel, size: '1024x1536',
+      })),
+    );
+    const done = settled.flatMap((entry) => (entry.status === 'fulfilled' && entry.value ? [entry.value] : []));
+    const firstFailure = settled.find((entry) => entry.status === 'rejected');
+    return { done, failed: count - done.length, firstFailure: firstFailure?.reason as unknown };
+  }
+
+  function reportDraw(done: number, failed: number, firstFailure: unknown) {
+    if (done > 0) setNotice(failed > 0 ? t('imagesPartial', { done, failed }) : t('imagesGenerated', { count: done }));
+    if (failed > 0) setFailure(done > 0 ? errorMessage(firstFailure) : errorMessage(firstFailure));
+  }
+
+  async function generateCharacterImages() {
+    if (!drama || !character.id || !character.visualPrompt.trim()) { setFailure(t('saveCharacterFirst')); return; }
+    setBusy('characterImage'); setFailure('');
     try {
-      const payload = await callCommand<{ ok: boolean; path?: string; error?: { message?: string } }>('video.pickReference');
-      if (!payload.ok || !payload.path) throw new Error(resultError(payload));
-      setForm((current) => ({ ...current, referenceImagePath: payload.path ?? '' }));
-    } catch (error) {
-      setFailure(error instanceof Error ? t(error.message) : t('commandFailed'));
-    }
-  }
-
-  async function directWithAI() {
-    if (!form.prompt.trim()) {
-      setFailure(t('missingPrompt'));
-      return;
-    }
-    setAIBusy(true);
-    setFailure('');
-    try {
-      const request: {
-        system: string;
-        messages: Array<{ role: 'user' | 'assistant'; content: string }>;
-        provider?: string;
-        model?: string;
-        maxOutputTokens?: number;
-      } = {
-        system: t('aiSystem'),
-        messages: [{
-          role: 'user',
-          content: t('aiUserTemplate', {
-            prompt: form.prompt,
-            mode: form.referenceImagePath ? t('imageToVideo') : t('textToVideo'),
-            duration: settings.duration,
-            width: settings.width,
-            height: settings.height,
-          }),
-        }],
-        maxOutputTokens: 1_000,
-      };
-      if (settings.assistantProviderID) request.provider = settings.assistantProviderID;
-      if (settings.assistantModel) request.model = settings.assistantModel;
-      const response = await window.willdeep?.ai?.complete(request);
-      if (!response) throw new Error('ai_unavailable');
-      const plan = parseVideoPlan(response.text);
-      if (!plan) {
-        setFailure(t('invalidAIResponse'));
-        return;
+      const { done, failed, firstFailure } = await drawImages(character.visualPrompt, candidateCount);
+      for (const result of done) {
+        await callCommand('drama.recordCharacterImage', { dramaID: drama.id, characterID: character.id, prompt: character.visualPrompt, ...result });
       }
-      setForm((current) => ({
-        ...current,
-        title: plan.title || current.title,
-        prompt: plan.prompt,
-        negativePrompt: plan.negativePrompt,
-      }));
-    } catch {
-      setFailure(t('aiUnavailable'));
-    } finally {
-      setAIBusy(false);
-    }
+      // 成功那几张先落库再刷新，失败的单独报，不让已花的钱看不见。
+      await reload(drama.id);
+      reportDraw(done.length, failed, firstFailure);
+    } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
   }
 
-  async function generate() {
-    if (!form.prompt.trim()) {
-      setFailure(t('missingPrompt'));
-      return;
-    }
-    setBusy(true);
-    setFailure('');
-    setNotice('');
+  async function chooseCharacterImage(candidateID: string) {
+    if (!drama || !character.id) return;
+    await callCommand('drama.selectCharacterImage', { dramaID: drama.id, characterID: character.id, candidateID });
+    await reload(drama.id);
+  }
+
+  async function saveEpisode() {
+    if (!drama || !episode) return;
+    setBusy('episode');
+    try { await callCommand('drama.saveEpisode', { dramaID: drama.id, episodeID: episode.id, ...episodeDraft }); await reload(drama.id); setNotice(t('episodeSaved')); }
+    catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
+  }
+
+  // 不碰 busy：generateFrames 会先调它，再接着生成图片。早先 saveShot 自己在
+  // finally 里清空 busy，把外层刚设的状态一起清掉，生成期间按钮提前解锁，
+  // 用户看着没反应就再点一次，白白多抽一轮。
+  async function persistShot(): Promise<string | undefined> {
+    if (!drama || !episode) return undefined;
+    const payload = await callCommand<{ ok: boolean; drama?: Drama }>('drama.saveShot', { dramaID: drama.id, episodeID: episode.id, shotID: shotDraft.id || undefined, ...shotDraft });
+    const saved = payload.drama?.episodes.find((item) => item.id === episode.id)?.shots.find((item) => item.id === shotDraft.id)
+      ?? payload.drama?.episodes.find((item) => item.id === episode.id)?.shots.find((item) => item.order === shotDraft.order);
+    if (payload.drama) setDramas((items) => items.map((item) => item.id === payload.drama?.id ? payload.drama : item));
+    if (saved) { setDraftingNewShot(false); setShotID(saved.id); setShotDraft(structuredClone(saved)); }
+    return saved?.id;
+  }
+
+  async function saveShot(): Promise<string | undefined> {
+    setBusy('shot');
     try {
-      const payload = await callCommand<{ ok: boolean; job?: VideoJob; error?: { message?: string; details?: { message?: string } } }>(
-        'video.generate',
-        {
-          draftID: form.draftID || undefined,
-          title: form.title,
-          prompt: form.prompt,
-          negativePrompt: form.negativePrompt,
-          referenceImagePath: form.referenceImagePath || undefined,
-          model: settings.videoModel,
-          duration: settings.duration,
-          width: settings.width,
-          height: settings.height,
-          inferenceSteps: settings.inferenceSteps,
-          seed: form.seed || undefined,
-          source: form.draftID ? 'draft' : 'studio',
-        },
+      const id = await persistShot();
+      if (id) setNotice(t('shotSaved'));
+      return id;
+    } catch (error) { setFailure(errorMessage(error)); return undefined; } finally { setBusy(''); }
+  }
+
+  async function generateFrames(kind: 'start' | 'end') {
+    if (!drama || !episode) return;
+    const prompt = kind === 'start' ? shotDraft.startPrompt : shotDraft.endPrompt;
+    if (!prompt.trim()) { setFailure(t('framePromptRequired')); return; }
+    setBusy(kind); setFailure('');
+    try {
+      const savedShotID = await persistShot();
+      if (!savedShotID) throw new Error(t('saveShotFailed'));
+      const { done, failed, firstFailure } = await drawImages(prompt, candidateCount);
+      for (const result of done) {
+        await callCommand('drama.recordImage', { dramaID: drama.id, episodeID: episode.id, shotID: savedShotID, kind, prompt, ...result });
+      }
+      await reload(drama.id);
+      reportDraw(done.length, failed, firstFailure);
+    } catch (error) { setFailure(errorMessage(error)); }
+    finally { setBusy(''); }
+  }
+
+  async function chooseFrame(kind: 'start' | 'end', candidateID: string) {
+    if (!drama || !episode || !shot) return;
+    await callCommand('drama.selectImage', { dramaID: drama.id, episodeID: episode.id, shotID: shot.id, kind, candidateID });
+    await reload(drama.id);
+  }
+
+  async function generateVideos() {
+    if (!shot) return;
+    const start = selectedCandidate(shot, 'start');
+    if (!start) { setFailure(t('selectStartFirst')); return; }
+    setBusy('video'); setFailure('');
+    try {
+      const basePrompt = shot.summary || shot.cameraIntent;
+      const settled = await Promise.allSettled(
+        Array.from({ length: videoCount }, (_, index) => callCommand('video.generate', {
+          title: `${drama?.title ?? ''} · ${episode?.title ?? ''} · ${shot.title}`,
+          prompt: variedPrompt(basePrompt, index), referenceImagePath: start.filePath,
+          duration: [2, 4, 6].includes(shot.duration) ? shot.duration : 4, source: 'short-drama',
+        })),
       );
-      if (!payload.ok) throw new Error(resultError(payload) || t('commandFailed'));
-      resetForm();
-      await reload(true);
-    } catch (error) {
-      setFailure(error instanceof Error ? t(error.message) : t('commandFailed'));
-      await reload(true);
-    } finally {
-      setBusy(false);
-    }
+      // 一条提交失败不该让另外几条已经计过费的提交无声消失。
+      const done = settled.filter((entry) => entry.status === 'fulfilled').length;
+      const firstFailure = settled.find((entry) => entry.status === 'rejected');
+      if (done > 0) setNotice(done === videoCount ? t('videosSubmitted', { count: done }) : t('videosPartial', { done, failed: videoCount - done }));
+      if (firstFailure) setFailure(errorMessage(firstFailure.reason));
+    } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
   }
 
-  async function runJobCommand(command: string, job: VideoJob) {
-    if (jobBusy) return;
-    setJobBusy(true);
-    setFailure('');
-    try {
-      const payload = await callCommand<{ ok: boolean; error?: { message?: string; details?: { message?: string } } }>(command, { id: job.id });
-      if (!payload.ok) throw new Error(resultError(payload) || t('commandFailed'));
-      await reload(true);
-    } catch (error) {
-      setFailure(error instanceof Error ? t(error.message) : t('commandFailed'));
-      await reload(true);
-    } finally {
-      setJobBusy(false);
-    }
+  function Sidebar() {
+    const globalItems = ['library', 'assets', 'queue', 'settings'] as const;
+    return <aside className="sidebar"><button className="wordmark" onClick={() => setStage('library')}>{t('appName')}</button><nav className="global-nav" aria-label={t('mainNavigation')}>{globalItems.map((item) => <button key={item} className={item === 'library' ? 'active' : ''} disabled={item !== 'library'} onClick={() => setStage('library')}>{t(`nav_${item}`)}</button>)}</nav>{drama && <div className="project-nav"><p>{t('productionFlow')}</p><strong>{drama.title}</strong>{stageOrder.map((item, index) => <button key={item} className={stage === item ? 'active' : ''} onClick={() => setStage(item)}><span>{String(index + 1).padStart(2, '0')}</span>{t(`stage_${item}`)}</button>)}</div>}<div className="sidebar-foot"><span>{t('localPlugin')}</span><button onClick={() => setLocale(locale === 'zh-Hans' ? 'en' : 'zh-Hans')}>{locale === 'zh-Hans' ? 'EN' : '中文'}</button></div></aside>;
   }
 
-  async function confirmJobCommand() {
-    if (!confirmation) return;
-    const action = confirmation;
-    setConfirmation(null);
-    await runJobCommand(action.command, action.job);
+  // 这一组是渲染函数，不是组件，调用点一律写成 Foo() 而不是 <Foo />。
+  // 它们定义在 App 函数体内，每次渲染都是新的函数引用；一旦以 JSX 元素的形式
+  // 出现，React 就按类型引用比对，于是每个 setState 都会 unmount + remount
+  // 整棵子树，所有受控输入框打一个字就掉焦点。
+  function AppShell(children: ReactNode) {
+    return <div className="app-shell">{Sidebar()}<div className="app-main">{children}</div></div>;
   }
 
-  async function saveSettings(next: StudioSettings) {
-    setFailure('');
-    try {
-      const payload = await callCommand<{ ok: boolean; settings?: StudioSettings; error?: { message?: string } }>('video.settings', next);
-      if (!payload.ok || !payload.settings) throw new Error(resultError(payload));
-      setSettings(payload.settings);
-      setNotice(t('saved'));
-      setSettingsOpen(false);
-    } catch (error) {
-      setFailure(error instanceof Error ? t(error.message) : t('commandFailed'));
-    }
+  function ProjectHeader() {
+    if (!drama) return null;
+    return <header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{drama.title}</span></div><span className={`status-pill status-${drama.status}`}>{t(`status_${drama.status}`)}</span></header>;
   }
 
-  const filters: Array<{ id: Filter; label: string }> = [
-    { id: 'all', label: t('filtersAll') },
-    { id: 'draft', label: t('filtersDraft') },
-    { id: 'active', label: t('filtersActive') },
-    { id: 'completed', label: t('filtersCompleted') },
-    { id: 'failed', label: t('filtersFailed') },
-  ];
+  function EpisodeSwitcher() {
+    if (!drama) return null;
+    return <div className="episode-switcher"><label>{t('episode')}</label><select value={episode?.id ?? ''} onChange={(event) => { setEpisodeID(event.target.value); setShotID(''); }}>{drama.episodes.map((item) => <option key={item.id} value={item.id}>{t('episodeNumber', { number: item.order })} · {item.title}</option>)}</select><span>{t('episodeProgress', { current: episode?.order ?? 0, total: drama.episodes.length })}</span></div>;
+  }
 
-  return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <h1>{t('appTitle')}</h1>
-          <p>{t('appSubtitle')}</p>
-        </div>
-        <div className="top-actions">
-          <button className="button secondary" onClick={resetForm}>{t('newVideo')}</button>
-          <button className="button secondary" onClick={() => setSettingsOpen(true)}>{t('settings')}</button>
-        </div>
-      </header>
+  function ShotRail() {
+    if (!episode) return null;
+    return <aside className="shot-rail"><div className="rail-title"><strong>{t('shots')}</strong><button onClick={() => { setDraftingNewShot(true); setShotID(''); setShotDraft(emptyShot(episode.shots.length + 1)); }}>{t('addShot')}</button></div>{episode.shots.map((item) => <button key={item.id} className={shot?.id === item.id ? 'selected' : ''} onClick={() => { setDraftingNewShot(false); setShotID(item.id); }}><span>{String(item.order).padStart(2, '0')}</span><div><strong>{item.title || t('untitledShot')}</strong><small>{item.duration}s · {item.dialogue?.length ?? 0} {t('dialogueLines')}</small></div></button>)}</aside>;
+  }
 
-      <section className={`provider-banner ${provider.apiConfigured ? 'ready' : 'missing'}`}>
-        <div>
-          <strong>{provider.apiConfigured ? t('providerReady') : t('providerMissing')}</strong>
-          <span>{t('providerHint')}</span>
-        </div>
-        <code>{provider.apiBase ?? provider.id}</code>
-      </section>
+  function Library() {
+    const normalizedQuery = query.trim().toLocaleLowerCase(locale);
+    const visibleDramas = dramas.filter((item) => {
+      const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+      const haystack = `${item.title} ${item.logline} ${item.genre}`.toLocaleLowerCase(locale);
+      return matchesStatus && (!normalizedQuery || haystack.includes(normalizedQuery));
+    });
+    const recent = dramas[0];
+    return AppShell(<main className="library"><header className="library-head"><div><p className="eyebrow">{t('workspace')}</p><h1>{t('libraryTitle')}</h1><p>{t('librarySubtitle')}</p></div><button className="primary" onClick={openPlanning}>{t('createDrama')}</button></header><div className="library-toolbar"><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchDrama')} aria-label={t('searchDrama')} /><div className="status-filters">{(['all', 'planning', 'production', 'completed'] as DramaStatusFilter[]).map((status) => { const count = status === 'all' ? dramas.length : dramas.filter((item) => item.status === status).length; return <button key={status} className={statusFilter === status ? 'active' : ''} disabled={count === 0 && statusFilter !== status} onClick={() => setStatusFilter(status)}>{t(`status_${status}`)}<span className="filter-count">{count}</span></button>; })}</div></div>{recent && !query && statusFilter === 'all' && <section className="recent-project"><div className="recent-cover">{recent.coverURL ? <img src={recent.coverURL} alt={recent.title} /> : <span>{t('noCover')}</span>}</div><div><p className="eyebrow">{t('continueCreating')}</p><h2>{recent.title}</h2><p>{recent.logline || t('noLogline')}</p><small>{t('episodeCount', { count: recent.episodes.length })}</small></div><button className="ghost" onClick={() => enterProject(recent)}>{t('continueButton')}</button></section>}<section className="drama-list">{visibleDramas.map((item) => <article className="drama-row" key={item.id}><button className="row-cover" onClick={() => enterProject(item)}>{item.coverURL ? <img src={item.coverURL} alt={item.title} /> : <span>{t('noCover')}</span>}</button><div className="row-copy"><div><h2>{item.title}</h2><span className={`status-pill status-${item.status}`}>{t(`status_${item.status}`)}</span></div><p>{item.logline || t('noLogline')}</p><small>{item.genre} · {item.format} · {t('episodeCount', { count: item.episodes.length })}</small></div><button className="ghost" onClick={() => enterProject(item)}>{t('continueButton')}</button></article>)}{visibleDramas.length === 0 && <div className="empty-library"><h2>{t('emptyLibrary')}</h2><p>{t(query ? 'emptySearchHint' : 'emptyLibraryHint')}</p><button className="primary" onClick={openPlanning}>{t('createDrama')}</button></div>}</section></main>);
+  }
 
-      {failure && <div className="alert error" role="alert">{failure}</div>}
-      {notice && <div className="alert success" role="status">{notice}</div>}
+  function Planning() {
+    return AppShell(<main className="planning-shell"><header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{t('planningTitle')}</span></div></header><div className="planning-grid"><section className="chat-panel"><div className="section-title"><p className="eyebrow">{t('aiPlanning')}</p><h1>{t('tellStory')}</h1><p>{t('planningHint')}</p></div><div className="chat-history" aria-live="polite"><div className="chat-message assistant"><strong>{t('plannerName')}</strong><p>{t('plannerWelcome')}</p></div>{plannerMessages.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'plannerName')}</strong><p>{message.display}</p></div>)}</div><div className="composer"><textarea className="idea-box" value={idea} onChange={(event) => setIdea(event.target.value)} placeholder={t(plan ? 'revisionPlaceholder' : 'ideaPlaceholder')} /><div className="routing"><label>{t('chatProvider')}<select value={assistantProvider} onChange={(event) => { setAssistantProvider(event.target.value); setAssistantModel(''); }}>{providers.map((item) => <option key={item.providerID} value={item.providerID}>{item.displayName}</option>)}</select></label><label>{t('chatModel')}<select value={assistantModel} onChange={(event) => setAssistantModel(event.target.value)}>{provider?.models.map((item) => <option key={item}>{item}</option>)}</select></label></div><button className="primary wide" disabled={busy === 'plan'} onClick={() => void askPlanner()}>{busy === 'plan' ? t('planningBusy') : t(plan ? 'revisePlan' : 'generatePlan')}</button><small>{t('markdownContract')}</small></div></section><section className="plan-card">{plan ? <><div className="plan-summary"><span>{plan.genre}</span><h2>{plan.title}</h2><small>{plan.format}</small></div><div className="plan-body"><div className="facts"><span>{t('episodeCount', { count: plan.episodeCount })}</span><span>{t('minutesPerEpisode', { count: Math.round(plan.episodeDurationSeconds / 60) })}</span><span>{plan.audience}</span></div><h3>{t('logline')}</h3><p>{plan.logline}</p><h3>{t('coreConflict')}</h3><p>{plan.coreConflict}</p><h3>{t('seriesArc')}</h3><p>{plan.arc}</p><div className="actions"><button className="ghost" onClick={() => setIdea(t('revisionStarter'))}>{t('revise')}</button><button className="primary" disabled={busy === 'confirm'} onClick={() => void confirmPlan()}>{t('confirmAndSave')}</button></div></div></> : <div className="empty-plan"><h2>{t('planWaiting')}</h2><p>{t('planWaitingHint')}</p></div>}</section></div></main>);
+  }
 
-      <section className="composer-card">
-        <div className="section-heading">
-          <div>
-            <span className="eyebrow">{form.referenceImagePath ? t('imageToVideo') : t('textToVideo')}</span>
-            <h2>{t('ideaTitle')}</h2>
-          </div>
-          {form.draftID && <span className="draft-chip">{t('stateDraft')}</span>}
-        </div>
+  function Characters() {
+    const current = drama?.characters.find((item) => item.id === character.id);
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content"><div className="page-heading"><div><p className="eyebrow">{t('stage_characters')}</p><h1>{t('characterTitle')}</h1><p>{t('characterHint')}</p></div><button className="ghost" onClick={() => setCharacter({ id: '', name: '', description: '', visualPrompt: '' })}>{t('newCharacter')}</button></div><div className="character-grid"><section className="character-list">{drama?.characters.map((item) => <button key={item.id} onClick={() => setCharacter({ id: item.id, name: item.name, description: item.description, visualPrompt: item.visualPrompt })}>{item.candidates?.find((candidate) => candidate.id === item.selectedCandidateID) ? <img className="avatar photo" src={item.candidates.find((candidate) => candidate.id === item.selectedCandidateID)?.mediaURL} alt={item.name} /> : <div className="avatar">{item.name.slice(0, 1)}</div>}<div><strong>{item.name}</strong><p>{item.description}</p><small>{t('identityVersion', { version: item.identityVersion })}</small></div></button>)}</section><section className="editor-card"><label>{t('characterName')}<input value={character.name} onChange={(event) => setCharacter({ ...character, name: event.target.value })} /></label><label>{t('characterDescription')}<textarea value={character.description} onChange={(event) => setCharacter({ ...character, description: event.target.value })} /></label><label>{t('identityPrompt')}<textarea className="tall" value={character.visualPrompt} onChange={(event) => setCharacter({ ...character, visualPrompt: event.target.value })} placeholder={t('identityPromptHint')} /></label><div className="identity-note"><strong>{t('identityLock')}</strong><span>{t('identityLockHint')}</span></div><div className="generation-controls"><select value={imageModel} onChange={(event) => setImageModel(event.target.value as ImageModel)}>{imageModels.map((model) => <option key={model}>{model}</option>)}</select><select value={candidateCount} onChange={(event) => setCandidateCount(Number(event.target.value))}>{[1, 2, 4, 6].map((count) => <option key={count} value={count}>{t('countImages', { count })}</option>)}</select></div>{current && <div className="identity-candidates">{current.candidates.map((candidate) => <button className={candidate.id === current.selectedCandidateID ? 'chosen' : ''} key={candidate.id} onClick={() => void chooseCharacterImage(candidate.id)}><img src={candidate.mediaURL} alt={current.name} /></button>)}</div>}<div className="actions"><button className="ghost" disabled={busy === 'characterImage'} onClick={() => void generateCharacterImages()}>{t('generateIdentity')}</button><button className="primary" disabled={busy === 'character'} onClick={() => void saveCharacter()}>{t('saveCharacter')}</button></div></section></div></main></div>);
+  }
 
-        <div className="field-grid">
-          <label className="field full">
-            <span>{t('titleLabel')}</span>
-            <input value={form.title} placeholder={t('titlePlaceholder')} onChange={(event) => setForm({ ...form, title: event.target.value })} />
-          </label>
-          <label className="field full">
-            <span>{t('promptLabel')}</span>
-            <textarea rows={5} value={form.prompt} placeholder={t('promptPlaceholder')} onChange={(event) => setForm({ ...form, prompt: event.target.value })} />
-          </label>
-          <label className="field full">
-            <span>{t('negativeLabel')}</span>
-            <textarea rows={2} value={form.negativePrompt} placeholder={t('negativePlaceholder')} onChange={(event) => setForm({ ...form, negativePrompt: event.target.value })} />
-          </label>
-          <label className="field reference-field">
-            <span>{t('referenceLabel')}</span>
-            <input value={form.referenceImagePath} placeholder={t('referencePlaceholder')} onChange={(event) => setForm({ ...form, referenceImagePath: event.target.value })} />
-          </label>
-          <div className="reference-actions">
-            <button className="button secondary" onClick={() => void chooseReference()}>{t('choose')}</button>
-            {form.referenceImagePath && <button className="button ghost" onClick={() => setForm({ ...form, referenceImagePath: '' })}>{t('clear')}</button>}
-          </div>
-        </div>
+  function Script() {
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="page-heading"><div><p className="eyebrow">{t('stage_script')}</p><h1>{t('scriptTitle')}</h1><p>{t('scriptHint')}</p></div><button className="primary" disabled={busy === 'episode'} onClick={() => void saveEpisode()}>{t('saveEpisode')}</button></div><div className="script-grid"><section className="editor-card"><label>{t('episodeTitle')}<input value={episodeDraft.title} onChange={(event) => setEpisodeDraft({ ...episodeDraft, title: event.target.value })} /></label><label>{t('episodeSummary')}<textarea value={episodeDraft.summary} onChange={(event) => setEpisodeDraft({ ...episodeDraft, summary: event.target.value })} /></label><label>{t('episodeScript')}<textarea className="script-area" value={episodeDraft.script} onChange={(event) => setEpisodeDraft({ ...episodeDraft, script: event.target.value })} /></label></section><aside className="script-guide"><h3>{t('episodeChecklist')}</h3><p>{t('checkHook')}</p><p>{t('checkConflict')}</p><p>{t('checkCliffhanger')}</p><button className="ghost" onClick={() => setStage('storyboard')}>{t('goStoryboard')}</button></aside></div></main></div>);
+  }
 
-        <div className="composer-footer">
-          <div className="parameter-summary">
-            {t('modelAndSize', {
-              model: settings.videoModel,
-              width: settings.width,
-              height: settings.height,
-              duration: settings.duration,
-            })}
-          </div>
-          <div className="composer-actions">
-            <button className="button secondary" disabled={aiBusy || busy} onClick={() => void directWithAI()}>
-              {aiBusy ? t('aiWorking') : t('aiDirect')}
-            </button>
-            <button className="button primary" disabled={busy || aiBusy || !provider.apiConfigured} onClick={() => void generate()}>
-              {busy ? t('generating') : t('generate')}
-            </button>
-          </div>
-        </div>
-      </section>
+  function Storyboard() {
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor"><div className="page-heading compact"><div><p className="eyebrow">{t('shotNumber', { number: shotDraft.order })}</p><h1>{t('storyboardTitle')}</h1></div><button className="primary" disabled={busy === 'shot'} onClick={() => void saveShot()}>{t('saveShot')}</button></div><div className="two-col"><label>{t('shotTitle')}<input value={shotDraft.title} onChange={(event) => setShotDraft({ ...shotDraft, title: event.target.value })} /></label><label>{t('durationSeconds')}<input type="number" value={shotDraft.duration} onChange={(event) => setShotDraft({ ...shotDraft, duration: Number(event.target.value) })} /></label></div><label>{t('shotStory')}<textarea value={shotDraft.summary} onChange={(event) => setShotDraft({ ...shotDraft, summary: event.target.value })} /></label><div className="dialogue-head"><strong>{t('dialogue')}</strong><button className="ghost" onClick={() => setShotDraft({ ...shotDraft, dialogue: [...shotDraft.dialogue, { id: localID(), speaker: '', text: '' }] })}>{t('addLine')}</button></div>{shotDraft.dialogue.map((line, index) => <div className="dialogue-row" key={line.id}><input value={line.speaker} placeholder={t('speaker')} onChange={(event) => { const lines = [...shotDraft.dialogue]; lines[index] = { ...line, speaker: event.target.value }; setShotDraft({ ...shotDraft, dialogue: lines }); }} /><textarea value={line.text} placeholder={t('lineText')} onChange={(event) => { const lines = [...shotDraft.dialogue]; lines[index] = { ...line, text: event.target.value }; setShotDraft({ ...shotDraft, dialogue: lines }); }} /></div>)}<div className="three-col"><label>{t('startAction')}<textarea value={shotDraft.actionStart} onChange={(event) => setShotDraft({ ...shotDraft, actionStart: event.target.value })} /></label><label>{t('endAction')}<textarea value={shotDraft.actionEnd} onChange={(event) => setShotDraft({ ...shotDraft, actionEnd: event.target.value })} /></label><label>{t('cameraIntent')}<textarea value={shotDraft.cameraIntent} onChange={(event) => setShotDraft({ ...shotDraft, cameraIntent: event.target.value })} /></label></div></section></div></main></div>);
+  }
 
-      <nav className="filter-row" aria-label={t('filtersAll')}>
-        {filters.map((item) => (
-          <button key={item.id} className={filter === item.id ? 'filter active' : 'filter'} onClick={() => setFilter(item.id)}>
-            <span>{item.label}</span>
-            <b>{counts[item.id] ?? 0}</b>
-          </button>
-        ))}
-        <button className="filter refresh-filter" onClick={() => void reload()}>{t('refresh')}</button>
-      </nav>
+  function FrameColumn(kind: 'start' | 'end') {
+    const candidates = kind === 'start' ? shot?.startCandidates ?? [] : shot?.endCandidates ?? [];
+    const selectedID = kind === 'start' ? shot?.selectedStartID : shot?.selectedEndID;
+    const prompt = kind === 'start' ? shotDraft.startPrompt : shotDraft.endPrompt;
+    return <section className="frame-column"><div className="frame-title"><div><span>{kind === 'start' ? t('startLabel') : t('endLabel')}</span><div><h2>{t(kind === 'start' ? 'startFrame' : 'endFrame')}</h2><p>{t(kind === 'start' ? 'startFrameHint' : 'endFrameHint')}</p></div></div><small>{candidates.length} {t('candidates')}</small></div><textarea className="prompt-box" value={prompt} placeholder={t('framePromptPlaceholder')} onChange={(event) => setShotDraft({ ...shotDraft, [kind === 'start' ? 'startPrompt' : 'endPrompt']: event.target.value })} /><div className="candidate-grid">{candidates.map((candidate) => <button className={selectedID === candidate.id ? 'chosen' : ''} key={candidate.id} onClick={() => void chooseFrame(kind, candidate.id)}><img src={candidate.mediaURL} alt={t('frameCandidate')} /><span>{selectedID === candidate.id ? t('selected') : t('select')}</span></button>)}{candidates.length === 0 && <div className="candidate-empty">{t('noCandidates')}</div>}</div><button className="primary wide" disabled={busy === kind} onClick={() => void generateFrames(kind)}>{busy === kind ? t('generatingImages') : t('generateCandidates', { count: candidateCount })}</button></section>;
+  }
 
-      {visibleJobs.length === 0 ? (
-        <section className="empty-state">
-          <div className="empty-symbol">▶</div>
-          <h2>{t('emptyTitle')}</h2>
-          <p>{t('emptyBody')}</p>
-        </section>
-      ) : (
-        <section className="job-grid">
-          {visibleJobs.map((job) => (
-            <article className="job-card" key={job.id}>
-              <div className="job-card-top">
-                <span className={`status status-${job.state}`}>{t(stateTranslationKey(job.state))}</span>
-                <span className="mode">{job.mode === 'image_to_video' ? t('imageToVideo') : t('textToVideo')}</span>
-              </div>
-              <h3>{job.title}</h3>
-              <p className="job-prompt">{job.prompt}</p>
-              {activeStates.has(job.state) && (
-                <progress className="progress-track" aria-label={t('progress', { value: job.progress ?? 0 })} max={100} value={Math.max(2, job.progress ?? 0)} />
-              )}
-              <dl>
-                {job.remoteID && <><dt>{t('remoteTask')}</dt><dd>{job.remoteID}</dd></>}
-                {job.outputPath && <><dt>{t('output')}</dt><dd title={job.outputPath}>{job.outputPath}</dd></>}
-              </dl>
-              {job.ambiguousSubmission && <p className="warning-text">{t('ambiguous')}</p>}
-              {Boolean(job.error || job.lastPollError || job.downloadError) && (
-                <p className="error-text">{errorSummary(job.error || job.lastPollError || job.downloadError)}</p>
-              )}
-              <div className="job-meta">
-                <span>{job.model ?? settings.videoModel}</span>
-                <span>{t('updatedAt', { value: new Date(job.updatedAt).toLocaleString(locale === 'zh-Hans' ? 'zh-CN' : 'en-US') })}</span>
-              </div>
-              <fieldset className="job-actions" disabled={jobBusy}>
-                {job.state === 'draft' && <button onClick={() => editJob(job)}>{t('edit')}</button>}
-                {activeStates.has(job.state) && <button onClick={() => void runJobCommand('video.refresh', job)}>{t('refresh')}</button>}
-                {job.state === 'failed' && <button onClick={() => setConfirmation({ command: 'video.retry', job })}>{t('retry')}</button>}
-                {job.state === 'completed' && !job.outputPath && <button onClick={() => void runJobCommand('video.download', job)}>{t('download')}</button>}
-                {job.outputPath && <button onClick={() => void runJobCommand('video.revealOutput', job)}>{t('reveal')}</button>}
-                <button className="danger-link" onClick={() => setConfirmation({ command: 'video.remove', job })}>{t('remove')}</button>
-              </fieldset>
-            </article>
-          ))}
-        </section>
-      )}
+  function Frames() {
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor"><div className="page-heading compact"><div><p className="eyebrow">{shot?.title || t('selectShot')}</p><h1>{t('frameTitle')}</h1><p>{t('frameHint')}</p></div><div className="generation-controls"><select value={imageModel} onChange={(event) => setImageModel(event.target.value as ImageModel)}>{imageModels.map((model) => <option key={model}>{model}</option>)}</select><select value={candidateCount} onChange={(event) => setCandidateCount(Number(event.target.value))}>{[1, 2, 4, 6].map((count) => <option key={count} value={count}>{t('countImages', { count })}</option>)}</select></div></div><div className="frames-grid">{FrameColumn('start')}{FrameColumn('end')}</div></section></div></main></div>);
+  }
 
-      {confirmation && (
-        <div className="modal-backdrop">
-          <section className="settings-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
-            <h2 id="confirm-title">{t('confirmAction')}</h2>
-            <p>{t(confirmation.command === 'video.retry' ? 'confirmRetry' : 'confirmRemove')}</p>
-            <div className="dialog-actions">
-              <button className="button secondary" onClick={() => setConfirmation(null)}>{t('cancel')}</button>
-              <button className="button primary" onClick={() => void confirmJobCommand()}>{t('confirm')}</button>
-            </div>
-          </section>
-        </div>
-      )}
+  function Video() {
+    const start = selectedCandidate(shot, 'start'); const end = selectedCandidate(shot, 'end');
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor"><div className="page-heading compact"><div><p className="eyebrow">{shot?.title || t('selectShot')}</p><h1>{t('videoTitle')}</h1><p>{t('videoHint')}</p></div></div><div className="video-flow"><div className="anchor-card"><span>{t('selectedStart')}</span>{start ? <img src={start.mediaURL} alt={t('startFrame')} /> : <div>{t('notSelected')}</div>}</div><div className="flow-duration"><strong>{t('durationValue', { count: shot?.duration ?? 4 })}</strong><small>{t('frameTransition')}</small></div><div className="anchor-card muted"><span>{t('selectedEnd')}</span>{end ? <img src={end.mediaURL} alt={t('endFrame')} /> : <div>{t('optional')}</div>}</div></div><div className="capability-note"><strong>{t('providerCapability')}</strong><p>{t('firstFrameOnly')}</p></div><div className="mode-grid"><label className="mode active"><input type="radio" checked readOnly /><strong>{t('firstFrameMode')}</strong><span>{t('firstFrameModeHint')}</span></label><label className="mode disabled"><input type="radio" disabled /><strong>{t('lockedEndsMode')}</strong><span>{t('lockedEndsModeHint')}</span></label></div><div className="submit-row"><label>{t('videoDrawCount')}<select value={videoCount} onChange={(event) => setVideoCount(Number(event.target.value))}>{[1, 2, 3, 4].map((count) => <option key={count} value={count}>{t('countVideos', { count })}</option>)}</select></label><button className="primary" disabled={busy === 'video' || !start} onClick={() => void generateVideos()}>{t('submitVideo')}</button></div></section></div></main></div>);
+  }
 
-      {settingsOpen && (
-        <SettingsDialog
-          settings={settings}
-          providers={providers}
-          selectedProvider={selectedProvider}
-          t={t}
-          onCancel={() => setSettingsOpen(false)}
-          onSave={saveSettings}
-        />
-      )}
-    </main>
-  );
-}
-
-type SettingsDialogProps = {
-  settings: StudioSettings;
-  providers: ProviderEntry[];
-  selectedProvider?: ProviderEntry;
-  t: ReturnType<typeof createTranslator>;
-  onCancel: () => void;
-  onSave: (settings: StudioSettings) => Promise<void>;
-};
-
-function SettingsDialog({ settings, providers, selectedProvider, t, onCancel, onSave }: SettingsDialogProps) {
-  const [draft, setDraft] = useState(settings);
-  const provider = providers.find((entry) => entry.providerID === draft.assistantProviderID) ?? selectedProvider;
-
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
-      <section className="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <h2 id="settings-title">{t('settingsTitle')}</h2>
-        <label className="field">
-          <span>{t('assistantProvider')}</span>
-          <select
-            value={draft.assistantProviderID ?? ''}
-            onChange={(event) => setDraft({ ...draft, assistantProviderID: event.target.value || null, assistantModel: null })}
-          >
-            <option value="">{t('assistantDefault')}</option>
-            {providers.map((entry) => <option key={entry.providerID} value={entry.providerID}>{entry.displayName}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span>{t('assistantModel')}</span>
-          <select
-            value={draft.assistantModel ?? ''}
-            disabled={!draft.assistantProviderID}
-            onChange={(event) => setDraft({ ...draft, assistantModel: event.target.value || null })}
-          >
-            <option value="">{provider?.flashModel || t('assistantModelAuto')}</option>
-            {(provider?.models ?? []).map((model) => <option key={model} value={model}>{model}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span>{t('videoModel')}</span>
-          <input value={draft.videoModel} onChange={(event) => setDraft({ ...draft, videoModel: event.target.value })} />
-        </label>
-        <div className="settings-grid">
-          <label className="field">
-            <span>{t('duration')}</span>
-            <select value={draft.duration} onChange={(event) => setDraft({ ...draft, duration: Number(event.target.value) })}>
-              {[2, 4, 6].map((value) => <option key={value} value={value}>{t('seconds', { value })}</option>)}
-            </select>
-          </label>
-          <label className="field">
-            <span>{t('steps')}</span>
-            <input type="number" min={1} max={100} value={draft.inferenceSteps} onChange={(event) => setDraft({ ...draft, inferenceSteps: Number(event.target.value) })} />
-          </label>
-          <label className="field">
-            <span>{t('width')}</span>
-            <input type="number" min={32} max={4096} step={32} value={draft.width} onChange={(event) => setDraft({ ...draft, width: Number(event.target.value) })} />
-          </label>
-          <label className="field">
-            <span>{t('height')}</span>
-            <input type="number" min={32} max={4096} step={32} value={draft.height} onChange={(event) => setDraft({ ...draft, height: Number(event.target.value) })} />
-          </label>
-        </div>
-        <label className="toggle-row">
-          <input type="checkbox" checked={draft.autoDownload} onChange={(event) => setDraft({ ...draft, autoDownload: event.target.checked })} />
-          <span>{t('autoDownload')}</span>
-        </label>
-        <div className="dialog-actions">
-          <button className="button secondary" onClick={onCancel}>{t('cancel')}</button>
-          <button className="button primary" onClick={() => void onSave(draft)}>{t('save')}</button>
-        </div>
-      </section>
-    </div>
-  );
+  let body = Library();
+  if (stage === 'planning') body = Planning();
+  if (stage === 'characters') body = Characters();
+  if (stage === 'script') body = Script();
+  if (stage === 'storyboard') body = Storyboard();
+  if (stage === 'frames') body = Frames();
+  if (stage === 'video') body = Video();
+  // role="alert" 让屏幕阅读器读出结果；用 button 而不是 div 是为了键盘也能关掉。
+  return <>{body}{(notice || failure) && <div className="toast-layer" role="alert" aria-live={failure ? 'assertive' : 'polite'}><button type="button" className={`toast ${failure ? 'error' : ''}`} onClick={() => { setNotice(''); setFailure(''); }}>{failure || notice}<span className="toast-dismiss" aria-hidden="true">×</span><span className="visually-hidden">{t('dismissNotice')}</span></button></div>}</>;
 }

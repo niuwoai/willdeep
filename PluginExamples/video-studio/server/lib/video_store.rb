@@ -20,6 +20,10 @@ class VideoStore
     "autoDownload" => true
   }.freeze
 
+  # 存档存在但读不出来。所有写入都是「读全量 → 改 → 全量覆写」，
+  # 把读失败当成空存档会在下一次保存时抹掉全部任务记录。
+  Unavailable = Class.new(StandardError)
+
   def initialize(path)
     @path = File.expand_path(path)
   end
@@ -27,8 +31,8 @@ class VideoStore
   attr_reader :path
 
   def data
-    parsed = JSON.parse(File.read(path))
-    return empty_data unless parsed.is_a?(Hash)
+    parsed = JSON.parse(File.read(path, encoding: "UTF-8"))
+    raise Unavailable, "video store is not a valid archive" unless parsed.is_a?(Hash)
 
     {
       "version" => VERSION,
@@ -37,9 +41,8 @@ class VideoStore
     }
   rescue Errno::ENOENT
     empty_data
-  rescue JSON::ParserError, SystemCallError => error
-    warn "video-studio: unreadable store (#{error.class}); starting with an empty view"
-    empty_data
+  rescue JSON::ParserError, EncodingError, SystemCallError, IOError => error
+    raise Unavailable, "video store is unreadable (#{error.class})"
   end
 
   def settings
@@ -47,10 +50,12 @@ class VideoStore
   end
 
   def update_settings(changes)
-    current = data
-    current["settings"] = normalize_settings(current["settings"].merge(changes))
-    write(current)
-    current["settings"]
+    with_lock do
+      current = data
+      current["settings"] = normalize_settings(current["settings"].merge(changes))
+      write(current)
+      current["settings"]
+    end
   end
 
   def jobs
@@ -63,49 +68,65 @@ class VideoStore
   end
 
   def add_job(attributes)
-    current = data
-    now = Time.now.utc.iso8601
-    job = {
-      "id" => SecureRandom.uuid,
-      "remoteID" => nil,
-      "provider" => "openai-videos-async",
-      "state" => "draft",
-      "progress" => 0,
-      "createdAt" => now,
-      "updatedAt" => now,
-      "error" => nil,
-      "outputURL" => nil,
-      "outputPath" => nil,
-      "downloadError" => nil,
-      "ambiguousSubmission" => false
-    }.merge(attributes)
-    current["jobs"].unshift(job)
-    current["jobs"] = current["jobs"].first(MAX_JOBS)
-    write(current)
-    job
+    with_lock do
+      current = data
+      now = Time.now.utc.iso8601
+      job = {
+        "id" => SecureRandom.uuid,
+        "remoteID" => nil,
+        "provider" => "openai-videos-async",
+        "state" => "draft",
+        "progress" => 0,
+        "createdAt" => now,
+        "updatedAt" => now,
+        "error" => nil,
+        "outputURL" => nil,
+        "outputPath" => nil,
+        "downloadError" => nil,
+        "ambiguousSubmission" => false
+      }.merge(attributes)
+      current["jobs"].unshift(job)
+      current["jobs"] = current["jobs"].first(MAX_JOBS)
+      write(current)
+      job
+    end
   end
 
   def update_job(id, changes)
-    current = data
-    index = current["jobs"].index { |job| job["id"] == id || job["remoteID"] == id }
-    return nil if index.nil?
+    with_lock do
+      current = data
+      index = current["jobs"].index { |job| job["id"] == id || job["remoteID"] == id }
+      next nil if index.nil?
 
-    current["jobs"][index] = current["jobs"][index].merge(changes).merge("updatedAt" => Time.now.utc.iso8601)
-    write(current)
-    current["jobs"][index]
+      current["jobs"][index] = current["jobs"][index].merge(changes).merge("updatedAt" => Time.now.utc.iso8601)
+      write(current)
+      current["jobs"][index]
+    end
   end
 
   def remove_job(id)
-    current = data
-    removed = current["jobs"].find { |job| job["id"] == id || job["remoteID"] == id }
-    return nil unless removed
+    with_lock do
+      current = data
+      removed = current["jobs"].find { |job| job["id"] == id || job["remoteID"] == id }
+      next nil unless removed
 
-    current["jobs"].reject! { |job| job["id"] == removed["id"] }
-    write(current)
-    removed
+      current["jobs"].reject! { |job| job["id"] == removed["id"] }
+      write(current)
+      removed
+    end
   end
 
   private
+
+  # 读-改-写整段互斥。写入本身是 tmp + rename 所以文件不会写坏，但两个并发的
+  # 轮询会各拿一份陈旧快照，后写的那个把前一个的进度整段丢掉。
+  def with_lock
+    FileUtils.mkdir_p(File.dirname(path))
+    File.open("#{path}.lock", File::RDWR | File::CREAT, 0o600) do |handle|
+      handle.flock(File::LOCK_EX)
+      yield
+    end
+  end
 
   def empty_data
     { "version" => VERSION, "settings" => DEFAULT_SETTINGS.dup, "jobs" => [] }
@@ -162,11 +183,17 @@ class VideoStore
 
   def write(payload)
     FileUtils.mkdir_p(File.dirname(path))
+    temporary = nil
     temporary = "#{path}.#{Process.pid}.tmp"
-    File.write(temporary, JSON.pretty_generate(payload), perm: 0o600)
+    # 显式钉死编码，理由同 DramaStore#write。
+    File.write(temporary, JSON.pretty_generate(payload), perm: 0o600, encoding: "UTF-8")
     File.rename(temporary, path)
+    temporary = nil
     payload
   ensure
-    File.delete(temporary) if defined?(temporary) && File.exist?(temporary)
+    # 早先写的是 `defined?(temporary) && File.exist?(temporary)`：赋值语句一旦
+    # 被解析器看见，defined? 就返回真，于是异常路径上会拿 nil 去调 File.exist?
+    # 抛 TypeError，把真正的错误顶掉。
+    File.delete(temporary) if temporary && File.exist?(temporary)
   end
 end
