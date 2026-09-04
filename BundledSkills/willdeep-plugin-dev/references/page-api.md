@@ -102,13 +102,13 @@ const { providers } = await window.willdeep.ai.providers();
 const image = await window.willdeep.ai.generateImage({
   prompt: '电影感竖屏人物定妆照，冷色侧光',
   provider: 'some-im',
-  model: 'gpt-image-2', // 或 nano_banana_2
+  model: 'gpt-image-2', // 或 nano-banana-2
   size: '1024x1536'
 });
 // { mediaURL, filePath, model, providerID: 'some-im' }
 ```
 
-宿主只接受 `some-im`、`gpt-image-2` / `nano_banana_2` 和三种受控尺寸；提示词最多 8000 字。API Key 始终留在 Keychain。生成文件写入当前插件隔离的数据目录，页面通过只读 `mediaURL` 展示；单个媒体文件上限 32 MiB。
+宿主只接受 `some-im`、`gpt-image-2` / `nano-banana-2` 和三种受控尺寸；提示词最多 8000 字。API Key 始终留在 Keychain。生成文件写入当前插件隔离的数据目录，页面通过只读 `mediaURL` 展示；单个媒体文件上限 32 MiB。
 
 ## MCP App 页面
 

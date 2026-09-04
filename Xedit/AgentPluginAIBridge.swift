@@ -44,7 +44,7 @@ nonisolated struct AgentPluginImageRequest: Equatable, Sendable {
     let model: String
     let size: String
 
-    static let allowedModels = ["gpt-image-2", "nano_banana_2"]
+    static let allowedModels = ["gpt-image-2", "nano-banana-2"]
     static let allowedSizes = ["1024x1024", "1536x1024", "1024x1536"]
     static let maximumCharacters = 8_000
 }

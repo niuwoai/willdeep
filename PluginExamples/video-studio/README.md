@@ -6,7 +6,7 @@
 
 - 短剧项目：首页按剧名管理；AI 策划只在用户确认 `short_drama_plan` 卡片后落库。
 - 角色与剧本：角色定妆独立于分镜帧；分集可切换，剧本、分镜剧情和逐句台词都可编辑。
-- 图片候选：宿主通过 some.im 调用用户选择的 `gpt-image-2` 或 `nano_banana_2`，支持一次生成多张角色定妆、首帧和尾帧候选；密钥不出宿主。
+- 图片候选：宿主通过 some.im 调用用户选择的 `gpt-image-2` 或 `nano-banana-2`，支持一次生成多张角色定妆、首帧和尾帧候选；密钥不出宿主。
 - 文生视频：不提供参考图时提交 `t2va`。
 - 首帧图生视频：提供本地 PNG、JPEG 或 WebP 时提交 `fl2va` 与 `input_reference`。
 - AI 导演：读取 WillDeep 已启用的聊天 Provider 和模型；默认沿用当前 Provider 的 Flash 档，也可在页面中固定 Provider/模型。
@@ -16,7 +16,7 @@
 
 ## 安装与配置
 
-1. 运行 `ruby scripts/package_video_studio.rb`，在 WillDeep 插件中心选择生成的 `build/plugins/willdeep-video-studio-0.2.0.zip`。安装包只包含运行文件，不含前端开发依赖和设计稿。
+1. 运行 `ruby scripts/package_video_studio.rb`，在 WillDeep 插件中心选择生成的 `build/plugins/willdeep-video-studio-0.2.1.zip`。安装包只包含运行文件，不含前端开发依赖和设计稿。
 2. 审核插件声明的进程、网络、凭据、AI 聊天、图片生成和 Provider 读取权限后安装。
 3. 在插件设置中填写 `Video API Key`。该字段为 `secret`，由宿主安全存储，不写入任务文件或页面。
 4. 默认 API Base 为 `https://hub.tsingfly.com`，默认视频模型为 `MiniMax-H3`，默认输出目录为 `~/Movies/WillDeep Video Studio`。

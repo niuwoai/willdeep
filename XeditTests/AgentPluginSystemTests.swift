@@ -980,14 +980,14 @@ struct AgentPluginSystemTests {
         guard case .success(let request) = AgentPluginImageRequestValidator.request(from: [
             "prompt": "  cinematic portrait  ",
             "provider": "some-im",
-            "model": "nano_banana_2",
+            "model": "nano-banana-2",
             "size": "1024x1536",
         ]) else {
             Issue.record("合法图片请求不该被拒")
             return
         }
         #expect(request.prompt == "cinematic portrait")
-        #expect(request.model == "nano_banana_2")
+        #expect(request.model == "nano-banana-2")
         #expect(request.size == "1024x1536")
     }
 

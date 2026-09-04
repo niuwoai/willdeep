@@ -94,6 +94,9 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
     raise "start prompt wiped" unless saved["startPrompt"] == "暗室中的手机"
     raise "duration not applied" unless saved["duration"] == 6
   end
+  check.call("the first saved shot moves the drama from planning into production") do
+    raise "status did not advance" unless service.get("id" => drama["id"]).dig("drama", "status") == "production"
+  end
   check.call("a stale shot ID is reported instead of stacking empty shots") do
     response = service.save_shot(
       "dramaID" => drama["id"], "episodeID" => episode["id"],

@@ -51,6 +51,24 @@ describe('Short Drama Studio', () => {
     expect(await screen.findByText('先把故事讲给我听')).toBeTruthy();
   });
 
+  // 早先每个内部渲染函数都以 <Foo /> 的形式出现，每次 setState 都换一个新的
+  // 函数引用，React 于是重挂载整棵子树：每敲一个字输入框就掉焦点，只能打一个字。
+  // fireEvent.change 一次性灌整串值测不出来，必须逐字符敲并盯住 activeElement。
+  it('keeps focus and the same DOM node while typing one character at a time', async () => {
+    render(<App />);
+    const search = await screen.findByLabelText('搜索剧名、类型或梗概');
+    (search as HTMLInputElement).focus();
+    expect(document.activeElement).toBe(search);
+
+    for (const character of ['月', '港', '追']) {
+      const value = (search as HTMLInputElement).value + character;
+      fireEvent.change(search, { target: { value } });
+      expect(screen.getByLabelText('搜索剧名、类型或梗概')).toBe(search);
+      expect(document.activeElement).toBe(search);
+    }
+    expect((search as HTMLInputElement).value).toBe('月港追');
+  });
+
   it('filters dramas by keyword and status', async () => {
     const base = {
       genre: '悬疑', format: '竖屏', episodeCount: 8, episodeDurationSeconds: 90,
@@ -66,7 +84,7 @@ describe('Short Drama Studio', () => {
     fireEvent.change(screen.getByLabelText('搜索剧名、类型或梗概'), { target: { value: '月港' } });
     expect(screen.queryByRole('heading', { name: '错时来信' })).toBeNull();
     expect(screen.getByRole('heading', { name: '月港追光' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '策划中' }));
+    fireEvent.click(screen.getByRole('button', { name: /^策划中/ }));
     expect(screen.getByText('还没有符合条件的短剧')).toBeTruthy();
   });
 });

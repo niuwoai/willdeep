@@ -43,7 +43,7 @@ the plugin's `generated-images` directory. Any other path is refused with
 
 ### Image models
 
-`gpt-image-2` and `nano_banana_2` are the only accepted values, and the host
+`gpt-image-2` and `nano-banana-2` are the only accepted values, and the host
 enforces the same list. Ask the user which one to use rather than guessing.
 
 ## Video workflow

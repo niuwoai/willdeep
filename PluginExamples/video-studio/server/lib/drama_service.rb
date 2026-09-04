@@ -5,7 +5,7 @@ require "securerandom"
 require "time"
 
 class DramaService
-  IMAGE_MODELS = %w[gpt-image-2 nano_banana_2].freeze
+  IMAGE_MODELS = %w[gpt-image-2 nano-banana-2].freeze
   FRAME_KINDS = %w[start end].freeze
 
   # 找不到目标时抛出，message 即对外错误码。刻意不复用 ArgumentError：
@@ -95,7 +95,10 @@ class DramaService
 
   def save_shot(arguments)
     guarded do
-      drama = mutate_episode(arguments) do |episode|
+      drama = mutate_episode(arguments) do |episode, item|
+        # 第一个分镜落库就算进入制作。早先 status 只会是 planning，首页那两个
+        # 状态筛选点了必然是空的。
+        item["status"] = "production" if item["status"] == "planning"
         shot = find_or_build(episode["shots"], arguments["shotID"], SHOT_DEFAULTS, "shot_not_found")
         shot["order"] = positive(arguments["order"], episode["shots"].length) unless arguments["order"].nil?
         assign(shot, "title", arguments["title"], 160)
@@ -190,7 +193,7 @@ class DramaService
     mutate_drama(arguments) do |drama|
       episode = drama["episodes"].find { |entry| entry["id"] == arguments["episodeID"].to_s }
       raise NotFound, "episode_not_found" unless episode
-      yield episode
+      yield episode, drama
     end
   end
 

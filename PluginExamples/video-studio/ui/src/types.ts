@@ -17,7 +17,7 @@ export type Drama = Omit<DramaPlan, 'episodes'> & {
   id: string; status: string; coverURL?: string | null; characters: Character[]; episodes: Episode[];
   createdAt: string; updatedAt: string;
 };
-export type ImageModel = 'gpt-image-2' | 'nano_banana_2';
+export type ImageModel = 'gpt-image-2' | 'nano-banana-2';
 export type ImageResult = { mediaURL: string; filePath: string; model: ImageModel; providerID: 'some-im' };
 export type ProviderEntry = { providerID: string; displayName: string; isActive: boolean; isLocal: boolean; models: string[]; flashModel?: string };
 export type Stage = 'library' | 'planning' | 'characters' | 'script' | 'storyboard' | 'frames' | 'video';
