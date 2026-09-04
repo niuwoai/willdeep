@@ -77,6 +77,69 @@ nonisolated struct AgentPluginPermission: RawRepresentable, Codable, Hashable, S
     static let notifications = Self(rawValue: "notifications")
 }
 
+/// 权限的风险档位。安装确认框把七八个 raw identifier 平铺成一列时，
+/// `process.execute` 和 `providers.read` 一个字重、一个图标，用户看不出该
+/// 警惕哪一条。分档只影响呈现顺序与强调，不改变任何授权语义。
+nonisolated enum AgentPluginPermissionRisk: Int, Comparable, Sendable {
+    /// 能在本机跑东西或动用户的凭据。
+    case sensitive = 0
+    /// 会联网或花钱，但动不了本地文件与凭据。
+    case standard = 1
+    /// 只读宿主已有的清单，不产生副作用。
+    case readOnly = 2
+
+    static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
+}
+
+nonisolated extension AgentPluginPermission {
+    var risk: AgentPluginPermissionRisk {
+        switch self {
+        case .processExecute, .credentialUse, .workspaceWrite:
+            return .sensitive
+        case .networkAccess, .aiChat, .aiImage, .clipboardWrite, .notifications:
+            return .standard
+        default:
+            return .readOnly
+        }
+    }
+
+    /// 人话描述。未知权限回落到 rawValue——插件声明了一个宿主还不认识的
+    /// 权限时，宁可显示原始串，也不要假装它不存在。
+    var localizedSummary: String {
+        switch self {
+        case .processExecute: return L10n.Plugins.Permission.processExecute
+        case .credentialUse: return L10n.Plugins.Permission.credentialUse
+        case .workspaceWrite: return L10n.Plugins.Permission.workspaceWrite
+        case .workspaceRead: return L10n.Plugins.Permission.workspaceRead
+        case .conversationRead: return L10n.Plugins.Permission.conversationRead
+        case .networkAccess: return L10n.Plugins.Permission.networkAccess
+        case .aiChat: return L10n.Plugins.Permission.aiChat
+        case .aiImage: return L10n.Plugins.Permission.aiImage
+        case .providersRead: return L10n.Plugins.Permission.providersRead
+        case .skillsRead: return L10n.Plugins.Permission.skillsRead
+        case .clipboardWrite: return L10n.Plugins.Permission.clipboardWrite
+        case .notifications: return L10n.Plugins.Permission.notifications
+        default: return rawValue
+        }
+    }
+
+    /// 高风险两档单独给图标，只读那档在 UI 上会被并成一行，不单独出图标。
+    var symbolName: String {
+        switch risk {
+        case .sensitive: return "exclamationmark.triangle.fill"
+        case .standard: return "circle.fill"
+        case .readOnly: return "eye"
+        }
+    }
+
+    /// 排序：先按风险档，再按 rawValue，保证同一份清单每次呈现顺序一致。
+    static func ordered(_ permissions: [Self]) -> [Self] {
+        permissions.sorted {
+            $0.risk == $1.risk ? $0.rawValue < $1.rawValue : $0.risk < $1.risk
+        }
+    }
+}
+
 nonisolated enum AgentPluginSidebarMode: String, Codable, Sendable {
     case sessionList
     case declarative

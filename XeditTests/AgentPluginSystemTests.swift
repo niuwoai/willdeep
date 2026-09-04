@@ -347,11 +347,15 @@ struct AgentPluginSystemTests {
     }
 
     @Test @MainActor
-    func registryPinsAtMostFiveDestinationsInStableOrder() async throws {
+    func registryPinsUpToTheDestinationCapacityInStableOrder() async throws {
         let root = try temporaryDirectory()
         let stateURL = root.appendingPathComponent("state.json")
         defer { try? FileManager.default.removeItem(at: root) }
-        for index in 0..<6 {
+        // 比上限多造一个，验证多出来的那个真的被挡在外面。断言不再写死 5：
+        // 内置插件的 defaultPinned 固定位和用户手动固定共用这一个额度，
+        // 上限调整时该跟着常量走，而不是让测试变成需要一起改的死数字。
+        let capacity = AgentPluginRegistry.maximumPinnedDestinations
+        for index in 0..<(capacity + 1) {
             let package = try makePackage(id: "plugin-\(index)", destinations: [("home", "sessionList")])
             try FileManager.default.moveItem(at: package, to: root.appendingPathComponent("plugin-\(index)"))
         }
@@ -365,8 +369,9 @@ struct AgentPluginSystemTests {
         for destination in registry.snapshot.activeDestinations {
             registry.pin(destinationID: destination.qualifiedID)
         }
-        #expect(registry.snapshot.pinnedDestinationIDs.count == 5)
-        #expect(registry.snapshot.pinnedDestinationIDs == Array(registry.snapshot.activeDestinations.prefix(5).map(\.qualifiedID)))
+        #expect(registry.snapshot.pinnedDestinationIDs.count == capacity)
+        #expect(registry.snapshot.pinnedDestinationIDs == Array(registry.snapshot.activeDestinations.prefix(capacity).map(\.qualifiedID)))
+        #expect(capacity >= 10)
     }
 
     @Test

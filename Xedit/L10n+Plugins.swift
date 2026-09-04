@@ -7,6 +7,25 @@ import Foundation
 
 extension L10n {
     nonisolated enum Plugins {
+        /// 权限的人话描述。安装确认框按风险分档呈现，这里只负责「这条权限
+        /// 让插件能做什么」，不掺杂风险判断。
+        nonisolated enum Permission {
+            static let processExecute = String(localized: "plugins.permission.process-execute", defaultValue: "Run commands on this Mac")
+            static let credentialUse = String(localized: "plugins.permission.credentials-use", defaultValue: "Use credentials from your Keychain")
+            static let workspaceWrite = String(localized: "plugins.permission.workspace-write", defaultValue: "Change files in your workspace")
+            static let workspaceRead = String(localized: "plugins.permission.workspace-read", defaultValue: "Read files in your workspace")
+            static let conversationRead = String(localized: "plugins.permission.conversation-read", defaultValue: "Read your conversations")
+            static let networkAccess = String(localized: "plugins.permission.network-access", defaultValue: "Reach the network")
+            static let aiChat = String(localized: "plugins.permission.ai-chat", defaultValue: "Ask a chat model")
+            static let aiImage = String(localized: "plugins.permission.ai-image", defaultValue: "Generate images")
+            static let providersRead = String(localized: "plugins.permission.providers-read", defaultValue: "model list")
+            static let skillsRead = String(localized: "plugins.permission.skills-read", defaultValue: "skill list")
+            static let clipboardWrite = String(localized: "plugins.permission.clipboard-write", defaultValue: "Write to the clipboard")
+            static let notifications = String(localized: "plugins.permission.notifications", defaultValue: "Send notifications")
+            static let readOnlyPrefix = String(localized: "plugins.permission.read-only-prefix", defaultValue: "Read-only")
+            static let separator = String(localized: "plugins.permission.separator", defaultValue: ", ")
+        }
+
         static let sidebarHeader = String(localized: "plugins.sidebar.header", defaultValue: "Plugins")
         static let addPlugin = String(localized: "plugins.sidebar.add", defaultValue: "Add Plugin…")
         static let morePlugins = String(localized: "plugins.sidebar.more", defaultValue: "More Plugins")

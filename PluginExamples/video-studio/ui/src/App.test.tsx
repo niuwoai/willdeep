@@ -28,7 +28,7 @@ beforeEach(() => {
     getContext: () => ({ locale: 'zh-Hans' }), executeCommand,
     ai: {
       complete,
-      providers: async () => ({ providers: [{ providerID: 'chat-a', displayName: 'Chat A', isActive: true, isLocal: false, models: ['fast'], flashModel: 'fast' }] }),
+      providers: async () => ({ providers: [{ providerID: 'chat-a', displayName: 'Chat A', isActive: true, isLocal: false, models: ['fast', 'pro', 'fast-alt', 'pro-alt'], flashModel: 'fast' }] }),
       generateImage: vi.fn(),
     },
     skills: { list: listSkills },
@@ -107,6 +107,36 @@ describe('Short Drama Studio', () => {
     await waitFor(() => expect(complete).toHaveBeenCalled());
     // 页面只回传 identifier，正文由宿主读取注入
     expect(complete.mock.calls[0]![0].skills).toEqual(['hongguo-drama']);
+  });
+
+  it('shows a streaming line while planning and clears it afterwards', async () => {
+    // 策划一次十几秒。complete 在 resolve 之前，宿主按 streamID 推增量，
+    // 页面要贴着输入框把它显示出来，而不是只转个圈。
+    let release: (value: unknown) => void = () => {};
+    complete.mockImplementation((request: { streamID?: string }) => new Promise((resolve) => {
+      window.dispatchEvent(new CustomEvent('willdeep:ai-delta', {
+        detail: { streamID: request.streamID, delta: '正在梳理人物关系' },
+      }));
+      release = resolve;
+    }));
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '策划新短剧' }))[0]!);
+    const composer = await screen.findByPlaceholderText(/一个落魄程序员/);
+    fireEvent.change(composer, { target: { value: '一个程序员的故事' } });
+    fireEvent.click(screen.getByRole('button', { name: '生成短剧策划卡' }));
+
+    expect(await screen.findByText('正在梳理人物关系')).toBeTruthy();
+    release({ text: '```short_drama_plan\n{"title":"错时来信"}\n```', model: 'fast', providerID: 'chat-a' });
+    await waitFor(() => expect(screen.queryByText('正在梳理人物关系')).toBeNull());
+  });
+
+  it('offers every configured model in the picker', async () => {
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '策划新短剧' }))[0]!);
+    const picker = await screen.findByLabelText('聊天模型');
+    const options = Array.from(picker.querySelectorAll('option')).map((item) => item.textContent);
+    expect(options).toEqual(['fast', 'pro', 'fast-alt', 'pro-alt']);
   });
 
   it('filters dramas by keyword and status', async () => {
