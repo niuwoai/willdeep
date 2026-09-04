@@ -60,6 +60,7 @@ enum AgentSettingsStore {
     private static let legacyChatBaseFontSizeKey = "com.willdeep.agentSettings.chatBaseFontSize.v1"
     private static let chatFontIDKey = "com.willdeep.agentSettings.chatFontID.v1"
     private static let fontSmoothingEnabledKey = "com.willdeep.agentSettings.fontSmoothing.v1"
+    private static let pluginPageInspectableKey = "com.willdeep.agentSettings.pluginPageInspectable.v1"
     private static let chatLineHeightMultipleKey = "com.willdeep.agentSettings.chatLineHeightMultiple.v1"
     private static let anthropicMaxOutputTokensKey = "com.willdeep.agentSettings.anthropicMaxOutputTokens.v1"
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
@@ -374,6 +375,20 @@ enum AgentSettingsStore {
 
     static func saveFontSmoothingEnabled(_ enabled: Bool) {
         defaults.set(enabled, forKey: fontSmoothingEnabledKey)
+    }
+
+    /// 插件页面允不允许挂 Safari 的网页检查器。
+    ///
+    /// 默认关。开着不会给页面多一分权限（能力还是那些桥），但检查器能读
+    /// 到页面内存里的一切，包括它刚从 `ai.complete` 拿回来的东西；这是给
+    /// 插件作者调试用的开关，不该是所有用户的默认状态。
+    /// 开启后还需要 Safari 打开「开发」菜单才看得到。
+    static func loadPluginPageInspectable() -> Bool {
+        defaults.bool(forKey: pluginPageInspectableKey)
+    }
+
+    static func savePluginPageInspectable(_ enabled: Bool) {
+        defaults.set(enabled, forKey: pluginPageInspectableKey)
     }
 
     static func loadAgentChatFontID() -> String {

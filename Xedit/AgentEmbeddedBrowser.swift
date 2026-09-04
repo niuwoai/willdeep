@@ -146,6 +146,35 @@ final class AgentEmbeddedBrowserController: NSObject, ObservableObject, WKNaviga
         webView?.reload()
     }
 
+    /// 从一个 Chrome profile 导入 cookie。解密的重活（钥匙串、SQLite、AES）放
+    /// 后台线程，注入 WKWebView 的 cookie store 回到主线程。钥匙串读取会触发
+    /// macOS 授权框——那是用户的同意闸，如实等它。
+    @MainActor
+    func importChromeCookies(from profile: ChromeProfile) async -> Result<ChromeCookieImportSummary, ChromeCookieImportError> {
+        let loaded: Result<(cookies: [HTTPCookie], skipped: Int), ChromeCookieImportError> = await Task.detached(priority: .userInitiated) {
+            do {
+                let safeStorageKey = try ChromeCookieImporter.fetchSafeStorageKey()
+                let aesKey = ChromeCookieImporter.deriveKey(fromSafeStorageKey: safeStorageKey)
+                return .success(try ChromeCookieImporter.loadCookies(from: profile, key: aesKey))
+            } catch let error as ChromeCookieImportError {
+                return .failure(error)
+            } catch {
+                return .failure(.databaseUnreadable(error.localizedDescription))
+            }
+        }.value
+
+        switch loaded {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let payload):
+            let store = ensureWebView(loadInitialPage: false).configuration.websiteDataStore.httpCookieStore
+            for cookie in payload.cookies {
+                await store.setCookie(cookie)
+            }
+            return .success(ChromeCookieImportSummary(imported: payload.cookies.count, skipped: payload.skipped))
+        }
+    }
+
     func goBack() {
         webView?.goBack()
     }
@@ -1411,6 +1440,7 @@ enum AgentEmbeddedBrowserTools {
 struct AgentEmbeddedBrowserPanel: View {
     @ObservedObject private var controller: AgentEmbeddedBrowserController
     @State private var screenshotError: String?
+    @State private var isChromeImportPresented = false
     let width: CGFloat
 
     private let runtimeID: UUID?
@@ -1495,6 +1525,16 @@ struct AgentEmbeddedBrowserPanel: View {
             .help(L10n.AgentEmbeddedBrowser.go)
 
             Button {
+                isChromeImportPresented = true
+            } label: {
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .help(L10n.AgentEmbeddedBrowser.importChrome)
+
+            Button {
                 captureScreenshot()
             } label: {
                 Image(systemName: "camera")
@@ -1506,6 +1546,9 @@ struct AgentEmbeddedBrowserPanel: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
+        .sheet(isPresented: $isChromeImportPresented) {
+            ChromeCookieImportSheet(controller: controller)
+        }
     }
 
     private var footer: some View {

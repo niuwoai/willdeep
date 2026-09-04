@@ -8,12 +8,19 @@
   "properties": {
     "schemaVersion": { "const": 1 },
     "minimumWillDeepVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
+    "networkDomains": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "Hosts window.willdeep.net.fetch may reach. Requires the network.access permission; an empty list means the page cannot fetch anything. Use api.example.com or *.example.com.",
+      "items": { "type": "string", "pattern": "^(\\*\\.)?[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$" }
+    },
     "permissions": {
       "type": "array",
       "uniqueItems": true,
       "items": {
         "enum": [
           "conversation.read",
+          "conversation.write",
           "workspace.read",
           "workspace.write",
           "process.execute",

@@ -6,15 +6,47 @@
 import Foundation
 
 extension L10n {
+    enum PluginCommandConfirm {
+        /// %@ 是插件展示名。
+        static func title(_ pluginName: String) -> String {
+            String(
+                format: String(
+                    localized: "plugins.command-confirm.title",
+                    defaultValue: "Let %@ run this command?"
+                ),
+                pluginName
+            )
+        }
+        static let run = String(localized: "plugins.command-confirm.run", defaultValue: "Run")
+        static let cancel = String(localized: "plugins.command-confirm.cancel", defaultValue: "Cancel")
+        static let remember = String(
+            localized: "plugins.command-confirm.remember",
+            defaultValue: "Don't ask again for this exact command"
+        )
+    }
+}
+
+extension L10n {
     nonisolated enum Plugins {
         /// 权限的人话描述。安装确认框按风险分档呈现，这里只负责「这条权限
         /// 让插件能做什么」，不掺杂风险判断。
+        static let developerSection = String(localized: "plugins.developer-section", defaultValue: "For plugin authors")
+        static let inspectPluginPages = String(
+            localized: "plugins.inspect-pages",
+            defaultValue: "Allow Web Inspector on plugin pages"
+        )
+        static let inspectPluginPagesHint = String(
+            localized: "plugins.inspect-pages-hint",
+            defaultValue: "Off by default. It grants the page no extra capability, but the inspector can read everything in its memory. Reopen the page after switching, and turn on Safari's Develop menu to attach."
+        )
+
         nonisolated enum Permission {
             static let processExecute = String(localized: "plugins.permission.process-execute", defaultValue: "Run commands on this Mac")
             static let credentialUse = String(localized: "plugins.permission.credentials-use", defaultValue: "Use credentials from your Keychain")
             static let workspaceWrite = String(localized: "plugins.permission.workspace-write", defaultValue: "Change files in your workspace")
             static let workspaceRead = String(localized: "plugins.permission.workspace-read", defaultValue: "Read files in your workspace")
             static let conversationRead = String(localized: "plugins.permission.conversation-read", defaultValue: "Read your conversations")
+            static let conversationWrite = String(localized: "plugins.permission.conversation-write", defaultValue: "Send messages to the agent for you")
             static let networkAccess = String(localized: "plugins.permission.network-access", defaultValue: "Reach the network")
             static let aiChat = String(localized: "plugins.permission.ai-chat", defaultValue: "Ask a chat model")
             static let aiImage = String(localized: "plugins.permission.ai-image", defaultValue: "Generate images")

@@ -16,6 +16,13 @@ extension NSAttributedString.Key {
     static let agentChatHistoryCodeBlockID = NSAttributedString.Key("AgentChatHistoryCodeBlockID")
     static let agentChatHistoryCodeBlockBodyID = NSAttributedString.Key("AgentChatHistoryCodeBlockBodyID")
     static let agentChatHistoryCodeCopyText = NSAttributedString.Key("AgentChatHistoryCodeCopyText")
+    /// 围栏代码块头上「运行」图标携带的命令原文（已净化零宽断点）。
+    /// 只有 AgentChatRunnableCommand 放行的块才带这个属性。
+    static let agentChatHistoryRunCommandText = NSAttributedString.Key("AgentChatHistoryRunCommandText")
+    /// 同上，「送进侧边栏终端」图标携带的命令原文。
+    static let agentChatHistoryTerminalCommandText = NSAttributedString.Key(
+        "AgentChatHistoryTerminalCommandText"
+    )
     static let agentChatHistoryMessageCopyText = NSAttributedString.Key("AgentChatHistoryMessageCopyText")
     static let agentChatHistoryRetryLastTurn = NSAttributedString.Key("AgentChatHistoryRetryLastTurn")
     static let agentChatHistoryShowTurnReport = NSAttributedString.Key("AgentChatHistoryShowTurnReport")

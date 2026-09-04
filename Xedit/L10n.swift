@@ -1130,12 +1130,32 @@ nonisolated enum L10n {
         static let previewUnsupported = String(localized: "agent-side-panel.preview-unsupported", defaultValue: "Only Markdown and HTML can be previewed here.")
     }
 
+    enum ChromeImport {
+        static let title = String(localized: "chrome-import.title", defaultValue: "Import from Chrome")
+        static let subtitle = String(localized: "chrome-import.subtitle", defaultValue: "Bring your Chrome logins into this browser")
+        static let profile = String(localized: "chrome-import.profile", defaultValue: "Chrome profile")
+        static let chooseFolder = String(localized: "chrome-import.choose-folder", defaultValue: "Choose Chrome data folder…")
+        static let choosePrompt = String(localized: "chrome-import.choose-prompt", defaultValue: "Select the Chrome folder so this browser can read its cookies. This grants read access to just that folder.")
+        static let notFound = String(localized: "chrome-import.not-found", defaultValue: "No Chrome profile with cookies was found in the folder you chose.")
+        static let noticeKeychain = String(localized: "chrome-import.notice-keychain", defaultValue: "macOS will ask permission to read Chrome's stored cookies.")
+        static let noticeLocal = String(localized: "chrome-import.notice-local", defaultValue: "Cookies stay in this browser on this Mac and are not sent anywhere.")
+        static let noticeNoPasswords = String(localized: "chrome-import.notice-no-passwords", defaultValue: "Saved passwords are never touched—only cookies.")
+        static let importing = String(localized: "chrome-import.importing", defaultValue: "Importing cookies…")
+        static let action = String(localized: "chrome-import.action", defaultValue: "Import Cookies")
+        static let close = String(localized: "chrome-import.close", defaultValue: "Close")
+        static func done(_ count: Int) -> String {
+            let template = String(localized: "chrome-import.done", defaultValue: "Imported %lld cookies. Reload a page to use your Chrome session.")
+            return String(format: template, count)
+        }
+    }
+
     enum AgentEmbeddedBrowser {
         static let addressPlaceholder = String(localized: "agent-embedded-browser.address-placeholder", defaultValue: "URL or domain")
         static let back = String(localized: "agent-embedded-browser.back", defaultValue: "Back")
         static let capture = String(localized: "agent-embedded-browser.capture", defaultValue: "Capture Screenshot")
         static let forward = String(localized: "agent-embedded-browser.forward", defaultValue: "Forward")
         static let go = String(localized: "agent-embedded-browser.go", defaultValue: "Go")
+        static let importChrome = String(localized: "agent-embedded-browser.import-chrome", defaultValue: "Import logins from Chrome")
         static func lastScreenshot(_ a1: String) -> String {
             let template = String(localized: "agent-embedded-browser.last-screenshot", defaultValue: "Last screenshot: %@")
             return String(format: template, a1)

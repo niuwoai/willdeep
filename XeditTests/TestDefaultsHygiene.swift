@@ -28,6 +28,7 @@ enum TestDefaultsHygiene {
         "test.workspace.identity.",
         "willdeep-agent-sidebar-state-",
         "willdeep-dispatch-",
+        "willdeep-plugin-approvals-",
         "willdeep-mcp-config-tool-",
         "willdeep-mcp-credentials-",
         "willdeep-mobile-gateway-corrupt-",

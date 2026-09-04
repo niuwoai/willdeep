@@ -235,7 +235,8 @@ enum AgentChatHistoryRenderer {
         lineHeightMultiple: CGFloat = AgentSettingsStore.chatLineHeightMultipleDefault,
         layoutWidth: CGFloat = AgentChatHistoryLayoutMetrics.defaultTranscriptWidth,
         progressPlan: AgentPlan? = nil,
-        latestTurnReportToolCount: Int? = nil
+        latestTurnReportToolCount: Int? = nil,
+        allowsLocalCommandButtons: Bool = true
     ) -> NSAttributedString {
         let clampedSize = AgentSettingsStore.clampChatBaseFontSize(baseFontSize)
         let resolvedLayoutWidth = AgentChatHistoryLayoutMetrics.resolvedLayoutWidth(layoutWidth)
@@ -247,6 +248,9 @@ enum AgentChatHistoryRenderer {
         hasher.combine(expandedProgressBlockIDs.sorted())
         hasher.combine(hoveredUserMessageID)
         hasher.combine(latestTurnReportToolCount ?? -1)
+        // 同一段文本在本地会话有「运行」按钮、在远端会话没有，两份结果
+        // 不能共用一个缓存条目。
+        hasher.combine(allowsLocalCommandButtons)
         for m in messages {
             hasher.combine(messageHash(m))
         }
@@ -296,7 +300,8 @@ enum AgentChatHistoryRenderer {
             lineHeightMultiple: lineHeightMultiple,
             layoutWidth: resolvedLayoutWidth,
             progressPlan: progressPlan,
-            latestTurnReportToolCount: latestTurnReportToolCount
+            latestTurnReportToolCount: latestTurnReportToolCount,
+            allowsLocalCommandButtons: allowsLocalCommandButtons
         )
 
         // Critical section #2: insertion + LRU eviction. If a parallel
@@ -329,7 +334,8 @@ enum AgentChatHistoryRenderer {
         lineHeightMultiple: CGFloat,
         layoutWidth: CGFloat,
         progressPlan: AgentPlan?,
-        latestTurnReportToolCount: Int?
+        latestTurnReportToolCount: Int?,
+        allowsLocalCommandButtons: Bool
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
         // Only the newest assistant/system message keeps its turn-progress
@@ -715,7 +721,8 @@ enum AgentChatHistoryRenderer {
                             secondaryColor: secondaryColor,
                             codeBackgroundColor: codeBackgroundColor,
                             isDark: isDark,
-                            layoutWidth: layoutWidth
+                            layoutWidth: layoutWidth,
+                            allowsLocalCommandButtons: allowsLocalCommandButtons
                         )
                     }
                 }
@@ -1385,7 +1392,8 @@ enum AgentChatHistoryRenderer {
         secondaryColor: NSColor,
         codeBackgroundColor: NSColor,
         isDark: Bool,
-        layoutWidth: CGFloat
+        layoutWidth: CGFloat,
+        allowsLocalCommandButtons: Bool
     ) {
         let normalized = AgentMarkdownNormalizer.normalizedForChatRendering(source)
         let safe = AgentLongTokenBreaker.inject(into: normalized)
@@ -1528,6 +1536,28 @@ enum AgentChatHistoryRenderer {
                 // 的(见 appendMarkdownBody),直接当复制载荷会把 U+200B 一起
                 // 送进剪贴板——粘到终端或编译器里就是一串查无此因的报错。
                 // 渲染仍用带断点的 block.text,只有复制走净化版。
+                // 「运行」与「送进终端」排在复制左边，且只有够格的块才有：
+                // 要审批的、复杂的、耗时的、远端的一律只留复制（判据见
+                // AgentChatRunnableCommand）。user 气泡不给——用户自己贴
+                // 的命令不需要 App 再递一把刀。
+                if role != .user,
+                   allowsLocalCommandButtons,
+                   let runnable = AgentChatRunnableCommand.command(
+                       language: language,
+                       body: block.text,
+                       isRemoteWorkspace: false
+                   ) {
+                    result.append(AgentChatHistoryCodeRunChrome.runButton(
+                        command: runnable,
+                        font: codeHeaderFont,
+                        color: secondaryColor
+                    ))
+                    result.append(AgentChatHistoryCodeRunChrome.terminalButton(
+                        command: runnable,
+                        font: codeHeaderFont,
+                        color: secondaryColor
+                    ))
+                }
                 result.append(AgentChatHistoryCodeCopyChrome.button(
                     copied: false,
                     code: AgentCopyTextSanitizer.sanitize(block.text),

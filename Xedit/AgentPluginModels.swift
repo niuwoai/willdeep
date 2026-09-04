@@ -56,6 +56,11 @@ nonisolated struct AgentPluginPermission: RawRepresentable, Codable, Hashable, S
     }
 
     static let conversationRead = Self(rawValue: "conversation.read")
+    /// 插件可以把一句话递给主 Agent：填进输入框，或直接起一个回合
+    /// （`window.willdeep.chat.*`）。与只读的 `conversation.read` 分开，
+    /// 因为它会花钱、会让 Agent 动工作区。递进去的文本走与用户输入完全
+    /// 相同的发送路径，审批档位与沙箱一个都不绕。
+    static let conversationWrite = Self(rawValue: "conversation.write")
     static let workspaceRead = Self(rawValue: "workspace.read")
     static let workspaceWrite = Self(rawValue: "workspace.write")
     static let processExecute = Self(rawValue: "process.execute")
@@ -94,7 +99,7 @@ nonisolated enum AgentPluginPermissionRisk: Int, Comparable, Sendable {
 nonisolated extension AgentPluginPermission {
     var risk: AgentPluginPermissionRisk {
         switch self {
-        case .processExecute, .credentialUse, .workspaceWrite:
+        case .processExecute, .credentialUse, .workspaceWrite, .conversationWrite:
             return .sensitive
         case .networkAccess, .aiChat, .aiImage, .clipboardWrite, .notifications:
             return .standard
@@ -112,6 +117,7 @@ nonisolated extension AgentPluginPermission {
         case .workspaceWrite: return L10n.Plugins.Permission.workspaceWrite
         case .workspaceRead: return L10n.Plugins.Permission.workspaceRead
         case .conversationRead: return L10n.Plugins.Permission.conversationRead
+        case .conversationWrite: return L10n.Plugins.Permission.conversationWrite
         case .networkAccess: return L10n.Plugins.Permission.networkAccess
         case .aiChat: return L10n.Plugins.Permission.aiChat
         case .aiImage: return L10n.Plugins.Permission.aiImage
@@ -430,6 +436,13 @@ nonisolated struct AgentPluginManifest: Codable, Equatable, Sendable {
     var contributes: AgentPluginContributions
     var permissions: [AgentPluginPermission]
     var dependencies: AgentPluginDependencies
+    /// 页面用 `window.willdeep.net.fetch` 能访问的主机白名单。
+    ///
+    /// 单靠 `network.access` 不够：那个权限回答「这插件要不要联网」，
+    /// 而用户在安装面板上有权知道**联的是谁**。白名单空着就等于页面
+    /// 一个请求都发不出去——声明了权限却没写域名不是「随便连」。
+    /// 支持 `api.example.com` 与 `*.example.com` 两种写法。
+    var networkDomains: [String]
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion
@@ -437,6 +450,7 @@ nonisolated struct AgentPluginManifest: Codable, Equatable, Sendable {
         case contributes
         case permissions
         case dependencies
+        case networkDomains
     }
 
     init(
@@ -444,13 +458,15 @@ nonisolated struct AgentPluginManifest: Codable, Equatable, Sendable {
         minimumWillDeepVersion: String? = nil,
         contributes: AgentPluginContributions = .init(),
         permissions: [AgentPluginPermission] = [],
-        dependencies: AgentPluginDependencies = .init()
+        dependencies: AgentPluginDependencies = .init(),
+        networkDomains: [String] = []
     ) {
         self.schemaVersion = schemaVersion
         self.minimumWillDeepVersion = minimumWillDeepVersion
         self.contributes = contributes
         self.permissions = permissions
         self.dependencies = dependencies
+        self.networkDomains = networkDomains
     }
 
     init(from decoder: Decoder) throws {
@@ -460,6 +476,7 @@ nonisolated struct AgentPluginManifest: Codable, Equatable, Sendable {
         contributes = try container.decodeIfPresent(AgentPluginContributions.self, forKey: .contributes) ?? .init()
         permissions = try container.decodeIfPresent([AgentPluginPermission].self, forKey: .permissions) ?? []
         dependencies = try container.decodeIfPresent(AgentPluginDependencies.self, forKey: .dependencies) ?? .init()
+        networkDomains = try container.decodeIfPresent([String].self, forKey: .networkDomains) ?? []
     }
 }
 
