@@ -250,3 +250,35 @@ label { display: grid; gap: 7px; color: var(--text-muted); font-size: 11px; font
 .stream-text.muted { opacity: .8; }
 @keyframes stream-pulse { 0%, 100% { opacity: .25; transform: scale(.85); } 50% { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .stream-dot { animation: none; opacity: .7; } }
+
+/* 自绘下拉：原生 select 在 WKWebView 里是系统控件，圆角、描边、字重跟这页
+   对不上，暗色下尤其突兀，下拉面板还完全改不了样式。 */
+.dropdown { position: relative; width: 100%; }
+.dropdown-trigger {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+  border-radius: 7px; padding: 9px 11px; text-align: left; cursor: pointer;
+}
+.dropdown-trigger:hover { border-color: var(--text-muted); }
+.dropdown-trigger:disabled { opacity: 0.55; cursor: default; }
+.dropdown-trigger .muted { color: var(--text-muted); }
+.dropdown-trigger svg { flex: none; color: var(--text-muted); }
+.dropdown-menu {
+  position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; right: 0;
+  max-height: 260px; overflow-y: auto; padding: 4px;
+  border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
+}
+.dropdown-menu button {
+  width: 100%; display: block; text-align: left; border: none; background: none; color: var(--text);
+  border-radius: 6px; padding: 7px 9px; cursor: pointer;
+}
+.dropdown-menu button small { display: block; color: var(--text-muted); }
+.dropdown-menu button.highlighted { background: var(--surface-muted); }
+.dropdown-menu button.chosen { font-weight: 600; }
+.dropdown.custom { display: flex; gap: 6px; align-items: center; }
+.dropdown-input { flex: 1; }
+.dropdown-revert {
+  flex: none; width: 32px; border: 1px solid var(--border-strong); background: var(--surface);
+  color: var(--text-muted); border-radius: 7px; padding: 8px 0; cursor: pointer;
+}

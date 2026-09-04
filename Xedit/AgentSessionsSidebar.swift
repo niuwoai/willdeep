@@ -400,7 +400,7 @@ struct AgentSessionsSidebar: View {
                         } else {
                             EmptyView()
                         }
-                    } else if appState.agentPrimaryDestination == .pluginCenter {
+                    } else if !appState.agentPrimaryDestination.showsSessionSidebar {
                         EmptyView()
                     } else {
                         sessionSidebarContent(

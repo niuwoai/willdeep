@@ -426,7 +426,11 @@ nonisolated enum AgentDelegatedTaskControl {
         contract: AgentDelegatedTaskContract,
         evidence: AgentDelegatedExecutorEvidence?,
         changedPaths: [String],
-        rerunChecks: [AgentDelegatedHostCheck]
+        rerunChecks: [AgentDelegatedHostCheck],
+        /// 复核那一趟自己就没跑成时的原因。有它就说「复核没跑起来」，
+        /// 而不是含糊的「没产出证据块」——后者会让人去查执行器的输出格式，
+        /// 而真正的问题可能是它压根没启动。
+        evidenceFailure: String? = nil
     ) -> AgentDelegatedWillDeepAcceptance {
         var checks: [AgentDelegatedHostCheck] = []
         var findings: [String] = []
@@ -443,13 +447,15 @@ nonisolated enum AgentDelegatedTaskControl {
                 findings.append("Fresh executor review verdict is \(evidence.verdict.rawValue): \(evidence.summary)")
             }
         } else {
+            let detail = evidenceFailure.map { "The fresh review run failed: \($0)" }
+                ?? "No valid structured evidence block was produced."
             checks.append(.init(
                 id: "executor-evidence",
                 label: "Fresh executor self-review",
                 status: .failed,
-                detail: "No valid structured evidence block was produced."
+                detail: detail
             ))
-            findings.append("The fresh executor review did not produce a valid structured evidence block.")
+            findings.append(detail)
         }
 
         let evidenceByCriterion = Dictionary(

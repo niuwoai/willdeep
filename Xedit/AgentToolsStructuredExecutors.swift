@@ -442,6 +442,19 @@ extension AgentToolRunner {
             let sessionLine = completedJob.executorSessionID.map {
                 "\n\nSession: \($0)"
             } ?? ""
+            // 退出码 0 但一个字都没回来，不是成功。此前这里照样返回一个只剩
+            // "Session: …" 的空载荷交给验收层，于是用户看到的是「没有产出
+            // 结构化证据块」外加每条验收标准各一行「缺证据」——六七行下游
+            // 噪音，把「执行器压根没输出」这唯一的事实盖住了。
+            guard !payload.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AgentToolError.commandFailed(
+                    completedJob.exitCode ?? 0,
+                    AgentStructuredExecutorDiagnostics.emptyOutputMessage(
+                        executor: specification.executor.rawValue,
+                        sessionLine: sessionLine
+                    )
+                )
+            }
             return AgentToolResult(
                 summary: "\(specification.executor.rawValue) completed\(usage)",
                 payload: payload + sessionLine
@@ -456,5 +469,18 @@ extension AgentToolRunner {
                 failureDetail
             )
         }
+    }
+}
+
+
+/// 结构化执行器的诊断文案。抽出来是为了让测试能直接断言这句话，
+/// 而不必去驱动整个后台任务注册表。
+nonisolated enum AgentStructuredExecutorDiagnostics {
+    static func emptyOutputMessage(executor: String, sessionLine: String = "") -> String {
+        """
+        \(executor) exited without returning any output.
+        Nothing was produced to review, so there is no acceptance evidence to look for.
+        Check that the executor is installed and signed in, then retry.\(sessionLine)
+        """
     }
 }

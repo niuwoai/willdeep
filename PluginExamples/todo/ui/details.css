@@ -16,10 +16,15 @@ h1 { font-size: 24px; }
 .composer input[type="text"] { font-size: var(--willdeep-body-font-size, 15px); }
 .composer .hint:empty { display: none; }
 .filters { gap: 10px; margin-bottom: 12px; }
-.filters .chip, .filters select, .filters summary { font-size: 14px; padding: 7px 11px; }
+/* 筛选行的控件必须同高同字号：select 此前靠 min-height:36 撑，标签按钮只有
+   padding，两者差几个像素，一行摆开就是台阶。字号也别钉死 px，跟着宿主正文走。 */
+.filters .chip, .filters select, .filters summary, .filters .filter-select {
+  font-size: 1em; padding: 0 11px; min-height: 34px; display: inline-flex;
+  align-items: center; box-sizing: border-box;
+}
 .filter-select, .detail-control, .tag-search, .query-input {
   border: 1px solid var(--border); border-radius: 8px; background: var(--page);
-  padding: 8px 10px; font: inherit; color: var(--fg); min-height: 36px;
+  padding: 8px 10px; font: inherit; color: var(--fg); min-height: 34px;
 }
 .filter-select { max-width: 220px; }
 .filter-count { color: var(--muted); font-size: 13px; margin: 20px 0 22px; }
@@ -128,3 +133,38 @@ li.item.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--acce
   .toolbar { gap: 5px; }
   .no-deadline { flex-wrap: wrap; }
 }
+
+
+/* 标签直接铺在筛选行里，而不是全都藏在一个要点开的 details 后面。
+   常用的几个一眼可见、可直接点；剩下的仍然收在「更多」里带搜索。 */
+.tag-inline { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tag-inline .chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.tag-inline .chip .n { color: var(--muted); margin-left: 5px; font-variant-numeric: tabular-nums; }
+
+/* 附件片：跟标签片同一行排，右边一个叉直接移除。 */
+.attachment-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px 6px 2px 10px; font-size: .78em; color: var(--muted);
+  max-width: 220px;
+}
+.attachment-chip button {
+  border: none; background: none; color: inherit; cursor: pointer;
+  line-height: 1; padding: 0 2px;
+}
+.attachment-chip button:hover { color: var(--danger); }
+
+/* 项目选择：就地一张小卡，选完即走，不做成模态对话框。 */
+.project-picker {
+  position: fixed; z-index: 60; right: 20px; bottom: 20px; width: 280px;
+  display: flex; flex-direction: column; gap: 4px; padding: 12px;
+  border: 1px solid var(--border-strong); border-radius: 10px;
+  background: var(--page); box-shadow: 0 14px 32px rgba(0, 0, 0, 0.16);
+}
+.project-picker p { margin: 0 0 4px; color: var(--muted); font-size: .85em; }
+.project-picker button {
+  text-align: left; border: 1px solid transparent; border-radius: 7px;
+  padding: 7px 9px; cursor: pointer; background: none; color: inherit;
+}
+.project-picker button:hover { background: var(--surface-strong); border-color: var(--border); }
+.project-picker button.ghost { color: var(--muted); }

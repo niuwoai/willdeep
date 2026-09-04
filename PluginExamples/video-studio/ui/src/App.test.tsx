@@ -131,12 +131,26 @@ describe('Short Drama Studio', () => {
     await waitFor(() => expect(screen.queryByText('正在梳理人物关系')).toBeNull());
   });
 
-  it('offers every configured model in the picker', async () => {
+  it('offers every configured model in the picker, plus a custom entry', async () => {
     render(<App />);
     fireEvent.click((await screen.findAllByRole('button', { name: '策划新短剧' }))[0]!);
-    const picker = await screen.findByLabelText('聊天模型');
-    const options = Array.from(picker.querySelectorAll('option')).map((item) => item.textContent);
-    expect(options).toEqual(['fast', 'pro', 'fast-alt', 'pro-alt']);
+    // 自绘下拉：先点开才有 listbox；末尾那一项是「自定义模型…」，
+    // provider 库里只配了一个模型时用户仍然打得出别的型号。
+    fireEvent.click(await screen.findByRole('button', { name: '聊天模型' }));
+    const options = Array.from(
+      (await screen.findByRole('listbox', { name: '聊天模型' })).querySelectorAll('[role="option"]')
+    ).map((item) => item.textContent);
+    expect(options).toEqual(['fast', 'pro', 'fast-alt', 'pro-alt', '自定义模型…']);
+  });
+
+  it('switches the model picker to free text when custom is chosen', async () => {
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '策划新短剧' }))[0]!);
+    fireEvent.click(await screen.findByRole('button', { name: '聊天模型' }));
+    fireEvent.mouseDown(await screen.findByRole('option', { name: '自定义模型…' }));
+    const input = await screen.findByLabelText('聊天模型');
+    fireEvent.change(input, { target: { value: 'someim-32b' } });
+    expect((input as HTMLInputElement).value).toBe('someim-32b');
   });
 
   it('filters dramas by keyword and status', async () => {

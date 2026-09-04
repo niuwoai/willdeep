@@ -24,9 +24,14 @@
   "command.pickReference": "选择参考图",
   "command.revealOutput": "在访达中显示视频",
   "setting.videoApiBase": "视频 API 地址",
-  "setting.videoApiBase.description": "默认连接 Tsingfly Hub 网关；除本地开发外必须使用 HTTPS。",
+  "setting.videoApiBase.description": "默认连接 Tsingfly Hub 网关；除本地开发外必须使用 HTTPS。仅当服务商选为 custom 时生效。",
   "setting.videoApiKey": "视频 API Key",
   "setting.videoApiKey.description": "保存在 macOS Keychain，只会传给本地视频工坊 MCP 进程。",
   "setting.outputDirectory": "视频输出目录",
-  "setting.outputDirectory.description": "完成后的 MP4 会下载到这里，支持以波浪号开头的路径。"
+  "setting.outputDirectory.description": "完成后的 MP4 会下载到这里，支持以波浪号开头的路径。",
+  "setting.videoProvider": "视频服务商",
+  "setting.videoProvider.description": "视频生成调用哪一家。选「custom」才使用下面的 API Base。tsingfly = hub.tsingfly.com，openai = api.openai.com。",
+  "tsingfly": "青蜂 Hub（hub.tsingfly.com）",
+  "openai": "OpenAI 官方（api.openai.com）",
+  "custom": "自定义（用下面的 API Base）"
 }
