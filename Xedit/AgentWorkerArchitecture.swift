@@ -19,12 +19,21 @@ nonisolated enum AgentWorkerTier: String, Codable, CaseIterable, Identifiable, S
     }
 }
 
+/// 用户看得见的六个工种。顺序即 `publicBuiltIn` 的顺序，两边由
+/// AgentWorkerArchitectureTests 钉住。
+///
+/// 「调查」与「通用」是两件事，别再合成一格：调查是只读的查证工种
+/// （scout 及其同族的 reader / deep / git 溯源 / 日志巡检），通用是没有
+/// 更合适工种时的兜底，它可以在已声明范围内改文件。此前 `investigate`
+/// 这一格挂的是 `generalist` 的 id 却叫「调查」，统计面板于是把整个调查
+/// 家族的次数记在一个写着 generalist 的行上，名不副实。
 nonisolated enum AgentWorkerRole: String, CaseIterable, Identifiable, Sendable {
-    case investigate, implement, verify, review, operate
+    case scout, general, implement, verify, review, operate
     var id: String { rawValue }
     var profileID: String {
         switch self {
-        case .investigate: return "generalist"
+        case .scout: return "scout"
+        case .general: return "generalist"
         case .implement: return "implementer"
         case .verify: return "tester"
         case .review: return "reviewer"
@@ -33,7 +42,8 @@ nonisolated enum AgentWorkerRole: String, CaseIterable, Identifiable, Sendable {
     }
     var title: String {
         switch self {
-        case .investigate: return String(localized: "调查", table: "WorkerArchitecture")
+        case .scout: return String(localized: "调查", table: "WorkerArchitecture")
+        case .general: return String(localized: "通用", table: "WorkerArchitecture")
         case .implement: return String(localized: "实现", table: "WorkerArchitecture")
         case .verify: return String(localized: "验证", table: "WorkerArchitecture")
         case .review: return String(localized: "审查", table: "WorkerArchitecture")

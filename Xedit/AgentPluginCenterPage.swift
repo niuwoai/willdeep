@@ -59,6 +59,7 @@ struct AgentPluginCenterPage: View {
     @State private var errorMessage: String?
     /// 插件页面的网页检查器开关。默认关，见 AgentSettingsStore 的说明。
     @State private var isPluginPageInspectable = AgentSettingsStore.loadPluginPageInspectable()
+    @State private var isDeveloperSectionExpanded = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -355,8 +356,12 @@ struct AgentPluginCenterPage: View {
     }
 
     /// 给插件作者的开关。收在 DisclosureGroup 里，普通用户不会误开。
+    ///
+    /// 自己管展开状态、标题自己接点击：`DisclosureGroup(_:content:)` 在
+    /// macOS 上只有那个小三角是热区，标题文字点不动——用户会以为这一栏
+    /// 是坏的。标题铺满整行并加 `contentShape`，点字、点字右边的空白都能开。
     private var developerSection: some View {
-        DisclosureGroup(L10n.Plugins.developerSection) {
+        DisclosureGroup(isExpanded: $isDeveloperSectionExpanded) {
             VStack(alignment: .leading, spacing: 6) {
                 Toggle(L10n.Plugins.inspectPluginPages, isOn: Binding(
                     get: { isPluginPageInspectable },
@@ -373,6 +378,11 @@ struct AgentPluginCenterPage: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 8)
+        } label: {
+            Text(L10n.Plugins.developerSection)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { isDeveloperSectionExpanded.toggle() }
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(0.035)))
