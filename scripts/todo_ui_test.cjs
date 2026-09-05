@@ -51,6 +51,39 @@ test('Chinese and English detail dictionaries have identical keys', () => {
 test('labels may use object property names without silently disappearing', () => {
   assert.equal(JSON.stringify(ui.normalizeTags(['constructor', '__proto__', 'toString'])), JSON.stringify(['constructor', '__proto__', 'toString']));
 });
+test('clipboard image files become attachments instead of pasted path text', () => {
+  const image = { name: 'shot.png', type: 'image/png', size: 5 };
+  const result = ui.pastedImages({
+    items: [{ kind: 'file', type: 'image/png', getAsFile: () => image }],
+    getData: () => '/tmp/should-not-win.png'
+  });
+  assert.equal(result.files[0], image);
+  assert.equal(JSON.stringify(result.paths), '[]');
+});
+test('an absolute image path becomes an attachment but ordinary text stays text', () => {
+  assert.equal(JSON.stringify(ui.pastedImages({ items: [], files: [], getData: type => type === 'text/plain' ? '/tmp/区域截图.png' : '' }).paths), '["/tmp/区域截图.png"]');
+  assert.equal(JSON.stringify(ui.pastedImages({ items: [], files: [], getData: () => 'finish screenshot.png tomorrow' })), '{"files":[],"paths":[]}');
+});
+test('only image attachments opt into thumbnail rendering', () => {
+  assert.equal(ui.isImageAttachment({ type: 'image/png', name: 'capture' }), true);
+  assert.equal(ui.isImageAttachment({ type: '', name: 'capture.webp' }), true);
+  assert.equal(ui.isImageAttachment({ type: 'application/pdf', name: 'spec.pdf' }), false);
+});
+test('todo page includes a real image thumbnail and full-size lightbox flow', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../PluginExamples/todo/ui/index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../PluginExamples/todo/ui/details.css'), 'utf8');
+  assert.match(html, /id="image-lightbox" role="dialog" aria-modal="true"/);
+  assert.match(html, /runCommand\('todo\.attachment_preview'/);
+  assert.match(html, /createElement\('img'\)/);
+  assert.match(css, /\.image-attachment-preview[^}]*width: 72px; height: 50px;/s);
+  assert.match(css, /\.image-lightbox-panel > img[^}]*object-fit: contain;/s);
+  const inlineScripts = Array.from(html.matchAll(/<script(?: [^>]*)?>([\s\S]*?)<\/script>/g), match => match[1]).filter(Boolean);
+  inlineScripts.forEach(source => assert.doesNotThrow(() => new Function(source)));
+});
+test('filter controls share one explicit height contract', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../PluginExamples/todo/ui/details.css'), 'utf8');
+  assert.match(css, /\.filters \.chip, \.filters select, \.filters summary, \.filters \.filter-select \{[^}]*height: 36px;[^}]*line-height: 34px;/s);
+});
 test('release packaging includes the complete todo UI and every local asset', () => {
   const repo = path.resolve(__dirname, '..');
   const project = fs.readFileSync(path.join(repo, 'Xedit.xcodeproj/project.pbxproj'), 'utf8');

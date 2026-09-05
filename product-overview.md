@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-04 | Current version: v1.333.0-rc1
+> Last updated: 2026-09-05 | Current version: v1.333.0-rc1
 
 ## Positioning
 
@@ -18,6 +18,7 @@ WillDeep is configured for non-App-Store distribution without App Sandbox so it 
 
 ## 架构概览
 
+- **待办图片缩略图与完整预览（1.333.0-rc1）** —— 在待办快速输入框粘贴截图或本地图片会直接形成真实缩略图，不再把临时路径写进标题；保存后的图片附件继续以小图展示，点击可在无外联的本地灯箱中按比例查看完整图片，键盘 Escape、遮罩与关闭按钮均可退出。非图片附件保持文件片。项目、状态、标签与“更多标签”筛选控件统一为 36px 高。
 - **本地 AI 短剧工坊插件（1.321.0-rc1）** —— `PluginExamples/video-studio` 从单条视频任务升级为短剧生产线：首页按剧名管理项目，支持搜索、状态筛选和继续最近创作；AI 策划保留多轮聊天上下文，输出 `short_drama_plan` 结构卡并只在用户确认后落库。角色定妆、分集剧本、可编辑分镜台词、独立首尾帧提示词与多候选抽卡依次衔接。图片统一由宿主通过 some.im 的 `gpt-image-2` / `nano-banana-2` 生成，密钥不进入页面；默认 Tsingfly Hub 适配器如实限制为文生视频和首帧续拍，尾帧能力未公开时不伪造支持。
 - **投机 Worker 可见性、模型驻留与只读审核收口（1.319.0-rc3）** —— 并行 scout 以回合自持的 run ID 和实时活动进入舰队面板并保存可检查 transcript，但不注册为后台 Worker，也不产生回合后唤醒。Ollama 判路请求结束后异步恢复 10 分钟或永久驻留。静态只读的 `ops_runner.target_command` 不再升级成写审批；全局 Git 配置查询在隔离 HOME 下通过精确 `GIT_CONFIG_GLOBAL` 读取真实配置，不继承 SSH、Token 或写权限。
 - **Worker 判路输入隔离与 `@` 菜单修正（1.319.0-rc2）** —— 自动分类只读取附件协议边界后的用户原文；宿主生成的 Skill 候选、文件内容和工作区说明仅供模型参考，不再以其中的“部署”等词改变 Worker 工种。`@` 菜单先列 Worker、再列工作区和文件，默认长列表拥有六行（252pt）的实际可视高度。

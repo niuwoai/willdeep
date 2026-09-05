@@ -151,18 +151,54 @@ def normalize_attachments(raw)
   end.compact.first(MAX_ATTACHMENTS_PER_ITEM)
 end
 
+def image_mime_type(bytes)
+  return "image/png" if bytes.start_with?("\x89PNG\r\n\x1A\n".b)
+  return "image/jpeg" if bytes.start_with?("\xFF\xD8\xFF".b)
+  return "image/gif" if bytes.start_with?("GIF87a".b, "GIF89a".b)
+  return "image/bmp" if bytes.start_with?("BM".b)
+  return "image/tiff" if bytes.start_with?("II*\x00".b, "MM\x00*".b)
+  return "image/webp" if bytes.bytesize >= 12 && bytes[0, 4] == "RIFF" && bytes[8, 4] == "WEBP"
+  return nil unless bytes.bytesize >= 12 && bytes[4, 4] == "ftyp"
+
+  brand = bytes[8, 4]
+  return "image/avif" if %w[avif avis].include?(brand)
+  return "image/heic" if %w[heic heix hevc hevx mif1 msf1].include?(brand)
+
+  nil
+end
+
+def image_bytes?(bytes)
+  !image_mime_type(bytes).nil?
+end
+
+def attachment_bytes(arguments)
+  source_path = arguments["sourcePath"].to_s.strip
+  unless source_path.empty?
+    return [nil, "attachment_path_not_absolute"] unless source_path.start_with?(File::SEPARATOR)
+    return [nil, "attachment_not_image"] unless source_path.match?(/\.(?:avif|bmp|gif|heic|heif|jpe?g|png|tiff?|webp)\z/i)
+    return [nil, "attachment_not_found"] unless File.file?(source_path)
+    return [nil, "attachment_too_large"] if File.size(source_path) > MAX_ATTACHMENT_BYTES
+    bytes = File.binread(source_path)
+    return [nil, "attachment_not_image"] unless image_bytes?(bytes)
+    return [bytes, nil]
+  end
+
+  data = arguments["dataBase64"].to_s
+  return [nil, "empty_attachment"] if data.empty?
+  begin
+    [data.unpack1("m"), nil]
+  rescue ArgumentError
+    [nil, "invalid_base64"]
+  end
+end
+
 def attach_file(arguments)
   items = load_items
   index = items.index { |item| item["id"] == arguments["id"].to_s }
   return { "ok" => false, "error" => "not_found" } if index.nil?
 
-  data = arguments["dataBase64"].to_s
-  return { "ok" => false, "error" => "empty_attachment" } if data.empty?
-  begin
-    bytes = data.unpack1("m")
-  rescue ArgumentError
-    return { "ok" => false, "error" => "invalid_base64" }
-  end
+  bytes, read_error = attachment_bytes(arguments)
+  return { "ok" => false, "error" => read_error } if read_error
   return { "ok" => false, "error" => "attachment_too_large" } if bytes.bytesize > MAX_ATTACHMENT_BYTES
 
   item = items[index]
@@ -186,6 +222,40 @@ def attach_file(arguments)
   items[index] = item
   save_items(items)
   { "ok" => true, "item" => item, "attachment" => entry }
+end
+
+# 缩略图和完整预览都从 MCP 桥拿 data URL 的 payload。待上传的路径只读用户
+# 刚刚明确粘贴的那张图；已保存附件则必须仍位于 Todo 自己的附件根目录下，
+# 不能借一条被篡改的存储记录去读任意本地文件。
+def attachment_preview(arguments)
+  source_path = arguments["sourcePath"].to_s.strip
+  unless source_path.empty?
+    bytes, read_error = attachment_bytes("sourcePath" => source_path)
+    return { "ok" => false, "error" => read_error } if read_error
+    return { "ok" => true, "mimeType" => image_mime_type(bytes), "dataBase64" => [bytes].pack("m0") }
+  end
+
+  item = load_items.find { |entry| entry["id"] == arguments["id"].to_s }
+  return { "ok" => false, "error" => "not_found" } unless item
+  attachment = normalize_attachments(item["attachments"])
+               .find { |entry| entry["id"] == arguments["attachmentID"].to_s }
+  return { "ok" => false, "error" => "attachment_not_found" } unless attachment
+
+  begin
+    root = File.realpath(attachments_root) + File::SEPARATOR
+    path = File.realpath(attachment["path"].to_s)
+  rescue Errno::ENOENT, Errno::EACCES
+    return { "ok" => false, "error" => "attachment_not_found" }
+  end
+  return { "ok" => false, "error" => "attachment_path_not_allowed" } unless path.start_with?(root)
+  return { "ok" => false, "error" => "attachment_not_found" } unless File.file?(path)
+  return { "ok" => false, "error" => "attachment_too_large" } if File.size(path) > MAX_ATTACHMENT_BYTES
+
+  bytes = File.binread(path)
+  mime_type = image_mime_type(bytes)
+  return { "ok" => false, "error" => "attachment_not_image" } unless mime_type
+
+  { "ok" => true, "mimeType" => mime_type, "dataBase64" => [bytes].pack("m0") }
 end
 
 def detach_file(arguments)
@@ -807,6 +877,7 @@ def call_tool(name, arguments)
   when "todo.restore" then restore_item(arguments)
   when "todo.stats" then stats(arguments)
   when "todo.attach" then attach_file(arguments)
+  when "todo.attachment_preview" then attachment_preview(arguments)
   when "todo.detach" then detach_file(arguments)
   when "todo.settings" then settings_tool(arguments)
   else { "ok" => false, "error" => "unknown tool #{name}" }
@@ -903,15 +974,28 @@ TOOLS = [
   },
   {
     name: "todo.attach",
-    description: "Attach one file (screenshot, PDF, Word…) to a todo. The page reads the file and passes base64; the server stores it beside the todo store and records only metadata.",
+    description: "Attach one file (screenshot, PDF, Word…) to a todo. The page normally passes base64; a pasted local image path may be copied directly. The server stores it beside the todo store and records only metadata.",
     inputSchema: {
       type: "object",
-      required: %w[id name dataBase64],
+      required: %w[id name],
       properties: {
         id: { type: "string", description: "Todo id" },
         name: { type: "string", description: "Original file name" },
         mimeType: { type: "string", description: "MIME type reported by the page" },
-        dataBase64: { type: "string", description: "Base64 file bytes, at most 10 MiB decoded" }
+        dataBase64: { type: "string", description: "Base64 file bytes, at most 10 MiB decoded" },
+        sourcePath: { type: "string", description: "Absolute path of a pasted local image, copied without deleting the source" }
+      }
+    }
+  }.freeze,
+  {
+    name: "todo.attachment_preview",
+    description: "Return an image attachment as base64 for the local plugin page thumbnail and full-size viewer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sourcePath: { type: "string", description: "Absolute local image path that is currently queued for attachment" },
+        id: { type: "string", description: "Todo id for a stored attachment" },
+        attachmentID: { type: "string", description: "Stored attachment id" }
       }
     }
   }.freeze,
@@ -955,7 +1039,7 @@ ARGF.each_line do |line|
            when "initialize"
              { protocolVersion: "2025-06-18",
                capabilities: { tools: {} },
-               serverInfo: { name: "todo", version: "1.0.0" } }
+               serverInfo: { name: "todo", version: "1.4.0" } }
            when "tools/list"
              { tools: TOOLS }
            when "tools/call"

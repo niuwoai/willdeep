@@ -67,6 +67,8 @@
       .composer input::placeholder { color: var(--placeholder); }
       input::placeholder, textarea::placeholder { color: var(--placeholder); }
       .composer .hint { margin-top: 7px; font-size: .78em; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+      .quick-attachments { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+      .quick-attachments:empty { display: none; }
       .badge {
         border-radius: 999px; padding: 1px 8px; font-size: .75em;
         border: 1px solid var(--border); color: var(--muted);
@@ -206,6 +208,7 @@
         <input id="quick" type="text" autocomplete="off" spellcheck="false" />
         <button class="chip" id="quick-add" type="button"></button>
       </div>
+      <div class="quick-attachments" id="quick-attachments" aria-live="polite"></div>
       <div class="hint" id="quick-hint"></div>
     </div>
 
@@ -236,6 +239,16 @@
       <button class="undo hidden" id="toast-undo" type="button"></button>
     </div>
 
+    <div class="image-lightbox hidden" id="image-lightbox" role="dialog" aria-modal="true">
+      <div class="image-lightbox-panel">
+        <div class="image-lightbox-header">
+          <span id="image-lightbox-caption"></span>
+          <button class="icon-button" id="image-lightbox-close" type="button"></button>
+        </div>
+        <img id="image-lightbox-image" alt="" />
+      </div>
+    </div>
+
     <script src="details-i18n.js"></script>
     <script src="details.js"></script>
     <script>
@@ -247,6 +260,7 @@
             title: '待办',
             quickPlaceholder: '一句话记个待办，比如「明天下午三点前把发布验一遍，很急」',
             attach: '附件', detach: '移除附件', attachments: '附件',
+            viewImage: '查看完整图片', closeImagePreview: '关闭图片预览', imagePreview: '图片预览',
             attachTooLarge: '附件超过 10 MB，服务端不收。',
             attachReadFailed: '读取文件失败。',
             sendToChat: '发到聊天',
@@ -308,6 +322,7 @@
             title: 'Todo',
             quickPlaceholder: 'One sentence, e.g. “verify the release by 3pm tomorrow, urgent”',
             attach: 'Attach', detach: 'Remove attachment', attachments: 'Attachments',
+            viewImage: 'View full image', closeImagePreview: 'Close image preview', imagePreview: 'Image preview',
             attachTooLarge: 'That file is over 10 MB; the server will not take it.',
             attachReadFailed: 'Could not read that file.',
             sendToChat: 'Send to chat',
@@ -421,12 +436,16 @@
         };
         var lastRemoved = null;
         var toastTimer = null;
+        var pendingQuickAttachments = [];
+        var attachmentPreviewCache = Object.create(null);
+        var lightboxReturnFocus = null;
 
         var el = {};
         ['title', 'count', 'refresh', 'settings-toggle', 'settings', 'settings-title', 'parser-label',
          'parser-mode', 'provider-label', 'provider-select', 'model-select', 'settings-note',
          'filters', 'skeleton', 'state', 'groups', 'toast', 'toast-text', 'toast-undo',
-         'composer', 'quick', 'quick-add', 'quick-hint'].forEach(function (id) {
+         'composer', 'quick', 'quick-add', 'quick-attachments', 'quick-hint',
+         'image-lightbox', 'image-lightbox-caption', 'image-lightbox-close', 'image-lightbox-image'].forEach(function (id) {
           el[id] = document.getElementById(id);
         });
 
@@ -543,7 +562,14 @@
               });
             })
             .then(function (result) {
+              var item = result.payload && result.payload.item;
+              if (!item || !pendingQuickAttachments.length) return result;
+              return attachPendingFiles(item.id).then(function () { return result; });
+            })
+            .then(function (result) {
               el.quick.value = '';
+              clearPendingAttachments();
+              renderQuickAttachments();
               renderQuickHint(result.payload && result.payload.item, result.by);
               return load();
             })
@@ -622,11 +648,16 @@
           el['parser-label'].textContent = t('parserLabel');
           el['provider-label'].textContent = t('providerLabel');
           el['settings-note'].textContent = t('settingsNote');
+          el['image-lightbox'].setAttribute('aria-label', t('imagePreview'));
+          el['image-lightbox-close'].setAttribute('aria-label', t('closeImagePreview'));
+          el['image-lightbox-close'].textContent = '';
+          el['image-lightbox-close'].appendChild(window.TodoDetails.icon('x-mark'));
           el.quick.placeholder = t('quickPlaceholder');
           if (!state.busy) el['quick-add'].textContent = t('add');
         }
 
         var MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+        var MAX_ATTACHMENTS_PER_ITEM = 10;
 
         function readAsBase64(file) {
           return new Promise(function (resolve, reject) {
@@ -647,6 +678,171 @@
           if (value < 1024) return value + ' B';
           if (value < 1024 * 1024) return Math.round(value / 1024) + ' KB';
           return (value / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function attachmentName(entry) {
+          if (entry.file && entry.file.name) return entry.file.name;
+          var parts = String(entry.path || '').split('/');
+          return parts[parts.length - 1] || t('attach');
+        }
+
+        function imageMimeType(path) {
+          var extension = String(path || '').split('.').pop().toLowerCase();
+          var types = {
+            avif: 'image/avif', bmp: 'image/bmp', gif: 'image/gif', heic: 'image/heic', heif: 'image/heif',
+            jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', tif: 'image/tiff', tiff: 'image/tiff', webp: 'image/webp'
+          };
+          return types[extension] || 'application/octet-stream';
+        }
+
+        function imageDataURL(payload) {
+          if (!payload || !payload.dataBase64 || !payload.mimeType) return '';
+          return 'data:' + payload.mimeType + ';base64,' + payload.dataBase64;
+        }
+
+        function openImagePreview(url, name, trigger) {
+          if (!url) return;
+          lightboxReturnFocus = trigger || document.activeElement;
+          el['image-lightbox-caption'].textContent = name;
+          el['image-lightbox-image'].src = url;
+          el['image-lightbox-image'].alt = name;
+          el['image-lightbox'].classList.remove('hidden');
+          document.body.classList.add('lightbox-open');
+          el['image-lightbox-close'].focus();
+        }
+
+        function closeImagePreview() {
+          if (el['image-lightbox'].classList.contains('hidden')) return;
+          el['image-lightbox'].classList.add('hidden');
+          el['image-lightbox-image'].removeAttribute('src');
+          document.body.classList.remove('lightbox-open');
+          if (lightboxReturnFocus && typeof lightboxReturnFocus.focus === 'function') lightboxReturnFocus.focus();
+          lightboxReturnFocus = null;
+        }
+
+        function createImageAttachment(name, title, removeAction) {
+          var card = document.createElement('span');
+          card.className = 'image-attachment is-loading';
+          card.title = title;
+          var preview = document.createElement('button');
+          preview.type = 'button';
+          preview.className = 'image-attachment-preview';
+          preview.setAttribute('aria-label', t('viewImage') + ': ' + name);
+          var image = document.createElement('img');
+          image.alt = '';
+          image.loading = 'lazy';
+          preview.appendChild(image);
+          card.appendChild(preview);
+          var label = document.createElement('span');
+          label.className = 'image-attachment-name';
+          label.textContent = name;
+          card.appendChild(label);
+          var remove = document.createElement('button');
+          remove.type = 'button';
+          remove.className = 'image-attachment-remove';
+          remove.setAttribute('aria-label', t('detach'));
+          remove.appendChild(window.TodoDetails.icon('x-mark'));
+          remove.addEventListener('click', removeAction);
+          card.appendChild(remove);
+          return { root: card, preview: preview, image: image };
+        }
+
+        function hydrateImageAttachment(view, url, name) {
+          if (!url || !view.root.isConnected) return;
+          view.image.src = url;
+          view.root.classList.remove('is-loading');
+          view.preview.addEventListener('click', function () { openImagePreview(url, name, view.preview); });
+        }
+
+        function previewPayload(options, cacheKey) {
+          if (!attachmentPreviewCache[cacheKey]) {
+            attachmentPreviewCache[cacheKey] = runCommand('todo.attachment_preview', options)
+              .then(imageDataURL)
+              .catch(function (error) { delete attachmentPreviewCache[cacheKey]; throw error; });
+          }
+          return attachmentPreviewCache[cacheKey];
+        }
+
+        function releasePendingAttachment(entry) {
+          if (entry && entry.previewURL && entry.file) URL.revokeObjectURL(entry.previewURL);
+        }
+
+        function clearPendingAttachments() {
+          pendingQuickAttachments.forEach(releasePendingAttachment);
+          pendingQuickAttachments = [];
+        }
+
+        function renderQuickAttachments() {
+          el['quick-attachments'].textContent = '';
+          pendingQuickAttachments.forEach(function (entry, index) {
+            var name = attachmentName(entry);
+            var title = name + (entry.file ? ' · ' + formatBytes(entry.file.size) : '');
+            var view = createImageAttachment(name, title, function () {
+              var removed = pendingQuickAttachments.splice(index, 1)[0];
+              releasePendingAttachment(removed);
+              renderQuickAttachments();
+              el.quick.focus();
+            });
+            el['quick-attachments'].appendChild(view.root);
+            if (entry.previewURL) hydrateImageAttachment(view, entry.previewURL, name);
+          });
+        }
+
+        function queuePastedImages(event) {
+          var pasted = window.TodoDetails.pastedImages(event.clipboardData);
+          var entries = pasted.files.map(function (file) { return { file: file }; })
+            .concat(pasted.paths.map(function (path) { return { path: path }; }));
+          if (!entries.length) return;
+          event.preventDefault();
+          entries.forEach(function (entry) {
+            if (pendingQuickAttachments.length >= MAX_ATTACHMENTS_PER_ITEM) return;
+            if (entry.file && entry.file.size > MAX_ATTACHMENT_BYTES) {
+              fail(new Error(t('attachTooLarge')));
+              return;
+            }
+            if (entry.file) entry.previewURL = URL.createObjectURL(entry.file);
+            pendingQuickAttachments.push(entry);
+            if (entry.path) {
+              previewPayload({ sourcePath: entry.path }, 'source:' + entry.path)
+                .then(function (url) {
+                  if (pendingQuickAttachments.indexOf(entry) < 0) return;
+                  entry.previewURL = url;
+                  renderQuickAttachments();
+                })
+                .catch(fail);
+            }
+          });
+          renderQuickAttachments();
+        }
+
+        function attachPendingFiles(itemID) {
+          var attachedIDs = [];
+          var upload = pendingQuickAttachments.reduce(function (promise, entry) {
+            return promise.then(function () {
+              if (entry.path) {
+                return runCommand('todo.attach', {
+                  id: itemID, name: attachmentName(entry), sourcePath: entry.path, mimeType: imageMimeType(entry.path)
+                });
+              }
+              return readAsBase64(entry.file).then(function (dataBase64) {
+                return runCommand('todo.attach', {
+                  id: itemID, name: attachmentName(entry), mimeType: entry.file.type || '', dataBase64: dataBase64
+                });
+              });
+            }).then(function (payload) {
+              if (payload && payload.attachment) attachedIDs.push(payload.attachment.id);
+            });
+          }, Promise.resolve());
+          return upload.catch(function (error) {
+            var cleanup = attachedIDs.reduce(function (promise, attachmentID) {
+              return promise.then(function () {
+                return runCommand('todo.detach', { id: itemID, attachmentID: attachmentID }).catch(function () {});
+              });
+            }, Promise.resolve());
+            return cleanup.then(function () {
+              return runCommand('todo.remove', { id: itemID }).catch(function () {});
+            }).then(function () { throw error; });
+          });
         }
 
         /**
@@ -909,6 +1105,32 @@
           });
           if (!(item.tags || []).length) labels.appendChild(window.TodoDetails.button(dt('tags'), 'tag-add', function () { openInspector(item, 'tags'); }, 'plus'));
           (item.attachments || []).forEach(function (file) {
+            if (window.TodoDetails.isImageAttachment(file)) {
+              var cacheKey = 'stored:' + item.id + ':' + file.id;
+              var view = createImageAttachment(file.name, file.name + ' · ' + formatBytes(file.size), function () {
+                view.root.classList.add('is-removing');
+                runCommand('todo.detach', { id: item.id, attachmentID: file.id })
+                  .then(function () { delete attachmentPreviewCache[cacheKey]; return load(); })
+                  .catch(function (error) { view.root.classList.remove('is-removing'); fail(error); });
+              });
+              labels.appendChild(view.root);
+              var loadPreview = function () {
+                previewPayload({ id: item.id, attachmentID: file.id }, cacheKey)
+                  .then(function (url) { hydrateImageAttachment(view, url, file.name); })
+                  .catch(fail);
+              };
+              if ('IntersectionObserver' in window) {
+                var observer = new IntersectionObserver(function (entries) {
+                  if (!entries.some(function (entry) { return entry.isIntersecting; })) return;
+                  observer.disconnect();
+                  loadPreview();
+                }, { rootMargin: '160px' });
+                observer.observe(view.root);
+              } else {
+                loadPreview();
+              }
+              return;
+            }
             var chip = document.createElement('span');
             chip.className = 'attachment-chip';
             chip.title = file.name + ' · ' + formatBytes(file.size);
@@ -1094,6 +1316,7 @@
         el.quick.addEventListener('keydown', function (event) {
           if (event.key === 'Enter') { event.preventDefault(); quickAdd(); }
         });
+        el.quick.addEventListener('paste', queuePastedImages);
         el['quick-add'].addEventListener('click', quickAdd);
         el.refresh.addEventListener('click', function () { load(); });
         el['settings-toggle'].addEventListener('click', function () {
@@ -1108,14 +1331,23 @@
           saveSettings();
         });
         el['model-select'].addEventListener('change', saveSettings);
+        el['image-lightbox-close'].addEventListener('click', closeImagePreview);
+        el['image-lightbox'].addEventListener('click', function (event) {
+          if (event.target === el['image-lightbox']) closeImagePreview();
+        });
 
         document.addEventListener('keydown', function (event) {
           var typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
           if ((event.metaKey || event.ctrlKey) && event.key === 'n') {
             event.preventDefault();
             el.quick.focus();
-          } else if (event.key === 'Escape' && !typing) {
-            hideToast();
+          } else if (event.key === 'Escape') {
+            if (!el['image-lightbox'].classList.contains('hidden')) {
+              event.preventDefault();
+              closeImagePreview();
+            } else if (!typing) {
+              hideToast();
+            }
           }
         });
 
