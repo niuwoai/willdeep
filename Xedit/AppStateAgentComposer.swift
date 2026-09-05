@@ -490,7 +490,7 @@ extension AppState {
                 attachedSkills: attachedSkills,
                 source: source
             )
-        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI:
+        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI, .openCode:
             dispatchDelegatedAgentMessage(
                 for: runtime,
                 text: text,

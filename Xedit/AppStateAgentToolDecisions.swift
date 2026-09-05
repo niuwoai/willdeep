@@ -1193,7 +1193,8 @@ extension AppState {
         "codex_cli",
         "hermes_cli",
         "cursor_agent",
-        "cline_cli"
+        "cline_cli",
+        "opencode_cli"
     ]
 
     nonisolated static func isTrustedDelegatedAgentTool(_ toolName: String) -> Bool {
@@ -1645,7 +1646,7 @@ extension AppState {
         arguments: [String: AgentJSONValue]
     ) -> Bool {
         switch toolName {
-        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli":
             return arguments["permission_mode"]?.stringValue() == "plan"
         default:
             return false
@@ -1687,7 +1688,7 @@ extension AppState {
                 || sandboxDecision.mode == .workspaceWrite
                 || sandboxDecision.mode == .workspaceWriteNetwork
                 || sandboxDecision.mode == .workspaceWriteNetworkCredentialed
-        case "kill_job", "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli",
+        case "kill_job", "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli",
              "add_memory", "create_user_skill", "create_user_skills", "update_user_skill", "suggest_mcp_server", "configure_mcp_server":
             return true
         case "call_mcp_tool":

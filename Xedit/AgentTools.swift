@@ -440,6 +440,8 @@ enum AgentToolRunner {
                 result = try await cursorAgent(arguments: activeArguments, context: activeContext)
             case "cline_cli":
                 result = try await clineCLI(arguments: activeArguments, context: activeContext)
+            case "opencode_cli":
+                result = try await openCodeCLI(arguments: activeArguments, context: activeContext)
             case "lark_cli":
                 result = try await larkCLI(arguments: activeArguments)
             case "list_jobs":

@@ -983,7 +983,7 @@ extension AppState {
                 RUN ON THE REMOTE RUNTIME (these reach \(remoteRuntimeDescriptor.sshTarget)):
                 - search_files, grep_files, read_file, list_directory, git_status — read remote files.
                 - run_command — executes on the remote box, in the remote root. This is your main hands-on tool here; use it for edits too (e.g. targeted `sed` / `perl` replacements, checked-in scripts, `git apply` with an existing patch file, explicit file transfer, or a small auditable heredoc/patch fallback when transfer tools such as rz/sz cannot be installed), inspecting processes, services, disk, logs. Avoid heredoc/here-string file creation as the first choice, but it is an allowed fallback when no safer auditable path exists.
-                - claude_code / codex_cli / hermes_cli / cursor_agent / cline_cli — the delegated CLI runs on the remote box (it must be installed there).
+                - claude_code / codex_cli / hermes_cli / cursor_agent / cline_cli / opencode_cli — the delegated CLI runs on the remote box (it must be installed there).
 
                 RUN ON THE LOCAL MAC, NOT the remote box — do NOT use these to change or inspect the remote workspace:
                 - create_file / edit_file / apply_patch — create or edit LOCAL files; they do NOT touch remote files. For remote file creation or edits use run_command.

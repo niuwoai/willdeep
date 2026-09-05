@@ -223,7 +223,7 @@ enum AgentToolPackCatalog {
     private static let integrationToolNames: Set<String> = [
         "search_mcp_servers", "suggest_mcp_server", "configure_mcp_server",
         "list_mcp_servers", "list_mcp_tools", "call_mcp_tool", "lark_cli",
-        "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli"
+        "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli"
     ]
 
     private static let sessionAutomationToolNames: Set<String> = [

@@ -461,7 +461,7 @@ enum AgentSandboxPolicy {
                     prefixRule: ["lark-cli"]
                 )
             }
-        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli":
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
