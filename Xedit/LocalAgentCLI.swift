@@ -295,7 +295,7 @@ struct LocalAgentCLI: Identifiable, Equatable {
                 "/opt/homebrew/bin/opencode",
                 "/usr/local/bin/opencode"
             ],
-            integration: .discoveryOnly
+            integration: .directTool("opencode_cli")
         ),
         LocalAgentCLI(
             id: "aider",

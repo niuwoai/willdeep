@@ -221,8 +221,8 @@ enum AgentContextBuilder {
         if toolsEnabled {
             if executionAgent == .willDeep {
                 let delegatedPolicy = interactionMode == .goal
-                    ? "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, hermes_cli, cursor_agent, cline_cli) are available only as a Goal-mode fallback after native workspace tools, focused edits, and verification attempts are not enough."
-                    : "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, hermes_cli, cursor_agent, cline_cli) are intentionally unavailable in ordinary mode; use WillDeep's native tools instead."
+                    ? "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, hermes_cli, cursor_agent, cline_cli, opencode_cli) are available only as a Goal-mode fallback after native workspace tools, focused edits, and verification attempts are not enough."
+                    : "WillDeep is the selected executor. External delegated coding tools (claude_code, codex_cli, hermes_cli, cursor_agent, cline_cli, opencode_cli) are intentionally unavailable in ordinary mode; use WillDeep's native tools instead."
                 sections.append("""
                 Delegated executor policy:
                 \(delegatedPolicy)
@@ -602,7 +602,7 @@ enum AgentContextBuilder {
                 - Workspace exploration: search_files, grep_files, read_file, list_directory, git_status.
                 - Shell and verification: run_command for build/test/render commands; use run_in_background with list_jobs/get_job_output/kill_job for long tasks.
                 - Optional native capabilities: when a needed tool is absent, call load_tool_pack with the matching compact category id. Load related packs together when the task clearly needs them; activated schemas stay available for the conversation.
-                - Delegation: use five responsibilities independently of model capability: generalist (investigate), implementer, tester, reviewer, ops_runner. Their models come from three configured tiers: standard / advanced / expert, with independent 128K/256K input budgets. Prefer the lowest sufficient tier and bounded task packets; tier changes never widen tools or file access. Keep private-provider bindings private. Use claude_code/codex_cli/hermes_cli/cursor_agent/cline_cli only for the separately governed external-agent path.
+                - Delegation: use five responsibilities independently of model capability: generalist (investigate), implementer, tester, reviewer, ops_runner. Their models come from three configured tiers: standard / advanced / expert, with independent 128K/256K input budgets. Prefer the lowest sufficient tier and bounded task packets; tier changes never widen tools or file access. Keep private-provider bindings private. Use claude_code/codex_cli/hermes_cli/cursor_agent/cline_cli/opencode_cli only for the separately governed external-agent path.
                 - External context: web_search/web_fetch for current public information, list_mcp_servers/list_mcp_tools/call_mcp_tool for configured integrations, configure_mcp_server for approved pasted MCP JSON add/update, and lark_cli for configured Feishu/Lark work.
                 - Browser (chrome_*/embedded_browser_*), web-dev workflow, and native-app computer_use_* guidance is appended under "Capability guidance" only while the matching capability is active; when those tools are absent from your tool list they are unavailable, not broken.
                 """)

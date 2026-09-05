@@ -73,7 +73,7 @@ struct AgentExecutionPickerPill: View {
     private var pillBackground: Color {
         switch selectedAgent {
         case .willDeep: return AgentComposerChrome.controlFill
-        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI:
+        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI, .openCode:
             return AgentComposerChrome.selectedControlFill
         }
     }

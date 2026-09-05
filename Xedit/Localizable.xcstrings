@@ -34700,6 +34700,8 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通过本机 Hermes Profile 执行这轮任务。" } }
       }
     },
+    "execution-agent.opencode.name" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "OpenCode" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "OpenCode" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "OpenCode" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "OpenCode" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "OpenCode" } } } },
+    "execution-agent.opencode.summary" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Run this task with the local opencode CLI." } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "Ejecuta esta tarea con la CLI local de opencode." } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "Exécuter cette tâche avec la CLI opencode locale." } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "ローカルの opencode CLI でこのタスクを実行します。" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用本机的 opencode CLI 执行这个任务。" } } } },
     "execution-agent.willdeep.name" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -1043,7 +1043,7 @@ struct AgentSemanticActivityStatusLine: View {
                 systemImage: "person.2",
                 tint: .secondary
             )
-        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI:
+        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI, .openCode:
             let delegatedProgress = call.delegatedProgress.map {
                 L10n.DelegatedTask.liveProgress(
                     phase: $0.phase,

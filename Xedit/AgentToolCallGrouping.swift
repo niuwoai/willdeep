@@ -282,7 +282,7 @@ struct AgentToolActivityRowPresentation: Identifiable, Equatable {
             return host
         case "spawn_agent":
             return compact(call.arguments["label"]?.stringValue())
-        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli":
             guard let progress = call.delegatedProgress else { return nil }
             var detail = L10n.DelegatedTask.liveProgress(
                 phase: progress.phase,
@@ -442,6 +442,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
     case hermesCLI
     case cursorAgent
     case clineCLI
+    case openCode
     case fileMutation
     case applyPatch
     case askUser
@@ -469,6 +470,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return .cursorAgent
         case "cline_cli":
             return .clineCLI
+        case "opencode_cli":
+            return .openCode
         case "edit_file", "create_file":
             return .fileMutation
         case "apply_patch":
@@ -510,6 +513,8 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
             return "已委派\(count)个 Cursor Agent 任务"
         case .clineCLI:
             return "已委派\(count)个 Cline 任务"
+        case .openCode:
+            return "已委派\(count)个 opencode 任务"
         case .fileMutation:
             return "已写入\(count)个文件"
         case .applyPatch:
@@ -545,6 +550,7 @@ nonisolated enum AgentToolKind: Equatable, Sendable {
         case .hermesCLI: return "h.circle"
         case .cursorAgent: return "cursorarrow.rays"
         case .clineCLI: return "chevron.left.forwardslash.chevron.right"
+        case .openCode: return "curlybraces"
         case .fileMutation: return "square.and.pencil"
         case .applyPatch: return "square.and.pencil"
         case .askUser: return "bubble.left.and.text.bubble.right"
@@ -578,6 +584,8 @@ extension AgentToolKind {
             return "委派给 Cursor Agent"
         case .clineCLI:
             return "委派给 Cline"
+        case .openCode:
+            return "委派给 opencode"
         default:
             return nil
         }

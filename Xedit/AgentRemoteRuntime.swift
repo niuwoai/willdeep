@@ -61,6 +61,7 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
         printf 'agent_codex=%s\\n' "$(command -v codex 2>/dev/null || true)"
         printf 'agent_cursor=%s\\n' "$(command -v cursor-agent 2>/dev/null || command -v cursor 2>/dev/null || true)"
         printf 'agent_cline=%s\\n' "$(command -v cline 2>/dev/null || true)"
+        printf 'agent_opencode=%s\\n' "$(command -v opencode 2>/dev/null || true)"
         printf 'npm_registry=%s\\n' "$(wd_cfg npm config get registry)"
         printf 'npm_proxy=%s\\n' "$(wd_cfg npm config get proxy)"
         printf 'npm_https_proxy=%s\\n' "$(wd_cfg npm config get https-proxy)"
@@ -109,6 +110,7 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
                 AgentExecutionAgent.codexCLI.rawValue: nonEmpty(fields["agent_codex"]),
                 AgentExecutionAgent.cursorAgent.rawValue: nonEmpty(fields["agent_cursor"]),
                 AgentExecutionAgent.clineCLI.rawValue: nonEmpty(fields["agent_cline"]),
+                AgentExecutionAgent.openCode.rawValue: nonEmpty(fields["agent_opencode"]),
             ].compactMapValues { $0 }
         )
         updated.lastProbeAt = Date()
@@ -500,6 +502,7 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
                 AgentExecutionAgent.codexCLI.rawValue: report.tools["codex"],
                 AgentExecutionAgent.cursorAgent.rawValue: report.tools["cursor-agent"] ?? report.tools["cursor"],
                 AgentExecutionAgent.clineCLI.rawValue: report.tools["cline"],
+                AgentExecutionAgent.openCode.rawValue: report.tools["opencode"],
             ].compactMapValues { $0 }
         )
         updated.lastProbeAt = Date()

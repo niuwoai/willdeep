@@ -35,6 +35,7 @@ nonisolated enum AgentDispatchExecutorChoice: String, Codable, CaseIterable, Ide
     case hermesCLI
     case cursorAgent
     case clineCLI
+    case openCode
 
     var id: String { rawValue }
 
@@ -47,6 +48,7 @@ nonisolated enum AgentDispatchExecutorChoice: String, Codable, CaseIterable, Ide
         case .hermesCLI: return .hermesCLI
         case .cursorAgent: return .cursorAgent
         case .clineCLI: return .clineCLI
+        case .openCode: return .openCode
         }
     }
 
@@ -58,6 +60,7 @@ nonisolated enum AgentDispatchExecutorChoice: String, Codable, CaseIterable, Ide
         case .hermesCLI: self = .hermesCLI
         case .cursorAgent: self = .cursorAgent
         case .clineCLI: self = .clineCLI
+        case .openCode: self = .openCode
         }
     }
 }
@@ -705,6 +708,7 @@ nonisolated enum AgentDispatchExecutorResolver {
             case "hermes-cli": result.insert(.hermesCLI)
             case "cursor-cli": result.insert(.cursorAgent)
             case "cline-cli": result.insert(.clineCLI)
+            case "opencode": result.insert(.openCode)
             default: break
             }
         }

@@ -60,7 +60,7 @@ nonisolated struct AgentExecutionProfile: Codable, Equatable, Identifiable {
             configuration = .claudeAgent(name: nativeProfileName ?? "")
         case .hermesCLI:
             configuration = .hermesProfile(name: nativeProfileName ?? "default")
-        case .willDeep, .cursorAgent, .clineCLI:
+        case .willDeep, .cursorAgent, .clineCLI, .openCode:
             configuration = .generic
         }
         return LocalAgentCLIProfile(

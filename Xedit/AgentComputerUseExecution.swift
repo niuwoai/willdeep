@@ -75,6 +75,7 @@ nonisolated enum AgentComputerUseExecution {
         "hermes_cli",
         "cursor_agent",
         "cline_cli",
+        "opencode_cli",
         "call_mcp_tool",
     ]
 

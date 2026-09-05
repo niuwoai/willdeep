@@ -269,6 +269,7 @@ nonisolated enum AgentToolDisplay {
         "hermes_cli": "Hermes",
         "cursor_agent": "Cursor Agent",
         "cline_cli": "Cline CLI",
+        "opencode_cli": "opencode CLI",
         "spawn_agent": "派生子代理",
         "ask_user": "询问你",
         "run_workflow": "运行工作流",

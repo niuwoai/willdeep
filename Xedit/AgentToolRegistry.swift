@@ -1796,6 +1796,18 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "opencode_cli",
+            description: "Delegate a complex coding task to the locally installed opencode CLI (`opencode`). opencode can inspect and edit the workspace, run shell commands, and work multi-step; use it for self-contained implementation tasks. Requires user approval. The prompt must be fully self-contained: opencode sees the workspace files but not this conversation.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description. Include relevant file paths, acceptance criteria, and constraints — the delegated opencode session cannot ask follow-up questions here.", required: true),
+                AgentToolParameter(name: "permission_mode", type: .string, description: "One of `default` (opencode asks before each privileged action) or `auto` (auto-approve anything not explicitly denied). Defaults to default.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional model id forwarded with `--model`, in opencode's `provider/model` form.", required: false),
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false when the caller needs to wait for the final CLI response inline.", required: false),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout. Local/SSH background default has no hard timeout; delegated foreground default/cap is 21600 seconds.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "spawn_agent",
             description: "Spawn a worker with one of five responsibilities: general utility, implementation, verification, review, or operations. Model capability is selected separately through the configured standard/advanced/expert tier; context budgets are configured independently at 128K/256K and capped by the supported model window. Prefer the lowest adequate tier. The generalist is the fallback when no narrower role fits and carries declared file patches, visible terminal, logged-in Chrome, and configured MCP tools. All writes remain scoped and parent-approved; children cannot ask the user or spawn agents. Supply a self-contained task.",
             risk: .read,
@@ -1954,7 +1966,7 @@ enum AgentToolRegistry {
 
     static func isDelegatedCodingTool(_ name: String) -> Bool {
         switch name {
-        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli":
             return true
         default:
             return false

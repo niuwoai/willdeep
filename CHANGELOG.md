@@ -3,6 +3,22 @@
 > 当前文件保留最新版本（1.321.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.334.0-rc1 - 2026-09-05
+
+### Added
+
+- 委派执行器新增 opencode。按**结构化执行器**接入（与 Claude Code、Codex 同级），不是当普通 shell 工具：`opencode run --format json` 吐的是一条定义清楚的 NDJSON 事件流（step_start / tool_use / text / step_finish），每条带 sessionID 可以 `-s` 续接，信息量足够撑起工具调用卡片和 token 计数。本机、SSH 远端和守护进程三条发现路径都认它。
+
+### Changed
+
+- `LocalAgentCLI` 里原有的 opencode 条目从 `.discoveryOnly` 改为 `.directTool("opencode_cli")`。此前它只是被发现，选不了。
+- 权限只有两档：默认逐条询问，`auto` 自动放行未被明确拒绝的操作。不设 auto 为默认——opencode 自己的说明把它标成 "(dangerous!)"。
+- 提示词走 argv 位置参数且必须排在所有选项之后（`opencode run` 不读 stdin）。以 `-` 开头的正文排在中间会被当成选项吃掉，这一条有用例钉着。
+
+### Tests
+
+- 新增 opencode 执行器用例七项。解码那半边不用手编 JSON，样本是真跑 `opencode run --format json` 抓下来的，存在 `XeditTests/Fixtures/opencode-stream.jsonl`：照文档猜的事件形状能让用例全绿而线上一条都解不出，而宿主拿不到事件的表现跟「执行器没输出」一模一样。另外钉住 `reason == "tool-calls"` 不能判成回合结束，否则宿主提前收尾，后面的正文没人接。
+
 ## 1.333.0-rc1 - 2026-09-05
 
 ### Added

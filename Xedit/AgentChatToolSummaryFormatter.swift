@@ -103,7 +103,7 @@ enum AgentChatToolSummaryFormatter {
             preferredKeys = ["server", "tool", "name"]
         case "spawn_agent":
             preferredKeys = ["label", "prompt"]
-        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli":
             preferredKeys = ["prompt", "permission_mode"]
         case "create_file", "write_file":
             preferredKeys = ["path", "title"]
