@@ -1020,10 +1020,33 @@ extension AppState {
                 model: childConfiguration.model,
                 providerID: childConfiguration.providerID
             )
+            // Delegation was tried and could not run. Record the attempt so
+            // `AgentWorkerRouteGuard` stops fencing the parent out of the work.
+            //
+            // Without this the turn has no way forward at all: the guard only
+            // steps aside for a profile that appears in this set, and the set
+            // is otherwise written only on a *successful* spawn that carried
+            // write access or an approved command. A read-only ops inspection
+            // whose worker never reached its provider therefore left the
+            // parent permanently blocked — it could only spawn again, fail
+            // again, and eventually give up mid-turn. A routine log check that
+            // used to finish in about a minute sat for an hour waiting for the
+            // operator to type "继续".
+            //
+            // This does not widen what a *successful* worker unlocks: that
+            // rule still lives at the spawn site above, and a failed run
+            // produced no findings to unlock anything with.
+            runtime.currentTurnAttemptedWorkerProfiles.insert(profile.id)
             finishRecord(
                 status: .failed,
                 summary: "subagent failed",
-                payload: "Tool error: \(error.localizedDescription)",
+                payload: """
+                    Tool error: \(error.localizedDescription)
+
+                    Delegation to `\(profile.id)` could not run, so this turn's \
+                    delegate-first route no longer applies. Do the work directly \
+                    in this session rather than spawning the same trade again.
+                    """,
                 errorMessage: error.localizedDescription
             )
         }

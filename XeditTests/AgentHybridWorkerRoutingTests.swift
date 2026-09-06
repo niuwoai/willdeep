@@ -207,4 +207,70 @@ struct AgentHybridWorkerRoutingTests {
         let modelRows = AgentUsageStats.modelUsage(for: [snapshot])
         #expect(modelRows.first { $0.modelID == "someim-32b-scout" }?.totalTokens == 1_000)
     }
+
+    /// A routine unattended log check took an hour instead of about a minute.
+    /// The evidence was all gathered inside two minutes; then the delegate-first
+    /// route blocked the parent's next command, the `ops_runner` worker died
+    /// before its first round (its provider refused the TLS handshake), and the
+    /// parent was left with no legal move: the guard steps aside only for a
+    /// profile in `attemptedProfiles`, and a failed spawn never wrote to that
+    /// set. It could spawn again, fail again, and eventually stop mid-turn.
+    /// The turn sat dead until the operator typed "继续".
+    ///
+    /// The guard's own contract is what the fix leans on, so it is pinned here:
+    /// once a trade has been attempted, the parent may proceed itself.
+    @Test("a failed delegation attempt lets the parent run the command itself")
+    func attemptedProfileLiftsTheOpsRunnerFence() throws {
+        let decision = AgentRequestRouter.pinnedDecision(
+            profileID: AgentSubagentProfileCatalog.opsRunnerID
+        )
+
+        let blocked = AgentWorkerRouteGuard.refusal(
+            toolName: "run_command",
+            risk: .write,
+            decision: decision,
+            delegationPolicy: .required,
+            attemptedProfiles: []
+        )
+        #expect(try #require(blocked).contains(AgentSubagentProfileCatalog.opsRunnerID))
+
+        #expect(AgentWorkerRouteGuard.refusal(
+            toolName: "run_command",
+            risk: .write,
+            decision: decision,
+            delegationPolicy: .required,
+            attemptedProfiles: [AgentSubagentProfileCatalog.opsRunnerID]
+        ) == nil)
+
+        // The visible terminal is the other transport the fence covers, and it
+        // has to lift on the same signal — otherwise an SSH inspection stays
+        // stuck exactly where this one did.
+        #expect(AgentWorkerRouteGuard.refusal(
+            toolName: "terminal_send_command",
+            risk: .write,
+            decision: decision,
+            delegationPolicy: .required,
+            attemptedProfiles: [AgentSubagentProfileCatalog.opsRunnerID]
+        ) == nil)
+    }
+
+    /// Read-only commands were never the thing this route was protecting, and
+    /// an unattended inspection is almost entirely read-only. If the fence ever
+    /// starts catching them, every log check pays the delegation round trip.
+    @Test("read-only commands never hit the ops_runner fence")
+    func readOnlyCommandsAreNotFenced() {
+        let decision = AgentRequestRouter.pinnedDecision(
+            profileID: AgentSubagentProfileCatalog.opsRunnerID
+        )
+
+        for tool in ["run_command", "terminal_send_command"] {
+            #expect(AgentWorkerRouteGuard.refusal(
+                toolName: tool,
+                risk: .read,
+                decision: decision,
+                delegationPolicy: .required,
+                attemptedProfiles: []
+            ) == nil, "\(tool) was fenced on a read")
+        }
+    }
 }
