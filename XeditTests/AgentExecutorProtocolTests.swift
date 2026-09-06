@@ -526,6 +526,8 @@ struct AgentExecutorProtocolTests {
             processHandler: { pid in await processProbe.record(pid) }
         )
         let firstResult = try await firstTurn.run()
+        // A completed owner no longer controls a connection returned to the pool.
+        firstTurn.cancel()
 
         let secondConfiguration = AgentACPConfiguration(
             executableURL: URL(fileURLWithPath: "/usr/bin/ruby"),

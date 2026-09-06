@@ -873,6 +873,7 @@ extension AppState {
                 )
             }
         }
+        beginGoalExecutionBudgetIfNeeded(for: runtime)
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
             additionalWorkspaceRoots: Array(
@@ -882,6 +883,8 @@ extension AppState {
             runtimeDescriptor: remoteRuntimeDescriptor,
             runtimeID: runtime.id,
             turnID: runtime.activeTurnID,
+            isGoalMode: runtime.interactionMode == .goal,
+            executionBudget: toolExecutionBudget(for: runtime),
             jobRegistry: agentJobRegistry,
             mediaTaskRegistry: agentMediaTaskRegistry,
             shortDramaStore: agentShortDramaStore,

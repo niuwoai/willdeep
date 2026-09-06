@@ -49,11 +49,12 @@ type APIResponse struct {
 }
 
 const (
-	maxFSListEntries     = 400
-	maxSearchFileSize    = 512 * 1024
-	maxSearchFiles       = 4_000
-	maxSearchVisitedPath = 50_000
-	maxProcessStdinBytes = 1024 * 1024
+	maxFSListEntries          = 400
+	maxSearchFileSize         = 512 * 1024
+	maxSearchFiles            = 4_000
+	maxSearchVisitedPath      = 50_000
+	maxProcessStdinBytes      = 1024 * 1024
+	jobEventHeartbeatInterval = 15 * time.Second
 )
 
 var skippedDirectoryNames = map[string]struct{}{
@@ -165,6 +166,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /v1/search", s.withAuth(s.handleSearch))
 	mux.HandleFunc("GET /v1/git/status", s.withAuth(s.handleGitStatus))
 	mux.HandleFunc("POST /v1/run/start", s.withAuth(s.handleRunStart))
+	mux.HandleFunc("GET /v1/run/identity", s.withAuth(s.handleRunIdentity))
+	mux.HandleFunc("POST /v1/run/requests/{key}/reconcile", s.withAuth(s.handleRunStartReconcile))
 	mux.HandleFunc("GET /v1/run/jobs/{id}", s.withAuth(s.handleJobGet))
 	mux.HandleFunc("GET /v1/run/jobs/{id}/output", s.withAuth(s.handleJobOutput))
 	mux.HandleFunc("GET /v1/run/jobs/{id}/events", s.withAuth(s.handleJobEvents))
@@ -195,7 +198,15 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
-	writeOK(w, Probe(r.Context(), s.config.Workspace))
+	report := Probe(r.Context(), s.config.Workspace)
+	report.IdempotentJobStart = true
+	report.StartRequestRecovery = true
+	report.MonotonicRunDeadline = true
+	writeOK(w, report)
+}
+
+func (s *Server) handleRunIdentity(w http.ResponseWriter, r *http.Request) {
+	writeOK(w, map[string]any{"instance_id": s.jobs.instanceID, "elapsed_milliseconds": s.jobs.ElapsedMilliseconds()})
 }
 
 func (s *Server) handleFSList(w http.ResponseWriter, r *http.Request) {
@@ -296,15 +307,31 @@ func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRunStart(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		Command        string   `json:"command"`
-		Executable     string   `json:"executable"`
-		Arguments      []string `json:"arguments,omitempty"`
-		StdinBase64    string   `json:"stdin_base64,omitempty"`
-		Cwd            string   `json:"cwd,omitempty"`
-		TimeoutSeconds int      `json:"timeout_seconds,omitempty"`
+		RequestID                   string   `json:"request_id,omitempty"`
+		ExpectedInstanceID          string   `json:"expected_instance_id,omitempty"`
+		Command                     string   `json:"command"`
+		Executable                  string   `json:"executable"`
+		Arguments                   []string `json:"arguments,omitempty"`
+		StdinBase64                 string   `json:"stdin_base64,omitempty"`
+		Cwd                         string   `json:"cwd,omitempty"`
+		TimeoutSeconds              int      `json:"timeout_seconds,omitempty"`
+		DeadlineElapsedMilliseconds *int64   `json:"deadline_elapsed_milliseconds,omitempty"`
 	}
 	if err := decodeJSON(r.Body, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if request.DeadlineElapsedMilliseconds != nil && (request.RequestID == "" || request.ExpectedInstanceID == "") {
+		writeError(w, http.StatusBadRequest, "instance-relative deadlines require request_id and expected_instance_id")
+		return
+	}
+	// Clamp before duration multiplication so a large JSON integer cannot
+	// overflow into a negative duration and reset to the default timeout.
+	if request.TimeoutSeconds > int(maximumJobDuration/time.Second) {
+		request.TimeoutSeconds = int(maximumJobDuration / time.Second)
+	}
+	if request.TimeoutSeconds < 0 {
+		writeError(w, http.StatusBadRequest, "timeout_seconds must not be negative")
 		return
 	}
 	cwd, err := s.config.Workspace.Resolve(request.Cwd)
@@ -318,20 +345,26 @@ func (s *Server) handleRunStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	spec := ProcessSpec{
-		Command:    request.Command,
-		Executable: request.Executable,
-		Arguments:  request.Arguments,
-		Stdin:      stdin,
-		Cwd:        cwd,
-		Timeout:    time.Duration(request.TimeoutSeconds) * time.Second,
+		Command:                     request.Command,
+		Executable:                  request.Executable,
+		Arguments:                   request.Arguments,
+		Stdin:                       stdin,
+		Cwd:                         cwd,
+		Timeout:                     time.Duration(request.TimeoutSeconds) * time.Second,
+		DeadlineElapsedMilliseconds: request.DeadlineElapsedMilliseconds,
 	}
 	if err := ValidateProcessSpec(spec); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	job, err := s.jobs.StartProcess(r.Context(), spec)
+	var job *Job
+	if request.RequestID != "" || request.ExpectedInstanceID != "" {
+		job, err = s.jobs.StartProcessOnce(r.Context(), spec, request.ExpectedInstanceID, request.RequestID)
+	} else {
+		job, err = s.jobs.StartProcess(r.Context(), spec)
+	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, startRequestErrorStatus(err), err.Error())
 		return
 	}
 	writeOK(w, job.Snapshot())
@@ -378,32 +411,73 @@ func (s *Server) handleJobEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "job not found")
 		return
 	}
+	rawCursor := r.URL.Query().Get("after")
+	if rawCursor == "" {
+		rawCursor = r.Header.Get("Last-Event-ID")
+	}
+	var index int64
+	if rawCursor != "" {
+		var err error
+		index, err = strconv.ParseInt(rawCursor, 10, 64)
+		if err != nil || index < 0 {
+			writeError(w, http.StatusBadRequest, "invalid job event cursor")
+			return
+		}
+	}
+	initial := job.eventBatchSince(index)
+	if index > initial.Next {
+		writeError(w, http.StatusBadRequest, "job event cursor is ahead of this job")
+		return
+	}
+	writeVersionHeaders(w)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Job-Event-Cursor", "1")
 	flusher, _ := w.(http.Flusher)
-	index := 0
+	heartbeat := time.NewTicker(jobEventHeartbeatInterval)
+	defer heartbeat.Stop()
 	for {
-		events, nextIndex := job.EventsSince(index)
-		index = nextIndex
-		for _, event := range events {
-			if err := writeSSE(w, "run."+event.Stream, event); err != nil {
+		batch := job.eventBatchSince(index)
+		if index < batch.First-1 {
+			gap := JobEvent{JobID: job.ID, Sequence: batch.First - 1, Stream: "gap",
+				Data: "Earlier job output was evicted from the bounded event buffer.", Time: time.Now().UTC()}
+			if err := writeJobEvent(w, gap); err != nil {
+				return
+			}
+		}
+		index = batch.Next
+		for _, event := range batch.Events {
+			if err := writeJobEvent(w, event); err != nil {
 				return
 			}
 		}
 		if flusher != nil {
 			flusher.Flush()
 		}
-		snapshot := job.Snapshot()
-		if snapshot.ExitCode != nil {
+		if batch.Finished {
 			return
 		}
 		select {
 		case <-r.Context().Done():
 			return
-		case <-time.After(250 * time.Millisecond):
+		case <-batch.Changed:
+		case <-heartbeat.C:
+			if _, err := io.WriteString(w, ": heartbeat\n\n"); err != nil {
+				return
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
 		}
 	}
+}
+
+func writeJobEvent(w io.Writer, event JobEvent) error {
+	if _, err := fmt.Fprintf(w, "id: %d\n", event.Sequence); err != nil {
+		return err
+	}
+	return writeSSE(w, "run."+event.Stream, event)
 }
 
 func (s *Server) handleJobKill(w http.ResponseWriter, r *http.Request) {

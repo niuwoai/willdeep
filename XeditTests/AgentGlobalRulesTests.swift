@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Darwin
 import Testing
 @testable import WillDeep
 
@@ -509,20 +510,71 @@ struct AgentGlobalRulesTests {
     func zmodemPTYWriterDeliversLargePayloadThroughBackpressuredPipe() async throws {
         let pipe = Pipe()
         let payload = Array((0..<(2 * 1_024 * 1_024)).map { UInt8($0 % 251) })
-        let readTask = Task.detached {
-            try pipe.fileHandleForReading.readToEnd() ?? Data()
+        let readFD = pipe.fileHandleForReading.fileDescriptor
+        let writeFD = pipe.fileHandleForWriting.fileDescriptor
+        // A concurrent process may retain a pipe writer after our original
+        // handle closes. Keep such an alias alive deliberately: receiving the
+        // exact frame must not require EOF from every holder of that pipe.
+        let heldWriter = Darwin.dup(writeFD)
+        try #require(heldWriter >= 0)
+        defer { Darwin.close(heldWriter) }
+        defer { try? pipe.fileHandleForReading.close() }
+        for descriptor in [readFD, writeFD, heldWriter] {
+            try #require(Darwin.fcntl(descriptor, F_SETFD, FD_CLOEXEC) == 0)
+        }
+        let flags = Darwin.fcntl(writeFD, F_GETFL)
+        try #require(flags >= 0)
+        try #require(Darwin.fcntl(writeFD, F_SETFL, flags | O_NONBLOCK) == 0)
+
+        let (results, continuation) = AsyncStream<Data>.makeStream()
+        let expectedCount = payload.count
+        // Do not occupy a cooperative executor with blocking readToEnd while
+        // the writer (and hundreds of unrelated tests) need that executor.
+        DispatchQueue.global(qos: .userInitiated).async {
+            continuation.yield(Self.readPipePayload(readFD, expectedCount: expectedCount))
+            continuation.finish()
         }
         let writer = TerminalZModemPTYWriter(
-            fileDescriptor: pipe.fileHandleForWriting.fileDescriptor,
+            fileDescriptor: writeFD,
             writeTimeout: 10
         )
 
         let delivered = writer.write(payload)
         try pipe.fileHandleForWriting.close()
-        let received = try await readTask.value
+        var iterator = results.makeAsyncIterator()
+        let received = try #require(await iterator.next())
 
         #expect(delivered)
+        #expect(received.count == payload.count)
         #expect(received == Data(payload))
+    }
+
+    /// Bounded test-only receiver. A missing byte becomes a failed assertion,
+    /// not an indefinite EOF wait that prevents the entire suite finishing.
+    private nonisolated static func readPipePayload(_ descriptor: Int32, expectedCount: Int) -> Data {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(10))
+        var received = Data()
+        var buffer = [UInt8](repeating: 0, count: 16 * 1_024)
+        while received.count < expectedCount, clock.now < deadline {
+            var readiness = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+            let ready = Darwin.poll(&readiness, 1, 100)
+            if ready < 0 {
+                if errno == EINTR { continue }
+                break
+            }
+            if ready == 0 { continue }
+            let remaining = min(buffer.count, expectedCount - received.count)
+            let count = buffer.withUnsafeMutableBytes {
+                Darwin.read(descriptor, $0.baseAddress, remaining)
+            }
+            if count > 0 {
+                received.append(contentsOf: buffer.prefix(count))
+            } else if count == 0 || (errno != EINTR && errno != EAGAIN) {
+                break
+            }
+        }
+        return received
     }
 
     @Test

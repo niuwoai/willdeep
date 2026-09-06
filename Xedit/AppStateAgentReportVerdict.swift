@@ -22,7 +22,8 @@ extension AppState {
         profile: AgentSubagentProfile,
         task: String,
         outcome: AgentSubagentRunner.Outcome,
-        parentConfiguration: AgentConfiguration
+        parentConfiguration: AgentConfiguration,
+        executionBudget: AgentToolExecutionBudget? = nil
     ) async -> String {
         guard AgentSubagentReportVerdict.shouldJudge(
             profileID: profile.id,
@@ -53,7 +54,8 @@ extension AppState {
                 outputSchema: AgentSubagentReportVerdict.outputSchema,
                 profile: judge,
                 writeAccess: nil,
-                verifierCommand: nil
+                verifierCommand: nil,
+                executionBudget: executionBudget
             )
             guard let result = AgentSubagentReportVerdict.decode(verdictOutcome.report) else {
                 return ""

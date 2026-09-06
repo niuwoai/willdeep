@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"io"
 	"testing"
 	"time"
 )
@@ -58,16 +59,22 @@ func TestChromeNativeHostRejectsUnknownType(t *testing.T) {
 }
 
 func TestChromeNativeBridgeSendRequestWritesFrameAndReceivesReply(t *testing.T) {
-	var output bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	reader, writer := io.Pipe()
+	defer reader.Close()
+	defer writer.Close()
+	stop := context.AfterFunc(ctx, func() { reader.CloseWithError(ctx.Err()) })
+	defer stop()
 	bridge := &ChromeNativeBridge{
-		writer:  bufio.NewWriter(&output),
+		writer:  bufio.NewWriter(writer),
 		pending: map[string]chan ChromeNativeHostMessage{},
 	}
 
 	resultCh := make(chan ChromeNativeHostMessage, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		reply, err := bridge.sendRequest(context.Background(), "page.read", json.RawMessage(`{"maxChars":1200}`))
+		reply, err := bridge.sendRequest(ctx, "page.read", json.RawMessage(`{"maxChars":1200}`))
 		if err != nil {
 			errCh <- err
 			return
@@ -75,7 +82,7 @@ func TestChromeNativeBridgeSendRequestWritesFrameAndReceivesReply(t *testing.T) 
 		resultCh <- reply
 	}()
 
-	message := waitForChromeNativeHostTestMessage(t, &output)
+	message := decodeChromeNativeHostTestMessage(t, reader)
 	if message.Type != "page.read" {
 		t.Fatalf("type = %q, want page.read", message.Type)
 	}
@@ -121,28 +128,14 @@ func encodeChromeNativeHostTestMessage(t *testing.T, message ChromeNativeHostMes
 	return buffer.Bytes()
 }
 
-func waitForChromeNativeHostTestMessage(t *testing.T, buffer *bytes.Buffer) ChromeNativeHostMessage {
+func decodeChromeNativeHostTestMessage(t *testing.T, reader io.Reader) ChromeNativeHostMessage {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if buffer.Len() > 4 {
-			return decodeChromeNativeHostTestMessage(t, buffer.Bytes())
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for native host message")
-	return ChromeNativeHostMessage{}
-}
-
-func decodeChromeNativeHostTestMessage(t *testing.T, data []byte) ChromeNativeHostMessage {
-	t.Helper()
-	reader := bytes.NewReader(data)
 	var length uint32
 	if err := binary.Read(reader, binary.LittleEndian, &length); err != nil {
 		t.Fatalf("read length: %v", err)
 	}
 	body := make([]byte, length)
-	if _, err := reader.Read(body); err != nil {
+	if _, err := io.ReadFull(reader, body); err != nil {
 		t.Fatalf("read body: %v", err)
 	}
 	var message ChromeNativeHostMessage

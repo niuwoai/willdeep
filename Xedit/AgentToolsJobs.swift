@@ -38,7 +38,7 @@ extension AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        if let daemonBackend = context.daemonBackend {
+        if let daemonBackend = context.daemonBackend, context.jobRegistry == nil || context.runtimeID == nil {
             return try await daemonBackend.listJobs()
         }
         guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
@@ -64,7 +64,8 @@ extension AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        if let daemonBackend = context.daemonBackend {
+        if let daemonBackend = context.daemonBackend,
+           !(await hasRegisteredJob(arguments: arguments, context: context)) {
             return try await daemonBackend.getJobOutput(arguments: arguments)
         }
         guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
@@ -146,7 +147,8 @@ extension AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
-        if let daemonBackend = context.daemonBackend {
+        if let daemonBackend = context.daemonBackend,
+           !(await hasRegisteredJob(arguments: arguments, context: context)) {
             return try await daemonBackend.killJob(arguments: arguments)
         }
         guard let registry = context.jobRegistry, let runtimeID = context.runtimeID else {
@@ -159,12 +161,15 @@ extension AgentToolRunner {
         let result: (job: AgentBackgroundJob, didSignal: Bool)? = await MainActor.run {
             guard let job = registry.job(matchingHandle: handle, runtimeID: runtimeID) else { return nil }
             let signaled = registry.kill(id: job.id)
-            return (job, signaled)
+            return (registry.job(id: job.id) ?? job, signaled)
         }
         guard let result else {
             throw AgentJobError.jobNotFound(handle)
         }
-        if result.didSignal {
+        if result.job.isAlive, result.job.requiresExitReceipt {
+            return AgentToolResult(summary: "\(result.job.displayHandle): \(L10n.JobReceipt.stopping)",
+                payload: "\(describe(job: result.job))\n\(L10n.JobReceipt.unconfirmed)")
+        } else if result.didSignal {
             return AgentToolResult(
                 summary: "\(result.job.displayHandle) killed",
                 payload: "Sent SIGTERM to \(result.job.displayHandle) (pid \(result.job.pid)). A completion notice will arrive on the next turn."
@@ -266,6 +271,10 @@ extension AgentToolRunner {
                     "handle": job.displayHandle,
                     "status": job.status.rawValue,
                     "is_alive": job.isAlive,
+                    "exit_confirmation_required": job.requiresExitReceipt,
+                    "cancellation_requested": job.cancellationRequestedAt != nil,
+                    "monitoring_failure": job.monitoringFailure ?? NSNull(),
+                    "is_reconnecting": job.isReconnecting,
                     "exit_code": job.exitCode.map { Int($0) } ?? NSNull(),
                     "started_at": isoString(job.startedAt),
                     "finished_at": job.finishedAt.map(isoString) ?? NSNull(),
@@ -306,7 +315,16 @@ extension AgentToolRunner {
         let trimmedCommand = job.command.count > 100
             ? String(job.command.prefix(100)) + "…"
             : job.command
-        return "\(job.displayHandle) [\(job.status.rawValue)] \(exit) · \(durationText) · pid=\(job.pid) · \(trimmedCommand)"
+        let receipt = job.monitoringFailure.map { " · \(L10n.JobReceipt.unknown): \($0)" }
+            ?? (job.isAlive && job.cancellationRequestedAt != nil ? " · \(L10n.JobReceipt.stopping)"
+                : job.isAlive && job.isReconnecting ? " · \(L10n.JobReceipt.reconnecting)" : "")
+        return "\(job.displayHandle) [\(job.status.rawValue)] \(exit) · \(durationText) · pid=\(job.pid) · \(trimmedCommand)\(receipt)"
+    }
+
+    private static func hasRegisteredJob(arguments: [String: AgentJSONValue], context: AgentToolContext) async -> Bool {
+        guard let registry = context.jobRegistry, let runtimeID = context.runtimeID,
+              let handle = arguments["job_id"]?.stringValue() else { return false }
+        return await MainActor.run { registry.job(matchingHandle: handle, runtimeID: runtimeID) != nil }
     }
 
     private static func describe(mediaTask task: AgentMediaTask) -> String {

@@ -249,7 +249,8 @@ nonisolated enum AgentRequestAnalytics {
 
     private static func samples(for session: AgentUsageSessionSnapshot) -> [Sample] {
         var result = session.messages.compactMap { message -> Sample? in
-            guard message.role == .assistant, message.origin != .delegatedExternal else { return nil }
+            guard message.role == .assistant, message.origin != .delegatedExternal,
+                  message.origin != .hostGenerated else { return nil }
             let model = normalized(message.requestModelID ?? session.modelID, fallback: "unknown-model")
             let provider = normalized(message.requestProviderID ?? session.providerID, fallback: "unknown-provider")
             let hasRequestEvidence = message.requestModelID != nil

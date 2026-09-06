@@ -68,6 +68,7 @@ extension AgentToolRunner {
             )
         }
 
+        guard job.isAlive else { throw CancellationError() }
         Task {
             do {
                 let result = try await controller.run()
@@ -118,15 +119,7 @@ extension AgentToolRunner {
         }
 
         let completedJob = try await withTaskCancellationHandler {
-            while true {
-                try Task.checkCancellation()
-                if let snapshot = await MainActor.run(
-                    body: { registry.job(id: job.id) }
-                ), !snapshot.isAlive {
-                    return snapshot
-                }
-                try await Task.sleep(nanoseconds: 100_000_000)
-            }
+            try await registry.waitForTerminal(id: job.id, forRuntime: runtimeID)
         } onCancel: {
             Task { @MainActor in
                 _ = registry.killForStoppedTurn(id: job.id)
@@ -224,6 +217,7 @@ extension AgentToolRunner {
             )
         }
 
+        guard job.isAlive else { throw CancellationError() }
         Task {
             do {
                 let result = try await controller.run()
@@ -280,15 +274,7 @@ extension AgentToolRunner {
         }
 
         let completedJob = try await withTaskCancellationHandler {
-            while true {
-                try Task.checkCancellation()
-                if let snapshot = await MainActor.run(
-                    body: { registry.job(id: job.id) }
-                ), !snapshot.isAlive {
-                    return snapshot
-                }
-                try await Task.sleep(nanoseconds: 100_000_000)
-            }
+            try await registry.waitForTerminal(id: job.id, forRuntime: runtimeID)
         } onCancel: {
             Task { @MainActor in
                 _ = registry.killForStoppedTurn(id: job.id)

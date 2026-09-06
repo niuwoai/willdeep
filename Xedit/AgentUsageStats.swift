@@ -632,7 +632,7 @@ nonisolated enum AgentUsageStats {
             var sessionTokens = 0
             for message in session.messages {
                 sessionTokens += displayTokenCount(for: message)
-                if message.role == .assistant {
+                if message.role == .assistant, message.origin != .hostGenerated {
                     assistantCount += 1
                     if (message.reasoningTokens ?? 0) > 0 || message.reasoningCharacterCount > 0 {
                         reasonedCount += 1
@@ -854,7 +854,7 @@ nonisolated enum AgentUsageStats {
                 tokenCountByDay[day, default: 0] += tokens
                 sessionIDsByDay[day, default: []].insert(session.id)
 
-                guard message.role == .assistant else { continue }
+                guard message.role == .assistant, message.origin != .hostGenerated else { continue }
                 // Unpriced messages (no price row / delegated CLI) count as
                 // free instead of vetoing the whole day's cost.
                 if let cost = estimatedCostUSD(for: message, session: session) {
@@ -892,7 +892,7 @@ nonisolated enum AgentUsageStats {
         let cachedPromptTokens = rows.reduce(0) { $0 + $1.cachedPromptTokens }
         let maximumContextTokens = dailySessions
             .flatMap(\.messages)
-            .filter { $0.role == .assistant }
+            .filter { $0.role == .assistant && $0.origin != .hostGenerated }
             .map { message in
                 if let prompt = message.promptTokens {
                     return prompt + max(0, message.completionTokens ?? 0)
@@ -978,7 +978,7 @@ nonisolated enum AgentUsageStats {
         for session in sessions {
             var seenKeysInSession = Set<String>()
 
-            for message in session.messages where message.role == .assistant {
+            for message in session.messages where message.role == .assistant && message.origin != .hostGenerated {
                 let identity = usageIdentity(for: message, session: session)
                 let key = "\(identity.provider.id)|\(identity.modelID)"
                 var row = rows[key] ?? AgentModelUsageRow(
@@ -1161,7 +1161,7 @@ nonisolated enum AgentUsageStats {
                     eligibleUserMessageIDs.insert(messageID)
                     currentEligibleUserMessageID = messageID
                 }
-                if message.role == .assistant, message.origin != .delegatedExternal {
+                if message.role == .assistant, message.origin != .delegatedExternal, message.origin != .hostGenerated {
                     kpis.parentTurnCount += 1
                     if !message.subagentRuns.isEmpty,
                        let currentEligibleUserMessageID {
@@ -1369,6 +1369,7 @@ nonisolated enum AgentUsageStats {
     }
 
     private static func estimateTokens(for message: AgentUsageMessageSnapshot) -> Int {
+        guard message.origin != .hostGenerated else { return 0 }
         var total = max(0, message.contentCharacterCount / 4)
         // Reasoning content costs tokens too even when the provider
         // doesn't split it out.
@@ -1470,6 +1471,7 @@ nonisolated enum AgentUsageStats {
         estimated: Int,
         isEstimated: Bool
     ) {
+        guard message.origin != .hostGenerated else { return (0, 0, 0, 0, 0, 0, 0, false) }
         let cached = max(0, message.cachedPromptTokens ?? 0)
         let cacheWrite = max(0, message.cacheWritePromptTokens ?? 0)
         let reasoning = max(0, message.reasoningTokens ?? 0)

@@ -54,6 +54,9 @@ extension AppState {
 
         // A pinned Always Allow signature means the user already trusted this
         // command family — don't make them click through the same wall twice.
+        if runtime.toolCalls.first(where: { $0.id == recordID })?.approvalSource == .taskGrant {
+            return .notApplicable
+        }
         if isAgentCommandSignatureAlwaysAllowed(toolName: toolName, arguments: arguments) {
             return .retryEscalated(
                 approvalSource: .alwaysAllowList,
@@ -144,6 +147,7 @@ extension AppState {
         existingApprovalSource: AgentToolApprovalSource?,
         isUnattendedDispatchTask: Bool
     ) -> AgentToolApprovalSource? {
+        guard existingApprovalSource != .taskGrant else { return nil }
         if isUnattendedDispatchTask {
             return .dispatchTask
         }

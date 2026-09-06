@@ -296,6 +296,7 @@ extension AppState {
             ? agentTerminalController
             : nil
         let runProfile = profile
+        let executionBudget = toolExecutionBudget(for: runtime)
         scout.task = Task { @MainActor [weak self, weak runtime, scout] in
             let result: Result<AgentSubagentRunner.Outcome, Error>
             do {
@@ -311,6 +312,7 @@ extension AppState {
                     verifierCommand: nil,
                     patchProposalSink: nil,
                     terminalController: terminalController,
+                    executionBudget: executionBudget,
                     onProgress: { [weak self, weak runtime] update in
                         guard let self, let runtime else { return }
                         self.applySubagentLiveProgress(

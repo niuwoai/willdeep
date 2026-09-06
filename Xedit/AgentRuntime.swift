@@ -62,6 +62,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// a slower cadence; see AgentStreamingMessageBuffer's header comment.
     let streamingOverlay = AgentStreamingContentOverlay()
     @Published var contextSummary: String?
+    @Published var contextCheckpoint: AgentContextCheckpoint?
     @Published var contextSummaryThroughMessageID: AgentMessage.ID?
     @Published var patchProposals: [AgentPatchProposal] = []
     /// Assistant messages whose consecutive local file edits are still being
@@ -117,6 +118,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// compression drains it; without a ceiling that spins forever on the
     /// user's money. Reset when a human sends a new message.
     @Published var contextRunwayResumeCount: Int = 0
+    /// Last native request's fixed prompt overhead, separate from history and
+    /// tool schemas. A fresh/recovered runtime uses a conservative reserve.
+    var contextSystemPromptTokenEstimate: Int?
     @Published var errorMessage: String?
     @Published var errorDetails: AgentErrorDetails?
     /// How loudly the banner should present `errorMessage`. Not every banner
@@ -178,7 +182,21 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// decision. Without it a turn that reported progress only through the
     /// tool looks like "no progress" to `AgentPlanAutoContinuationPolicy`.
     var planAdvancedByToolSinceLastContinuationDecision = false
-    @Published var currentGoal: AgentGoal?
+    @Published var currentGoal: AgentGoal? {
+        didSet {
+            // Reopening a held segment never revives envelopes captured by
+            // old workers, including workers that never observed the hold.
+            if (oldValue?.continuationBudget?.wrapUpDispatched == true
+                && currentGoal?.continuationBudget?.wrapUpDispatched != true)
+                || (oldValue?.continuationBudget?.modelAdmissionPaused == true
+                    && currentGoal?.continuationBudget?.modelAdmissionPaused != true) {
+                goalAuthorizationRevision = UUID()
+            }
+        }
+    }
+    /// Invalidates in-flight permission capture even when Stop happens before
+    /// a grant was persisted, or the same Goal text is redefined.
+    var goalAuthorizationRevision = UUID()
     @Published var goalPlanningState: AgentGoalPlanningState?
     @Published var goalRoadmap: AgentGoalRoadmap?
     @Published var goalTurnRecoveryCheckpoint: AgentGoalTurnRecoveryCheckpoint?
@@ -302,7 +320,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// Host-side cleanup can outlive the provider stream briefly while an AI
     /// judge decides which jobs from each stopped turn to terminate. Keep one
     /// task per turn so stopping a newer turn cannot strand an older cleanup.
-    var stopCleanupTasks: [UUID: Task<Void, Never>] = [:]
+    var stopCleanupObservers: [UUID: AgentStopCleanupObserver] = [:]
     /// Provider slot claimed by the currently running turn. The id lets
     /// forced queue handoff release a stuck turn's slot without letting that
     /// cancelled turn later release a newer turn's slot.
@@ -455,6 +473,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.messages = session.messages.map(Self.normalizingInterruptedWorkflow)
         self.latestComputerUseActivity = AgentComputerUseActivity.latest(in: self.messages)
         self.contextSummary = session.contextSummary
+        self.contextCheckpoint = session.contextCheckpoint
         self.contextSummaryThroughMessageID = session.contextSummaryThroughMessageID
         self.didEditFiles = session.didEditFiles
         self.agentEditedPaths = Set(session.agentEditedPaths)
@@ -638,6 +657,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     func persist(touchUpdatedAt: Bool = true) {
         session.messages = messages
         session.contextSummary = contextSummary
+        session.contextCheckpoint = contextCheckpoint
         session.contextSummaryThroughMessageID = contextSummaryThroughMessageID
         session.workspaceRootPath = workspaceRootPath
         session.workspaceLocation = workspaceLocation

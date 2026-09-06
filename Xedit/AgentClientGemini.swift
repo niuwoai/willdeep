@@ -60,6 +60,8 @@ struct GeminiAdapter {
     func streamChat(
         messages: [AgentMessage],
         tools: [AgentToolDescriptor] = [],
+        requestLedger: AgentModelRequestLedger? = nil,
+        requestOwnerGate: AgentRequestOwnerGate? = nil,
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async throws {
         guard !configuration.apiKey.isEmpty else {
@@ -87,46 +89,48 @@ struct GeminiAdapter {
         )
         request.httpBody = requestBody
 
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AgentClientError.invalidResponse
-        }
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
-            throw AgentClientError.serverStatus(
-                httpError(
-                    statusCode: httpResponse.statusCode,
-                    method: request.httpMethod ?? "POST",
-                    url: endpoint,
-                    requestBody: requestBody,
-                    responseBody: responseBody,
-                    messages: requestMessages
-                )
-            )
-        }
-
-        var state = StreamState()
-
-        for try await line in bytes.lines {
-            try Task.checkCancellation()
-            guard line.hasPrefix("data: ") else { continue }
-            let payload = String(line.dropFirst("data: ".count))
-            guard !payload.isEmpty,
-                  let data = payload.data(using: .utf8),
-                  let chunk = try? JSONDecoder().decode(GenerateContentResponse.self, from: data) else {
-                continue
+        try await AgentModelRequestAccounting.run(ledger: requestLedger, configuration: configuration, request: request, format: .gemini, ownerGate: requestOwnerGate, onEvent: onEvent) { request, onEvent in
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw AgentClientError.invalidResponse
             }
-            await handleResponse(chunk, state: &state, onEvent: onEvent)
-        }
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
+                throw AgentClientError.serverStatus(
+                    httpError(
+                        statusCode: httpResponse.statusCode,
+                        method: request.httpMethod ?? "POST",
+                        url: endpoint,
+                        requestBody: requestBody,
+                        responseBody: responseBody,
+                        messages: requestMessages
+                    )
+                )
+            }
 
-        // A 2xx stream that produced no text, function call or finishReason
-        // is an empty no-op. Surface it as a retryable error rather than
-        // silently dropping the turn.
-        if !state.didEmitStreamEvent {
-            throw AgentClientError.emptyStream(
-                providerID: configuration.providerID,
-                model: configuration.model
-            )
+            var state = StreamState()
+
+            for try await line in bytes.lines {
+                try Task.checkCancellation()
+                guard line.hasPrefix("data: ") else { continue }
+                let payload = String(line.dropFirst("data: ".count))
+                guard !payload.isEmpty,
+                      let data = payload.data(using: .utf8),
+                      let chunk = try? JSONDecoder().decode(GenerateContentResponse.self, from: data) else {
+                    continue
+                }
+                await handleResponse(chunk, state: &state, onEvent: onEvent)
+            }
+
+            // A 2xx stream that produced no text, function call or finishReason
+            // is an empty no-op. Surface it as a retryable error rather than
+            // silently dropping the turn.
+            if !state.didEmitStreamEvent {
+                throw AgentClientError.emptyStream(
+                    providerID: configuration.providerID,
+                    model: configuration.model
+                )
+            }
         }
     }
 
@@ -140,8 +144,10 @@ struct GeminiAdapter {
         toolName: String = "run_command",
         taskContext: String = "",
         environmentTrust: String = "",
-        kind: AgentSafetyJudgeKind = .developerOperations
-    ) async -> AgentSafetyJudgeResult {
+        kind: AgentSafetyJudgeKind = .developerOperations,
+        requestLedger: AgentModelRequestLedger? = nil,
+        executionBudget: AgentToolExecutionBudget? = nil
+    ) async throws -> AgentSafetyJudgeResult {
         guard !configuration.apiKey.isEmpty else {
             return .unavailable("missing api key")
         }
@@ -185,7 +191,9 @@ struct GeminiAdapter {
         request.httpBody = payload
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await AgentNonStreamingModelRequest.run(request: request, session: session,
+                configuration: configuration, format: .gemini, ledger: requestLedger,
+                executionBudget: executionBudget)
             guard let http = response as? HTTPURLResponse else {
                 return .unavailable("no http response")
             }
@@ -207,6 +215,7 @@ struct GeminiAdapter {
                 return .unavailable(text.isEmpty ? "empty reply" : "no verdict tag")
             }
         } catch {
+            if AgentAuxiliaryRequestStop(error) != nil || error is CancellationError { throw error }
             return .unavailable("network error")
         }
     }

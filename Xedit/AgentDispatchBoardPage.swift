@@ -240,6 +240,7 @@ private struct AgentDispatchBoardContent: View {
                 onResume: { togglePaused(goal) }
             )
             Divider().opacity(0.55)
+            AgentDispatchDecisionCards(goal: goal)
             // 侧栏宽度跟着可用宽度走。定宽 420 的接管抽屉在窄窗口下会把任务图
             // 整列挤没，只剩一个看起来像普通聊天的面板——那正是这块工作区最
             // 不该丢的东西。

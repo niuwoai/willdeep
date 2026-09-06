@@ -892,7 +892,17 @@ struct AgentProviderLibraryTests {
 
         // Background wakeups now re-enter the same durable-kernel dispatch
         // path, so AppStateAgentLoop has one shared request entry point.
-        #expect(loopSource.components(separatedBy: repairBeforeSnapshot).count - 1 == 1)
+        let liveRepairBeforeSnapshot = """
+        if agentLoopInferenceEnvironment == nil {
+                    reconcileSomeIMProviderFromSharedSession()
+                    ensureActiveProviderIsUsableForChatSelection()
+                    repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
+                }
+                let configuration = configurationForCurrentTurn(for: runtime)
+        """
+        // A fixture-owned transport/configuration must not reconcile or
+        // overwrite shared credentials. The live path still repairs first.
+        #expect(loopSource.components(separatedBy: liveRepairBeforeSnapshot).count - 1 == 1)
         #expect(retrySource.contains(repairBeforeSnapshot))
     }
 

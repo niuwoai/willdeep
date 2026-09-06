@@ -37,7 +37,7 @@ nonisolated enum AgentJobOutputStream: String, CaseIterable, Identifiable {
 /// Host-enforced ownership for background commands. Goal dev servers are
 /// phase-scoped by default, so finishing QA cannot leave an old server (or its
 /// browser children) consuming resources indefinitely.
-nonisolated enum AgentBackgroundJobLifetime: String, CaseIterable, Equatable {
+nonisolated enum AgentBackgroundJobLifetime: String, Codable, CaseIterable, Equatable {
     case turn
     case phase
     case goal
@@ -84,9 +84,18 @@ struct AgentBackgroundJob: Identifiable, Equatable {
     var executorUsage: AgentExecutorUsage? = nil
     var lifetime: AgentBackgroundJobLifetime = .turn
     var goalPhaseID: String? = nil
+    /// Explicit independent ownership, not inferred merely from a server-like
+    /// command. Tool approval still governs whether the command may run.
+    var survivesTurnStop = false
+    var requiresExitReceipt = false
+    var cancellationRequestedAt: Date? = nil
+    var terminationRequestStatus: Status? = nil
+    var monitoringFailure: String? = nil
+    var isReconnecting = false
 
     nonisolated var isAlive: Bool { status == .running }
     nonisolated var needsAttention: Bool {
+        if monitoringFailure != nil { return true }
         switch status {
         case .failed, .timedOut, .launchFailed:
             return true
@@ -120,6 +129,7 @@ private struct AgentBackgroundSandboxRetrySpecification {
     let approvalSource: AgentToolApprovalSource
     let lifetime: AgentBackgroundJobLifetime
     let goalPhaseID: String?
+    let survivesTurnStop: Bool
 }
 
 /// Per-app registry of background jobs. One instance lives on
@@ -132,6 +142,60 @@ private struct AgentBackgroundSandboxRetrySpecification {
 /// main actor to mutate state.
 @MainActor
 final class AgentJobRegistry: ObservableObject {
+    let daemonStartJournal: AgentDaemonStartJournal
+    private var daemonReceiptClaims: Set<UUID> = []
+
+    func claimDaemonStartReceipt(_ id: UUID) -> Bool { daemonReceiptClaims.insert(id).inserted }
+
+    func persistDaemonTerminal(_ receipt: AgentDaemonStartReceipt, exitCode: Int32?) throws {
+        guard let job = job(id: receipt.id), job.runtimeID == receipt.runtimeID else {
+            throw AgentDaemonStartJournalError.conflictingReceipt
+        }
+        let status = job.terminationRequestStatus
+            ?? (exitCode == nil ? .launchFailed : (exitCode == 0 ? .completed : .failed))
+        try daemonStartJournal.finish(receipt, exitCode: exitCode, disposition: status.rawValue,
+            finishedAt: Date(), publishesCompletion: receipt.publishesCompletion
+                && !suppressedCompletionJobIDs.contains(receipt.id))
+    }
+
+    /// Restore only host metadata. Never launch, retrieve raw output, enqueue
+    /// another registry notification or ask a model to rediscover the result.
+    func restoreDaemonTerminal(_ delivery: AgentDaemonStartJournal.Delivery) throws -> AgentBackgroundJob {
+        let receipt = delivery.receipt
+        guard let raw = delivery.terminal.disposition, let status = AgentBackgroundJob.Status(rawValue: raw),
+              status != .running, let finishedAt = delivery.terminal.finishedAt else {
+            throw AgentDaemonStartJournalError.corrupt
+        }
+        if let existing = job(id: receipt.id), !existing.isAlive { return existing }
+        let job = AgentBackgroundJob(id: receipt.id, shortID: String(receipt.id.uuidString.prefix(6)).lowercased(),
+            command: receipt.executor?.displayName ?? L10n.JobReceipt.command, workingDirectoryPath: nil, runtimeID: receipt.runtimeID,
+            remoteRuntimeID: receipt.remoteRuntimeID, startedAt: receipt.createdAt, pid: -1,
+            status: status, exitCode: delivery.terminal.exitCode, finishedAt: finishedAt,
+            outputByteCount: 0, executor: receipt.executor, lifetime: receipt.lifetime ?? .turn,
+            goalPhaseID: receipt.goalPhaseID, survivesTurnStop: receipt.survivesTurnStop ?? false, requiresExitReceipt: true)
+        insertOrUpdate(job)
+        recordManagedExecutorEvents(id: job.id,
+            events: [AgentExecutorEvent(kind: .warning, detail: L10n.JobReceipt.outputGap, status: .running)])
+        return self.job(id: job.id) ?? job
+    }
+
+    func retainUnavailableDaemonStart(_ receipt: AgentDaemonStartReceipt) {
+        guard !jobs.contains(where: { $0.id == receipt.id }) else { return }
+        if let turnID = receipt.turnID { originatingTurnIDs[receipt.id] = turnID }
+        let job = AgentBackgroundJob(id: receipt.id, shortID: String(receipt.id.uuidString.prefix(6)).lowercased(),
+            command: receipt.executor?.displayName ?? L10n.JobReceipt.command, workingDirectoryPath: nil, runtimeID: receipt.runtimeID,
+            remoteRuntimeID: receipt.remoteRuntimeID, startedAt: receipt.createdAt, pid: -1,
+            status: .running, outputByteCount: 0, executor: receipt.executor, lifetime: receipt.lifetime ?? .turn,
+            goalPhaseID: receipt.goalPhaseID, survivesTurnStop: receipt.survivesTurnStop ?? false, requiresExitReceipt: true)
+        insertOrUpdate(job)
+        recordRemoteMonitoringFailure(id: receipt.id, detail: L10n.JobReceipt.recoveryUnavailable)
+    }
+
+    init(daemonStartDirectory: URL? = nil) {
+        daemonStartJournal = .init(directory: daemonStartDirectory
+            ?? AgentSessionStore.directory.appendingPathComponent("daemon-start-receipts", isDirectory: true))
+    }
+
     /// Process termination and timeout escalation must not share the
     /// global utility queue. Under a cold Xcode test build that queue can
     /// be starved long enough for a requested kill to miss its UI budget.
@@ -164,6 +228,10 @@ final class AgentJobRegistry: ObservableObject {
     /// narrower Stop question: "which exact turn created it?". Keeping the
     /// token host-only avoids changing the public/persisted job snapshot.
     private var originatingTurnIDs: [UUID: UUID] = [:]
+    private struct TurnOwner: Hashable { let runtimeID: UUID; let turnID: UUID }
+    private var stoppedTurnOwners: Set<TurnOwner> = []
+    /// Host diagnostics for suspended receipt waits; not a scheduling limit.
+    var terminalWaiterCount = 0
 
     /// Jobs killed as part of a user Stop already receive a local transcript
     /// acknowledgement. Suppress their normal completion wake-up so the app
@@ -188,7 +256,9 @@ final class AgentJobRegistry: ObservableObject {
     /// driver. The registry keeps only cancellation, timeout, and normalized
     /// event state so the regular job UI can manage both transport styles.
     private var managedExecutorEvents: [UUID: [AgentExecutorEvent]] = [:]
+    private var managedCommandOutput: [UUID: AgentJobOutputCollector] = [:]
     private var managedExecutorCancellations: [UUID: @Sendable () -> Void] = [:]
+    private var managedExecutorCancellationReceipts: [UUID: @MainActor () throws -> Void] = [:]
     private var managedExecutorTimeouts: [UUID: DispatchWorkItem] = [:]
 
     // MARK: - Spawn
@@ -218,8 +288,10 @@ final class AgentJobRegistry: ObservableObject {
         secretRedactionValues: [String] = [],
         lifetime: AgentBackgroundJobLifetime = .turn,
         goalPhaseID: String? = nil,
+        survivesTurnStop: Bool = false,
         automaticSandboxRetryApprovalSource: AgentToolApprovalSource? = nil
     ) throws -> AgentBackgroundJob {
+        try checkTurnAdmission(runtimeID: runtimeID, turnID: turnID)
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             throw AgentJobError.emptyCommand
@@ -251,7 +323,8 @@ final class AgentJobRegistry: ObservableObject {
                 sandboxMode: sandboxMode,
                 approvalSource: automaticSandboxRetryApprovalSource,
                 lifetime: lifetime,
-                goalPhaseID: goalPhaseID
+                goalPhaseID: goalPhaseID,
+                survivesTurnStop: survivesTurnStop
             )
         }
 
@@ -314,7 +387,8 @@ final class AgentJobRegistry: ObservableObject {
                 finishedAt: Date(),
                 outputByteCount: 0,
                 lifetime: lifetime,
-                goalPhaseID: goalPhaseID
+                goalPhaseID: goalPhaseID,
+                survivesTurnStop: survivesTurnStop
             )
             insertOrUpdate(job)
             collector.appendString(error.localizedDescription, stream: .stderr)
@@ -341,7 +415,8 @@ final class AgentJobRegistry: ObservableObject {
             finishedAt: nil,
             outputByteCount: 0,
             lifetime: lifetime,
-            goalPhaseID: goalPhaseID
+            goalPhaseID: goalPhaseID,
+            survivesTurnStop: survivesTurnStop
         )
         let processBox = AgentJobProcess(process: process, collector: collector)
         processes[id] = processBox
@@ -413,6 +488,7 @@ final class AgentJobRegistry: ObservableObject {
         publishesCompletion: Bool = true,
         secretRedactionValues: [String] = []
     ) throws -> AgentBackgroundJob {
+        try checkTurnAdmission(runtimeID: runtimeID, turnID: turnID)
         let id = UUID()
         let shortID = String(id.uuidString.prefix(6)).lowercased()
         let workingDirectoryPath = specification.workingDirectory?.path
@@ -444,6 +520,12 @@ final class AgentJobRegistry: ObservableObject {
         process.environment = processEnvironment
 
         let stdinPipe = Pipe()
+        // Timeout/Stop or an early child exit closes the reader. Return EPIPE
+        // to this writer instead of letting SIGPIPE terminate the host app.
+        // Keep the policy descriptor-local; never change process-wide signals.
+        guard fcntl(stdinPipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1) != -1 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
         process.standardInput = stdinPipe
@@ -593,7 +675,10 @@ final class AgentJobRegistry: ObservableObject {
             }
         }
         let standardInput = specification.standardInput
-        Self.lifecycleQueue.async { [weak self, weak processBox] in
+        // A child may never read stdin. Its blocking pipe write must not hold
+        // the lifecycle queue that enforces timeouts, or another child's input.
+        let inputQueue = DispatchQueue(label: "com.willdeep.agent-background-jobs.stdin.\(id.uuidString)", qos: .userInitiated)
+        inputQueue.async { [weak self, weak processBox] in
             do {
                 if !standardInput.isEmpty {
                     try stdinPipe.fileHandleForWriting.write(
@@ -630,7 +715,7 @@ final class AgentJobRegistry: ObservableObject {
     @discardableResult
     func registerManagedExecutor(
         id: UUID = UUID(),
-        executor: AgentExecutionAgent,
+        executor: AgentExecutionAgent?,
         displayCommand: String,
         workingDirectory: URL,
         runtimeID: UUID,
@@ -640,16 +725,37 @@ final class AgentJobRegistry: ObservableObject {
         runtimeDisplayName: String? = nil,
         remoteRuntimeID: UUID? = nil,
         remotePID: Int32? = nil,
+        requiresExitReceipt: Bool = false,
+        originalStartedAt: Date? = nil,
+        expiredOnRegistration: Bool = false,
+        lifetime: AgentBackgroundJobLifetime = .turn,
+        goalPhaseID: String? = nil,
+        survivesTurnStop: Bool = false,
+        secretRedactionValues: [String] = [],
+        beforeCancellation: (@MainActor () throws -> Void)? = nil,
         cancellation: @escaping @Sendable () -> Void
     ) -> AgentBackgroundJob {
+        let revoked = Task.isCancelled || isTurnStopped(runtimeID: runtimeID, turnID: turnID)
+        if revoked && !requiresExitReceipt {
+            cancellation()
+            return AgentBackgroundJob(id: id, shortID: String(id.uuidString.prefix(6)).lowercased(),
+                command: displayCommand, workingDirectoryPath: workingDirectory.path, runtimeID: runtimeID,
+                startedAt: Date(), pid: -1, status: .killed, exitCode: SIGTERM, finishedAt: Date(),
+                outputByteCount: 0, executor: executor)
+        }
         if let turnID {
             originatingTurnIDs[id] = turnID
         }
-        if !publishesCompletion {
+        if !publishesCompletion || revoked {
             suppressedCompletionJobIDs.insert(id)
         }
         managedExecutorEvents[id] = []
+        if executor == nil {
+            managedCommandOutput[id] = AgentJobOutputCollector(limit: Self.maxOutputBytes,
+                secretRedactionValues: secretRedactionValues)
+        }
         managedExecutorCancellations[id] = cancellation
+        managedExecutorCancellationReceipts[id] = beforeCancellation
         let job = AgentBackgroundJob(
             id: id,
             shortID: String(id.uuidString.prefix(6)).lowercased(),
@@ -659,25 +765,24 @@ final class AgentJobRegistry: ObservableObject {
             runtimeDisplayName: runtimeDisplayName,
             remoteRuntimeID: remoteRuntimeID,
             remotePID: remotePID,
-            startedAt: Date(),
+            startedAt: originalStartedAt ?? Date(),
             pid: remotePID ?? -1,
             status: .running,
             exitCode: nil,
             finishedAt: nil,
             outputByteCount: 0,
-            executor: executor
+            executor: executor,
+            lifetime: lifetime,
+            goalPhaseID: goalPhaseID,
+            survivesTurnStop: survivesTurnStop,
+            requiresExitReceipt: requiresExitReceipt
         )
         insertOrUpdate(job)
 
         if let timeoutSeconds, timeoutSeconds > 0 {
             let work = DispatchWorkItem { [weak self] in
-                cancellation()
                 Task { @MainActor [weak self] in
-                    self?.finishManagedExecutor(
-                        id: id,
-                        status: .timedOut,
-                        exitCode: -1
-                    )
+                    self?.requestManagedCancellation(id: id, status: .timedOut)
                 }
             }
             managedExecutorTimeouts[id] = work
@@ -686,6 +791,10 @@ final class AgentJobRegistry: ObservableObject {
                 execute: work
             )
         }
+        // A remote POST may have committed before Stop revoked its owner.
+        // Track that real process until a receipt arrives; do not drop it.
+        if revoked { requestManagedCancellation(id: id, status: .killed) }
+        else if expiredOnRegistration { requestManagedCancellation(id: id, status: .timedOut) }
         return job
     }
 
@@ -713,10 +822,16 @@ final class AgentJobRegistry: ObservableObject {
         managedExecutorEvents[id] = collected
         var updated = jobs[index]
         applyExecutorEvents(events, to: &updated)
-        updated.outputByteCount = managedExecutorOutput(
-            events: collected
-        ).utf8.count
+        updated.outputByteCount = managedCommandOutput[id] == nil
+            ? managedExecutorOutput(events: collected).utf8.count : output(id: id).utf8.count
         jobs[index] = updated
+    }
+
+    func recordManagedCommandOutput(id: UUID, text: String, stream: AgentJobOutputStream) {
+        guard let index = jobs.firstIndex(where: { $0.id == id }), jobs[index].isAlive,
+              let collector = managedCommandOutput[id] else { return }
+        collector.appendString(text, stream: stream)
+        jobs[index].outputByteCount = collector.byteCount
     }
 
     func recordExecutorNotice(id: UUID, detail: String) {
@@ -734,21 +849,40 @@ final class AgentJobRegistry: ObservableObject {
     func finishManagedExecutor(
         id: UUID,
         status: AgentBackgroundJob.Status,
-        exitCode: Int32
+        exitCode: Int32,
+        exitConfirmed: Bool = false
     ) {
+        completeManagedExecutor(id: id, status: status, exitCode: exitCode, terminalConfirmed: exitConfirmed)
+    }
+
+    /// A server-sealed request proves no process was launched, not "exit 0".
+    func finishManagedExecutorWithoutLaunch(id: UUID) {
+        completeManagedExecutor(id: id, status: .launchFailed, exitCode: nil, terminalConfirmed: true)
+    }
+
+    private func completeManagedExecutor(id: UUID, status: AgentBackgroundJob.Status,
+        exitCode: Int32?, terminalConfirmed: Bool) {
         guard let index = jobs.firstIndex(where: { $0.id == id }),
               jobs[index].isAlive else {
             return
         }
+        guard !jobs[index].requiresExitReceipt || terminalConfirmed else {
+            recordRemoteMonitoringFailure(id: id, detail: L10n.JobReceipt.unconfirmed)
+            return
+        }
         managedExecutorTimeouts.removeValue(forKey: id)?.cancel()
         managedExecutorCancellations.removeValue(forKey: id)
+        managedExecutorCancellationReceipts.removeValue(forKey: id)
         var updated = jobs[index]
+        let status = updated.terminationRequestStatus ?? status
+        updated.monitoringFailure = nil
+        updated.isReconnecting = false
         let collectedEvents = managedExecutorEvents[id] ?? []
         applyExecutorEvents(collectedEvents, to: &updated)
         updated.status = status
         updated.exitCode = exitCode
         updated.finishedAt = Date()
-        if updated.latestExecutorEvent?.kind != .finished {
+        if updated.latestExecutorEvent?.kind != .finished || updated.terminationRequestStatus != nil {
             let eventStatus: AgentExecutorEventStatus
             switch status {
             case .completed: eventStatus = .completed
@@ -769,15 +903,14 @@ final class AgentJobRegistry: ObservableObject {
             let finished = AgentExecutorEvent(
                 kind: .finished,
                 sessionID: updated.executorSessionID,
-                detail: failureReason ?? "exit \(exitCode)",
+                detail: failureReason ?? exitCode.map { "exit \($0)" } ?? L10n.JobReceipt.notStarted,
                 status: eventStatus
             )
             managedExecutorEvents[id, default: []].append(finished)
             updated.latestExecutorEvent = finished
         }
-        updated.outputByteCount = managedExecutorOutput(
-            events: managedExecutorEvents[id] ?? []
-        ).utf8.count
+        updated.outputByteCount = managedCommandOutput[id] == nil
+            ? managedExecutorOutput(events: managedExecutorEvents[id] ?? []).utf8.count : output(id: id).utf8.count
         jobs[index] = updated
 
         let suppressCompletion = suppressedCompletionJobIDs.remove(id) != nil
@@ -823,6 +956,36 @@ final class AgentJobRegistry: ObservableObject {
         }
     }
 
+    func revokeTurn(runtimeID: UUID, turnID: UUID) {
+        stoppedTurnOwners.insert(TurnOwner(runtimeID: runtimeID, turnID: turnID))
+        let owned = jobs.filter { $0.runtimeID == runtimeID && originatingTurnIDs[$0.id] == turnID && !$0.survivesTurnStop }
+        let ids = Set(owned.map(\.id))
+        suppressedCompletionJobIDs.formUnion(owned.filter(\.isAlive).map(\.id))
+        pendingCompletionEvents[runtimeID]?.removeAll { ids.contains($0) }
+    }
+
+    private func isTurnStopped(runtimeID: UUID, turnID: UUID?) -> Bool {
+        turnID.map { stoppedTurnOwners.contains(TurnOwner(runtimeID: runtimeID, turnID: $0)) } ?? false
+    }
+
+    func checkTurnAdmission(runtimeID: UUID, turnID: UUID?) throws {
+        try Task.checkCancellation()
+        if isTurnStopped(runtimeID: runtimeID, turnID: turnID) { throw CancellationError() }
+    }
+
+    func hasLocalProcessExitReceipt(id: UUID) -> Bool { processes[id] != nil }
+
+    @discardableResult
+    func requestStop(id: UUID, runtimeID: UUID, turnID: UUID) -> Bool {
+        guard originatingTurnIDs[id] == turnID,
+              let job = job(id: id), job.runtimeID == runtimeID,
+              job.isAlive, !job.survivesTurnStop else { return false }
+        // The OS process may already have exited while its MainActor receipt
+        // is queued. Keep that receipt quiet even if sending TERM is too late.
+        suppressedCompletionJobIDs.insert(id)
+        return kill(id: id)
+    }
+
     func job(id: UUID) -> AgentBackgroundJob? {
         jobs.first(where: { $0.id == id })
     }
@@ -865,6 +1028,11 @@ final class AgentJobRegistry: ObservableObject {
         let full: String
         if let proc = processes[id] {
             full = proc.collector.stringValue(for: stream)
+        } else if let collector = managedCommandOutput[id] {
+            let captured = collector.stringValue(for: stream)
+            let diagnostics = stream == .stdout ? "" : managedExecutorOutput(
+                events: (managedExecutorEvents[id] ?? []).filter { $0.kind == .warning })
+            full = captured + (diagnostics.isEmpty ? "" : "\n" + diagnostics)
         } else {
             switch stream {
             case .combined, .stdout:
@@ -920,25 +1088,69 @@ final class AgentJobRegistry: ObservableObject {
             AgentProcessSupport.terminateProcessTree(proc.process)
             return true
         }
+        return requestManagedCancellation(id: id, status: .killed)
+    }
+
+    @discardableResult
+    private func requestManagedCancellation(id: UUID, status: AgentBackgroundJob.Status) -> Bool {
         guard let cancellation = managedExecutorCancellations[id],
-              jobs.first(where: { $0.id == id })?.isAlive == true else {
-            return false
+              let index = jobs.firstIndex(where: { $0.id == id }), jobs[index].isAlive else { return false }
+        if jobs[index].requiresExitReceipt {
+            guard jobs[index].cancellationRequestedAt == nil || jobs[index].monitoringFailure != nil else { return false }
+            jobs[index].cancellationRequestedAt = Date()
+            jobs[index].terminationRequestStatus = jobs[index].terminationRequestStatus ?? status
+            jobs[index].monitoringFailure = nil
+            do { try managedExecutorCancellationReceipts[id]?() }
+            catch { recordRemoteMonitoringFailure(id: id, detail: error.localizedDescription) }
+            cancellation()
+        } else {
+            cancellation()
+            finishManagedExecutor(id: id, status: status, exitCode: status == .timedOut ? -1 : SIGTERM)
         }
-        cancellation()
-        finishManagedExecutor(id: id, status: .killed, exitCode: SIGTERM)
         return true
+    }
+
+    /// Server terminal metadata, not another request to cancel the process.
+    /// A prior explicit Stop retains its own disposition.
+    func recordRemoteTimeout(id: UUID) {
+        guard let index = jobs.firstIndex(where: { $0.id == id }), jobs[index].isAlive,
+              jobs[index].terminationRequestStatus == nil else { return }
+        jobs[index].terminationRequestStatus = .timedOut
+    }
+
+    func recordRemoteMonitoringFailure(id: UUID, detail: String) {
+        guard let index = jobs.firstIndex(where: { $0.id == id }),
+              jobs[index].isAlive, jobs[index].requiresExitReceipt else { return }
+        jobs[index].monitoringFailure = detail
+        jobs[index].isReconnecting = false
+        recordManagedExecutorEvents(id: id, events: [
+            AgentExecutorEvent(kind: .warning, detail: detail, status: .pending)
+        ])
+    }
+
+    func recordRemoteRecovery(id: UUID, recovering: Bool) {
+        guard let index = jobs.firstIndex(where: { $0.id == id }),
+              jobs[index].isAlive, jobs[index].requiresExitReceipt else { return }
+        // A still-open stream cannot erase an independent permission failure.
+        if !recovering, jobs[index].monitoringFailure != nil { return }
+        var updated = jobs[index]
+        updated.isReconnecting = recovering
+        if recovering { updated.monitoringFailure = nil }
+        guard updated != jobs[index] else { return }
+        // Publish one coherent transition, not repeated no-op array changes
+        // that invalidate the entire AppState on every background probe.
+        jobs[index] = updated
     }
 
     /// Stop-cleanup variant: same TERM→KILL lifecycle, but without creating a
     /// background completion that wakes the just-stopped conversation.
     @discardableResult
     func killForStoppedTurn(id: UUID) -> Bool {
+        guard job(id: id)?.isAlive == true else { return false }
         suppressedCompletionJobIDs.insert(id)
-        guard kill(id: id) else {
-            suppressedCompletionJobIDs.remove(id)
-            return false
-        }
-        return true
+        // Another Stop handler may already have requested cancellation while
+        // its receipt is still pending. Do not unsuppress that future receipt.
+        return kill(id: id)
     }
 
     /// Best-effort terminate-all for a given runtime — used when a
@@ -1030,6 +1242,7 @@ final class AgentJobRegistry: ObservableObject {
             jobs.removeAll(where: { $0.id == entry.element.id })
             processes.removeValue(forKey: entry.element.id)
             managedExecutorEvents.removeValue(forKey: entry.element.id)
+            managedCommandOutput.removeValue(forKey: entry.element.id)
             managedExecutorCancellations.removeValue(forKey: entry.element.id)
             managedExecutorTimeouts.removeValue(forKey: entry.element.id)?.cancel()
             originatingTurnIDs.removeValue(forKey: entry.element.id)
@@ -1088,6 +1301,7 @@ final class AgentJobRegistry: ObservableObject {
         jobs[index] = updated
 
         if updated.status == .failed,
+           !isTurnStopped(runtimeID: updated.runtimeID, turnID: originatingTurnIDs[id]),
            let specification = sandboxRetrySpecifications.removeValue(forKey: id),
            let output = processes[id]?.collector.stringValue(for: .combined),
            AgentSandboxPolicy.looksLikeSandboxDenial(
@@ -1111,6 +1325,7 @@ final class AgentJobRegistry: ObservableObject {
                secretRedactionValues: specification.secretRedactionValues,
                lifetime: specification.lifetime,
                goalPhaseID: specification.goalPhaseID,
+               survivesTurnStop: specification.survivesTurnStop,
                automaticSandboxRetryApprovalSource: nil
            ) {
             processes[id]?.collector.appendString(
@@ -1192,11 +1407,13 @@ final class AgentJobRegistry: ObservableObject {
 enum AgentJobError: LocalizedError {
     case emptyCommand
     case jobNotFound(String)
+    case exitUnconfirmed(String, String)
 
     var errorDescription: String? {
         switch self {
         case .emptyCommand: return "Background job command is empty."
         case .jobNotFound(let handle): return "No background job matches \(handle)."
+        case .exitUnconfirmed(let handle, let detail): return "\(handle): \(L10n.JobReceipt.unconfirmed) \(detail)"
         }
     }
 }

@@ -10,6 +10,7 @@ import Foundation
 
 extension AppState {
     func consumeNextQueuedMessageIfNeeded(for runtime: AgentRuntime) {
+        guard runtime.currentGoal?.continuationBudget?.modelAdmissionPaused != true else { return }
         // Wait for any in-flight compression to finish — otherwise the
         // user's queued message would race a compression that just got
         // kicked off in the same defer block.
@@ -35,6 +36,7 @@ extension AppState {
     /// a phantom user message and never races a live provider request.
     @MainActor
     func resumeAgentLoopForPendingBackgroundCompletions(for runtime: AgentRuntime) {
+        guard runtime.currentGoal?.continuationBudget?.modelAdmissionPaused != true else { return }
         guard ownsAgentRuntimeKernelDelivery(for: runtime.id) else { return }
         guard !runtime.isResponding,
               !runtime.isAwaitingProviderSlot,

@@ -25,26 +25,32 @@ nonisolated struct AgentGoalContinuationBudget: Codable, Equatable {
     /// Safety net so a stuck Goal cannot spin forever when there is no clock
     /// limit. This is a backstop, not the primary gate.
     var maximumContinuations: Int
-    /// Start of the current segment. `nil` until the first continuation.
+    /// Start of execution, persisted before the first executing request.
+    /// Legacy sessions without a stamp initialize at their next boundary.
     var segmentStartedAt: Date?
     /// Continuations already spent in this segment.
     var continuationsUsed: Int
     /// Wrap-up guidance was already delivered, so the next natural stop is
     /// accepted instead of being refused again.
     var wrapUpDispatched: Bool
+    /// Host admission failure parks automatic work without purchasing an LLM
+    /// handover. Optional for backwards-compatible decoding of old sessions.
+    var modelAdmissionPaused: Bool?
 
     init(
         wallClockLimit: TimeInterval? = AgentGoalContinuationPolicy.defaultWallClockLimit,
         maximumContinuations: Int = AgentGoalContinuationPolicy.defaultMaximumContinuations,
         segmentStartedAt: Date? = nil,
         continuationsUsed: Int = 0,
-        wrapUpDispatched: Bool = false
+        wrapUpDispatched: Bool = false,
+        modelAdmissionPaused: Bool? = nil
     ) {
         self.wallClockLimit = wallClockLimit
         self.maximumContinuations = maximumContinuations
         self.segmentStartedAt = segmentStartedAt
         self.continuationsUsed = continuationsUsed
         self.wrapUpDispatched = wrapUpDispatched
+        self.modelAdmissionPaused = modelAdmissionPaused
     }
 
     static let standard = AgentGoalContinuationBudget()

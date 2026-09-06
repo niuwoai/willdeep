@@ -55,6 +55,7 @@ struct AgentDispatchGoalHeader: View {
                     .textSelection(.enabled)
                 }
                 Spacer(minLength: 10)
+                AgentGoalBudgetButton(ownerID: goal.id)
                 workspaceMenu
                 routingMenu
                 workerMenu

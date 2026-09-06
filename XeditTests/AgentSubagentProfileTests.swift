@@ -580,12 +580,16 @@ struct AgentSubagentProfileTests {
         #expect(!SettingsGroup.ai.tabs.contains(.subagents))
     }
 
-    @Test("schema exposes five roles while legacy ids still resolve")
+    @Test("schema exposes six roles while legacy ids still resolve")
     func toolDescriptionListsOnlyPublicTrades() {
         let catalog = AgentSubagentProfileCatalog.toolDescriptionCatalog
+        let spawnDescription = AgentToolRegistry.all.first { $0.name == "spawn_agent" }?.description ?? ""
+        #expect(spawnDescription.contains("six roles"))
+        #expect(spawnDescription.contains("read-only scout"))
+        #expect(!spawnDescription.contains("five responsibilities"))
 
         #expect(AgentSubagentProfileCatalog.publicBuiltIn.map(\.id) == [
-            "generalist", "implementer", "tester", "reviewer", "ops_runner",
+            "scout", "generalist", "implementer", "tester", "reviewer", "ops_runner",
         ])
         for profile in AgentSubagentProfileCatalog.publicBuiltIn {
             #expect(catalog.contains("`\(profile.id)`"), "missing \(profile.id)")
@@ -595,7 +599,7 @@ struct AgentSubagentProfileTests {
         #expect(AgentSubagentProfileCatalog.profile(id: "test_fixer").id == "test_fixer")
         #expect(AgentSubagentProfileCatalog.profile(id: "git_detective").id == "git_detective")
         #expect(AgentSubagentProfileCatalog.publicID(for: "test_fixer") == "implementer")
-        #expect(AgentSubagentProfileCatalog.publicID(for: "git_detective") == "generalist")
+        #expect(AgentSubagentProfileCatalog.publicID(for: "git_detective") == "scout")
     }
 
     @Test("live profile store advertises public trades but resolves saved specialist ids")

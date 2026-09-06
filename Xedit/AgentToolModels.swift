@@ -198,6 +198,8 @@ struct AgentToolContext {
     /// still being planned. Dev servers inherit this ownership automatically.
     let goalPhaseID: String?
     let isGoalMode: Bool
+    let executionBudget: AgentToolExecutionBudget?
+    let taskAuthorizationCheck: (@MainActor (String, [String: AgentJSONValue], AgentToolContext) async throws -> Void)?
     /// User-visible title of the conversation that owns a native Computer Use
     /// lease. Kept separate from runtimeID so the global control indicator can
     /// identify a background task without reaching back into AppState.
@@ -231,6 +233,8 @@ struct AgentToolContext {
     /// this closure so the current transcript is on disk even if macOS asks the
     /// user to restart a permissioned process.
     let sessionPersistenceBarrier: (@MainActor () -> Void)?
+    /// Bound to one interactive runtime; not inherited by worker contexts.
+    let contextMessageReader: (@MainActor (AgentContextReadRequest) throws -> AgentContextReadSnapshot)?
     /// Resolved environment for commands executed on this Mac. App-owned
     /// contexts merge Settings → Terminal variables into the normal command
     /// PATH before installing this value. Remote backends intentionally ignore
@@ -307,6 +311,8 @@ struct AgentToolContext {
         turnID: UUID? = nil,
         goalPhaseID: String? = nil,
         isGoalMode: Bool = false,
+        executionBudget: AgentToolExecutionBudget? = nil,
+        taskAuthorizationCheck: (@MainActor (String, [String: AgentJSONValue], AgentToolContext) async throws -> Void)? = nil,
         computerUseSessionTitle: String? = nil,
         jobRegistry: AgentJobRegistry? = nil,
         mediaTaskRegistry: AgentMediaTaskRegistry? = nil,
@@ -316,6 +322,7 @@ struct AgentToolContext {
         sessionManagementHandler: (@MainActor (AgentSessionManagementRequest) async throws -> AgentToolResult)? = nil,
         sessionTitleSuggestionProvider: (@MainActor () async -> AgentSessionTitleSuggestionSnapshot)? = nil,
         sessionPersistenceBarrier: (@MainActor () -> Void)? = nil,
+        contextMessageReader: (@MainActor (AgentContextReadRequest) throws -> AgentContextReadSnapshot)? = nil,
         localCommandEnvironment: [String: String]? = nil,
         sandboxMode: AgentSandboxMode = .readOnly,
         automaticBackgroundSandboxRetryApprovalSource: AgentToolApprovalSource? = nil,
@@ -343,6 +350,8 @@ struct AgentToolContext {
         self.turnID = turnID
         self.goalPhaseID = goalPhaseID
         self.isGoalMode = isGoalMode
+        self.executionBudget = executionBudget
+        self.taskAuthorizationCheck = taskAuthorizationCheck
         self.computerUseSessionTitle = computerUseSessionTitle
         self.jobRegistry = jobRegistry
         self.mediaTaskRegistry = mediaTaskRegistry
@@ -352,6 +361,7 @@ struct AgentToolContext {
         self.sessionManagementHandler = sessionManagementHandler
         self.sessionTitleSuggestionProvider = sessionTitleSuggestionProvider
         self.sessionPersistenceBarrier = sessionPersistenceBarrier
+        self.contextMessageReader = contextMessageReader
         self.localCommandEnvironment = localCommandEnvironment
         self.sandboxMode = sandboxMode
         self.automaticBackgroundSandboxRetryApprovalSource = automaticBackgroundSandboxRetryApprovalSource
@@ -404,6 +414,8 @@ struct AgentToolContext {
             turnID: turnID,
             goalPhaseID: goalPhaseID,
             isGoalMode: isGoalMode,
+            executionBudget: executionBudget,
+            taskAuthorizationCheck: taskAuthorizationCheck,
             computerUseSessionTitle: computerUseSessionTitle,
             jobRegistry: jobRegistry,
             mediaTaskRegistry: mediaTaskRegistry,
@@ -413,6 +425,7 @@ struct AgentToolContext {
             sessionManagementHandler: sessionManagementHandler,
             sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
             sessionPersistenceBarrier: sessionPersistenceBarrier,
+            contextMessageReader: contextMessageReader,
             localCommandEnvironment: localCommandEnvironment,
             sandboxMode: sandboxMode,
             automaticBackgroundSandboxRetryApprovalSource: automaticBackgroundSandboxRetryApprovalSource,
@@ -442,6 +455,8 @@ struct AgentToolContext {
             turnID: turnID,
             goalPhaseID: goalPhaseID,
             isGoalMode: isGoalMode,
+            executionBudget: executionBudget,
+            taskAuthorizationCheck: taskAuthorizationCheck,
             computerUseSessionTitle: computerUseSessionTitle,
             jobRegistry: jobRegistry,
             mediaTaskRegistry: mediaTaskRegistry,
@@ -451,6 +466,7 @@ struct AgentToolContext {
             sessionManagementHandler: sessionManagementHandler,
             sessionTitleSuggestionProvider: sessionTitleSuggestionProvider,
             sessionPersistenceBarrier: sessionPersistenceBarrier,
+            contextMessageReader: contextMessageReader,
             localCommandEnvironment: localCommandEnvironment,
             sandboxMode: mode,
             automaticBackgroundSandboxRetryApprovalSource: automaticBackgroundSandboxRetryApprovalSource,
@@ -550,17 +566,22 @@ nonisolated struct AgentToolResult: Equatable, Sendable {
     /// fall back to `payload`. Downscaled at capture time to keep context
     /// and memory bounded — never store an unscaled retina screenshot here.
     let images: [AgentImageAttachment]
+    /// Present only after a foreground process has actually exited. Starting
+    /// a background job, timing out or producing prose is not exit zero.
+    let commandExitCode: Int32?
 
     init(
         summary: String,
         payload: String,
         references: [AgentSourceReference] = [],
-        images: [AgentImageAttachment] = []
+        images: [AgentImageAttachment] = [],
+        commandExitCode: Int32? = nil
     ) {
         self.summary = summary
         self.payload = payload
         self.references = references
         self.images = images
+        self.commandExitCode = commandExitCode
     }
 }
 
@@ -695,6 +716,7 @@ enum AgentToolDecision {
 /// nil = either pure read (never gated) or still pending.
 enum AgentToolApprovalSource: String, Equatable, Codable {
     case user
+    case taskGrant
     case alwaysAllowList
     case staticAllowlist
     case llmJudge
@@ -756,8 +778,8 @@ struct AgentToolCall: Identifiable, Equatable {
     var finishedAt: Date?
     var result: AgentToolResult?
     var errorMessage: String?
-    /// Exit status of a command that actually ran to completion and returned
-    /// non-zero. Only set for `AgentToolError.commandFailed` with a real
+    /// Exit status of a command that actually ran to completion, including
+    /// successful foreground exit zero. Failed commands record only a real
     /// (positive) status — a probe like `corepack --version` on a machine
     /// without corepack exits 127, which is an ordinary answer, not a
     /// malfunction. Stays nil when the process never ran (launch failure,
@@ -961,9 +983,10 @@ enum AgentJSONValue: Equatable {
 
     nonisolated static func wrap(_ value: Any) -> AgentJSONValue {
         if value is NSNull { return .null }
-        if let boolean = value as? Bool { return .bool(boolean) }
         if let number = value as? NSNumber {
-            if CFNumberGetType(number) == .charType { return .bool(number.boolValue) }
+            // Foundation also bridges numeric 0/1 to Bool. Test the CF type,
+            // not a conditional cast or char storage, to preserve JSON types.
+            if CFGetTypeID(number) == CFBooleanGetTypeID() { return .bool(number.boolValue) }
             return .number(number.doubleValue)
         }
         if let string = value as? String { return .string(string) }
@@ -1001,7 +1024,7 @@ enum AgentJSONValue: Equatable {
 
     nonisolated func intValue() -> Int? {
         switch self {
-        case .number(let value): return Int(value)
+        case .number(let value): return Int(exactly: value)
         case .string(let value): return Int(value)
         default: return nil
         }

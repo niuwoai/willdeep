@@ -66,6 +66,8 @@ struct AnthropicMessagesAdapter {
     func streamChat(
         messages: [AgentMessage],
         tools: [AgentToolDescriptor] = [],
+        requestLedger: AgentModelRequestLedger? = nil,
+        requestOwnerGate: AgentRequestOwnerGate? = nil,
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async throws {
         guard !configuration.apiKey.isEmpty else {
@@ -92,67 +94,69 @@ struct AnthropicMessagesAdapter {
         )
         request.httpBody = requestBody
 
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AgentClientError.invalidResponse
-        }
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
-            throw AgentClientError.serverStatus(
-                httpError(
-                    statusCode: httpResponse.statusCode,
-                    method: request.httpMethod ?? "POST",
-                    url: endpoint,
-                    requestBody: requestBody,
-                    responseBody: responseBody,
-                    messages: requestMessages
-                )
-            )
-        }
-
-        // Anthropic SSE is line-pair driven: `event: <type>` followed
-        // by `data: <json>`. We hold the last event name and route the
-        // next data payload accordingly. Anything else (blank lines
-        // between pairs, the trailing `: ping` comment Anthropic
-        // occasionally sends as keepalive) is skipped silently.
-        var pendingEventName: String = ""
-        var streamState = StreamState()
-
-        for try await line in bytes.lines {
-            try Task.checkCancellation()
-
-            if line.hasPrefix("event: ") {
-                pendingEventName = String(line.dropFirst("event: ".count))
-                continue
+        try await AgentModelRequestAccounting.run(ledger: requestLedger, configuration: configuration, request: request, format: .anthropic, ownerGate: requestOwnerGate, onEvent: onEvent) { request, onEvent in
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw AgentClientError.invalidResponse
             }
-            guard line.hasPrefix("data: ") else { continue }
-            let payload = String(line.dropFirst("data: ".count))
-            guard !payload.isEmpty,
-                  let data = payload.data(using: .utf8) else { continue }
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
+                throw AgentClientError.serverStatus(
+                    httpError(
+                        statusCode: httpResponse.statusCode,
+                        method: request.httpMethod ?? "POST",
+                        url: endpoint,
+                        requestBody: requestBody,
+                        responseBody: responseBody,
+                        messages: requestMessages
+                    )
+                )
+            }
 
-            await handleEvent(
-                name: pendingEventName,
-                payload: data,
-                state: &streamState,
-                onEvent: onEvent
-            )
+            // Anthropic SSE is line-pair driven: `event: <type>` followed
+            // by `data: <json>`. We hold the last event name and route the
+            // next data payload accordingly. Anything else (blank lines
+            // between pairs, the trailing `: ping` comment Anthropic
+            // occasionally sends as keepalive) is skipped silently.
+            var pendingEventName: String = ""
+            var streamState = StreamState()
 
-            // Reset so a misformatted stream (`data:` without preceding
-            // `event:`) doesn't get misrouted to whatever the previous
-            // event happened to be.
-            pendingEventName = ""
-        }
+            for try await line in bytes.lines {
+                try Task.checkCancellation()
 
-        // A 2xx stream that carried no text, reasoning, tool call, stop_reason
-        // or error is an empty no-op (e.g. an expired relay token answered
-        // with an empty body instead of 401). Surface it so the caller shows
-        // an actionable, retryable error rather than silently dropping the
-        // turn.
-        if !streamState.didEmitStreamEvent {
-            throw AgentClientError.emptyStream(
-                providerID: configuration.providerID,
-                model: configuration.model
-            )
+                if line.hasPrefix("event: ") {
+                    pendingEventName = String(line.dropFirst("event: ".count))
+                    continue
+                }
+                guard line.hasPrefix("data: ") else { continue }
+                let payload = String(line.dropFirst("data: ".count))
+                guard !payload.isEmpty,
+                      let data = payload.data(using: .utf8) else { continue }
+
+                await handleEvent(
+                    name: pendingEventName,
+                    payload: data,
+                    state: &streamState,
+                    onEvent: onEvent
+                )
+
+                // Reset so a misformatted stream (`data:` without preceding
+                // `event:`) doesn't get misrouted to whatever the previous
+                // event happened to be.
+                pendingEventName = ""
+            }
+
+            // A 2xx stream that carried no text, reasoning, tool call, stop_reason
+            // or error is an empty no-op (e.g. an expired relay token answered
+            // with an empty body instead of 401). Surface it so the caller shows
+            // an actionable, retryable error rather than silently dropping the
+            // turn.
+            if !streamState.didEmitStreamEvent {
+                throw AgentClientError.emptyStream(
+                    providerID: configuration.providerID,
+                    model: configuration.model
+                )
+            }
         }
     }
 
@@ -168,8 +172,10 @@ struct AnthropicMessagesAdapter {
         toolName: String = "run_command",
         taskContext: String = "",
         environmentTrust: String = "",
-        kind: AgentSafetyJudgeKind = .developerOperations
-    ) async -> AgentSafetyJudgeResult {
+        kind: AgentSafetyJudgeKind = .developerOperations,
+        requestLedger: AgentModelRequestLedger? = nil,
+        executionBudget: AgentToolExecutionBudget? = nil
+    ) async throws -> AgentSafetyJudgeResult {
         guard !configuration.apiKey.isEmpty else {
             return .unavailable("missing api key")
         }
@@ -230,7 +236,9 @@ struct AnthropicMessagesAdapter {
         request.httpBody = payload
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await AgentNonStreamingModelRequest.run(request: request, session: session,
+                configuration: configuration, format: .anthropic, ledger: requestLedger,
+                executionBudget: executionBudget)
             guard let http = response as? HTTPURLResponse else {
                 return .unavailable("no http response")
             }
@@ -253,6 +261,7 @@ struct AnthropicMessagesAdapter {
                 return .unavailable(answer.isEmpty ? "empty reply" : "no verdict tag")
             }
         } catch {
+            if AgentAuxiliaryRequestStop(error) != nil || error is CancellationError { throw error }
             return .unavailable("network error")
         }
     }

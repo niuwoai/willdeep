@@ -79,6 +79,28 @@ struct AgentUsageSidecarTests {
         AgentSessionStore.directory.appendingPathComponent("\(id.uuidString).json")
     }
 
+    /// The scan contract covers the entire library, so it must not share a
+    /// mutable directory with other suites. Use full session JSON as input;
+    /// production scans still build and validate their own sidecars/database.
+    private func makeScanLibrary(_ sessions: [AgentSession]) throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("usage-scan-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        do {
+            for session in sessions {
+                try encoder.encode(session).write(
+                    to: root.appendingPathComponent("\(session.id.uuidString).json"), options: .atomic
+                )
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            throw error
+        }
+        return root
+    }
+
     /// 篡改侧车用的"诱饵"快照：id 相同，数据故意与真实会话完全不同。
     private func decoySnapshot(id: UUID) -> AgentUsageSessionSnapshot {
         AgentUsageSessionSnapshot(
@@ -146,23 +168,24 @@ struct AgentUsageSidecarTests {
     /// 这条用例同时兜住「结果集一致」和「并发解码没把数据搅坏」。
     @Test("并行扫描与串行扫描返回同一批快照")
     func concurrentScanMatchesTheSerialScan() async throws {
-        var ids: [UUID] = []
-        defer { for id in ids { AgentSessionStore.delete(id: id) } }
-        for index in 0..<12 {
+        let sessions = (0..<12).map { index in
             var session = makeRichSession()
             session.title = "usage-parallel-\(index)"
-            ids.append(session.id)
-            #expect(AgentSessionStore.save(session))
+            return session
         }
+        let ids = sessions.map(\.id)
+        let root = try makeScanLibrary(sessions)
+        defer { try? FileManager.default.removeItem(at: root) }
 
-        let serial = AgentSessionStore.loadUsageSnapshots()
-        let concurrent = await AgentSessionStore.scanUsageSidecarsConcurrently()
+        let serial = AgentSessionStore.loadUsageSnapshots(in: root)
+        let concurrent = await AgentSessionStore.scanUsageSidecarsConcurrently(in: root)
 
         // 按 id 排序再比：两边都按 updatedAt 倒序，而 Swift 的 sort 不
         // 稳定，同一毫秒创建的会话之间谁在前是没有保证的。这里要钉的是
         // 「同一批数据」，不是那个本来就不存在的顺序保证。
         #expect(concurrent.sorted { $0.id.uuidString < $1.id.uuidString }
             == serial.sorted { $0.id.uuidString < $1.id.uuidString })
+        #expect(Set(concurrent.map(\.id)) == Set(ids))
         for id in ids {
             #expect(concurrent.contains { $0.id == id })
         }
@@ -176,25 +199,57 @@ struct AgentUsageSidecarTests {
     /// 思考痕迹、工具调用、token 计数、编辑与产物路径。
     @Test("统计库往返与侧车逐字段等价")
     func databaseRoundTripMatchesTheSidecar() async throws {
-        var ids: [UUID] = []
-        defer { for id in ids { AgentSessionStore.delete(id: id) } }
-        for index in 0..<5 {
+        let sessions = (0..<5).map { index in
             var session = makeRichSession()
             session.title = "usage-db-\(index)"
-            ids.append(session.id)
-            #expect(AgentSessionStore.save(session))
+            return session
         }
+        let ids = sessions.map(\.id)
+        let root = try makeScanLibrary(sessions)
+        defer { try? FileManager.default.removeItem(at: root) }
 
-        let fromSidecars = await AgentSessionStore.scanUsageSidecarsConcurrently()
-        let fromDatabase = await AgentSessionStore.loadUsageSnapshotsConcurrently()
+        let fromSidecars = await AgentSessionStore.scanUsageSidecarsConcurrently(in: root)
+        let fromDatabase = await AgentSessionStore.loadUsageSnapshotsConcurrently(in: root)
+        let database = try #require(AgentUsageDatabase(url: AgentUsageDatabase.defaultURL(in: root)))
+        #expect(database.loadAll().sorted { $0.id.uuidString < $1.id.uuidString }
+            == fromDatabase.sorted { $0.id.uuidString < $1.id.uuidString })
 
         let sidecarByID = Dictionary(uniqueKeysWithValues: fromSidecars.map { ($0.id, $0) })
         let databaseByID = Dictionary(uniqueKeysWithValues: fromDatabase.map { ($0.id, $0) })
         #expect(Set(databaseByID.keys) == Set(sidecarByID.keys))
+        #expect(Set(databaseByID.keys) == Set(ids))
         for id in ids {
             let sidecar = try #require(sidecarByID[id])
             let stored = try #require(databaseByID[id])
             #expect(stored == sidecar)
+        }
+    }
+
+    @Test("不同目录的同 ID 会话并发扫描不串库，侧车留在各自目录")
+    func concurrentLibrariesKeepIdenticalIDsIsolated() async throws {
+        let first = makeRichSession()
+        var second = first
+        second.messages.append(AgentMessage(role: .user, content: "only in second library"))
+        let firstRoot = try makeScanLibrary([first])
+        defer { try? FileManager.default.removeItem(at: firstRoot) }
+        let secondRoot = try makeScanLibrary([second])
+        defer { try? FileManager.default.removeItem(at: secondRoot) }
+
+        async let firstScan = AgentSessionStore.loadUsageSnapshotsConcurrently(in: firstRoot)
+        async let secondScan = AgentSessionStore.loadUsageSnapshotsConcurrently(in: secondRoot)
+        let (firstResult, secondResult) = await (firstScan, secondScan)
+        #expect(firstResult.count == 1)
+        #expect(secondResult.count == 1)
+        #expect(firstResult.first?.messages.count == first.messages.count)
+        #expect(secondResult.first?.messages.count == second.messages.count)
+        #expect(firstResult != secondResult)
+        for (root, expected) in [(firstRoot, firstResult), (secondRoot, secondResult)] {
+            let sidecars = await AgentSessionStore.scanUsageSidecarsConcurrently(in: root)
+            #expect(sidecars == expected)
+            let sidecarURL = root.appendingPathComponent("usage-v1/\(first.id.uuidString).json")
+            #expect(FileManager.default.fileExists(atPath: sidecarURL.path))
+            let database = try #require(AgentUsageDatabase(url: AgentUsageDatabase.defaultURL(in: root)))
+            #expect(database.loadAll() == expected)
         }
     }
 

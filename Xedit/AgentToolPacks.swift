@@ -37,6 +37,7 @@ enum AgentToolPackCatalog {
     /// discovery round for almost every repository task.
     static let coreToolNames: Set<String> = [
         loaderToolName,
+        AgentContextReadTool.name,
         "search_files", "grep_files", "read_file", AgentBundledRules.readerToolName,
         "list_directory", "git_status",
         "run_command", "create_file", "write_file", "edit_file", "apply_patch",

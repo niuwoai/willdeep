@@ -46,6 +46,7 @@ extension AppState {
         existingUserMessageID: AgentMessage.ID? = nil,
         source: AgentMessageSource = .operatorInput
     ) {
+        if source != .operatorInput && dispatchContinuationIsSuspended(runtime) { return }
         runtime.currentTurnPlanningOnly = source == .operatorInput
             && AgentExecutionIntentPolicy.requestsPlanningOnly(text)
         // Slash-staged delegation directive applies to exactly this turn.
@@ -100,9 +101,11 @@ extension AppState {
             didChangeGoalRecoveryCheckpoint = false
         }
 
-        reconcileSomeIMProviderFromSharedSession()
-        ensureActiveProviderIsUsableForChatSelection()
-        repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
+        if agentLoopInferenceEnvironment == nil {
+            reconcileSomeIMProviderFromSharedSession()
+            ensureActiveProviderIsUsableForChatSelection()
+            repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
+        }
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID
 
@@ -548,7 +551,10 @@ extension AppState {
                 toolsEnabled: true,
                 conversationSummary: runtime.contextSummary
             )
-            let judgeClient = AgentClient(configuration: configuration, someIMContext: someIMContext)
+            beginGoalExecutionBudgetIfNeeded(for: runtime)
+            let judgeClient = AgentClient(configuration: configuration, session: agentLoopInferenceEnvironment?.session,
+                someIMContext: someIMContext, requestLedger: modelRequestLedger(for: runtime))
+            let routeJudge = AgentGoalRouteJudge(client: judgeClient, executionBudget: auxiliaryModelExecutionBudget(for: runtime))
             // Routing must never wait on the account control plane. The
             // launch timer owns refreshes; a stale value is still a better
             // latency trade than blocking the first provider request.
@@ -561,13 +567,9 @@ extension AppState {
                 floor: floor,
                 hasCodingPlan: hasCodingPlan
             ) { system, user, maxTokens in
-                await judgeClient.routeJudge(
-                    model: SomeIMManagedModel.judge,
-                    systemPrompt: system,
-                    userPayload: user,
-                    maxTokens: maxTokens
-                )
+                await routeJudge.text(model: SomeIMManagedModel.judge, system: system, user: user, maxTokens: maxTokens)
             }
+            if stopAfterRouteJudge(routeJudge, runtime: runtime) { return }
             // Captured BEFORE noteManagedSelectedModel overwrites it — the
             // escalation check below compares against the tier the session
             // actually ran on last turn.
@@ -619,8 +621,10 @@ extension AppState {
         // client and re-run the round (see the no-tool-call guard below).
         var client = AgentClient(
             configuration: turnConfiguration,
+            session: agentLoopInferenceEnvironment?.session,
             someIMContext: someIMContext,
-            openAIResponsesContinuationState: runtime.openAIResponsesContinuationState
+            openAIResponsesContinuationState: runtime.openAIResponsesContinuationState,
+            requestLedger: modelRequestLedger(for: runtime)
         )
         // Resolve the runtime's workspace path for tool execution —
         // never read AppState.rootDirectory here. Concurrent runtimes
@@ -723,6 +727,7 @@ extension AppState {
         let planOnDemandToolCallBaseline = runtime.toolCalls.count
 
         for toolRound in 0..<Self.maxAgentToolRounds {
+            beginGoalExecutionBudgetIfNeeded(for: runtime)
             // The host kernel is the single prioritized interrupt queue. It
             // persists events across restarts and delivers them only at a
             // model/tool boundary. Legacy registries are still drained below
@@ -1061,12 +1066,7 @@ extension AppState {
                 runtime.messages[index].requestPrefixHash = cacheDiagnostics.hash
                 runtime.messages[index].requestStablePrefixCharacters = cacheDiagnostics.stableCharacters
             }
-            let history = Self.modelFacingHistory(
-                messages: runtime.messages,
-                contextSummary: runtime.contextSummary,
-                contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID,
-                excludingMessageID: assistantID
-            )
+            let history = modelFacingHistory(for: runtime, excludingMessageID: assistantID)
             // No second attach on the request copy: `attachTurnContextIfNeeded`
             // above already persisted this turn's context onto `runtime.messages`
             // (setting the fresh user message's modelContext, or inserting a
@@ -1086,6 +1086,7 @@ extension AppState {
                 messages: requestWithoutRunwayHandoff,
                 tools: requestTools
             )
+            runtime.contextSystemPromptTokenEstimate = Self.estimateTextTokens(systemPrompt)
             let providerAnchoredTokens = Self.providerAnchoredUsedTokens(
                 messages: runtime.messages,
                 contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
@@ -1171,7 +1172,8 @@ extension AppState {
                     do {
                         try await client.streamChat(
                             messages: requestMessages,
-                            tools: requestTools
+                            tools: requestTools,
+                            executionBudget: modelExecutionBudget(for: runtime)
                         ) { event in
                             await MainActor.run { [weak runtime] in
                                 guard let runtime,
@@ -1282,6 +1284,9 @@ extension AppState {
                     )
                     return
                 }
+                if error is AgentToolExecutionBudgetError,
+                   stopExpiredGoalToolRound(for: runtime, assistantID: assistantID) { return }
+                if stopOnModelAdmissionFailure(error, runtime: runtime, assistantID: assistantID) { return }
                 turnTelemetry.noteFailure(error)
                 setAgentError(error, for: runtime)
                 if let index = runtime.messages.firstIndex(where: { $0.id == assistantID }),
@@ -1359,6 +1364,9 @@ extension AppState {
                     let latestUserMessage = runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
                     let qualityConfig = turnConfiguration
                     let qualityContext = someIMContext
+                    let qualityJudge = AgentGoalRouteJudge(client: AgentClient(configuration: qualityConfig,
+                        session: agentLoopInferenceEnvironment?.session, someIMContext: qualityContext,
+                        requestLedger: modelRequestLedger(for: runtime)), executionBudget: auxiliaryModelExecutionBudget(for: runtime))
                     let decision = await SomeIMManagedRouting.outputQuality(
                         assistantText: assistantText,
                         reasoningText: reasoningText,
@@ -1366,14 +1374,9 @@ extension AppState {
                         model: turnConfiguration.model,
                         finishReason: finishReason
                     ) { system, user, maxTokens in
-                        await AgentClient(configuration: qualityConfig, someIMContext: qualityContext)
-                            .routeJudge(
-                                model: SomeIMManagedModel.judge,
-                                systemPrompt: system,
-                                userPayload: user,
-                                maxTokens: maxTokens
-                            )
+                        await qualityJudge.text(model: SomeIMManagedModel.judge, system: system, user: user, maxTokens: maxTokens)
                     }
+                    if stopAfterRouteJudge(qualityJudge, runtime: runtime) { return }
                     if decision.shouldRetry {
                         didQualityRetry = true
                         if let dropIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
@@ -1383,8 +1386,10 @@ extension AppState {
                         turnTelemetry.noteResolvedModel(escalatedModel)
                         client = AgentClient(
                             configuration: turnConfiguration,
+                            session: agentLoopInferenceEnvironment?.session,
                             someIMContext: someIMContext,
-                            openAIResponsesContinuationState: runtime.openAIResponsesContinuationState
+                            openAIResponsesContinuationState: runtime.openAIResponsesContinuationState,
+                            requestLedger: modelRequestLedger(for: runtime)
                         )
                         let escalatedTier = SomeIMManagedModel.tier(of: escalatedModel)
                         if let escalatedTier {
@@ -1528,7 +1533,7 @@ extension AppState {
                 let assistantReplyContainsGoalCheck = hasValidClosedGoalCheck
                 var didAdvanceGoalChecklist = false
                 if assistantReplyContainsGoalCheck {
-                    didAdvanceGoalChecklist = captureAgentGoalEvaluationFromLatestMessage(
+                    didAdvanceGoalChecklist = await captureAndVerifyAgentGoalEvaluation(
                         for: runtime,
                         finishReason: finishReason
                     )
@@ -1695,6 +1700,9 @@ extension AppState {
                 return
             }
 
+            if stopExpiredGoalToolRound(for: runtime, assistantID: assistantID) { return }
+            if captureDispatchDecisions(runtime: runtime, messageID: assistantID, calls: latestToolCalls) { return }
+
             // Execute every tool call, gating on the user when necessary.
             runtime.currentTurnTiming?.noteToolBoundary()
             var anyDenied = false
@@ -1849,25 +1857,7 @@ extension AppState {
                 // deterministic denial back so the agent can choose a safe
                 // fallback or finish with a concrete blocked reason.
                 if runtime.isUnattendedDispatchTask, risk == .userInput {
-                    var record = AgentToolCall(
-                        messageID: assistantID,
-                        externalID: call.externalID,
-                        toolName: call.toolName,
-                        arguments: argsDict,
-                        risk: risk,
-                        status: .denied,
-                        approvalSource: nil
-                    )
-                    record.errorMessage = "Unavailable in unattended dispatch task"
-                    runtime.toolCalls.append(record)
-                    appendToolMessage(
-                        for: runtime,
-                        toolCallID: call.externalID,
-                        payload: "Unavailable in unattended dispatch task: no operator is attached. Continue autonomously with the locked task, or report a concrete blocked reason to the scheduler.",
-                        source: .systemNotice,
-                        outcomeStatus: .denied,
-                        errorMessage: record.errorMessage
-                    )
+                    recordUnattendedInputDenial(call, messageID: assistantID, arguments: argsDict, risk: risk, runtime: runtime)
                     continue
                 }
 
@@ -1878,7 +1868,7 @@ extension AppState {
                 ) {
                     autoApproval = unattendedApproval
                 } else {
-                    autoApproval = await autoApprovalSource(
+                    do { autoApproval = try await checkedAutoApprovalSource(
                         toolName: call.toolName,
                         arguments: argsDict,
                         risk: risk,
@@ -1890,8 +1880,11 @@ extension AppState {
                         approvalMode: runtime.approvalMode,
                         conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
                         environmentTrustDeclarations: runtime.environmentTrustDeclarations,
-                        computerUseOwner: runtime.computerUseOwner, latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
-                    )
+                        computerUseOwner: runtime.computerUseOwner, latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? "", taskRuntime: runtime
+                    ) } catch {
+                        stopApprovalToolRound(error, runtime: runtime, assistantID: assistantID)
+                        return
+                    }
                 }
                 let isAlwaysAllowed = autoApproval != nil
                 // Manual decisions are activated only when stage 2 reaches
@@ -2068,6 +2061,7 @@ extension AppState {
             func makeToolContext(
                 sandboxMode: AgentSandboxMode,
                 patchAutoApplySource: AgentToolApprovalSource?,
+                taskAuthorizationSource: AgentToolApprovalSource? = nil,
                 automaticBackgroundSandboxRetryApprovalSource: AgentToolApprovalSource? = nil,
                 delegatedProgressSink: (@MainActor (AgentDelegatedTerminalProgressUpdate) -> Void)? = nil
             ) -> AgentToolContext {
@@ -2095,6 +2089,8 @@ extension AppState {
                     turnID: runtime.activeTurnID,
                     goalPhaseID: runtime.goalRoadmap?.activePhase?.id,
                     isGoalMode: runtime.interactionMode == .goal,
+                    executionBudget: self.toolExecutionBudget(for: runtime),
+                    taskAuthorizationCheck: self.goalTaskAuthorizationExecutionCheck(runtime: runtime, source: taskAuthorizationSource, root: workspaceURL),
                     computerUseSessionTitle: runtime.session.title,
                     jobRegistry: agentJobRegistry,
                     mediaTaskRegistry: agentMediaTaskRegistry,
@@ -2134,6 +2130,7 @@ extension AppState {
                         )
                         AgentSessionStore.flushPendingWrites()
                     },
+                    contextMessageReader: self.contextMessageReader(for: runtime),
                     localCommandEnvironment: AgentToolRunner.localCommandEnvironment(
                         settings: editorTerminalSettings
                     ),
@@ -2338,6 +2335,10 @@ extension AppState {
                         runtime: runtime
                     )
                     let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
+                    if runtime.toolCalls.first(where: { $0.id == recordID })?.status == .failed {
+                        finishHostStoppedToolRound(runtime: runtime, assistantID: assistantID, recordID: recordID)
+                        return
+                    }
                     if Task.isCancelled {
                         settleUnexecutedStagedCalls(from: stagedIndex, reason: "Cancelled")
                         return
@@ -2388,6 +2389,10 @@ extension AppState {
                         runtime: runtime
                     )
                     let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
+                    if runtime.toolCalls.first(where: { $0.id == recordID })?.status == .failed {
+                        finishHostStoppedToolRound(runtime: runtime, assistantID: assistantID, recordID: recordID)
+                        return
+                    }
                     if Task.isCancelled {
                         settleUnexecutedStagedCalls(from: stagedIndex, reason: "Cancelled")
                         return
@@ -2542,11 +2547,12 @@ extension AppState {
                 let context = makeToolContext(
                     sandboxMode: sandboxModeForToolExecution(
                         risk: risk,
-                        approvalSource: autoApproval,
+                        approvalSource: currentApprovalSource,
                         sandboxDecision: sandboxDecision,
                         isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
                     ),
                     patchAutoApplySource: patchAutoApplySource,
+                    taskAuthorizationSource: currentApprovalSource,
                     automaticBackgroundSandboxRetryApprovalSource: automaticBackgroundSandboxRetrySource,
                     delegatedProgressSink: liveProgressSink
                 )
@@ -2721,6 +2727,7 @@ extension AppState {
                     if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
                         runtime.toolCalls[index].status = .succeeded
                         runtime.toolCalls[index].result = result
+                        runtime.toolCalls[index].commandExitCode = result.commandExitCode
                         if let patchAutoApplySource {
                             runtime.toolCalls[index].approvalSource = patchAutoApplySource
                         }
@@ -2982,6 +2989,7 @@ extension AppState {
             // Otherwise: loop again so the model can react to the tool outputs.
         }
 
+        if continueGoalOnBudgetInsteadOfRoundLimit(for: runtime, boundary: .toolRoundLimit) { return }
         runtime.errorMessage = "Agent paused after \(Self.maxAgentToolRounds) tool-call rounds to avoid an accidental loop. Send another message to continue."
         runtime.errorDetails = nil
     }

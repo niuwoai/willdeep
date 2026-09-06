@@ -1170,6 +1170,7 @@ private struct AgentSubagentFleetPopover: View {
             }
             .buttonStyle(.plain)
             .help(L10n.AgentDelegation.inspectorTitle)
+            .focusable(false)
         } else {
             memberRowContent(member, showsDisclosure: false)
         }
@@ -1860,6 +1861,7 @@ private struct AgentRailRuntimeEventRow: View {
                 }
                 .buttonStyle(.borderless)
                 .help(L10n.RuntimeEvents.dismiss)
+                .focusable(false)
             } else if event.isAwaitingUserAction, event.source == .approval {
                 Image(systemName: "arrow.left")
                     .font(.caption2)

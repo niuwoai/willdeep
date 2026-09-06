@@ -467,6 +467,8 @@ struct AgentTurnReportCard: View {
         switch source {
         case .user:
             return L10n.Transcript.turnReportApprovalUser
+        case .taskGrant:
+            return L10n.GoalAuthorization.badge
         case .alwaysAllowList:
             return L10n.Transcript.turnReportApprovalAlwaysAllow
         case .staticAllowlist:

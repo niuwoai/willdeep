@@ -218,6 +218,68 @@ struct AgentDispatchBoardPersistenceTests {
         #expect(reconciledIDs == expectedIDs)
     }
 
+    @Test("多工作区的固定基准与节点输入跨投影及新协调器保留")
+    func integrationBasesSurviveProjectionAndRelaunch() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let store = AgentDispatchStore(defaults: sandbox.defaults)
+        let coordinator = AgentDispatchCoordinator(store: store)
+        var session = makePlannedSession()
+        coordinator.synchronize(with: [session])
+        let original = try #require(coordinator.goals.first)
+        let project = try #require(original.logicalProject)
+        let local = try #require(original.effectiveWorkspaceBindings.first)
+        let remote = AgentDispatchWorkspaceBinding(location: .remote(runtimeID: UUID(), path: "/workspace/remote"), projectID: project.id)
+        coordinator.updateGoal(id: original.id) { goal in
+            goal.workspaceBindings = [local, remote]
+            goal.tasks[1].workspaceBindingID = remote.id
+        }
+        let localBase = String(repeating: "a", count: 40)
+        let remoteBase = String(repeating: "b", count: 40)
+        let remoteInput = String(repeating: "c", count: 40)
+        coordinator.pinTaskInputRevision(goalID: original.id, taskID: original.tasks[0].id,
+            bindingID: local.id, baseRevision: localBase, inputRevision: localBase)
+        coordinator.pinTaskInputRevision(goalID: original.id, taskID: original.tasks[1].id,
+            bindingID: remote.id, baseRevision: remoteBase, inputRevision: remoteInput)
+        session.title = "仅标题变化"
+        for _ in 0..<3 { coordinator.synchronize(with: [session]) }
+        let expected = [local.id: localBase, remote.id: remoteBase]
+        #expect(coordinator.goals.first?.integrationBaseRevisions == expected)
+        let relaunched = AgentDispatchCoordinator(store: AgentDispatchStore(defaults: sandbox.defaults))
+        #expect(relaunched.goals.first?.integrationBaseRevisions == expected)
+        relaunched.synchronize(with: [session])
+        #expect(relaunched.goals.first?.integrationBaseRevisions == expected)
+        #expect(relaunched.goals.first?.tasks[0].inputRevision == localBase)
+        #expect(relaunched.goals.first?.tasks[1].inputRevision == remoteInput)
+    }
+
+    @Test("移除或不属本项目的映射不把旧基准转给同路径新运行端")
+    func projectionPrunesUnownedIntegrationBases() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let coordinator = AgentDispatchCoordinator(store: AgentDispatchStore(defaults: sandbox.defaults))
+        let session = makePlannedSession()
+        coordinator.synchronize(with: [session])
+        let original = try #require(coordinator.goals.first)
+        let project = try #require(original.logicalProject)
+        let local = try #require(original.effectiveWorkspaceBindings.first)
+        let removed = AgentDispatchWorkspaceBinding(location: .remote(runtimeID: UUID(), path: "/workspace/shared"), projectID: project.id)
+        let replacement = AgentDispatchWorkspaceBinding(location: .remote(runtimeID: UUID(), path: "/workspace/shared"), projectID: project.id)
+        let foreign = AgentDispatchWorkspaceBinding(location: .local(path: "/workspace/foreign"), projectID: UUID())
+        coordinator.updateGoal(id: original.id) { goal in
+            goal.workspaceBindings = [local, replacement, foreign]
+            goal.integrationBaseRevisions = [local.id: "local-base", removed.id: "removed-base",
+                foreign.id: "foreign-base", "local:/unmapped": "unknown-base"]
+        }
+        coordinator.synchronize(with: [session])
+        let projected = try #require(coordinator.goals.first)
+        #expect(projected.integrationBaseRevisions == [local.id: "local-base"])
+        #expect(projected.integrationBaseRevisions?[replacement.id] == nil)
+        #expect(projected.effectiveWorkspaceBindings.contains { $0.id == replacement.id })
+        #expect(!projected.effectiveWorkspaceBindings.contains { $0.id == foreign.id })
+        #expect(AgentDispatchStore(defaults: sandbox.defaults).load().first?.integrationBaseRevisions == [local.id: "local-base"])
+    }
+
     private func makePlannedSession() -> AgentSession {
         let firstID = UUID()
         let secondID = UUID()

@@ -446,7 +446,7 @@ struct AgentSubagentLiveActivityTests {
         )
     }
 
-    /// The roster shows seven trades, and all seven can run in one turn. A shared
+    /// Every public trade can run in one turn. A shared
     /// colour there is not a near-miss, it is the feature failing. An earlier
     /// `distinct.count >= 4` assertion passed while `reader`, `tester` and
     /// `ops_runner` all rendered the same green — half the roster.
@@ -455,18 +455,19 @@ struct AgentSubagentLiveActivityTests {
         let ids = AgentSubagentProfileCatalog.publicBuiltIn.map(\.id)
         let colors = ids.map { String(describing: AgentSubagentTradePalette.color(forProfileID: $0)) }
 
-        #expect(ids.count == 5)
+        #expect(ids.count == 6)
         #expect(Set(colors).count == ids.count)
     }
 
-    /// Eighteen internal trades are presented as seven. Two runs that both
+    /// Internal trades are grouped by their public capability. Two runs that both
     /// say "阅读者" must look the same, so the colour keys on the public id.
     @Test("internal trades inherit the colour of the public trade they fold into")
     func internalTradesFollowTheirPublicTrade() {
-        let reader = AgentSubagentTradePalette.color(forProfileID: "reader")
-        for folded in ["scout", "log_inspector", "git_detective"] {
-            #expect(AgentSubagentTradePalette.color(forProfileID: folded) == reader)
+        let scout = AgentSubagentTradePalette.color(forProfileID: "scout")
+        for folded in ["reader", "log_inspector", "git_detective", "deep"] {
+            #expect(AgentSubagentTradePalette.color(forProfileID: folded) == scout)
         }
+        #expect(scout != AgentSubagentTradePalette.color(forProfileID: "generalist"))
 
         let implementer = AgentSubagentTradePalette.color(forProfileID: "implementer")
         for folded in ["editor", "small_implementer", "test_fixer", "build_fixer"] {

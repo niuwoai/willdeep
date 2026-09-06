@@ -175,7 +175,8 @@ extension AppState {
                 patchProposalSink: nil,
                 terminalController: profile.id == AgentSubagentProfileCatalog.terminalOperatorID
                     ? agentTerminalController
-                    : nil
+                    : nil,
+                executionBudget: toolExecutionBudget(for: runtime)
             )
             settle(.succeeded, summary: "preflight")
             finishHostWorkerRun(hostRunID, status: .succeeded, outcome: outcome, runtime: runtime)

@@ -309,6 +309,11 @@ enum AgentToolRunner {
         arguments: [String: AgentJSONValue],
         context: AgentToolContext
     ) async throws -> AgentToolResult {
+        try Task.checkCancellation()
+        try context.executionBudget?.checkCurrentOwner()
+        try await context.taskAuthorizationCheck?(name, arguments, context)
+        try Task.checkCancellation()
+        try context.executionBudget?.checkCurrentOwner()
         guard !AgentTerminalAutomationPolicy.forbidsShortcutReplay(toolName: name) else {
             throw AgentToolError.invalidArgument(
                 "Saved Terminal recording shortcuts are user-run only. Ask the user to press Run in the visible Terminal panel."
@@ -345,6 +350,7 @@ enum AgentToolRunner {
                 .leaseID
                 .uuidString
                 .lowercased()
+            try context.executionBudget?.checkCurrentOwner()
             let result: AgentToolResult
             if AgentShortDramaToolDispatcher.canHandle(name) {
                 result = try await AgentShortDramaToolDispatcher.run(
@@ -388,6 +394,8 @@ enum AgentToolRunner {
                 result = try await AgentSessionTools.listWorkspaceSessions(arguments: activeArguments, context: activeContext)
             case "search_sessions":
                 result = try await AgentSessionTools.searchSessions(arguments: activeArguments, context: activeContext)
+            case "read_context_message":
+                result = try await AgentContextReadTool.run(arguments: activeArguments, context: activeContext)
             case "list_projects", "list_project_sessions", "manage_sessions":
                 result = try await AgentSessionManagementTools.run(tool: name, arguments: activeArguments, context: activeContext)
             case "suggest_session_title":

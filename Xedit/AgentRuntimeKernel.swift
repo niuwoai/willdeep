@@ -898,6 +898,15 @@ final class AgentRuntimeKernel: ObservableObject {
         AgentKernelEventStore.saveAsync(events, for: runtimeID)
     }
 
+    /// App-process crash handoff barrier. A non-persistent test/in-memory
+    /// kernel must never authorize deletion of a durable producer receipt.
+    func confirmEventPersistenceForHandoff(_ event: AgentKernelEvent) -> Bool {
+        guard persistsEvents, events.contains(where: { $0.id == event.id && $0.runtimeID == event.runtimeID }) else {
+            return false
+        }
+        return AgentKernelEventStore.flushPendingWrites(for: [event.runtimeID]).isEmpty
+    }
+
     private func enforceBounds() -> Set<UUID> {
         var affectedRuntimeIDs: Set<UUID> = []
         let runtimeIDs = Set(events.map(\.runtimeID))

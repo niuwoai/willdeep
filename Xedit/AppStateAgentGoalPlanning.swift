@@ -337,6 +337,24 @@ extension AppState {
         }
         if !forceRestart, runtime.goalPlanningState != nil { return false }
 
+        do {
+            try Task.checkCancellation()
+            try auxiliaryModelExecutionBudget(for: runtime)?.check()
+        } catch {
+            if AgentAuxiliaryRequestStop(error) != nil, runtime.goalPlanningState == nil {
+                // Even pre-admission refusal needs a visible, retryable
+                // planning state. Editing a spent Goal must not look idle.
+                runtime.goalPlanningState = AgentGoalPlanningState(
+                    goalFingerprint: AgentGoalPlanningState.fingerprint(for: goal),
+                    members: Self.goalPlanningMembers.map {
+                        .init(roleID: $0.id, displayName: $0.name)
+                    }
+                )
+            }
+            stopGoalPlanningOnRequestFailure(error, runtime: runtime)
+            return false
+        }
+
         if runtime.session.presentationScope == .dispatchBoard {
             guard let planningProfile = nextDispatchPlanningProfile(
                 for: runtime,
@@ -413,13 +431,16 @@ extension AppState {
                     workspaceLocation: workspaceLocation,
                     parentRuntimeID: runtime.id,
                     someIMContext: someIMContext,
-                    outputSchema: AgentGoalPlanningMemberPayload.outputSchema
+                    outputSchema: AgentGoalPlanningMemberPayload.outputSchema,
+                    executionBudget: auxiliaryModelExecutionBudget(for: runtime)
                 )
                 state.members[memberIndex].runID = run.id
                 state.members[memberIndex].status = .running
             } catch {
                 state.members[memberIndex].status = .failed
                 state.members[memberIndex].errorMessage = Self.boundedSanitized(error.localizedDescription, limit: 1_000)
+                runtime.goalPlanningState = state
+                if stopGoalPlanningOnRequestFailure(error, runtime: runtime) { return true }
             }
         }
         runtime.goalPlanningState = state
@@ -548,9 +569,11 @@ extension AppState {
         Emit exactly one numbered fenced `plan` block for PHASE-1 only, with at most \(AgentGoalRoadmap.maximumStepsPerPhase) steps. Across those steps cover implementation, tests, documentation, versioning, and acceptance, or explicitly mark a category N/A. Every step names a task ID, member, owner, or deliverable.
 
         Emit exactly one fenced `dispatch-graph` JSON block for PHASE-1 only, with at most \(AgentGoalDispatchPlanParser.maximumNodeCount) execution nodes:
-        {"nodes":[{"id":"TASK-1","title":"specific deliverable","depends_on":[],"profile":"profile-id","fallback_profiles":["fallback-profile-id"],"acceptance":["observable evidence"]}]}
+        {"nodes":[{"id":"TASK-1","title":"specific deliverable","depends_on":[],"profile":"profile-id","fallback_profiles":["fallback-profile-id"],"acceptance":["observable evidence"],"verification_commands":["repository-local test command"]}]}
+        For code nodes, verification_commands must list relevant standalone repository-relative test commands. The host reruns them against the integrated candidate, not the worker's original checkout. Do not supply shell chains, absolute checkout paths, help/list-only commands, or placeholder commands.
 
-        Choose the smallest useful DAG. Parallelize independent work, but never emit every node as an independent root for a multi-part project. The UI acceptance gate is synthetic and cannot merge code, integrate deliverables, test, or repair work. A graph with 3+ nodes must have exactly one executable terminal test/regression/verification node and at least three execution layers. Every parallel implementation wave must feed a distinct merge/integration execution node whose depends_on explicitly lists the upstream coding nodes; the terminal verification node must then depend on that merge/integration node. For software projects, model the usual foundation/shared-contract → parallel implementation → distinct code merge/integration → independent test/regression flow. Never flatten independent work into a serial chain. Give nontrivial nodes at least one fallback profile when another suitable profile is available. Choose profile IDs only from:
+        \(Self.dispatchSchedulingContractPrompt)
+        Choose the smallest useful DAG. Parallelize independent work and preserve real prerequisite edges. A graph with 3+ nodes must converge to one executable terminal verification node. Give nontrivial nodes a suitable fallback profile when one is available. Choose profile IDs only from:
         <execution_profiles>
         \(catalog)
         </execution_profiles>
@@ -611,6 +634,7 @@ extension AppState {
     ) -> Bool {
         guard runtime.session.presentationScope == .dispatchBoard,
               runtime.interactionMode == .goal,
+              runtime.currentGoal?.continuationBudget?.modelAdmissionPaused != true,
               runtime.executionAgent == .willDeep,
               let state = runtime.goalPlanningState,
               state.phase == .readyForProposal,
@@ -760,8 +784,11 @@ extension AppState {
     /// orderly wrap-up was dispatched, or (post-handover) the budget banner
     /// was claimed — and the caller must not show the round-limit banner.
     @discardableResult
-    func continueGoalOnBudgetInsteadOfRoundLimit(for runtime: AgentRuntime) -> Bool {
-        guard runtime.interactionMode == .goal,
+    func continueGoalOnBudgetInsteadOfRoundLimit(
+        for runtime: AgentRuntime,
+        boundary: AgentGoalRunBoundary = .planRoundLimit
+    ) -> Bool {
+        guard goalOwnsAutomaticContinuation(for: runtime),
               let goal = runtime.currentGoal,
               !goal.isEmpty,
               // Aligned with `requiresGoalCompletion` in the loop: an empty
@@ -810,6 +837,8 @@ extension AppState {
             prompt = """
             Automatic Goal continuation: this Goal is not complete and its execution budget has runway left. Keep executing the active plan — do not replace it, do not restart Goal Teams, and do not summarize completed work instead of advancing. Pick the next unfinished step and do it.
 
+            \(boundary.instruction)
+
             \(remainingAcceptance.isEmpty
                 ? "The acceptance checklist has not been established yet. Derive it from the Goal statement and report it with one `goal-check` block before or alongside your next concrete step."
                 : "Unchecked acceptance items:\n- \(remainingAcceptance.joined(separator: "\n- "))")
@@ -824,10 +853,11 @@ extension AppState {
                 $0.source == .hostInstruction && $0.text.hasPrefix(dedupPrefix)
             }) else { return true }
             runtime.queuedMessages.append(
-                AgentQueuedMessage(text: prompt, images: [], source: .hostInstruction)
+                AgentQueuedMessage(text: prompt, images: [], executionAgent: runtime.executionAgent, source: .hostInstruction)
             )
         } else {
-            dispatchAgentMessage(
+            dispatchAgentMessageUsingSelectedExecutor(
+                runtime.executionAgent,
                 for: runtime,
                 text: prompt,
                 images: [],
@@ -893,7 +923,9 @@ extension AppState {
             phaseDispatchContract = """
 
             Also emit one fenced `dispatch-graph` JSON block for this phase only, with at most \(AgentGoalDispatchPlanParser.maximumNodeCount) execution nodes:
-            {"nodes":[{"id":"TASK-1","title":"specific deliverable","depends_on":[],"profile":"profile-id","fallback_profiles":["fallback-profile-id"],"acceptance":["observable evidence"]}]}
+            {"nodes":[{"id":"TASK-1","title":"specific deliverable","depends_on":[],"profile":"profile-id","fallback_profiles":["fallback-profile-id"],"acceptance":["observable evidence"],"verification_commands":["repository-local test command"]}]}
+            Code nodes must name relevant repository-relative test commands for host verification of their integrated candidate. Do not use shell chains, absolute checkout paths, help/list modes, or placeholders.
+            \(Self.dispatchSchedulingContractPrompt)
             Choose profile IDs only from:
             <execution_profiles>
             \(catalog)
@@ -940,6 +972,7 @@ extension AppState {
         guard agentSubagentRegistry.isGoalPlanningRun(run.id) else { return false }
         guard let runtime = runtime(for: run.parentRuntimeID),
               var state = runtime.goalPlanningState,
+              state.phase == .collecting,
               let index = state.members.firstIndex(where: { $0.runID == run.id }),
               state.members[index].status == .running else {
             return true
@@ -965,6 +998,8 @@ extension AppState {
         }
         let generationID = state.generationID
         runtime.goalPlanningState = state
+        if run.status == .failed, let stop = run.requestStop,
+           stopGoalPlanningOnRequestStop(stop, runtime: runtime) { return true }
         persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
         finishAgentGoalPlanningFirstRoundIfReady(runtimeID: runtime.id, generationID: generationID)
         return true
@@ -1008,7 +1043,8 @@ extension AppState {
                 runtimeDescriptor: runtimeDescriptor,
                 workspaceLocation: workspaceLocation,
                 someIMContext: someIMContext,
-                outputSchema: AgentGoalPlanningArbitrationPayload.outputSchema
+                outputSchema: AgentGoalPlanningArbitrationPayload.outputSchema,
+                executionBudget: auxiliaryModelExecutionBudget(for: runtime)
             )
             guard let report = Self.validatedArbitrationReport(outcome.report) else {
                 throw WorkflowError.structuredOutputUnavailable(reason: "empty or invalid Goal planning arbitration")
@@ -1027,6 +1063,7 @@ extension AppState {
                   var liveState = liveRuntime.goalPlanningState,
                   liveState.generationID == generationID,
                   liveState.phase == .arbitrating else { return }
+            if stopGoalPlanningOnRequestFailure(error, runtime: liveRuntime) { return }
             if Self.isStructuredOutputUnavailable(error) {
                 liveState.phase = .readyForProposal
                 liveState.arbitration = .init(
@@ -1128,6 +1165,15 @@ extension AppState {
         guard let runtime = activeRuntime,
               runtime.interactionMode == .goal else { return }
 
+        // This is an explicit user retry, not an automatic profile fallback.
+        // Open a new segment but never reset the owner's persisted token spend.
+        if var goal = runtime.currentGoal, goal.continuationBudget?.modelAdmissionPaused == true {
+            goal.continuationBudget = (goal.continuationBudget ?? .standard).restarted
+            runtime.currentGoal = goal
+            runtime.clearTurnError()
+            persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+        }
+
         if var state = runtime.goalPlanningState,
            state.phase == .blocked,
            state.members.filter({ $0.status == .completed && $0.report != nil }).count >= 2,
@@ -1205,9 +1251,11 @@ extension AppState {
             ? """
 
             Also emit exactly one fenced `dispatch-graph` JSON block after the numbered plan for PHASE-1 only. This is the executable DAG and is separate from the Goal acceptance checklist. Use at most \(AgentGoalDispatchPlanParser.maximumNodeCount) execution nodes in this exact shape:
-            {"nodes":[{"id":"TASK-1","title":"specific deliverable","depends_on":[],"profile":"profile-id","fallback_profiles":["fallback-profile-id"],"acceptance":["observable evidence"]}]}
+            {"nodes":[{"id":"TASK-1","title":"specific deliverable","depends_on":[],"profile":"profile-id","fallback_profiles":["fallback-profile-id"],"acceptance":["observable evidence"],"verification_commands":["repository-local test command"]}]}
+            Code nodes must name relevant repository-relative test commands for host verification of their integrated candidate. Do not use shell chains, absolute checkout paths, help/list modes, or placeholders.
 
-            Choose the smallest useful DAG from the actual task. Parallelize independent work, but never emit every node as an independent root for a multi-part project. The UI acceptance gate is synthetic and cannot merge code, integrate deliverables, test, or repair work. A graph with 3+ nodes must have exactly one executable terminal test/regression/verification node and at least three execution layers. Every parallel implementation wave must feed a distinct merge/integration execution node whose depends_on explicitly lists the upstream coding nodes; the terminal verification node must then depend on that merge/integration node. For software projects, model the usual foundation/shared-contract → parallel implementation → distinct code merge/integration → independent test/regression flow. Do not flatten the graph into a serial chain and do not invent parallelism when the work is truly sequential. Give nontrivial nodes at least one fallback profile when another suitable profile is available. Pick each node's primary profile and ordered fallbacks from this catalog only:
+            \(Self.dispatchSchedulingContractPrompt)
+            Choose the smallest useful DAG. Parallelize independent work and preserve real prerequisite edges. A graph with 3+ nodes must converge to one executable terminal verification node. Give nontrivial nodes a suitable fallback profile when one is available. Pick each node's primary profile and ordered fallbacks from this catalog only:
             <execution_profiles>
             \(profileCatalog)
             </execution_profiles>
@@ -1358,7 +1406,7 @@ extension AppState {
         return String(sanitized.prefix(limit)) + "…[truncated]"
     }
 
-    private static func goalPlanningSomeIMContext(
+    static func goalPlanningSomeIMContext(
         configuration: AgentConfiguration,
         runtime: AgentRuntime
     ) -> SomeIMRequestContext? {

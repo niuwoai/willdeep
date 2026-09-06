@@ -1478,6 +1478,13 @@ enum AgentSandboxPolicy {
     }
 
     /// Sandbox modes whose seatbelt profile carries `(deny network*)`.
+    nonisolated static func canEnforceLocalTaskVerification(command: String, mode: AgentSandboxMode) -> Bool {
+        (mode == .readOnly || mode == .workspaceWrite)
+            && FileManager.default.isExecutableFile(atPath: sandboxExecPath)
+            && !shouldRunWithoutSeatbelt(command: command, mode: mode)
+    }
+
+    /// Sandbox modes whose seatbelt profile carries `(deny network*)`.
     nonisolated static func deniesNetwork(_ mode: AgentSandboxMode) -> Bool {
         switch mode {
         case .readOnly, .workspaceWrite:

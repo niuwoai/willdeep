@@ -45,15 +45,20 @@ struct AgentSubagentInterventionTests {
         #expect(!channel.hasPendingInterruption)
     }
 
-    @Test("interrupt submission cancels only the active child step")
+    @Test("interrupt submission cancels only the active child step", .timeLimit(.minutes(1)))
     func interruptCancelsActiveStep() async throws {
         let channel = AgentSubagentInterventionChannel()
         channel.beginRound(5)
+        let (blocked, release) = AsyncStream<Void>.makeStream()
+        defer { release.finish() }
+        var stepFinished = false
 
         let step = Task { @MainActor in
+            defer { stepFinished = true }
             do {
                 _ = try await channel.runCancellableStep {
-                    try await Task.sleep(nanoseconds: 5_000_000_000)
+                    for await _ in blocked { }
+                    try Task.checkCancellation()
                     return true
                 }
                 return false
@@ -61,22 +66,24 @@ struct AgentSubagentInterventionTests {
                 return true
             }
         }
-        // Wait for the step to actually register rather than guessing how
-        // long that takes. The 2ms this replaces was enough on an idle
-        // machine and not enough under a full-load run, where the MainActor
-        // is contended: the interrupt then arrived before there was anything
-        // to cancel, the step slept out its five seconds, and the suite went
-        // red for reasons that had nothing to do with the channel.
+        defer { step.cancel() }
+        // Registration alone is insufficient if a finite sleep has already
+        // ended while the actor was busy. This operation cannot finish normally
+        // until teardown, so the assertion measures cancellation, not scheduling.
         try await waitUntil { channel.hasActiveStep }
-        #expect(channel.hasActiveStep)
+        try #require(channel.hasActiveStep)
 
         _ = try channel.submit(
             text: "不要继续读这个文件，先检查环境变量",
             mode: .interruptCurrentStep
         )
 
+        try await waitUntil { stepFinished }
+        #expect(stepFinished, "Interrupt must finish the active step before teardown releases it")
+        release.finish()
         let wasCancelled = try await step.value
         #expect(wasCancelled)
+        #expect(!Task.isCancelled)
         #expect(channel.hasPendingInterruption)
         let drained = channel.drainPending(effectiveRound: 6)
         #expect(drained.count == 1)

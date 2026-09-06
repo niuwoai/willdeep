@@ -541,6 +541,7 @@ final class AgentDispatchCoordinator: ObservableObject {
         guard !trimmedTitle.isEmpty,
               let goal = goals.first(where: { $0.id == goalID }),
               let existingTask = goal.tasks.first(where: { $0.id == taskID }),
+              existingTask.pendingDecisionIDs?.isEmpty != false,
               existingTask.state != .running,
               existingTask.state != .reviewing else {
             return false
@@ -629,6 +630,9 @@ final class AgentDispatchCoordinator: ObservableObject {
                 task.attemptedProfileIDs = attempted
             }
             task.resolvedTarget = target
+            if task.runtimeSessionID != runtimeSessionID {
+                task.operatorAcceptedAt = nil
+            }
             task.runtimeSessionID = runtimeSessionID
             var runtimeSessionIDs = task.runtimeSessionIDs ?? []
             if !runtimeSessionIDs.contains(runtimeSessionID) {
@@ -651,18 +655,60 @@ final class AgentDispatchCoordinator: ObservableObject {
         }
     }
 
+    func pinTaskInputRevision(goalID: UUID, taskID: UUID, bindingID: String, baseRevision: String, inputRevision: String) {
+        updateGoal(id: goalID) { goal in
+            guard let index = goal.tasks.firstIndex(where: { $0.id == taskID }) else { return }
+            var bases = goal.integrationBaseRevisions ?? [:]
+            if bases[bindingID] == nil { bases[bindingID] = baseRevision }
+            goal.integrationBaseRevisions = bases
+            if goal.tasks[index].inputRevision == nil { goal.tasks[index].inputRevision = inputRevision }
+            goal.tasks[index].updatedAt = Date()
+            goal.updatedAt = Date()
+        }
+    }
+
     func updateTaskState(
         goalID: UUID,
         taskID: UUID,
         state: AgentDispatchTaskState
     ) {
         updateTask(goalID: goalID, taskID: taskID) { task in
+            if task.pendingDecisionIDs?.isEmpty == false && state != .cancelled && state != .failed { return }
+            if state == .cancelled || state == .failed { task.pendingDecisionIDs = nil }
             task.state = state
             task.updatedAt = Date()
         }
         if state == .merged {
             unlockReadyTasks(goalID: goalID)
         }
+    }
+
+    func recordOperatorAcceptance(goalID: UUID, taskID: UUID) {
+        updateTask(goalID: goalID, taskID: taskID) { task in
+            task.operatorAcceptedAt = Date()
+            task.state = .reviewing
+            task.updatedAt = Date()
+        }
+    }
+
+    func applyDeliveredRecord(_ record: AgentDispatchDeliveryRecord) throws {
+        guard record.phase == .delivered, let receipt = record.receipt,
+              let verification = record.verificationReceipt, verification.isValid,
+              verification.revision == receipt.integratedRevision, verification.id == record.verificationID,
+              receipt.snapshot == record.candidate.snapshot,
+              let goal = goals.first(where: { $0.id == record.goalID }), !goal.isPaused,
+              let task = goal.tasks.first(where: { $0.id == record.taskID }), task.runtimeSessionID == record.runtimeID,
+              [.running, .reviewing, .accepted].contains(task.state) else {
+            throw AgentDispatchJournalError.invalidTransition
+        }
+        updateTask(goalID: record.goalID, taskID: record.taskID) { task in
+            task.artifactSnapshot = receipt.snapshot
+            task.integrationCandidate = record.candidate
+            task.integrationReceipt = receipt
+            task.state = .merged
+            task.updatedAt = Date()
+        }
+        unlockReadyTasks(goalID: record.goalID)
     }
 
     func resetForTests() {
@@ -672,13 +718,13 @@ final class AgentDispatchCoordinator: ObservableObject {
         persist()
     }
 
-    private func updateGoal(id: UUID, change: (inout AgentDispatchGoal) -> Void) {
+    func updateGoal(id: UUID, change: (inout AgentDispatchGoal) -> Void) {
         guard let index = goals.firstIndex(where: { $0.id == id }) else { return }
         change(&goals[index])
         persist()
     }
 
-    private func updateTask(
+    func updateTask(
         goalID: UUID,
         taskID: UUID,
         change: (inout AgentDispatchTask) -> Void
@@ -694,7 +740,8 @@ final class AgentDispatchCoordinator: ObservableObject {
         updateGoal(id: goalID) { goal in
             let mergedIDs = Set(goal.tasks.filter { $0.state == .merged }.map(\.id))
             for index in goal.tasks.indices where goal.tasks[index].state == .blocked {
-                if Set(goal.tasks[index].dependencyIDs).isSubset(of: mergedIDs) {
+                if goal.tasks[index].pendingDecisionIDs?.isEmpty != false,
+                   Set(goal.tasks[index].dependencyIDs).isSubset(of: mergedIDs) {
                     goal.tasks[index].state = .queued
                     goal.tasks[index].updatedAt = Date()
                 }
@@ -805,6 +852,13 @@ final class AgentDispatchCoordinator: ObservableObject {
                 workspaceBindings.insert(primaryBinding, at: 0)
             }
         }
+        // Session projection must not reset host-owned immutable inputs. Keep
+        // each pin only while its exact project-owned workspace mapping still
+        // exists; never transfer a removed mapping's base to another root.
+        let retainedBindingIDs = Set(workspaceBindings.map(\.id))
+        let integrationBaseRevisions = existing?.integrationBaseRevisions?.filter {
+            retainedBindingIDs.contains($0.key)
+        }
         let oldTasks = Dictionary(
             uniqueKeysWithValues: (existing?.tasks ?? []).map { ($0.id, $0) }
         )
@@ -831,6 +885,10 @@ final class AgentDispatchCoordinator: ObservableObject {
                 task.planNodeKey = node.key
                 task.primaryProfileID = node.primaryProfileID
                 task.fallbackProfileIDs = node.fallbackProfileIDs
+                if task.runtimeSessionID == nil {
+                    task.verificationCommands = node.verificationCommands
+                    task.scheduling = node.scheduling
+                }
                 task.acceptanceCriteria = node.acceptanceCriteria.isEmpty
                     ? [defaultAcceptanceCriterion]
                     : node.acceptanceCriteria
@@ -841,10 +899,16 @@ final class AgentDispatchCoordinator: ObservableObject {
                 // knocked back to queued/blocked on every board
                 // synchronization — "finished yesterday, not started today".
                 if task.runtimeSessionID == nil,
+                   task.pendingDecisionIDs?.isEmpty != false,
                    task.state == .queued || task.state == .blocked {
                     task.state = node.dependencyIDs.isEmpty ? .queued : .blocked
                 }
                 task.updatedAt = max(task.updatedAt, session.updatedAt)
+                if existing?.statement != sourceGoal.statement, task.pendingDecisionIDs?.isEmpty == false {
+                    task.pendingDecisionIDs = nil
+                    task.resumedDecisionIDs = nil
+                    task.state = .cancelled
+                }
                 return task
             }
         } else {
@@ -864,7 +928,8 @@ final class AgentDispatchCoordinator: ObservableObject {
         var tasks = projectedTasks + manuallyAppendedTasks
         let mergedIDs = Set(tasks.filter { $0.state == .merged }.map(\.id))
         for index in tasks.indices where tasks[index].state == .blocked {
-            if Set(tasks[index].dependencyIDs).isSubset(of: mergedIDs) {
+            if tasks[index].pendingDecisionIDs?.isEmpty != false,
+               Set(tasks[index].dependencyIDs).isSubset(of: mergedIDs) {
                 tasks[index].state = .queued
             }
         }
@@ -876,6 +941,8 @@ final class AgentDispatchCoordinator: ObservableObject {
             logicalProject: logicalProject,
             workspaceLocation: primaryWorkspace,
             workspaceBindings: workspaceBindings,
+            integrationBaseRevisions: integrationBaseRevisions,
+            decisions: existing?.decisions,
             tasks: tasks,
             executorChoice: existing?.executorChoice ?? .automatic,
             targetChoice: existing?.targetChoice ?? .automatic,

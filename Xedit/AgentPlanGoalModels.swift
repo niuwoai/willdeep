@@ -676,6 +676,11 @@ nonisolated struct AgentGoal: Codable, Equatable {
     /// Budget and spend for the current execution segment. Persisted so a
     /// relaunch cannot hand a long-running Goal a fresh full budget.
     var continuationBudget: AgentGoalContinuationBudget? = nil
+    /// Host-owned completion evidence; absent in legacy sessions. A model's
+    /// goal-check is a candidate, never authority to manufacture receipts.
+    var verification: AgentGoalVerification? = nil
+    /// Explicit user grants, never supplied by model tool arguments.
+    var taskAuthorizations: [AgentGoalTaskAuthorization]? = nil
 
     struct Item: Codable, Equatable, Identifiable {
         var id: UUID

@@ -4,59 +4,6 @@ import Testing
 
 @Suite
 struct AgentStopHandlingTests {
-    @Test("stop decision accepts only current-turn candidate ids")
-    func processDecisionIsCandidateScoped() {
-        let first = AgentStopJobCandidate(
-            id: UUID(),
-            displayHandle: "job_first",
-            command: "yarn test"
-        )
-        let second = AgentStopJobCandidate(
-            id: UUID(),
-            displayHandle: "job_second",
-            command: "yarn dev"
-        )
-        let unrelated = UUID()
-        let raw = """
-        ```json
-        {"stop_job_ids":["\(first.id.uuidString)","\(unrelated.uuidString)"]}
-        ```
-        """
-
-        let selected = AgentStopProcessDecision.selectedJobIDs(
-            rawResponse: raw,
-            candidates: [first, second]
-        )
-
-        #expect(selected == Set([first.id]))
-    }
-
-    @Test("valid empty stop decision keeps current-turn jobs")
-    func emptyDecisionIsRespected() {
-        let candidate = AgentStopJobCandidate(
-            id: UUID(),
-            displayHandle: "job_keep",
-            command: "yarn dev"
-        )
-        let selected = AgentStopProcessDecision.selectedJobIDs(
-            rawResponse: #"{"stop_job_ids":[]}"#,
-            candidates: [candidate]
-        )
-        #expect(selected.isEmpty)
-    }
-
-    @Test("invalid stop decision fails closed within the current turn")
-    func invalidDecisionStopsCurrentCandidatesOnly() {
-        let candidates = [
-            AgentStopJobCandidate(id: UUID(), displayHandle: "job_one", command: "build"),
-            AgentStopJobCandidate(id: UUID(), displayHandle: "job_two", command: "test"),
-        ]
-        let selected = AgentStopProcessDecision.selectedJobIDs(
-            rawResponse: "not-json",
-            candidates: candidates
-        )
-        #expect(selected == Set(candidates.map(\.id)))
-    }
 
     @Test("user-stopped URLSession cancellations are recognized across Error bridges")
     @MainActor

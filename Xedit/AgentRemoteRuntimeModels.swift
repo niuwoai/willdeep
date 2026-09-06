@@ -88,6 +88,10 @@ struct RuntimeCapabilities: Codable, Equatable {
     /// Keys use `AgentExecutionAgent.rawValue`; values are absolute command
     /// paths reported by `command -v`.
     var agentCLIPaths: [String: String]
+    /// Negotiated by the daemon probe; nil on older runtimes is not support.
+    var supportsIdempotentJobStart: Bool? = nil
+    var supportsStartRequestRecovery: Bool? = nil
+    var supportsMonotonicRunDeadline: Bool? = nil
 
     static let empty = RuntimeCapabilities(
         hasGit: false,
@@ -117,6 +121,9 @@ struct RuntimeCapabilities: Codable, Equatable {
         case nodeVersion, npmVersion, yarnVersion, pythonVersion, pipVersion
         case rubyVersion, goVersion, javaVersion, ghVersion, ghAuthStatus
         case npmRegistry, yarnRegistry, npmProxy, npmHTTPSProxy, pipProxy, proxyEnvironment, agentCLIPaths
+        case supportsIdempotentJobStart
+        case supportsStartRequestRecovery
+        case supportsMonotonicRunDeadline
     }
 
     init(
@@ -185,6 +192,9 @@ struct RuntimeCapabilities: Codable, Equatable {
         self.pipProxy = try c.decodeIfPresent(String.self, forKey: .pipProxy)
         self.proxyEnvironment = try c.decodeIfPresent([String: String].self, forKey: .proxyEnvironment) ?? [:]
         self.agentCLIPaths = try c.decodeIfPresent([String: String].self, forKey: .agentCLIPaths) ?? [:]
+        self.supportsIdempotentJobStart = try c.decodeIfPresent(Bool.self, forKey: .supportsIdempotentJobStart)
+        self.supportsStartRequestRecovery = try c.decodeIfPresent(Bool.self, forKey: .supportsStartRequestRecovery)
+        self.supportsMonotonicRunDeadline = try c.decodeIfPresent(Bool.self, forKey: .supportsMonotonicRunDeadline)
     }
 
     var availableExecutionAgents: Set<AgentExecutionAgent> {

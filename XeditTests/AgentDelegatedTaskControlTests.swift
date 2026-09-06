@@ -134,8 +134,8 @@ nonisolated struct AgentDelegatedTaskControlTests {
         #expect(acceptance.checks.allSatisfy { $0.status == .passed })
     }
 
-    @Test("verification command selection deduplicates and caps host reruns")
-    func verificationCommandsAreBounded() {
+    @Test("verification command selection deduplicates without dropping required checks")
+    func verificationCommandsPreserveRequiredChecks() {
         let contract = AgentDelegatedTaskContract(
             objective: "Verify",
             executor: .codexCLI,
@@ -166,7 +166,47 @@ nonisolated struct AgentDelegatedTaskControlTests {
             evidence: evidence
         )
 
-        #expect(commands == ["swift test", "xcodebuild build", "ruby verify.rb"])
+        #expect(commands == ["swift test", "xcodebuild build", "ruby verify.rb", "go test ./..."])
+    }
+
+    @Test("宿主缺失、跳过或没有退出成功回执均不能验收", arguments: ["missing", "skipped", "no-exit", "failed-exit", "wrong-command"])
+    func rejectsMissingHostReceipt(scenario: String) {
+        let contract = AgentDelegatedTaskContract(
+            objective: "Implement", executor: .codexCLI,
+            acceptanceCriteria: [.init(id: "AC-01", statement: "Tests pass")],
+            verificationCommands: ["swift test"]
+        )
+        let evidence = AgentDelegatedExecutorEvidence(
+            schemaVersion: 1, verdict: .passed, summary: "Claims done",
+            criteria: [.init(criterionID: "AC-01", status: .passed, detail: "Claims verified")],
+            checks: [], changedPaths: [], knownRisks: []
+        )
+        let check = AgentDelegatedHostCheck(
+            id: "host", label: "Tests", status: scenario == "skipped" ? .skipped : .passed,
+            detail: "Fixture", command: scenario == "wrong-command" ? "git status" : "swift test",
+            exitCode: scenario == "no-exit" ? nil : (scenario == "failed-exit" ? 1 : 0)
+        )
+        let acceptance = AgentDelegatedTaskControl.structuralAcceptance(
+            contract: contract, evidence: evidence, changedPaths: [], rerunChecks: scenario == "missing" ? [] : [check]
+        )
+        #expect(!acceptance.accepted)
+        #expect(!acceptance.findings.isEmpty)
+    }
+
+    @Test("未指定命令的任务也不能凭空验收结果集通过")
+    func emptyHostResultsCannotPassWithoutDeclaredCommands() {
+        let contract = AgentDelegatedTaskContract(
+            objective: "Analyze", executor: .codexCLI,
+            acceptanceCriteria: [.init(id: "AC-01", statement: "Verified analysis")]
+        )
+        let evidence = AgentDelegatedExecutorEvidence(
+            schemaVersion: 1, verdict: .passed, summary: "Claims done",
+            criteria: [.init(criterionID: "AC-01", status: .passed, detail: "Claim")],
+            checks: [], changedPaths: [], knownRisks: []
+        )
+        #expect(!AgentDelegatedTaskControl.structuralAcceptance(
+            contract: contract, evidence: evidence, changedPaths: [], rerunChecks: []
+        ).accepted)
     }
 
     @Test("delegated ledger survives session JSON round trip")

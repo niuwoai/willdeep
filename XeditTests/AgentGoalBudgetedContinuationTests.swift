@@ -17,7 +17,7 @@ import Testing
 @testable import WillDeep
 
 @MainActor
-@Suite("Goal 轮次上限交给预算裁决")
+@Suite("Goal 轮次上限交给预算裁决", .serialized)
 struct AgentGoalBudgetedContinuationTests {
     private func makeAppRuntime(goal: AgentGoal) -> (AppState, AgentRuntime) {
         let appState = AppState()
@@ -53,6 +53,21 @@ struct AgentGoalBudgetedContinuationTests {
         )
         goal.continuationBudget = budget
         return goal
+    }
+
+    @Test("工具批次到期只排一次收尾，不再启动审核或反复续跑")
+    func expiredToolBatchQueuesOneWrapUp() throws {
+        let (appState, runtime) = makeAppRuntime(goal: goal(budget: .init(wallClockLimit: 1, segmentStartedAt: .distantPast)))
+        let assistant = AgentMessage(role: .assistant, content: "")
+        runtime.messages.append(assistant)
+        #expect(appState.stopExpiredGoalToolRound(for: runtime, assistantID: assistant.id))
+        #expect(runtime.currentGoal?.continuationBudget?.wrapUpDispatched == true)
+        #expect(runtime.queuedMessages.count == 1)
+        #expect(runtime.queuedMessages.first?.source == .hostInstruction)
+        #expect(runtime.toolCalls.isEmpty)
+        #expect(appState.stopExpiredGoalToolRound(for: runtime, assistantID: assistant.id))
+        #expect(runtime.queuedMessages.count == 1)
+        #expect(runtime.currentGoal?.checklist.last?.done == false)
     }
 
     @Test("预算还有余量时接管轮次上限，继续推进而不是硬停")
@@ -146,5 +161,69 @@ struct AgentGoalBudgetedContinuationTests {
 
         #expect(!appState.continueGoalOnBudgetInsteadOfRoundLimit(for: runtime))
         #expect(runtime.queuedMessages.isEmpty)
+    }
+
+    @Test("工具轮数和压缩边界都消耗同一份持久化预算", arguments: [
+        AgentGoalRunBoundary.toolRoundLimit, .contextCompaction,
+    ])
+    func mechanicalBoundariesUseGoalBudget(boundary: AgentGoalRunBoundary) throws {
+        let (appState, runtime) = makeAppRuntime(goal: goal())
+        runtime.contextRunwayResumeCount = 20
+        #expect(appState.continueGoalOnBudgetInsteadOfRoundLimit(for: runtime, boundary: boundary))
+        #expect(runtime.currentGoal?.continuationBudget?.continuationsUsed == 1)
+        #expect(try #require(runtime.queuedMessages.last).text.contains(boundary.instruction))
+    }
+
+    @Test("压缩续跑保持原执行器，不静默改用原生 Agent")
+    func continuationPreservesExecutor() throws {
+        let (appState, runtime) = makeAppRuntime(goal: goal())
+        runtime.executionAgent = .claudeCode
+        #expect(appState.continueGoalOnBudgetInsteadOfRoundLimit(for: runtime, boundary: .contextCompaction))
+        #expect(try #require(runtime.queuedMessages.last).executionAgent == .claudeCode)
+    }
+
+    @Test("第四次上下文交接仍安排 Goal 续跑，普通任务保留保护上限")
+    func fourthHandoffUsesGoalAuthority() {
+        let (appState, runtime) = makeAppRuntime(goal: goal())
+        runtime.contextRunwayResumeCount = AgentContextRunwayPolicy.maximumAutomaticResumes
+        appState.concludeContextRunwayHandoff(for: runtime, finishReason: "stop")
+        #expect(runtime.pendingContextRunwayResume)
+        runtime.interactionMode = .normal
+        runtime.pendingContextRunwayResume = false
+        appState.concludeContextRunwayHandoff(for: runtime, finishReason: "stop")
+        #expect(!runtime.pendingContextRunwayResume)
+    }
+
+    @Test("预算从执行开始，后续轮次不重置起点也不花续推次数")
+    func executionStartsClockExactlyOnce() {
+        let (appState, runtime) = makeAppRuntime(goal: goal())
+        let start = Date(timeIntervalSince1970: 1_000)
+        appState.beginGoalExecutionBudgetIfNeeded(for: runtime, now: start)
+        appState.beginGoalExecutionBudgetIfNeeded(for: runtime, now: start.addingTimeInterval(100))
+        #expect(runtime.currentGoal?.continuationBudget?.segmentStartedAt == start)
+        #expect(runtime.currentGoal?.continuationBudget?.continuationsUsed == 0)
+        #expect(appState.continueGoalOnBudgetInsteadOfRoundLimit(for: runtime, boundary: .toolRoundLimit))
+        #expect(runtime.currentGoal?.continuationBudget?.wrapUpDispatched == true)
+    }
+
+    @Test("未批准计划不开始执行预算")
+    func proposedPlanDoesNotSpendBudget() {
+        let (appState, runtime) = makeAppRuntime(goal: goal())
+        runtime.currentPlan?.status = .proposed
+        appState.beginGoalExecutionBudgetIfNeeded(for: runtime)
+        #expect(runtime.currentGoal?.continuationBudget == nil)
+    }
+
+    @Test("Stop 和排队用户指令都阻止机械边界续跑")
+    func stopAndOperatorInputWin() {
+        let (appState, runtime) = makeAppRuntime(goal: goal())
+        runtime.currentPlan?.interruptedAt = Date()
+        #expect(!appState.continueGoalOnBudgetInsteadOfRoundLimit(for: runtime, boundary: .toolRoundLimit))
+        #expect(!appState.canResumeAfterContextCompaction(for: runtime))
+        runtime.currentPlan?.interruptedAt = nil
+        runtime.queuedMessages.append(AgentQueuedMessage(text: "停止实现，先解释", images: [], source: .operatorInput))
+        #expect(!appState.continueGoalOnBudgetInsteadOfRoundLimit(for: runtime, boundary: .contextCompaction))
+        #expect(runtime.queuedMessages.count == 1)
+        #expect(runtime.currentGoal?.continuationBudget == nil)
     }
 }

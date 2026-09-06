@@ -266,6 +266,7 @@ struct AgentToolCallCard: View {
             HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
                 compactDenyButton
                 Spacer(minLength: 16)
+                if appState.canOfferGoalTaskAuthorization(id: call.id) { goalAuthorizationButton }
                 if alwaysAllowSignature != nil {
                     compactAlwaysAllowButton
                 } else if conversationAllowSignature == nil {
@@ -279,6 +280,7 @@ struct AgentToolCallCard: View {
                 HStack(spacing: AgentCompactAuthorizationMetrics.actionSpacing) {
                     compactDenyButton
                     Spacer(minLength: 0)
+                    if appState.canOfferGoalTaskAuthorization(id: call.id) { goalAuthorizationButton }
                     if alwaysAllowSignature != nil {
                         compactAlwaysAllowButton
                     } else if conversationAllowSignature == nil {
@@ -305,6 +307,14 @@ struct AgentToolCallCard: View {
                 cornerRadius: AgentCompactAuthorizationMetrics.buttonCornerRadius
             )
         )
+        .cursor(.arrow)
+    }
+
+    private var goalAuthorizationButton: some View {
+        Button(L10n.GoalAuthorization.allow) {
+            Task { await appState.allowAgentVerifierForGoal(id: call.id) }
+        }
+        .help(L10n.GoalAuthorization.scope)
         .cursor(.arrow)
     }
 
@@ -675,6 +685,9 @@ struct AgentToolCallCard: View {
                 }
                 .controlSize(.regular)
 
+                if appState.canOfferGoalTaskAuthorization(id: call.id) {
+                    goalAuthorizationButton
+                }
                 if alwaysAllowSignature != nil {
                     Button("以后允许同类操作") {
                         appState.alwaysAllowAgentToolCall(id: call.id)
@@ -1828,6 +1841,7 @@ struct AgentToolCallCard: View {
               let source = call.approvalSource else { return nil }
         switch source {
         case .user: return nil // explicit user clicks don't need a badge
+        case .taskGrant: return L10n.GoalAuthorization.badge
         case .alwaysAllowList: return "ALWAYS"
         case .staticAllowlist: return "AUTO"
         case .llmJudge: return "AI OK"
@@ -1846,6 +1860,7 @@ struct AgentToolCallCard: View {
         guard let source = call.approvalSource else { return nil }
         switch source {
         case .user: return nil
+        case .taskGrant: return L10n.GoalAuthorization.scope
         case .alwaysAllowList: return "You pinned this command signature as always-allowed."
         case .staticAllowlist: return "Matched a built-in deterministic low-risk rule (safe inspection, bounded local metadata, or read-style MCP tools)."
         case .llmJudge: return "An LLM judge classified this call as non-malicious normal work."

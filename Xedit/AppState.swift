@@ -459,6 +459,12 @@ final class AppState: ObservableObject {
     /// refresh at the same time, while still allowing a retry runtime to take
     /// over monitoring for the same task.
     var dispatchMonitoredRuntimeIDsByTaskID: [UUID: UUID] = [:]
+    var dispatchMonitorLeaseIDsByTaskID: [UUID: UUID] = [:]
+    var dispatchMonitorTasksByTaskID: [UUID: Task<Void, Never>] = [:]
+    var dispatchDecisionResumptionTask: Task<Void, Never>?
+    private var dispatchDecisionStateSubscription: AnyCancellable?
+    private var dispatchJobReservationSubscription: AnyCancellable?
+    private var dispatchWorkerReservationSubscription: AnyCancellable?
     /// Process-wide registry of background `run_command` jobs. Scoped
     /// by `runtime.id` inside the registry so concurrent sessions can't
     /// steal each other's jobs or completion notices. See
@@ -635,6 +641,15 @@ final class AppState: ObservableObject {
     /// inside `AgentSessionRowStatusDot`, so background runtime
     /// changes only repaint that one row.
     private var activeRuntimeSubscription: AnyCancellable?
+    /// Injectable model boundary; checkpoint capture, installation, budgeting
+    /// and persistence remain the production path under deterministic tests.
+    var contextCompressionSummaryOperation: (([String], AgentConfiguration) async throws -> String)?
+    /// Instance-scoped inference boundary for deterministic full-loop tests.
+    /// Configuration and transport are supplied together; neither is persisted
+    /// to the user's provider library. Scheduling and tool execution stay real.
+    var agentLoopInferenceEnvironment: (configuration: AgentConfiguration, session: URLSession)?
+    /// Test transport only; verdict parsing, candidate fallback and admission remain real.
+    var safetyJudgeInferenceEnvironment: (configurations: [AgentConfiguration], session: URLSession)?
     private var activeRuntimeForwardTask: Task<Void, Never>?
     /// rc482 perf: while the user is typing in the composer, the keystroke
     /// writes `activeRuntime.input` (a `@Published`), whose `objectWillChange`
@@ -707,6 +722,7 @@ final class AppState: ObservableObject {
             AgentSettingsStore.savePerProviderConcurrencyLimit(clamped)
             // Raising the cap may free up slots for queued dispatches.
             drainPendingDispatchQueue()
+            scheduleDispatchDecisionResumption()
         }
     }
 
@@ -851,6 +867,16 @@ final class AppState: ObservableObject {
         // No initial subscriptions to set up: runtimes are created
         // lazily as the user opens sessions, and `subscribeToRuntime`
         // runs at every creation site.
+        dispatchDecisionStateSubscription = agentDispatchCoordinator.$goals.dropFirst()
+            .sink { [weak self] _ in self?.scheduleDispatchDecisionResumption() }
+        // Resource retirement is independent of whether the executor publishes
+        // a user-facing completion. Output/progress alone does not wake work.
+        dispatchJobReservationSubscription = agentJobRegistry.$jobs
+            .map { Set($0.filter(\.isAlive).map(\.id)) }.removeDuplicates().dropFirst()
+            .sink { [weak self] _ in self?.scheduleDispatchDecisionResumption() }
+        dispatchWorkerReservationSubscription = agentSubagentRegistry.$runs
+            .map { Set($0.filter { $0.status == .running }.map(\.id)) }.removeDuplicates().dropFirst()
+            .sink { [weak self] _ in self?.scheduleDispatchDecisionResumption() }
         jobRegistrySubscription = agentJobRegistry.objectWillChange
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -932,7 +958,7 @@ final class AppState: ObservableObject {
             // eviction dropped it while the job was still running — a plain
             // `agentRuntimes[...]` lookup would silently strand the result.
             if let runtime = self.runtime(for: job.runtimeID) {
-                self.publishBackgroundJobKernelEvent(job, runtime: runtime)
+                self.deliverDaemonTerminalIfNeeded(job, runtime: runtime)
             }
         }
         // Same wake-up contract for the other two background channels:
@@ -1042,6 +1068,7 @@ final class AppState: ObservableObject {
             self.agentSessions = sessionsByID.values.sorted { $0.updatedAt > $1.updatedAt }
             self.metadataOnlySessionIDs = metadataOnlyIDs
             self.metadataOnlyUserMessageIDs = metadataOnlyUserMessageIDs
+            await self.restoreDaemonStartReceipts()
             self.hasLoadedAgentSessionCatalog = true
             CollaborationRelayEventPump.shared.attach(to: self)
             // Older builds promoted Dispatch task worktrees into named
@@ -1102,6 +1129,10 @@ final class AppState: ObservableObject {
         activeRuntimeSubscription?.cancel()
         activeRuntimeForwardTask?.cancel()
         jobRegistrySubscription?.cancel()
+        dispatchDecisionStateSubscription?.cancel()
+        dispatchJobReservationSubscription?.cancel()
+        dispatchWorkerReservationSubscription?.cancel()
+        dispatchDecisionResumptionTask?.cancel()
         mediaTaskRegistrySubscription?.cancel()
         runtimeKernelSubscription?.cancel()
         runtimeKernelSaveFailureSubscription?.cancel()

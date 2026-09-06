@@ -25,8 +25,8 @@ nonisolated enum AgentContextRunwayPolicy {
     /// the work to finish. The case this bounds is the one where it doesn't:
     /// a task whose tool output refills the window as fast as compression
     /// drains it would otherwise loop stop → compress → resume → stop for as
-    /// long as the user's credit lasts. After the ceiling the session parks
-    /// and waits for a human.
+    /// long as the user's credit lasts. Ordinary tasks park at this ceiling;
+    /// Goals use their persisted execution budget instead.
     static let maximumAutomaticResumes = 3
 
     /// How many extra rounds one handoff turn may spend recovering from a
@@ -141,7 +141,7 @@ nonisolated enum AgentContextRunwayPolicy {
         === CONTEXT RUNWAY RESUME ===
         Context compression finished and the window has been reclaimed. This is automatic resumption \(attempt) of at most \(maximumAutomaticResumes) for this task.
 
-        Continue the work described by the NEXT PROMPT and REMAINING sections of your own handover above, treating its ANCHORS as the current state. Do not restate the handover, do not re-verify work its DONE section already recorded as verified, and do not start over from the original request.
+        Continue the work described by the NEXT PROMPT and REMAINING sections of your own handover above. ANCHORS describe the last observed state, not a guarantee that files or external resources stayed unchanged. Reuse DONE evidence when its inputs are unchanged; reconcile only stale or uncertain evidence. Do not restate the handover; do not start over from the original request.
 
         If the remaining work cannot be finished before the window fills again, prefer durable progress — write findings to files, land reviewable commits — over holding state in this conversation.
         """

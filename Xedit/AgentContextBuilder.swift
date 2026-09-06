@@ -127,19 +127,19 @@ enum AgentContextBuilder {
 
     A fenced ```progress block with the same `1: done` lines still works and is read as a fallback, but it is second choice: it only registers when the reply text is produced, and anything the tool already settled this turn wins over it. Completion prose, successful tool output, and a repeated `plan` block are evidence for your status decision, but they never update the checklist by themselves.
     """
-    /// v36 records the three-tier / five-responsibility delegation contract
-    /// introduced in 1.312. The version is part of every profile's prefix,
+    /// v37 distinguishes read-only investigation from the generalist fallback
+    /// and includes the current parallel/external-worker contract. The version is part of every profile's prefix,
     /// so all three snapshots must advance together, including compact.
-    static let stablePrefixVersion = "willdeep-agent-system-v36"
+    static let stablePrefixVersion = "willdeep-agent-system-v37"
     /// Byte-level snapshot hashes for all three prompt profiles (computed
     /// with the fixed test locale directive). Intentional prompt edits must
     /// bump `stablePrefixVersion` and re-record every affected hash — run
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "f217c0065418ea4"
-    static let compactPrefixSnapshotHash = "fd64052f49f126eb"
-    static let extendedPrefixSnapshotHash = "6c689d9c2c876d75"
+    static let stablePrefixSnapshotHash = "b37d96580566d3fb"
+    static let compactPrefixSnapshotHash = "e0e86848b3dfcf78"
+    static let extendedPrefixSnapshotHash = "f04475f6ded9f535"
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
@@ -602,7 +602,7 @@ enum AgentContextBuilder {
                 - Workspace exploration: search_files, grep_files, read_file, list_directory, git_status.
                 - Shell and verification: run_command for build/test/render commands; use run_in_background with list_jobs/get_job_output/kill_job for long tasks.
                 - Optional native capabilities: when a needed tool is absent, call load_tool_pack with the matching compact category id. Load related packs together when the task clearly needs them; activated schemas stay available for the conversation.
-                - Delegation: use five responsibilities independently of model capability: generalist (investigate), implementer, tester, reviewer, ops_runner. Their models come from three configured tiers: standard / advanced / expert, with independent 128K/256K input budgets. Prefer the lowest sufficient tier and bounded task packets; tier changes never widen tools or file access. Keep private-provider bindings private. Use claude_code/codex_cli/hermes_cli/cursor_agent/cline_cli/opencode_cli only for the separately governed external-agent path.
+                - Delegation: use six responsibilities independently of model capability: scout (read-only investigation), generalist (bounded fallback), implementer, tester, reviewer, ops_runner. Their models come from three configured tiers: standard / advanced / expert, with independent 128K/256K input budgets. Prefer the lowest sufficient tier and bounded task packets; tier changes never widen tools or file access. Keep private-provider bindings private. Use claude_code/codex_cli/hermes_cli/cursor_agent/cline_cli/opencode_cli only for the separately governed external-agent path.
                 - External context: web_search/web_fetch for current public information, list_mcp_servers/list_mcp_tools/call_mcp_tool for configured integrations, configure_mcp_server for approved pasted MCP JSON add/update, and lark_cli for configured Feishu/Lark work.
                 - Browser (chrome_*/embedded_browser_*), web-dev workflow, and native-app computer_use_* guidance is appended under "Capability guidance" only while the matching capability is active; when those tools are absent from your tool list they are unavailable, not broken.
                 """)
@@ -636,7 +636,7 @@ enum AgentContextBuilder {
             - File arguments are literal text. `${{ ... }}` in GitHub Actions YAML is fully supported, and a `${{ secrets.NAME }}` reference is not the secret value — never claim the file tools reject that syntax, and never switch to shell/Python merely because it is present.
             - Edits to files that are tracked and clean against HEAD land directly. Anything untracked, already dirty, or with unsaved editor changes produces a patch card inline in the conversation for the user to Apply (Goal / workspace-access modes auto-apply); never tell the user to look in a "right-side review panel", there is none. When the user explicitly asks to write without review ("直接写", "直接落盘", "不用审核", "just write it"), pass apply_immediately=true.
             - When tool calls are independent, batch them into one assistant turn so they can run in parallel. In particular, emit independent create_file/edit_file calls for multiple files together: WillDeep collects their patch cards into one review group with Apply All / Reject All instead of interrupting the user once per file. Keep dependent edits to the same file ordered.
-            - Prefer `spawn_agent` for a bounded goal with known facts and at most 16 write paths. Select responsibility separately from model capability: `generalist` investigates, `implementer` edits, `tester` verifies, `reviewer` independently reviews, and `ops_runner` performs operations. Use the role's configured tier unless a different `worker_tier` is justified; context size does not measure intelligence. Scheduling never grants extra permissions. Writing workers remain confined to declared paths; `ops_runner.target_command` requires confirmation of its exact command. Read-only questions that need a shell are investigation, not operations. Legacy specialized profiles remain compatibility paths, not separate model tiers.
+            - Prefer `spawn_agent` for a bounded goal with known facts and at most 16 write paths. Select responsibility separately from model capability: `scout` investigates read-only, `generalist` handles bounded fallback work, `implementer` edits, `tester` verifies, `reviewer` independently reviews, and `ops_runner` performs operations. Use scout for investigation even when it needs a shell; do not grant a writing role merely to read evidence. Use the role's configured tier unless a different `worker_tier` is justified; context size does not measure intelligence. Scheduling never grants extra permissions. Writing workers remain confined to declared paths; `ops_runner.target_command` requires confirmation of its exact command. Legacy specialized profiles remain compatibility paths, not separate model tiers.
             - When 2–5 Worker tasks are independent, emit their `spawn_agent` calls together with `run_in_background: true` so they actually overlap. Keep dependent work ordered, and do not background a Worker that owns a declared write set because its exact file lock is scoped to the foreground turn.
             - You can discover installed skills with list_skills and read a selected skill's SKILL.md with read_skill. Use skills when the user's task matches a specialized workflow. With approval, you can create_user_skill, create_user_skills, update_user_skill, or delete_user_skill, but only user-created skills may be changed or deleted. When one request asks for two or more skills, submit every draft through one create_user_skills call so the user sees one complete batch confirmation; never issue repeated create_user_skill calls for that batch.
             - Expert guidance: if the user's task clearly enters a specialist domain and the relevant expert is not active, ask once with ask_user whether to activate it, then call activate_expert if they agree. Examples: short-drama production/storyboard work → shortDrama; web UI/frontend/static HTML/Vite/Next/React/Vue/screenshot-to-UI/dev-server orchestration → webCoding. If activating would only slow down a tiny one-off answer, continue without ceremony.

@@ -436,18 +436,18 @@ nonisolated enum AgentDelegatedTaskControl {
         contract: AgentDelegatedTaskContract,
         evidence: AgentDelegatedExecutorEvidence?
     ) -> [String] {
-        let evidenceCommands = evidence?.checks.compactMap { check -> String? in
+        let maximumSupplementalCommands = 6
+        let evidenceCommands = Array((evidence?.checks.compactMap { check -> String? in
             guard check.status == .passed,
                   let command = check.command?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !command.isEmpty else {
                 return nil
             }
             return command
-        } ?? []
+        } ?? []).prefix(maximumSupplementalCommands))
         var seen = Set<String>()
         return sanitizedCommands(contract.verificationCommands + evidenceCommands)
             .filter { seen.insert($0).inserted }
-            .prefix(3)
             .map { $0 }
     }
 
@@ -560,6 +560,19 @@ nonisolated enum AgentDelegatedTaskControl {
             findings.append("Sensitive files changed and require explicit review: \(sensitivePaths.joined(separator: ", ")).")
         }
 
+        if contract.requiresWillDeepVerification, rerunChecks.isEmpty {
+            findings.append("No host verification result was recorded. Executor self-review alone cannot satisfy host acceptance.")
+        }
+        let verifiedCommands = Set(rerunChecks.compactMap { check -> String? in
+            guard check.status == .passed, check.exitCode == 0 else { return nil }
+            return check.command?.trimmingCharacters(in: .whitespacesAndNewlines)
+        })
+        for command in sanitizedCommands(contract.verificationCommands) where !verifiedCommands.contains(command) {
+            findings.append("Required host verification has not passed: \(command)")
+        }
+        for check in rerunChecks where check.command != nil && check.status == .passed && check.exitCode != 0 {
+            findings.append("Host command result has no successful exit receipt: \(check.label)")
+        }
         checks.append(contentsOf: rerunChecks)
         for check in rerunChecks where check.status != .passed {
             findings.append("WillDeep verification failed: \(check.label) — \(check.detail)")

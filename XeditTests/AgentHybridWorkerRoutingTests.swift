@@ -193,8 +193,9 @@ struct AgentHybridWorkerRoutingTests {
         )
 
         let rows = AgentUsageStats.subagentUsage(for: [snapshot])
-        #expect(rows.first { $0.profileID == "generalist" }?.invocationCount == 1)
-        #expect(rows.first { $0.profileID == "generalist" }?.runCount == 1)
+        #expect(rows.first { $0.profileID == "scout" }?.invocationCount == 1)
+        #expect(rows.first { $0.profileID == "scout" }?.runCount == 1)
+        #expect(!rows.contains { $0.profileID == "generalist" })
         #expect(rows.first { $0.profileID == "implementer" }?.invocationCount == 1)
         #expect(rows.first { $0.profileID == "implementer" }?.runCount == 0)
 

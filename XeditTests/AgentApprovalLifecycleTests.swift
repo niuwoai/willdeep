@@ -35,7 +35,7 @@ struct AgentApprovalLifecycleTests {
         defer { runtime.cancelToolDecisions(reason: "Test cleanup") }
 
         let approval = Task {
-            await app.resolveSubagentToolApproval(
+            try await app.resolveSubagentToolApproval(
                 toolName: "call_mcp_tool",
                 arguments: [
                     "server": .string("test-server"),
@@ -66,7 +66,7 @@ struct AgentApprovalLifecycleTests {
         ) == 1)
 
         app.approveAgentToolCall(id: id)
-        #expect(await approval.value)
+        #expect(try await approval.value)
         #expect(runtime.toolCalls.first(where: { $0.id == id })?.status == .succeeded)
         #expect(AgentSessionApprovalBadgeLogic.pendingApprovalRequestCount(
             session: runtime.session,
@@ -81,7 +81,7 @@ struct AgentApprovalLifecycleTests {
         defer { AgentSessionStore.delete(id: session.id) }
         let runtime = try #require(app.agentRuntimes[session.id])
 
-        let approved = await app.resolveSubagentToolApproval(
+        let approved = try await app.resolveSubagentToolApproval(
             toolName: "run_command",
             arguments: ["command": .string("sed -n '1,70p' vendor/example.php")],
             risk: .read,
@@ -124,7 +124,7 @@ struct AgentApprovalLifecycleTests {
         let runtime = try #require(app.agentRuntimes[session.id])
         runtime.approvalMode = .fullAccess
 
-        let approved = await app.resolveSubagentToolApproval(
+        let approved = try await app.resolveSubagentToolApproval(
             toolName: "run_command",
             arguments: ["command": .string("rm -rf ./build")],
             risk: .danger,

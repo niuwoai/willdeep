@@ -713,6 +713,7 @@ extension AppState {
         guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }) else {
             return .noProposal
         }
+        guard last.origin != .hostGenerated else { return .noProposal }
         if runtime.interactionMode == .goal,
            runtime.goalPlanningState?.phase == .readyForProposal,
            let generationID = runtime.goalPlanningState?.generationID,
@@ -932,6 +933,7 @@ extension AppState {
         guard runtime.interactionMode == .goal,
               runtime.currentGoal == nil || runtime.currentGoal?.isEmpty == true else { return false }
         guard let last = runtime.messages.last(where: { $0.role == .assistant && !$0.content.isEmpty }),
+              last.origin != .hostGenerated,
               let parsed = AgentGoalParser.extract(from: last.content),
               !parsed.isEmpty else {
             return false
@@ -966,6 +968,10 @@ extension AppState {
         if let editedAt = runtime.currentGoalEditedAt,
            last.createdAt < editedAt {
             return false
+        }
+        guard last.origin != .hostGenerated else { return false }
+        if runtime.session.dispatchTaskID == nil {
+            return captureNativeGoalCompletionCandidate(goal: goal, message: last, runtime: runtime, finishReason: finishReason)
         }
         if let updated = AgentGoalChecklistParser.applyEvaluation(
             to: goal,
@@ -1177,7 +1183,7 @@ extension AppState {
             statement: trimmedStatement,
             checklist: trimmedItems.map { text in
                 if let prior = priorItemsByText[text] {
-                    return AgentGoal.Item(id: prior.id, text: text, done: prior.done)
+                    return AgentGoal.Item(id: prior.id, text: text, done: runtime.session.dispatchTaskID != nil && previousGoal?.statement == trimmedStatement && prior.done)
                 }
                 return AgentGoal.Item(text: text)
             },
@@ -1186,9 +1192,11 @@ extension AppState {
             planningAttemptedProfileIDs: previousGoal?.planningAttemptedProfileIDs,
             selectedWorkerProfileIDs: selectedWorkerProfileIDs
                 ?? previousGoal?.selectedWorkerProfileIDs
-                ?? [AgentExecutionProfile.recommendedWorkerID]
+                ?? [AgentExecutionProfile.recommendedWorkerID],
+            continuationBudget: previousGoal?.continuationBudget
         )
         runtime.currentGoal = updatedGoal
+        runtime.goalAuthorizationRevision = UUID()
         if previousGoal != updatedGoal {
             if let state = runtime.goalPlanningState {
                 agentSubagentRegistry.cancelGoalPlanningRuns(Set(state.members.compactMap(\.runID)))
@@ -1340,6 +1348,11 @@ extension AppState {
         for runtime: AgentRuntime,
         pausingOwningDispatchProject: Bool = true
     ) {
+        runtime.goalAuthorizationRevision = UUID()
+        if runtime.currentGoal?.taskAuthorizations != nil {
+            runtime.currentGoal?.taskAuthorizations = nil
+            persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+        }
         if pausingOwningDispatchProject,
            let projectID = runtime.session.dispatchParentProjectID,
            let taskID = runtime.session.dispatchTaskID {
@@ -1356,6 +1369,9 @@ extension AppState {
         if let activeTurnID = runtime.activeTurnID,
            runtime.userStoppedTurnID == activeTurnID {
             return
+        }
+        if let turnID = runtime.activeTurnID {
+            agentJobRegistry.revokeTurn(runtimeID: runtime.id, turnID: turnID)
         }
         if runtime.goalTurnRecoveryCheckpoint != nil {
             runtime.goalTurnRecoveryCheckpoint = nil
@@ -1390,10 +1406,9 @@ extension AppState {
 
         markCurrentPlanInterruptedByUser(for: runtime)
 
-        let subagentStopCount: Int
         let liveJobs: [AgentBackgroundJob]
         if let stoppedTurnID {
-            subagentStopCount = agentSubagentRegistry.cancelRunning(
+            _ = agentSubagentRegistry.cancelRunning(
                 forParentRuntime: runtime.id,
                 originatingTurnID: stoppedTurnID
             )
@@ -1403,21 +1418,11 @@ extension AppState {
             )
             runtime.userStoppedTurnID = stoppedTurnID
         } else {
-            subagentStopCount = 0
             liveJobs = []
         }
 
         runtime.clearTurnError()
-        let immediateStoppedCount = activeWorkflowIDs.count + subagentStopCount
-        let eventContent: String
-        if liveJobs.isEmpty {
-            eventContent = immediateStoppedCount > 0
-                ? L10n.Composer.stoppedAndCleanedUp(immediateStoppedCount)
-                : L10n.Composer.stopped
-        } else {
-            eventContent = L10n.Composer.stoppedCheckingProcesses(liveJobs.count)
-        }
-        let stopEventID = appendStoppedTurnEvent(to: runtime, content: eventContent)
+        let stopEventID = appendStoppedTurnEvent(to: runtime, content: L10n.Composer.stopped)
 
         closeBlockingAgentToolDecision(for: runtime, reason: "Response stopped")
         runtime.shouldConsumeQueueAfterStop = !runtime.queuedMessages.isEmpty
@@ -1425,22 +1430,10 @@ extension AppState {
         scheduleQueuedMessageConsumptionAfterCancellation(for: runtime)
 
         if !liveJobs.isEmpty, let stoppedTurnID {
-            let candidates = liveJobs.map {
-                AgentStopJobCandidate(
-                    id: $0.id,
-                    displayHandle: $0.displayHandle,
-                    command: $0.command
-                )
-            }
-            let latestRequest = runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
             startStoppedTurnProcessCleanup(
                 runtime: runtime,
                 turnID: stoppedTurnID,
-                eventID: stopEventID,
-                candidates: candidates,
-                configuration: runtime.activeTurnConfiguration,
-                userRequest: latestRequest,
-                alreadyStoppedCount: immediateStoppedCount
+                eventID: stopEventID
             )
         }
     }
@@ -2323,10 +2316,10 @@ extension AppState {
         // cancellation propagates.
         if let doomed = agentRuntimes[id] {
             doomed.requestTask?.cancel()
-            for cleanupTask in doomed.stopCleanupTasks.values {
-                cleanupTask.cancel()
+            for observer in doomed.stopCleanupObservers.values {
+                observer.cancel()
             }
-            doomed.stopCleanupTasks.removeAll()
+            doomed.stopCleanupObservers.removeAll()
             cancelAllWorkflows(for: doomed)
             doomed.cancelToolDecisions(reason: "Session deleted")
             doomed.pendingToolDecisions.removeAll()
