@@ -827,6 +827,9 @@ struct AgentGoalCard: View {
                         .textCase(.uppercase)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
+                    if let runtime = appState.activeRuntime {
+                        AgentGoalBudgetButton(ownerID: runtime.session.dispatchParentProjectID ?? runtime.id)
+                    }
                     Button {
                         showingEditor = true
                     } label: {

@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Darwin
 
 nonisolated struct AgentCodexAppServerConfiguration: Sendable {
     let executableURL: URL
@@ -89,6 +90,7 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
     private let processHandler: ProcessHandler
     private let processLock = NSLock()
     private var process: Process?
+    private var cancellationRequested = false
 
     /// 静默看门狗：app-server 握手成功后若长时间不再吐任何一行（模型卡住、
     /// 等一个永不返回的审批、网络挂起、协议方言对不上），原来的等待循环会无限
@@ -111,7 +113,7 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
                 let idle = self.activityLock.withLock { Date().timeIntervalSince(self.lastActivityAt) }
                 if idle >= Self.idleTimeout {
                     self.activityLock.withLock { self.idleTimedOut = true }
-                    self.cancel()
+                    self.terminateProcess()
                     return
                 }
             }
@@ -131,13 +133,18 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
     }
 
     func cancel() {
+        processLock.withLock { cancellationRequested = true }
+        terminateProcess()
+    }
+
+    private func terminateProcess() {
         let runningProcess = processLock.withLock { process }
         guard let runningProcess, runningProcess.isRunning else { return }
         AgentProcessSupport.terminateProcessTree(runningProcess)
     }
 
     func run() async throws -> AgentCodexAppServerResult {
-        try Task.checkCancellation()
+        try checkCancellation()
 
         let process = Process()
         let launch = AgentSandboxPolicy.processLaunch(
@@ -158,6 +165,9 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
         process.environment = environment
 
         let inputPipe = Pipe()
+        guard fcntl(inputPipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1) != -1 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
         let outputPipe = Pipe()
         let errorPipe = Pipe()
         process.standardInput = inputPipe
@@ -192,17 +202,24 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
         }
 
         do {
-            try process.run()
+            try processLock.withLock {
+                guard !cancellationRequested else { throw CancellationError() }
+                try process.run()
+                self.process = process
+            }
         } catch {
             outputPipe.fileHandleForReading.readabilityHandler = nil
             errorPipe.fileHandleForReading.readabilityHandler = nil
             try? inputPipe.fileHandleForWriting.close()
             throw error
         }
-        processLock.withLock {
-            self.process = process
+        defer {
+            terminateProcess()
+            processLock.withLock { self.process = nil }
+            try? inputPipe.fileHandleForWriting.close()
         }
         await processHandler(process.processIdentifier)
+        try checkCancellation()
 
         let writer = AgentCodexJSONLineWriter(
             handle: inputPipe.fileHandleForWriting
@@ -234,7 +251,7 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
         do {
             for await line in lines.stream {
                 noteActivity()
-                try Task.checkCancellation()
+                try checkCancellation()
                 guard let object = AgentCodexJSON.object(from: line) else {
                     throw AgentCodexAppServerError.invalidMessage(line)
                 }
@@ -286,6 +303,7 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
                         status: .running,
                         rawJSON: redact(line)
                     )])
+                    try checkCancellation()
                     try writer.send(turnRequest(threadID: threadID))
                 default:
                     break
@@ -293,12 +311,14 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
             }
         } catch {
             try? writer.close()
-            cancel()
+            terminateProcess()
+            try checkCancellation()
             throw error
         }
 
         try? writer.close()
-        cancel()
+        terminateProcess()
+        try checkCancellation()
         // 看门狗踢掉进程时，流会以 EOF 正常结束、走到这里而不是 catch。此时给出
         // 明确的静默超时原因，而不是笼统的 processExited。
         if activityLock.withLock({ idleTimedOut }) {
@@ -318,6 +338,11 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
             sessionID: activeThreadID,
             status: completionStatus
         )
+    }
+
+    private func checkCancellation() throws {
+        try Task.checkCancellation()
+        if processLock.withLock({ cancellationRequested }) { throw CancellationError() }
     }
 
     private func threadRequest() -> [String: Any] {
@@ -399,6 +424,7 @@ nonisolated final class AgentCodexAppServerTurn: @unchecked Sendable {
             status: .pending
         )])
         let decision = await approvalHandler?(request) ?? .decline
+        try checkCancellation()
         let result: [String: Any]
         if request.kind == .permissions {
             let granted = decision == .accept || decision == .acceptForSession

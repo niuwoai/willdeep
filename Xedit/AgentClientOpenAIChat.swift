@@ -35,6 +35,8 @@ struct OpenAIChatAdapter {
     func streamChat(
         messages: [AgentMessage],
         tools: [AgentToolDescriptor] = [],
+        requestLedger: AgentModelRequestLedger? = nil,
+        requestOwnerGate: AgentRequestOwnerGate? = nil,
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async throws {
         guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
@@ -63,107 +65,109 @@ struct OpenAIChatAdapter {
         )
         request.httpBody = requestBody
 
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw AgentClientError.invalidResponse
-        }
-        SomeIMCreditsResponseObserver.capture(httpResponse, providerID: configuration.providerID)
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
-            throw AgentClientError.serverStatus(
-                httpError(
-                    statusCode: httpResponse.statusCode,
-                    method: request.httpMethod ?? "POST",
-                    url: endpoint,
-                    requestBody: requestBody,
-                    responseBody: responseBody,
-                    messages: requestMessages
+        try await AgentModelRequestAccounting.run(ledger: requestLedger, configuration: configuration, request: request, format: configuration.providerID == "openai" ? .openAIChat : .compatibleChat, ownerGate: requestOwnerGate, onEvent: onEvent) { request, onEvent in
+            let (bytes, response) = try await session.bytes(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw AgentClientError.invalidResponse
+            }
+            SomeIMCreditsResponseObserver.capture(httpResponse, providerID: configuration.providerID)
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
+                throw AgentClientError.serverStatus(
+                    httpError(
+                        statusCode: httpResponse.statusCode,
+                        method: request.httpMethod ?? "POST",
+                        url: endpoint,
+                        requestBody: requestBody,
+                        responseBody: responseBody,
+                        messages: requestMessages
+                    )
                 )
-            )
-        }
-
-        var pendingToolCalls: [Int: PendingToolCall] = [:]
-        var toolCallEmissionGate = AgentToolCallStreamEmissionGate()
-        // Track whether the stream ever carried a meaningful signal. A 2xx
-        // response whose SSE body is empty (or is just `[DONE]`) decodes to
-        // zero events and would otherwise return as a silent success — the
-        // caller then drops the placeholder assistant message and the user
-        // sees nothing happen. We convert that into an explicit error below.
-        var didEmitStreamEvent = false
-
-        for try await line in bytes.lines {
-            try Task.checkCancellation()
-            guard line.hasPrefix("data: ") else { continue }
-            let payload = String(line.dropFirst("data: ".count))
-            if payload == "[DONE]" { break }
-            guard let data = payload.data(using: .utf8),
-                  let chunk = try? JSONDecoder().decode(ChatCompletionChunk.self, from: data) else {
-                continue
             }
 
-            for choice in chunk.choices {
-                if let reasoning = choice.delta.reasoning_content, !reasoning.isEmpty {
-                    didEmitStreamEvent = true
-                    await onEvent(.reasoningDelta(reasoning))
-                }
-                if let content = choice.delta.content, !content.isEmpty {
-                    didEmitStreamEvent = true
-                    await onEvent(.textDelta(content))
+            var pendingToolCalls: [Int: PendingToolCall] = [:]
+            var toolCallEmissionGate = AgentToolCallStreamEmissionGate()
+            // Track whether the stream ever carried a meaningful signal. A 2xx
+            // response whose SSE body is empty (or is just `[DONE]`) decodes to
+            // zero events and would otherwise return as a silent success — the
+            // caller then drops the placeholder assistant message and the user
+            // sees nothing happen. We convert that into an explicit error below.
+            var didEmitStreamEvent = false
+
+            for try await line in bytes.lines {
+                try Task.checkCancellation()
+                guard line.hasPrefix("data: ") else { continue }
+                let payload = String(line.dropFirst("data: ".count))
+                if payload == "[DONE]" { break }
+                guard let data = payload.data(using: .utf8),
+                      let chunk = try? JSONDecoder().decode(ChatCompletionChunk.self, from: data) else {
+                    continue
                 }
 
-                if let calls = choice.delta.tool_calls {
-                    didEmitStreamEvent = true
-                    for call in calls {
-                        let slot = call.index ?? 0
-                        var pending = pendingToolCalls[slot] ?? PendingToolCall()
-                        if let id = call.id, !id.isEmpty { pending.externalID = id }
-                        if let function = call.function {
-                            if let name = function.name, !name.isEmpty { pending.toolName = name }
-                            if let args = function.arguments { pending.appendArguments(args) }
+                for choice in chunk.choices {
+                    if let reasoning = choice.delta.reasoning_content, !reasoning.isEmpty {
+                        didEmitStreamEvent = true
+                        await onEvent(.reasoningDelta(reasoning))
+                    }
+                    if let content = choice.delta.content, !content.isEmpty {
+                        didEmitStreamEvent = true
+                        await onEvent(.textDelta(content))
+                    }
+
+                    if let calls = choice.delta.tool_calls {
+                        didEmitStreamEvent = true
+                        for call in calls {
+                            let slot = call.index ?? 0
+                            var pending = pendingToolCalls[slot] ?? PendingToolCall()
+                            if let id = call.id, !id.isEmpty { pending.externalID = id }
+                            if let function = call.function {
+                                if let name = function.name, !name.isEmpty { pending.toolName = name }
+                                if let args = function.arguments { pending.appendArguments(args) }
+                            }
+                            pendingToolCalls[slot] = pending
                         }
-                        pendingToolCalls[slot] = pending
+                        let signature = Self.signature(of: pendingToolCalls)
+                        if toolCallEmissionGate.shouldEmit(signature: signature) {
+                            await onEvent(.toolCallsUpdated(Self.snapshot(of: pendingToolCalls)))
+                        }
                     }
-                    let signature = Self.signature(of: pendingToolCalls)
-                    if toolCallEmissionGate.shouldEmit(signature: signature) {
-                        await onEvent(.toolCallsUpdated(Self.snapshot(of: pendingToolCalls)))
+
+                    if let finishReason = choice.finish_reason {
+                        didEmitStreamEvent = true
+                        let signature = Self.signature(of: pendingToolCalls)
+                        if toolCallEmissionGate.shouldEmit(signature: signature, force: true) {
+                            await onEvent(.toolCallsUpdated(Self.snapshot(of: pendingToolCalls)))
+                        }
+                        await onEvent(.finishedTurn(finishReason))
                     }
                 }
 
-                if let finishReason = choice.finish_reason {
-                    didEmitStreamEvent = true
-                    let signature = Self.signature(of: pendingToolCalls)
-                    if toolCallEmissionGate.shouldEmit(signature: signature, force: true) {
-                        await onEvent(.toolCallsUpdated(Self.snapshot(of: pendingToolCalls)))
-                    }
-                    await onEvent(.finishedTurn(finishReason))
+                // Top-level `usage` arrives on the final chunk for providers
+                // that include it. We surface it once so the caller can stamp
+                // the last assistant message with real token counts.
+                if let usage = chunk.usage,
+                   let total = usage.total_tokens, total >= 0 {
+                    await onEvent(.usageReported(
+                        prompt: usage.prompt_tokens ?? 0,
+                        completion: usage.completion_tokens ?? 0,
+                        total: total,
+                        cachedPrompt: usage.cachedPromptTokens,
+                        cacheWritePrompt: usage.cacheWritePromptTokens,
+                        reasoning: usage.reasoningTokens
+                    ))
                 }
             }
 
-            // Top-level `usage` arrives on the final chunk for providers
-            // that include it. We surface it once so the caller can stamp
-            // the last assistant message with real token counts.
-            if let usage = chunk.usage,
-               let total = usage.total_tokens, total > 0 {
-                await onEvent(.usageReported(
-                    prompt: usage.prompt_tokens ?? 0,
-                    completion: usage.completion_tokens ?? 0,
-                    total: total,
-                    cachedPrompt: usage.cachedPromptTokens,
-                    cacheWritePrompt: usage.cacheWritePromptTokens,
-                    reasoning: usage.reasoningTokens
-                ))
+            // Zero meaningful events over a 2xx stream. Surface it as an error the
+            // caller can present (and retry) instead of a silent no-op. A
+            // usage-only final chunk doesn't count as a real reply, so this still
+            // fires when the provider sends nothing but token accounting.
+            if !didEmitStreamEvent {
+                throw AgentClientError.emptyStream(
+                    providerID: configuration.providerID,
+                    model: configuration.model
+                )
             }
-        }
-
-        // Zero meaningful events over a 2xx stream. Surface it as an error the
-        // caller can present (and retry) instead of a silent no-op. A
-        // usage-only final chunk doesn't count as a real reply, so this still
-        // fires when the provider sends nothing but token accounting.
-        if !didEmitStreamEvent {
-            throw AgentClientError.emptyStream(
-                providerID: configuration.providerID,
-                model: configuration.model
-            )
         }
     }
 
@@ -178,8 +182,10 @@ struct OpenAIChatAdapter {
         toolName: String = "run_command",
         taskContext: String = "",
         environmentTrust: String = "",
-        kind: AgentSafetyJudgeKind = .developerOperations
-    ) async -> AgentSafetyJudgeResult {
+        kind: AgentSafetyJudgeKind = .developerOperations,
+        requestLedger: AgentModelRequestLedger? = nil,
+        executionBudget: AgentToolExecutionBudget? = nil
+    ) async throws -> AgentSafetyJudgeResult {
         guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else {
             return .unavailable("missing api key")
         }
@@ -219,7 +225,9 @@ struct OpenAIChatAdapter {
         request.httpBody = payload
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await AgentNonStreamingModelRequest.run(request: request, session: session,
+                configuration: configuration, format: configuration.providerID == "openai" ? .openAIChat : .compatibleChat, ledger: requestLedger,
+                executionBudget: executionBudget)
             guard let http = response as? HTTPURLResponse else {
                 return .unavailable("no http response")
             }
@@ -240,6 +248,7 @@ struct OpenAIChatAdapter {
                 return .unavailable(answer.isEmpty ? "empty reply" : "no verdict tag")
             }
         } catch {
+            if AgentAuxiliaryRequestStop(error) != nil || error is CancellationError { throw error }
             return .unavailable("network error")
         }
     }
@@ -254,8 +263,10 @@ struct OpenAIChatAdapter {
         model: String,
         systemPrompt: String,
         userPayload: String,
-        maxTokens: Int
-    ) async -> String? {
+        maxTokens: Int,
+        requestLedger: AgentModelRequestLedger? = nil,
+        executionBudget: AgentToolExecutionBudget? = nil
+    ) async throws -> String? {
         guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else { return nil }
 
         let endpoint: URL
@@ -290,10 +301,10 @@ struct OpenAIChatAdapter {
         request.httpBody = payload
 
         do {
-            let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                return nil
-            }
+            let (data, response) = try await AgentNonStreamingModelRequest.run(request: request, session: session,
+                configuration: configuration, format: configuration.providerID == "openai" ? .openAIChat : .compatibleChat,
+                ledger: requestLedger, executionBudget: executionBudget)
+            guard let http = response as? HTTPURLResponse else { return nil }
             SomeIMCreditsResponseObserver.capture(http, providerID: configuration.providerID)
             guard (200..<300).contains(http.statusCode) else {
                 return nil
@@ -311,6 +322,7 @@ struct OpenAIChatAdapter {
             // content — salvage it instead of reporting judge-unavailable.
             return choice.message.reasoningContent
         } catch {
+            if AgentAuxiliaryRequestStop(error) != nil || error is CancellationError { throw error }
             return nil
         }
     }

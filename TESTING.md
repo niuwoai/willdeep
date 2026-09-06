@@ -141,6 +141,12 @@ GitHub Actions `Tests` workflow 会运行复杂度、版本一致性、Go agent 
 
 ## 六、Pre-PR 自检清单
 
+### 调度产物组件快速回归
+
+`ruby scripts/run_dispatch_artifact_tests.rb` 在工作树独立的 `build/dispatch-artifact-tests` 生成一个无外部包依赖的 SwiftPM 测试目标，编译真实集成内核及子进程源码，并执行原 Swift Testing fixture。它只缩小编译范围，不用假 Git/假工具结果代替实际集成；不会与 Xcode 共用可写编译缓存。
+
+入口保留增量缓存，并用自身锁避免同一工作树并发改写。`--check` 仅验证生产源码提取边界，不能当作测试通过。正常运行输出 `report.json`、`report.md` 与 `swift-test.log`，源码在运行中变化时不得报绿。新入口不能替代下面的完整 Pre-PR 门禁；目前不宣称整条 App 构建已获得任何固定倍数提速。
+
 提 PR 前自己跑一遍：
 
 ```bash

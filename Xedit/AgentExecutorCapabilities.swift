@@ -92,6 +92,15 @@ nonisolated enum AgentExecutorCapabilityResolver {
                 stdin: true,
                 resumable: true
             )
+        // opencode 与上面两个的差别只有一处：提示词走 argv 位置参数
+        // (`opencode run <message>`)，它不读 stdin。
+        case .openCode:
+            return profile(
+                transport: .structuredProcess,
+                structured: true,
+                stdin: false,
+                resumable: true
+            )
         case .hermesCLI, .cursorAgent, .clineCLI, .willDeep:
             return profile(
                 transport: .shellCompatibility,

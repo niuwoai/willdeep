@@ -37,6 +37,7 @@ enum AgentToolPackCatalog {
     /// discovery round for almost every repository task.
     static let coreToolNames: Set<String> = [
         loaderToolName,
+        AgentContextReadTool.name,
         "search_files", "grep_files", "read_file", AgentBundledRules.readerToolName,
         "list_directory", "git_status",
         "run_command", "create_file", "write_file", "edit_file", "apply_patch",
@@ -223,7 +224,7 @@ enum AgentToolPackCatalog {
     private static let integrationToolNames: Set<String> = [
         "search_mcp_servers", "suggest_mcp_server", "configure_mcp_server",
         "list_mcp_servers", "list_mcp_tools", "call_mcp_tool", "lark_cli",
-        "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli"
+        "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli"
     ]
 
     private static let sessionAutomationToolNames: Set<String> = [

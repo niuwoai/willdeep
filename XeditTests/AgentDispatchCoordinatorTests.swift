@@ -12,13 +12,64 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentDispatchCoordinatorTests {
+    @Test("规划调度约束可解析持久化，执行开始后重新规划不能改写资源合同")
+    func schedulingContractFreezesAtLaunch() throws {
+        let sandbox = try makeSandbox()
+        defer { sandbox.cleanup() }
+        let content = """
+        ```dispatch-graph
+        {"nodes":[{"id":"A","title":"实现接口","depends_on":[],"acceptance":["接口可用"],"scheduling":{"write_paths":["Sources/api"],"exclusive_resources":["build-cache"],"estimated_seconds":120}}]}
+        ```
+        """
+        var plan = try #require(AgentGoalDispatchPlanParser.extract(from: content))
+        let hints = try #require(plan.nodes.first?.scheduling)
+        #expect(hints.writePaths == ["Sources/api"])
+        #expect(hints.cost == 120)
+        let coordinator = AgentDispatchCoordinator(store: AgentDispatchStore(defaults: sandbox.defaults))
+        var session = AgentSession(title: "调度", workspaceRootPath: FileManager.default.temporaryDirectory.path,
+                                   presentationScope: .dispatchBoard,
+                                   currentGoal: .init(statement: "交付", checklist: [.init(text: "完成")], dispatchPlan: plan))
+        coordinator.synchronize(with: [session])
+        let taskID = try #require(plan.nodes.first?.id)
+        coordinator.markTaskStarted(goalID: session.id, taskID: taskID, executor: .willDeep, target: .local, runtimeSessionID: UUID())
+        plan.nodes[0].scheduling = .init(writePaths: ["Other"])
+        session.currentGoal?.dispatchPlan = plan
+        coordinator.synchronize(with: [session])
+        let restored = AgentDispatchCoordinator(store: AgentDispatchStore(defaults: sandbox.defaults))
+        #expect(restored.goals.first?.tasks.first(where: { $0.id == taskID })?.scheduling == hints)
+    }
+
+    @Test("任务输入与项目基准只固定一次并可恢复")
+    func pinnedArtifactInputSurvivesRetryAndPersistence() throws {
+        let suiteName = "willdeep-dispatch-input-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = AgentDispatchStore(defaults: defaults)
+        let coordinator = AgentDispatchCoordinator(store: store)
+        let session = AgentSession(
+            title: "调度", workspaceRootPath: FileManager.default.temporaryDirectory.path,
+            presentationScope: .dispatchBoard,
+            currentGoal: AgentGoal(statement: "交付", checklist: [.init(text: "完成")])
+        )
+        coordinator.synchronize(with: [session])
+        let task = try #require(coordinator.appendTask(title: "节点", goalID: session.id))
+        let base = String(repeating: "a", count: 40), input = String(repeating: "b", count: 40)
+        coordinator.pinTaskInputRevision(goalID: session.id, taskID: task.id, bindingID: "local:test", baseRevision: base, inputRevision: input)
+        coordinator.pinTaskInputRevision(goalID: session.id, taskID: task.id, bindingID: "local:test", baseRevision: input, inputRevision: base)
+        let restored = try #require(AgentDispatchCoordinator(store: store).goals.first)
+        #expect(restored.integrationBaseRevisions?["local:test"] == base)
+        #expect(restored.tasks.first(where: { $0.id == task.id })?.inputRevision == input)
+        let encoded = try JSONEncoder().encode(AgentDispatchTask(title: "legacy"))
+        #expect(try JSONDecoder().decode(AgentDispatchTask.self, from: encoded).inputRevision == nil)
+    }
+
     @Test("验收已完成时成功裁决优先于后续运行时错误")
     func completedAcceptanceWinsOverRuntimeError() {
         #expect(
             AgentDispatchCompletionPolicy.terminalState(
                 hasCompletedAcceptance: true,
                 hasRuntimeError: true
-            ) == .merged
+            ) == .reviewing
         )
         #expect(
             AgentDispatchCompletionPolicy.terminalState(
@@ -193,7 +244,7 @@ struct AgentDispatchCoordinatorTests {
     }
 
     @Test("重开调度台时自动修复验收全绿但图状态失败的节点")
-    func restoredFailedTaskWithCompletedAcceptanceRepairsToMerged() throws {
+    func restoredFailedTaskWithCompletedAcceptanceStartsVerification() throws {
         let workspace = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep-dispatch-repair-complete-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
@@ -237,10 +288,11 @@ struct AgentDispatchCoordinatorTests {
                 .first(where: { $0.id == project.id })?.tasks
                 .first(where: { $0.id == task.id })
         )
-        #expect(repaired.state == .merged)
+        #expect(repaired.state == .reviewing)
+        #expect(repaired.integrationReceipt == nil)
     }
 
-    @Test("人工标记成功同步验收状态并完成节点")
+    @Test("人工标记成功只覆盖验收，不跳过产物集成")
     func manualSuccessOverrideCompletesGoalAndTask() throws {
         let workspace = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep-dispatch-manual-success-\(UUID().uuidString)")
@@ -289,7 +341,9 @@ struct AgentDispatchCoordinatorTests {
                 .first(where: { $0.id == project.id })?.tasks
                 .first(where: { $0.id == task.id })
         )
-        #expect(completed.state == .merged)
+        #expect(completed.state == .reviewing)
+        #expect(completed.operatorAcceptedAt != nil)
+        #expect(completed.integrationReceipt == nil)
         #expect(childRuntime.currentGoal?.checklist.allSatisfy(\.done) == true)
         #expect(childRuntime.errorMessage == nil)
     }
@@ -420,8 +474,8 @@ struct AgentDispatchCoordinatorTests {
             appState.agentDispatchCoordinator.goals
                 .first(where: { $0.id == projectSession.id })?.tasks
         )
-        #expect(tasks.first(where: { $0.id == rootTaskID })?.state == .merged)
-        #expect(tasks.first(where: { $0.id == downstreamTaskID })?.state == .queued)
+        #expect(tasks.first(where: { $0.id == rootTaskID })?.state == .running)
+        #expect(tasks.first(where: { $0.id == downstreamTaskID })?.state == .blocked)
     }
 
     @Test("调度子会话恢复后保留固定 Provider")
@@ -1283,19 +1337,18 @@ struct AgentDispatchCoordinatorTests {
             availableProfileIDs: ["worker"]
         )
         #expect(failures.contains { $0.contains("exactly one executable terminal") })
-        #expect(failures.contains { $0.contains("at least three execution layers") })
-        #expect(failures.contains { $0.contains("distinct merge/integration node") })
+        #expect(AgentGoalDispatchPlanParser.extract(from: content, availableProfileIDs: ["worker"]) == nil)
     }
 
-    @Test("并行代码分支拒绝把合并和测试塞进同一个末端节点")
-    func aiDispatchGraphRejectsCombinedMergeAndVerification() {
+    @Test("宿主集成后并行分支直接汇入真实验证，不强迫额外合并 Worker")
+    func aiDispatchGraphAcceptsHostIntegrationThenVerification() {
         let content = """
         ```dispatch-graph
         {"nodes":[
           {"id":"BASE-1","title":"公共框架","depends_on":[],"profile":"worker","fallback_profiles":[],"acceptance":["框架可用"]},
           {"id":"GAME-1","title":"实现贪吃蛇","depends_on":["BASE-1"],"profile":"worker","fallback_profiles":[],"acceptance":["可运行"]},
           {"id":"GAME-2","title":"实现俄罗斯方块","depends_on":["BASE-1"],"profile":"worker","fallback_profiles":[],"acceptance":["可运行"]},
-          {"id":"MERGE-VERIFY-1","title":"合并代码并测试验收","depends_on":["GAME-1","GAME-2"],"profile":"worker","fallback_profiles":[],"acceptance":["全部测试通过"]}
+          {"id":"VERIFY-1","title":"对宿主已集成产物执行测试验收","depends_on":["GAME-1","GAME-2"],"profile":"worker","fallback_profiles":[],"acceptance":["全部测试通过"]}
         ]}
         ```
         """
@@ -1304,11 +1357,11 @@ struct AgentDispatchCoordinatorTests {
             content: content,
             availableProfileIDs: ["worker"]
         )
-        #expect(failures.contains { $0.contains("terminal verification node must depend directly") })
+        #expect(failures.isEmpty)
         #expect(AgentGoalDispatchPlanParser.extract(
             from: content,
             availableProfileIDs: ["worker"]
-        ) == nil)
+        ) != nil)
     }
 
     @Test("小游戏平台任务图通过基础、并行实现、集成与独立回归四层语义门禁")
@@ -2308,7 +2361,7 @@ struct AgentDispatchCoordinatorTests {
         #expect(persisted.tasks.first(where: { $0.id == task.id })?.state == .reviewing)
     }
 
-    @Test("reopening a dispatch project closes a completed node")
+    @Test("reopening cannot integrate a node based only on its completed checklist")
     func reopeningDispatchProjectClosesCompletedTask() async throws {
         let workspace = FileManager.default.temporaryDirectory
             .appendingPathComponent("willdeep-dispatch-observe-\(UUID().uuidString)")
@@ -2362,7 +2415,8 @@ struct AgentDispatchCoordinatorTests {
         let refreshed = try #require(
             appState.agentDispatchCoordinator.goals.first(where: { $0.id == project.id })
         )
-        #expect(refreshed.tasks.first(where: { $0.id == completedTaskID })?.state == .merged)
+        #expect(refreshed.tasks.first(where: { $0.id == completedTaskID })?.state == .failed)
+        #expect(refreshed.tasks.first(where: { $0.id == completedTaskID })?.integrationReceipt == nil)
     }
 
     private func makeSandbox() throws -> DefaultsSandbox {

@@ -894,11 +894,15 @@ nonisolated enum AgentSessionStore {
     private static let usageDatabaseLock = NSLock()
 
     static func usageDatabase() -> AgentUsageDatabase? {
-        let url = AgentUsageDatabase.defaultURL(in: directory)
+        usageDatabase(in: directory)
+    }
+
+    private static func usageDatabase(in sourceDirectory: URL) -> AgentUsageDatabase? {
+        let url = AgentUsageDatabase.defaultURL(in: sourceDirectory)
         usageDatabaseLock.lock()
         defer { usageDatabaseLock.unlock() }
         if let cached = usageDatabaseCache, cached.url == url { return cached.database }
-        try? ensureDirectory()
+        try? FileManager.default.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
         let database = AgentUsageDatabase(url: url)
         usageDatabaseCache = (url, database)
         return database
@@ -983,9 +987,10 @@ nonisolated enum AgentSessionStore {
         // nothing about concurrent use. One allocation per file is nothing
         // next to decoding a 70 KB document.
         let decoder = makeUsageCoder()
+        let sourceDirectory = sourceURL.deletingLastPathComponent()
         if let id = UUID(uuidString: sourceURL.deletingPathExtension().lastPathComponent),
            let signature = sourceSignature(for: sourceURL),
-           let data = try? Data(contentsOf: usageCatalogURL(for: id)),
+           let data = try? Data(contentsOf: usageCatalogURL(for: id, in: sourceDirectory)),
            let entry = try? decoder.decode(UsageCatalogEntry.self, from: data),
            entry.isCurrentSchema,
            entry.snapshot.id == id,
@@ -1016,7 +1021,7 @@ nonisolated enum AgentSessionStore {
             }
             return nil
         }
-        writeUsageCatalogEntryBestEffort(rebuilt)
+        writeUsageCatalogEntryBestEffort(rebuilt, in: sourceDirectory)
         return rebuilt.snapshot
     }
 
@@ -1029,10 +1034,11 @@ nonisolated enum AgentSessionStore {
         guard let signature = sourceSignature(for: sourceURL) else { return }
         let snapshot = AgentUsageSessionSnapshot(session: session)
         writeUsageCatalogEntryBestEffort(
-            UsageCatalogEntry(snapshot: snapshot, sourceSignature: signature)
+            UsageCatalogEntry(snapshot: snapshot, sourceSignature: signature),
+            in: sourceURL.deletingLastPathComponent()
         )
         // 双写：库是快路径，侧车是退路。两边都写，任何一边坏掉统计都还在。
-        usageDatabase()?.upsert(
+        usageDatabase(in: sourceURL.deletingLastPathComponent())?.upsert(
             snapshot,
             signature: AgentUsageSourceStamp(
                 fileSize: signature.fileSize,
@@ -1041,9 +1047,17 @@ nonisolated enum AgentSessionStore {
         )
     }
 
-    private static func writeUsageCatalogEntryBestEffort(_ entry: UsageCatalogEntry) {
+    private static func usageCatalogURL(for id: UUID, in sourceDirectory: URL) -> URL {
+        sourceDirectory.appendingPathComponent("usage-v1", isDirectory: true)
+            .appendingPathComponent("\(id.uuidString).json")
+    }
+
+    private static func writeUsageCatalogEntryBestEffort(_ entry: UsageCatalogEntry, in sourceDirectory: URL) {
         do {
-            try ensureUsageCatalogDirectory()
+            let destination = usageCatalogURL(for: entry.snapshot.id, in: sourceDirectory)
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
             // Local encoder for the same reason the read path uses a local
             // decoder: the concurrent scan reaches here whenever a sidecar
             // is stale and has to be rebuilt.
@@ -1051,7 +1065,7 @@ nonisolated enum AgentSessionStore {
             encoder.dateEncodingStrategy = .iso8601
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(entry)
-            try coordinatedWrite(data, to: usageCatalogURL(for: entry.snapshot.id))
+            try coordinatedWrite(data, to: destination)
         } catch {
             // The conversation JSON already landed; a missing usage sidecar
             // costs one fallback full decode on the next stats scan.
@@ -1076,6 +1090,7 @@ nonisolated enum AgentSessionStore {
         var copy = session
         copy.messages = []
         copy.contextSummary = nil
+        copy.contextCheckpoint = nil
         copy.contextSummaryThroughMessageID = nil
         copy.documentAttachments = []
         copy.knowledgeFolders = []
@@ -1191,8 +1206,12 @@ nonisolated enum AgentSessionStore {
     /// for the next scan. Runs on the caller's background task either way.
     static func loadUsageSnapshots() -> [AgentUsageSessionSnapshot] {
         importLegacySessionsIfNeeded()
+        return loadUsageSnapshots(in: directory)
+    }
 
-        let dir = directory
+    /// Explicit-source scans never import other libraries. Every child read,
+    /// rebuilt sidecar and database belongs to this captured directory.
+    static func loadUsageSnapshots(in dir: URL) -> [AgentUsageSessionSnapshot] {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else {
             return []
@@ -1226,9 +1245,14 @@ nonisolated enum AgentSessionStore {
     /// concurrency promise, and the shared static instances are used by the
     /// serial paths elsewhere in this file.
     static func loadUsageSnapshotsConcurrently() async -> [AgentUsageSessionSnapshot] {
+        importLegacySessionsIfNeeded()
+        return await loadUsageSnapshotsConcurrently(in: directory)
+    }
+
+    static func loadUsageSnapshotsConcurrently(in sourceDirectory: URL) async -> [AgentUsageSessionSnapshot] {
         // 库命中就直接走库：没有 JSON 要解析，字段名在表结构里只存一次。
-        if let fromDatabase = await loadUsageSnapshotsFromDatabase() { return fromDatabase }
-        return await scanUsageSidecarsConcurrently()
+        if let fromDatabase = await loadUsageSnapshotsFromDatabase(in: sourceDirectory) { return fromDatabase }
+        return await scanUsageSidecarsConcurrently(in: sourceDirectory)
     }
 
     /// 从统计库读，顺带把过期的会话补回去。
@@ -1240,10 +1264,9 @@ nonisolated enum AgentSessionStore {
     /// 返回 nil 的每一种情形都不是错误，只是「这次走退路」：库打不开、
     /// 目录还不存在、一个会话都没有。统计是派生数据，正确性由源文件保证，
     /// 库只是让它快。
-    private static func loadUsageSnapshotsFromDatabase() async -> [AgentUsageSessionSnapshot]? {
-        importLegacySessionsIfNeeded()
-        guard let database = usageDatabase() else { return nil }
-        guard let urls = sessionFileURLs(), !urls.isEmpty else { return nil }
+    private static func loadUsageSnapshotsFromDatabase(in sourceDirectory: URL) async -> [AgentUsageSessionSnapshot]? {
+        guard let database = usageDatabase(in: sourceDirectory) else { return nil }
+        guard let urls = sessionFileURLs(in: sourceDirectory), !urls.isEmpty else { return nil }
 
         let stored = database.storedSignatures()
         var stale: [URL] = []
@@ -1288,8 +1311,7 @@ nonisolated enum AgentSessionStore {
         return snapshots.isEmpty ? nil : snapshots
     }
 
-    private static func sessionFileURLs() -> [URL]? {
-        let dir = directory
+    private static func sessionFileURLs(in dir: URL) -> [URL]? {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else {
             return nil
@@ -1307,8 +1329,11 @@ nonisolated enum AgentSessionStore {
     /// 纯侧车扫描，不碰库。库不可用时的退路，也是库回填的数据来源。
     static func scanUsageSidecarsConcurrently() async -> [AgentUsageSessionSnapshot] {
         importLegacySessionsIfNeeded()
+        return await scanUsageSidecarsConcurrently(in: directory)
+    }
 
-        let urls = sessionFileURLs() ?? []
+    static func scanUsageSidecarsConcurrently(in sourceDirectory: URL) async -> [AgentUsageSessionSnapshot] {
+        let urls = sessionFileURLs(in: sourceDirectory) ?? []
 
         var snapshots = await withTaskGroup(
             of: AgentUsageSessionSnapshot?.self,

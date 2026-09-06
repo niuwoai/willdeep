@@ -218,12 +218,14 @@ extension AppState {
                     runtimeDescriptor: runtimeDescriptor,
                     workspaceLocation: workspaceLocation,
                     someIMContext: someIMContext,
-                    outputSchema: AgentDispatchGoalAssessmentContract.outputSchema
+                    outputSchema: AgentDispatchGoalAssessmentContract.outputSchema,
+                    executionBudget: auxiliaryModelExecutionBudget(for: runtime)
                 )
                 return try AgentDispatchGoalAssessmentContract.decode(outcome.report)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
+                if AgentAuxiliaryRequestStop(error) != nil { throw error }
                 lastError = error
             }
         }

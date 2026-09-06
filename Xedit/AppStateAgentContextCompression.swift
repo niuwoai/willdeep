@@ -27,6 +27,7 @@ extension AppState {
     }
 
     func compressAgentContext(for runtime: AgentRuntime, keepRecent: Int = 4) {
+        guard runtime.currentGoal?.continuationBudget?.modelAdmissionPaused != true else { return }
         guard !runtime.isCompressingContext, !runtime.isResponding else { return }
         guard let plan = compressionPlan(for: runtime, keepRecent: keepRecent) else { return }
 
@@ -59,7 +60,8 @@ extension AppState {
 
     func compressionPlan(for runtime: AgentRuntime, keepRecent: Int) -> AgentCompressionPlan? {
         guard runtime.messages.count > 1 else { return nil }
-        let hasPriorSummary = (runtime.contextSummary?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+        let priorSummary = effectiveContextSummary(for: runtime)
+        let hasPriorSummary = (priorSummary?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
             && runtime.contextSummaryThroughMessageID != nil
         let effectiveKeepRecent = hasPriorSummary ? min(2, keepRecent) : keepRecent
         guard runtime.messages.count > effectiveKeepRecent else { return nil }
@@ -72,7 +74,7 @@ extension AppState {
         return AgentCompressionPlan(
             head: Array(runtime.messages.prefix(tailStart)),
             tail: Array(runtime.messages[tailStart...]),
-            priorSummary: hasPriorSummary ? runtime.contextSummary : nil
+            priorSummary: hasPriorSummary ? priorSummary : nil
         )
     }
 
@@ -103,6 +105,7 @@ extension AppState {
     }
 
     func shouldAutoCompressNow(for runtime: AgentRuntime) -> Bool {
+        guard runtime.currentGoal?.continuationBudget?.modelAdmissionPaused != true else { return false }
         guard !runtime.isCompressingContext, !runtime.isResponding else { return false }
         guard runtime.messages.count > 6 else { return false }
         // This runtime's own window: a background session must not borrow
@@ -111,11 +114,7 @@ extension AppState {
         // Estimate the model-facing window, not the local transcript. Once a
         // summary exists, the user can still see every old message locally
         // while the provider request sees only the summary + newer tail.
-        let history = Self.modelFacingHistory(
-            messages: runtime.messages,
-            contextSummary: runtime.contextSummary,
-            contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
-        )
+        let history = modelFacingHistory(for: runtime)
         let collapsed = Self.collapseOldToolResults(in: history)
         // Same expert/mode-filtered tool set the real request sends — the
         // full registry overstates usage and trips auto-compression early.
@@ -197,6 +196,7 @@ extension AppState {
             // no-op if the queued-message consume above claimed the
             // runtime; that turn drains completions itself).
             resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+            completeLaunchRecoveryCompression(for: runtime, succeeded: didReclaimWindow)
         }
 
         let outcome = await performCompression(
@@ -229,10 +229,10 @@ extension AppState {
         priorSummary: String?,
         configurations: [AgentConfiguration]
     ) async -> (reclaimed: Bool, lastError: Error?) {
-        let segments = Self.compressionTranscriptSegments(
-            head: head,
-            priorSummary: priorSummary
-        )
+        let input: (segments: [String], sourceTokens: Int)
+        do { input = try contextCompressionInput(for: runtime, head: head, priorSummary: priorSummary) }
+        catch { return (false, error) }
+        let segments = input.segments
 
         // some.im 归因头：压缩流量此前不带 session/workspace id，服务端
         // 看不出这笔请求属于哪个会话。与主循环同一构造（AppStateAgentLoop），
@@ -245,14 +245,22 @@ extension AppState {
         )
 
         var lastError: Error?
+        let ticket: ContextCompressionTicket
+        do {
+            guard let through = head.last?.id else { throw AgentContextCheckpoint.Failure.stale }
+            ticket = try prepareContextCompression(for: runtime, through: through,
+                sourceTokens: input.sourceTokens)
+        } catch { return (false, error) }
         for configuration in configurations {
             do {
-                let trimmed = try await summarizeForCompression(
-                    segments: segments,
-                    configuration: configuration,
-                    someIMContext: someIMContext,
-                    runtimeID: runtime.id
-                )
+                try validateContextCompressionTicket(ticket, for: runtime)
+                let trimmed: String
+                if let operation = contextCompressionSummaryOperation {
+                    trimmed = try await operation(segments, configuration).trimmingCharacters(in: .whitespacesAndNewlines)
+                } else {
+                    trimmed = try await summarizeForCompression(segments: segments, configuration: configuration,
+                        someIMContext: someIMContext, runtimeID: runtime.id)
+                }
                 guard !trimmed.isEmpty else {
                     lastError = AgentClientError.serverStatus(
                         AgentProviderHTTPError(
@@ -268,9 +276,12 @@ extension AppState {
                     )
                     continue
                 }
-                runtime.contextSummary = trimmed
-                runtime.contextSummaryThroughMessageID = head.last?.id
+                try installContextCompression(for: runtime, summary: trimmed, ticket: ticket)
                 return (true, nil)
+            } catch is CancellationError {
+                return (false, CancellationError())
+            } catch let error as AgentContextCheckpoint.Failure {
+                return (false, error)
             } catch {
                 lastError = error
                 continue
@@ -301,11 +312,7 @@ extension AppState {
         guard !runtime.isCompressingContext else { return }
         let window = Self.agentContextWindow(model: escalatedModel, providerID: providerID)
         let threshold = Self.escalationCompressionThresholdTokens(window: window)
-        let history = Self.modelFacingHistory(
-            messages: runtime.messages,
-            contextSummary: runtime.contextSummary,
-            contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
-        )
+        let history = modelFacingHistory(for: runtime)
         let collapsed = Self.collapseOldToolResults(in: history)
         // 只算消息本身：工具 schema 是固定开销，压缩收不回来，不该参与
         // 「值不值得压」的判断。
@@ -420,6 +427,10 @@ extension AppState {
             return
         }
         runtime.pendingContextRunwayResume = false
+        if runtime.interactionMode == .goal {
+            _ = continueGoalOnBudgetInsteadOfRoundLimit(for: runtime, boundary: .contextCompaction)
+            return
+        }
         guard runtime.contextRunwayResumeCount < AgentContextRunwayPolicy.maximumAutomaticResumes else {
             return
         }
@@ -510,7 +521,9 @@ extension AppState {
         let context = configuration.providerID == AgentProviderPreset.someIMID
             ? someIMContext
             : nil
-        let client = AgentClient(configuration: configuration, someIMContext: context)
+        let client = AgentClient(configuration: configuration, someIMContext: context,
+            requestLedger: agentRuntimes[runtimeID].flatMap { modelRequestLedger(for: $0) })
+        let executionBudget = agentRuntimes[runtimeID].flatMap { toolExecutionBudget(for: $0) }
         let collector = CompressionSummaryCollector()
         let measurement = AgentAuxiliaryRequestMeasurement()
         let messages = Self.compressionRequestMessages(
@@ -520,7 +533,7 @@ extension AppState {
             partCount: partCount
         )
         do {
-            try await client.streamChat(messages: messages) { event in
+            try await client.streamChat(messages: messages, executionBudget: executionBudget) { event in
                 await measurement.consume(event)
                 if case .textDelta(let delta) = event {
                     await collector.append(delta)
@@ -772,7 +785,8 @@ extension AppState {
         messages: [AgentMessage],
         contextSummary: String?,
         contextSummaryThroughMessageID: AgentMessage.ID?,
-        excludingMessageID: AgentMessage.ID? = nil
+        excludingMessageID: AgentMessage.ID? = nil,
+        checkpointText: String? = nil
     ) -> [AgentMessage] {
         let visible = messages
             .filter { $0.id != excludingMessageID }
@@ -796,7 +810,10 @@ extension AppState {
             """,
             source: .hostInstruction
         )
-        return [summaryMessage] + Array(visible.dropFirst(markerIndex + 1))
+        let checkpointMessages = checkpointText.map {
+            [AgentMessage(role: .user, content: $0, source: .hostInstruction)]
+        } ?? []
+        return [summaryMessage] + checkpointMessages + Array(visible.dropFirst(markerIndex + 1))
     }
 
     /// Persisted host notices historically used `.system` so every provider

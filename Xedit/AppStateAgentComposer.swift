@@ -490,7 +490,7 @@ extension AppState {
                 attachedSkills: attachedSkills,
                 source: source
             )
-        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI:
+        case .claudeCode, .codexCLI, .hermesCLI, .cursorAgent, .clineCLI, .openCode:
             dispatchDelegatedAgentMessage(
                 for: runtime,
                 text: text,
@@ -552,10 +552,17 @@ extension AppState {
         runtime.messages.append(userMessage)
         runtime.latestTurnRecall = nil
 
+        // 一句问候不该带着一份验收合同去找执行器。判定刻意做窄，拿不准
+        // 就当任务——见 AgentDelegatedAcceptancePolicy。
+        let requiresAcceptance = AgentDelegatedAcceptancePolicy.requiresAcceptance(
+            userText: delegatedUserText,
+            hasAttachments: !images.isEmpty || !textAttachments.isEmpty || !attachedSkills.isEmpty
+        )
         let delegatedContract = AgentDelegatedTaskControl.makeContract(
             objective: delegatedUserText,
             executor: executionAgent,
-            goal: runtime.currentGoal
+            goal: runtime.currentGoal,
+            requiresAcceptanceEvidence: requiresAcceptance
         )
         runtime.delegatedTaskRuns.insert(
             AgentDelegatedTaskRun(contract: delegatedContract),
@@ -866,6 +873,7 @@ extension AppState {
                 )
             }
         }
+        beginGoalExecutionBudgetIfNeeded(for: runtime)
         let context = AgentToolContext(
             rootDirectory: workspaceURL,
             additionalWorkspaceRoots: Array(
@@ -875,6 +883,8 @@ extension AppState {
             runtimeDescriptor: remoteRuntimeDescriptor,
             runtimeID: runtime.id,
             turnID: runtime.activeTurnID,
+            isGoalMode: runtime.interactionMode == .goal,
+            executionBudget: toolExecutionBudget(for: runtime),
             jobRegistry: agentJobRegistry,
             mediaTaskRegistry: agentMediaTaskRegistry,
             shortDramaStore: agentShortDramaStore,
@@ -1141,12 +1151,16 @@ extension AppState {
                 run.phase = .willDeepVerifying
             }
 
-            let rerunChecks = await runDelegatedWillDeepVerification(
-                contract: contract,
-                evidence: executorEvidence,
-                context: context,
-                workspaceURL: workspaceURL
-            )
+            // 寒暄没有可复跑的东西。此前这一趟照跑，跑出「执行器未提供
+            // 可安全复跑的命令」，又给那六条问题添了一条。
+            let rerunChecks = contract.requiresAcceptanceEvidence
+                ? await runDelegatedWillDeepVerification(
+                    contract: contract,
+                    evidence: executorEvidence,
+                    context: context,
+                    workspaceURL: workspaceURL
+                )
+                : []
             let acceptance = AgentDelegatedTaskControl.structuralAcceptance(
                 contract: contract,
                 evidence: executorEvidence,

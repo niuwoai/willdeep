@@ -32,6 +32,8 @@ extension AppState {
         // (jobs / media tasks / subagent reports) were stranded because
         // their resume attempt lost an earlier slot race.
         resumeAgentLoopsWithPendingBackgroundCompletions()
+        scheduleDeferredGoalLaunchRecovery()
+        scheduleDispatchDecisionResumption()
     }
 
     /// Undo a tentative capacity reservation without recursively probing the

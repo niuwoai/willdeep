@@ -130,10 +130,13 @@ extension AgentToolRunner {
                         secretRedactionValues: context.secretRedactionValues,
                         lifetime: jobLifetime,
                         goalPhaseID: jobLifetime == .phase ? context.goalPhaseID : nil,
+                        survivesTurnStop: requestedLifetime == .persistent,
                         automaticSandboxRetryApprovalSource: context
                             .automaticBackgroundSandboxRetryApprovalSource
                     )
                 }
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 throw AgentToolError.commandFailed(
                     -1,
@@ -291,7 +294,7 @@ extension AgentToolRunner {
 
         let firstLine = stdout.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
         let summary = "exit 0\(firstLine.isEmpty ? "" : ": " + firstLine.prefix(60))"
-        return AgentToolResult(summary: summary, payload: trimmed)
+        return AgentToolResult(summary: summary, payload: trimmed, commandExitCode: status)
     }
 
     nonisolated static func closeStandardInput(for process: Process) {

@@ -68,7 +68,7 @@ struct AgentContextBuilderPromptTests {
         #expect(!compact.contains("list_mcp_servers"))
     }
 
-    @Test("stable v36 prompt text is guarded by a deterministic hash snapshot")
+    @Test("stable v37 prompt text is guarded by a deterministic hash snapshot")
     func testStablePromptSnapshotHash() {
         let prompt = AgentContextBuilder.stableSystemPromptPrefix(
             toolsEnabled: true,
@@ -81,7 +81,7 @@ struct AgentContextBuilderPromptTests {
             promptProfile: .standard
         )
 
-        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v36")
+        #expect(AgentContextBuilder.stablePrefixVersion == "willdeep-agent-system-v37")
         #expect(diagnostics.hash == AgentContextBuilder.stablePrefixSnapshotHash)
     }
 
@@ -106,11 +106,13 @@ struct AgentContextBuilderPromptTests {
         #expect(standard.contains("Never edit source code, build configuration"))
     }
 
-    @Test("delegation contract separates five responsibilities from model tiers")
+    @Test("delegation contract separates six responsibilities from model tiers")
     func testDelegationResponsibilityContract() {
         for profile in [AgentSystemPromptProfile.standard, .extended] {
             let prompt = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true, promptProfile: profile)
-            #expect(prompt.contains("`generalist` investigates"))
+            #expect(prompt.contains("`scout` investigates read-only"))
+            #expect(prompt.contains("`generalist` handles bounded fallback work"))
+            #expect(!prompt.contains("`generalist` investigates"))
             #expect(prompt.contains("`implementer` edits"))
             #expect(prompt.contains("`tester` verifies"))
             #expect(prompt.contains("`reviewer` independently reviews"))
@@ -120,6 +122,8 @@ struct AgentContextBuilderPromptTests {
             #expect(!prompt.contains("deployable 32K/48K/64K/256K"))
         }
         let extended = AgentContextBuilder.stableSystemPromptPrefix(toolsEnabled: true, promptProfile: .extended)
+        #expect(extended.contains("scout (read-only investigation)"))
+        #expect(extended.contains("generalist (bounded fallback)"))
         #expect(extended.contains("standard / advanced / expert"))
         #expect(extended.contains("tier changes never widen tools or file access"))
         #expect(extended.contains("Keep private-provider bindings private"))

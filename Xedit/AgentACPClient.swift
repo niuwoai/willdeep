@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Darwin
 
 nonisolated struct AgentACPConfiguration: Sendable {
     let executableURL: URL
@@ -103,6 +104,7 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
     private let processHandler: ProcessHandler
     private let processLock = NSLock()
     private var process: Process?
+    private var cancellationRequested = false
     private var terminalStore: AgentACPTerminalStore
     private var authorizationStore = AgentACPAuthorizationStore()
 
@@ -129,25 +131,36 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
     }
 
     func cancel() {
-        processLock.withLock {
-            guard let process, process.isRunning else { return }
-            AgentProcessSupport.terminateProcessTree(process)
+        let owned = processLock.withLock {
+            cancellationRequested = true
+            return (process, terminalStore)
         }
-        terminalStore.killAll()
+        guard let process = owned.0 else { return }
+        if process.isRunning { AgentProcessSupport.terminateProcessTree(process) }
+        owned.1.killAll()
+    }
+
+    private func checkCancellation() throws {
+        try Task.checkCancellation()
+        if processLock.withLock({ cancellationRequested }) { throw CancellationError() }
     }
 
     func run() async throws -> AgentACPResult {
-        try Task.checkCancellation()
+        try checkCancellation()
         if let requestedSessionID = configuration.sessionID,
            let connection = await AgentACPConnectionPool.shared.take(
             sessionID: requestedSessionID,
             configuration: configuration
            ) {
-            terminalStore = connection.terminalStore
-            authorizationStore = connection.authorizationStore
-            processLock.withLock { self.process = connection.process }
-            await processHandler(connection.process.processIdentifier)
             do {
+                try processLock.withLock {
+                    guard !cancellationRequested else { throw CancellationError() }
+                    terminalStore = connection.terminalStore
+                    authorizationStore = connection.authorizationStore
+                    self.process = connection.process
+                }
+                await processHandler(connection.process.processIdentifier)
+                try checkCancellation()
                 try connection.writer.send(
                     promptRequest(sessionID: requestedSessionID)
                 )
@@ -158,15 +171,19 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
                     errors: connection.errors,
                     existingSessionID: requestedSessionID
                 )
+                try processLock.withLock {
+                    guard !cancellationRequested else { throw CancellationError() }
+                    self.process = nil
+                }
                 await AgentACPConnectionPool.shared.store(
                     sessionID: result.sessionID,
                     connection: connection
                 )
-                processLock.withLock { self.process = nil }
                 return result
             } catch {
                 connection.terminate()
                 processLock.withLock { self.process = nil }
+                try checkCancellation()
                 throw error
             }
         }
@@ -191,6 +208,9 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
         process.environment = environment
 
         let inputPipe = Pipe()
+        guard fcntl(inputPipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1) != -1 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
         let outputPipe = Pipe()
         let errorPipe = Pipe()
         process.standardInput = inputPipe
@@ -244,14 +264,17 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
         }
 
         do {
-            try process.run()
+            try processLock.withLock {
+                guard !cancellationRequested else { throw CancellationError() }
+                try process.run()
+                self.process = process
+            }
         } catch {
             outputPipe.fileHandleForReading.readabilityHandler = nil
             errorPipe.fileHandleForReading.readabilityHandler = nil
             try? inputPipe.fileHandleForWriting.close()
             throw error
         }
-        processLock.withLock { self.process = process }
         await processHandler(process.processIdentifier)
         let writer = AgentACPJSONLineWriter(handle: inputPipe.fileHandleForWriting)
         let connection = AgentACPConnection(
@@ -269,6 +292,7 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
         )
 
         do {
+            try checkCancellation()
             try writer.send(initializeRequest())
             let result = try await processMessages(
                 lines: lines,
@@ -277,15 +301,19 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
                 errors: errors,
                 existingSessionID: nil
             )
+            try processLock.withLock {
+                guard !cancellationRequested else { throw CancellationError() }
+                self.process = nil
+            }
             await AgentACPConnectionPool.shared.store(
                 sessionID: result.sessionID,
                 connection: connection
             )
-            processLock.withLock { self.process = nil }
             return result
         } catch {
             connection.terminate()
             processLock.withLock { self.process = nil }
+            try checkCancellation()
             throw error
         }
     }
@@ -302,7 +330,7 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
         var sentPrompt = existingSessionID != nil
 
         for await line in lines.stream {
-            try Task.checkCancellation()
+            try checkCancellation()
             guard let object = AgentExecutorJSON.object(from: line) else {
                 throw AgentACPError.invalidMessage(redact(line))
             }
@@ -349,6 +377,7 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
                     status: .running,
                     rawJSON: redact(line)
                 )])
+                try checkCancellation()
                 try writer.send(promptRequest(sessionID: sessionID))
                 sentPrompt = true
             case "prompt":
@@ -498,6 +527,7 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
         let id = object["id"] ?? NSNull()
         let params = object["params"] as? [String: Any] ?? [:]
         do {
+            try checkCancellation()
             let result: [String: Any]
             switch method {
             case "session/request_permission":
@@ -519,12 +549,16 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
             default:
                 throw AgentACPError.unavailableHostCapability(method)
             }
+            try checkCancellation()
             try writer.send([
                 "jsonrpc": "2.0",
                 "id": id,
                 "result": result,
             ])
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
+            try checkCancellation()
             try writer.send([
                 "jsonrpc": "2.0",
                 "id": id,
@@ -589,6 +623,7 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
             toolName: kindText
         )])
         let decision = await approvalHandler(request)
+        try checkCancellation()
         if decision == .accept || decision == .acceptForSession {
             authorizationStore.record(
                 command: command,
@@ -668,7 +703,13 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
                 filePaths: [url.path]
             )
         }
-        try await MainActor.run { try writeHandler(url, content) }
+        try await MainActor.run {
+            try Task.checkCancellation()
+            try processLock.withLock {
+                guard !cancellationRequested else { throw CancellationError() }
+                try writeHandler(url, content)
+            }
+        }
         await eventHandler([AgentExecutorEvent(
             kind: .fileChanged,
             title: "write",
@@ -691,7 +732,11 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
                 filePaths: []
             )
         }
-        return try terminalStore.create(params: params)
+        try Task.checkCancellation()
+        return try processLock.withLock {
+            guard !cancellationRequested else { throw CancellationError() }
+            return try terminalStore.create(params: params)
+        }
     }
 
     private func requireFallbackApproval(
@@ -714,6 +759,7 @@ nonisolated final class AgentACPClientTurn: @unchecked Sendable {
             requestedPermissions: nil,
             allowsSessionApproval: true
         ))
+        try checkCancellation()
         guard decision == .accept || decision == .acceptForSession else {
             throw AgentACPError.protocolFailure("Host declined \(title)")
         }

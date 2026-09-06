@@ -89,6 +89,12 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
         // so it may start a fresh planning generation. All execution recovery
         // decisions are revalidated against normalized live state.
         if catalogAction == .restartPlanning {
+            // Restore normalizes these phases to blocked. Seeing either in
+            // live state means the current process already owns planning.
+            if restoredSession.goalPlanningState?.phase == .collecting
+                || restoredSession.goalPlanningState?.phase == .arbitrating {
+                return .none
+            }
             guard restoredSession.archivedAt == nil,
                   restoredSession.presentationScope != .dispatchBoard,
                   restoredSession.interactionMode == .goal,
@@ -161,14 +167,42 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
 }
 
 @MainActor
-private final class AgentGoalLaunchRecoveryCoordinator {
+final class AgentGoalLaunchRecoveryCoordinator {
     static let shared = AgentGoalLaunchRecoveryCoordinator()
 
     private var claimedSessionIDs: Set<AgentSession.ID> = []
+    private var deferredSessionIDs: Set<AgentSession.ID> = []
+    private var compressionSessionIDs: Set<AgentSession.ID> = []
+
+    var hasRunnableDeferredSessions: Bool { !deferredSessionIDs.subtracting(compressionSessionIDs).isEmpty }
+    func isDeferred(_ id: UUID) -> Bool { deferredSessionIDs.contains(id) }
+    func awaitsCompression(_ id: UUID) -> Bool { compressionSessionIDs.contains(id) }
 
     func claim(_ sessionID: AgentSession.ID) -> Bool {
         claimedSessionIDs.insert(sessionID).inserted
     }
+
+    func finish(_ id: UUID) {
+        claimedSessionIDs.insert(id)
+        deferredSessionIDs.remove(id)
+        compressionSessionIDs.remove(id)
+    }
+
+    func release(_ id: UUID, retryWhenIdle: Bool, awaitingCompression: Bool = false) {
+        claimedSessionIDs.remove(id)
+        deferredSessionIDs.remove(id)
+        compressionSessionIDs.remove(id)
+        if retryWhenIdle {
+            deferredSessionIDs.insert(id)
+            if awaitingCompression { compressionSessionIDs.insert(id) }
+        }
+    }
+
+    func deferIfUnclaimed(_ id: UUID) {
+        if !claimedSessionIDs.contains(id) { deferredSessionIDs.insert(id) }
+    }
+
+    func compressionSucceeded(_ id: UUID) { compressionSessionIDs.remove(id) }
 }
 
 @MainActor
@@ -177,16 +211,29 @@ extension AppState {
     /// The process-wide coordinator prevents a later editor-window AppState
     /// from launching the same recovery a second time during this app run.
     @discardableResult
-    func resumeInterruptedGoalSessionsAfterLaunch() -> [AgentSession.ID] {
+    func resumeInterruptedGoalSessionsAfterLaunch(deferredOnly: Bool = false) -> [AgentSession.ID] {
         guard hasLoadedAgentSessionCatalog else { return [] }
 
+        let coordinator = AgentGoalLaunchRecoveryCoordinator.shared
         var resumedSessionIDs: [AgentSession.ID] = []
         for catalogSession in agentSessions {
+            if deferredOnly && !coordinator.isDeferred(catalogSession.id) { continue }
+            if coordinator.awaitsCompression(catalogSession.id) { continue }
             let catalogAction = AgentGoalLaunchRecoveryPolicy.action(for: catalogSession)
-            guard catalogAction != .none,
-                  AgentGoalLaunchRecoveryCoordinator.shared.claim(catalogSession.id),
-                  let runtime = runtime(for: catalogSession.id) else {
+            guard catalogAction != .none else {
+                if deferredOnly { coordinator.finish(catalogSession.id) }
                 continue
+            }
+            guard let runtime = runtime(for: catalogSession.id) else { continue }
+            guard ownsAgentRuntimeKernelDelivery(for: runtime.id) else {
+                coordinator.deferIfUnclaimed(runtime.id)
+                continue
+            }
+            guard coordinator.claim(runtime.id) else { continue }
+            var accepted = false, retryWhenIdle = false, awaitingCompression = false
+            defer {
+                if accepted { coordinator.finish(runtime.id) }
+                else { coordinator.release(runtime.id, retryWhenIdle: retryWhenIdle, awaitingCompression: awaitingCompression) }
             }
 
             seedPersistedSessionModelOverride(for: runtime)
@@ -201,12 +248,22 @@ extension AppState {
                 restoredSession: liveSession
             )
 
+            if [.restartPlanning, .resumePhasePlanning, .resumeExecution].contains(liveAction),
+               runtime.isResponding || runtime.isAwaitingProviderSlot || runtime.isCompressingContext
+                || runtime.requestTask != nil || !runtime.queuedMessages.isEmpty {
+                retryWhenIdle = true
+                awaitingCompression = runtime.isCompressingContext
+                continue
+            }
+
             switch liveAction {
             case .none:
+                accepted = true
                 continue
             case .discardStaleCheckpoint:
                 runtime.goalTurnRecoveryCheckpoint = nil
                 persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+                accepted = true
             case .restartPlanning:
                 guard !runtime.isResponding else { continue }
                 let revisionNote = runtime.goalPlanningState?.revisionNote
@@ -216,6 +273,7 @@ extension AppState {
                     forceRestart: true,
                     revisionNote: revisionNote
                 ) {
+                    accepted = true
                     resumedSessionIDs.append(runtime.id)
                 }
             case .resumePhasePlanning:
@@ -232,7 +290,8 @@ extension AppState {
                     images: [],
                     source: .hostInstruction
                 )
-                resumedSessionIDs.append(runtime.id)
+                accepted = runtime.isResponding || runtime.isAwaitingProviderSlot
+                if accepted { resumedSessionIDs.append(runtime.id) }
             case .resumeExecution:
                 guard !runtime.isResponding,
                       !runtime.isAwaitingProviderSlot,
@@ -247,9 +306,40 @@ extension AppState {
                     images: [],
                     source: .hostInstruction
                 )
-                resumedSessionIDs.append(runtime.id)
+                accepted = runtime.isResponding || runtime.isAwaitingProviderSlot
+                if accepted { resumedSessionIDs.append(runtime.id) }
             }
         }
         return resumedSessionIDs
+    }
+
+    @discardableResult
+    func scheduleDeferredGoalLaunchRecovery() -> Task<Void, Never>? {
+        if let task = goalLaunchRecoveryTask { return task }
+        guard hasLoadedAgentSessionCatalog,
+              AgentGoalLaunchRecoveryCoordinator.shared.hasRunnableDeferredSessions,
+              agentSessions.contains(where: {
+                  AgentGoalLaunchRecoveryCoordinator.shared.isDeferred($0.id)
+                    && !AgentGoalLaunchRecoveryCoordinator.shared.awaitsCompression($0.id)
+              }) else { return nil }
+        let task = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            defer { self.goalLaunchRecoveryTask = nil }
+            guard !Task.isCancelled else { return }
+            _ = self.resumeInterruptedGoalSessionsAfterLaunch(deferredOnly: true)
+        }
+        goalLaunchRecoveryTask = task
+        return task
+    }
+
+    func completeLaunchRecoveryCompression(for runtime: AgentRuntime, succeeded: Bool) {
+        guard succeeded else { return }
+        AgentGoalLaunchRecoveryCoordinator.shared.compressionSucceeded(runtime.id)
+        scheduleDeferredGoalLaunchRecovery()
+    }
+
+    func cancelPendingGoalLaunchRecovery(for runtime: AgentRuntime) {
+        AgentGoalLaunchRecoveryCoordinator.shared.finish(runtime.id)
     }
 }

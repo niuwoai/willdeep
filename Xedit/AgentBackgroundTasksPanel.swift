@@ -526,6 +526,8 @@ struct AgentBackgroundTasksPanel: View {
             metadataRow(L10n.AgentJobs.processName, row.processName)
             metadataRow(L10n.AgentJobs.workingDirectory, job.workingDirectoryPath ?? L10n.AgentJobs.noWorkingDirectory)
             metadataRow(L10n.AgentJobs.command, job.command)
+            metadataRow(L10n.StopLifecycle.behaviorLabel,
+                job.survivesTurnStop ? L10n.StopLifecycle.independent : L10n.StopLifecycle.turnOwned)
             metadataRow(L10n.AgentJobs.pid, String(job.pid))
             metadataRow(L10n.AgentJobs.startedAt, job.startedAt.formatted(date: .omitted, time: .standard))
             // Spelled out rather than routed through `metadataRow` so the
@@ -708,6 +710,9 @@ struct AgentBackgroundTasksPanel: View {
     }
 
     private func statusText(for job: AgentBackgroundJob) -> String {
+        if job.isAlive, job.monitoringFailure != nil { return L10n.JobReceipt.unknown }
+        if job.isAlive, job.cancellationRequestedAt != nil { return L10n.JobReceipt.stopping }
+        if job.isAlive, job.isReconnecting { return L10n.JobReceipt.reconnecting }
         switch job.status {
         case .running: return L10n.AgentJobs.statusRunning
         case .completed: return L10n.AgentJobs.statusCompleted
@@ -719,6 +724,8 @@ struct AgentBackgroundTasksPanel: View {
     }
 
     private func statusTint(for job: AgentBackgroundJob) -> Color {
+        if job.isAlive, job.isReconnecting { return .orange }
+        if job.isAlive, job.cancellationRequestedAt != nil || job.monitoringFailure != nil { return .orange }
         switch job.status {
         case .running: return .green
         case .completed: return .secondary

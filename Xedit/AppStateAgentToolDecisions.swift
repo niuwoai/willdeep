@@ -30,6 +30,8 @@ extension AppState {
         messageID: UUID,
         rootDirectory: URL?
     ) async -> AgentDelegatedApprovalDecision {
+        do { try checkApprovalExecutionBudget(runtime) }
+        catch { _ = handleApprovalRequestStop(error, runtime: runtime); return .cancel }
         let toolName: String
         var arguments: [String: AgentJSONValue] = [
             "_delegated_executor": .string(request.executor.rawValue),
@@ -102,7 +104,8 @@ extension AppState {
         // to authorize ordinary danger-tier commands too, while
         // `autoApprovalSource` itself preserves the malicious-command,
         // session-management, and environment-trust hard stops.
-        let autoApproval = await autoApprovalSource(
+        let autoApproval: AgentToolApprovalSource?
+        do { autoApproval = try await checkedAutoApprovalSource(
             toolName: toolName,
             arguments: arguments,
             risk: risk,
@@ -114,8 +117,9 @@ extension AppState {
             approvalMode: runtime.approvalMode,
             conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
             environmentTrustDeclarations: runtime.environmentTrustDeclarations,
-            latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
-        )
+            latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? "",
+            budgetRuntime: runtime
+        ) } catch { _ = handleApprovalRequestStop(error, runtime: runtime); return .cancel }
 
         let initialStatus: AgentToolCallStatus
         if autoApproval != nil {
@@ -158,6 +162,7 @@ extension AppState {
         }
 
         if let index = runtime.toolCalls.firstIndex(where: { $0.id == record.id }) {
+            if runtime.toolCalls[index].status == .failed { return .cancel }
             switch decision {
             case .accept, .acceptForSession:
                 runtime.toolCalls[index].status = .succeeded
@@ -187,7 +192,10 @@ extension AppState {
         runtime: AgentRuntime,
         messageID: UUID,
         rootDirectory: URL?
-    ) async -> Bool {
+    ) async throws -> Bool {
+        let revision = runtime.goalAuthorizationRevision
+        do { try checkApprovalExecutionBudget(runtime) }
+        catch { _ = handleApprovalRequestStop(error, runtime: runtime); throw error }
         // Pure reads are already admitted by the Worker execution gate. They
         // must not enter the parent's approval queue or create a Dock badge.
         guard risk != .read else { return true }
@@ -224,7 +232,8 @@ extension AppState {
 
         // Full Access also covers normal danger-tier Worker operations. The
         // shared resolver keeps the few explicit never-auto-approve cases.
-        let autoApproval = await autoApprovalSource(
+        let autoApproval: AgentToolApprovalSource?
+        do { autoApproval = try await checkedAutoApprovalSource(
             toolName: toolName,
             arguments: arguments,
             risk: risk,
@@ -236,8 +245,9 @@ extension AppState {
             approvalMode: runtime.approvalMode,
             conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
             environmentTrustDeclarations: runtime.environmentTrustDeclarations,
-            latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
-        )
+            latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? "",
+            budgetRuntime: runtime
+        ) } catch { _ = handleApprovalRequestStop(error, runtime: runtime); throw error }
 
         let initialStatus: AgentToolCallStatus
         if autoApproval != nil {
@@ -278,6 +288,16 @@ extension AppState {
         }
 
         if let index = runtime.toolCalls.firstIndex(where: { $0.id == record.id }) {
+            do {
+                try Task.checkCancellation()
+                guard runtime.goalAuthorizationRevision == revision else { throw CancellationError() }
+                try checkApprovalExecutionBudget(runtime)
+                if runtime.toolCalls[index].status == .failed { throw CancellationError() }
+            } catch {
+                let notice = handleApprovalRequestStop(error, runtime: runtime)
+                settleHostStoppedApprovals([record.id], notice: notice, runtime: runtime, includeStaged: true)
+                throw error
+            }
             if approved {
                 runtime.toolCalls[index].status = .succeeded
                 runtime.toolCalls[index].result = AgentToolResult(
@@ -465,7 +485,7 @@ extension AppState {
     /// source that approved it, or `nil` to mean "user must decide".
     /// Cheap paths (user allowlist, static SafeCommand) run inline; the
     /// LLM judge round-trips only when nothing cheaper matched.
-    func autoApprovalSource(
+    func checkedAutoApprovalSource(
         toolName: String,
         arguments: [String: AgentJSONValue],
         risk: AgentToolRisk,
@@ -476,8 +496,14 @@ extension AppState {
         conversationAllowedToolSignatures: Set<String> = [],
         environmentTrustDeclarations: [AgentEnvironmentTrustDeclaration] = [],
         computerUseOwner: AgentComputerUseOwner? = nil,
-        latestUserMessage: String = ""
-    ) async -> AgentToolApprovalSource? {
+        latestUserMessage: String = "",
+        taskRuntime: AgentRuntime? = nil,
+        budgetRuntime: AgentRuntime? = nil
+    ) async throws -> AgentToolApprovalSource? {
+        try Task.checkCancellation()
+        // Budget ownership does not grant a child the parent's exact authorization.
+        let judgeRuntime = budgetRuntime ?? taskRuntime
+        try judgeRuntime.flatMap { auxiliaryModelExecutionBudget(for: $0) }?.check()
         // 环境信任声明本身永不自动通过——任何模式、任何 pin、Goal 免审都
         // 够不到它，完全访问也一样。一次人工点击 = 一次授权仪式：注入文本
         // 骗 Agent 调这个工具时，用户会在卡片上看到被逐字引用的"用户原话"，
@@ -537,6 +563,11 @@ extension AppState {
             rootDirectory: rootDirectory,
             additionalWorkspaceRoots: additionalWorkspaceRoots
         )
+
+        if let taskRuntime, await goalTaskAuthorizationMatches(runtime: taskRuntime, toolName: toolName,
+                arguments: arguments, risk: risk, root: rootDirectory) {
+            return .taskGrant
+        }
 
         // A local commit only records the already-staged workspace state and
         // remains recoverable through Git history/reflog. Run it in the
@@ -733,10 +764,10 @@ extension AppState {
                     tool: tool,
                     argumentsJSON: arguments["arguments_json"]?.stringValue() ?? "{}"
                 )
-                return await safetyJudgeApproval(
+                return try await checkedSafetyJudgeApproval(
                     toolName: toolName,
                     command: pseudoCommand,
-                    taskContext: latestUserMessage
+                    taskContext: latestUserMessage, taskRuntime: judgeRuntime
                 )
             }
         }
@@ -785,11 +816,11 @@ extension AppState {
             case .needsJudgment:
                 break
             }
-            return await safetyJudgeApproval(
+            return try await checkedSafetyJudgeApproval(
                 toolName: toolName,
                 command: command,
                 taskContext: latestUserMessage,
-                trustDeclaration: trustDeclaration
+                trustDeclaration: trustDeclaration, taskRuntime: judgeRuntime
             )
         }
 
@@ -801,10 +832,10 @@ extension AppState {
                 return nil
             }
             let pseudo = AgentToolAuthorization.terminalControlJudgePseudoCommand(control: control)
-            return await safetyJudgeApproval(
+            return try await checkedSafetyJudgeApproval(
                 toolName: toolName,
                 command: pseudo,
-                taskContext: latestUserMessage
+                taskContext: latestUserMessage, taskRuntime: judgeRuntime
             )
         }
 
@@ -846,11 +877,11 @@ extension AppState {
             break
         }
 
-        return await safetyJudgeApproval(
+        return try await checkedSafetyJudgeApproval(
             toolName: toolName,
             command: command,
             taskContext: latestUserMessage,
-            trustDeclaration: trustDeclaration
+            trustDeclaration: trustDeclaration, taskRuntime: judgeRuntime
         )
     }
 
@@ -1039,15 +1070,20 @@ extension AppState {
     /// on a clean YES; `nil` for deny / unavailable (both fall back to the
     /// user). The single choke point every judge path (run_command, MCP,
     /// terminal) routes through.
-    func safetyJudgeApproval(
+    func checkedSafetyJudgeApproval(
         toolName: String,
         command: String,
         taskContext: String = "",
         trustDeclaration: AgentEnvironmentTrustDeclaration? = nil,
         kind: AgentSafetyJudgeKind = .developerOperations,
         approvedSource: AgentToolApprovalSource = .llmJudge,
-        approvesWhenUnavailable: Bool = false
-    ) async -> AgentToolApprovalSource? {
+        approvesWhenUnavailable: Bool = false,
+        taskRuntime: AgentRuntime? = nil
+    ) async throws -> AgentToolApprovalSource? {
+        try Task.checkCancellation()
+        let scope = taskRuntime?.goalAuthorizationRevision
+        let budget = taskRuntime.flatMap { auxiliaryModelExecutionBudget(for: $0) }
+        try budget?.check()
         let judgeTaskContext = AgentInjectionDefense.redactedTaskContextForSafetyJudge(taskContext)
         let trustFingerprint = trustDeclaration.map {
             AgentEnvironmentTrust.fingerprint([$0])
@@ -1090,7 +1126,7 @@ extension AppState {
             user statement: \(declaration.userStatement)
             """
         } ?? ""
-        let candidates = safetyJudgeCandidateConfigurations()
+        let candidates = safetyJudgeInferenceEnvironment?.configurations ?? safetyJudgeCandidateConfigurations()
         var effectiveConfiguration = candidates.first ?? configurationForSafetyJudge()
         var fallbackDetail = ""
         let judgeCommand = AgentInjectionDefense.redactedCommandForSafetyJudge(command)
@@ -1108,14 +1144,24 @@ extension AppState {
         }
         for candidate in candidates {
             effectiveConfiguration = candidate
-            result = await AgentClient(configuration: candidate).judgeCommandSafety(
-                command: judgeCommand,
-                historyContext: kind == .maliciousIntent ? "" : safetyJudgeHistoryContext(),
-                toolName: toolName,
-                taskContext: judgeTaskContext,
-                environmentTrust: trustPayload,
-                kind: kind
-            )
+            do {
+                result = try await AgentClient(configuration: candidate, session: safetyJudgeInferenceEnvironment?.session,
+                    someIMContext: taskRuntime.flatMap { Self.goalPlanningSomeIMContext(configuration: candidate, runtime: $0) },
+                    requestLedger: budget?.requestLedger).budgetedSafetyJudge(
+                    command: judgeCommand,
+                    historyContext: kind == .maliciousIntent ? "" : safetyJudgeHistoryContext(),
+                    toolName: toolName,
+                    taskContext: judgeTaskContext,
+                    environmentTrust: trustPayload,
+                    kind: kind, executionBudget: budget
+                )
+            } catch {
+                try Task.checkCancellation()
+                guard taskRuntime?.goalAuthorizationRevision == scope else { throw CancellationError() }
+                throw error
+            }
+            try Task.checkCancellation()
+            guard taskRuntime?.goalAuthorizationRevision == scope else { throw CancellationError() }
             guard case .unavailable(let reason) = result else { break }
             if fallbackDetail.isEmpty {
                 fallbackDetail = "fallback after \(reason)"
@@ -1193,7 +1239,8 @@ extension AppState {
         "codex_cli",
         "hermes_cli",
         "cursor_agent",
-        "cline_cli"
+        "cline_cli",
+        "opencode_cli"
     ]
 
     nonisolated static func isTrustedDelegatedAgentTool(_ toolName: String) -> Bool {
@@ -1255,6 +1302,11 @@ extension AppState {
         sandboxDecision: AgentSandboxDecision,
         isUnattendedDispatchTask: Bool = false
     ) -> AgentSandboxMode {
+        // A scoped grant cannot be widened by an unattended flag or retry.
+        // The execution-time guard separately rejects a changed decision.
+        if approvalSource == .taskGrant {
+            return sandboxDecision.mode == .readOnly ? .readOnly : .workspaceWrite
+        }
         if sandboxDecision.mode == .escalated {
             return .escalated
         }
@@ -1295,7 +1347,7 @@ extension AppState {
         // 而不是像 workspaceAccess 那样统一抬到 workspace-write。放行理由
         // 宽松不等于沙箱要跟着放宽——真需要越界时，走下面的 seatbelt 拒绝
         // 重跑路径，那条路在完全访问下同样自动。
-        case .staticAllowlist, .llmJudge, .fullAccess, .none:
+        case .staticAllowlist, .llmJudge, .fullAccess, .taskGrant, .none:
             return sandboxDecision.mode
         }
     }
@@ -1568,7 +1620,8 @@ extension AppState {
                     continue
                 }
 
-                let source = await autoApprovalSource(
+                let source: AgentToolApprovalSource?
+                do { source = try await checkedAutoApprovalSource(
                     toolName: call.toolName,
                     arguments: call.arguments,
                     risk: call.risk,
@@ -1581,8 +1634,14 @@ extension AppState {
                     conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
                     environmentTrustDeclarations: runtime.environmentTrustDeclarations,
                     computerUseOwner: runtime.computerUseOwner,
-                    latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? ""
-                )
+                    latestUserMessage: runtime.messages.last(where: { $0.isOperatorInput })?.content ?? "",
+                    taskRuntime: call.externalID.hasPrefix("delegated:") || call.externalID.hasPrefix("subagent:") ? nil : runtime,
+                    budgetRuntime: runtime
+                ) } catch {
+                    let notice = handleApprovalRequestStop(error, runtime: runtime)
+                    settleHostStoppedApprovals(pendingCallIDs, notice: notice, runtime: runtime)
+                    return
+                }
                 guard let source,
                       requiringApprovalMode == nil || runtime.approvalMode == requiringApprovalMode,
                       let currentIndex = runtime.toolCalls.firstIndex(where: { $0.id == callID }),
@@ -1603,7 +1662,7 @@ extension AppState {
         }
     }
 
-    private func runtimeAndToolCallIndex(containing id: AgentToolCall.ID) -> (runtime: AgentRuntime, index: Int)? {
+    func runtimeAndToolCallIndex(containing id: AgentToolCall.ID) -> (runtime: AgentRuntime, index: Int)? {
         if let runtime = activeRuntime,
            let index = runtime.toolCalls.firstIndex(where: { $0.id == id }) {
             return (runtime, index)
@@ -1645,7 +1704,7 @@ extension AppState {
         arguments: [String: AgentJSONValue]
     ) -> Bool {
         switch toolName {
-        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli":
             return arguments["permission_mode"]?.stringValue() == "plan"
         default:
             return false
@@ -1687,7 +1746,7 @@ extension AppState {
                 || sandboxDecision.mode == .workspaceWrite
                 || sandboxDecision.mode == .workspaceWriteNetwork
                 || sandboxDecision.mode == .workspaceWriteNetworkCredentialed
-        case "kill_job", "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli",
+        case "kill_job", "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli",
              "add_memory", "create_user_skill", "create_user_skills", "update_user_skill", "suggest_mcp_server", "configure_mcp_server":
             return true
         case "call_mcp_tool":

@@ -174,6 +174,13 @@ nonisolated struct AgentKernelEvent: Identifiable, Codable, Equatable, Sendable 
     var resolutionActor: AgentKernelEventResolutionActor?
     var resolutionOutcome: AgentKernelEventResolutionOutcome?
     var resolvedAt: Date?
+    /// Set only by the host persistence barrier, never by producer payloads.
+    /// A producer ACK transfers responsibility until the model consumes it.
+    var durableModelDeliveryRequired: Bool? = nil
+
+    var hasOutstandingDurableDelivery: Bool {
+        durableModelDeliveryRequired == true && resolvedModelDeliveryState != .handled
+    }
 
     var resolvedContentTrust: AgentKernelEventContentTrust {
         resolvedContentProvenance == .host ? .trusted : .untrusted
@@ -533,6 +540,7 @@ final class AgentRuntimeKernel: ObservableObject {
     private let persistsEvents: Bool
     private let now: () -> Date
     private var externalWakeHistoryByRuntime: [UUID: [Date]] = [:]
+    private var deferredDurableRuntimeIDs: Set<UUID> = []
     private var persistenceLoadTask: Task<[AgentKernelEvent], Never>?
     private(set) var isPersistenceLoaded: Bool
 
@@ -592,6 +600,7 @@ final class AgentRuntimeKernel: ObservableObject {
     func publish(_ raw: AgentKernelEvent) -> AgentKernelEvent {
         let timestamp = now()
         var event = AgentKernelEventPolicy.normalized(raw, now: timestamp)
+        event.durableModelDeliveryRequired = nil
         if event.resolvedDedupeScope == .journal,
            let dedupeKey = event.dedupeKey,
            let existing = events.first(where: {
@@ -616,6 +625,7 @@ final class AgentRuntimeKernel: ObservableObject {
            let index = events.firstIndex(where: {
                $0.runtimeID == event.runtimeID
                    && $0.isPendingForModel
+                   && !$0.hasOutstandingDurableDelivery
                    && $0.dedupeKey == dedupeKey
                    && timestamp.timeIntervalSince($0.updatedAt) <= AgentKernelEventPolicy.coalescingWindow
            }) {
@@ -761,13 +771,15 @@ final class AgentRuntimeKernel: ObservableObject {
     func consumePendingModelEvents(
         for runtimeID: UUID,
         limit: Int = 20,
-        leaseID: UUID? = nil
+        leaseID: UUID? = nil,
+        excluding excludedIDs: Set<UUID> = []
     ) -> [AgentKernelEvent] {
         guard limit > 0 else { return [] }
         let candidates = events.enumerated()
             .filter {
                 $0.element.runtimeID == runtimeID
                     && $0.element.isPendingForModel
+                    && !excludedIDs.contains($0.element.id)
             }
         let indexes = fairDeliveryIndexes(from: candidates, limit: limit)
         let timestamp = now()
@@ -788,6 +800,7 @@ final class AgentRuntimeKernel: ObservableObject {
         let timestamp = now()
         var changedRuntimeIDs: Set<UUID> = []
         for index in events.indices where idSet.contains(events[index].id)
+            && events[index].resolvedModelDeliveryState != .handled
             && (leaseID == nil || events[index].modelDeliveryLeaseID == leaseID) {
             events[index].modelDeliveryState = .handled
             events[index].modelDeliveryLeaseID = nil
@@ -802,6 +815,25 @@ final class AgentRuntimeKernel: ObservableObject {
             changedRuntimeIDs.insert(events[index].runtimeID)
         }
         changedRuntimeIDs.forEach(persist(runtimeID:))
+    }
+
+    /// Host cancellation is not model consumption. Keep the result and user
+    /// attention state, but release its model delivery responsibility.
+    func resolveModelDeliveriesAtSource(_ ids: Set<UUID>) {
+        let timestamp = now()
+        var changed: Set<UUID> = []
+        for index in events.indices where ids.contains(events[index].id)
+            && events[index].resolvedModelDeliveryState != .handled {
+            events[index].modelDeliveryState = .handled
+            events[index].modelDeliveryLeaseID = nil
+            events[index].resolutionActor = .host
+            events[index].resolutionOutcome = .resolvedAtSource
+            events[index].resolvedAt = timestamp
+            events[index].updatedAt = timestamp
+            refreshLegacyState(at: index)
+            changed.insert(events[index].runtimeID)
+        }
+        changed.forEach(persist(runtimeID:))
     }
 
     func dismiss(_ id: UUID) {
@@ -898,34 +930,61 @@ final class AgentRuntimeKernel: ObservableObject {
         AgentKernelEventStore.saveAsync(events, for: runtimeID)
     }
 
-    private func enforceBounds() -> Set<UUID> {
-        var affectedRuntimeIDs: Set<UUID> = []
-        let runtimeIDs = Set(events.map(\.runtimeID))
-        for runtimeID in runtimeIDs {
-            if trim(runtimeID: runtimeID, to: AgentKernelEventPolicy.maximumEventsPerRuntime) {
-                affectedRuntimeIDs.insert(runtimeID)
-            }
+    /// App-process crash handoff barrier. A non-persistent test/in-memory
+    /// kernel must never authorize deletion of a durable producer receipt.
+    func confirmEventPersistenceForHandoff(_ event: AgentKernelEvent) -> Bool {
+        guard persistsEvents, let index = events.firstIndex(where: {
+            $0.id == event.id && $0.runtimeID == event.runtimeID
+        }) else {
+            return false
         }
-        affectedRuntimeIDs.formUnion(trimGlobal(to: AgentKernelEventPolicy.maximumEventsAcrossKernel))
-        return affectedRuntimeIDs
+        events[index].durableModelDeliveryRequired = true
+        persist(runtimeID: event.runtimeID)
+        return AgentKernelEventStore.flushPendingWrites(for: [event.runtimeID]).isEmpty
     }
 
-    private func trim(runtimeID: UUID, to maximum: Int) -> Bool {
-        var matches = events.indices.filter { events[$0].runtimeID == runtimeID }
-        guard matches.count > maximum else { return false }
-        matches.sort { evictionRank(events[$0]) < evictionRank(events[$1]) }
-        let remove = Set(matches.prefix(matches.count - maximum))
-        events = events.enumerated().filter { !remove.contains($0.offset) }.map(\.element)
-        return true
+    func canAdmitDurableDelivery(runtimeID: UUID, dedupeKey: String) -> Bool {
+        if events.contains(where: { $0.runtimeID == runtimeID && $0.dedupeKey == dedupeKey }) {
+            return true
+        }
+        let outstanding = events.filter(\.hasOutstandingDurableDelivery)
+        return outstanding.count < AgentKernelEventPolicy.maximumEventsAcrossKernel
+            && outstanding.filter { $0.runtimeID == runtimeID }.count
+                < AgentKernelEventPolicy.maximumEventsPerRuntime
     }
 
-    private func trimGlobal(to maximum: Int) -> Set<UUID> {
-        guard events.count > maximum else { return [] }
-        let ranked = events.indices.sorted { evictionRank(events[$0]) < evictionRank(events[$1]) }
-        let remove = Set(ranked.prefix(events.count - maximum))
-        let affectedRuntimeIDs = Set(remove.map { events[$0].runtimeID })
-        events = events.enumerated().filter { !remove.contains($0.offset) }.map(\.element)
-        return affectedRuntimeIDs
+    func deferDurableDelivery(for runtimeID: UUID) {
+        deferredDurableRuntimeIDs.insert(runtimeID)
+    }
+
+    func takeDeferredDurableRuntimeIDs() -> Set<UUID> {
+        let result = deferredDurableRuntimeIDs
+        deferredDurableRuntimeIDs.removeAll()
+        return result
+    }
+
+    private func enforceBounds() -> Set<UUID> {
+        // Read @Published once. Repeatedly filtering its getter for every
+        // runtime makes a burst across many sessions quadratic per publish.
+        let snapshot = events
+        let groups = Dictionary(grouping: snapshot.indices) { snapshot[$0].runtimeID }
+        var removed: Set<Int> = []
+        let perRuntimeLimit = AgentKernelEventPolicy.maximumEventsPerRuntime
+        for indexes in groups.values where indexes.count > perRuntimeLimit {
+            let ranked = indexes.filter { !snapshot[$0].hasOutstandingDurableDelivery }
+                .sorted { evictionRank(snapshot[$0]) < evictionRank(snapshot[$1]) }
+            removed.formUnion(ranked.prefix(indexes.count - perRuntimeLimit))
+        }
+        let remaining = snapshot.indices.filter { !removed.contains($0) }
+        let globalLimit = AgentKernelEventPolicy.maximumEventsAcrossKernel
+        if remaining.count > globalLimit {
+            let ranked = remaining.filter { !snapshot[$0].hasOutstandingDurableDelivery }
+                .sorted { evictionRank(snapshot[$0]) < evictionRank(snapshot[$1]) }
+            removed.formUnion(ranked.prefix(remaining.count - globalLimit))
+        }
+        guard !removed.isEmpty else { return [] }
+        events = snapshot.enumerated().filter { !removed.contains($0.offset) }.map(\.element)
+        return Set(removed.map { snapshot[$0].runtimeID })
     }
 
     private func evictionRank(_ event: AgentKernelEvent) -> (Int, Int, Date) {

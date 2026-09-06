@@ -82,12 +82,14 @@ Dir.mktmpdir do |dir|
     init = call.call("initialize", {})
     check(init&.dig("result", "serverInfo", "name") == "todo",
           "initialize 返回 todo 服务端信息。", results)
+    check(init&.dig("result", "serverInfo", "version") == "1.4.0",
+          "MCP 服务端版本与待办插件版本一致。", results)
 
     names = (call.call("tools/list", {})&.dig("result", "tools") || []).map { |t| t["name"] }.sort
-    check(names == ["todo.add", "todo.attach", "todo.detach", "todo.list", "todo.quick_add",
+    check(names == ["todo.add", "todo.attach", "todo.attachment_preview", "todo.detach", "todo.list", "todo.quick_add",
                     "todo.remove", "todo.restore", "todo.settings", "todo.stats",
                     "todo.toggle", "todo.update"],
-          "tools/list 暴露十一个工具。", results)
+          "tools/list 暴露十二个工具。", results)
 
     attached = tool.call("todo.add", { "text" => "带附件的待办" })
     attach = tool.call("todo.attach", {
@@ -100,6 +102,50 @@ Dir.mktmpdir do |dir|
     check(stored && File.file?(stored["path"]) && File.binread(stored["path"]) == "hello",
           "附件字节落到了磁盘上。", results)
     check(stored && stored["size"] == 5, "附件记的是解码后的字节数。", results)
+
+    pasted_source = File.join(dir, "区域截图.png")
+    pasted_bytes = "\x89PNG\r\n\x1A\n".b + "pasted-image"
+    File.binwrite(pasted_source, pasted_bytes)
+    pasted = tool.call("todo.attach", {
+      "id" => attached["item"]["id"], "name" => File.basename(pasted_source),
+      "mimeType" => "image/png", "sourcePath" => pasted_source
+    })
+    pasted_entry = pasted && pasted["attachment"]
+    check(pasted_entry && File.binread(pasted_entry["path"]) == pasted_bytes,
+          "剪贴板只给图片路径时，服务端复制为待办附件。", results)
+    queued_preview = tool.call("todo.attachment_preview", { "sourcePath" => pasted_source })
+    check(queued_preview && queued_preview["mimeType"] == "image/png" &&
+          queued_preview["dataBase64"].unpack1("m") == pasted_bytes,
+          "待上传的路径图片可读取为真实缩略图数据。", results)
+    stored_preview = tool.call("todo.attachment_preview", {
+      "id" => attached["item"]["id"], "attachmentID" => pasted_entry["id"]
+    })
+    check(stored_preview && stored_preview["mimeType"] == "image/png" &&
+          stored_preview["dataBase64"].unpack1("m") == pasted_bytes,
+          "已保存图片附件可读取为缩略图和完整预览数据。", results)
+    File.delete(pasted_entry["path"])
+    File.symlink(pasted_source, pasted_entry["path"])
+    symlink_preview = tool.call("todo.attachment_preview", {
+      "id" => attached["item"]["id"], "attachmentID" => pasted_entry["id"]
+    })
+    check(symlink_preview && symlink_preview["error"] == "attachment_path_not_allowed",
+          "附件目录里的符号链接也不能把预览读取带到目录外。", results)
+    File.delete(pasted_entry["path"])
+    File.binwrite(pasted_entry["path"], pasted_bytes)
+    missing_preview = tool.call("todo.attachment_preview", {
+      "id" => attached["item"]["id"], "attachmentID" => "missing"
+    })
+    check(missing_preview && missing_preview["error"] == "attachment_not_found",
+          "图片预览不能越过条目和附件 id 读取其他文件。", results)
+    check(File.binread(pasted_source) == pasted_bytes,
+          "复制路径附件不会移动或删除剪贴板源文件。", results)
+    fake_image = File.join(dir, "伪装图片.png")
+    File.binwrite(fake_image, File.binread(File.expand_path(__FILE__)))
+    rejected_path = tool.call("todo.attach", {
+      "id" => attached["item"]["id"], "name" => "伪装图片.png", "sourcePath" => fake_image
+    })
+    check(rejected_path && rejected_path["error"] == "attachment_not_image",
+          "路径粘贴通道校验图片内容，不被伪装成 .png 的普通文件骗过。", results)
 
     # 文件名来自页面，是不可信输入：不能写出附件目录之外去
     escaping = tool.call("todo.attach", {

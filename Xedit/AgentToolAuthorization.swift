@@ -461,7 +461,7 @@ enum AgentSandboxPolicy {
                     prefixRule: ["lark-cli"]
                 )
             }
-        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli":
             return AgentSandboxDecision(
                 mode: .escalated,
                 requiresUserApproval: true,
@@ -1475,6 +1475,13 @@ enum AgentSandboxPolicy {
             }
         }
         return true
+    }
+
+    /// Sandbox modes whose seatbelt profile carries `(deny network*)`.
+    nonisolated static func canEnforceLocalTaskVerification(command: String, mode: AgentSandboxMode) -> Bool {
+        (mode == .readOnly || mode == .workspaceWrite)
+            && FileManager.default.isExecutableFile(atPath: sandboxExecPath)
+            && !shouldRunWithoutSeatbelt(command: command, mode: mode)
     }
 
     /// Sandbox modes whose seatbelt profile carries `(deny network*)`.

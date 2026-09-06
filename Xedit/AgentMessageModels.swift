@@ -47,6 +47,8 @@ nonisolated enum AgentRole: String, Codable {
 nonisolated enum AgentMessageOrigin: String, Codable, Equatable {
     case nativeModel
     case delegatedExternal
+    /// A visible host notice, not an inference attempt or completion claim.
+    case hostGenerated
 }
 
 /// Identifies who supplied a user-role message. Providers still receive both
@@ -194,6 +196,15 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
         inlineDataBase64.flatMap { Data(base64Encoded: $0) }
     }
 
+    nonisolated var inlineImageEncodedByteCount: Int { inlineDataBase64?.utf8.count ?? 0 }
+
+    /// Exact application-owned upload location, not any path whose parent
+    /// happens to be named AgentAttachments.
+    nonisolated var isInOwnedAttachmentStorage: Bool {
+        guard let fileURL, let directory = try? Self.attachmentDirectory(for: id) else { return false }
+        return fileURL == directory.appendingPathComponent("image.\(Self.fileExtension(for: mimeType))").standardizedFileURL
+    }
+
     /// Image bytes as base64, read from the inline copy if present, otherwise
     /// lazily from the file-backed copy.
     nonisolated var dataBase64: String {
@@ -306,6 +317,16 @@ nonisolated struct AgentImageAttachment: Codable, Equatable, Identifiable, Senda
     }
 
     private nonisolated static func attachmentDirectory(for id: UUID) throws -> URL {
+        let environment = ProcessInfo.processInfo.environment
+        if NSClassFromString("XCTestCase") != nil || NSClassFromString("XCTest") != nil
+            || environment["XCTestConfigurationFilePath"] != nil || environment["XCTestBundlePath"] != nil {
+            // Like the session store, tests must never create upload assets in
+            // the user's Application Support directory.
+            return FileManager.default.temporaryDirectory
+                .appendingPathComponent("WillDeepTests-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+                .appendingPathComponent("AgentAttachments", isDirectory: true)
+                .appendingPathComponent(id.uuidString, isDirectory: true)
+        }
         guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             throw CocoaError(.fileNoSuchFile)
         }
@@ -547,6 +568,7 @@ nonisolated struct AgentHostWorkerRunRecord: Identifiable, Codable, Equatable, S
         case automaticCoding
         case automaticCodingEscalation
         case automaticCodingReview
+        case goalVerification
         /// Read-only worker started in parallel with the root model's first
         /// request; its report is injected at a tool boundary of the same
         /// turn or dropped when the turn ends first.

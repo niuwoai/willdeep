@@ -101,8 +101,8 @@ extension AppState {
             guard let runtime = agentRuntimes[ingress.runtimeID],
                   runtime.session.archivedAt == nil else { return false }
         }
-        publishAgentKernelEvent(ingress.kernelEvent())
-        return true
+        let published = publishAgentKernelEvent(ingress.kernelEvent())
+        return agentRuntimeKernel.events.contains { $0.id == published.id }
     }
 
     @discardableResult
@@ -237,9 +237,10 @@ extension AppState {
     }
 
     func schedulePendingAgentKernelEvents(for runtime: AgentRuntime) {
+        let blocked = reconcileRevokedKernelDeliveries(for: runtime)
         guard agentRuntimeKernel.pendingModelEventCount(for: runtime.id) > 0 else { return }
         let probe = agentRuntimeKernel.events
-            .filter { $0.runtimeID == runtime.id && $0.isPendingForModel }
+            .filter { $0.runtimeID == runtime.id && $0.isPendingForModel && !blocked.contains($0.id) }
             .max { lhs, rhs in
                 if lhs.priority != rhs.priority { return lhs.priority < rhs.priority }
                 return lhs.updatedAt < rhs.updatedAt
@@ -247,7 +248,9 @@ extension AppState {
         if let probe { scheduleAgentKernelEvent(probe) }
     }
 
-    func publishBackgroundJobKernelEvent(_ job: AgentBackgroundJob, runtime: AgentRuntime) {
+    @discardableResult
+    func publishBackgroundJobKernelEvent(_ job: AgentBackgroundJob, runtime: AgentRuntime,
+        requiresDurableHandoff: Bool = false) -> Bool {
         let recentOutput: String? = {
             guard job.needsAttention, job.outputByteCount > 0 else { return nil }
             let tail = agentJobRegistry.output(id: job.id, tailLines: 40)
@@ -257,8 +260,7 @@ extension AppState {
             return scrubbed.count > 4_000 ? "…" + String(scrubbed.suffix(4_000)) : scrubbed
         }()
         let failed = job.needsAttention
-        publishAgentKernelEvent(
-            AgentKernelEvent(
+        let event = AgentKernelEvent(
                 runtimeID: runtime.id,
                 source: .backgroundJob,
                 kind: failed ? .backgroundJobFailed : .backgroundJobCompleted,
@@ -271,9 +273,18 @@ extension AppState {
                 payload: Self.backgroundJobCompletionNotice(for: job, recentOutput: recentOutput),
                 metadata: ["resource_id": job.id.uuidString, "handle": job.displayHandle],
                 dedupeKey: "background-job:\(job.id.uuidString)",
+                dedupeScope: .journal,
                 requiresUserAction: false
             )
-        )
+        if requiresDurableHandoff {
+            let published = agentRuntimeKernel.publish(event)
+            guard agentRuntimeKernel.confirmEventPersistenceForHandoff(published) else { return false }
+            // The producer ACK must succeed before this handoff schedules a
+            // model. Its caller also retries pending (not handled) events.
+        } else {
+            publishAgentKernelEvent(event)
+        }
+        return true
     }
 
     func publishMediaTaskKernelEvent(_ task: AgentMediaTask, runtime: AgentRuntime) {
@@ -457,7 +468,8 @@ extension AppState {
         let published = agentRuntimeKernel.publish(event)
         // Journal-scoped duplicates return the existing event. Scheduling it
         // again would turn an at-least-once relay retry into another model run.
-        guard published.id == event.id else { return published }
+        guard published.id == event.id,
+              agentRuntimeKernel.events.contains(where: { $0.id == published.id }) else { return published }
         scheduleAgentKernelEvent(published)
         return published
     }

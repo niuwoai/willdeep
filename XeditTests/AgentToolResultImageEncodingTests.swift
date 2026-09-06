@@ -543,6 +543,12 @@ struct AgentToolResultImageEncodingTests {
 
     @Test
     func deepSeekHostedWebSearchFallsBackLocallyAndPreservesCitations() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("responses-ledger-\(UUID())")
+        let ledger = AgentModelRequestLedger(directory: directory, ownerID: UUID())
+        defer {
+            do { try FileManager.default.removeItem(at: directory) }
+            catch { Issue.record("Responses ledger cleanup failed: \(error)") }
+        }
         let configuration = AgentConfiguration(
             providerID: AgentProviderPreset.someIMID,
             baseURL: "https://example.com/v1",
@@ -594,13 +600,15 @@ struct AgentToolResultImageEncodingTests {
         )
         try await adapter.streamChat(
             messages: [AgentMessage(role: .user, content: "Search current news")],
-            tools: [webSearch]
+            tools: [webSearch],
+            requestLedger: ledger
         ) { event in
             await eventRecorder.record(event)
         }
 
         let requests = requestRecorder.requests
         try #require(requests.count == 2)
+        #expect(try ledger.summary() == .init(attempts: 2, unfinished: 0, unknownUsage: 2, reportedTokens: 0))
         #expect(requests[0].body.contains(#""type":"web_search""#))
         #expect(!requests[0].body.contains(#""name":"web_search""#))
         #expect(requests[1].body.contains(#""type":"function""#))

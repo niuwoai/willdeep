@@ -86,6 +86,14 @@ LOG
 # bundle counted.
 AGREEING_PASSING_LOG = UNDERCOUNTING_PASSING_LOG
 
+# URLProtocol callbacks can lose Swift Testing's task-local ownership. Xcode
+# may exit zero while the framework records failures outside a named test.
+UNASSOCIATED_ISSUE_LOG = [
+  "✘ Test «unknown» recorded an issue at Fixture.swift:1:1: Expectation failed: false",
+  "✘ Test run with 35 tests in 4 suites failed after 29.168 seconds with 4 issues.",
+  "** TEST SUCCEEDED **"
+].join("\n")
+
 results = []
 
 def check(condition, message, results)
@@ -191,6 +199,21 @@ Dir.mktmpdir("xcresult-report-contract") do |workspace|
     check(report[:exit_status] == EXIT_PASSED, "Recovered passing report exits #{EXIT_PASSED}.", results)
   end
 
+  # Formatting-only prefixes must not silently reclassify skipped cases as
+  # passed. Suite-level skips are not an additional test and must not double count.
+  ["", "\u200B", "\uFEFF", " \u200B\uFEFF"].each do |prefix|
+    Dir.mktmpdir("formatted-skip", workspace) do |directory|
+      bundle = corrupt_bundle(directory)
+      log = "#{prefix}➜ Suite fixture skipped.\n#{prefix}➜ Test fixture skipped.\n" \
+            "✔ Test run with 3 tests in 1 suite passed after 0.1 seconds.\n** TEST SUCCEEDED **\n"
+      File.write(File.join(directory, "xcodebuild.log"), log)
+      report = run_reporter(bundle, directory)
+      check(report[:json].dig("stats", "skipped") == 1, "Formatting prefixes preserve one skipped case, not its suite.", results)
+      check(report[:json].dig("stats", "passed") == 2, "A skipped test is not reported as passed.", results)
+      check(report[:exit_status] == EXIT_PASSED, "A permitted skip does not become a failure.", results)
+    end
+  end
+
   # 3. Unreadable bundle plus a failing log → failure, never green.
   Dir.mktmpdir("failing-log", workspace) do |directory|
     bundle = corrupt_bundle(directory)
@@ -200,6 +223,8 @@ Dir.mktmpdir("xcresult-report-contract") do |workspace|
     check(report[:json]["ok"] == false, "Failing xcodebuild log reports ok=false.", results)
     check(report[:exit_status] == EXIT_FAILED, "Failing recovered report exits #{EXIT_FAILED}.", results)
     check(!report[:markdown].include?("✅"), "Failing markdown report carries no green check.", results)
+    check(report[:json].dig("stats", "failed") == 1, "Swift Testing failures are counted even when XCTest reports zero.", results)
+    check(report[:json].dig("stats", "passed") == 1747, "Failed Swift tests are not counted as passed.", results)
   end
 
   # 4. An explicit --log path is honoured even when it is not a sibling.
@@ -249,11 +274,42 @@ Dir.mktmpdir("xcresult-report-contract") do |workspace|
       results
     )
     check(report[:json]["total_mismatch"] == true, "The truncated bundle is flagged with total_mismatch.", results)
+    check(report[:json].dig("log_stats", "failed") == 3, "Log statistics include all three Swift Testing failures.", results)
+    check(report[:json].dig("stats", "failed") == 3, "A stale bundle cannot erase log-observed failed-test counts.", results)
     check(
       report[:json]["reasons"].to_a.any? { |reason| reason.include?("report=2340") && reason.include?("log=2362") },
       "The report spells out the 2340 vs 2362 total disagreement.",
       results
     )
+  end
+
+  # Extra bundle entries are also a mismatch, but not missing tests.
+  Dir.mktmpdir("overcount-bundle", workspace) do |directory|
+    recorded_bundle(directory, total: 2363, failed: 0, result: "Passed")
+    report = run_recorded_reporter(directory, log: UNDERCOUNTING_PASSING_LOG)
+    check(report[:json]["status"] == "unknown", "An over-counting bundle cannot report passed.", results)
+    check(report[:exit_status] == EXIT_UNKNOWN, "An over-counting bundle exits unknown.", results)
+    reasons = report[:json]["reasons"].to_a.join(" ")
+    check(reasons.include?("1 extra test entries") && !reasons.include?("bundle is missing"),
+          "An over-count is described as extra entries, not missing tests.", results)
+  end
+
+  [false, true].each do |synthetic_entry|
+    Dir.mktmpdir("unassociated-issue", workspace) do |directory|
+      recorded_bundle(directory, total: synthetic_entry ? 36 : 35,
+                      failed: synthetic_entry ? 1 : 0,
+                      result: synthetic_entry ? "Failed" : "Passed",
+                      failing_tests: synthetic_entry ? ["Issues recorded without an associated test or suite"] : [])
+      report = run_recorded_reporter(directory, log: UNASSOCIATED_ISSUE_LOG,
+                                     extra: ["--test-exit", "0"])
+      label = synthetic_entry ? "synthetic bundle entry" : "stale passing bundle"
+      check(report[:json]["status"] == "failed", "Unassociated issues with #{label} report failed.", results)
+      check(report[:exit_status] == EXIT_FAILED, "Unassociated issues with #{label} override exit zero.", results)
+      check(report[:json]["ok"] == false && !report[:markdown].include?("✅"),
+            "Unassociated issues with #{label} cannot produce a green report.", results)
+      check(report[:json].dig("stats", "failed").to_i.positive?,
+            "Unassociated issues with #{label} remain visible in failure counts.", results)
+    end
   end
 
   # 8. Same under-count with a log that flags nothing. There is no failure to
@@ -289,6 +345,14 @@ Dir.mktmpdir("xcresult-report-contract") do |workspace|
       "A bundle whose own result is Failed is never reported as a pass.",
       results
     )
+  end
+
+  Dir.mktmpdir("duplicate-issues", workspace) do |directory|
+    bundle = corrupt_bundle(directory)
+    log = "✘ Test \"same test\" recorded an issue at source.swift:1\n" + FAILING_LOG.sub('"agent tool runner refuses paths outside the workspace" failed', '"same test" failed')
+    File.write(File.join(directory, "xcodebuild.log"), log)
+    report = run_reporter(bundle, directory)
+    check(report[:json].dig("stats", "failed") == 1, "Multiple issues in one Swift test are counted once.", results)
   end
 
   # 11. A non-zero xcodebuild exit can never come back green, whatever the

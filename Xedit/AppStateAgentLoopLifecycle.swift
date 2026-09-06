@@ -11,10 +11,10 @@ extension AppState {
     func clearAgentConversation() {
         agentRequestTask?.cancel()
         if let runtime = activeRuntime {
-            for cleanupTask in runtime.stopCleanupTasks.values {
-                cleanupTask.cancel()
+            for observer in runtime.stopCleanupObservers.values {
+                observer.cancel()
             }
-            runtime.stopCleanupTasks.removeAll()
+            runtime.stopCleanupObservers.removeAll()
             runtime.activeTurnID = nil
             runtime.activeTurnConfiguration = nil
             runtime.userStoppedTurnID = nil
@@ -22,6 +22,12 @@ extension AppState {
             agentSubagentRegistry.cancelAll(forParentRuntime: runtime.id)
         }
         agentMessages.removeAll()
+        if let runtime = activeRuntime {
+            runtime.contextSummary = nil
+            runtime.contextSummaryThroughMessageID = nil
+            runtime.contextCheckpoint = nil
+            discardContextCheckpointCache(for: runtime)
+        }
         agentPatchProposals.removeAll()
         activeRuntime?.clearLocalPanelPreview()
         agentToolCalls.removeAll()
@@ -61,7 +67,7 @@ extension AppState {
         for runtime: AgentRuntime,
         finishReason: String?
     ) {
-        if runtime.contextRunwayResumeCount < AgentContextRunwayPolicy.maximumAutomaticResumes {
+        if canResumeAfterContextCompaction(for: runtime) {
             runtime.pendingContextRunwayResume = true
         }
         _ = captureAgentPlanFromLatestMessage(for: runtime)

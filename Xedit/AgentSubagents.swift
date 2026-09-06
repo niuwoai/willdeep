@@ -68,6 +68,7 @@ struct AgentSubagentRun: Identifiable, Equatable {
     var usageSplit = AgentSubagentRunner.UsageSplit()
     var roundCount: Int = 0
     var toolInvocationCount: Int = 0
+    var requestStop: AgentAuxiliaryRequestStop?
 
     nonisolated var displayHandle: String { "agent_\(shortID)" }
     nonisolated var duration: TimeInterval {
@@ -146,6 +147,8 @@ final class AgentSubagentRegistry: ObservableObject {
         var approvedCommand: String?
         var commandReviewer: AgentSubagentRunner.CommandReviewer?
         var toolReviewer: AgentSubagentRunner.ToolReviewer?
+        var openingImages: [AgentImageAttachment] = []
+        var executionBudget: AgentToolExecutionBudget?
     }
 
     typealias RunOperation = @MainActor (
@@ -205,6 +208,8 @@ final class AgentSubagentRegistry: ObservableObject {
             commandReviewer: executionContext.commandReviewer,
             toolReviewer: executionContext.toolReviewer,
             interventionChannel: interventionChannel,
+            openingImages: executionContext.openingImages,
+            executionBudget: executionContext.executionBudget,
             onProgress: onProgress
         )
     }
@@ -299,6 +304,8 @@ final class AgentSubagentRegistry: ObservableObject {
         executionContext: BackgroundExecutionContext = BackgroundExecutionContext(),
         queuesParentReport: Bool = true
     ) throws -> AgentSubagentRun {
+        try Task.checkCancellation()
+        try executionContext.executionBudget?.checkCurrentOwner()
         guard activeCount(forParentRuntime: parentRuntimeID) < Self.maxConcurrentPerRuntime else {
             throw AgentSubagentError.tooManyConcurrent(Self.maxConcurrentPerRuntime)
         }
@@ -335,6 +342,8 @@ final class AgentSubagentRegistry: ObservableObject {
         tasks[id] = Task { [weak self] in
             let outcome: AgentSubagentRunner.Outcome
             do {
+                try Task.checkCancellation()
+        try executionContext.executionBudget?.checkCurrentOwner()
                 agentSubagentLog.info(
                     "background subagent started run=\(id.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(configuration.model, privacy: .public)"
                 )
@@ -368,7 +377,8 @@ final class AgentSubagentRegistry: ObservableObject {
                 agentSubagentLog.error(
                     "background subagent failed run=\(id.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) errorType=\(String(describing: type(of: error)), privacy: .public) error=\(error.localizedDescription, privacy: .private)"
                 )
-                self?.finish(id: id, status: .failed, report: "Subagent failed: \(error.localizedDescription)", profileID: profile.id)
+                self?.finish(id: id, status: .failed, report: "Subagent failed: \(error.localizedDescription)",
+                    profileID: profile.id, requestStop: AgentAuxiliaryRequestStop(error))
                 return
             }
             agentSubagentLog.info(
@@ -403,7 +413,8 @@ final class AgentSubagentRegistry: ObservableObject {
         workspaceLocation: WorkspaceLocation? = nil,
         parentRuntimeID: UUID,
         someIMContext: SomeIMRequestContext? = nil,
-        outputSchema: AgentStructuredSchema
+        outputSchema: AgentStructuredSchema,
+        executionBudget: AgentToolExecutionBudget? = nil
     ) throws -> AgentSubagentRun {
         try startBackground(
             prompt: prompt,
@@ -415,6 +426,7 @@ final class AgentSubagentRegistry: ObservableObject {
             parentRuntimeID: parentRuntimeID,
             someIMContext: someIMContext,
             outputSchema: outputSchema,
+            executionContext: BackgroundExecutionContext(executionBudget: executionBudget),
             queuesParentReport: false
         )
     }
@@ -426,9 +438,12 @@ final class AgentSubagentRegistry: ObservableObject {
         runtimeDescriptor: RuntimeDescriptor?,
         workspaceLocation: WorkspaceLocation?,
         someIMContext: SomeIMRequestContext?,
-        outputSchema: AgentStructuredSchema
+        outputSchema: AgentStructuredSchema,
+        executionBudget: AgentToolExecutionBudget? = nil
     ) async throws -> AgentSubagentRunner.Outcome {
-        try await runOperation(
+        try Task.checkCancellation()
+        try executionBudget?.checkCurrentOwner()
+        return try await runOperation(
             prompt,
             configuration,
             workspaceURL,
@@ -440,7 +455,7 @@ final class AgentSubagentRegistry: ObservableObject {
             // optimization — it stays on the parent's model and tool set.
             AgentSubagentProfileCatalog.deep,
             nil,
-            BackgroundExecutionContext(),
+            BackgroundExecutionContext(executionBudget: executionBudget),
             // Deliberately silent: goal-planning members are aggregated by
             // their coordinator and never surface as individual Workers.
             nil
@@ -457,7 +472,8 @@ final class AgentSubagentRegistry: ObservableObject {
         toolInvocationCount: Int = 0,
         rounds: [AgentSubagentTranscript.Round] = [],
         didTruncate: Bool = false,
-        profileID: String? = nil
+        profileID: String? = nil,
+        requestStop: AgentAuxiliaryRequestStop? = nil
     ) {
         tasks[id] = nil
         unregisterInterventionChannel(runID: id)
@@ -473,6 +489,7 @@ final class AgentSubagentRegistry: ObservableObject {
         runs[index].usageSplit = usageSplit
         runs[index].roundCount = roundCount
         runs[index].toolInvocationCount = toolInvocationCount
+        runs[index].requestStop = requestStop
 
         // Persist the inspector record before the run snapshot can be
         // evicted from `runs` by the history cap below.
@@ -699,12 +716,12 @@ enum AgentSubagentRunner {
     /// otherwise unknown terminal command. A nil reviewer preserves Strict
     /// and Workspace Access semantics: the child reports the command so the
     /// parent can request an explicit `ops_runner.target_command` approval.
-    typealias CommandReviewer = (_ toolName: String, _ command: String) async -> Bool
+    typealias CommandReviewer = (_ toolName: String, _ command: String) async throws -> Bool
     typealias ToolReviewer = (
         _ toolName: String,
         _ arguments: [String: AgentJSONValue],
         _ risk: AgentToolRisk
-    ) async -> Bool
+    ) async throws -> Bool
 
     /// Read-tier commands are already admitted by the execution guard below;
     /// asking the parent to review them first creates a redundant approval
@@ -1005,6 +1022,7 @@ enum AgentSubagentRunner {
         systemInstruction: String,
         configuration: AgentConfiguration,
         someIMContext: SomeIMRequestContext? = nil,
+        executionBudget: AgentToolExecutionBudget? = nil,
         onEvent: StreamingTextEventHandler? = nil
     ) async throws -> AgentSubagentStreamingTextOutcome {
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1020,10 +1038,11 @@ enum AgentSubagentRunner {
             AgentMessage(role: .user, content: trimmedPrompt),
         ]
         let configuration = AgentSubagentModelCompatibility.configuration(configuration)
-        let client = AgentClient(configuration: configuration, someIMContext: someIMContext)
+        let client = AgentClient(configuration: configuration, someIMContext: someIMContext,
+            requestLedger: executionBudget?.requestLedger)
 
         return try await AgentSubagentTextStreamPipeline.run(onEvent: onEvent) { consume in
-            try await client.streamChat(messages: messages, tools: [], onEvent: consume)
+            try await client.streamChat(messages: messages, tools: [], executionBudget: executionBudget, onEvent: consume)
         }
     }
 
@@ -1082,14 +1101,20 @@ enum AgentSubagentRunner {
         commandReviewer: CommandReviewer? = nil,
         toolReviewer: ToolReviewer? = nil,
         interventionChannel: AgentSubagentInterventionChannel? = nil,
+        openingImages: [AgentImageAttachment] = [],
+        executionBudget: AgentToolExecutionBudget? = nil,
+        session: URLSession? = nil,
         onProgress: ((AgentSubagentProgressUpdate) -> Void)? = nil
     ) async throws -> Outcome {
+        try Task.checkCancellation()
+        try executionBudget?.checkCurrentOwner()
         // some.im-gated providers require the session/workspace context headers on
         // every request; without them some.im rejects/stalls the call. Workflow
         // subagents used to omit this (unlike the main loop), so a `/code-review`
         // on a some.im model hung as an empty card. Forward it here.
         let configuration = AgentSubagentModelCompatibility.configuration(configuration)
-        let client = AgentClient(configuration: configuration, someIMContext: someIMContext)
+        let client = AgentClient(configuration: configuration, session: session, someIMContext: someIMContext,
+            requestLedger: executionBudget?.requestLedger)
         var transcript: [AgentMessage] = [
             AgentMessage(
                 role: .system,
@@ -1107,7 +1132,7 @@ enum AgentSubagentRunner {
                             .strictReadOnlyShellTradeIDs.contains(profile.id)
                 )
             ),
-            AgentMessage(role: .user, content: prompt),
+            AgentMessage(role: .user, content: prompt, images: openingImages),
         ]
         var totalTokens = 0
         var usageSplit = UsageSplit()
@@ -1201,6 +1226,8 @@ enum AgentSubagentRunner {
             )
         )
         while round <= roundLimit {
+            try Task.checkCancellation()
+        try executionBudget?.checkCurrentOwner()
             defer { round += 1 }
             interventionChannel?.beginRound(round)
             _ = applyPendingInterventions(effectiveRound: round)
@@ -1221,6 +1248,7 @@ enum AgentSubagentRunner {
                         try await client.streamChat(
                             messages: transcript,
                             tools: toolList,
+                            executionBudget: executionBudget,
                             onEmptyResponseRetry: { attempt, limit in
                                 publishProgress(round: round, activity: .retryingEmptyResponse(attempt, limit))
                             }
@@ -1232,6 +1260,7 @@ enum AgentSubagentRunner {
                     try await client.streamChat(
                         messages: transcript,
                         tools: toolList,
+                        executionBudget: executionBudget,
                         onEmptyResponseRetry: { attempt, limit in
                             publishProgress(round: round, activity: .retryingEmptyResponse(attempt, limit))
                         }
@@ -1240,6 +1269,7 @@ enum AgentSubagentRunner {
                     }
                 }
             } catch is CancellationError {
+                try executionBudget?.checkCurrentOwner()
                 guard interventionChannel?.hasPendingInterruption == true else {
                     throw CancellationError()
                 }
@@ -1537,7 +1567,7 @@ enum AgentSubagentRunner {
                 do {
                     if let interventionChannel {
                         rawPayload = try await interventionChannel.runCancellableStep {
-                            await executeToolCall(
+                            try await executeToolCall(
                                 call,
                                 workspaceURL: workspaceURL,
                                 additionalWorkspaceRoots: additionalWorkspaceRoots,
@@ -1549,11 +1579,12 @@ enum AgentSubagentRunner {
                                 approvedCommand: approvedCommand,
                                 commandReviewer: commandReviewer,
                                 toolReviewer: toolReviewer,
-                                patchProposalSink: patchProposalSink
+                                patchProposalSink: patchProposalSink,
+                                executionBudget: executionBudget
                             )
                         }
                     } else {
-                        rawPayload = await executeToolCall(
+                        rawPayload = try await executeToolCall(
                             call,
                             workspaceURL: workspaceURL,
                             additionalWorkspaceRoots: additionalWorkspaceRoots,
@@ -1565,10 +1596,12 @@ enum AgentSubagentRunner {
                             approvedCommand: approvedCommand,
                             commandReviewer: commandReviewer,
                             toolReviewer: toolReviewer,
-                            patchProposalSink: patchProposalSink
+                            patchProposalSink: patchProposalSink,
+                            executionBudget: executionBudget
                         )
                     }
                 } catch is CancellationError {
+                    try executionBudget?.checkCurrentOwner()
                     guard interventionChannel?.hasPendingInterruption == true else {
                         throw CancellationError()
                     }
@@ -1890,8 +1923,11 @@ enum AgentSubagentRunner {
         approvedCommand: String? = nil,
         commandReviewer: CommandReviewer? = nil,
         toolReviewer: ToolReviewer? = nil,
-        patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil
-    ) async -> String {
+        patchProposalSink: (@MainActor (String?, String, Bool, URL) async throws -> AgentPatchProposal)? = nil,
+        executionBudget: AgentToolExecutionBudget? = nil
+    ) async throws -> String {
+        try Task.checkCancellation()
+        try executionBudget?.checkCurrentOwner()
         let permitted = profile.effectiveToolNames(
             writeAccessGranted: writeAccess != nil,
             approvedCommandGranted: approvedCommand != nil
@@ -1980,7 +2016,7 @@ enum AgentSubagentRunner {
            ),
            let command = argsDict["command"]?.stringValue(),
            let commandReviewer {
-            isJudgeApprovedCommand = await commandReviewer(call.toolName, command)
+            isJudgeApprovedCommand = try await commandReviewer(call.toolName, command)
         }
         // Chrome mutations and dynamic MCP calls are real host capabilities,
         // but a child has no approval UI of its own. The catch-all generalist
@@ -1993,10 +2029,12 @@ enum AgentSubagentRunner {
            AgentSubagentProfileCatalog.generalistExtraToolNames.contains(call.toolName),
            risk != .read,
            let toolReviewer {
-            isParentApprovedGeneralistTool = await toolReviewer(call.toolName, argsDict, risk)
+            isParentApprovedGeneralistTool = try await toolReviewer(call.toolName, argsDict, risk)
         }
         // 单命令授权：用户在 spawn 审批卡上批准的那条确切命令（仅
         // ops_runner）。精确文本匹配——多一个字符都不放。
+        try Task.checkCancellation()
+        try executionBudget?.checkCurrentOwner()
         let isApprovedCommandInvocation: Bool = {
             guard ["run_command", "terminal_send_command"].contains(call.toolName),
                   profile.id == AgentSubagentProfileCatalog.opsRunnerID,
@@ -2059,6 +2097,7 @@ enum AgentSubagentRunner {
             additionalWorkspaceRoots: additionalWorkspaceRoots,
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: runtimeDescriptor,
+            executionBudget: executionBudget,
             sandboxMode: sandboxMode,
             patchProposalSink: writeAccess == nil ? nil : patchProposalSink,
             // controller 随两个终端工种下发；执行闸门另行保证修改命令必须
@@ -2074,6 +2113,7 @@ enum AgentSubagentRunner {
             )
             return result.payload
         } catch {
+            if error is CancellationError || AgentAuxiliaryRequestStop(error) != nil { throw error }
             return "Tool error: \(error.localizedDescription)"
         }
     }

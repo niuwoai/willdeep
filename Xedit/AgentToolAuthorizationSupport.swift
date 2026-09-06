@@ -790,6 +790,10 @@ enum AgentToolAuthorization {
             let mode = arguments["permission_mode"]?.stringValue()?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "act"
             return "cline_cli:\(mode == "default" ? "act" : mode)"
+        case "opencode_cli":
+            let mode = arguments["permission_mode"]?.stringValue()?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "default"
+            return "opencode_cli:\(mode)"
         default:
             return nil
         }

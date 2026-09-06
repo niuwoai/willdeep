@@ -236,10 +236,10 @@ def parse_log(path)
   duration = nil
 
   # Swift Testing: "✔ Test run with 1748 tests in 150 suites passed after 34.952 seconds."
-  if (match = text.match(/Test run with (\d+) tests?(?: in \d+ suites?)? (passed|failed)(?: after ([\d.]+) seconds)?/))
-    total = match[1].to_i
-    verdict = match[2] == "passed" ? STATUS_PASSED : STATUS_FAILED
-    duration = match[3]&.to_f
+  if (match = text.scan(/Test run with (\d+) tests?(?: in \d+ suites?)? (passed|failed)(?: after ([\d.]+) seconds)?/).last)
+    total = match[0].to_i
+    verdict = match[1] == "passed" ? STATUS_PASSED : STATUS_FAILED
+    duration = match[2]&.to_f
   end
 
   # XCTest aggregate: "Executed 7 tests, with 1 failure (0 unexpected) in 0.4 seconds".
@@ -254,10 +254,15 @@ def parse_log(path)
   failures = text.scan(/✘ Test (.+?) (?:failed|recorded an issue)/).flatten
   # "✘ Test run with 5 tests in 2 suites failed" is the aggregate line, not a case.
   failures.reject! { |name| name.start_with?("run with ") }
+  # Swift Testing does not contribute to XCTest's aggregate failure count.
+  # Multiple issues from one test still represent one failed test.
+  failed += failures.uniq.length
   failures.concat(text.scan(/Test Case '(.+?)' failed/).flatten)
   failures.uniq!
 
-  skipped = text.each_line.count { |line| line.match?(/^\s*\S?\s*Test .+ skipped\b/) }
+  # Swift Testing's progress output can prefix its arrow with a zero-width
+  # space/BOM. Do not let a formatting character turn a skipped test into a pass.
+  skipped = text.each_line.count { |line| line.match?(/^[\s\u200B\uFEFF]*\S?[\s\u200B\uFEFF]*Test .+ skipped\b/) }
 
   # An explicit overall verdict in the log outranks the per-framework lines.
   verdict = STATUS_FAILED if text.include?("** TEST FAILED **")
@@ -335,15 +340,23 @@ elsif log_view
       reasons << "The xcresult bundle reports failed=0 while #{log_path} records a failed run; " \
                  "the bundle is stale or was written by a run that died before finalizing."
     end
+    if log_stats[:failed].to_i > stats[:failed].to_i
+      stats[:failed] = log_stats[:failed]
+      stats[:passed] = [stats[:total] - stats[:failed] - stats[:skipped], 0].max
+    end
   end
 
   log_total = log_stats[:total].to_i
   if log_total.positive? && log_total != stats[:total].to_i
     total_mismatch = true
     delta = log_total - stats[:total].to_i
+    detail = if delta.positive?
+               "The bundle is missing #{delta} of the tests the log ran, so any failure among them would be invisible here."
+             else
+               "The bundle reports #{delta.abs} extra test entries; totals cannot be reconciled (for example, an issue outside a test may create a synthetic entry)."
+             end
     reasons << "Test total disagrees with the xcodebuild log: report=#{stats[:total]} log=#{log_total} " \
-               "(delta #{format("%+d", delta)}). The bundle is missing #{delta.abs} of the tests the log ran, " \
-               "so any failure among them would be invisible here."
+               "(delta #{format("%+d", delta)}). #{detail}"
   end
 end
 

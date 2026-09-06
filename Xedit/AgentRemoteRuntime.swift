@@ -61,6 +61,7 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
         printf 'agent_codex=%s\\n' "$(command -v codex 2>/dev/null || true)"
         printf 'agent_cursor=%s\\n' "$(command -v cursor-agent 2>/dev/null || command -v cursor 2>/dev/null || true)"
         printf 'agent_cline=%s\\n' "$(command -v cline 2>/dev/null || true)"
+        printf 'agent_opencode=%s\\n' "$(command -v opencode 2>/dev/null || true)"
         printf 'npm_registry=%s\\n' "$(wd_cfg npm config get registry)"
         printf 'npm_proxy=%s\\n' "$(wd_cfg npm config get proxy)"
         printf 'npm_https_proxy=%s\\n' "$(wd_cfg npm config get https-proxy)"
@@ -109,6 +110,7 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
                 AgentExecutionAgent.codexCLI.rawValue: nonEmpty(fields["agent_codex"]),
                 AgentExecutionAgent.cursorAgent.rawValue: nonEmpty(fields["agent_cursor"]),
                 AgentExecutionAgent.clineCLI.rawValue: nonEmpty(fields["agent_cline"]),
+                AgentExecutionAgent.openCode.rawValue: nonEmpty(fields["agent_opencode"]),
             ].compactMapValues { $0 }
         )
         updated.lastProbeAt = Date()
@@ -457,13 +459,27 @@ struct SSHRuntimeBackend: AgentRemoteRuntimeBackend {
 
 struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
     let descriptor: RuntimeDescriptor
+    let session: URLSession
+    private let tokenOverride: String?
+    private let recoveryDelays: [Duration]
+    private let slowRecoveryDelay: Duration
+
+    init(descriptor: RuntimeDescriptor, session: URLSession = .shared, tokenOverride: String? = nil,
+         recoveryDelays: [Duration] = AgentDaemonRecoveryPolicy.fastDelays,
+         slowRecoveryDelay: Duration = AgentDaemonRecoveryPolicy.slowDelay) {
+        self.descriptor = descriptor
+        self.session = session
+        self.tokenOverride = tokenOverride
+        self.recoveryDelays = recoveryDelays
+        self.slowRecoveryDelay = slowRecoveryDelay
+    }
 
     private let defaultTimeout: TimeInterval = 20
     /// run_command default only; internal probes stay on `defaultTimeout`.
     private let defaultCommandTimeout: TimeInterval = 60
     private let maxForegroundTimeout: TimeInterval = 120
     private let maxOutputBytes = 32 * 1024
-    private let foregroundJobPollIntervalNanoseconds: UInt64 = 1_000_000_000
+    private let exitConfirmationRequestTimeout: TimeInterval = 5
 
     func probe() async throws -> RuntimeDescriptor {
         let report: DaemonProbeReport = try await request(method: "GET", path: "/v1/probe", query: [])
@@ -500,8 +516,12 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
                 AgentExecutionAgent.codexCLI.rawValue: report.tools["codex"],
                 AgentExecutionAgent.cursorAgent.rawValue: report.tools["cursor-agent"] ?? report.tools["cursor"],
                 AgentExecutionAgent.clineCLI.rawValue: report.tools["cline"],
+                AgentExecutionAgent.openCode.rawValue: report.tools["opencode"],
             ].compactMapValues { $0 }
         )
+        updated.capabilities.supportsIdempotentJobStart = report.idempotentJobStart
+        updated.capabilities.supportsStartRequestRecovery = report.startRequestRecovery
+        updated.capabilities.supportsMonotonicRunDeadline = report.monotonicRunDeadline
         updated.lastProbeAt = Date()
         return updated
     }
@@ -608,43 +628,17 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         foregroundMaxTimeout: TimeInterval
     ) async throws -> AgentToolResult {
         let command = try requiredString("command", in: arguments)
-        let timeoutArg = arguments["timeout_seconds"]?.intValue() ?? Int(defaultCommandTimeout)
-        let timeout = min(max(timeoutArg, 1), 3600 * 6)
-        let wantsBackground = arguments["run_in_background"]?.boolValue() ?? false
-        let job = try await startJob(command: command, timeoutSeconds: timeout)
-        if wantsBackground {
-            let payload = """
-            Started daemon background job \(job.id).
-            Runtime: \(descriptor.displayName)
-            Command: \(command)
-            Remote PID: \(job.pid ?? 0)
-            cwd: \(job.cwd)
-
-            Use `get_job_output` with job_id `\(job.id)` or `kill_job` to inspect or stop it.
-            """
-            return AgentToolResult(summary: "▶ \(job.id) started on \(descriptor.displayName)", payload: payload)
-        }
-
-        let deadline = Date().addingTimeInterval(min(TimeInterval(timeout), max(1, foregroundMaxTimeout)))
-        var latest = job
-        while latest.exitCode == nil && Date() < deadline {
-            try await Task.sleep(nanoseconds: foregroundJobPollIntervalNanoseconds)
-            latest = try await getJob(id: job.id)
-        }
-        if latest.exitCode == nil {
-            _ = try? await killJob(id: job.id)
-            throw AgentToolError.commandTimeout
-        }
-        let output = try await jobOutput(id: job.id)
-        let combined = trimOutput("runtime=\(descriptor.displayName)\njob=\(job.id)\nexit=\(latest.exitCode ?? -1)\n--- output ---\n\(output.output)")
-        if latest.exitCode != 0 {
-            throw AgentToolError.commandFailed(Int32(latest.exitCode ?? -1), combined)
-        }
-        let firstLine = output.output.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
-        return AgentToolResult(
-            summary: "daemon \(descriptor.displayName): exit 0\(firstLine.isEmpty ? "" : ": " + firstLine.prefix(60))",
-            payload: combined
-        )
+        var effective = arguments
+        effective["run_in_background"] = .bool(arguments["run_in_background"]?.boolValue() ?? false)
+        let ownedBackground = effective["run_in_background"]?.boolValue() == true
+            && context.jobRegistry != nil && context.runtimeID != nil
+        effective["timeout_seconds"] = arguments["timeout_seconds"]
+            ?? .number(ownedBackground ? Double(AgentDaemonRunDeadline.maximumCommandSeconds) : defaultCommandTimeout)
+        var specification = AgentDaemonExecution(command: command,
+            displayCommand: AgentSecretStore.redact(command, secretValues: context.secretRedactionValues))
+        try specification.applyCommandOwnership(arguments: arguments, context: context)
+        return try await runDaemonExecution(specification: specification, arguments: effective,
+            context: context, foregroundMaxTimeout: foregroundMaxTimeout)
     }
 
     func runExecutor(
@@ -653,20 +647,80 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         context: AgentToolContext,
         foregroundMaxTimeout: TimeInterval
     ) async throws -> AgentToolResult {
-        let timeoutArg = arguments["timeout_seconds"]?.intValue()
-            ?? Int(foregroundMaxTimeout)
-        let timeout = min(max(timeoutArg, 1), 3600 * 6)
-        let wantsBackground = arguments["run_in_background"]?.boolValue() ?? true
-        let remoteExecutable = specification.executableURL.lastPathComponent
-        let job = try await startProcess(
-            executable: remoteExecutable,
-            arguments: specification.arguments,
-            standardInput: specification.standardInput,
-            timeoutSeconds: timeout
-        )
-        if let registry = context.jobRegistry,
-           let runtimeID = context.runtimeID {
-            return try await runManagedExecutor(
+        try await runDaemonExecution(specification: AgentDaemonExecution(specification), arguments: arguments,
+            context: context, foregroundMaxTimeout: foregroundMaxTimeout)
+    }
+
+    private func runDaemonExecution(
+        specification: AgentDaemonExecution, arguments: [String: AgentJSONValue],
+        context: AgentToolContext, foregroundMaxTimeout: TimeInterval
+    ) async throws -> AgentToolResult {
+        let registry = await MainActor.run { context.jobRegistry ?? AgentJobRegistry() }
+        let runtimeID = context.runtimeID ?? UUID()
+        // Without a session owner there is nowhere to deliver a detached
+        // result. Match local run_command: keep this call in the foreground.
+        let wantsBackground = (arguments["run_in_background"]?.boolValue() ?? true)
+            && context.jobRegistry != nil && context.runtimeID != nil
+        let timeout = AgentDaemonRunDeadline.commandTimeout(
+            requestedSeconds: arguments["timeout_seconds"]?.intValue(),
+            foregroundMaximum: foregroundMaxTimeout, background: wantsBackground)
+        try await registry.checkTurnAdmission(runtimeID: runtimeID, turnID: context.turnID)
+        let preparation = await MainActor.run { () -> AgentDaemonStartPreparation? in
+            guard descriptor.capabilities.supportsStartRequestRecovery == true,
+                  descriptor.capabilities.supportsIdempotentJobStart == true,
+                  let registry = context.jobRegistry, context.runtimeID != nil else { return nil }
+            return AgentDaemonStartPreparation(journal: registry.daemonStartJournal)
+        }
+        let job: DaemonJobData
+        do {
+            job = try await startWithRequestReceipt(body: specification.startBody(timeout: timeout), context: context,
+                onPrepared: { instance, key, serverDeadline in
+                    guard let preparation, let runtimeID = context.runtimeID else { return }
+                    try await checkStartAdmission(context)
+                    let created = Date()
+                    let deadline = min(created.addingTimeInterval(Double(timeout)), context.executionBudget?.deadline ?? .distantFuture)
+                    var receipt = AgentDaemonStartReceipt(id: UUID(), runtimeID: runtimeID, turnID: context.turnID,
+                        remoteRuntimeID: descriptor.id,
+                        endpointFingerprint: AgentDaemonStartReceipt.fingerprint(descriptor.daemonEndpointURL?.absoluteString ?? ""),
+                        workspaceFingerprint: AgentDaemonStartReceipt.fingerprint(descriptor.defaultWorkspacePath),
+                        instanceID: instance, requestID: key, executor: specification.executor,
+                        createdAt: created, deadline: deadline, publishesCompletion: wantsBackground)
+                    receipt.serverDeadlineElapsedMilliseconds = serverDeadline
+                    if specification.executor == nil {
+                        receipt.isCommand = true
+                        receipt.lifetime = specification.lifetime
+                        receipt.goalPhaseID = specification.goalPhaseID
+                        receipt.survivesTurnStop = specification.survivesTurnStop
+                    }
+                    try await preparation.prepare(receipt)
+                })
+        } catch {
+            if let receipt = await preparation?.receipt {
+                // POST may have committed even when cancellation won locally.
+                // Attach recovery under the original owner, then preserve the caller error.
+                let isRecoverable = error is AgentDaemonStartUncertainError && !Task.isCancelled
+                let awaitsExit = isRecoverable && !wantsBackground
+                do {
+                    let recovered = try await runManagedExecutor(remoteJob: .init(id: receipt.jobID, command: "", cwd: descriptor.defaultWorkspacePath,
+                            pid: nil, exitCode: nil), specification: specification, registry: registry,
+                        runtimeID: receipt.runtimeID, turnID: receipt.turnID, timeout: timeout,
+                        wantsBackground: !awaitsExit, secretRedactionValues: context.secretRedactionValues,
+                        startReceipt: receipt, recoveryOnly: true)
+                    if isRecoverable {
+                        try Task.checkCancellation()
+                        if awaitsExit { return recovered }
+                        return AgentToolResult(summary: L10n.JobReceipt.reconnecting,
+                            payload: "job_\(receipt.id.uuidString.prefix(6).lowercased()): \(L10n.JobReceipt.unconfirmed)")
+                    }
+                } catch {
+                    if awaitsExit || Task.isCancelled { throw error }
+                    await registry.recordRemoteMonitoringFailure(id: receipt.id, detail: AgentSecretStore.redact(
+                        error.localizedDescription, secretValues: context.secretRedactionValues))
+                }
+            }
+            throw error
+        }
+        return try await runManagedExecutor(
                 remoteJob: job,
                 specification: specification,
                 registry: registry,
@@ -674,180 +728,137 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
                 turnID: context.turnID,
                 timeout: timeout,
                 wantsBackground: wantsBackground,
-                secretRedactionValues: context.secretRedactionValues
-            )
-        }
-        if wantsBackground {
-            let capabilityNote = specification.executor == .claudeCode
-                ? "\nClaude Code permissions remain controlled by its CLI mode and the daemon workspace boundary; this transport does not provide host-routed approvals."
-                : ""
-            return AgentToolResult(
-                summary: "▶ \(job.id) started on \(descriptor.displayName)",
-                payload: """
-                Started structured \(specification.executor.rawValue) daemon job \(job.id).
-                Runtime: \(descriptor.displayName)
-                Executable: \(remoteExecutable)
-                Remote PID: \(job.pid ?? 0)
-                cwd: \(job.cwd)
-
-                The prompt was sent over stdin, outside argv and the shell.\(capabilityNote)
-                Use `get_job_output` with job_id `\(job.id)` or `kill_job` to inspect or stop it.
-                """
-            )
-        }
-
-        let deadline = Date().addingTimeInterval(
-            min(TimeInterval(timeout), max(1, foregroundMaxTimeout))
-        )
-        var latest = job
-        while latest.exitCode == nil && Date() < deadline {
-            try await Task.sleep(
-                nanoseconds: foregroundJobPollIntervalNanoseconds
-            )
-            latest = try await getJob(id: job.id)
-        }
-        if latest.exitCode == nil {
-            _ = try? await killJob(id: job.id)
-            throw AgentToolError.commandTimeout
-        }
-
-        let output = try await jobOutput(id: job.id)
-        let redactedOutput = AgentSecretStore.redact(
-            output.output,
-            secretValues: context.secretRedactionValues
-        )
-        let events = redactedOutput
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .flatMap { specification.decoder.decode(line: String($0)) }
-        let resultText = structuredResultText(
-            events: events,
-            fallback: redactedOutput
-        )
-        if latest.exitCode != 0 {
-            throw AgentToolError.commandFailed(
-                Int32(latest.exitCode ?? -1),
-                resultText
-            )
-        }
-        let sessionID = events.reversed()
-            .compactMap { $0.sessionID }
-            .first
-        let sessionLine = sessionID.map { "\n\nSession: \($0)" } ?? ""
-        let capabilityNote = specification.executor == .claudeCode
-            ? "\n\nPermission note: Claude permissions were enforced by its CLI mode and the daemon workspace boundary; host-routed approvals are unavailable on this transport."
-            : ""
-        return AgentToolResult(
-            summary: "daemon \(descriptor.displayName): \(specification.executor.rawValue) completed",
-            payload: resultText + sessionLine + capabilityNote
+                secretRedactionValues: context.secretRedactionValues,
+                startReceipt: await preparation?.receipt
         )
     }
 
     private func runManagedExecutor(
         remoteJob: DaemonJobData,
-        specification: AgentExecutorProcessSpecification,
+        specification: AgentDaemonExecution,
         registry: AgentJobRegistry,
         runtimeID: UUID,
         turnID: UUID?,
         timeout: Int,
         wantsBackground: Bool,
-        secretRedactionValues: [String]
+        secretRedactionValues: [String],
+        startReceipt: AgentDaemonStartReceipt? = nil,
+        recoveryOnly: Bool = false,
+        restoredCancellation: Bool = false,
+        statusOnlyRecovery: Bool = false
     ) async throws -> AgentToolResult {
-        let localJobID = UUID()
-        let streamController = DaemonExecutorStreamController()
-        let localJob = await MainActor.run {
-            registry.registerManagedExecutor(
+        let localJobID = startReceipt?.id ?? UUID()
+        if startReceipt != nil, !(await registry.claimDaemonStartReceipt(localJobID)) {
+            return AgentToolResult(summary: L10n.JobReceipt.reconnecting, payload: localJobID.uuidString)
+        }
+        let (localJob, monitor) = await MainActor.run {
+            let remaining = startReceipt.map { max(0, $0.deadline.timeIntervalSinceNow) } ?? Double(timeout)
+            let monitor = AgentDaemonJobMonitor(registry: registry, jobID: localJobID,
+                monitoringDuration: .seconds(remaining) + AgentDaemonRecoveryPolicy.cleanupWindow, fastDelays: recoveryDelays,
+                slowDelay: slowRecoveryDelay,
+                stream: { [weak registry] cursor in
+                    // Original per-request redaction values were deliberately
+                    // not persisted. Do not replay raw logs into a new model context.
+                    if statusOnlyRecovery { throw AgentDaemonEventCursor.ProtocolFailure.capabilityLost }
+                    guard let registry else { throw CancellationError() }
+                    return try await streamExecutorEvents(remoteJobID: remoteJob.id,
+                        specification: specification, registry: registry, localJobID: localJobID,
+                        secretRedactionValues: secretRedactionValues, cursorStore: cursor).exitCode
+                }, lookup: {
+                    if let startReceipt {
+                        let resolved = try await reconcileStart(startReceipt)
+                        guard let code = resolved?.exitCode else { return nil }
+                        guard let exact = Int32(exactly: code) else { throw AgentDaemonEventCursor.ProtocolFailure.invalidSequence }
+                        if resolved?.timedOut == true { await registry.recordRemoteTimeout(id: localJobID) }
+                        return exact
+                    }
+                    let latest: DaemonJobData = try await request(method: "GET", path: "/v1/run/jobs/\(remoteJob.id)",
+                        query: [], timeoutSeconds: exitConfirmationRequestTimeout)
+                    guard latest.id == remoteJob.id else { throw AgentJobError.jobNotFound(remoteJob.id) }
+                    guard let code = latest.exitCode else { return nil }
+                    guard let exact = Int32(exactly: code) else { throw AgentDaemonEventCursor.ProtocolFailure.invalidSequence }
+                    if latest.timedOut == true { await registry.recordRemoteTimeout(id: localJobID) }
+                    return exact
+                }, cancel: {
+                    if let startReceipt, try await reconcileStart(startReceipt) == nil { return false }
+                    let result: DaemonKillData = try await request(method: "DELETE", path: "/v1/run/jobs/\(remoteJob.id)",
+                        query: [], timeoutSeconds: exitConfirmationRequestTimeout)
+                    return result.killed
+                }, describeError: { error in
+                    AgentSecretStore.redact(error.localizedDescription, secretValues: secretRedactionValues)
+                }, persistTerminal: { code in
+                    if let startReceipt { try registry.persistDaemonTerminal(startReceipt, exitCode: code) }
+                })
+            let job = registry.registerManagedExecutor(
                 id: localJobID,
                 executor: specification.executor,
-                displayCommand: "\(specification.executor.rawValue) via \(descriptor.displayName)",
+                displayCommand: specification.executor.map { "\($0.rawValue) via \(descriptor.displayName)" }
+                    ?? specification.displayCommand,
                 workingDirectory: specification.workingDirectory
                     ?? URL(fileURLWithPath: descriptor.defaultWorkspacePath),
                 runtimeID: runtimeID,
                 turnID: turnID,
-                timeoutSeconds: Double(timeout),
-                publishesCompletion: wantsBackground,
+                timeoutSeconds: statusOnlyRecovery && startReceipt?.serverDeadlineElapsedMilliseconds != nil
+                    ? nil : max(0.001, remaining),
+                publishesCompletion: !restoredCancellation && (startReceipt?.publishesCompletion ?? wantsBackground),
                 runtimeDisplayName: descriptor.displayName,
                 remoteRuntimeID: descriptor.id,
-                remotePID: remoteJob.pid.map(Int32.init),
+                remotePID: remoteJob.pid.flatMap(Int32.init(exactly:)),
+                requiresExitReceipt: true,
+                originalStartedAt: startReceipt?.createdAt,
+                expiredOnRegistration: startReceipt != nil && remaining <= 0 && !restoredCancellation
+                    && startReceipt?.serverDeadlineElapsedMilliseconds == nil,
+                lifetime: specification.lifetime,
+                goalPhaseID: specification.goalPhaseID,
+                survivesTurnStop: specification.survivesTurnStop,
+                restoringIndependentReceipt: recoveryOnly && startReceipt?.survivesTurnStop == true,
+                secretRedactionValues: secretRedactionValues,
+                beforeCancellation: {
+                    if let startReceipt { try registry.daemonStartJournal.requestCancellation(startReceipt) }
+                },
                 cancellation: {
-                    streamController.cancel()
-                    Task {
-                        _ = try? await killJob(id: remoteJob.id)
-                    }
+                    Task { @MainActor in monitor.requestCancellation() }
                 }
             )
+            if restoredCancellation { _ = registry.kill(id: localJobID) }
+            return (job, monitor)
         }
 
-        let streamTask = Task {
-            let terminal: DaemonExecutorStreamTerminal
-            do {
-                terminal = try await streamExecutorEvents(
-                    remoteJobID: remoteJob.id,
-                    specification: specification,
-                    registry: registry,
-                    localJobID: localJobID,
-                    secretRedactionValues: secretRedactionValues
-                )
-            } catch is CancellationError {
-                terminal = .cancelled
-            } catch {
-                let detail = AgentSecretStore.redact(
-                    error.localizedDescription,
-                    secretValues: secretRedactionValues
-                )
-                await MainActor.run {
-                    registry.recordManagedExecutorEvents(
-                        id: localJobID,
-                        events: [AgentExecutorEvent(
-                            kind: .warning,
-                            detail: detail,
-                            status: .failed
-                        )]
-                    )
-                }
-                terminal = .failed
-            }
-            await MainActor.run {
-                registry.finishManagedExecutor(
-                    id: localJobID,
-                    status: terminal.jobStatus,
-                    exitCode: terminal.exitCode
-                )
-            }
-        }
-        streamController.attach(streamTask)
+        guard localJob.isAlive else { throw CancellationError() }
+        await monitor.start()
+        // Late remote acceptance is tracked and cancelled above even though
+        // the stopped caller must not report it as freshly started work.
+        if !recoveryOnly { try await registry.checkTurnAdmission(runtimeID: runtimeID, turnID: turnID) }
 
         if wantsBackground {
+            let kind = specification.executor.map { "structured \($0.rawValue)" } ?? "command"
+            let transportNote = specification.executor == nil
+                ? "Command output is streaming into WillDeep."
+                : "The prompt was sent over stdin, outside argv and the shell. Structured daemon events are streaming into WillDeep."
             return AgentToolResult(
                 summary: "▶ \(localJob.displayHandle) started on \(descriptor.displayName)",
                 payload: """
-                Started structured \(specification.executor.rawValue) job \(localJob.displayHandle).
+                Started \(kind) job \(localJob.displayHandle).
                 Runtime: \(descriptor.displayName)
                 Remote job: \(remoteJob.id)
                 Remote PID: \(remoteJob.pid ?? 0)
                 cwd: \(remoteJob.cwd)
 
-                The prompt was sent over stdin, outside argv and the shell. Structured daemon events are streaming into WillDeep; use `get_job_output`, `list_jobs`, or `kill_job` with local job id `\(localJob.displayHandle)`.
+                \(transportNote) Use `get_job_output`, `list_jobs`, or `kill_job` with local job id `\(localJob.displayHandle)`.
                 """
             )
         }
 
         let completedJob = try await withTaskCancellationHandler {
-            while true {
-                try Task.checkCancellation()
-                if let snapshot = await MainActor.run(
-                    body: { registry.job(id: localJobID) }
-                ), !snapshot.isAlive {
-                    return snapshot
-                }
-                try await Task.sleep(nanoseconds: 100_000_000)
-            }
+            try await registry.waitForTerminal(id: localJobID, forRuntime: runtimeID)
         } onCancel: {
-            streamController.cancel()
+            Task { @MainActor in _ = registry.killForStoppedTurn(id: localJobID) }
         }
         await MainActor.run {
             registry.markCompletionSurfaced(id: localJobID, forRuntime: runtimeID)
         }
         let detail = await MainActor.run {
+            if specification.executor == nil { return registry.output(id: localJobID, tailLines: nil) }
             let result = registry.executorResultText(id: localJobID)
             return result.isEmpty
                 ? registry.output(id: localJobID, tailLines: nil)
@@ -855,6 +866,14 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         }
         switch completedJob.status {
         case .completed:
+            if specification.executor == nil {
+                let prefix = specification.summaryPrefix ?? "daemon \(descriptor.displayName)"
+                let output = trimOutput(detail)
+                let payload = specification.summaryPrefix == nil
+                    ? "runtime=\(descriptor.displayName)\njob=\(localJob.displayHandle)\nexit=0\n--- output ---\n\(output)"
+                    : (output.isEmpty ? "(no output)" : output)
+                return AgentToolResult(summary: "\(prefix): exit 0", payload: payload)
+            }
             let usage = AgentToolRunner.structuredUsageSummary(
                 completedJob.executorUsage
             )
@@ -862,7 +881,7 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
                 "\n\nSession: \($0)"
             } ?? ""
             return AgentToolResult(
-                summary: "daemon \(descriptor.displayName): \(specification.executor.rawValue) completed\(usage)",
+                summary: "daemon \(descriptor.displayName): \(specification.executor?.rawValue ?? "command") completed\(usage)",
                 payload: detail + sessionLine
             )
         case .timedOut:
@@ -882,13 +901,40 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
 
     private func streamExecutorEvents(
         remoteJobID: String,
-        specification: AgentExecutorProcessSpecification,
+        specification: AgentDaemonExecution,
         registry: AgentJobRegistry,
         localJobID: UUID,
-        secretRedactionValues: [String]
+        secretRedactionValues: [String],
+        cursorStore: AgentDaemonEventCursorStore
     ) async throws -> DaemonExecutorStreamTerminal {
-        let request = try eventStreamRequest(jobID: remoteJobID)
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        var cursor = cursorStore.load()
+        defer { cursorStore.save(cursor) }
+        var retryIndex = 0
+        while true {
+            do {
+                return try await readExecutorEventStream(remoteJobID: remoteJobID,
+                    specification: specification, registry: registry, localJobID: localJobID,
+                    secretRedactionValues: secretRedactionValues, cursor: &cursor)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                try Task.checkCancellation()
+                guard cursor.supportsResume, retryIndex < recoveryDelays.count,
+                      !(error is AgentDaemonEventCursor.ProtocolFailure) else { throw error }
+                if case AgentToolError.httpFailed(let code, _) = error,
+                   (400..<500).contains(code), code != 408, code != 429 { throw error }
+                try await Task.sleep(for: recoveryDelays[retryIndex])
+                retryIndex += 1
+            }
+        }
+    }
+
+    private func readExecutorEventStream(remoteJobID: String,
+        specification: AgentDaemonExecution, registry: AgentJobRegistry,
+        localJobID: UUID, secretRedactionValues: [String],
+        cursor: inout AgentDaemonEventCursor) async throws -> DaemonExecutorStreamTerminal {
+        let request = try eventStreamRequest(jobID: remoteJobID, after: cursor.after)
+        let (bytes, response) = try await session.bytes(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             throw AgentToolError.httpFailed(
@@ -896,7 +942,10 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
                 "Daemon event stream failed."
             )
         }
-        var terminal = DaemonExecutorStreamTerminal.failed
+        try cursor.negotiate(resumable: (response as? HTTPURLResponse)?
+            .value(forHTTPHeaderField: "X-Job-Event-Cursor") == "1")
+        await registry.recordRemoteRecovery(id: localJobID, recovering: false)
+        var terminal: DaemonExecutorStreamTerminal?
         for try await line in bytes.lines {
             try Task.checkCancellation()
             guard line.hasPrefix("data:") else { continue }
@@ -908,12 +957,41 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
                     DaemonJobEventData.self,
                     from: data
                   ) else {
-                continue
+                // EOF may truncate the final JSON line. The cursor has not
+                // advanced, so a capable daemon can replay it safely.
+                throw AgentJobError.exitUnconfirmed(remoteJobID, L10n.JobReceipt.unconfirmed)
+            }
+            let admission = try cursor.accept(jobID: event.jobID, expectedJobID: remoteJobID,
+                sequence: event.sequence, isGap: event.stream == "gap")
+            if admission == .duplicate { continue }
+            if admission == .deliver(hasGap: true) {
+                await MainActor.run {
+                    registry.recordManagedExecutorEvents(id: localJobID,
+                        events: [AgentExecutorEvent(kind: .warning, detail: L10n.JobReceipt.outputGap, status: .running)])
+                }
+            }
+            if event.stream == "gap" { continue }
+            if let error = event.error, !error.isEmpty {
+                let detail = AgentSecretStore.redact(error, secretValues: secretRedactionValues)
+                await MainActor.run {
+                    registry.recordManagedExecutorEvents(id: localJobID,
+                        events: [AgentExecutorEvent(kind: .warning, detail: detail, status: .running)])
+                }
             }
             if let exitCode = event.exitCode {
-                terminal = exitCode == 0 ? .completed : .failedCode(
-                    Int32(exitCode)
-                )
+                guard event.stream == "exit", let code = Int32(exactly: exitCode) else {
+                    throw AgentJobError.exitUnconfirmed(remoteJobID, L10n.JobReceipt.unconfirmed)
+                }
+                if event.timedOut == true { await registry.recordRemoteTimeout(id: localJobID) }
+                terminal = code == 0 ? .completed : .failedCode(code)
+            }
+            if specification.executor == nil {
+                if event.stream == "stdout" || event.stream == "stderr" {
+                    await registry.recordManagedCommandOutput(id: localJobID, text: event.data + "\n",
+                        stream: event.stream == "stderr" ? .stderr : .stdout)
+                }
+                if let terminal { return terminal }
+                continue
             }
             var normalized = specification.decoder.decode(line: event.data)
             if event.stream == "stderr",
@@ -946,8 +1024,9 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
                     )
                 }
             }
+            if let terminal { return terminal }
         }
-        return terminal
+        throw AgentJobError.exitUnconfirmed(remoteJobID, L10n.JobReceipt.unconfirmed)
     }
 
     private func redactedExecutorEvents(
@@ -973,7 +1052,7 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         }
     }
 
-    private func eventStreamRequest(jobID: String) throws -> URLRequest {
+    private func eventStreamRequest(jobID: String, after: Int64) throws -> URLRequest {
         guard let baseURL = descriptor.daemonEndpointURL else {
             throw AgentToolError.invalidArgument(
                 "Daemon endpoint URL is not configured."
@@ -986,11 +1065,10 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
             .appendingPathComponent(jobID)
             .appendingPathComponent("events")
         var request = URLRequest(url: url)
+        request.setValue(String(after), forHTTPHeaderField: "Last-Event-ID")
         request.timeoutInterval = TimeInterval(3600 * 6)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        let token = RemoteRuntimeSecretStore.daemonToken(
-            runtimeID: descriptor.id
-        )
+        let token = tokenOverride ?? RemoteRuntimeSecretStore.daemonToken(runtimeID: descriptor.id)
         if !token.isEmpty {
             request.setValue(
                 "Bearer \(token)",
@@ -1017,61 +1095,125 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
     func killJob(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
         let id = try requiredString("job_id", in: arguments)
         _ = try await killJob(id: id)
-        return AgentToolResult(summary: "\(id) killed", payload: "Sent kill request to daemon job \(id) on \(descriptor.displayName).")
+        return AgentToolResult(summary: "\(id): \(L10n.JobReceipt.stopping)", payload: "Sent kill request to daemon job \(id) on \(descriptor.displayName). \(L10n.JobReceipt.unconfirmed)")
     }
 
     private func runForegroundCommand(_ command: String, summaryPrefix: String) async throws -> AgentToolResult {
-        let job = try await startJob(command: command, timeoutSeconds: Int(defaultTimeout))
-        var latest = job
-        let deadline = Date().addingTimeInterval(maxForegroundTimeout)
-        while latest.exitCode == nil && Date() < deadline {
-            try await Task.sleep(nanoseconds: foregroundJobPollIntervalNanoseconds)
-            latest = try await getJob(id: job.id)
-        }
-        if latest.exitCode == nil {
-            _ = try? await killJob(id: job.id)
-            throw AgentToolError.commandTimeout
-        }
-        let output = try await jobOutput(id: job.id)
-        let combined = trimOutput(output.output)
-        if latest.exitCode != 0 {
-            throw AgentToolError.commandFailed(Int32(latest.exitCode ?? -1), combined)
-        }
-        return AgentToolResult(summary: "\(summaryPrefix): exit 0", payload: combined.isEmpty ? "(no output)" : combined)
+        try await runDaemonExecution(specification: .init(command: command, displayCommand: summaryPrefix,
+            summaryPrefix: summaryPrefix), arguments: ["run_in_background": .bool(false),
+                "timeout_seconds": .number(defaultTimeout)], context: AgentToolContext(rootDirectory: nil),
+            foregroundMaxTimeout: maxForegroundTimeout)
     }
 
-    private func startJob(command: String, timeoutSeconds: Int) async throws -> DaemonJobData {
-        let body: [String: Any] = [
-            "command": command,
-            "cwd": ".",
-            "timeout_seconds": timeoutSeconds
-        ]
-        return try await request(method: "POST", path: "/v1/run/start", query: [], body: body)
+    private func startWithRequestReceipt(body: [String: Any], context: AgentToolContext?,
+        onPrepared: (@Sendable (String, String, Int64?) async throws -> Void)? = nil) async throws -> DaemonJobData {
+        try await checkStartAdmission(context)
+        if context?.executionBudget?.deadline != nil,
+           descriptor.capabilities.supportsMonotonicRunDeadline != true
+            || descriptor.capabilities.supportsIdempotentJobStart != true {
+            throw AgentToolError.invalidArgument(L10n.JobReceipt.deadlineUnsupported)
+        }
+        guard descriptor.capabilities.supportsIdempotentJobStart == true else {
+            // An old daemon cannot promise deduplication. Never blindly replay
+            // a non-idempotent POST merely because its response was lost.
+            return try await request(method: "POST", path: "/v1/run/start", query: [], body: body)
+        }
+        let identity: DaemonRunIdentity = try await request(method: "GET", path: "/v1/run/identity", query: [],
+            timeoutSeconds: startReceiptTimeout(context))
+        guard identity.instanceID.utf8.count == 32,
+              identity.instanceID.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
+            throw AgentToolError.invalidArgument("Daemon returned an invalid process instance identity.")
+        }
+        let key = UUID().uuidString.lowercased()
+        let jobID = "job-\(identity.instanceID)-request-\(key)"
+        var keyedBody = body
+        keyedBody["request_id"] = key
+        keyedBody["expected_instance_id"] = identity.instanceID
+        try await checkStartAdmission(context)
+        let serverDeadline = try AgentDaemonRunDeadline.resolve(localDeadline: context?.executionBudget?.deadline,
+            serverElapsedMilliseconds: identity.elapsedMilliseconds,
+            timeoutSeconds: body["timeout_seconds"] as? Int ?? AgentDaemonRunDeadline.maximumCommandSeconds)
+        if let serverDeadline { keyedBody["deadline_elapsed_milliseconds"] = serverDeadline }
+        try await onPrepared?(identity.instanceID, key, serverDeadline)
+        let delays: [Duration] = [.zero] + Array(recoveryDelays.dropFirst().prefix(2))
+        for (attempt, delay) in delays.enumerated() {
+            try await Task.sleep(for: delay)
+            try await checkStartAdmission(context)
+            do {
+                let job: DaemonJobData = try await request(method: "POST", path: "/v1/run/start", query: [],
+                    body: keyedBody, timeoutSeconds: startReceiptTimeout(context))
+                guard job.id == jobID else { throw AgentDaemonStartUncertainError(jobID: jobID) }
+                return job
+            } catch {
+                if Task.isCancelled || error is CancellationError { throw error }
+                let retryable: Bool
+                if case AgentToolError.httpFailed(let status, _) = error {
+                    if status == 410, serverDeadline != nil { throw AgentToolExecutionBudgetError.exhausted }
+                    retryable = [408, 429, 500, 502, 503, 504].contains(status)
+                    if attempt == 0, (400..<500).contains(status), !retryable { throw error }
+                } else if let transport = error as? URLError {
+                    retryable = [.timedOut, .networkConnectionLost, .cannotConnectToHost,
+                                 .notConnectedToInternet, .cannotFindHost, .dnsLookupFailed].contains(transport.code)
+                } else { retryable = error is DecodingError }
+                guard retryable, attempt + 1 < delays.count else {
+                    throw AgentDaemonStartUncertainError(jobID: jobID)
+                }
+            }
+        }
+        throw AgentDaemonStartUncertainError(jobID: jobID)
     }
 
-    private func startProcess(
-        executable: String,
-        arguments: [String],
-        standardInput: Data,
-        timeoutSeconds: Int
-    ) async throws -> DaemonJobData {
-        let body: [String: Any] = [
-            "executable": executable,
-            "arguments": arguments,
-            "stdin_base64": standardInput.base64EncodedString(),
-            "cwd": ".",
-            "timeout_seconds": timeoutSeconds
-        ]
-        return try await request(
-            method: "POST",
-            path: "/v1/run/start",
-            query: [],
-            body: body
-        )
+    private func checkStartAdmission(_ context: AgentToolContext?) async throws {
+        try Task.checkCancellation()
+        try await context?.executionBudget?.checkCurrentOwner()
+        if let registry = context?.jobRegistry, let runtimeID = context?.runtimeID {
+            try await registry.checkTurnAdmission(runtimeID: runtimeID, turnID: context?.turnID)
+        }
+    }
+
+    private func startReceiptTimeout(_ context: AgentToolContext?) -> TimeInterval {
+        min(defaultTimeout, max(0.001, context?.executionBudget?.deadline?.timeIntervalSinceNow ?? defaultTimeout))
     }
 
     private func getJob(id: String) async throws -> DaemonJobData {
         try await request(method: "GET", path: "/v1/run/jobs/\(id)", query: [])
+    }
+
+    private func reconcileStart(_ receipt: AgentDaemonStartReceipt) async throws -> DaemonJobData? {
+        guard receipt.matches(descriptor) else { throw AgentDaemonStartJournalError.conflictingReceipt }
+        let resolution: DaemonStartResolution = try await request(method: "POST",
+            path: "/v1/run/requests/\(receipt.requestID)/reconcile", query: [],
+            body: ["expected_instance_id": receipt.instanceID], timeoutSeconds: exitConfirmationRequestTimeout)
+        guard resolution.instanceID == receipt.instanceID, resolution.requestID == receipt.requestID else {
+            throw AgentDaemonEventCursor.ProtocolFailure.invalidSequence
+        }
+        switch resolution.state {
+        case "pending":
+            guard resolution.job == nil else { throw AgentDaemonEventCursor.ProtocolFailure.invalidSequence }
+            return nil
+        case "not_started":
+            guard resolution.job == nil else { throw AgentDaemonEventCursor.ProtocolFailure.invalidSequence }
+            throw AgentDaemonStartResolutionError.notStarted
+        case "started":
+            guard let job = resolution.job, job.id == receipt.jobID else { throw AgentDaemonEventCursor.ProtocolFailure.invalidSequence }
+            return job
+        default: throw AgentDaemonEventCursor.ProtocolFailure.invalidSequence
+        }
+    }
+
+    /// Resume an existing receipt only. No executable or prompt is reconstructed
+    /// and no /run/start request can be emitted from this entry point.
+    func restoreStartReceipt(_ pending: AgentDaemonStartJournal.Pending, registry: AgentJobRegistry) async throws {
+        let receipt = pending.receipt
+        guard receipt.matches(descriptor), descriptor.capabilities.supportsStartRequestRecovery == true else {
+            throw AgentDaemonStartJournalError.conflictingReceipt
+        }
+        let specification = AgentDaemonExecution(receipt: receipt, workspace: descriptor.defaultWorkspacePath)
+        _ = try await runManagedExecutor(remoteJob: .init(id: receipt.jobID, command: "", cwd: descriptor.defaultWorkspacePath,
+                pid: nil, exitCode: nil), specification: specification, registry: registry, runtimeID: receipt.runtimeID,
+            turnID: receipt.turnID, timeout: max(1, Int(receipt.deadline.timeIntervalSinceNow)),
+            wantsBackground: true, secretRedactionValues: [], startReceipt: receipt, recoveryOnly: true,
+            restoredCancellation: pending.cancellationRequested, statusOnlyRecovery: true)
     }
 
     private func jobOutput(id: String) async throws -> DaemonJobOutputData {
@@ -1086,7 +1228,8 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         method: String,
         path: String,
         query: [URLQueryItem],
-        body: [String: Any]? = nil
+        body: [String: Any]? = nil,
+        timeoutSeconds: TimeInterval? = nil
     ) async throws -> T {
         guard let baseURL = descriptor.daemonEndpointURL else {
             throw AgentToolError.invalidArgument("Daemon endpoint URL is not configured.")
@@ -1098,8 +1241,8 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.timeoutInterval = maxForegroundTimeout
-        let token = RemoteRuntimeSecretStore.daemonToken(runtimeID: descriptor.id)
+        request.timeoutInterval = timeoutSeconds ?? maxForegroundTimeout
+        let token = tokenOverride ?? RemoteRuntimeSecretStore.daemonToken(runtimeID: descriptor.id)
         if !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -1107,8 +1250,12 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            let detail = (try? JSONDecoder.willdeepDaemon.decode(DaemonEnvelope<T>.self, from: data))?.error
+            throw AgentToolError.httpFailed(status, detail ?? "Daemon request failed.")
+        }
         let envelope = try JSONDecoder.willdeepDaemon.decode(DaemonEnvelope<T>.self, from: data)
         guard (200..<300).contains(status), envelope.ok else {
             throw AgentToolError.httpFailed(status, envelope.error ?? "Daemon request failed.")
@@ -1165,6 +1312,9 @@ private struct DaemonEnvelope<T: Decodable>: Decodable {
 }
 
 private struct DaemonProbeReport: Decodable {
+    let idempotentJobStart: Bool?
+    let startRequestRecovery: Bool?
+    let monotonicRunDeadline: Bool?
     let platform: String
     let arch: String
     let workspace: String
@@ -1176,6 +1326,9 @@ private struct DaemonProbeReport: Decodable {
     enum CodingKeys: String, CodingKey {
         case platform, arch, workspace, tools, registries, proxies
         case githubCLIAuthLine = "github_cli_auth_line"
+        case idempotentJobStart = "idempotent_job_start"
+        case startRequestRecovery = "start_request_recovery"
+        case monotonicRunDeadline = "monotonic_run_deadline"
     }
 }
 
@@ -1219,10 +1372,33 @@ private struct DaemonJobData: Decodable {
     let cwd: String
     let pid: Int?
     let exitCode: Int?
+    var timedOut: Bool? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, command, cwd, pid
         case exitCode = "exit_code"
+        case timedOut = "timed_out"
+    }
+}
+
+private struct DaemonRunIdentity: Decodable {
+    let instanceID: String
+    let elapsedMilliseconds: Int64?
+    enum CodingKeys: String, CodingKey {
+        case instanceID = "instance_id"
+        case elapsedMilliseconds = "elapsed_milliseconds"
+    }
+}
+
+private struct DaemonStartResolution: Decodable {
+    let requestID: String
+    let instanceID: String
+    let state: String
+    let job: DaemonJobData?
+    enum CodingKeys: String, CodingKey {
+        case state, job
+        case requestID = "request_id"
+        case instanceID = "instance_id"
     }
 }
 
@@ -1231,13 +1407,19 @@ private struct DaemonJobOutputData: Decodable {
 }
 
 private struct DaemonJobEventData: Decodable {
+    let jobID: String?
+    let sequence: Int64?
     let stream: String
     let data: String
     let exitCode: Int?
+    let error: String?
+    let timedOut: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case stream, data
+        case stream, data, sequence, error
+        case jobID = "job_id"
         case exitCode = "exit_code"
+        case timedOut = "timed_out"
     }
 }
 
@@ -1269,31 +1451,6 @@ private enum DaemonExecutorStreamTerminal {
         case .cancelled:
             return SIGTERM
         }
-    }
-}
-
-private nonisolated final class DaemonExecutorStreamController:
-    @unchecked Sendable {
-    private let lock = NSLock()
-    private var task: Task<Void, Never>?
-    private var cancelled = false
-
-    func attach(_ task: Task<Void, Never>) {
-        let shouldCancel = lock.withLock {
-            self.task = task
-            return cancelled
-        }
-        if shouldCancel {
-            task.cancel()
-        }
-    }
-
-    func cancel() {
-        let task = lock.withLock {
-            cancelled = true
-            return self.task
-        }
-        task?.cancel()
     }
 }
 

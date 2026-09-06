@@ -792,6 +792,40 @@ struct GitWorktreeCoreTests {
         #expect(restored.worktree.branch == "feature/recover-me")
     }
 
+    @Test("dispatch worktree uses its pinned input instead of a moving source HEAD")
+    func testWorktreeUsesPinnedInputRevision() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("willdeep_pinned_input_\(UUID().uuidString)")
+        let repository = base.appendingPathComponent("repository")
+        let worktreeRoot = base.appendingPathComponent("worktrees")
+        try FileManager.default.createDirectory(at: repository, withIntermediateDirectories: true)
+        defer {
+            do { try FileManager.default.removeItem(at: base) }
+            catch { Issue.record("Fixture cleanup failed: \(error)") }
+        }
+        try requireGit(["init"], in: repository)
+        try requireGit(["config", "user.email", "tests@example.com"], in: repository)
+        try requireGit(["config", "user.name", "WillDeep Tests"], in: repository)
+        let file = repository.appendingPathComponent("input.txt")
+        try Data("pinned\n".utf8).write(to: file)
+        try requireGit(["add", "input.txt"], in: repository)
+        try requireGit(["-c", "commit.gpgsign=false", "commit", "-m", "input"], in: repository)
+        let pinned = AppState.runGitCommand(arguments: ["rev-parse", "HEAD"], in: repository).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        try Data("new source HEAD\n".utf8).write(to: file)
+        try requireGit(["-c", "commit.gpgsign=false", "commit", "-am", "advance source"], in: repository)
+        let result = try AppState.createGitWorktree(
+            from: repository, branchName: "task/pinned", worktreeRoot: worktreeRoot, startingRevision: pinned
+        ).get()
+        #expect(try String(contentsOf: result.worktree.url.appendingPathComponent("input.txt"), encoding: .utf8) == "pinned\n")
+        #expect(try String(contentsOf: file, encoding: .utf8) == "new source HEAD\n")
+        let head = AppState.runGitCommand(arguments: ["rev-parse", "HEAD"], in: repository).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        if case .success = AppState.createGitWorktree(
+            from: repository, branchName: "task/pinned", worktreeRoot: worktreeRoot, startingRevision: head
+        ) {
+            Issue.record("A mismatched existing task worktree must not be silently reused")
+        }
+        #expect(try String(contentsOf: result.worktree.url.appendingPathComponent("input.txt"), encoding: .utf8) == "pinned\n")
+    }
+
     @Test("git worktree creation lists and detects worktree git-file roots")
     func testGitWorktreeCreateListAndFindRoot() throws {
         let base = FileManager.default.temporaryDirectory

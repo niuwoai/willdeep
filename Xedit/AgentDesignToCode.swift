@@ -30,7 +30,7 @@ nonisolated enum AgentDesignToCode {
 
     private static let implementationToolNames: Set<String> = [
         "create_file", "edit_file", "apply_patch",
-        "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli",
+        "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli",
     ]
     private static let captureToolNames: Set<String> = [
         "embedded_browser_capture_screenshot", "chrome_capture_tab",

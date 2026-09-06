@@ -222,6 +222,9 @@ extension AgentToolRunner {
     nonisolated static let codexCLIPermissionModes: Set<String> = ["plan", "workspaceWrite", "default"]
     nonisolated static let cursorAgentPermissionModes: Set<String> = ["plan", "ask", "default"]
     nonisolated static let clineCLIPermissionModes: Set<String> = ["plan", "act", "default"]
+    /// opencode 只有两档：默认逐条询问，`auto` 自动放行未被明确拒绝的操作。
+    /// 它自己的 --help 把 auto 标成 "(dangerous!)"，所以不设成默认值。
+    nonisolated static let openCodePermissionModes: Set<String> = ["default", "auto"]
 
     nonisolated static func delegatedAgentForwardedCommandArguments(
         command: String,
@@ -273,6 +276,17 @@ extension AgentToolRunner {
         return executablePath(commandName: "cursor", preferredPaths: [
             "/usr/local/bin/cursor",
             "/opt/homebrew/bin/cursor",
+        ], environment: environment, isExecutable: isExecutable)
+    }
+
+    nonisolated static func openCodeExecutablePath(
+        environment: [String: String] = shellEnvironment(),
+        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) -> String? {
+        executablePath(commandName: "opencode", preferredPaths: [
+            "\(NSHomeDirectory())/.local/bin/opencode",
+            "/opt/homebrew/bin/opencode",
+            "/usr/local/bin/opencode",
         ], environment: environment, isExecutable: isExecutable)
     }
 
@@ -357,6 +371,30 @@ extension AgentToolRunner {
         }
         if let workspacePath, !workspacePath.isEmpty {
             parts += ["--workspace", shellQuoted(workspacePath)]
+        }
+        if let model, !model.isEmpty {
+            parts += ["--model", shellQuoted(model)]
+        }
+        parts.append(shellQuoted(prompt))
+        return parts.joined(separator: " ")
+    }
+
+    /// 与 `AgentExecutorProcessFactory.openCode` 保持同一套参数顺序。两边
+    /// 都存在是因为这条路径要拼一行可在远端 shell 里执行的命令，而工厂那
+    /// 边直接用 Process 的 argv；提示词必须排在所有选项之后。
+    nonisolated static func openCodeCommandLine(
+        executable: String,
+        prompt: String,
+        permissionMode: String,
+        model: String?,
+        workspacePath: String?
+    ) -> String {
+        var parts = [shellQuoted(executable), "run", "--format", "json"]
+        if let workspacePath, !workspacePath.isEmpty {
+            parts += ["--dir", shellQuoted(workspacePath)]
+        }
+        if permissionMode == "auto" {
+            parts.append("--auto")
         }
         if let model, !model.isEmpty {
             parts += ["--model", shellQuoted(model)]
@@ -614,6 +652,39 @@ extension AgentToolRunner {
             arguments: arguments,
             context: context
         )
+    }
+
+    static func openCodeCLI(
+        arguments: [String: AgentJSONValue],
+        context: AgentToolContext
+    ) async throws -> AgentToolResult {
+        let prompt = try delegatedAgentPrompt(arguments: arguments)
+        let permissionMode = arguments["permission_mode"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "default"
+        guard openCodePermissionModes.contains(permissionMode) else {
+            throw AgentToolError.invalidArgument(
+                "permission_mode must be one of: \(openCodePermissionModes.sorted().joined(separator: ", "))"
+            )
+        }
+        let executable: String
+        if context.remoteBackend != nil {
+            executable = "opencode"
+        } else if let localExecutable = openCodeExecutablePath() {
+            executable = localExecutable
+        } else {
+            throw AgentToolError.commandFailed(
+                127,
+                "opencode CLI not found on this Mac. Install it first (`brew install sst/tap/opencode` or see opencode.ai), then retry. Tell the user instead of retrying blindly."
+            )
+        }
+        let command = openCodeCommandLine(
+            executable: executable,
+            prompt: prompt,
+            permissionMode: permissionMode,
+            model: arguments["model"]?.stringValue(),
+            workspacePath: context.workspaceLocation?.path ?? context.rootDirectory?.standardizedFileURL.path
+        )
+        return try await runDelegatedAgentCommand(command, arguments: arguments, context: context)
     }
 
     static func clineCLI(

@@ -290,7 +290,8 @@ enum AgentSecretStore {
             // when rebuilding the value; otherwise every image-producing tool
             // reports success while its screenshot silently disappears before
             // the tool message is persisted or rendered.
-            images: result.images
+            images: result.images,
+            commandExitCode: result.commandExitCode
         )
     }
 

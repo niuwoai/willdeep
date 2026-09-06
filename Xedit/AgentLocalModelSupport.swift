@@ -746,6 +746,7 @@ extension AppState {
     }
 
     func contextCompressionConfigurationCandidates() -> [AgentConfiguration] {
+        if let environment = agentLoopInferenceEnvironment { return [environment.configuration.normalized] }
         // 顺序：用户显式偏好的本地模型 → some.im 网关托管压缩模型
         // （someim-32b-compressor，固定指令由服务端 replace 注入）→ 会话
         // 压缩模型兜底。用户在设置里显式指定了压缩模型时尊重该选择，

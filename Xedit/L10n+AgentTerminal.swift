@@ -11,12 +11,14 @@ extension L10n {
         static let hermesName = String(localized: "execution-agent.hermes.name", defaultValue: "Hermes")
         static let cursorName = String(localized: "execution-agent.cursor.name", defaultValue: "Cursor Agent")
         static let clineName = String(localized: "execution-agent.cline.name", defaultValue: "Cline")
+        static let openCodeName = String(localized: "execution-agent.opencode.name", defaultValue: "OpenCode")
         static let willDeepSummary = String(localized: "execution-agent.willdeep.summary", defaultValue: "Let WillDeep run this task with its built-in model and tools.")
         static let claudeCodeSummary = String(localized: "execution-agent.claude-code.summary", defaultValue: "Run this task with the local Claude Code CLI.")
         static let codexSummary = String(localized: "execution-agent.codex.summary", defaultValue: "Run this task with the local Codex CLI.")
         static let hermesSummary = String(localized: "execution-agent.hermes.summary", defaultValue: "Run this task with a local Hermes profile.")
         static let cursorSummary = String(localized: "execution-agent.cursor.summary", defaultValue: "Run this task with the local Cursor Agent CLI.")
         static let clineSummary = String(localized: "execution-agent.cline.summary", defaultValue: "Run this task with the local Cline CLI.")
+        static let openCodeSummary = String(localized: "execution-agent.opencode.summary", defaultValue: "Run this task with the local opencode CLI.")
         static let pickerHelp = String(localized: "execution-agent.picker.help", defaultValue: "Choose whether WillDeep runs this turn or delegates it to a local external coding CLI.")
     }
 

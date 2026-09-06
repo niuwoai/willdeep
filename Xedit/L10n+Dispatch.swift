@@ -7,6 +7,18 @@ import Foundation
 
 extension L10n {
     enum Dispatch {
+        static let handoffUnavailable = String(
+            localized: "dispatch.handoff-unavailable",
+            defaultValue: "Task continuation could not be reconciled. Existing work is preserved; no replacement executor was started."
+        )
+        static let deliveryIncomplete = String(
+            localized: "dispatch.delivery-incomplete",
+            defaultValue: "Host verification or artifact integration is incomplete."
+        )
+        static let artifactInputMissing = String(
+            localized: "dispatch.artifact-input-missing",
+            defaultValue: "This legacy task has no recorded input revision. Its changes need input-version reconciliation before retrying."
+        )
         static let navigationTitle = String(
             localized: "dispatch.navigation-title",
             defaultValue: "Orchestrator"

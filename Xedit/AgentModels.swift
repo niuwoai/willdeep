@@ -150,6 +150,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// separate from `messages`: context compression must shrink only the
     /// next provider request, never the user's local transcript.
     var contextSummary: String?
+    var contextCheckpoint: AgentContextCheckpoint? = nil
     /// The latest local message included in `contextSummary`. Requests send
     /// the summary plus messages after this id; the UI still renders every
     /// original message from `messages`.
@@ -472,7 +473,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, worktreeRecoveryInfo, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
         case providerEntryID, providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
-        case createdAt, updatedAt, messages, hostWorkerRuns, coordinatorWorkerRuns, auxiliaryModelRequests, contextSummary, contextSummaryThroughMessageID
+        case createdAt, updatedAt, messages, hostWorkerRuns, coordinatorWorkerRuns, auxiliaryModelRequests, contextSummary, contextSummaryThroughMessageID, contextCheckpoint
         case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
         case originRoutineID, lastTurnFailure
@@ -513,6 +514,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
             forKey: .auxiliaryModelRequests
         ) ?? []
         self.contextSummary = try c.decodeIfPresent(String.self, forKey: .contextSummary)
+        self.contextCheckpoint = try c.decodeIfPresent(AgentContextCheckpoint.self, forKey: .contextCheckpoint)
         self.contextSummaryThroughMessageID = try c.decodeIfPresent(AgentMessage.ID.self, forKey: .contextSummaryThroughMessageID)
         self.didEditFiles = try c.decodeIfPresent(Bool.self, forKey: .didEditFiles) ?? false
         self.agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []

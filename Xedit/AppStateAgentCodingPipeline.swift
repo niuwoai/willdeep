@@ -410,7 +410,8 @@ extension AppState {
         }
 
         if writeAccess != nil {
-            let approval = await autoApprovalSource(
+            let approval: AgentToolApprovalSource?
+            do { approval = try await checkedAutoApprovalSource(
                 toolName: "spawn_agent",
                 arguments: spawnArguments,
                 risk: .write,
@@ -421,11 +422,20 @@ extension AppState {
                 conversationAllowedToolSignatures: runtime.conversationAllowedToolSignatures,
                 environmentTrustDeclarations: runtime.environmentTrustDeclarations,
                 computerUseOwner: runtime.computerUseOwner,
-                latestUserMessage: requestTextForAutomaticCoding(runtime: runtime)
-            )
+                latestUserMessage: requestTextForAutomaticCoding(runtime: runtime), budgetRuntime: runtime
+            ) } catch {
+                let notice = handleApprovalRequestStop(error, runtime: runtime)
+                settle(.failed, summary: notice, error: notice)
+                finishHostWorkerRun(hostRunID, status: .failed, runtime: runtime)
+                throw error
+            }
             if approval == nil {
                 activateSerialToolDecision(recordID: recordID, status: .pendingApproval, runtime: runtime)
                 let decision = await awaitToolDecision(for: runtime, forCallID: recordID)
+                if runtime.toolCalls.first(where: { $0.id == recordID })?.status == .failed {
+                    finishHostWorkerRun(hostRunID, status: .failed, runtime: runtime)
+                    throw CancellationError() // Owner hold, if needed, was settled by re-evaluation.
+                }
                 if Task.isCancelled || decision.isDenied {
                     settle(.denied, summary: "declined", error: "Declined")
                     finishHostWorkerRun(hostRunID, status: .denied, runtime: runtime)
@@ -475,6 +485,7 @@ extension AppState {
                         applyImmediately: true
                     )
                 },
+                executionBudget: toolExecutionBudget(for: runtime),
                 onProgress: { [weak self] progress in
                     self?.applySubagentLiveProgress(
                         progress,

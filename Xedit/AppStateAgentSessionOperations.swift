@@ -220,6 +220,9 @@ extension AppState {
             agentSessions.insert(updated, at: 0)
         }
         upsertAgentUsageSnapshot(for: runtime.session)
+        if !runtime.isResponding && !runtime.isAwaitingProviderSlot && !runtime.isCompressingContext {
+            scheduleDispatchDecisionResumption()
+        }
 
         // After every persist, give the LLM summarizer a chance to
         // upgrade the auto-derived first-message-prefix title to a

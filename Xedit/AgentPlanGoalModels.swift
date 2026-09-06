@@ -212,6 +212,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
     case hermesCLI
     case cursorAgent
     case clineCLI
+    case openCode
 
     var id: String { rawValue }
 
@@ -223,6 +224,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .hermesCLI: return L10n.ExecutionAgent.hermesName
         case .cursorAgent: return L10n.ExecutionAgent.cursorName
         case .clineCLI: return L10n.ExecutionAgent.clineName
+        case .openCode: return L10n.ExecutionAgent.openCodeName
         }
     }
 
@@ -234,6 +236,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .hermesCLI: return L10n.ExecutionAgent.hermesSummary
         case .cursorAgent: return L10n.ExecutionAgent.cursorSummary
         case .clineCLI: return L10n.ExecutionAgent.clineSummary
+        case .openCode: return L10n.ExecutionAgent.openCodeSummary
         }
     }
 
@@ -245,6 +248,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .hermesCLI: return "h.circle"
         case .cursorAgent: return "cursorarrow.click"
         case .clineCLI: return "chevron.left.forwardslash.chevron.right"
+        case .openCode: return "curlybraces"
         }
     }
 
@@ -256,6 +260,7 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .hermesCLI: return "hermes_cli"
         case .cursorAgent: return "cursor_agent"
         case .clineCLI: return "cline_cli"
+        case .openCode: return "opencode_cli"
         }
     }
 
@@ -267,12 +272,18 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
         case .hermesCLI: return "workspaceWrite"
         case .cursorAgent: return "default"
         case .clineCLI: return "act"
+        // opencode 默认逐条询问权限；`--auto` 才自动放行，见
+        // AgentExecutorProcessFactory.openCode。
+        case .openCode: return "default"
         }
     }
 
     var supportsStructuredExecution: Bool {
         switch self {
-        case .claudeCode, .codexCLI:
+        // opencode 的 `--format json` 是一条定义清楚的事件流（step_start /
+        // tool_use / text / step_finish），并且带 sessionID 可以 `-s` 续接，
+        // 所以按结构化执行器接，而不是当普通 shell 工具。
+        case .claudeCode, .codexCLI, .openCode:
             return true
         case .willDeep, .hermesCLI, .cursorAgent, .clineCLI:
             return false
@@ -291,6 +302,8 @@ nonisolated enum AgentExecutionAgent: String, Codable, CaseIterable, Identifiabl
             self = .cursorAgent
         case "cline_cli":
             self = .clineCLI
+        case "opencode_cli":
+            self = .openCode
         default:
             return nil
         }
@@ -663,6 +676,11 @@ nonisolated struct AgentGoal: Codable, Equatable {
     /// Budget and spend for the current execution segment. Persisted so a
     /// relaunch cannot hand a long-running Goal a fresh full budget.
     var continuationBudget: AgentGoalContinuationBudget? = nil
+    /// Host-owned completion evidence; absent in legacy sessions. A model's
+    /// goal-check is a candidate, never authority to manufacture receipts.
+    var verification: AgentGoalVerification? = nil
+    /// Explicit user grants, never supplied by model tool arguments.
+    var taskAuthorizations: [AgentGoalTaskAuthorization]? = nil
 
     struct Item: Codable, Equatable, Identifiable {
         var id: UUID

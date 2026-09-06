@@ -202,7 +202,7 @@ struct WillDeepTests {
     }
 
     @MainActor
-    @Test("editing a pinned goal changes only the statement before AI acceptance reconciliation")
+    @Test("editing a pinned goal preserves criteria but invalidates old acceptance")
     func testPinnedGoalEditorPreservesInternalAcceptance() {
         let appState = AppState()
         appState.startNewAgentSession(
@@ -211,13 +211,22 @@ struct WillDeepTests {
         appState.agentInteractionMode = .goal
         appState.setAgentGoal(statement: "Old target", items: ["AI-owned acceptance"])
         appState.agentCurrentGoal?.checklist[0].done = true
+        let spentBudget = AgentGoalContinuationBudget(wallClockLimit: 60,
+            segmentStartedAt: .distantPast, continuationsUsed: 7, wrapUpDispatched: true)
+        appState.agentCurrentGoal?.continuationBudget = spentBudget
 
         appState.setAgentGoalStatement("New target")
 
         #expect(appState.agentCurrentGoal?.statement == "New target")
         #expect(appState.agentCurrentGoal?.checklist.map(\.text) == ["AI-owned acceptance"])
-        #expect(appState.agentCurrentGoal?.checklist.first?.done == true)
-        #expect(appState.activeRuntime?.goalPlanningState != nil)
+        #expect(appState.agentCurrentGoal?.checklist.first?.done == false)
+        var heldBudget = spentBudget
+        heldBudget.modelAdmissionPaused = true
+        // Editing preserves every spent counter and deadline. The only new
+        // field is the host hold preventing paid planning on an ended segment.
+        #expect(appState.agentCurrentGoal?.continuationBudget == heldBudget)
+        #expect(appState.activeRuntime?.goalPlanningState?.phase == .blocked)
+        #expect(appState.agentSubagentRegistry.activeCount(forParentRuntime: appState.activeRuntime!.id) == 0)
         appState.agentSubagentRegistry.cancelAll(forParentRuntime: appState.activeRuntime!.id)
     }
 
@@ -2148,6 +2157,7 @@ struct WillDeepTests {
         let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)
 
+        print("[tool-schema-budget] estimated_tokens=\(withTools) ceiling=\(maximumExpectedToolSchemaTokens)")
         #expect(withTools > withoutTools)
         #expect(withTools < maximumExpectedToolSchemaTokens)
     }

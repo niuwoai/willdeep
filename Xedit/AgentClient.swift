@@ -124,26 +124,44 @@ struct AgentClient {
     private let configuration: AgentConfiguration
     private let session: URLSession?
     private let someIMContext: SomeIMRequestContext?
+    private let requestLedger: AgentModelRequestLedger?
     private let openAIResponsesContinuationState: OpenAIResponsesContinuationState
 
     init(
         configuration: AgentConfiguration,
         session: URLSession? = nil,
         someIMContext: SomeIMRequestContext? = nil,
-        openAIResponsesContinuationState: OpenAIResponsesContinuationState = OpenAIResponsesContinuationState()
+        openAIResponsesContinuationState: OpenAIResponsesContinuationState = OpenAIResponsesContinuationState(),
+        requestLedger: AgentModelRequestLedger? = nil
     ) {
         self.configuration = configuration.normalized
         self.session = session
         self.someIMContext = someIMContext
+        self.requestLedger = requestLedger
         self.openAIResponsesContinuationState = openAIResponsesContinuationState
     }
 
     func streamChat(
         messages: [AgentMessage],
         tools: [AgentToolDescriptor] = [],
+        executionBudget: AgentToolExecutionBudget? = nil,
         onEmptyResponseRetry: (@MainActor (Int, Int) -> Void)? = nil,
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async throws {
+        if let executionBudget {
+            try await executionBudget.runModelRequest {
+                try await streamChatRetryLoop(messages: messages, tools: tools, executionBudget: executionBudget,
+                    onEmptyResponseRetry: onEmptyResponseRetry, onEvent: onEvent)
+            }
+            return
+        }
+        try await streamChatRetryLoop(messages: messages, tools: tools, executionBudget: nil,
+            onEmptyResponseRetry: onEmptyResponseRetry, onEvent: onEvent)
+    }
+
+    private func streamChatRetryLoop(messages: [AgentMessage], tools: [AgentToolDescriptor],
+        executionBudget: AgentToolExecutionBudget?, onEmptyResponseRetry: (@MainActor (Int, Int) -> Void)?,
+        onEvent: @escaping @Sendable (AgentClientEvent) async -> Void) async throws {
         try await AgentEmptyResponseRetry.run(
             providerID: configuration.providerID, model: configuration.model,
             onEvent: onEvent, onRetry: { attempt, limit in
@@ -154,25 +172,27 @@ struct AgentClient {
                 onEmptyResponseRetry?(attempt, limit)
             }
         ) { consume in
-            try await streamChatOnce(messages: messages, tools: tools, onEvent: consume)
+            try executionBudget?.checkCurrentOwner()
+            try await streamChatOnce(messages: messages, tools: tools, executionBudget: executionBudget, onEvent: consume)
         }
     }
 
     private func streamChatOnce(
         messages: [AgentMessage],
         tools: [AgentToolDescriptor],
+        executionBudget: AgentToolExecutionBudget?,
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async throws {
         switch configuration.inferenceProviderKind {
         case .openAIChat:
             try await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
-                .streamChat(messages: messages, tools: tools, onEvent: onEvent)
+                .streamChat(messages: messages, tools: tools, requestLedger: requestLedger, requestOwnerGate: executionBudget?.ownerGate, onEvent: onEvent)
         case .anthropicMessages:
             try await AnthropicMessagesAdapter(configuration: configuration, session: session)
-                .streamChat(messages: messages, tools: tools, onEvent: onEvent)
+                .streamChat(messages: messages, tools: tools, requestLedger: requestLedger, requestOwnerGate: executionBudget?.ownerGate, onEvent: onEvent)
         case .geminiGenerateContent:
             try await GeminiAdapter(configuration: configuration, session: session)
-                .streamChat(messages: messages, tools: tools, onEvent: onEvent)
+                .streamChat(messages: messages, tools: tools, requestLedger: requestLedger, requestOwnerGate: executionBudget?.ownerGate, onEvent: onEvent)
         case .openAIResponses:
             try await OpenAIResponsesAdapter(
                 configuration: configuration,
@@ -180,7 +200,7 @@ struct AgentClient {
                 continuationState: openAIResponsesContinuationState,
                 someIMContext: someIMContext
             )
-                .streamChat(messages: messages, tools: tools, onEvent: onEvent)
+                .streamChat(messages: messages, tools: tools, requestLedger: requestLedger, requestOwnerGate: executionBudget?.ownerGate, onEvent: onEvent)
         }
     }
 
@@ -190,47 +210,54 @@ struct AgentClient {
     /// prompt. The some.im security guard ignores this parameter because its
     /// fixed policy is injected by the gateway and the client sends only the
     /// per-command user message.
-    func judgeCommandSafety(
+    func budgetedSafetyJudge(
         command: String,
         historyContext: String = "",
         toolName: String = "run_command",
         taskContext: String = "",
         environmentTrust: String = "",
-        kind: AgentSafetyJudgeKind = .developerOperations
-    ) async -> AgentSafetyJudgeResult {
+        kind: AgentSafetyJudgeKind = .developerOperations,
+        executionBudget: AgentToolExecutionBudget? = nil
+    ) async throws -> AgentSafetyJudgeResult {
+        try Task.checkCancellation()
+        try executionBudget?.checkCurrentOwner()
+        if let requestLedger, let ownerLedger = executionBudget?.requestLedger, requestLedger != ownerLedger {
+            throw AgentModelRequestLedger.Failure.ownerMismatch
+        }
+        let judgeLedger = requestLedger ?? executionBudget?.requestLedger
         switch configuration.inferenceProviderKind {
         case .openAIChat:
-            return await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
+            return try await OpenAIChatAdapter(configuration: configuration, session: session, someIMContext: someIMContext)
                 .judgeCommandSafety(
                     command: command,
                     historyContext: historyContext,
                     toolName: toolName,
                     taskContext: taskContext,
                     environmentTrust: environmentTrust,
-                    kind: kind
+                    kind: kind, requestLedger: judgeLedger, executionBudget: executionBudget
                 )
         case .anthropicMessages:
-            return await AnthropicMessagesAdapter(configuration: configuration, session: session)
+            return try await AnthropicMessagesAdapter(configuration: configuration, session: session)
                 .judgeCommandSafety(
                     command: command,
                     historyContext: historyContext,
                     toolName: toolName,
                     taskContext: taskContext,
                     environmentTrust: environmentTrust,
-                    kind: kind
+                    kind: kind, requestLedger: judgeLedger, executionBudget: executionBudget
                 )
         case .geminiGenerateContent:
-            return await GeminiAdapter(configuration: configuration, session: session)
+            return try await GeminiAdapter(configuration: configuration, session: session)
                 .judgeCommandSafety(
                     command: command,
                     historyContext: historyContext,
                     toolName: toolName,
                     taskContext: taskContext,
                     environmentTrust: environmentTrust,
-                    kind: kind
+                    kind: kind, requestLedger: judgeLedger, executionBudget: executionBudget
                 )
         case .openAIResponses:
-            return await OpenAIResponsesAdapter(
+            return try await OpenAIResponsesAdapter(
                 configuration: configuration,
                 session: session,
                 someIMContext: someIMContext
@@ -241,7 +268,7 @@ struct AgentClient {
                     toolName: toolName,
                     taskContext: taskContext,
                     environmentTrust: environmentTrust,
-                    kind: kind
+                    kind: kind, requestLedger: judgeLedger, executionBudget: executionBudget
                 )
         }
     }
@@ -258,20 +285,36 @@ struct AgentClient {
         userPayload: String,
         maxTokens: Int
     ) async -> String? {
+        try? await budgetedRouteJudge(model: model, systemPrompt: systemPrompt,
+            userPayload: userPayload, maxTokens: maxTokens)
+    }
+
+    func budgetedRouteJudge(
+        model: String, systemPrompt: String, userPayload: String, maxTokens: Int,
+        executionBudget: AgentToolExecutionBudget? = nil
+    ) async throws -> String? {
+        try Task.checkCancellation()
+        try executionBudget?.checkCurrentOwner()
+        if let requestLedger, let ownerLedger = executionBudget?.requestLedger, requestLedger != ownerLedger {
+            throw AgentModelRequestLedger.Failure.ownerMismatch
+        }
+        let judgeLedger = requestLedger ?? executionBudget?.requestLedger
         var judgeConfiguration = configuration
         judgeConfiguration.model = model
         judgeConfiguration = judgeConfiguration.normalized
 
         switch judgeConfiguration.inferenceProviderKind {
         case .openAIChat:
-            return await OpenAIChatAdapter(configuration: judgeConfiguration, session: session, someIMContext: someIMContext)
-                .routeJudge(model: model, systemPrompt: systemPrompt, userPayload: userPayload, maxTokens: maxTokens)
+            return try await OpenAIChatAdapter(configuration: judgeConfiguration, session: session, someIMContext: someIMContext)
+                .routeJudge(model: model, systemPrompt: systemPrompt, userPayload: userPayload, maxTokens: maxTokens,
+                    requestLedger: judgeLedger, executionBudget: executionBudget)
         case .openAIResponses:
-            return await OpenAIResponsesAdapter(
+            return try await OpenAIResponsesAdapter(
                 configuration: judgeConfiguration,
                 session: session,
                 someIMContext: someIMContext
-            ).routeJudge(systemPrompt: systemPrompt, userPayload: userPayload, maxTokens: maxTokens)
+            ).routeJudge(systemPrompt: systemPrompt, userPayload: userPayload, maxTokens: maxTokens,
+                requestLedger: judgeLedger, executionBudget: executionBudget)
         default:
             return nil
         }

@@ -35,6 +35,7 @@ nonisolated enum AgentDispatchExecutorChoice: String, Codable, CaseIterable, Ide
     case hermesCLI
     case cursorAgent
     case clineCLI
+    case openCode
 
     var id: String { rawValue }
 
@@ -47,6 +48,7 @@ nonisolated enum AgentDispatchExecutorChoice: String, Codable, CaseIterable, Ide
         case .hermesCLI: return .hermesCLI
         case .cursorAgent: return .cursorAgent
         case .clineCLI: return .clineCLI
+        case .openCode: return .openCode
         }
     }
 
@@ -58,6 +60,7 @@ nonisolated enum AgentDispatchExecutorChoice: String, Codable, CaseIterable, Ide
         case .hermesCLI: self = .hermesCLI
         case .cursorAgent: self = .cursorAgent
         case .clineCLI: self = .clineCLI
+        case .openCode: self = .openCode
         }
     }
 }
@@ -313,6 +316,25 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
     /// A durable count prevents reopening the board from resetting the retry
     /// budget and creating an unbounded, expensive recovery loop.
     var acceptanceRecoveryAttempts: Int? = nil
+    var pendingDecisionIDs: [UUID]? = nil
+    /// Answer outbox: retained after resume so a crash before the transcript
+    /// flush cannot lose the operator's already persisted response.
+    var resumedDecisionIDs: [UUID]? = nil
+    /// Exact immutable input used to create this task's isolated checkout.
+    /// Retrying a runtime must not silently move its base to a newer HEAD.
+    var inputRevision: String? = nil
+    /// Host-owned delivery epoch. Nil addresses legacy evidence; a revised
+    /// outcome must use a fresh epoch without deleting the earlier receipt.
+    var deliveryRevisionID: UUID? = nil
+    var outcomeOverride: AgentDispatchOutcomeOverride? = nil
+    var pendingOutcomeRevision: Bool? = nil
+    var sourcePlanCommands: AgentDispatchPlanCommands? = nil
+    var artifactSnapshot: AgentDispatchArtifactSnapshot? = nil
+    var integrationCandidate: AgentDispatchIntegrationCandidate? = nil
+    var integrationReceipt: AgentDispatchIntegrationReceipt? = nil
+    var verificationCommands: [String]? = nil
+    var scheduling: AgentDispatchSchedulingHints? = nil
+    var operatorAcceptedAt: Date? = nil
     /// Optional checkout override. The referenced binding must belong to the
     /// Goal's logical project; otherwise launch validation rejects it.
     var workspaceBindingID: String?
@@ -408,10 +430,14 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
     var sessionID: UUID
     var title: String
     var statement: String
+    var sourceGoalContractDigest: String? = nil
     /// Nil means the Goal is a legacy unbound record and cannot execute.
     var logicalProject: AgentDispatchLogicalProject? = nil
     var workspaceLocation: WorkspaceLocation? = nil
     var workspaceBindings: [AgentDispatchWorkspaceBinding]? = nil
+    /// Pinned before execution, independently for each workspace mapping.
+    var integrationBaseRevisions: [String: String]? = nil
+    var decisions: [AgentDispatchDecision]? = nil
     var tasks: [AgentDispatchTask]
     var executorChoice: AgentDispatchExecutorChoice
     var targetChoice: AgentDispatchTargetChoice
@@ -439,7 +465,7 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
     }
 
     var activeTaskCount: Int {
-        tasks.filter { $0.state == .running || $0.state == .reviewing }.count
+        tasks.filter { $0.state == .running || $0.state == .reviewing || $0.state == .accepted }.count
     }
 
     var isExecutionActive: Bool {
@@ -705,6 +731,7 @@ nonisolated enum AgentDispatchExecutorResolver {
             case "hermes-cli": result.insert(.hermesCLI)
             case "cursor-cli": result.insert(.cursorAgent)
             case "cline-cli": result.insert(.clineCLI)
+            case "opencode": result.insert(.openCode)
             default: break
             }
         }

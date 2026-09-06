@@ -5,6 +5,7 @@
   var MAX_TAG_LENGTH = 40;
   var MONTH_CELLS = 42;
   var CUSTOM_PROJECT = '__custom_project__';
+  var IMAGE_PATH_PATTERN = /\.(?:avif|bmp|gif|heic|heif|jpe?g|png|tiff?|webp)$/i;
 
   function node(tag, className, text) {
     var element = document.createElement(tag);
@@ -53,6 +54,40 @@
       seen[normalized] = true;
       return true;
     }).map(function (name) { return name.normalize('NFC').trim().replace(/^#+/, '').trim(); });
+  }
+  function imagePathFromClipboardText(raw) {
+    var value = String(raw || '').trim();
+    if (!value || /[\r\n]/.test(value)) return '';
+    if (value.indexOf('file://') === 0) {
+      try { value = decodeURIComponent(new URL(value).pathname); } catch (error) { return ''; }
+    }
+    return value.charAt(0) === '/' && IMAGE_PATH_PATTERN.test(value) ? value : '';
+  }
+  function pastedImages(clipboardData) {
+    var files = [];
+    if (clipboardData) {
+      Array.from(clipboardData.items || []).forEach(function (item) {
+        if (!item || item.kind !== 'file') return;
+        var file = typeof item.getAsFile === 'function' ? item.getAsFile() : null;
+        if (file && (String(file.type || '').indexOf('image/') === 0 || IMAGE_PATH_PATTERN.test(file.name || ''))) files.push(file);
+      });
+      if (!files.length) {
+        Array.from(clipboardData.files || []).forEach(function (file) {
+          if (file && (String(file.type || '').indexOf('image/') === 0 || IMAGE_PATH_PATTERN.test(file.name || ''))) files.push(file);
+        });
+      }
+    }
+    var path = '';
+    if (!files.length && clipboardData && typeof clipboardData.getData === 'function') {
+      path = imagePathFromClipboardText(clipboardData.getData('text/uri-list'))
+        || imagePathFromClipboardText(clipboardData.getData('text/plain'));
+    }
+    return { files: files, paths: path ? [path] : [] };
+  }
+  function isImageAttachment(attachment) {
+    if (!attachment) return false;
+    if (String(attachment.type || '').toLowerCase().indexOf('image/') === 0) return true;
+    return IMAGE_PATH_PATTERN.test(String(attachment.name || attachment.path || ''));
   }
   function dayKey(date) {
     return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
@@ -400,5 +435,6 @@
   }
   window.TodoDetails = { createInspector: createInspector, renderFilters: renderFilters, icon: icon,
     button: button, tagChip: tagChip, normalizeTags: normalizeTags, dayKey: dayKey,
+    pastedImages: pastedImages, isImageAttachment: isImageAttachment,
     parseDay: parseDay, calendarDays: calendarDays, dueValue: dueValue, draftFor: draftFor };
 })();

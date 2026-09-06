@@ -7,8 +7,8 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `.willdeep-plugin/plugin.json` | 目的地（`defaultPinned`）、页面、十一条命令，以及 `menus["chat.selection"] = ["todo.quick_add"]` |
-| `server/todo.rb` | MCP stdio 服务端：add / quick_add / list / update / toggle / remove / restore / settings / stats |
+| `.willdeep-plugin/plugin.json` | 目的地（`defaultPinned`）、页面、十一条宿主命令，以及 `menus["chat.selection"] = ["todo.quick_add"]` |
+| `server/todo.rb` | MCP stdio 服务端：十二个工具，含 CRUD、附件保存/移除、受限图片预览、设置与统计 |
 | `ui/index.html` | 待办页面（localWeb 运行时），用 `window.willdeep.executeCommand` 调命令、用 `window.willdeep.ai.complete` 问模型 |
 | `ui/details.js` / `details.css` / `details-i18n.js` | 右侧详情、日历、多标签与组合筛选，中英文文案独立维护 |
 | `ui/icons/` | 官方 Heroicons v2.2.0 outline 图标和 MIT 许可证；离线随 App 打包 |
@@ -47,7 +47,9 @@
 优先级用左侧色条表示（紧急红、高橙、中蓝、低灰）。标题点开就能改；点击项目、时间、标签或优先级，
 统一打开右侧详情，修改后显式保存；取消或切换任务会确认未保存草稿，保存失败保留草稿。
 日期组件包含月历、时刻与全天，**“无终止时间”位于组件底部**，选中即清空日期、时刻与全天标记。
-删除后 6 秒内可撤销。每个分组使用
+删除后 6 秒内可撤销。快速输入框支持直接粘贴截图或本地图片：图片会先显示为真实缩略图，
+不会把临时文件路径塞进标题；记下待办时再与标题一并保存。保存后的图片附件继续显示小图，
+点击可打开完整图片查看器；非图片附件仍显示文件片。每个分组使用
 `auto-fill + minmax(400px, 1fr)` 按页面当前可用宽度排卡，窄栏自动回到单列；⌘N 聚焦快速输入。
 
 ### 标签
@@ -68,6 +70,8 @@
 | `todo.toggle` | 打勾、取消打勾 |
 | `todo.remove` | 删一条并回传整条（撤销用） |
 | `todo.restore` | 原样放回去 |
+| `todo.attach` / `todo.detach` | 保存或移除附件；路径粘贴只接受通过文件头校验的本地图片 |
+| `todo.attachment_preview` | 向本地页面提供图片缩略图/完整预览字节；已保存附件限制在 Todo 自己的附件目录 |
 | `todo.settings` | 解析方式（ai / local）与 provider、模型 |
 | `todo.stats` | 概览计数 |
 
@@ -97,8 +101,9 @@ ruby scripts/todo_server_test.rb
 node --test scripts/todo_ui_test.cjs
 ```
 
-81 项服务端检查与 11 项前端模型/资源检查：一句话解析的每条规则（中文数字小时、时段提示、否定优先级、
+96 项服务端检查与 16 项前端模型/资源检查：一句话解析的每条规则（中文数字小时、时段提示、否定优先级、
 「之前」剥离、认不出就不填）、CRUD 与撤销闭环、按项目/状态过滤、分组计数、
-设置读写不误伤待办、标签规范化与组合筛选、旧数据迁移、日期清除、响应式卡片网格、落盘格式与损坏降级。
+设置读写不误伤待办、标签规范化与组合筛选、旧数据迁移、日期清除、响应式卡片网格、
+图片缩略图/完整预览、附件目录隔离、落盘格式与损坏降级。
 
 `node scripts/todo_preview_server.cjs` 启动真实 MCP 的隔离预览（12 条演示任务，临时存储，不读取用户数据），用于浏览器交互与视觉验收。

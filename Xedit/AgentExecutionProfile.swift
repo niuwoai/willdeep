@@ -60,7 +60,7 @@ nonisolated struct AgentExecutionProfile: Codable, Equatable, Identifiable {
             configuration = .claudeAgent(name: nativeProfileName ?? "")
         case .hermesCLI:
             configuration = .hermesProfile(name: nativeProfileName ?? "default")
-        case .willDeep, .cursorAgent, .clineCLI:
+        case .willDeep, .cursorAgent, .clineCLI, .openCode:
             configuration = .generic
         }
         return LocalAgentCLIProfile(
@@ -266,6 +266,8 @@ nonisolated struct AgentGoalDispatchPlan: Codable, Equatable {
         var primaryProfileID: String?
         var fallbackProfileIDs: [String]
         var acceptanceCriteria: [String]
+        var verificationCommands: [String]? = nil
+        var scheduling: AgentDispatchSchedulingHints? = nil
     }
 
     var nodes: [Node]
@@ -282,11 +284,14 @@ nonisolated enum AgentGoalDispatchPlanParser {
             let profile: String?
             let fallbackProfiles: [String]
             let acceptance: [String]
+            let verificationCommands: [String]
+            let scheduling: AgentDispatchSchedulingHints?
 
             enum CodingKeys: String, CodingKey {
-                case id, title, profile, acceptance
+                case id, title, profile, acceptance, scheduling
                 case dependsOn = "depends_on"
                 case fallbackProfiles = "fallback_profiles"
+                case verificationCommands = "verification_commands"
             }
 
             init(from decoder: Decoder) throws {
@@ -306,6 +311,8 @@ nonisolated enum AgentGoalDispatchPlanParser {
                     [String].self,
                     forKey: .acceptance
                 ) ?? []
+                verificationCommands = try container.decodeIfPresent([String].self, forKey: .verificationCommands) ?? []
+                scheduling = try container.decodeIfPresent(AgentDispatchSchedulingHints.self, forKey: .scheduling)
             }
         }
 
@@ -345,7 +352,9 @@ nonisolated enum AgentGoalDispatchPlanParser {
                 ),
                 acceptanceCriteria: node.acceptance
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
+                    .filter { !$0.isEmpty },
+                verificationCommands: unique(node.verificationCommands.compactMap(normalized)),
+                scheduling: node.scheduling
             )
         })
     }
@@ -424,9 +433,6 @@ nonisolated enum AgentGoalDispatchPlanParser {
     private static func semanticGraphFailures(_ nodes: [Payload.Node]) -> [String] {
         guard nodes.count >= 3 else { return [] }
 
-        let dependenciesByKey = Dictionary(nodes.map { ($0.id, $0.dependsOn) }) {
-            _, latest in latest
-        }
         let dependencyKeys = Set(nodes.flatMap(\.dependsOn))
         let terminalKeys = nodes.map(\.id).filter { !dependencyKeys.contains($0) }
         var failures: [String] = []
@@ -442,34 +448,6 @@ nonisolated enum AgentGoalDispatchPlanParser {
             )
         }
 
-        var depths: [String: Int] = [:]
-        func depth(of key: String) -> Int {
-            if let existing = depths[key] { return existing }
-            let value = dependenciesByKey[key, default: []]
-                .map { depth(of: $0) }
-                .max()
-                .map { $0 + 1 } ?? 0
-            depths[key] = value
-            return value
-        }
-        let maximumDepth = nodes.map { depth(of: $0.id) }.max() ?? 0
-        if maximumDepth < 2 {
-            failures.append(
-                "a dispatch graph with three or more nodes needs at least three execution layers (foundation, implementation/integration, verification); the synthetic acceptance gate does not count as a layer"
-            )
-        }
-
-        let nodesByDepth = Dictionary(grouping: nodes) { depth(of: $0.id) }
-        let containsParallelWave = nodesByDepth.values.contains { $0.count > 1 }
-        let convergenceNodes = nodes.filter { node in
-            node.dependsOn.count >= 2 && hasIntegrationSemantics(node)
-        }
-        if containsParallelWave, convergenceNodes.isEmpty {
-            failures.append(
-                "parallel dispatch branches need a distinct merge/integration node whose depends_on lists the upstream implementation nodes"
-            )
-        }
-
         if terminalKeys.count == 1,
            let terminalKey = terminalKeys.first,
            let terminalNode = nodes.first(where: { $0.id == terminalKey }) {
@@ -478,28 +456,8 @@ nonisolated enum AgentGoalDispatchPlanParser {
                     "the executable terminal node must be a distinct test, regression, or verification task before the synthetic acceptance gate"
                 )
             }
-            if containsParallelWave {
-                let integrationKeys = Set(convergenceNodes.map(\.id))
-                let directIntegrationDependencies = Set(terminalNode.dependsOn)
-                    .intersection(integrationKeys)
-                if directIntegrationDependencies.isEmpty {
-                    failures.append(
-                        "the terminal verification node must depend directly on the distinct merge/integration node; merging code is execution work, not part of the synthetic acceptance gate"
-                    )
-                }
-            }
         }
         return failures
-    }
-
-    private static func hasIntegrationSemantics(_ node: Payload.Node) -> Bool {
-        containsSemanticMarker(
-            node,
-            markers: [
-                "merge", "integrat", "consolidat", "assemble",
-                "合并", "集成", "汇合", "汇总", "整合", "组装",
-            ]
-        )
     }
 
     private static func hasVerificationSemantics(_ node: Payload.Node) -> Bool {

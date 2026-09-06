@@ -304,20 +304,30 @@ struct SomeIMRouteOrchestrationTests {
     @Test
     func judgeTimeoutFallsBackToFloor() async {
         let input = SomeIMRouteJudgeInput(latestUserMessage: "Explain this code", workspaceAvailable: true)
-        let startedAt = Date()
+        let probe = RouteJudgeCancellationProbe()
         let res = await SomeIMManagedRouting.route(
             input: input,
             floor: .high,
             hasCodingPlan: true,
             timeout: 0.05
         ) { _, _, _ in
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            return nil
+            do {
+                try await Task.sleep(for: .seconds(30))
+                return #"{"domain":"coding","complexity":"high","confidence":1.0}"#
+            } catch is CancellationError {
+                await probe.recordCancellation()
+                return nil
+            } catch {
+                return nil
+            }
         }
 
         #expect(res.usedFallback)
         #expect(res.effectiveTier == .high)
-        #expect(Date().timeIntervalSince(startedAt) < 0.2)
+        // The timeout must win and cancel the pending judge, not merely get
+        // nil from a normally completed request. Loaded test hosts need not
+        // schedule all these tasks inside an arbitrary 200 ms wall window.
+        #expect(await probe.wasCancelled)
     }
 
     @Test
@@ -329,6 +339,11 @@ struct SomeIMRouteOrchestrationTests {
         #expect(res.effectiveTier == .premium)
         #expect(res.model == "someim-auto-premium")
     }
+}
+
+private actor RouteJudgeCancellationProbe {
+    private(set) var wasCancelled = false
+    func recordCancellation() { wasCancelled = true }
 }
 
 @Suite(.serialized)

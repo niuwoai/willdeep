@@ -11,15 +11,18 @@ import (
 )
 
 type ProbeReport struct {
-	Version           VersionReport     `json:"version"`
-	Platform          string            `json:"platform"`
-	Arch              string            `json:"arch"`
-	Workspace         string            `json:"workspace"`
-	Now               time.Time         `json:"now"`
-	Tools             map[string]string `json:"tools"`
-	Registries        map[string]string `json:"registries"`
-	Proxies           map[string]string `json:"proxies"`
-	GitHubCLIAuthLine string            `json:"github_cli_auth_line,omitempty"`
+	IdempotentJobStart   bool              `json:"idempotent_job_start,omitempty"`
+	StartRequestRecovery bool              `json:"start_request_recovery,omitempty"`
+	MonotonicRunDeadline bool              `json:"monotonic_run_deadline,omitempty"`
+	Version              VersionReport     `json:"version"`
+	Platform             string            `json:"platform"`
+	Arch                 string            `json:"arch"`
+	Workspace            string            `json:"workspace"`
+	Now                  time.Time         `json:"now"`
+	Tools                map[string]string `json:"tools"`
+	Registries           map[string]string `json:"registries"`
+	Proxies              map[string]string `json:"proxies"`
+	GitHubCLIAuthLine    string            `json:"github_cli_auth_line,omitempty"`
 }
 
 func Probe(ctx context.Context, root WorkspaceRoot) ProbeReport {

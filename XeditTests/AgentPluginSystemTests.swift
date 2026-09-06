@@ -1263,7 +1263,9 @@ struct AgentPluginSystemTests {
                 pinnedDestinationIDs: []
             )
         )
-        #expect(updatedSnapshot.records.first?.activePackage.source == .installed)
+        // Equal versions prefer the bundled package, but its fixed slot must
+        // remain present even when an approved installed copy also exists.
+        #expect(updatedSnapshot.records.first?.activePackage.source == .bundled)
         #expect(updatedSnapshot.pinnedDestinationIDs == [destination.qualifiedID])
     }
 

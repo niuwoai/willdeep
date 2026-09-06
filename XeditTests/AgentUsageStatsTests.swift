@@ -1166,9 +1166,16 @@ extension WillDeepTests {
     /// 这条用例以前是同步的：写完快照立刻读，就该拿到新数字。那正是要
     /// 修掉的行为——聚合要走完每个会话的每条消息，同步做等于在画面线程
     /// 上做。现在写完快照先拿到的仍是旧值，等后台那一轮落地才更新。
+    @MainActor
     @Test("dashboard aggregates refresh in the background after snapshots change")
     func testAppStateDashboardModelRefreshesOffTheMainThread() async throws {
-        let appState = AppState()
+        // This tests aggregation of explicitly supplied snapshots, not
+        // launch recovery. Loading another test's persisted sessions/events
+        // can add a live snapshot while the detached aggregate is running.
+        let appState = AppState(
+            runtimeKernel: AgentRuntimeKernel(loadPersisted: false, persistsEvents: false),
+            loadSessionCatalog: false
+        )
         let baseline = appState.agentUsageStatsRevision
         let session = makeSession(modelID: "gpt-4.1", messages: [
             userMessage("hello", at: Date())
@@ -1193,6 +1200,7 @@ extension WillDeepTests {
         }
         #expect(updated.overview.sessionCount == 1)
         #expect(updated.overview.userTurnCount == 1)
+        #expect(appState.agentUsageSnapshots.map(\.id) == [session.id])
     }
 
     @Test("startNewAgentSession keeps usage snapshots most-recent-first without a full sort")

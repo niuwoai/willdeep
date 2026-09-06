@@ -9,7 +9,9 @@ struct AgentParallelSpawnBatchTests {
     func foregroundReadOnlyWorkersOverlap() async {
         let appState = AppState()
         let runtime = AgentRuntime(session: AgentSession())
-        var startedAt: [Date] = []
+        let startBarrier = SpawnStartBarrier()
+        var events: [String] = []
+        var overlappingStarts: [Bool] = []
         let messageID = UUID()
         let first = AgentMessageToolCall(
             externalID: "spawn-first",
@@ -53,7 +55,6 @@ struct AgentParallelSpawnBatchTests {
             ),
         ]
 
-        let wallStart = Date()
         let stopped = await appState.executeParallelSpawnBatch(
             &batch,
             runtime: runtime,
@@ -62,8 +63,10 @@ struct AgentParallelSpawnBatchTests {
             runtimeDescriptor: nil,
             workspaceLocation: nil
         ) { entry in
-            startedAt.append(Date())
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            events.append("start:\(entry.call.externalID)")
+            let overlapped = await startBarrier.waitForBoth()
+            overlappingStarts.append(overlapped)
+            events.append("finish:\(entry.call.externalID)")
             entry.messageBuffer.message = AgentDeferredSpawnToolMessage(
                 toolCallID: entry.call.externalID,
                 payload: entry.call.externalID,
@@ -74,12 +77,46 @@ struct AgentParallelSpawnBatchTests {
         }
 
         #expect(!stopped)
-        #expect(Date().timeIntervalSince(wallStart) < 0.5)
-        #expect(startedAt.count == 2)
-        if startedAt.count == 2 {
-            #expect(abs(startedAt[0].timeIntervalSince(startedAt[1])) < 0.1)
-        }
+        // Assert causal overlap, not this machine's scheduling latency. In a
+        // serial implementation the first worker times out before the second
+        // can start, so both the barrier result and event order reject it.
+        #expect(overlappingStarts == [true, true])
+        #expect(Set(events.prefix(2)) == ["start:spawn-first", "start:spawn-second"])
+        #expect(events.count == 4)
         #expect(runtime.messages.map(\.toolCallID) == ["spawn-first", "spawn-second"])
         #expect(runtime.messages.map(\.content).allSatisfy { !$0.isEmpty })
+    }
+
+    @MainActor
+    private final class SpawnStartBarrier {
+        private var arrivals = 0
+        private var waiter: CheckedContinuation<Bool, Never>?
+        private var timeout: Task<Void, Never>?
+
+        func waitForBoth() async -> Bool {
+            arrivals += 1
+            if arrivals == 2 {
+                resolve(true)
+                return true
+            }
+            return await withCheckedContinuation { continuation in
+                waiter = continuation
+                // Failure escape only; normal execution does not wait for a
+                // timer. Do not leave a serial regression hanging the suite.
+                timeout = Task { [weak self] in
+                    do { try await Task.sleep(for: .seconds(10)) }
+                    catch { return }
+                    self?.resolve(false)
+                }
+            }
+        }
+
+        private func resolve(_ overlapped: Bool) {
+            timeout?.cancel()
+            timeout = nil
+            let pending = waiter
+            waiter = nil
+            pending?.resume(returning: overlapped)
+        }
     }
 }

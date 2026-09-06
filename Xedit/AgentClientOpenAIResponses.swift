@@ -228,9 +228,13 @@ struct OpenAIResponsesAdapter {
 
     // MARK: - streamChat
 
+    private enum RecordedCompatibilityRetry: Error { case retry }
+
     func streamChat(
         messages: [AgentMessage],
         tools: [AgentToolDescriptor] = [],
+        requestLedger: AgentModelRequestLedger? = nil,
+        requestOwnerGate: AgentRequestOwnerGate? = nil,
         onEvent: @escaping @Sendable (AgentClientEvent) async -> Void
     ) async throws {
         guard !configuration.apiKey.isEmpty else {
@@ -290,118 +294,126 @@ struct OpenAIResponsesAdapter {
             request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
             request.httpBody = preparedRequest.body
 
-            let (bytes, response) = try await session.bytes(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw AgentClientError.invalidResponse
-            }
-            SomeIMCreditsResponseObserver.capture(httpResponse, providerID: configuration.providerID)
-            guard (200..<300).contains(httpResponse.statusCode) else {
-                let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
-                if mayRequestGatewayState,
-                   Self.isGatewayStateUnavailable(
-                       statusCode: httpResponse.statusCode,
-                       responseBody: responseBody
-                   ) {
-                    continuationState.invalidate()
-                    mayUseContinuation = false
-                    mayRequestGatewayState = false
-                    continue
+            do {
+                try await AgentModelRequestAccounting.run(ledger: requestLedger, configuration: configuration, request: request, format: .responses, ownerGate: requestOwnerGate, onEvent: onEvent) { request, onEvent in
+                    let (bytes, response) = try await session.bytes(for: request)
+                    guard let httpResponse = response as? HTTPURLResponse else {
+                        throw AgentClientError.invalidResponse
+                    }
+                    SomeIMCreditsResponseObserver.capture(httpResponse, providerID: configuration.providerID)
+                    guard (200..<300).contains(httpResponse.statusCode) else {
+                        let responseBody = try await AgentNetworkSupport.collectBody(from: bytes)
+                        if mayRequestGatewayState,
+                           Self.isGatewayStateUnavailable(
+                               statusCode: httpResponse.statusCode,
+                               responseBody: responseBody
+                           ) {
+                            continuationState.invalidate()
+                            mayUseContinuation = false
+                            mayRequestGatewayState = false
+                            throw RecordedCompatibilityRetry.retry
+                        }
+                        if preparedRequest.usesPreviousResponse,
+                           Self.isInvalidContinuation(
+                               statusCode: httpResponse.statusCode,
+                               responseBody: responseBody
+                           ) {
+                            continuationState.invalidate(responseID: preparedRequest.responseID)
+                            mayUseContinuation = false
+                            throw RecordedCompatibilityRetry.retry
+                        }
+                        if usesHostedWebSearch,
+                           Self.isHostedWebSearchRejected(
+                               statusCode: httpResponse.statusCode,
+                               responseBody: responseBody
+                           ) {
+                            // DeepSeek V4 (Flash / Pro) normally executes hosted web search
+                            // inside the Responses request. Older relays may reject
+                            // that hosted tool shape, so retry once with the existing
+                            // client-executed function tool instead of failing the
+                            // whole user turn.
+                            continuationState.invalidate()
+                            usesHostedWebSearch = false
+                            mayUseContinuation = false
+                            fullRequestBody = try Self.encodeRequestBody(
+                                model: configuration.model,
+                                messages: requestMessages,
+                                tools: tools,
+                                supportsImages: configuration.supportsImageInput,
+                                store: !configuration.isDeepSeekV4ResponsesModel,
+                                useHostedWebSearch: false
+                            )
+                            throw RecordedCompatibilityRetry.retry
+                        }
+                        throw AgentClientError.serverStatus(
+                            httpError(
+                                statusCode: httpResponse.statusCode,
+                                method: request.httpMethod ?? "POST",
+                                url: endpoint,
+                                requestBody: preparedRequest.body,
+                                responseBody: responseBody,
+                                messages: requestMessages
+                            )
+                        )
+                    }
+
+                    // Same line-pair SSE pattern as Anthropic: each `event: <name>`
+                    // line pre-announces the type of the next `data: <json>` line.
+                    var pendingEventName = ""
+                    var state = StreamState()
+
+                    for try await line in bytes.lines {
+                        try Task.checkCancellation()
+
+                        if line.hasPrefix("event: ") {
+                            pendingEventName = String(line.dropFirst("event: ".count))
+                            continue
+                        }
+                        guard line.hasPrefix("data: ") else { continue }
+                        let payload = String(line.dropFirst("data: ".count))
+                        guard !payload.isEmpty,
+                              let data = payload.data(using: .utf8) else { continue }
+
+                        await handleEvent(
+                            name: pendingEventName,
+                            payload: data,
+                            state: &state,
+                            onEvent: onEvent
+                        )
+                        pendingEventName = ""
+                    }
+
+                    // A 2xx stream that produced no text, reasoning, function call,
+                    // completion or error is an empty no-op.
+                    if !state.didEmitStreamEvent {
+                        throw AgentClientError.emptyStream(
+                            providerID: configuration.providerID,
+                            model: configuration.model
+                        )
+                    }
+                    let gatewayStateActive = !configuration.usesWillDeepGatewayResponsesState ||
+                        httpResponse.value(
+                            forHTTPHeaderField: AgentNetworkSupport.willDeepResponsesStateHeaderName
+                        )?.lowercased().contains("v1; active") == true
+                    if state.didCompleteResponse,
+                       !state.didFailResponse,
+                       !state.didLoseGatewayState,
+                       gatewayStateActive,
+                       let responseID = state.responseID {
+                        continuationState.commit(
+                            responseID: responseID,
+                            preparedRequest: preparedRequest
+                        )
+                    } else if configuration.usesWillDeepGatewayResponsesState {
+                        continuationState.invalidate()
+                    }
                 }
-                if preparedRequest.usesPreviousResponse,
-                   Self.isInvalidContinuation(
-                       statusCode: httpResponse.statusCode,
-                       responseBody: responseBody
-                   ) {
-                    continuationState.invalidate(responseID: preparedRequest.responseID)
-                    mayUseContinuation = false
-                    continue
-                }
-                if usesHostedWebSearch,
-                   Self.isHostedWebSearchRejected(
-                       statusCode: httpResponse.statusCode,
-                       responseBody: responseBody
-                   ) {
-                    // DeepSeek V4 (Flash / Pro) normally executes hosted web search
-                    // inside the Responses request. Older relays may reject
-                    // that hosted tool shape, so retry once with the existing
-                    // client-executed function tool instead of failing the
-                    // whole user turn.
-                    continuationState.invalidate()
-                    usesHostedWebSearch = false
-                    mayUseContinuation = false
-                    fullRequestBody = try Self.encodeRequestBody(
-                        model: configuration.model,
-                        messages: requestMessages,
-                        tools: tools,
-                        supportsImages: configuration.supportsImageInput,
-                        store: !configuration.isDeepSeekV4ResponsesModel,
-                        useHostedWebSearch: false
-                    )
-                    continue
-                }
-                throw AgentClientError.serverStatus(
-                    httpError(
-                        statusCode: httpResponse.statusCode,
-                        method: request.httpMethod ?? "POST",
-                        url: endpoint,
-                        requestBody: preparedRequest.body,
-                        responseBody: responseBody,
-                        messages: requestMessages
-                    )
-                )
+                return
+            } catch RecordedCompatibilityRetry.retry {
+                // The rejected HTTP attempt is recorded before a new request
+                // is registered. No accounting failure is eligible for retry.
+                continue
             }
-
-            // Same line-pair SSE pattern as Anthropic: each `event: <name>`
-            // line pre-announces the type of the next `data: <json>` line.
-            var pendingEventName = ""
-            var state = StreamState()
-
-            for try await line in bytes.lines {
-                try Task.checkCancellation()
-
-                if line.hasPrefix("event: ") {
-                    pendingEventName = String(line.dropFirst("event: ".count))
-                    continue
-                }
-                guard line.hasPrefix("data: ") else { continue }
-                let payload = String(line.dropFirst("data: ".count))
-                guard !payload.isEmpty,
-                      let data = payload.data(using: .utf8) else { continue }
-
-                await handleEvent(
-                    name: pendingEventName,
-                    payload: data,
-                    state: &state,
-                    onEvent: onEvent
-                )
-                pendingEventName = ""
-            }
-
-            // A 2xx stream that produced no text, reasoning, function call,
-            // completion or error is an empty no-op.
-            if !state.didEmitStreamEvent {
-                throw AgentClientError.emptyStream(
-                    providerID: configuration.providerID,
-                    model: configuration.model
-                )
-            }
-            let gatewayStateActive = !configuration.usesWillDeepGatewayResponsesState ||
-                httpResponse.value(
-                    forHTTPHeaderField: AgentNetworkSupport.willDeepResponsesStateHeaderName
-                )?.lowercased().contains("v1; active") == true
-            if state.didCompleteResponse,
-               !state.didFailResponse,
-               !state.didLoseGatewayState,
-               gatewayStateActive,
-               let responseID = state.responseID {
-                continuationState.commit(
-                    responseID: responseID,
-                    preparedRequest: preparedRequest
-                )
-            } else if configuration.usesWillDeepGatewayResponsesState {
-                continuationState.invalidate()
-            }
-            return
         }
     }
 
@@ -417,8 +429,10 @@ struct OpenAIResponsesAdapter {
         toolName: String = "run_command",
         taskContext: String = "",
         environmentTrust: String = "",
-        kind: AgentSafetyJudgeKind = .developerOperations
-    ) async -> AgentSafetyJudgeResult {
+        kind: AgentSafetyJudgeKind = .developerOperations,
+        requestLedger: AgentModelRequestLedger? = nil,
+        executionBudget: AgentToolExecutionBudget? = nil
+    ) async throws -> AgentSafetyJudgeResult {
         guard !configuration.apiKey.isEmpty else {
             return .unavailable("missing api key")
         }
@@ -474,7 +488,12 @@ struct OpenAIResponsesAdapter {
         request.httpBody = payload
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await AgentNonStreamingModelRequest.run(request: request, session: session,
+                configuration: configuration, format: .responses, ledger: requestLedger,
+                // Even with explicit malicious-intent instructions, the
+                // gateway may add/replace its own hidden policy.
+                safelyQuantifiableInput: !configuration.usesServerManagedSafetyJudge,
+                executionBudget: executionBudget)
             guard let http = response as? HTTPURLResponse else {
                 return .unavailable("no http response")
             }
@@ -497,6 +516,7 @@ struct OpenAIResponsesAdapter {
                 return .unavailable(text.isEmpty ? "empty reply" : "no verdict tag")
             }
         } catch {
+            if AgentAuxiliaryRequestStop(error) != nil || error is CancellationError { throw error }
             return .unavailable("network error")
         }
     }
@@ -507,8 +527,10 @@ struct OpenAIResponsesAdapter {
     func routeJudge(
         systemPrompt: String,
         userPayload: String,
-        maxTokens: Int
-    ) async -> String? {
+        maxTokens: Int,
+        requestLedger: AgentModelRequestLedger? = nil,
+        executionBudget: AgentToolExecutionBudget? = nil
+    ) async throws -> String? {
         guard !configuration.requiresAPIKey || !configuration.apiKey.isEmpty else { return nil }
 
         let body: [String: Any] = [
@@ -527,10 +549,11 @@ struct OpenAIResponsesAdapter {
             "stream": false,
             "store": false
         ]
-        return await nonStreamingResponseText(body: body)
+        return try await nonStreamingResponseText(body: body, requestLedger: requestLedger, executionBudget: executionBudget)
     }
 
-    private func nonStreamingResponseText(body: [String: Any]) async -> String? {
+    private func nonStreamingResponseText(body: [String: Any], requestLedger: AgentModelRequestLedger?,
+                                          executionBudget: AgentToolExecutionBudget?) async throws -> String? {
         guard let endpoint = try? responsesEndpoint(from: configuration.baseURL),
               let payload = try? JSONSerialization.data(withJSONObject: body, options: []) else {
             return nil
@@ -544,7 +567,8 @@ struct OpenAIResponsesAdapter {
         request.httpBody = payload
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await AgentNonStreamingModelRequest.run(request: request, session: session,
+                configuration: configuration, format: .responses, ledger: requestLedger, executionBudget: executionBudget)
             guard let http = response as? HTTPURLResponse else { return nil }
             SomeIMCreditsResponseObserver.capture(http, providerID: configuration.providerID)
             guard (200..<300).contains(http.statusCode),
@@ -554,6 +578,7 @@ struct OpenAIResponsesAdapter {
             let text = decoded.outputText
             return text.isEmpty ? nil : text
         } catch {
+            if AgentAuxiliaryRequestStop(error) != nil || error is CancellationError { throw error }
             return nil
         }
     }

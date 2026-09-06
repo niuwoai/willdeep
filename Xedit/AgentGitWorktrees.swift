@@ -581,10 +581,16 @@ extension AppState {
     nonisolated static func createGitWorktree(
         from directoryURL: URL,
         branchName rawBranchName: String,
-        worktreeRoot: URL? = nil
+        worktreeRoot: URL? = nil,
+        startingRevision: String? = nil
     ) -> Result<AgentGitWorktreeCreateResult, AgentGitWorktreeFailure> {
         guard let repositoryRoot = findGitRepositoryRoot(startingAt: directoryURL) else {
             return .failure(AgentGitWorktreeFailure(message: "当前 workspace 不是 Git 仓库。"))
+        }
+
+        if let startingRevision,
+           !([40, 64].contains(startingRevision.count) && startingRevision.allSatisfy({ $0.isASCII && $0.isHexDigit })) {
+            return .failure(AgentGitWorktreeFailure(message: "Invalid immutable worktree input revision."))
         }
 
         let branchName = sanitizedGitWorktreeName(rawBranchName)
@@ -592,6 +598,9 @@ extension AppState {
             forBranch: branchName,
             repositoryRoot: repositoryRoot
         ) {
+            if let startingRevision, existing.head != startingRevision {
+                return .failure(AgentGitWorktreeFailure(message: "Existing worktree does not match the requested input revision."))
+            }
             return .success(AgentGitWorktreeCreateResult(
                 worktree: existing,
                 output: "Reusing existing WillDeep worktree: \(existing.path)"
@@ -615,9 +624,15 @@ extension AppState {
         }
         let arguments: [String]
         if existingBranch.status == 0 {
+            if let startingRevision {
+                let actual = runGitCommand(arguments: ["rev-parse", "refs/heads/\(branchName)"], in: repositoryRoot)
+                guard actual.succeeded, actual.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == startingRevision else {
+                    return .failure(AgentGitWorktreeFailure(message: "Existing branch does not match the requested input revision."))
+                }
+            }
             arguments = ["worktree", "add", worktreeURL.path, branchName]
         } else {
-            arguments = ["worktree", "add", "-b", branchName, worktreeURL.path, "HEAD"]
+            arguments = ["worktree", "add", "-b", branchName, worktreeURL.path, startingRevision ?? "HEAD"]
         }
 
         let result = runGitCommand(arguments: arguments, in: repositoryRoot)

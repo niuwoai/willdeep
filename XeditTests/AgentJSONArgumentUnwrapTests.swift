@@ -20,6 +20,46 @@ struct AgentJSONArgumentUnwrapTests {
 
     // MARK: The unwrap primitive
 
+    @Test("JSON zero and one remain numbers, distinct from booleans")
+    func numericBoundaryValuesPreserveType() throws {
+        let decoded = try AgentJSONValue.decode(from: Data("[0,1,1.0,-1,2,true,false,null]".utf8))
+        #expect(decoded == .array([.number(0), .number(1), .number(1), .number(-1),
+                                  .number(2), .bool(true), .bool(false), .null]))
+        let roundTrip = try JSONSerialization.data(withJSONObject: decoded.rawAny)
+        #expect(try AgentJSONValue.decode(from: roundTrip) == decoded)
+    }
+
+    @Test("native and boxed numeric arguments do not become booleans")
+    func boxedValuesPreserveType() {
+        #expect(AgentJSONValue.wrap(0) == .number(0))
+        #expect(AgentJSONValue.wrap(1) == .number(1))
+        #expect(AgentJSONValue.wrap(NSNumber(value: Int8(1))) == .number(1))
+        #expect(AgentJSONValue.wrap(NSNumber(value: 0.0)) == .number(0))
+        #expect(AgentJSONValue.wrap(true) == .bool(true))
+        #expect(AgentJSONValue.wrap(NSNumber(value: false)) == .bool(false))
+    }
+
+    @Test("integer arguments reject overflow, nonfinite values and fractions without trapping")
+    func integerConversionIsBounded() {
+        for number in [Double.infinity, -Double.infinity, Double.nan, Double.greatestFiniteMagnitude, 1.5] {
+            #expect(AgentJSONValue.number(number).intValue() == nil)
+        }
+        #expect(AgentJSONValue.number(0).intValue() == 0)
+        #expect(AgentJSONValue.number(1).intValue() == 1)
+        #expect(AgentJSONValue.number(-1).intValue() == -1)
+    }
+
+    @Test("nested tool pagination and attempt limits retain exact integer values")
+    func paginationAndAttemptLimitsPreserveOne() throws {
+        let fields = try #require(AgentJSONValue.objectFields(unwrapping:
+            AgentJSONValue.decode(from: #"{"offset":1,"limit":1,"options":{"retries":0,"enabled":true}}"#)))
+        #expect(fields["offset"]?.intValue() == 1)
+        #expect(fields["limit"]?.intValue() == 1)
+        #expect(fields["options"] == .object(["retries": .number(0), "enabled": .bool(true)]))
+        let task = try #require(AgentSubagentTaskPacket.parse(.string(#"{"goal":"Inspect records","max_attempts":1}"#)))
+        #expect(task.maxAttempts == 1)
+    }
+
     @Test("plain prose is not an object, and does not loop")
     func plainProseTerminates() {
         #expect(AgentJSONValue.objectFields(unwrapping: .string("修复登录 bug")) == nil)

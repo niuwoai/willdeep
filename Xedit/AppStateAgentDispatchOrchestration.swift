@@ -45,15 +45,15 @@ nonisolated enum AgentDispatchUnattendedRecoveryPolicy {
 
 /// Resolves the terminal node state from the two independent signals owned by
 /// the task Harness. A completed acceptance checklist is the authoritative
-/// delivery verdict: a later provider/plan-continuation warning must not turn
-/// already verified work back into a failed graph node.
+/// request to start host verification, never proof of integration. A later
+/// provider warning does not suppress that verification attempt.
 nonisolated enum AgentDispatchCompletionPolicy {
     static func terminalState(
         hasCompletedAcceptance: Bool,
         hasRuntimeError: Bool
     ) -> AgentDispatchTaskState? {
         if hasCompletedAcceptance {
-            return .merged
+            return .reviewing
         }
         return hasRuntimeError ? .failed : nil
     }
@@ -651,7 +651,8 @@ extension AppState {
 
     func launchDispatchTask(
         goalID: UUID,
-        taskID: UUID
+        taskID: UUID,
+        explicitlyRequested: Bool = true
     ) -> AgentDispatchLaunchResult {
         guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
               let task = goal.tasks.first(where: { $0.id == taskID }) else {
@@ -673,15 +674,27 @@ extension AppState {
         guard goal.isWorkspaceBound else {
             return .blocked(message: L10n.Dispatch.workspaceRequired)
         }
+        guard task.pendingDecisionIDs?.isEmpty != false else { return .blocked(message: L10n.DispatchDecision.waiting) }
+        guard explicitlyRequested || task.state != .cancelled else {
+            return .blocked(message: L10n.Dispatch.deliveryIncomplete)
+        }
         guard task.state == .queued
                 || task.state == .reviewing
                 || task.state == .failed
                 || task.state == .cancelled else {
             return .blocked(message: L10n.Dispatch.waitingForDependencies)
         }
+        do {
+            if !explicitlyRequested, try dispatchDeliveryJournal(goalID: goalID, taskID: taskID).load(goalID: goalID, taskID: taskID)?.phase == .stopped {
+                return .blocked(message: L10n.Dispatch.deliveryIncomplete)
+            }
+        } catch { return .blocked(message: L10n.Dispatch.deliveryIncomplete) }
 
         guard let workspaceBinding = goal.resolvedWorkspaceBinding(for: task) else {
             return .blocked(message: L10n.Dispatch.workspaceMappingRequired)
+        }
+        guard dispatchAdmissionIsAvailable(goalID: goalID, taskID: taskID) else {
+            return .blocked(message: L10n.DispatchDecision.resourcesBusy)
         }
         let target = workspaceBinding.targetChoice
         let available = availableDispatchExecutors(on: target)
@@ -712,10 +725,17 @@ extension AppState {
         if task.executorChoice == .automatic, hasProfilePolicy, profile == nil {
             return .blocked(message: L10n.Dispatch.noProfileAvailable)
         }
+        let inputRevision: String?
+        switch prepareDispatchInputRevision(goal: goal, task: task, binding: workspaceBinding) {
+        case .success(let revision): inputRevision = revision
+        case .failure(let failure): return .blocked(message: failure.message)
+        }
         let workspaceLocation: WorkspaceLocation
         switch isolatedDispatchWorkspaceLocation(
+            goalID: goalID,
             task: task,
-            source: workspaceBinding.location
+            source: workspaceBinding.location,
+            inputRevision: inputRevision
         ) {
         case .success(let isolatedLocation):
             workspaceLocation = isolatedLocation
@@ -743,6 +763,15 @@ extension AppState {
             return .blocked(message: L10n.Dispatch.noExecutorOnTarget)
         }
 
+        let handoff: AgentDispatchTaskHandoff?
+        let handoffInstruction: String
+        do {
+            handoff = try prepareDispatchTaskHandoff(goalID: goalID, task: task, workspaceLocation: workspaceLocation)
+            handoffInstruction = try handoff?.instruction() ?? ""
+        } catch {
+            return .blocked(message: L10n.Dispatch.handoffUnavailable)
+        }
+
         guard let runtime = createDispatchTaskRuntime(
             workspaceLocation: workspaceLocation,
             goalID: goal.id,
@@ -764,6 +793,7 @@ extension AppState {
         )
         runtime.activeExperts = Self.dispatchTaskExperts(from: runtime.activeExperts)
         runtime.executionAgent = decision.executor
+        applyDispatchTaskHandoff(handoff, to: runtime)
         if decision.executor == .willDeep {
             runtime.sessionProviderIDOverride = profile?.providerID
             applyDispatchModel(
@@ -773,6 +803,11 @@ extension AppState {
         }
         persistAgentSession(runtime: runtime)
 
+        do {
+            try resumeStoppedDispatchDelivery(goalID: goalID, taskID: taskID, runtimeID: runtime.id, explicitlyRequested: explicitlyRequested)
+        } catch {
+            return .blocked(message: L10n.Dispatch.deliveryIncomplete)
+        }
         agentDispatchCoordinator.markTaskStarted(
             goalID: goalID,
             taskID: taskID,
@@ -790,7 +825,7 @@ extension AppState {
                 goal: goal,
                 task: task,
                 workspaceLocation: workspaceLocation
-            ),
+            ) + (handoffInstruction.isEmpty ? "" : "\n\n" + handoffInstruction),
             images: [],
             delegatedProfile: delegatedProfile,
             source: .hostInstruction
@@ -806,6 +841,7 @@ extension AppState {
 
     @discardableResult
     func launchReadyDispatchTasks(goalID: UUID) -> [AgentDispatchLaunchResult] {
+        resumeAnsweredDispatchDecisions(goalID: goalID)
         guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
               !goal.isPaused else {
             return [.blocked(message: L10n.Dispatch.goalPausedLaunch)]
@@ -822,12 +858,9 @@ extension AppState {
         )
         let availableSlots = max(0, capacity - goal.activeTaskCount)
         guard availableSlots > 0 else { return [] }
-        let readyTaskIDs = goal.tasks
-            .filter { $0.state == .queued }
-            .prefix(availableSlots)
-            .map(\.id)
+        let readyTaskIDs = readyDispatchTaskIDs(goalID: goalID, capacity: availableSlots)
         return readyTaskIDs.map {
-            launchDispatchTask(goalID: goalID, taskID: $0)
+            launchDispatchTask(goalID: goalID, taskID: $0, explicitlyRequested: false)
         }
     }
 
@@ -843,11 +876,12 @@ extension AppState {
             return
         }
 
+        resumeAnsweredDispatchDecisions(goalID: goalID)
+        scheduleDispatchDecisionResumption()
         // Repair durable graph records written by older builds where a
         // provider/continuation warning won over an already completed Goal
         // checklist. This is deliberately limited to failed nodes: a user
         // explicitly stopped (`cancelled`) node must stay stopped.
-        var didRepairCompletedFailure = false
         for task in goal.tasks where task.state == .failed {
             guard let runtimeSessionID = task.runtimeSessionID,
                   let taskRuntime = runtime(for: runtimeSessionID),
@@ -856,19 +890,16 @@ extension AppState {
                   }) == true else {
                 continue
             }
-            dispatchMonitoredRuntimeIDsByTaskID[task.id] = nil
+            invalidateDispatchMonitor(taskID: task.id)
             agentDispatchCoordinator.updateTaskState(
                 goalID: goalID,
                 taskID: task.id,
-                state: .merged
+                state: .reviewing
             )
-            didRepairCompletedFailure = true
-        }
-        if didRepairCompletedFailure {
-            _ = launchReadyDispatchTasks(goalID: goalID)
+            monitorDispatchTaskRuntime(taskRuntime, goalID: goalID, taskID: task.id, allowsAutomaticRecovery: true)
         }
 
-        for task in goal.tasks where task.state == .running || task.state == .reviewing {
+        for task in goal.tasks where task.state == .running || task.state == .reviewing || task.state == .accepted {
             guard let runtimeSessionID = task.runtimeSessionID,
                   let taskRuntime = runtime(for: runtimeSessionID) else {
                 agentDispatchCoordinator.updateTaskState(
@@ -882,6 +913,7 @@ extension AppState {
                 )
                 continue
             }
+            _ = prepareAnsweredDispatchDecision(runtime: taskRuntime, goalID: goalID, taskID: task.id, includingResumed: true)
             monitorDispatchTaskRuntime(
                 taskRuntime,
                 goalID: goalID,
@@ -909,7 +941,7 @@ extension AppState {
               let task = goal.tasks.first(where: { $0.id == taskID }) else {
             return false
         }
-        dispatchMonitoredRuntimeIDsByTaskID[taskID] = nil
+        invalidateDispatchMonitor(taskID: taskID)
         if let runtimeSessionID = task.runtimeSessionID,
            let taskRuntime = runtime(for: runtimeSessionID) {
             stopAgentResponse(
@@ -924,6 +956,7 @@ extension AppState {
             // the transcript; it just will not auto-fire.
             taskRuntime.shouldConsumeQueueAfterStop = false
         }
+        stopDispatchDelivery(goalID: goalID, taskID: taskID)
         agentDispatchCoordinator.updateTaskState(
             goalID: goalID,
             taskID: taskID,
@@ -945,13 +978,16 @@ extension AppState {
         }
 
         let taskRuntime = task.runtimeSessionID.flatMap { runtime(for: $0) }
-        guard taskRuntime?.isResponding != true,
-              taskRuntime?.isAwaitingProviderSlot != true else {
+        guard let taskRuntime, !taskRuntime.isResponding,
+              !taskRuntime.isAwaitingProviderSlot else {
             return false
         }
 
-        dispatchMonitoredRuntimeIDsByTaskID[taskID] = nil
-        if let taskRuntime, var completedGoal = taskRuntime.currentGoal {
+        do {
+            try resumeStoppedDispatchDelivery(goalID: goalID, taskID: taskID, runtimeID: taskRuntime.id, explicitlyRequested: true)
+        } catch { return false }
+        invalidateDispatchMonitor(taskID: taskID)
+        if var completedGoal = taskRuntime.currentGoal {
             for index in completedGoal.checklist.indices {
                 completedGoal.checklist[index].done = true
             }
@@ -961,13 +997,9 @@ extension AppState {
             persistAgentSession(runtime: taskRuntime)
         }
 
-        agentDispatchCoordinator.updateTaskState(
-            goalID: goalID,
-            taskID: taskID,
-            state: .merged
-        )
+        agentDispatchCoordinator.recordOperatorAcceptance(goalID: goalID, taskID: taskID)
         if !goal.isPaused {
-            _ = launchReadyDispatchTasks(goalID: goalID)
+            monitorDispatchTaskRuntime(taskRuntime, goalID: goalID, taskID: taskID, allowsAutomaticRecovery: true)
         }
         return true
     }
@@ -1096,16 +1128,23 @@ extension AppState {
     }
 
     private func isolatedDispatchWorkspaceLocation(
+        goalID: UUID,
         task: AgentDispatchTask,
-        source: WorkspaceLocation
+        source: WorkspaceLocation,
+        inputRevision: String?
     ) -> DispatchWorkspaceResolution {
         guard case .local(let sourcePath) = source else {
             return .success(source)
         }
-        if let previousRuntimeID = task.runtimeSessionID,
-           let previousRuntime = runtime(for: previousRuntimeID),
-           case .local(let previousPath)? = previousRuntime.workspaceLocation,
-           FileManager.default.fileExists(atPath: previousPath) {
+        if let previousRuntimeID = task.runtimeSessionID {
+            guard let previous = dispatchHandoffSession(id: previousRuntimeID),
+                  previous.dispatchParentProjectID == goalID, previous.dispatchTaskID == task.id,
+                  case .local(let previousPath)? = previous.workspaceLocation,
+                  Self.isExistingDirectory(URL(fileURLWithPath: previousPath)) else {
+                // Missing continuation data must not silently become a fresh
+                // checkout that abandons already attributed implementation.
+                return .failure(L10n.Dispatch.handoffUnavailable)
+            }
             return .success(.local(path: previousPath))
         }
         let sourceURL = URL(fileURLWithPath: sourcePath).standardizedFileURL
@@ -1113,7 +1152,7 @@ extension AppState {
             return .success(source)
         }
         let branchName = "\(task.branchName)-\(task.id.uuidString.prefix(8).lowercased())"
-        switch Self.createGitWorktree(from: sourceURL, branchName: branchName) {
+        switch Self.createGitWorktree(from: sourceURL, branchName: branchName, startingRevision: inputRevision) {
         case .success(let created):
             return .success(.local(path: created.worktree.path))
         case .failure(let failure):
@@ -1121,7 +1160,7 @@ extension AppState {
         }
     }
 
-    private func monitorDispatchTaskRuntime(
+    func monitorDispatchTaskRuntime(
         _ runtime: AgentRuntime,
         goalID: UUID,
         taskID: UUID,
@@ -1130,12 +1169,14 @@ extension AppState {
         guard dispatchMonitoredRuntimeIDsByTaskID[taskID] != runtime.id else {
             return
         }
-        dispatchMonitoredRuntimeIDsByTaskID[taskID] = runtime.id
-        Task { @MainActor [weak self, weak runtime] in
+        let leaseID = beginDispatchMonitor(runtimeID: runtime.id, taskID: taskID)
+        dispatchMonitorTasksByTaskID[taskID] = Task { @MainActor [weak self, weak runtime] in
             guard let self, let runtime else { return }
             defer {
-                if self.dispatchMonitoredRuntimeIDsByTaskID[taskID] == runtime.id {
+                if self.isCurrentDispatchMonitor(runtimeID: runtime.id, taskID: taskID, leaseID: leaseID) {
                     self.dispatchMonitoredRuntimeIDsByTaskID[taskID] = nil
+                    self.dispatchMonitorLeaseIDsByTaskID[taskID] = nil
+                    self.dispatchMonitorTasksByTaskID[taskID] = nil
                 }
             }
             while true {
@@ -1149,17 +1190,28 @@ extension AppState {
                 // node's state — its verdict would overwrite `cancelled` and
                 // could even trigger an automatic retry the operator just
                 // stopped.
-                guard self.dispatchMonitoredRuntimeIDsByTaskID[taskID] == runtime.id else {
+                guard self.isCurrentDispatchMonitor(runtimeID: runtime.id, taskID: taskID, leaseID: leaseID) else {
+                    return
+                }
+                if self.hasPendingDispatchDecisions(runtime) {
+                    if self.resumeAnsweredDispatchDecision(runtime: runtime, goalID: goalID, taskID: taskID) { continue }
+                    _ = self.launchReadyDispatchTasks(goalID: goalID)
                     return
                 }
                 let hasCompletedAcceptance = runtime.currentGoal.map {
                     !$0.checklist.isEmpty && $0.checklist.allSatisfy(\.done)
                 } ?? false
+                if runtime.currentGoal?.continuationBudget?.modelAdmissionPaused == true {
+                    self.agentDispatchCoordinator.updateTaskState(goalID: goalID, taskID: taskID, state: .failed)
+                    return
+                }
                 let refreshedGoal = self.agentDispatchCoordinator.goals
                     .first(where: { $0.id == goalID })
                 let refreshedTask = refreshedGoal?.tasks.first(where: { $0.id == taskID })
+                guard refreshedTask?.state != .cancelled else { return }
                 let attempts = refreshedTask?.acceptanceRecoveryAttempts ?? 0
                 let goalIsPaused = refreshedGoal?.isPaused ?? true
+                guard !goalIsPaused else { return }
                 if allowsAutomaticRecovery && AgentDispatchUnattendedRecoveryPolicy.shouldRetry(
                     hasCompletedAcceptance: hasCompletedAcceptance,
                     hasRuntimeError: runtime.errorMessage != nil,
@@ -1180,7 +1232,8 @@ extension AppState {
                         taskID: taskID,
                         state: .reviewing
                     )
-                    self.dispatchAgentMessage(
+                    self.dispatchAgentMessageUsingSelectedExecutor(
+                        runtime.executionAgent,
                         for: runtime,
                         text: AgentDispatchUnattendedRecoveryPolicy.prompt(
                             attempt: nextAttempt,
@@ -1190,6 +1243,25 @@ extension AppState {
                         source: .hostInstruction
                     )
                     continue
+                }
+
+                if hasCompletedAcceptance {
+                    self.agentDispatchCoordinator.updateTaskState(goalID: goalID, taskID: taskID, state: .reviewing)
+                    do {
+                        try await self.deliverVerifiedDispatchTask(runtime: runtime, goalID: goalID, taskID: taskID)
+                        if allowsAutomaticRecovery { _ = self.launchReadyDispatchTasks(goalID: goalID) }
+                    } catch {
+                        guard self.isCurrentDispatchMonitor(runtimeID: runtime.id, taskID: taskID, leaseID: leaseID),
+                              self.agentDispatchCoordinator.goals.first(where: { $0.id == goalID })?.isPaused == false else { return }
+                        if allowsAutomaticRecovery, self.retryDispatchDeliveryFailure(error, runtime: runtime, goalID: goalID, taskID: taskID) { continue }
+                        runtime.errorMessage = L10n.Dispatch.deliveryIncomplete
+                        runtime.errorDetails = AgentErrorDetails(sections: [
+                            .init(title: L10n.Dispatch.deliveryIncomplete, text: error.localizedDescription)
+                        ])
+                        self.persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+                        self.agentDispatchCoordinator.updateTaskState(goalID: goalID, taskID: taskID, state: .failed)
+                    }
+                    return
                 }
 
                 let state: AgentDispatchTaskState
@@ -1240,6 +1312,7 @@ extension AppState {
         guard let goal = agentDispatchCoordinator.goals.first(where: { $0.id == goalID }),
               let task = goal.tasks.first(where: { $0.id == taskID }),
               task.executorChoice == .automatic,
+              task.runtimeSessionID.flatMap({ runtime(for: $0) })?.currentGoal?.continuationBudget?.modelAdmissionPaused != true,
               AgentDispatchProfileResolver.hasUntriedFallback(
                   fallbackProfileIDs: task.fallbackProfileIDs ?? [],
                   selectedWorkerProfileIDs: goal.effectiveWorkerProfileIDs,
@@ -1247,7 +1320,7 @@ extension AppState {
               ) else {
             return false
         }
-        if case .started = launchDispatchTask(goalID: goalID, taskID: taskID) {
+        if case .started = launchDispatchTask(goalID: goalID, taskID: taskID, explicitlyRequested: false) {
             return true
         }
         return false
@@ -1322,7 +1395,15 @@ extension AppState {
         Acceptance criteria:
         \(criteria)
 
-        Execute this node directly as an unattended run. Do not create another Goal, dispatch graph, or team of agents. Work only inside the assigned checkout. It is a checkout of the fixed logical project above; do not switch this Task to another repository. Preserve unrelated changes. Diagnose and recover from ordinary Git/worktree, dependency, build, test, path, and transient tool failures yourself; prefer safe reversible repairs and retry before stopping. For ordinary browser-backed UI verification, prefer the runtime-scoped `embedded_browser_*` tools: they work headlessly before the side panel is opened, and the user can later inspect the same page in the task browser. Use Playwright or an external Chromium process only when the acceptance criterion explicitly requires that engine or the embedded browser cannot express the required interaction. Do not ask the user for confirmation or implementation preferences: no operator is attached to this task conversation. If missing credentials, private interactive control, or an unavoidable product decision makes completion impossible, report a concrete blocked reason to the scheduler instead of opening an approval or question card. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
+        Declared artifact write scope (no new permissions are granted):
+        \((task.scheduling?.writePaths ?? []).map { "- \($0)" }.joined(separator: "\n"))
+
+        Host verification commands (run relative to the assigned checkout):
+        \((task.verificationCommands ?? []).map { "- \($0)" }.joined(separator: "\n"))
+        If no command is recorded, run the relevant repository tests using standalone relative-workspace commands. The host will independently replay eligible test commands against an immutable integration candidate. A completed checklist alone does not publish artifacts or unlock downstream work.
+
+        Execute this node directly as an unattended run. Do not create another Goal, dispatch graph, or team of agents. Work only inside the assigned checkout. It is a checkout of the fixed logical project above; do not switch this Task to another repository. Preserve unrelated changes. Diagnose and recover from ordinary Git/worktree, dependency, build, test, path, and transient tool failures yourself; prefer safe reversible repairs and retry before stopping. For ordinary browser-backed UI verification, prefer the runtime-scoped `embedded_browser_*` tools: they work headlessly before the side panel is opened, and the user can later inspect the same page in the task browser. Use Playwright or an external Chromium process only when the acceptance criterion explicitly requires that engine or the embedded browser cannot express the required interaction.
+        Do not request routine execution confirmation, discretionary implementation preferences, or manual QA from the user. When a genuinely missing product decision prevents correct work, native WillDeep's ask_user tool persists a bounded question on the project board and suspends this node. Include the exact missing information, viable options and safe assumptions; use decision_scope=project only when the same answer has identical meaning for every affected node in this project/workspace. Do not request secrets in the answer or treat it as tool permission. External executors without this host question tool must report the concrete blocker to the scheduler; do not open an interactive CLI prompt. Before reporting completion, provide concrete evidence such as tests, build output, or a focused diff summary. Do not merge into a shared branch; WillDeep owns review and integration.
 
         In the final response, update the visible execution step with a closed `progress` block and evaluate every acceptance criterion with a closed `goal-check` block. Mark an item done only when the evidence actually proves it.
         """

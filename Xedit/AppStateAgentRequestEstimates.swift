@@ -149,6 +149,7 @@ extension AppState {
     /// pick up their own override rather than whatever happened to be on
     /// the currently-selected one.
     func configurationForCurrentTurn(for runtime: AgentRuntime) -> AgentConfiguration {
+        if let environment = agentLoopInferenceEnvironment { return environment.configuration.normalized }
         var configuration: AgentConfiguration
         if let entry = providerEntry(for: runtime) {
             configuration = entry.makeConfiguration(
@@ -306,10 +307,10 @@ extension AppState {
         // summary 在请求阶段会把旧消息折叠成一段 system 摘要,本地
         // estimator 也得用同一个 modelFacingHistory,不然「Compress」
         // 跑完后 ring 还是 100%,用户会以为压缩没生效。
-        let modelFacing = Self.modelFacingHistory(
+        let modelFacing = activeRuntime.map { modelFacingHistory(for: $0) } ?? Self.modelFacingHistory(
             messages: agentMessages,
-            contextSummary: activeRuntime?.contextSummary,
-            contextSummaryThroughMessageID: activeRuntime?.contextSummaryThroughMessageID
+            contextSummary: nil,
+            contextSummaryThroughMessageID: nil
         )
         let collapsedHistory = Self.collapseOldToolResults(in: modelFacing)
         let contextualHistory = AgentContextBuilder.appendingTurnContext(

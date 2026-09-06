@@ -22,6 +22,7 @@ import Foundation
 enum AgentToolRegistry {
     static let all: [AgentToolDescriptor] = AgentSessionManagementTools.descriptors + [
         AgentToolPackCatalog.loaderDescriptor,
+        AgentContextReadTool.descriptor,
         AgentToolDescriptor(
             name: "search_files",
             description: "Search workspace files for a literal text query and return matching lines with paths and line numbers. Read-only.",
@@ -120,7 +121,7 @@ enum AgentToolRegistry {
         ),
         AgentToolDescriptor(
             name: "run_command",
-            description: "Run a shell command in the workspace root. This is the DEFAULT way to execute any shell command — including ones that reach other machines (scp / rsync / ssh remote-host), file copies, builds, installs, and tests. Only use terminal_send_command instead when the user explicitly asks for the command to be run in the visible side-panel terminal. Requires user approval. Commands stay in the workspace sandbox by default; when the user explicitly requests a path outside the workspace (including `~/...` or `$HOME/...`), keep that exact path and let this tool request escalated access to the real location — do not invent a sandbox path mapping or reroute to the visible terminal. Well-known test/build/dev-server commands are automatically moved to the background when `run_in_background` is omitted. Pass `run_in_background: true` for any other task expected to take at least ~30 seconds; the call returns immediately with a job handle and you receive a system notification when the job finishes. Continue independent, non-conflicting work while it runs.",
+            description: "Run shell commands from the workspace root, including scp/rsync/ssh, copies, builds, installs and tests. Use terminal_send_command only if the user explicitly requests the visible terminal. Subject to approval; sandboxed by default. Preserve explicitly requested external paths (including ~/ and $HOME/); let this tool request escalation, never remap paths or evade via the terminal. Recognized test/build/dev-server commands are automatically moved to the background unless overridden. Set run_in_background=true for other work expected to take ~30s or more: receive a job handle immediately and completion notification later. Continue independent, non-conflicting work meanwhile.",
             risk: .write,
             parameters: [
                 AgentToolParameter(name: "command", type: .string, description: "Shell command line. Runs through /bin/sh -c.", required: true),
@@ -1796,8 +1797,20 @@ enum AgentToolRegistry {
             ]
         ),
         AgentToolDescriptor(
+            name: "opencode_cli",
+            description: "Delegate a complex coding task to the locally installed opencode CLI (`opencode`). opencode can inspect and edit the workspace, run shell commands, and work multi-step; use it for self-contained implementation tasks. Requires user approval. The prompt must be fully self-contained: opencode sees the workspace files but not this conversation.",
+            risk: .write,
+            parameters: [
+                AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description. Include relevant file paths, acceptance criteria, and constraints — the delegated opencode session cannot ask follow-up questions here.", required: true),
+                AgentToolParameter(name: "permission_mode", type: .string, description: "One of `default` (opencode asks before each privileged action) or `auto` (auto-approve anything not explicitly denied). Defaults to default.", required: false),
+                AgentToolParameter(name: "model", type: .string, description: "Optional model id forwarded with `--model`, in opencode's `provider/model` form.", required: false),
+                AgentToolParameter(name: "run_in_background", type: .boolean, description: "Defaults to true: returns a job handle (job_xxxxxx) and the result arrives as a background-task notification; inspect progress with get_job_output. Set false when the caller needs to wait for the final CLI response inline.", required: false),
+                AgentToolParameter(name: "timeout_seconds", type: .integer, description: "Optional hard timeout. Local/SSH background default has no hard timeout; delegated foreground default/cap is 21600 seconds.", required: false)
+            ]
+        ),
+        AgentToolDescriptor(
             name: "spawn_agent",
-            description: "Spawn a worker with one of five responsibilities: general utility, implementation, verification, review, or operations. Model capability is selected separately through the configured standard/advanced/expert tier; context budgets are configured independently at 128K/256K and capped by the supported model window. Prefer the lowest adequate tier. The generalist is the fallback when no narrower role fits and carries declared file patches, visible terminal, logged-in Chrome, and configured MCP tools. All writes remain scoped and parent-approved; children cannot ask the user or spawn agents. Supply a self-contained task.",
+            description: "Spawn one of six roles: read-only scout, generalist fallback, implementer, tester, reviewer, ops_runner. Choose the lowest adequate standard/advanced/expert tier independently of role and 128K/256K context budget (capped by model window). Generalist supports declared patches, visible terminal, logged-in Chrome and configured MCP. Writes stay scoped and parent-approved. Children cannot ask users or spawn agents; supply a self-contained task.",
             risk: .read,
             parameters: [
                 AgentToolParameter(name: "prompt", type: .string, description: "Self-contained task description for the subagent. Include all needed context — it cannot see the parent conversation or ask questions.", required: true),
@@ -1807,8 +1820,8 @@ enum AgentToolRegistry {
                 AgentToolParameter(name: "worker_tier", type: .string, description: "Optional capability tier: standard, advanced, or expert. Defaults to the role's configured tier. Select the lowest sufficient tier; explain complex work in the task packet. It never expands tools, write scope, or command approval. Profiles with an explicit legacy/custom model binding cannot be overridden this way.", required: false),
                 AgentToolParameter(name: "target_file", type: .string, description: "Required for `profile=\"editor\"`, ignored otherwise. Workspace-relative path of the single file the child may edit. Scheduling the worker never asks for approval in any mode; the declared path is enforced as its exact write boundary, and every other path is rejected.", required: false),
                 AgentToolParameter(name: "target_files", type: .stringArray, description: "Write set for `generalist`, `implementer`, `test_fixer`, and `build_fixer`: 1–16 workspace-relative existing or new paths. The generalist remains non-writing when no write set is declared. If omitted, these trades use `task.write_files` (or the legacy `task.relevant_files`). Scheduling the worker never asks for approval in any mode; every undeclared path and all file deletion are rejected.", required: false),
-                AgentToolParameter(name: "target_command", type: .string, description: "Only for `profile=\"ops_runner\"`, ignored otherwise. The EXACT shell command the worker may execute despite it being write-tier (a release/deploy script, typically). Spawning a worker never needs approval by itself; this field instead opens a human-readable confirmation for the specific external write command. The worker may run the approved text repeatedly (retry loops need idempotent scripts), but any different write command is denied. Combine with a `task` whose `verifier.command` is a read-only health/status check so success is decided by exit code, not the worker's claim. Keep rollback and other irreversible decisions in this session.", required: false),
-                AgentToolParameter(name: "task", type: .string, description: "Structured task packet, as a JSON STRING. Strongly preferred for the fixer trades and useful for any trade: it lets the worker start hot instead of spending its window searching. Fields: `goal` (string, what done looks like), `skill` (string, an installed skill's identifier — its SKILL.md body is inlined into the worker's first message, so use it for tier=worker skills instead of pasting their steps), `read_files` (array of workspace-relative paths inlined as context — readable, never writable), `write_files` (array — the exact paths a writing trade may create or edit when `target_files` is omitted; also inlined), `relevant_files` (deprecated combined read+write set, kept for older callers — prefer `read_files` plus `write_files` so giving a worker context does not widen what it may change), `known_facts` (array of strings you already established), `constraints` (array of strings it must not violate), `verifier` (object with `command`: a read-only test/build/lint command whose exit code decides success — with it, the worker's own claim of success is not accepted), `max_attempts` (integer, default 4).", required: false),
+                AgentToolParameter(name: "target_command", type: .string, description: "ops_runner only: EXACT write command requiring explicit confirmation, not approval to spawn. Identical retries require an idempotent script; different write commands are denied. Set task.verifier.command to a read-only health/status check: success requires its exit code, not self-report. Parent retains rollback and irreversible decisions.", required: false),
+                AgentToolParameter(name: "task", type: .string, description: "JSON STRING task packet; preferred for fixers. Fields: goal (completion criteria); skill (installed worker skill ID; host inlines SKILL.md); read_files (workspace-relative array, inlined read-only); write_files (exact create/edit paths when target_files omitted, also inlined); relevant_files (deprecated combined read/write set: prefer separate lists); known_facts and constraints (string arrays); verifier ({command: read-only test/build/lint command}, success requires its exit code, not worker self-report); max_attempts (integer, default 4). Context alone never grants write access.", required: false),
                 AgentToolParameter(name: "role", type: .string, description: "Optional goal-team role to run as (`developer` / `tester` / `reviewer`). A role binds a trade and may only narrow it further — a reviewer loses the shell, and no role can grant a write tool its trade lacks. Use it when the goal has a roles file; otherwise pick a `profile` directly.", required: false),
                 AgentToolParameter(name: "escalation", type: .string, description: "REQUIRED for `profile=\"deep\"`, ignored otherwise. Admission ticket for the scarce 1M tier, as a JSON STRING. Fields: `reason` (why the standard tier could not finish), `attempted_profiles` (array — the bounded trades you already ran in THIS session; WillDeep cross-checks this against what actually ran), `context_evidence` (measured evidence the material does not fit a smaller window and cannot be sharded), `why_not_decompose` (why independent worker packets cannot cover it). Deep is rationed per session; if you have not tried a bounded trade yet, do that instead — it is usually the answer.", required: false)
             ]
@@ -1819,6 +1832,7 @@ enum AgentToolRegistry {
             risk: .userInput,
             parameters: [
                 AgentToolParameter(name: "question", type: .string, description: "The question or short context sentence shown below the optional title.", required: true),
+                AgentToolParameter(name: "decision_scope", type: .string, description: "In an unattended dispatch task only: task (default), or project when this self-contained question and every option has exactly the same meaning for all tasks in the current workspace binding. Project-scoped identical questions may share one operator answer. This is information, never a tool permission grant. Ask only for genuinely missing facts or decisions, not routine execution or user QA.", required: false),
                 AgentToolParameter(name: "title", type: .string, description: "Optional concise heading for a long or bundled question. Prefer a specific action-oriented title under 60 characters.", required: false),
                 AgentToolParameter(name: "requested_information", type: .stringArray, description: "Optional list of facts or decisions the user must provide. Keep each item concise and do not repeat the context sentence.", required: false),
                 AgentToolParameter(name: "default_assumptions", type: .stringArray, description: "Optional list of defaults the Agent will use unless the user corrects them.", required: false),
@@ -1954,7 +1968,7 @@ enum AgentToolRegistry {
 
     static func isDelegatedCodingTool(_ name: String) -> Bool {
         switch name {
-        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli":
+        case "claude_code", "codex_cli", "hermes_cli", "cursor_agent", "cline_cli", "opencode_cli":
             return true
         default:
             return false

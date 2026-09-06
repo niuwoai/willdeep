@@ -52,7 +52,7 @@ const server = http.createServer(async (request, response) => {
     for await (const chunk of request) { body += chunk; if (body.length > 32768) { response.writeHead(413).end(); return; } }
     try {
       const { name, args } = JSON.parse(body);
-      if (!/^todo\.(add|quick_add|list|update|toggle|remove|restore|settings|stats)$/.test(name)) throw new Error('Unknown command');
+      if (!/^todo\.(add|quick_add|list|update|toggle|remove|restore|attach|attachment_preview|detach|settings|stats)$/.test(name)) throw new Error('Unknown command');
       response.setHeader('Content-Type', 'application/json');
       if (failNextSave && name === 'todo.update') { failNextSave = false; response.end(JSON.stringify({ ok: false, error: '测试：保存失败，请重试' })); return; }
       response.end(JSON.stringify(await tool(name, args)));

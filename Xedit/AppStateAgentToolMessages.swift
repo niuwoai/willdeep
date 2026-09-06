@@ -120,6 +120,13 @@ extension AppState {
             }
         }
 
+        do { try toolExecutionBudget(for: runtime)?.check() }
+        catch {
+            finishRecord(status: .failed, summary: "Goal budget exhausted",
+                payload: error.localizedDescription, errorMessage: error.localizedDescription)
+            return
+        }
+
         // Stamp the child's effective model + a live progress line onto the
         // tool-call record so the card can show "用的哪个子代理 · 进度到哪了"
         // instead of an opaque spinner. Both fields are render-only.
@@ -407,11 +414,16 @@ extension AppState {
         var verifierCommand = taskPacket?.verifierCommand
         if let candidate = verifierCommand,
            !AgentSubagentRunner.verifierCommandIsReadTier(candidate, workspaceURL: workspaceURL) {
-            let verdict = await safetyJudgeApproval(
+            let verdict: AgentToolApprovalSource?
+            do { verdict = try await checkedSafetyJudgeApproval(
                 toolName: "run_command",
                 command: candidate,
-                taskContext: taskPacket?.goal ?? ""
-            )
+                taskContext: taskPacket?.goal ?? "", taskRuntime: runtime
+            ) } catch {
+                let notice = handleApprovalRequestStop(error, runtime: runtime)
+                finishRecord(status: .failed, summary: notice, payload: notice, errorMessage: notice)
+                return
+            }
             if verdict == nil {
                 verifierCommand = nil
                 profileNotices.append(
@@ -449,6 +461,7 @@ extension AppState {
             writeAccessGranted: false,
             approvedCommandGranted: approvedCommand != nil
         )
+        let approvalOwnerGate = auxiliaryModelExecutionBudget(for: runtime)?.ownerGate
         let backgroundCommandReviewer: AgentSubagentRunner.CommandReviewer? = {
             guard backgroundEffectiveTools.contains("run_command")
                     || backgroundEffectiveTools.contains("terminal_send_command") else {
@@ -456,10 +469,11 @@ extension AppState {
             }
             let runtimeID = runtime.id
             return { [weak self] toolName, command in
+                try approvalOwnerGate?.check()
                 guard let self,
                       let liveRuntime = self.loadedRuntime(for: runtimeID),
                       let hostMessageID = liveRuntime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
-                    return false
+                    throw CancellationError()
                 }
                 let toolArguments: [String: AgentJSONValue] = ["command": .string(command)]
                 let risk = AgentToolRegistry.risk(
@@ -468,7 +482,7 @@ extension AppState {
                     rootDirectory: workspaceURL,
                     additionalWorkspaceRoots: backgroundWorkspaceRoots
                 )
-                return await self.resolveSubagentToolApproval(
+                return try await self.resolveSubagentToolApproval(
                     toolName: toolName,
                     arguments: toolArguments,
                     risk: risk,
@@ -488,12 +502,13 @@ extension AppState {
             }
             let runtimeID = runtime.id
             return { [weak self] toolName, toolArguments, risk in
+                try approvalOwnerGate?.check()
                 guard let self,
                       let liveRuntime = self.loadedRuntime(for: runtimeID),
                       let hostMessageID = liveRuntime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
-                    return false
+                    throw CancellationError()
                 }
-                return await self.resolveSubagentToolApproval(
+                return try await self.resolveSubagentToolApproval(
                     toolName: toolName,
                     arguments: toolArguments,
                     risk: risk,
@@ -539,7 +554,8 @@ extension AppState {
                         terminalController: agentTerminalController,
                         approvedCommand: approvedCommand,
                         commandReviewer: backgroundCommandReviewer,
-                        toolReviewer: backgroundToolReviewer
+                        toolReviewer: backgroundToolReviewer,
+                        executionBudget: toolExecutionBudget(for: runtime)
                     )
                 )
                 bindSubagentRun(run.id)
@@ -797,9 +813,10 @@ extension AppState {
                     return nil
                 }
                 return { [weak self] toolName, command in
+                    try approvalOwnerGate?.check()
                     guard let self,
                           let hostMessageID = runtime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
-                        return false
+                        throw CancellationError()
                     }
                     let arguments: [String: AgentJSONValue] = ["command": .string(command)]
                     let risk = AgentToolRegistry.risk(
@@ -808,7 +825,7 @@ extension AppState {
                         rootDirectory: workspaceURL,
                         additionalWorkspaceRoots: workspaceRoots
                     )
-                    return await self.resolveSubagentToolApproval(
+                    return try await self.resolveSubagentToolApproval(
                         toolName: toolName,
                         arguments: arguments,
                         risk: risk,
@@ -827,11 +844,12 @@ extension AppState {
                     return nil
                 }
                 return { [weak self] toolName, arguments, risk in
+                    try approvalOwnerGate?.check()
                     guard let self,
                           let hostMessageID = runtime.toolCalls.first(where: { $0.id == recordID })?.messageID else {
-                        return false
+                        throw CancellationError()
                     }
-                    return await self.resolveSubagentToolApproval(
+                    return try await self.resolveSubagentToolApproval(
                         toolName: toolName,
                         arguments: arguments,
                         risk: risk,
@@ -866,6 +884,7 @@ extension AppState {
                 commandReviewer: commandReviewer,
                 toolReviewer: toolReviewer,
                 interventionChannel: interventionChannel,
+                executionBudget: toolExecutionBudget(for: runtime),
                 onProgress: { [weak self] progress in
                     self?.applySubagentLiveProgress(
                         progress,
@@ -962,7 +981,8 @@ extension AppState {
                 profile: profile,
                 task: prompt,
                 outcome: outcome,
-                parentConfiguration: configuration
+                parentConfiguration: configuration,
+                executionBudget: toolExecutionBudget(for: runtime)
             )
             finishRecord(
                 status: .succeeded,
@@ -1222,16 +1242,26 @@ extension AppState {
         // re-see them every turn (Anthropic re-attaches as tool_result
         // image blocks). Text-only providers ignore `images` and use the
         // sanitized text payload.
-        runtime.messages.append(
-            AgentMessage(
-                role: .tool,
-                content: limited,
-                images: images,
-                toolCallID: toolCallID,
-                toolCallStatus: outcomeStatus,
-                toolErrorMessage: errorMessage
-            )
+        let message = AgentMessage(
+            role: .tool,
+            content: limited,
+            images: images,
+            toolCallID: toolCallID,
+            toolCallStatus: outcomeStatus,
+            toolErrorMessage: errorMessage
         )
+        // A budget hold can be posted while an approval/verifier is awaiting
+        // its receipt. Keep that receipt adjacent to its owning tool round;
+        // otherwise provider history sanitization drops the incomplete round
+        // when it encounters the intervening host-generated handover.
+        if runtime.currentGoal?.continuationBudget?.modelAdmissionPaused == true,
+           let owner = runtime.messages.lastIndex(where: { $0.role == .assistant && $0.toolCalls.contains { $0.externalID == toolCallID } }) {
+            var insertion = owner + 1
+            while insertion < runtime.messages.count, runtime.messages[insertion].role == .tool { insertion += 1 }
+            runtime.messages.insert(message, at: insertion)
+        } else {
+            runtime.messages.append(message)
+        }
     }
 
     func attachRecentVisibleToolImages(to assistantID: UUID, in runtime: AgentRuntime) {
