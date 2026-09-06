@@ -82,6 +82,7 @@ enum AgentShortDramaImageTools {
                 sourceImagePath: imagePath,
                 reviewItemID: reviewItemID,
                 runtimeID: context.runtimeID,
+                ownerTurnID: context.turnID,
                 projectID: resolved.projectID.uuidString,
                 episodeID: resolved.episodeID.uuidString,
                 shotID: resolved.shotID.uuidString,

@@ -478,10 +478,8 @@ struct AgentDispatchGraphView: View {
 
     private var acceptanceGate: some View {
         let selected = selection == .acceptance
-        let completed = goal.tasks.filter {
-            $0.state == .accepted || $0.state == .merged
-        }.count
-        let tint: Color = completed == goal.tasks.count && !goal.tasks.isEmpty ? .green : .orange
+        let completed = goal.deliveredTaskCount
+        let tint: Color = goal.hasDeliveredAllTasks ? .green : .orange
         return Button {
             onSelect(.acceptance)
         } label: {
@@ -489,7 +487,7 @@ struct AgentDispatchGraphView: View {
                 Image(systemName: "checkmark.shield.fill")
                     .font(.system(size: 25, weight: .medium))
                     .foregroundStyle(tint)
-                Text(L10n.Dispatch.acceptanceGate)
+                Text(L10n.Dispatch.deliveryGate)
                     .font(.system(size: 12, weight: .semibold))
                     .multilineTextAlignment(.center)
                 Text("\(completed)/\(goal.tasks.count)")
@@ -520,8 +518,8 @@ struct AgentDispatchGraphView: View {
             .accessibilityElement(children: .ignore)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(L10n.Dispatch.acceptanceGate)
-        .accessibilityValue(L10n.Dispatch.acceptanceProgress(completed, goal.tasks.count))
+        .accessibilityLabel(L10n.Dispatch.deliveryGate)
+        .accessibilityValue(L10n.Dispatch.deliveryProgress(completed, goal.tasks.count))
         .accessibilityHint(L10n.Dispatch.nodeSelectionHint)
     }
 

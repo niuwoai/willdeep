@@ -503,12 +503,8 @@ struct AgentDispatchAcceptanceInspectorView: View {
     let goal: AgentDispatchGoal
     let onSelectTask: (UUID) -> Void
 
-    private var completedTasks: [AgentDispatchTask] {
-        goal.tasks.filter { $0.state == .accepted || $0.state == .merged }
-    }
-
-    private var pendingTasks: [AgentDispatchTask] {
-        goal.tasks.filter { $0.state != .accepted && $0.state != .merged }
+    private var pendingTaskCount: Int {
+        goal.tasks.count - goal.deliveredTaskCount
     }
 
     private var totalCriteria: Int {
@@ -528,7 +524,7 @@ struct AgentDispatchAcceptanceInspectorView: View {
         }
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.38))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(L10n.Dispatch.acceptanceGate)
+        .accessibilityLabel(L10n.Dispatch.deliveryGate)
     }
 
     private var header: some View {
@@ -536,21 +532,21 @@ struct AgentDispatchAcceptanceInspectorView: View {
             HStack(spacing: 9) {
                 Image(systemName: "checkmark.shield.fill")
                     .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(pendingTasks.isEmpty ? Color.green : Color.orange)
+                    .foregroundStyle(goal.hasDeliveredAllTasks ? Color.green : Color.orange)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(L10n.Dispatch.acceptanceGate)
+                    Text(L10n.Dispatch.deliveryGate)
                         .font(.system(size: 17, weight: .semibold))
-                    Text(L10n.Dispatch.acceptanceInspectorMessage)
+                    Text(L10n.Dispatch.deliveryInspectorMessage)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
             }
             ProgressView(
-                value: Double(completedTasks.count),
+                value: Double(goal.deliveredTaskCount),
                 total: Double(max(goal.tasks.count, 1))
             )
-            .tint(pendingTasks.isEmpty ? .green : .orange)
-            Text(L10n.Dispatch.acceptanceProgress(completedTasks.count, goal.tasks.count))
+            .tint(goal.hasDeliveredAllTasks ? .green : .orange)
+            Text(L10n.Dispatch.deliveryProgress(goal.deliveredTaskCount, goal.tasks.count))
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(.secondary)
         }
@@ -566,7 +562,7 @@ struct AgentDispatchAcceptanceInspectorView: View {
                     color: .blue
                 )
                 summaryTile(
-                    value: "\(pendingTasks.count)",
+                    value: "\(pendingTaskCount)",
                     label: L10n.Dispatch.graphPending,
                     color: .orange
                 )
@@ -581,14 +577,14 @@ struct AgentDispatchAcceptanceInspectorView: View {
 
     private var taskChecklist: some View {
         VStack(alignment: .leading, spacing: 10) {
-            fieldLabel(L10n.Dispatch.acceptanceByTask)
+            fieldLabel(L10n.Dispatch.deliveryByTask)
             ForEach(goal.tasks) { task in
                 Button {
                     onSelectTask(task.id)
                 } label: {
                     HStack(alignment: .top, spacing: 8) {
                         Image(
-                            systemName: task.state == .accepted || task.state == .merged
+                            systemName: task.state == .merged
                                 ? "checkmark.circle.fill"
                                 : task.state == .failed
                                     ? "exclamationmark.triangle.fill"

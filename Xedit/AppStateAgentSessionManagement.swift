@@ -27,6 +27,7 @@ extension AppState {
             || agentSubagentRegistry.activeCount(forParentRuntime: session.id) > 0
             || agentSubagentRegistry.pendingReportCount(forParentRuntime: session.id) > 0
             || agentMediaTaskRegistry.tasks.contains(where: { $0.runtimeID == session.id && $0.isActive })
+            || agentMediaTaskRegistry.hasOutstandingCompletion(forRuntime: session.id)
             || agentMediaTaskRegistry.pendingCompletionCount(forRuntime: session.id) > 0 { return "background_work" }
         if let runtime = agentRuntimes[session.id] {
             if runtime.isResponding || runtime.requestTask != nil || runtime.isAwaitingProviderSlot

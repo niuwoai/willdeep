@@ -458,10 +458,18 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
     var createdAt: Date
     var updatedAt: Date
 
+    var deliveredTaskCount: Int {
+        tasks.filter { $0.state == .merged }.count
+    }
+
+    /// Node delivery only; this does not prove semantic acceptance of the parent Goal.
+    var hasDeliveredAllTasks: Bool {
+        !tasks.isEmpty && deliveredTaskCount == tasks.count
+    }
+
     var progressFraction: Double {
         guard !tasks.isEmpty else { return 0 }
-        let completed = tasks.filter { $0.state == .merged }.count
-        return Double(completed) / Double(tasks.count)
+        return Double(deliveredTaskCount) / Double(tasks.count)
     }
 
     var activeTaskCount: Int {
@@ -476,7 +484,7 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
     /// every task has been merged. Failed/cancelled work remains unfinished
     /// so retrying it does not silently free the project's single active slot.
     var isComplete: Bool {
-        !tasks.isEmpty && tasks.allSatisfy { $0.state == .merged }
+        hasDeliveredAllTasks
     }
 
     /// Project-level ownership used by the single-running-dispatch invariant.

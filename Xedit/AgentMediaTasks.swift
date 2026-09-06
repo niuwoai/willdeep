@@ -209,6 +209,11 @@ struct AgentMediaTask: Codable, Equatable, Identifiable {
     var maskPath: String?
     var reviewItemID: String?
     var runtimeID: UUID?
+    /// Captured from the initiating tool context; never inferred at completion.
+    /// Nil preserves legacy/manual tasks whose original turn is unknown.
+    var ownerTurnID: UUID?
+    /// Nil on old history: never replay every historical terminal task.
+    var completionDeliveryManaged: Bool? = nil
     var projectID: String?
     var projectPath: String?
     var episodeID: String?
@@ -244,6 +249,7 @@ struct AgentMediaTask: Codable, Equatable, Identifiable {
         maskPath: String? = nil,
         reviewItemID: String? = nil,
         runtimeID: UUID? = nil,
+        ownerTurnID: UUID? = nil,
         projectID: String? = nil,
         projectPath: String? = nil,
         episodeID: String? = nil,
@@ -274,6 +280,7 @@ struct AgentMediaTask: Codable, Equatable, Identifiable {
         self.maskPath = maskPath
         self.reviewItemID = reviewItemID
         self.runtimeID = runtimeID
+        self.ownerTurnID = ownerTurnID
         self.projectID = projectID
         self.projectPath = projectPath
         self.episodeID = episodeID
@@ -304,17 +311,19 @@ final class AgentMediaTaskRegistry: ObservableObject {
 
     private static let historyLimit = 100
     private let fileURL: URL
+    let completionStore: AgentMediaCompletionStore
     private var pendingCompletionEvents: [UUID: [UUID]] = [:]
     weak var shortDramaStore: AgentShortDramaStore?
 
-    /// Host hook fired after a task reaches a terminal status and its
-    /// completion event is queued. AppState uses it to auto-resume the
-    /// owning agent loop when the task outlives the turn that spawned
-    /// it — mirroring `AgentJobRegistry.onJobFinished`.
+    /// Host hook fired only after terminal evidence is persisted. AppState
+    /// completes the kernel handoff before it may auto-resume the
+    /// owning loop. Recovery may call this repeatedly for the same task ID.
     var onTaskFinished: ((AgentMediaTask) -> Void)?
 
-    init(fileURL: URL = AgentMediaTaskRegistry.defaultFileURL()) {
+    init(fileURL: URL = AgentMediaTaskRegistry.defaultFileURL(), completionDirectory: URL? = nil) {
         self.fileURL = fileURL
+        self.completionStore = AgentMediaCompletionStore(directory: completionDirectory
+            ?? fileURL.deletingLastPathComponent().appendingPathComponent("completions", isDirectory: true))
         self.tasks = Self.load(from: fileURL)
         trimHistory(saveAfterTrim: false)
     }
@@ -335,6 +344,7 @@ final class AgentMediaTaskRegistry: ObservableObject {
         maskPath: String? = nil,
         reviewItemID: String? = nil,
         runtimeID: UUID? = nil,
+        ownerTurnID: UUID? = nil,
         projectID: String? = nil,
         projectPath: String? = nil,
         episodeID: String? = nil,
@@ -344,7 +354,7 @@ final class AgentMediaTaskRegistry: ObservableObject {
         status: AgentMediaTaskStatus = .queued,
         statusMessage: String? = nil
     ) -> AgentMediaTask {
-        let task = AgentMediaTask(
+        var task = AgentMediaTask(
             provider: provider,
             kind: kind,
             title: title,
@@ -359,6 +369,7 @@ final class AgentMediaTaskRegistry: ObservableObject {
             maskPath: maskPath,
             reviewItemID: reviewItemID,
             runtimeID: runtimeID,
+            ownerTurnID: ownerTurnID,
             projectID: projectID,
             projectPath: projectPath,
             episodeID: episodeID,
@@ -368,8 +379,12 @@ final class AgentMediaTaskRegistry: ObservableObject {
             status: status,
             statusMessage: statusMessage
         )
+        task.completionDeliveryManaged = runtimeID != nil
         insertOrUpdate(task)
         syncShortDramaLinks(for: task)
+        if !task.isActive, task.runtimeID != nil {
+            persistCompletionAndNotify(task)
+        }
         return task
     }
 
@@ -407,15 +422,13 @@ final class AgentMediaTaskRegistry: ObservableObject {
         if !task.status.isActive, task.finishedAt == nil {
             task.finishedAt = task.updatedAt
         }
-        tasks[index] = task
         let justFinished = previousStatus.isActive && !task.status.isActive && task.runtimeID != nil
-        if justFinished, let runtimeID = task.runtimeID {
-            pendingCompletionEvents[runtimeID, default: []].append(task.id)
-        }
+        if justFinished { task.completionDeliveryManaged = true }
+        tasks[index] = task
         syncShortDramaLinks(for: task)
         trimHistory()
         if justFinished {
-            onTaskFinished?(task)
+            persistCompletionAndNotify(task)
         }
     }
 
@@ -473,10 +486,55 @@ final class AgentMediaTaskRegistry: ObservableObject {
         return ids.compactMap { id in tasks.first(where: { $0.id == id }) }
     }
 
+    /// The kernel retains the visible event; its legacy duplicate must not
+    /// bypass ownership admission when a completion is stopped or deferred.
+    func markCompletionSurfaced(id: UUID, forRuntime runtimeID: UUID) {
+        pendingCompletionEvents[runtimeID]?.removeAll { $0 == id }
+    }
+
     /// Non-destructive count of finished-but-unsurfaced tasks — the
     /// auto-resume path checks this before kicking a wake-up turn.
     func pendingCompletionCount(forRuntime runtimeID: UUID) -> Int {
         pendingCompletionEvents[runtimeID]?.count ?? 0
+    }
+
+    /// Durable completions are intentionally excluded from the legacy wake
+    /// count: only a successful kernel/producer handoff may wake the model.
+    func hasOutstandingCompletion(forRuntime runtimeID: UUID) -> Bool {
+        if tasks.contains(where: {
+            $0.runtimeID == runtimeID && requiresCompletionRetention($0)
+        }) { return true }
+        do { return try completionStore.outstanding().contains { $0.task.runtimeID == runtimeID } }
+        catch { return true } // Unknown persistence must not authorize session eviction.
+    }
+
+    func retryPendingCompletionNotifications() {
+        for task in tasks where !task.isActive && task.completionDeliveryManaged == true {
+            persistCompletionAndNotify(task)
+        }
+        do {
+            let known = Set(tasks.map(\.id))
+            for delivery in try completionStore.outstanding() where !known.contains(delivery.task.id) {
+                onTaskFinished?(delivery.task)
+            }
+        } catch {
+            NSLog("Media completion recovery deferred; existing records retained")
+        }
+    }
+
+    private func persistCompletionAndNotify(_ task: AgentMediaTask) {
+        do {
+            let delivery = try completionStore.prepare(task)
+            if !delivery.settled { onTaskFinished?(delivery.task) }
+        } catch {
+            NSLog("Media completion persistence failed; delivery retained for retry")
+        }
+    }
+
+    private func requiresCompletionRetention(_ task: AgentMediaTask) -> Bool {
+        guard !task.isActive, task.completionDeliveryManaged == true else { return false }
+        do { return try completionStore.delivery(id: task.id)?.settled != true }
+        catch { return true }
     }
 
     private func insertOrUpdate(_ task: AgentMediaTask) {
@@ -489,8 +547,8 @@ final class AgentMediaTaskRegistry: ObservableObject {
     }
 
     private func trimHistory(saveAfterTrim: Bool = true) {
-        let alive = tasks.filter(\.isActive)
-        let finished = tasks.filter { !$0.isActive }
+        let alive = tasks.filter { $0.isActive || requiresCompletionRetention($0) }
+        let finished = tasks.filter { !$0.isActive && !requiresCompletionRetention($0) }
             .sorted { $0.updatedAt > $1.updatedAt }
             .prefix(Self.historyLimit)
         tasks = (alive + finished).sorted { $0.updatedAt > $1.updatedAt }
@@ -620,6 +678,7 @@ final class AgentMediaTaskPoller {
     private var loopTask: Task<Void, Never>?
     private var inFlightTaskIDs: Set<UUID> = []
     private var lastPollAt: [UUID: Date] = [:]
+    private var lastCompletionRecoveryAt = Date.distantPast
 
     func start(registry: AgentMediaTaskRegistry) {
         guard loopTask == nil else { return }
@@ -631,6 +690,10 @@ final class AgentMediaTaskPoller {
                 // gone this loop can never do work again, and `continue`
                 // would leave it ticking every 2s for the app's lifetime.
                 guard let self, let registry else { return }
+                if Date().timeIntervalSince(self.lastCompletionRecoveryAt) >= self.pollInterval {
+                    self.lastCompletionRecoveryAt = Date()
+                    registry.retryPendingCompletionNotifications()
+                }
                 self.pollDueTasks(in: registry)
             }
         }

@@ -287,10 +287,16 @@ extension AppState {
         return true
     }
 
-    func publishMediaTaskKernelEvent(_ task: AgentMediaTask, runtime: AgentRuntime) {
+    @discardableResult
+    func publishMediaTaskKernelEvent(_ task: AgentMediaTask, runtime: AgentRuntime,
+        requiresDurableHandoff: Bool = false) -> AgentKernelEvent? {
         let failed = task.status != .succeeded
-        publishAgentKernelEvent(
-            AgentKernelEvent(
+        var metadata = ["resource_id": task.id.uuidString, "handle": task.displayHandle]
+        if let ownerTurnID = task.ownerTurnID {
+            metadata["owner_turn_id"] = ownerTurnID.uuidString
+        }
+        if requiresDurableHandoff { metadata["completion_outbox"] = "1" }
+        let event = AgentKernelEvent(
                 runtimeID: runtime.id,
                 source: .mediaTask,
                 kind: failed ? .mediaTaskFailed : .mediaTaskCompleted,
@@ -301,11 +307,20 @@ extension AppState {
                 audience: .both,
                 title: task.title,
                 payload: Self.mediaTaskCompletionNotice(for: task),
-                metadata: ["resource_id": task.id.uuidString, "handle": task.displayHandle],
+                metadata: metadata,
                 dedupeKey: "media-task:\(task.id.uuidString)",
+                dedupeScope: .journal,
                 requiresUserAction: false
             )
-        )
+        if requiresDurableHandoff {
+            guard agentRuntimeKernel.canAdmitDurableDelivery(runtimeID: runtime.id,
+                dedupeKey: "media-task:\(task.id.uuidString)") else { return nil }
+            let published = agentRuntimeKernel.publish(event)
+            guard agentRuntimeKernel.confirmEventPersistenceForHandoff(published) else { return nil }
+            return published
+        }
+        publishAgentKernelEvent(event)
+        return event
     }
 
     func publishSubagentKernelEvent(_ run: AgentSubagentRun, runtime: AgentRuntime) {

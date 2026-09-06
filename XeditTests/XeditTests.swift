@@ -2065,10 +2065,18 @@ struct WillDeepTests {
     @Test("media task terminal transition fires onTaskFinished and queues a completion")
     @MainActor
     func testMediaTaskFinishFiresWakeupHook() throws {
-        let scratch = FileManager.default.temporaryDirectory
-            .appendingPathComponent("media-task-wakeup-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: scratch) }
-        let registry = AgentMediaTaskRegistry(fileURL: scratch)
+        // Own directory for both the task list and its completion outbox. The
+        // registry derives the outbox from the task file's parent, so a bare
+        // file in $TMPDIR would share `$TMPDIR/completions` across every run
+        // and replay whatever the last one left behind.
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("media-task-wakeup-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let registry = AgentMediaTaskRegistry(
+            fileURL: root.appendingPathComponent("tasks.json"),
+            completionDirectory: root.appendingPathComponent("completions", isDirectory: true)
+        )
         let runtimeID = UUID()
         var hookTasks: [AgentMediaTask] = []
         registry.onTaskFinished = { hookTasks.append($0) }
@@ -2086,11 +2094,14 @@ struct WillDeepTests {
         registry.update(id: task.id, status: .failed, statusMessage: "boom")
         #expect(hookTasks.count == 1)
         #expect(hookTasks.first?.id == task.id)
-        #expect(registry.pendingCompletionCount(forRuntime: runtimeID) == 1)
-        #expect(registry.consumePendingCompletions(forRuntime: runtimeID).count == 1)
+        // A terminal state now goes to the durable outbox, not the in-memory
+        // compatibility queue: that queue bypassed the ACK gate.
         #expect(registry.pendingCompletionCount(forRuntime: runtimeID) == 0)
+        let delivery = try #require(try registry.completionStore.delivery(id: task.id))
+        #expect(!delivery.handedOff && !delivery.settled)
+        #expect(registry.hasOutstandingCompletion(forRuntime: runtimeID))
 
-        // A second terminal-to-terminal update must not re-queue.
+        // A second terminal-to-terminal update must not re-fire or re-record.
         registry.update(id: task.id, statusMessage: "still failed")
         #expect(hookTasks.count == 1)
         #expect(registry.pendingCompletionCount(forRuntime: runtimeID) == 0)

@@ -986,6 +986,13 @@ final class AgentJobRegistry: ObservableObject {
         }
     }
 
+    /// A read failure is not evidence of an explicit Stop. Other producers
+    /// must defer delivery on failure instead of permanently discarding it.
+    func completionOwnerWasStopped(runtimeID: UUID, turnID: UUID) throws -> Bool {
+        if stoppedTurnOwners.contains(TurnOwner(runtimeID: runtimeID, turnID: turnID)) { return true }
+        return try daemonStartJournal.isTurnRevoked(runtimeID: runtimeID, turnID: turnID)
+    }
+
     func allowsDaemonTerminalDelivery(_ receipt: AgentDaemonStartReceipt) -> Bool {
         receipt.survivesTurnStop == true
             || !isTurnStopped(runtimeID: receipt.runtimeID, turnID: receipt.turnID)

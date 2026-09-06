@@ -470,13 +470,13 @@ final class AppState: ObservableObject {
     /// by `runtime.id` inside the registry so concurrent sessions can't
     /// steal each other's jobs or completion notices. See
     /// `AgentBackgroundJobs.swift` for the lifecycle contract.
-    let agentJobRegistry = AgentJobRegistry()
+    let agentJobRegistry: AgentJobRegistry
 
     /// Process-wide registry of remote AI media tasks. some.im,
     /// Replicate, and short-drama skills publish image/video generation
     /// and editing progress here so the right side panel and future chat
     /// completion notices have one shared source of truth.
-    let agentMediaTaskRegistry = AgentMediaTaskRegistry()
+    let agentMediaTaskRegistry: AgentMediaTaskRegistry
     let agentMediaTaskPoller = AgentMediaTaskPoller()
 
     /// Process-wide short-drama project store. Agent tools and the side
@@ -764,6 +764,8 @@ final class AppState: ObservableObject {
         // the real `com.willdeep.agentDispatch.goals.v1` domain.
         dispatchStore: AgentDispatchStore = AgentDispatchStore(),
         runtimeKernel: AgentRuntimeKernel? = nil,
+        backgroundJobRegistry: AgentJobRegistry? = nil,
+        mediaTaskRegistry: AgentMediaTaskRegistry? = nil,
         sessionManagementDefaults: UserDefaults = .standard,
         loadSessionCatalog: Bool = true
     ) {
@@ -774,6 +776,8 @@ final class AppState: ObservableObject {
         // AppState instances coexist and must never keep divergent snapshots
         // of the same per-session journal.
         self.agentRuntimeKernel = runtimeKernel ?? AgentRuntimeKernel.shared
+        self.agentJobRegistry = backgroundJobRegistry ?? AgentJobRegistry()
+        self.agentMediaTaskRegistry = mediaTaskRegistry ?? AgentMediaTaskRegistry()
         self.openedFileURL = openedFileURL
         self.fileContent = fileContent
         self.isEdited = isEdited
@@ -972,9 +976,7 @@ final class AppState: ObservableObject {
         // the top-of-round drain, so a run that outlives its turn needs
         // this kick or it stays unreported until the next user message.
         agentMediaTaskRegistry.onTaskFinished = { [weak self] task in
-            guard let self, let runtimeID = task.runtimeID,
-                  let runtime = self.runtime(for: runtimeID) else { return }
-            self.publishMediaTaskKernelEvent(task, runtime: runtime)
+            self?.deliverMediaCompletion(task)
         }
         agentSubagentRegistry.onRunProgress = { [weak self] runID, update in
             self?.applyBackgroundSubagentProgress(runID: runID, update)
@@ -1113,6 +1115,9 @@ final class AppState: ObservableObject {
             // Pending kernel events survived an app restart. Materialize only
             // their owning sessions and let the normal provider-slot scheduler
             // wake them; no phantom user message is created.
+            if loaded.catalogReadSucceeded {
+                self.agentMediaTaskRegistry.retryPendingCompletionNotifications()
+            }
             self.resumePersistedAgentKernelEvents()
 
             // Sidebar visibility hides empty placeholders; it cannot stop them
