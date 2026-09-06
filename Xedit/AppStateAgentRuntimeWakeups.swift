@@ -42,9 +42,11 @@ extension AppState {
               !runtime.isAwaitingProviderSlot,
               !runtime.isCompressingContext,
               runtime.requestTask == nil else { return }
+        let blocked = reconcileRevokedKernelDeliveries(for: runtime)
         let pendingEvents = agentRuntimeKernel.events.filter {
-            $0.runtimeID == runtime.id && $0.isPendingForModel
+            $0.runtimeID == runtime.id && $0.isPendingForModel && !blocked.contains($0.id)
         }
+        guard !pendingEvents.isEmpty || hasPendingHostBackgroundCompletions(for: runtime) else { return }
         repairSomeIMProviderCredentialsForTurnIfNeeded(for: runtime)
         let configuration = configurationForCurrentTurn(for: runtime)
         let providerID = configuration.providerID

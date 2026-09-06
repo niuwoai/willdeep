@@ -237,9 +237,10 @@ extension AppState {
     }
 
     func schedulePendingAgentKernelEvents(for runtime: AgentRuntime) {
+        let blocked = reconcileRevokedKernelDeliveries(for: runtime)
         guard agentRuntimeKernel.pendingModelEventCount(for: runtime.id) > 0 else { return }
         let probe = agentRuntimeKernel.events
-            .filter { $0.runtimeID == runtime.id && $0.isPendingForModel }
+            .filter { $0.runtimeID == runtime.id && $0.isPendingForModel && !blocked.contains($0.id) }
             .max { lhs, rhs in
                 if lhs.priority != rhs.priority { return lhs.priority < rhs.priority }
                 return lhs.updatedAt < rhs.updatedAt

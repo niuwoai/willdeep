@@ -1373,6 +1373,7 @@ extension AppState {
         let stopPersisted = runtime.activeTurnID.map {
             agentJobRegistry.revokeTurn(runtimeID: runtime.id, turnID: $0)
         } ?? true
+        reconcileRevokedKernelDeliveries(for: runtime)
         defer {
             if !stopPersisted { runtime.errorMessage = L10n.JobReceipt.recoveryUnavailable }
         }

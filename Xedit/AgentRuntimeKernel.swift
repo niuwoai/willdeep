@@ -771,13 +771,15 @@ final class AgentRuntimeKernel: ObservableObject {
     func consumePendingModelEvents(
         for runtimeID: UUID,
         limit: Int = 20,
-        leaseID: UUID? = nil
+        leaseID: UUID? = nil,
+        excluding excludedIDs: Set<UUID> = []
     ) -> [AgentKernelEvent] {
         guard limit > 0 else { return [] }
         let candidates = events.enumerated()
             .filter {
                 $0.element.runtimeID == runtimeID
                     && $0.element.isPendingForModel
+                    && !excludedIDs.contains($0.element.id)
             }
         let indexes = fairDeliveryIndexes(from: candidates, limit: limit)
         let timestamp = now()
@@ -798,6 +800,7 @@ final class AgentRuntimeKernel: ObservableObject {
         let timestamp = now()
         var changedRuntimeIDs: Set<UUID> = []
         for index in events.indices where idSet.contains(events[index].id)
+            && events[index].resolvedModelDeliveryState != .handled
             && (leaseID == nil || events[index].modelDeliveryLeaseID == leaseID) {
             events[index].modelDeliveryState = .handled
             events[index].modelDeliveryLeaseID = nil
@@ -812,6 +815,25 @@ final class AgentRuntimeKernel: ObservableObject {
             changedRuntimeIDs.insert(events[index].runtimeID)
         }
         changedRuntimeIDs.forEach(persist(runtimeID:))
+    }
+
+    /// Host cancellation is not model consumption. Keep the result and user
+    /// attention state, but release its model delivery responsibility.
+    func resolveModelDeliveriesAtSource(_ ids: Set<UUID>) {
+        let timestamp = now()
+        var changed: Set<UUID> = []
+        for index in events.indices where ids.contains(events[index].id)
+            && events[index].resolvedModelDeliveryState != .handled {
+            events[index].modelDeliveryState = .handled
+            events[index].modelDeliveryLeaseID = nil
+            events[index].resolutionActor = .host
+            events[index].resolutionOutcome = .resolvedAtSource
+            events[index].resolvedAt = timestamp
+            events[index].updatedAt = timestamp
+            refreshLegacyState(at: index)
+            changed.insert(events[index].runtimeID)
+        }
+        changed.forEach(persist(runtimeID:))
     }
 
     func dismiss(_ id: UUID) {

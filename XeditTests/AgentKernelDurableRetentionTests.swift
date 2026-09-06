@@ -5,6 +5,30 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct AgentKernelDurableRetentionTests {
+    @Test("host resolution preserves user attention and cannot be overwritten by a stale model ACK")
+    func resolvedAtSourceIsNotModelConsumption() {
+        let runtimeID = UUID()
+        defer { cleanup(runtimeID) }
+        let kernel = AgentRuntimeKernel(loadPersisted: false)
+        let original = kernel.publish(AgentKernelEvent(runtimeID: runtimeID, source: .backgroundJob,
+            kind: .backgroundJobFailed, title: "fixture", payload: "result", requiresUserAction: true))
+        #expect(kernel.confirmEventPersistenceForHandoff(original))
+        let lease = UUID()
+        _ = kernel.consumePendingModelEvents(for: runtimeID, leaseID: lease)
+        kernel.resolveModelDeliveriesAtSource([original.id])
+        kernel.acknowledge([original.id], leaseID: lease)
+        kernel.acknowledge([original.id])
+        kernel.releaseModelDeliveryLeases(for: runtimeID, leaseID: lease)
+        #expect(AgentKernelEventStore.flushPendingWrites(for: [runtimeID]).isEmpty)
+        let restored = AgentRuntimeKernel()
+        let event = restored.events.first { $0.id == original.id }
+        #expect(event?.resolutionActor == .host && event?.resolutionOutcome == .resolvedAtSource)
+        #expect(event?.isAwaitingUserAction == true)
+        #expect(event?.hasOutstandingDurableDelivery == false)
+        #expect(event?.acknowledgedAt == nil)
+        #expect(restored.consumePendingModelEvents(for: runtimeID).isEmpty)
+    }
+
     @Test("durable pending and leased results survive pressure and kernel reload")
     func retainsPendingAndLeased() {
         for leased in [false, true] {

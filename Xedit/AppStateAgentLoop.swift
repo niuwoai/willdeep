@@ -733,10 +733,7 @@ extension AppState {
             // model/tool boundary. Legacy registries are still drained below
             // for compatibility; resource ids prevent double delivery while
             // producers migrate onto the kernel.
-            let kernelEvents = agentRuntimeKernel.consumePendingModelEvents(
-                for: runtime.id,
-                leaseID: turnID
-            )
+            let kernelEvents = consumeAdmittedKernelEvents(for: runtime, leaseID: turnID)
             let kernelResourceKeys = Set(kernelEvents.compactMap { event -> String? in
                 guard let resourceID = event.metadata["resource_id"] else { return nil }
                 return "\(event.source.rawValue):\(resourceID)"

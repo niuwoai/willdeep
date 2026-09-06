@@ -32,7 +32,7 @@ struct AgentDaemonTerminalHandoffTests {
     }
 
     private func fixture(publishes: Bool = true, status: String = "failed", code: Int32? = 17,
-        persists: Bool = true) throws -> Fixture {
+        persists: Bool = true, independent: Bool = false) throws -> Fixture {
         var session = AgentSession()
         // No real model or network execution is permitted by this fixture.
         session.archivedAt = Date()
@@ -40,16 +40,124 @@ struct AgentDaemonTerminalHandoffTests {
             loadSessionCatalog: false)
         app.agentSessions = [session]
         let created = Date().addingTimeInterval(-240)
-        let receipt = AgentDaemonStartReceipt(id: UUID(), runtimeID: session.id, turnID: UUID(),
+        var receipt = AgentDaemonStartReceipt(id: UUID(), runtimeID: session.id, turnID: UUID(),
             remoteRuntimeID: UUID(), endpointFingerprint: String(repeating: "a", count: 64),
             workspaceFingerprint: String(repeating: "b", count: 64), instanceID: String(repeating: "c", count: 32),
             requestID: UUID().uuidString.lowercased(), executor: .codexCLI,
             createdAt: created, deadline: created.addingTimeInterval(60), publishesCompletion: publishes)
+        if independent {
+            receipt.lifetime = .persistent
+            receipt.survivesTurnStop = true
+        }
         let f = Fixture(session: session, receipt: receipt, app: app)
         try f.journal.prepare(receipt)
         try f.journal.finish(receipt, exitCode: code, disposition: status,
             finishedAt: created.addingTimeInterval(20), publishesCompletion: publishes)
         return f
+    }
+
+    private func acceptIntoKernel(_ f: Fixture) throws -> AgentKernelEvent {
+        let delivery = try #require(try f.journal.delivery(id: f.receipt.id))
+        let job = try f.app.agentJobRegistry.restoreDaemonTerminal(delivery)
+        let runtime = try #require(f.app.runtime(for: f.session.id))
+        #expect(f.app.publishBackgroundJobKernelEvent(job, runtime: runtime, requiresDurableHandoff: true))
+        try f.journal.acknowledge(delivery)
+        #expect(try f.journal.delivery(id: f.receipt.id) == nil)
+        return try #require(f.app.agentRuntimeKernel.events.first { $0.metadata["resource_id"] == f.receipt.id.uuidString })
+    }
+
+    private func denyProviderNetwork(_ app: AppState) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [GoalLoopURLProtocol.self]
+        // No registered handler: any unexpected request fails locally.
+        let session = URLSession(configuration: configuration)
+        app.agentLoopInferenceEnvironment = (.init(providerID: "openai", baseURL: "https://kernel-stop.invalid/v1",
+            model: "fixture", apiKey: "test-placeholder"), session)
+        return session
+    }
+
+    @Test("真实 Stop 撤销已接收结果，不把它记成模型消费")
+    func stopResolvesAcceptedResultAtSource() throws {
+        let f = try fixture(); defer { f.cleanup(); AgentSessionStore.delete(id: f.session.id) }
+        let original = try acceptIntoKernel(f)
+        let runtime = try #require(f.app.runtime(for: f.session.id))
+        runtime.activeTurnID = f.receipt.turnID
+        runtime.isResponding = true
+        defer { runtime.isResponding = false; runtime.requestTask?.cancel() }
+        f.app.stopAgentResponse(for: runtime)
+        let event = try #require(f.app.agentRuntimeKernel.events.first { $0.id == original.id })
+        #expect(event.resolutionActor == .host && event.resolutionOutcome == .resolvedAtSource)
+        #expect(!event.hasOutstandingDurableDelivery && event.acknowledgedAt == nil)
+    }
+
+    @Test("队列接收 ACK 后停止并重载，不复活 pending 或 leased 结果", arguments: [false, true])
+    func acknowledgedResultRespectsStopAfterReload(leased: Bool) async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let original = try acceptIntoKernel(f)
+        if leased { _ = f.app.agentRuntimeKernel.consumePendingModelEvents(for: f.session.id, leaseID: UUID()) }
+        #expect(f.app.agentJobRegistry.revokeTurn(runtimeID: f.session.id, turnID: try #require(f.receipt.turnID)))
+        #expect(AgentKernelEventStore.flushPendingWrites(for: [f.session.id]).isEmpty)
+        let app = AppState(runtimeKernel: AgentRuntimeKernel(), loadSessionCatalog: false)
+        let network = denyProviderNetwork(app)
+        defer { network.invalidateAndCancel() }
+        app.agentSessions = [f.session]
+        let runtime = try #require(app.runtime(for: f.session.id))
+        defer { runtime.requestTask?.cancel() }
+        runtime.session.archivedAt = nil
+        // The real automatic wake entry must refuse the old event before
+        // selecting credentials or starting a provider request.
+        app.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+        #expect(runtime.requestTask == nil && !runtime.isResponding)
+        #expect(app.consumeAdmittedKernelEvents(for: runtime, leaseID: UUID()).isEmpty)
+        let retained = try #require(app.agentRuntimeKernel.events.first { $0.id == original.id })
+        #expect(retained.payload == original.payload)
+        #expect(retained.resolutionActor == .host && retained.resolutionOutcome == .resolvedAtSource)
+        #expect(!retained.hasOutstandingDurableDelivery && retained.acknowledgedAt == nil)
+    }
+
+    @Test("已 ACK 独立任务不被 owner 停止抑制")
+    func acceptedIndependentResultRemainsDeliverable() throws {
+        let f = try fixture(independent: true); defer { f.cleanup() }
+        let original = try acceptIntoKernel(f)
+        #expect(f.app.agentJobRegistry.revokeTurn(runtimeID: f.session.id, turnID: try #require(f.receipt.turnID)))
+        let runtime = try #require(f.app.runtime(for: f.session.id))
+        let events = f.app.consumeAdmittedKernelEvents(for: runtime, leaseID: UUID())
+        #expect(events.map(\.id) == [original.id])
+    }
+
+    @Test("已接管事件的回执损坏或缺失时不唤醒、不消费、不丢弃", arguments: [false, true])
+    func unreadableOwnershipDefersAcceptedEvent(missing: Bool) throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let network = denyProviderNetwork(f.app)
+        defer { network.invalidateAndCancel() }
+        f.app.agentJobRegistry.onJobFinished = nil
+        _ = f.app.agentJobRegistry.registerManagedExecutor(id: f.receipt.id, executor: .codexCLI,
+            displayCommand: "fixture", workingDirectory: FileManager.default.temporaryDirectory,
+            runtimeID: f.session.id, turnID: f.receipt.turnID, timeoutSeconds: nil,
+            publishesCompletion: true, remoteRuntimeID: f.receipt.remoteRuntimeID,
+            requiresExitReceipt: true, cancellation: {})
+        f.app.agentJobRegistry.finishManagedExecutor(id: f.receipt.id, status: .failed, exitCode: 17, exitConfirmed: true)
+        #expect(f.app.agentJobRegistry.pendingCompletionCount(forRuntime: f.session.id) == 1)
+        let original = try acceptIntoKernel(f)
+        let path = f.journal.directory.appendingPathComponent("\(f.receipt.id.uuidString).json")
+        let saved = try Data(contentsOf: path)
+        if missing { try FileManager.default.removeItem(at: path) }
+        else { try Data("corrupt fixture".utf8).write(to: path) }
+        defer {
+            do { try saved.write(to: path, options: .atomic) }
+            catch { Issue.record("Could not restore receipt fixture: \(error)") }
+        }
+        let runtime = try #require(f.app.runtime(for: f.session.id))
+        defer { runtime.requestTask?.cancel() }
+        runtime.session.archivedAt = nil
+        f.app.resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+        #expect(runtime.requestTask == nil && !runtime.isResponding)
+        #expect(f.app.agentJobRegistry.pendingCompletionCount(forRuntime: f.session.id) == 0)
+        #expect(f.app.consumeAdmittedKernelEvents(for: runtime, leaseID: UUID()).isEmpty)
+        #expect(f.app.agentRuntimeKernel.events.first { $0.id == original.id }?.hasOutstandingDurableDelivery == true)
+        #expect(runtime.errorMessage == L10n.JobReceipt.recoveryUnavailable)
+        try saved.write(to: path, options: .atomic)
+        #expect(f.app.consumeAdmittedKernelEvents(for: runtime, leaseID: UUID()).map(\.id) == [original.id])
     }
 
     @Test("终态后事件前崩溃，恢复只交付本地结果且不重新判定超时")

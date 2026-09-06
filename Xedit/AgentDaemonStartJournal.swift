@@ -75,6 +75,19 @@ nonisolated struct AgentDaemonStartJournal: Sendable {
         let receipt: AgentDaemonStartReceipt
         let cancellationRequested: Bool
     }
+    struct ExecutionOwnership: Sendable {
+        let receipt: AgentDaemonStartReceipt
+        let cancellationRequested: Bool
+    }
+
+    /// Ownership outlives producer delivery ACK. The kernel may still hold an
+    /// unconsumed result after the producer has no pending delivery left.
+    func executionOwnership(id: UUID, runtimeID: UUID) throws -> ExecutionOwnership? {
+        let name = "\(id.uuidString).json"
+        guard try exists(name), let record = try record(name: name, runtimeID: nil) else { return nil }
+        guard record.receipt.runtimeID == runtimeID else { throw AgentDaemonStartJournalError.conflictingReceipt }
+        return .init(receipt: record.receipt, cancellationRequested: record.stopped)
+    }
     private struct Envelope: Codable { let version: Int; let digest: String; let payload: Data }
     private struct TurnOwner: Codable, Equatable { let runtimeID: UUID; let turnID: UUID }
 
