@@ -3,6 +3,22 @@
 基线：develop `5cbadabd`（2026-09-05 已 fetch；保留本地已合入改动）。
 分支：`codex/agent-autonomy`。
 
+## rc3 容量扫描优化与交付缺陷证据（2026-09-06）
+
+本批将容量裁剪改为一次快照、一次按会话分组，保持既有优先级和会话/全局上限；避免每个会话再次扫描完整 `@Published` 数组。新增全局优先级保留、会话隔离、已处理历史优先回收三项测试，独立 Swift Testing 3/3 通过。未优化编译、无磁盘持久化的 200 会话/200 事件负载，顺序各执行三次，中位耗时 1.56935 秒 → 0.023727 秒；约 66.14 倍仅限该组件负载，不能外推为生产 App 或 Agent 任务端到端提速。
+
+最新 App 定向 14 组 146/146、同构建完整 3834 项（3833 通过、0 失败、1 个既有真实模型靶场条件跳过）均退出 0，结果包与日志一致。完整 Swift Testing 子集为 3827 项/339 组/104.476 秒，结果包总时长 135.12 秒；不能混用这两个计数口径。定向及完整构建指纹相同，并逐项核对当前 HEAD、编译输入状态、工作区 diff、暂存 diff、未跟踪编译文件哈希。此次测试宿主正常运行；此前启动失败/认证等待记录仅为历史，不再视为当前阻点。
+
+- 定向结果：`build/kernel-rc3-target-pass-20260906-20260906-29422-tu4mf7/`。
+- 完整结果：`build/kernel-rc3-full-pass-20260906-20260906-33234-28b1l5/`。
+- Go 全量 race：`build/daemon-cursor-go-20260906-33224-hcbknq/`，65 个顶层/含子项 78 个通过，退出 0，源码前后 SHA256 `6c06da57c48e81581b7f3283f8fa915b28cb950b3aa1c17bd76bf4039325d3ed`。
+- 原 App 启动失败已归档：`build/daemon-deadline-xctest-startup-failed-20260906-20260906-28373-b4ctmi/`。
+- 容量源码 SHA256 `af471de2367e5c8a9093d2e1dfd871a4bfa6ea71b1ec016401fc80eba24d28b7`；新增测试 SHA256 `82cd01e4548474a93e436ed01f2ebac2ffaf06ae223a6ca414aa25d0fbadf1e0`。
+
+**可靠事件交付仍未修复。** 真实内核的 pending、leased、urgent、global 四种场景均复现：已确认持久化但未消费的事件被容量裁剪，内存、磁盘与重载后都不可见。真实 `AgentDaemonStartJournal` 与内核的联合探针进一步复现：producer ACK 成功、没有模型消费 ACK，施压重载后原事件、待交付回执与待恢复启动入口均不存在；原始 prepare/terminal/delivered 文件仍在，不等于物理删除底层证据。联合探针未执行 AppState、真实远端 Daemon 或模型，不能冒充完整端到端验收。独立临时证据：`/private/tmp/agent-daemon-handoff-retention-report.md`、同名 JSON 和 `agent-daemon-handoff-retention-probe.swift`。
+
+下一步须把可靠未消费责任与可裁剪展示历史分离，保留有界内存/磁盘、失败准入及 producer 重试；按原事件和租约确认消费，覆盖重启、重复通知、磁盘故障、Stop/归档及 Worker/媒体/Workflow 兼容队列。不能仅增大上限、提高优先级或延迟一次 ACK。十项完整 Goal 保持未完成；本批测试通过不是整个 Goal 已达成。
+
 ## 本地 WIP 保存点（2026-09-06）
 
 用户明确允许本次例外：在 App 验证未完成时先做本地 WIP 提交，不合并、不推送、不打 tag。本次保存现有 `1.334.0-rc2` 工作批次，不代表完整 Goal 完成或可发布；后续按小批次及时验证、及时提交，本次例外不取消后续测试门禁。

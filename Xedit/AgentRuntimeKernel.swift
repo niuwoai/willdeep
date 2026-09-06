@@ -908,33 +908,25 @@ final class AgentRuntimeKernel: ObservableObject {
     }
 
     private func enforceBounds() -> Set<UUID> {
-        var affectedRuntimeIDs: Set<UUID> = []
-        let runtimeIDs = Set(events.map(\.runtimeID))
-        for runtimeID in runtimeIDs {
-            if trim(runtimeID: runtimeID, to: AgentKernelEventPolicy.maximumEventsPerRuntime) {
-                affectedRuntimeIDs.insert(runtimeID)
-            }
+        // Read @Published once. Repeatedly filtering its getter for every
+        // runtime makes a burst across many sessions quadratic per publish.
+        let snapshot = events
+        let groups = Dictionary(grouping: snapshot.indices) { snapshot[$0].runtimeID }
+        var removed: Set<Int> = []
+        let perRuntimeLimit = AgentKernelEventPolicy.maximumEventsPerRuntime
+        for indexes in groups.values where indexes.count > perRuntimeLimit {
+            let ranked = indexes.sorted { evictionRank(snapshot[$0]) < evictionRank(snapshot[$1]) }
+            removed.formUnion(ranked.prefix(indexes.count - perRuntimeLimit))
         }
-        affectedRuntimeIDs.formUnion(trimGlobal(to: AgentKernelEventPolicy.maximumEventsAcrossKernel))
-        return affectedRuntimeIDs
-    }
-
-    private func trim(runtimeID: UUID, to maximum: Int) -> Bool {
-        var matches = events.indices.filter { events[$0].runtimeID == runtimeID }
-        guard matches.count > maximum else { return false }
-        matches.sort { evictionRank(events[$0]) < evictionRank(events[$1]) }
-        let remove = Set(matches.prefix(matches.count - maximum))
-        events = events.enumerated().filter { !remove.contains($0.offset) }.map(\.element)
-        return true
-    }
-
-    private func trimGlobal(to maximum: Int) -> Set<UUID> {
-        guard events.count > maximum else { return [] }
-        let ranked = events.indices.sorted { evictionRank(events[$0]) < evictionRank(events[$1]) }
-        let remove = Set(ranked.prefix(events.count - maximum))
-        let affectedRuntimeIDs = Set(remove.map { events[$0].runtimeID })
-        events = events.enumerated().filter { !remove.contains($0.offset) }.map(\.element)
-        return affectedRuntimeIDs
+        let remaining = snapshot.indices.filter { !removed.contains($0) }
+        let globalLimit = AgentKernelEventPolicy.maximumEventsAcrossKernel
+        if remaining.count > globalLimit {
+            let ranked = remaining.sorted { evictionRank(snapshot[$0]) < evictionRank(snapshot[$1]) }
+            removed.formUnion(ranked.prefix(remaining.count - globalLimit))
+        }
+        guard !removed.isEmpty else { return [] }
+        events = snapshot.enumerated().filter { !removed.contains($0.offset) }.map(\.element)
+        return Set(removed.map { snapshot[$0].runtimeID })
     }
 
     private func evictionRank(_ event: AgentKernelEvent) -> (Int, Int, Date) {
