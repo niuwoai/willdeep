@@ -3,6 +3,17 @@
 > 当前文件保留最新版本（1.321.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## 1.334.0-rc15 - 2026-09-06
+
+### Fixed
+
+- 恢复 `go vet ./...` 干净。1.334.0-rc14 新增的 `job_deadline_test.go` 把 `Job.Snapshot()` 的返回值整个传进 `t.Fatalf` 的变参，而 `Job` 仍内嵌其缓冲区的 `sync.Mutex`，vet 因此判定复制了锁。改为只打印 `TimedOut`、`ExitCode` 和 `Error` 三个字段。这条不影响运行时行为，但 `vet && test` 串起来时 vet 一红后面的测试根本不会执行，红得静悄悄。
+
+### Tests
+
+- Bugfix 预发布版本从 **1.334.0-rc14** 递增为 **1.334.0-rc15**，内部构建号 **646 → 647**；App、Go agent、Help、Helper、浏览器扩展、README、版本响应头与产品文档保持一致。
+- 本机已知红：`WillDeepRuntimeProtocolTests` 的 `the local fixture copy still matches the Rust source when both are present`。`XeditTests/Fixtures/willdeep-runtime-public-api-v1.json` 自 1.283.0-rc1 未动，而 willdeep-rs 侧已新增 `kernel_list` 请求与 `kernel_event` 响应。该用例在没有相邻 Rust 检出的机器（含 CI）上自动跳过，与本次改动无关，刷新 fixture 需同时补 Swift 侧解码类型，另行处理。
+
 ## 1.334.0-rc14 - 2026-09-06
 
 ### Fixed

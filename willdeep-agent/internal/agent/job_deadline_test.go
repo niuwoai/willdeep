@@ -44,8 +44,17 @@ func TestRunDeadlineSurvivesRequestCancellationAndDoesNotExtendOnReplay(t *testi
 	if elapsed := time.Since(started); elapsed < time.Second || elapsed > 6*time.Second {
 		t.Fatalf("deadline elapsed %s", elapsed)
 	}
+	// `Job` still embeds its buffer's mutex, so the snapshot must never be
+	// copied into a variadic argument: `go vet` fails the whole package for
+	// it, and a `vet && test` chain then never reaches the tests at all.
+	// Report the fields instead.
 	if snapshot := job.Snapshot(); !snapshot.TimedOut || snapshot.ExitCode == nil || snapshot.Error != context.DeadlineExceeded.Error() {
-		t.Fatalf("missing authoritative timeout: %+v", snapshot)
+		t.Fatalf(
+			"missing authoritative timeout: timedOut=%t exitCode=%v error=%q",
+			snapshot.TimedOut,
+			snapshot.ExitCode,
+			snapshot.Error,
+		)
 	}
 	events, _ := job.EventsSince(0)
 	if len(events) == 0 || !events[len(events)-1].TimedOut {
