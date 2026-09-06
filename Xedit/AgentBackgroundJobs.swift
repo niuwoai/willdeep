@@ -731,11 +731,15 @@ final class AgentJobRegistry: ObservableObject {
         lifetime: AgentBackgroundJobLifetime = .turn,
         goalPhaseID: String? = nil,
         survivesTurnStop: Bool = false,
+        restoringIndependentReceipt: Bool = false,
         secretRedactionValues: [String] = [],
         beforeCancellation: (@MainActor () throws -> Void)? = nil,
         cancellation: @escaping @Sendable () -> Void
     ) -> AgentBackgroundJob {
-        let revoked = Task.isCancelled || isTurnStopped(runtimeID: runtimeID, turnID: turnID)
+        // Only an existing durable remote receipt may recover an explicitly
+        // independent task. New work still passes the ordinary owner gate.
+        let independentRecovery = restoringIndependentReceipt && requiresExitReceipt && survivesTurnStop
+        let revoked = Task.isCancelled || (!independentRecovery && isTurnStopped(runtimeID: runtimeID, turnID: turnID))
         if revoked && !requiresExitReceipt {
             cancellation()
             return AgentBackgroundJob(id: id, shortID: String(id.uuidString.prefix(6)).lowercased(),
@@ -956,16 +960,30 @@ final class AgentJobRegistry: ObservableObject {
         }
     }
 
-    func revokeTurn(runtimeID: UUID, turnID: UUID) {
+    @discardableResult
+    func revokeTurn(runtimeID: UUID, turnID: UUID) -> Bool {
         stoppedTurnOwners.insert(TurnOwner(runtimeID: runtimeID, turnID: turnID))
         let owned = jobs.filter { $0.runtimeID == runtimeID && originatingTurnIDs[$0.id] == turnID && !$0.survivesTurnStop }
         let ids = Set(owned.map(\.id))
         suppressedCompletionJobIDs.formUnion(owned.filter(\.isAlive).map(\.id))
         pendingCompletionEvents[runtimeID]?.removeAll { ids.contains($0) }
+        do {
+            try daemonStartJournal.revokeTurn(runtimeID: runtimeID, turnID: turnID)
+            return true
+        } catch {
+            NSLog("Daemon turn cancellation could not be persisted; in-memory revocation retained")
+            return false
+        }
     }
 
     private func isTurnStopped(runtimeID: UUID, turnID: UUID?) -> Bool {
-        turnID.map { stoppedTurnOwners.contains(TurnOwner(runtimeID: runtimeID, turnID: $0)) } ?? false
+        guard let turnID else { return false }
+        if stoppedTurnOwners.contains(TurnOwner(runtimeID: runtimeID, turnID: turnID)) { return true }
+        do { return try daemonStartJournal.isTurnRevoked(runtimeID: runtimeID, turnID: turnID) }
+        catch {
+            NSLog("Turn revocation could not be read; execution admission denied")
+            return true
+        }
     }
 
     func allowsDaemonTerminalDelivery(_ receipt: AgentDaemonStartReceipt) -> Bool {

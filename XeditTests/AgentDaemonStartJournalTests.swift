@@ -5,9 +5,9 @@ import Testing
 @MainActor
 @Suite("Daemon 启动恢复持久化", .serialized)
 struct AgentDaemonStartJournalTests {
-    private func receipt(id: UUID = UUID(), runtimeID: UUID = UUID()) -> AgentDaemonStartReceipt {
+    private func receipt(id: UUID = UUID(), runtimeID: UUID = UUID(), turnID: UUID = UUID()) -> AgentDaemonStartReceipt {
         let now = Date()
-        return .init(id: id, runtimeID: runtimeID, turnID: UUID(), remoteRuntimeID: UUID(),
+        return .init(id: id, runtimeID: runtimeID, turnID: turnID, remoteRuntimeID: UUID(),
             endpointFingerprint: AgentDaemonStartReceipt.fingerprint("https://fixture.invalid"),
             workspaceFingerprint: AgentDaemonStartReceipt.fingerprint("/workspace"),
             instanceID: String(repeating: "a", count: 32), requestID: UUID().uuidString.lowercased(),
@@ -22,6 +22,107 @@ struct AgentDaemonStartJournalTests {
             catch { Issue.record("Journal fixture cleanup failed: \(error)") }
         }
         try body(.init(directory: directory))
+    }
+
+    @Test("轮次撤销跨重载覆盖未完成和已完成回执，隔离兄弟及显式独立任务")
+    func revokedPreparedReceiptsRemainStoppedAfterReload() throws {
+        try withJournal { journal in
+            let runtime = UUID(), turn = UUID()
+            let pending = receipt(runtimeID: runtime, turnID: turn)
+            let terminal = receipt(runtimeID: runtime, turnID: turn)
+            let sibling = receipt(runtimeID: runtime)
+            let other = receipt(turnID: turn)
+            var independent = receipt(runtimeID: runtime, turnID: turn)
+            independent.lifetime = .persistent
+            independent.survivesTurnStop = true
+            for record in [pending, terminal, sibling, other, independent] { try journal.prepare(record) }
+            try journal.finish(terminal, exitCode: 0, disposition: "completed",
+                finishedAt: Date(), publishesCompletion: true)
+            try journal.revokeTurn(runtimeID: runtime, turnID: turn)
+            try journal.revokeTurn(runtimeID: runtime, turnID: turn)
+            let reloaded = AgentDaemonStartJournal(directory: journal.directory)
+            let restored = try reloaded.pending()
+            #expect(restored.first { $0.receipt.id == pending.id }?.cancellationRequested == true)
+            for record in [sibling, other, independent] {
+                #expect(restored.first { $0.receipt.id == record.id }?.cancellationRequested == false)
+            }
+            let delivery = try #require(try reloaded.delivery(id: terminal.id))
+            #expect(delivery.cancellationRequested)
+            #expect(delivery.terminal.disposition == "completed" && delivery.terminal.exitCode == 0)
+            #expect(try reloaded.deliveries() == [delivery])
+            var laterIndependent = receipt(runtimeID: runtime, turnID: turn)
+            laterIndependent.lifetime = .persistent
+            laterIndependent.survivesTurnStop = true
+            try reloaded.prepare(laterIndependent)
+            #expect(try FileManager.default.contentsOfDirectory(atPath: journal.directory.path)
+                .filter { $0.hasSuffix(".revoked") }.count == 1)
+        }
+    }
+
+    @Test("停止写盘失败必须报告失败，但本进程仍拒绝原轮次新动作")
+    func failedRevocationKeepsInMemoryAdmissionClosed() throws {
+        try withJournal { journal in
+            let record = receipt()
+            try journal.prepare(record)
+            let turn = try #require(record.turnID)
+            let stop = journal.revocationURL(runtimeID: record.runtimeID, turnID: turn)
+            try FileManager.default.createDirectory(at: stop, withIntermediateDirectories: false)
+            let registry = AgentJobRegistry(daemonStartDirectory: journal.directory)
+            #expect(!registry.revokeTurn(runtimeID: record.runtimeID, turnID: turn))
+            #expect(throws: CancellationError.self) {
+                try registry.checkTurnAdmission(runtimeID: record.runtimeID, turnID: turn)
+            }
+        }
+    }
+
+    @Test("持久轮次撤销无需扫描历史，重启后拒绝迟到准备与动作")
+    func ownerMarkerRejectsLatePreparationWithoutScanningHistory() throws {
+        try withJournal { journal in
+            let runtime = UUID(), turn = UUID()
+            // Unrelated damaged history must not delay or prevent this Stop.
+            try Data("unrelated damaged fixture".utf8).write(to:
+                journal.directory.appendingPathComponent("\(UUID().uuidString).json"))
+            try journal.revokeTurn(runtimeID: runtime, turnID: turn)
+            let reloaded = AgentDaemonStartJournal(directory: journal.directory)
+            #expect(try reloaded.isTurnRevoked(runtimeID: runtime, turnID: turn))
+            #expect(throws: CancellationError.self) {
+                try reloaded.prepare(receipt(runtimeID: runtime, turnID: turn))
+            }
+            let registry = AgentJobRegistry(daemonStartDirectory: journal.directory)
+            #expect(throws: CancellationError.self) {
+                try registry.checkTurnAdmission(runtimeID: runtime, turnID: turn)
+            }
+            try registry.checkTurnAdmission(runtimeID: runtime, turnID: UUID())
+        }
+    }
+
+    @Test("损坏、链接或归属不匹配的撤销标记不能被当作允许执行", arguments: ["corrupt", "symlink", "wrongOwner"])
+    func invalidOwnerMarkerFailsClosed(kind: String) throws {
+        try withJournal { journal in
+            let record = receipt(), turn = try #require(record.turnID)
+            try journal.prepare(record)
+            let marker = journal.revocationURL(runtimeID: record.runtimeID, turnID: turn)
+            if kind == "corrupt" {
+                try Data("incomplete".utf8).write(to: marker)
+            } else {
+                let other = UUID()
+                try journal.revokeTurn(runtimeID: other, turnID: turn)
+                let source = journal.revocationURL(runtimeID: other, turnID: turn)
+                if kind == "symlink" {
+                    try FileManager.default.createSymbolicLink(at: marker, withDestinationURL: source)
+                } else {
+                    try FileManager.default.copyItem(at: source, to: marker)
+                }
+            }
+            #expect(throws: AgentDaemonStartJournalError.self) {
+                try journal.isTurnRevoked(runtimeID: record.runtimeID, turnID: turn)
+            }
+            #expect(throws: AgentDaemonStartJournalError.self) { try journal.pending() }
+            let registry = AgentJobRegistry(daemonStartDirectory: journal.directory)
+            #expect(throws: CancellationError.self) {
+                try registry.checkTurnAdmission(runtimeID: record.runtimeID, turnID: turn)
+            }
+        }
     }
 
     @Test("准备、停止、终态回执重载保持一致，冲突不能覆盖")

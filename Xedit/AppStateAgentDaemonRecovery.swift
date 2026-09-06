@@ -47,7 +47,7 @@ extension AppState {
                 publishBackgroundJobKernelEvent(job, runtime: runtime)
                 return
             }
-            guard delivery.terminal.publishesCompletion == true else { return }
+            guard delivery.terminal.publishesCompletion == true, !delivery.cancellationRequested else { return }
             guard agentJobRegistry.allowsDaemonTerminalDelivery(delivery.receipt) else { return }
             guard agentRuntimeKernel.canAdmitDurableDelivery(runtimeID: runtime.id,
                 dedupeKey: "background-job:\(job.id.uuidString)") else {

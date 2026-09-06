@@ -811,6 +811,7 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
                 lifetime: specification.lifetime,
                 goalPhaseID: specification.goalPhaseID,
                 survivesTurnStop: specification.survivesTurnStop,
+                restoringIndependentReceipt: recoveryOnly && startReceipt?.survivesTurnStop == true,
                 secretRedactionValues: secretRedactionValues,
                 beforeCancellation: {
                     if let startReceipt { try registry.daemonStartJournal.requestCancellation(startReceipt) }

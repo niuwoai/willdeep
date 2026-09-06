@@ -1370,8 +1370,11 @@ extension AppState {
            runtime.userStoppedTurnID == activeTurnID {
             return
         }
-        if let turnID = runtime.activeTurnID {
-            agentJobRegistry.revokeTurn(runtimeID: runtime.id, turnID: turnID)
+        let stopPersisted = runtime.activeTurnID.map {
+            agentJobRegistry.revokeTurn(runtimeID: runtime.id, turnID: $0)
+        } ?? true
+        defer {
+            if !stopPersisted { runtime.errorMessage = L10n.JobReceipt.recoveryUnavailable }
         }
         if runtime.goalTurnRecoveryCheckpoint != nil {
             runtime.goalTurnRecoveryCheckpoint = nil

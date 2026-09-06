@@ -308,6 +308,44 @@ struct AgentDaemonExitReceiptTests {
         try registry.checkTurnAdmission(runtimeID: f.runtimeID, turnID: f.turnID)
     }
 
+    @Test("轮次撤销跨重启取消普通任务，明确独立任务只恢复而不重新启动")
+    func revokedOwnerRecoveryPreservesIndependentTask() async throws {
+        let f = fixture(recovery: true); defer { f.cleanup() }
+        let stopped = preparedReceipt(f)
+        var independent = preparedReceipt(f)
+        independent.lifetime = .persistent
+        independent.survivesTurnStop = true
+        try f.registry.daemonStartJournal.prepare(stopped)
+        try f.registry.daemonStartJournal.prepare(independent)
+        #expect(f.registry.revokeTurn(runtimeID: f.runtimeID, turnID: f.turnID))
+        let registry = AgentJobRegistry(daemonStartDirectory: f.registry.daemonStartJournal.directory)
+        var deleted: [String] = [], starts = 0
+        DaemonReceiptURLProtocol.install(f.token) { request in
+            let path = request.url?.path ?? ""
+            if path == "/v1/run/start" { starts += 1; return (500, Data()) }
+            if request.httpMethod == "DELETE" {
+                deleted.append(path)
+                #expect(path == "/v1/run/jobs/\(stopped.jobID)")
+                return (200, Data(#"{"ok":true,"data":{"killed":true}}"#.utf8))
+            }
+            if path.contains(stopped.requestID) {
+                return (200, try resolutionData(stopped, state: "started", exit: deleted.isEmpty ? nil : 143))
+            }
+            #expect(path.contains(independent.requestID))
+            return (200, try resolutionData(independent, state: "started", exit: 0))
+        }
+        for pending in try registry.daemonStartJournal.pending() {
+            try await f.backend.restoreStartReceipt(pending, registry: registry)
+        }
+        let stoppedFinal = try await registry.waitForTerminal(id: stopped.id, forRuntime: f.runtimeID)
+        let independentFinal = try await registry.waitForTerminal(id: independent.id, forRuntime: f.runtimeID)
+        #expect(stoppedFinal.status == .killed && stoppedFinal.exitCode == 143)
+        #expect(independentFinal.status == .completed && independentFinal.exitCode == 0)
+        #expect(independentFinal.survivesTurnStop)
+        #expect(starts == 0 && deleted == ["/v1/run/jobs/\(stopped.jobID)"])
+        #expect(registry.pendingCompletionCount(forRuntime: f.runtimeID) == 1)
+    }
+
     @Test("真实 App 会话目录恢复入口接管回执，重复调用不重复注册")
     func appCatalogRecoveryConnectsReceipts() async throws {
         let f = fixture(recovery: true); defer { f.cleanup() }

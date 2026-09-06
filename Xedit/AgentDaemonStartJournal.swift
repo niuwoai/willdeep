@@ -69,15 +69,35 @@ nonisolated struct AgentDaemonStartJournal: Sendable {
     struct Delivery: Equatable, Sendable {
         let receipt: AgentDaemonStartReceipt
         let terminal: Terminal
+        var cancellationRequested = false
     }
     struct Pending: Equatable, Sendable {
         let receipt: AgentDaemonStartReceipt
         let cancellationRequested: Bool
     }
     private struct Envelope: Codable { let version: Int; let digest: String; let payload: Data }
+    private struct TurnOwner: Codable, Equatable { let runtimeID: UUID; let turnID: UUID }
+
+    func revocationURL(runtimeID: UUID, turnID: UUID) -> URL {
+        directory.appendingPathComponent("owner-\(runtimeID.uuidString)-\(turnID.uuidString).revoked")
+    }
+
+    func isTurnRevoked(runtimeID: UUID, turnID: UUID) throws -> Bool {
+        let name = revocationURL(runtimeID: runtimeID, turnID: turnID).lastPathComponent
+        guard try exists(name) else { return false }
+        let owner: TurnOwner = try read(name)
+        guard owner == TurnOwner(runtimeID: runtimeID, turnID: turnID) else {
+            throw AgentDaemonStartJournalError.corrupt
+        }
+        return true
+    }
 
     func prepare(_ receipt: AgentDaemonStartReceipt) throws {
         guard receipt.isValid else { throw AgentDaemonStartJournalError.corrupt }
+        if receipt.survivesTurnStop != true, let turnID = receipt.turnID,
+           try isTurnRevoked(runtimeID: receipt.runtimeID, turnID: turnID) {
+            throw CancellationError()
+        }
         _ = try pending(runtimeID: receipt.runtimeID)
         try publish(receipt, name: "\(receipt.id.uuidString).json")
     }
@@ -85,6 +105,13 @@ nonisolated struct AgentDaemonStartJournal: Sendable {
     func requestCancellation(_ receipt: AgentDaemonStartReceipt) throws {
         try requirePrepared(receipt)
         try publish(receipt.id, name: "\(receipt.id.uuidString).stop")
+    }
+
+    /// One immutable owner marker, independent of historical receipt count.
+    /// Covers terminal delivery and late preparation after process restart.
+    func revokeTurn(runtimeID: UUID, turnID: UUID) throws {
+        try publish(TurnOwner(runtimeID: runtimeID, turnID: turnID),
+            name: revocationURL(runtimeID: runtimeID, turnID: turnID).lastPathComponent)
     }
 
     func finish(_ receipt: AgentDaemonStartReceipt, exitCode: Int32?, disposition: String? = nil,
@@ -121,7 +148,7 @@ nonisolated struct AgentDaemonStartJournal: Sendable {
         try records(runtimeID: runtimeID).compactMap { record in
             guard let terminal = record.terminal, terminal.disposition != nil,
                   !record.acknowledged else { return nil }
-            return Delivery(receipt: record.receipt, terminal: terminal)
+            return Delivery(receipt: record.receipt, terminal: terminal, cancellationRequested: record.stopped)
         }
     }
 
@@ -130,7 +157,7 @@ nonisolated struct AgentDaemonStartJournal: Sendable {
         guard try exists(name), let record = try record(name: name, runtimeID: nil),
               let terminal = record.terminal, terminal.disposition != nil,
               !record.acknowledged else { return nil }
-        return Delivery(receipt: record.receipt, terminal: terminal)
+        return Delivery(receipt: record.receipt, terminal: terminal, cancellationRequested: record.stopped)
     }
 
     func acknowledge(_ delivery: Delivery) throws {
@@ -179,10 +206,14 @@ nonisolated struct AgentDaemonStartJournal: Sendable {
                     }
                 }
             }
-            let stopped = try exists("\(id.uuidString).stop")
+            var stopped = try exists("\(id.uuidString).stop")
             if stopped {
                 let stopID: UUID = try read("\(id.uuidString).stop")
                 guard stopID == id else { throw AgentDaemonStartJournalError.corrupt }
+            }
+            if receipt.survivesTurnStop != true, let turnID = receipt.turnID,
+               try isTurnRevoked(runtimeID: receipt.runtimeID, turnID: turnID) {
+                stopped = true
             }
             let acknowledged = try exists("\(id.uuidString).delivered")
             if acknowledged {

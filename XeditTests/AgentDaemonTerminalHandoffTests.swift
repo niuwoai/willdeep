@@ -12,6 +12,13 @@ struct AgentDaemonTerminalHandoffTests {
         var journal: AgentDaemonStartJournal { app.agentJobRegistry.daemonStartJournal }
         func cleanup() {
             AgentKernelEventStore.flushPendingWrites(for: [session.id])
+            if let turnID = receipt.turnID {
+                let marker = journal.revocationURL(runtimeID: session.id, turnID: turnID)
+                if FileManager.default.fileExists(atPath: marker.path) {
+                    do { try FileManager.default.removeItem(at: marker) }
+                    catch { Issue.record("Owner fixture cleanup failed: \(error)") }
+                }
+            }
             for suffix in ["json", "terminal", "stop", "delivered"] {
                 let url = journal.directory.appendingPathComponent("\(receipt.id.uuidString).\(suffix)")
                 if FileManager.default.fileExists(atPath: url.path) {
@@ -148,6 +155,33 @@ struct AgentDaemonTerminalHandoffTests {
         retained.lifetime = .persistent
         retained.survivesTurnStop = true
         #expect(f.app.agentJobRegistry.allowsDaemonTerminalDelivery(retained))
+    }
+
+    @Test("终态等待交付时停止，新的 App 注册表恢复不唤醒模型", arguments: [false, true])
+    func stoppedTerminalSurvivesRegistryRestart(directCancellation: Bool) async throws {
+        let f = try fixture(status: "completed", code: 0)
+        defer { f.cleanup() }
+        if directCancellation {
+            try f.journal.requestCancellation(f.receipt)
+        } else {
+            // No job has been restored into the registry yet: disk ownership
+            // must be sufficient to find a completion awaiting delivery.
+            let turn = try #require(f.receipt.turnID)
+            #expect(f.app.agentJobRegistry.revokeTurn(runtimeID: f.session.id, turnID: turn))
+        }
+        let restored = AppState(runtimeKernel: AgentRuntimeKernel(loadPersisted: false), loadSessionCatalog: false)
+        restored.agentSessions = [f.session]
+        var backendCalls = 0
+        await restored.restoreDaemonStartReceipts(descriptors: [], backendFactory: { descriptor in
+            backendCalls += 1
+            return DaemonRuntimeBackend(descriptor: descriptor)
+        })
+        #expect(restored.agentJobRegistry.job(id: f.receipt.id)?.status == .completed)
+        #expect(restored.agentRuntimeKernel.events.filter { $0.runtimeID == f.session.id }.isEmpty)
+        #expect(restored.agentJobRegistry.pendingCompletionCount(forRuntime: f.session.id) == 0)
+        #expect(restored.runtime(for: f.session.id)?.requestTask == nil)
+        #expect(backendCalls == 0)
+        #expect(try f.journal.delivery(id: f.receipt.id)?.cancellationRequested == true)
     }
 
     @Test("容量满保留回执，模型消费释放空间后自动补交而不重跑任务")
