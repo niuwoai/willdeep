@@ -675,6 +675,9 @@ extension AppState {
             return .blocked(message: L10n.Dispatch.workspaceRequired)
         }
         guard task.pendingDecisionIDs?.isEmpty != false else { return .blocked(message: L10n.DispatchDecision.waiting) }
+        guard explicitlyRequested || task.state != .cancelled else {
+            return .blocked(message: L10n.Dispatch.deliveryIncomplete)
+        }
         guard task.state == .queued
                 || task.state == .reviewing
                 || task.state == .failed
@@ -874,6 +877,7 @@ extension AppState {
         }
 
         resumeAnsweredDispatchDecisions(goalID: goalID)
+        scheduleDispatchDecisionResumption()
         // Repair durable graph records written by older builds where a
         // provider/continuation warning won over an already completed Goal
         // checklist. This is deliberately limited to failed nodes: a user

@@ -641,7 +641,7 @@ private struct AgentDispatchBoardContent: View {
         acceptanceCriteria: [String]
     ) {
         if let taskID = request.taskID {
-            guard coordinator.updateTaskOutcome(
+            guard appState.reviseDispatchTaskOutcome(
                 goalID: request.goalID,
                 taskID: taskID,
                 title: title,

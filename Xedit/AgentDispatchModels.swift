@@ -326,6 +326,8 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
     /// Host-owned delivery epoch. Nil addresses legacy evidence; a revised
     /// outcome must use a fresh epoch without deleting the earlier receipt.
     var deliveryRevisionID: UUID? = nil
+    var outcomeOverride: AgentDispatchOutcomeOverride? = nil
+    var pendingOutcomeRevision: Bool? = nil
     var artifactSnapshot: AgentDispatchArtifactSnapshot? = nil
     var integrationCandidate: AgentDispatchIntegrationCandidate? = nil
     var integrationReceipt: AgentDispatchIntegrationReceipt? = nil

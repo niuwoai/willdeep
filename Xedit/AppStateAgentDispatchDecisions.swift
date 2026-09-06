@@ -75,14 +75,17 @@ extension AppState {
     func scheduleDispatchDecisionResumption() {
         guard dispatchDecisionResumptionTask == nil,
               agentDispatchCoordinator.goals.contains(where: { goal in
-                  !goal.isPaused && goal.tasks.contains { $0.pendingDecisionIDs?.isEmpty == false }
+                  !goal.isPaused && goal.tasks.contains {
+                      $0.pendingDecisionIDs?.isEmpty == false || $0.pendingOutcomeRevision == true
+                  }
               }) else { return }
         dispatchDecisionResumptionTask = Task { @MainActor [weak self] in
             await Task.yield()
             guard let self, !Task.isCancelled else { return }
-            self.dispatchDecisionResumptionTask = nil
+            defer { self.dispatchDecisionResumptionTask = nil }
             for goal in self.agentDispatchCoordinator.goals where !goal.isPaused {
                 self.resumeAnsweredDispatchDecisions(goalID: goal.id)
+                self.resumePendingOutcomeRevisions(goalID: goal.id)
             }
         }
     }

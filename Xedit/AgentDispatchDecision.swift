@@ -57,11 +57,13 @@ nonisolated struct AgentDispatchDecision: Codable, Equatable, Identifiable {
             let binding: AgentDispatchWorkspaceBinding?
             let verificationCommands: [String]?
             let scheduling: AgentDispatchSchedulingHints?
+            let deliveryRevisionID: UUID?
         }
         return try AgentGoalTaskAuthorization.digest(Contract(goalID: goal.id, statement: goal.statement,
             taskID: task.id, title: task.title, criteria: task.acceptanceCriteria,
             dependencies: task.dependencyIDs, binding: goal.resolvedWorkspaceBinding(for: task),
-            verificationCommands: task.verificationCommands, scheduling: task.scheduling))
+            verificationCommands: task.verificationCommands, scheduling: task.scheduling,
+            deliveryRevisionID: task.deliveryRevisionID))
     }
 
     func applies(to task: AgentDispatchTask, in goal: AgentDispatchGoal) -> Bool {

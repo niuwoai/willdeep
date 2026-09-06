@@ -188,6 +188,54 @@ struct AgentDispatchDeliveryTests {
         #expect(try f.task(f.firstID).state == .merged)
     }
 
+    @Test("已交付节点编辑后自动续跑而不继承完成声明，暂停仍保持暂停", arguments: [false, true])
+    func editedOutcomeAutomaticallyQueuesFreshExecution(paused: Bool) async throws {
+        let f = try await fixture()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [GoalLoopURLProtocol.self]
+        let network = URLSession(configuration: configuration)
+        defer {
+            f.app.dispatchDecisionResumptionTask?.cancel()
+            f.app.pendingDispatchQueue.removeAll()
+            network.invalidateAndCancel()
+            f.cleanup()
+        }
+        f.app.agentLoopInferenceEnvironment = (.init(providerID: "openai", baseURL: "https://outcome-revision.invalid/v1",
+            model: "fixture", apiKey: "test-placeholder"), network)
+        f.app.inFlightCountByProvider["openai"] = f.app.perProviderConcurrencyLimit + 1
+        f.app.agentDispatchCoordinator.updateTask(goalID: f.goalID, taskID: f.firstID) { $0.executorChoice = .willDeep }
+        try Data("A\n".utf8).write(to: f.checkout.appendingPathComponent("interface.txt"))
+        try await f.deliver()
+        let original = try #require(try f.app.dispatchDeliveryJournal.load(goalID: f.goalID, taskID: f.firstID))
+        f.app.agentDispatchCoordinator.updateGoal(id: f.goalID) { $0.isPaused = paused }
+        #expect(f.app.reviseDispatchTaskOutcome(goalID: f.goalID, taskID: f.firstID,
+            title: "Updated interface", acceptanceCriteria: ["Interface A and a new report"]))
+        if paused {
+            #expect(f.app.dispatchDecisionResumptionTask == nil)
+            #expect(try f.task(f.firstID).state == .queued)
+            #expect(try f.task(f.firstID).runtimeSessionID == f.runtime.id)
+            #expect(f.app.pendingDispatchQueue.isEmpty)
+            return
+        }
+        #expect(f.app.dispatchDecisionResumptionTask != nil)
+        await f.app.dispatchDecisionResumptionTask?.value
+        let task = try f.task(f.firstID)
+        let runtimeID = try #require(task.runtimeSessionID)
+        let fresh = try #require(f.app.loadedRuntime(for: runtimeID))
+        #expect(runtimeID != f.runtime.id)
+        #expect(task.deliveryRevisionID != nil && task.pendingOutcomeRevision != true)
+        #expect(fresh.currentGoal?.checklist.map(\.text) == ["Interface A and a new report"])
+        #expect(fresh.currentGoal?.checklist.allSatisfy { !$0.done } == true)
+        #expect(fresh.agentEditedPaths == ["interface.txt"])
+        #expect(fresh.workspaceLocation == f.runtime.workspaceLocation)
+        #expect(fresh.isAwaitingProviderSlot && fresh.requestTask == nil)
+        #expect(f.app.pendingDispatchQueue.filter { $0.runtimeID == runtimeID }.count == 1)
+        #expect(try f.task(f.nextID).state == .blocked)
+        #expect(try f.app.dispatchDeliveryJournal.load(goalID: f.goalID, taskID: f.firstID) == original)
+        f.app.agentDispatchCoordinator.synchronize(with: f.app.agentSessions)
+        #expect(try f.task(f.firstID).title == "Updated interface")
+    }
+
     private func seedVerifiedCheckpoint(_ f: Fixture) async throws -> AgentDispatchDeliveryRecord {
         let snapshot = try await AgentDispatchArtifactIntegrator.snapshot(in: f.checkout,
             goalID: f.goalID, taskID: f.firstID, baseRevision: f.base, paths: ["interface.txt"])

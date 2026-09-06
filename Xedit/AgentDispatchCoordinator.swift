@@ -587,27 +587,13 @@ final class AgentDispatchCoordinator: ObservableObject {
         title: String,
         acceptanceCriteria requestedAcceptanceCriteria: [String]
     ) -> Bool {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty,
-              let goal = goals.first(where: { $0.id == goalID }),
-              let existingTask = goal.tasks.first(where: { $0.id == taskID }),
-              existingTask.state != .running,
-              existingTask.state != .reviewing else {
-            return false
-        }
-
-        let criteria = requestedAcceptanceCriteria
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        updateTask(goalID: goalID, taskID: taskID) { task in
-            task.title = trimmedTitle
-            task.acceptanceCriteria = criteria.isEmpty
-                ? [L10n.Dispatch.defaultAcceptanceCriterion]
-                : criteria
-            task.branchName = Self.branchName(for: trimmedTitle)
-            task.updatedAt = Date()
-        }
-        return true
+        guard let revision = prepareOutcomeRevision(goalID: goalID, taskID: taskID, title: title,
+            acceptanceCriteria: requestedAcceptanceCriteria) else { return false }
+        // Active attempts must be cancelled by the AppState owner first.
+        guard revision.isNoOp || !revision.originalStates.values.contains(where: {
+            [.running, .reviewing, .accepted].contains($0)
+        }) else { return false }
+        return applyOutcomeRevision(revision)
     }
 
     func markTaskStarted(
@@ -620,6 +606,7 @@ final class AgentDispatchCoordinator: ObservableObject {
     ) {
         updateTask(goalID: goalID, taskID: taskID) { task in
             task.state = .running
+            task.pendingOutcomeRevision = nil
             task.resolvedExecutor = executor
             task.activeProfileID = profileID
             if let profileID {
@@ -675,6 +662,7 @@ final class AgentDispatchCoordinator: ObservableObject {
         updateTask(goalID: goalID, taskID: taskID) { task in
             if task.pendingDecisionIDs?.isEmpty == false && state != .cancelled && state != .failed { return }
             if state == .cancelled || state == .failed { task.pendingDecisionIDs = nil }
+            if state == .cancelled { task.pendingOutcomeRevision = nil }
             task.state = state
             task.updatedAt = Date()
         }
@@ -893,6 +881,10 @@ final class AgentDispatchCoordinator: ObservableObject {
                 task.acceptanceCriteria = node.acceptanceCriteria.isEmpty
                     ? [defaultAcceptanceCriterion]
                     : node.acceptanceCriteria
+                if let override = task.outcomeOverride, override.goalStatement == sourceGoal.statement {
+                    task.title = override.title
+                    task.acceptanceCriteria = override.acceptanceCriteria
+                }
                 // Dependency-derived state may only move a task between the
                 // two not-yet-started states. This used to run for every
                 // task without a runtime session, so a node completed by
