@@ -165,6 +165,7 @@
         }
       }
     },
+    "agent-delegation.fleet-panel-background-slots" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Background %1$d/%2$d" } }, "es" : { "stringUnit" : { "state" : "translated", "value" : "En segundo plano %1$d/%2$d" } }, "fr" : { "stringUnit" : { "state" : "translated", "value" : "En arrière-plan %1$d/%2$d" } }, "ja" : { "stringUnit" : { "state" : "translated", "value" : "バックグラウンド %1$d/%2$d" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "后台 %1$d/%2$d" } }, "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "背景 %1$d/%2$d" } } } },
     "agent-delegation.inspector-arguments" : {
       "extractionState" : "manual",
       "localizations" : {

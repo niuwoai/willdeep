@@ -432,6 +432,16 @@ nonisolated struct AgentSubagentFleetStatus: Equatable {
     }
 
     let runningCount: Int
+    /// How many of the running Workers hold one of the registry's background
+    /// slots.
+    ///
+    /// This is deliberately not `runningCount`. `maxConcurrentPerRuntime`
+    /// bounds `startBackground` alone — a foreground Worker never takes a slot
+    /// — so pairing the two would let the panel read "6/5". The count comes
+    /// from the registry rather than from the tool calls because a background
+    /// Worker occupies its slot from the moment it is admitted, before it has
+    /// published any live activity to recognise it by.
+    let backgroundCount: Int
     let primaryWorkerName: String
     let primaryDetail: String
     /// The primary Worker's own start time, for the strip's elapsed clock.
@@ -442,6 +452,7 @@ nonisolated struct AgentSubagentFleetStatus: Equatable {
     /// phase it would otherwise show.
     static func make(
         from calls: [AgentToolCall],
+        backgroundCount: Int = 0,
         fallbackWorkerName: (AgentToolCall) -> String
     ) -> AgentSubagentFleetStatus? {
         // See `AgentToolCall.subagentIsWorking` for why liveness cannot just
@@ -480,6 +491,7 @@ nonisolated struct AgentSubagentFleetStatus: Equatable {
         }
         return AgentSubagentFleetStatus(
             runningCount: running.count,
+            backgroundCount: min(backgroundCount, AgentSubagentRegistry.maxConcurrentPerRuntime),
             primaryWorkerName: name,
             primaryDetail: primary.subagentLiveActivity?.detailLine
                 ?? primary.subagentProgress

@@ -229,6 +229,47 @@ struct AgentSubagentLiveActivityTests {
         #expect(fleet.primaryWorkerName == "后台工")
     }
 
+    /// The panel used to print `runningCount / maxConcurrentPerRuntime`, but
+    /// the limit governs `startBackground` alone — a foreground Worker never
+    /// takes a slot. Six running Workers with five background slots printed
+    /// "6/5", a ratio that cannot happen. The two numbers now describe the same
+    /// population.
+    @Test("the slot readout counts background Workers, not every running one")
+    func fleetSeparatesBackgroundOccupancyFromRunningCount() throws {
+        let calls = [
+            spawnCall(status: .running, activity: activity(workerName: "前台一")),
+            spawnCall(status: .running, activity: activity(workerName: "前台二")),
+            spawnCall(status: .succeeded, activity: backgroundActivity(workerName: "后台工")),
+        ]
+
+        let fleet = try #require(
+            AgentSubagentFleetStatus.make(
+                from: calls,
+                backgroundCount: 1,
+                fallbackWorkerName: { _ in "X" }
+            )
+        )
+
+        #expect(fleet.runningCount == 3)
+        #expect(fleet.backgroundCount == 1)
+        #expect(fleet.backgroundCount <= AgentSubagentRegistry.maxConcurrentPerRuntime)
+    }
+
+    /// A registry count that somehow exceeded the limit would put the old
+    /// impossible ratio straight back on screen.
+    @Test("background occupancy never reads above the limit")
+    func fleetClampsBackgroundOccupancyToTheLimit() throws {
+        let fleet = try #require(
+            AgentSubagentFleetStatus.make(
+                from: [spawnCall(status: .running, activity: activity())],
+                backgroundCount: AgentSubagentRegistry.maxConcurrentPerRuntime + 3,
+                fallbackWorkerName: { _ in "X" }
+            )
+        )
+
+        #expect(fleet.backgroundCount == AgentSubagentRegistry.maxConcurrentPerRuntime)
+    }
+
     /// The closing heartbeat exists only to flip liveness. If it were folded
     /// in like an ordinary update, its zeroes would blank the round and tool
     /// counts the card should keep showing.
