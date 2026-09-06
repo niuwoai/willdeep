@@ -277,9 +277,9 @@ ruby scripts/chrome_extension_contract_test.rb
 
 ### 7.2 仍然没修（本文剩下的全部欠账）
 
-只剩一条 P2：
+~~只剩一条 P2：舰队面板可以显示 "6/5"。~~ **已于 1.334.0-rc16 修掉。** 改法是分子取注册表的后台占用而非所有在跑的 Worker，并在读数上加「后台」字样——两个数字现在描述同一群体。`AgentSubagentFleetStatus` 新增 `backgroundCount`，由调用方从 `activeCount(forParentRuntime:)` 传入，不从工具调用推断（后台 Worker 从被准入那一刻起就占着槽，那时它还没发过任何 live activity）。
 
-- **舰队面板可以显示 "6/5"。** `Xedit/AgentTaskMonitorRail.swift:1136` 仍是 `Text("\(fleet.runningCount)/\(AgentSubagentRegistry.maxConcurrentPerRuntime)")`。分母 `maxConcurrentPerRuntime = 5` 只约束后台注册表，分子 `AgentSubagentFleetStatus.make` 数的是所有 `subagentIsWorking` 的 `spawn_agent` 调用（`Xedit/AgentSubagentLiveActivity.swift:449`），前台 Worker 也算进去。改法二选一：分子只数后台，或者文案不再暗示这是配额。
+至此本文第 1 到 4 节的条目全部处理完毕。
 
 ### 7.3 修复动作本身带出的新问题
 
@@ -288,16 +288,23 @@ ruby scripts/chrome_extension_contract_test.rb
 
 ### 7.4 第 5 节测试缺口的现状
 
-- **已补**：Go 侧加了 `TestCollaborationRelayRejectsNewEventsWithoutEvictingDurableQueue`、`TestCollaborationRelayAckReportsUnknownEventIDs`、`TestCollaborationRelayQuarantinesCorruptJournalAndStartsEmpty`。
-- **仍缺**：Go 侧没有并发 poll / ack / callback 的竞态用例（建议 `-race` 下开 goroutine 打）。Swift 侧 `deliveryLeaseCanBeReleasedWithoutRestart` 和 `automaticWakePolicyCoversEveryIdleResumePath` 还是只测纯函数，没有经 `runAgentLoop` 实际失败路径与三个调用点的用例。旧 rc14/rc15 日志格式仍无 fixture，`AgentRuntimeKernelTests` 里搜不到相关引用。
+- **d090b3c8 补上的**：Go 侧的 `TestCollaborationRelayRejectsNewEventsWithoutEvictingDurableQueue`、`TestCollaborationRelayAckReportsUnknownEventIDs`、`TestCollaborationRelayQuarantinesCorruptJournalAndStartsEmpty`。
+- **1.334.0-rc16 补上的**：
+  - `TestCollaborationRelayHandlesConcurrentCallbackPollAndAck`：回调、poll、ack 三条路径同时打同一个队列，`-race` 下校验恒等式「收到 = 去重 + 拒收 + 已确认 + 在队」。容量分支和去重分支各由确定性的前置阶段钉住，不指望并发阶段碰巧覆盖到。
+  - `AgentUnattendedDispatchLadderTests`：无人值守派发的审批阶梯六项。原来那份 `AgentSubagentApprovalLadderTests` 是跟着它测的死函数一起被删的，删得没错，但留下的空白没人补。
+  - `AgentKernelLegacyJournalTests`：rc14 裸数组与 rc15 schema 2 的手写 fixture，含 `contentTrust` 拆分后邮件正文不被提升为宿主可信，以及无法识别的日志被隔离而非删除。
+  - `cancelledTurnReleasesLeaseThroughRunAgentLoop`：驱动真实回合，等它确实拿到 lease 再取消，证明 defer 里那句归还真的会执行。写这条时发现一个坑：宿主事件发布在**空闲** runtime 上会被自动唤醒策略接走另起一轮，用例必须先把 runtime 置忙，否则是在跟 App 抢同一个事件，表现出来像是 lease 没归还。
+- **仍缺**：`automaticWakePolicyCoversEveryIdleResumePath` 还是只测纯函数，没有覆盖 slot 释放、压缩结束、turn 结束这三个实际调用点。
 
 ---
 
-## 8. 若要继续，按这个顺序
+## 8. 收尾（1.334.0-rc16 已全部完成）
 
-1. 补 Go Relay 的并发竞态用例——最便宜，且 `-race` 能立刻给结论。
-2. 恢复 Worker 审批阶梯的独立测试套件，覆盖只读 / 写入 / danger / untrusted MCP 四档，把 rc7 那个回归钉死。
-3. 修舰队面板的 "6/5"。
-4. 第 5 节剩下的两条 Swift 覆盖（lease 恢复的真实失败路径、旧日志 fixture）视精力再说。
+第 8 节原本列了四件待办，现在都做完了：Go Relay 并发竞态用例、Worker 审批阶梯套件、舰队面板的 "6/5"、以及 lease 归还与旧日志 fixture 两条 Swift 覆盖。
 
-这几条都不再是合并阻断级，可以各自开一个 `fix/` 分支单独走，别攒成一个 PR。
+还剩一条从第 5 节继承下来、不属于本次范围的：`automaticWakePolicyCoversEveryIdleResumePath` 只测纯函数，三个实际调用点（slot 释放、压缩结束、turn 结束）没有端到端用例。要做的话可以照 `cancelledTurnReleasesLeaseThroughRunAgentLoop` 的姿势，注意先把 runtime 置忙以免和自动唤醒抢事件。
+
+另有两件与本文无关、但查证过程中确认存在的：
+
+- `WillDeepRuntimeProtocolTests` 的跨仓库 fixture 已漂移。`XeditTests/Fixtures/willdeep-runtime-public-api-v1.json` 自 1.283.0-rc1 未动，willdeep-rs 侧新增了 `kernel_list` 请求与 `kernel_event` 响应。刷新 fixture 要同时补 Swift 解码类型，并更新那条断言响应键完整集合的用例。该用例在没有相邻 Rust 检出的机器（含 CI）上自动跳过。
+- 切换审批档位时，**已经在队列里等待**的审批卡只有切到「工作区访问」才会被重新裁决（`AppStateAgentSessions.swift` 里调 `reevaluatePendingToolCallsForWorkspaceAccess`）。切到「完全访问」没有对应调用，那张卡仍需用户手动点。执行层本身是实时的——所有判定点都在决策当刻现读 `runtime.approvalMode`，切档后同一回合的下一次工具调用即按新档位走。
