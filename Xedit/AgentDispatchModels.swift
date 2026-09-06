@@ -328,6 +328,7 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
     var deliveryRevisionID: UUID? = nil
     var outcomeOverride: AgentDispatchOutcomeOverride? = nil
     var pendingOutcomeRevision: Bool? = nil
+    var sourcePlanCommands: AgentDispatchPlanCommands? = nil
     var artifactSnapshot: AgentDispatchArtifactSnapshot? = nil
     var integrationCandidate: AgentDispatchIntegrationCandidate? = nil
     var integrationReceipt: AgentDispatchIntegrationReceipt? = nil
@@ -429,6 +430,7 @@ nonisolated struct AgentDispatchGoal: Codable, Equatable, Identifiable {
     var sessionID: UUID
     var title: String
     var statement: String
+    var sourceGoalContractDigest: String? = nil
     /// Nil means the Goal is a legacy unbound record and cannot execute.
     var logicalProject: AgentDispatchLogicalProject? = nil
     var workspaceLocation: WorkspaceLocation? = nil

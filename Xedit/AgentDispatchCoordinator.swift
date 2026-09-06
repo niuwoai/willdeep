@@ -16,6 +16,8 @@ final class AgentDispatchCoordinator: ObservableObject {
 
     private let store: AgentDispatchStore
     private var backgroundSynchronizationRevision = 0
+    var willApplyProjection: (([AgentDispatchGoal], [AgentDispatchGoal]) -> Void)?
+    var didApplyProjection: (() -> Void)?
 
     init(store: AgentDispatchStore = AgentDispatchStore()) {
         self.store = store
@@ -194,12 +196,14 @@ final class AgentDispatchCoordinator: ObservableObject {
     }
 
     private func applySynchronizedGoals(_ synchronizedGoals: [AgentDispatchGoal]) {
+        willApplyProjection?(goals, synchronizedGoals)
         goals = synchronizedGoals
         if selectedGoalID.flatMap({ id in goals.first(where: { $0.id == id }) }) == nil {
             selectedGoalID = goals.first?.id
         }
         reconcileSelectedTask()
         persist()
+        didApplyProjection?()
     }
 
     func selectGoal(_ id: UUID) {
@@ -874,16 +878,21 @@ final class AgentDispatchCoordinator: ObservableObject {
                 task.planNodeKey = node.key
                 task.primaryProfileID = node.primaryProfileID
                 task.fallbackProfileIDs = node.fallbackProfileIDs
-                if task.runtimeSessionID == nil {
+                let sourceCommands = AgentDispatchPlanCommands(commands: node.verificationCommands)
+                if task.runtimeSessionID == nil
+                    || (task.sourcePlanCommands != nil && task.sourcePlanCommands != sourceCommands) {
                     task.verificationCommands = node.verificationCommands
                     task.scheduling = node.scheduling
                 }
+                task.sourcePlanCommands = sourceCommands
                 task.acceptanceCriteria = node.acceptanceCriteria.isEmpty
                     ? [defaultAcceptanceCriterion]
                     : node.acceptanceCriteria
                 if let override = task.outcomeOverride, override.goalStatement == sourceGoal.statement {
                     task.title = override.title
                     task.acceptanceCriteria = override.acceptanceCriteria
+                } else if task.outcomeOverride != nil {
+                    task.outcomeOverride = nil
                 }
                 // Dependency-derived state may only move a task between the
                 // two not-yet-started states. This used to run for every
@@ -919,6 +928,8 @@ final class AgentDispatchCoordinator: ObservableObject {
                 && $0.planNodeKey == nil
         }
         var tasks = projectedTasks + manuallyAppendedTasks
+        let parentDigest = AgentGoalVerification.contractDigest(sourceGoal)
+        Self.reviseProjectedTasks(&tasks, previous: existing, parentDigest: parentDigest, statement: sourceGoal.statement)
         let mergedIDs = Set(tasks.filter { $0.state == .merged }.map(\.id))
         for index in tasks.indices where tasks[index].state == .blocked {
             if tasks[index].pendingDecisionIDs?.isEmpty != false,
@@ -931,6 +942,7 @@ final class AgentDispatchCoordinator: ObservableObject {
             sessionID: session.id,
             title: session.title,
             statement: sourceGoal.statement,
+            sourceGoalContractDigest: parentDigest,
             logicalProject: logicalProject,
             workspaceLocation: primaryWorkspace,
             workspaceBindings: workspaceBindings,

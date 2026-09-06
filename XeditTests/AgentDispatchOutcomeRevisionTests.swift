@@ -5,6 +5,58 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct AgentDispatchOutcomeRevisionTests {
+    @Test("规划或父验收变化自动撤销旧证据，普通进度同步与重载不反复失效", arguments: ["node", "commands", "parent", "removed"])
+    func projectedDefinitionInvalidation(change: String) throws {
+        let suite = "projection-revision-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = AgentDispatchStore(defaults: defaults)
+        let coordinator = AgentDispatchCoordinator(store: store)
+        let ids = (0..<3).map { _ in UUID() }
+        var session = AgentSession(title: "Project", workspaceRootPath: "/tmp/projection-fixture",
+            presentationScope: .dispatchBoard, currentGoal: .init(statement: "Deliver",
+                checklist: [.init(text: "All verified")], dispatchPlan: .init(nodes: ids.enumerated().map { i, id in
+                    .init(id: id, key: "N\(i)", title: "Node \(i)", dependencyIDs: i == 1 ? [ids[0]] : [],
+                        primaryProfileID: nil, fallbackProfileIDs: [], acceptanceCriteria: ["Original"],
+                        verificationCommands: ["ruby verify.rb"])
+                })))
+        coordinator.synchronize(with: [session])
+        coordinator.updateGoal(id: session.id) { goal in
+            goal.isPaused = true
+            for i in goal.tasks.indices {
+                goal.tasks[i].state = .merged
+                goal.tasks[i].runtimeSessionID = UUID()
+                goal.tasks[i].operatorAcceptedAt = Date()
+            }
+        }
+        session.currentGoal?.checklist[0].done = true
+        coordinator.synchronize(with: [session])
+        #expect(coordinator.goals[0].isComplete)
+        #expect(coordinator.goals[0].tasks.allSatisfy { $0.deliveryRevisionID == nil })
+        let independent = coordinator.goals[0].tasks[2]
+        switch change {
+        case "node": session.currentGoal?.dispatchPlan?.nodes[0].acceptanceCriteria = ["New requirement"]
+        case "commands": session.currentGoal?.dispatchPlan?.nodes[0].verificationCommands = ["ruby stronger.rb"]
+        case "parent": session.currentGoal?.checklist[0].text = "New parent acceptance"
+        default:
+            session.currentGoal?.dispatchPlan?.nodes.removeFirst()
+            session.currentGoal?.dispatchPlan?.nodes[0].dependencyIDs = []
+        }
+        coordinator.synchronize(with: [session])
+        let revised = coordinator.goals[0]
+        #expect(!revised.isComplete && revised.isPaused)
+        for task in revised.tasks where change == "parent" || task.id != ids[2] {
+            #expect(task.deliveryRevisionID != nil && task.operatorAcceptedAt == nil)
+            #expect(task.pendingOutcomeRevision == true)
+            #expect(task.state == (task.dependencyIDs.isEmpty ? .queued : .blocked))
+        }
+        if change != "parent" { #expect(revised.tasks.last == independent) }
+        if change == "commands" { #expect(revised.tasks[0].verificationCommands == ["ruby stronger.rb"]) }
+        let reopened = AgentDispatchCoordinator(store: store)
+        reopened.synchronize(with: [session])
+        #expect(reopened.goals[0] == revised)
+    }
+
     @Test("编辑使依赖链证据失效，同步及重载保留人工要求，取消与暂停不被绕过", arguments: [false, true])
     func editsSurviveProjectionAndInvalidateDependents(cancelled: Bool) throws {
         let suite = "outcome-revision-\(UUID())"

@@ -188,8 +188,8 @@ struct AgentDispatchDeliveryTests {
         #expect(try f.task(f.firstID).state == .merged)
     }
 
-    @Test("已交付节点编辑后自动续跑而不继承完成声明，暂停仍保持暂停", arguments: [false, true])
-    func editedOutcomeAutomaticallyQueuesFreshExecution(paused: Bool) async throws {
+    @Test("已交付节点编辑或重新规划后自动续跑，暂停仍保持暂停", arguments: [false, true], [false, true])
+    func editedOutcomeAutomaticallyQueuesFreshExecution(paused: Bool, projection: Bool) async throws {
         let f = try await fixture()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [GoalLoopURLProtocol.self]
@@ -208,8 +208,16 @@ struct AgentDispatchDeliveryTests {
         try await f.deliver()
         let original = try #require(try f.app.dispatchDeliveryJournal.load(goalID: f.goalID, taskID: f.firstID))
         f.app.agentDispatchCoordinator.updateGoal(id: f.goalID) { $0.isPaused = paused }
-        #expect(f.app.reviseDispatchTaskOutcome(goalID: f.goalID, taskID: f.firstID,
-            title: "Updated interface", acceptanceCriteria: ["Interface A and a new report"]))
+        if projection {
+            let parent = try #require(f.app.runtime(for: f.goalID))
+            parent.currentGoal?.dispatchPlan?.nodes[0].title = "Updated interface"
+            parent.currentGoal?.dispatchPlan?.nodes[0].acceptanceCriteria = ["Interface A and a new report"]
+            f.app.persistAgentSession(runtime: parent)
+            f.app.agentDispatchCoordinator.synchronize(with: f.app.agentSessions)
+        } else {
+            #expect(f.app.reviseDispatchTaskOutcome(goalID: f.goalID, taskID: f.firstID,
+                title: "Updated interface", acceptanceCriteria: ["Interface A and a new report"]))
+        }
         if paused {
             #expect(f.app.dispatchDecisionResumptionTask == nil)
             #expect(try f.task(f.firstID).state == .queued)

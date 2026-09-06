@@ -869,6 +869,10 @@ final class AppState: ObservableObject {
         // No initial subscriptions to set up: runtimes are created
         // lazily as the user opens sessions, and `subscribeToRuntime`
         // runs at every creation site.
+        agentDispatchCoordinator.willApplyProjection = { [weak self] previous, projected in
+            self?.stopSupersededDispatchProjection(previous: previous, projected: projected)
+        }
+        agentDispatchCoordinator.didApplyProjection = { [weak self] in self?.scheduleDispatchDecisionResumption() }
         dispatchDecisionStateSubscription = agentDispatchCoordinator.$goals.dropFirst()
             .sink { [weak self] _ in self?.scheduleDispatchDecisionResumption() }
         // Resource retirement is independent of whether the executor publishes
