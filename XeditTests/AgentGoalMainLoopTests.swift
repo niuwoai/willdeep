@@ -17,7 +17,7 @@ struct AgentGoalMainLoopTests {
         }
     }
 
-    @MainActor private struct Fixture {
+    @MainActor struct Fixture {
         let app: AppState
         let runtime: AgentRuntime
         let root: URL
@@ -57,10 +57,10 @@ struct AgentGoalMainLoopTests {
 
     private enum LoopFailure: Error { case timeout, unexpectedRequest }
 
-    private func fixture() throws -> Fixture {
+    func fixture(recordCount: Int = 257) throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("goal-main-loop-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let records = (1...257).map { "record-\($0)" }.joined(separator: "\n") + "\n"
+        let records = (1...recordCount).map { "record-\($0)" }.joined(separator: "\n") + "\n"
         try Data(records.utf8).write(to: root.appendingPathComponent("records.txt"))
         let suite = "goal-main-loop-\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -86,7 +86,7 @@ struct AgentGoalMainLoopTests {
         return .init(app: app, runtime: runtime, root: root, defaults: defaults, suite: suite, token: token, session: session)
     }
 
-    private static func toolResponse(_ index: Int, content: String? = nil, promptTokens: Int? = nil,
+    static func toolResponse(_ index: Int, content: String? = nil, promptTokens: Int? = nil,
                                      toolName: String = "read_file", customArguments: [String: Any]? = nil,
                                      externalID: String? = nil) throws -> Data {
         let arguments = String(decoding: try JSONSerialization.data(withJSONObject:
