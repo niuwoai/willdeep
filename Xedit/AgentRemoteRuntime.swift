@@ -661,10 +661,9 @@ struct DaemonRuntimeBackend: AgentRemoteRuntimeBackend {
         // result. Match local run_command: keep this call in the foreground.
         let wantsBackground = (arguments["run_in_background"]?.boolValue() ?? true)
             && context.jobRegistry != nil && context.runtimeID != nil
-        let timeoutArg = arguments["timeout_seconds"]?.intValue()
-            ?? Int(foregroundMaxTimeout)
-        let maximum = wantsBackground ? 3600 * 6 : min(3600 * 6, max(1, Int(foregroundMaxTimeout)))
-        let timeout = min(max(timeoutArg, 1), maximum)
+        let timeout = AgentDaemonRunDeadline.commandTimeout(
+            requestedSeconds: arguments["timeout_seconds"]?.intValue(),
+            foregroundMaximum: foregroundMaxTimeout, background: wantsBackground)
         try await registry.checkTurnAdmission(runtimeID: runtimeID, turnID: context.turnID)
         let preparation = await MainActor.run { () -> AgentDaemonStartPreparation? in
             guard descriptor.capabilities.supportsStartRequestRecovery == true,

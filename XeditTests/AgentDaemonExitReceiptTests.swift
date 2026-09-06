@@ -126,7 +126,7 @@ struct AgentDaemonExitReceiptTests {
         #expect(f.registry.pendingCompletionCount(forRuntime: f.runtimeID) == 1)
     }
 
-    @Test("普通前台命令丢失启动响应后等待同一任务，前台上限进入远端超时")
+    @Test("普通前台命令丢失启动响应后只重试同一请求并等待原任务")
     func commandUnknownStartUsesSameReceipt() async throws {
         let f = fixture(recovery: true); defer { f.cleanup() }
         var starts = 0, reconciliations = 0
@@ -136,7 +136,7 @@ struct AgentDaemonExitReceiptTests {
             if request.url?.path == "/v1/run/start" {
                 starts += 1
                 let body = try requestBody(request)
-                #expect(body["timeout_seconds"] as? Int == 5)
+                #expect(body["timeout_seconds"] as? Int == 60)
                 let pending = try #require(try f.registry.daemonStartJournal.pending().first)
                 if let record { #expect(pending.receipt == record) }
                 record = pending.receipt
@@ -148,11 +148,21 @@ struct AgentDaemonExitReceiptTests {
             return (200, try resolutionData(try #require(record), state: "started", exit: 0))
         }
         let result = try await f.backend.runCommand(arguments: ["command": .string("printf fixture"),
-            "timeout_seconds": .number(600)], context: f.context, foregroundMaxTimeout: 5)
+            "timeout_seconds": .number(600)], context: f.context, foregroundMaxTimeout: 60)
         #expect(starts == 3 && reconciliations == 1)
         #expect(result.payload.contains("exit=0") && result.payload.contains(L10n.JobReceipt.outputGap))
         #expect(f.registry.jobs.first?.status == .completed)
         #expect(f.registry.pendingCompletionCount(forRuntime: f.runtimeID) == 0)
+    }
+
+    @Test("前台五秒上限严格写入远端命令，不依赖网络及调度墙钟")
+    func foregroundTimeoutCapIsForwardedDeterministically() throws {
+        let timeout = AgentDaemonRunDeadline.commandTimeout(requestedSeconds: 600,
+            foregroundMaximum: 5, background: false)
+        #expect(timeout == 5)
+        let specification = AgentDaemonExecution(command: "printf fixture", displayCommand: "fixture")
+        let body = try specification.startBody(timeout: timeout)
+        #expect(body["timeout_seconds"] as? Int == 5)
     }
 
     @Test("没有会话归属时请求后台也等待真实终态，grep 使用相同事件路径", arguments: [false, true])

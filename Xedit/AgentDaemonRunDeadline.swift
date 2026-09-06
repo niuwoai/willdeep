@@ -7,6 +7,14 @@ nonisolated enum AgentDaemonRunDeadline {
     static let maximumMilliseconds = Int64.max / 1_000_000
     static let maximumCommandSeconds = 6 * 3600
 
+    static func commandTimeout(requestedSeconds: Int?, foregroundMaximum: TimeInterval,
+        background: Bool) -> Int {
+        let requested = requestedSeconds ?? Int(foregroundMaximum)
+        let maximum = background ? maximumCommandSeconds
+            : min(maximumCommandSeconds, max(1, Int(foregroundMaximum)))
+        return min(max(requested, 1), maximum)
+    }
+
     static func resolve(localDeadline: Date?, serverElapsedMilliseconds: Int64?,
         timeoutSeconds: Int, now: Date = Date()) throws -> Int64? {
         guard let localDeadline else { return nil }

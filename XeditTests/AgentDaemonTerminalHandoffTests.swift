@@ -123,4 +123,63 @@ struct AgentDaemonTerminalHandoffTests {
         await f.app.restoreDaemonStartReceipts(descriptors: [])
         #expect(try f.journal.delivery(id: f.receipt.id) != nil)
     }
+
+    @Test("原轮次已撤销时不补交，即使临时停止标记已被收尾清空")
+    func revokedOwnerCannotBeReactivatedByDeferredDelivery() async throws {
+        let f = try fixture(status: "completed", code: 0)
+        defer { f.cleanup() }
+        let delivery = try #require(try f.journal.delivery(id: f.receipt.id))
+        _ = try f.app.agentJobRegistry.restoreDaemonTerminal(delivery)
+        let runtime = try #require(f.app.runtime(for: f.session.id))
+        runtime.session.archivedAt = nil
+        runtime.isResponding = true
+        defer { runtime.isResponding = false }
+        let turnID = try #require(f.receipt.turnID)
+        f.app.agentJobRegistry.revokeTurn(runtimeID: f.session.id, turnID: turnID)
+        runtime.userStoppedTurnID = nil
+        f.app.agentRuntimeKernel.deferDurableDelivery(for: f.session.id)
+        await f.app.retryDeferredDaemonTerminalDeliveries()
+        #expect(try f.journal.delivery(id: f.receipt.id) != nil)
+        #expect(!f.app.agentRuntimeKernel.events.contains {
+            $0.metadata["resource_id"] == f.receipt.id.uuidString
+        })
+        #expect(runtime.requestTask == nil)
+        var retained = f.receipt
+        retained.lifetime = .persistent
+        retained.survivesTurnStop = true
+        #expect(f.app.agentJobRegistry.allowsDaemonTerminalDelivery(retained))
+    }
+
+    @Test("容量满保留回执，模型消费释放空间后自动补交而不重跑任务")
+    func capacityDeferredDeliveryRetriesAfterConsumption() async throws {
+        let f = try fixture(status: "completed", code: 0)
+        defer { f.cleanup() }
+        let kernel = f.app.agentRuntimeKernel
+        for index in 0..<AgentKernelEventPolicy.maximumEventsPerRuntime {
+            let event = kernel.publish(AgentKernelEvent(runtimeID: f.session.id,
+                source: .backgroundJob, kind: .backgroundJobCompleted,
+                title: "held", payload: "result", dedupeKey: "held-\(index)", dedupeScope: .journal))
+            #expect(kernel.confirmEventPersistenceForHandoff(event))
+        }
+        let delivery = try #require(try f.journal.delivery(id: f.receipt.id))
+        let job = try f.app.agentJobRegistry.restoreDaemonTerminal(delivery)
+        let runtime = try #require(f.app.runtime(for: f.session.id))
+        f.app.deliverDaemonTerminalIfNeeded(job, runtime: runtime)
+        #expect(try f.journal.delivery(id: f.receipt.id) != nil)
+        #expect(runtime.errorMessage == nil)
+        let lease = UUID()
+        let consumed = kernel.consumePendingModelEvents(for: f.session.id, limit: 1, leaseID: lease)
+        kernel.acknowledge(consumed.map(\.id), leaseID: lease)
+        // Exercise the live retry path without permitting a provider request.
+        runtime.session.archivedAt = nil
+        runtime.isResponding = true
+        defer { runtime.isResponding = false }
+        await f.app.retryDeferredDaemonTerminalDeliveries()
+        #expect(try f.journal.delivery(id: f.receipt.id) == nil)
+        #expect(kernel.events.contains {
+            $0.metadata["resource_id"] == f.receipt.id.uuidString && $0.hasOutstandingDurableDelivery
+        })
+        #expect(kernel.events.count == AgentKernelEventPolicy.maximumEventsPerRuntime)
+        #expect(runtime.requestTask == nil)
+    }
 }

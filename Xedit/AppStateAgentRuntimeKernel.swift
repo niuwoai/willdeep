@@ -101,8 +101,8 @@ extension AppState {
             guard let runtime = agentRuntimes[ingress.runtimeID],
                   runtime.session.archivedAt == nil else { return false }
         }
-        publishAgentKernelEvent(ingress.kernelEvent())
-        return true
+        let published = publishAgentKernelEvent(ingress.kernelEvent())
+        return agentRuntimeKernel.events.contains { $0.id == published.id }
     }
 
     @discardableResult
@@ -467,7 +467,8 @@ extension AppState {
         let published = agentRuntimeKernel.publish(event)
         // Journal-scoped duplicates return the existing event. Scheduling it
         // again would turn an at-least-once relay retry into another model run.
-        guard published.id == event.id else { return published }
+        guard published.id == event.id,
+              agentRuntimeKernel.events.contains(where: { $0.id == published.id }) else { return published }
         scheduleAgentKernelEvent(published)
         return published
     }

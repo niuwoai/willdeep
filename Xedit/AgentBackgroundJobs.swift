@@ -968,6 +968,11 @@ final class AgentJobRegistry: ObservableObject {
         turnID.map { stoppedTurnOwners.contains(TurnOwner(runtimeID: runtimeID, turnID: $0)) } ?? false
     }
 
+    func allowsDaemonTerminalDelivery(_ receipt: AgentDaemonStartReceipt) -> Bool {
+        receipt.survivesTurnStop == true
+            || !isTurnStopped(runtimeID: receipt.runtimeID, turnID: receipt.turnID)
+    }
+
     func checkTurnAdmission(runtimeID: UUID, turnID: UUID?) throws {
         try Task.checkCancellation()
         if isTurnStopped(runtimeID: runtimeID, turnID: turnID) { throw CancellationError() }

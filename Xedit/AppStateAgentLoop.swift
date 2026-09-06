@@ -785,39 +785,7 @@ extension AppState {
             // handle them (OpenAI-Chat accepts inline system; the
             // Anthropic adapter folds them into the top-level `system`
             // field; Gemini / Responses do the same coalescing).
-            let pendingCompletions = agentJobRegistry.consumePendingCompletions(forRuntime: runtime.id)
-            for finishedJob in pendingCompletions {
-                guard !kernelResourceKeys.contains("background_job:\(finishedJob.id.uuidString)"),
-                      !agentRuntimeKernel.hasPendingEvent(
-                          runtimeID: runtime.id,
-                          source: .backgroundJob,
-                          resourceID: finishedJob.id
-                      ) else {
-                    continue
-                }
-                // For jobs that need attention (failed / timed out / launch
-                // failed) inline a secret-redacted tail of the captured
-                // output so the model can diagnose the failure in this same
-                // turn instead of spending a round calling get_job_output.
-                // Success / killed jobs keep the lighter byte-count hint.
-                let recentOutput: String? = {
-                    guard finishedJob.needsAttention, finishedJob.outputByteCount > 0 else { return nil }
-                    let tail = agentJobRegistry.output(id: finishedJob.id, tailLines: 40)
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !tail.isEmpty else { return nil }
-                    let scrubbed = AgentSandboxPolicy.scrub(tail)
-                    return scrubbed.count > 4000 ? "…" + String(scrubbed.suffix(4000)) : scrubbed
-                }()
-                runtime.messages.append(
-                    AgentMessage(
-                        role: .system,
-                        content: Self.backgroundJobCompletionNotice(
-                            for: finishedJob,
-                            recentOutput: recentOutput
-                        )
-                    )
-                )
-            }
+            appendPendingBackgroundJobCompletions(for: runtime, excluding: kernelResourceKeys)
 
             let finishedMediaTasks = agentMediaTaskRegistry.consumePendingCompletions(forRuntime: runtime.id)
             for task in finishedMediaTasks {
@@ -1258,6 +1226,7 @@ extension AppState {
                     ),
                     leaseID: turnID
                 )
+                await retryDeferredDaemonTerminalDeliveries()
             } catch is CancellationError {
                 shouldResumePendingEventsAtTurnEnd = false
                 if runtime.userStoppedTurnID == turnID {
