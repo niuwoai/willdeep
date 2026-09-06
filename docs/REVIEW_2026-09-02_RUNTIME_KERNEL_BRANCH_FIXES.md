@@ -294,7 +294,9 @@ ruby scripts/chrome_extension_contract_test.rb
   - `AgentUnattendedDispatchLadderTests`：无人值守派发的审批阶梯六项。原来那份 `AgentSubagentApprovalLadderTests` 是跟着它测的死函数一起被删的，删得没错，但留下的空白没人补。
   - `AgentKernelLegacyJournalTests`：rc14 裸数组与 rc15 schema 2 的手写 fixture，含 `contentTrust` 拆分后邮件正文不被提升为宿主可信，以及无法识别的日志被隔离而非删除。
   - `cancelledTurnReleasesLeaseThroughRunAgentLoop`：驱动真实回合，等它确实拿到 lease 再取消，证明 defer 里那句归还真的会执行。写这条时发现一个坑：宿主事件发布在**空闲** runtime 上会被自动唤醒策略接走另起一轮，用例必须先把 runtime 置忙，否则是在跟 App 抢同一个事件，表现出来像是 lease 没归还。
-- **仍缺**：`automaticWakePolicyCoversEveryIdleResumePath` 还是只测纯函数，没有覆盖 slot 释放、压缩结束、turn 结束这三个实际调用点。
+- **1.334.0-rc17 补上的最后两条**（`AgentKernelIdleResumeTests`）：
+  - `transportFailureReleasesLeaseThroughRunAgentLoop`：补上「取消、传输失败」里传输失败那半边。用 `URLProtocol` 桩让请求当场失败，不用 `.invalid` 域名——本机有全局代理，代理可能接下连接再慢慢放弃。断言里钉了请求确实发生过、事件的 `updatedAt` 确实被回合动过，否则「从没租借」也能让用例通过。
+  - `slotReleaseHonoursTheWakePolicy` 等三项：未鉴权事件在 slot 释放、压缩后恢复两条路径上都不得唤醒空闲会话，外加一条宿主事件仍然能唤醒的对照组——没有对照组的话，自动唤醒整个坏掉也能让前两条通过。
 
 ---
 
@@ -302,7 +304,12 @@ ruby scripts/chrome_extension_contract_test.rb
 
 第 8 节原本列了四件待办，现在都做完了：Go Relay 并发竞态用例、Worker 审批阶梯套件、舰队面板的 "6/5"、以及 lease 归还与旧日志 fixture 两条 Swift 覆盖。
 
-还剩一条从第 5 节继承下来、不属于本次范围的：`automaticWakePolicyCoversEveryIdleResumePath` 只测纯函数，三个实际调用点（slot 释放、压缩结束、turn 结束）没有端到端用例。要做的话可以照 `cancelledTurnReleasesLeaseThroughRunAgentLoop` 的姿势，注意先把 runtime 置忙以免和自动唤醒抢事件。
+第 5 节剩下的两条测试覆盖也在 1.334.0-rc17 补完（见 7.4）。本文的条目至此清零。
+
+写这批用例时踩到的两个坑，留给下一个人：
+
+- **宿主事件发布在空闲 runtime 上会被自动唤醒策略接走另起一轮。** 用例必须先把 runtime 置忙再发布，否则是在跟 App 抢同一个事件，表现出来像「lease 没归还」。
+- **别用 `.invalid` 域名制造传输失败。** 本机有全局代理，代理可能接下连接再慢慢放弃。用 `URLProtocol` 桩当场失败，顺便还能数请求次数，用来证明用例不是空转通过。
 
 另有两件与本文无关、但查证过程中确认存在的：
 
