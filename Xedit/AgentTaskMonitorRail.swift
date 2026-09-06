@@ -932,6 +932,9 @@ struct AgentSemanticActivityStatusLine: View {
     private var currentFleet: AgentSubagentFleetStatus? {
         AgentSubagentFleetStatus.make(
             from: appState.agentToolCalls,
+            backgroundCount: appState.activeAgentSessionID.map {
+                appState.agentSubagentRegistry.activeCount(forParentRuntime: $0)
+            } ?? 0,
             fallbackWorkerName: { call in
                 L10n.AgentDelegation.profileName(
                     for: call.arguments["profile"]?.stringValue()
@@ -1133,7 +1136,12 @@ private struct AgentSubagentFleetPopover: View {
                 Text(L10n.AgentDelegation.fleetPanelTitle(fleet.runningCount))
                     .font(.headline)
                 Spacer(minLength: 12)
-                Text("\(fleet.runningCount)/\(AgentSubagentRegistry.maxConcurrentPerRuntime)")
+                Text(
+                    L10n.AgentDelegation.fleetBackgroundSlots(
+                        fleet.backgroundCount,
+                        AgentSubagentRegistry.maxConcurrentPerRuntime
+                    )
+                )
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.secondary)
             }

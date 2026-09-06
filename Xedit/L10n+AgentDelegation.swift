@@ -368,6 +368,19 @@ extension L10n {
             return String(format: template, count)
         }
 
+        /// Background occupancy, shown next to the panel title.
+        ///
+        /// The label matters: the concurrency limit governs background Workers
+        /// only, so an unlabelled fraction beside a larger running count reads
+        /// as a contradiction.
+        static func fleetBackgroundSlots(_ used: Int, _ limit: Int) -> String {
+            let template = String(
+                localized: "agent-delegation.fleet-panel-background-slots",
+                defaultValue: "Background %1$d/%2$d"
+            )
+            return String(format: template, used, limit)
+        }
+
         static let fleetPanelHelp = String(
             localized: "agent-delegation.fleet-panel-help",
             defaultValue: "Show every running Worker"

@@ -318,6 +318,80 @@ struct AgentRuntimeKernelTests {
         #expect(kernel.pendingModelEventCount(for: runtimeID) == 1)
     }
 
+    /// `deliveryLeaseCanBeReleasedWithoutRestart` proves the kernel method
+    /// works when something calls it. It does not prove anything calls it: the
+    /// release lives in `runAgentLoop`'s defer, and a turn that returned down
+    /// some other path would strand the lease until the app restarted, with the
+    /// event invisible to every wake-up probe in between.
+    ///
+    /// This drives the real loop. It waits for the turn to actually take the
+    /// lease before cancelling, so a cancellation that lands too early cannot
+    /// make the test pass by never leasing anything.
+    @Test("a cancelled turn puts its leased events back through the real loop")
+    @MainActor
+    func cancelledTurnReleasesLeaseThroughRunAgentLoop() async throws {
+        let kernel = AgentRuntimeKernel(loadPersisted: false, persistsEvents: false)
+        let app = AppState(runtimeKernel: kernel, loadSessionCatalog: false)
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        // Mark the runtime busy *before* publishing. A host-trust event on an
+        // idle runtime is exactly what the automatic wake policy exists to
+        // catch: it would start a turn of its own, lease the event under that
+        // turn's id, and leave this test racing the app instead of driving it.
+        let turnID = UUID()
+        runtime.isResponding = true
+        runtime.activeTurnID = turnID
+
+        app.publishHostAgentEvent(
+            runtimeID: session.id,
+            kind: .hostNotice,
+            title: "leased then abandoned",
+            payload: "the turn never finished"
+        )
+        let publishedAt = try #require(
+            kernel.events.first { $0.runtimeID == session.id }?.updatedAt
+        )
+
+        // `.invalid` never resolves, so if cancellation somehow arrives after
+        // the request is issued, the turn still fails locally instead of
+        // reaching the network.
+        let configuration = AgentConfiguration(
+            providerID: "openai",
+            baseURL: "https://kernel-lease.invalid/v1",
+            model: "gpt-4.1",
+            apiKey: "test-placeholder"
+        )
+        let turn = Task { @MainActor in
+            await app.runAgentLoop(
+                for: runtime,
+                configuration: configuration,
+                providerSlotClaimID: UUID(),
+                turnID: turnID
+            )
+        }
+
+        var leased = false
+        for _ in 0..<20_000 {
+            if !kernel.leasedModelEventIDs(for: session.id, leaseID: turnID).isEmpty {
+                leased = true
+                break
+            }
+            await Task.yield()
+        }
+        turn.cancel()
+        await turn.value
+        runtime.isResponding = false
+        runtime.requestTask = nil
+
+        #expect(leased, "the turn never leased the pending event; the seam moved")
+        #expect(kernel.leasedModelEventIDs(for: session.id).isEmpty)
+        #expect(kernel.pendingModelEventCount(for: session.id) == 1)
+        let restored = try #require(kernel.events.first { $0.runtimeID == session.id })
+        #expect(restored.deliveredAt == nil)
+        #expect(restored.updatedAt > publishedAt, "the event was never touched by the turn")
+    }
+
     @Test("a provider turn cannot acknowledge or release another window's lease")
     func deliveryLeaseIsBoundToExactTurn() throws {
         let runtimeID = UUID()
