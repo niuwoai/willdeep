@@ -526,6 +526,66 @@ struct AgentDispatchDeliveryTests {
         await owned.value
     }
 
+    @Test("验证执行期间合同改变，旧成功结果不能发布或解锁下游",
+          arguments: ["criteria", "statement", "input", "workspace", "override"])
+    func changedContractRejectsLateVerifier(field: String) async throws {
+        let f = try await fixture(verifierBody: """
+        File.write('verifier.started', 'ready')
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
+        until File.exist?('verifier.continue')
+          abort 'fixture release timeout' if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+          sleep 0.01
+        end
+        puts 'old contract verification passed'
+        """)
+        defer { f.cleanup() }
+        try Data("A\n".utf8).write(to: f.checkout.appendingPathComponent("interface.txt"))
+        let delivery: Task<Void, Never> = Task {
+            do {
+                try await f.deliver()
+                Issue.record("Old contract result was delivered")
+            } catch {
+                if case AgentDispatchDeliveryError.staleRuntime = error {} else {
+                    Issue.record("Expected stale contract rejection, received \(error)")
+                }
+            }
+        }
+        f.app.dispatchMonitorTasksByTaskID[f.firstID] = delivery
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        var verifier: URL?
+        while ContinuousClock.now < deadline {
+            let worktrees = try await git(["worktree", "list", "--porcelain"], at: f.repository)
+            verifier = worktrees.split(separator: "\n").filter { $0.hasPrefix("worktree ") }
+                .map { URL(fileURLWithPath: String($0.dropFirst(9))) }
+                .first { FileManager.default.fileExists(atPath: $0.appendingPathComponent("verifier.started").path) }
+            if verifier != nil { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        if let verifier {
+            switch field {
+            case "statement": f.app.agentDispatchCoordinator.updateGoal(id: f.goalID) { $0.statement = "New outcome" }
+            case "workspace": f.app.agentDispatchCoordinator.updateGoal(id: f.goalID) {
+                $0.workspaceBindings = []
+                $0.workspaceLocation = nil
+            }
+            case "override": f.app.agentDispatchCoordinator.recordOperatorAcceptance(goalID: f.goalID, taskID: f.firstID)
+            default: f.app.agentDispatchCoordinator.updateTask(goalID: f.goalID, taskID: f.firstID) {
+                if field == "input" { $0.inputRevision = "changed input" }
+                else { $0.acceptanceCriteria = ["New acceptance requirement"] }
+            }
+            }
+            try Data("continue\n".utf8).write(to: verifier.appendingPathComponent("verifier.continue"))
+        } else { delivery.cancel() }
+        await delivery.value
+        #expect(verifier != nil)
+        #expect(try f.task(f.firstID).state != .merged)
+        #expect(try f.task(f.nextID).state == .blocked)
+        #expect(try f.app.dispatchDeliveryJournal.load(goalID: f.goalID, taskID: f.firstID)?.phase == .prepared)
+        #expect(try await AgentDispatchArtifactIntegrator.currentRevision(in: f.repository,
+            goalID: f.goalID, baseRevision: f.base) == f.base)
+        #expect(!(try await git(["worktree", "list", "--porcelain"], at: f.repository)).contains("willdeep-verify-"))
+    }
+
     @Test("Stop 终止真实宿主验证进程并回收专属工作树，不解锁下游")
     func stopCancelsRealVerifier() async throws {
         let f = try await fixture(verifierBody: "File.write('verifier.started', 'ready')\nsleep 30\n")

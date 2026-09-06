@@ -37,6 +37,11 @@ extension AppState {
         }
         guard let input = task.inputRevision,
               let base = goal.integrationBaseRevisions?[binding.id] else { throw AgentDispatchDeliveryError.missingInput }
+        let contract = try AgentDispatchDeliveryContract(goal: goal, task: task, runtime: runtime)
+        func requireCurrentLease() throws {
+            try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID,
+                leaseID: leaseID, contract: contract)
+        }
         if let scheduling = task.scheduling, !runtime.agentEditedPaths.allSatisfy(scheduling.covers) {
             throw AgentDispatchDeliveryError.writeScopeChanged
         }
@@ -51,7 +56,7 @@ extension AppState {
                 baseRevision: input, paths: Array(runtime.agentEditedPaths)
             )
             let candidate = try await AgentDispatchArtifactIntegrator.prepareIntegration(snapshot, in: repository, goalID: goalID, goalBaseRevision: base)
-            try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID, leaseID: leaseID)
+            try requireCurrentLease()
             record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id, generation: 0, phase: .prepared, candidate: candidate)
             try journal.save(record, expectedGeneration: nil)
         }
@@ -69,7 +74,7 @@ extension AppState {
                 || (!alreadyPublished && current != record.candidate.previousRevision)
                 || record.runtimeID != runtime.id {
                 let candidate = try await AgentDispatchArtifactIntegrator.prepareIntegration(snapshot, in: repository, goalID: goalID, goalBaseRevision: base)
-                try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID, leaseID: leaseID)
+                try requireCurrentLease()
                 let generation = record.generation
                 record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id, generation: generation + 1, phase: .prepared, candidate: candidate)
                 try journal.save(record, expectedGeneration: generation)
@@ -79,7 +84,7 @@ extension AppState {
         if record.phase == .verified {
             let commands = try await combinedDispatchVerificationCommands(candidate: record.candidate,
                 task: task, runtime: runtime, repository: repository)
-            try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID, leaseID: leaseID)
+            try requireCurrentLease()
             if record.verificationReceipt?.commands != commands {
                 let generation = record.generation
                 record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id,
@@ -88,8 +93,9 @@ extension AppState {
             }
         }
         if record.phase == .prepared {
-            let verification = try await verifyDispatchCandidate(record.candidate, task: task, runtime: runtime, repository: repository, leaseID: leaseID)
-            try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID, leaseID: leaseID)
+            let verification = try await verifyDispatchCandidate(record.candidate, task: task, runtime: runtime,
+                repository: repository, leaseID: leaseID, contract: contract)
+            try requireCurrentLease()
             let generation = record.generation
             record.generation += 1
             record.phase = .verified
@@ -98,7 +104,7 @@ extension AppState {
             try journal.save(record, expectedGeneration: generation)
         }
         if record.phase == .verified {
-            try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID, leaseID: leaseID)
+            try requireCurrentLease()
             guard let verification = record.verificationReceipt, verification.isValid,
                   verification.revision == record.candidate.revision else { throw AgentDispatchJournalError.corrupt }
             agentDispatchCoordinator.updateTaskState(goalID: goalID, taskID: taskID, state: .accepted)
@@ -107,13 +113,13 @@ extension AppState {
                 receipt = try await AgentDispatchArtifactIntegrator.publish(record.candidate, verifiedRevision: verification.revision, in: repository)
             } catch AgentDispatchIntegrationError.concurrentUpdate {
                 let candidate = try await AgentDispatchArtifactIntegrator.prepareIntegration(record.candidate.snapshot, in: repository, goalID: goalID, goalBaseRevision: base)
-                try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID, leaseID: leaseID)
+                try requireCurrentLease()
                 let generation = record.generation
                 record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id, generation: generation + 1, phase: .prepared, candidate: candidate)
                 try journal.save(record, expectedGeneration: generation)
                 throw AgentDispatchDeliveryError.retryIntegration
             }
-            try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID, leaseID: leaseID)
+            try requireCurrentLease()
             let generation = record.generation
             record.generation += 1
             record.phase = .published
@@ -126,7 +132,7 @@ extension AppState {
             record.phase = .delivered
             try journal.save(record, expectedGeneration: generation)
         }
-        try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID, leaseID: leaseID)
+        try requireCurrentLease()
         try agentDispatchCoordinator.applyDeliveredRecord(record)
     }
 
@@ -170,7 +176,8 @@ extension AppState {
         return true
     }
 
-    func requireDispatchDeliveryLease(runtime: AgentRuntime, goalID: UUID, taskID: UUID, leaseID: UUID) throws {
+    func requireDispatchDeliveryLease(runtime: AgentRuntime, goalID: UUID, taskID: UUID, leaseID: UUID,
+                                      contract: AgentDispatchDeliveryContract? = nil) throws {
         try Task.checkCancellation()
         try toolExecutionBudget(for: runtime)?.check()
         guard isCurrentDispatchMonitor(runtimeID: runtime.id, taskID: taskID, leaseID: leaseID),
@@ -179,15 +186,19 @@ extension AppState {
               [.running, .reviewing, .accepted].contains(task.state), !runtime.isResponding else {
             throw AgentDispatchDeliveryError.staleRuntime
         }
+        if let contract, try AgentDispatchDeliveryContract(goal: goal, task: task, runtime: runtime) != contract {
+            throw AgentDispatchDeliveryError.staleRuntime
+        }
     }
 
     private func verifyDispatchCandidate(
         _ candidate: AgentDispatchIntegrationCandidate, task: AgentDispatchTask,
-        runtime: AgentRuntime, repository: URL, leaseID: UUID
+        runtime: AgentRuntime, repository: URL, leaseID: UUID, contract: AgentDispatchDeliveryContract
     ) async throws -> AgentDispatchVerificationReceipt {
         let commands = try await combinedDispatchVerificationCommands(candidate: candidate,
             task: task, runtime: runtime, repository: repository)
-        try requireDispatchDeliveryLease(runtime: runtime, goalID: candidate.goalID, taskID: task.id, leaseID: leaseID)
+        try requireDispatchDeliveryLease(runtime: runtime, goalID: candidate.goalID, taskID: task.id,
+            leaseID: leaseID, contract: contract)
         if task.operatorAcceptedAt != nil && commands.isEmpty {
             return .init(id: UUID(), revision: candidate.revision, commands: [], outputDigests: [], operatorOverride: true, verifiedAt: Date())
         }
@@ -198,7 +209,8 @@ extension AppState {
         do {
             var digests: [String] = []
             for command in commands {
-                try requireDispatchDeliveryLease(runtime: runtime, goalID: candidate.goalID, taskID: task.id, leaseID: leaseID)
+                try requireDispatchDeliveryLease(runtime: runtime, goalID: candidate.goalID, taskID: task.id,
+                    leaseID: leaseID, contract: contract)
                 guard Self.isCandidateVerificationCommand(command),
                       AgentDelegatedTaskControl.isSafeVerificationCommand(command, workspaceURL: checkout) else {
                     throw AgentDispatchDeliveryError.unsafeVerification
