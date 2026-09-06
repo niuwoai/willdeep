@@ -462,6 +462,7 @@ final class AppState: ObservableObject {
     var dispatchMonitorLeaseIDsByTaskID: [UUID: UUID] = [:]
     var dispatchMonitorTasksByTaskID: [UUID: Task<Void, Never>] = [:]
     var dispatchDecisionResumptionTask: Task<Void, Never>?
+    var goalLaunchRecoveryTask: Task<Void, Never>?
     private var dispatchDecisionStateSubscription: AnyCancellable?
     private var dispatchJobReservationSubscription: AnyCancellable?
     private var dispatchWorkerReservationSubscription: AnyCancellable?
@@ -723,6 +724,7 @@ final class AppState: ObservableObject {
             // Raising the cap may free up slots for queued dispatches.
             drainPendingDispatchQueue()
             scheduleDispatchDecisionResumption()
+            scheduleDeferredGoalLaunchRecovery()
         }
     }
 
@@ -1133,6 +1135,7 @@ final class AppState: ObservableObject {
         dispatchJobReservationSubscription?.cancel()
         dispatchWorkerReservationSubscription?.cancel()
         dispatchDecisionResumptionTask?.cancel()
+        goalLaunchRecoveryTask?.cancel()
         mediaTaskRegistrySubscription?.cancel()
         runtimeKernelSubscription?.cancel()
         runtimeKernelSaveFailureSubscription?.cancel()

@@ -196,6 +196,7 @@ extension AppState {
             // no-op if the queued-message consume above claimed the
             // runtime; that turn drains completions itself).
             resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+            completeLaunchRecoveryCompression(for: runtime, succeeded: didReclaimWindow)
         }
 
         let outcome = await performCompression(

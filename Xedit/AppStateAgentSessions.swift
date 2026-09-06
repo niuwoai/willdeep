@@ -1348,6 +1348,7 @@ extension AppState {
         for runtime: AgentRuntime,
         pausingOwningDispatchProject: Bool = true
     ) {
+        cancelPendingGoalLaunchRecovery(for: runtime)
         runtime.goalAuthorizationRevision = UUID()
         if runtime.currentGoal?.taskAuthorizations != nil {
             runtime.currentGoal?.taskAuthorizations = nil
@@ -2309,6 +2310,7 @@ extension AppState {
 
     @discardableResult
     func deleteAgentSession(id: AgentSession.ID, removeFromStore: Bool = true) -> Bool {
+        AgentGoalLaunchRecoveryCoordinator.shared.finish(id)
         AgentDetachedPanelRegistry.shared.releaseSession(id)
         let persistedImages = agentRuntimes[id]?.messages.flatMap(\.images)
             ?? AgentSessionStore.load(id: id)?.messages.flatMap(\.images)

@@ -50,6 +50,21 @@ struct AgentGoalLaunchRecoveryTests {
         ) == .restartPlanning)
     }
 
+    @Test("当前进程正在规划时不重复启动，真正重载的中断状态仍恢复", arguments: [AgentGoalPlanningState.Phase.collecting, .arbitrating])
+    @MainActor
+    func livePlanningIsNotInterrupted(phase: AgentGoalPlanningState.Phase) {
+        let goal = makeGoal()
+        var session = makeSession(planStatus: nil)
+        session.goalPlanningState = makePlanningState(goal: goal, phase: phase)
+        #expect(AgentGoalLaunchRecoveryPolicy.reconciledAction(catalogAction: .restartPlanning,
+            restoredSession: session) == .none)
+        let restored = AgentRuntime(session: session)
+        session.goalPlanningState = restored.goalPlanningState
+        #expect(session.goalPlanningState?.phase == .blocked)
+        #expect(AgentGoalLaunchRecoveryPolicy.reconciledAction(catalogAction: .restartPlanning,
+            restoredSession: session) == .restartPlanning)
+    }
+
     @Test("blocked Goal planning waits for manual retry")
     func blockedPlanningDoesNotRestart() {
         let goal = makeGoal()
