@@ -10,6 +10,22 @@
 - 重写中英日 README，以产品价值、任务场景、核心能力和上手入口组织官方介绍；将构建、测试与贡献说明移入开发指南，移除过时版本描述和未经证实的绝对承诺。
 - 新增根目录 AGENTS.md 并同步 CLAUDE.md：优先 rebase 后保留逐条提交集成到 develop/main，默认不 squash，不改写共享主分支历史或制造无意义提交。
 
+## 1.334.0-rc20 - 2026-09-07
+
+### Fixed
+
+- **「客户端中断」不再把所有取消揉成一团。** 四个流式适配器（Anthropic、Gemini、OpenAI Chat、OpenAI Responses）在拿到响应头后，若 provider 是 some.im，从 `X-Request-Id` 取出网关请求 ID，经新增的 `requestIdentified` 事件写进本回合遥测；取消完成遥测同时带上结构化原因：用户主动停止、排队消息接管当前生成、会话运行时被替换、任务或系统取消。原因在两处 catch 块里判定，此时 `userStoppedTurnID`、`shouldConsumeQueueAfterStop`、`activeTurnID` 尚未被清理，判定顺序已对着当前主循环核过。
+
+### Changed
+
+- 客户端遥测协议 schema 从 1 升到 2，新增可选 `request_id` 与 `cancellation_reason`；两个字段为空时与旧服务端兼容，请求 ID 只在 some.im 上读取并按标识符脱敏截断。不改模型请求、取消时机或计费行为。
+
+### Tests
+
+- 遥测编码测试改为取消事件，断言请求 ID、结构化取消原因与 schema v2。
+- 这批改动来自 `fix/client-cancel-reasons` 工作区 2026-09-02 的未提交稿，基线落后 develop 129 条提交；适配器已被 `AgentModelRequestAccounting.run` 包了一层，五处冲突按原意手工重打，其余十八个文件原样可用。
+- Bugfix 预发布版本从 **1.334.0-rc19** 递增为 **1.334.0-rc20**，内部构建号 **651 → 652**；App、Go agent、Help、Helper、浏览器扩展、README、版本响应头与产品文档保持一致。
+
 ## 1.334.0-rc19 - 2026-09-07
 
 ### Changed

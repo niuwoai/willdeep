@@ -27,6 +27,14 @@ struct SomeIMRequestContext: Equatable {
 }
 
 enum AgentNetworkSupport {
+    static func someIMRequestID(from response: HTTPURLResponse, providerID: String) -> String? {
+        guard providerID == AgentProviderPreset.someIMID,
+              let requestID = response.value(forHTTPHeaderField: "X-Request-Id")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !requestID.isEmpty else { return nil }
+        return requestID
+    }
+
     /// The one name this client answers to, everywhere it identifies itself:
     /// `X-Client-Name`, the handshakes that carry their own `version` field
     /// (MCP / ACP / Codex app-server `clientInfo`), OpenRouter's `X-Title`,

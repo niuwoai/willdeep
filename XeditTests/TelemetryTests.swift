@@ -115,8 +115,10 @@ struct TelemetryProtocolTests {
             provider: "anthropic",
             requestedModel: "claude-opus-5",
             credentialSource: .someGateway,
-            status: .succeeded,
-            durationMs: 4210
+            status: .cancelled,
+            durationMs: 4210,
+            requestID: "05583695-234d-4337-9526-3f24af00bbfc",
+            cancellationReason: .queuedMessageTakeover
         )
         let data = try JSONEncoder().encode(TelemetryUploadPayload(events: [event]))
         let json = try #require(
@@ -132,9 +134,11 @@ struct TelemetryProtocolTests {
         #expect(first["os_name"] as? String == "macos")
         #expect(first["app_version"] as? String == "1.290.0-rc1")
         #expect(first["credential_source"] as? String == "some_gateway")
-        #expect(first["status"] as? String == "succeeded")
+        #expect(first["status"] as? String == "cancelled")
+        #expect(first["request_id"] as? String == "05583695-234d-4337-9526-3f24af00bbfc")
+        #expect(first["cancellation_reason"] as? String == "queued_message_takeover")
         #expect(first["duration_ms"] as? Int == 4210)
-        #expect(first["schema_version"] as? Int == 1)
+        #expect(first["schema_version"] as? Int == 2)
         // 没有任何字段能装下 prompt/路径/命令——协议里根本没有这些 key。
         #expect(first["prompt"] == nil)
         #expect(first["content"] == nil)

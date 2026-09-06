@@ -105,6 +105,8 @@ private actor EmptyResponseAttempt {
 
     func consume(_ event: AgentClientEvent) async {
         switch event {
+        case .requestIdentified:
+            break
         case .textDelta(let text), .reasoningDelta(let text):
             state.hasPayload = state.hasPayload || !text.isEmpty
         case .toolCallsUpdated(let calls):

@@ -80,6 +80,8 @@ final class AgentTurnTelemetry {
     var credentialSource: TelemetryCredentialSource?
     var status: TelemetryStatus = .succeeded
     var errorCode: String?
+    var requestID: String?
+    var cancellationReason: TelemetryCancellationReason?
     var inputTokens: Int = 0
     var outputTokens: Int = 0
     var fallbackCount: Int = 0
@@ -111,6 +113,11 @@ final class AgentTurnTelemetry {
 
     func noteRequestStarted() {
         didSendRequest = true
+        requestID = nil
+    }
+
+    func noteRequestID(_ value: String) {
+        requestID = TelemetryProtocol.identifier(value, maxLength: 64)
     }
 
     /// 实际执行模型与最初选的不同就算一次降级/改派。
@@ -129,9 +136,10 @@ final class AgentTurnTelemetry {
         errorCode = AgentTelemetry.errorCode(for: error)
     }
 
-    func noteCancelled() {
+    func noteCancelled(reason: TelemetryCancellationReason = .taskCancelled) {
         status = .cancelled
         errorCode = TelemetryErrorCode.cancelled.rawValue
+        cancellationReason = reason
     }
 
     var durationMs: Int {
@@ -187,6 +195,8 @@ enum AgentTelemetry {
         event.credentialSource = summary.credentialSource
         event.status = summary.status
         event.errorCode = summary.errorCode
+        event.requestID = summary.requestID
+        event.cancellationReason = summary.status == .cancelled ? summary.cancellationReason : nil
         event.durationMs = summary.durationMs
         event.inputTokens = summary.inputTokens > 0 ? summary.inputTokens : nil
         event.outputTokens = summary.outputTokens > 0 ? summary.outputTokens : nil

@@ -37,6 +37,23 @@ import AppKit
 import Foundation
 
 extension AppState {
+    @MainActor
+    private func telemetryCancellationReason(
+        for runtime: AgentRuntime,
+        turnID: UUID
+    ) -> TelemetryCancellationReason {
+        if runtime.userStoppedTurnID == turnID {
+            return .userStop
+        }
+        if runtime.shouldConsumeQueueAfterStop {
+            return .queuedMessageTakeover
+        }
+        if runtime.activeTurnID != turnID {
+            return .runtimeReplaced
+        }
+        return .taskCancelled
+    }
+
     func dispatchAgentMessage(
         for runtime: AgentRuntime,
         text: String,
@@ -1146,6 +1163,8 @@ extension AppState {
                                     return
                                 }
                                 switch event {
+                                case .requestIdentified(let requestID):
+                                    turnTelemetry.noteRequestID(requestID)
                                 case .textDelta(let delta):
                                     if !delta.isEmpty, runtime.messages[index].firstResponseSeconds == nil {
                                         runtime.messages[index].firstResponseSeconds = Date().timeIntervalSince(turnStartedAt)
@@ -1230,7 +1249,7 @@ extension AppState {
                     agentKernelPreemptedRuntimeIDs.remove(runtime.id)
                 }
                 streamBuffer.flushPending()
-                turnTelemetry.noteCancelled()
+                turnTelemetry.noteCancelled(reason: telemetryCancellationReason(for: runtime, turnID: turnID))
                 finalizeInterruptedAssistantMessage(
                     id: assistantID,
                     in: runtime,
@@ -1242,7 +1261,7 @@ extension AppState {
                 streamBuffer.flushPending()
                 if Self.isStoppedTurnCancellation(error, runtime: runtime, turnID: turnID) {
                     agentKernelPreemptedRuntimeIDs.remove(runtime.id)
-                    turnTelemetry.noteCancelled()
+                    turnTelemetry.noteCancelled(reason: telemetryCancellationReason(for: runtime, turnID: turnID))
                     finalizeInterruptedAssistantMessage(
                         id: assistantID,
                         in: runtime,

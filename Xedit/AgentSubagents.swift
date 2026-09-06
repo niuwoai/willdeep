@@ -2141,6 +2141,8 @@ private actor SubagentTurnCollector {
 
     func consume(_ event: AgentClientEvent) {
         switch event {
+        case .requestIdentified:
+            break
         case .textDelta(let delta):
             turn.content += delta
         case .reasoningDelta(let delta):
@@ -2204,6 +2206,8 @@ private actor AgentSubagentTextStreamCollector {
 
     func consume(_ event: AgentClientEvent) -> AgentSubagentStreamingTextEvent? {
         switch event {
+        case .requestIdentified:
+            return nil
         case .textDelta(let delta):
             guard !delta.isEmpty else { return nil }
             text += delta

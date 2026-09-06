@@ -34,6 +34,13 @@ enum TelemetryStatus: String, Codable, Sendable {
     case cancelled
 }
 
+enum TelemetryCancellationReason: String, Codable, Sendable {
+    case userStop = "user_stop"
+    case queuedMessageTakeover = "queued_message_takeover"
+    case runtimeReplaced = "runtime_replaced"
+    case taskCancelled = "task_cancelled"
+}
+
 /// 凭据来源——只记类型，永远不记密钥本身。
 enum TelemetryCredentialSource: String, Codable, Sendable {
     /// 走 some.im 网关（省心托管或 some.im 供应商）。
@@ -80,6 +87,8 @@ struct TelemetryEvent: Codable, Sendable, Equatable, Identifiable {
     var outputTokens: Int?
     var fallbackCount: Int?
     var errorCode: String?
+    var requestID: String?
+    var cancellationReason: TelemetryCancellationReason?
 
     var feature: String?
     var surface: String?
@@ -108,6 +117,8 @@ struct TelemetryEvent: Codable, Sendable, Equatable, Identifiable {
         case outputTokens = "output_tokens"
         case fallbackCount = "fallback_count"
         case errorCode = "error_code"
+        case requestID = "request_id"
+        case cancellationReason = "cancellation_reason"
         case feature
         case surface
         case outcome
@@ -136,6 +147,8 @@ struct TelemetryEvent: Codable, Sendable, Equatable, Identifiable {
         outputTokens: Int? = nil,
         fallbackCount: Int? = nil,
         errorCode: String? = nil,
+        requestID: String? = nil,
+        cancellationReason: TelemetryCancellationReason? = nil,
         feature: String? = nil,
         surface: String? = nil,
         outcome: TelemetryOutcome? = nil,
@@ -162,6 +175,8 @@ struct TelemetryEvent: Codable, Sendable, Equatable, Identifiable {
         self.outputTokens = outputTokens
         self.fallbackCount = fallbackCount
         self.errorCode = errorCode
+        self.requestID = requestID
+        self.cancellationReason = cancellationReason
         self.feature = feature
         self.surface = surface
         self.outcome = outcome
@@ -175,7 +190,7 @@ struct TelemetryEvent: Codable, Sendable, Equatable, Identifiable {
 /// 而是为了让「不该出网的东西根本不进队列」——本地拦下来的，连传输过程
 /// 都不存在。两边规则刻意保持一致。
 enum TelemetryProtocol {
-    static let schemaVersion = 1
+    static let schemaVersion = 2
     static let appID = "willdeep-mac"
     static let osName = "macos"
 
@@ -256,6 +271,7 @@ extension TelemetryEvent {
         copy.requestedModel = TelemetryProtocol.modelIdentifier(requestedModel)
         copy.resolvedModel = TelemetryProtocol.modelIdentifier(resolvedModel)
         copy.errorCode = TelemetryProtocol.identifier(errorCode, maxLength: 64)
+        copy.requestID = TelemetryProtocol.identifier(requestID, maxLength: 64)
         copy.feature = TelemetryProtocol.identifier(feature, maxLength: 64)
         copy.surface = TelemetryProtocol.identifier(surface, maxLength: 32)
         copy.osVersion = TelemetryProtocol.identifier(osVersion, maxLength: 16)

@@ -18,6 +18,10 @@ import Foundation
 /// format into this enum so AppState never sees OpenAI / Anthropic /
 /// Gemini shapes directly.
 enum AgentClientEvent {
+    /// Gateway request identifier returned in `X-Request-Id`. It contains no
+    /// prompt or response content and lets cancellation telemetry correlate a
+    /// client-side reason with the matching usage row.
+    case requestIdentified(String)
     /// Assistant text delta.
     case textDelta(String)
     /// Reasoning / thinking-mode trace delta. Emitted by DashScope
