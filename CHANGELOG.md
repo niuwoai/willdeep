@@ -3,6 +3,13 @@
 > 当前文件保留最新版本（1.321.0-rc1 至 1.109.0-rc340）。
 > 更早的 1000 个版本已移至 [CHANGELOG-ARCHIVE.md](CHANGELOG-ARCHIVE.md)。
 
+## Unreleased
+
+### Documentation
+
+- 重写中英日 README，以产品价值、任务场景、核心能力和上手入口组织官方介绍；将构建、测试与贡献说明移入开发指南，移除过时版本描述和未经证实的绝对承诺。
+- 新增根目录 AGENTS.md 并同步 CLAUDE.md：优先 rebase 后保留逐条提交集成到 develop/main，默认不 squash，不改写共享主分支历史或制造无意义提交。
+
 ## 1.334.0-rc15 - 2026-09-06
 
 ### Fixed
