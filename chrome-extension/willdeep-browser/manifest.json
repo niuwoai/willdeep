@@ -3,8 +3,8 @@
   "name": "__MSG_extensionName__",
   "description": "__MSG_extensionDescription__",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAscrt8TTByYGZrLYup1CXz2ZrFwx4mCCfmQGq9poMfdStY0HtzrOlCRc4iCAs9zSXHIZSfbQhMde7+JRahbLDc3UayueDnq7zZhFZXs2dmEwj8JDGMCkfEZQCDHWvXFtOXGBvI+VieFvJpt97R98sgVY869U1+K2wqp6V68DBXcbk1zbL0l9ReYuQH3XsVzGmVE1Hv3bSx5Xnz28Sevp8B5J+rTDj3aHCkwDXnBfwX1CLBNBaKKTzA63/UQK9/TkDqfmjVA9dqPVO9LGTeBmV40dKaFD4wRg7lszAAfE42YeLA3QW0IJewOtMH4vQB58FLY/qAvMUaZpG1iEU/R6YVQIDAQAB",
-  "version": "1.334.0.16",
-  "version_name": "1.334.0-rc16",
+  "version": "1.334.0.17",
+  "version_name": "1.334.0-rc17",
   "default_locale": "en",
   "action": {
     "default_popup": "popup.html",
