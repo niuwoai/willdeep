@@ -180,6 +180,20 @@ nonisolated enum AgentDispatchArtifactIntegrator {
                      integratedRevision: candidate.revision)
     }
 
+    static func repositoryIdentity(in repository: URL) async throws -> URL {
+        let output = try await git(["rev-parse", "--path-format=absolute", "--git-common-dir"], in: repository)
+        let path = output.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard path.hasPrefix("/") else { throw AgentDispatchIntegrationError.invalidRevision }
+        return URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL
+    }
+
+    static func isAncestor(_ revision: String, of descendant: String, in repository: URL) async throws -> Bool {
+        try validateRevision(revision)
+        try validateRevision(descendant)
+        return try await git(["merge-base", "--is-ancestor", revision, descendant], in: repository,
+                             allowedStatuses: [0, 1]).exitStatus == 0
+    }
+
     static func currentRevision(in repository: URL, goalID: UUID, baseRevision: String) async throws -> String {
         try validateRevision(baseRevision)
         return try await resolve(integratedRef(goalID: goalID), in: repository) ?? baseRevision

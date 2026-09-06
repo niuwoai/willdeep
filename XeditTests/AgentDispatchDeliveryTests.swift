@@ -88,10 +88,59 @@ struct AgentDispatchDeliveryTests {
 
         func cleanup() {
             app.invalidateDispatchMonitor(taskID: firstID)
+            app.invalidateDispatchMonitor(taskID: nextID)
             defaults.removePersistentDomain(forName: suite)
             do { try FileManager.default.removeItem(at: root) }
             catch { Issue.record("Fixture cleanup failed: \(error)") }
         }
+    }
+
+    @Test("后续节点改坏先前产物时组合回归阻止交付，修复后自动通过", arguments: [false, true])
+    func combinedCandidateRechecksEarlierNode(operatorOverride: Bool) async throws {
+        let f = try await fixture(verifierBody:
+            "abort 'prior interface regressed' unless ARGV.first == 'current' || File.read('interface.txt') == \"A\\n\"\nputs 'verified'\n")
+        defer { f.cleanup() }
+        try Data("A\n".utf8).write(to: f.checkout.appendingPathComponent("interface.txt"))
+        try await f.deliver()
+        let receipt = try #require(try f.task(f.firstID).integrationReceipt)
+        let checkout = f.root.appendingPathComponent("second-worker")
+        _ = try await git(["worktree", "add", "--detach", checkout.path, receipt.integratedRevision], at: f.repository)
+        #expect(try await AgentDispatchArtifactIntegrator.repositoryIdentity(in: checkout)
+            == AgentDispatchArtifactIntegrator.repositoryIdentity(in: f.repository))
+        let child = f.app.startNewAgentSession(inWorkspaceAt: checkout.path)
+        let runtime = try #require(f.app.runtime(for: child.id))
+        runtime.session.dispatchParentProjectID = f.goalID
+        runtime.session.dispatchTaskID = f.nextID
+        runtime.agentEditedPaths = ["interface.txt"]
+        runtime.currentGoal = .init(statement: "Consumer", checklist: [.init(text: "Consumer works", done: true)])
+        let goal = try #require(f.app.agentDispatchCoordinator.goals.first { $0.id == f.goalID })
+        let binding = try #require(goal.resolvedWorkspaceBinding(for: try f.task(f.nextID)))
+        f.app.agentDispatchCoordinator.pinTaskInputRevision(goalID: f.goalID, taskID: f.nextID,
+            bindingID: binding.id, baseRevision: f.base, inputRevision: receipt.integratedRevision)
+        f.app.agentDispatchCoordinator.markTaskStarted(goalID: f.goalID, taskID: f.nextID,
+            executor: .willDeep, target: .local, runtimeSessionID: runtime.id)
+        f.app.agentDispatchCoordinator.updateTask(goalID: f.goalID, taskID: f.nextID) {
+            $0.verificationCommands = ["ruby verify_test.rb current", "ruby verify_test.rb current"]
+        }
+        if operatorOverride { f.app.agentDispatchCoordinator.recordOperatorAcceptance(goalID: f.goalID, taskID: f.nextID) }
+        _ = f.app.beginDispatchMonitor(runtimeID: runtime.id, taskID: f.nextID)
+        try Data("broken\n".utf8).write(to: checkout.appendingPathComponent("interface.txt"))
+        do {
+            try await f.app.deliverVerifiedDispatchTask(runtime: runtime, goalID: f.goalID, taskID: f.nextID)
+            Issue.record("Current-node success must not hide a prior-node regression")
+        } catch { #expect(error.localizedDescription.contains("prior interface regressed")) }
+        #expect(try f.task(f.nextID).state != .merged)
+        #expect(f.app.agentDispatchCoordinator.goals.first { $0.id == f.goalID }?.isComplete == false)
+        #expect(try await AgentDispatchArtifactIntegrator.currentRevision(in: f.repository,
+            goalID: f.goalID, baseRevision: f.base) == receipt.integratedRevision)
+        try Data("A\n".utf8).write(to: checkout.appendingPathComponent("interface.txt"))
+        try await f.app.deliverVerifiedDispatchTask(runtime: runtime, goalID: f.goalID, taskID: f.nextID)
+        let record = try #require(try f.app.dispatchDeliveryJournal.load(goalID: f.goalID, taskID: f.nextID))
+        let expected = operatorOverride ? ["ruby verify_test.rb"] : ["ruby verify_test.rb", "ruby verify_test.rb current"]
+        #expect(record.verificationReceipt?.commands == expected)
+        #expect(record.verificationReceipt?.outputDigests.count == expected.count)
+        #expect(record.phase == .delivered)
+        #expect(try await git(["rev-parse", "HEAD"], at: f.repository) == f.base)
     }
 
     private func fixture(commands: [String] = ["ruby verify_test.rb"], verifierBody: String? = nil,

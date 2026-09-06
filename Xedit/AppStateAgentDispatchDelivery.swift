@@ -70,6 +70,17 @@ extension AppState {
             }
         }
         if record.phase == .stopped { throw AgentDispatchDeliveryError.staleRuntime }
+        if record.phase == .verified {
+            let commands = try await combinedDispatchVerificationCommands(candidate: record.candidate,
+                task: task, runtime: runtime, repository: repository)
+            try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID, leaseID: leaseID)
+            if record.verificationReceipt?.commands != commands {
+                let generation = record.generation
+                record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id,
+                    generation: generation + 1, phase: .prepared, candidate: record.candidate)
+                try journal.save(record, expectedGeneration: generation)
+            }
+        }
         if record.phase == .prepared {
             let verification = try await verifyDispatchCandidate(record.candidate, task: task, runtime: runtime, repository: repository, leaseID: leaseID)
             try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID, leaseID: leaseID)
@@ -168,10 +179,12 @@ extension AppState {
         _ candidate: AgentDispatchIntegrationCandidate, task: AgentDispatchTask,
         runtime: AgentRuntime, repository: URL, leaseID: UUID
     ) async throws -> AgentDispatchVerificationReceipt {
-        if task.operatorAcceptedAt != nil {
+        let commands = try await combinedDispatchVerificationCommands(candidate: candidate,
+            task: task, runtime: runtime, repository: repository)
+        try requireDispatchDeliveryLease(runtime: runtime, goalID: candidate.goalID, taskID: task.id, leaseID: leaseID)
+        if task.operatorAcceptedAt != nil && commands.isEmpty {
             return .init(id: UUID(), revision: candidate.revision, commands: [], outputDigests: [], operatorOverride: true, verifiedAt: Date())
         }
-        let commands = Self.dispatchVerificationCommands(task: task, runtime: runtime)
         guard !commands.isEmpty else { throw AgentDispatchDeliveryError.missingVerification }
         let checkout = try await AgentDispatchArtifactIntegrator.createVerificationCheckout(
             for: candidate, in: repository, parent: AgentSessionStore.directory.appendingPathComponent("dispatch-verification")
