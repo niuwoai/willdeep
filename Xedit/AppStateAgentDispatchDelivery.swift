@@ -55,13 +55,19 @@ extension AppState {
             record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id, generation: 0, phase: .prepared, candidate: candidate)
             try journal.save(record, expectedGeneration: nil)
         }
-        if record.phase == .prepared {
+        if record.phase == .prepared || record.phase == .verified {
             let snapshot = try await AgentDispatchArtifactIntegrator.snapshot(
                 in: URL(fileURLWithPath: taskPath), goalID: goalID, taskID: taskID,
                 baseRevision: input, paths: Array(runtime.agentEditedPaths)
             )
             let current = try await AgentDispatchArtifactIntegrator.currentRevision(in: repository, goalID: goalID, baseRevision: base)
-            if snapshot != record.candidate.snapshot || current != record.candidate.previousRevision || record.runtimeID != runtime.id {
+            // Publication can precede its journal update. Keep that exact
+            // candidate for idempotent recovery, but a later integration or
+            // changed worker artifact must be prepared and verified afresh.
+            let alreadyPublished = record.phase == .verified && current == record.candidate.revision
+            if snapshot != record.candidate.snapshot
+                || (!alreadyPublished && current != record.candidate.previousRevision)
+                || record.runtimeID != runtime.id {
                 let candidate = try await AgentDispatchArtifactIntegrator.prepareIntegration(snapshot, in: repository, goalID: goalID, goalBaseRevision: base)
                 try requireDispatchDeliveryLease(runtime: runtime, goalID: goalID, taskID: taskID, leaseID: leaseID)
                 let generation = record.generation

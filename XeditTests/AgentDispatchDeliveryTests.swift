@@ -143,6 +143,93 @@ struct AgentDispatchDeliveryTests {
         #expect(try await git(["rev-parse", "HEAD"], at: f.repository) == f.base)
     }
 
+    private func seedVerifiedCheckpoint(_ f: Fixture) async throws -> AgentDispatchDeliveryRecord {
+        let snapshot = try await AgentDispatchArtifactIntegrator.snapshot(in: f.checkout,
+            goalID: f.goalID, taskID: f.firstID, baseRevision: f.base, paths: ["interface.txt"])
+        let candidate = try await AgentDispatchArtifactIntegrator.prepareIntegration(snapshot,
+            in: f.repository, goalID: f.goalID, goalBaseRevision: f.base)
+        var record = AgentDispatchDeliveryRecord(goalID: f.goalID, taskID: f.firstID,
+            runtimeID: f.runtime.id, generation: 0, phase: .prepared, candidate: candidate)
+        try f.app.dispatchDeliveryJournal.save(record, expectedGeneration: nil)
+        record.generation = 1
+        record.phase = .verified
+        let id = UUID()
+        record.verificationID = id
+        record.verificationReceipt = .init(id: id, revision: candidate.revision,
+            commands: ["ruby verify_test.rb"], outputDigests: ["fixture prior host digest"],
+            operatorOverride: false, verifiedAt: Date())
+        try f.app.dispatchDeliveryJournal.save(record, expectedGeneration: 0)
+        return record
+    }
+
+    @Test("已验证记录恢复时追上并发集成，不反复重试同一旧候选", arguments: [false, true])
+    func verifiedRecoveryRepreparesAdvancedIntegration(alreadyPublished: Bool) async throws {
+        let f = try await fixture(verifierBody:
+            "abort 'interface mismatch' unless ARGV.first == 'current' || File.read('interface.txt') == \"A\\n\"\nputs 'verified'\n")
+        defer { f.cleanup() }
+        try Data("A\n".utf8).write(to: f.checkout.appendingPathComponent("interface.txt"))
+        let checkpoint = try await seedVerifiedCheckpoint(f)
+        if alreadyPublished {
+            _ = try await AgentDispatchArtifactIntegrator.publish(checkpoint.candidate,
+                verifiedRevision: checkpoint.candidate.revision, in: f.repository)
+        }
+        let checkout = f.root.appendingPathComponent("concurrent-worker")
+        _ = try await git(["worktree", "add", "--detach", checkout.path, f.base], at: f.repository)
+        try Data("other node artifact\n".utf8).write(to: checkout.appendingPathComponent("consumer.txt"))
+        let child = f.app.startNewAgentSession(inWorkspaceAt: checkout.path)
+        let runtime = try #require(f.app.runtime(for: child.id))
+        runtime.session.dispatchParentProjectID = f.goalID
+        runtime.session.dispatchTaskID = f.nextID
+        runtime.agentEditedPaths = ["consumer.txt"]
+        runtime.currentGoal = .init(statement: "Independent consumer", checklist: [.init(text: "Consumer checked", done: true)])
+        let goal = try #require(f.app.agentDispatchCoordinator.goals.first { $0.id == f.goalID })
+        let binding = try #require(goal.resolvedWorkspaceBinding(for: try f.task(f.nextID)))
+        f.app.agentDispatchCoordinator.updateTask(goalID: f.goalID, taskID: f.nextID) {
+            $0.dependencyIDs = []
+            $0.verificationCommands = ["ruby verify_test.rb current"]
+        }
+        f.app.agentDispatchCoordinator.pinTaskInputRevision(goalID: f.goalID, taskID: f.nextID,
+            bindingID: binding.id, baseRevision: f.base, inputRevision: f.base)
+        f.app.agentDispatchCoordinator.markTaskStarted(goalID: f.goalID, taskID: f.nextID,
+            executor: .willDeep, target: .local, runtimeSessionID: runtime.id)
+        _ = f.app.beginDispatchMonitor(runtimeID: runtime.id, taskID: f.nextID)
+        try await f.app.deliverVerifiedDispatchTask(runtime: runtime, goalID: f.goalID, taskID: f.nextID)
+        let concurrent = try #require(try f.task(f.nextID).integrationReceipt)
+        try await f.deliver()
+        let restored = try #require(try f.app.dispatchDeliveryJournal.load(goalID: f.goalID, taskID: f.firstID))
+        #expect(restored.phase == .delivered)
+        #expect(restored.candidate.previousRevision == concurrent.integratedRevision)
+        #expect(restored.verificationID != checkpoint.verificationID)
+        #expect(restored.verificationReceipt?.commands == ["ruby verify_test.rb current", "ruby verify_test.rb"])
+        #expect(try await git(["show", "\(restored.candidate.revision):consumer.txt"], at: f.repository) == "other node artifact")
+        #expect(try await git(["show", "\(restored.candidate.revision):interface.txt"], at: f.repository) == "A")
+        #expect(try await git(["rev-parse", "HEAD"], at: f.repository) == f.base)
+    }
+
+    @Test("发布后尚未记账的恢复不重复集成，源产物改变则重新验证", arguments: [false, true])
+    func verifiedRecoveryChecksSourceAndPublication(sourceChanged: Bool) async throws {
+        let f = try await fixture()
+        defer { f.cleanup() }
+        try Data("A\n".utf8).write(to: f.checkout.appendingPathComponent("interface.txt"))
+        let checkpoint = try await seedVerifiedCheckpoint(f)
+        if sourceChanged {
+            try Data("regressed\n".utf8).write(to: f.checkout.appendingPathComponent("interface.txt"))
+            await #expect(throws: (any Error).self) { try await f.deliver() }
+            #expect(try f.app.dispatchDeliveryJournal.load(goalID: f.goalID, taskID: f.firstID)?.phase == .prepared)
+            #expect(try f.task(f.firstID).state != .merged)
+            #expect(try await AgentDispatchArtifactIntegrator.currentRevision(in: f.repository,
+                goalID: f.goalID, baseRevision: f.base) == f.base)
+        } else {
+            _ = try await AgentDispatchArtifactIntegrator.publish(checkpoint.candidate,
+                verifiedRevision: checkpoint.candidate.revision, in: f.repository)
+            try await f.deliver()
+            let recovered = try #require(try f.app.dispatchDeliveryJournal.load(goalID: f.goalID, taskID: f.firstID))
+            #expect(recovered.candidate == checkpoint.candidate)
+            #expect(recovered.verificationID == checkpoint.verificationID)
+            #expect(recovered.generation == 3)
+        }
+    }
+
     private func fixture(commands: [String] = ["ruby verify_test.rb"], verifierBody: String? = nil,
                          scheduling: AgentDispatchSchedulingHints? = nil) async throws -> Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("delivery-app-test-\(UUID().uuidString)")
