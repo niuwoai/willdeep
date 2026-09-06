@@ -22,6 +22,16 @@ extension AppState {
         AgentDispatchDeliveryJournal(directory: AgentSessionStore.directory.appendingPathComponent("dispatch-delivery", isDirectory: true))
     }
 
+    func dispatchDeliveryJournal(goalID: UUID, taskID: UUID) throws -> AgentDispatchDeliveryJournal {
+        guard let task = agentDispatchCoordinator.goals.first(where: { $0.id == goalID })?.tasks.first(where: { $0.id == taskID }) else {
+            throw AgentDispatchDeliveryError.staleRuntime
+        }
+        guard let revisionID = task.deliveryRevisionID else { return dispatchDeliveryJournal }
+        return AgentDispatchDeliveryJournal(directory: dispatchDeliveryJournal.directory
+            .appendingPathComponent("revisions", isDirectory: true)
+            .appendingPathComponent(revisionID.uuidString, isDirectory: true), revisionID: revisionID)
+    }
+
     /// The only completion path for a running node. The board is a projection;
     /// the synced delivery journal and private Git ref are the durable truth.
     func deliverVerifiedDispatchTask(runtime: AgentRuntime, goalID: UUID, taskID: UUID) async throws {
@@ -45,7 +55,7 @@ extension AppState {
         if let scheduling = task.scheduling, !runtime.agentEditedPaths.allSatisfy(scheduling.covers) {
             throw AgentDispatchDeliveryError.writeScopeChanged
         }
-        let journal = dispatchDeliveryJournal
+        let journal = try dispatchDeliveryJournal(goalID: goalID, taskID: taskID)
         var record: AgentDispatchDeliveryRecord
         if let stored = try journal.load(goalID: goalID, taskID: taskID) {
             guard stored.runtimeID == runtime.id || stored.phase == .prepared else { throw AgentDispatchDeliveryError.staleRuntime }
@@ -57,7 +67,8 @@ extension AppState {
             )
             let candidate = try await AgentDispatchArtifactIntegrator.prepareIntegration(snapshot, in: repository, goalID: goalID, goalBaseRevision: base)
             try requireCurrentLease()
-            record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id, generation: 0, phase: .prepared, candidate: candidate)
+            record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id,
+                deliveryRevisionID: task.deliveryRevisionID, generation: 0, phase: .prepared, candidate: candidate)
             try journal.save(record, expectedGeneration: nil)
         }
         if record.phase == .prepared || record.phase == .verified {
@@ -76,7 +87,8 @@ extension AppState {
                 let candidate = try await AgentDispatchArtifactIntegrator.prepareIntegration(snapshot, in: repository, goalID: goalID, goalBaseRevision: base)
                 try requireCurrentLease()
                 let generation = record.generation
-                record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id, generation: generation + 1, phase: .prepared, candidate: candidate)
+                record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id,
+                    deliveryRevisionID: task.deliveryRevisionID, generation: generation + 1, phase: .prepared, candidate: candidate)
                 try journal.save(record, expectedGeneration: generation)
             }
         }
@@ -88,6 +100,7 @@ extension AppState {
             if record.verificationReceipt?.commands != commands {
                 let generation = record.generation
                 record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id,
+                    deliveryRevisionID: task.deliveryRevisionID,
                     generation: generation + 1, phase: .prepared, candidate: record.candidate)
                 try journal.save(record, expectedGeneration: generation)
             }
@@ -115,7 +128,8 @@ extension AppState {
                 let candidate = try await AgentDispatchArtifactIntegrator.prepareIntegration(record.candidate.snapshot, in: repository, goalID: goalID, goalBaseRevision: base)
                 try requireCurrentLease()
                 let generation = record.generation
-                record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id, generation: generation + 1, phase: .prepared, candidate: candidate)
+                record = .init(goalID: goalID, taskID: taskID, runtimeID: runtime.id,
+                    deliveryRevisionID: task.deliveryRevisionID, generation: generation + 1, phase: .prepared, candidate: candidate)
                 try journal.save(record, expectedGeneration: generation)
                 throw AgentDispatchDeliveryError.retryIntegration
             }
@@ -138,12 +152,13 @@ extension AppState {
 
     func stopDispatchDelivery(goalID: UUID, taskID: UUID) {
         do {
-            guard var record = try dispatchDeliveryJournal.load(goalID: goalID, taskID: taskID),
+            let journal = try dispatchDeliveryJournal(goalID: goalID, taskID: taskID)
+            guard var record = try journal.load(goalID: goalID, taskID: taskID),
                   record.phase != .stopped, record.phase != .delivered else { return }
             let generation = record.generation
             record.generation += 1
             record.phase = .stopped
-            try dispatchDeliveryJournal.save(record, expectedGeneration: generation)
+            try journal.save(record, expectedGeneration: generation)
         } catch {
             NSLog("WillDeep delivery Stop journal failed: %@", String(describing: type(of: error)))
         }

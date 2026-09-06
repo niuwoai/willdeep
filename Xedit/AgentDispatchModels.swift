@@ -323,6 +323,9 @@ nonisolated struct AgentDispatchTask: Codable, Equatable, Identifiable {
     /// Exact immutable input used to create this task's isolated checkout.
     /// Retrying a runtime must not silently move its base to a newer HEAD.
     var inputRevision: String? = nil
+    /// Host-owned delivery epoch. Nil addresses legacy evidence; a revised
+    /// outcome must use a fresh epoch without deleting the earlier receipt.
+    var deliveryRevisionID: UUID? = nil
     var artifactSnapshot: AgentDispatchArtifactSnapshot? = nil
     var integrationCandidate: AgentDispatchIntegrationCandidate? = nil
     var integrationReceipt: AgentDispatchIntegrationReceipt? = nil

@@ -682,7 +682,7 @@ extension AppState {
             return .blocked(message: L10n.Dispatch.waitingForDependencies)
         }
         do {
-            if !explicitlyRequested, try dispatchDeliveryJournal.load(goalID: goalID, taskID: taskID)?.phase == .stopped {
+            if !explicitlyRequested, try dispatchDeliveryJournal(goalID: goalID, taskID: taskID).load(goalID: goalID, taskID: taskID)?.phase == .stopped {
                 return .blocked(message: L10n.Dispatch.deliveryIncomplete)
             }
         } catch { return .blocked(message: L10n.Dispatch.deliveryIncomplete) }

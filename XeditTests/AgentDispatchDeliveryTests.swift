@@ -143,6 +143,51 @@ struct AgentDispatchDeliveryTests {
         #expect(try await git(["rev-parse", "HEAD"], at: f.repository) == f.base)
     }
 
+    @Test("交付新代次隔离旧终态与停止回执，重验不覆盖历史证据")
+    func deliveryRevisionPreservesOldEvidence() async throws {
+        let f = try await fixture()
+        defer { f.cleanup() }
+        try Data("A\n".utf8).write(to: f.checkout.appendingPathComponent("interface.txt"))
+        try await f.deliver()
+        let legacy = f.app.dispatchDeliveryJournal
+        let original = try #require(try legacy.load(goalID: f.goalID, taskID: f.firstID))
+        let revisionID = UUID()
+        f.app.agentDispatchCoordinator.updateTask(goalID: f.goalID, taskID: f.firstID) {
+            $0.deliveryRevisionID = revisionID
+            $0.state = .reviewing
+            $0.integrationReceipt = nil
+            $0.integrationCandidate = nil
+            $0.operatorAcceptedAt = nil
+        }
+        let restoredBoard = AgentDispatchCoordinator(store: AgentDispatchStore(defaults: f.defaults))
+        #expect(restoredBoard.goals.first { $0.id == f.goalID }?.tasks.first { $0.id == f.firstID }?.deliveryRevisionID == revisionID)
+        #expect(throws: AgentDispatchJournalError.invalidTransition) {
+            try f.app.agentDispatchCoordinator.applyDeliveredRecord(original)
+        }
+        let revised = try f.app.dispatchDeliveryJournal(goalID: f.goalID, taskID: f.firstID)
+        #expect(try revised.load(goalID: f.goalID, taskID: f.firstID) == nil)
+        let prepared = AgentDispatchDeliveryRecord(goalID: f.goalID, taskID: f.firstID,
+            runtimeID: f.runtime.id, deliveryRevisionID: revisionID, generation: 0,
+            phase: .prepared, candidate: original.candidate)
+        try revised.save(prepared, expectedGeneration: nil)
+        f.app.stopDispatchDelivery(goalID: f.goalID, taskID: f.firstID)
+        #expect(try revised.load(goalID: f.goalID, taskID: f.firstID)?.phase == .stopped)
+        #expect(try legacy.load(goalID: f.goalID, taskID: f.firstID) == original)
+        #expect(throws: AgentDispatchDeliveryError.self) {
+            try f.app.resumeStoppedDispatchDelivery(goalID: f.goalID, taskID: f.firstID,
+                runtimeID: f.runtime.id, explicitlyRequested: false)
+        }
+        try f.app.resumeStoppedDispatchDelivery(goalID: f.goalID, taskID: f.firstID,
+            runtimeID: f.runtime.id, explicitlyRequested: true)
+        _ = f.app.beginDispatchMonitor(runtimeID: f.runtime.id, taskID: f.firstID)
+        try await f.deliver()
+        let result = try #require(try revised.load(goalID: f.goalID, taskID: f.firstID))
+        #expect(result.phase == .delivered && result.deliveryRevisionID == revisionID)
+        #expect(result.verificationID != original.verificationID)
+        #expect(try legacy.load(goalID: f.goalID, taskID: f.firstID) == original)
+        #expect(try f.task(f.firstID).state == .merged)
+    }
+
     private func seedVerifiedCheckpoint(_ f: Fixture) async throws -> AgentDispatchDeliveryRecord {
         let snapshot = try await AgentDispatchArtifactIntegrator.snapshot(in: f.checkout,
             goalID: f.goalID, taskID: f.firstID, baseRevision: f.base, paths: ["interface.txt"])
@@ -527,7 +572,7 @@ struct AgentDispatchDeliveryTests {
     }
 
     @Test("验证执行期间合同改变，旧成功结果不能发布或解锁下游",
-          arguments: ["criteria", "statement", "input", "workspace", "override"])
+          arguments: ["criteria", "statement", "input", "workspace", "override", "revision"])
     func changedContractRejectsLateVerifier(field: String) async throws {
         let f = try await fixture(verifierBody: """
         File.write('verifier.started', 'ready')
@@ -569,6 +614,9 @@ struct AgentDispatchDeliveryTests {
                 $0.workspaceLocation = nil
             }
             case "override": f.app.agentDispatchCoordinator.recordOperatorAcceptance(goalID: f.goalID, taskID: f.firstID)
+            case "revision": f.app.agentDispatchCoordinator.updateTask(goalID: f.goalID, taskID: f.firstID) {
+                $0.deliveryRevisionID = UUID()
+            }
             default: f.app.agentDispatchCoordinator.updateTask(goalID: f.goalID, taskID: f.firstID) {
                 if field == "input" { $0.inputRevision = "changed input" }
                 else { $0.acceptanceCriteria = ["New acceptance requirement"] }

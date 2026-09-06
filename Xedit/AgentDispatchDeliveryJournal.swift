@@ -10,6 +10,7 @@ nonisolated struct AgentDispatchDeliveryRecord: Codable, Equatable, Sendable {
     let goalID: UUID
     let taskID: UUID
     let runtimeID: UUID
+    var deliveryRevisionID: UUID? = nil
     var generation: Int
     var phase: Phase
     let candidate: AgentDispatchIntegrationCandidate
@@ -31,7 +32,13 @@ nonisolated enum AgentDispatchJournalError: Error, Equatable {
 /// Cross-process locks and generations reject stale completion callbacks.
 nonisolated struct AgentDispatchDeliveryJournal: Sendable {
     let directory: URL
+    let revisionID: UUID?
     private static let maximumRecordBytes = 4 * 1_024 * 1_024
+
+    init(directory: URL, revisionID: UUID? = nil) {
+        self.directory = directory
+        self.revisionID = revisionID
+    }
 
     private struct Envelope: Codable {
         let version: Int
@@ -53,7 +60,7 @@ nonisolated struct AgentDispatchDeliveryJournal: Sendable {
                 throw AgentDispatchJournalError.corrupt
             }
             let record = try JSONDecoder().decode(AgentDispatchDeliveryRecord.self, from: envelope.payload)
-            guard record.goalID == goalID, record.taskID == taskID,
+            guard record.goalID == goalID, record.taskID == taskID, record.deliveryRevisionID == revisionID,
                   record.candidate.goalID == goalID, record.candidate.snapshot.taskID == taskID else {
                 throw AgentDispatchJournalError.corrupt
             }
@@ -75,12 +82,14 @@ nonisolated struct AgentDispatchDeliveryJournal: Sendable {
         guard stopped.phase == .stopped else { throw AgentDispatchJournalError.invalidTransition }
         let prepared = AgentDispatchDeliveryRecord(
             goalID: stopped.goalID, taskID: stopped.taskID, runtimeID: runtimeID,
+            deliveryRevisionID: stopped.deliveryRevisionID,
             generation: stopped.generation + 1, phase: .prepared, candidate: stopped.candidate
         )
         try save(prepared, expectedGeneration: stopped.generation, restartingStopped: true)
     }
 
     private func save(_ record: AgentDispatchDeliveryRecord, expectedGeneration: Int?, restartingStopped: Bool) throws {
+        guard record.deliveryRevisionID == revisionID else { throw AgentDispatchJournalError.invalidTransition }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let lockURL = directory.appendingPathComponent("\(record.goalID.uuidString)-\(record.taskID.uuidString).lock")
         let descriptor = Darwin.open(lockURL.path, O_CREAT | O_RDWR | O_NOFOLLOW, mode_t(0o600))

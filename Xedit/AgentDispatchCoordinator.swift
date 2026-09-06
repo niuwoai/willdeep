@@ -698,6 +698,7 @@ final class AgentDispatchCoordinator: ObservableObject {
               receipt.snapshot == record.candidate.snapshot,
               let goal = goals.first(where: { $0.id == record.goalID }), !goal.isPaused,
               let task = goal.tasks.first(where: { $0.id == record.taskID }), task.runtimeSessionID == record.runtimeID,
+              task.deliveryRevisionID == record.deliveryRevisionID,
               [.running, .reviewing, .accepted].contains(task.state) else {
             throw AgentDispatchJournalError.invalidTransition
         }

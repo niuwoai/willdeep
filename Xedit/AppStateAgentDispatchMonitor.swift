@@ -25,10 +25,11 @@ extension AppState {
     /// Called only by explicit task launch/override, never by board restoration
     /// or automatic executor fallback. A fresh prepared record has no old proof.
     func resumeStoppedDispatchDelivery(goalID: UUID, taskID: UUID, runtimeID: UUID, explicitlyRequested: Bool) throws {
-        guard let record = try dispatchDeliveryJournal.load(goalID: goalID, taskID: taskID),
+        let journal = try dispatchDeliveryJournal(goalID: goalID, taskID: taskID)
+        guard let record = try journal.load(goalID: goalID, taskID: taskID),
               record.phase == .stopped else { return }
         guard explicitlyRequested else { throw AgentDispatchDeliveryError.staleRuntime }
         invalidateDispatchMonitor(taskID: taskID)
-        try dispatchDeliveryJournal.restartStopped(record, runtimeID: runtimeID)
+        try journal.restartStopped(record, runtimeID: runtimeID)
     }
 }

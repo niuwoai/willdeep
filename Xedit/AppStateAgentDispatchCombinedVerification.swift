@@ -31,7 +31,8 @@ extension AppState {
                 identities[path] = priorIdentity
             }
             guard priorIdentity == identity else { continue }
-            guard let record = try dispatchDeliveryJournal.load(goalID: goal.id, taskID: prior.id),
+            let journal = try dispatchDeliveryJournal(goalID: goal.id, taskID: prior.id)
+            guard let record = try journal.load(goalID: goal.id, taskID: prior.id),
                   record.phase == .delivered, let receipt = record.receipt,
                   receipt == prior.integrationReceipt,
                   receipt.snapshot == record.candidate.snapshot,

@@ -20,6 +20,24 @@ struct AgentDispatchDeliveryJournalTests {
         try body(AgentDispatchDeliveryJournal(directory: directory))
     }
 
+    @Test("日志拒绝跨交付代次读写，旧格式继续隔离使用")
+    func revisionIdentityRejectsCrossScopeRecords() throws {
+        try withJournal { legacy in
+            let original = initialRecord()
+            try legacy.save(original, expectedGeneration: nil)
+            let wrongReader = AgentDispatchDeliveryJournal(directory: legacy.directory, revisionID: UUID())
+            #expect(throws: AgentDispatchJournalError.corrupt) {
+                try wrongReader.load(goalID: original.goalID, taskID: original.taskID)
+            }
+            var wrongRecord = original
+            wrongRecord.deliveryRevisionID = UUID()
+            #expect(throws: AgentDispatchJournalError.invalidTransition) {
+                try legacy.save(wrongRecord, expectedGeneration: 0)
+            }
+            #expect(try legacy.load(goalID: original.goalID, taskID: original.taskID) == original)
+        }
+    }
+
     @Test("各交付阶段写入后可由新实例恢复")
     func phasesSurviveReopen() throws {
         try withJournal { journal in
