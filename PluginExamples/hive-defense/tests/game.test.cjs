@@ -5,6 +5,28 @@ const path = require('node:path');
 const { JSDOM } = require('../../arcade/ui/node_modules/jsdom');
 const ui = path.resolve(__dirname, '../ui');
 
+test('flea charges half a second, lands once, and pollen cancels its only chance',()=>{
+  const g=game(),{PATH,PTS,DIST}=g.api.route();
+  const index=PATH.findIndex((_,i)=>g.w.HiveWorld.planJump(PATH,i,()=>0)?.charge===0.5);
+  const flea=g.api.makeBug('flea',1);flea.dist=DIST[index];Object.assign(flea,PTS[index]);flea.jumpDelay=0;
+  const random=g.w.Math.random;g.w.Math.random=()=>0;g.api.advanceJump(flea,0);g.w.Math.random=random;
+  assert.equal(flea.jump.phase,'charge');g.api.advanceJump(flea,0.49);assert.equal(flea.jump.phase,'charge');
+  g.api.advanceJump(flea,0.01);assert.equal(flea.jump.phase,'flight');const landing=flea.jump.to;
+  g.api.advanceJump(flea,0.3);assert.equal(flea.dist,DIST[landing]);assert.equal(flea.jump,null);
+  g.api.advanceJump(flea,100);assert.equal(flea.jump,null);assert.equal(flea.jumpUsed,true);
+  const blocked=g.api.makeBug('flea',1);blocked.dist=DIST[3];Object.assign(blocked,PTS[3]);blocked.jumpUsed=true;
+  blocked.jump={phase:'charge',charge:0.5,time:0,to:10,from:{...PTS[3]}};g.api.addBug(blocked);
+  g.api.select('pollen');g.api.build({c:3,r:2});g.api.tick(0.05);
+  assert.equal(blocked.jump,null);assert.equal(blocked.jumpUsed,true);g.close();
+});
+test('flea flies over portals without triggering them but landing on entry costs two',()=>{
+  const g=game(),{PTS,DIST}=g.api.route();g.api.portals.step(6,PTS,DIST);const pair=g.api.portals.pair;
+  const flea=g.api.makeBug('flea',1);flea.jumpUsed=true;flea.jump={phase:'flight',time:0,to:pair.entry+1,from:PTS[0]};
+  g.api.advanceJump(flea,0.3);assert.equal(pair.remaining,4);assert.equal(flea.portalId,undefined);
+  const landing=g.api.makeBug('flea',1);landing.jumpUsed=true;landing.jump={phase:'flight',time:0,to:pair.entry,from:PTS[0]};
+  g.api.advanceJump(landing,0.3);assert.equal(pair.remaining,2);assert.equal(landing.dist,pair.to);assert.equal(landing.jumpUsed,true);g.close();
+});
+
 test('new insects spawn in waves, heal or sprint, and unlock their cards',()=>{
   const g=game();
   for(const [type,wave] of [['ant',2],['grasshopper',4],['caterpillar',7]]){
@@ -58,7 +80,8 @@ function game() {
   source = source.replace(/\}\)\(\);\s*$/, `window.testGame = { reset, build, canBuild, damage, makeBug, tick, drawBug, drawTowerGlyph, drawHive, towerStats, cellCenter, startWave, frame,
     select: key => selType = key, addBug: bug => bugs.push(bug),
     setVitals: (health, balance) => { hp=health; honey=balance; syncHud(); },
-    animateHoney, syncHud, repair, gameOver, bear, openBear, closeBear, shootBear, collection, startGame, configureMap, portals, waveDef,
+    animateHoney, syncHud, repair, gameOver, bear, openBear, closeBear, shootBear, collection, startGame, configureMap, portals, waveDef, advanceJump,
+    route:()=>({PATH,PTS,DIST}),
     addShot:s=>shots.push(s),
     chooseTower:t=>{selTower=t;renderInfo();}, aimAt:(x,y)=>aim={x,y},
     state: () => ({towers, bugs, honey, hp, wave, paused, speed, running, prep, texts}) }; })();`);
@@ -100,9 +123,9 @@ test('pollen slow adds twenty five percent to actual splash damage',()=>{
 test('all towers and enemies render their own image including hive', () => {
   const g = game();
   for (const key of ['sting','bomb','pollen','barb','drum']) g.api.drawTowerGlyph(10,10,key,2,0,1,true);
-  for (const key of ['aphid','wasp','beetle','moth','spider','hornet','ant','caterpillar','grasshopper']) g.api.drawBug(g.api.makeBug(key,1));
+  for (const key of ['aphid','wasp','beetle','moth','spider','hornet','ant','caterpillar','grasshopper','flea']) g.api.drawBug(g.api.makeBug(key,1));
   g.api.drawHive();
-  assert.equal(new Set(g.drawn).size,15);
+  assert.equal(new Set(g.drawn).size,16);
   g.close();
 });
 test('spider death produces two small spider sprites and pays once', () => {
@@ -146,7 +169,7 @@ test('real balance changes immediately while displayed honey animates', () => {
 
 test('every enemy death shows honey text and duplicate kills never pay twice', () => {
   const g = game();
-  for(const type of ['aphid','wasp','beetle','moth','spider','hornet','ant','caterpillar','grasshopper']){
+  for(const type of ['aphid','wasp','beetle','moth','spider','hornet','ant','caterpillar','grasshopper','flea']){
     const bug=g.api.makeBug(type,1), before=g.api.state().honey;
     g.api.damage(bug,100000,true);
     g.api.damage(bug,100000,true);

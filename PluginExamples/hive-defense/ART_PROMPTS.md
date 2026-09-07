@@ -45,3 +45,8 @@ Prompt: Wide landscape 16:9 background illustration for a children's forest aimi
 - ant SUBJECT: a reddish chestnut ant, six legs, three distinct body segments, big rounded abdomen, cute antennae
 - caterpillar SUBJECT: a plump lime green caterpillar, segmented rounded body, tiny feet, small amber face, charming leaf-like markings
 - grasshopper SUBJECT: a bright jade green grasshopper, long bent jumping hind legs, folded wings, tiny antennae
+# 跳蚤（1.340.0-rc1）
+
+内置 imagegen 生成 `ui/assets/flea.png`，原生透明 alpha，未后期抠图。
+
+Prompt: A single cute amber-purple flea enemy sprite for a children's garden tower defense game. Full body side three-quarter view facing RIGHT, rounded tiny head, compact segmented reddish plum body, six legs with oversized spring-like bent hind legs, charming big eyes. Warm hand-painted casual game illustration, clean crisp dark outlines, softly shaded, readable at small size. Centered isolated character with empty margins. Real transparent PNG alpha background. No colored glow, no aura, no ground shadow, no fog, no text, no checkerboard pattern, no scenery, no background.

@@ -195,10 +195,13 @@ body > footer{max-width:1060px;margin:0 auto;padding:0 16px 20px}
 .repair-box button{width:100%}
 @media (prefers-reduced-motion:reduce){#honey,#honeyDelta{transform:none!important}}
 /* 林间访客在独立画布中进行，外部控制由 inert 暂时停用。 */
-.bear-panel { position:absolute; inset:0; z-index:5; background:var(--panel); padding:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
+.bear-panel { position:absolute; inset:0; z-index:5; background:var(--panel); overflow:hidden; border-radius:3px; }
 .bear-panel[hidden] { display:none; }
-.bear-panel h2,.bear-panel p { margin:0; text-align:center; }
-#bearCanvas { width:100%; min-height:0; flex:1; object-fit:contain; cursor:crosshair; touch-action:none; }
+.bear-panel h2,.bear-panel p { position:absolute; left:8px; z-index:1; margin:0; padding:4px 8px; max-width:calc(100% - 32px); color:#FFF8DF; background:rgba(24,47,27,.8); border-radius:4px; pointer-events:none; }
+.bear-panel h2 { top:8px; font-size:15px; }
+.bear-panel p { top:41px; font-size:12px; }
+#bearCanvas { display:block; width:100%; height:100%; object-fit:contain; cursor:crosshair; touch-action:none; }
+#bearExit { position:absolute; right:10px; bottom:10px; z-index:1; }
 #bearNotice,#beeGrowth { font-size:12px; line-height:1.6; }
 #portalNotice { font-size:12px; line-height:1.6; color:var(--ink-2); }
 .map-choices { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }

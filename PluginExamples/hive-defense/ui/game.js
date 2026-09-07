@@ -112,6 +112,7 @@
     ant:{name:"蚂蚁",hp:42,speed:78,armor:0,bounty:7,dmg:1,color:"#B96239",r:7},
     caterpillar:{name:"毛毛虫",hp:210,speed:29,armor:1,bounty:22,dmg:2,color:"#8EAF43",r:11,regen:0.025},
     grasshopper:{name:"蚱蜢",hp:95,speed:58,armor:1,bounty:16,dmg:1,color:"#4FA875",r:9,sprint:1.8},
+    flea:{name:"跳蚤",hp:85,speed:55,armor:0,bounty:18,dmg:1,color:"#A36A9A",r:8,jumper:true},
     hornet:{name:"大黄蜂", hp:1400, speed:30, armor:12, bounty:140, dmg:6, color:"#B33F22", r:15, boss:true }
   };
 
@@ -121,13 +122,13 @@
     [["aphid",6,0.65],["ant",5,0.35]],
     [["aphid",8,0.6],["wasp",3,1.2]],
     [["wasp",6,0.8],["grasshopper",3,0.9]],
-    [["aphid",12,0.45],["beetle",2,2]],
+    [["aphid",10,0.45],["beetle",2,2],["flea",1,1]],
     [["moth",8,0.7],["wasp",5,0.9]],
     [["beetle",3,1.4],["caterpillar",2,1.8],["ant",8,0.3]],
     [["spider",3,1.8],["wasp",8,0.7]],
     [["moth",8,0.4],["grasshopper",6,0.6]],
     [["hornet",1,1],["aphid",12,0.5]],
-    [["beetle",8,1],["moth",10,0.5]],
+    [["beetle",6,1],["moth",8,0.5],["flea",4,1]],
     [["spider",4,1.2],["caterpillar",3,1.5],["ant",12,0.25]],
     [["moth",18,0.32],["beetle",4,1.5]],
     [["spider",8,1],["beetle",6,1.2]],
@@ -146,7 +147,7 @@
       ["spider", 8 + k, 0.7],
       ["beetle", 8 + k, 0.7],
       ["moth", 12 + k*2, 0.3],
-      ["ant", 8+k, 0.25], ["caterpillar", 2+Math.floor(k/2), 1.5], ["grasshopper", 4+k, 0.6]
+      ["ant", 8+k, 0.25], ["caterpillar", 2+Math.floor(k/2), 1.5], ["grasshopper", 4+k, 0.6], ["flea",3+k,0.8]
     ];
   }
   function hpScale(n){ return Math.pow(1.16, n - 1); }
@@ -242,6 +243,7 @@
     syncHud();
   }
 
+  function bugPortalCost(type){return ['aphid','ant'].includes(type)?1:['beetle','caterpillar','hornet'].includes(type)?4:2;}
   function makeBug(type, scale){
     const b = BUGS[type];
     return {
@@ -249,6 +251,8 @@
       hp: Math.round(b.hp * scale), maxHp: Math.round(b.hp * scale),
       speed: b.speed * MAPS[currentMap].speed, armor: b.armor + MAPS[currentMap].armor, bounty: Math.round(b.bounty * (1 + (wave-1) * 0.05)),
       dmg: b.dmg, color: b.color, r: b.r, boss: !!b.boss,
+      portalCost:bugPortalCost(type),
+      jumpDelay:b.jumper?2+Math.random()*3:0,jumpUsed:false,jump:null,
       dist: 0, x: PTS[0].x, y: PTS[0].y,
       slowUntil: 0, slowAmt: 0, wob: Math.random() * 6.28, hitFlash: 0
     };
@@ -321,6 +325,42 @@
     }
   }
 
+  function transportBug(b,previousDistance){
+    if(!portals.transport(b,previousDistance))return;
+    const gate=portals.pair;
+    parts.push({ring:true,x:gate.entryPoint.x,y:gate.entryPoint.y,t:0,life:0.35,r:24,c:'#289FD3'});
+    parts.push({ring:true,x:gate.exitPoint.x,y:gate.exitPoint.y,t:0,life:0.35,r:24,c:'#A863D2'});
+  }
+  function advanceJump(b,dt){
+    if(!b.jump && !b.jumpUsed){
+      b.jumpDelay-=dt;
+      if(b.jumpDelay<=0){
+        const index=Math.max(0,DIST.findLastIndex(d=>d<=b.dist));
+        const plan=window.HiveWorld.planJump(PATH,index);
+        b.jumpUsed=true;
+        if(plan)b.jump={...plan,phase:plan.charge?'charge':'flight',time:0,from:{x:b.x,y:b.y}};
+      }
+    }
+    const jump=b.jump;
+    if(!jump)return false;
+    b.slowUntil=Math.max(0,b.slowUntil-dt);
+    jump.time+=dt;
+    if(jump.phase==='charge'){
+      if(jump.time+1e-9>=jump.charge){jump.phase='flight';jump.time=0;}
+      return true;
+    }
+    const progress=Math.min(1,jump.time/0.3),landing=PTS[jump.to];
+    b.x=jump.from.x+(landing.x-jump.from.x)*progress;
+    b.y=jump.from.y+(landing.y-jump.from.y)*progress-Math.sin(progress*Math.PI)*32;
+    if(progress>=1){
+      b.dist=DIST[jump.to];b.jump=null;
+      transportBug(b,b.dist);
+      const p=posAt(b.dist);b.x=p.x;b.y=p.y;
+      parts.push({ring:true,x:b.x,y:b.y,t:0,life:0.25,r:18,c:b.color});
+    }
+    return true;
+  }
+
   function tick(dt,eventDt=dt){
     if(bear.active) return;
     portals.step(dt,PTS,DIST);
@@ -344,17 +384,14 @@
       b.hitFlash = Math.max(0, b.hitFlash - dt);
       const traits=BUGS[b.type];
       if(traits.regen && b.hp<b.maxHp)b.hp=Math.min(b.maxHp,b.hp+b.maxHp*traits.regen*dt);
+      if(traits.jumper && advanceJump(b,dt))continue;
       const slowed = b.slowUntil > 0;
       if(slowed) b.slowUntil -= dt;
       const sprinting=traits.sprint && b.wob%32<8;
       const sp = b.speed * (slowed ? (1 - b.slowAmt) : 1) * (sprinting?traits.sprint:1);
       const previousDistance=b.dist;
       b.dist += sp * dt;
-      if(portals.transport(b,previousDistance)){
-        const gate=portals.pair;
-        parts.push({ring:true,x:gate.entryPoint.x,y:gate.entryPoint.y,t:0,life:0.35,r:24,c:"#289FD3"});
-        parts.push({ring:true,x:gate.exitPoint.x,y:gate.exitPoint.y,t:0,life:0.35,r:24,c:"#A863D2"});
-      }
+      transportBug(b,previousDistance);
       b.teleportFlash=Math.max(0,(b.teleportFlash||0)-dt);
       b.wob += dt * 8;
       const p = posAt(b.dist);
@@ -394,6 +431,10 @@
           damage(b, st.dmg, false, TOWERS[t.type].color);
           b.slowUntil = TOWERS[t.type].slowDur;
           b.slowAmt = TOWERS[t.type].slow;
+          if(b.jump?.phase==='charge'){
+            b.jump=null;
+            texts.push({x:b.x,y:b.y-15,t:0,s:'跳跃被打断',c:P.hive});
+          }
         });
         parts.push({ring:true, x:t.x, y:t.y, t:0, life:0.4, r:st.range, c:TOWERS[t.type].color});
       }else{
@@ -598,7 +639,10 @@
       ctx.rotate(angle);
       for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(0,0,8+i*4,i,Math.PI+i);ctx.stroke();}
       ctx.restore();ctx.fillStyle=color;ctx.font='bold 10px sans-serif';ctx.textAlign='center';
-      ctx.fillText(pair.remaining===0?'已用完':index?'出口 ↑':'入口 ↓ 剩'+pair.remaining,p.x,p.y+31);
+      ctx.fillText(pair.remaining===0?'已用完':index?'出口 ↑':'入口 ↓ '+pair.remaining+'/4',p.x,p.y+31);
+      if(!index)for(let slot=0;slot<4;slot++){
+        ctx.beginPath();ctx.arc(p.x-12+slot*8,p.y-27,2.5,0,Math.PI*2);ctx.fillStyle=slot<pair.remaining?color:P.ink3;ctx.fill();
+      }
     });
   }
 
@@ -667,6 +711,16 @@
   }
 
   function drawBug(b){
+    if(BUGS[b.type].jumper&&!b.jumpUsed){
+      ctx.save();ctx.strokeStyle=b.color;ctx.lineWidth=1.5;ctx.beginPath();
+      ctx.moveTo(b.x-5,b.y-14);ctx.lineTo(b.x+4,b.y-17);ctx.lineTo(b.x-4,b.y-20);ctx.lineTo(b.x+5,b.y-23);ctx.stroke();ctx.restore();
+    }
+    if(b.jump?.phase==='charge'){
+      const landing=PTS[b.jump.to];ctx.save();ctx.strokeStyle=b.color;ctx.lineWidth=2;ctx.setLineDash([4,4]);
+      ctx.beginPath();ctx.moveTo(b.x,b.y);ctx.quadraticCurveTo((b.x+landing.x)/2,(b.y+landing.y)/2-40,landing.x,landing.y);ctx.stroke();ctx.setLineDash([]);
+      ctx.beginPath();ctx.arc(landing.x,landing.y,12,0,Math.PI*2);ctx.stroke();
+      ctx.font='bold 10px sans-serif';ctx.fillStyle=b.color;ctx.fillText('蓄力',b.x,b.y-20);ctx.restore();
+    }
     const wob = Math.sin(b.wob) * 1.6;
     ctx.save();
     ctx.translate(b.x, b.y + wob);
@@ -678,6 +732,7 @@
 
     const ahead = posAt(Math.min(TOTAL_LEN, b.dist + 1));
     ctx.rotate(Math.atan2(ahead.y - b.y, ahead.x - b.x));
+    if(b.jump?.phase==='charge')ctx.scale(1.12,0.72);
     if(b.hitFlash > 0) ctx.globalAlpha = 0.65;
     if(b.teleportFlash>0)ctx.globalAlpha=1-b.teleportFlash/0.35;
     sprites.draw(ctx, b.sprite || b.type, 0, 0, b.r * 3.8);
@@ -886,7 +941,7 @@
     document.getElementById('beeGrowth').textContent=titles[collection.rank]+' · 累计修复 '+collection.repairs+' 点'+(collection.rank===0?' · 5 点得小帽子':collection.rank===1?' · 20 点得工具箱':' · 装扮已集齐');
     document.getElementById('bestiary').innerHTML=Object.keys(BUGS).map(k=>{
       const known=collection.has(k),facts=adventure.FACTS[k];
-      return '<details class="collection-card '+(known?'':'locked')+'"><summary><img class="creature-icon" src="assets/'+k+'.png" alt="">'+(known?BUGS[k].name:'未发现')+'</summary><p>'+(known?facts.join('<br>'):'首次击败后解锁卡片')+'</p></details>';
+      return '<details class="collection-card '+(known?'':'locked')+'"><summary><img class="creature-icon" src="assets/'+k+'.png" alt="">'+(known?BUGS[k].name:'未发现')+'</summary><p>'+(known?facts.join('<br>')+'<br>传送占 '+bugPortalCost(k)+' 格容量':'首次击败后解锁卡片')+'</p></details>';
     }).join('');
   }
 

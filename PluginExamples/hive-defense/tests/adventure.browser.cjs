@@ -7,9 +7,16 @@ const hooks=`window.hiveFixture={
   body(){return bear.target(motionPreference.matches);},
   snapshot(){return {hp,honey,prep,wave,paused,running,currentMap,hits:bear.state?.hits,demolition:bear.state?.demolition,duration:bear.state?.duration,damaged:!!towers[0]?.damaged};},
   choose(){running=false;chooseMap();},
-  portal(){portals.reset();portals.step(6,PTS,DIST);bugs=Array.from({length:3},()=>{const b=makeBug('aphid',10);b.dist=portals.pair.from-1;return b;});spawnQueue=[];return {from:portals.pair.from,to:portals.pair.to};},
+  portal(){portals.reset();portals.step(6,PTS,DIST);bugs=Array.from({length:5},()=>{const b=makeBug('aphid',10);b.dist=portals.pair.from-1;return b;});spawnQueue=[];return {from:portals.pair.from,to:portals.pair.to};},
   bugs(){return bugs.map(b=>({dist:b.dist,portalId:b.portalId}));},
   damageBase(){hp=12;honey=100;bugs=[];spawnQueue=[];prep=13;syncHud();},
+  flea(){
+    portals.reset();towers=[];selTower=null;renderInfo();spawnQueue=[];
+    const index=PATH.findIndex((_,i)=>HiveWorld.planJump(PATH,i,()=>0)?.charge===0.5);
+    const b=makeBug('flea',1);b.dist=DIST[index];Object.assign(b,PTS[index]);b.jumpDelay=0;
+    const random=Math.random;Math.random=()=>0;advanceJump(b,0);Math.random=random;bugs=[b];return b.dist;
+  },
+  jumping(){const b=bugs[0];return {dist:b.dist,used:b.jumpUsed,phase:b.jump?.phase};},
   discover(){for(const k of ['spider','ant','caterpillar','grasshopper'])damage(makeBug(k,1),10000,true);collection.repair(20);renderCollection();}
 };})();`;
 const server=http.createServer((req,res)=>{
@@ -49,6 +56,8 @@ const server=http.createServer((req,res)=>{
     const map=await page.locator('#map').boundingBox();
     await page.mouse.click(map.x+159.1*map.width/664,map.y+108*map.height/372);
     assert.equal(await page.locator('#bearPanel').isVisible(),true);
+    const scene=await page.locator('#bearCanvas').boundingBox();
+    assert.ok(Math.abs(scene.width-map.width)<2 && Math.abs(scene.height-map.height)<2,'aiming scene should fill the map area');
     const before=await page.evaluate(()=>hiveFixture.snapshot());await page.clock.runFor(1500);
     const frozen=await page.evaluate(()=>hiveFixture.snapshot());assert.equal(frozen.hp,before.hp);assert.equal(frozen.prep,before.prep);
     assert.equal(await page.locator('.hud').evaluate(e=>e.inert),true);
@@ -69,7 +78,7 @@ const server=http.createServer((req,res)=>{
     assert.equal(repaired.damaged,false);assert.equal(repaired.honey,won.honey-12);
     const gate=await page.evaluate(()=>hiveFixture.portal());await page.clock.runFor(100);
     const transported=await page.evaluate(()=>hiveFixture.bugs());
-    assert.equal(transported.filter(b=>b.dist>=gate.to).length,2);
+    assert.equal(transported.filter(b=>b.dist>=gate.to).length,4);
     assert.equal(transported.filter(b=>!b.portalId).length,1);
     await page.screenshot({path:path.join(out,'portal-active.png'),fullPage:true});
     for(const label of ['2×','3×','4×','1×']){await page.locator('#speedBtn').click();assert.equal(await page.locator('#speedBtn').textContent(),label);}
@@ -84,10 +93,15 @@ const server=http.createServer((req,res)=>{
     await page.locator('#repairBtn').click();
     await page.evaluate(()=>hiveFixture.discover());await page.locator('#bestiary summary').filter({hasText:'蜘蛛'}).click();
     await page.screenshot({path:path.join(out,'bear-collection.png'),fullPage:true});
+    const jumpStart=await page.evaluate(()=>hiveFixture.flea());await page.clock.runFor(200);
+    assert.equal((await page.evaluate(()=>hiveFixture.jumping())).phase,'charge');
+    await page.screenshot({path:path.join(out,'flea-charge.png'),fullPage:true});
+    await page.clock.runFor(350);assert.equal((await page.evaluate(()=>hiveFixture.jumping())).phase,'flight');
+    await page.clock.runFor(400);const landed=await page.evaluate(()=>hiveFixture.jumping());assert.ok(landed.dist>jumpStart);assert.equal(landed.used,true);assert.equal(landed.phase,undefined);
     await page.reload();await page.evaluate(()=>HiveSprites.ready);
     assert.match(await page.locator('#beeGrowth').textContent(),/工具箱/);assert.match(await page.locator('#bestiary').textContent(),/蜘蛛有八条腿/);
     assert.deepEqual(errors,[]);
-    const checks=['3 second automatic map','manual hollow','manual pond','3-6 second demolition','map click opens canvas','simulation frozen','controls locked','body shot misses','head shot hits','exit retains hits','reward in bounds','reward paid once','repair charges 12','portal transports exactly two of three bugs','4x speed cycle','repair charges 4 then 8','next dispatch charges 6','collection persists including new insects','growth persists','no runtime errors'];
+    const checks=['3 second automatic map','manual hollow','manual pond','3-6 second demolition','map click opens canvas','simulation frozen','controls locked','body shot misses','head shot hits','exit retains hits','reward in bounds','reward paid once','repair charges 12','portal transports exactly four of five small bugs','4x speed cycle','repair charges 4 then 8','next dispatch charges 6','collection persists including new insects','growth persists','scene matches map dimensions','flea charge flight and landing','no runtime errors'];
     fs.writeFileSync(path.join(out,'adventure-browser.json'),JSON.stringify({passed:true,checks},null,2));
     console.log('Adventure browser passed: '+checks.length+' checks.');
   }finally{await browser.close();server.close();}
