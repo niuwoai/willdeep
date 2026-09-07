@@ -4,7 +4,7 @@
 
 蜂王裁决塔（快捷键 7）：建造 2000 蜂蜜，升级依次 5000、10000，共三级；在 55 范围内经过的虫子削减当前生命的 1/4、1/3、1/2，无视护甲，每只虫子一生仅触发一次。限同时一座（损坏、搬运仍占名额），入口前十个路径格周围 55 范围禁建，搬家同样限制；花园、共鸣不增强该塔。独立 `royal.png` 为原生透明 PNG。全部素材现在共 20 张透明图片及 1 张丛林背景。
 
-WillDeep 内置本地塔防插件，版本 1.342.0-rc1。原始玩法来自 `~/Sites/pylearn/hive.html`，修改前文件备份为 `hive.before-willdeep-20260907.html`；整合版本位于 `ui/index.html`，可直接在浏览器打开，或由 WillDeep 插件中心加载此目录。构建 App 时，Xcode 自动复制至 `BundledPlugins/hive-defense`。
+WillDeep 内置本地塔防插件，版本 1.342.0-rc3。原始玩法来自 `~/Sites/pylearn/hive.html`，修改前文件备份为 `hive.before-willdeep-20260907.html`；整合版本位于 `ui/index.html`，可直接在浏览器打开，或由 WillDeep 插件中心加载此目录。构建 App 时，Xcode 自动复制至 `BundledPlugins/hive-defense`。
 
 5 种防御塔、南瓜花、10 种虫群、蜂巢基地、维修蜂和狗熊共 19 张独立透明 PNG，另有一张丛林背景，均位于 `ui/assets`。图片使用内置 imagegen 生成并保留原生 alpha。没有外链资源和运行权限。蜘蛛分裂后的幼体复用蜘蛛图并按原规则缩小。
 

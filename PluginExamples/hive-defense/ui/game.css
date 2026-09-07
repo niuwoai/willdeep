@@ -173,17 +173,51 @@
     border:1px solid var(--line);border-radius:2px;padding:1px 4px;background:var(--panel);
   }
 
+  /* Narrow panel (the plugin page inside WillDeep is often under 900px):
+     stage first, then the tower shop as one scrollable strip, then the
+     action boxes in a row — all clickable parts stay in the first screen.
+     The stage is capped in width so its 664:372 canvas cannot grow tall
+     enough to push the strip below the fold on a tall, narrow panel. */
   @media (max-width:900px){
-    .shop{width:100%;flex-direction:row;flex-wrap:wrap;order:2}
-    .shop .card{width:calc(50% - 4px)}
-    .side{width:100%;order:3;flex-direction:row;flex-wrap:wrap}
-    .side .box{flex:1;min-width:150px}
-    .stage{order:1;min-width:100%}
+    /* Tighter header and HUD: every point saved here is a point the action
+       row gets back at the bottom of a 700-point panel. */
+    .wrap{padding:10px 12px 28px}
+    header{margin-bottom:8px;gap:10px}
+    header h1{font-size:22px}
+    .hud{padding:6px 10px;margin-bottom:8px;gap:8px}
+    .hud .item{min-width:60px}
+    .hud .v{font-size:16px}
+    .game{gap:8px}
+    /* min-width:0, not 100%: the old 100% floor silently overrode the
+       max-width cap and the canvas filled the panel regardless. */
+    .stage{order:1;min-width:0;width:100%;max-width:600px;margin:0 auto}
+    /* The selection box shows guidance until a tower is picked; two lines
+       is enough and keeps the action row's height predictable. */
+    .side-actions .empty{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .shop{width:100%;order:2;flex-direction:row;flex-wrap:nowrap;gap:6px;
+      overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:4px;scrollbar-width:thin}
+    .shop .card{flex:0 0 auto;width:132px;padding:6px 8px;grid-template-columns:26px minmax(0,1fr) auto}
+    .shop .card .glyph{width:26px;height:26px}
+    .shop .card .de{display:none}
+    .side-actions{width:100%;order:3;flex-direction:row;flex-wrap:wrap;gap:6px}
+    .side-actions .box{flex:1;min-width:150px;padding:7px 8px}
+    .side-actions .box h2{margin:0 0 4px;font-size:12px}
+    .side-actions .empty{font-size:11px;line-height:1.4}
+    .side-actions .repair-rules,.side-actions #repairStatus,.side-actions #baseProgress,.side-actions #beeGrowth{margin:4px 0;line-height:1.35}
   }
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
 .card{grid-template-columns:38px minmax(0,1fr) auto}.card .nm,.card .de{display:block}.card .glyph{width:38px;height:38px;object-fit:contain;border-radius:0}.creature-icon{width:26px;height:26px;object-fit:contain;vertical-align:middle;margin-right:5px} [hidden]{display:none!important}
 body > footer{max-width:1060px;margin:0 auto;padding:0 16px 20px}
+/* Reading matter lives below the game as a full-width grid, whatever the
+   panel width. It shares the `.side` class only so the existing inert
+   toggle in game.js still covers it while a reward is being chosen. */
+.side-notes{width:100%;flex-direction:row;flex-wrap:wrap;margin-top:12px}
+.side-notes .box{flex:1 1 220px;min-width:0}
+/* The bear button sits in the HUD next to the wave controls so it is never
+   below the fold when it lights up mid-wave. */
+button.alert{background:var(--danger);border-color:var(--danger);color:#fff}
+button.alert:hover{filter:brightness(1.08)}
 .honey-item{min-width:104px!important}
 .honey-value{display:flex;align-items:baseline;gap:8px}
 #honey{display:inline-block;transform-origin:left center;min-width:5ch}

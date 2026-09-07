@@ -7,6 +7,12 @@
     <span class="tag" id="mapLabel">花园 · 六边形塔防</span>
   </header>
 
+  <!--
+    First-screen rule: everything the player clicks lives in the HUD, the
+    tower shop, the stage, or the actions column beside the stage. Reading
+    matter (rules, bestiary, garden notes, shortcuts) goes below the game.
+    Element ids are unchanged so game.js keeps working; only their homes moved.
+  -->
   <div class="hud">
     <div class="item"><span class="k">蜂巢</span><span class="v" id="hp">20</span></div>
     <div class="item honey-item"><span class="k">蜂蜜</span><span class="honey-value"><span class="v honey" id="honey" aria-label="蜂蜜 220">220</span><span id="honeyDelta" aria-hidden="true"></span></span></div>
@@ -14,6 +20,7 @@
     <div class="item"><span class="k">击杀</span><span class="v" id="kills">0</span></div>
     <div class="spacer"></div>
     <div class="ctl">
+      <button id="bearOpen" class="alert" hidden>瞄准狗熊</button>
       <button id="callBtn" class="primary">下一波</button>
       <button id="speedBtn">1×</button>
       <button id="pauseBtn">暂停</button>
@@ -51,20 +58,8 @@
       </div>
     </div>
 
-    <div class="side">
-      <div class="box">
-        <h2 id="baseTitle">蜂巢基地 · Lv.1</h2>
-        <p id="baseProgress" role="status"></p>
-        <button id="baseUpgradeBtn">升级基地</button>
-      </div>
-      <div class="box repair-box">
-        <h2>蜂巢维修</h2>
-        <p class="repair-rules">每 3 个游戏秒修 1 点。历次派出首点依次收 4、6、8…蜂蜜；同次第 1、2、3…点收首价的 1、2、3…倍，完成时扣费。停止保留进度，再派出按新首价计费；受击减速，波间休整 13 秒。</p>
-        <progress id="repairProgress" max="3" value="0" aria-label="下一点生命的维修进度"></progress>
-        <p id="repairStatus" role="status">开始防守后可维修</p>
-        <button id="repairBtn" aria-pressed="false">派维修蜂</button>
-        <p id="beeGrowth"></p>
-      </div>
+    <!-- Actions only: every box here has a button. -->
+    <div class="side side-actions">
       <div class="box" id="infoBox">
         <h2>选中</h2>
         <div class="empty" id="infoEmpty">点击地图上的防御塔查看数据，或先从左侧选一种塔再点空地建造。</div>
@@ -79,26 +74,45 @@
         </div>
       </div>
       <div class="box">
+        <h2 id="baseTitle">蜂巢基地 · Lv.1</h2>
+        <p id="baseProgress" role="status"></p>
+        <button id="baseUpgradeBtn">升级基地</button>
+      </div>
+      <div class="box repair-box">
+        <h2>蜂巢维修</h2>
+        <progress id="repairProgress" max="3" value="0" aria-label="下一点生命的维修进度"></progress>
+        <p id="repairStatus" role="status">开始防守后可维修</p>
+        <button id="repairBtn" aria-pressed="false">派维修蜂</button>
+        <p id="beeGrowth"></p>
+      </div>
+      <div class="box">
         <h2>本波来袭</h2>
         <div class="waveline" id="waveInfo"><span class="chip">尚未开始</span></div>
       </div>
-      <div class="box">
-        <h2>林间访客</h2>
-        <p id="bearNotice" role="status">第 3 波起狗熊偶尔从塔旁出现，3～6 秒拆坏一座塔。</p>
-        <button id="bearOpen" hidden>瞄准狗熊</button>
-        <p id="portalNotice" role="status">传送门共 4 格容量：小虫占 1、中虫占 2、大虫占 4。容量不足就走原路，用完关闭。</p>
-        <p class="repair-rules">跳蚤一生跳一次！沿路小跳无需蓄力；跨绿地蓄力 0.5 秒，花粉能打断。</p>
-        <p class="repair-rules">花粉减速 + 蜂胶炮：对减速虫子额外造成 25% 伤害。</p>
-      </div>
-      <div class="box">
-        <h2>我的小花园</h2>
-        <p id="gardenStatus" class="repair-rules"></p>
-        <p id="rewardStatus" class="repair-rules">每守住 3 波，选择一份奖励。</p>
-      </div>
-      <div class="box">
-        <h2>虫群图鉴</h2>
-        <div class="rows" id="bestiary"></div>
-      </div>
+    </div>
+  </div>
+
+  <!-- Reading matter. Nothing here needs a click mid-wave. -->
+  <div class="side side-notes">
+    <div class="box">
+      <h2>维修规则</h2>
+      <p class="repair-rules">每 3 个游戏秒修 1 点。历次派出首点依次收 4、6、8…蜂蜜；同次第 1、2、3…点收首价的 1、2、3…倍，完成时扣费。停止保留进度，再派出按新首价计费；受击减速，波间休整 13 秒。</p>
+    </div>
+    <div class="box">
+      <h2>林间访客</h2>
+      <p id="bearNotice" role="status">第 3 波起狗熊偶尔从塔旁出现，3～6 秒拆坏一座塔。出现时顶栏会亮起「瞄准狗熊」。</p>
+      <p id="portalNotice" role="status">传送门共 4 格容量：小虫占 1、中虫占 2、大虫占 4。容量不足就走原路，用完关闭。</p>
+      <p class="repair-rules">跳蚤一生跳一次！沿路小跳无需蓄力；跨绿地蓄力 0.5 秒，花粉能打断。</p>
+      <p class="repair-rules">花粉减速 + 蜂胶炮：对减速虫子额外造成 25% 伤害。</p>
+    </div>
+    <div class="box">
+      <h2>我的小花园</h2>
+      <p id="gardenStatus" class="repair-rules"></p>
+      <p id="rewardStatus" class="repair-rules">每守住 3 波，选择一份奖励。</p>
+    </div>
+    <div class="box">
+      <h2>虫群图鉴</h2>
+      <div class="rows" id="bestiary"></div>
     </div>
   </div>
 
@@ -109,4 +123,4 @@
 </div>
 
 
-<footer>蜂巢防线 · 1.342.0-rc1</footer><script src="sprites.js"></script><script src="systems.js"></script><script src="adventure.js"></script><script src="world.js"></script><script src="leisure.js"></script><script src="game.js"></script></body></html>
+<footer>蜂巢防线 · 1.342.0-rc3</footer><script src="sprites.js"></script><script src="systems.js"></script><script src="adventure.js"></script><script src="world.js"></script><script src="leisure.js"></script><script src="game.js"></script></body></html>
