@@ -131,14 +131,19 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
     }
 
     static func executionContinuationNotice(
-        checkpoint: AgentGoalTurnRecoveryCheckpoint
+        checkpoint: AgentGoalTurnRecoveryCheckpoint,
+        lastReceipt: AgentPhaseReceipt? = nil
     ) -> String {
-        """
+        // The last phase receipt is the one durable summary of where the
+        // work stood; without it the resumed model rediscovers the state
+        // from step statuses alone.
+        let receiptBlock = lastReceipt.map { "\n" + $0.resumeContextBlock } ?? ""
+        return """
         WillDeep launch recovery: the app process stopped while this approved Goal-backed Plan was executing. Resume the same Goal from the persisted non-terminal step statuses.
 
         Before repeating any write, command, network request, or other external side effect, inspect the current workspace and conversation evidence. An interrupted tool call may already have changed external state, so never assume it failed merely because its response is incomplete. Preserve normal approval and confirmation gates. Continue until the Plan reaches a terminal state, and end each reply with the required progress and goal-check blocks.
 
-        Recovery checkpoint: \(checkpoint.id.uuidString)
+        Recovery checkpoint: \(checkpoint.id.uuidString)\(receiptBlock)
         """
     }
 
@@ -149,6 +154,7 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
         let acceptance = phase.acceptanceCriteria.map {
             "- \(AgentContextBuilder.escapedUntrustedContext($0))"
         }.joined(separator: "\n")
+        let receiptBlock = roadmap.lastCompletedReceipt.map { "\n" + $0.resumeContextBlock } ?? ""
         return """
         WillDeep launch recovery: resume planning the active Goal phase only.
         <active_goal_phase id="\(phaseID)" position="\(roadmap.phasePositionText)">
@@ -157,7 +163,7 @@ nonisolated enum AgentGoalLaunchRecoveryPolicy {
         <phase_acceptance>
         \(acceptance)
         </phase_acceptance>
-        Emit exactly one numbered fenced `plan` block with at most \(AgentGoalRoadmap.maximumStepsPerPhase) steps. Do not replace the roadmap, repeat completed phases, or call tools in this planning reply.
+        Emit exactly one numbered fenced `plan` block with at most \(AgentGoalRoadmap.maximumStepsPerPhase) steps. Do not replace the roadmap, repeat completed phases, or call tools in this planning reply.\(receiptBlock)
         """
     }
 
@@ -301,7 +307,8 @@ extension AppState {
                 dispatchAgentMessage(
                     for: runtime,
                     text: AgentGoalLaunchRecoveryPolicy.executionContinuationNotice(
-                        checkpoint: checkpoint
+                        checkpoint: checkpoint,
+                        lastReceipt: runtime.goalRoadmap?.lastCompletedReceipt
                     ),
                     images: [],
                     source: .hostInstruction

@@ -199,6 +199,8 @@ extension AppState {
                 return "\(prefix)。图片尚未交给纯文本主模型，请稍后重试或更换视觉模型。"
             case .emptyStream:
                 return "模型服务返回了空响应（连接正常，但没有任何内容、也没有报错）。多半是上游临时抽风、被限流，或「省心托管 / some.im」的中继 token 已失效。点「重试」再发一次；如果反复空响应，多半要重新登录 some.im，或换个 provider/模型。"
+            case .streamStalled(let idleSeconds):
+                return "模型流式响应停了 \(Int(idleSeconds)) 秒没有任何内容（连接还在，但上游不出字）。多半是网关或代理把死连接挂住了，会自动重试；反复出现就换个 Base URL 或代理试试。"
             case .unsupportedProviderKind(let kind):
                 return "当前 provider 使用的传输协议（\(kind.rawValue)）在这个版本里还没接通。到 Settings → Agent Providers 里换一个支持的 provider，或等下个版本。"
             }
@@ -484,6 +486,11 @@ extension AppState {
         // surfacing the error. (In normal mode there's no auto-retry — the
         // error card with its 重试 button shows immediately.)
         if case AgentClientError.emptyStream = error {
+            return true
+        }
+        // A stream that went quiet behind keepalives is a dropped upstream
+        // wearing a live socket; retry it like any other lost connection.
+        if case AgentClientError.streamStalled = error {
             return true
         }
         guard case AgentClientError.serverStatus(let providerError) = error else {

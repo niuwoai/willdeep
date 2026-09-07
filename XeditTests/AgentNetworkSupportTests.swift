@@ -22,6 +22,23 @@ struct AgentNetworkSupportTests {
         #expect(configuration.timeoutIntervalForResource == 600)
     }
 
+    /// A Worker has no retry ladder and its parent is fenced while it waits,
+    /// so its session gives up sooner than the main loop's. The ten-minute
+    /// default once let a Worker spend 602 s losing one TLS handshake.
+    @Test
+    func workerSessionGivesUpSoonerThanTheMainLoop() {
+        let worker = AgentNetworkSupport.workerSession().configuration
+        let main = AgentNetworkSupport.defaultSession().configuration
+
+        #expect(worker.timeoutIntervalForRequest == AgentNetworkSupport.workerRequestTimeout)
+        #expect(worker.timeoutIntervalForResource == AgentNetworkSupport.workerResourceTimeout)
+        #expect(worker.timeoutIntervalForRequest < main.timeoutIntervalForRequest)
+        #expect(worker.timeoutIntervalForResource < main.timeoutIntervalForResource)
+        #expect(worker.waitsForConnectivity == false)
+        // First contact is guarded far tighter than either session timeout.
+        #expect(AgentWorkerFirstContact.timeout < worker.timeoutIntervalForRequest)
+    }
+
     /// The unified client identity must brand every request as this client and
     /// carry the running version: `WillDeep Desktop (some.im) {version} (macOS)`.
     @Test

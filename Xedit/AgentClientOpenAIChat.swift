@@ -100,7 +100,7 @@ struct OpenAIChatAdapter {
             // sees nothing happen. We convert that into an explicit error below.
             var didEmitStreamEvent = false
 
-            for try await line in bytes.lines {
+            for try await line in AgentStreamIdleGuard.lines(bytes.lines) {
                 try Task.checkCancellation()
                 guard line.hasPrefix("data: ") else { continue }
                 let payload = String(line.dropFirst("data: ".count))

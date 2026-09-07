@@ -106,6 +106,16 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// the dispatch acquires a slot and the real turn begins.
     @Published var isAwaitingProviderSlot: Bool = false
     @Published var turnStartedAt: Date?
+    /// Last streamed provider event or tool result in the current turn.
+    /// Read by the turn watchdog on a timer; deliberately not @Published so
+    /// a per-token stamp never triggers a repaint.
+    var lastActivityAt: Date?
+    /// The banner currently shows the watchdog's stall notice rather than a
+    /// real error, so resumed activity is allowed to clear it.
+    var isShowingWatchdogStallNotice = false
+    /// Automatic resumes issued for turns that ended on unexecuted tool
+    /// calls. Reset when a turn ends cleanly; capped by the watchdog policy.
+    var turnInterruptionAutoResumeCount = 0
     @Published var isCompressingContext: Bool = false
     /// Set when a turn ended because `AgentContextRunwayPolicy` ordered a stop
     /// at 90% context usage. It tells the turn's cleanup to compress even if

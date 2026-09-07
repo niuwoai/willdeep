@@ -368,7 +368,7 @@ struct OpenAIResponsesAdapter {
                     var pendingEventName = ""
                     var state = StreamState()
 
-                    for try await line in bytes.lines {
+                    for try await line in AgentStreamIdleGuard.lines(bytes.lines) {
                         try Task.checkCancellation()
 
                         if line.hasPrefix("event: ") {

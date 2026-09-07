@@ -489,6 +489,9 @@ extension AppState {
             // authoritative. The successful prose-only reply path owns both
             // evaluation capture and cycle advancement.
             startAgentGoalPlanningAfterCaptureIfNeeded(didDefineGoal, for: runtime)
+            // A turn that ended with a tool call nobody executed is not a
+            // finished turn. Say so and resume it; see AgentTurnWatchdog.
+            noteAgentTurnEnded(for: runtime, turnID: turnID)
             persistAgentSession(runtime: runtime)
             // Runs after the persist so the record reads the same settled
             // state the session file just captured. No-op for anything a
@@ -742,6 +745,11 @@ extension AppState {
         /// after the model ignored the first request must not nag every round.
         var didRequestPlanOnDemand = false
         let planOnDemandToolCallBaseline = runtime.toolCalls.count
+        /// Host-side progress accounting for an executing plan: rounds since
+        /// the last successful `update_plan`, and how many such calls this
+        /// turn has seen so a new one can be detected without a callback.
+        var toolRoundsSinceLastPlanUpdate = 0
+        var planUpdateCallsSeen = 0
 
         for toolRound in 0..<Self.maxAgentToolRounds {
             beginGoalExecutionBudgetIfNeeded(for: runtime)
@@ -907,6 +915,7 @@ extension AppState {
             // the client — pre-network — because that's what the user
             // perceives as "how long did the agent take".
             let turnStartedAt = Date()
+            runtime.lastActivityAt = turnStartedAt
 
             // Build the system prompt against the runtime's workspace,
             // not whatever the window happens to be focused on. The
@@ -1136,6 +1145,45 @@ extension AppState {
                     didRequestPlanOnDemand = true
                 }
             }
+            // Progress accounting for an executing plan. The model is asked
+            // to call `update_plan` at every step change and mostly does so
+            // only at the end of the turn; the host keeps count and asks
+            // after `roundThreshold` silent rounds. Appended as the newest
+            // host instruction, not a system message: every added `.system`
+            // message rewrites the provider's cached system blob.
+            if toolRound > 0 {
+                let planUpdateCalls = runtime.toolCalls
+                    .dropFirst(planOnDemandToolCallBaseline)
+                    .filter { $0.toolName == "update_plan" && $0.status == .succeeded }
+                    .count
+                if planUpdateCalls > planUpdateCallsSeen {
+                    planUpdateCallsSeen = planUpdateCalls
+                    toolRoundsSinceLastPlanUpdate = 0
+                } else {
+                    toolRoundsSinceLastPlanUpdate += 1
+                }
+                let hasExecutingPlan = runtime.currentPlan.map {
+                    $0.status == .executing && $0.interruptedAt == nil
+                } ?? false
+                if AgentPlanProgressNudgePolicy.shouldNudge(
+                    roundsSinceLastUpdate: toolRoundsSinceLastPlanUpdate,
+                    hasActivePlan: hasExecutingPlan,
+                    isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
+                ) {
+                    let nudge = AgentMessage(
+                        role: .user,
+                        content: AgentPlanProgressNudgePolicy.notice(
+                            roundsSinceLastUpdate: toolRoundsSinceLastPlanUpdate
+                        ),
+                        source: .hostInstruction
+                    )
+                    if let assistantIndex = runtime.messages.firstIndex(where: { $0.id == assistantID }) {
+                        runtime.messages.insert(nudge, at: assistantIndex)
+                    }
+                    collapsedHistory.append(nudge)
+                    toolRoundsSinceLastPlanUpdate = 0
+                }
+            }
             let requestMessages = [AgentMessage(role: .system, content: systemPrompt)] + collapsedHistory
             // Capture starts at the round boundary but joins only after prompt
             // assembly, preserving the guarded-mutation CAS point without
@@ -1162,6 +1210,9 @@ extension AppState {
                                       let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) else {
                                     return
                                 }
+                                // Every streamed event is proof of life for
+                                // the turn watchdog, keepalives included.
+                                self.noteAgentTurnActivity(for: runtime)
                                 switch event {
                                 case .requestIdentified(let requestID):
                                     turnTelemetry.noteRequestID(requestID)

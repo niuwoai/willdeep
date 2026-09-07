@@ -194,6 +194,25 @@ struct AgentPlanCard: View {
             }
 
             if isExpanded {
+                // Where the previous phase left off: the host-written (and
+                // possibly model-refined) three-line receipt. Shown only while
+                // a later phase is active, so a first phase never wears a
+                // receipt for nothing.
+                if let receipt = lastPhaseReceipt {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(L10n.GoalRoadmap.lastReceipt)
+                            .font(.system(size: 10, weight: .medium))
+                            .textCase(.uppercase)
+                            .foregroundStyle(.tertiary)
+                        ForEach(receipt.lines, id: \.self) { line in
+                            Text(line)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    .accessibilityIdentifier("plan-card-phase-receipt")
+                }
                 if !plan.summary.isEmpty {
                     planDetailsButton {
                         Text(plan.summary)
@@ -283,6 +302,13 @@ struct AgentPlanCard: View {
                 .fixedSize()
         }
         .contentShape(Rectangle())
+    }
+
+    /// The last closed phase's receipt, only once a later phase is active.
+    private var lastPhaseReceipt: AgentPhaseReceipt? {
+        guard let roadmap = appState.agentGoalRoadmap,
+              roadmap.activePhaseIndex > 0 else { return nil }
+        return roadmap.lastCompletedReceipt
     }
 
     private var phaseText: String? {
@@ -561,12 +587,24 @@ struct AgentPlanStepRow: View {
     }
 
     private var stepText: some View {
-        TruncatedTooltipText(
-            attributed: MarkdownInline.attributedString(from: step.text),
-            color: textColor,
-            strikethrough: step.status == .done || step.status == .skipped,
-            tooltip: step.text
-        )
+        VStack(alignment: .leading, spacing: 2) {
+            TruncatedTooltipText(
+                attributed: MarkdownInline.attributedString(from: step.text),
+                color: textColor,
+                strikethrough: step.status == .done || step.status == .skipped,
+                tooltip: step.text
+            )
+            // Live Worker line under a delegated step ("侦察兵 · 第 3/8 轮 · …").
+            // Host-written from heartbeats; absent once the Worker finishes.
+            if let detail = step.detail, !detail.isEmpty {
+                Text(detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .accessibilityIdentifier("plan-step-worker-detail")
+            }
+        }
     }
 
     private var glyph: String {

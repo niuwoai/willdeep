@@ -573,6 +573,7 @@ extension AppState {
             if runtime.toolCalls[index].subagentLiveActivity?.finishedAt == nil {
                 runtime.toolCalls[index].subagentLiveActivity?.finishedAt = Date()
             }
+            projectWorkerDetailOntoPlan(nil, runtime: runtime)
             return
         }
 
@@ -605,6 +606,24 @@ extension AppState {
             tools: update.tools
         )
         runtime.toolCalls[index].subagentLiveActivity = activity
+        projectWorkerDetailOntoPlan("\(workerName) · \(activity.detailLine)", runtime: runtime)
+    }
+
+    /// Mirror a Worker's heartbeat onto the plan card.
+    ///
+    /// The composer strip already shows "第 3/8 轮 · …" for the Worker, but
+    /// the plan card — the surface people actually watch during a long task
+    /// — showed nothing while a step was delegated. The in-progress step gets
+    /// the Worker's line as its detail; `nil` clears it when the Worker
+    /// finishes so a settled step never carries a stale "round 3/8".
+    /// Workers cannot call `update_plan` themselves, so this is the only
+    /// route their progress has onto the card.
+    func projectWorkerDetailOntoPlan(_ detail: String?, runtime: AgentRuntime) {
+        guard var plan = runtime.currentPlan,
+              let index = plan.steps.firstIndex(where: { $0.status == .inProgress }) else { return }
+        guard plan.steps[index].detail != detail else { return }
+        plan.steps[index].detail = detail
+        runtime.currentPlan = plan
     }
 
     /// Route one background Worker's heartbeat back to the tool call that

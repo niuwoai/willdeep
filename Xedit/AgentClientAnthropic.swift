@@ -127,7 +127,7 @@ struct AnthropicMessagesAdapter {
             var pendingEventName: String = ""
             var streamState = StreamState()
 
-            for try await line in bytes.lines {
+            for try await line in AgentStreamIdleGuard.lines(bytes.lines) {
                 try Task.checkCancellation()
 
                 if line.hasPrefix("event: ") {

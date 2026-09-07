@@ -67,6 +67,10 @@ enum AgentClientError: LocalizedError {
     /// expected during the multi-provider rollout — once Anthropic /
     /// Gemini / Responses adapters land this should become unreachable.
     case unsupportedProviderKind(AgentProviderKind)
+    /// The SSE stream stayed open but carried no payload line for this long.
+    /// Keepalive comments keep the socket alive, so the URLSession request
+    /// timeout never sees this; AgentStreamIdleGuard does.
+    case streamStalled(idleSeconds: TimeInterval)
 
     var errorDescription: String? {
         switch self {
@@ -82,6 +86,8 @@ enum AgentClientError: LocalizedError {
             return "The vision model \(error.model) returned HTTP \(error.statusCode)."
         case .emptyStream(let providerID, let model):
             return "The provider \(providerID) (\(model)) returned an empty stream."
+        case .streamStalled(let idleSeconds):
+            return "The model stream went quiet for \(Int(idleSeconds)) s with no content."
         case .unsupportedProviderKind(let kind):
             return "Support for the \(kind.rawValue) protocol is not enabled in this build yet."
         }

@@ -104,6 +104,25 @@ enum AgentNetworkSupport {
         return URLSession(configuration: configuration)
     }
 
+    /// Worker (spawned subagent) requests. The main loop has a retry ladder
+    /// for transient and TLS failures; a Worker has none, and its parent is
+    /// fenced behind the delegate-first route while it waits. A Worker that
+    /// took the default ten-minute resource budget to lose a TLS handshake
+    /// once turned a two-minute log check into an hour. Shorter here: a
+    /// Worker that cannot get bytes in ninety seconds, or finish a request in
+    /// five minutes, is better reported than waited for. First contact is
+    /// guarded separately and much tighter (AgentWorkerFirstContact).
+    static let workerRequestTimeout: TimeInterval = 90
+    static let workerResourceTimeout: TimeInterval = 5 * 60
+
+    static func workerSession() -> URLSession {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = workerRequestTimeout
+        configuration.timeoutIntervalForResource = workerResourceTimeout
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration)
+    }
+
     /// Session for talking to a process on this Mac's loopback interface
     /// (the local Mobile Gateway). Forces proxies OFF: a configured system
     /// HTTP/HTTPS/SOCKS proxy (Clash, Surge, a corporate PAC…) must never

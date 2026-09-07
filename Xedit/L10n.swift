@@ -942,6 +942,8 @@ nonisolated enum L10n {
     }
 
     enum GoalRoadmap {
+        static let lastReceipt = String(localized: "goal-roadmap.last-receipt", defaultValue: "Last phase")
+
         static func phase(_ current: Int, _ total: Int) -> String {
             let template = String(
                 localized: "goal-roadmap.phase-position",

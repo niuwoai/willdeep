@@ -783,6 +783,16 @@ extension AppState {
                 if var roadmap = runtime.goalRoadmap,
                    roadmap.phases.indices.contains(roadmap.activePhaseIndex) {
                     roadmap.phases[roadmap.activePhaseIndex].status = .executing
+                    // The planning reply for this phase was asked to open with a
+                    // `receipt` block for the phase that just closed. Fold its
+                    // wording into the host's receipt; timing stays the host's.
+                    let previousIndex = roadmap.activePhaseIndex - 1
+                    if roadmap.phases.indices.contains(previousIndex),
+                       let hostReceipt = roadmap.phases[previousIndex].receipt,
+                       hostReceipt.author == .host,
+                       let modelReceipt = AgentPhaseReceipt.parse(from: last.content) {
+                        roadmap.phases[previousIndex].receipt = hostReceipt.refined(with: modelReceipt)
+                    }
                     runtime.goalRoadmap = roadmap
                 }
                 runtime.goalTurnRecoveryCheckpoint = AgentGoalTurnRecoveryCheckpoint()

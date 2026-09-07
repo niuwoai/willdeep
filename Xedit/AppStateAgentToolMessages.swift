@@ -885,6 +885,9 @@ extension AppState {
                 toolReviewer: toolReviewer,
                 interventionChannel: interventionChannel,
                 executionBudget: toolExecutionBudget(for: runtime),
+                // Shorter timeouts than the parent's own session: a Worker has
+                // no retry ladder and the parent is fenced while it waits.
+                session: AgentNetworkSupport.workerSession(),
                 onProgress: { [weak self] progress in
                     self?.applySubagentLiveProgress(
                         progress,
@@ -1040,13 +1043,26 @@ extension AppState {
             finishRecord(
                 status: .failed,
                 summary: "subagent failed",
-                payload: """
-                    Tool error: \(error.localizedDescription)
+                payload: {
+                    // A Worker that never reached its provider says so in the
+                    // parent's own words: the model should not read it as the
+                    // task itself failing, and should not spawn again into
+                    // the same dead link.
+                    let headline: String
+                    if case AgentSubagentError.firstContactTimeout(let seconds) = error {
+                        headline = "Tool error: the `\(profile.id)` Worker never reached its provider " +
+                            "(no response within \(Int(seconds)) s). The provider link is the problem, not the task."
+                    } else {
+                        headline = "Tool error: \(error.localizedDescription)"
+                    }
+                    return """
+                        \(headline)
 
-                    Delegation to `\(profile.id)` could not run, so this turn's \
-                    delegate-first route no longer applies. Do the work directly \
-                    in this session rather than spawning the same trade again.
-                    """,
+                        Delegation to `\(profile.id)` could not run, so this turn's \
+                        delegate-first route no longer applies. Do the work directly \
+                        in this session rather than spawning the same trade again.
+                        """
+                }(),
                 errorMessage: error.localizedDescription
             )
         }
@@ -1237,6 +1253,9 @@ extension AppState {
         toolName: String? = nil,
         toolCommand: String? = nil
     ) {
+        // Every tool result, hand-authored notices included, is activity as
+        // far as the turn watchdog is concerned.
+        noteAgentTurnActivity(for: runtime)
         let sanitized = AgentInjectionDefense.sanitizedToolMessageContent(
             payload: payload,
             source: source

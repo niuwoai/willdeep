@@ -80,6 +80,10 @@ enum AgentSubagentError: LocalizedError {
     case missingPrompt
     case tooManyConcurrent(Int)
     case emptyStreamingText
+    /// The Worker's first request produced no streamed event within the
+    /// deadline — it never reached its provider. Distinct from a
+    /// cancellation so the parent's spawn failure branch runs.
+    case firstContactTimeout(TimeInterval)
 
     var errorDescription: String? {
         switch self {
@@ -87,6 +91,8 @@ enum AgentSubagentError: LocalizedError {
             return "spawn_agent requires a non-empty `prompt`."
         case .tooManyConcurrent(let limit):
             return "Too many subagents running for this session (max \(limit)). Wait for one to finish or run synchronously."
+        case .firstContactTimeout(let seconds):
+            return "The Worker never reached its provider: no response within \(Int(seconds)) s of its first request."
         case .emptyStreamingText:
             return "The streaming subagent finished without producing visible text."
         }
@@ -210,6 +216,7 @@ final class AgentSubagentRegistry: ObservableObject {
             interventionChannel: interventionChannel,
             openingImages: executionContext.openingImages,
             executionBudget: executionContext.executionBudget,
+            session: AgentNetworkSupport.workerSession(),
             onProgress: onProgress
         )
     }
@@ -1225,6 +1232,9 @@ enum AgentSubagentRunner {
                 shared: AgentWorkerTierSharedConfig.cached()
             )
         )
+        // Flipped after the first request streams to completion; until then
+        // each request is under the first-contact clock.
+        var hasCompletedFirstRequest = false
         while round <= roundLimit {
             try Task.checkCancellation()
         try executionBudget?.checkCurrentOwner()
@@ -1242,7 +1252,7 @@ enum AgentSubagentRunner {
 
             try AgentWorkerContextBudget.validate(messages: transcript, tools: toolList, limit: inputLimit)
 
-            do {
+            let performRequest: @Sendable () async throws -> Void = {
                 if let interventionChannel {
                     try await interventionChannel.runCancellableStep {
                         try await client.streamChat(
@@ -1267,6 +1277,21 @@ enum AgentSubagentRunner {
                     ) { event in
                         await collector.consume(event)
                     }
+                }
+            }
+            do {
+                // The first request is raced against a short clock: a Worker
+                // that cannot get a single event out of its provider fails
+                // now, not after the session's ten-minute budget. Later rounds
+                // have already proven the link. See AgentWorkerFirstContact.
+                if hasCompletedFirstRequest {
+                    try await performRequest()
+                } else {
+                    try await AgentWorkerFirstContact.race(
+                        hasMadeContact: { await collector.hasReceivedAnyEvent },
+                        operation: performRequest
+                    )
+                    hasCompletedFirstRequest = true
                 }
             } catch is CancellationError {
                 try executionBudget?.checkCurrentOwner()
@@ -2138,8 +2163,12 @@ private actor SubagentTurnCollector {
     }
 
     private var turn = Turn()
+    /// Set on the first event of any kind. The first-contact guard reads it
+    /// when its clock runs out: an event means the provider answered.
+    private(set) var hasReceivedAnyEvent = false
 
     func consume(_ event: AgentClientEvent) {
+        hasReceivedAnyEvent = true
         switch event {
         case .requestIdentified:
             break

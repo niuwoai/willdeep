@@ -867,6 +867,10 @@ final class AppState: ObservableObject {
                 AgentRoutineRunStore.save(reconciled)
             }
         }
+        // The turn watchdog shares the scheduler's 30-second tick.
+        agentRoutineScheduler.onTick = { [weak self] in
+            self?.scanAgentTurnsForStalls()
+        }
         agentRoutineScheduler.start(initialRoutines: agentRoutines) { [weak self] routineID in
             self?.fireRoutine(id: routineID) != nil
         }

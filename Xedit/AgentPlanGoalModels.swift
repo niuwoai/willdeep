@@ -346,14 +346,21 @@ nonisolated struct AgentGoalRoadmap: Codable, Equatable {
             title: String,
             acceptanceCriteria: [String],
             status: PhaseStatus = .pending,
-            completedAt: Date? = nil
+            completedAt: Date? = nil,
+            receipt: AgentPhaseReceipt? = nil
         ) {
             self.id = id
             self.title = title
             self.acceptanceCriteria = acceptanceCriteria
             self.status = status
             self.completedAt = completedAt
+            self.receipt = receipt
         }
+
+        /// Three-line receipt written when the host closed this phase; nil
+        /// while the phase is open and on roadmaps persisted before receipts
+        /// existed. See AgentPhaseReceipt.
+        var receipt: AgentPhaseReceipt? = nil
     }
 
     var phases: [Phase]
@@ -371,6 +378,12 @@ nonisolated struct AgentGoalRoadmap: Codable, Equatable {
 
     var isComplete: Bool {
         !phases.isEmpty && phases.allSatisfy { $0.status == .completed }
+    }
+
+    /// The receipt of the most recently closed phase — what a resumed run
+    /// and the goal card should show as "where we left off".
+    var lastCompletedReceipt: AgentPhaseReceipt? {
+        phases.last(where: { $0.status == .completed && $0.receipt != nil })?.receipt
     }
 
     var phasePositionText: String {
@@ -618,11 +631,17 @@ nonisolated struct AgentPlan: Codable, Equatable {
         var id: UUID
         var text: String
         var status: StepStatus
+        /// One-line live detail under the step, e.g. which Worker is on it
+        /// and how far it got. Written by the host from Worker heartbeats,
+        /// never by the model; cleared when the Worker finishes. Older
+        /// persisted plans decode as nil.
+        var detail: String? = nil
 
-        init(id: UUID = UUID(), text: String, status: StepStatus = .pending) {
+        init(id: UUID = UUID(), text: String, status: StepStatus = .pending, detail: String? = nil) {
             self.id = id
             self.text = text
             self.status = status
+            self.detail = detail
         }
     }
 

@@ -887,7 +887,20 @@ extension AppState {
             phaseID: roadmap.phases[completedIndex].id
         )
         roadmap.phases[completedIndex].status = .completed
-        roadmap.phases[completedIndex].completedAt = Date()
+        let closedAt = Date()
+        roadmap.phases[completedIndex].completedAt = closedAt
+        // Phase receipt: three lines the host writes from what it already
+        // knows the moment the boundary is crossed. The next planning reply
+        // may refine the wording (captureAgentPlanFromLatestMessage); the
+        // projection of time left stays the host's. The first phase has no
+        // start mark, so its receipt carries no ETA.
+        roadmap.phases[completedIndex].receipt = AgentPhaseReceipt.synthesized(
+            roadmap: roadmap,
+            completedIndex: completedIndex,
+            plan: runtime.currentPlan,
+            phaseStartedAt: completedIndex > 0 ? roadmap.phases[completedIndex - 1].completedAt : nil,
+            now: closedAt
+        )
 
         let nextIndex = completedIndex + 1
         guard roadmap.phases.indices.contains(nextIndex) else {
@@ -945,6 +958,8 @@ extension AppState {
         </phase_acceptance>
 
         Emit exactly one numbered fenced `plan` block with at most \(AgentGoalRoadmap.maximumStepsPerPhase) concrete steps for this phase. Do not repeat completed phases, replace the Goal roadmap, emit a Teams table, or call tools in this planning reply. The host will continue execution immediately after accepting the phase plan.\(phaseDispatchContract)
+
+        \(AgentPhaseReceipt.promptFragment)
         """
         guard !runtime.queuedMessages.contains(where: {
             $0.source == .hostInstruction

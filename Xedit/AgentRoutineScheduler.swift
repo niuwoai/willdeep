@@ -90,7 +90,14 @@ final class AgentRoutineScheduler {
     /// already-due routine should run immediately. During normal ticks
     /// the same logic applies; the flag mostly exists for clarity in
     /// notification copy ("scheduled run" vs "catching up after wake").
+    /// Fired on every 30-second tick before routines are evaluated. The turn
+    /// watchdog rides on this rather than owning a timer: it is the one
+    /// app-level clock that keeps ticking while panels are hidden and menus
+    /// are open, and a stall check needs exactly that.
+    var onTick: (() -> Void)?
+
     private func evaluate(catchUp: Bool) {
+        onTick?()
         guard let trigger else { return }
         let now = Date()
         for routine in snapshot where routine.isEnabled {

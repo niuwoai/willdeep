@@ -303,6 +303,11 @@ enum AgentTelemetry {
                 return TelemetryErrorCode.http(httpError.statusCode)
             case .emptyStream:
                 return TelemetryErrorCode.emptyStream.rawValue
+            case .streamStalled:
+                // A stream that went quiet behind keepalives is a timeout the
+                // socket never noticed; report it as one rather than widening
+                // the error-code schema.
+                return TelemetryErrorCode.networkTimeout.rawValue
             case .unsupportedProviderKind:
                 return TelemetryErrorCode.unsupportedProvider.rawValue
             }
