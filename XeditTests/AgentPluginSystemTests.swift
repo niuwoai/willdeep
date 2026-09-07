@@ -762,7 +762,7 @@ struct AgentPluginSystemTests {
         for name in [
             "project-overview", "issue-panel", "tetris", "arcade",
             "session-vitality", "favorites", "todo", "history-recall",
-            "video-studio",
+            "video-studio", "hive-defense",
         ] {
             let packageURL = name == "arcade"
                 ? arcadeRuntimePackage

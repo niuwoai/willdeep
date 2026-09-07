@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-06 | Current version: v1.335.0-rc1
+> Last updated: 2026-09-07 | Current version: v1.335.0-rc1
+
+新增内置「蜂巢防线」离线塔防游戏，提供 5 种防御塔、6 种虫群和蜂巢基地共 12 张透明图片；支持建塔、升级、出售、暂停和加速，通过插件中心进入。
 
 ## Positioning
 

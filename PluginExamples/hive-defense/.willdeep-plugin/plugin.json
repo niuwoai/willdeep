@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "minimumWillDeepVersion": "1.280.0",
+  "contributes": {
+    "destinations": [
+      {
+        "id": "hive",
+        "titleKey": "destination.hive",
+        "icon": "sf:hexagon.fill",
+        "mainPage": "hive.main",
+        "companionSidebar": "hive.sidebar",
+        "toolbarCommandIDs": [
+          "hive.restart"
+        ]
+      }
+    ],
+    "pages": [
+      {
+        "id": "hive.main",
+        "runtime": "localWeb",
+        "entryPath": "ui/index.html"
+      }
+    ],
+    "sidebars": [
+      {
+        "id": "hive.sidebar",
+        "mode": "none"
+      }
+    ],
+    "commands": [
+      {
+        "id": "hive.restart",
+        "titleKey": "command.restart",
+        "icon": "sf:arrow.counterclockwise",
+        "handler": {
+          "type": "host",
+          "action": "plugin.refresh"
+        }
+      }
+    ],
+    "menus": {
+      "plugin.page.toolbar": [
+        "hive.restart"
+      ]
+    },
+    "settings": []
+  },
+  "permissions": [],
+  "dependencies": {
+    "mcpServers": [],
+    "skills": []
+  }
+}

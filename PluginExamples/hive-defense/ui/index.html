@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-Hans"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>蜂巢防线</title><link rel="stylesheet" href="game.css"></head><body>
+
+<div class="wrap">
+  <header>
+    <h1>蜂巢<em>防线</em></h1>
+    <span class="tag">六边形网格塔防 · 五种防御 · 六类虫群 · 无尽波次</span>
+  </header>
+
+  <div class="hud">
+    <div class="item"><span class="k">蜂巢</span><span class="v" id="hp">20</span></div>
+    <div class="item"><span class="k">蜂蜜</span><span class="v honey" id="honey">220</span></div>
+    <div class="item"><span class="k">波次</span><span class="v" id="wave">0</span></div>
+    <div class="item"><span class="k">击杀</span><span class="v" id="kills">0</span></div>
+    <div class="spacer"></div>
+    <div class="ctl">
+      <button id="callBtn" class="primary">下一波</button>
+      <button id="speedBtn">1×</button>
+      <button id="pauseBtn">暂停</button>
+    </div>
+  </div>
+
+  <div class="game">
+    <div class="shop" id="shop"></div>
+
+    <div class="stage">
+      <canvas id="map" width="664" height="372"></canvas>
+      <div class="overlay" id="overlay">
+        <div class="big" id="ovTitle">蜂巢防线</div>
+        <div class="sub" id="ovText">
+          虫群会沿着蜡黄色的通道爬向蜂巢。<br>
+          在通道两侧的空格上建塔，别让它们走到底。
+        </div>
+        <button class="primary" id="startBtn">开始防守</button>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="box" id="infoBox">
+        <h2>选中</h2>
+        <div class="empty" id="infoEmpty">点击地图上的防御塔查看数据，或先从左侧选一种塔再点空地建造。</div>
+        <div id="infoBody" hidden>
+          <div class="rows" id="infoRows"></div>
+          <div class="acts">
+            <button id="upBtn">升级</button>
+            <button id="sellBtn">出售</button>
+          </div>
+        </div>
+      </div>
+      <div class="box">
+        <h2>本波来袭</h2>
+        <div class="waveline" id="waveInfo"><span class="chip">尚未开始</span></div>
+      </div>
+      <div class="box">
+        <h2>虫群图鉴</h2>
+        <div class="rows" id="bestiary"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    快捷键：<kbd>1</kbd>–<kbd>5</kbd> 选塔　<kbd>空格</kbd> 暂停　<kbd>F</kbd> 加速　<kbd>N</kbd> 提前叫下一波（剩余准备时间折算成蜂蜜）　<kbd>Esc</kbd> 取消选择<br>
+    提前叫波有奖励，卖塔返还六成。甲虫有护甲，只有毒刺弩无视护甲；蜘蛛死后会裂成两只小蜘蛛。
+  </footer>
+</div>
+
+
+<footer>蜂巢防线 · 1.335.0-rc1</footer><script src="sprites.js"></script><script src="game.js"></script></body></html>
