@@ -7,10 +7,10 @@ const hooks=`window.hiveFixture={
   body(){return bear.target(motionPreference.matches);},
   snapshot(){return {hp,honey,prep,wave,paused,running,currentMap,hits:bear.state?.hits,demolition:bear.state?.demolition,duration:bear.state?.duration,damaged:!!towers[0]?.damaged};},
   choose(){running=false;chooseMap();},
-  portal(){portals.reset();portals.step(6,PTS,DIST);const b=makeBug('aphid',10);b.dist=portals.pair.from-1;bugs=[b];spawnQueue=[];return {from:portals.pair.from,to:portals.pair.to};},
-  bug(){return {dist:bugs[0].dist,portalId:bugs[0].portalId};},
+  portal(){portals.reset();portals.step(6,PTS,DIST);bugs=Array.from({length:3},()=>{const b=makeBug('aphid',10);b.dist=portals.pair.from-1;return b;});spawnQueue=[];return {from:portals.pair.from,to:portals.pair.to};},
+  bugs(){return bugs.map(b=>({dist:b.dist,portalId:b.portalId}));},
   damageBase(){hp=12;honey=100;bugs=[];spawnQueue=[];prep=13;syncHud();},
-  discover(){damage(makeBug('spider',1),10000,true);collection.repair(20);renderCollection();}
+  discover(){for(const k of ['spider','ant','caterpillar','grasshopper'])damage(makeBug(k,1),10000,true);collection.repair(20);renderCollection();}
 };})();`;
 const server=http.createServer((req,res)=>{
   const name=new URL(req.url,'http://localhost').pathname;
@@ -68,7 +68,9 @@ const server=http.createServer((req,res)=>{
     await page.locator('#towerRepairBtn').click();const repaired=await page.evaluate(()=>hiveFixture.snapshot());
     assert.equal(repaired.damaged,false);assert.equal(repaired.honey,won.honey-12);
     const gate=await page.evaluate(()=>hiveFixture.portal());await page.clock.runFor(100);
-    assert.ok((await page.evaluate(()=>hiveFixture.bug())).dist>=gate.to);
+    const transported=await page.evaluate(()=>hiveFixture.bugs());
+    assert.equal(transported.filter(b=>b.dist>=gate.to).length,2);
+    assert.equal(transported.filter(b=>!b.portalId).length,1);
     await page.screenshot({path:path.join(out,'portal-active.png'),fullPage:true});
     for(const label of ['2×','3×','4×','1×']){await page.locator('#speedBtn').click();assert.equal(await page.locator('#speedBtn').textContent(),label);}
     await page.evaluate(()=>hiveFixture.damageBase());await page.locator('#repairBtn').click();
@@ -85,7 +87,7 @@ const server=http.createServer((req,res)=>{
     await page.reload();await page.evaluate(()=>HiveSprites.ready);
     assert.match(await page.locator('#beeGrowth').textContent(),/工具箱/);assert.match(await page.locator('#bestiary').textContent(),/蜘蛛有八条腿/);
     assert.deepEqual(errors,[]);
-    const checks=['3 second automatic map','manual hollow','manual pond','3-6 second demolition','map click opens canvas','simulation frozen','controls locked','body shot misses','head shot hits','exit retains hits','reward in bounds','reward paid once','repair charges 12','portal transports actual bug','4x speed cycle','repair charges 4 then 8','next dispatch charges 6','collection persists','growth persists','no runtime errors'];
+    const checks=['3 second automatic map','manual hollow','manual pond','3-6 second demolition','map click opens canvas','simulation frozen','controls locked','body shot misses','head shot hits','exit retains hits','reward in bounds','reward paid once','repair charges 12','portal transports exactly two of three bugs','4x speed cycle','repair charges 4 then 8','next dispatch charges 6','collection persists including new insects','growth persists','no runtime errors'];
     fs.writeFileSync(path.join(out,'adventure-browser.json'),JSON.stringify({passed:true,checks},null,2));
     console.log('Adventure browser passed: '+checks.length+' checks.');
   }finally{await browser.close();server.close();}

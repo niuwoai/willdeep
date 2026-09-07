@@ -5,6 +5,22 @@ const path = require('node:path');
 const { JSDOM } = require('../../arcade/ui/node_modules/jsdom');
 const ui = path.resolve(__dirname, '../ui');
 
+test('new insects spawn in waves, heal or sprint, and unlock their cards',()=>{
+  const g=game();
+  for(const [type,wave] of [['ant',2],['grasshopper',4],['caterpillar',7]]){
+    assert.ok(g.api.waveDef(wave).some(group=>group[0]===type));
+    assert.ok(g.api.waveDef(21).some(group=>group[0]===type));
+    const bug=g.api.makeBug(type,1);g.api.damage(bug,100000,true);assert.equal(g.api.collection.has(type),true);
+  }
+  const caterpillar=g.api.makeBug('caterpillar',1);caterpillar.hp=100;g.api.addBug(caterpillar);
+  g.api.tick(1);assert.equal(caterpillar.hp,105.25);
+  caterpillar.hp=209;g.api.tick(1);assert.equal(caterpillar.hp,210);
+  const jumper=g.api.makeBug('grasshopper',1);jumper.wob=0;g.api.addBug(jumper);
+  g.api.tick(0.1);assert.equal(jumper.dist,58*1.8*0.1);
+  jumper.wob=10;const before=jumper.dist;g.api.tick(0.1);assert.ok(Math.abs(jumper.dist-before-5.8)<1e-9);
+  g.close();
+});
+
 test('bear encounter freezes simulation, pays once and preserves manual pause',()=>{
   const g=game();g.api.select('sting');g.api.build({c:3,r:2});
   while(!g.api.bear.spawn(3,g.api.state().towers))g.api.bear.reset();
@@ -42,7 +58,7 @@ function game() {
   source = source.replace(/\}\)\(\);\s*$/, `window.testGame = { reset, build, canBuild, damage, makeBug, tick, drawBug, drawTowerGlyph, drawHive, towerStats, cellCenter, startWave, frame,
     select: key => selType = key, addBug: bug => bugs.push(bug),
     setVitals: (health, balance) => { hp=health; honey=balance; syncHud(); },
-    animateHoney, syncHud, repair, gameOver, bear, openBear, closeBear, shootBear, collection, startGame, configureMap, portals,
+    animateHoney, syncHud, repair, gameOver, bear, openBear, closeBear, shootBear, collection, startGame, configureMap, portals, waveDef,
     addShot:s=>shots.push(s),
     chooseTower:t=>{selTower=t;renderInfo();}, aimAt:(x,y)=>aim={x,y},
     state: () => ({towers, bugs, honey, hp, wave, paused, speed, running, prep, texts}) }; })();`);
@@ -84,9 +100,9 @@ test('pollen slow adds twenty five percent to actual splash damage',()=>{
 test('all towers and enemies render their own image including hive', () => {
   const g = game();
   for (const key of ['sting','bomb','pollen','barb','drum']) g.api.drawTowerGlyph(10,10,key,2,0,1,true);
-  for (const key of ['aphid','wasp','beetle','moth','spider','hornet']) g.api.drawBug(g.api.makeBug(key,1));
+  for (const key of ['aphid','wasp','beetle','moth','spider','hornet','ant','caterpillar','grasshopper']) g.api.drawBug(g.api.makeBug(key,1));
   g.api.drawHive();
-  assert.equal(new Set(g.drawn).size,12);
+  assert.equal(new Set(g.drawn).size,15);
   g.close();
 });
 test('spider death produces two small spider sprites and pays once', () => {
@@ -130,7 +146,7 @@ test('real balance changes immediately while displayed honey animates', () => {
 
 test('every enemy death shows honey text and duplicate kills never pay twice', () => {
   const g = game();
-  for(const type of ['aphid','wasp','beetle','moth','spider','hornet']){
+  for(const type of ['aphid','wasp','beetle','moth','spider','hornet','ant','caterpillar','grasshopper']){
     const bug=g.api.makeBug(type,1), before=g.api.state().honey;
     g.api.damage(bug,100000,true);
     g.api.damage(bug,100000,true);

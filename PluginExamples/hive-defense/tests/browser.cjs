@@ -25,7 +25,7 @@ const out = path.resolve(__dirname, '../../../build/ci/hive-defense');
         image.src='assets/'+key+'.png';
       })));
     });
-    assert.equal(images.length,15);
+    assert.equal(images.length,18);
     assert.ok(images.every(x=>x.width>0));
     await page.locator('#startBtn').click();
     await page.locator('.card').first().click();
@@ -45,6 +45,6 @@ const out = path.resolve(__dirname, '../../../build/ci/hive-defense');
     await page.screenshot({path:path.join(out,'game-dark.png'),fullPage:true});
     assert.deepEqual(errors,[]);
     fs.writeFileSync(path.join(out,'browser.json'),JSON.stringify({status:'passed',images,errors},null,2));
-    console.log('Browser passed: 15 images, build/upgrade, pause/resume, speed, wave, light/dark screenshots; no runtime errors.');
+    console.log('Browser passed: 18 images, build/upgrade, pause/resume, speed, wave, light/dark screenshots; no runtime errors.');
   } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1});

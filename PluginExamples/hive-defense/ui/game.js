@@ -109,29 +109,32 @@
     beetle:{name:"甲虫", hp:150,  speed:34, armor:7,  bounty:15,  dmg:2, color:"#5B6E88", r:10 },
     moth: { name:"飞蛾", hp:78,   speed:92, armor:0,  bounty:12,  dmg:1, color:"#B9A9C6", r:8 },
     spider:{name:"蜘蛛", hp:170,  speed:42, armor:2,  bounty:19,  dmg:2, color:"#6E4A55", r:10, splits:2 },
+    ant:{name:"蚂蚁",hp:42,speed:78,armor:0,bounty:7,dmg:1,color:"#B96239",r:7},
+    caterpillar:{name:"毛毛虫",hp:210,speed:29,armor:1,bounty:22,dmg:2,color:"#8EAF43",r:11,regen:0.025},
+    grasshopper:{name:"蚱蜢",hp:95,speed:58,armor:1,bounty:16,dmg:1,color:"#4FA875",r:9,sprint:1.8},
     hornet:{name:"大黄蜂", hp:1400, speed:30, armor:12, bounty:140, dmg:6, color:"#B33F22", r:15, boss:true }
   };
 
   // ===== 波次表 =====
   const WAVES = [
     [["aphid",6,0.8]],
-    [["aphid",10,0.65]],
+    [["aphid",6,0.65],["ant",5,0.35]],
     [["aphid",8,0.6],["wasp",3,1.2]],
-    [["wasp",8,0.8]],
+    [["wasp",6,0.8],["grasshopper",3,0.9]],
     [["aphid",12,0.45],["beetle",2,2]],
     [["moth",8,0.7],["wasp",5,0.9]],
-    [["beetle",5,1.4],["aphid",10,0.4]],
+    [["beetle",3,1.4],["caterpillar",2,1.8],["ant",8,0.3]],
     [["spider",3,1.8],["wasp",8,0.7]],
-    [["moth",14,0.4]],
+    [["moth",8,0.4],["grasshopper",6,0.6]],
     [["hornet",1,1],["aphid",12,0.5]],
     [["beetle",8,1],["moth",10,0.5]],
-    [["spider",6,1.2],["wasp",10,0.6]],
+    [["spider",4,1.2],["caterpillar",3,1.5],["ant",12,0.25]],
     [["moth",18,0.32],["beetle",4,1.5]],
     [["spider",8,1],["beetle",6,1.2]],
     [["hornet",2,3],["moth",14,0.45]],
     [["wasp",20,0.4],["spider",6,1.1]],
     [["beetle",12,0.8],["moth",12,0.4]],
-    [["spider",12,0.8]],
+    [["spider",7,0.8],["caterpillar",4,1.2],["grasshopper",8,0.5]],
     [["hornet",3,2.5],["beetle",10,0.9]],
     [["hornet",4,2],["spider",10,0.7],["moth",16,0.35]]
   ];
@@ -142,7 +145,8 @@
       ["hornet", 2 + Math.floor(k/2), 2],
       ["spider", 8 + k, 0.7],
       ["beetle", 8 + k, 0.7],
-      ["moth", 12 + k*2, 0.3]
+      ["moth", 12 + k*2, 0.3],
+      ["ant", 8+k, 0.25], ["caterpillar", 2+Math.floor(k/2), 1.5], ["grasshopper", 4+k, 0.6]
     ];
   }
   function hpScale(n){ return Math.pow(1.16, n - 1); }
@@ -338,9 +342,12 @@
       const b = bugs[i];
       if(b.dead){ bugs.splice(i, 1); continue; }
       b.hitFlash = Math.max(0, b.hitFlash - dt);
+      const traits=BUGS[b.type];
+      if(traits.regen && b.hp<b.maxHp)b.hp=Math.min(b.maxHp,b.hp+b.maxHp*traits.regen*dt);
       const slowed = b.slowUntil > 0;
       if(slowed) b.slowUntil -= dt;
-      const sp = b.speed * (slowed ? (1 - b.slowAmt) : 1);
+      const sprinting=traits.sprint && b.wob%32<8;
+      const sp = b.speed * (slowed ? (1 - b.slowAmt) : 1) * (sprinting?traits.sprint:1);
       const previousDistance=b.dist;
       b.dist += sp * dt;
       if(portals.transport(b,previousDistance)){
@@ -591,7 +598,7 @@
       ctx.rotate(angle);
       for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(0,0,8+i*4,i,Math.PI+i);ctx.stroke();}
       ctx.restore();ctx.fillStyle=color;ctx.font='bold 10px sans-serif';ctx.textAlign='center';
-      ctx.fillText(index?'出口 ↑':'入口 ↓',p.x,p.y+31);
+      ctx.fillText(pair.remaining===0?'已用完':index?'出口 ↑':'入口 ↓ 剩'+pair.remaining,p.x,p.y+31);
     });
   }
 

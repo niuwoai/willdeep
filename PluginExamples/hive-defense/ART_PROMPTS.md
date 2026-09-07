@@ -36,3 +36,12 @@ Prompt: Create one game sprite of a cute mischievous brown bear for a children's
 内置 imagegen 生成，最终文件 `ui/assets/jungle.png`。此图为完整不透明场景，狗熊沿用透明角色图，放大镜直接采样同一画布。
 
 Prompt: Wide landscape 16:9 background illustration for a children's forest aiming mini-game. Lush storybook jungle clearing, layered emerald and sage green leafy trees and vines along sides, warm soft sunlight coming through canopy, distant atmospheric trunks, gentle earth and moss floor occupying lower third, open uncluttered middle area with gentle green shrubs and depth where a cartoon brown bear will move horizontally. Polished warm hand-painted 2D casual game art, friendly and magical not scary, moderate detail, soft outlines, natural green gold palette. Background only, no bear or any animals, no characters, no text, no UI, no target, no crosshairs, no borders. Full bleed opaque landscape illustration.
+# 三种新增虫群（1.339.0-rc1）
+
+内置 imagegen 分别生成 `ui/assets/ant.png`、`caterpillar.png`、`grasshopper.png`，选用带真实 alpha 的初始输出。清边编辑候选没有改善透明输出，未采用。
+
+共同提示词：Single isolated transparent PNG sprite of SUBJECT. Friendly children's honeybee tower defense enemy. Full body pointing to the RIGHT, top down three-quarter game view. Warm hand-painted cartoon style, crisp soft dark outlines, rounded readable silhouette, subtle shading, similar to polished casual garden tower-defense art. Centered full character with empty margin all around. True transparent alpha background. No text, no scenery, no ground, no glow, no cast shadow outside silhouette. One character only.
+
+- ant SUBJECT: a reddish chestnut ant, six legs, three distinct body segments, big rounded abdomen, cute antennae
+- caterpillar SUBJECT: a plump lime green caterpillar, segmented rounded body, tiny feet, small amber face, charming leaf-like markings
+- grasshopper SUBJECT: a bright jade green grasshopper, long bent jumping hind legs, folded wings, tiny antennae

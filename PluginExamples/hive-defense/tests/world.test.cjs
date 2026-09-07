@@ -21,3 +21,15 @@ test('portals jump forward once, never teleport bugs that already passed, then e
     p.reset();assert.equal(p.pair,null);
   }
 });
+test('each portal admits at most two distinct bugs even in the same frame',()=>{
+  const portals=createPortals(()=>0),points=MAPS.garden.path,dist=points.map((_,i)=>i*40);
+  portals.step(6,points,dist);const pair=portals.pair;
+  const bugs=Array.from({length:5},()=>({dist:pair.from+1}));
+  assert.equal(portals.transport(bugs[0],pair.from-1),true);
+  assert.equal(portals.transport(bugs[0],pair.from-1),false);
+  assert.equal(pair.remaining,1);
+  assert.equal(portals.transport(bugs[1],pair.from-1),true);
+  for(const bug of bugs.slice(2)){assert.equal(portals.transport(bug,pair.from-1),false);assert.equal(bug.dist,pair.from+1);}
+  assert.equal(pair.remaining,0);portals.step(0.4,points,dist);assert.equal(portals.pair,null);
+  portals.step(9,points,dist);assert.equal(portals.pair.remaining,2);
+});
