@@ -5,8 +5,30 @@ const path = require('node:path');
 const { JSDOM } = require('../../arcade/ui/node_modules/jsdom');
 const ui = path.resolve(__dirname, '../ui');
 
+test('bear encounter freezes simulation, pays once and preserves manual pause',()=>{
+  const g=game();g.api.select('sting');g.api.build({c:3,r:2});
+  while(!g.api.bear.spawn(3,g.api.state().towers))g.api.bear.reset();
+  g.w.document.getElementById('pauseBtn').click();g.api.openBear();
+  const before=g.api.state();g.api.tick(100);
+  assert.equal(g.api.state().prep,before.prep);
+  const p=g.api.bear.target(false);g.api.aimAt(p.x,p.y);
+  for(let i=0;i<6;i++)g.api.shootBear();
+  assert.ok(g.api.state().honey>=before.honey+100 && g.api.state().honey<=before.honey+300);
+  const paid=g.api.state().honey;g.api.shootBear();assert.equal(g.api.state().honey,paid);
+  g.api.closeBear();assert.equal(g.api.state().paused,true);assert.equal(g.api.bear.state,null);g.close();
+});
+test('damaged tower stops firing and repair charges twenty percent without losing level',()=>{
+  const g=game();g.api.select('sting');g.api.build({c:3,r:2});
+  const tower=g.api.state().towers[0];tower.level=3;tower.damaged=true;tower.cd=0;
+  const bug=g.api.makeBug('aphid',10);bug.dist=130;g.api.addBug(bug);g.api.tick(0.01);
+  assert.equal(tower.cd,0);g.api.chooseTower(tower);
+  const balance=g.api.state().honey;g.w.document.getElementById('towerRepairBtn').click();
+  assert.equal(tower.damaged,false);assert.equal(tower.level,3);assert.equal(g.api.state().honey,balance-12);
+  g.w.document.getElementById('towerRepairBtn').click();assert.equal(g.api.state().honey,balance-12);g.close();
+});
+
 function game() {
-  const dom = new JSDOM(fs.readFileSync(path.join(ui, 'index.html'), 'utf8'), { runScripts: 'outside-only' });
+  const dom = new JSDOM(fs.readFileSync(path.join(ui, 'index.html'), 'utf8'), { runScripts: 'outside-only', url:'https://hive.test' });
   const w = dom.window;
   w.HTMLCanvasElement.prototype.getContext = () => new Proxy({}, { get: (o, k) => o[k] || (() => {}), set: (o,k,v) => (o[k]=v,true) });
   w.matchMedia = () => ({ addEventListener() {} });
@@ -14,11 +36,14 @@ function game() {
   const drawn = [];
   w.HiveSprites = { ready: Promise.resolve(), draw: (_, key) => drawn.push(key) };
   w.eval(fs.readFileSync(path.join(ui, 'systems.js'), 'utf8'));
+  w.eval(fs.readFileSync(path.join(ui, 'adventure.js'), 'utf8'));
   let source = fs.readFileSync(path.join(ui, 'game.js'), 'utf8');
   source = source.replace(/\}\)\(\);\s*$/, `window.testGame = { reset, build, canBuild, damage, makeBug, tick, drawBug, drawTowerGlyph, drawHive, towerStats, cellCenter, startWave, frame,
     select: key => selType = key, addBug: bug => bugs.push(bug),
     setVitals: (health, balance) => { hp=health; honey=balance; syncHud(); },
-    animateHoney, syncHud, repair, gameOver,
+    animateHoney, syncHud, repair, gameOver, bear, openBear, closeBear, shootBear, collection,
+    addShot:s=>shots.push(s),
+    chooseTower:t=>{selTower=t;renderInfo();}, aimAt:(x,y)=>aim={x,y},
     state: () => ({towers, bugs, honey, hp, wave, paused, speed, running, prep, texts}) }; })();`);
   w.eval(source);
   w.document.getElementById('startBtn').click();
@@ -33,6 +58,13 @@ test('building charges honey and rejects occupied/path cells', () => {
   assert.equal(g.api.state().towers.length, 1);
   assert.equal(g.api.canBuild({c:3,r:2}), false);
   g.close();
+});
+test('pollen slow adds twenty five percent to actual splash damage',()=>{
+  for(const slowed of [false,true]){
+    const g=game(),bug=g.api.makeBug('aphid',10);bug.speed=0;bug.slowUntil=slowed?2:0;
+    g.api.addBug(bug);g.api.addShot({target:bug,x:bug.x,y:bug.y,sp:460,dmg:20,splash:44,c:'#C0703A'});
+    const before=bug.hp;g.api.tick(0.01);assert.equal(before-bug.hp,slowed?25:20);g.close();
+  }
 });
 test('all towers and enemies render their own image including hive', () => {
   const g = game();

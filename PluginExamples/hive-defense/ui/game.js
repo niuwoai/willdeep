@@ -5,6 +5,11 @@
   const sprites = window.HiveSprites;
   const {RULES, createCounter, createRepair} = window.HiveSystems;
   const repair = createRepair();
+  const adventure = window.HiveAdventure;
+  const bear = adventure.createBear();
+  let storage;
+  try { storage = window.localStorage; } catch(error) { console.warn('Hive storage unavailable',error.name); }
+  const collection = adventure.createCollection(storage);
   const honeyCounter = createCounter(220);
   const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
   let honeyFeedbackAge = 1, honeyDelta = 0;
@@ -203,7 +208,7 @@
     hp = RULES.maxHP; honey = 220; wave = 0; kills = 0; prep = 0;
     spawnQueue = []; running = false; paused = false; over = false; speed = 1;
     selType = null; selTower = null;
-    repair.reset(); honeyCounter.reset(honey);
+    repair.reset(); bear.reset(); closeBear(); renderCollection(); honeyCounter.reset(honey);
     honeyFeedbackAge = 1; honeyDelta = 0;
     honeyEl.textContent = honey;
     honeyEl.setAttribute('aria-label', '蜂蜜 ' + honey);
@@ -214,6 +219,7 @@
   // ===== 波次调度 =====
   function startWave(){
     wave++;
+    if(bear.spawn(wave,towers)) renderBearNotice();
     const def = waveDef(wave);
     const scale = hpScale(wave);
     let t = 0;
@@ -256,7 +262,7 @@
     let boostD = 0, boostR = 0;
     if(base.kind !== "aura"){
       towers.forEach(function(o){
-        if(o === t || TOWERS[o.type].kind !== "aura") return;
+        if(o.damaged || o === t || TOWERS[o.type].kind !== "aura") return;
         const or_ = TOWERS[o.type].range * Math.pow(1.1, o.level - 1);
         if(Math.hypot(o.x - t.x, o.y - t.y) <= or_){
           boostD += TOWERS[o.type].boostDmg * (1 + (o.level - 1) * 0.4);
@@ -288,6 +294,7 @@
     if(bug.dead) return;
     bug.dead = true;
     kills++;
+    if(collection.unlock(bug.sprite || bug.type)) renderCollection();
     honey += bug.bounty;
     texts.push({x:bug.x, y:bug.y, t:0, s:"+" + bug.bounty + " 蜂蜜", c:P.honeyC, reward:true});
     burst(bug.x, bug.y, color || bug.color, bug.boss ? 26 : 10);
@@ -312,6 +319,8 @@
   }
 
   function tick(dt){
+    if(bear.active) return;
+    if(bear.walk(dt,towers)){ renderInfo(); renderBearNotice(); }
     // 生成
     if(spawnQueue.length){
       spawnQueue.forEach(s => s.at -= dt);
@@ -348,6 +357,7 @@
     towers.forEach(function(t){
       const st = towerStats(t);
       t.st = st;
+      if(t.damaged) return;
       if(TOWERS[t.type].kind === "aura") return;
       t.cd -= dt;
       // 选取「走得最远」的目标
@@ -390,7 +400,14 @@
           bugs.forEach(function(b){
             if(b.dead) return;
             const dd = Math.hypot(b.x - tg.x, b.y - tg.y);
-            if(dd <= s.splash) damage(b, s.dmg * (dd < s.splash * 0.5 ? 1 : 0.6), false, s.c);
+            if(dd <= s.splash){
+              const combo=b.slowUntil>0;
+              damage(b, s.dmg * (dd < s.splash * 0.5 ? 1 : 0.6) * (combo ? adventure.RULES.combo : 1), false, s.c);
+              if(combo && !b.comboShown){
+                b.comboShown=true;
+                texts.push({x:b.x,y:b.y-16,t:0,s:'花粉 + 蜂胶！',c:P.honeyC});
+              }
+            }
           });
           parts.push({ring:true, x:tg.x, y:tg.y, t:0, life:0.28, r:s.splash, c:s.c});
         }else{
@@ -429,6 +446,7 @@
     const repaired = repair.step(dt, hp, honey);
     hp = repaired.hp; honey = repaired.honey;
     if(repaired.repaired){
+      collection.repair(repaired.repaired); renderCollection();
       const hive = cellCenter(HIVE.c, HIVE.r);
       texts.push({x:hive.x, y:hive.y - 20, t:0, s:'+' + repaired.repaired + ' 修复', c:P.hive});
       syncHud(); renderShop(); renderInfo();
@@ -471,7 +489,15 @@
     drawHive();
 
     // 塔
-    towers.forEach(t => drawTowerGlyph(t.x, t.y, t.type, t.level, t.angle || 0, 1, t.st && t.st.boosted));
+    towers.forEach(t => {
+      drawTowerGlyph(t.x,t.y,t.type,t.level,t.angle||0,t.damaged?0.35:1,!t.damaged && t.st && t.st.boosted);
+      if(t.damaged){ctx.fillStyle=P.danger;ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText('待修',t.x,t.y+5);}
+    });
+    if(bear.state){
+      sprites.draw(ctx,'bear',bear.state.x,bear.state.y,68);
+      ctx.fillStyle=P.ink;ctx.font='bold 11px sans-serif';ctx.textAlign='center';
+      ctx.fillText('点击狗熊',bear.state.x,bear.state.y-31);
+    }
 
     // 虫子
     bugs.forEach(drawBug);
@@ -543,7 +569,12 @@
     if(repair.active && running && !over){
       const moving = !paused && honey >= RULES.repairCost && !motionPreference.matches;
       const angle = moving ? blinkT * 1.8 : -0.7;
-      sprites.draw(ctx, 'repair-bee', Math.cos(angle)*32, Math.sin(angle)*20-12, 34);
+      const bx=Math.cos(angle)*32,by=Math.sin(angle)*20-12;
+      sprites.draw(ctx, 'repair-bee', bx, by, 34);
+      if(collection.rank){
+        ctx.fillStyle='#E9B636';ctx.fillRect(bx-8,by-15,16,4);ctx.fillRect(bx-5,by-20,10,6);
+        if(collection.rank>1){ctx.fillStyle='#9A603D';ctx.fillRect(bx+7,by+2,11,8);ctx.strokeRect(bx+10,by,5,3);}
+      }
       ctx.beginPath(); ctx.arc(0,0,29,-Math.PI/2,-Math.PI/2 + Math.PI*2*repair.progress/RULES.repairSeconds);
       ctx.strokeStyle = P.hive; ctx.lineWidth = 2; ctx.stroke();
     }
@@ -666,8 +697,11 @@
   const infoRows = document.getElementById("infoRows");
   const upBtn = document.getElementById("upBtn");
   const sellBtn = document.getElementById("sellBtn");
+  const towerRepairBtn = document.getElementById("towerRepairBtn");
+  const towerRepairCost = t => Math.ceil(TOWERS[t.type].cost * adventure.RULES.repairFraction);
 
   function renderInfo(){
+    towerRepairBtn.hidden = !selTower?.damaged;
     if(!selTower){
       infoEmpty.hidden = false; infoBody.hidden = true;
       if(selType){
@@ -683,6 +717,7 @@
     const rows = [
       ["名称", base.name],
       ["等级", "Lv." + t.level],
+      ["状态", t.damaged ? "损坏停机" : "正常"],
       ["伤害", st.dmg.toFixed(1) + (st.boosted ? " ↑" : "")],
       ["射程", Math.round(st.range)],
       ["射速", base.rate ? st.rate.toFixed(2) + "/秒" : "—"]
@@ -696,12 +731,14 @@
     }).join("");
     const uc = upgradeCost(t);
     upBtn.textContent = t.level >= 4 ? "已满级" : "升级 " + uc;
-    upBtn.disabled = t.level >= 4 || honey < uc;
+    upBtn.disabled = t.damaged || t.level >= 4 || honey < uc;
+    towerRepairBtn.textContent = "修复塔 " + towerRepairCost(t) + " 蜂蜜";
+    towerRepairBtn.disabled = honey < towerRepairCost(t);
     sellBtn.textContent = "出售 " + sellValue(t);
   }
 
   upBtn.addEventListener("click", function(){
-    if(!selTower || selTower.level >= 4) return;
+    if(bear.active || !selTower || selTower.damaged || selTower.level >= 4) return;
     const c = upgradeCost(selTower);
     if(honey < c) return;
     honey -= c; selTower.level++;
@@ -709,12 +746,18 @@
     syncHud(); renderInfo(); renderShop();
   });
   sellBtn.addEventListener("click", function(){
-    if(!selTower) return;
+    if(bear.active || !selTower) return;
     honey += sellValue(selTower);
     burst(selTower.x, selTower.y, P.ink3, 10);
     towers = towers.filter(t => t !== selTower);
     selTower = null;
     syncHud(); renderInfo(); renderShop();
+  });
+
+  towerRepairBtn.addEventListener('click',function(){
+    if(bear.active || !selTower?.damaged || honey<towerRepairCost(selTower)) return;
+    honey-=towerRepairCost(selTower);selTower.damaged=false;
+    syncHud();renderInfo();renderShop();
   });
 
   const hpEl = document.getElementById("hp");
@@ -724,6 +767,7 @@
   const repairStatus = document.getElementById('repairStatus');
   const repairProgress = document.getElementById('repairProgress');
   repairBtn.addEventListener('click', function(){
+    if(bear.active) return;
     repair.toggle(hp, running && !over && (!paused || repair.active));
     renderRepair();
   });
@@ -766,7 +810,7 @@
       honeyEl.setAttribute('aria-label', '蜂蜜 ' + honey);
       // 可购买状态使用真实余额，绝不等待视觉数字追上。
       document.querySelectorAll('#shop .card').forEach((el,i) => el.classList.toggle('poor', honey < TOWERS[TKEYS[i]].cost));
-      if(selTower) upBtn.disabled = selTower.level >= 4 || honey < upgradeCost(selTower);
+      if(selTower) renderInfo();
     }
     waveEl.textContent = wave;
     killsEl.textContent = kills;
@@ -788,12 +832,72 @@
     }).join("");
   }
 
-  // 图鉴
-  document.getElementById("bestiary").innerHTML = Object.keys(BUGS).map(function(k){
-    const b = BUGS[k];
-    const note = b.splits ? "会分裂" : b.armor >= 7 ? "护甲 " + b.armor : b.speed >= 90 ? "极快" : b.boss ? "首领" : "护甲 " + b.armor;
-    return '<div><img class="creature-icon" src="assets/' + k + '.png" alt=""><span style="flex:1">' + b.name + '</span><b>' + note + '</b></div>';
-  }).join("");
+  function renderCollection(){
+    const titles=['维修学徒','小帽子维修蜂','工具箱维修蜂'];
+    document.getElementById('beeGrowth').textContent=titles[collection.rank]+' · 累计修复 '+collection.repairs+' 点'+(collection.rank===0?' · 5 点得小帽子':collection.rank===1?' · 20 点得工具箱':' · 装扮已集齐');
+    document.getElementById('bestiary').innerHTML=Object.keys(BUGS).map(k=>{
+      const known=collection.has(k),facts=adventure.FACTS[k];
+      return '<details class="collection-card '+(known?'':'locked')+'"><summary><img class="creature-icon" src="assets/'+k+'.png" alt="">'+(known?BUGS[k].name:'未发现')+'</summary><p>'+(known?facts.join('<br>'):'首次击败后解锁卡片')+'</p></details>';
+    }).join('');
+  }
+
+  const bearPanel=document.getElementById('bearPanel');
+  const bearCanvas=document.getElementById('bearCanvas');
+  const bearCtx=bearCanvas.getContext('2d');
+  const bearStatus=document.getElementById('bearStatus');
+  const bearExit=document.getElementById('bearExit');
+  let aim={x:332,y:186},bearFlash=0;
+  function renderBearNotice(){
+    const b=bear.state;
+    document.getElementById('bearOpen').hidden=!b;
+    document.getElementById('bearNotice').textContent=b?(b.arrived?'狗熊停在塔旁！损坏的塔可花建造价的 20% 修复。':'狗熊来了！点击它进入瞄准小游戏，可在它碰到塔前阻止它。'):'第 3 波起偶尔出现狗熊，每次最多损坏一座塔。';
+  }
+  function setAdventureLock(locked){
+    document.querySelectorAll('.hud,.shop,.side').forEach(el=>el.inert=locked);
+  }
+  function openBear(){
+    if(!running || over || !bear.open())return;
+    bearPanel.hidden=false;setAdventureLock(true);
+    bearStatus.textContent='命中 '+bear.state.hits+'/5 · 点击狗熊发射；方向键瞄准，空格发射。防线已暂停。';
+    bearExit.textContent='暂时返回防线';bearCanvas.focus();drawBear(0);
+  }
+  function closeBear(){
+    bear.close();bearPanel.hidden=true;setAdventureLock(false);renderBearNotice();
+  }
+  function shootBear(){
+    const result=bear.shoot(aim.x,aim.y,motionPreference.matches);
+    if(!bear.state || bear.state.reward && !result.reward)return;
+    bearFlash=0.18;
+    bearStatus.textContent=result.hit?'命中 '+bear.state.hits+'/5！':'没打中，再试一次！没有时间限制。';
+    if(result.reward){
+      honey+=result.reward;syncHud();
+      bearStatus.textContent='狗熊被击败！获得 '+result.reward+' 蜂蜜。';
+      bearExit.textContent='带着奖励返回防线';
+    }
+  }
+  function drawBear(dt){
+    if(!bear.active)return;
+    bear.step(dt);bearFlash=Math.max(0,bearFlash-dt);
+    const p=bear.target(motionPreference.matches);
+    bearCtx.fillStyle=P.bg;bearCtx.fillRect(0,0,W,H);
+    bearCtx.strokeStyle=P.pathEdge;bearCtx.lineWidth=2;
+    bearCtx.beginPath();bearCtx.arc(p.x,p.y,adventure.RULES.radius,0,Math.PI*2);bearCtx.stroke();
+    bearCtx.globalAlpha=bear.state.reward?0.35:1;
+    sprites.draw(bearCtx,'bear',p.x,p.y,135);bearCtx.globalAlpha=1;
+    bearCtx.strokeStyle=bearFlash?P.honeyC:P.ink;bearCtx.lineWidth=2;
+    bearCtx.beginPath();bearCtx.arc(aim.x,aim.y,12,0,Math.PI*2);
+    bearCtx.moveTo(aim.x-20,aim.y);bearCtx.lineTo(aim.x+20,aim.y);
+    bearCtx.moveTo(aim.x,aim.y-20);bearCtx.lineTo(aim.x,aim.y+20);bearCtx.stroke();
+  }
+  document.getElementById('bearOpen').addEventListener('click',openBear);
+  bearExit.addEventListener('click',()=>{closeBear();document.getElementById('bearOpen').focus();});
+  bearCanvas.addEventListener('pointerdown',e=>{
+    const r=bearCanvas.getBoundingClientRect();
+    // object-fit preserves the logical canvas ratio inside the flex panel.
+    const scale=Math.min(r.width/W,r.height/H);
+    aim={x:(e.clientX-r.left-(r.width-W*scale)/2)/scale,y:(e.clientY-r.top-(r.height-H*scale)/2)/scale};
+    shootBear();
+  });
 
   // ===== 输入 =====
   function evtPos(e){
@@ -810,6 +914,7 @@
   cv.addEventListener("click", function(e){
     if(!running || over) return;
     const p = evtPos(e);
+    if(bear.state && Math.hypot(p.x-bear.state.x,p.y-bear.state.y)<40){openBear();return;}
     const cell = pixelToCell(p.x, p.y);
     if(!cell) return;
     const existing = towers.find(t => t.c === cell.c && t.r === cell.r);
@@ -820,6 +925,14 @@
 
   document.addEventListener("keydown", function(e){
     const k = e.key;
+    if(bear.active){
+      if(k.startsWith("Arrow") || k===" "){
+        e.preventDefault();
+        if(k===" ")shootBear();
+        else {aim.x=Math.max(0,Math.min(W,aim.x+(k==="ArrowRight"?12:k==="ArrowLeft"?-12:0)));aim.y=Math.max(0,Math.min(H,aim.y+(k==="ArrowDown"?12:k==="ArrowUp"?-12:0)));}
+      } else if(k==="Escape")closeBear();
+      return;
+    }
     if(k >= "1" && k <= "5"){
       selType = TKEYS[+k - 1]; selTower = null; renderShop(); renderInfo();
     }else if(k === " "){
@@ -836,11 +949,13 @@
   const speedBtn = document.getElementById("speedBtn");
   const pauseBtn = document.getElementById("pauseBtn");
   function cycleSpeed(){
+    if(bear.active) return;
     speed = speed === 1 ? 2 : speed === 2 ? 3 : 1;
     speedBtn.textContent = speed + "×";
     speedBtn.classList.toggle("on", speed > 1);
   }
   function togglePause(){
+    if(bear.active) return;
     if(!running || over) return;
     paused = !paused;
     pauseBtn.textContent = paused ? "继续" : "暂停";
@@ -848,6 +963,7 @@
     renderRepair();
   }
   function callNow(){
+    if(bear.active) return;
     if(!running || over || prep <= 0.05) return;
     honey += Math.round(prep * 3);
     prep = 0;
@@ -887,12 +1003,13 @@
     if(!last) last = now;
     let dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    if(running && !paused && !over){
-      for(let i = 0; i < speed; i++) tick(dt);
+    if(running && !paused && !over && !bear.active){
+      for(let i = 0; i < speed && !over; i++) tick(dt);
     }
-    if(!paused) blinkT += dt;
+    if(!paused && !bear.active) blinkT += dt;
     animateHoney(dt);
     draw();
+    drawBear(dt);
     requestAnimationFrame(frame);
   }
 

@@ -25,6 +25,12 @@
 
     <div class="stage">
       <canvas id="map" width="664" height="372"></canvas>
+      <section id="bearPanel" class="bear-panel" hidden aria-label="狗熊瞄准小游戏">
+        <h2 id="bearTitle">蜂蜜球赶走狗熊</h2>
+        <p id="bearStatus" role="status">瞄准狗熊，点击发射蜂蜜球。命中 5 次获胜！</p>
+        <canvas id="bearCanvas" width="664" height="372" tabindex="0" aria-label="瞄准画布：点击狗熊发射，方向键移动准星，空格发射"></canvas>
+        <button id="bearExit">暂时返回防线</button>
+      </section>
       <div class="overlay" id="overlay">
         <div class="big" id="ovTitle">蜂巢防线</div>
         <div class="sub" id="ovText">
@@ -42,6 +48,7 @@
         <progress id="repairProgress" max="3" value="0" aria-label="下一点生命的维修进度"></progress>
         <p id="repairStatus" role="status">开始防守后可维修</p>
         <button id="repairBtn" aria-pressed="false">派维修蜂</button>
+        <p id="beeGrowth"></p>
       </div>
       <div class="box" id="infoBox">
         <h2>选中</h2>
@@ -51,12 +58,19 @@
           <div class="acts">
             <button id="upBtn">升级</button>
             <button id="sellBtn">出售</button>
+            <button id="towerRepairBtn" hidden>修复塔</button>
           </div>
         </div>
       </div>
       <div class="box">
         <h2>本波来袭</h2>
         <div class="waveline" id="waveInfo"><span class="chip">尚未开始</span></div>
+      </div>
+      <div class="box">
+        <h2>林间访客</h2>
+        <p id="bearNotice" role="status">第 3 波起偶尔出现狗熊，每次最多损坏一座塔。</p>
+        <button id="bearOpen" hidden>瞄准狗熊</button>
+        <p class="repair-rules">花粉减速 + 蜂胶炮：对减速虫子额外造成 25% 伤害。</p>
       </div>
       <div class="box">
         <h2>虫群图鉴</h2>
@@ -72,4 +86,4 @@
 </div>
 
 
-<footer>蜂巢防线 · 1.336.0-rc1</footer><script src="sprites.js"></script><script src="systems.js"></script><script src="game.js"></script></body></html>
+<footer>蜂巢防线 · 1.337.0-rc1</footer><script src="sprites.js"></script><script src="systems.js"></script><script src="adventure.js"></script><script src="game.js"></script></body></html>

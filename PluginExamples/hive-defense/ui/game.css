@@ -194,3 +194,13 @@ body > footer{max-width:1060px;margin:0 auto;padding:0 16px 20px}
 .repair-box progress{display:block;width:100%;height:8px;accent-color:var(--honey)}
 .repair-box button{width:100%}
 @media (prefers-reduced-motion:reduce){#honey,#honeyDelta{transform:none!important}}
+/* 林间访客在独立画布中进行，外部控制由 inert 暂时停用。 */
+.bear-panel { position:absolute; inset:0; z-index:5; background:var(--panel); padding:12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
+.bear-panel[hidden] { display:none; }
+.bear-panel h2,.bear-panel p { margin:0; text-align:center; }
+#bearCanvas { width:100%; min-height:0; flex:1; object-fit:contain; cursor:crosshair; touch-action:none; }
+#bearNotice,#beeGrowth { font-size:12px; line-height:1.6; }
+.collection-card { display:block !important; padding:6px 0; border-bottom:1px solid var(--line); }
+.collection-card summary { cursor:pointer; display:flex; align-items:center; gap:6px; }
+.collection-card p { font-size:11px; line-height:1.6; margin:5px 0; }
+.collection-card.locked img { filter:brightness(0); opacity:.2; }
