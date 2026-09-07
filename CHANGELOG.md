@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.342.0-rc12 - 2026-09-08
+
+### Added
+
+- 模型选择的「编程推荐」分组新增 Gemini 3.5 Flash（`gemini-3.5-flash`）与 Gemini 3.8 Flash（`gemini-3.8-flash`），与其余推荐项一样走 some.im，归 flash 档。
+
+### Tests
+
+- `AgentModelPickerCatalogTests` 钉住两款 Gemini 的模型 ID、来源与档位；套件 9 项全过。
+- 版本从 **1.342.0-rc11** 递增为 **1.342.0-rc12**。
+
 ## 1.342.0-rc11 - 2026-09-08
 
 ### Added

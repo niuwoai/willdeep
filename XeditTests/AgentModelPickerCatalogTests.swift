@@ -151,5 +151,9 @@ struct AgentModelPickerCatalogTests {
         #expect(recommendations.prefix(4).allSatisfy {
             $0.providerID == AgentProviderPreset.someIMID
         })
+        // 两款 Gemini Flash 走 some.im，模型 ID 原样透传，都归 flash 档。
+        let gemini = recommendations.filter { $0.model.hasPrefix("gemini-") }
+        #expect(gemini.map(\.model) == ["gemini-3.5-flash", "gemini-3.8-flash"])
+        #expect(gemini.allSatisfy { $0.providerID == AgentProviderPreset.someIMID && $0.tier == .flash })
     }
 }

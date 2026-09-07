@@ -2766,6 +2766,22 @@ struct ModelPickerPill: View {
             note: L10n.AgentModelPicker.dailyCodingNote,
             tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.affordable],
             tier: nil
+        ),
+        CodingRecommendation(
+            providerID: AgentProviderPreset.someIMID,
+            title: "Gemini 3.5 Flash",
+            model: "gemini-3.5-flash",
+            note: L10n.AgentModelPicker.fastCodingNote,
+            tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.fast],
+            tier: .flash
+        ),
+        CodingRecommendation(
+            providerID: AgentProviderPreset.someIMID,
+            title: "Gemini 3.8 Flash",
+            model: "gemini-3.8-flash",
+            note: L10n.AgentModelPicker.dailyCodingNote,
+            tags: [L10n.AgentModelPicker.coding, L10n.AgentModelPicker.fast],
+            tier: .flash
         )
     ]
 
