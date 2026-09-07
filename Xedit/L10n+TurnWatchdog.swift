@@ -39,6 +39,64 @@ extension L10n {
             }
         }
 
+        /// Tier one, composer strip. Only the model subjects get a line: a
+        /// running tool or Worker already shows its own name and clock.
+        static func reassurance(subject: AgentTurnWatchdogPolicy.StallSubject) -> String? {
+            switch subject {
+            case .modelFirstToken:
+                return String(
+                    localized: "turn-watchdog.reassure-model-first-token",
+                    defaultValue: "Model is thinking, nothing to show yet — reasoning models often take a minute or two"
+                )
+            case .modelMidStream:
+                return String(
+                    localized: "turn-watchdog.reassure-model-mid-stream",
+                    defaultValue: "Model is working on the next part"
+                )
+            case .worker, .tool:
+                return nil
+            }
+        }
+
+        /// Tier two, second sentence of the banner: what the host will do
+        /// if the silence continues, so the user knows they need not act.
+        static func nextStep(subject: AgentTurnWatchdogPolicy.StallSubject, idle: TimeInterval) -> String {
+            switch subject {
+            case .modelFirstToken, .modelMidStream:
+                let remaining = max(0, Int((AgentTurnWatchdogPolicy.automaticReconnectAt - idle).rounded()))
+                let template = String(
+                    localized: "turn-watchdog.next-auto-reconnect",
+                    defaultValue: "If nothing arrives in the next %@ the connection is dropped and retried automatically."
+                )
+                return String(format: template, AgentTurnWatchdogPolicy.formatIdle(TimeInterval(remaining)))
+            case .worker:
+                return String(
+                    localized: "turn-watchdog.next-worker",
+                    defaultValue: "A Worker that stays silent is cut off by its own timeout and the result is reported back to the model."
+                )
+            case .tool:
+                return String(
+                    localized: "turn-watchdog.next-tool",
+                    defaultValue: "Stop interrupts the tool call."
+                )
+            }
+        }
+
+        /// Tier three: the transient ladder is reconnecting.
+        static func reconnecting(attempt: Int, maximum: Int) -> String {
+            let template = String(
+                localized: "turn-watchdog.reconnecting",
+                defaultValue: "Connection dropped; reconnecting (attempt %1$d of %2$d)."
+            )
+            return String(format: template, attempt, maximum)
+        }
+
+        static let retryNow = String(localized: "turn-watchdog.retry-now", defaultValue: "Retry now")
+        static let retryNowHelp = String(
+            localized: "turn-watchdog.retry-now-help",
+            defaultValue: "Stop this turn and send it again immediately"
+        )
+
         static func durationSeconds(_ seconds: Int) -> String {
             let template = String(localized: "turn-watchdog.duration-seconds", defaultValue: "%d s")
             return String(format: template, seconds)

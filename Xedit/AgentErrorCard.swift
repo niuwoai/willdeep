@@ -45,6 +45,26 @@ struct AgentErrorCard: View {
                     .foregroundStyle(.secondary)
                     .help("打开 some.im 登录页；登录后点「重试」重新发送")
                 }
+                if appState.canRetryStalledAgentTurn {
+                    // Tier two: the turn is still open but silent. Stop it
+                    // and re-run it now rather than waiting for the idle
+                    // guard to do the same thing a minute later.
+                    Button {
+                        appState.retryStalledAgentTurn()
+                    } label: {
+                        Label(L10n.TurnWatchdog.retryNow, systemImage: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 10)
+                            .frame(height: 22)
+                    }
+                    .buttonStyle(
+                        AgentApprovalPrimaryButtonStyle(
+                            colorScheme: colorScheme,
+                            cornerRadius: 6
+                        )
+                    )
+                    .help(L10n.TurnWatchdog.retryNowHelp)
+                }
                 if appState.canRetryLastAgentTurn {
                     Button {
                         appState.retryLastAgentTurn()

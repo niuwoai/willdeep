@@ -1217,6 +1217,7 @@ extension AppState {
                                 case .requestIdentified(let requestID):
                                     turnTelemetry.noteRequestID(requestID)
                                 case .textDelta(let delta):
+                                    if !delta.isEmpty { self.noteAgentVisibleOutput(for: runtime) }
                                     if !delta.isEmpty, runtime.messages[index].firstResponseSeconds == nil {
                                         runtime.messages[index].firstResponseSeconds = Date().timeIntervalSince(turnStartedAt)
                                         runtime.currentTurnTiming?.noteFirstToken()
@@ -1276,6 +1277,13 @@ extension AppState {
                             for: error,
                             runtime: runtime,
                             attempt: retryCount
+                        )
+                        noteAgentTransientReconnect(
+                            for: runtime,
+                            attempt: retryCount,
+                            maximum: Self.isTLSHandshakeError(error)
+                                ? Self.maxTLSHandshakeRetries
+                                : (transientNetworkRetryLane(for: runtime)?.maximumRetries ?? retryCount)
                         )
                         try await Task.sleep(nanoseconds: retryDelay)
                     }

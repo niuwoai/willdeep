@@ -988,6 +988,15 @@ struct AgentSemanticActivityStatusLine: View {
             return AgentActivityPhase(label: "任务运行中", systemImage: "play.circle", tint: .secondary)
         }
         if appState.isAgentResponding {
+            // Tier one of the liveness ladder: alive, but nothing to show
+            // for a while. Says what is slow and that slow is normal, in the
+            // same grey as every other in-progress state. Only the model
+            // subjects land here — a running tool or Worker already shows
+            // its name and a clock above.
+            if let quiet = appState.activeRuntime?.quietReassurance,
+               let label = L10n.TurnWatchdog.reassurance(subject: quiet.subject) {
+                return AgentActivityPhase(label: label, systemImage: "brain", tint: .secondary)
+            }
             if let headline = appState.agentCurrentActivityHeadline {
                 return AgentActivityPhase(
                     label: headline.liveTitle,

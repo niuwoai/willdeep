@@ -261,4 +261,42 @@ struct AgentTurnWatchdogTests {
         // 秒数每一跳都要变，否则读秒读了个寂寞。
         #expect(AgentTurnWatchdogPolicy.formatIdle(111) != AgentTurnWatchdogPolicy.formatIdle(112))
     }
+
+    @Test func reassuranceStartsWellBeforeTheBannerAndOnlyForTheModel() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        func quiet(after seconds: TimeInterval) -> TimeInterval? {
+            AgentTurnWatchdogPolicy.quietSeconds(
+                isResponding: true,
+                isAwaitingProviderSlot: false,
+                isCompressingContext: false,
+                hasBlockingDecision: false,
+                lastVisibleOutputAt: start,
+                now: start.addingTimeInterval(seconds)
+            )
+        }
+        #expect(quiet(after: 5) == nil)
+        #expect(quiet(after: 15) == 15)
+        #expect(AgentTurnWatchdogPolicy.reassuranceThreshold < AgentTurnWatchdogPolicy.stallThreshold)
+        // 工具和 Worker 在状态条上本来就有名字和秒表，安抚只给模型那两种。
+        #expect(L10n.TurnWatchdog.reassurance(subject: .modelFirstToken) != nil)
+        #expect(L10n.TurnWatchdog.reassurance(subject: .modelMidStream) != nil)
+        #expect(L10n.TurnWatchdog.reassurance(subject: .tool("run_command")) == nil)
+        #expect(L10n.TurnWatchdog.reassurance(subject: .worker("调查员")) == nil)
+        // 没有可见输出的时间点就没有安抚：不能从 nil 起算。
+        #expect(AgentTurnWatchdogPolicy.quietSeconds(
+            isResponding: true, isAwaitingProviderSlot: false, isCompressingContext: false,
+            hasBlockingDecision: false, lastVisibleOutputAt: nil, now: start
+        ) == nil)
+    }
+
+    @Test func theBannerCountsDownToTheAutomaticReconnect() {
+        let at100 = L10n.TurnWatchdog.nextStep(subject: .modelFirstToken, idle: 100)
+        let at150 = L10n.TurnWatchdog.nextStep(subject: .modelFirstToken, idle: 150)
+        #expect(at100 != at150)
+        #expect(at100.contains(AgentTurnWatchdogPolicy.formatIdle(AgentTurnWatchdogPolicy.automaticReconnectAt - 100)))
+        // 过了守卫时限还没断（守卫在另一条线程上）也不能倒数成负数。
+        let past = L10n.TurnWatchdog.nextStep(subject: .modelMidStream, idle: 10_000)
+        #expect(past.contains(AgentTurnWatchdogPolicy.formatIdle(0)))
+        #expect(AgentTurnWatchdogPolicy.automaticReconnectAt > AgentTurnWatchdogPolicy.stallThreshold)
+    }
 }

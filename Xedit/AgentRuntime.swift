@@ -30,6 +30,13 @@ nonisolated enum AgentBannerSeverity: Equatable {
     case notice
 }
 
+/// What the composer strip says while a live turn shows nothing. See
+/// AgentTurnWatchdogPolicy.reassuranceThreshold.
+nonisolated struct AgentQuietReassurance: Equatable {
+    var subject: AgentTurnWatchdogPolicy.StallSubject
+    var since: Date
+}
+
 @MainActor
 final class AgentRuntime: ObservableObject, Identifiable {
     let id: AgentSession.ID
@@ -113,6 +120,17 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// The banner currently shows the watchdog's stall notice rather than a
     /// real error, so resumed activity is allowed to clear it.
     var isShowingWatchdogStallNotice = false
+    /// Last time the user could *see* something happen: a text delta, a tool
+    /// result, a Worker round. `lastActivityAt` also moves on reasoning
+    /// deltas and other invisible events; the gap between the two clocks is
+    /// exactly the stretch where the user needs reassurance, not alarm.
+    var lastVisibleOutputAt: Date?
+    /// Tier-one liveness copy for the composer strip: the turn is alive but
+    /// has shown nothing for a while. Nil whenever output is flowing.
+    @Published var quietReassurance: AgentQuietReassurance?
+    /// Set by "retry now" on the stall banner: stop this turn, then re-run
+    /// it as soon as the loop has wound down.
+    var retryAfterStopRequested = false
     /// Automatic resumes issued for turns that ended on unexecuted tool
     /// calls. Reset when a turn ends cleanly; capped by the watchdog policy.
     var turnInterruptionAutoResumeCount = 0

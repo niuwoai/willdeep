@@ -1253,9 +1253,9 @@ extension AppState {
         toolName: String? = nil,
         toolCommand: String? = nil
     ) {
-        // Every tool result, hand-authored notices included, is activity as
-        // far as the turn watchdog is concerned.
-        noteAgentTurnActivity(for: runtime)
+        // Every tool result, hand-authored notices included, is something the
+        // user can see land in the transcript.
+        noteAgentVisibleOutput(for: runtime)
         let sanitized = AgentInjectionDefense.sanitizedToolMessageContent(
             payload: payload,
             source: source

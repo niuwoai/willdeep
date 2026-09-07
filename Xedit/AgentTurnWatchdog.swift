@@ -30,6 +30,16 @@ nonisolated enum AgentTurnWatchdogPolicy {
     /// provider's time-to-first-token and longer than a normal tool call, and
     /// three ticks of the 30-second scheduler the check rides on.
     static let stallThreshold: TimeInterval = 90
+    /// Seconds of *visible* silence before the composer strip starts
+    /// reassuring instead of just saying "思考中". Fifteen seconds is past
+    /// the point where a user starts wondering and well before anything is
+    /// actually wrong: reasoning models routinely take a minute or two to
+    /// show their first character.
+    static let reassuranceThreshold: TimeInterval = 15
+    /// Silence at which the stream idle guard cuts the connection and the
+    /// transient ladder reconnects. The stall banner counts down to it so
+    /// the user knows the host will act without them.
+    static let automaticReconnectAt: TimeInterval = AgentStreamIdleGuard.streamIdleTimeout
     /// How many times a turn that ended on dangling tool calls is resumed
     /// without the user. Two catches a transient; more would loop a turn that
     /// keeps breaking in the same place.
@@ -37,6 +47,22 @@ nonisolated enum AgentTurnWatchdogPolicy {
     /// First line of the resume instruction; used to deduplicate against a
     /// queued copy the same way the goal planner does.
     static let resumePromptPrefix = "=== TURN INTERRUPTED — RESUME ==="
+
+    /// Visible silence long enough for tier-one reassurance, nil when the
+    /// turn is either showing output or legitimately parked.
+    static func quietSeconds(
+        isResponding: Bool,
+        isAwaitingProviderSlot: Bool,
+        isCompressingContext: Bool,
+        hasBlockingDecision: Bool,
+        lastVisibleOutputAt: Date?,
+        now: Date
+    ) -> TimeInterval? {
+        guard isResponding, !isAwaitingProviderSlot, !isCompressingContext, !hasBlockingDecision,
+              let lastVisibleOutputAt else { return nil }
+        let quiet = now.timeIntervalSince(lastVisibleOutputAt)
+        return quiet >= reassuranceThreshold ? quiet : nil
+    }
 
     /// Seconds of silence when the turn should be reported as stalled, nil
     /// when it is either active or legitimately waiting.
@@ -125,13 +151,51 @@ extension AppState {
     /// event and every tool result; cheap enough to call per token.
     func noteAgentTurnActivity(for runtime: AgentRuntime, at now: Date = Date()) {
         runtime.lastActivityAt = now
+        // A turn that has just started has shown nothing yet; the visible
+        // clock starts with the first sign of life so quiet is measured
+        // from a real point, not from nil.
+        if runtime.lastVisibleOutputAt == nil { runtime.lastVisibleOutputAt = now }
         if runtime.isShowingWatchdogStallNotice {
             runtime.isShowingWatchdogStallNotice = false
             if runtime.errorSeverity == .notice {
                 runtime.clearTurnError()
             }
-            updateAgentStallTicker()
         }
+        updateAgentStallTicker()
+    }
+
+    /// Stamp something the user could see: a text delta, a tool result, a
+    /// Worker round. Implies activity.
+    func noteAgentVisibleOutput(for runtime: AgentRuntime, at now: Date = Date()) {
+        noteAgentTurnActivity(for: runtime, at: now)
+        runtime.lastVisibleOutputAt = now
+        if runtime.quietReassurance != nil {
+            runtime.quietReassurance = nil
+        }
+    }
+
+    /// Tier three: the stream idle guard or a dropped connection ended the
+    /// request and the transient ladder is about to reconnect. Until now this
+    /// happened in silence; the user saw the same frozen state before and
+    /// after the reconnect and could not tell the host had done anything.
+    func noteAgentTransientReconnect(for runtime: AgentRuntime, attempt: Int, maximum: Int) {
+        guard runtime.errorMessage == nil || runtime.isShowingWatchdogStallNotice else { return }
+        runtime.errorMessage = L10n.TurnWatchdog.reconnecting(attempt: attempt, maximum: maximum)
+        runtime.errorDetails = nil
+        runtime.errorSeverity = .notice
+        // Same clearing path as the stall notice: the first event of the
+        // new request takes it down.
+        runtime.isShowingWatchdogStallNotice = true
+        runtime.quietReassurance = nil
+    }
+
+    /// "Retry now" on the stall banner. Stops the turn and re-runs it once
+    /// the loop has wound down, instead of making the user wait for the
+    /// idle guard to time out on its own.
+    func retryStalledAgentTurn() {
+        guard let runtime = activeRuntime, runtime.isResponding else { return }
+        runtime.retryAfterStopRequested = true
+        stopAgentResponse(for: runtime)
     }
 
     /// Runs on the scheduler tick. Raises the stall notice on runtimes that
@@ -139,6 +203,22 @@ extension AppState {
     func scanAgentTurnsForStalls(now: Date = Date()) {
         for runtime in agentRuntimes.values {
             let blocking = runtime.toolCalls.contains { $0.status.isBlockingForUserDecision }
+            // Tier one: alive but showing nothing. Only ever changes the
+            // strip label, and only publishes when the label would change.
+            let isQuiet = AgentTurnWatchdogPolicy.quietSeconds(
+                isResponding: runtime.isResponding,
+                isAwaitingProviderSlot: runtime.isAwaitingProviderSlot,
+                isCompressingContext: runtime.isCompressingContext,
+                hasBlockingDecision: blocking,
+                lastVisibleOutputAt: runtime.lastVisibleOutputAt,
+                now: now
+            ) != nil
+            if isQuiet, let since = runtime.lastVisibleOutputAt {
+                let reassurance = AgentQuietReassurance(subject: watchdogStallSubject(for: runtime), since: since)
+                if runtime.quietReassurance != reassurance { runtime.quietReassurance = reassurance }
+            } else if runtime.quietReassurance != nil {
+                runtime.quietReassurance = nil
+            }
             guard let idle = AgentTurnWatchdogPolicy.stalledSeconds(
                 isResponding: runtime.isResponding,
                 isAwaitingProviderSlot: runtime.isAwaitingProviderSlot,
@@ -150,10 +230,9 @@ extension AppState {
             // Never paint over a real error; the stall notice is the mild
             // one and yields to anything already on the banner.
             guard runtime.errorMessage == nil || runtime.isShowingWatchdogStallNotice else { continue }
-            runtime.errorMessage = L10n.TurnWatchdog.stalled(
-                subject: watchdogStallSubject(for: runtime),
-                idle: idle
-            )
+            let subject = watchdogStallSubject(for: runtime)
+            runtime.errorMessage = L10n.TurnWatchdog.stalled(subject: subject, idle: idle)
+                + " " + L10n.TurnWatchdog.nextStep(subject: subject, idle: idle)
             runtime.errorDetails = nil
             runtime.errorSeverity = .notice
             runtime.isShowingWatchdogStallNotice = true
@@ -177,13 +256,14 @@ extension AppState {
 
     /// The banner counts. A number frozen at "111 s" while the wait keeps
     /// growing reads like the app is stuck too; a moving number is the
-    /// cheapest proof that the host is still watching. The ticker only runs
-    /// while a notice is up — the 30-second routine scheduler raises the
-    /// first one, this takes over the seconds, and both stop when the turn
-    /// comes back to life.
+    /// cheapest proof that the host is still watching. The ticker runs
+    /// while any turn is responding — it is what promotes a quiet turn to
+    /// reassurance at fifteen seconds and to the banner at ninety — and
+    /// stops with the last turn. Each tick is a handful of comparisons; it
+    /// publishes only when a label or a notice actually changes.
     func updateAgentStallTicker() {
-        let stalled = agentRuntimes.values.contains { $0.isShowingWatchdogStallNotice }
-        guard stalled else {
+        let live = agentRuntimes.values.contains { $0.isResponding || $0.isShowingWatchdogStallNotice }
+        guard live else {
             agentStallTickerTask?.cancel()
             agentStallTickerTask = nil
             return
@@ -193,7 +273,7 @@ extension AppState {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 guard let self, !Task.isCancelled else { return }
-                guard self.agentRuntimes.values.contains(where: { $0.isShowingWatchdogStallNotice }) else {
+                guard self.agentRuntimes.values.contains(where: { $0.isResponding || $0.isShowingWatchdogStallNotice }) else {
                     self.agentStallTickerTask = nil
                     return
                 }
@@ -208,6 +288,20 @@ extension AppState {
     /// automatic resume.
     func noteAgentTurnEnded(for runtime: AgentRuntime, turnID: UUID) {
         runtime.isShowingWatchdogStallNotice = false
+        runtime.quietReassurance = nil
+        runtime.lastVisibleOutputAt = nil
+        updateAgentStallTicker()
+        if runtime.retryAfterStopRequested {
+            runtime.retryAfterStopRequested = false
+            // The stop's own bookkeeping (interrupted message, persisted
+            // session) finishes in this same defer; re-run on the next hop.
+            Task { @MainActor [weak self, weak runtime] in
+                guard let self, let runtime, self.activeRuntime === runtime else { return }
+                if runtime.errorSeverity == .notice { runtime.clearTurnError() }
+                self.retryLastAgentTurn()
+            }
+            return
+        }
         guard runtime.userStoppedTurnID != turnID,
               runtime.errorMessage == nil,
               !runtime.toolCalls.contains(where: { $0.status.isBlockingForUserDecision }) else { return }

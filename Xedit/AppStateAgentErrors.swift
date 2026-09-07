@@ -251,6 +251,13 @@ extension AppState {
     /// Whether the error banner should expose a "Retry" affordance.
     /// We allow retry whenever the loop is idle and there's at least one
     /// user message in the history — i.e. there's something to retry.
+    /// The stall banner's "retry now": only while the turn is still open
+    /// and it is the watchdog, not a real error, on the banner.
+    var canRetryStalledAgentTurn: Bool {
+        guard let runtime = activeRuntime else { return false }
+        return runtime.isResponding && runtime.isShowingWatchdogStallNotice
+    }
+
     var canRetryLastAgentTurn: Bool {
         guard !isAgentResponding, !isCompressingAgentContext else { return false }
         guard agentMessages.contains(where: { $0.role == .user }) else { return false }

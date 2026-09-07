@@ -607,6 +607,7 @@ extension AppState {
         )
         runtime.toolCalls[index].subagentLiveActivity = activity
         projectWorkerDetailOntoPlan("\(workerName) · \(activity.detailLine)", runtime: runtime)
+        noteAgentVisibleOutput(for: runtime)
     }
 
     /// Mirror a Worker's heartbeat onto the plan card.
