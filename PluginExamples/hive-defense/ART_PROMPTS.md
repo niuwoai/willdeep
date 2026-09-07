@@ -18,3 +18,11 @@
 | spider.png | Spider; head faces exactly RIGHT; plum-brown spider with exactly eight articulated legs; two distinct rounded body segments; small amber eyes; clear leg separation. |
 | hornet.png | Giant hornet BOSS; head faces exactly RIGHT; powerful red-orange hornet with dark brown striped armored abdomen; larger fierce mandibles; six legs; antennae; two pairs of translucent amber wings spread symmetrically; long stinger; no crown. |
 | hive.png | Honeybee hive base; compact hexagonal cluster of golden beeswax honeycomb cells with amber honey centers; slightly raised central hive entrance; warm brown edges; no bees or other creatures. |
+
+## 1.336.0-rc1 维修蜂
+
+`ui/assets/repair-bee.png` 使用内置 imagegen 生成并编辑，保留 alpha，实际尺寸 1536×1024。
+
+生成提示词：A single friendly honeybee repair worker game sprite with a tiny sky-blue mechanic cap and one small silver wrench held in its forelegs, golden yellow and brown striped round body, smiling friendly eyes, delicate translucent wings. Top-down three-quarter view with head to the right, whole bee and wrench inside image. Charming polished hand-painted 2D honeycomb tower-defense art, crisp dark outlines and chunky readable silhouette. One centered isolated character, no hive, no scenery, no lettering, no ground or outside shadow. Genuine transparent alpha PNG background, ample clear padding. Suitable for a small bee flying around a damaged hive to repair it.
+
+编辑提示词：Keep exactly this cute repair bee, blue cap and wrench. Remove ALL background, all black or brown vignette, all atmospheric glow/haze around the bee, every surrounding shadow. Output a clean isolated game sprite with completely transparent pixels outside the bee, wrench and wings. The bee's body and hat must be fully opaque, wing membranes may be translucent. Do not add scenery, lighting halos, text or other objects. Preserve the same bee design and fit it entirely within generous transparent padding.

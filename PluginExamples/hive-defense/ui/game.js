@@ -3,6 +3,11 @@
   "use strict";
 
   const sprites = window.HiveSprites;
+  const {RULES, createCounter, createRepair} = window.HiveSystems;
+  const repair = createRepair();
+  const honeyCounter = createCounter(220);
+  const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let honeyFeedbackAge = 1, honeyDelta = 0;
 
   // ===== 六边形网格几何（尖顶，odd-r 偏移）=====
   const SIZE = 26;
@@ -195,9 +200,14 @@
 
   function reset(){
     towers = []; bugs = []; shots = []; parts = []; texts = [];
-    hp = 20; honey = 220; wave = 0; kills = 0; prep = 0;
+    hp = RULES.maxHP; honey = 220; wave = 0; kills = 0; prep = 0;
     spawnQueue = []; running = false; paused = false; over = false; speed = 1;
     selType = null; selTower = null;
+    repair.reset(); honeyCounter.reset(honey);
+    honeyFeedbackAge = 1; honeyDelta = 0;
+    honeyEl.textContent = honey;
+    honeyEl.setAttribute('aria-label', '蜂蜜 ' + honey);
+    honeyDeltaEl.textContent = '';
     syncHud(); renderShop(); renderInfo(); renderWaveInfo();
   }
 
@@ -279,7 +289,7 @@
     bug.dead = true;
     kills++;
     honey += bug.bounty;
-    texts.push({x:bug.x, y:bug.y, t:0, s:"+" + bug.bounty, c:P.honeyC});
+    texts.push({x:bug.x, y:bug.y, t:0, s:"+" + bug.bounty + " 蜂蜜", c:P.honeyC, reward:true});
     burst(bug.x, bug.y, color || bug.color, bug.boss ? 26 : 10);
     const def = BUGS[bug.type];
     if(def.splits){
@@ -325,6 +335,7 @@
       b.x = p.x; b.y = p.y;
       if(b.dist >= TOTAL_LEN){
         hp -= b.dmg;
+        repair.hit();
         texts.push({x:PTS[PTS.length-1].x, y:PTS[PTS.length-1].y - 14, t:0, s:"-" + b.dmg, c:P.danger});
         burst(b.x, b.y, P.danger, 8);
         bugs.splice(i, 1);
@@ -408,13 +419,21 @@
     // 波次推进
     if(!spawnQueue.length && !bugs.length){
       if(prep <= 0){
-        prep = wave === 0 ? 0.01 : 13;
+        prep = wave === 0 ? 0.01 : RULES.restSeconds;
       }else{
         prep -= dt;
         if(prep <= 0) startWave();
       }
       syncHud();
     }
+    const repaired = repair.step(dt, hp, honey);
+    hp = repaired.hp; honey = repaired.honey;
+    if(repaired.repaired){
+      const hive = cellCenter(HIVE.c, HIVE.r);
+      texts.push({x:hive.x, y:hive.y - 20, t:0, s:'+' + repaired.repaired + ' 修复', c:P.hive});
+      syncHud(); renderShop(); renderInfo();
+    }
+    renderRepair();
   }
 
   // ===== 绘制 =====
@@ -493,6 +512,9 @@
     texts.forEach(function(t){
       ctx.globalAlpha = Math.max(0, 1 - t.t / 0.9);
       ctx.fillStyle = t.c;
+      ctx.font = (t.reward ? '700 13px' : '600 12px') + " 'IBM Plex Mono', monospace";
+      ctx.strokeStyle = P.bg; ctx.lineWidth = 3;
+      ctx.strokeText(t.s, t.x, t.y);
       ctx.fillText(t.s, t.x, t.y);
       ctx.globalAlpha = 1;
     });
@@ -502,7 +524,7 @@
       ctx.font = "600 12px 'IBM Plex Mono', monospace";
       ctx.fillStyle = P.ink2;
       ctx.textAlign = "left";
-      ctx.fillText("第 " + (wave + 1) + " 波 " + prep.toFixed(1) + "s 后进攻", 12, H - 12);
+      ctx.fillText("休整中 · 第 " + (wave + 1) + " 波 " + prep.toFixed(1) + "s 后进攻", 12, H - 12);
     }
   }
 
@@ -511,13 +533,27 @@
     ctx.save();
     ctx.translate(p.x, p.y);
     sprites.draw(ctx, 'hive', 0, 0, 52);
+    // 裂纹随损伤加深，维修后逐渐变淡。
+    ctx.globalAlpha = Math.max(0, 1 - hp / RULES.maxHP);
+    ctx.strokeStyle = '#38220E'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(-15,-16); ctx.lineTo(-5,-5);
+    ctx.lineTo(-10,2); ctx.lineTo(2,13); ctx.moveTo(17,-10);
+    ctx.lineTo(8,0); ctx.lineTo(14,8); ctx.stroke();
+    ctx.globalAlpha = 1;
+    if(repair.active && running && !over){
+      const moving = !paused && honey >= RULES.repairCost && !motionPreference.matches;
+      const angle = moving ? blinkT * 1.8 : -0.7;
+      sprites.draw(ctx, 'repair-bee', Math.cos(angle)*32, Math.sin(angle)*20-12, 34);
+      ctx.beginPath(); ctx.arc(0,0,29,-Math.PI/2,-Math.PI/2 + Math.PI*2*repair.progress/RULES.repairSeconds);
+      ctx.strokeStyle = P.hive; ctx.lineWidth = 2; ctx.stroke();
+    }
     ctx.restore();
     // 血条
     const w = 40;
     ctx.fillStyle = hexToRgba(P.ink3, .3);
     ctx.fillRect(p.x - w/2, p.y + SIZE - 4, w, 4);
     ctx.fillStyle = hp > 8 ? P.hive : P.danger;
-    ctx.fillRect(p.x - w/2, p.y + SIZE - 4, w * Math.max(0, hp) / 20, 4);
+    ctx.fillRect(p.x - w/2, p.y + SIZE - 4, w * Math.max(0, hp) / RULES.maxHP, 4);
   }
 
   function drawTowerGlyph(x, y, type, level, angle, alpha, boosted){
@@ -683,17 +719,60 @@
 
   const hpEl = document.getElementById("hp");
   const honeyEl = document.getElementById("honey");
+  const honeyDeltaEl = document.getElementById('honeyDelta');
+  const repairBtn = document.getElementById('repairBtn');
+  const repairStatus = document.getElementById('repairStatus');
+  const repairProgress = document.getElementById('repairProgress');
+  repairBtn.addEventListener('click', function(){
+    repair.toggle(hp, running && !over && (!paused || repair.active));
+    renderRepair();
+  });
+  function renderRepair(){
+    repairBtn.disabled = !running || over || (paused && !repair.active) || hp >= RULES.maxHP;
+    repairBtn.textContent = repair.active ? '停止维修' : '派维修蜂';
+    repairBtn.setAttribute('aria-pressed', String(repair.active));
+    repairProgress.value = repair.progress;
+    let status = '每 3 秒修 1 点 · 每点 4 蜂蜜';
+    if(over) status = '蜂巢已失守';
+    else if(!running) status = '开始防守后可维修';
+    else if(hp >= RULES.maxHP) status = '蜂巢完好';
+    else if(paused) status = '游戏已暂停 · 维修进度保留';
+    else if(repair.active && honey < RULES.repairCost) status = '等待蜂蜜 · 每点需要 4 蜂蜜';
+    else if(repair.active) status = (repair.hurt > 0 ? '受击减速 · ' : '维修中 · ') + '下一点 ' + Math.ceil(repair.remaining) + ' 秒';
+    if(repairStatus.textContent !== status) repairStatus.textContent = status;
+  }
+  function animateHoney(dt){
+    honeyEl.textContent = honeyCounter.step(dt, motionPreference.matches);
+    honeyFeedbackAge += dt;
+    const visible = honeyFeedbackAge < 0.9;
+    honeyEl.classList.toggle('earning', visible && honeyDelta > 0);
+    honeyEl.classList.toggle('spending', visible && honeyDelta < 0);
+    const pulse = visible && !motionPreference.matches ? Math.sin(Math.min(1,honeyFeedbackAge/0.45)*Math.PI)*0.16 : 0;
+    honeyEl.style.transform = 'scale(' + (1+pulse) + ')';
+    honeyDeltaEl.style.opacity = visible ? String(Math.min(1,(0.9-honeyFeedbackAge)*3)) : '0';
+    honeyDeltaEl.style.transform = motionPreference.matches ? 'none' : 'translateY(' + (-honeyFeedbackAge*9) + 'px)';
+  }
   const waveEl = document.getElementById("wave");
   const killsEl = document.getElementById("kills");
   const callBtn = document.getElementById("callBtn");
   function syncHud(){
     hpEl.textContent = Math.max(0, hp);
     hpEl.className = "v" + (hp <= 8 ? " hurt" : "");
-    honeyEl.textContent = honey;
+    const delta = honeyCounter.set(honey);
+    if(delta){
+      honeyDelta = honeyFeedbackAge < 0.3 && Math.sign(delta) === Math.sign(honeyDelta) ? honeyDelta + delta : delta;
+      honeyFeedbackAge = 0;
+      honeyDeltaEl.textContent = (honeyDelta > 0 ? '+' : '') + honeyDelta;
+      honeyEl.setAttribute('aria-label', '蜂蜜 ' + honey);
+      // 可购买状态使用真实余额，绝不等待视觉数字追上。
+      document.querySelectorAll('#shop .card').forEach((el,i) => el.classList.toggle('poor', honey < TOWERS[TKEYS[i]].cost));
+      if(selTower) upBtn.disabled = selTower.level >= 4 || honey < upgradeCost(selTower);
+    }
     waveEl.textContent = wave;
     killsEl.textContent = kills;
     callBtn.disabled = !running || over || prep <= 0.05;
     callBtn.textContent = prep > 0.05 ? "下一波 +" + Math.round(prep * 3) : "进攻中";
+    renderRepair();
   }
   function flashHud(){
     honeyEl.classList.add("hurt");
@@ -766,6 +845,7 @@
     paused = !paused;
     pauseBtn.textContent = paused ? "继续" : "暂停";
     pauseBtn.classList.toggle("on", paused);
+    renderRepair();
   }
   function callNow(){
     if(!running || over || prep <= 0.05) return;
@@ -785,6 +865,7 @@
 
   function gameOver(){
     over = true; running = false;
+    repair.stop();
     ovTitle.textContent = "蜂巢失守";
     ovText.innerHTML = "撑到第 <b>" + wave + "</b> 波，消灭 <b>" + kills + "</b> 只虫子。<br>换个建塔位置再试一次？";
     startBtn.textContent = "重新防守";
@@ -809,7 +890,8 @@
     if(running && !paused && !over){
       for(let i = 0; i < speed; i++) tick(dt);
     }
-    blinkT += dt;
+    if(!paused) blinkT += dt;
+    animateHoney(dt);
     draw();
     requestAnimationFrame(frame);
   }

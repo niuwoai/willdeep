@@ -1,7 +1,7 @@
 (function () {
   'use strict';
   const keys = ['sting', 'bomb', 'pollen', 'barb', 'drum',
-    'aphid', 'wasp', 'beetle', 'moth', 'spider', 'hornet', 'hive'];
+    'aphid', 'wasp', 'beetle', 'moth', 'spider', 'hornet', 'hive', 'repair-bee'];
   const images = new Map();
   const ready = Promise.all(keys.map(key => new Promise((resolve, reject) => {
     const image = new Image();

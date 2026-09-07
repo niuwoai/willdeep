@@ -9,7 +9,7 @@
 
   <div class="hud">
     <div class="item"><span class="k">蜂巢</span><span class="v" id="hp">20</span></div>
-    <div class="item"><span class="k">蜂蜜</span><span class="v honey" id="honey">220</span></div>
+    <div class="item honey-item"><span class="k">蜂蜜</span><span class="honey-value"><span class="v honey" id="honey" aria-label="蜂蜜 220">220</span><span id="honeyDelta" aria-hidden="true"></span></span></div>
     <div class="item"><span class="k">波次</span><span class="v" id="wave">0</span></div>
     <div class="item"><span class="k">击杀</span><span class="v" id="kills">0</span></div>
     <div class="spacer"></div>
@@ -36,6 +36,13 @@
     </div>
 
     <div class="side">
+      <div class="box repair-box">
+        <h2>蜂巢维修</h2>
+        <p class="repair-rules">每 3 个游戏秒修 1 点，每点消耗 4 蜂蜜。受击暂时减速；波间有 13 秒休整。</p>
+        <progress id="repairProgress" max="3" value="0" aria-label="下一点生命的维修进度"></progress>
+        <p id="repairStatus" role="status">开始防守后可维修</p>
+        <button id="repairBtn" aria-pressed="false">派维修蜂</button>
+      </div>
       <div class="box" id="infoBox">
         <h2>选中</h2>
         <div class="empty" id="infoEmpty">点击地图上的防御塔查看数据，或先从左侧选一种塔再点空地建造。</div>
@@ -65,4 +72,4 @@
 </div>
 
 
-<footer>蜂巢防线 · 1.335.0-rc1</footer><script src="sprites.js"></script><script src="game.js"></script></body></html>
+<footer>蜂巢防线 · 1.336.0-rc1</footer><script src="sprites.js"></script><script src="systems.js"></script><script src="game.js"></script></body></html>
