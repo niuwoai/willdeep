@@ -1161,8 +1161,10 @@ struct AgentPluginSystemTests {
         )
         #expect(apiKey.type == .secret)
 
-        let selection = manifest.contributes.menus[AgentPluginMenuLocation.chatSelection] ?? []
-        #expect(selection == ["video.createDraft"])
+        // 短剧工坊不进聊天选区右键菜单：那个菜单是对着聊天正文划词用的，
+        // 「发送到短剧工坊」放在这里既不常用，又把菜单挤长。命令本身保留，
+        // 仍可经 MCP 工具调用。
+        #expect(manifest.contributes.menus[AgentPluginMenuLocation.chatSelection] == nil)
         let createDraft = try #require(
             manifest.contributes.commands.first { $0.id == "video.createDraft" }
         )
