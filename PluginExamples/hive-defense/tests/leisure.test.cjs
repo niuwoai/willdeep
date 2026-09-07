@@ -20,3 +20,13 @@ test('move quota is once per wave and is restored only at wave start',()=>{
   const l=createLeisure(()=>0);l.reset(cells);assert.equal(l.consumeMove(),true);assert.equal(l.consumeMove(),false);
   l.clear(1,cells);assert.equal(l.consumeMove(),false);l.start(2);assert.equal(l.consumeMove(),true);
 });
+test('three of four cards are offered and only an offered card can be chosen',()=>{
+  const l=createLeisure(()=>0);l.reset(cells);
+  for(let wave=1;wave<=3;wave++)l.clear(wave,cells);
+  assert.deepEqual(l.offered,['honey','repair','haste']);
+  assert.equal(l.choose('parcel'),false);assert.equal(l.choosing,true);
+  const p=createLeisure(()=>0.9);p.reset(cells);
+  for(let wave=1;wave<=3;wave++)p.clear(wave,cells);
+  assert.deepEqual(p.offered,['parcel','honey','repair']);
+  assert.equal(p.choose('parcel'),true);assert.equal(p.choosing,false);
+});

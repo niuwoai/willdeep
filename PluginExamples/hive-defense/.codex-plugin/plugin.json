@@ -1,6 +1,6 @@
 {
   "name": "willdeep-hive-defense",
-  "version": "1.342.0-rc9",
+  "version": "1.342.0-rc10",
   "description": "Offline honeycomb tower defense with transparent illustrated sprites.",
   "interface": {
     "displayName": "Hive Defense",

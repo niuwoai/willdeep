@@ -1,6 +1,7 @@
 (function(root){
   'use strict';
-  const RULES = Object.freeze({firstWave:3, waveGap:3, chance:0.55, minDemolition:3, demolitionRange:3, hits:5, headRadius:29, headOffset:-48, bearSize:210, repairFraction:0.2, combo:1.25});
+  // 狗熊现在掉道具，蜂蜜只给一小份（reward）；打得准不准由 misses 记，评级在 items.js。
+  const RULES = Object.freeze({firstWave:3, waveGap:3, chance:0.55, pawChance:0.8, pawGap:2, minDemolition:3, demolitionRange:3, hits:5, headRadius:29, headOffset:-48, bearSize:210, repairFraction:0.2, combo:1.25, honey:50});
   const FACTS = Object.freeze({
     aphid:['成群出现，蜂胶炮擅长应对','蚜虫会吸食植物汁液。'],
     wasp:['用工蜂哨塔持续攻击','黄蜂也会捕食其他小虫。'],
@@ -14,16 +15,19 @@
     hornet:['强壮首领，组合多种塔','大黄蜂属于胡蜂家族。']
   });
   function createBear(random = Math.random){
-    let bear = null, lastWave = 0, elapsed = 0;
+    let bear = null, lastWave = 0, elapsed = 0, paw = false;
     return {
-      reset(){ bear=null; lastWave=0; elapsed=0; },
+      reset(){ bear=null; lastWave=0; elapsed=0; paw=false; },
+      // 熊掌印：更常来、间隔更短。持续到局末，reset 才清。
+      setPaw(on){paw=!!on;},
+      get paw(){return paw;},
       spawn(wave,towers){
         const candidates=towers.filter(t=>!t.damaged&&!t.moving);
-        if(bear || wave<RULES.firstWave || wave-lastWave<RULES.waveGap || !candidates.length) return false;
+        if(bear || wave<RULES.firstWave || wave-lastWave<(paw?RULES.pawGap:RULES.waveGap) || !candidates.length) return false;
         lastWave=wave;
-        if(random()>=RULES.chance) return false;
+        if(random()>=(paw?RULES.pawChance:RULES.chance)) return false;
         const target=candidates[Math.floor(random()*candidates.length)];
-        bear={x:target.x,y:target.y,target,arrived:false,active:false,hits:0,reward:0,demolition:0,duration:RULES.minDemolition+random()*RULES.demolitionRange};
+        bear={x:target.x,y:target.y,target,arrived:false,active:false,hits:0,misses:0,reward:0,demolition:0,duration:RULES.minDemolition+random()*RULES.demolitionRange};
         elapsed=0; return true;
       },
       walk(dt,towers){
@@ -44,10 +48,10 @@
       shoot(x,y,reduced){
         if(!bear?.active || bear.reward)return {hit:false,reward:0};
         const p=this.head(reduced);
-        if(Math.hypot(x-p.x,y-p.y)>RULES.headRadius)return {hit:false,reward:0};
+        if(Math.hypot(x-p.x,y-p.y)>RULES.headRadius){bear.misses++;return {hit:false,reward:0};}
         bear.hits++;
-        if(bear.hits>=RULES.hits)bear.reward=100+Math.floor(random()*201);
-        return {hit:true,reward:bear.reward};
+        if(bear.hits>=RULES.hits)bear.reward=RULES.honey;
+        return {hit:true,reward:bear.reward,misses:bear.misses};
       },
       get state(){return bear;},
       get active(){return !!bear?.active;}

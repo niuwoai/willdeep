@@ -8,6 +8,10 @@
   const adventure = window.HiveAdventure;
   const bear = adventure.createBear();
   const leisureAPI=window.HiveLeisure,leisure=leisureAPI.createLeisure();
+  // 道具与南瓜花疲劳：数值在 items.js，这里只接玩法。
+  const itemsAPI=window.HiveItems,bag=itemsAPI.createInventory();
+  let hornUntil=0,edictWave=-1;
+  const runSeen=new Set();
   let moveSelection=null;
   let baseLevel=1;
   const builtTypes=new Set();
@@ -226,6 +230,7 @@
     selType = null; selTower = null;moveSelection=null;
     leisure.reset(gardenCells());renderLeisure();
     repair.reset(); portals.reset(); bear.reset(); closeBear(); renderCollection(); honeyCounter.reset(honey);
+    bag.reset();hornUntil=0;edictWave=-1;runSeen.clear();renderBag();
     honeyFeedbackAge = 1; honeyDelta = 0;
     honeyEl.textContent = honey;
     honeyEl.setAttribute('aria-label', '蜂蜜 ' + honey);
@@ -293,7 +298,7 @@
       });
     }
     return {
-      dmg: dmg * (1 + boostD) * (1+leisure.bonus(t)), range: range * (1 + boostR), rate: rate * (t.type==='sting'?leisure.haste(wave):1),
+      dmg: dmg * (1 + boostD) * (1+leisure.bonus(t)) * (edictWave===wave?1+itemsAPI.RULES.edictBonus:1), range: range * (1 + boostR), rate: rate * (t.type==='sting'?leisure.haste(wave):1),
       boosted: boostD > 0, splash: base.splash || 0
     };
   }
@@ -302,8 +307,12 @@
   function sellValue(t){
     let spent = TOWERS[t.type].cost;
     for(let l = 1; l < t.level; l++) spent += upgradeCost({...t,level:l});
+    // 南瓜花的折率跟着疲劳走：拔老花换新花是净成本。
+    if(TOWERS[t.type].kind==='farm')return Math.round(spent*itemsAPI.sellRatio(t.harvests||0,t.amber));
     return Math.round(spent * 0.6);
   }
+  // 工蜂号角生效时南瓜花产蜜间隔减半。
+  function farmInterval(){return TOWERS.pumpkin.interval/(hornUntil>0?2:1);}
 
   function damage(bug, amount, ignoreArmor, srcColor){
     const real = Math.max(1, ignoreArmor ? amount : amount - bug.armor);
@@ -318,6 +327,9 @@
     bug.dead = true;
     kills++;
     if(collection.unlock(bug.sprite || bug.type)) renderCollection();
+    // 本局第一次打到某种虫子：掉一件普通道具，前期铺底。图鉴是跨局的，这份记录不是。
+    const kind=bug.sprite||bug.type;
+    if(!runSeen.has(kind)){runSeen.add(kind);grantItem(itemsAPI.rollDrop('plain'),bug.x,bug.y);}
     honey += bug.bounty;
     texts.push({x:bug.x, y:bug.y, t:0, s:"+" + bug.bounty + " 蜂蜜", c:P.honeyC, reward:true});
     burst(bug.x, bug.y, color || bug.color, bug.boss ? 26 : 10);
@@ -377,9 +389,10 @@
     return true;
   }
 
+  function tickItems(dt){if(hornUntil>0){hornUntil=Math.max(0,hornUntil-dt);if(hornUntil===0)renderBag();}}
   function tick(dt,eventDt=dt){
     if(bear.active || leisure.choosing) return;
-    advanceMoves(dt);
+    advanceMoves(dt);tickItems(dt);
     portals.step(dt,PTS,DIST);
     if(bear.walk(eventDt,towers)){
       burst(bear.state.x,bear.state.y,P.danger,18);
@@ -446,11 +459,23 @@
         return;
       }
       if(TOWERS[t.type].kind==='farm'){
-        const base=TOWERS[t.type];t.harvest=(t.harvest||0)+dt;
-        if(t.harvest+1e-9>=base.interval){
-          const batches=Math.floor((t.harvest+1e-9)/base.interval),amount=batches*(base.income+(t.level-1)*base.incomeStep);
-          t.harvest=Math.max(0,t.harvest-batches*base.interval);honey+=amount;
-          texts.push({x:t.x,y:t.y-18,t:0,s:'+'+amount+' 蜂蜜',c:P.honeyC,reward:true});syncHud();
+        const base=TOWERS[t.type];t.harvests=t.harvests||0;
+        // 枯萎的花不再走时钟：产量 0，占格，等人拔。
+        if(itemsAPI.withered(t.harvests,t.amber))return;
+        const interval=farmInterval();
+        t.harvest=(t.harvest||0)+dt;
+        if(t.harvest+1e-9>=interval){
+          const batches=Math.floor((t.harvest+1e-9)/interval);
+          let amount=0;
+          // 逐次结算：一次结算就可能跨过 30 次的减半门槛。
+          for(let i=0;i<batches;i++){
+            amount+=itemsAPI.pumpkinYield(base.income+(t.level-1)*base.incomeStep,t.harvests,itemsAPI.neighbourCount(t,towers),t.amber);
+            t.harvests++;
+          }
+          t.harvest=Math.max(0,t.harvest-batches*interval);honey+=amount;
+          if(amount>0)texts.push({x:t.x,y:t.y-18,t:0,s:'+'+amount+' 蜂蜜',c:P.honeyC,reward:true});
+          if(itemsAPI.withered(t.harvests,t.amber))texts.push({x:t.x,y:t.y-30,t:0,s:'枯萎了',c:P.danger});
+          syncHud();if(selTower===t)renderInfo();
         }
         return;
       }
@@ -604,7 +629,14 @@
       drawTowerGlyph(t.x+shake,t.y,t.type,t.level,t.angle||0,t.damaged?0.35:1,!t.damaged && t.st && t.st.boosted);
       if(t.moving){sprites.draw(ctx,'repair-bee',t.x+16,t.y-20,30);ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillStyle=P.ink;ctx.fillText('搬运中',t.x,t.y+26);}
       if(t.type==='pumpkin'){
-        ctx.strokeStyle=P.honeyC;ctx.lineWidth=2;ctx.beginPath();ctx.arc(t.x,t.y,22,-Math.PI/2,-Math.PI/2+(t.harvest||0)/TOWERS.pumpkin.interval*Math.PI*2);ctx.stroke();
+        const dead=itemsAPI.withered(t.harvests||0,t.amber);
+        if(dead){ctx.fillStyle='#8A6A3E';ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.fillText('枯萎',t.x,t.y+26);}
+        else{
+          // 进度环随疲劳从蜂蜜色褪成灰；琥珀花的环是琥珀色。
+          const h=itemsAPI.halvings(t.harvests||0);
+          ctx.strokeStyle=t.amber?'#E08A2E':['#E4A148','#C9A874','#A89F8E','#8E8E8E'][Math.min(3,h)];
+          ctx.lineWidth=2;ctx.beginPath();ctx.arc(t.x,t.y,22,-Math.PI/2,-Math.PI/2+(t.harvest||0)/farmInterval()*Math.PI*2);ctx.stroke();
+        }
       }
       if(t.damaged){ctx.fillStyle=P.danger;ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText('待修',t.x,t.y+5);}
     });
@@ -898,8 +930,13 @@
     ];
     if(base.dmg && leisure.bonus(t))rows.push(['花园增伤',Math.round(leisure.bonus(t)*100)+'%']);
     if(base.kind==='farm'){
-      rows.splice(3,3,['产蜜',base.income+(t.level-1)*base.incomeStep+' / '+base.interval+'秒']);
-      rows.push(['进度','花朵外圈显示产蜜进度']);
+      const h=t.harvests||0,dead=itemsAPI.withered(h,t.amber),near=itemsAPI.neighbourCount(t,towers);
+      const yieldNow=itemsAPI.pumpkinYield(base.income+(t.level-1)*base.incomeStep,h,near,t.amber);
+      rows.splice(2,4,
+        ['状态',t.moving?'搬运中':dead?'枯萎，请拔除':t.amber?'琥珀花，永不疲劳':'正常'],
+        ['产蜜',dead?'0':yieldNow+' / '+farmInterval()+'秒'],
+        ['疲劳',t.amber?'免疫':dead?'已枯萎':(h%itemsAPI.RULES.fatigueEvery)+'/'+itemsAPI.RULES.fatigueEvery+(itemsAPI.halvings(h)?' · 已减半 '+itemsAPI.halvings(h)+' 次':'')],
+        ['邻减',t.amber?'免疫':near?'-'+Math.min(60,near*20)+'%（相邻 '+near+' 棵）':'无']);
     }
     if(base.kind==='judgement')rows.splice(3,3,['削减当前生命',['1/4','1/3','1/2'][t.level-1]],['触发','每只虫子一生一次'],['范围',base.range]);
     if(base.splash) rows.push(["溅射半径", base.splash]);
@@ -911,11 +948,11 @@
     }).join("");
     const uc = upgradeCost(t);
     upBtn.textContent = t.level >= maxLevel(t) ? "已满级" : t.level>=baseLevel ? '需要基地 Lv.'+(t.level+1) : "升级 " + uc;
-    upBtn.disabled = t.moving || t.damaged || t.level >= maxLevel(t) || t.level>=baseLevel || honey < uc;
+    upBtn.disabled = t.moving || t.damaged || t.level >= maxLevel(t) || t.level>=baseLevel || honey < uc || itemsAPI.withered(t.harvests||0,t.amber);
     towerRepairBtn.textContent = "修复塔 " + towerRepairCost(t) + " 蜂蜜";
     towerRepairBtn.disabled = t.moving || honey < towerRepairCost(t);
     sellBtn.disabled=!!t.moving;
-    sellBtn.textContent = "出售 " + sellValue(t);
+    sellBtn.textContent = (base.kind==='farm'&&itemsAPI.withered(t.harvests||0,t.amber)?"拔除 ":"出售 ") + sellValue(t);
   }
 
   upBtn.addEventListener("click", function(){
@@ -1048,6 +1085,78 @@
   const bearStatus=document.getElementById('bearStatus');
   const bearExit=document.getElementById('bearExit');
   let aim={x:332,y:186},bearFlash=0,bearVictoryAge=0;
+  // ===== 道具 =====
+  const bagSlots=document.getElementById('bagSlots'),bagStatus=document.getElementById('bagStatus');
+  const SLOT_KEYS=['Z','X','C','V','B','N'];
+  // 拿到一件道具：背包满了折成蜂蜜（按稀有度）。返回是否真的进了背包。
+  function grantItem(key,x,y){
+    if(!key)return false;
+    const item=itemsAPI.ITEMS[key];
+    if(bag.add(key)){
+      if(x!=null)texts.push({x,y:y-24,t:0,s:item.glyph+' '+item.name,c:TOWERS.royal.color});
+      renderBag();return true;
+    }
+    const gold=itemsAPI.RULES.fullBagHoney[item.rarity];honey+=gold;
+    if(x!=null)texts.push({x,y:y-24,t:0,s:'背包满 +'+gold+' 蜂蜜',c:P.honeyC,reward:true});
+    syncHud();return false;
+  }
+  function renderBag(){
+    if(!bagSlots)return;
+    const list=bag.items;
+    bagSlots.innerHTML=Array.from({length:itemsAPI.RULES.slots},(_,i)=>{
+      const key=list[i];
+      if(!key)return '<button class="bag-slot empty" disabled aria-label="空格子"><kbd>'+SLOT_KEYS[i]+'</kbd></button>';
+      const item=itemsAPI.ITEMS[key];
+      return '<button class="bag-slot '+item.rarity+(bag.armed===i?' armed':'')+'" data-slot="'+i+'" title="'+item.name+'：'+item.detail+'" aria-pressed="'+(bag.armed===i)+'"><span class="glyph">'+item.glyph+'</span><kbd>'+SLOT_KEYS[i]+'</kbd></button>';
+    }).join('');
+    bagSlots.querySelectorAll('[data-slot]').forEach(b=>b.addEventListener('click',()=>armSlot(+b.dataset.slot)));
+    const armed=bag.armedKey?itemsAPI.ITEMS[bag.armedKey]:null;
+    const passive=[];
+    if(hornUntil>0)passive.push('号角 '+Math.ceil(hornUntil)+' 秒');
+    if(edictWave===wave+1)passive.push('下一波蜂王令');else if(edictWave===wave&&wave>0)passive.push('本波蜂王令');
+    if(bear.paw)passive.push('熊掌印生效');
+    bagStatus.textContent=armed?('已持有「'+armed.name+'」：'+(armed.target==='pumpkin'?'点一棵南瓜花':armed.target==='map'?'点地图落点':armed.target==='hiveOrTower'?'点受损塔修复，点别处蜂巢 +1':'生效中')+'，Esc 取消'):list.length?('点格子或按 Z–N 使用'+(passive.length?' · '+passive.join(' · '):'')):('打狗熊、首次遇到新虫子、神秘包裹都会掉道具'+(passive.length?' · '+passive.join(' · '):''));
+  }
+  function armSlot(i){
+    if(!running||over||bear.active||leisure.choosing)return;
+    if(!bag.arm(i)){renderBag();return;}
+    const item=itemsAPI.ITEMS[bag.armedKey];
+    if(item.target==='none'){applyItem(bag.consume(),null);renderBag();return;}
+    if(item.target==='hiveOrTower'&&!towers.some(t=>t.damaged)){applyItem(bag.consume(),null);renderBag();return;}
+    selType=null;moveSelection=null;renderShop();renderBag();
+  }
+  // 持有道具时点了地图：按目标类型找落点，找不到就保持持有。
+  function useArmedItem(p){
+    const key=bag.armedKey;if(!key)return;
+    const item=itemsAPI.ITEMS[key],cell=pixelToCell(p.x,p.y);
+    const hit=cell?towers.find(t=>t.c===cell.c&&t.r===cell.r):null;
+    if(item.target==='pumpkin'){
+      if(!hit||hit.type!=='pumpkin'){flashHud();return;}
+      applyItem(bag.consume(),{tower:hit});
+    }else if(item.target==='map'){
+      applyItem(bag.consume(),{point:p});
+    }else if(item.target==='hiveOrTower'){
+      applyItem(bag.consume(),hit&&hit.damaged?{tower:hit}:null);
+    }
+    renderBag();renderInfo();
+  }
+  function applyItem(key,target){
+    const R=itemsAPI.RULES;
+    switch(key){
+      case 'nectar':{const t=target.tower;t.harvests=0;t.harvest=0;burst(t.x,t.y,'#E4A148',14);texts.push({x:t.x,y:t.y-18,t:0,s:'重新盛开',c:P.honeyC});break;}
+      case 'amber':{const t=target.tower;t.amber=true;t.harvests=0;burst(t.x,t.y,'#E08A2E',18);texts.push({x:t.x,y:t.y-18,t:0,s:'琥珀花',c:'#E08A2E'});break;}
+      case 'bomb':{const p=target.point;let n=0;bugs.forEach(b=>{if(b.dead||Math.hypot(b.x-p.x,b.y-p.y)>R.bombRadius)return;b.slowUntil=Math.max(b.slowUntil,R.bombSeconds);b.slowAmt=Math.max(b.slowAmt,R.bombSlow);n++;});burst(p.x,p.y,'#7FA8C4',24);texts.push({x:p.x,y:p.y-18,t:0,s:'花粉炸弹 ×'+n,c:'#7FA8C4'});break;}
+      case 'wax':{
+        if(target&&target.tower){const t=target.tower;t.damaged=false;burst(t.x,t.y,P.honeyC,12);texts.push({x:t.x,y:t.y-18,t:0,s:'蜡封修复',c:P.honeyC});}
+        else{hp=Math.min(RULES.maxHP,hp+1);const h=cellCenter(HIVE.c,HIVE.r);burst(h.x,h.y,P.honeyC,12);texts.push({x:h.x,y:h.y-30,t:0,s:'蜂巢 +1',c:P.honeyC});}
+        break;}
+      case 'horn':hornUntil=R.hornSeconds;break;
+      case 'edict':edictWave=wave+1;break;
+      case 'paw':bear.setPaw(true);break;
+    }
+    syncHud();renderInfo();
+  }
+
   function renderBearNotice(){
     const b=bear.state;
     document.getElementById('bearOpen').hidden=!b;
@@ -1073,7 +1182,11 @@
     if(result.reward){
       bearVictoryAge=0;
       honey+=result.reward;syncHud();
-      bearStatus.textContent='狗熊被击败！获得 '+result.reward+' 蜂蜜。';
+      // 打得准不准决定掉什么：脱靶 0 次完美、1–2 次干净、3 次以上一般。
+      const g=itemsAPI.grade(result.misses,false),key=itemsAPI.rollDrop(g,Math.random,bear.paw);
+      const granted=grantItem(key);
+      const label={perfect:'完美',clean:'干净',plain:'一般'}[g];
+      bearStatus.textContent='狗熊被击败！'+label+'（脱靶 '+result.misses+' 次）· 获得 '+result.reward+' 蜂蜜'+(key?(granted?'，掉落「'+itemsAPI.ITEMS[key].name+'」':'，背包已满，折成 '+itemsAPI.RULES.fullBagHoney[itemsAPI.ITEMS[key].rarity]+' 蜂蜜'):'')+'。';
       bearExit.textContent='带着奖励返回防线';
     }
   }
@@ -1114,16 +1227,21 @@
   bearCanvas.addEventListener('pointerdown',e=>{pointBear(e);shootBear();});
 
   const rewardPanel=document.getElementById('rewardPanel');
-  const rewardArt={honey:{image:'hive',tag:'甜蜜补给',value:'+40',unit:'蜂蜜'},repair:{image:'repair-bee',tag:'基地守护',value:'免费',unit:'维修 1 点'},haste:{image:'sting',tag:'战斗助力',value:'+20%',unit:'下一波射速'}};
-  document.getElementById('rewardCards').innerHTML=Object.entries(leisureAPI.CARDS).map(([key,card])=>{
-    const art=rewardArt[key];
-    return '<button class="reward-card" data-reward="'+key+'"><span class="reward-tag">'+art.tag+'</span><span class="reward-art" aria-hidden="true"><img src="assets/'+art.image+'.png" alt=""></span><strong>'+card.title+'</strong><span class="reward-value">'+art.value+'<small>'+art.unit+'</small></span><span class="reward-detail">'+card.detail+'</span><span class="reward-pick" aria-hidden="true">就选这个 <b>↗</b></span></button>';
-  }).join('');
-  document.querySelectorAll('[data-reward]').forEach(button=>button.addEventListener('click',()=>chooseReward(button.dataset.reward)));
+  const rewardArt={parcel:{glyph:'🎁',tag:'意外之喜',value:'×1',unit:'普通道具'},honey:{image:'hive',tag:'甜蜜补给',value:'+40',unit:'蜂蜜'},repair:{image:'repair-bee',tag:'基地守护',value:'免费',unit:'维修 1 点'},haste:{image:'sting',tag:'战斗助力',value:'+20%',unit:'下一波射速'}};
+  function renderRewardCards(){
+    const keys=leisure.offered.length?leisure.offered:Object.keys(leisureAPI.CARDS);
+    document.getElementById('rewardCards').innerHTML=keys.map(key=>{
+      const card=leisureAPI.CARDS[key],art=rewardArt[key];
+      return '<button class="reward-card" data-reward="'+key+'"><span class="reward-tag">'+art.tag+'</span><span class="reward-art" aria-hidden="true">'+(art.image?'<img src="assets/'+art.image+'.png" alt="">':'<span class="reward-glyph">'+art.glyph+'</span>')+'</span><strong>'+card.title+'</strong><span class="reward-value">'+art.value+'<small>'+art.unit+'</small></span><span class="reward-detail">'+card.detail+'</span><span class="reward-pick" aria-hidden="true">就选这个 <b>↗</b></span></button>';
+    }).join('');
+    document.querySelectorAll('[data-reward]').forEach(button=>button.addEventListener('click',()=>chooseReward(button.dataset.reward)));
+  }
+  renderRewardCards();
   function chooseReward(key){
     if(!leisure.choose(key))return;
     if(key==='honey')honey+=leisureAPI.RULES.honeyGift;
     if(key==='repair')repair.grantFreePoint();
+    if(key==='parcel')grantItem(itemsAPI.rollDrop('plain'));
     renderLeisure();setAdventureLock(false);syncHud();renderInfo();
   }
   function gardenCells(){
@@ -1133,6 +1251,7 @@
   }
   function renderLeisure(){
     rewardPanel.hidden=!leisure.choosing;
+    if(leisure.choosing)renderRewardCards();
     const grown=leisure.flowers.filter(f=>f.age>=leisureAPI.RULES.flowerMaturity).length;
     document.getElementById('gardenStatus').textContent='开花 '+grown+'/'+leisure.flowers.length+' · 守住 3 波开花，每 2 波长新芽。每朵为附近塔增伤 5%，最多 15%，不占建塔位。';
     document.getElementById('rewardStatus').textContent=leisure.queuedHaste?'下一波哨塔射速 +20%':leisure.haste(wave)>1?'本波哨塔射速 +20%':'每守住 3 波，选择一份奖励。';
@@ -1189,6 +1308,7 @@
     if(!running || over || leisure.choosing || bear.active) return;
     const p = evtPos(e);
     if(bear.state && Math.hypot(p.x-bear.state.x,p.y-bear.state.y)<40){openBear();return;}
+    if(bag.armedKey){useArmedItem(p);return;}
     const cell = pixelToCell(p.x, p.y);
     if(!cell) return;
     if(moveSelection){startMove(cell);return;}
@@ -1218,7 +1338,10 @@
       cycleSpeed();
     }else if(k === "n" || k === "N"){
       callNow();
+    }else if("zxcvbn".includes(k.toLowerCase()) && k.length===1){
+      armSlot("zxcvbn".indexOf(k.toLowerCase()));
     }else if(k === "Escape"){
+      if(bag.armedKey){bag.disarm();renderBag();return;}
       moveSelection=null;selType = null; selTower = null; renderShop(); renderInfo();
     }
   });

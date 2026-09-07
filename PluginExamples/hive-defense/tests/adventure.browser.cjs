@@ -2,7 +2,7 @@ const {chromium}=require('../../arcade/ui/node_modules/playwright');
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const ui=path.resolve(__dirname,'../ui'),out=path.resolve(__dirname,'../../../build/ci/hive-defense');
 const hooks=`window.hiveFixture={
-  encounter(){selType='sting';build({c:3,r:2});wave=3;leisure.clear(3,[]);leisure.choose('honey');while(!bear.spawn(wave,towers))bear.reset();renderBearNotice();},
+  encounter(){selType='sting';build({c:3,r:2});wave=3;leisure.clear(3,[]);leisure.choose(leisure.offered[0]);while(!bear.spawn(wave,towers))bear.reset();renderBearNotice();},
   point(){return bear.head(motionPreference.matches);},
   body(){return bear.target(motionPreference.matches);},
   snapshot(){return {hp,honey,prep,wave,paused,running,currentMap,hits:bear.state?.hits,demolition:bear.state?.demolition,duration:bear.state?.duration,damaged:!!towers[0]?.damaged};},
@@ -70,7 +70,9 @@ const server=http.createServer((req,res)=>{
     await page.locator('#bearOpen').click();assert.equal((await page.evaluate(()=>hiveFixture.snapshot())).hits,2);
     await page.clock.runFor(50);fs.mkdirSync(out,{recursive:true});await page.screenshot({path:path.join(out,'bear-aim.png'),fullPage:true});
     await hit();await hit();await hit();const won=await page.evaluate(()=>hiveFixture.snapshot());
-    assert.ok(won.honey-before.honey>=100&&won.honey-before.honey<=300);await hit();
+    // 打身体那一下是脱靶，评级「干净」：蜂蜜固定 50，另掉一件道具进背包。
+    assert.equal(won.honey-before.honey,50);
+    assert.equal(await page.locator('#bagSlots .bag-slot:not(.empty)').count(),1);await hit();
     assert.equal((await page.evaluate(()=>hiveFixture.snapshot())).honey,won.honey);
     await page.locator('#bearExit').click();assert.equal(await page.locator('.hud').evaluate(e=>e.inert),false);
     await page.mouse.click(map.x+159.1*map.width/664,map.y+108*map.height/372);

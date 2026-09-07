@@ -8,7 +8,14 @@ const ui = path.resolve(__dirname, '../ui');
 test('wave reward pauses simulation and honey choice pays once',()=>{
   const g=game();g.api.finishWave(3);g.api.tick(0.01);assert.equal(g.api.leisure.choosing,true);
   const before=g.api.state();g.api.tick(100);assert.equal(g.api.state().prep,before.prep);
-  g.api.chooseReward('honey');g.api.chooseReward('honey');assert.equal(g.api.state().honey,before.honey+40);
+  // 四张卡随机展示三张：没被展示的卡选不了，展示了的只能选一次。
+  const offered=g.api.leisure.offered;assert.equal(offered.length,3);
+  const missing=['parcel','honey','repair','haste'].find(k=>!offered.includes(k));
+  g.api.chooseReward(missing);assert.equal(g.api.leisure.choosing,true);
+  const key=offered.includes('honey')?'honey':offered[0];
+  g.api.chooseReward(key);g.api.chooseReward(key);
+  if(key==='honey')assert.equal(g.api.state().honey,before.honey+40);
+  if(key==='parcel')assert.equal(g.api.bag.items.length,1);
   assert.equal(g.api.leisure.choosing,false);g.close();
 });
 test('haste reward increases actual sentry rate for exactly the following wave',()=>{
@@ -77,8 +84,10 @@ test('bear encounter freezes simulation, pays once and preserves manual pause',(
   assert.equal(g.api.state().prep,before.prep);
   const p=g.api.bear.head(false);g.api.aimAt(p.x,p.y);
   for(let i=0;i<6;i++)g.api.shootBear();
-  assert.ok(g.api.state().honey>=before.honey+100 && g.api.state().honey<=before.honey+300);
-  const paid=g.api.state().honey;g.api.shootBear();assert.equal(g.api.state().honey,paid);
+  // 六发里第一发脱靶前就命中了 5 次：零脱靶是完美评级，掉稀有或史诗，蜂蜜只给 50。
+  assert.equal(g.api.state().honey,before.honey+50);
+  assert.equal(g.api.bag.items.length,1);assert.notEqual(g.api.items.ITEMS[g.api.bag.items[0]].rarity,'common');
+  const paid=g.api.state().honey;g.api.shootBear();assert.equal(g.api.state().honey,paid);assert.equal(g.api.bag.items.length,1);
   g.api.closeBear();assert.equal(g.api.state().paused,true);assert.equal(g.api.bear.state,null);g.close();
 });
 test('damaged tower stops firing and repair charges twenty percent without losing level',()=>{
@@ -103,6 +112,7 @@ function game() {
   w.eval(fs.readFileSync(path.join(ui, 'adventure.js'), 'utf8'));
   w.eval(fs.readFileSync(path.join(ui, 'world.js'), 'utf8'));
   w.eval(fs.readFileSync(path.join(ui, 'leisure.js'), 'utf8'));
+  w.eval(fs.readFileSync(path.join(ui, 'items.js'), 'utf8'));
   let source = fs.readFileSync(path.join(ui, 'game.js'), 'utf8');
   source = source.replace(/\}\)\(\);\s*$/, `window.testGame = { reset, build, canBuild, damage, makeBug, tick, drawBug, drawTowerGlyph, drawHive, towerStats, cellCenter, startWave, frame,
     select: key => selType = key, addBug: bug => bugs.push(bug),
@@ -114,6 +124,7 @@ function game() {
     finishWave:n=>{wave=n;bugs=[];spawnQueue=[];prep=0;},
     addShot:s=>shots.push(s),
     chooseTower:t=>{selTower=t;renderInfo();}, aimAt:(x,y)=>aim={x,y},
+    bag, items:itemsAPI, grantItem, armSlot, useArmedItem, applyItem, farmInterval, effects:()=>({hornUntil,edictWave,paw:bear.paw}),
     state: () => ({towers, bugs, honey, hp, wave, paused, speed, running, prep, texts}) }; })();`);
   w.eval(source);
   w.document.getElementById('startBtn').click();
@@ -251,9 +262,12 @@ test('every enemy death shows honey text and duplicate kills never pay twice', (
   const g = game();
   for(const type of ['aphid','wasp','beetle','moth','spider','hornet','ant','caterpillar','grasshopper','flea']){
     const bug=g.api.makeBug(type,1), before=g.api.state().honey;
+    // 本局首次打到一种虫子掉一件普通道具；背包满了折成 80 蜂蜜。
+    const overflow=g.api.bag.full?g.api.items.RULES.fullBagHoney.common:0,bagBefore=g.api.bag.items.length;
     g.api.damage(bug,100000,true);
     g.api.damage(bug,100000,true);
-    assert.equal(g.api.state().honey,before+bug.bounty);
+    assert.equal(g.api.state().honey,before+bug.bounty+overflow);
+    assert.equal(g.api.bag.items.length,overflow?bagBefore:bagBefore+1);
     assert.ok(g.api.state().texts.some(t=>t.s===`+${bug.bounty} 蜂蜜`));
   }
   g.api.animateHoney(1);
@@ -300,5 +314,43 @@ test('an active repair can be stopped while the game is paused', () => {
   g.w.document.getElementById('repairBtn').click();
   assert.equal(g.api.repair.active,false);
   assert.equal(g.api.repair.progress,1);
+  g.close();
+});
+
+test('items: nectar, amber, bomb, wax, horn, edict and paw all do what the design says',()=>{
+  const g=game();g.api.setVitals(18,5000);g.api.select('pumpkin');g.api.build({c:3,r:2});g.api.build({c:4,r:2});
+  const [a,b]=g.api.state().towers;
+  // 邻减：两棵挨着各减 20%
+  a.harvests=0;assert.equal(g.api.items.pumpkinYield(10,0,g.api.items.neighbourCount(a,g.api.state().towers),false),8);
+  // 疲劳与蜜露瓶
+  a.harvests=45;g.api.bag.add('nectar');g.api.armSlot(0);assert.equal(g.api.bag.armedKey,'nectar');
+  g.api.useArmedItem(g.api.cellCenter(3,2));assert.equal(a.harvests,0);assert.equal(g.api.bag.items.length,0);
+  // 琥珀：免疫疲劳与邻减，卖价回到六成
+  b.harvests=95;assert.equal(g.api.sellValue(b),0);
+  g.api.bag.add('amber');g.api.armSlot(0);g.api.useArmedItem(g.api.cellCenter(4,2));
+  assert.equal(b.amber,true);assert.equal(g.api.sellValue(b),60);
+  assert.equal(g.api.items.pumpkinYield(10,500,6,b.amber),10);
+  // 花粉炸弹：落点 90 内减速 60% 4 秒
+  const bug=g.api.makeBug('aphid',1);bug.x=200;bug.y=200;g.api.addBug(bug);
+  g.api.bag.add('bomb');g.api.armSlot(0);g.api.useArmedItem({x:230,y:200});
+  assert.equal(bug.slowUntil,4);assert.equal(bug.slowAmt,0.6);
+  // 蜡封：没有受损塔时直接蜂巢 +1
+  g.api.bag.add('wax');g.api.armSlot(0);assert.equal(g.api.state().hp,19);assert.equal(g.api.bag.items.length,0);
+  // 蜡封：有受损塔时点它免费修
+  a.damaged=true;g.api.bag.add('wax');g.api.armSlot(0);assert.equal(g.api.bag.armedKey,'wax');
+  g.api.useArmedItem(g.api.cellCenter(3,2));assert.equal(a.damaged,false);assert.equal(g.api.state().hp,19);
+  // 号角：间隔减半，15 秒后恢复
+  g.api.bag.add('horn');g.api.armSlot(0);assert.equal(g.api.farmInterval(),4);
+  g.api.tick(16);assert.equal(g.api.farmInterval(),8);
+  // 蜂王令：只对下一波生效
+  g.api.select('sting');g.api.build({c:6,r:2});const s=g.api.state().towers[2];const base=g.api.towerStats(s).dmg;
+  g.api.bag.add('edict');g.api.armSlot(0);assert.equal(g.api.effects().edictWave,g.api.state().wave+1);
+  g.api.startWave();assert.ok(Math.abs(g.api.towerStats(s).dmg-base*1.3)<1e-9);
+  g.api.finishWave(g.api.state().wave);g.api.startWave();assert.ok(Math.abs(g.api.towerStats(s).dmg-base)<1e-9);
+  // 熊掌印
+  g.api.bag.add('paw');g.api.armSlot(0);assert.equal(g.api.effects().paw,true);
+  // 背包满了折蜂蜜
+  for(let i=0;i<6;i++)g.api.bag.add('bomb');const honey=g.api.state().honey;
+  assert.equal(g.api.grantItem('amber'),false);assert.equal(g.api.state().honey,honey+600);
   g.close();
 });

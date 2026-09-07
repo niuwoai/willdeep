@@ -9,17 +9,23 @@ test('bear respects wave gate, damages only one tower and keeps its level',()=>{
   assert.equal(towers[0].damaged,true);assert.equal(towers[0].level,3);assert.equal(towers[1].damaged,undefined);
   assert.equal(b.spawn(6,towers),false);
 });
-test('misses do not count, closing retains hits, rewards include both bounds and pay once',()=>{
-  for(const bound of [0,0.999999]){
-    let random=0;const b=createBear(()=>random);
-    b.spawn(3,[{x:90,y:100}]);b.open();
-    assert.equal(b.shoot(0,0,true).hit,false);
-    for(let i=0;i<4;i++)assert.equal(b.shoot(332,180,true).reward,0);
-    b.close();b.open();assert.equal(b.state.hits,4);
-    random=bound;assert.equal(b.shoot(332,180,true).reward,bound?300:100);
-    assert.equal(b.shoot(332,180,true).reward,0);
-    b.close();assert.equal(b.state,null);assert.equal(b.spawn(4,[{}]),false);
-  }
+test('misses are counted but do not score, closing retains hits, victory pays the small honey once',()=>{
+  const b=createBear(()=>0);
+  b.spawn(3,[{x:90,y:100}]);b.open();
+  assert.equal(b.shoot(0,0,true).hit,false);assert.equal(b.state.misses,1);
+  for(let i=0;i<4;i++)assert.equal(b.shoot(332,180,true).reward,0);
+  b.close();b.open();assert.equal(b.state.hits,4);assert.equal(b.state.misses,1);
+  const win=b.shoot(332,180,true);assert.equal(win.reward,50);assert.equal(win.misses,1);
+  assert.equal(b.shoot(332,180,true).reward,0);
+  b.close();assert.equal(b.state,null);assert.equal(b.spawn(4,[{}]),false);
+});
+test('the paw makes the bear come sooner and more often until reset',()=>{
+  // random 返回 0.7：普通概率 0.55 时不来，熊掌印 0.8 时来。
+  const b=createBear(()=>0.7),towers=[{x:1,y:1}];
+  assert.equal(b.spawn(3,towers),false);
+  b.setPaw(true);assert.equal(b.spawn(4,towers),false);   // 距上次判定只隔 1 波
+  assert.equal(b.spawn(5,towers),true);                  // 间隔 2 波即可
+  b.reset();assert.equal(b.paw,false);
 });
 test('selling target stops demolition safely and empty map does not crash',()=>{
   const b=createBear(()=>0),tower={x:40,y:300};b.spawn(3,[tower]);b.walk(1,[]);
