@@ -266,6 +266,10 @@ struct AgentPluginCenterPage: View {
                 if !manifest.permissions.isEmpty {
                     permissionChips(manifest.permissions)
                 }
+                let unsupported = AgentPluginPackageLoader.unsupportedItems(in: manifest)
+                if !unsupported.isEmpty {
+                    unsupportedRow(unsupported)
+                }
                 if !record.activePackage.destinations.isEmpty {
                     Divider()
                     ForEach(record.activePackage.destinations) { destination in
@@ -352,6 +356,21 @@ struct AgentPluginCenterPage: View {
                     )
                     .help(permission.localizedSummary)
             }
+        }
+    }
+
+    /// 这个插件为另一个 WillDeep 宿主声明、而本宿主还不认识的那几项。
+    ///
+    /// 不显示的话，用户只会看到某个菜单项不见了或者点了没反应，然后以为
+    /// 插件坏了。写出来，至少知道该去催谁。
+    private func unsupportedRow(_ items: [String]) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(L10n.Plugins.unsupportedHere)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text(items.joined(separator: "  "))
+                .font(.system(size: 9).monospaced())
+                .foregroundStyle(.tertiary)
         }
     }
 

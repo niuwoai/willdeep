@@ -73,6 +73,30 @@ nonisolated enum AgentPluginPackageLoader {
         // 见 AgentPluginCommandExecutor.executeHost。
         "session.open",
     ]
+    /// 清单里本宿主还不认识的词汇。
+    ///
+    /// 插件包在 macOS 版与 willdeep-rs 之间共享，权限、宿主动作、菜单位置
+    /// 三张表却各自用白名单校验。一侧先加了一项，另一侧原本会把整个包判
+    /// 非法——用户看到的是「装不上」，真相只是这个宿主还没实现其中一项。
+    /// 现在一律记下来照装：宿主的每道门问的都是「有没有这一项已知权限」，
+    /// 认不出的授不出任何东西；认不出的动作在执行时才拒；认不出的菜单
+    /// 位置不显示。返回值给插件中心显示成「本宿主不支持」。
+    static func unsupportedItems(in manifest: AgentPluginManifest) -> [String] {
+        var items: [String] = []
+        for permission in manifest.permissions where !allowedPermissions.contains(permission) {
+            items.append("permission:\(permission.rawValue)")
+        }
+        for command in manifest.contributes.commands where command.handler.type == .host {
+            if let action = command.handler.action, !allowedHostCommands.contains(action) {
+                items.append("hostAction:\(action)")
+            }
+        }
+        for location in manifest.contributes.menus.keys where !allowedMenuLocations.contains(location) {
+            items.append("menu:\(location)")
+        }
+        return items.sorted()
+    }
+
     static let allowedPermissions: Set<AgentPluginPermission> = [
         .conversationRead,
         .conversationWrite,
@@ -320,8 +344,11 @@ nonisolated enum AgentPluginPackageLoader {
             }
             switch command.handler.type {
             case .host:
-                guard let action = command.handler.action,
-                      allowedHostCommands.contains(action) else {
+                // 动作必须写，但认不认得出是另一回事：插件包由 macOS 版和
+                // willdeep-rs 共享，一侧先支持的动作在另一侧只是「还没实现」，
+                // 不该让整个包装不上。白名单之外的动作在执行时被
+                // AgentPluginCommandExecutor.executeHost 的 default 分支拒掉。
+                guard let action = command.handler.action, !action.isEmpty else {
                     throw AgentPluginPackageError.invalidContribution("host command \(command.id) requires action")
                 }
             case .mcpTool:
@@ -340,10 +367,8 @@ nonisolated enum AgentPluginPackageLoader {
             }
         }
 
-        for location in manifest.contributes.menus.keys where !allowedMenuLocations.contains(location) {
-            throw AgentPluginPackageError.invalidContribution("unsupported menu location \(location)")
-        }
-        for (location, ids) in manifest.contributes.menus {
+        // 认不出的挂载点直接无视：这一条菜单不显示，插件的其他部分照常用。
+        for (location, ids) in manifest.contributes.menus where allowedMenuLocations.contains(location) {
             for id in ids where !commandIDs.contains(id) {
                 throw AgentPluginPackageError.invalidContribution("menu \(location) references unknown command \(id)")
             }
@@ -398,9 +423,9 @@ nonisolated enum AgentPluginPackageLoader {
         for dependency in manifest.dependencies.mcpServers + manifest.dependencies.skills {
             try requireIdentifier(dependency)
         }
-        for permission in manifest.permissions where !allowedPermissions.contains(permission) {
-            throw AgentPluginPackageError.invalidContribution("unknown permission \(permission.rawValue)")
-        }
+        // 认不出的权限不再判非法：见 unsupportedItems(in:)。宿主的每一道门
+        // 问的都是「有没有这一项已知权限」，认不出的那些什么也授不出去，
+        // 插件中心会把它们列成「本宿主不支持」。
         if manifest.contributes.settings.contains(where: { $0.type == .secret }),
            !manifest.permissions.contains(.credentialUse) {
             throw AgentPluginPackageError.invalidContribution(

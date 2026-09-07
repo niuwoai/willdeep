@@ -683,12 +683,20 @@ struct AgentPluginSystemTests {
             try AgentPluginPackageLoader.load(packageURL: root, source: .installed, currentWillDeepVersion: "1.280.0")
         }
 
+        // 认不出的权限不再判非法（插件包与 willdeep-rs 共享，一侧先加的能力
+        // 在这边只是「还没实现」）。装得上，但一分能力也授不出去，并在插件
+        // 中心列成「本宿主不支持」。见 AgentPluginCrossHostCompatibilityTests。
         manifest = original
         manifest["permissions"] = ["host.everything"]
         try writeJSON(manifest, to: manifestURL)
-        #expect(throws: AgentPluginPackageError.self) {
-            try AgentPluginPackageLoader.load(packageURL: root, source: .installed, currentWillDeepVersion: "1.280.0")
-        }
+        let tolerated = try AgentPluginPackageLoader.load(
+            packageURL: root,
+            source: .installed,
+            currentWillDeepVersion: "1.280.0"
+        )
+        let toleratedManifest = try #require(tolerated.manifest)
+        #expect(AgentPluginPackageLoader.unsupportedItems(in: toleratedManifest)
+            == ["permission:host.everything"])
 
         manifest = original
         try writeJSON(manifest, to: manifestURL)

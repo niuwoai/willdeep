@@ -77,6 +77,12 @@ extension L10n {
         static let pin = String(localized: "plugins.pin", defaultValue: "Pin to Sidebar")
         static let unpin = String(localized: "plugins.unpin", defaultValue: "Unpin from Sidebar")
         static let permissions = String(localized: "plugins.permissions", defaultValue: "Permissions")
+        /// 清单里本宿主不认识的词汇。插件包在 macOS 版与 willdeep-rs 之间
+        /// 共享，另一侧先支持的能力在这里只是「还没实现」，照装但要说清楚。
+        static let unsupportedHere = String(
+            localized: "plugins.unsupported-here",
+            defaultValue: "Not supported here"
+        )
         static let noPermissions = String(localized: "plugins.permissions.none", defaultValue: "No additional permissions")
         static let source = String(localized: "plugins.source", defaultValue: "Source")
         static let version = String(localized: "plugins.version", defaultValue: "Version")

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.342.0-rc5 - 2026-09-07
+
+### Fixed
+
+- 插件清单里认不出的词汇不再让整个包装不上。插件包与 willdeep-rs 共享，权限、host action、菜单挂载点三张表却两端各自用白名单校验，一侧先支持的一项会被另一侧判成非法包。实测 rs 因此装不上本仓库自带的待办（`conversation.write`）、短剧工坊（`ai.image`）与历史回溯（`session.open`）三个插件。约定改为：`schemaVersion` 不变时，认不出的权限照收但一分能力也授不出去（宿主每道门问的都是已知常量），认不出的 host action 保留命令、执行时才拒，认不出的菜单位置不显示。仍然拒装的只有结构性错误：schemaVersion 不认识、引用悬空、重复 ID、页面缺必填字段、secret 设置没有 `credentials.use`。
+- 插件中心新增「本宿主不支持」一行，列出这些条目。不写出来的话，用户只会看到某个菜单项不见了或点了没反应，然后以为插件坏了。
+
+### Tests
+
+- 新增 `AgentPluginCrossHostCompatibilityTests` 4 项：共享 schema 里的 13 项权限本宿主全部认识、为另一宿主写的包能装上并列出缺口、只用已知词汇时不报缺口、host action 仍然必须写。原先钉死严格行为的 `rejectsUnknownSchemaPermissionMissingLocalizationAndInvalidMCPURI` 改写为新约定。
+- Bugfix 预发布版本从 **1.342.0-rc4** 递增为 **1.342.0-rc5**。
+
 ## 1.342.0-rc4 - 2026-09-07
 
 ### Fixed

@@ -187,6 +187,43 @@ v1 菜单位置：
 
 其中 `session.open`（参数 `sessionID`，UUID 字符串）切换并打开指定 Agent 会话，是唯一带权限门的 host action——执行时要求插件声明 `conversation.read`，未声明直接报错。会话目录尚未装载完成与会话不存在是两条不同的错误，便于页面区分提示。
 
+## 7.5 跨宿主兼容（认不出就降级，不拒装）
+
+插件包在 macOS 版（Xedit）与 willdeep-rs（CLI + Web）之间共享，同一份
+`schemaVersion: 1` 契约，两端各自实现校验。麻烦出在三张封闭词汇表：权限、
+host action、菜单挂载点。一侧先支持了某一项，另一侧原本会把**整个包**判非法，
+用户看到的是「装不上」，而真相只是这个宿主还没实现其中一项能力。
+
+2026-09-07 实测：rs 侧因此装不上本仓库自带的三个插件——待办的
+`conversation.write`、短剧工坊的 `ai.image`、历史回溯的 `session.open`。
+
+**约定（两端同时生效）**：在 `schemaVersion` 不变的前提下，认不出的词汇与
+字段一律记下来并降级，不再中断安装。
+
+| 认不出的东西 | 处理 |
+|---|---|
+| 权限 | 照收照显示，但授不出任何能力——宿主的每道门问的都是「有没有这一项已知权限」 |
+| host action | 命令保留（菜单引用因此不悬空），执行时拒绝并说明原因 |
+| 菜单挂载点 | 这一条菜单不显示，插件其余部分照常 |
+| 清单字段 | 忽略并记录 |
+
+仍然判非法的只有结构性错误：`schemaVersion` 不认识、引用悬空、重复 ID、
+页面缺必填字段、`mcpApp` 的 `resourceURI` 不是 `ui://`、secret 设置没有
+`credentials.use`。
+
+记录下来的条目在插件中心显示为「本宿主不支持」（rs 侧是 `plugin install` /
+`info` / `approve` 的 `unsupported here` 一行）。不显示的话，用户只会看到某个
+菜单项不见了或点了没反应，然后以为插件坏了。
+
+落点：`AgentPluginPackageLoader.unsupportedItems(in:)`、
+`XeditTests/AgentPluginCrossHostCompatibilityTests.swift`；rs 侧
+`plugin/manifest.rs` 的 `UnsupportedItems`。
+
+**页面能力用 `window.willdeep.capabilities` 探测，不要靠宿主名判断。**
+两个宿主的能力集不同（rs 目前只有 `context`、`commands`、`ai.complete`、
+`ai.providers`），而且会各自增长；判据是能力清单，不是 `version`，两端的
+号段互不比较大小。
+
 ## 8. 注册、安装与生命周期
 
 ```text
