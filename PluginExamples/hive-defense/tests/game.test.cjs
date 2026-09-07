@@ -11,7 +11,7 @@ test('bear encounter freezes simulation, pays once and preserves manual pause',(
   g.w.document.getElementById('pauseBtn').click();g.api.openBear();
   const before=g.api.state();g.api.tick(100);
   assert.equal(g.api.state().prep,before.prep);
-  const p=g.api.bear.target(false);g.api.aimAt(p.x,p.y);
+  const p=g.api.bear.head(false);g.api.aimAt(p.x,p.y);
   for(let i=0;i<6;i++)g.api.shootBear();
   assert.ok(g.api.state().honey>=before.honey+100 && g.api.state().honey<=before.honey+300);
   const paid=g.api.state().honey;g.api.shootBear();assert.equal(g.api.state().honey,paid);
@@ -28,7 +28,7 @@ test('damaged tower stops firing and repair charges twenty percent without losin
 });
 
 function game() {
-  const dom = new JSDOM(fs.readFileSync(path.join(ui, 'index.html'), 'utf8'), { runScripts: 'outside-only', url:'https://hive.test' });
+  const dom = new JSDOM(fs.readFileSync(path.join(ui, 'index.html'), 'utf8'), { runScripts: 'outside-only', url:'https://hive.test', pretendToBeVisual:true });
   const w = dom.window;
   w.HTMLCanvasElement.prototype.getContext = () => new Proxy({}, { get: (o, k) => o[k] || (() => {}), set: (o,k,v) => (o[k]=v,true) });
   w.matchMedia = () => ({ addEventListener() {} });
@@ -37,11 +37,12 @@ function game() {
   w.HiveSprites = { ready: Promise.resolve(), draw: (_, key) => drawn.push(key) };
   w.eval(fs.readFileSync(path.join(ui, 'systems.js'), 'utf8'));
   w.eval(fs.readFileSync(path.join(ui, 'adventure.js'), 'utf8'));
+  w.eval(fs.readFileSync(path.join(ui, 'world.js'), 'utf8'));
   let source = fs.readFileSync(path.join(ui, 'game.js'), 'utf8');
   source = source.replace(/\}\)\(\);\s*$/, `window.testGame = { reset, build, canBuild, damage, makeBug, tick, drawBug, drawTowerGlyph, drawHive, towerStats, cellCenter, startWave, frame,
     select: key => selType = key, addBug: bug => bugs.push(bug),
     setVitals: (health, balance) => { hp=health; honey=balance; syncHud(); },
-    animateHoney, syncHud, repair, gameOver, bear, openBear, closeBear, shootBear, collection,
+    animateHoney, syncHud, repair, gameOver, bear, openBear, closeBear, shootBear, collection, startGame, configureMap, portals,
     addShot:s=>shots.push(s),
     chooseTower:t=>{selTower=t;renderInfo();}, aimAt:(x,y)=>aim={x,y},
     state: () => ({towers, bugs, honey, hp, wave, paused, speed, running, prep, texts}) }; })();`);
@@ -58,6 +59,20 @@ test('building charges honey and rejects occupied/path cells', () => {
   assert.equal(g.api.state().towers.length, 1);
   assert.equal(g.api.canBuild({c:3,r:2}), false);
   g.close();
+});
+test('map rules affect real enemies and speed cycles through four times',()=>{
+  const g=game();g.api.startGame('hollow');assert.equal(g.api.makeBug('aphid',1).armor,2);
+  g.api.startGame('pond');assert.equal(g.api.makeBug('aphid',1).speed,64*0.85);
+  for(const speed of [2,3,4,1]){g.w.document.getElementById('speedBtn').click();assert.equal(g.api.state().speed,speed);}
+  g.close();
+});
+test('four times combat does not accelerate bear demolition',()=>{
+  const g=game();g.api.select('sting');g.api.build({c:3,r:2});
+  while(!g.api.bear.spawn(3,g.api.state().towers))g.api.bear.reset();
+  for(let i=0;i<3;i++)g.w.document.getElementById('speedBtn').click();
+  for(let i=1;i<=41;i++)g.api.frame(i*50);
+  assert.ok(Math.abs(g.api.bear.state.demolition-2)<0.001);
+  assert.equal(!!g.api.state().towers[0].damaged,false);g.close();
 });
 test('pollen slow adds twenty five percent to actual splash damage',()=>{
   for(const slowed of [false,true]){
@@ -150,6 +165,8 @@ test('pause and restart do not repair or leak old display values', () => {
   assert.equal(g.api.repair.progress,0);
   g.api.gameOver();
   assert.equal(g.api.repair.active,false);
+  g.w.document.getElementById('startBtn').click();
+  assert.equal(g.w.document.getElementById('mapChoices').hidden,false);
   g.w.document.getElementById('startBtn').click();
   assert.equal(g.api.state().hp,20);
   assert.equal(g.api.state().honey,220);

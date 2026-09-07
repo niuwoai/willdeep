@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  const RULES = Object.freeze({maxHP:20, repairCost:4, repairSeconds:3, hurtSeconds:3, restSeconds:13, counterSeconds:0.65});
+  const RULES = Object.freeze({maxHP:20, repairCost:4, dispatchIncrease:2, repairSeconds:3, hurtSeconds:3, restSeconds:13, counterSeconds:0.65});
 
   function createCounter(initial){
     let value = initial, from = initial, target = initial, elapsed = RULES.counterSeconds;
@@ -24,12 +24,16 @@
   }
 
   function createRepair(){
-    let active = false, progress = 0, hurt = 0;
+    let active = false, progress = 0, hurt = 0, dispatches=0, firstCost=RULES.repairCost, completed=0;
+    const nextCost=()=>firstCost*(completed+1);
     return {
-      reset(){ active = false; progress = 0; hurt = 0; },
+      reset(){ active = false; progress = 0; hurt = 0; dispatches=0;firstCost=RULES.repairCost;completed=0; },
       stop(){ active = false; },
       toggle(hp, allowed){
-        if(allowed && hp > 0 && hp < RULES.maxHP) active = !active;
+        if(allowed && hp > 0 && hp < RULES.maxHP){
+          if(!active){dispatches++;firstCost=RULES.repairCost+(dispatches-1)*RULES.dispatchIncrease;completed=0;}
+          active = !active;
+        }
         return active;
       },
       hit(){ hurt = RULES.hurtSeconds; },
@@ -37,12 +41,13 @@
         const slowed = Math.min(dt, hurt);
         hurt = Math.max(0, hurt - dt);
         let repaired = 0;
-        if(active && hp > 0 && hp < RULES.maxHP && honey >= RULES.repairCost){
+        if(active && hp > 0 && hp < RULES.maxHP && honey >= nextCost()){
           progress += dt - slowed / 2;
-          while(progress + 1e-9 >= RULES.repairSeconds && hp < RULES.maxHP && honey >= RULES.repairCost){
+          while(progress + 1e-9 >= RULES.repairSeconds && hp < RULES.maxHP && honey >= nextCost()){
             progress = Math.max(0, progress - RULES.repairSeconds);
-            hp++; honey -= RULES.repairCost; repaired++;
+            hp++; honey -= nextCost(); repaired++;completed++;
           }
+          if(repaired && honey<nextCost())progress=0;
         }
         if(hp >= RULES.maxHP || hp <= 0){ active = false; progress = 0; }
         return {hp, honey, repaired};
@@ -50,6 +55,11 @@
       get active(){ return active; },
       get progress(){ return progress; },
       get hurt(){ return hurt; },
+      get nextCost(){return nextCost();},
+      get firstCost(){return firstCost;},
+      get point(){return completed+1;},
+      get dispatches(){return dispatches;},
+      get nextDispatchCost(){return RULES.repairCost+dispatches*RULES.dispatchIncrease;},
       get remaining(){
         const work = RULES.repairSeconds - progress;
         return work <= hurt / 2 ? work * 2 : work + hurt / 2;

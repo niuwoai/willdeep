@@ -10,7 +10,24 @@ test('repair preserves progress when stopped or short of honey',()=>{
   r.toggle(10,true);r.step(5,10,40);
   assert.equal(r.progress,2);
   r.toggle(10,true);
-  assert.deepEqual(r.step(1,10,4),{hp:11,honey:0,repaired:1});
+  assert.equal(r.nextCost,6);
+  assert.deepEqual(r.step(1,10,6),{hp:11,honey:0,repaired:1});
+});
+test('dispatch first prices rise 4 6 8 and each repair multiplies that dispatch price',()=>{
+  const r=createRepair();
+  for(const first of [4,6,8]){
+    assert.equal(r.nextDispatchCost,first);r.toggle(10,true);
+    assert.equal(r.nextCost,first);let result=r.step(3,10,100);
+    assert.equal(result.honey,100-first);assert.equal(r.nextCost,first*2);
+    result=r.step(3,result.hp,result.honey);assert.equal(result.honey,100-first*3);
+    assert.equal(r.nextCost,first*3);r.stop();
+  }
+  r.reset();assert.equal(r.nextDispatchCost,4);assert.equal(r.dispatches,0);
+});
+test('expensive next point waits without spending or progressing',()=>{
+  const r=createRepair();r.toggle(10,true);r.step(3,10,10);
+  assert.equal(r.nextCost,8);assert.deepEqual(r.step(2,11,6),{hp:11,honey:6,repaired:0});
+  assert.equal(r.progress,0);assert.deepEqual(r.step(3,11,8),{hp:12,honey:0,repaired:1});
 });
 test('being hit halves repair temporarily and keeps earned progress',()=>{
   const r=createRepair();r.toggle(10,true);r.step(1,10,40);r.hit();

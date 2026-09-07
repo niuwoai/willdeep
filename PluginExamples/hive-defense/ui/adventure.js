@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  const RULES = Object.freeze({firstWave:3, waveGap:3, chance:0.55, walkSpeed:22, hits:5, radius:48, repairFraction:0.2, combo:1.25});
+  const RULES = Object.freeze({firstWave:3, waveGap:3, chance:0.55, minDemolition:3, demolitionRange:3, hits:5, headRadius:29, headOffset:-48, bearSize:210, repairFraction:0.2, combo:1.25});
   const FACTS = Object.freeze({
     aphid:['成群出现，蜂胶炮擅长应对','蚜虫会吸食植物汁液。'],
     wasp:['用工蜂哨塔持续攻击','黄蜂也会捕食其他小虫。'],
@@ -18,30 +18,29 @@
         if(bear || wave<RULES.firstWave || wave-lastWave<RULES.waveGap || !candidates.length) return false;
         lastWave=wave;
         if(random()>=RULES.chance) return false;
-        bear={x:24,y:340,target:candidates[Math.floor(random()*candidates.length)],arrived:false,active:false,hits:0,reward:0};
+        const target=candidates[Math.floor(random()*candidates.length)];
+        bear={x:target.x,y:target.y,target,arrived:false,active:false,hits:0,reward:0,demolition:0,duration:RULES.minDemolition+random()*RULES.demolitionRange};
         elapsed=0; return true;
       },
       walk(dt,towers){
         if(!bear || bear.active || bear.arrived) return false;
-        if(!towers.includes(bear.target)){
-          bear.target=towers.find(t=>!t.damaged);
-          if(!bear.target){bear.arrived=true;return false;}
-        }
-        const dx=bear.target.x-bear.x, dy=bear.target.y-bear.y, distance=Math.hypot(dx,dy);
-        if(distance<=RULES.walkSpeed*dt){
-          bear.x=bear.target.x;bear.y=bear.target.y;bear.arrived=true;
+        if(!towers.includes(bear.target)){bear.arrived=true;return false;}
+        bear.demolition=Math.min(bear.duration,bear.demolition+dt);
+        if(bear.demolition>=bear.duration){
+          bear.arrived=true;
           bear.target.damaged=true;return true;
         }
-        bear.x+=dx/distance*RULES.walkSpeed*dt;bear.y+=dy/distance*RULES.walkSpeed*dt;return false;
+        return false;
       },
       open(){if(!bear)return false;bear.active=true;return true;},
       close(){if(bear?.reward)bear=null;else if(bear)bear.active=false;},
       step(dt){if(bear?.active && !bear.reward)elapsed+=dt;},
-      target(reduced){return {x:332+(reduced?0:Math.sin(elapsed*0.8)*210),y:180+(reduced?0:Math.sin(elapsed*1.3)*65)};},
+      target(reduced){return {x:332+(reduced?0:Math.sin(elapsed*0.8)*210),y:228};},
+      head(reduced){const p=this.target(reduced);return {x:p.x+8,y:p.y+RULES.headOffset};},
       shoot(x,y,reduced){
         if(!bear?.active || bear.reward)return {hit:false,reward:0};
-        const p=this.target(reduced);
-        if(Math.hypot(x-p.x,y-p.y)>RULES.radius)return {hit:false,reward:0};
+        const p=this.head(reduced);
+        if(Math.hypot(x-p.x,y-p.y)>RULES.headRadius)return {hit:false,reward:0};
         bear.hits++;
         if(bear.hits>=RULES.hits)bear.reward=100+Math.floor(random()*201);
         return {hit:true,reward:bear.reward};

@@ -31,3 +31,8 @@
 内置 imagegen 生成；最终文件 `ui/assets/bear.png`，保留原生透明 alpha，无后期抠图。
 
 Prompt: Create one game sprite of a cute mischievous brown bear for a children's honeybee tower defense game. Whole body, chubby rounded silhouette, standing facing viewer slightly three-quarter, paws raised playfully, warm chestnut fur, beige muzzle and belly, small black eyes, cheerful determined expression. Charming polished hand-painted cartoon game illustration, warm earthy palette, crisp thick soft brown outlines, subtle volume. Single centered isolated character, large generous empty margins, no props, no text, no scenery, no shadow outside silhouette, no glow. True transparent alpha background PNG, not checkerboard. Used both at small size on map and as large aiming target in a non-graphic honey-ball minigame.
+# 丛林瞄准背景（1.338.0-rc1）
+
+内置 imagegen 生成，最终文件 `ui/assets/jungle.png`。此图为完整不透明场景，狗熊沿用透明角色图，放大镜直接采样同一画布。
+
+Prompt: Wide landscape 16:9 background illustration for a children's forest aiming mini-game. Lush storybook jungle clearing, layered emerald and sage green leafy trees and vines along sides, warm soft sunlight coming through canopy, distant atmospheric trunks, gentle earth and moss floor occupying lower third, open uncluttered middle area with gentle green shrubs and depth where a cartoon brown bear will move horizontally. Polished warm hand-painted 2D casual game art, friendly and magical not scary, moderate detail, soft outlines, natural green gold palette. Background only, no bear or any animals, no characters, no text, no UI, no target, no crosshairs, no borders. Full bleed opaque landscape illustration.

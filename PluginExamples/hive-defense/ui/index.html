@@ -4,7 +4,7 @@
 <div class="wrap">
   <header>
     <h1>蜂巢<em>防线</em></h1>
-    <span class="tag">六边形网格塔防 · 五种防御 · 六类虫群 · 无尽波次</span>
+    <span class="tag" id="mapLabel">花园 · 六边形塔防</span>
   </header>
 
   <div class="hud">
@@ -27,8 +27,8 @@
       <canvas id="map" width="664" height="372"></canvas>
       <section id="bearPanel" class="bear-panel" hidden aria-label="狗熊瞄准小游戏">
         <h2 id="bearTitle">蜂蜜球赶走狗熊</h2>
-        <p id="bearStatus" role="status">瞄准狗熊，点击发射蜂蜜球。命中 5 次获胜！</p>
-        <canvas id="bearCanvas" width="664" height="372" tabindex="0" aria-label="瞄准画布：点击狗熊发射，方向键移动准星，空格发射"></canvas>
+        <p id="bearStatus" role="status">用放大镜瞄准头部，命中 5 次获胜！</p>
+        <canvas id="bearCanvas" width="664" height="372" tabindex="0" aria-label="丛林瞄准画布：移动放大镜，点击头部发射；方向键瞄准，空格发射"></canvas>
         <button id="bearExit">暂时返回防线</button>
       </section>
       <div class="overlay" id="overlay">
@@ -37,14 +37,19 @@
           虫群会沿着蜡黄色的通道爬向蜂巢。<br>
           在通道两侧的空格上建塔，别让它们走到底。
         </div>
-        <button class="primary" id="startBtn">开始防守</button>
+        <div id="mapChoices" class="map-choices">
+          <button data-map="hollow">树洞 · 虫子护甲 +2</button>
+          <button data-map="pond">池塘 · 虫子减速 15%</button>
+        </div>
+        <button class="primary" id="startBtn">花园 · 开始防守</button>
+        <p id="mapCountdown" role="status">3 秒后随机选择地图</p>
       </div>
     </div>
 
     <div class="side">
       <div class="box repair-box">
         <h2>蜂巢维修</h2>
-        <p class="repair-rules">每 3 个游戏秒修 1 点，每点消耗 4 蜂蜜。受击暂时减速；波间有 13 秒休整。</p>
+        <p class="repair-rules">每 3 个游戏秒修 1 点。历次派出首点依次收 4、6、8…蜂蜜；同次第 1、2、3…点收首价的 1、2、3…倍，完成时扣费。停止保留进度，再派出按新首价计费；受击减速，波间休整 13 秒。</p>
         <progress id="repairProgress" max="3" value="0" aria-label="下一点生命的维修进度"></progress>
         <p id="repairStatus" role="status">开始防守后可维修</p>
         <button id="repairBtn" aria-pressed="false">派维修蜂</button>
@@ -68,8 +73,9 @@
       </div>
       <div class="box">
         <h2>林间访客</h2>
-        <p id="bearNotice" role="status">第 3 波起偶尔出现狗熊，每次最多损坏一座塔。</p>
+        <p id="bearNotice" role="status">第 3 波起狗熊偶尔从塔旁出现，3～6 秒拆坏一座塔。</p>
         <button id="bearOpen" hidden>瞄准狗熊</button>
+        <p id="portalNotice" role="status">留意蓝色入口与紫色出口：虫子会沿传送门抄近路！</p>
         <p class="repair-rules">花粉减速 + 蜂胶炮：对减速虫子额外造成 25% 伤害。</p>
       </div>
       <div class="box">
@@ -86,4 +92,4 @@
 </div>
 
 
-<footer>蜂巢防线 · 1.337.0-rc1</footer><script src="sprites.js"></script><script src="systems.js"></script><script src="adventure.js"></script><script src="game.js"></script></body></html>
+<footer>蜂巢防线 · 1.338.0-rc1</footer><script src="sprites.js"></script><script src="systems.js"></script><script src="adventure.js"></script><script src="world.js"></script><script src="game.js"></script></body></html>

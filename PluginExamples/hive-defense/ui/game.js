@@ -50,27 +50,21 @@
   }
 
   // ===== 蜡道：一条蜿蜒穿过网格的路径 =====
-  const PATH = (function(){
-    const p = [];
-    const push = (c, r) => p.push({c, r});
-    for(let c = 0; c <= 12; c++) push(c, 1);
-    push(12, 2); push(12, 3);
-    for(let c = 11; c >= 1; c--) push(c, 3);
-    push(1, 4); push(1, 5);
-    for(let c = 2; c <= 12; c++) push(c, 5);
-    push(12, 6); push(12, 7);
-    for(let c = 11; c >= 4; c--) push(c, 7);
-    return p;
-  })();
-  const HIVE = PATH[PATH.length - 1];
-  const pathKeys = new Set(PATH.map(p => p.c + "," + p.r));
-  const PTS = PATH.map(p => cellCenter(p.c, p.r));
-  const SEG = [];       // 每段长度
-  let TOTAL_LEN = 0;
-  for(let i = 0; i < PTS.length - 1; i++){
-    const d = Math.hypot(PTS[i+1].x - PTS[i].x, PTS[i+1].y - PTS[i].y);
-    SEG.push(d); TOTAL_LEN += d;
+  const {MAPS,createPortals}=window.HiveWorld;
+  const portals=createPortals();
+  let currentMap='garden',PATH=[],HIVE,pathKeys,PTS=[],SEG=[],DIST=[],TOTAL_LEN=0;
+  let mapChoiceRemaining=3;
+  function configureMap(key){
+    currentMap=key;PATH=MAPS[key].path;HIVE=PATH[PATH.length-1];
+    pathKeys=new Set(PATH.map(p=>p.c+','+p.r));PTS=PATH.map(p=>cellCenter(p.c,p.r));
+    SEG=[];DIST=[0];TOTAL_LEN=0;
+    for(let i=0;i<PTS.length-1;i++){
+      const d=Math.hypot(PTS[i+1].x-PTS[i].x,PTS[i+1].y-PTS[i].y);
+      SEG.push(d);TOTAL_LEN+=d;DIST.push(TOTAL_LEN);
+    }
+    document.getElementById('mapLabel').textContent=MAPS[key].name+' · '+MAPS[key].description;
   }
+  configureMap('garden');
   function posAt(dist){
     let d = Math.max(0, dist), i = 0;
     while(i < SEG.length && d > SEG[i]){ d -= SEG[i]; i++; }
@@ -188,11 +182,16 @@
         const p = cellCenter(c, r);
         const onPath = pathKeys.has(c + "," + r);
         hexPath(m, p.x, p.y, SIZE - 1.5);
-        m.fillStyle = onPath ? P.path : P.cell;
+        m.fillStyle = onPath ? MAPS[currentMap].pathColor : hexToRgba(MAPS[currentMap].ground,0.5);
         m.fill();
         m.strokeStyle = onPath ? P.pathEdge : P.line;
         m.lineWidth = 1;
         m.stroke();
+        if(!onPath && (c+r)%3===0){
+          m.fillStyle=hexToRgba(MAPS[currentMap].decor==='water'?'#3B929B':MAPS[currentMap].decor==='roots'?'#785438':'#C994B4',0.5);
+          if(MAPS[currentMap].decor==='roots'){m.fillRect(p.x-14,p.y-2,28,3);}
+          else {m.beginPath();m.ellipse(p.x,p.y,MAPS[currentMap].decor==='water'?13:3,3,0,0,Math.PI*2);m.fill();}
+        }
       }
     }
     // 入口与蜂巢标记
@@ -208,7 +207,7 @@
     hp = RULES.maxHP; honey = 220; wave = 0; kills = 0; prep = 0;
     spawnQueue = []; running = false; paused = false; over = false; speed = 1;
     selType = null; selTower = null;
-    repair.reset(); bear.reset(); closeBear(); renderCollection(); honeyCounter.reset(honey);
+    repair.reset(); portals.reset(); bear.reset(); closeBear(); renderCollection(); honeyCounter.reset(honey);
     honeyFeedbackAge = 1; honeyDelta = 0;
     honeyEl.textContent = honey;
     honeyEl.setAttribute('aria-label', '蜂蜜 ' + honey);
@@ -244,7 +243,7 @@
     return {
       type: type,
       hp: Math.round(b.hp * scale), maxHp: Math.round(b.hp * scale),
-      speed: b.speed, armor: b.armor, bounty: Math.round(b.bounty * (1 + (wave-1) * 0.05)),
+      speed: b.speed * MAPS[currentMap].speed, armor: b.armor + MAPS[currentMap].armor, bounty: Math.round(b.bounty * (1 + (wave-1) * 0.05)),
       dmg: b.dmg, color: b.color, r: b.r, boss: !!b.boss,
       dist: 0, x: PTS[0].x, y: PTS[0].y,
       slowUntil: 0, slowAmt: 0, wob: Math.random() * 6.28, hitFlash: 0
@@ -318,9 +317,13 @@
     }
   }
 
-  function tick(dt){
+  function tick(dt,eventDt=dt){
     if(bear.active) return;
-    if(bear.walk(dt,towers)){ renderInfo(); renderBearNotice(); }
+    portals.step(dt,PTS,DIST);
+    if(bear.walk(eventDt,towers)){
+      burst(bear.state.x,bear.state.y,P.danger,18);
+      renderInfo(); renderBearNotice();
+    }
     // 生成
     if(spawnQueue.length){
       spawnQueue.forEach(s => s.at -= dt);
@@ -338,7 +341,14 @@
       const slowed = b.slowUntil > 0;
       if(slowed) b.slowUntil -= dt;
       const sp = b.speed * (slowed ? (1 - b.slowAmt) : 1);
+      const previousDistance=b.dist;
       b.dist += sp * dt;
+      if(portals.transport(b,previousDistance)){
+        const gate=portals.pair;
+        parts.push({ring:true,x:gate.entryPoint.x,y:gate.entryPoint.y,t:0,life:0.35,r:24,c:"#289FD3"});
+        parts.push({ring:true,x:gate.exitPoint.x,y:gate.exitPoint.y,t:0,life:0.35,r:24,c:"#A863D2"});
+      }
+      b.teleportFlash=Math.max(0,(b.teleportFlash||0)-dt);
       b.wob += dt * 8;
       const p = posAt(b.dist);
       b.x = p.x; b.y = p.y;
@@ -458,6 +468,7 @@
   function draw(){
     ctx.clearRect(0, 0, W, H);
     ctx.drawImage(mapCache, 0, 0, W, H);
+    drawPortals();
 
     // 悬停高亮 / 建造预览
     if(hoverCell && selType){
@@ -490,13 +501,29 @@
 
     // 塔
     towers.forEach(t => {
-      drawTowerGlyph(t.x,t.y,t.type,t.level,t.angle||0,t.damaged?0.35:1,!t.damaged && t.st && t.st.boosted);
+      const attacked=bear.state?.target===t && !bear.state.arrived;
+      const shake=attacked && !paused && !bear.active && !motionPreference.matches ? Math.sin(bear.state.demolition*32)*2 : 0;
+      drawTowerGlyph(t.x+shake,t.y,t.type,t.level,t.angle||0,t.damaged?0.35:1,!t.damaged && t.st && t.st.boosted);
       if(t.damaged){ctx.fillStyle=P.danger;ctx.font='bold 12px sans-serif';ctx.textAlign='center';ctx.fillText('待修',t.x,t.y+5);}
     });
     if(bear.state){
-      sprites.draw(ctx,'bear',bear.state.x,bear.state.y,68);
-      ctx.fillStyle=P.ink;ctx.font='bold 11px sans-serif';ctx.textAlign='center';
-      ctx.fillText('点击狗熊',bear.state.x,bear.state.y-31);
+      const b=bear.state,attack=!b.arrived;
+      const swing=attack && !motionPreference.matches ? Math.sin(b.demolition*15) : 0;
+      ctx.save();ctx.translate(b.x+20,b.y-5);ctx.rotate(swing*0.16);
+      sprites.draw(ctx,'bear',0,0,68);ctx.restore();
+      if(attack){
+        const life=1-b.demolition/b.duration;
+        ctx.fillStyle='#47382A';ctx.fillRect(b.x-24,b.y-39,48,6);
+        ctx.fillStyle=life>0.4?'#82BA58':'#DC6046';ctx.fillRect(b.x-23,b.y-38,46*life,4);
+        ctx.fillStyle=P.ink;ctx.font='bold 10px sans-serif';ctx.textAlign='center';
+        ctx.fillText('塔 '+Math.ceil(life*100)+'%',b.x,b.y-43);
+        if(swing>0.2){
+          ctx.strokeStyle='#F5CF56';ctx.lineWidth=2;ctx.beginPath();
+          for(let i=0;i<5;i++){const a=i*Math.PI*0.4;ctx.moveTo(b.x+Math.cos(a)*8,b.y+Math.sin(a)*8);ctx.lineTo(b.x+Math.cos(a)*16,b.y+Math.sin(a)*16);}ctx.stroke();
+        }
+      }
+      ctx.fillStyle=P.ink;ctx.font='bold 10px sans-serif';ctx.textAlign='center';
+      ctx.fillText('点击狗熊',b.x+20,b.y+35);
     }
 
     // 虫子
@@ -554,6 +581,20 @@
     }
   }
 
+  function drawPortals(){
+    const pair=portals.pair;
+    if(!pair)return;
+    [pair.entryPoint,pair.exitPoint].forEach((p,index)=>{
+      const color=index?'#AC69DB':'#259ECE',angle=motionPreference.matches?0:pair.age*(index?-3:3);
+      ctx.save();ctx.translate(p.x,p.y);
+      hexPath(ctx,0,0,SIZE-2);ctx.fillStyle=hexToRgba(color,0.3);ctx.fill();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke();
+      ctx.rotate(angle);
+      for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(0,0,8+i*4,i,Math.PI+i);ctx.stroke();}
+      ctx.restore();ctx.fillStyle=color;ctx.font='bold 10px sans-serif';ctx.textAlign='center';
+      ctx.fillText(index?'出口 ↑':'入口 ↓',p.x,p.y+31);
+    });
+  }
+
   function drawHive(){
     const p = cellCenter(HIVE.c, HIVE.r);
     ctx.save();
@@ -567,7 +608,7 @@
     ctx.lineTo(8,0); ctx.lineTo(14,8); ctx.stroke();
     ctx.globalAlpha = 1;
     if(repair.active && running && !over){
-      const moving = !paused && honey >= RULES.repairCost && !motionPreference.matches;
+      const moving = !paused && !bear.active && honey >= repair.nextCost && !motionPreference.matches;
       const angle = moving ? blinkT * 1.8 : -0.7;
       const bx=Math.cos(angle)*32,by=Math.sin(angle)*20-12;
       sprites.draw(ctx, 'repair-bee', bx, by, 34);
@@ -631,6 +672,7 @@
     const ahead = posAt(Math.min(TOTAL_LEN, b.dist + 1));
     ctx.rotate(Math.atan2(ahead.y - b.y, ahead.x - b.x));
     if(b.hitFlash > 0) ctx.globalAlpha = 0.65;
+    if(b.teleportFlash>0)ctx.globalAlpha=1-b.teleportFlash/0.35;
     sprites.draw(ctx, b.sprite || b.type, 0, 0, b.r * 3.8);
     ctx.restore();
 
@@ -773,16 +815,16 @@
   });
   function renderRepair(){
     repairBtn.disabled = !running || over || (paused && !repair.active) || hp >= RULES.maxHP;
-    repairBtn.textContent = repair.active ? '停止维修' : '派维修蜂';
+    repairBtn.textContent = repair.active ? '停止维修' : '派维修蜂 · 首点 '+repair.nextDispatchCost+' 蜂蜜';
     repairBtn.setAttribute('aria-pressed', String(repair.active));
     repairProgress.value = repair.progress;
-    let status = '每 3 秒修 1 点 · 每点 4 蜂蜜';
+    let status = '下次派出首点 '+repair.nextDispatchCost+' 蜂蜜，第二点 '+repair.nextDispatchCost*2+' 蜂蜜';
     if(over) status = '蜂巢已失守';
     else if(!running) status = '开始防守后可维修';
     else if(hp >= RULES.maxHP) status = '蜂巢完好';
     else if(paused) status = '游戏已暂停 · 维修进度保留';
-    else if(repair.active && honey < RULES.repairCost) status = '等待蜂蜜 · 每点需要 4 蜂蜜';
-    else if(repair.active) status = (repair.hurt > 0 ? '受击减速 · ' : '维修中 · ') + '下一点 ' + Math.ceil(repair.remaining) + ' 秒';
+    else if(repair.active && honey < repair.nextCost) status = '等待蜂蜜 · 第 '+repair.point+' 点需要 '+repair.nextCost+' 蜂蜜';
+    else if(repair.active) status = (repair.hurt > 0 ? '受击减速 · ' : '维修中 · ') + '第 '+repair.point+' 点 '+repair.nextCost+' 蜂蜜 · '+Math.ceil(repair.remaining)+' 秒';
     if(repairStatus.textContent !== status) repairStatus.textContent = status;
   }
   function animateHoney(dt){
@@ -850,7 +892,7 @@
   function renderBearNotice(){
     const b=bear.state;
     document.getElementById('bearOpen').hidden=!b;
-    document.getElementById('bearNotice').textContent=b?(b.arrived?'狗熊停在塔旁！损坏的塔可花建造价的 20% 修复。':'狗熊来了！点击它进入瞄准小游戏，可在它碰到塔前阻止它。'):'第 3 波起偶尔出现狗熊，每次最多损坏一座塔。';
+    document.getElementById('bearNotice').textContent=b?(b.arrived?'塔已损坏停机，可花建造价的 20% 修复。':'狗熊正在拆塔！3～6 秒拆完，快点击它，瞄准头部阻止它！'):'第 3 波起狗熊偶尔从塔旁出现，3～6 秒拆坏一座塔。';
   }
   function setAdventureLock(locked){
     document.querySelectorAll('.hud,.shop,.side').forEach(el=>el.inert=locked);
@@ -858,7 +900,7 @@
   function openBear(){
     if(!running || over || !bear.open())return;
     bearPanel.hidden=false;setAdventureLock(true);
-    bearStatus.textContent='命中 '+bear.state.hits+'/5 · 点击狗熊发射；方向键瞄准，空格发射。防线已暂停。';
+    bearStatus.textContent='头部命中 '+bear.state.hits+'/5 · 移动放大镜，点击头部发射。防线已暂停。';
     bearExit.textContent='暂时返回防线';bearCanvas.focus();drawBear(0);
   }
   function closeBear(){
@@ -868,36 +910,46 @@
     const result=bear.shoot(aim.x,aim.y,motionPreference.matches);
     if(!bear.state || bear.state.reward && !result.reward)return;
     bearFlash=0.18;
-    bearStatus.textContent=result.hit?'命中 '+bear.state.hits+'/5！':'没打中，再试一次！没有时间限制。';
+    bearStatus.textContent=result.hit?'命中 '+bear.state.hits+'/5！':'只有头部命中才有效！用放大镜瞄准再试试。';
     if(result.reward){
       honey+=result.reward;syncHud();
       bearStatus.textContent='狗熊被击败！获得 '+result.reward+' 蜂蜜。';
       bearExit.textContent='带着奖励返回防线';
     }
   }
+  const bearScene=document.createElement('canvas');bearScene.width=W;bearScene.height=H;
+  const sceneCtx=bearScene.getContext('2d');
   function drawBear(dt){
     if(!bear.active)return;
     bear.step(dt);bearFlash=Math.max(0,bearFlash-dt);
     const p=bear.target(motionPreference.matches);
-    bearCtx.fillStyle=P.bg;bearCtx.fillRect(0,0,W,H);
-    bearCtx.strokeStyle=P.pathEdge;bearCtx.lineWidth=2;
-    bearCtx.beginPath();bearCtx.arc(p.x,p.y,adventure.RULES.radius,0,Math.PI*2);bearCtx.stroke();
-    bearCtx.globalAlpha=bear.state.reward?0.35:1;
-    sprites.draw(bearCtx,'bear',p.x,p.y,135);bearCtx.globalAlpha=1;
-    bearCtx.strokeStyle=bearFlash?P.honeyC:P.ink;bearCtx.lineWidth=2;
-    bearCtx.beginPath();bearCtx.arc(aim.x,aim.y,12,0,Math.PI*2);
-    bearCtx.moveTo(aim.x-20,aim.y);bearCtx.lineTo(aim.x+20,aim.y);
-    bearCtx.moveTo(aim.x,aim.y-20);bearCtx.lineTo(aim.x,aim.y+20);bearCtx.stroke();
+    sceneCtx.fillStyle='#335C36';sceneCtx.fillRect(0,0,W,H);
+    sprites.draw(sceneCtx,'jungle',W/2,H/2,W);
+    sceneCtx.globalAlpha=bear.state.reward?0.35:1;
+    sprites.draw(sceneCtx,'bear',p.x,p.y,adventure.RULES.bearSize);sceneCtx.globalAlpha=1;
+    bearCtx.drawImage(bearScene,0,0);
+    // The lens samples the same scene at 2x. Its centre is the actual shot point.
+    const radius=58,zoom=2;
+    bearCtx.save();bearCtx.beginPath();bearCtx.arc(aim.x,aim.y,radius,0,Math.PI*2);bearCtx.clip();
+    bearCtx.fillStyle='#203C29';bearCtx.fillRect(aim.x-radius,aim.y-radius,radius*2,radius*2);
+    bearCtx.translate(aim.x,aim.y);bearCtx.scale(zoom,zoom);bearCtx.drawImage(bearScene,-aim.x,-aim.y);bearCtx.restore();
+    bearCtx.strokeStyle=bearFlash?'#FBE16F':'#E5EBD5';bearCtx.lineWidth=4;
+    bearCtx.beginPath();bearCtx.arc(aim.x,aim.y,radius,0,Math.PI*2);bearCtx.stroke();
+    bearCtx.lineWidth=7;bearCtx.beginPath();bearCtx.moveTo(aim.x+42,aim.y+42);bearCtx.lineTo(aim.x+68,aim.y+68);bearCtx.stroke();
+    bearCtx.strokeStyle='#E8B640';bearCtx.lineWidth=1.5;bearCtx.beginPath();
+    bearCtx.moveTo(aim.x-13,aim.y);bearCtx.lineTo(aim.x+13,aim.y);
+    bearCtx.moveTo(aim.x,aim.y-13);bearCtx.lineTo(aim.x,aim.y+13);bearCtx.stroke();
   }
   document.getElementById('bearOpen').addEventListener('click',openBear);
   bearExit.addEventListener('click',()=>{closeBear();document.getElementById('bearOpen').focus();});
-  bearCanvas.addEventListener('pointerdown',e=>{
+  function pointBear(e){
     const r=bearCanvas.getBoundingClientRect();
     // object-fit preserves the logical canvas ratio inside the flex panel.
     const scale=Math.min(r.width/W,r.height/H);
     aim={x:(e.clientX-r.left-(r.width-W*scale)/2)/scale,y:(e.clientY-r.top-(r.height-H*scale)/2)/scale};
-    shootBear();
-  });
+  }
+  bearCanvas.addEventListener('pointermove',pointBear);
+  bearCanvas.addEventListener('pointerdown',e=>{pointBear(e);shootBear();});
 
   // ===== 输入 =====
   function evtPos(e){
@@ -950,7 +1002,7 @@
   const pauseBtn = document.getElementById("pauseBtn");
   function cycleSpeed(){
     if(bear.active) return;
-    speed = speed === 1 ? 2 : speed === 2 ? 3 : 1;
+    speed = speed >= 4 ? 1 : speed + 1;
     speedBtn.textContent = speed + "×";
     speedBtn.classList.toggle("on", speed > 1);
   }
@@ -982,29 +1034,44 @@
   function gameOver(){
     over = true; running = false;
     repair.stop();
+    mapChoiceRemaining=0;mapChoices.hidden=true;mapCountdown.hidden=true;
     ovTitle.textContent = "蜂巢失守";
     ovText.innerHTML = "撑到第 <b>" + wave + "</b> 波，消灭 <b>" + kills + "</b> 只虫子。<br>换个建塔位置再试一次？";
     startBtn.textContent = "重新防守";
     overlay.hidden = false;
     syncHud();
   }
-  startBtn.addEventListener("click", function(){
-    reset();
-    running = true;
-    prep = 6;
-    overlay.hidden = true;
+  const mapChoices=document.getElementById('mapChoices'),mapCountdown=document.getElementById('mapCountdown');
+  function startGame(key){
+    mapChoiceRemaining=0;configureMap(key);buildMapCache();reset();
+    running=true;prep=6;overlay.hidden=true;
+    speedBtn.textContent='1×';speedBtn.classList.remove('on');pauseBtn.textContent='暂停';pauseBtn.classList.remove('on');
     syncHud();
-  });
+  }
+  function chooseMap(){
+    mapChoiceRemaining=3;over=false;
+    ovTitle.textContent='选择你的防线';ovText.textContent='花园：标准规则；树洞：厚甲虫群；池塘：湿地减速。';
+    mapChoices.hidden=false;mapCountdown.hidden=false;mapCountdown.textContent='3 秒后随机选择地图';
+    startBtn.textContent='花园 · 开始防守';overlay.hidden=false;
+  }
+  startBtn.addEventListener('click',()=>{if(over)chooseMap();else startGame('garden');});
+  document.querySelectorAll('[data-map]').forEach(button=>button.addEventListener('click',()=>startGame(button.dataset.map)));
 
   // ===== 主循环 =====
   let last = 0;
   function frame(now){
     if(document.hidden) { last = now; requestAnimationFrame(frame); return; }
     if(!last) last = now;
-    let dt = Math.min(0.05, (now - last) / 1000);
+    const elapsedSeconds=Math.max(0,(now-last)/1000);
+    let dt = Math.min(0.05, elapsedSeconds);
     last = now;
+    if(mapChoiceRemaining>0){
+      mapChoiceRemaining=Math.max(0,mapChoiceRemaining-elapsedSeconds);
+      mapCountdown.textContent=Math.ceil(mapChoiceRemaining)+' 秒后随机选择地图';
+      if(mapChoiceRemaining===0){const keys=Object.keys(MAPS);startGame(keys[Math.floor(Math.random()*keys.length)]);}
+    }
     if(running && !paused && !over && !bear.active){
-      for(let i = 0; i < speed && !over; i++) tick(dt);
+      for(let i = 0; i < speed && !over; i++) tick(dt,i===0?dt:0);
     }
     if(!paused && !bear.active) blinkT += dt;
     animateHoney(dt);
@@ -1016,12 +1083,14 @@
   // ===== 初始化 =====
   function fitCanvas(){
     const dpr = window.devicePixelRatio || 1;
+    if(cv.width===W*dpr && cv.height===H*dpr)return;
     cv.width = W * dpr; cv.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   fitCanvas();
   readPalette();
   reset();
+  chooseMap();
 
   // 首屏摆几座示范塔，让人一眼看懂玩法
   ["sting","bomb","pollen"].forEach(function(k, i){
