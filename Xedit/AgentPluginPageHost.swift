@@ -577,7 +577,23 @@ private struct AgentPluginWebView: NSViewRepresentable {
     let context: AgentPluginDestinationContext
     let appState: AppState
 
+    /// 缓存键跟着激活包走：重装或内置↔本地切换后必须另起一张页面。
+    private var liveCacheKey: String {
+        AgentPluginLivePageCache.key(
+            destinationID: destination.qualifiedID,
+            packagePath: destination.packageURL.path
+        )
+    }
+
     func makeNSView(context coordinatorContext: Context) -> WKWebView {
+        // 离屏保活：用户切去聊天再切回来时，把原来那张还活着的页面挂回去，
+        // 而不是重新载入一张空白的。makeCoordinator 已经把同一个 Coordinator
+        // 取了回来，两者必须成对，否则消息桥会接到一个陌生的 WebView 上。
+        if let cached = AgentPluginLivePageCache.shared.reusableEntry(for: liveCacheKey),
+           cached.coordinator === coordinatorContext.coordinator {
+            AgentPluginLivePageCache.shared.markMounted(liveCacheKey)
+            return cached.webView
+        }
         let configuration = WKWebViewConfiguration()
         // 一个插件一个持久化仓：页面刷新不再丢 localStorage，同时因为
         // 所有插件页面共用同一个源（willdeep-plugin://bundle/），必须靠
@@ -603,6 +619,17 @@ private struct AgentPluginWebView: NSViewRepresentable {
         webView.uiDelegate = coordinatorContext.coordinator
         webView.setValue(false, forKey: "drawsBackground")
         coordinatorContext.coordinator.webView = webView
+        // 同一个目标换了激活包（重装、内置↔本地切换）会落到另一个键上，
+        // 旧那张页面对着旧资源根，留着只会占容量，直接拆掉。
+        var evicted = AgentPluginLivePageCache.shared.evictAll(destinationID: destination.qualifiedID)
+        evicted += AgentPluginLivePageCache.shared.store(
+            webView: webView,
+            coordinator: coordinatorContext.coordinator,
+            for: liveCacheKey
+        )
+        for entry in evicted where entry.webView !== webView {
+            Self.tearDown(entry.webView, coordinator: entry.coordinator as? Coordinator)
+        }
         return webView
     }
 
@@ -623,15 +650,30 @@ private struct AgentPluginWebView: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(destination: destination, destinationContext: context, appState: appState)
+        // 复用缓存里的 Coordinator，页面的桥接状态（已加载的 HTML、MCP
+        // 订阅、scheme handler）才跟着一起回来；新建一个的话 loadedHTML 是
+        // 空的，updateNSView 会立刻把页面重载，保活就白做了。
+        if let cached = AgentPluginLivePageCache.shared.reusableEntry(for: liveCacheKey)?.coordinator
+            as? Coordinator {
+            return cached
+        }
+        return Coordinator(destination: destination, destinationContext: context, appState: appState)
     }
 
     static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
-        coordinator.sendMCPRequest(
+        // 归缓存所有的页面只是暂时离屏，不能拆：拆掉等于把玩到一半的游戏、
+        // 填了一半的表单清零，而这正是用户切一下就回来时最不该发生的事。
+        if AgentPluginLivePageCache.shared.markUnmounted(nsView) { return }
+        tearDown(nsView, coordinator: coordinator)
+    }
+
+    /// 真正的拆卸：页面被淘汰或不再归缓存所有时才走这里。
+    static func tearDown(_ webView: WKWebView, coordinator: Coordinator?) {
+        coordinator?.sendMCPRequest(
             method: "ui/resource-teardown",
             params: ["reason": "destination-closed"]
         )
-        nsView.configuration.userContentController.removeScriptMessageHandler(forName: "willdeepPlugin")
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "willdeepPlugin")
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
