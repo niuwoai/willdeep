@@ -25,7 +25,7 @@ test('moving reserves both cells, keeps level, stops firing and completes after 
 test('pumpkin harvests periodically, upgrades income, and stops while damaged or moved',()=>{
   const g=game();g.api.select('pumpkin');g.api.build({c:3,r:2});const t=g.api.state().towers[0];
   assert.equal(g.api.state().honey,120);g.api.tick(7.9);assert.equal(g.api.state().honey,120);g.api.tick(0.1);assert.equal(g.api.state().honey,130);
-  g.api.chooseTower(t);g.w.document.getElementById('upBtn').click();assert.equal(t.level,2);
+  g.api.unlock();g.api.chooseTower(t);g.w.document.getElementById('upBtn').click();assert.equal(t.level,2);
   const balance=g.api.state().honey;t.damaged=true;g.api.tick(4);assert.equal(t.harvest,0);assert.equal(g.api.state().honey,balance);
   t.damaged=false;g.api.move(t);g.api.startMove({c:5,r:2});g.api.tick(1);assert.equal(t.harvest,0);
   g.api.advanceMoves(1);g.api.tick(8);assert.equal(g.api.state().honey,balance+15);g.close();
@@ -108,7 +108,8 @@ function game() {
     select: key => selType = key, addBug: bug => bugs.push(bug),
     setVitals: (health, balance) => { hp=health; honey=balance; syncHud(); },
     animateHoney, syncHud, repair, gameOver, bear, openBear, closeBear, shootBear, collection, startGame, configureMap, portals, waveDef, advanceJump,
-    route:()=>({PATH,PTS,DIST}), leisure, chooseReward, startMove, advanceMoves,
+    royalPlacement, upgradeCost, sellValue, route:()=>({PATH,PTS,DIST}), leisure, chooseReward, startMove, advanceMoves,
+    tech:()=>({baseLevel,types:[...builtTypes]}),unlock:()=>{baseLevel=4;renderInfo();},
     move:t=>moveSelection=t,
     finishWave:n=>{wave=n;bugs=[];spawnQueue=[];prep=0;},
     addShot:s=>shots.push(s),
@@ -119,6 +120,45 @@ function game() {
   return { w, api: w.testGame, drawn, close: () => w.close() };
 }
 
+test('royal tower enforces price, uniqueness, entrance exclusion and relocation rules',()=>{
+  const g=game();g.api.setVitals(20,20000);g.api.select('royal');
+  const cells=[];for(let r=0;r<9;r++)for(let c=0;c<14;c++)if(g.api.canBuild({c,r}))cells.push({c,r});
+  const bad=cells.find(c=>!g.api.royalPlacement(c,'royal')),good=cells.find(c=>g.api.royalPlacement(c,'royal'));
+  assert.ok(bad);assert.ok(good);g.api.build(bad);assert.equal(g.api.state().towers.length,0);
+  g.api.build(good);const t=g.api.state().towers[0];assert.equal(g.api.state().honey,18000);
+  g.api.build(cells.find(c=>c!==good));assert.equal(g.api.state().towers.length,1);
+  g.api.move(t);g.api.startMove(bad);assert.ok(!t.moving);assert.equal(g.api.leisure.moved,false);
+  g.api.unlock();
+  for(const [level,cost] of [[2,5000],[3,10000]]){const before=g.api.state().honey;g.w.document.getElementById('upBtn').click();assert.equal(t.level,level);assert.equal(g.api.state().honey,before-cost);}
+  assert.equal(g.w.document.getElementById('upBtn').disabled,true);assert.equal(g.api.sellValue(t),10200);g.close();
+});
+test('royal judgement removes current HP once at all levels and ignores armor',()=>{
+  for(const [level,remaining] of [[1,90],[2,80],[3,60]]){
+    const g=game();g.api.setVitals(20,2000);g.api.select('royal');
+    let cell;for(let r=0;r<9&&!cell;r++)for(let c=0;c<14;c++)if(g.api.canBuild({c,r})&&g.api.royalPlacement({c,r},'royal')){cell={c,r};break;}
+    g.api.build(cell);const t=g.api.state().towers[0];t.level=level;
+    const route=g.api.route(),idx=12;t.x=route.PTS[idx].x;t.y=route.PTS[idx].y;
+    const b=g.api.makeBug('beetle',1);b.hp=120;b.armor=999;b.dist=route.DIST[idx];b.speed=0;g.api.addBug(b);
+    t.damaged=true;g.api.tick(.01);assert.equal(b.hp,120);t.damaged=false;
+    g.api.tick(.01);assert.equal(b.hp,remaining);g.api.tick(.01);assert.equal(b.hp,remaining);g.close();
+  }
+});
+test('base requires distinct built types, honey and unlocks matching tower levels without healing',()=>{
+  const g=game();g.api.setVitals(15,30000);
+  const base=g.w.document.getElementById('baseUpgradeBtn'),up=g.w.document.getElementById('upBtn');
+  function buildType(type){g.api.select(type);for(let r=0;r<9;r++)for(let c=0;c<14;c++)if(g.api.canBuild({c,r})){g.api.build({c,r});return;}}
+  buildType('sting');assert.equal(up.disabled,true);base.click();assert.equal(g.api.tech().baseLevel,1);
+  buildType('sting');assert.equal(g.api.tech().types.length,1);
+  buildType('pumpkin');buildType('bomb');assert.equal(g.api.tech().types.length,3);
+  const before=g.api.state().honey;base.click();assert.equal(g.api.tech().baseLevel,2);assert.equal(g.api.state().honey,before-300);assert.equal(g.api.state().hp,15);
+  up.click();assert.equal(g.api.state().towers.at(-1).level,2);assert.equal(up.disabled,true);
+  buildType('pollen');buildType('barb');base.click();assert.equal(g.api.tech().baseLevel,3);
+  buildType('drum');const six=g.api.state().honey;
+  g.api.setVitals(15,1799);base.click();assert.equal(g.api.tech().baseLevel,3);
+  g.api.setVitals(15,six);base.click();assert.equal(g.api.tech().baseLevel,4);assert.equal(base.disabled,true);
+  g.w.document.getElementById('sellBtn').click();assert.equal(g.api.tech().types.length,6);
+  g.api.reset();assert.equal(g.api.tech().baseLevel,1);assert.equal(g.api.tech().types.length,0);g.close();
+});
 test('building charges honey and rejects occupied/path cells', () => {
   const g = game();
   g.api.select('sting');
@@ -151,10 +191,10 @@ test('pollen slow adds twenty five percent to actual splash damage',()=>{
 });
 test('all towers and enemies render their own image including hive', () => {
   const g = game();
-  for (const key of ['sting','bomb','pollen','barb','drum','pumpkin']) g.api.drawTowerGlyph(10,10,key,2,0,1,true);
+  for (const key of ['sting','bomb','pollen','barb','drum','pumpkin','royal']) g.api.drawTowerGlyph(10,10,key,2,0,1,true);
   for (const key of ['aphid','wasp','beetle','moth','spider','hornet','ant','caterpillar','grasshopper','flea']) g.api.drawBug(g.api.makeBug(key,1));
   g.api.drawHive();
-  assert.equal(new Set(g.drawn).size,17);
+  assert.equal(new Set(g.drawn).size,18);
   g.close();
 });
 test('spider death produces two small spider sprites and pays once', () => {

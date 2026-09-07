@@ -1,5 +1,9 @@
 # 透明素材生成记录
 
+## 蜂王裁决塔（1.342.0-rc1）
+
+`royal.png`：内置 imagegen，原生透明 PNG，alpha 最小 0、最大 1。提示词：Single isolated transparent PNG game sprite: royal honeybee judgement tower, luxurious golden honeycomb pedestal, tall violet crystal inside a golden bee crown, tiny honey wings, polished hand-painted cute children's tower defense art, angled top-down three-quarter view, crisp dark outline readable at 48 pixels. Entire tower centered with generous transparent margins, genuine alpha transparent background, no ground, no text, no checkerboard, no scene, no cast shadow. Original fantasy building.
+
 ## 南瓜花（1.341.0-rc1）
 
 `pumpkin.png` 使用内置 imagegen 独立生成，保留原生透明 alpha（最小值 0、最大值 1），无后期抠图。提示词：Single isolated game sprite of a magical pumpkin blossom honey-producing plant. Large beautiful orange-gold five-petal pumpkin flower on a short curving green stem, two broad pumpkin vine leaves, a small friendly rounded golden nectar centre (no face necessary), tiny orange pumpkin bud near base. Children's garden tower-defense style, original character plant design, warm polished hand-painted cartoon art, crisp brown and green outlines, soft shading, angled top-down three-quarter view, readable small silhouette. Entire plant centred with clear margin. True transparent PNG alpha background, no ground patch, no pot, no scenery, no checkerboard, no text, no glow or cast shadow. A standalone plant asset.

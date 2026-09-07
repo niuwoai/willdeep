@@ -9,6 +9,9 @@
   const bear = adventure.createBear();
   const leisureAPI=window.HiveLeisure,leisure=leisureAPI.createLeisure();
   let moveSelection=null;
+  let baseLevel=1;
+  const builtTypes=new Set();
+  const BASE_UPGRADES=[{cost:300,types:3},{cost:800,types:5},{cost:1800,types:6}];
   let storage;
   try { storage = window.localStorage; } catch(error) { console.warn('Hive storage unavailable',error.name); }
   const collection = adventure.createCollection(storage);
@@ -101,11 +104,14 @@
       name:"共鸣塔", short:"不攻击，增强邻近防御塔", cost:130, color:"#5E9160",
       range:78, dmg:0, rate:0, kind:"aura", boostDmg:0.28, boostRange:0.12
     },
+    royal:{
+      name:'蜂王裁决塔',short:'限一座 · 路过削血 1/4 → 1/3 → 1/2',cost:2000,color:'#A272D1',range:55,dmg:0,rate:0,kind:'judgement',maxLevel:3,upgrades:[5000,10000],fractions:[1/4,1/3,1/2],entranceCells:10
+    },
     pumpkin:{
       name:'南瓜花',short:'每 8 秒产蜜，可升级增产',cost:100,color:'#E4A148',range:0,dmg:0,rate:0,kind:'farm',income:10,incomeStep:5,interval:8
     }
   };
-  const TKEYS = Object.keys(TOWERS);
+  const TKEYS = ['sting','bomb','pollen','barb','drum','pumpkin','royal'];
 
   // ===== 虫群定义 =====
   const BUGS = {
@@ -214,6 +220,7 @@
 
   function reset(){
     towers = []; bugs = []; shots = []; parts = []; texts = [];
+    baseLevel=1;builtTypes.clear();
     hp = RULES.maxHP; honey = 220; wave = 0; kills = 0; prep = 0;
     spawnQueue = []; running = false; paused = false; over = false; speed = 1;
     selType = null; selTower = null;moveSelection=null;
@@ -269,6 +276,7 @@
   function towerStats(t){
     const base = TOWERS[t.type];
     const lv = t.level;
+    if(base.kind==='judgement')return {dmg:0,range:base.range,rate:0,boosted:false,splash:0};
     let dmg = base.dmg * Math.pow(1.62, lv - 1);
     let range = base.range * Math.pow(1.1, lv - 1);
     let rate = base.rate * Math.pow(1.16, lv - 1);
@@ -289,10 +297,11 @@
       boosted: boostD > 0, splash: base.splash || 0
     };
   }
-  function upgradeCost(t){ return Math.round(TOWERS[t.type].cost * 0.85 * Math.pow(1.9, t.level - 1)); }
+  function maxLevel(t){return TOWERS[t.type].maxLevel||4;}
+  function upgradeCost(t){ return TOWERS[t.type].upgrades?.[t.level-1] ?? Math.round(TOWERS[t.type].cost * 0.85 * Math.pow(1.9, t.level - 1)); }
   function sellValue(t){
     let spent = TOWERS[t.type].cost;
-    for(let l = 1; l < t.level; l++) spent += Math.round(TOWERS[t.type].cost * 0.85 * Math.pow(1.9, l - 1));
+    for(let l = 1; l < t.level; l++) spent += upgradeCost({...t,level:l});
     return Math.round(spent * 0.6);
   }
 
@@ -421,6 +430,17 @@
       const st = towerStats(t);
       t.st = st;
       if(t.damaged || t.moving) return;
+      if(TOWERS[t.type].kind==='judgement'){
+        bugs.forEach(b=>{
+          if(b.dead||b.judged||b.jump||b.dist<DIST[TOWERS.royal.entranceCells]||Math.hypot(b.x-t.x,b.y-t.y)>st.range)return;
+          b.judged=true;
+          const amount=b.hp*TOWERS.royal.fractions[t.level-1];
+          b.hp-=amount;
+          texts.push({x:b.x,y:b.y-18,t:0,s:'裁决 −'+Math.round(amount*10)/10,c:TOWERS.royal.color});
+          burst(b.x,b.y,TOWERS.royal.color,12);
+        });
+        return;
+      }
       if(TOWERS[t.type].kind==='farm'){
         const base=TOWERS[t.type];t.harvest=(t.harvest||0)+dt;
         if(t.harvest+1e-9>=base.interval){
@@ -546,7 +566,7 @@
     // 悬停高亮 / 建造预览
     if(hoverCell && (selType || moveSelection)){
       const p = cellCenter(hoverCell.c, hoverCell.r);
-      const ok = canBuild(hoverCell);
+      const ok = canBuild(hoverCell)&&royalPlacement(hoverCell,moveSelection?.type||selType,moveSelection);
       hexPath(ctx, p.x, p.y, SIZE - 1.5);
       ctx.fillStyle = ok ? P.cellHi : "rgba(192,64,42,.28)";
       ctx.fill();
@@ -681,6 +701,7 @@
     ctx.save();
     ctx.translate(p.x, p.y);
     sprites.draw(ctx, 'hive', 0, 0, 52);
+    ctx.font='bold 10px sans-serif';ctx.fillStyle=P.ink;ctx.textAlign='center';ctx.fillText('Lv.'+baseLevel,0,33);
     // 裂纹随损伤加深，维修后逐渐变淡。
     ctx.globalAlpha = Math.max(0, 1 - hp / RULES.maxHP);
     ctx.strokeStyle = '#38220E'; ctx.lineWidth = 2.5;
@@ -725,7 +746,7 @@
       ctx.strokeStyle = hexToRgba("#5E9160", .55); ctx.lineWidth = 1.5; ctx.stroke();
     }
 
-    if(type !== 'pollen' && type !== 'drum' && type !== 'pumpkin') ctx.rotate(angle);
+    if(type !== 'pollen' && type !== 'drum' && type !== 'pumpkin' && type !== 'royal') ctx.rotate(angle);
     sprites.draw(ctx, type, 0, 0, 43);
     ctx.restore();
 
@@ -790,17 +811,26 @@
   // ===== 建造 =====
   function canBuild(cell){
     if(!cell) return false;
+    if(cell.c<0||cell.c>=COLS||cell.r<0||cell.r>=ROWS)return false;
     if(pathKeys.has(cell.c + "," + cell.r)) return false;
     return !towers.some(t => (t.c === cell.c && t.r === cell.r) || (t.moving?.to.c===cell.c && t.moving?.to.r===cell.r));
   }
+  function royalPlacement(cell,type,moving=null){
+    if(type!=='royal')return true;
+    if(towers.some(t=>t.type==='royal'&&t!==moving))return false;
+    const p=cellCenter(cell.c,cell.r);
+    return !PTS.slice(0,TOWERS.royal.entranceCells).some(s=>Math.hypot(s.x-p.x,s.y-p.y)<=TOWERS.royal.range);
+  }
   function build(cell){
     if(bear.active || leisure.choosing || !canBuild(cell) || !selType)return;
+    if(!royalPlacement(cell,selType)){flashHud();return;}
     const base = TOWERS[selType];
     if(honey < base.cost){ flashHud(); return; }
     const p = cellCenter(cell.c, cell.r);
     honey -= base.cost;
     const t = {c:cell.c, r:cell.r, x:p.x, y:p.y, type:selType, level:1, cd:0, angle:-Math.PI/2};
     towers.push(t);
+    builtTypes.add(selType);
     selTower = t;
     burst(p.x, p.y, base.color, 8);
     syncHud(); renderShop(); renderInfo();
@@ -847,6 +877,7 @@
       if(selType){
         const t = TOWERS[selType];
         infoEmpty.textContent = "已选「" + t.name + "」，点击通道两侧的空格建造，" + t.cost + " 蜂蜜。";
+        if(selType==='royal')infoEmpty.textContent+=' 限建一座；入口前 10 格周围 55 范围内禁放，搬家同样限制。升级 5000 / 10000；每只虫子仅削减一次当前生命，无视护甲。';
       }else{
         infoEmpty.textContent = "点击地图上的防御塔查看数据，或先从左侧选一种塔再点空地建造。";
       }
@@ -867,6 +898,7 @@
       rows.splice(3,3,['产蜜',base.income+(t.level-1)*base.incomeStep+' / '+base.interval+'秒']);
       rows.push(['进度','花朵外圈显示产蜜进度']);
     }
+    if(base.kind==='judgement')rows.splice(3,3,['削减当前生命',['1/4','1/3','1/2'][t.level-1]],['触发','每只虫子一生一次'],['范围',base.range]);
     if(base.splash) rows.push(["溅射半径", base.splash]);
     if(base.slow) rows.push(["减速", Math.round(base.slow * 100) + "%"]);
     if(base.kind === "pierce") rows.push(["特性", "无视护甲"]);
@@ -875,8 +907,8 @@
       return "<div><span>" + r[0] + "</span><b" + (String(r[1]).includes("↑") ? ' class="up"' : "") + ">" + r[1] + "</b></div>";
     }).join("");
     const uc = upgradeCost(t);
-    upBtn.textContent = t.level >= 4 ? "已满级" : "升级 " + uc;
-    upBtn.disabled = t.moving || t.damaged || t.level >= 4 || honey < uc;
+    upBtn.textContent = t.level >= maxLevel(t) ? "已满级" : t.level>=baseLevel ? '需要基地 Lv.'+(t.level+1) : "升级 " + uc;
+    upBtn.disabled = t.moving || t.damaged || t.level >= maxLevel(t) || t.level>=baseLevel || honey < uc;
     towerRepairBtn.textContent = "修复塔 " + towerRepairCost(t) + " 蜂蜜";
     towerRepairBtn.disabled = t.moving || honey < towerRepairCost(t);
     sellBtn.disabled=!!t.moving;
@@ -884,7 +916,7 @@
   }
 
   upBtn.addEventListener("click", function(){
-    if(bear.active || leisure.choosing || !selTower || selTower.moving || selTower.damaged || selTower.level >= 4) return;
+    if(bear.active || leisure.choosing || !selTower || selTower.moving || selTower.damaged || selTower.level >= maxLevel(selTower) || selTower.level>=baseLevel) return;
     const c = upgradeCost(selTower);
     if(honey < c) return;
     honey -= c; selTower.level++;
@@ -908,6 +940,22 @@
   });
 
   const hpEl = document.getElementById("hp");
+  const baseUpgradeBtn=document.getElementById('baseUpgradeBtn');
+  function renderBase(){
+    const next=BASE_UPGRADES[baseLevel-1];
+    document.getElementById('baseTitle').textContent='蜂巢基地 · Lv.'+baseLevel;
+    document.getElementById('baseProgress').textContent=next?'本局已建 '+builtTypes.size+' / '+next.types+' 种 · 解锁塔 Lv.'+(baseLevel+1):'基地已满级 · 普通塔可升至 Lv.4';
+    baseUpgradeBtn.textContent=next?'升级基地 · '+next.cost+' 蜂蜜':'基地已满级';
+    baseUpgradeBtn.disabled=!next||!running||over||paused||bear.active||leisure.choosing||builtTypes.size<next.types||honey<next.cost;
+  }
+  baseUpgradeBtn.addEventListener('click',()=>{
+    const next=BASE_UPGRADES[baseLevel-1];
+    if(!next||!running||over||paused||bear.active||leisure.choosing||builtTypes.size<next.types||honey<next.cost)return;
+    honey-=next.cost;baseLevel++;
+    const p=PTS[PTS.length-1];burst(p.x,p.y,P.honeyC,24);
+    texts.push({x:p.x,y:p.y-30,t:0,s:'基地 Lv.'+baseLevel+'！',c:P.honeyC});
+    syncHud();renderInfo();
+  });
   const honeyEl = document.getElementById("honey");
   const honeyDeltaEl = document.getElementById('honeyDelta');
   const repairBtn = document.getElementById('repairBtn');
@@ -919,6 +967,7 @@
     renderRepair();
   });
   function renderRepair(){
+    renderBase();
     repairBtn.disabled = !running || over || (paused && !repair.active) || hp >= RULES.maxHP;
     repairBtn.textContent = repair.active ? '停止维修' : '派维修蜂 · 首点 '+(repair.credits?0:repair.nextDispatchCost)+' 蜂蜜';
     repairBtn.setAttribute('aria-pressed', String(repair.active));
@@ -948,6 +997,7 @@
   const killsEl = document.getElementById("kills");
   const callBtn = document.getElementById("callBtn");
   function syncHud(){
+    renderBase();
     hpEl.textContent = Math.max(0, hp);
     hpEl.className = "v" + (hp <= 8 ? " hurt" : "");
     const delta = honeyCounter.set(honey);
@@ -1106,6 +1156,7 @@
   });
   function startMove(cell){
     const t=moveSelection;
+    if(t&&cell&&!royalPlacement(cell,t.type,t)){flashHud();return;}
     if(!t||!towers.includes(t)||t.moving||!running||over||bear.active||leisure.choosing||(bear.state?.target===t&&!bear.state.arrived)||!canBuild(cell)||!leisure.consumeMove())return;
     t.moving={from:{x:t.x,y:t.y},to:{...cell,...cellCenter(cell.c,cell.r)},time:0};
     moveSelection=null;renderInfo();
@@ -1155,7 +1206,7 @@
       } else if(k==="Escape")closeBear();
       return;
     }
-    if(k >= "1" && k <= "6"){
+    if(k >= "1" && k <= "7"){
       moveSelection=null;
       selType = TKEYS[+k - 1]; selTower = null; renderShop(); renderInfo();
     }else if(k === " "){
