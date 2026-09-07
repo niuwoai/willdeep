@@ -120,18 +120,20 @@ function game() {
   return { w, api: w.testGame, drawn, close: () => w.close() };
 }
 
-test('royal tower enforces price, entrance exclusion and relocation rules, and several may coexist',()=>{
+test('royal tower enforces price, builds anywhere, relocates anywhere, and several may coexist',()=>{
   const g=game();g.api.setVitals(20,20000);g.api.select('royal');
   const cells=[];for(let r=0;r<9;r++)for(let c=0;c<14;c++)if(g.api.canBuild({c,r}))cells.push({c,r});
-  const bad=cells.find(c=>!g.api.royalPlacement(c,'royal')),good=cells.find(c=>g.api.royalPlacement(c,'royal'));
-  assert.ok(bad);assert.ok(good);g.api.build(bad);assert.equal(g.api.state().towers.length,0);
+  // 入口旁边的空格也能建：placement 对所有可建格都放行。
+  assert.ok(cells.every(c=>g.api.royalPlacement(c,'royal')));
+  const good=cells[0];
   g.api.build(good);const t=g.api.state().towers[0];assert.equal(g.api.state().honey,18000);
-  const second=cells.find(c=>c!==good&&g.api.royalPlacement(c,'royal'));
+  const second=cells.find(c=>c!==good);
   g.api.select('royal');g.api.build(second);assert.equal(g.api.state().towers.length,2);
   assert.equal(g.api.state().honey,16000);
   g.api.chooseTower(g.api.state().towers[1]);g.w.document.getElementById('sellBtn').click();assert.equal(g.api.state().towers.length,1);
   g.api.chooseTower(t);
-  g.api.move(t);g.api.startMove(bad);assert.ok(!t.moving);assert.equal(g.api.leisure.moved,false);
+  const elsewhere=cells.find(c=>c!==good&&c!==second);
+  g.api.move(t);g.api.startMove(elsewhere);assert.ok(t.moving);g.api.advanceMoves(2.1);assert.equal(t.moving,null);assert.equal(t.c,elsewhere.c);g.api.chooseTower(t);
   g.api.unlock();
   for(const [level,cost] of [[2,5000],[3,10000]]){const before=g.api.state().honey;g.w.document.getElementById('upBtn').click();assert.equal(t.level,level);assert.equal(g.api.state().honey,before-cost);}
   assert.equal(g.w.document.getElementById('upBtn').disabled,true);assert.equal(g.api.sellValue(t),10200);g.close();
