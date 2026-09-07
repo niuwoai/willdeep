@@ -125,6 +125,7 @@ function game() {
     addShot:s=>shots.push(s),
     chooseTower:t=>{selTower=t;renderInfo();}, aimAt:(x,y)=>aim={x,y},
     bag, items:itemsAPI, grantItem, armSlot, useArmedItem, applyItem, farmInterval, effects:()=>({hornUntil,edictWave,paw:bear.paw}),
+    picking:()=>({over,mapChoiceRemaining,overlayHidden:overlay.hidden}),
     state: () => ({towers, bugs, honey, hp, wave, paused, speed, running, prep, texts}) }; })();`);
   w.eval(source);
   w.document.getElementById('startBtn').click();
@@ -353,4 +354,16 @@ test('items: nectar, amber, bomb, wax, horn, edict and paw all do what the desig
   for(let i=0;i<6;i++)g.api.bag.add('bomb');const honey=g.api.state().honey;
   assert.equal(g.api.grantItem('amber'),false);assert.equal(g.api.state().honey,honey+600);
   g.close();
+});
+test('restart needs two clicks mid-game, one click when idle, and returns to the map picker',()=>{
+  const g=game();const btn=g.w.document.getElementById('restartBtn');
+  g.api.startGame('garden');g.api.select('sting');g.api.build({c:3,r:2});g.api.setVitals(20,999);
+  btn.click();assert.equal(btn.textContent,'确认重来');assert.equal(g.api.state().running,true);
+  btn.click();assert.equal(g.api.state().running,false);assert.equal(g.api.picking().overlayHidden,false);
+  assert.equal(g.api.picking().mapChoiceRemaining,3);assert.equal(btn.textContent,'重来');
+  // 倒计时走完自动开新局：塔和蜂蜜都回到初始
+  g.api.frame(1);g.api.frame(3200);assert.equal(g.api.state().running,true);
+  assert.equal(g.api.state().towers.length,0);assert.equal(g.api.state().honey,220);
+  // 空闲时（未开始）一次就够
+  g.api.reset();btn.click();assert.equal(g.api.picking().mapChoiceRemaining,3);g.close();
 });

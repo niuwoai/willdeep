@@ -1393,7 +1393,7 @@
   function startGame(key){
     mapChoiceRemaining=0;configureMap(key);buildMapCache();reset();
     running=true;prep=6;overlay.hidden=true;
-    speedBtn.textContent='1×';speedBtn.classList.remove('on');pauseBtn.textContent='暂停';pauseBtn.classList.remove('on');
+    speedBtn.textContent='1×';speedBtn.classList.remove('on');pauseBtn.textContent='暂停';pauseBtn.classList.remove('on');disarmRestart();
     syncHud();
   }
   function chooseMap(){
@@ -1403,6 +1403,23 @@
     startBtn.textContent='花园 · 开始防守';overlay.hidden=false;
   }
   startBtn.addEventListener('click',()=>{if(over)chooseMap();else startGame('garden');});
+  // 「重来」：回到地图选择。一局进行中误点会白丢一局，所以要点两次，
+  // 第一次只把按钮变成「确认重来」，3 秒不点回去就恢复原样。
+  const restartBtn=document.getElementById('restartBtn');
+  let restartArmed=0;
+  function disarmRestart(){if(restartArmed){clearTimeout(restartArmed);restartArmed=0;}restartBtn.textContent='重来';restartBtn.classList.remove('on');}
+  function restartGame(){
+    disarmRestart();
+    if(bear.active)closeBear();
+    running=false;paused=false;over=false;repair.stop();
+    bugs=[];spawnQueue=[];selTower=null;selType=null;moveSelection=null;bag.disarm();
+    chooseMap();syncHud();renderShop();renderInfo();renderBag();
+  }
+  restartBtn.addEventListener('click',()=>{
+    if(!running||over){restartGame();return;}
+    if(!restartArmed){restartBtn.textContent='确认重来';restartBtn.classList.add('on');restartArmed=setTimeout(disarmRestart,3000);return;}
+    restartGame();
+  });
   document.querySelectorAll('[data-map]').forEach(button=>button.addEventListener('click',()=>startGame(button.dataset.map)));
 
   // ===== 主循环 =====
