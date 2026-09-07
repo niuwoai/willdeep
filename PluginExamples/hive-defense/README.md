@@ -1,6 +1,6 @@
 # 蜂巢防线
 
-WillDeep 内置本地塔防插件，版本 1.341.0-rc1。原始玩法来自 `~/Sites/pylearn/hive.html`，修改前文件备份为 `hive.before-willdeep-20260907.html`；整合版本位于 `ui/index.html`，可直接在浏览器打开，或由 WillDeep 插件中心加载此目录。构建 App 时，Xcode 自动复制至 `BundledPlugins/hive-defense`。
+WillDeep 内置本地塔防插件，版本 1.341.0-rc2。原始玩法来自 `~/Sites/pylearn/hive.html`，修改前文件备份为 `hive.before-willdeep-20260907.html`；整合版本位于 `ui/index.html`，可直接在浏览器打开，或由 WillDeep 插件中心加载此目录。构建 App 时，Xcode 自动复制至 `BundledPlugins/hive-defense`。
 
 5 种防御塔、南瓜花、10 种虫群、蜂巢基地、维修蜂和狗熊共 19 张独立透明 PNG，另有一张丛林背景，均位于 `ui/assets`。图片使用内置 imagegen 生成并保留原生 alpha。没有外链资源和运行权限。蜘蛛分裂后的幼体复用蜘蛛图并按原规则缩小。
 

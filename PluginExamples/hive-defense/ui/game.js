@@ -1061,7 +1061,11 @@
   bearCanvas.addEventListener('pointerdown',e=>{pointBear(e);shootBear();});
 
   const rewardPanel=document.getElementById('rewardPanel');
-  document.getElementById('rewardCards').innerHTML=Object.entries(leisureAPI.CARDS).map(([key,card])=>'<button data-reward="'+key+'"><strong>'+card.title+'</strong><span>'+card.detail+'</span></button>').join('');
+  const rewardArt={honey:{image:'hive',tag:'甜蜜补给',value:'+40',unit:'蜂蜜'},repair:{image:'repair-bee',tag:'基地守护',value:'免费',unit:'维修 1 点'},haste:{image:'sting',tag:'战斗助力',value:'+20%',unit:'下一波射速'}};
+  document.getElementById('rewardCards').innerHTML=Object.entries(leisureAPI.CARDS).map(([key,card])=>{
+    const art=rewardArt[key];
+    return '<button class="reward-card" data-reward="'+key+'"><span class="reward-tag">'+art.tag+'</span><span class="reward-art" aria-hidden="true"><img src="assets/'+art.image+'.png" alt=""></span><strong>'+card.title+'</strong><span class="reward-value">'+art.value+'<small>'+art.unit+'</small></span><span class="reward-detail">'+card.detail+'</span><span class="reward-pick" aria-hidden="true">就选这个 <b>↗</b></span></button>';
+  }).join('');
   document.querySelectorAll('[data-reward]').forEach(button=>button.addEventListener('click',()=>chooseReward(button.dataset.reward)));
   function chooseReward(key){
     if(!leisure.choose(key))return;
