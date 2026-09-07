@@ -105,7 +105,7 @@
       range:78, dmg:0, rate:0, kind:"aura", boostDmg:0.28, boostRange:0.12
     },
     royal:{
-      name:'蜂王裁决塔',short:'限一座 · 路过削血 1/4 → 1/3 → 1/2',cost:2000,color:'#A272D1',range:55,dmg:0,rate:0,kind:'judgement',maxLevel:3,upgrades:[5000,10000],fractions:[1/4,1/3,1/2],entranceCells:10
+      name:'蜂王裁决塔',short:'路过削血 1/4 → 1/3 → 1/2 · 每塔各判一次',cost:2000,color:'#A272D1',range:55,dmg:0,rate:0,kind:'judgement',maxLevel:3,upgrades:[5000,10000],fractions:[1/4,1/3,1/2],entranceCells:10
     },
     pumpkin:{
       name:'南瓜花',short:'每 8 秒产蜜，可升级增产',cost:100,color:'#E4A148',range:0,dmg:0,rate:0,kind:'farm',income:10,incomeStep:5,interval:8
@@ -432,8 +432,12 @@
       if(t.damaged || t.moving) return;
       if(TOWERS[t.type].kind==='judgement'){
         bugs.forEach(b=>{
-          if(b.dead||b.judged||b.jump||b.dist<DIST[TOWERS.royal.entranceCells]||Math.hypot(b.x-t.x,b.y-t.y)>st.range)return;
-          b.judged=true;
+          // 允许多座裁决塔并存：每座塔对每只虫子只判一次，不同塔各判各的，
+          // 否则第二座塔形同虚设。
+          if(b.dead||b.jump||b.dist<DIST[TOWERS.royal.entranceCells]||Math.hypot(b.x-t.x,b.y-t.y)>st.range)return;
+          if(!b.judgedBy)b.judgedBy=new Set();
+          if(b.judgedBy.has(t))return;
+          b.judgedBy.add(t);
           const amount=b.hp*TOWERS.royal.fractions[t.level-1];
           b.hp-=amount;
           texts.push({x:b.x,y:b.y-18,t:0,s:'裁决 −'+Math.round(amount*10)/10,c:TOWERS.royal.color});
@@ -817,7 +821,6 @@
   }
   function royalPlacement(cell,type,moving=null){
     if(type!=='royal')return true;
-    if(towers.some(t=>t.type==='royal'&&t!==moving))return false;
     const p=cellCenter(cell.c,cell.r);
     return !PTS.slice(0,TOWERS.royal.entranceCells).some(s=>Math.hypot(s.x-p.x,s.y-p.y)<=TOWERS.royal.range);
   }
@@ -877,7 +880,7 @@
       if(selType){
         const t = TOWERS[selType];
         infoEmpty.textContent = "已选「" + t.name + "」，点击通道两侧的空格建造，" + t.cost + " 蜂蜜。";
-        if(selType==='royal')infoEmpty.textContent+=' 限建一座；入口前 10 格周围 55 范围内禁放，搬家同样限制。升级 5000 / 10000；每只虫子仅削减一次当前生命，无视护甲。';
+        if(selType==='royal')infoEmpty.textContent+=' 可建多座；入口前 10 格周围 55 范围内禁放，搬家同样限制。升级 5000 / 10000；每座塔对每只虫子各削减一次当前生命，无视护甲。';
       }else{
         infoEmpty.textContent = "点击地图上的防御塔查看数据，或先从左侧选一种塔再点空地建造。";
       }

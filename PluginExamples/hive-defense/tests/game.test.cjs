@@ -120,13 +120,17 @@ function game() {
   return { w, api: w.testGame, drawn, close: () => w.close() };
 }
 
-test('royal tower enforces price, uniqueness, entrance exclusion and relocation rules',()=>{
+test('royal tower enforces price, entrance exclusion and relocation rules, and several may coexist',()=>{
   const g=game();g.api.setVitals(20,20000);g.api.select('royal');
   const cells=[];for(let r=0;r<9;r++)for(let c=0;c<14;c++)if(g.api.canBuild({c,r}))cells.push({c,r});
   const bad=cells.find(c=>!g.api.royalPlacement(c,'royal')),good=cells.find(c=>g.api.royalPlacement(c,'royal'));
   assert.ok(bad);assert.ok(good);g.api.build(bad);assert.equal(g.api.state().towers.length,0);
   g.api.build(good);const t=g.api.state().towers[0];assert.equal(g.api.state().honey,18000);
-  g.api.build(cells.find(c=>c!==good));assert.equal(g.api.state().towers.length,1);
+  const second=cells.find(c=>c!==good&&g.api.royalPlacement(c,'royal'));
+  g.api.select('royal');g.api.build(second);assert.equal(g.api.state().towers.length,2);
+  assert.equal(g.api.state().honey,16000);
+  g.api.chooseTower(g.api.state().towers[1]);g.w.document.getElementById('sellBtn').click();assert.equal(g.api.state().towers.length,1);
+  g.api.chooseTower(t);
   g.api.move(t);g.api.startMove(bad);assert.ok(!t.moving);assert.equal(g.api.leisure.moved,false);
   g.api.unlock();
   for(const [level,cost] of [[2,5000],[3,10000]]){const before=g.api.state().honey;g.w.document.getElementById('upBtn').click();assert.equal(t.level,level);assert.equal(g.api.state().honey,before-cost);}
@@ -140,7 +144,12 @@ test('royal judgement removes current HP once at all levels and ignores armor',(
     const route=g.api.route(),idx=12;t.x=route.PTS[idx].x;t.y=route.PTS[idx].y;
     const b=g.api.makeBug('beetle',1);b.hp=120;b.armor=999;b.dist=route.DIST[idx];b.speed=0;g.api.addBug(b);
     t.damaged=true;g.api.tick(.01);assert.equal(b.hp,120);t.damaged=false;
-    g.api.tick(.01);assert.equal(b.hp,remaining);g.api.tick(.01);assert.equal(b.hp,remaining);g.close();
+    g.api.tick(.01);assert.equal(b.hp,remaining);g.api.tick(.01);assert.equal(b.hp,remaining);
+    // 第二座裁决塔对同一只虫子再判一次：各塔各判，同塔不重复。
+    g.api.setVitals(20,4000);g.api.select('royal');
+    let cell2;for(let r=8;r>=0&&!cell2;r--)for(let c=13;c>=0;c--)if(g.api.canBuild({c,r})&&g.api.royalPlacement({c,r},'royal')){cell2={c,r};break;}
+    g.api.build(cell2);const t2=g.api.state().towers[1];t2.level=1;t2.x=t.x;t2.y=t.y;
+    g.api.tick(.01);assert.equal(b.hp,remaining*3/4);g.api.tick(.01);assert.equal(b.hp,remaining*3/4);g.close();
   }
 });
 test('base requires distinct built types, honey and unlocks matching tower levels without healing',()=>{
