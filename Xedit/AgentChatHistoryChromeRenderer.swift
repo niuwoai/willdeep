@@ -286,11 +286,22 @@ extension AgentChatHistoryRenderer {
         let tableParagraphStyle = tableBlockParagraphStyle(from: paragraphStyle)
         attributed.enumerateAttribute(.agentChatHistoryTableBlockID, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
-            attributed.addAttribute(.paragraphStyle, value: tableParagraphStyle, range: subrange)
+            // Each table carries its own tab stops, so the shared style is
+            // specialised per block before the row margins copy it: margins
+            // applied from the shared style would drop the tabs again.
+            let blockStyle = tableParagraphStyleWithTabs(
+                from: tableParagraphStyle,
+                columnOffsets: attributed.attribute(
+                    .agentChatHistoryTableColumns,
+                    at: subrange.location,
+                    effectiveRange: nil
+                ) as? [NSNumber]
+            )
+            attributed.addAttribute(.paragraphStyle, value: blockStyle, range: subrange)
             applyTableBlockVerticalMargins(
                 to: attributed,
                 tableRange: subrange,
-                baseStyle: tableParagraphStyle
+                baseStyle: blockStyle
             )
         }
         let progressStyle = progressBlockParagraphStyle(from: paragraphStyle)
@@ -344,11 +355,22 @@ extension AgentChatHistoryRenderer {
         let tableParagraphStyle = tableBlockParagraphStyle(from: paragraphStyle)
         attributed.enumerateAttribute(.agentChatHistoryTableBlockID, in: range, options: []) { value, subrange, _ in
             guard value != nil else { return }
-            attributed.addAttribute(.paragraphStyle, value: tableParagraphStyle, range: subrange)
+            // Each table carries its own tab stops, so the shared style is
+            // specialised per block before the row margins copy it: margins
+            // applied from the shared style would drop the tabs again.
+            let blockStyle = tableParagraphStyleWithTabs(
+                from: tableParagraphStyle,
+                columnOffsets: attributed.attribute(
+                    .agentChatHistoryTableColumns,
+                    at: subrange.location,
+                    effectiveRange: nil
+                ) as? [NSNumber]
+            )
+            attributed.addAttribute(.paragraphStyle, value: blockStyle, range: subrange)
             applyTableBlockVerticalMargins(
                 to: attributed,
                 tableRange: subrange,
-                baseStyle: tableParagraphStyle
+                baseStyle: blockStyle
             )
         }
         let progressStyle = progressBlockParagraphStyle(from: paragraphStyle)
@@ -1077,6 +1099,27 @@ extension AgentChatHistoryRenderer {
         // prose after a table look as though its line height suddenly shrank.
         style.paragraphSpacing = 0
         style.paragraphSpacingBefore = 0
+        return style
+    }
+
+    /// Specialise the shared table style with one block's tab stops.
+    ///
+    /// Offsets are relative to the first column's text origin; tab locations
+    /// are absolute from the container's leading edge, so the paragraph's
+    /// head indent is added here. `defaultTabInterval` stays small on purpose:
+    /// a row with more tabs than stops (a malformed table) should not fly
+    /// off to the right, it should just look slightly wrong.
+    private static func tableParagraphStyleWithTabs(
+        from baseStyle: NSParagraphStyle,
+        columnOffsets: [NSNumber]?
+    ) -> NSParagraphStyle {
+        guard let columnOffsets, !columnOffsets.isEmpty else { return baseStyle }
+        let style = baseStyle.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+        let origin = baseStyle.firstLineHeadIndent
+        style.tabStops = columnOffsets.map {
+            NSTextTab(textAlignment: .left, location: origin + CGFloat($0.doubleValue))
+        }
+        style.defaultTabInterval = AgentChatHistoryTableLayout.cellPadding * 2
         return style
     }
 

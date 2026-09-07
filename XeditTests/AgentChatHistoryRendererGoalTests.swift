@@ -701,7 +701,11 @@ struct AgentChatHistoryRendererGoalTests {
 
         #expect(rendered.string.contains("时间"))
         #expect(rendered.string.contains("作者"))
-        #expect(rendered.string.contains("─┼─"))
+        // Rows are tab-separated paragraphs aligned by tab stops; the old
+        // monospace `─┼─` rule is gone (the grid is drawn by the layout
+        // manager from the same stops).
+        #expect(rendered.string.contains("时间\t提交\t作者\t说明"))
+        #expect(!rendered.string.contains("─┼─"))
         // The "open in standalone window" affordance is now a trailing icon
         // attachment (no text label), shown via the attachment character.
         let iconRange = (rendered.string as NSString).range(of: "\u{FFFC}")

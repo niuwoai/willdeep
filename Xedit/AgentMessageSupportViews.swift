@@ -147,6 +147,28 @@ enum AgentCopyTextSanitizer {
         return String(scalars)
     }
 
+    /// The transcript draws list markers as `•` / `◦` / `▪`; the clipboard
+    /// gets the Markdown dash back so a copied list pastes as a list
+    /// everywhere else. Only a marker at the start of a line (after
+    /// indentation) followed by a space is touched — a bullet character in
+    /// running prose is left alone.
+    static func restoringMarkdownListMarkers(_ text: String) -> String {
+        guard text.contains(where: { renderedListMarkers.contains($0) }) else { return text }
+        return text
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { line -> Substring in
+                let indent = line.prefix(while: { $0 == " " || $0 == "\t" })
+                let rest = line.dropFirst(indent.count)
+                guard let first = rest.first,
+                      renderedListMarkers.contains(first),
+                      rest.dropFirst().first == " " else { return line }
+                return Substring(indent + "-" + rest.dropFirst())
+            }
+            .joined(separator: "\n")
+    }
+
+    private static let renderedListMarkers: Set<Character> = ["•", "◦", "▪"]
+
     /// 会回流给模型的出口（右键「加入任务」、引用选区）专用。
     ///
     /// 先净化再**重新打断注入标记**：`AgentInjectionDefense` 是靠往

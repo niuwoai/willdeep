@@ -28,6 +28,11 @@ extension NSAttributedString.Key {
     static let agentChatHistoryShowTurnReport = NSAttributedString.Key("AgentChatHistoryShowTurnReport")
     static let agentChatHistoryTableBlockID = NSAttributedString.Key("AgentChatHistoryTableBlockID")
     static let agentChatHistoryTablePayload = NSAttributedString.Key("AgentChatHistoryTablePayload")
+    /// `[NSNumber]` of tab-stop offsets (points from the first column's text
+    /// origin, one per column after the first). The chrome pass turns them
+    /// into `NSTextTab`s on the table's paragraphs and the layout manager
+    /// draws the column separators from the same positions.
+    static let agentChatHistoryTableColumns = NSAttributedString.Key("AgentChatHistoryTableColumns")
     static let agentChatHistoryInlineCodeChipColor = NSAttributedString.Key("AgentChatHistoryInlineCodeChipColor")
     static let agentChatHistoryTextAttachment = NSAttributedString.Key("AgentChatHistoryTextAttachment")
     static let agentChatHistoryFilePath = NSAttributedString.Key("AgentChatHistoryFilePath")

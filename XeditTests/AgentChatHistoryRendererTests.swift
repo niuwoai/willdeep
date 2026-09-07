@@ -351,8 +351,12 @@ struct AgentChatHistoryRendererTests {
         let string = rendered.string as NSString
         let beforeRange = string.range(of: "表格前的正文")
         let headerRange = string.range(of: "项目")
-        let separatorRange = string.range(of: "─┼─")
+        // The table is tab-separated rows now; the monospace `─┼─` rule is
+        // gone, so the middle row stands in for it. Its paragraph must carry
+        // neither block margin — that was the whole point of this test.
+        let separatorRange = string.range(of: "服务状态")
         let lastRowRange = string.range(of: "Error/Critical")
+        #expect(separatorRange.location != NSNotFound)
         let afterRange = string.range(of: "表格后的正文")
         let beforeFont = try #require(rendered.attribute(
             .font,

@@ -353,7 +353,12 @@ final class AgentChatHistoryNSTextView: NSTextView {
             return super.writeSelection(to: pboard, type: type)
         }
         let raw = (storageString as NSString).substring(with: range)
-        pboard.setString(AgentCopyTextSanitizer.sanitize(raw), forType: .string)
+        // Bullets go back to Markdown dashes so a copied list is still a list
+        // when pasted into an editor or a terminal.
+        let plain = AgentCopyTextSanitizer.restoringMarkdownListMarkers(
+            AgentCopyTextSanitizer.sanitize(raw)
+        )
+        pboard.setString(plain, forType: .string)
         return true
     }
 
@@ -1571,6 +1576,66 @@ private final class AgentChatHistoryBubbleLayoutManager: NSLayoutManager {
             NSColor.separatorColor.withAlphaComponent(0.14).setStroke()
             path.lineWidth = 1
             path.stroke()
+            drawAgentTableGrid(
+                characterRange: fullEffectiveRange,
+                glyphRange: tableGlyphRange,
+                blockRect: rect,
+                at: origin
+            )
+        }
+    }
+
+    /// Row rules and column separators for one table block.
+    ///
+    /// Positions come from the paragraph's own tab stops, so the lines land
+    /// exactly where TextKit put the cells — nothing is re-measured here.
+    /// Each row is one paragraph and rows never wrap (the table style
+    /// truncates), so one line fragment is one row.
+    private func drawAgentTableGrid(
+        characterRange: NSRange,
+        glyphRange: NSRange,
+        blockRect: NSRect,
+        at origin: NSPoint
+    ) {
+        guard let textStorage else { return }
+        let style = textStorage.attribute(
+            .paragraphStyle, at: characterRange.location, effectiveRange: nil
+        ) as? NSParagraphStyle
+        let tabLocations = style?.tabStops.map(\.location) ?? []
+
+        var rowBottoms: [CGFloat] = []
+        enumerateLineFragments(forGlyphRange: glyphRange) { lineFragmentRect, _, _, lineGlyphRange, _ in
+            guard NSIntersectionRange(lineGlyphRange, glyphRange).length > 0 else { return }
+            rowBottoms.append(lineFragmentRect.maxY + origin.y)
+        }
+        guard rowBottoms.count > 1 else { return }
+
+        let ruleColor = NSColor.separatorColor
+        let ruleInset: CGFloat = 1
+        // Header rule is the heaviest; body rules are hairlines.
+        for (index, bottom) in rowBottoms.dropLast().enumerated() {
+            let alpha: CGFloat = index == 0 ? 0.42 : 0.16
+            ruleColor.withAlphaComponent(alpha).setFill()
+            NSRect(
+                x: blockRect.minX + ruleInset,
+                y: bottom - 0.5,
+                width: blockRect.width - ruleInset * 2,
+                height: 1
+            ).fill()
+        }
+
+        guard !tabLocations.isEmpty else { return }
+        ruleColor.withAlphaComponent(0.16).setFill()
+        let separatorGap = AgentChatHistoryTableLayout.cellPadding / 2
+        for location in tabLocations {
+            let x = origin.x + location - separatorGap
+            guard x > blockRect.minX + ruleInset, x < blockRect.maxX - ruleInset else { continue }
+            NSRect(
+                x: x - 0.5,
+                y: blockRect.minY + ruleInset,
+                width: 1,
+                height: blockRect.height - ruleInset * 2
+            ).fill()
         }
     }
 

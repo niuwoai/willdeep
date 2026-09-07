@@ -1617,62 +1617,49 @@ enum AgentChatHistoryRenderer {
             case .table:
                 appendBlockSeparator()
                 if let headers = block.tableHeaders, let rows = block.tableRows {
-                    let layout = AgentMarkdownTableFormatter.formattedWithSpans(
+                    // Proportional columns via tab stops, not monospace
+                    // padding: every cell is rendered with the body font and
+                    // measured, widths are fitted to the paragraph, and the
+                    // grid is drawn later from the same tab positions. See
+                    // AgentChatHistoryTableLayout for the cost model.
+                    let headerFont = NSFontManager.shared.convert(bodyFont, toHaveTrait: .boldFontMask)
+                    let layout = AgentChatHistoryTableLayout.layout(
                         headers: headers,
-                        rows: rows
-                    )
-                    let table = layout.text
-                    if !table.isEmpty {
+                        rows: rows,
+                        availableWidth: tableAvailableWidth(for: role, layoutWidth: layoutWidth),
+                        bodyFont: bodyFont,
+                        headerFont: headerFont
+                    ) { raw, font in
+                        inlineMarkdownAttributedString(raw, baseFont: font, color: bodyColor)
+                    }
+                    if let layout, !layout.rows.isEmpty {
                         let tableBlockStart = result.length
                         let tableBlockID = tableBlockIndex
                         tableBlockIndex += 1
-                        result.append(NSAttributedString(
-                            string: table,
-                            attributes: [
-                                .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-                                .foregroundColor: bodyColor,
-                            ]
-                        ))
-                        // Bake the cells' inline Markdown into the aligned
-                        // monospaced layout. Spans are Character offsets into
-                        // `table`; convert to UTF-16 NSRanges shifted by the
-                        // table's start offset in `result`.
-                        for span in layout.spans {
-                            guard let charLower = table.index(
-                                table.startIndex,
-                                offsetBy: span.range.lowerBound,
-                                limitedBy: table.endIndex
-                            ), let charUpper = table.index(
-                                table.startIndex,
-                                offsetBy: span.range.upperBound,
-                                limitedBy: table.endIndex
-                            ) else { continue }
-                            let local = NSRange(charLower..<charUpper, in: table)
-                            let range = NSRange(
-                                location: tableBlockStart + local.location,
-                                length: local.length
-                            )
-                            switch span.style {
-                            case .bold:
-                                result.addAttribute(
-                                    .font,
-                                    value: NSFont.monospacedSystemFont(ofSize: 12, weight: .bold),
-                                    range: range
-                                )
-                            case .italic:
-                                let italic = NSFontManager.shared.convert(
-                                    NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-                                    toHaveTrait: .italicFontMask
-                                )
-                                result.addAttribute(.font, value: italic, range: range)
-                            case .code:
-                                result.addAttribute(
-                                    .backgroundColor,
-                                    value: NSColor.labelColor.withAlphaComponent(0.08),
-                                    range: range
-                                )
+                        let separatorAttributes: [NSAttributedString.Key: Any] = [
+                            .font: bodyFont,
+                            .foregroundColor: bodyColor,
+                        ]
+                        for (rowIndex, row) in layout.rows.enumerated() {
+                            if rowIndex > 0 {
+                                result.append(NSAttributedString(string: "\n", attributes: separatorAttributes))
+                            }
+                            for (columnIndex, cell) in row.enumerated() {
+                                if columnIndex > 0 {
+                                    result.append(NSAttributedString(string: "\t", attributes: separatorAttributes))
+                                }
+                                result.append(cell)
                             }
                         }
+                        let tableTextRange = NSRange(
+                            location: tableBlockStart,
+                            length: result.length - tableBlockStart
+                        )
+                        result.addAttribute(
+                            .agentChatHistoryTableColumns,
+                            value: layout.tabStopOffsets.map { NSNumber(value: Double($0)) },
+                            range: tableTextRange
+                        )
                         if role != .user {
                             let tableRange = NSRange(location: tableBlockStart, length: result.length - tableBlockStart)
                             result.addAttribute(
@@ -1969,14 +1956,39 @@ enum AgentChatHistoryRenderer {
         return NSFontManager.shared.convert(resized, toHaveTrait: .boldFontMask)
     }
 
-    private static func bulletGlyph(for indent: Int) -> String {
+    /// Width a table's columns may occupy: the paragraph's text column minus
+    /// the rich-block text inset on both sides, so the last column ends where
+    /// a code block's text would.
+    static func tableAvailableWidth(for role: AgentRole, layoutWidth: CGFloat) -> CGFloat {
+        let inset = AgentChatHistoryLayoutMetrics.richBlockTextInset * 2
+        let width: CGFloat
+        switch role {
+        case .user:
+            width = layoutWidth
+                - AgentChatHistoryLayoutMetrics.userBodyHeadIndent(for: layoutWidth)
+                - abs(AgentChatHistoryLayoutMetrics.userBodyTailIndent)
+        case .assistant, .system, .tool, .workflowReport, .widget, .scheduledTask:
+            width = layoutWidth
+                - AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
+                - AgentChatHistoryLayoutMetrics.assistantContentTailInset
+        }
+        return max(AgentChatHistoryLayoutMetrics.richBlockMinimumWidth, width - inset)
+    }
+
+    /// Rendered list markers. The transcript used to print the raw Markdown
+    /// dash, which read as a hyphen rather than a bullet and was the only
+    /// surface in the app still doing so — the Worker speech bubble and the
+    /// Markdown preview both draw discs. Copying a list back out restores the
+    /// dash (see `AgentCopyTextSanitizer.restoringMarkdownListMarkers`), so
+    /// the clipboard still holds valid Markdown.
+    static func bulletGlyph(for indent: Int) -> String {
         switch indent {
         case 0:
-            return "-"
+            return "•"
         case 1:
-            return "*"
+            return "◦"
         default:
-            return "+"
+            return "▪"
         }
     }
 }
