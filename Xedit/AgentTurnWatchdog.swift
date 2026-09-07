@@ -54,6 +54,47 @@ nonisolated enum AgentTurnWatchdogPolicy {
         return idle >= stallThreshold ? idle : nil
     }
 
+    /// What the turn is actually waiting on. The distinction matters because
+    /// the four cases have different culprits and different remedies: a
+    /// silent Worker is somebody else's process, a silent tool is this
+    /// machine, no first token is the request never landing, and a reply
+    /// that stops mid-stream is the connection dying with the turn still
+    /// open. "Waiting for the model" covered all four and told the user
+    /// nothing.
+    enum StallSubject: Equatable {
+        case worker(String)
+        case tool(String)
+        /// Request is out (or a tool result was just handed back) and not one
+        /// token has come back yet.
+        case modelFirstToken
+        /// Text was already streaming and then stopped.
+        case modelMidStream
+    }
+
+    /// Pure so the four branches can be tested without a runtime.
+    static func stallSubject(
+        runningToolName: String?,
+        runningWorkerName: String?,
+        lastMessageIsAssistantWithText: Bool
+    ) -> StallSubject {
+        if let runningToolName {
+            if let runningWorkerName, !runningWorkerName.isEmpty {
+                return .worker(runningWorkerName)
+            }
+            return .tool(runningToolName)
+        }
+        return lastMessageIsAssistantWithText ? .modelMidStream : .modelFirstToken
+    }
+
+    /// Seconds-resolution duration for the banner. The banner is re-rendered
+    /// every second while it is up, so this has to read naturally at 91 s as
+    /// well as at 40 min.
+    static func formatIdle(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds.rounded()))
+        if total < 60 { return L10n.TurnWatchdog.durationSeconds(total) }
+        return L10n.TurnWatchdog.durationMinutes(total / 60, total % 60)
+    }
+
     /// External IDs of tool calls on the last assistant message that have no
     /// tool result after them. Empty when the turn ended cleanly.
     static func danglingToolCallIDs(in messages: [AgentMessage]) -> [String] {
@@ -89,6 +130,7 @@ extension AppState {
             if runtime.errorSeverity == .notice {
                 runtime.clearTurnError()
             }
+            updateAgentStallTicker()
         }
     }
 
@@ -108,22 +150,56 @@ extension AppState {
             // Never paint over a real error; the stall notice is the mild
             // one and yields to anything already on the banner.
             guard runtime.errorMessage == nil || runtime.isShowingWatchdogStallNotice else { continue }
-            runtime.errorMessage = L10n.TurnWatchdog.stalled(seconds: Int(idle), waitingOn: watchdogWaitDescription(for: runtime))
+            runtime.errorMessage = L10n.TurnWatchdog.stalled(
+                subject: watchdogStallSubject(for: runtime),
+                idle: idle
+            )
             runtime.errorDetails = nil
             runtime.errorSeverity = .notice
             runtime.isShowingWatchdogStallNotice = true
         }
+        updateAgentStallTicker()
     }
 
-    private func watchdogWaitDescription(for runtime: AgentRuntime) -> String {
-        if let running = runtime.toolCalls.last(where: { $0.status == .running }) {
-            if running.toolName == "spawn_agent",
-               let worker = running.subagentWorkerName ?? running.subagentLiveActivity?.workerName {
-                return L10n.TurnWatchdog.waitingOnWorker(worker)
-            }
-            return L10n.TurnWatchdog.waitingOnTool(running.toolName)
+    private func watchdogStallSubject(for runtime: AgentRuntime) -> AgentTurnWatchdogPolicy.StallSubject {
+        let running = runtime.toolCalls.last(where: { $0.status == .running })
+        let worker = running?.toolName == "spawn_agent"
+            ? (running?.subagentWorkerName ?? running?.subagentLiveActivity?.workerName)
+            : nil
+        let tail = runtime.messages.last
+        return AgentTurnWatchdogPolicy.stallSubject(
+            runningToolName: running?.toolName,
+            runningWorkerName: worker,
+            lastMessageIsAssistantWithText: tail?.role == .assistant
+                && !(tail?.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        )
+    }
+
+    /// The banner counts. A number frozen at "111 s" while the wait keeps
+    /// growing reads like the app is stuck too; a moving number is the
+    /// cheapest proof that the host is still watching. The ticker only runs
+    /// while a notice is up — the 30-second routine scheduler raises the
+    /// first one, this takes over the seconds, and both stop when the turn
+    /// comes back to life.
+    func updateAgentStallTicker() {
+        let stalled = agentRuntimes.values.contains { $0.isShowingWatchdogStallNotice }
+        guard stalled else {
+            agentStallTickerTask?.cancel()
+            agentStallTickerTask = nil
+            return
         }
-        return L10n.TurnWatchdog.waitingOnModel
+        guard agentStallTickerTask == nil else { return }
+        agentStallTickerTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                guard self.agentRuntimes.values.contains(where: { $0.isShowingWatchdogStallNotice }) else {
+                    self.agentStallTickerTask = nil
+                    return
+                }
+                self.scanAgentTurnsForStalls()
+            }
+        }
     }
 
     /// Called from the turn's closing `defer`, after the loop has released

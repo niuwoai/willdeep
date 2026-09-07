@@ -5,33 +5,51 @@ extension L10n {
     /// notices use the mild `.notice` severity: they describe a turn that
     /// went quiet or broke, not a failure the user caused.
     enum TurnWatchdog {
-        static func stalled(seconds: Int, waitingOn: String) -> String {
-            let template = String(
-                localized: "turn-watchdog.stalled",
-                defaultValue: "No activity for %1$d s — waiting on %2$@."
-            )
-            return String(format: template, seconds, waitingOn)
+        /// One line naming what the turn is waiting on and for how long.
+        /// The four subjects read differently on purpose: the user's first
+        /// question when a turn goes quiet is "谁没动静" — 模型、工具，还是
+        /// 派出去的 Worker。
+        static func stalled(subject: AgentTurnWatchdogPolicy.StallSubject, idle: TimeInterval) -> String {
+            let duration = AgentTurnWatchdogPolicy.formatIdle(idle)
+            switch subject {
+            case .worker(let name):
+                let template = String(
+                    localized: "turn-watchdog.stalled-worker",
+                    defaultValue: "Worker %1$@ has sent nothing back for %2$@. The turn is waiting on it, not on the model."
+                )
+                return String(format: template, name, duration)
+            case .tool(let name):
+                let template = String(
+                    localized: "turn-watchdog.stalled-tool",
+                    defaultValue: "The %1$@ tool has not returned for %2$@."
+                )
+                return String(format: template, name, duration)
+            case .modelFirstToken:
+                let template = String(
+                    localized: "turn-watchdog.stalled-model-first-token",
+                    defaultValue: "Nothing from the model for %@; the request is still open."
+                )
+                return String(format: template, duration)
+            case .modelMidStream:
+                let template = String(
+                    localized: "turn-watchdog.stalled-model-mid-stream",
+                    defaultValue: "The reply stopped mid-stream %@ ago; the connection is probably dead."
+                )
+                return String(format: template, duration)
+            }
         }
 
-        static let waitingOnModel = String(
-            localized: "turn-watchdog.waiting-on-model",
-            defaultValue: "the model's response"
-        )
-
-        static func waitingOnTool(_ toolName: String) -> String {
-            let template = String(
-                localized: "turn-watchdog.waiting-on-tool",
-                defaultValue: "the %@ tool"
-            )
-            return String(format: template, toolName)
+        static func durationSeconds(_ seconds: Int) -> String {
+            let template = String(localized: "turn-watchdog.duration-seconds", defaultValue: "%d s")
+            return String(format: template, seconds)
         }
 
-        static func waitingOnWorker(_ workerName: String) -> String {
+        static func durationMinutes(_ minutes: Int, _ seconds: Int) -> String {
             let template = String(
-                localized: "turn-watchdog.waiting-on-worker",
-                defaultValue: "Worker %@"
+                localized: "turn-watchdog.duration-minutes",
+                defaultValue: "%1$d min %2$d s"
             )
-            return String(format: template, workerName)
+            return String(format: template, minutes, seconds)
         }
 
         static func interrupted(toolNames: [String]) -> String {

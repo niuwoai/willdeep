@@ -227,4 +227,38 @@ struct AgentTurnWatchdogTests {
         #expect(runtime.errorMessage != nil)
         #expect(runtime.turnInterruptionAutoResumeCount == AgentTurnWatchdogPolicy.maximumAutomaticResumes)
     }
+
+    @Test func theNoticeNamesWhoIsActuallySilent() {
+        // 派出去的 Worker 没回：回合等的是它，说成「等模型」会让人去查错地方。
+        #expect(AgentTurnWatchdogPolicy.stallSubject(
+            runningToolName: "spawn_agent",
+            runningWorkerName: "调查员",
+            lastMessageIsAssistantWithText: false
+        ) == .worker("调查员"))
+        // 本机工具没回。
+        #expect(AgentTurnWatchdogPolicy.stallSubject(
+            runningToolName: "run_command",
+            runningWorkerName: nil,
+            lastMessageIsAssistantWithText: true
+        ) == .tool("run_command"))
+        // 没有在跑的工具、也还没有正文：请求出去了没回来。
+        #expect(AgentTurnWatchdogPolicy.stallSubject(
+            runningToolName: nil,
+            runningWorkerName: nil,
+            lastMessageIsAssistantWithText: false
+        ) == .modelFirstToken)
+        // 正文已经流了一半又停：连接多半断了。
+        #expect(AgentTurnWatchdogPolicy.stallSubject(
+            runningToolName: nil,
+            runningWorkerName: nil,
+            lastMessageIsAssistantWithText: true
+        ) == .modelMidStream)
+    }
+
+    @Test func theBannerCountsInSecondsAndThenInMinutes() {
+        #expect(AgentTurnWatchdogPolicy.formatIdle(91) == L10n.TurnWatchdog.durationMinutes(1, 31))
+        #expect(AgentTurnWatchdogPolicy.formatIdle(45) == L10n.TurnWatchdog.durationSeconds(45))
+        // 秒数每一跳都要变，否则读秒读了个寂寞。
+        #expect(AgentTurnWatchdogPolicy.formatIdle(111) != AgentTurnWatchdogPolicy.formatIdle(112))
+    }
 }

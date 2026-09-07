@@ -131,6 +131,9 @@ final class AppState: ObservableObject {
     @Published var agentGitWorktreeCreation: AgentGitWorktreeCreation?
     var agentGitWorktreeRefreshTask: Task<Void, Never>?
     var agentWorktreeRecoveryTask: Task<Void, Never>?
+    /// Per-second refresh of the turn-stall banner. Only alive while a stall
+    /// notice is on screen; see AgentTurnWatchdog.updateAgentStallTicker().
+    var agentStallTickerTask: Task<Void, Never>?
     var agentGitWorktreeRefreshPath: String?
     var agentGitWorktreeCreationTask: Task<Void, Never>?
     var agentGitWorktreeProcessController: AgentGitWorktreeProcessController?
