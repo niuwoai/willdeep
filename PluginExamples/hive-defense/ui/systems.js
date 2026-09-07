@@ -24,10 +24,11 @@
   }
 
   function createRepair(){
-    let active = false, progress = 0, hurt = 0, dispatches=0, firstCost=RULES.repairCost, completed=0;
-    const nextCost=()=>firstCost*(completed+1);
+    let active = false, progress = 0, hurt = 0, dispatches=0, firstCost=RULES.repairCost, completed=0,credits=0;
+    const nextCost=()=>credits>0?0:firstCost*(completed+1);
     return {
-      reset(){ active = false; progress = 0; hurt = 0; dispatches=0;firstCost=RULES.repairCost;completed=0; },
+      reset(){ active = false; progress = 0; hurt = 0; dispatches=0;firstCost=RULES.repairCost;completed=0;credits=0; },
+      grantFreePoint(){credits++;},
       stop(){ active = false; },
       toggle(hp, allowed){
         if(allowed && hp > 0 && hp < RULES.maxHP){
@@ -45,7 +46,7 @@
           progress += dt - slowed / 2;
           while(progress + 1e-9 >= RULES.repairSeconds && hp < RULES.maxHP && honey >= nextCost()){
             progress = Math.max(0, progress - RULES.repairSeconds);
-            hp++; honey -= nextCost(); repaired++;completed++;
+            hp++; honey -= nextCost(); if(credits>0)credits--;repaired++;completed++;
           }
           if(repaired && honey<nextCost())progress=0;
         }
@@ -55,6 +56,7 @@
       get active(){ return active; },
       get progress(){ return progress; },
       get hurt(){ return hurt; },
+      get credits(){return credits;},
       get nextCost(){return nextCost();},
       get firstCost(){return firstCost;},
       get point(){return completed+1;},

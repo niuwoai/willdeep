@@ -2,6 +2,13 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {createRepair,createCounter}=require('../ui/systems.js');
 
+test('repair coupon waives exactly one completed point and still needs time',()=>{
+  const r=createRepair();r.grantFreePoint();r.toggle(10,true);
+  assert.equal(r.nextCost,0);assert.equal(r.step(2.9,10,0).hp,10);assert.equal(r.credits,1);
+  assert.deepEqual(r.step(0.1,10,0),{hp:11,honey:0,repaired:1});assert.equal(r.credits,0);assert.equal(r.nextCost,8);
+  assert.equal(r.step(3,11,0).hp,11);r.grantFreePoint();r.reset();assert.equal(r.credits,0);
+});
+
 test('repair preserves progress when stopped or short of honey',()=>{
   const r=createRepair();r.toggle(10,true);
   r.step(2,10,4);

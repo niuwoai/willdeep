@@ -2,7 +2,7 @@ const {chromium}=require('../../arcade/ui/node_modules/playwright');
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const ui=path.resolve(__dirname,'../ui'),out=path.resolve(__dirname,'../../../build/ci/hive-defense');
 const hooks=`window.hiveFixture={
-  encounter(){selType='sting';build({c:3,r:2});wave=3;while(!bear.spawn(wave,towers))bear.reset();renderBearNotice();},
+  encounter(){selType='sting';build({c:3,r:2});wave=3;leisure.clear(3,[]);leisure.choose('honey');while(!bear.spawn(wave,towers))bear.reset();renderBearNotice();},
   point(){return bear.head(motionPreference.matches);},
   body(){return bear.target(motionPreference.matches);},
   snapshot(){return {hp,honey,prep,wave,paused,running,currentMap,hits:bear.state?.hits,demolition:bear.state?.demolition,duration:bear.state?.duration,damaged:!!towers[0]?.damaged};},

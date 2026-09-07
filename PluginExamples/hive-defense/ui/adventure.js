@@ -18,7 +18,7 @@
     return {
       reset(){ bear=null; lastWave=0; elapsed=0; },
       spawn(wave,towers){
-        const candidates=towers.filter(t=>!t.damaged);
+        const candidates=towers.filter(t=>!t.damaged&&!t.moving);
         if(bear || wave<RULES.firstWave || wave-lastWave<RULES.waveGap || !candidates.length) return false;
         lastWave=wave;
         if(random()>=RULES.chance) return false;

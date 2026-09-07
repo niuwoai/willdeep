@@ -5,6 +5,32 @@ const path = require('node:path');
 const { JSDOM } = require('../../arcade/ui/node_modules/jsdom');
 const ui = path.resolve(__dirname, '../ui');
 
+test('wave reward pauses simulation and honey choice pays once',()=>{
+  const g=game();g.api.finishWave(3);g.api.tick(0.01);assert.equal(g.api.leisure.choosing,true);
+  const before=g.api.state();g.api.tick(100);assert.equal(g.api.state().prep,before.prep);
+  g.api.chooseReward('honey');g.api.chooseReward('honey');assert.equal(g.api.state().honey,before.honey+40);
+  assert.equal(g.api.leisure.choosing,false);g.close();
+});
+test('haste reward increases actual sentry rate for exactly the following wave',()=>{
+  const g=game();g.api.select('sting');g.api.build({c:3,r:2});const t=g.api.state().towers[0];
+  g.api.finishWave(3);g.api.tick(0.01);g.api.chooseReward('haste');g.api.startWave();
+  assert.equal(g.api.towerStats(t).rate,1.7*1.2);g.api.startWave();assert.equal(g.api.towerStats(t).rate,1.7);g.close();
+});
+test('moving reserves both cells, keeps level, stops firing and completes after two seconds',()=>{
+  const g=game();g.api.select('sting');g.api.build({c:3,r:2});const t=g.api.state().towers[0];t.level=3;
+  g.api.move(t);g.api.startMove({c:5,r:2});assert.ok(t.moving);assert.equal(g.api.canBuild({c:3,r:2}),false);assert.equal(g.api.canBuild({c:5,r:2}),false);
+  g.api.advanceMoves(1.9);assert.ok(t.moving);g.api.advanceMoves(0.1);assert.equal(t.moving,null);assert.equal(t.level,3);assert.equal(t.c,5);assert.equal(g.api.canBuild({c:3,r:2}),true);
+  g.api.move(t);g.api.startMove({c:7,r:2});assert.equal(t.moving,null);g.close();
+});
+test('pumpkin harvests periodically, upgrades income, and stops while damaged or moved',()=>{
+  const g=game();g.api.select('pumpkin');g.api.build({c:3,r:2});const t=g.api.state().towers[0];
+  assert.equal(g.api.state().honey,120);g.api.tick(7.9);assert.equal(g.api.state().honey,120);g.api.tick(0.1);assert.equal(g.api.state().honey,130);
+  g.api.chooseTower(t);g.w.document.getElementById('upBtn').click();assert.equal(t.level,2);
+  const balance=g.api.state().honey;t.damaged=true;g.api.tick(4);assert.equal(t.harvest,0);assert.equal(g.api.state().honey,balance);
+  t.damaged=false;g.api.move(t);g.api.startMove({c:5,r:2});g.api.tick(1);assert.equal(t.harvest,0);
+  g.api.advanceMoves(1);g.api.tick(8);assert.equal(g.api.state().honey,balance+15);g.close();
+});
+
 test('flea charges half a second, lands once, and pollen cancels its only chance',()=>{
   const g=game(),{PATH,PTS,DIST}=g.api.route();
   const index=PATH.findIndex((_,i)=>g.w.HiveWorld.planJump(PATH,i,()=>0)?.charge===0.5);
@@ -76,12 +102,15 @@ function game() {
   w.eval(fs.readFileSync(path.join(ui, 'systems.js'), 'utf8'));
   w.eval(fs.readFileSync(path.join(ui, 'adventure.js'), 'utf8'));
   w.eval(fs.readFileSync(path.join(ui, 'world.js'), 'utf8'));
+  w.eval(fs.readFileSync(path.join(ui, 'leisure.js'), 'utf8'));
   let source = fs.readFileSync(path.join(ui, 'game.js'), 'utf8');
   source = source.replace(/\}\)\(\);\s*$/, `window.testGame = { reset, build, canBuild, damage, makeBug, tick, drawBug, drawTowerGlyph, drawHive, towerStats, cellCenter, startWave, frame,
     select: key => selType = key, addBug: bug => bugs.push(bug),
     setVitals: (health, balance) => { hp=health; honey=balance; syncHud(); },
     animateHoney, syncHud, repair, gameOver, bear, openBear, closeBear, shootBear, collection, startGame, configureMap, portals, waveDef, advanceJump,
-    route:()=>({PATH,PTS,DIST}),
+    route:()=>({PATH,PTS,DIST}), leisure, chooseReward, startMove, advanceMoves,
+    move:t=>moveSelection=t,
+    finishWave:n=>{wave=n;bugs=[];spawnQueue=[];prep=0;},
     addShot:s=>shots.push(s),
     chooseTower:t=>{selTower=t;renderInfo();}, aimAt:(x,y)=>aim={x,y},
     state: () => ({towers, bugs, honey, hp, wave, paused, speed, running, prep, texts}) }; })();`);
@@ -122,10 +151,10 @@ test('pollen slow adds twenty five percent to actual splash damage',()=>{
 });
 test('all towers and enemies render their own image including hive', () => {
   const g = game();
-  for (const key of ['sting','bomb','pollen','barb','drum']) g.api.drawTowerGlyph(10,10,key,2,0,1,true);
+  for (const key of ['sting','bomb','pollen','barb','drum','pumpkin']) g.api.drawTowerGlyph(10,10,key,2,0,1,true);
   for (const key of ['aphid','wasp','beetle','moth','spider','hornet','ant','caterpillar','grasshopper','flea']) g.api.drawBug(g.api.makeBug(key,1));
   g.api.drawHive();
-  assert.equal(new Set(g.drawn).size,16);
+  assert.equal(new Set(g.drawn).size,17);
   g.close();
 });
 test('spider death produces two small spider sprites and pays once', () => {

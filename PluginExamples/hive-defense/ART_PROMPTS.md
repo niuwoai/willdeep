@@ -1,5 +1,11 @@
 # 透明素材生成记录
 
+## 南瓜花（1.341.0-rc1）
+
+`pumpkin.png` 使用内置 imagegen 独立生成，保留原生透明 alpha（最小值 0、最大值 1），无后期抠图。提示词：Single isolated game sprite of a magical pumpkin blossom honey-producing plant. Large beautiful orange-gold five-petal pumpkin flower on a short curving green stem, two broad pumpkin vine leaves, a small friendly rounded golden nectar centre (no face necessary), tiny orange pumpkin bud near base. Children's garden tower-defense style, original character plant design, warm polished hand-painted cartoon art, crisp brown and green outlines, soft shading, angled top-down three-quarter view, readable small silhouette. Entire plant centred with clear margin. True transparent PNG alpha background, no ground patch, no pot, no scenery, no checkerboard, no text, no glow or cast shadow. A standalone plant asset.
+
+## 首批素材
+
 工具：内置 `image_gen`，每种素材独立生成一次，未使用 CLI/API 回退。输出为原生 alpha PNG，1254×1254；保留原文件像素，没有抠图或白底替换。运行时按比例绘制到小尺寸，独立资源只加载一次。
 
 共同提示词约束：production game sprite for honeycomb tower-defense; top-down orthographic; charming polished hand-painted 2D game art; crisp dark outlines; chunky readable silhouette; centered isolated object with 12 percent transparent padding; square 512x512 PNG with genuine alpha transparency; no text, labels, scene, ground, tile or outside shadow. 生成器实际返回尺寸为 1254×1254。

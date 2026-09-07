@@ -25,6 +25,11 @@
 
     <div class="stage">
       <canvas id="map" width="664" height="372"></canvas>
+      <section id="rewardPanel" class="reward-panel" hidden aria-label="波间三选一">
+        <h2>守住了！选一份奖励</h2>
+        <p>选好再继续，休整倒计时已暂停。</p>
+        <div id="rewardCards"></div>
+      </section>
       <section id="bearPanel" class="bear-panel" hidden aria-label="狗熊瞄准小游戏">
         <h2 id="bearTitle">蜂蜜球赶走狗熊</h2>
         <p id="bearStatus" role="status">用放大镜瞄准头部，命中 5 次获胜！</p>
@@ -64,6 +69,7 @@
             <button id="upBtn">升级</button>
             <button id="sellBtn">出售</button>
             <button id="towerRepairBtn" hidden>修复塔</button>
+            <button id="moveBtn">紧急搬家</button>
           </div>
         </div>
       </div>
@@ -80,6 +86,11 @@
         <p class="repair-rules">花粉减速 + 蜂胶炮：对减速虫子额外造成 25% 伤害。</p>
       </div>
       <div class="box">
+        <h2>我的小花园</h2>
+        <p id="gardenStatus" class="repair-rules"></p>
+        <p id="rewardStatus" class="repair-rules">每守住 3 波，选择一份奖励。</p>
+      </div>
+      <div class="box">
         <h2>虫群图鉴</h2>
         <div class="rows" id="bestiary"></div>
       </div>
@@ -87,10 +98,10 @@
   </div>
 
   <footer>
-    快捷键：<kbd>1</kbd>–<kbd>5</kbd> 选塔　<kbd>空格</kbd> 暂停　<kbd>F</kbd> 加速　<kbd>N</kbd> 提前叫下一波（剩余准备时间折算成蜂蜜）　<kbd>Esc</kbd> 取消选择<br>
+    快捷键：<kbd>1</kbd>–<kbd>6</kbd> 选塔　<kbd>空格</kbd> 暂停　<kbd>F</kbd> 加速　<kbd>N</kbd> 提前叫下一波（剩余准备时间折算成蜂蜜）　<kbd>Esc</kbd> 取消选择<br>
     提前叫波有奖励，卖塔返还六成。甲虫有护甲，只有毒刺弩无视护甲；蜘蛛死后会裂成两只小蜘蛛。
   </footer>
 </div>
 
 
-<footer>蜂巢防线 · 1.340.0-rc1</footer><script src="sprites.js"></script><script src="systems.js"></script><script src="adventure.js"></script><script src="world.js"></script><script src="game.js"></script></body></html>
+<footer>蜂巢防线 · 1.341.0-rc1</footer><script src="sprites.js"></script><script src="systems.js"></script><script src="adventure.js"></script><script src="world.js"></script><script src="leisure.js"></script><script src="game.js"></script></body></html>
