@@ -7,6 +7,13 @@ require "json"
 require "open3"
 require "tmpdir"
 
+# 插件描述与语言包里有中文。Ruby 用调用方的 locale 给外部读入的字节打标签，
+# 而 LANG/LC_ALL 未设时那是 US-ASCII，`JSON.parse` 一碰到第一个中文字节就抛
+# Encoding::InvalidByteSequenceError。打包脚本不该依赖调用者的 shell 怎么设，
+# 这里钉死 UTF-8（与 scripts/run_tests_fast.rb 同一处理）。
+Encoding.default_external = Encoding::UTF_8
+Encoding.default_internal = Encoding::UTF_8
+
 root = File.expand_path("..", __dir__)
 source = File.join(root, "PluginExamples", "video-studio")
 manifest = JSON.parse(File.read(File.join(source, ".codex-plugin", "plugin.json")))

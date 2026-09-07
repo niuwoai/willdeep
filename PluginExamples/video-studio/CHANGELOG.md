@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2] - 2026-09-07
+
+### Changed
+
+- 不再向聊天选区菜单贡献「发送到短剧工坊」。这一项来自清单里的 `menus["chat.selection"]`，对着聊天正文划词时用不上它，白占一格。命令 `video.createDraft` 保留，MCP 工具 `video.create_draft` 与插件页内的入口都不受影响。
+- MCP 服务端 `serverInfo.version` 从 `0.2.0` 对齐到插件版本 `0.3.2`。此前两者各走各的，服务端报的版本从 0.2.0 起就没跟过。
+
 ## [0.3.1] - 2026-09-04
 
 ### Fixed

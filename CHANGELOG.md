@@ -10,6 +10,21 @@
 - 重写中英日 README，以产品价值、任务场景、核心能力和上手入口组织官方介绍；将构建、测试与贡献说明移入开发指南，移除过时版本描述和未经证实的绝对承诺。
 - 新增根目录 AGENTS.md 并同步 CLAUDE.md：优先 rebase 后保留逐条提交集成到 develop/main，默认不 squash，不改写共享主分支历史或制造无意义提交。
 
+## 1.334.0-rc22 - 2026-09-07
+
+### Changed
+
+- 内置短剧工坊插件升至 **0.3.2**，记录上一版移除聊天选区菜单项的改动；MCP 服务端 `serverInfo.version` 从 `0.2.0` 对齐到插件版本——此前两者各走各的，服务端报的版本从 0.2.0 起就没跟过。
+
+### Fixed
+
+- `scripts/package_video_studio.rb` 在未设 `LANG` / `LC_ALL` 的 shell 里直接崩溃。Ruby 用调用方的 locale 给外部读入的字节打标签，未设时是 US-ASCII，`JSON.parse` 碰到插件描述里第一个中文字节就抛 `Encoding::InvalidByteSequenceError`。打包脚本不该依赖调用者的 shell 怎么设，现在钉死 UTF-8，与 `scripts/run_tests_fast.rb` 同一处理。
+
+### Tests
+
+- 短剧工坊服务端回归 40 项通过；打包脚本在未设 locale 的 shell 下重新产出 `willdeep-video-studio-0.3.2.zip`，包内清单确认已无 `chat.selection`。
+- Bugfix 预发布版本从 **1.334.0-rc21** 递增为 **1.334.0-rc22**，内部构建号 **653 → 654**；App、Go agent、Help、Helper、浏览器扩展、README、版本响应头与产品文档保持一致。
+
 ## 1.334.0-rc21 - 2026-09-07
 
 ### Changed
