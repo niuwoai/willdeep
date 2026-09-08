@@ -114,7 +114,7 @@ struct EditorSettingsView: View {
                             .background {
                                 if isSelected {
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(Color.accentColor.opacity(0.16))
+                                        .fill(Color.primary.opacity(0.10))
                                 }
                             }
                     }
@@ -292,6 +292,7 @@ struct EditorSettingsView: View {
         case .appearance: appearanceSettings
         case .workspace: workspaceSettings
         case .agentAppearance: agentAppearanceSettings
+        case .localModels: Form { AgentLocalModelSettingsSection() }.formStyle(.grouped).tint(.primary)
         case .agent: agentSettings
         case .notifications: AgentAttentionSettingsView()
         case .subagents: AgentProfileSettingsView()
@@ -409,7 +410,6 @@ struct EditorSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            AgentLocalModelSettingsSection()
             AgentSessionRetentionSettingsSection()
 
             Section(L10n.Settings.sectionConversationTitle) {

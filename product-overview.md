@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-08 | Current version: v1.342.0-rc21
+> Last updated: 2026-09-08 | Current version: v1.342.0-rc23
+
+代理档案使用灰度双栏与常规、职责、工具权限三个页签；上下文文字链接快速填入，职责支持恢复内置默认，修改自动保存。
 
 后台 Worker 列表支持逐个手动停止，其他 Worker 继续运行，取消后不自动唤醒父聊天续跑。
 
@@ -1984,3 +1986,5 @@ CLAUDE.md §2 要求 React 部分必须走 i18n，但 WillDeep 是 SwiftUI macOS
 - Add keyboard-first refinements for replacing and selecting all find matches.
 - Make structure items jump to their source lines.
 - Decide whether very large files should open in read-only preview mode instead of the editable buffer.
+
+本地模型在设置一级入口配置兼容服务、模型名称与辅助用途；模型下载和运行由 Ollama 等工具管理。Composer 不再展示专家包手动开关。

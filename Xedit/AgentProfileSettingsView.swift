@@ -18,6 +18,16 @@
 import SwiftUI
 
 struct AgentProfileSettingsView: View {
+    enum DetailTab: CaseIterable {
+        case general, responsibilities, tools
+        var title: String {
+            switch self {
+            case .general: return L10n.AgentProfiles.generalTab
+            case .responsibilities: return L10n.AgentProfiles.responsibilitiesTab
+            case .tools: return L10n.AgentProfiles.toolsTab
+            }
+        }
+    }
     private enum Filter: String, CaseIterable, Identifiable {
         case all, subagent, dispatch
         var id: String { rawValue }
@@ -46,8 +56,14 @@ struct AgentProfileSettingsView: View {
     @State private var filter: Filter = .subagent
     @State private var showsLegacyProfiles = false
     @State private var deleteTarget: AgentProfile?
+    @State private var search = ""
+    @State private var detailTab: DetailTab = .general
 
     private let store = AgentProfileStore()
+
+    init(detailTab: DetailTab = .general) {
+        _detailTab = State(initialValue: detailTab)
+    }
 
     private var visibleProfiles: [AgentProfile] {
         let publicProfiles = profiles.filter { profile in
@@ -57,8 +73,10 @@ struct AgentProfileSettingsView: View {
                 || AgentSubagentProfileCatalog.isPublic(id: profile.id)
                 || showsLegacyProfiles
         }
-        guard let usage = filter.usage else { return publicProfiles }
-        return publicProfiles.filter { $0.usages.contains(usage) }
+        return publicProfiles.filter {
+            (filter.usage == nil || $0.usages.contains(filter.usage!))
+                && (search.isEmpty || ($0.localizedName + " " + detailLine($0)).localizedCaseInsensitiveContains(search))
+        }
     }
 
     private var selectedIndex: Int? {
@@ -67,50 +85,34 @@ struct AgentProfileSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            AgentWorkerTierSettingsView(onSave: reload)
-            Section {
-                Text(L10n.AgentProfiles.paneDescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Picker("", selection: $filter) {
-                    ForEach(Filter.allCases) { option in
-                        Text(option.title).tag(option)
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(L10n.AgentProfiles.tabTitle).font(.title2.bold())
+                TextField(L10n.AgentProfiles.searchPlaceholder, text: $search)
+                    .textFieldStyle(.roundedBorder)
+                profileFilters
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        ForEach(visibleProfiles) { profile in profileRow(profile) }
                     }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-
+                Divider()
+                Button(action: addProfile) { Label(L10n.AgentProfiles.addProfile, systemImage: "plus") }
+                    .buttonStyle(.plain)
                 Toggle(String(localized: "显示旧工种兼容配置", table: "WorkerArchitecture"), isOn: $showsLegacyProfiles)
-                    .font(.caption)
-
-                ForEach(visibleProfiles) { profile in
-                    profileRow(profile)
-                }
-
-                HStack {
-                    Button {
-                        addProfile()
-                    } label: {
-                        Label(L10n.AgentProfiles.addProfile, systemImage: "plus")
-                    }
-                    Spacer()
-                }
+                    .font(.caption).toggleStyle(.checkbox)
             }
-
-            if let index = selectedIndex {
-                editor(index: index)
-            } else {
-                Section {
-                    Text(L10n.AgentProfiles.emptySelection)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
+            .padding(16)
+            .frame(minWidth: 210, idealWidth: 260, maxWidth: 290)
+            .background(Color.primary.opacity(0.025))
+            Divider()
+            detailPane
         }
-        .formStyle(.grouped)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .tint(.primary)
+        .onChange(of: search) { _ in reconcileSelection() }
+        .onChange(of: filter) { _ in reconcileSelection() }
+        .onChange(of: showsLegacyProfiles) { _ in reconcileSelection() }
         .onAppear(perform: reload)
         .alert(L10n.AgentProfiles.deleteTitle, isPresented: deleteAlertBinding) {
             Button(L10n.Automation.cancel, role: .cancel) { deleteTarget = nil }
@@ -118,6 +120,64 @@ struct AgentProfileSettingsView: View {
         } message: {
             Text(L10n.AgentProfiles.deleteMessage(deleteTarget?.localizedName ?? ""))
         }
+    }
+
+    private var profileFilters: some View {
+        HStack(spacing: 2) {
+            ForEach(Filter.allCases) { option in
+                filterButton(option)
+            }
+        }
+    }
+
+    private func filterButton(_ option: Filter) -> some View {
+        let fill: Color = filter == option ? Color.primary.opacity(0.14) : Color.clear
+        return Button { filter = option } label: {
+            Text(option.title)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 6).fill(fill))
+        }.buttonStyle(.plain)
+    }
+
+    private var detailPane: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let index = selectedIndex {
+                detailHeader(profiles[index])
+                detailTabs
+                Form { editor(index: index) }.formStyle(.grouped)
+                Divider()
+                Text(L10n.AgentProfiles.autoSaved).font(.caption).foregroundStyle(.secondary)
+                    .padding(12).frame(maxWidth: .infinity, alignment: .trailing)
+            } else {
+                Text(L10n.AgentProfiles.emptySelection).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }.frame(maxWidth: .infinity)
+    }
+
+    private func detailHeader(_ profile: AgentProfile) -> some View {
+        HStack {
+            Image(systemName: profile.runtime.executor.symbol).font(.title2)
+            VStack(alignment: .leading) {
+                Text(profile.localizedName).font(.title2.bold())
+                Text(originLabel(profile.origin) + " · " + usageLabel(profile))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }.padding(20)
+    }
+
+    private var detailTabs: some View {
+        HStack(spacing: 4) {
+            ForEach(DetailTab.allCases, id: \.self) { tab in
+                Button { detailTab = tab } label: {
+                    Text(tab.title).frame(maxWidth: .infinity).padding(.vertical, 8)
+                        .background(detailTab == tab ? Color.primary.opacity(0.14) : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: 6))
+                }.buttonStyle(.plain)
+            }
+        }.padding(.horizontal, 20)
     }
 
     // MARK: - List
@@ -129,30 +189,32 @@ struct AgentProfileSettingsView: View {
             HStack(spacing: 9) {
                 Image(systemName: profile.runtime.executor.symbol)
                     .frame(width: 18)
-                    .foregroundStyle(selectedID == profile.id ? Color.accentColor : .secondary)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(profile.localizedName)
                             .font(.system(size: 12, weight: .medium))
                         Text(originLabel(profile.origin))
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(selectedID == profile.id ? Color.white.opacity(0.8) : Color.secondary)
                         if profile.soul.hasUserContent {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(selectedID == profile.id ? Color.white.opacity(0.8) : Color.secondary)
                         }
                     }
                     Text(detailLine(profile))
                         .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(selectedID == profile.id ? Color.white.opacity(0.8) : Color.secondary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 6)
-                Text(usageLabel(profile))
-                    .font(.system(size: 9))
-                    .foregroundStyle(.tertiary)
+                Text(AgentWorkerTierModels.windowLabel(profile.runtime.modelBinding.contextWindowTokens ?? defaultContextWindow(for: profile) ?? AgentWorkerTierModels.extendedWindow))
+                    .font(.caption2.monospacedDigit())
+                if selectedID == profile.id { Image(systemName: "checkmark").font(.caption.bold()) }
             }
+            .padding(10)
+            .foregroundStyle(selectedID == profile.id ? Color.white : Color.primary)
+            .background(selectedID == profile.id ? Color(white: 0.25) : .clear, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -194,6 +256,7 @@ struct AgentProfileSettingsView: View {
         let profile = profiles[index]
         let isManaged = profile.origin == .managed
 
+        if detailTab == .general {
         Section(L10n.AgentProfiles.sectionProfile) {
             if isManaged {
                 TextField(L10n.AgentProfiles.fieldName, text: nameBinding(index))
@@ -251,7 +314,7 @@ struct AgentProfileSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 if appState.workerTierConfiguration(tier, parent: appState.agentConfiguration) == nil {
                     Text(String(localized: "此档当前不可用：使用当前会话模型，不自动升级。请检查提供商和模型配置。", table: "WorkerArchitecture"))
-                        .font(.caption).foregroundStyle(.orange)
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             } else {
             // Model selection is independent of the local job instructions.
@@ -312,11 +375,16 @@ struct AgentProfileSettingsView: View {
                 .disabled(profile.origin == .discovered)
             }
 
-            contextWindowField(index: index, profile: profile)
             }
+            contextWindowField(index: index, profile: profile)
+        }
+        DisclosureGroup(L10n.AgentProfiles.sharedModels) {
+            AgentWorkerTierSettingsView(onSave: reload)
+        }
         }
 
-        Section(L10n.AgentProfiles.sectionSoul) {
+        if detailTab == .responsibilities {
+        Section(L10n.AgentProfiles.responsibilitiesTab) {
             if !profile.soulApplies {
                 Text(L10n.AgentProfiles.soulExternalNote)
                     .font(.caption)
@@ -337,11 +405,27 @@ struct AgentProfileSettingsView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
+                if !profile.soul.basePromptSection.isEmpty {
+                    DisclosureGroup(L10n.AgentProfiles.builtInInstructions) {
+                        Text(profile.soul.basePromptSection).font(.caption.monospaced())
+                            .textSelection(.enabled)
+                    }
+                }
+                HStack {
                 Text(L10n.AgentProfiles.fieldPrompt)
                     .font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    Button(L10n.AgentProfiles.restoreInstructions) {
+                        profiles[index].soul.restoreDefaultInstructions()
+                        persist()
+                    }
+                    .buttonStyle(.plain).underline()
+                    .disabled(profile.soul.promptSection.isEmpty)
+                    .accessibilityIdentifier("profile-restore-instructions")
+                }
                 TextEditor(text: promptBinding(index))
                     .font(.system(size: 12, design: .monospaced))
-                    .frame(minHeight: 90)
+                    .frame(minHeight: 200)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(Color.primary.opacity(0.12), lineWidth: 1)
@@ -358,7 +442,9 @@ struct AgentProfileSettingsView: View {
             }
             .disabled(!profile.soulApplies)
         }
+        }
 
+        if detailTab == .tools {
         Section(L10n.AgentProfiles.sectionCapability) {
             if !profile.runtime.isInProcess {
                 Text(L10n.AgentProfiles.capabilityExternalNote)
@@ -372,11 +458,13 @@ struct AgentProfileSettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                LabeledContent(L10n.AgentProfiles.fieldTools) {
-                    Text((profile.capability?.toolNames ?? []).sorted().joined(separator: ", "))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.trailing)
+                ForEach((profile.capability?.toolNames ?? []).sorted(), id: \.self) { tool in
+                    HStack {
+                        Text(AgentToolDisplay.name(for: tool))
+                        Spacer()
+                        Text(tool).font(.caption.monospaced()).foregroundStyle(.secondary)
+                        Image(systemName: "lock").foregroundStyle(.secondary)
+                    }
                 }
                 maxRoundsField(index: index, profile: profile)
                 Text(L10n.AgentProfiles.capabilityBuiltInNote)
@@ -385,8 +473,9 @@ struct AgentProfileSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        }
 
-        if isManaged {
+        if isManaged && detailTab == .general {
             Section {
                 Button(role: .destructive) {
                     deleteTarget = profile
@@ -407,11 +496,25 @@ struct AgentProfileSettingsView: View {
             .map(String.init) ?? L10n.AgentProfiles.contextWindowInherits
         VStack(alignment: .leading, spacing: 4) {
             LabeledContent(L10n.AgentProfiles.fieldContextWindow) {
-                TextField(placeholder, text: contextWindowBinding(index))
+                TextField("", text: contextWindowBinding(index), prompt: Text(placeholder))
                     .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
                     .frame(width: 120)
                     .multilineTextAlignment(.trailing)
             }
+            HStack(spacing: 14) {
+                ForEach([32, 64, 128, 256, 512, 1024], id: \.self) { value in
+                    Button {
+                        contextWindowBinding(index).wrappedValue = String(value * 1024)
+                    } label: {
+                        Text(value == 1024 ? "1M" : "\(value)K").underline()
+                    }.buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
+                Button(L10n.AgentProfiles.contextWindowInherits) {
+                    contextWindowBinding(index).wrappedValue = ""
+                }.buttonStyle(.plain)
+            }.font(.caption)
             Text(L10n.AgentProfiles.contextWindowNote)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -430,6 +533,7 @@ struct AgentProfileSettingsView: View {
                     text: maxRoundsBinding(index)
                 )
                 .textFieldStyle(.roundedBorder)
+                .labelsHidden()
                 .frame(width: 80)
                 .multilineTextAlignment(.trailing)
             }
@@ -445,8 +549,11 @@ struct AgentProfileSettingsView: View {
     /// built-in rather than the edited copy, so clearing the field shows the
     /// value it is about to restore instead of the one being replaced.
     private func defaultContextWindow(for profile: AgentProfile) -> Int? {
-        AgentProfile.builtIns.first { $0.id == profile.id }?
-            .runtime.modelBinding.contextWindowTokens
+        if let tier = AgentWorkerTierModels.tier(for: profile.runtime.modelBinding) {
+            return store.workerTierModels()[tier].contextWindowTokens ?? AgentWorkerTierModels.extendedWindow
+        }
+        return AgentProfile.builtIns.first { $0.id == profile.id }?
+            .runtime.modelBinding.contextWindowTokens ?? AgentWorkerTierModels.extendedWindow
     }
 
     private func defaultMaxRounds(for profile: AgentProfile) -> Int {
@@ -700,6 +807,10 @@ struct AgentProfileSettingsView: View {
 
     private func reload() {
         profiles = store.profiles()
+        reconcileSelection()
+    }
+
+    private func reconcileSelection() {
         if selectedID == nil || !visibleProfiles.contains(where: { $0.id == selectedID }) {
             selectedID = visibleProfiles.first?.id
         }
@@ -725,6 +836,8 @@ struct AgentProfileSettingsView: View {
             capability: .managedDefault
         )
         profiles.append(profile)
+        search = ""
+        filter = .all
         selectedID = profile.id
         persist()
     }

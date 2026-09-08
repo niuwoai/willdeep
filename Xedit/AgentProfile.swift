@@ -46,6 +46,10 @@ nonisolated struct AgentProfileSoul: Codable, Equatable, Sendable {
         !promptSection.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !skillIdentifiers.isEmpty
     }
+
+    mutating func restoreDefaultInstructions() {
+        promptSection = ""
+    }
 }
 
 nonisolated struct AgentProfileRuntime: Codable, Equatable, Sendable {

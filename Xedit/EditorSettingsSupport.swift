@@ -80,6 +80,7 @@ enum EditorSettingsTab: Hashable {
     case workspace
     case agentAppearance
     case agent
+    case localModels
     case notifications
     case subagents
     case someIM
@@ -112,6 +113,7 @@ extension EditorSettingsTab {
         // appears as a duplicate Editor pane.
         case .editing, .typography, .appearance, .workspace: return .editor
         case .agentAppearance: return .agentAppearance
+        case .localModels: return .localModels
         case .agent, .notifications, .memory, .rules: return .ai
         // Agent profiles is its own top-level group: it is where the model,
         // window, round budget and preloaded skills of every trade are set,
@@ -139,6 +141,7 @@ extension EditorSettingsTab {
         case .appearance: return L10n.Settings.tabAppearance
         case .workspace: return L10n.Settings.tabWorkspace
         case .agentAppearance: return L10n.Settings.tabAgentAppearance
+        case .localModels: return L10n.Settings.LocalModel.pageTitle
         case .agent: return L10n.Settings.tabAgent
         case .notifications: return L10n.AgentNotifications.Settings.tabTitle
         case .subagents: return L10n.AgentProfiles.tabTitle
@@ -165,6 +168,7 @@ extension EditorSettingsTab {
 enum SettingsGroup: Hashable, Identifiable {
     case accountAndDevices
     case ai
+    case localModels
     case agentProfiles
     case agentTools
     case runtimes
@@ -178,6 +182,7 @@ enum SettingsGroup: Hashable, Identifiable {
     static let allCases: [Self] = [
         .accountAndDevices,
         .ai,
+        .localModels,
         .agentProfiles,
         .agentTools,
         .runtimes,
@@ -199,6 +204,7 @@ enum SettingsGroup: Hashable, Identifiable {
         case .editor: return [.editing, .appearance, .typography, .workspace]
         case .agentAppearance: return [.agentAppearance]
         case .pet: return [.pet]
+        case .localModels: return [.localModels]
         case .ai: return [.agent, .notifications, .memory, .rules]
         case .agentProfiles: return [.subagents]
         case .agentTools: return [.skills, .mcp, .tools, .secrets]
@@ -217,6 +223,7 @@ enum SettingsGroup: Hashable, Identifiable {
         case .editor: return L10n.Settings.groupEditor
         case .agentAppearance: return L10n.Settings.groupAgentAppearance
         case .pet: return L10n.DesktopPet.settingsTabTitle
+        case .localModels: return L10n.Settings.LocalModel.pageTitle
         case .ai: return L10n.Settings.groupAI
         case .agentProfiles: return L10n.AgentProfiles.tabTitle
         case .agentTools: return L10n.Settings.groupAgentTools
@@ -233,6 +240,7 @@ enum SettingsGroup: Hashable, Identifiable {
         case .editor: return "pencil.line"
         case .agentAppearance: return "textformat.size"
         case .pet: return "pawprint.fill"
+        case .localModels: return "cpu"
         case .ai: return "sparkles"
         case .agentProfiles: return "person.2.badge.gearshape"
         case .agentTools: return "wrench.and.screwdriver"

@@ -7,6 +7,16 @@ import Testing
 @Suite
 @MainActor
 struct AgentProfileUnificationTests {
+    @Test("恢复内置指令只清除附加指令，保留默认职责与挂载技能")
+    func restoreDefaultInstructionsPreservesOtherFields() {
+        var soul = AgentProfileSoul(purpose: "Investigate", basePromptSection: "Built-in rules",
+                                    promptSection: "User additions", skillIdentifiers: ["skill-a"])
+        soul.restoreDefaultInstructions()
+        #expect(soul.promptSection.isEmpty)
+        #expect(soul.basePromptSection == "Built-in rules")
+        #expect(soul.purpose == "Investigate")
+        #expect(soul.skillIdentifiers == ["skill-a"])
+    }
     private func sandboxDefaults() -> (UserDefaults, String)? {
         let suiteName = "willdeep-profiles-\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else { return nil }

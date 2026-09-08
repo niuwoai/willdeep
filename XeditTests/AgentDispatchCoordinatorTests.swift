@@ -952,6 +952,27 @@ struct AgentDispatchCoordinatorTests {
         try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
     }
 
+    @Test("render standalone local model settings for design QA")
+    @MainActor
+    func renderLocalModelSettingsForDesignQA() throws {
+        let navigation = EditorSettingsNavigation.shared
+        let previous = navigation.selectedTab
+        defer { navigation.selectedTab = previous }
+        navigation.selectedTab = .localModels
+        let root = EditorSettingsView().environmentObject(AppState())
+            .preferredColorScheme(.light).frame(width: 1000, height: 900)
+            .background(Color.white)
+        let host = NSHostingView(rootView: root)
+        host.frame = NSRect(x: 0, y: 0, width: 1000, height: 900)
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: "/tmp/Xedit-local-model-settings-qa.png"))
+    }
+
     @Test("render the unified agent profile settings pane for design QA")
     @MainActor
     func renderAgentProfileSettingsForDesignQA() throws {
@@ -980,11 +1001,12 @@ struct AgentDispatchCoordinatorTests {
             ],
             activeID: nil
         )
-        let size = NSSize(width: 760, height: 520)
+        for (tabIndex, tab) in AgentProfileSettingsView.DetailTab.allCases.enumerated() {
+        for size in [NSSize(width: 1100, height: 780), NSSize(width: 760, height: 520)] {
         // The dispatch board's own profile editor was retired: profiles live
         // in one store (agent-profile.v2) and are edited in one place,
         // Settings → AI → Agent profiles.
-        let root = AgentProfileSettingsView()
+        let root = AgentProfileSettingsView(detailTab: tab)
         .environmentObject(appState)
         .tint(appState.editorSettings.interfaceSkin.palette.accent)
         .preferredColorScheme(.light)
@@ -999,7 +1021,10 @@ struct AgentDispatchCoordinatorTests {
         let bitmap = try #require(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
         hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
-        try png.write(to: URL(fileURLWithPath: outputPath), options: .atomic)
+        let target = outputPath.replacingOccurrences(of: ".png", with: "-\(tabIndex)-\(Int(size.width)).png")
+        try png.write(to: URL(fileURLWithPath: target), options: .atomic)
+        }
+        }
     }
 
     @Test("任务执行会话不会再次投影成侧栏项目")

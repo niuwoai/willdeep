@@ -80,6 +80,7 @@ struct SettingsInformationArchitectureTests {
         #expect(SettingsGroup.allCases == [
             .accountAndDevices,
             .ai,
+            .localModels,
             .agentProfiles,
             .agentTools,
             .runtimes,
@@ -92,6 +93,8 @@ struct SettingsInformationArchitectureTests {
         #expect(SettingsGroup.agentAppearance.tabs == [.agentAppearance])
         #expect(EditorSettingsTab.agentAppearance.group == .agentAppearance)
         #expect(SettingsGroup.allCases.suffix(2) == [.agentAppearance, .general])
+        #expect(SettingsGroup.localModels.tabs == [.localModels])
+        #expect(EditorSettingsTab.localModels.group == .localModels)
         #expect(SettingsGroup.ai.tabs == [.agent, .notifications, .memory, .rules])
         // 1.306.0-rc1：代理档案升为一级页签。工种的模型、窗口、轮次预算和
         // 预加载技能都在这儿定，是会反复回来改的配置，不该是 AI 组里的第

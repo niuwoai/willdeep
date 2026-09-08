@@ -370,6 +370,8 @@ extension L10n {
         }
 
         enum LocalModel {
+            static let pageTitle = String(localized: "settings.local-model.page-title", defaultValue: "Local models")
+            static let serviceHelp = String(localized: "settings.local-model.service-help", defaultValue: "Start a local model service with Ollama or another OpenAI-compatible tool, then enter its API address and model names below. Manage model downloads in that tool.")
             static let enabled = String(localized: "settings.local-model.enabled", defaultValue: "启用本地辅助模型")
             static let baseURL = String(localized: "settings.local-model.base-url", defaultValue: "本地 Endpoint")
             static let visionModel = String(localized: "settings.local-model.vision-model", defaultValue: "图片理解模型")

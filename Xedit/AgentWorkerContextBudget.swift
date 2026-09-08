@@ -16,9 +16,9 @@ nonisolated enum AgentWorkerContextBudget {
         configuration: AgentConfiguration,
         models: AgentWorkerTierModels
     ) -> Int {
-        let declared = AgentWorkerTierModels.tier(for: profile.modelBinding).map {
+        let declared = profile.modelBinding.contextWindowTokens ?? AgentWorkerTierModels.tier(for: profile.modelBinding).map {
             models[$0].contextWindowTokens ?? AgentWorkerTierModels.extendedWindow
-        } ?? profile.modelBinding.contextWindowTokens ?? AgentWorkerTierModels.extendedWindow
+        } ?? AgentWorkerTierModels.extendedWindow
         let supported = AppState.agentContextWindow(model: configuration.model, providerID: configuration.providerID)
         let window = max(1, min(declared, supported))
         // Reserve output and estimator headroom. A budget never fabricates a

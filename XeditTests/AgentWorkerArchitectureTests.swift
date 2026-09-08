@@ -4,6 +4,20 @@ import Testing
 
 @Suite @MainActor
 struct AgentWorkerArchitectureTests {
+    @Test("档案上下文覆盖共享档位，清空后恢复继承")
+    func profileContextOverridesSharedTier() {
+        var profile = AgentSubagentProfileCatalog.tester
+        var models = AgentWorkerTierModels()
+        models[.standard].contextWindowTokens = 262_144
+        let configuration = AgentConfiguration(providerID: AgentProviderPreset.someIMID,
+            baseURL: "https://example.invalid", model: "deepseek-v4-flash", apiKey: "test")
+        profile.modelBinding.contextWindowTokens = 32_768
+        let custom = AgentWorkerContextBudget.inputLimit(profile: profile, configuration: configuration, models: models)
+        #expect(custom < 32_768)
+        profile.modelBinding.contextWindowTokens = nil
+        let inherited = AgentWorkerContextBudget.inputLimit(profile: profile, configuration: configuration, models: models)
+        #expect(inherited > custom)
+    }
     @Test
     func backgroundRequiresIndependentTaskAndOtherParentWork() {
         #expect(!AgentSubagentSchedulingPolicy.runsInBackground([:]))

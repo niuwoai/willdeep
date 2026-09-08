@@ -18,7 +18,6 @@
 //     and executes as needed; Goal repeatedly checks a persistent objective.
 //   - `AgentApprovalModePickerPill`: per-session tool approval posture
 //     selector — request every time, smart approval, or workspace access.
-//   - `AgentExpertPickerPill`: per-session opt-in specialist tool packs
 //     with one-way activation switches.
 //   - `AgentPluginPickerPill`: installed plugin/MCP capability browser.
 //   - `ComposerAdaptiveControlStrip`: progressively exposes overflow
@@ -377,7 +376,6 @@ enum ComposerOverflowControl: Hashable {
     case approval
     case executor
     case plugins
-    case experts
 }
 
 struct ComposerAdaptiveControlStrip: View {
@@ -387,7 +385,7 @@ struct ComposerAdaptiveControlStrip: View {
     // 在三套布局变体间按窗口宽度挑一套显示，代价是**每次重渲染都要把每个
     // 变体整建一遍来测量**——composer pill 重建因此成为主线程热点（打字、
     // 窗口切换、焦点变化都中招，采样里占主线程大头）。现在常用的四个
-    // （Workspace / Model / Mode / Approval）固定展示，其余（插件 / 技能包）
+    // （Workspace / Model / Mode / Approval）固定展示，其余插件入口
     // 固定收进「更多 …」弹层。执行器固定在输入框顶部上下文栏右侧。
     // 布局不再随宽度变化，每次重建只建一套。
     var body: some View {
@@ -400,165 +398,7 @@ struct ComposerAdaptiveControlStrip: View {
             }
             AgentModePickerPill()
             AgentApprovalModePickerPill()
-            ComposerOverflowPill(controls: [.plugins, .experts])
-        }
-        .focusable(false)
-    }
-}
-
-// MARK: - Expert picker
-
-struct AgentExpertPickerPill: View {
-    @EnvironmentObject var appState: AppState
-    @State private var isPresented = false
-
-    var body: some View {
-        Button {
-            isPresented.toggle()
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "person.crop.circle.badge.checkmark")
-                    .font(.system(size: 10, weight: .semibold))
-                Text(label)
-                    .font(.system(size: 11, weight: .medium))
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .foregroundStyle(pillForeground)
-            .background(Capsule(style: .continuous).fill(pillBackground))
-            .overlay(Capsule(style: .continuous).stroke(pillBorder, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-        .focusable(false)
-        .fixedSize()
-        .help(L10n.Expert.pickerHelp)
-        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            AgentExpertActivationList()
-                .focusable(false)
-                .padding(14)
-                .frame(width: 320, alignment: .leading)
-                .environmentObject(appState)
-        }
-    }
-
-    private var label: String {
-        let count = appState.agentActiveExperts.count
-        return count == 0 ? L10n.Expert.pickerLabel : L10n.Expert.pickerLabelActive("\(count)")
-    }
-
-    private var pillForeground: Color {
-        appState.agentActiveExperts.isEmpty ? Color.secondary : Color.white
-    }
-
-    private var pillBackground: Color {
-        appState.agentActiveExperts.isEmpty ? Color.secondary.opacity(0.10) : Color.accentColor
-    }
-
-    private var pillBorder: Color {
-        appState.agentActiveExperts.isEmpty ? Color.secondary.opacity(0.25) : Color.clear
-    }
-}
-
-struct AgentExpertActivationList: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.Expert.pickerLabel)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-
-            if shouldShowLockedNotice {
-                HStack(alignment: .top, spacing: 7) {
-                    Image(systemName: "info.circle.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(AgentComposerChrome.iconPrimary)
-                    Text(L10n.Expert.lockedNotice)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.accentColor.opacity(0.10))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.accentColor.opacity(0.22), lineWidth: 1)
-                )
-                .accessibilityElement(children: .combine)
-            }
-
-            ForEach(AgentExpert.allCases) { expert in
-                expertRow(expert)
-            }
-        }
-    }
-
-    private var shouldShowLockedNotice: Bool {
-        !appState.agentActiveExperts.isEmpty && !appState.canDeactivateAgentExperts()
-    }
-
-    private func expertRow(_ expert: AgentExpert) -> some View {
-        let isActive = appState.agentActiveExperts.contains(expert)
-        let canDeactivate = appState.canDeactivateAgentExperts()
-        return HStack(alignment: .center, spacing: 10) {
-            Image(systemName: expert.symbol)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isActive ? AgentComposerChrome.iconPrimary : AgentComposerChrome.iconSecondary)
-                .frame(width: 18)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(expert.displayName)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary)
-                Text(expert.summary)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 10)
-
-            Toggle("", isOn: Binding(
-                get: { isActive },
-                set: { newValue in
-                    if newValue {
-                        appState.activateAgentExpert(expert)
-                    } else {
-                        appState.deactivateAgentExpert(expert)
-                    }
-                }
-            ))
-            .labelsHidden()
-            .toggleStyle(.switch)
-            .focusable(false)
-            .disabled(isActive && !canDeactivate)
-        }
-        .focusable(false)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isActive ? Color.accentColor.opacity(0.10) : Color.secondary.opacity(0.07))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isActive ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.12), lineWidth: 1)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 8))
-        .onTapGesture {
-            if isActive {
-                appState.deactivateAgentExpert(expert)
-            } else {
-                appState.activateAgentExpert(expert)
-            }
+            ComposerOverflowPill(controls: [.plugins])
         }
         .focusable(false)
     }

@@ -160,7 +160,7 @@ struct ComposerOverflowPill: View {
     let controls: [ComposerOverflowControl]
     @State private var isPresented = false
 
-    init(controls: [ComposerOverflowControl] = [.executor, .plugins, .experts]) {
+    init(controls: [ComposerOverflowControl] = [.executor, .plugins]) {
         self.controls = controls
     }
 
@@ -198,11 +198,7 @@ struct ComposerOverflowPill: View {
                 if controls.contains(.plugins) {
                     overflowRow(L10n.Composer.overflowPlugins) { AgentPluginPickerPill() }
                 }
-                if controls.contains(.experts) {
-                    AgentExpertActivationList()
-                        .focusable(false)
-                }
-                let pluginCommands = pluginRegistry.menuCommands(at: "composer.more")
+                let pluginCommands = pluginRegistry.menuCommands(at: "composer.more").filter { $0.command.id != "video.open" }
                 if !pluginCommands.isEmpty {
                     Divider()
                     Text(L10n.Plugins.actions)
@@ -236,7 +232,7 @@ struct ComposerOverflowPill: View {
                 }
             }
             .padding(14)
-            .frame(width: controls.contains(.experts) ? 340 : 300, alignment: .leading)
+            .frame(width: 300, alignment: .leading)
             .focusable(false)
             .environmentObject(appState)
         }

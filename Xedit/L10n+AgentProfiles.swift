@@ -5,6 +5,14 @@ import Foundation
 // under the 3000-line guard.
 extension L10n {
     nonisolated enum AgentProfiles {
+        static let generalTab = String(localized: "agent-profiles.general-tab", defaultValue: "General")
+        static let responsibilitiesTab = String(localized: "agent-profiles.responsibilities-tab", defaultValue: "Responsibilities")
+        static let toolsTab = String(localized: "agent-profiles.tools-tab", defaultValue: "Tool permissions")
+        static let searchPlaceholder = String(localized: "agent-profiles.search", defaultValue: "Search profiles")
+        static let autoSaved = String(localized: "agent-profiles.auto-saved", defaultValue: "Changes are saved automatically")
+        static let sharedModels = String(localized: "agent-profiles.shared-models", defaultValue: "Shared model tiers")
+        static let builtInInstructions = String(localized: "agent-profiles.builtin-instructions", defaultValue: "Built-in instructions")
+        static let restoreInstructions = String(localized: "agent-profiles.restore-instructions", defaultValue: "Restore default instructions")
         static let tabTitle = String(localized: "agent-profiles.tab-title", defaultValue: "Agent profiles")
         static let paneDescription = String(
             localized: "agent-profiles.pane-description",
