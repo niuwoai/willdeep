@@ -1,6 +1,13 @@
 # Manual Smoke-Test Queue
 
-> Last updated: 2026-08-26（1.293.0-rc7）
+> Last updated: 2026-09-08（1.342.0-rc15）
+
+## 1.342.0-rc15 — Agent 聊天排版默认值回到 14 pt / 1.2×
+
+- ⏳ 在一台从未跑过 WillDeep 的账户（或先执行 `defaults delete com.willdeep.app com.willdeep.agentSettings.chatBaseFontSize.v2` 与 `...chatLineHeightMultiple.v1` 再启动）打开设置 → Agent 外观：字号应为 14 pt，行高应为 1.20×，说明文案应写「默认 14 pt」。
+- ⏳ 用同一个账户先跑 Debug 构建再跑 Release 构建：两边读到的字号与行高必须一致，Release 不得显示比 Debug 更大的字号。两种构建共用 `com.willdeep.app` 这一份 UserDefaults，这一条查的就是它们的默认值是否已经对齐。
+- ⏳ 此前明确选过 13 pt 或 18 pt 的安装升级后仍应保持各自字号；此前停在 14 pt 的安装升级后仍是 14 pt，不得被抬到 15 pt。
+- ⏳ 观察侧边栏会话行与输入框：两者跟随正文字号，因此应比上个版本各小一档，且与正文字号一致，不得出现输入框比正文明显大的错位。
 
 ## 1.293.0-rc7 — 聊天灰度层级与桌宠间歇环境动作
 

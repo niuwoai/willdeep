@@ -899,7 +899,10 @@ enum AgentDesign {
     static let bodyFont = Font.system(size: 13)
     static let secondaryFont = Font.system(size: 11)
     static let captionFont = Font.system(size: 10)
-    static let chatSupportingFontSizeDefault: CGFloat = 13
+    /// Two points below the chat body default, which is what makes timestamps
+    /// and status labels read as supporting text. It moves whenever
+    /// `chatBaseFontSizeDefault` moves — the gap is the point, not the number.
+    static let chatSupportingFontSizeDefault: CGFloat = 12
     static let sidebarSectionFont = Font.system(size: 11, weight: .semibold)
     static let sidebarRowFont = Font.system(size: sidebarRowFontSize)
     static let sidebarWorkspaceFont = Font.system(size: sidebarRowFontSize)

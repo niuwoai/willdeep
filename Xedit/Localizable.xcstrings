@@ -45709,31 +45709,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 15 pt; range %1$@ – %2$@ pt."
+            "value" : "Base size (pt) for Agent chat message body and rendered Markdown blocks (paragraphs, lists, quotes, fenced code, tables). Tool-call summaries, footers, message headers, and composer chrome keep their fixed sizes — this knob is about reading the conversation, not resizing the whole UI. Default is 14 pt; range %1$@ – %2$@ pt."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tamaño base (pt) del cuerpo de los mensajes del chat del Agente y de los bloques Markdown renderizados (párrafos, listas, citas, código en bloque, tablas). Los resúmenes de llamadas a herramientas, pies de página, cabeceras de mensaje y la barra del compositor mantienen su tamaño fijo — este ajuste es para leer la conversación, no para redimensionar toda la interfaz. El valor predeterminado es 15 pt; rango %1$@ – %2$@ pt."
+            "value" : "Tamaño base (pt) del cuerpo de los mensajes del chat del Agente y de los bloques Markdown renderizados (párrafos, listas, citas, código en bloque, tablas). Los resúmenes de llamadas a herramientas, pies de página, cabeceras de mensaje y la barra del compositor mantienen su tamaño fijo — este ajuste es para leer la conversación, no para redimensionar toda la interfaz. El valor predeterminado es 14 pt; rango %1$@ – %2$@ pt."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Taille de base (pt) du corps des messages du chat Agent et des blocs Markdown rendus (paragraphes, listes, citations, blocs de code, tableaux). Les résumés d'appels d'outils, les pieds de page, les en-têtes de message et l'interface de saisie conservent leur taille fixe — ce réglage sert à lire la conversation, pas à redimensionner toute l'interface. Valeur par défaut : 15 pt ; plage %1$@ – %2$@ pt."
+            "value" : "Taille de base (pt) du corps des messages du chat Agent et des blocs Markdown rendus (paragraphes, listes, citations, blocs de code, tableaux). Les résumés d'appels d'outils, les pieds de page, les en-têtes de message et l'interface de saisie conservent leur taille fixe — ce réglage sert à lire la conversation, pas à redimensionner toute l'interface. Valeur par défaut : 14 pt ; plage %1$@ – %2$@ pt."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agentチャット本文とレンダリングされたMarkdownブロック（段落、リスト、引用、コードブロック、表）の基本サイズ（pt）。ツール呼び出しの要約、フッター、メッセージヘッダー、入力欄のUIは固定サイズのままです — この設定は会話を読みやすくするためのもので、UI全体を拡大縮小するものではありません。デフォルトは15pt、範囲は %1$@ – %2$@ pt です。"
+            "value" : "Agentチャット本文とレンダリングされたMarkdownブロック（段落、リスト、引用、コードブロック、表）の基本サイズ（pt）。ツール呼び出しの要約、フッター、メッセージヘッダー、入力欄のUIは固定サイズのままです — この設定は会話を読みやすくするためのもので、UI全体を拡大縮小するものではありません。デフォルトは14pt、範囲は %1$@ – %2$@ pt です。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Agent 聊天正文和 Markdown 块（段落、列表、引用、代码块、表格）的基础字号（pt）。工具卡片摘要、底栏、消息头、输入框工具栏会保持固定字号 — 这个旋钮只管「读对话」，不会缩放整个 UI。默认 15 pt；范围 %1$@ – %2$@ pt。"
+            "value" : "Agent 聊天正文和 Markdown 块（段落、列表、引用、代码块、表格）的基础字号（pt）。工具卡片摘要、底栏、消息头、输入框工具栏会保持固定字号 — 这个旋钮只管「读对话」，不会缩放整个 UI。默认 14 pt；范围 %1$@ – %2$@ pt。"
           }
         }
       }

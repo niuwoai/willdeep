@@ -135,9 +135,15 @@ struct AgentSidebarListVisualMetricsTests {
         #expect(AgentDesign.assistantMetadataTopSpacing(baseFontSize: 15) < AgentDesign.messageVerticalSpacing)
         #expect(AgentDesign.reviewPanelPreferredWidth == 520)
         // Supporting text tracks the body size on a constant 2 pt offset
-        // rather than being capped at its 13 pt default. Raising the body to
-        // 18 now yields 16 (it used to stall at 13 and rely on the caller's
-        // visualMinimum), and the floor still holds at the smallest body.
+        // rather than being capped at its default. Raising the body to 18 now
+        // yields 16 (it used to stall at its default and rely on the caller's
+        // visualMinimum), and the floor still holds at the smallest body. The
+        // offset is stated against the body default so it survives a change to
+        // that default rather than pinning the gap to one body size.
+        #expect(
+            AgentDesign.chatSupportingFontSize(baseFontSize: AgentSettingsStore.chatBaseFontSizeDefault)
+                == AgentSettingsStore.chatBaseFontSizeDefault - 2
+        )
         #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 15) == 13)
         #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 14, visualMinimum: 9) == 12)
         #expect(AgentDesign.chatSupportingFontSize(baseFontSize: 18, visualMinimum: 15) == 16)

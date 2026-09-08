@@ -73,11 +73,11 @@ enum AgentSettingsStore {
     /// constants in AgentDesign.
     static let chatBaseFontSizeMin: CGFloat = 11
     static let chatBaseFontSizeMax: CGFloat = 20
-    static let chatBaseFontSizeDefault: CGFloat = 15
+    static let chatBaseFontSizeDefault: CGFloat = 14
     static let chatFontIDDefault = "pingfang-sc"
     static let chatLineHeightMultipleMin: CGFloat = 1.2
     static let chatLineHeightMultipleMax: CGFloat = 2.0
-    static let chatLineHeightMultipleDefault: CGFloat = 1.4
+    static let chatLineHeightMultipleDefault: CGFloat = 1.2
     /// JSON-encoded `AgentProviderLibrary` minus the API keys, which
     /// live in Keychain under the entry's UUID.
     private static let providerLibraryKey = "com.willdeep.agentSettings.providerLibrary.v1"
@@ -444,13 +444,14 @@ enum AgentSettingsStore {
         max(chatLineHeightMultipleMin, min(chatLineHeightMultipleMax, multiple))
     }
 
-    /// Preserve deliberate custom sizes while moving installs that still use
-    /// the old 14 pt default onto the Codex-aligned 15 pt baseline.
+    /// Carry a v1 size across to the v2 key untouched.
+    ///
+    /// This used to lift installs sitting on the old 14 pt default up to the
+    /// Codex-aligned 15 pt baseline. 14 pt is the default again, so that lift
+    /// would now push installs *away* from the default rather than onto it;
+    /// every stored size, 14 included, is a deliberate choice worth keeping.
     static func migratedChatBaseFontSize(fromLegacy size: CGFloat?) -> CGFloat {
         guard let size, size > 0 else { return chatBaseFontSizeDefault }
-        if size == 14 {
-            return chatBaseFontSizeDefault
-        }
         return clampChatBaseFontSize(size)
     }
 

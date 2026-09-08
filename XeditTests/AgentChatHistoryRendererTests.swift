@@ -40,17 +40,23 @@ struct AgentChatHistoryRendererTests {
 
     @Test
     func agentTypographyUsesReadableDefaultsAndClampsLineHeight() {
-        #expect(AgentSettingsStore.chatBaseFontSizeDefault == 15)
+        #expect(AgentSettingsStore.chatBaseFontSizeDefault == 14)
         #expect(AgentSettingsStore.chatFontIDDefault == AgentChatFontChoice.pingFang.id)
-        #expect(AgentSettingsStore.chatLineHeightMultipleDefault == 1.4)
-        // 1.4 has no exact binary representation, so these are the one place
+        #expect(AgentSettingsStore.chatLineHeightMultipleDefault == 1.2)
+        // The default multiple sits exactly on the slider's lower bound, so a
+        // fresh install and a user who drags the knob all the way left agree.
+        #expect(AgentSettingsStore.chatLineHeightMultipleDefault == AgentSettingsStore.chatLineHeightMultipleMin)
+        // 1.2 has no exact binary representation, so these are the one place
         // in this file that compares with a tolerance rather than `==`.
-        #expect(abs(AgentChatTypography.lineSpacing(fontSize: 15, lineHeightMultiple: 1.4) - 6) < 0.0001)
-        #expect(abs(AgentChatTypography.lineHeight(fontSize: 15, lineHeightMultiple: 1.4) - 21) < 0.0001)
+        #expect(abs(AgentChatTypography.lineSpacing(fontSize: 14, lineHeightMultiple: 1.2) - 2.8) < 0.0001)
+        #expect(abs(AgentChatTypography.lineHeight(fontSize: 14, lineHeightMultiple: 1.2) - 16.8) < 0.0001)
         #expect(AgentSettingsStore.clampChatLineHeightMultiple(0.5) == 1.2)
         #expect(AgentSettingsStore.clampChatLineHeightMultiple(3) == 2)
-        #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: nil) == 15)
-        #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: 14) == 15)
+        // A stored v1 size crosses to v2 untouched — 14 included, now that 14
+        // is the default rather than the size the old migration lifted away.
+        #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: nil) == 14)
+        #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: 14) == 14)
+        #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: 15) == 15)
         #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: 13) == 13)
         #expect(AgentSettingsStore.migratedChatBaseFontSize(fromLegacy: 18) == 18)
     }
@@ -1740,7 +1746,7 @@ struct AgentChatHistoryRendererTests {
             at: doneRange.location,
             effectiveRange: nil
         ) as? NSParagraphStyle)
-        #expect(bodyFont.pointSize == 15)
+        #expect(bodyFont.pointSize == AgentSettingsStore.chatBaseFontSizeDefault)
         // Status is supporting chrome, not another body paragraph.
         #expect(processedFont.pointSize == AgentDesign.chatSupportingFontSize(
             baseFontSize: bodyFont.pointSize
@@ -1807,7 +1813,14 @@ struct AgentChatHistoryRendererTests {
             at: retryRange.location,
             effectiveRange: nil
         ) as? NSFont)
-        #expect(retryFont.pointSize >= 13)
+        // The retry glyph is a click target, so it never renders below the
+        // supporting-text size for the current body size — stated relative to
+        // that size rather than as a fixed 13 pt, which silently became a
+        // stricter bound than supporting text itself once the body default
+        // moved to 14 pt.
+        #expect(retryFont.pointSize >= AgentDesign.chatSupportingFontSize(
+            baseFontSize: bodyFont.pointSize
+        ))
         #expect(retryFont.pointSize < copyFont.pointSize)
 
         let copiedButton = AgentChatHistoryFooterChrome.copyButton(
