@@ -18,7 +18,8 @@ nonisolated enum AgentComposerActivityStatusPolicy {
         isResponding: Bool,
         isCompressingContext: Bool,
         runningTaskCount: Int,
-        isWaitingForUserDecision: Bool
+        isWaitingForUserDecision: Bool,
+        backgroundWorkerCount: Int = 0
     ) -> Bool {
         // rc6 曾把 isResponding 从这里拿掉（只显示"可识别动作"），结果
         // 不产出可识别状态标题的模型（如 glm-5.2）在纯响应期整条消失：
@@ -27,6 +28,7 @@ nonisolated enum AgentComposerActivityStatusPolicy {
         isResponding
             || isCompressingContext
             || runningTaskCount > 0
+            || backgroundWorkerCount > 0
             || isWaitingForUserDecision
     }
 }
@@ -178,7 +180,10 @@ struct AgentChatComposer: View {
             isResponding: appState.isAgentResponding,
             isCompressingContext: appState.isCompressingAgentContext,
             runningTaskCount: appState.agentRunningTaskCount,
-            isWaitingForUserDecision: appState.isAgentWaitingForUserDecision
+            isWaitingForUserDecision: appState.isAgentWaitingForUserDecision,
+            backgroundWorkerCount: appState.activeAgentSessionID.map {
+                appState.agentSubagentRegistry.activeCount(forParentRuntime: $0)
+            } ?? 0
         )
     }
 

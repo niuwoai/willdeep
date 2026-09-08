@@ -1,10 +1,42 @@
 import Foundation
+import Combine
 import Testing
 @testable import WillDeep
 
 @Suite
 @MainActor
 struct AgentSubagentLiveActivityTests {
+    @Test("主聊天空闲时 Worker 开始和结束仍通知界面，数量按父聊天隔离")
+    func backgroundRegistryNotifiesIdleComposer() async throws {
+        let state = AppState()
+        let parentID = UUID()
+        state.agentSubagentRegistry.runOperation = { _, _, _, _, _, _, _, _, _, _, _ in
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+            return .init(report: "done", usageTokens: 0, roundCount: 0, toolInvocationCount: 0)
+        }
+        var notifications = 0
+        let subscription = state.objectWillChange.sink { notifications += 1 }
+        defer { subscription.cancel(); state.agentSubagentRegistry.cancelAll(forParentRuntime: parentID) }
+        let baseline = notifications
+        _ = try state.agentSubagentRegistry.startBackground(
+            prompt: "fixture", label: "Worker", configuration: .init(
+                providerID: "test", baseURL: "https://example.invalid", model: "test", apiKey: "test"
+            ), workspaceURL: nil, parentRuntimeID: parentID
+        )
+        #expect(notifications > baseline)
+        #expect(state.agentSubagentRegistry.activeCount(forParentRuntime: parentID) == 1)
+        #expect(state.agentSubagentRegistry.activeCount(forParentRuntime: UUID()) == 0)
+        let started = notifications
+        state.agentSubagentRegistry.cancelAll(forParentRuntime: parentID)
+        // Cancellation is acknowledged by the worker task, not by the
+        // synchronous request. Keep the strip until that terminal state.
+        for _ in 0..<100 where state.agentSubagentRegistry.activeCount(forParentRuntime: parentID) > 0 {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        #expect(notifications > started)
+        #expect(state.agentSubagentRegistry.activeCount(forParentRuntime: parentID) == 0)
+    }
+
     private func activity(
         profileID: String = "scout",
         workerName: String = "侦察兵",

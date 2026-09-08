@@ -6,6 +6,18 @@ import Testing
 
 @Suite
 struct AgentThinkingStatusVisualTests {
+    @Test("后台 Worker 独立于主聊天保留状态条，全部结束后隐藏")
+    func backgroundWorkersKeepComposerVisible() {
+        for count in [0, 1, 2] {
+            #expect(AgentComposerActivityStatusPolicy.shouldShow(
+                isResponding: false,
+                isCompressingContext: false,
+                runningTaskCount: 0,
+                isWaitingForUserDecision: false,
+                backgroundWorkerCount: count
+            ) == (count > 0))
+        }
+    }
     @Test("full transcript omits duplicate thinking status")
     func fullTranscriptOmitsDuplicateThinkingStatus() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)

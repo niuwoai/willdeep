@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-08 | Current version: v1.342.0-rc15
+> Last updated: 2026-09-08 | Current version: v1.342.0-rc18
+
+后台 Worker 的 Composer 状态条独立于主聊天生命周期：主聊天回复结束后继续显示当前聊天 Worker 的进度，全部结束后隐藏；无需重新发送消息刷新。
 
 本版把 Agent 聊天正文的默认字号调回 14 pt、默认行高调回 1.2×，两者也是全新安装第一次打开时看到的排版；侧边栏会话行与输入框跟随正文字号，因此同步降一档。旧安装此前主动选择的字号仍然保留，v1 到 v2 的迁移不再把 14 pt 抬成 15 pt。同时修复 Agent 响应结束后仍等待空闲计时器、Responses 终止事件后继续等待连接关闭的问题。Composer 停止后拒绝迟到输出，取消收尾保留用户停止意图，避免 watchdog 自动续跑；等待提示改为描述客户端实际收到的输出，长时间无输出时明确标记尚未确认结束。
 

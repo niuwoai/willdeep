@@ -469,6 +469,7 @@ final class AppState: ObservableObject {
     private var dispatchDecisionStateSubscription: AnyCancellable?
     private var dispatchJobReservationSubscription: AnyCancellable?
     private var dispatchWorkerReservationSubscription: AnyCancellable?
+    private var subagentRegistrySubscription: AnyCancellable?
     /// Process-wide registry of background `run_command` jobs. Scoped
     /// by `runtime.id` inside the registry so concurrent sessions can't
     /// steal each other's jobs or completion notices. See
@@ -898,6 +899,10 @@ final class AppState: ObservableObject {
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
+        // Background Workers outlive the foreground turn. Their admission,
+        // progress and completion must repaint the composer without a new prompt.
+        subagentRegistrySubscription = agentSubagentRegistry.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
         mediaTaskRegistrySubscription = agentMediaTaskRegistry.objectWillChange
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -1150,6 +1155,7 @@ final class AppState: ObservableObject {
         dispatchDecisionStateSubscription?.cancel()
         dispatchJobReservationSubscription?.cancel()
         dispatchWorkerReservationSubscription?.cancel()
+        subagentRegistrySubscription?.cancel()
         dispatchDecisionResumptionTask?.cancel()
         goalLaunchRecoveryTask?.cancel()
         mediaTaskRegistrySubscription?.cancel()
