@@ -77,15 +77,28 @@ const { text, model, providerID } = await window.willdeep.ai.complete({
   messages: [{ role: 'user', content: '明天下午三点前把发布验一遍' }],
   provider: 'ollama',           // 可选，缺省用默认 provider 的 flash 档
   model: 'gemma4:e4b-it-qat',   // 可选，必须是该 provider 列出来的模型
-  maxOutputTokens: 256          // 可选，宿主会夹到上限内
+  streamID: 'ask-1'             // 可选，给了才有流式增量，也才停得掉
 });
 ```
 
-非流式、单轮，要么给全文要么抛错。上限：最多 24 条消息、总计 32000 字符、输出 4096 token。
+要么给全文要么抛错。上限：最多 24 条消息、总计 32000 字符（system 也算在内），同一个页面最多 2 条请求并行。输出长度页面指定不了，由用户在设置里给 provider 配的上限决定。
+
+带 `streamID` 时增量走 `willdeep:ai-delta` 事件，`detail` 是 `{streamID, delta}`。没有「流结束」事件，以 `complete()` 那个 promise 落定为准。
+
+停止用 `await window.willdeep.ai.cancel(streamID)`（桥 2.3.0 起）：
+
+```js
+const streamID = 'ask-' + Date.now();
+const pending = window.willdeep.ai.complete({ system, messages, streamID });
+// 用户按了停止
+await window.willdeep.ai.cancel(streamID);   // pending 以「已取消」reject
+```
+
+取消是真取消，底层请求会中断。页面被关掉时宿主也会把它在跑的请求全停掉——切到别处让页面离屏不算关掉，那种情况请求继续跑，切回来照常拿结果。
 
 页面递上来的 `baseURL` 一律不认，密钥永远不出宿主。指定的 provider 必须在用户的 provider 库里，模型必须是该条目列出的（flashPrimary / proPrimary / flashAlternates）；`ollama` 只有用户开了本地加速才认。
 
-失败原因会原样回到页面：`permissionDenied`、`emptyRequest`、`tooManyMessages`、`tooLong`、`unknownProvider`、`unknownModel`、`unavailable`、`emptyResponse`。**请为不可用准备回落**——待办插件默认让模型解析"明天下午三点"，模型不可用时回落到内置规则，用户那条待办不会因为断网就丢。
+失败原因会原样回到页面：`permissionDenied`、`emptyRequest`、`tooManyMessages`、`tooLong`、`unknownProvider`、`unknownModel`、`unavailable`、`emptyResponse`、`tooManyConcurrentRequests`、`cancelled`。**请为不可用准备回落**——待办插件默认让模型解析"明天下午三点"，模型不可用时回落到内置规则，用户那条待办不会因为断网就丢。
 
 ## 读 provider 清单（需要 `providers.read` 或 `ai.chat`）
 

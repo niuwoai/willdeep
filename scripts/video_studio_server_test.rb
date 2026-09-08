@@ -248,6 +248,72 @@ Dir.mktmpdir do |directory|
       rejected = tool.call("video.generate", { "prompt" => "must not submit" })
       check(!rejected["ok"] && rejected.dig("error", "message").include?("not configured"), "Generation is blocked when no API key is configured.", results)
     end
+
+    # 短剧共创的工具此前一条都没走过 MCP 层：schema 写错、分发漏一行，
+    # 存储层的测试全绿也照样在页面上炸。
+    drama_environment = environment.merge(
+      "VIDEO_STUDIO_DRAMA_STORE" => File.join(directory, "dramas.json"),
+      "VIDEO_STUDIO_CHAT_STORE" => File.join(directory, "chats"),
+      "VIDEO_STUDIO_MEDIA_ROOT" => File.join(directory, "generated-images")
+    )
+    with_mcp(drama_environment) do |call, tool|
+      listed = call.call("tools/list").dig("result", "tools").map { |entry| entry["name"] }
+      %w[drama.save_draft drama.commit_draft drama.discard_draft chat.append chat.list chat.clear].each do |name|
+        check(listed.include?(name), "#{name} is advertised by tools/list.", results)
+      end
+
+      created = tool.call("drama.confirm_plan", { "plan" => { "title" => "端到端短剧", "episodeCount" => 1 } })
+      drama_id = created.dig("drama", "id")
+      check(created.dig("drama", "rev") == 0, "A new drama starts at rev 0.", results)
+
+      saved = tool.call("drama.save_character", { "dramaID" => drama_id, "name" => "林晚" })
+      character_id = saved.dig("drama", "characters", 0, "id")
+
+      drafted = tool.call("drama.save_draft", {
+        "dramaID" => drama_id, "scope" => "character", "characterID" => character_id,
+        "draft" => { "description" => "夜班护士" }
+      })
+      character = drafted.dig("drama", "characters", 0)
+      check(character.dig("draft", "description") == "夜班护士", "save_draft stores a working draft over MCP.", results)
+      check(character["name"] == "林晚" && character["rev"] == 0, "save_draft leaves committed content and rev alone.", results)
+
+      stale = tool.call("drama.save_draft", {
+        "dramaID" => drama_id, "scope" => "character", "characterID" => character_id,
+        "draft" => { "description" => "迟到的结果" }, "expectedDraftRev" => 0
+      })
+      check(stale.dig("error", "code") == "revision_conflict", "A stale draft revision is refused over MCP.", results)
+
+      committed = tool.call("drama.commit_draft", {
+        "dramaID" => drama_id, "scope" => "character", "characterID" => character_id, "expectedRev" => 0
+      })
+      adopted = committed.dig("drama", "characters", 0)
+      check(adopted["description"] == "夜班护士" && adopted["draft"].nil?, "commit_draft adopts and clears the draft.", results)
+      check(adopted["rev"] == 1, "commit_draft bumps rev.", results)
+
+      repeated = tool.call("drama.commit_draft", {
+        "dramaID" => drama_id, "scope" => "character", "characterID" => character_id, "expectedRev" => 0
+      })
+      check(repeated.dig("error", "code") == "revision_conflict", "Confirming twice reports a conflict instead of writing again.", results)
+
+      tool.call("chat.append", {
+        "dramaID" => drama_id, "stage" => "characters",
+        "message" => { "role" => "user", "content" => "再冷一点", "objectID" => character_id, "draftRev" => 1 }
+      })
+      messages = tool.call("chat.list", { "dramaID" => drama_id, "stage" => "characters" })["messages"]
+      check(messages.length == 1 && messages[0]["objectID"] == character_id, "Chat round-trips through MCP with its object scope.", results)
+      check(tool.call("chat.list", { "dramaID" => drama_id, "stage" => "planning" })["messages"].empty?, "Chat stages stay separate.", results)
+
+      bad_stage = tool.call("chat.append", { "dramaID" => drama_id, "stage" => "montage", "message" => { "content" => "x" } })
+      check(bad_stage.dig("error", "code") == "invalid_stage", "An unknown chat stage is refused over MCP.", results)
+
+      tool.call("chat.clear", { "dramaID" => drama_id, "stage" => "characters" })
+      check(tool.call("chat.list", { "dramaID" => drama_id, "stage" => "characters" })["messages"].empty?, "chat.clear empties one stage.", results)
+
+      chat_file = File.join(directory, "chats", "#{drama_id}.json")
+      check(File.exist?(chat_file), "Chat is stored in a per-drama file, not in dramas.json.", results)
+      check(!File.read(File.join(directory, "dramas.json"), encoding: "UTF-8").include?("再冷一点"), "Chat text never lands in the drama archive.", results)
+    end
+
   ensure
     gateway.shutdown
     gateway_thread.join

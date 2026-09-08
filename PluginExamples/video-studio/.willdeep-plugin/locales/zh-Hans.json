@@ -33,5 +33,11 @@
   "setting.videoProvider.description": "视频生成调用哪一家。选「custom」才使用下面的 API Base。tsingfly = hub.tsingfly.com，openai = api.openai.com。",
   "tsingfly": "青蜂 Hub（hub.tsingfly.com）",
   "openai": "OpenAI 官方（api.openai.com）",
-  "custom": "自定义（用下面的 API Base）"
+  "custom": "自定义（用下面的 API Base）",
+  "command.drama.saveDraft": "保存草稿",
+  "command.drama.commitDraft": "采用草稿",
+  "command.drama.discardDraft": "丢弃草稿",
+  "command.chat.append": "追加共创消息",
+  "command.chat.list": "读取共创消息",
+  "command.chat.clear": "清空共创消息"
 }

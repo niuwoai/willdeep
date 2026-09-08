@@ -9,8 +9,10 @@
 //  1. 密钥永远不出宿主。页面拿到的 provider 清单只有 id / 名称 / 模型名。
 //  2. provider 与模型必须落在用户自己配置的库里（本地 Ollama 也算一条），
 //     页面递上来的 baseURL 一律不认——否则插件就能把用户的对话发去任意端点。
-//  3. 载荷有硬上限（条数、字数、输出 token、并发），插件不能借这条路把
-//     用户的额度烧干。
+//  3. 载荷有硬上限（条数、字数、并发），插件不能借这条路把用户的额度烧干。
+//     输出长度不在这里管：它由 provider adapter 按用户自己的设置决定，
+//     页面无从指定——2026-09 前这里曾收一个 `maxOutputTokens` 却从不使用，
+//     现已连同文档一起删除。
 //
 
 import Foundation
@@ -25,7 +27,6 @@ nonisolated struct AgentPluginAIRequest: Equatable, Sendable {
     /// nil = 用默认 provider 的 flash 档（和压缩、审核解释走同一条辅助路线）
     var providerID: String?
     var model: String?
-    var maxOutputTokens: Int?
     /// 页面用 `$` 选中的技能。这里只存 identifier，正文由宿主读取并注入——
     /// 页面既拿不到 SKILL.md 全文，也拿不到它在磁盘上的位置。
     var skillIdentifiers: [String] = []
@@ -35,8 +36,9 @@ nonisolated struct AgentPluginAIRequest: Equatable, Sendable {
 
     static let maximumMessages = 24
     static let maximumCharacters = 32_000
-    static let maximumOutputTokens = 4_096
-    static let defaultOutputTokens = 512
+    /// 同一个插件页面同时在跑的对话数。共创页会连着点「生成」，没有这道闸
+    /// 就能并行发出任意多条请求，用户的额度是按条烧的。
+    static let maximumConcurrentRequests = 2
     /// 主聊天那条路对「一条消息挂几个技能」没有上限，用户从 popover 连点就能
     /// 挂 N 个，N × 24k 全进 prompt。这条通道是给插件页面的，一开始就封死。
     static let maximumSkills = 3
@@ -121,6 +123,8 @@ nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
     case unknownModel(String)
     case unavailable
     case emptyResponse
+    case tooManyConcurrentRequests
+    case cancelled
     case invalidImageRequest
     case invalidImageModel(String)
     case invalidImageSize(String)
@@ -139,6 +143,9 @@ nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
         case .unknownModel(let model): return "Model is not in this provider's list: \(model)"
         case .unavailable: return "No usable model is configured."
         case .emptyResponse: return "The model returned nothing."
+        case .tooManyConcurrentRequests:
+            return "At most \(AgentPluginAIRequest.maximumConcurrentRequests) AI requests can run at once on one page."
+        case .cancelled: return "The request was cancelled."
         case .invalidImageRequest: return "The image prompt is empty or too long."
         case .invalidImageModel(let model): return "Unsupported some.im image model: \(model)"
         case .invalidImageSize(let size): return "Unsupported image size: \(size)"
@@ -204,12 +211,6 @@ nonisolated enum AgentPluginAIRequestValidator {
         request.model = (raw["model"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilWhenEmpty
-        if let tokens = raw["maxOutputTokens"] as? NSNumber {
-            request.maxOutputTokens = min(
-                max(tokens.intValue, 16),
-                AgentPluginAIRequest.maximumOutputTokens
-            )
-        }
         var identifiers: [String] = []
         for entry in raw["skills"] as? [Any] ?? [] {
             guard let token = (entry as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -376,6 +377,9 @@ extension AppState {
                 onDelta?(delta)
             }
         }
+        // 取消是正常收场，不是「模型什么也没回」。先认取消再判空，
+        // 否则页面按停止键会收到一条误导性的 emptyResponse。
+        try Task.checkCancellation()
         let text = await buffer.value().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw AgentPluginAIError.emptyResponse }
         return AgentPluginAIResult(

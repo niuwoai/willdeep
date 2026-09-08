@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { callCommand, loadDramas, loadProviders, parseDramaPlan } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, callCommand, loadDramas, loadProviders, parseDramaPlan, parseFencedDraft, requestBudget, visibleStream } from './bridge';
 import { Dropdown } from './Dropdown';
 import { createTranslator, localeFromContext } from './i18n';
-import type { Drama, DramaPlan, ImageModel, ProviderEntry, Shot, SkillEntry, Stage } from './types';
+import type { ChatMessage, Character, CharacterDraft, Drama, DramaPlan, ImageModel, ProviderEntry, Shot, SkillEntry, Stage } from './types';
 import './styles.css';
 
 const imageModels: ImageModel[] = ['gpt-image-2', 'nano-banana-2'];
@@ -19,6 +19,32 @@ function localID(): string {
 // 宿主对一次请求最多接受 3 个技能，这里跟它保持一致，超了不如早点拦住。
 const MAX_ATTACHED_SKILLS = 3;
 const stageOrder: Stage[] = ['planning', 'characters', 'script', 'storyboard', 'frames', 'video'];
+const CHARACTER_FENCE = 'short_drama_character';
+
+/// 显示值：有草稿就看草稿，没有才看已定稿的内容。共创全程改的是草稿，
+/// 正式内容要等用户按下采用才动。
+function characterView(entry: Character | undefined): CharacterDraft & { name: string; description: string; visualPrompt: string } {
+  const draft = entry?.draft ?? null;
+  return {
+    name: draft?.name ?? entry?.name ?? '',
+    description: draft?.description ?? entry?.description ?? '',
+    visualPrompt: draft?.visualPrompt ?? entry?.visualPrompt ?? '',
+  };
+}
+
+/// 差异按字段自己算。模型常说「我只改了小传」，实际把名字也换了，
+/// 采用前给用户看的必须是真的差异。
+export function draftDifferences(entry: Character | undefined): Array<{ field: keyof CharacterDraft & string; before: string; after: string }> {
+  if (!entry?.draft) return [];
+  const rows: Array<{ field: keyof CharacterDraft & string; before: string; after: string }> = [];
+  for (const field of CHARACTER_DRAFT_FIELDS) {
+    const after = entry.draft[field];
+    if (typeof after !== 'string') continue;
+    const before = (entry[field] ?? '') as string;
+    if (before !== after) rows.push({ field, before, after });
+  }
+  return rows;
+}
 type DramaStatusFilter = 'all' | 'planning' | 'production' | 'completed';
 type PlannerMessage = { id: string; role: 'user' | 'assistant'; content: string; display: string };
 
@@ -71,6 +97,14 @@ export default function App() {
   const [plannerMessages, setPlannerMessages] = useState<PlannerMessage[]>([]);
   const [plan, setPlan] = useState<DramaPlan | null>(null);
   const [character, setCharacter] = useState({ id: '', name: '', description: '', visualPrompt: '' });
+  // 共创：当前选中的角色、这一阶段的聊天、以及基准过期时留在内存里的候选。
+  const [characterID, setCharacterID] = useState('');
+  const [characterChat, setCharacterChat] = useState<ChatMessage[]>([]);
+  const [characterInput, setCharacterInput] = useState('');
+  const [characterStreamID, setCharacterStreamID] = useState('');
+  const [structuredStreaming, setStructuredStreaming] = useState(false);
+  const [staleCandidate, setStaleCandidate] = useState<{ characterID: string; draft: CharacterDraft; note: string } | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
   const [episodeDraft, setEpisodeDraft] = useState({ title: '', summary: '', script: '' });
   const [shotDraft, setShotDraft] = useState<Shot>(emptyShot(1));
   const [busy, setBusy] = useState('');
@@ -191,6 +225,15 @@ export default function App() {
     setFailure('');
   }
 
+  async function selectCharacter(entry: Character) {
+    setCharacterID(entry.id);
+    const view = characterView(entry);
+    setCharacter({ id: entry.id, name: view.name, description: view.description, visualPrompt: view.visualPrompt });
+    setShowDiff(false);
+    setStaleCandidate(null);
+    await loadCharacterChat(drama?.id ?? '');
+  }
+
   function openPlanning() {
     setDramaID('');
     setPlan(null);
@@ -219,7 +262,7 @@ export default function App() {
     try {
       const response = await window.willdeep?.ai?.complete({
         system: t('plannerSystem'), messages: requestMessages.map(({ role, content }) => ({ role, content })),
-        provider: assistantProvider || undefined, model: assistantModel || undefined, maxOutputTokens: 3000,
+        provider: assistantProvider || undefined, model: assistantModel || undefined,
         skills: attachedSkills.map((item) => item.identifier), streamID,
       });
       const parsed = response && parseDramaPlan(response.text);
@@ -258,6 +301,162 @@ export default function App() {
       }
       setNotice(t('characterSaved'));
     } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
+  }
+
+  // ---- 角色共创 ----
+
+  const selectedCharacter = drama?.characters.find((item) => item.id === characterID);
+
+  async function loadCharacterChat(id: string) {
+    if (!id) { setCharacterChat([]); return; }
+    try {
+      const payload = await callCommand<{ ok: boolean; messages?: ChatMessage[] }>('chat.list', { dramaID: id, stage: 'characters' });
+      setCharacterChat(payload.messages ?? []);
+    } catch { setCharacterChat([]); }
+  }
+
+  async function appendCharacterChat(role: 'user' | 'assistant', content: string, objectID: string, draftRev: number) {
+    const message = { role, content, objectID, draftRev };
+    try {
+      const payload = await callCommand<{ ok: boolean; message?: ChatMessage }>('chat.append', { dramaID: drama?.id, stage: 'characters', message });
+      if (payload.message) setCharacterChat((current) => [...current, payload.message as ChatMessage]);
+    } catch (error) { setFailure(errorMessage(error)); }
+  }
+
+  function applyDrama(next: Drama | undefined) {
+    if (!next) return;
+    setDramas((items) => items.map((item) => (item.id === next.id ? next : item)));
+  }
+
+  /// 手改和 AI 结果走同一条路。expectedDraftRev 对不上就不写，把结果留在
+  /// 内存里让用户复核——静默覆盖丢的是用户刚敲进去的字。
+  async function saveCharacterDraft(draft: CharacterDraft, expectedDraftRev: number | undefined, options: { silent?: boolean } = {}) {
+    if (!drama || !characterID) return false;
+    try {
+      const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { code?: string; message?: string } }>('drama.saveDraft', {
+        dramaID: drama.id, scope: 'character', characterID, draft,
+        expectedDraftRev,
+      });
+      if (!payload.ok) {
+        if (payload.error?.code === 'revision_conflict') return false;
+        throw new Error(payload.error?.message || t('operationFailed'));
+      }
+      applyDrama(payload.drama);
+      if (!options.silent) setNotice(t('draftSaved'));
+      return true;
+    } catch (error) { setFailure(errorMessage(error)); return false; }
+  }
+
+  async function commitCharacterDraft() {
+    if (!drama || !selectedCharacter) return;
+    setBusy('commit');
+    try {
+      const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { code?: string; message?: string } }>('drama.commitDraft', {
+        dramaID: drama.id, scope: 'character', characterID, expectedRev: selectedCharacter.rev ?? 0,
+      });
+      // 重复确认拿到的就是这条冲突：第一次已经写进去了，不该报错也不该再写一遍。
+      if (!payload.ok && payload.error?.code === 'revision_conflict') { await reload(drama.id); setNotice(t('draftAlreadyAdopted')); return; }
+      if (!payload.ok) throw new Error(payload.error?.message || t('operationFailed'));
+      applyDrama(payload.drama);
+      setShowDiff(false);
+      setNotice(t('draftAdopted'));
+    } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
+  }
+
+  async function discardCharacterDraft() {
+    if (!drama || !selectedCharacter) return;
+    try {
+      const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { message?: string } }>('drama.discardDraft', {
+        dramaID: drama.id, scope: 'character', characterID, expectedDraftRev: selectedCharacter.draftRev ?? 0,
+      });
+      if (!payload.ok) throw new Error(payload.error?.message || t('operationFailed'));
+      applyDrama(payload.drama);
+      setShowDiff(false);
+      setNotice(t('draftDiscarded'));
+    } catch (error) { setFailure(errorMessage(error)); }
+  }
+
+  function stopCharacterRequest() {
+    const cancel = window.willdeep?.ai?.cancel;
+    if (cancel && characterStreamID) void cancel(characterStreamID);
+  }
+
+  async function askCharacter() {
+    if (!drama || !selectedCharacter) { setFailure(t('selectCharacterFirst')); return; }
+    const question = characterInput.trim();
+    if (!question) { setFailure(t('characterAskRequired')); return; }
+
+    const view = characterView(selectedCharacter);
+    const baseDraftRev = selectedCharacter.draftRev ?? 0;
+    const objectID = selectedCharacter.id;
+    const system = t('characterSystem');
+    // 装配顺序：本轮要求 → 当前对象 → 相关上游 → 近期对话。整部剧的资料
+    // 按需取，不是每次都全塞进去。
+    const context = [
+      `${t('contextDramaLabel')}: ${drama.title} / ${drama.genre} / ${drama.tone}`,
+      `${t('contextLoglineLabel')}: ${drama.logline}`,
+      `${t('contextCharacterLabel')}: ${JSON.stringify({ name: view.name, description: view.description, visualPrompt: view.visualPrompt })}`,
+    ].join('\n');
+    const history = characterChat
+      .filter((item) => !item.objectID || item.objectID === objectID)
+      .slice(-8)
+      .map(({ role, content }) => ({ role, content }));
+    const messages = [...history, { role: 'user' as const, content: `${context}\n\n${question}` }];
+
+    const budget = requestBudget(system, messages);
+    if (!budget.withinLimits) { setFailure(t('requestTooLarge', { characters: budget.characters })); return; }
+
+    setCharacterInput('');
+    setBusy('character-ask'); setFailure(''); setStreamingText(''); setStructuredStreaming(false);
+    void appendCharacterChat('user', question, objectID, baseDraftRev);
+
+    const streamID = localID();
+    setCharacterStreamID(streamID);
+    let buffer = '';
+    const onDelta = (event: Event) => {
+      const detail = (event as CustomEvent<{ streamID?: string; delta?: string }>).detail;
+      if (detail?.streamID !== streamID || typeof detail.delta !== 'string') return;
+      buffer += detail.delta;
+      const visible = visibleStream(buffer, CHARACTER_FENCE);
+      setStructuredStreaming(visible.structured);
+      setStreamingText(visible.text.slice(-1200));
+    };
+    window.addEventListener('willdeep:ai-delta', onDelta);
+    try {
+      const response = await window.willdeep?.ai?.complete({
+        system, messages,
+        provider: assistantProvider || undefined, model: assistantModel || undefined,
+        skills: attachedSkills.map((item) => item.identifier), streamID,
+      });
+      if (!response) throw new Error(t('operationFailed'));
+      const parsed = parseFencedDraft<CharacterDraft>(response.text, CHARACTER_FENCE, CHARACTER_DRAFT_FIELDS);
+      if (parsed.kind === 'chat') { await appendCharacterChat('assistant', response.text, objectID, baseDraftRev); return; }
+      if (parsed.kind === 'invalid') {
+        await appendCharacterChat('assistant', response.text, objectID, baseDraftRev);
+        setFailure(t('characterDraftInvalid'));
+        return;
+      }
+      await appendCharacterChat('assistant', parsed.note || t('characterDraftReady'), objectID, baseDraftRev);
+      const written = await saveCharacterDraft(parsed.value, baseDraftRev, { silent: true });
+      if (written) { setShowDiff(true); return; }
+      // 基准变了：多半是这段时间里用户自己动了手。结果留在内存里等复核，
+      // 关窗即丢，这一版刻意不做候选持久化。
+      setStaleCandidate({ characterID: objectID, draft: parsed.value, note: parsed.note });
+      setFailure(t('characterDraftStale'));
+    } catch (error) {
+      const message = errorMessage(error);
+      setFailure(message.includes('cancel') ? t('requestStopped') : message);
+    } finally {
+      window.removeEventListener('willdeep:ai-delta', onDelta);
+      setStreamingText(''); setStructuredStreaming(false); setCharacterStreamID(''); setBusy('');
+    }
+  }
+
+  /// 用户看过内存候选后决定采用。这时才按最新的 draftRev 写进去。
+  async function acceptStaleCandidate() {
+    if (!staleCandidate || staleCandidate.characterID !== characterID) return;
+    const written = await saveCharacterDraft(staleCandidate.draft, selectedCharacter?.draftRev ?? 0, { silent: true });
+    if (written) { setStaleCandidate(null); setShowDiff(true); }
   }
 
   // 抽卡的前提是每张不一样。some.im 网关对 gpt-image 系会把 n 强制改成 1，
@@ -429,8 +628,43 @@ export default function App() {
   }
 
   function Characters() {
-    const current = drama?.characters.find((item) => item.id === character.id);
-    return AppShell(<div className="page">{ProjectHeader()}<main className="content"><div className="page-heading"><div><p className="eyebrow">{t('stage_characters')}</p><h1>{t('characterTitle')}</h1><p>{t('characterHint')}</p></div><button className="ghost" onClick={() => setCharacter({ id: '', name: '', description: '', visualPrompt: '' })}>{t('newCharacter')}</button></div><div className="character-grid"><section className="character-list">{drama?.characters.map((item) => <button key={item.id} onClick={() => setCharacter({ id: item.id, name: item.name, description: item.description, visualPrompt: item.visualPrompt })}>{item.candidates?.find((candidate) => candidate.id === item.selectedCandidateID) ? <img className="avatar photo" src={item.candidates.find((candidate) => candidate.id === item.selectedCandidateID)?.mediaURL} alt={item.name} /> : <div className="avatar">{item.name.slice(0, 1)}</div>}<div><strong>{item.name}</strong><p>{item.description}</p><small>{t('identityVersion', { version: item.identityVersion })}</small></div></button>)}</section><section className="editor-card"><label>{t('characterName')}<input value={character.name} onChange={(event) => setCharacter({ ...character, name: event.target.value })} /></label><label>{t('characterDescription')}<textarea value={character.description} onChange={(event) => setCharacter({ ...character, description: event.target.value })} /></label><label>{t('identityPrompt')}<textarea className="tall" value={character.visualPrompt} onChange={(event) => setCharacter({ ...character, visualPrompt: event.target.value })} placeholder={t('identityPromptHint')} /></label><div className="identity-note"><strong>{t('identityLock')}</strong><span>{t('identityLockHint')}</span></div><div className="generation-controls"><Dropdown ariaLabel={t('imageModel')} value={imageModel} options={imageModels.map((model) => ({ value: model, label: model }))} onChange={(next) => setImageModel(next as ImageModel)} /><Dropdown ariaLabel={t('imageCount')} value={String(candidateCount)} options={[1, 2, 4, 6].map((count) => ({ value: String(count), label: t('countImages', { count }) }))} onChange={(next) => setCandidateCount(Number(next))} /></div>{current && <div className="identity-candidates">{current.candidates.map((candidate) => <button className={candidate.id === current.selectedCandidateID ? 'chosen' : ''} key={candidate.id} onClick={() => void chooseCharacterImage(candidate.id)}><img src={candidate.mediaURL} alt={current.name} /></button>)}</div>}<div className="actions"><button className="ghost" disabled={busy === 'characterImage'} onClick={() => void generateCharacterImages()}>{t('generateIdentity')}</button><button className="primary" disabled={busy === 'character'} onClick={() => void saveCharacter()}>{t('saveCharacter')}</button></div></section></div></main></div>);
+    const current = selectedCharacter;
+    const view = characterView(current);
+    const differences = draftDifferences(current);
+    const hasDraft = differences.length > 0;
+    const chatForObject = characterChat.filter((item) => !item.objectID || item.objectID === characterID);
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">
+      <div className="page-heading"><div><p className="eyebrow">{t('stage_characters')}</p><h1>{t('characterTitle')}</h1><p>{t('characterHint')}</p></div><button className="ghost" onClick={() => { setCharacterID(''); setCharacter({ id: '', name: '', description: '', visualPrompt: '' }); setShowDiff(false); setStaleCandidate(null); }}>{t('newCharacter')}</button></div>
+      <div className="character-grid">
+        <section className="character-list">{drama?.characters.map((item) => <button key={item.id} className={item.id === characterID ? 'chosen' : ''} aria-current={item.id === characterID} onClick={() => void selectCharacter(item)}>{item.candidates?.find((candidate) => candidate.id === item.selectedCandidateID) ? <img className="avatar photo" src={item.candidates.find((candidate) => candidate.id === item.selectedCandidateID)?.mediaURL} alt={item.name} /> : <div className="avatar">{item.name.slice(0, 1)}</div>}<div><strong>{item.name}</strong><p>{item.description}</p><small>{t('identityVersion', { version: item.identityVersion })}{draftDifferences(item).length > 0 ? ` \u00b7 ${t('draftBadge')}` : ''}</small></div></button>)}</section>
+        <section className="editor-card">
+          {hasDraft && <div className="identity-note draft-note"><strong>{t('draftPending')}</strong><span>{t('draftPendingHint')}</span><button className="ghost" onClick={() => setShowDiff((value) => !value)}>{t(showDiff ? 'hideDiff' : 'showDiff')}</button></div>}
+          {hasDraft && showDiff && <div className="diff-list">{differences.map((row) => <div className="diff-row" key={row.field}><strong>{t(row.field === 'name' ? 'characterName' : row.field === 'description' ? 'characterDescription' : 'identityPrompt')}</strong><p className="diff-before">{row.before || t('diffEmpty')}</p><p className="diff-after">{row.after}</p></div>)}</div>}
+          {staleCandidate && staleCandidate.characterID === characterID && <div className="identity-note draft-note"><strong>{t('staleCandidate')}</strong><span>{t('staleCandidateHint')}</span><button className="ghost" onClick={() => void acceptStaleCandidate()}>{t('staleCandidateAccept')}</button><button className="ghost" onClick={() => setStaleCandidate(null)}>{t('staleCandidateDiscard')}</button></div>}
+          <label>{t('characterName')}<input value={character.name} onChange={(event) => setCharacter({ ...character, name: event.target.value })} onBlur={() => { if (characterID && character.name !== view.name) void saveCharacterDraft({ name: character.name }, current?.draftRev ?? 0, { silent: true }); }} /></label>
+          <label>{t('characterDescription')}<textarea value={character.description} onChange={(event) => setCharacter({ ...character, description: event.target.value })} onBlur={() => { if (characterID && character.description !== view.description) void saveCharacterDraft({ description: character.description }, current?.draftRev ?? 0, { silent: true }); }} /></label>
+          <label>{t('identityPrompt')}<textarea className="tall" value={character.visualPrompt} onChange={(event) => setCharacter({ ...character, visualPrompt: event.target.value })} onBlur={() => { if (characterID && character.visualPrompt !== view.visualPrompt) void saveCharacterDraft({ visualPrompt: character.visualPrompt }, current?.draftRev ?? 0, { silent: true }); }} placeholder={t('identityPromptHint')} /></label>
+          <div className="identity-note"><strong>{t('identityLock')}</strong><span>{t('identityLockHint')}</span></div>
+          <div className="generation-controls"><Dropdown ariaLabel={t('imageModel')} value={imageModel} options={imageModels.map((model) => ({ value: model, label: model }))} onChange={(next) => setImageModel(next as ImageModel)} /><Dropdown ariaLabel={t('imageCount')} value={String(candidateCount)} options={[1, 2, 4, 6].map((count) => ({ value: String(count), label: t('countImages', { count }) }))} onChange={(next) => setCandidateCount(Number(next))} /></div>
+          {current && <div className="identity-candidates">{current.candidates.map((candidate) => <button className={candidate.id === current.selectedCandidateID ? 'chosen' : ''} key={candidate.id} onClick={() => void chooseCharacterImage(candidate.id)}><img src={candidate.mediaURL} alt={current.name} /></button>)}</div>}
+          <div className="actions">
+            <button className="ghost" disabled={busy === 'characterImage'} onClick={() => void generateCharacterImages()}>{t('generateIdentity')}</button>
+            {hasDraft && <button className="ghost" onClick={() => void discardCharacterDraft()}>{t('discardDraft')}</button>}
+            {hasDraft ? <button className="primary" disabled={busy === 'commit'} onClick={() => void commitCharacterDraft()}>{t('adoptDraft')}</button>
+                      : <button className="primary" disabled={busy === 'character'} onClick={() => void saveCharacter()}>{t('saveCharacter')}</button>}
+          </div>
+        </section>
+        <section className="chat-panel character-chat">
+          <div className="section-title"><p className="eyebrow">{t('characterCoCreation')}</p><h2>{current ? current.name || t('newCharacter') : t('selectCharacterFirst')}</h2><p>{t('characterCoCreationHint')}</p></div>
+          <div className="chat-history" aria-live="polite">{chatForObject.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'characterAssistant')}</strong><p>{message.content}</p></div>)}</div>
+          <div className="composer">
+            {busy === 'character-ask' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('characterBusy')}</span>}<button className="ghost" onClick={() => stopCharacterRequest()}>{t('stopRequest')}</button></div>}
+            <div className="composer-input"><textarea className="idea-box" value={characterInput} placeholder={t('characterAskPlaceholder')} disabled={!current} onChange={(event) => setCharacterInput(event.target.value)} /></div>
+            <button className="primary" disabled={!current || busy === 'character-ask'} onClick={() => void askCharacter()}>{t('askCharacter')}</button>
+          </div>
+        </section>
+      </div>
+    </main></div>);
   }
 
   function Script() {

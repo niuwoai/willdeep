@@ -344,6 +344,10 @@ private struct AgentPluginWebPage: View {
           window.willdeep.ai = {
             providers: function() { return willdeepBridgeRequest('aiProviders', {}); },
             complete: function(request) { return willdeepBridgeRequest('aiComplete', {request: request || {}}); },
+            // 停止一条正在跑的对话。按 complete() 里传的 streamID 找：没传
+            // streamID 的请求停不了，因为页面手上没有别的把手。停下来之后
+            // complete() 那个 promise 会以「已取消」reject。
+            cancel: function(streamID) { return willdeepBridgeRequest('aiCancel', {streamID: streamID || ''}); },
             generateImage: function(request) { return willdeepBridgeRequest('aiGenerateImage', {request: request || {}}); }
           };
           // 已启用技能的只读清单。页面拿到的是 identifier / 名称 / 描述，
@@ -669,6 +673,10 @@ private struct AgentPluginWebView: NSViewRepresentable {
 
     /// 真正的拆卸：页面被淘汰或不再归缓存所有时才走这里。
     static func tearDown(_ webView: WKWebView, coordinator: Coordinator?) {
+        // 页面没了还在跑的模型请求就是纯烧钱：结果没人收，增量也送不出去。
+        // 注意这里只在真正拆卸时走到——归缓存的离屏页面在 dismantleNSView
+        // 就返回了，它的请求要继续跑，用户切回来时还等着看结果。
+        coordinator?.cancelAllAIRequests()
         coordinator?.sendMCPRequest(
             method: "ui/resource-teardown",
             params: ["reason": "destination-closed"]
@@ -688,6 +696,11 @@ private struct AgentPluginWebView: NSViewRepresentable {
         var mcpAppInitialized = false
         var nextHostRequestID = 1
         var crashResetWorkItem: DispatchWorkItem?
+        /// 在跑的插件 AI 请求，requestID -> Task。没有它时关掉页面只是
+        /// 把结果丢了，请求本身会一路跑完并照常计费。
+        private var runningAIRequests: [String: Task<Void, Never>] = [:]
+        /// 页面自己生成的 streamID -> 宿主 requestID。取消只能按前者找。
+        private var aiRequestIDsByStreamID: [String: String] = [:]
         var navigationFailureRetries = 0
         var isShowingFailureDocument = false
         /// 页面订阅了哪些宿主事件。没订阅的事件不推——省掉一次
@@ -866,6 +879,8 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 listAIProviders(body)
             case "aiComplete":
                 runAICompletion(body)
+            case "aiCancel":
+                cancelAICompletion(body)
             case "aiGenerateImage":
                 runAIImageGeneration(body)
             case "skillsList":
@@ -1043,7 +1058,18 @@ private struct AgentPluginWebView: NSViewRepresentable {
             case .failure(let error):
                 sendBridgeResult(requestID: requestID, result: nil, error: error.localizedDescription)
             case .success(let request):
-                Task { @MainActor [weak self] in
+                // 并发闸。超了就当场拒，不排队：排队只会把一堆过时的生成
+                // 请求攞到后面才发出去，用户已经不想要那个结果了。
+                // 图片生成走的是另一条路，不受这道闸管。
+                guard runningAIRequests.count < AgentPluginAIRequest.maximumConcurrentRequests else {
+                    sendBridgeResult(
+                        requestID: requestID,
+                        result: nil,
+                        error: AgentPluginAIError.tooManyConcurrentRequests.localizedDescription
+                    )
+                    return
+                }
+                let task = Task { @MainActor [weak self] in
                     guard let self, let appState = self.appState else { return }
                     do {
                         // 有 streamID 就把增量回推给页面，让它一边等一边显示。
@@ -1058,6 +1084,7 @@ private struct AgentPluginWebView: NSViewRepresentable {
                                 }
                             }
                         )
+                        self.finishAIRequest(requestID: requestID)
                         self.sendBridgeResult(
                             requestID: requestID,
                             result: [
@@ -1068,14 +1095,47 @@ private struct AgentPluginWebView: NSViewRepresentable {
                             error: nil
                         )
                     } catch {
-                        self.sendBridgeResult(
-                            requestID: requestID,
-                            result: nil,
-                            error: error.localizedDescription
-                        )
+                        self.finishAIRequest(requestID: requestID)
+                        let message = error is CancellationError
+                            ? AgentPluginAIError.cancelled.localizedDescription
+                            : error.localizedDescription
+                        self.sendBridgeResult(requestID: requestID, result: nil, error: message)
                     }
                 }
+                runningAIRequests[requestID] = task
+                if let streamID = request.streamID {
+                    aiRequestIDsByStreamID[streamID] = requestID
+                }
             }
+        }
+
+        /// 页面按停止。只认 streamID：宿主自己那个 requestID 从来不出桥，
+        /// 页面手里没有它。取消后对应的 complete() 以「已取消」reject，
+        /// 迟到的增量也不会再发了。
+        private func cancelAICompletion(_ body: [String: Any]) {
+            let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let streamID = String((body["streamID"] as? String ?? "").prefix(160))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !streamID.isEmpty, let target = aiRequestIDsByStreamID[streamID] else {
+                sendBridgeResult(requestID: requestID, result: ["cancelled": false], error: nil)
+                return
+            }
+            runningAIRequests[target]?.cancel()
+            sendBridgeResult(requestID: requestID, result: ["cancelled": true], error: nil)
+        }
+
+        private func finishAIRequest(requestID: String) {
+            runningAIRequests[requestID] = nil
+            for (streamID, owner) in aiRequestIDsByStreamID where owner == requestID {
+                aiRequestIDsByStreamID[streamID] = nil
+            }
+        }
+
+        /// 页面真正拆卸时把在跑的全停掉。
+        func cancelAllAIRequests() {
+            for task in runningAIRequests.values { task.cancel() }
+            runningAIRequests.removeAll()
+            aiRequestIDsByStreamID.removeAll()
         }
 
         private func runAIImageGeneration(_ body: [String: Any]) {

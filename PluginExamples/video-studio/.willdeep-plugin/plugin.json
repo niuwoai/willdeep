@@ -1,7 +1,7 @@
 {
   "$schema": "../../../docs/plugin-schema/willdeep-plugin.schema.json",
   "schemaVersion": 1,
-  "minimumWillDeepVersion": "1.321.0-rc1",
+  "minimumWillDeepVersion": "1.343.0-rc1",
   "contributes": {
     "destinations": [{
       "id": "studio",
@@ -27,6 +27,12 @@
       {"id":"drama.saveCharacter","titleKey":"command.drama.saveCharacter","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.save_character"}},
       {"id":"drama.saveEpisode","titleKey":"command.drama.saveEpisode","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.save_episode"}},
       {"id":"drama.saveShot","titleKey":"command.drama.saveShot","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.save_shot"}},
+      {"id":"drama.saveDraft","titleKey":"command.drama.saveDraft","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.save_draft"}},
+      {"id":"drama.commitDraft","titleKey":"command.drama.commitDraft","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.commit_draft"}},
+      {"id":"drama.discardDraft","titleKey":"command.drama.discardDraft","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.discard_draft"}},
+      {"id":"chat.append","titleKey":"command.chat.append","handler":{"type":"mcpTool","server":"video-studio","tool":"chat.append"}},
+      {"id":"chat.list","titleKey":"command.chat.list","handler":{"type":"mcpTool","server":"video-studio","tool":"chat.list"}},
+      {"id":"chat.clear","titleKey":"command.chat.clear","handler":{"type":"mcpTool","server":"video-studio","tool":"chat.clear"}},
       {"id":"drama.recordImage","titleKey":"command.drama.recordImage","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.record_image"}},
       {"id":"drama.selectImage","titleKey":"command.drama.selectImage","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.select_image"}},
       {"id":"drama.recordCharacterImage","titleKey":"command.drama.recordCharacterImage","handler":{"type":"mcpTool","server":"video-studio","tool":"drama.record_character_image"}},

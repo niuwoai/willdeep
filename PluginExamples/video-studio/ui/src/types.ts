@@ -1,20 +1,29 @@
 export type FrameCandidate = { id: string; mediaURL: string; filePath: string; prompt: string; model: ImageModel; createdAt: string };
 export type DialogueLine = { id: string; speaker: string; text: string };
-export type Shot = {
+/** 共创的两个修订号加一份草稿。旧存档没有这几个字段，读出来按 0 / null 处理。 */
+export type Revised = { rev?: number; draftRev?: number };
+export type CharacterDraft = Partial<Pick<Character, 'name' | 'description' | 'visualPrompt'>>;
+export type EpisodeDraftFields = Partial<Pick<Episode, 'title' | 'summary' | 'script'>>;
+export type ShotDraftFields = Partial<Pick<Shot, 'title' | 'summary' | 'actionStart' | 'actionEnd' | 'cameraIntent' | 'startPrompt' | 'endPrompt' | 'dialogue' | 'duration'>>;
+export type DraftScope = 'drama' | 'character' | 'episode' | 'shot';
+export type ChatStage = 'planning' | 'characters' | 'script' | 'storyboard' | 'frames';
+export type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string; objectID: string; draftRev: number; createdAt: string };
+export type Shot = Revised & {
   id: string; order: number; title: string; summary: string; dialogue: DialogueLine[];
   actionStart: string; actionEnd: string; cameraIntent: string; duration: number;
   startPrompt: string; endPrompt: string; startCandidates: FrameCandidate[]; endCandidates: FrameCandidate[];
   selectedStartID?: string | null; selectedEndID?: string | null;
+  draft?: ShotDraftFields | null;
 };
-export type Episode = { id: string; order: number; title: string; summary: string; script: string; status: string; shots: Shot[] };
-export type Character = { id: string; name: string; description: string; visualPrompt: string; identityVersion: number; candidates: FrameCandidate[]; selectedCandidateID?: string | null };
+export type Episode = Revised & { id: string; order: number; title: string; summary: string; script: string; status: string; shots: Shot[]; draft?: EpisodeDraftFields | null };
+export type Character = Revised & { id: string; name: string; description: string; visualPrompt: string; identityVersion: number; candidates: FrameCandidate[]; selectedCandidateID?: string | null; draft?: CharacterDraft | null };
 export type DramaPlan = {
   title: string; genre: string; format: string; episodeCount: number; episodeDurationSeconds: number;
   logline: string; coreConflict: string; audience: string; tone: string; arc: string;
   episodes?: Array<{ title?: string; summary?: string; script?: string }>;
 };
-export type Drama = Omit<DramaPlan, 'episodes'> & {
-  id: string; status: string; coverURL?: string | null; characters: Character[]; episodes: Episode[];
+export type Drama = Omit<DramaPlan, 'episodes'> & Revised & {
+  id: string; status: string; draft?: Partial<Omit<DramaPlan, 'episodes'>> | null; coverURL?: string | null; characters: Character[]; episodes: Episode[];
   createdAt: string; updatedAt: string;
 };
 export type ImageModel = 'gpt-image-2' | 'nano-banana-2';
@@ -34,7 +43,9 @@ declare global {
       };
       executeCommand(command: string, arguments?: Record<string, unknown>): Promise<string | undefined>;
       ai?: {
-        complete(request: { system: string; messages: Array<{ role: 'user' | 'assistant'; content: string }>; provider?: string; model?: string; maxOutputTokens?: number; skills?: string[]; streamID?: string }): Promise<{ text: string; model: string; providerID: string }>;
+        complete(request: { system: string; messages: Array<{ role: 'user' | 'assistant'; content: string }>; provider?: string; model?: string; skills?: string[]; streamID?: string }): Promise<{ text: string; model: string; providerID: string }>;
+        /** 按 streamID 停一条在跑的对话。桥 2.3.0 起可用，旧宿主上是 undefined。 */
+        cancel?(streamID: string): Promise<{ cancelled: boolean }>;
         providers(): Promise<{ providers: ProviderEntry[] }>;
         generateImage(request: { prompt: string; provider: 'some-im'; model: ImageModel; size: '1024x1024' | '1536x1024' | '1024x1536' }): Promise<ImageResult>;
       };

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0] - 2026-09-09
+
+### Added
+- 角色阶段支持与 AI 持续共创：按角色选中、阶段聊天持久化、草稿预览与逐字段差异、手改与 AI 交替编辑、明确采用、停止生成。模型回复不带围栏时按闲聊处理，不动草稿。
+- 存档为短剧、角色、分集、分镜加入 `rev` / `draftRev` / `draft`，并新增 `drama.save_draft`、`drama.commit_draft`、`drama.discard_draft`。草稿写入按 `expectedDraftRev` 比对，定稿按 `expectedRev` 比对，重复确认返回冲突而非重复写入。
+- 共创聊天按剧存独立文件，新增 `chat.append`、`chat.list`、`chat.clear`。
+- 角色草稿只接受 `name`、`description`、`visualPrompt` 三个字段，模型返回的 id、候选图、身份版本一律丢弃。
+
+### Changed
+- 要求宿主 1.343.0-rc1 及以上：停止生成依赖桥 2.3.0 的 `ai.cancel`。
+- 不再向宿主传 `maxOutputTokens`，该参数已在宿主侧删除。
+
 ## [0.3.2] - 2026-09-07
 
 ### Changed

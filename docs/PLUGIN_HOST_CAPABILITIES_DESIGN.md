@@ -31,7 +31,7 @@ const result = await window.willdeep.ai.complete({
   messages: [{ role: 'user', content: '明天下午三点前把发布验一遍，很急' }],
   provider: 'ollama',            // 可选，缺省=默认 provider
   model: 'gemma4:e4b-it-qat',    // 可选，缺省=该 provider 的 flash 档
-  maxOutputTokens: 256           // 可选，宿主会夹到上限内
+  streamID: 'ask-1'              // 可选，给了才有流式增量，也才停得掉
 });
 // → { text, model, providerID }
 ```

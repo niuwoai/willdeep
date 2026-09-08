@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { callCommand, loadDramas, parseDramaPlan } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, callCommand, loadDramas, parseDramaPlan, parseFencedDraft, requestBudget, visibleStream } from './bridge';
+import type { CharacterDraft } from './types';
 
 describe('parseDramaPlan', () => {
   it('accepts the short_drama_plan fenced contract', () => {
@@ -51,5 +52,65 @@ describe('callCommand', () => {
     await expect(callCommand('drama.list')).rejects.toThrow('willdeep_bridge_unavailable');
     host(undefined);
     await expect(callCommand('drama.list')).rejects.toThrow('empty_command_response');
+  });
+});
+
+describe('parseFencedDraft', () => {
+  const parse = (raw: string) => parseFencedDraft<CharacterDraft>(raw, 'short_drama_character', CHARACTER_DRAFT_FIELDS);
+
+  it('treats a reply without a fence as ordinary chat', () => {
+    expect(parse('你想让她冷到什么程度？')).toEqual({ kind: 'chat' });
+  });
+
+  it('keeps the prose outside the fence as the assistant note', () => {
+    const result = parse('收紧了性格。\n```short_drama_character\n{"description":"话少"}\n```');
+    expect(result).toMatchObject({ kind: 'draft', value: { description: '话少' }, note: '收紧了性格。' });
+  });
+
+  it('drops fields outside the whitelist so the model cannot rewrite ids', () => {
+    const result = parse('```short_drama_character\n{"id":"hijack","identityVersion":9,"name":"林晚"}\n```');
+    expect(result).toEqual({ kind: 'draft', value: { name: '林晚' }, note: '' });
+  });
+
+  it('reports malformed JSON instead of silently discarding the turn', () => {
+    expect(parse('```short_drama_character\n{"description": 断了\n```')).toMatchObject({ kind: 'invalid' });
+  });
+
+  it('reports a fence that carries nothing usable', () => {
+    expect(parse('```short_drama_character\n{"unrelated":"x"}\n```')).toMatchObject({ kind: 'invalid' });
+  });
+
+  it('honours only the first fence when the model repeats itself', () => {
+    const raw = '```short_drama_character\n{"name":"第一版"}\n```\n```short_drama_character\n{"name":"第二版"}\n```';
+    expect(parse(raw)).toMatchObject({ kind: 'draft', value: { name: '第一版' } });
+  });
+});
+
+describe('requestBudget', () => {
+  it('counts the system prompt against the host character limit', () => {
+    const budget = requestBudget('x'.repeat(31_990), [{ content: 'y'.repeat(20) }]);
+    expect(budget.characters).toBe(32_010);
+    expect(budget.withinLimits).toBe(false);
+  });
+
+  it('counts the system prompt as one of the 24 messages', () => {
+    const messages = Array.from({ length: 24 }, () => ({ content: 'x' }));
+    expect(requestBudget('s', messages).withinLimits).toBe(false);
+    expect(requestBudget('s', messages.slice(1)).withinLimits).toBe(true);
+  });
+});
+
+describe('visibleStream', () => {
+  it('shows prose while nothing structured has started', () => {
+    expect(visibleStream('正在想…', 'short_drama_character')).toEqual({ text: '正在想…', structured: false });
+  });
+
+  it('hides the JSON body once the fence opens', () => {
+    const result = visibleStream('收紧了性格。\n```short_drama_character\n{"desc', 'short_drama_character');
+    expect(result).toEqual({ text: '收紧了性格。', structured: true });
+  });
+
+  it('hides a partial fence marker too, so no stray backticks flash', () => {
+    expect(visibleStream('好的\n```', 'short_drama_character')).toEqual({ text: '好的', structured: true });
   });
 });

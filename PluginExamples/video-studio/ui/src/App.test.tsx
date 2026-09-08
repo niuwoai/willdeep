@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import App, { skillQueryAt } from './App';
+import App, { draftDifferences, skillQueryAt } from './App';
 
 const executeCommand = vi.fn();
 const complete = vi.fn();
@@ -173,6 +173,164 @@ describe('Short Drama Studio', () => {
     const input = await screen.findByLabelText('聊天模型');
     fireEvent.change(input, { target: { value: 'someim-32b' } });
     expect((input as HTMLInputElement).value).toBe('someim-32b');
+  });
+
+
+  // ---- 角色共创 ----
+
+  const characterFixture = (overrides: Record<string, unknown> = {}) => ({
+    id: 'c1', name: '林晚', description: '夜班护士', visualPrompt: '冷色调',
+    identityVersion: 1, candidates: [], selectedCandidateID: null,
+    rev: 0, draftRev: 0, draft: null, ...overrides,
+  });
+
+  const dramaFixture = (character: Record<string, unknown>) => ({
+    id: 'd1', title: '错时来信', genre: '悬疑', format: '竖屏', episodeCount: 1, episodeDurationSeconds: 90,
+    logline: '未来短信改变今天', coreConflict: '', audience: '', tone: '冷峻', arc: '', status: 'planning',
+    rev: 0, draftRev: 0, draft: null, characters: [character], episodes: [],
+    createdAt: '2026-09-09T00:00:00Z', updatedAt: '2026-09-09T00:00:00Z',
+  });
+
+  let chatSeq = 0;
+  const appendedMessage = (role: 'user' | 'assistant', content: string) =>
+    JSON.stringify({ ok: true, message: { id: `m${++chatSeq}`, role, content, objectID: 'c1', draftRev: 0, createdAt: '' } });
+
+  async function openCharacters(character: Record<string, unknown>) {
+    chatSeq = 0;
+    dramas = [dramaFixture(character)];
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '继续创作' }))[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: /林晚/ }))[0]!);
+  }
+
+  it('sends a character request and stores the result as a draft, not committed content', async () => {
+    complete.mockResolvedValue({
+      text: '按你说的收紧了性格。\n```short_drama_character\n{"description":"话少，句子短"}\n```',
+      model: 'fast', providerID: 'chat-a',
+    });
+    const updated = dramaFixture(characterFixture({ draftRev: 1, draft: { description: '话少，句子短' } }));
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('user', 'x');
+      if (command === 'drama.saveDraft') return JSON.stringify({ ok: true, drama: updated });
+      return JSON.stringify({ ok: true });
+    });
+
+    await openCharacters(characterFixture());
+    fireEvent.change(screen.getByPlaceholderText(/让她更冷一点/), { target: { value: '更冷一点' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      const call = executeCommand.mock.calls.find(([command]) => command === 'drama.saveDraft');
+      expect(call?.[1]).toMatchObject({ scope: 'character', characterID: 'c1', draft: { description: '话少，句子短' }, expectedDraftRev: 0 });
+    });
+    // 正式内容必须原封不动，只有草稿动了。
+    expect(executeCommand.mock.calls.some(([command]) => command === 'drama.saveCharacter')).toBe(false);
+    expect(await screen.findByText('有未采用的草稿')).toBeTruthy();
+  });
+
+  it('holds a result for review when the draft moved while generating', async () => {
+    complete.mockResolvedValue({
+      text: '```short_drama_character\n{"description":"迟到的结果"}\n```',
+      model: 'fast', providerID: 'chat-a',
+    });
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('assistant', 'x');
+      if (command === 'drama.saveDraft') return JSON.stringify({ ok: false, error: { code: 'revision_conflict' } });
+      return JSON.stringify({ ok: true });
+    });
+
+    await openCharacters(characterFixture());
+    fireEvent.change(screen.getByPlaceholderText(/让她更冷一点/), { target: { value: '更冷一点' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    expect(await screen.findByText('有一份待复核的结果')).toBeTruthy();
+    // 冲突时绝不能把结果直接写下去。
+    expect(screen.queryByText('有未采用的草稿')).toBeNull();
+  });
+
+  it('treats a reply without a fenced block as chat and leaves the draft alone', async () => {
+    complete.mockResolvedValue({ text: '你想让她冷到什么程度？说话还留不留温度？', model: 'fast', providerID: 'chat-a' });
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('assistant', '你想让她冷到什么程度？');
+      return JSON.stringify({ ok: true });
+    });
+
+    await openCharacters(characterFixture());
+    fireEvent.change(screen.getByPlaceholderText(/让她更冷一点/), { target: { value: '更冷一点' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => expect(executeCommand.mock.calls.some(([command]) => command === 'chat.append')).toBe(true));
+    expect(executeCommand.mock.calls.some(([command]) => command === 'drama.saveDraft')).toBe(false);
+  });
+
+  it('adopting a draft commits with the revision it was reviewed at', async () => {
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'drama.commitDraft') return JSON.stringify({ ok: true, drama: dramaFixture(characterFixture({ rev: 3, draft: null, description: '话少，句子短' })) });
+      return JSON.stringify({ ok: true });
+    });
+
+    await openCharacters(characterFixture({ rev: 2, draftRev: 4, draft: { description: '话少，句子短' } }));
+    fireEvent.click(await screen.findByRole('button', { name: '采用草稿' }));
+
+    await waitFor(() => {
+      const call = executeCommand.mock.calls.find(([command]) => command === 'drama.commitDraft');
+      expect(call?.[1]).toMatchObject({ scope: 'character', characterID: 'c1', expectedRev: 2 });
+    });
+  });
+
+  it('reads a repeated confirmation as already adopted instead of an error', async () => {
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'drama.commitDraft') return JSON.stringify({ ok: false, error: { code: 'revision_conflict', actual: 3 } });
+      return JSON.stringify({ ok: true });
+    });
+
+    await openCharacters(characterFixture({ rev: 2, draftRev: 4, draft: { description: '话少，句子短' } }));
+    fireEvent.click(await screen.findByRole('button', { name: '采用草稿' }));
+
+    expect(await screen.findByText('这一版刚才已经采用过了。')).toBeTruthy();
+  });
+
+  it('stops a running request through the host cancel bridge', async () => {
+    const cancel = vi.fn().mockResolvedValue({ cancelled: true });
+    window.willdeep!.ai!.cancel = cancel;
+    let settle: ((value: unknown) => void) | undefined;
+    complete.mockImplementation(() => new Promise((resolve) => { settle = resolve; }));
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('user', 'x');
+      return JSON.stringify({ ok: true });
+    });
+
+    await openCharacters(characterFixture());
+    fireEvent.change(screen.getByPlaceholderText(/让她更冷一点/), { target: { value: '更冷一点' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    fireEvent.click(await screen.findByRole('button', { name: '停止' }));
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(typeof cancel.mock.calls[0]?.[0]).toBe('string');
+    settle?.({ text: '', model: 'fast', providerID: 'chat-a' });
+  });
+
+  it('computes differences from the fields themselves', () => {
+    const entry = {
+      id: 'c1', name: '林晚', description: '夜班护士', visualPrompt: '冷色调',
+      identityVersion: 1, candidates: [], selectedCandidateID: null,
+      rev: 0, draftRev: 1, draft: { description: '话少，句子短', visualPrompt: '冷色调' },
+    };
+    const rows = draftDifferences(entry as never);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ field: 'description', before: '夜班护士', after: '话少，句子短' });
   });
 
   it('filters dramas by keyword and status', async () => {

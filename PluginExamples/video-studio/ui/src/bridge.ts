@@ -1,4 +1,4 @@
-import type { Drama, DramaPlan, ProviderEntry } from './types';
+import type { CharacterDraft, Drama, DramaPlan, ProviderEntry } from './types';
 
 /// 宿主的 executeCommand 对 mcpTool 类命令回的是**完整的 MCP result**，
 /// 形如 {"content":[{"type":"text","text":"{\"ok\":true,…}"}]}，工具真正的
@@ -54,4 +54,66 @@ export function parseDramaPlan(raw: string): DramaPlan | null {
       episodes: Array.isArray(value.episodes) ? value.episodes : [],
     };
   } catch { return null; }
+}
+
+/// 宿主对一次请求的硬上限：24 条消息、合计 32000 字符，system 也算在内。
+/// 撞上不是截断而是整条请求被拒，所以发之前先自己数一遍。
+export const HOST_MESSAGE_LIMIT = 24;
+export const HOST_CHARACTER_LIMIT = 32_000;
+
+export function requestBudget(system: string, messages: Array<{ content: string }>): { characters: number; messages: number; withinLimits: boolean } {
+  const characters = messages.reduce((total, item) => total + item.content.length, system.length);
+  const count = messages.length + 1;
+  return { characters, messages: count, withinLimits: characters <= HOST_CHARACTER_LIMIT && count <= HOST_MESSAGE_LIMIT };
+}
+
+/// 每个阶段一个围栏名。没有围栏就是模型在正常说话或反问，不该动草稿；
+/// 有围栏才当成结构化产出。
+export type FencedResult<T> = { kind: 'chat' } | { kind: 'draft'; value: T; note: string } | { kind: 'invalid'; note: string };
+
+/// 只认第一个围栏。模型偶尔会把同一份内容重发一遍，认最后一个会让
+/// 「改了又改回去」这种输出以后一个为准，用户看到的却是前一个。
+export function extractFenced(raw: string, fence: string): { body: string; note: string } | null {
+  const pattern = new RegExp('```' + fence + '\\s*([\\s\\S]*?)```', 'i');
+  const match = raw.match(pattern);
+  if (!match) return null;
+  return { body: match[1] ?? '', note: (raw.slice(0, match.index ?? 0) + raw.slice((match.index ?? 0) + match[0].length)).trim() };
+}
+
+function firstJSONObject(body: string): unknown {
+  const start = body.indexOf('{');
+  const end = body.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  return JSON.parse(body.slice(start, end + 1));
+}
+
+/// 围栏内的 JSON 解析加白名单裁剪。白名单在这里而不是靠提示词：模型返回
+/// 整个对象，表外的键一律丢掉，它就改不动 id、候选图和身份版本。
+export function parseFencedDraft<T extends object>(raw: string, fence: string, allowed: Array<keyof T & string>): FencedResult<T> {
+  const found = extractFenced(raw, fence);
+  if (!found) return { kind: 'chat' };
+  try {
+    const value = firstJSONObject(found.body);
+    if (!value || typeof value !== 'object') return { kind: 'invalid', note: found.note };
+    const picked: Record<string, unknown> = {};
+    for (const key of allowed) {
+      const entry = (value as Record<string, unknown>)[key];
+      if (typeof entry === 'string' && entry.trim()) picked[key] = entry.trim();
+    }
+    if (Object.keys(picked).length === 0) return { kind: 'invalid', note: found.note };
+    return { kind: 'draft', value: picked as T, note: found.note };
+  } catch {
+    return { kind: 'invalid', note: found.note };
+  }
+}
+
+export const CHARACTER_DRAFT_FIELDS: Array<keyof CharacterDraft & string> = ['name', 'description', 'visualPrompt'];
+
+/// 流式增量里围栏一开始，后面就全是 JSON 了。直接刷给用户看是一屏大括号，
+/// 所以从围栏开头起换成占位，只把围栏之前的说明文字显示出来。
+export function visibleStream(buffer: string, fence: string): { text: string; structured: boolean } {
+  const marker = buffer.indexOf('```' + fence);
+  const loose = marker < 0 ? buffer.indexOf('```') : marker;
+  if (loose < 0) return { text: buffer, structured: false };
+  return { text: buffer.slice(0, loose).trim(), structured: true };
 }

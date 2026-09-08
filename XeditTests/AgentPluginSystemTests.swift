@@ -779,8 +779,9 @@ struct AgentPluginSystemTests {
                 packageURL: packageURL,
                 source: .installed,
                 // 收藏夹与会话体检要求的宿主版本比其它样例新；翻旧账
-                // (history-recall) 又更新一档（它依赖 session.open host action）
-                currentWillDeepVersion: "1.321.0-rc1"
+                // (history-recall) 又更新一档（它依赖 session.open host action）；
+                // 短剧工坊再更新一档（它的停止按钮依赖 ai.cancel）。
+                currentWillDeepVersion: "1.343.0-rc1"
             )
             #expect(package.destinations.count == 1)
         }
@@ -971,8 +972,9 @@ struct AgentPluginSystemTests {
         #expect(request.messages.first?.role == .system)
         #expect(request.messages.last?.role == .user, "认不出的角色按 user 处理，绝不当成 system")
         #expect(request.providerID == "ollama", "provider 两边的空白要去掉")
-        // 输出上限由宿主收口，插件报多少都夹到上限内
-        #expect(request.maxOutputTokens == AgentPluginAIRequest.maximumOutputTokens)
+        // maxOutputTokens 这个字段 2026-09 删掉了：它从解析出来那天起就没被
+        // 传给任何模型调用，页面写了也只是自我安慰。多余的键要被静静忽略，
+        // 而不是让整条请求失败——旧插件还在传它。
     }
 
     @Test
@@ -1144,7 +1146,8 @@ struct AgentPluginSystemTests {
         let package = try AgentPluginPackageLoader.load(
             packageURL: packageURL,
             source: .installed,
-            currentWillDeepVersion: "1.321.0-rc1"
+            // 这个插件要求的宿主版本随 ai.cancel 一起抬到了 1.343.0-rc1。
+            currentWillDeepVersion: "1.343.0-rc1"
         )
         let manifest = try #require(package.manifest)
 

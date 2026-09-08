@@ -15,6 +15,7 @@ require_relative "lib/video_store"
 require_relative "lib/video_service"
 require_relative "lib/drama_store"
 require_relative "lib/drama_service"
+require_relative "lib/chat_store"
 
 # 宿主按 pluginID 给每个插件分一个目录，本插件的 pluginID 是
 # willdeep-video-studio，生成的图片也由宿主写进这个目录。任务存档早先落在
@@ -59,6 +60,12 @@ def drama_store_path
   ENV["VIDEO_STUDIO_DRAMA_STORE"] || File.join(plugin_data_directory, "dramas.json")
 end
 
+# 共创聊天一部剧一个文件。放在 dramas.json 旁边的子目录里，卸载清理仍然
+# 只需要删这一个插件目录。
+def chat_store_directory
+  ENV["VIDEO_STUDIO_CHAT_STORE"] || File.join(plugin_data_directory, "chats")
+end
+
 migrate_legacy_video_store
 STORE = VideoStore.new(video_store_path)
 # 选定 provider 就用它自己的地址，选「自定义」才回落到手填的 API Base。
@@ -94,6 +101,25 @@ DRAMA_SERVICE = DramaService.new(
   store: DramaStore.new(drama_store_path),
   media_root: ENV["VIDEO_STUDIO_MEDIA_ROOT"] || generated_media_directory
 )
+CHAT_STORE = ChatStore.new(chat_store_directory)
+
+def chat_append(arguments)
+  entry = CHAT_STORE.append(arguments["dramaID"], arguments["stage"], arguments["message"])
+  { "ok" => true, "message" => entry }
+rescue ArgumentError
+  { "ok" => false, "error" => { "code" => "invalid_stage", "message" => "Unknown co-creation stage." } }
+end
+
+def chat_list(arguments)
+  { "ok" => true, "messages" => CHAT_STORE.list(arguments["dramaID"], arguments["stage"]) }
+end
+
+def chat_clear(arguments)
+  CHAT_STORE.clear(arguments["dramaID"], arguments["stage"])
+  { "ok" => true }
+rescue ArgumentError
+  { "ok" => false, "error" => { "code" => "invalid_stage", "message" => "Unknown co-creation stage." } }
+end
 
 TOOLS = [
   {
@@ -125,6 +151,36 @@ TOOLS = [
     name: "drama.save_shot",
     description: "Create or update a storyboard shot, including editable dialogue and separate start/end frame prompts.",
     inputSchema: { type: "object", properties: { dramaID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, order: { type: "integer" }, title: { type: "string" }, summary: { type: "string" }, dialogue: { type: "array", items: { type: "object" } }, actionStart: { type: "string" }, actionEnd: { type: "string" }, cameraIntent: { type: "string" }, duration: { type: "integer" }, startPrompt: { type: "string" }, endPrompt: { type: "string" } }, required: ["dramaID", "episodeID"] }
+  },
+  {
+    name: "drama.save_draft",
+    description: "Write the working draft of one object without touching its committed content. Pass expectedDraftRev to detect edits made since the draft was loaded; fields outside the per-scope whitelist are dropped.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, scope: { type: "string", enum: DramaService::DRAFT_SCOPES }, characterID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, draft: { type: "object" }, expectedDraftRev: { type: "integer" } }, required: %w[dramaID scope draft] }
+  },
+  {
+    name: "drama.commit_draft",
+    description: "Adopt the working draft into committed content, clear the draft, and bump rev. A second call with the same expectedRev returns revision_conflict, which callers should read as 'already committed'.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, scope: { type: "string", enum: DramaService::DRAFT_SCOPES }, characterID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, expectedRev: { type: "integer" } }, required: %w[dramaID scope] }
+  },
+  {
+    name: "drama.discard_draft",
+    description: "Throw away the working draft of one object and leave committed content untouched.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, scope: { type: "string", enum: DramaService::DRAFT_SCOPES }, characterID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, expectedDraftRev: { type: "integer" } }, required: %w[dramaID scope] }
+  },
+  {
+    name: "chat.append",
+    description: "Append one co-creation chat message for a drama stage. Messages carry the object they were about and the draft revision they were sent against.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, stage: { type: "string", enum: ChatStore::STAGES }, message: { type: "object" } }, required: %w[dramaID stage message] }
+  },
+  {
+    name: "chat.list",
+    description: "Read the persisted co-creation chat for a drama stage.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, stage: { type: "string", enum: ChatStore::STAGES } }, required: %w[dramaID stage] }
+  },
+  {
+    name: "chat.clear",
+    description: "Clear the persisted co-creation chat for a drama stage.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, stage: { type: "string", enum: ChatStore::STAGES } }, required: %w[dramaID stage] }
   },
   {
     name: "drama.record_image",
@@ -260,6 +316,12 @@ def call_tool(name, arguments)
   when "drama.save_character" then DRAMA_SERVICE.save_character(arguments)
   when "drama.save_episode" then DRAMA_SERVICE.save_episode(arguments)
   when "drama.save_shot" then DRAMA_SERVICE.save_shot(arguments)
+  when "drama.save_draft" then DRAMA_SERVICE.save_draft(arguments)
+  when "drama.commit_draft" then DRAMA_SERVICE.commit_draft(arguments)
+  when "drama.discard_draft" then DRAMA_SERVICE.discard_draft(arguments)
+  when "chat.append" then chat_append(arguments)
+  when "chat.list" then chat_list(arguments)
+  when "chat.clear" then chat_clear(arguments)
   when "drama.record_image" then DRAMA_SERVICE.record_image(arguments)
   when "drama.select_image" then DRAMA_SERVICE.select_image(arguments)
   when "drama.record_character_image" then DRAMA_SERVICE.record_character_image(arguments)
@@ -297,7 +359,7 @@ ARGF.each_line do |line|
              {
                protocolVersion: "2025-06-18",
                capabilities: { tools: {} },
-               serverInfo: { name: "video-studio", version: "0.3.2" }
+               serverInfo: { name: "video-studio", version: "0.4.0" }
              }
            when "tools/list"
              { tools: TOOLS }
@@ -314,7 +376,7 @@ rescue JSON::ParserError
   warn "video-studio: invalid JSON-RPC request"
 rescue UnknownMethod => error
   respond_error(defined?(request) ? request : nil, -32_601, "Method not found: #{error.message}")
-rescue VideoStore::Unavailable, DramaStore::Unavailable => error
+rescue VideoStore::Unavailable, DramaStore::Unavailable, ChatStore::Unavailable => error
   # 存档读不出来时刻意不静默重建：写入是全量覆写，一次误判就会把用户的
   # 短剧和任务记录抹平。把原因如实告诉调用方，让人去看那个文件。
   warn "video-studio: #{error.class}: #{error.message}"

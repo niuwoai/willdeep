@@ -256,3 +256,21 @@ Schema 校验负责格式，引用存在性、对象归属、数值范围由业�
 1. 唯一维护源选内嵌副本还是独立仓库？独立仓库有发布流水线但落后两个 minor，内嵌副本有更新功能但无 CI。
 2. `maxOutputTokens` 接通还是删除？
 3. `MAX_DRAMAS = 100` 的静默截断是否在这一轮改成显式报错？
+
+## 13. 首版实现记录（2026-09-09，1.343.0-rc1）
+
+X、R、U 三阶段已落地，验收清单第 1 到 6 条由自动化测试覆盖，第 7 到 9 条需真机手测。
+
+已完成：
+
+- **X1 / X2 / X4**：新增 `window.willdeep.ai.cancel(streamID)`，页面拆卸时取消该页名下全部在跑请求（离屏缓存不取消）；每页面并发上限 2；桥版本 2.3.0，能力清单加 `ai.cancel`，插件 `minimumWillDeepVersion` 抬到 `1.343.0-rc1`。
+- **X3**：选择删除 `maxOutputTokens` 而不是接通。接通反而会把输出限死在插件传的那个数（video-studio 传的是 3000），比 provider 的全局默认更小；而长剧本恰恰需要大预算。同时订正了 `page-api.md` 与 `PLUGIN_HOST_CAPABILITIES_DESIGN.md`。
+- **R1 到 R6**：四类对象加 `rev` / `draftRev` / `draft`；`save_*` 接 `expectedRev`；新增 `drama.save_draft` / `commit_draft` / `discard_draft`；聊天按剧独立文件加 `chat.append` / `list` / `clear`；旧数据靠读时归一，不写盘迁移；drama 与 chat 工具补端到端测试。
+- **U1 到 U8**：角色选中态、阶段聊天持久化、围栏协议解析与流式占位、差异预览与采用、停止按钮、输入预算器、手改走草稿、双语文案。
+
+测试：前端 42 项、存储层 33 项、MCP 端到端 59 项全绿。
+
+实现时定下的两件事，原文档留作待确认：
+
+- **唯一维护源取 Xedit 内嵌副本。** 独立仓库停在 0.2.1、落后两个 minor，本轮未改动它。它要么按内嵌副本重新对齐，要么退役，需另行决定。
+- **`MAX_DRAMAS = 100` 的静默截断本轮未改**，行为与之前一致。

@@ -282,3 +282,16 @@ label { display: grid; gap: 7px; color: var(--text-muted); font-size: 11px; font
   flex: none; width: 32px; border: 1px solid var(--border-strong); background: var(--surface);
   color: var(--text-muted); border-radius: 7px; padding: 8px 0; cursor: pointer;
 }
+
+/* 共创草稿：正式内容与草稿必须一眼分得开，否则用户不知道自己在改哪一份。 */
+.draft-note { border-color: var(--accent-line, #6b6b6b); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.draft-note strong { flex: 0 0 auto; }
+.draft-note span { flex: 1 1 200px; }
+.diff-list { display: grid; gap: 10px; margin: 4px 0 12px; }
+.diff-row { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: rgba(127, 127, 127, 0.08); }
+.diff-row strong { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.7; }
+.diff-before { margin: 0; opacity: 0.55; text-decoration: line-through; white-space: pre-wrap; }
+.diff-after { margin: 0; white-space: pre-wrap; }
+.character-chat { min-height: 0; }
+.character-grid .chat-panel { display: flex; flex-direction: column; gap: 12px; }
+.character-list button.chosen { outline: 2px solid rgba(127, 127, 127, 0.55); outline-offset: -2px; }

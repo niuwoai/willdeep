@@ -7,6 +7,7 @@ require "json"
 require "tmpdir"
 require_relative "../PluginExamples/video-studio/server/lib/drama_store"
 require_relative "../PluginExamples/video-studio/server/lib/drama_service"
+require_relative "../PluginExamples/video-studio/server/lib/chat_store"
 
 results = []
 check = lambda do |name, &block|
@@ -141,6 +142,214 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
       "kind" => "start", "candidateID" => "00000000-0000-0000-0000-000000000000"
     )
     raise "wrong code #{response.dig('error', 'code')}" unless response.dig("error", "code") == "candidate_not_found"
+  end
+
+  # ---- 共创草稿：手改与 AI 结果都写这里，正式内容一步不动 ----
+
+  # 这部剧前面的用例已经塞过角色和分镜，固定索引会拿错对象，一律按 ID 定位。
+  character_id = nil
+  fetch_character = lambda do |response|
+    response.dig("drama", "characters").find { |entry| entry["id"] == character_id }
+  end
+  check.call("a draft never touches committed content") do
+    known = service.get("id" => drama["id"]).dig("drama", "characters").map { |entry| entry["id"] }
+    saved = service.save_character("dramaID" => drama["id"], "name" => "林晚")
+    character_id = (saved.dig("drama", "characters").map { |entry| entry["id"] } - known).first
+    response = service.save_draft(
+      "dramaID" => drama["id"], "scope" => "character", "characterID" => character_id,
+      "draft" => { "name" => "林晚·改", "description" => "夜班护士" }
+    )
+    character = fetch_character.call(response)
+    raise "committed name changed" unless character["name"] == "林晚"
+    raise "draft missing" unless character.dig("draft", "description") == "夜班护士"
+    raise "draftRev did not advance" unless character["draftRev"] == 1
+    raise "rev moved on a draft write" unless character["rev"] == 0
+  end
+
+  check.call("a second draft write layers onto the first instead of replacing it") do
+    response = service.save_draft(
+      "dramaID" => drama["id"], "scope" => "character", "characterID" => character_id,
+      "draft" => { "visualPrompt" => "冷色调" }, "expectedDraftRev" => 1
+    )
+    draft = fetch_character.call(response)["draft"]
+    raise "earlier field lost" unless draft["description"] == "夜班护士"
+    raise "new field missing" unless draft["visualPrompt"] == "冷色调"
+  end
+
+  check.call("fields outside the whitelist are dropped from a draft") do
+    response = service.save_draft(
+      "dramaID" => drama["id"], "scope" => "character", "characterID" => character_id,
+      "draft" => { "id" => "被顶替的 id", "candidates" => [{ "id" => "x" }], "identityVersion" => 99 }
+    )
+    character = fetch_character.call(response)
+    raise "id leaked into the draft" if character["draft"].key?("id")
+    raise "candidates leaked into the draft" if character["draft"].key?("candidates")
+    raise "committed id was rewritten" unless character["id"] == character_id
+  end
+
+  check.call("a stale draft revision is refused instead of overwriting a manual edit") do
+    response = service.save_draft(
+      "dramaID" => drama["id"], "scope" => "character", "characterID" => character_id,
+      "draft" => { "description" => "迟到的模型结果" }, "expectedDraftRev" => 1
+    )
+    raise "stale write accepted" if response["ok"]
+    raise "wrong code" unless response.dig("error", "code") == "revision_conflict"
+    current = fetch_character.call(service.get("id" => drama["id"]))
+    raise "draft was overwritten anyway" unless current.dig("draft", "description") == "夜班护士"
+  end
+
+  check.call("adopting a draft merges it, clears it, and bumps rev") do
+    current = fetch_character.call(service.get("id" => drama["id"]))
+    response = service.commit_draft(
+      "dramaID" => drama["id"], "scope" => "character", "characterID" => character_id,
+      "expectedRev" => current["rev"]
+    )
+    character = fetch_character.call(response)
+    raise "draft not applied" unless character["name"] == "林晚·改" && character["description"] == "夜班护士"
+    raise "draft not cleared" unless character["draft"].nil?
+    raise "rev did not advance" unless character["rev"] == 1
+  end
+
+  check.call("confirming twice reports a conflict instead of writing again") do
+    response = service.commit_draft(
+      "dramaID" => drama["id"], "scope" => "character", "characterID" => character_id,
+      "expectedRev" => 0
+    )
+    raise "double commit accepted" if response["ok"]
+    raise "wrong code" unless response.dig("error", "code") == "revision_conflict"
+    raise "actual rev not reported" unless response.dig("error", "actual") == 1
+  end
+
+  check.call("committing an empty draft fails without disturbing content") do
+    response = service.commit_draft(
+      "dramaID" => drama["id"], "scope" => "character", "characterID" => character_id
+    )
+    raise "empty commit accepted" if response["ok"]
+    raise "wrong code" unless response.dig("error", "code") == "empty_draft"
+    raise "content changed" unless fetch_character.call(service.get("id" => drama["id"]))["name"] == "林晚·改"
+  end
+
+  check.call("discarding a draft leaves committed content alone") do
+    service.save_draft(
+      "dramaID" => drama["id"], "scope" => "character", "characterID" => character_id,
+      "draft" => { "name" => "要丢掉的名字" }
+    )
+    response = service.discard_draft(
+      "dramaID" => drama["id"], "scope" => "character", "characterID" => character_id
+    )
+    character = fetch_character.call(response)
+    raise "draft not discarded" unless character["draft"].nil?
+    raise "committed name changed" unless character["name"] == "林晚·改"
+  end
+
+  check.call("drafts work on the drama, episode, and shot scopes too") do
+    episode_id = drama["episodes"].first["id"]
+    shots_of = lambda do |response|
+      response.dig("drama", "episodes").find { |entry| entry["id"] == episode_id }["shots"]
+    end
+    known_shots = shots_of.call(service.get("id" => drama["id"])).map { |entry| entry["id"] }
+    saved_shot = service.save_shot("dramaID" => drama["id"], "episodeID" => episode_id, "title" => "开场")
+    shot_id = (shots_of.call(saved_shot).map { |entry| entry["id"] } - known_shots).first
+
+    service.save_draft("dramaID" => drama["id"], "scope" => "drama", "draft" => { "logline" => "改过的一句话" })
+    service.save_draft("dramaID" => drama["id"], "scope" => "episode", "episodeID" => episode_id,
+                       "draft" => { "summary" => "本集梗概" })
+    service.save_draft("dramaID" => drama["id"], "scope" => "shot", "episodeID" => episode_id, "shotID" => shot_id,
+                       "draft" => { "dialogue" => [{ "speaker" => "林晚", "text" => "你终于来了" }], "duration" => 6 })
+
+    latest = service.get("id" => drama["id"])["drama"]
+    episode = latest["episodes"].find { |entry| entry["id"] == episode_id }
+    shot = episode["shots"].find { |entry| entry["id"] == shot_id }
+    raise "drama draft missing" unless latest.dig("draft", "logline") == "改过的一句话"
+    raise "drama committed logline changed" unless latest["logline"] == "未来短信改变今天"
+    raise "episode draft missing" unless episode.dig("draft", "summary") == "本集梗概"
+    shot_draft = shot["draft"]
+    raise "shot dialogue draft missing" unless shot_draft.dig("dialogue", 0, "text") == "你终于来了"
+    raise "shot duration draft missing" unless shot_draft["duration"] == 6
+
+    service.commit_draft("dramaID" => drama["id"], "scope" => "shot", "episodeID" => episode_id, "shotID" => shot_id)
+    committed = service.get("id" => drama["id"])["drama"]["episodes"]
+                       .find { |entry| entry["id"] == episode_id }["shots"]
+                       .find { |entry| entry["id"] == shot_id }
+    raise "dialogue not adopted" unless committed.dig("dialogue", 0, "text") == "你终于来了"
+    raise "duration not adopted" unless committed["duration"] == 6
+  end
+
+  check.call("an unknown draft scope is rejected") do
+    response = service.save_draft("dramaID" => drama["id"], "scope" => "episodes", "draft" => {})
+    raise "unknown scope accepted" if response["ok"]
+    raise "wrong code" unless response.dig("error", "code") == "invalid_scope"
+  end
+
+  check.call("a direct save refuses a stale expectedRev") do
+    response = service.save_character(
+      "dramaID" => drama["id"], "characterID" => character_id, "name" => "越过版本检查", "expectedRev" => 0
+    )
+    raise "stale direct save accepted" if response["ok"]
+    raise "wrong code" unless response.dig("error", "code") == "revision_conflict"
+    raise "name changed anyway" unless fetch_character.call(service.get("id" => drama["id"]))["name"] == "林晚·改"
+  end
+
+  check.call("legacy objects without a rev are treated as rev 0") do
+    legacy = JSON.parse(File.read(path, encoding: "UTF-8"))
+    target = legacy["dramas"].find { |entry| entry["id"] == drama["id"] }["characters"]
+                             .find { |entry| entry["id"] == character_id }
+    %w[rev draftRev draft].each { |key| target.delete(key) }
+    File.write(path, JSON.pretty_generate(legacy), encoding: "UTF-8")
+    response = service.save_draft(
+      "dramaID" => drama["id"], "scope" => "character", "characterID" => character_id,
+      "draft" => { "description" => "旧档也能共创" }, "expectedDraftRev" => 0
+    )
+    raise "legacy object refused" unless response["ok"]
+    raise "draft missing" unless fetch_character.call(response).dig("draft", "description") == "旧档也能共创"
+  end
+
+  # ---- 共创聊天：一部剧一个文件 ----
+
+  chat = ChatStore.new(File.join(directory, "chats"))
+
+  check.call("chat is stored per drama and per stage") do
+    chat.append(drama["id"], "characters", "role" => "user", "content" => "把她写得更冷一点",
+                "objectID" => character_id, "draftRev" => 3)
+    chat.append(drama["id"], "planning", "role" => "assistant", "content" => "策划那边的话")
+    stage = chat.list(drama["id"], "characters")
+    raise "message not stored" unless stage.length == 1
+    raise "object scope lost" unless stage[0]["objectID"] == character_id
+    raise "draftRev lost" unless stage[0]["draftRev"] == 3
+    raise "stages leaked into each other" unless chat.list(drama["id"], "planning").length == 1
+    raise "another drama saw these messages" unless chat.list("some-other-drama", "characters").empty?
+  end
+
+  check.call("chat files are owner-only and named after the drama") do
+    file = chat.path_for(drama["id"])
+    raise "chat file missing" unless File.exist?(file)
+    raise "unsafe mode" unless (File.stat(file).mode & 0o777) == 0o600
+  end
+
+  check.call("a drama ID cannot escape the chat directory") do
+    chat.append("../../escape", "planning", "role" => "user", "content" => "试图越界")
+    raise "path escaped" unless File.expand_path(chat.path_for("../../escape")).start_with?(File.join(directory, "chats"))
+  end
+
+  check.call("an unknown chat stage is refused") do
+    begin
+      chat.append(drama["id"], "montage", "role" => "user", "content" => "没有这个阶段")
+      raise "unknown stage accepted"
+    rescue ArgumentError
+      # 预期
+    end
+  end
+
+  check.call("an unreadable chat file refuses to write instead of wiping it") do
+    file = chat.path_for(drama["id"])
+    File.write(file, '{"version":1,"stages":{"characters":[', encoding: "UTF-8")
+    begin
+      chat.append(drama["id"], "characters", "role" => "user", "content" => "会不会覆盖")
+      raise "corrupt chat silently accepted a write"
+    rescue ChatStore::Unavailable
+      # 预期：和短剧存档同样的规矩，读不出来就停手。
+    end
+    raise "corrupt chat was rewritten" unless File.read(file, encoding: "UTF-8") == '{"version":1,"stages":{"characters":['
   end
 
   check.call("store file is owner-only") do

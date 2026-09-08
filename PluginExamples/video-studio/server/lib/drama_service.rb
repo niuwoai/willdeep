@@ -13,6 +13,37 @@ class DramaService
   # "参数格式不对" 误报成 "找不到对象"。
   NotFound = Class.new(StandardError)
 
+  # 版本对不上。跨调用（先 get 再 save）没有锁能拦，只能靠对象自己的修订号。
+  # 带上当前值，前端才好告诉用户「你手上这版已经旧了」而不是干抛一句失败。
+  class Conflict < StandardError
+    attr_reader :expected, :actual, :field
+
+    def initialize(field, expected, actual)
+      @field = field
+      @expected = expected
+      @actual = actual
+      super("revision_conflict")
+    end
+  end
+
+  # 允许走草稿的字段，以及各自的长度上限。白名单在这里而不是靠提示词：
+  # 模型返回整个对象，超出这张表的键一律丢掉，它就改不动候选图、ID 和
+  # 状态这些不该由文字生成来动的东西。
+  DRAFT_TEXT_FIELDS = {
+    "drama" => {
+      "title" => 160, "genre" => 80, "format" => 80, "logline" => 1_200,
+      "coreConflict" => 1_200, "audience" => 300, "tone" => 300, "arc" => 4_000
+    }.freeze,
+    "character" => { "name" => 120, "description" => 2_000, "visualPrompt" => 8_000 }.freeze,
+    "episode" => { "title" => 160, "summary" => 2_000, "script" => 20_000 }.freeze,
+    "shot" => {
+      "title" => 160, "summary" => 2_000, "actionStart" => 2_000, "actionEnd" => 2_000,
+      "cameraIntent" => 1_000, "startPrompt" => 8_000, "endPrompt" => 8_000
+    }.freeze
+  }.freeze
+
+  DRAFT_SCOPES = DRAFT_TEXT_FIELDS.keys.freeze
+
   NOT_FOUND_MESSAGES = {
     "drama_not_found" => "Short drama was not found.",
     "episode_not_found" => "Episode was not found.",
@@ -21,16 +52,21 @@ class DramaService
     "candidate_not_found" => "Image candidate was not found."
   }.freeze
 
+  CONFLICT_MESSAGE = "This object changed since you loaded it. Reload and review before saving again."
+
+
   CHARACTER_DEFAULTS = {
     "name" => "", "description" => "", "visualPrompt" => "",
-    "identityVersion" => 1, "candidates" => [], "selectedCandidateID" => nil
+    "identityVersion" => 1, "candidates" => [], "selectedCandidateID" => nil,
+    "rev" => 0, "draftRev" => 0, "draft" => nil
   }.freeze
 
   SHOT_DEFAULTS = {
     "order" => 1, "title" => "", "summary" => "", "dialogue" => [],
     "actionStart" => "", "actionEnd" => "", "cameraIntent" => "", "duration" => 4,
     "startPrompt" => "", "endPrompt" => "", "startCandidates" => [], "endCandidates" => [],
-    "selectedStartID" => nil, "selectedEndID" => nil
+    "selectedStartID" => nil, "selectedEndID" => nil,
+    "rev" => 0, "draftRev" => 0, "draft" => nil
   }.freeze
 
   # 宿主生成的图片只会落在这个目录里（AgentPluginGeneratedMediaResolver）。
@@ -71,6 +107,7 @@ class DramaService
       drama = mutate_drama(arguments) do |item|
         character = find_or_build(item["characters"], arguments["characterID"],
                                   CHARACTER_DEFAULTS, "character_not_found")
+        check_revision(character, arguments["expectedRev"])
         assign(character, "name", arguments["name"], 120)
         assign(character, "description", arguments["description"], 2_000)
         assign(character, "visualPrompt", arguments["visualPrompt"], 8_000)
@@ -85,6 +122,7 @@ class DramaService
   def save_episode(arguments)
     guarded do
       drama = mutate_episode(arguments) do |episode|
+        check_revision(episode, arguments["expectedRev"])
         assign(episode, "title", arguments["title"], 160)
         assign(episode, "summary", arguments["summary"], 2_000)
         assign(episode, "script", arguments["script"], 20_000)
@@ -100,6 +138,7 @@ class DramaService
         # 状态筛选点了必然是空的。
         item["status"] = "production" if item["status"] == "planning"
         shot = find_or_build(episode["shots"], arguments["shotID"], SHOT_DEFAULTS, "shot_not_found")
+        check_revision(shot, arguments["expectedRev"])
         shot["order"] = positive(arguments["order"], episode["shots"].length) unless arguments["order"].nil?
         assign(shot, "title", arguments["title"], 160)
         assign(shot, "summary", arguments["summary"], 2_000)
@@ -111,6 +150,66 @@ class DramaService
         shot["dialogue"] = normalize_dialogue(arguments["dialogue"]) unless arguments["dialogue"].nil?
         shot["duration"] = positive(arguments["duration"], 4) unless arguments["duration"].nil?
         episode["shots"].sort_by! { |entry| entry["order"].to_i }
+      end
+      { "ok" => true, "drama" => drama }
+    end
+  end
+
+  # 写工作草稿。手改和 AI 结果都走这条路：正式内容一步不动，用户随时
+  # 可以反悔。合并是局部的——只认调用方真的传了的键，其余保持原样，
+  # 这样「AI 只改一个字段」不会把别的字段抹成空串。
+  def save_draft(arguments)
+    guarded do
+      scope = draft_scope(arguments["scope"])
+      return failure("invalid_scope", "Unknown draft scope.") unless scope
+
+      drama = mutate_scope(scope, arguments) do |node|
+        check_revision(node, arguments["expectedDraftRev"], "draftRev")
+        patch = arguments["draft"]
+        raise NotFound, "invalid_draft" unless patch.is_a?(Hash)
+
+        node["draft"] = merge_draft(scope, node, patch)
+        node["draftRev"] = node["draftRev"].to_i + 1
+      end
+      { "ok" => true, "drama" => drama }
+    end
+  end
+
+  # 定稿。把草稿并进正式内容，清空草稿，rev 自增。
+  #
+  # 重复点确认靠 expectedRev 天然挡住：第二次进来时 rev 已经变了，返回的是
+  # 冲突而不是又写一遍——前端把这个冲突当成「刚才那次已经成了」就行，
+  # 不必再单独存一份请求 ID 去重。
+  def commit_draft(arguments)
+    guarded do
+      scope = draft_scope(arguments["scope"])
+      return failure("invalid_scope", "Unknown draft scope.") unless scope
+
+      drama = mutate_scope(scope, arguments) do |node|
+        check_revision(node, arguments["expectedRev"])
+        draft = node["draft"]
+        raise NotFound, "empty_draft" unless draft.is_a?(Hash) && !draft.empty?
+
+        apply_draft(scope, node, draft)
+        node["draft"] = nil
+        node["rev"] = node["rev"].to_i + 1
+        # 草稿清空本身也是一次草稿变更。draftRev 继续往前走，在跑的那条
+        # 请求回来时才认得出「基准已经不是你出发时那份了」。
+        node["draftRev"] = node["draftRev"].to_i + 1
+      end
+      { "ok" => true, "drama" => drama }
+    end
+  end
+
+  def discard_draft(arguments)
+    guarded do
+      scope = draft_scope(arguments["scope"])
+      return failure("invalid_scope", "Unknown draft scope.") unless scope
+
+      drama = mutate_scope(scope, arguments) do |node|
+        check_revision(node, arguments["expectedDraftRev"], "draftRev")
+        node["draft"] = nil
+        node["draftRev"] = node["draftRev"].to_i + 1
       end
       { "ok" => true, "drama" => drama }
     end
@@ -181,6 +280,65 @@ class DramaService
     yield
   rescue NotFound => error
     failure(error.message)
+  rescue Conflict => error
+    {
+      "ok" => false,
+      "error" => {
+        "code" => "revision_conflict", "message" => CONFLICT_MESSAGE,
+        "field" => error.field, "expected" => error.expected, "actual" => error.actual
+      }
+    }
+  end
+
+  # expectedRev 没传就当调用方不关心版本——旧插件和图片候选那几条路径都
+  # 这样。传了就必须对上，对不上宁可让这次保存失败：静默覆盖丢的是用户
+  # 刚敲进去的字。
+  def check_revision(node, expected, field = "rev")
+    return if expected.nil?
+    actual = node[field].to_i
+    raise Conflict.new(field, Integer(expected), actual) unless Integer(expected) == actual
+  rescue ArgumentError, TypeError
+    raise Conflict.new(field, expected, node[field].to_i)
+  end
+
+  def draft_scope(value)
+    token = value.to_s.strip
+    DRAFT_SCOPES.include?(token) ? token : nil
+  end
+
+  # 四种作用域共用一条定位路径，省得每个方法各写一遍找对象的代码。
+  def mutate_scope(scope, arguments, &block)
+    case scope
+    when "drama" then mutate_drama(arguments, &block)
+    when "character" then mutate_character(arguments, &block)
+    when "episode" then mutate_episode(arguments) { |episode, _drama| block.call(episode) }
+    when "shot" then mutate_shot(arguments, &block)
+    end
+  end
+
+  # 已有草稿上叠新的一层，而不是整份替换：模型这轮只回了三个字段时，
+  # 上一轮生成、用户已经看过的其他字段不该跟着消失。
+  def merge_draft(scope, node, patch)
+    merged = node["draft"].is_a?(Hash) ? deep_copy(node["draft"]) : {}
+    DRAFT_TEXT_FIELDS.fetch(scope).each do |key, limit|
+      next unless patch.key?(key)
+      merged[key] = clipped(patch[key], limit)
+    end
+    if scope == "shot"
+      merged["dialogue"] = normalize_dialogue(patch["dialogue"]) if patch.key?("dialogue")
+      merged["duration"] = positive(patch["duration"], node["duration"].to_i) if patch.key?("duration")
+    end
+    merged
+  end
+
+  def apply_draft(scope, node, draft)
+    DRAFT_TEXT_FIELDS.fetch(scope).each do |key, limit|
+      next unless draft.key?(key)
+      node[key] = clipped(draft[key], limit)
+    end
+    return unless scope == "shot"
+    node["dialogue"] = normalize_dialogue(draft["dialogue"]) if draft.key?("dialogue")
+    node["duration"] = positive(draft["duration"], node["duration"].to_i) if draft.key?("duration")
   end
 
   def mutate_drama(arguments)

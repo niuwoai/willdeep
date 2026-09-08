@@ -52,6 +52,9 @@ class DramaStore
         "tone" => text(plan["tone"], 300, ""),
         "arc" => text(plan["arc"], 4_000, ""),
         "status" => "planning",
+        "rev" => 0,
+        "draftRev" => 0,
+        "draft" => nil,
         "coverURL" => nil,
         "characters" => [],
         "episodes" => build_episodes(plan),
@@ -82,8 +85,9 @@ class DramaStore
 
   private
 
-  # 读-改-写整段互斥。写入本身是 tmp + rename 所以文件不会写坏，但两个并发的
-  # 保存会各拿一份陈旧快照，后写的那个把前一个的改动整段丢掉。
+  # 读-改-写整段互斥：`data` 在锁内读，`write` 在锁内写，所以并发保存不会
+  # 各拿一份陈旧快照。跨调用（先 get 再 save）的覆盖不归它管，那一层靠
+  # 对象自己的 rev 拦。
   def with_lock
     FileUtils.mkdir_p(File.dirname(path))
     File.open("#{path}.lock", File::RDWR | File::CREAT, 0o600) do |handle|
@@ -118,6 +122,9 @@ class DramaStore
         "summary" => text(source["summary"], 2_000, ""),
         "script" => text(source["script"], 20_000, ""),
         "status" => "draft",
+        "rev" => 0,
+        "draftRev" => 0,
+        "draft" => nil,
         "shots" => []
       }
     end
