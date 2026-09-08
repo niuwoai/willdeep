@@ -31,7 +31,7 @@
   <div class="game">
     <div class="shop" id="shop"></div>
 
-    <div class="stage">
+    <div class="battlefield"><div class="stage">
       <canvas id="map" width="664" height="372"></canvas>
       <section id="rewardPanel" class="reward-panel" hidden aria-label="波间三选一">
         <h2>守住了！选一份奖励</h2>
@@ -59,11 +59,26 @@
       </div>
     </div>
 
-    <!-- Actions only: every box here has a button. -->
+    <div class="tutorial" aria-label="防守教学"><strong>养蜂课堂</strong><div class="tip-window"><span id="tutorialTip"></span></div><button id="tipPause" aria-pressed="false" aria-label="暂停教学滚动">暂停</button><button id="tipNext" aria-label="下一条教学">下一条</button></div>
+    <div class="quick-actions side">      <div class="box bag-box">
+        <h2>背包</h2>
+        <button id="cancelItem" hidden>取消使用</button>
+        <div class="bag-slots" id="bagSlots" aria-label="道具背包"></div>
+        <p id="bagStatus" role="status">打狗熊、首次遇到新虫子、神秘包裹都会掉道具</p>
+      </div>
+      <div class="box repair-box">
+        <h2>蜂巢维修</h2>
+        <progress id="repairProgress" max="3" value="0" aria-label="下一点生命的维修进度"></progress>
+        <p id="repairStatus" role="status">开始防守后可维修</p>
+        <button id="repairBtn" aria-pressed="false">派维修蜂</button>
+
+      </div>
+</div></div>
+    <!-- Compact tactical controls beside the map. -->
     <div class="side side-actions">
       <div class="box" id="infoBox">
         <h2>选中</h2>
-        <div class="empty" id="infoEmpty">点击地图上的防御塔查看数据，或先从左侧选一种塔再点空地建造。</div>
+        <div class="empty" id="infoEmpty">选塔后点击空地建造</div>
         <div id="infoBody" hidden>
           <div class="rows" id="infoRows"></div>
           <div class="acts">
@@ -79,18 +94,6 @@
         <p id="baseProgress" role="status"></p>
         <button id="baseUpgradeBtn">升级基地</button>
       </div>
-      <div class="box repair-box">
-        <h2>蜂巢维修</h2>
-        <progress id="repairProgress" max="3" value="0" aria-label="下一点生命的维修进度"></progress>
-        <p id="repairStatus" role="status">开始防守后可维修</p>
-        <button id="repairBtn" aria-pressed="false">派维修蜂</button>
-        <p id="beeGrowth"></p>
-      </div>
-      <div class="box bag-box">
-        <h2>背包</h2>
-        <div class="bag-slots" id="bagSlots" aria-label="道具背包"></div>
-        <p id="bagStatus" role="status">打狗熊、首次遇到新虫子、神秘包裹都会掉道具</p>
-      </div>
       <div class="box">
         <h2>本波来袭</h2>
         <div class="waveline" id="waveInfo"><span class="chip">尚未开始</span></div>
@@ -99,9 +102,9 @@
   </div>
 
   <!-- Reading matter. Nothing here needs a click mid-wave. -->
-  <div class="side side-notes">
+  <details class="guide"><summary>防守手册与虫群图鉴</summary><div class="side side-notes">
     <div class="box">
-      <h2>维修规则</h2>
+      <h2>维修规则</h2><p id="beeGrowth"></p>
       <p class="repair-rules">每 3 个游戏秒修 1 点。历次派出首点依次收 4、6、8…蜂蜜；同次第 1、2、3…点收首价的 1、2、3…倍，完成时扣费。停止保留进度，再派出按新首价计费；受击减速，波间休整 13 秒。</p>
     </div>
     <div class="box">
@@ -124,6 +127,7 @@
     </div>
   </div>
 
+  </details>
   <footer>
     快捷键：<kbd>1</kbd>–<kbd>7</kbd> 选塔　<kbd>空格</kbd> 暂停　<kbd>F</kbd> 加速　<kbd>N</kbd> 提前叫下一波（剩余准备时间折算成蜂蜜）　<kbd>Esc</kbd> 取消选择<br>
     提前叫波有奖励，卖塔返还六成。甲虫有护甲，只有毒刺弩无视护甲；蜘蛛死后会裂成两只小蜘蛛。
@@ -131,4 +135,4 @@
 </div>
 
 
-<footer>蜂巢防线 · 1.342.0-rc11</footer><script src="sprites.js"></script><script src="systems.js"></script><script src="adventure.js"></script><script src="world.js"></script><script src="leisure.js"></script><script src="items.js"></script><script src="game.js"></script></body></html>
+<footer>蜂巢防线 · 1.342.0-rc16</footer><script src="sprites.js"></script><script src="systems.js"></script><script src="adventure.js"></script><script src="world.js"></script><script src="leisure.js"></script><script src="items.js"></script><script src="game.js"></script></body></html>

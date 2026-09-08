@@ -885,6 +885,7 @@
         '<span class="pr">' + t.cost + '</span>';
       el.addEventListener("click", function(){
         moveSelection=null;
+        bag.disarm();renderBag();
         selType = (selType === k) ? null : k;
         selTower = null;
         renderShop(); renderInfo();
@@ -1002,25 +1003,30 @@
   const repairStatus = document.getElementById('repairStatus');
   const repairProgress = document.getElementById('repairProgress');
   repairBtn.addEventListener('click', function(){
-    if(bear.active || leisure.choosing) return;
-    repair.toggle(hp, running && !over && (!paused || repair.active));
+    if(bear.active || leisure.choosing){ renderRepair(); return; }
+    // Dispatch can be queued while paused; simulation resumes with the game.
+    repair.toggle(hp, running && !over);
     renderRepair();
   });
   function renderRepair(){
     renderBase();
-    repairBtn.disabled = !running || over || (paused && !repair.active) || hp >= RULES.maxHP;
-    repairBtn.textContent = repair.active ? '停止维修' : '派维修蜂 · 首点 '+(repair.credits?0:repair.nextDispatchCost)+' 蜂蜜';
+    repairBtn.disabled = !running || over || bear.active || leisure.choosing || hp >= RULES.maxHP;
+    const label = repair.active ? '停止维修' : hp >= RULES.maxHP ? '蜂巢完好' : '派维修蜂 · 首点 '+(repair.credits?0:repair.nextDispatchCost)+' 蜂蜜';
+    if(repairBtn.textContent !== label) repairBtn.textContent = label;
     repairBtn.setAttribute('aria-pressed', String(repair.active));
     repairProgress.value = repair.progress;
     let status = '下次派出首点 '+repair.nextDispatchCost+' 蜂蜜，第二点 '+repair.nextDispatchCost*2+' 蜂蜜';
     if(over) status = '蜂巢已失守';
     else if(!running) status = '开始防守后可维修';
     else if(hp >= RULES.maxHP) status = '蜂巢完好';
-    else if(paused) status = '游戏已暂停 · 维修进度保留';
+    else if(bear.active) status = '瞄准狗熊中 · 返回防线后可维修';
+    else if(leisure.choosing) status = '先选择奖励，再继续维修';
+    else if(paused) status = repair.active ? '维修蜂已待命 · 继续游戏后开工' : '可先派出维修蜂 · 继续游戏后开工';
     else if(repair.active && honey < repair.nextCost) status = '等待蜂蜜 · 第 '+repair.point+' 点需要 '+repair.nextCost+' 蜂蜜';
     else if(repair.active) status = (repair.hurt > 0 ? '受击减速 · ' : '维修中 · ') + '第 '+repair.point+' 点 '+repair.nextCost+' 蜂蜜 · '+Math.ceil(repair.remaining)+' 秒';
     if(repair.credits)status+=' · 免费券 '+repair.credits+' 张';
     if(repairStatus.textContent !== status) repairStatus.textContent = status;
+    repairBtn.title = status;
   }
   function animateHoney(dt){
     honeyEl.textContent = honeyCounter.step(dt, motionPreference.matches);
@@ -1102,6 +1108,7 @@
   }
   function renderBag(){
     if(!bagSlots)return;
+    const focusedSlot=bagSlots.contains(document.activeElement)?document.activeElement.dataset.slot:null;
     const list=bag.items;
     bagSlots.innerHTML=Array.from({length:itemsAPI.RULES.slots},(_,i)=>{
       const key=list[i];
@@ -1110,7 +1117,9 @@
       return '<button class="bag-slot '+item.rarity+(bag.armed===i?' armed':'')+'" data-slot="'+i+'" title="'+item.name+'：'+item.detail+'" aria-pressed="'+(bag.armed===i)+'"><span class="glyph">'+item.glyph+'</span><kbd>'+SLOT_KEYS[i]+'</kbd></button>';
     }).join('');
     bagSlots.querySelectorAll('[data-slot]').forEach(b=>b.addEventListener('click',()=>armSlot(+b.dataset.slot)));
+    if(focusedSlot!=null)bagSlots.querySelector('[data-slot="'+focusedSlot+'"]')?.focus({preventScroll:true});
     const armed=bag.armedKey?itemsAPI.ITEMS[bag.armedKey]:null;
+    document.getElementById('cancelItem').hidden=!armed;
     const passive=[];
     if(hornUntil>0)passive.push('号角 '+Math.ceil(hornUntil)+' 秒');
     if(edictWave===wave+1)passive.push('下一波蜂王令');else if(edictWave===wave&&wave>0)passive.push('本波蜂王令');
@@ -1131,11 +1140,20 @@
     const item=itemsAPI.ITEMS[key],cell=pixelToCell(p.x,p.y);
     const hit=cell?towers.find(t=>t.c===cell.c&&t.r===cell.r):null;
     if(item.target==='pumpkin'){
-      if(!hit||hit.type!=='pumpkin'){flashHud();return;}
+      if(!hit||hit.type!=='pumpkin'){
+        if(hit){
+          bag.disarm();selTower=hit;selType=null;renderBag();renderShop();renderInfo();
+          bagStatus.textContent=item.name+'仅用于南瓜花 · 已切回选塔，道具保留';
+        }else{bagStatus.textContent=item.name+'需要点击南瓜花 · 可点「取消使用」退出';}
+        return;
+      }
+      selTower=hit;
       applyItem(bag.consume(),{tower:hit});
     }else if(item.target==='map'){
+      selTower=hit;
       applyItem(bag.consume(),{point:p});
     }else if(item.target==='hiveOrTower'){
+      selTower=hit;
       applyItem(bag.consume(),hit&&hit.damaged?{tower:hit}:null);
     }
     renderBag();renderInfo();
@@ -1164,6 +1182,7 @@
   }
   function setAdventureLock(locked){
     document.querySelectorAll('.hud,.shop,.side').forEach(el=>el.inert=locked || leisure.choosing);
+    renderRepair();
   }
   function openBear(){
     if(!running || over || leisure.choosing || !bear.open())return;
@@ -1330,6 +1349,7 @@
       return;
     }
     if(k >= "1" && k <= "7"){
+      bag.disarm();renderBag();
       moveSelection=null;
       selType = TKEYS[+k - 1]; selTower = null; renderShop(); renderInfo();
     }else if(k === " "){
@@ -1444,6 +1464,28 @@
     drawBear(dt);
     requestAnimationFrame(frame);
   }
+
+  document.getElementById('cancelItem').addEventListener('click',()=>{bag.disarm();renderBag();renderInfo();});
+  const tutorialTip=document.getElementById('tutorialTip');
+  const tutorial=document.querySelector('.tutorial');
+  const tipPause=document.getElementById('tipPause');
+  const tutorialTips=[
+    '先选左侧防御塔，再点地图空地建造；点已有塔可升级、出售或搬家。',
+    '维修蜂每 3 个游戏秒修复 1 点，完成时扣蜜；暂停时可派出待命，蜂蜜不足会等待。',
+    '选中背包道具后按提示点目标；点不适用的塔会切回选塔，道具保留。也可点取消使用或按 Esc。',
+    ...Array.from(document.querySelectorAll('.side-notes p')).map(el=>el.textContent).filter(Boolean)
+  ];
+  let tipIndex=0;
+  function showTutorial(){tutorialTip.textContent=tutorialTips[tipIndex];}
+  tutorialTip.addEventListener('animationiteration',()=>{tipIndex=(tipIndex+1)%tutorialTips.length;showTutorial();});
+  document.getElementById('tipNext').addEventListener('click',()=>{tipIndex=(tipIndex+1)%tutorialTips.length;showTutorial();});
+  tipPause.addEventListener('click',()=>{
+    const paused=tutorial.classList.toggle('paused');
+    tipPause.setAttribute('aria-pressed',String(paused));
+    tipPause.textContent=paused?'继续':'暂停';
+    tipPause.setAttribute('aria-label',paused?'继续教学滚动':'暂停教学滚动');
+  });
+  showTutorial();
 
   // ===== 初始化 =====
   function fitCanvas(){

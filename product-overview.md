@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-08 | Current version: v1.342.0-rc14
+> Last updated: 2026-09-08 | Current version: v1.342.0-rc16
+
+蜂巢防线将维修和背包放在地图下方，滚动教学支持暂停与手动切换，详细规则可展开查阅。暂停时可派维修蜂待命；背包道具误点不适用的塔会恢复选塔操作且保留物品，支持显式取消使用。
 
 本版修复 Agent 响应结束后仍等待空闲计时器、Responses 终止事件后继续等待连接关闭的问题。Composer 停止后拒绝迟到输出，取消收尾保留用户停止意图，避免 watchdog 自动续跑；等待提示改为描述客户端实际收到的输出，长时间无输出时明确标记尚未确认结束。
 

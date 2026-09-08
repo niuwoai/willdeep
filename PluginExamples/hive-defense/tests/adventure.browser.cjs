@@ -93,7 +93,7 @@ const server=http.createServer((req,res)=>{
     await page.locator('#repairBtn').click();await page.clock.runFor(3000);
     assert.equal((await page.evaluate(()=>hiveFixture.snapshot())).honey,82);
     await page.locator('#repairBtn').click();
-    await page.evaluate(()=>hiveFixture.discover());await page.locator('#bestiary summary').filter({hasText:'蜘蛛'}).click();
+    await page.evaluate(()=>hiveFixture.discover());await page.locator('.guide > summary').click();await page.locator('#bestiary summary').filter({hasText:'蜘蛛'}).click();
     await page.screenshot({path:path.join(out,'bear-collection.png'),fullPage:true});
     const jumpStart=await page.evaluate(()=>hiveFixture.flea());await page.clock.runFor(200);
     assert.equal((await page.evaluate(()=>hiveFixture.jumping())).phase,'charge');
