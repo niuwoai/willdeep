@@ -1,5 +1,14 @@
 import Foundation
 
+nonisolated enum AgentSubagentSchedulingPolicy {
+    static func runsInBackground(_ arguments: [String: AgentJSONValue]) -> Bool {
+        guard arguments["run_in_background"]?.boolValue() == true,
+              arguments["independent_task"]?.boolValue() == true else { return false }
+        return arguments["parent_parallel_work"]?.stringValue()?
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+}
+
 nonisolated enum AgentWorkerTier: String, Codable, CaseIterable, Identifiable, Sendable {
     case standard, advanced, expert
     var id: String { rawValue }
@@ -100,7 +109,7 @@ nonisolated struct AgentWorkerTierModels: Codable, Equatable, Sendable {
         return .init(
             preferredProviderID: AgentProviderPreset.someIMID,
             model: model,
-            contextWindowTokens: tier == .standard ? standardWindow : extendedWindow
+            contextWindowTokens: extendedWindow
         )
     }
 

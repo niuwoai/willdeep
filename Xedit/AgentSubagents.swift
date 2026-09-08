@@ -172,6 +172,7 @@ final class AgentSubagentRegistry: ObservableObject {
     ) async throws -> AgentSubagentRunner.Outcome
 
     @Published private(set) var runs: [AgentSubagentRun] = []
+    @Published private(set) var stopRequestedRunIDs: Set<UUID> = []
 
     /// Parallel fan-out cap per parent session. Provider rate limits
     /// are the real constraint — five concurrent child loops plus the
@@ -330,6 +331,11 @@ final class AgentSubagentRegistry: ObservableObject {
             providerID: configuration.providerID
         )
         runs.insert(run, at: 0)
+        AgentSubagentLiveTranscripts.shared.update(
+            runID: id, label: label, prompt: prompt, model: configuration.model,
+            progress: .init(round: 0, maximumRounds: profile.maxRounds,
+                            completedToolInvocations: 0, activity: .thinking)
+        )
         if let originatingTurnID {
             originatingTurnIDs[id] = originatingTurnID
         }
@@ -366,6 +372,10 @@ final class AgentSubagentRegistry: ObservableObject {
                     interventionChannel,
                     executionContext,
                     { [weak self] update in
+                        AgentSubagentLiveTranscripts.shared.update(
+                            runID: id, label: label, prompt: prompt,
+                            model: configuration.model, progress: update
+                        )
                         self?.onRunProgress?(id, update)
                     }
                 ) ?? AgentSubagentRunner.Outcome(
@@ -374,6 +384,7 @@ final class AgentSubagentRegistry: ObservableObject {
                     roundCount: 0,
                     toolInvocationCount: 0
                 )
+                try Task.checkCancellation()
             } catch is CancellationError {
                 agentSubagentLog.info(
                     "background subagent cancelled run=\(id.uuidString, privacy: .public) profile=\(profile.id, privacy: .public)"
@@ -483,6 +494,7 @@ final class AgentSubagentRegistry: ObservableObject {
         requestStop: AgentAuxiliaryRequestStop? = nil
     ) {
         tasks[id] = nil
+        stopRequestedRunIDs.remove(id)
         unregisterInterventionChannel(runID: id)
         // Seal the Worker's liveness before anything else. The strip and the
         // speech card key on this, not on the spawn's tool-call status, so a
@@ -574,6 +586,18 @@ final class AgentSubagentRegistry: ObservableObject {
         for run in runs where run.parentRuntimeID == runtimeID && run.status == .running {
             tasks[run.id]?.cancel()
         }
+    }
+
+    /// Stop precisely one user-selected run; never wake the parent to retry it.
+    @discardableResult
+    func stop(runID: UUID, forParentRuntime runtimeID: UUID) -> Bool {
+        guard runs.contains(where: {
+            $0.id == runID && $0.parentRuntimeID == runtimeID && $0.status == .running
+        }), !stopRequestedRunIDs.contains(runID), let task = tasks[runID] else { return false }
+        suppressedReportRunIDs.insert(runID)
+        stopRequestedRunIDs.insert(runID)
+        task.cancel()
+        return true
     }
 
     /// Cancel only background subagents born in the stopped turn. Returns the
@@ -674,6 +698,7 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
     /// the object each one acts on, so the card can say *which* file was
     /// read rather than only that a file was.
     let tools: [AgentSubagentToolMention]
+    let recordedRounds: [AgentSubagentTranscript.Round]?
 
     init(
         round: Int,
@@ -681,7 +706,8 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
         completedToolInvocations: Int,
         activity: Activity,
         speech: String = "",
-        tools: [AgentSubagentToolMention] = []
+        tools: [AgentSubagentToolMention] = [],
+        recordedRounds: [AgentSubagentTranscript.Round]? = nil
     ) {
         self.round = round
         self.maximumRounds = maximumRounds
@@ -689,6 +715,7 @@ nonisolated struct AgentSubagentProgressUpdate: Equatable, Sendable {
         self.activity = activity
         self.speech = speech
         self.tools = tools
+        self.recordedRounds = recordedRounds
     }
 
     /// The closing heartbeat. Carries no round or tool counts — whatever the
@@ -1199,7 +1226,8 @@ enum AgentSubagentRunner {
                     completedToolInvocations: toolInvocations,
                     activity: activity,
                     speech: speech,
-                    tools: tools
+                    tools: tools,
+                    recordedRounds: recordedRounds
                 )
             )
         }
@@ -1366,6 +1394,12 @@ enum AgentSubagentRunner {
                 startedAt: roundStartedAt,
                 finishedAt: nil
             )
+            onProgress?(AgentSubagentProgressUpdate(
+                round: round, maximumRounds: roundLimit,
+                completedToolInvocations: toolInvocations,
+                activity: toolCalls.isEmpty ? .preparingReport : .thinking,
+                recordedRounds: recordedRounds + [recordedRound]
+            ))
             /// Closes the in-progress round so an early `return` still records it.
             func sealingRound() -> [AgentSubagentTranscript.Round] {
                 var sealed = recordedRound
@@ -1392,6 +1426,12 @@ enum AgentSubagentRunner {
                         durationSeconds: Date().timeIntervalSince(startedAt)
                     )
                 )
+                onProgress?(AgentSubagentProgressUpdate(
+                    round: round, maximumRounds: roundLimit,
+                    completedToolInvocations: toolInvocations,
+                    activity: .thinking,
+                    recordedRounds: recordedRounds + [recordedRound]
+                ))
             }
 
             // An interrupt may arrive in the tiny boundary after the provider

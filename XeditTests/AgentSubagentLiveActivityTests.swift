@@ -6,11 +6,39 @@ import Testing
 @Suite
 @MainActor
 struct AgentSubagentLiveActivityTests {
+    @Test("手动停止只取消指定后台 Worker，不自动回报唤醒父聊天")
+    func stopOneBackgroundWorker() async throws {
+        let registry = AgentSubagentRegistry()
+        let parent = UUID()
+        registry.runOperation = { _, _, _, _, _, _, _, _, _, _, _ in
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+            return .init(report: "done", usageTokens: 0, roundCount: 0, toolInvocationCount: 0)
+        }
+        let config = AgentConfiguration(providerID: "test", baseURL: "https://example.invalid", model: "test", apiKey: "test")
+        let one = try registry.startBackground(prompt: "one", label: "one", configuration: config, workspaceURL: nil, parentRuntimeID: parent)
+        let two = try registry.startBackground(prompt: "two", label: "two", configuration: config, workspaceURL: nil, parentRuntimeID: parent)
+        defer { registry.cancelAll(forParentRuntime: parent) }
+        #expect(!registry.stop(runID: one.id, forParentRuntime: UUID()))
+        #expect(registry.stop(runID: one.id, forParentRuntime: parent))
+        #expect(!registry.stop(runID: one.id, forParentRuntime: parent))
+        for _ in 0..<100 where registry.runs.first(where: { $0.id == one.id })?.status == .running {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        #expect(registry.runs.first(where: { $0.id == one.id })?.status == .cancelled)
+        #expect(registry.runs.first(where: { $0.id == two.id })?.status == .running)
+        #expect(registry.pendingReportCount(forParentRuntime: parent) == 0)
+        #expect(!registry.stopRequestedRunIDs.contains(one.id))
+    }
     @Test("主聊天空闲时 Worker 开始和结束仍通知界面，数量按父聊天隔离")
     func backgroundRegistryNotifiesIdleComposer() async throws {
         let state = AppState()
         let parentID = UUID()
-        state.agentSubagentRegistry.runOperation = { _, _, _, _, _, _, _, _, _, _, _ in
+        state.agentSubagentRegistry.runOperation = { _, _, _, _, _, _, _, _, _, _, progress in
+            progress?(.init(round: 1, maximumRounds: 32, completedToolInvocations: 0,
+                            activity: .thinking, recordedRounds: [.init(
+                                index: 1, content: "Read the deployment status", toolCalls: [],
+                                usageTokens: 1, startedAt: Date()
+                            )]))
             try await Task.sleep(nanoseconds: 60_000_000_000)
             return .init(report: "done", usageTokens: 0, roundCount: 0, toolInvocationCount: 0)
         }
@@ -18,7 +46,7 @@ struct AgentSubagentLiveActivityTests {
         let subscription = state.objectWillChange.sink { notifications += 1 }
         defer { subscription.cancel(); state.agentSubagentRegistry.cancelAll(forParentRuntime: parentID) }
         let baseline = notifications
-        _ = try state.agentSubagentRegistry.startBackground(
+        let run = try state.agentSubagentRegistry.startBackground(
             prompt: "fixture", label: "Worker", configuration: .init(
                 providerID: "test", baseURL: "https://example.invalid", model: "test", apiKey: "test"
             ), workspaceURL: nil, parentRuntimeID: parentID
@@ -26,6 +54,11 @@ struct AgentSubagentLiveActivityTests {
         #expect(notifications > baseline)
         #expect(state.agentSubagentRegistry.activeCount(forParentRuntime: parentID) == 1)
         #expect(state.agentSubagentRegistry.activeCount(forParentRuntime: UUID()) == 0)
+        #expect(AgentSubagentLiveTranscripts.shared.records[run.id]?.status == .running)
+        for _ in 0..<100 where AgentSubagentLiveTranscripts.shared.records[run.id]?.rounds.isEmpty == true {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+        #expect(AgentSubagentLiveTranscripts.shared.records[run.id]?.rounds.first?.content == "Read the deployment status")
         let started = notifications
         state.agentSubagentRegistry.cancelAll(forParentRuntime: parentID)
         // Cancellation is acknowledged by the worker task, not by the

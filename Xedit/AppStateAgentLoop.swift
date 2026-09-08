@@ -2230,7 +2230,7 @@ extension AppState {
                 let isParallelForegroundReadOnlySpawn = changedWorkspacePath == nil
                     && call.toolName == "spawn_agent"
                     && risk == .read
-                    && argsDict["run_in_background"]?.boolValue() != true
+                    && !AgentSubagentSchedulingPolicy.runsInBackground(argsDict)
                     && runtime.currentTurnDelegationPolicy != .forbidden
 
                 // A write worker, interactive tool, or ordinary read marks a

@@ -4,6 +4,29 @@ import Testing
 
 @Suite @MainActor
 struct AgentWorkerArchitectureTests {
+    @Test
+    func backgroundRequiresIndependentTaskAndOtherParentWork() {
+        #expect(!AgentSubagentSchedulingPolicy.runsInBackground([:]))
+        #expect(!AgentSubagentSchedulingPolicy.runsInBackground(["run_in_background": .bool(true)]))
+        var arguments: [String: AgentJSONValue] = ["run_in_background": .bool(true), "independent_task": .bool(true)]
+        #expect(!AgentSubagentSchedulingPolicy.runsInBackground(arguments))
+        arguments["parent_parallel_work"] = .string("Review the independent API changes")
+        #expect(AgentSubagentSchedulingPolicy.runsInBackground(arguments))
+        arguments["independent_task"] = .bool(false)
+        #expect(!AgentSubagentSchedulingPolicy.runsInBackground(arguments))
+    }
+
+    @Test
+    func defaultContextsPreserveExplicitOverrides() throws {
+        var models = AgentWorkerTierModels()
+        for tier in AgentWorkerTier.allCases {
+            #expect(models[tier].contextWindowTokens == 262_144)
+        }
+        models[.standard].contextWindowTokens = 65_536
+        let restored = try JSONDecoder().decode(AgentWorkerTierModels.self, from: JSONEncoder().encode(models))
+        #expect(restored[.standard].contextWindowTokens == 65_536)
+        #expect(restored[.expert].contextWindowTokens == 262_144)
+    }
     private var parent: AgentConfiguration {
         .init(providerID: AgentProviderPreset.someIMID, baseURL: "https://example.invalid/v1", model: "parent-model", apiKey: "test-placeholder")
     }
@@ -12,7 +35,7 @@ struct AgentWorkerArchitectureTests {
     func rolesAndTiers() {
         #expect(AgentWorkerTier.allCases.count == 3)
         #expect(AgentSubagentProfileCatalog.publicBuiltIn.map(\.id) == AgentWorkerRole.allCases.map(\.profileID))
-        #expect(AgentWorkerTierModels.defaultBinding(.standard).contextWindowTokens == 131_072)
+        #expect(AgentWorkerTierModels.defaultBinding(.standard).contextWindowTokens == 262_144)
         #expect(AgentWorkerTierModels.defaultBinding(.expert).contextWindowTokens == 262_144)
         #expect(AgentSubagentProfileCatalog.reviewer.modelBinding.workerTier == .expert)
         #expect(AgentSubagentProfileCatalog.tester.modelBinding.workerTier == .standard)

@@ -165,6 +165,11 @@ extension AppState {
         runtime.pendingFiles = []
         runtime.pendingIncludeWorkspaceOverview = false
 
+        // Background Workers can wait for a decision after the parent reply
+        // finishes. A new message supersedes those gates too, not just gates
+        // owned by an actively responding parent. Settle before dispatch.
+        let closedDecision = closeBlockingAgentToolDecision(for: runtime, reason: "New message sent")
+
         if runtime.isResponding {
             // The directive belongs to this message, not to whatever turn is
             // still streaming — park it on the queue entry and clear the
@@ -181,7 +186,7 @@ extension AppState {
                     delegationPolicy: queuedDelegationPolicy
                 )
             )
-            if closeBlockingAgentToolDecision(for: runtime, reason: "New message sent") {
+            if closedDecision {
                 runtime.shouldConsumeQueueAfterStop = true
                 runtime.requestTask?.cancel()
                 scheduleQueuedMessageConsumptionAfterCancellation(for: runtime)

@@ -93,15 +93,16 @@ private final class AgentSubagentInspectorWindowController: NSWindowController, 
 
 struct AgentSubagentInspectorView: View {
     let runID: UUID
-    /// Loaded once when the window opens. A finished run's record is
-    /// immutable, so there is nothing to observe.
+    /// Disk fallback for historical runs; active and newly finished runs
+    /// arrive through the shared observable record below.
     let transcript: AgentSubagentTranscript?
+    @ObservedObject private var live = AgentSubagentLiveTranscripts.shared
 
     @State private var expandedRounds: Set<Int> = []
 
     var body: some View {
         Group {
-            if let transcript {
+            if let transcript = live.records[runID] ?? transcript {
                 content(for: transcript)
             } else {
                 emptyState
@@ -126,6 +127,9 @@ struct AgentSubagentInspectorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 header(for: transcript)
+                if transcript.status == .running && transcript.rounds.isEmpty {
+                    ProgressView(L10n.AgentDelegation.progressThinking)
+                }
                 section(title: L10n.AgentDelegation.inspectorPrompt, body: transcript.prompt)
                 ForEach(transcript.rounds) { round in
                     roundCard(round)

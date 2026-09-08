@@ -4,6 +4,27 @@ import Testing
 
 @Suite
 struct AgentSubagentTranscriptTests {
+    @Test @MainActor
+    func liveRecordSurvivesHeartbeatAndCancellation() {
+        let store = AgentSubagentLiveTranscripts()
+        let id = UUID()
+        let round = makeRound(index: 1, toolCalls: 2)
+        store.update(runID: id, label: "worker", prompt: "task", model: "model",
+                     progress: .init(round: 1, maximumRounds: 32, completedToolInvocations: 2,
+                                     activity: .thinking, recordedRounds: [round]))
+        store.update(runID: id, label: "worker", prompt: "task", model: "model",
+                     progress: .init(round: 2, maximumRounds: 32, completedToolInvocations: 2,
+                                     activity: .thinking, recordedRounds: []))
+        #expect(store.records[id]?.toolInvocationCount == 2)
+        var final = makeTranscript(runID: id)
+        final.status = .cancelled
+        let saved = store.finish(final)
+        #expect(saved.rounds == [round])
+        store.update(runID: id, label: "worker", prompt: "task", model: "model",
+                     progress: .init(round: 3, maximumRounds: 32, completedToolInvocations: 0,
+                                     activity: .thinking))
+        #expect(store.records[id]?.status == .cancelled)
+    }
     private func makeTranscript(
         runID: UUID = UUID(),
         rounds: [AgentSubagentTranscript.Round] = []

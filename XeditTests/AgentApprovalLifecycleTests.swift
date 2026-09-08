@@ -5,6 +5,37 @@ import Testing
 @Suite("审批生命周期", .serialized)
 @MainActor
 struct AgentApprovalLifecycleTests {
+    @Test("主聊天空闲时发送消息结束后台询问，旧确认不能影响下一条询问")
+    func newMessageSupersedesIdleWorkerDecision() async throws {
+        let app = AppState()
+        app.skillRoutingCatalogForTesting = []
+        let session = app.startNewAgentSession()
+        defer { AgentSessionStore.delete(id: session.id) }
+        let runtime = try #require(app.agentRuntimes[session.id])
+        let first = call(status: .awaitingConfirm)
+        runtime.toolCalls = [first]
+        let oldDecision = Task { await app.awaitToolDecision(for: runtime, forCallID: first.id) }
+        try await waitForRegistration(first.id, runtime: runtime)
+        runtime.isResponding = false
+        runtime.input = "Leave that operation for now"
+        app.sendAgentMessage()
+        runtime.requestTask?.cancel()
+        #expect(!approved(await oldDecision.value))
+        #expect(runtime.toolCalls.first(where: { $0.id == first.id })?.status == .denied)
+        #expect(runtime.toolDecisionWaiters[first.id] == nil)
+
+        let second = call(status: .awaitingConfirm)
+        runtime.toolCalls.append(second)
+        let newDecision = Task { await app.awaitToolDecision(for: runtime, forCallID: second.id) }
+        try await waitForRegistration(second.id, runtime: runtime)
+        app.resolveAgentToolCallDecision(id: first.id, decision: .approved)
+        #expect(runtime.toolDecisionWaiters[second.id] != nil)
+        app.resolveAgentToolCallDecision(id: second.id, decision: .approved)
+        #expect(approved(await newDecision.value))
+        app.resolveAgentToolCallDecision(id: first.id, decision: .approved)
+        #expect(runtime.toolCalls.first(where: { $0.id == first.id })?.status == .denied)
+    }
+
     private func call(status: AgentToolCallStatus = .pendingApproval) -> AgentToolCall {
         AgentToolCall(
             messageID: UUID(), externalID: UUID().uuidString,

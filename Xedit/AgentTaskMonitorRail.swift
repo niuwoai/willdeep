@@ -1142,6 +1142,7 @@ private struct AgentActivityPhase {
 }
 
 private struct AgentSubagentFleetPopover: View {
+    @EnvironmentObject private var appState: AppState
     let fleet: AgentSubagentFleetStatus
 
     var body: some View {
@@ -1183,6 +1184,7 @@ private struct AgentSubagentFleetPopover: View {
     @ViewBuilder
     private func memberRow(_ member: AgentSubagentFleetStatus.Member) -> some View {
         if let runID = member.runID {
+            HStack(spacing: 8) {
             Button {
                 AgentSubagentInspectorWindowRegistry.shared.open(
                     runID: runID,
@@ -1195,6 +1197,22 @@ private struct AgentSubagentFleetPopover: View {
             .buttonStyle(.plain)
             .help(L10n.AgentDelegation.inspectorTitle)
             .focusable(false)
+                if let parentID = appState.activeAgentSessionID,
+                   appState.agentSubagentRegistry.runs.contains(where: {
+                       $0.id == runID && $0.parentRuntimeID == parentID && $0.status == .running
+                   }) {
+                    Button {
+                        appState.agentSubagentRegistry.stop(runID: runID, forParentRuntime: parentID)
+                    } label: {
+                        Image(systemName: "stop.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(L10n.Consultation.stop)
+                    .accessibilityLabel(L10n.Consultation.stop)
+                    .accessibilityIdentifier("stop-worker-\(runID.uuidString)")
+                    .disabled(appState.agentSubagentRegistry.stopRequestedRunIDs.contains(runID))
+                }
+            }
         } else {
             memberRowContent(member, showsDisclosure: false)
         }

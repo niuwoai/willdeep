@@ -16,6 +16,44 @@
 
 import Foundation
 import OSLog
+import Combine
+
+/// Shared by foreground and background runs, including already-open inspectors.
+@MainActor
+final class AgentSubagentLiveTranscripts: ObservableObject {
+    static let shared = AgentSubagentLiveTranscripts()
+    @Published private(set) var records: [UUID: AgentSubagentTranscript] = [:]
+
+    func update(runID: UUID, label: String, prompt: String, model: String,
+                progress: AgentSubagentProgressUpdate) {
+        var record = records[runID] ?? AgentSubagentTranscript(
+            runID: runID, label: label,
+            prompt: AgentSubagentTranscript.clamped(prompt, to: AgentSubagentTranscript.Limits.promptCharacters).text,
+            model: model
+        )
+        guard record.status == .running else { return }
+        for round in progress.recordedRounds ?? [] {
+            if let index = record.rounds.firstIndex(where: { $0.index == round.index }) {
+                record.rounds[index] = round
+            } else {
+                record.rounds.append(round)
+            }
+        }
+        records[runID] = record
+    }
+
+    func finish(_ transcript: AgentSubagentTranscript) -> AgentSubagentTranscript {
+        var final = transcript
+        if final.rounds.isEmpty, let live = records[final.runID] {
+            final.rounds = live.rounds
+        }
+        records[final.runID] = final
+        let expired = records.values.filter { $0.status != .running && $0.runID != final.runID }
+            .sorted { $0.startedAt > $1.startedAt }.dropFirst(100)
+        for record in expired { records.removeValue(forKey: record.runID) }
+        return final
+    }
+}
 
 nonisolated struct AgentSubagentTranscript: Codable, Equatable, Sendable {
     nonisolated struct ToolCall: Codable, Equatable, Sendable, Identifiable {

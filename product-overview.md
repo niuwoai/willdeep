@@ -1,6 +1,12 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-08 | Current version: v1.342.0-rc18
+> Last updated: 2026-09-08 | Current version: v1.342.0-rc21
+
+后台 Worker 列表支持逐个手动停止，其他 Worker 继续运行，取消后不自动唤醒父聊天续跑。
+
+发送新消息会结束当前聊天尚未回答的确认和询问，即使只剩后台 Worker 运行；旧确认按未授权结算，不能再次生效。
+
+Worker 详情实时展示执行活动并保留终态记录。后台分派必须声明任务独立性及主聊天并行工作；三档 Worker 上下文默认 256K，用户显式配置优先。
 
 后台 Worker 的 Composer 状态条独立于主聊天生命周期：主聊天回复结束后继续显示当前聊天 Worker 的进度，全部结束后隐藏；无需重新发送消息刷新。
 

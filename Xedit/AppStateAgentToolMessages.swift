@@ -178,7 +178,7 @@ extension AppState {
             }
             return String(prompt.prefix(40))
         }()
-        let runInBackground = arguments["run_in_background"]?.boolValue() ?? false
+        let runInBackground = AgentSubagentSchedulingPolicy.runsInBackground(arguments)
         agentSpawnLog.info(
             "spawn_agent received runtime=\(runtime.id.uuidString, privacy: .public) turn=\(runtime.activeTurnID?.uuidString ?? "none", privacy: .public) call=\(call.externalID, privacy: .public) label=\(label, privacy: .public) requestedProfile=\(arguments["profile"]?.stringValue() ?? "default", privacy: .public) background=\(runInBackground ? "true" : "false", privacy: .public) promptChars=\(prompt.count, privacy: .public)"
         )
@@ -609,6 +609,11 @@ extension AppState {
         let runID = UUID()
         let startedAt = Date()
         bindSubagentRun(runID)
+        AgentSubagentLiveTranscripts.shared.update(
+            runID: runID, label: label, prompt: prompt, model: childConfiguration.model,
+            progress: .init(round: 0, maximumRounds: profile.maxRounds,
+                            completedToolInvocations: 0, activity: .thinking)
+        )
         agentSpawnLog.info(
             "spawn_agent synchronous started runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) run=\(runID.uuidString, privacy: .public) profile=\(profile.id, privacy: .public) model=\(childConfiguration.model, privacy: .public)"
         )
@@ -889,6 +894,10 @@ extension AppState {
                 // no retry ladder and the parent is fenced while it waits.
                 session: AgentNetworkSupport.workerSession(),
                 onProgress: { [weak self] progress in
+                    AgentSubagentLiveTranscripts.shared.update(
+                        runID: runID, label: label, prompt: prompt,
+                        model: configuration.model, progress: progress
+                    )
                     self?.applySubagentLiveProgress(
                         progress,
                         recordID: recordID,
@@ -1206,8 +1215,11 @@ extension AppState {
     /// hundreds of KB, and this is autosave-adjacent work the UI must not
     /// wait on.
     nonisolated static func persistSubagentTranscript(_ transcript: AgentSubagentTranscript) {
-        Task.detached(priority: .utility) {
-            AgentSubagentTranscriptStore.save(transcript)
+        Task { @MainActor in
+            let final = AgentSubagentLiveTranscripts.shared.finish(transcript)
+            Task.detached(priority: .utility) {
+                AgentSubagentTranscriptStore.save(final)
+            }
         }
     }
 

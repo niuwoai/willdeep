@@ -148,7 +148,7 @@ struct AgentWorkerTierSettingsView: View {
     }
 
     private func contextBinding(_ tier: AgentWorkerTier) -> Binding<Int> {
-        Binding(get: { models[tier].contextWindowTokens ?? AgentWorkerTierModels.standardWindow }, set: {
+        Binding(get: { models[tier].contextWindowTokens ?? AgentWorkerTierModels.extendedWindow }, set: {
             models[tier].contextWindowTokens = $0
             persist()
         })
