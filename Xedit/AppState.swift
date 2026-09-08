@@ -153,8 +153,10 @@ final class AppState: ObservableObject {
     /// Settings rewrite (Phase C). `agentConfiguration` above is
     /// derived from the active entry; selecting a different entry in
     /// Settings rebuilds the configuration on the spot.
+    var pluginDiscoveredModels: [UUID: [String]] = [:]
     @Published var agentProviderLibrary: AgentProviderLibrary {
         didSet {
+            pluginDiscoveredModels.removeAll()
             AgentSettingsStore.saveProviderLibrary(agentProviderLibrary)
             // A 方案的闭环：library 是 provider 字段的唯一真相源,任何对
             // library 的写入(onboarding 首次保存 key、设置页编辑 active 条目、

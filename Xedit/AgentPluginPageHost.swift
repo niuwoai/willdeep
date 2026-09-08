@@ -1025,7 +1025,7 @@ private struct AgentPluginWebView: NSViewRepresentable {
                     )
                     return
                 }
-                let providers = appState.pluginAIProviders().map(\.jsonObject)
+                let providers = await appState.pluginAIProviders().map(\.jsonObject)
                 self.sendBridgeResult(requestID: requestID, result: ["providers": providers], error: nil)
             }
         }

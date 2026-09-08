@@ -243,7 +243,29 @@ private actor AgentPluginAITextBuffer {
 @MainActor
 extension AppState {
     /// 页面能选的 provider：用户自己配的那些，加上本地 Ollama（如果开着）。
-    func pluginAIProviders() -> [AgentPluginAIProviderDescriptor] {
+    func pluginAIProviders() async -> [AgentPluginAIProviderDescriptor] {
+        for id in agentProviderLibrary.entries.map(\.id) {
+            materializeProviderLibraryEntryAPIKey(id: id)
+        }
+        let entries = agentProviderLibrary.entries
+        let discoveries = entries.map { entry in Task { @MainActor in
+            let sessionConfiguration = URLSessionConfiguration.ephemeral
+            sessionConfiguration.timeoutIntervalForResource = 15
+            let session = URLSession(configuration: sessionConfiguration)
+            defer { session.invalidateAndCancel() }
+            do {
+                return try await AgentClient(configuration: entry.makeConfiguration(), session: session).fetchModels()
+            } catch {
+                // Preserve configured models when discovery is unavailable.
+                NSLog("Plugin model discovery failed for provider %@", entry.providerID)
+                return [String]()
+            }
+        } }
+        for (entry, discovery) in zip(entries, discoveries) {
+            let models = await discovery.value
+            guard agentProviderLibrary.entries.contains(entry), !models.isEmpty else { continue }
+            pluginDiscoveredModels[entry.id] = models
+        }
         let activeID = agentProviderLibrary.active?.id
         var descriptors = agentProviderLibrary.entries.map { entry in
             AgentPluginAIProviderDescriptor(
@@ -251,7 +273,7 @@ extension AppState {
                 displayName: entry.displayName,
                 isActive: entry.id == activeID,
                 isLocal: AgentLocalModelPrompting.isLocalProvider(entry.makeConfiguration()),
-                models: Self.modelList(for: entry),
+                models: modelList(for: entry),
                 flashModel: entry.flashPrimary
             )
         }
@@ -274,16 +296,10 @@ extension AppState {
         return descriptors
     }
 
-    private static func modelList(for entry: AgentProviderEntry) -> [String] {
-        var models = [entry.flashPrimary, entry.proPrimary]
-        models.append(contentsOf: entry.flashAlternates)
-        // proAlternates 早先漏了，页面的模型下拉只能看到 flash 那几个。
-        models.append(contentsOf: entry.proAlternates)
-        let cleaned = models
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        var seen: Set<String> = []
-        return cleaned.filter { seen.insert($0).inserted }
+    private func modelList(for entry: AgentProviderEntry) -> [String] {
+        AgentExecutionProfileModelCatalog.models(
+            for: entry, discoveredModels: pluginDiscoveredModels[entry.id] ?? [], builtIns: []
+        )
     }
 
     /// 页面能引用的技能：用户当前启用的那些，含插件自带的。刻意不返回 url。
@@ -416,7 +432,7 @@ extension AppState {
         if let entry = agentProviderLibrary.entries.first(where: { $0.providerID == providerID }) {
             var configuration = entry.makeConfiguration(routingMode: .flash)
             if let model = request.model {
-                guard Self.modelList(for: entry).contains(model) else {
+                guard modelList(for: entry).contains(model) else {
                     throw AgentPluginAIError.unknownModel(model)
                 }
                 configuration.model = model

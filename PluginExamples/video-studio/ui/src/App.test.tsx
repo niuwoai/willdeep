@@ -38,6 +38,28 @@ beforeEach(() => {
 afterEach(() => { cleanup(); delete window.willdeep; });
 
 describe('Short Drama Studio', () => {
+  it('opens settings, saves a model and shares it with planning', async () => {
+    const set = vi.fn().mockResolvedValue({ ok: true });
+    window.willdeep!.storage = { get: vi.fn().mockResolvedValue({ value: null }), set };
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存默认模型' }).hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: '聊天模型' }));
+    fireEvent.mouseDown(screen.getByRole('option', { name: 'pro-alt' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存默认模型' }));
+    await waitFor(() => expect(set).toHaveBeenCalledWith('planning-model', { provider: 'chat-a', model: 'pro-alt' }));
+    fireEvent.click(screen.getByRole('button', { name: '短剧' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '策划新短剧' })[0]!);
+    expect(screen.getByRole('button', { name: '聊天模型' }).textContent).toContain('pro-alt');
+  });
+
+  it('restores the saved default model on opening', async () => {
+    window.willdeep!.storage = { get: vi.fn().mockResolvedValue({ value: { provider: 'chat-a', model: 'pro' } }), set: vi.fn() };
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '聊天模型' }).textContent).toContain('pro'));
+  });
+
   it('starts from the short-drama library', async () => {
     render(<App />);
     expect(await screen.findByText('我的短剧')).toBeTruthy();

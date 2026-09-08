@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-08 | Current version: v1.342.0-rc24
+> Last updated: 2026-09-09 | Current version: v1.342.0-rc25
+
+短剧工坊设置支持刷新服务商聊天模型列表和保存默认策划模型。
 
 代理档案使用灰度双栏与常规、职责、工具权限三个页签；上下文文字链接快速填入，职责支持恢复内置默认，修改自动保存。
 

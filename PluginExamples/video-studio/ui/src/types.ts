@@ -20,7 +20,7 @@ export type Drama = Omit<DramaPlan, 'episodes'> & {
 export type ImageModel = 'gpt-image-2' | 'nano-banana-2';
 export type ImageResult = { mediaURL: string; filePath: string; model: ImageModel; providerID: 'some-im' };
 export type ProviderEntry = { providerID: string; displayName: string; isActive: boolean; isLocal: boolean; models: string[]; flashModel?: string };
-export type Stage = 'library' | 'planning' | 'characters' | 'script' | 'storyboard' | 'frames' | 'video';
+export type Stage = 'library' | 'settings' | 'planning' | 'characters' | 'script' | 'storyboard' | 'frames' | 'video';
 /** 宿主给的技能条目。刻意没有正文和路径：引用时只回传 identifier。 */
 export type SkillEntry = { identifier: string; name: string; description: string; source: 'bundled' | 'user' | 'plugin'; tier?: 'worker' | 'standard' | 'deep' };
 
@@ -28,6 +28,10 @@ declare global {
   interface Window {
     willdeep?: {
       getContext(): { locale?: string; colorScheme?: string };
+      storage?: {
+        get(key: string): Promise<{ value: unknown }>;
+        set(key: string, value: unknown): Promise<unknown>;
+      };
       executeCommand(command: string, arguments?: Record<string, unknown>): Promise<string | undefined>;
       ai?: {
         complete(request: { system: string; messages: Array<{ role: 'user' | 'assistant'; content: string }>; provider?: string; model?: string; maxOutputTokens?: number; skills?: string[]; streamID?: string }): Promise<{ text: string; model: string; providerID: string }>;
