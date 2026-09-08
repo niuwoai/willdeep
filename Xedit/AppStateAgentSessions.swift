@@ -1461,7 +1461,10 @@ extension AppState {
         fallbackPollAttempts: Int = 20,
         fallbackPollIntervalNanoseconds: UInt64 = 150_000_000
     ) -> Task<Void, Never> {
-        Task { @MainActor [weak self, weak runtime] in
+        let turnID = runtime.activeTurnID
+        let claimID = runtime.currentProviderSlotClaim?.id
+        let cancellationRequested = runtime.isStoppingResponse || runtime.requestTask?.isCancelled == true
+        return Task { @MainActor [weak self, weak runtime] in
             for _ in 0..<fallbackPollAttempts {
                 if fallbackPollIntervalNanoseconds > 0 {
                     try? await Task.sleep(nanoseconds: fallbackPollIntervalNanoseconds)
@@ -1469,7 +1472,9 @@ extension AppState {
                     await Task.yield()
                 }
                 guard let self, let runtime else { return }
-                guard runtime.shouldConsumeQueueAfterStop else { return }
+                guard runtime.activeTurnID == turnID,
+                      runtime.currentProviderSlotClaim?.id == claimID,
+                      cancellationRequested || runtime.shouldConsumeQueueAfterStop else { return }
                 if !runtime.isResponding, runtime.requestTask == nil {
                     runtime.shouldConsumeQueueAfterStop = false
                     self.consumeNextQueuedMessageIfNeeded(for: runtime)
@@ -1477,13 +1482,23 @@ extension AppState {
                 }
             }
             guard let self, let runtime else { return }
-            guard runtime.shouldConsumeQueueAfterStop, runtime.isResponding else { return }
+            guard runtime.activeTurnID == turnID,
+                  runtime.currentProviderSlotClaim?.id == claimID,
+                  cancellationRequested || runtime.shouldConsumeQueueAfterStop,
+                  runtime.isResponding else { return }
             let claim = runtime.currentProviderSlotClaim
+            runtime.requestTask?.cancel()
+            if let turnID {
+                self.finalizeTurnTiming(for: runtime, turnID: turnID, outcome: "cancelled")
+            }
             runtime.isResponding = false
             runtime.turnStartedAt = nil
             runtime.requestTask = nil
             runtime.activeTurnID = nil
             runtime.activeTurnConfiguration = nil
+            if let turnID, runtime.userStoppedTurnID == turnID {
+                self.noteAgentTurnEnded(for: runtime, turnID: turnID)
+            }
             runtime.userStoppedTurnID = nil
             runtime.shouldConsumeQueueAfterStop = false
             runtime.currentTurnAttachedSkills = []

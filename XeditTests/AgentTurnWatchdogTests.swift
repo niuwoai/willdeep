@@ -289,6 +289,25 @@ struct AgentTurnWatchdogTests {
         ) == nil)
     }
 
+    @Test("等待超过阈值后升级为完成状态未确认，不继续显示普通等待提示")
+    @MainActor
+    func quietResponseBecomesUnconfirmedInsteadOfReassuring() throws {
+        let (app, runtime) = try fixture()
+        defer { AgentSessionStore.delete(id: runtime.id) }
+        runtime.isResponding = true
+        runtime.lastActivityAt = now
+        runtime.lastVisibleOutputAt = now
+        app.scanAgentTurnsForStalls(now: now.addingTimeInterval(20))
+        #expect(runtime.quietReassurance?.isOverdue == false)
+        app.scanAgentTurnsForStalls(now: now.addingTimeInterval(233))
+        #expect(runtime.quietReassurance?.isOverdue == true)
+        #expect(L10n.TurnWatchdog.reassurance(subject: .modelFirstToken, isOverdue: true)
+            != L10n.TurnWatchdog.reassurance(subject: .modelFirstToken))
+        app.noteAgentVisibleOutput(for: runtime, at: now.addingTimeInterval(234))
+        #expect(runtime.quietReassurance == nil)
+        runtime.isResponding = false
+    }
+
     @Test func theBannerCountsDownToTheAutomaticReconnect() {
         let at100 = L10n.TurnWatchdog.nextStep(subject: .modelFirstToken, idle: 100)
         let at150 = L10n.TurnWatchdog.nextStep(subject: .modelFirstToken, idle: 150)

@@ -297,6 +297,7 @@ struct OpenAIResponsesAdapter {
             do {
                 try await AgentModelRequestAccounting.run(ledger: requestLedger, configuration: configuration, request: request, format: .responses, ownerGate: requestOwnerGate, onEvent: onEvent) { request, onEvent in
                     let (bytes, response) = try await session.bytes(for: request)
+                    defer { bytes.task.cancel() }
                     guard let httpResponse = response as? HTTPURLResponse else {
                         throw AgentClientError.invalidResponse
                     }
@@ -371,22 +372,29 @@ struct OpenAIResponsesAdapter {
                     for try await line in AgentStreamIdleGuard.lines(bytes.lines) {
                         try Task.checkCancellation()
 
-                        if line.hasPrefix("event: ") {
-                            pendingEventName = String(line.dropFirst("event: ".count))
+                        if line.hasPrefix("event:") {
+                            pendingEventName = String(line.dropFirst("event:".count)).trimmingCharacters(in: .whitespaces)
                             continue
                         }
-                        guard line.hasPrefix("data: ") else { continue }
-                        let payload = String(line.dropFirst("data: ".count))
+                        guard line.hasPrefix("data:") else { continue }
+                        let payload = String(line.dropFirst("data:".count)).trimmingCharacters(in: .whitespaces)
+                        if payload == "[DONE]" { break }
                         guard !payload.isEmpty,
                               let data = payload.data(using: .utf8) else { continue }
 
                         await handleEvent(
-                            name: pendingEventName,
+                            name: pendingEventName.isEmpty
+                                ? ((try? JSONDecoder().decode(ResponseEventType.self, from: data))?.type ?? "")
+                                : pendingEventName,
                             payload: data,
                             state: &state,
                             onEvent: onEvent
                         )
                         pendingEventName = ""
+                        // Completion belongs to the Responses protocol, not
+                        // to the TCP connection. Relays may keep SSE open
+                        // after sending the terminal event.
+                        if state.didCompleteResponse || state.didFailResponse { break }
                     }
 
                     // A 2xx stream that produced no text, reasoning, function call,
@@ -1367,6 +1375,10 @@ private struct FunctionCallArgumentsDeltaEvent: Decodable {
 private struct FunctionCallArgumentsDoneEvent: Decodable {
     let item_id: String?
     let arguments: String?
+}
+
+private struct ResponseEventType: Decodable {
+    let type: String?
 }
 
 private struct ResponseCompletedEvent: Decodable {

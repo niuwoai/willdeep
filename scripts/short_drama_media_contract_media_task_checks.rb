@@ -77,7 +77,7 @@ def short_drama_media_contract_media_task_checks(
     media_tasks_source.include?(".pickerStyle(.segmented)") &&
     media_tasks_source.include?("按任务状态筛选"),
   "media task registry persists tasks across app restarts" =>
-    media_tasks_source.include?("init(fileURL: URL = AgentMediaTaskRegistry.defaultFileURL())") &&
+    media_tasks_source.include?("init(fileURL: URL = AgentMediaTaskRegistry.defaultFileURL(), completionDirectory: URL? = nil)") &&
     media_tasks_source.include?("self.tasks = Self.load(from: fileURL)") &&
     media_tasks_source.include?("WillDeep/media-tasks/tasks.json") &&
     media_tasks_source.include?("encoder.dateEncodingStrategy = .iso8601") &&

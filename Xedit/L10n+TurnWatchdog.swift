@@ -41,17 +41,23 @@ extension L10n {
 
         /// Tier one, composer strip. Only the model subjects get a line: a
         /// running tool or Worker already shows its own name and clock.
-        static func reassurance(subject: AgentTurnWatchdogPolicy.StallSubject) -> String? {
+        static func reassurance(subject: AgentTurnWatchdogPolicy.StallSubject, isOverdue: Bool = false) -> String? {
+            if isOverdue, subject == .modelFirstToken || subject == .modelMidStream {
+                return String(
+                    localized: "turn-watchdog.response-completion-unconfirmed",
+                    defaultValue: "No new output for a while; response completion has not been confirmed"
+                )
+            }
             switch subject {
             case .modelFirstToken:
                 return String(
                     localized: "turn-watchdog.reassure-model-first-token",
-                    defaultValue: "Model is thinking, nothing to show yet — reasoning models often take a minute or two"
+                    defaultValue: "Waiting for a response; no text received yet"
                 )
             case .modelMidStream:
                 return String(
                     localized: "turn-watchdog.reassure-model-mid-stream",
-                    defaultValue: "Model is working on the next part"
+                    defaultValue: "No new text received; waiting for more output"
                 )
             case .worker, .tool:
                 return nil

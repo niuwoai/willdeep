@@ -56,7 +56,7 @@ nonisolated struct WillDeepRuntimeProtocolTests {
         let responses = root["responses"] as? [String: Any] ?? [:]
         #expect(Set(responses.keys) == [
             "runtime", "workspace", "session", "agent", "turn", "tool",
-            "task", "approval", "question", "artifact", "event",
+            "task", "approval", "question", "artifact", "event", "kernel_event",
         ])
     }
 

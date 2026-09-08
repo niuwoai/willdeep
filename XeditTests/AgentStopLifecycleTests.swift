@@ -102,6 +102,110 @@ struct AgentStopLifecycleTests {
         #expect(notices.isEmpty)
     }
 
+    @Test("点击 Stop 后拒收正文、思考与工具增量，保留点击前已接收的内容")
+    func stoppedStreamRejectsLateEvents() throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let message = AgentMessage(role: .assistant, content: "已输出")
+        f.runtime.messages.append(message)
+        let buffer = AgentStreamingMessageBuffer(runtime: f.runtime, assistantID: message.id)
+        buffer.appendTextDelta("，停止前")
+        buffer.appendReasoningDelta("已接收的思考")
+        #expect(f.runtime.acceptsResponseEvents(for: f.turnID))
+
+        f.app.stopAgentResponse(for: f.runtime)
+
+        #expect(f.runtime.isStoppingResponse)
+        #expect(!f.runtime.acceptsResponseEvents(for: f.turnID))
+        buffer.appendTextDelta("不应出现")
+        buffer.appendReasoningDelta("不应继续思考")
+        buffer.updateToolCalls([.init(externalID: "late", toolName: "run_command", argumentsJSON: "{}")])
+        buffer.flushPending()
+        let preserved = try #require(f.runtime.messages.first { $0.id == message.id })
+        #expect(preserved.content == "已输出，停止前")
+        #expect(preserved.reasoningContent == "已接收的思考")
+        #expect(preserved.toolCalls.isEmpty)
+
+        let nextTurn = UUID()
+        f.runtime.activeTurnID = nextTurn
+        f.runtime.userStoppedTurnID = nil
+        #expect(f.runtime.acceptsResponseEvents(for: nextTurn))
+        #expect(!f.runtime.acceptsResponseEvents(for: f.turnID))
+        buffer.appendTextDelta("旧连接不能写入新轮次")
+        buffer.flushPending()
+        #expect(f.runtime.messages.first { $0.id == message.id }?.content == preserved.content)
+    }
+
+    @Test("没有排队消息时 Stop 也收回卡住的请求和 provider 槽位")
+    func stopWithoutQueueReleasesStuckTurn() async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let provider = "stop-fixture"
+        #expect(f.app.acquireProviderSlotIfPossible(providerID: provider))
+        _ = f.app.claimProviderSlot(for: f.runtime, providerID: provider)
+        f.runtime.turnStartedAt = Date()
+        f.runtime.requestTask = Task {}
+        f.app.stopAgentResponse(for: f.runtime)
+        #expect(!f.runtime.shouldConsumeQueueAfterStop)
+
+        await f.app.scheduleQueuedMessageConsumptionAfterCancellation(
+            for: f.runtime, fallbackPollAttempts: 1, fallbackPollIntervalNanoseconds: 0
+        ).value
+
+        #expect(!f.runtime.isResponding)
+        #expect(f.runtime.requestTask == nil)
+        #expect(f.runtime.activeTurnID == nil)
+        #expect(f.runtime.turnStartedAt == nil)
+        #expect(f.runtime.currentProviderSlotClaim == nil)
+        #expect(f.app.inFlightCountByProvider[provider] == nil)
+        #expect(f.runtime.messages.last?.transcriptEvent == .responseStopped)
+    }
+
+    @Test("主动停止包含未执行工具的回合不会被 watchdog 自动复活")
+    func stoppedLoopCleanupDoesNotResumeDanglingTools() async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let provider = "stop-fixture"
+        #expect(f.app.acquireProviderSlotIfPossible(providerID: provider))
+        let claim = f.app.claimProviderSlot(for: f.runtime, providerID: provider)
+        f.runtime.messages.append(.init(role: .assistant, content: "",
+            toolCalls: [.init(externalID: "unfinished", toolName: "run_command", argumentsJSON: "{}")]))
+        f.app.stopAgentResponse(for: f.runtime)
+        f.app.finishAgentLoopTurn(for: f.runtime, turnID: f.turnID,
+            providerSlotClaimID: claim.id, providerID: provider, shouldResumePendingEvents: true)
+        await Task.yield()
+        #expect(f.runtime.turnInterruptionAutoResumeCount == 0)
+        #expect(f.runtime.errorMessage == nil)
+        #expect(!f.runtime.isResponding)
+        #expect(f.runtime.requestTask == nil)
+        #expect(f.runtime.currentProviderSlotClaim == nil)
+        #expect(f.runtime.messages.last?.transcriptEvent == .responseStopped)
+    }
+
+    @Test("旧 Stop 的兜底与迟到收尾不能清理新轮次")
+    func staleStopCleanupPreservesReplacementTurn() async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        let provider = "stop-fixture"
+        #expect(f.app.acquireProviderSlotIfPossible(providerID: provider))
+        let oldClaim = f.app.claimProviderSlot(for: f.runtime, providerID: provider)
+        f.app.stopAgentResponse(for: f.runtime)
+        let fallback = f.app.scheduleQueuedMessageConsumptionAfterCancellation(
+            for: f.runtime, fallbackPollAttempts: 1, fallbackPollIntervalNanoseconds: 0)
+        f.app.releaseProviderSlot(for: f.runtime, claimID: oldClaim.id, providerID: provider)
+        #expect(f.app.acquireProviderSlotIfPossible(providerID: provider))
+        let newClaim = f.app.claimProviderSlot(for: f.runtime, providerID: provider)
+        let newTurn = UUID()
+        f.runtime.activeTurnID = newTurn
+        f.runtime.userStoppedTurnID = nil
+        f.runtime.requestTask = Task {}
+        await fallback.value
+        f.app.finishAgentLoopTurn(for: f.runtime, turnID: f.turnID,
+            providerSlotClaimID: oldClaim.id, providerID: provider, shouldResumePendingEvents: true)
+        #expect(f.runtime.isResponding)
+        #expect(f.runtime.activeTurnID == newTurn)
+        #expect(f.runtime.requestTask != nil)
+        #expect(f.runtime.currentProviderSlotClaim?.id == newClaim.id)
+        #expect(f.app.inFlightCountByProvider[provider] == 1)
+        f.app.releaseProviderSlot(for: f.runtime, claimID: newClaim.id, providerID: provider)
+    }
+
     @Test("没有进程时 Stop 也撤销晚到的本轮启动，不创建文件或句柄")
     func stoppedTurnCannotLaunchLateWork() async throws {
         let f = try fixture(); defer { f.cleanup() }

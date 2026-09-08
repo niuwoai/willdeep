@@ -37,23 +37,6 @@ import AppKit
 import Foundation
 
 extension AppState {
-    @MainActor
-    private func telemetryCancellationReason(
-        for runtime: AgentRuntime,
-        turnID: UUID
-    ) -> TelemetryCancellationReason {
-        if runtime.userStoppedTurnID == turnID {
-            return .userStop
-        }
-        if runtime.shouldConsumeQueueAfterStop {
-            return .queuedMessageTakeover
-        }
-        if runtime.activeTurnID != turnID {
-            return .runtimeReplaced
-        }
-        return .taskCancelled
-    }
-
     func dispatchAgentMessage(
         for runtime: AgentRuntime,
         text: String,
@@ -245,6 +228,10 @@ extension AppState {
                     imageDescriptionConfiguration: imageDescriptionConfiguration
                 )
             } catch is CancellationError {
+                guard runtime.activeTurnID == turnID else {
+                    self.releaseProviderSlot(for: runtime, claimID: providerSlotClaim.id, providerID: providerID)
+                    return
+                }
                 let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
                 runtime.isResponding = false
                 runtime.turnStartedAt = nil
@@ -267,6 +254,10 @@ extension AppState {
                 }
                 return
             } catch {
+                guard runtime.activeTurnID == turnID else {
+                    self.releaseProviderSlot(for: runtime, claimID: providerSlotClaim.id, providerID: providerID)
+                    return
+                }
                 if Self.isStoppedTurnCancellation(error, runtime: runtime, turnID: turnID) {
                     let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
                     runtime.isResponding = false
@@ -388,6 +379,11 @@ extension AppState {
         providerSlotClaimID: UUID,
         turnID: UUID
     ) async {
+        guard !Task.isCancelled, runtime.acceptsResponseEvents(for: turnID) else {
+            finishAgentLoopTurn(for: runtime, turnID: turnID, providerSlotClaimID: providerSlotClaimID,
+                                providerID: configuration.providerID, shouldResumePendingEvents: false)
+            return
+        }
         // This turn just went live (isResponding was set true by the caller).
         // Refresh the same-checkout collision hint so the foreground composer
         // reflects a background session now working in its directory.
@@ -429,11 +425,13 @@ extension AppState {
             // still running, drop an undelivered report, then write the
             // turn's timing line. Runs before the wake-up probes below so a
             // scout can never be mistaken for pending background work.
-            finalizeTurnTiming(
-                for: runtime,
-                turnID: turnID,
-                outcome: String(describing: turnTelemetry.status)
-            )
+            if runtime.activeTurnID == turnID {
+                finalizeTurnTiming(
+                    for: runtime,
+                    turnID: turnID,
+                    outcome: String(describing: turnTelemetry.status)
+                )
+            }
             // Any event still leased here was not acknowledged by a completed
             // provider request. Put it back before the final wakeup probe so a
             // cancellation, transport failure, or host preemption can retry in
@@ -458,7 +456,9 @@ extension AppState {
             // exclusive lease binds calls to one target during this turn;
             // retaining `computer_use:*` into a later turn would silently
             // authorize a different target or newly consequential action.
-            runtime.conversationAllowedToolSignatures.remove("computer_use:*")
+            if runtime.activeTurnID == turnID {
+                runtime.conversationAllowedToolSignatures.remove("computer_use:*")
+            }
             if let computerUseLeaseID {
                 Task {
                     try? await AgentComputerUseBridge.shared.endControlSession(
@@ -466,66 +466,11 @@ extension AppState {
                     )
                 }
             }
-            let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
-            runtime.isResponding = false
-            runtime.turnStartedAt = nil
-            runtime.requestTask = nil
-            if runtime.activeTurnID == turnID {
-                runtime.activeTurnID = nil
-                runtime.activeTurnConfiguration = nil
-                runtime.userStoppedTurnID = nil
-            }
-            runtime.goalTurnRecoveryCheckpoint = nil
-            runtime.shouldConsumeQueueAfterStop = false
-            auditDelegationPolicyForFinishedTurn(in: runtime)
-            // Turn finished — one fewer concurrent worker on this checkout.
-            refreshAgentWorkspaceCollision()
-            captureAgentPlanFromLatestMessage(for: runtime)
-            let didDefineGoal = captureAgentGoalDefinitionFromLatestMessage(for: runtime)
-            // Do not advance a completed Plan into a fresh planning cycle
-            // from unconditional turn cleanup. This defer also runs after
-            // quota errors, timeouts, cancellation, and empty streams; in
-            // those cases even a closed, partially streamed goal-check is not
-            // authoritative. The successful prose-only reply path owns both
-            // evaluation capture and cycle advancement.
-            startAgentGoalPlanningAfterCaptureIfNeeded(didDefineGoal, for: runtime)
-            // A turn that ended with a tool call nobody executed is not a
-            // finished turn. Say so and resume it; see AgentTurnWatchdog.
-            noteAgentTurnEnded(for: runtime, turnID: turnID)
-            persistAgentSession(runtime: runtime)
-            // Runs after the persist so the record reads the same settled
-            // state the session file just captured. No-op for anything a
-            // human started.
-            recordRoutineRunCompletionIfNeeded(for: runtime)
-            if !shouldConsumeQueueAfterStop {
-                // A runway stop means the window is already at 90%, well past
-                // the ordinary 75% trigger — but `shouldAutoCompressNow` can
-                // still refuse (too few messages, a tail that will not split).
-                // Ask for it explicitly so the ordered stop is always followed
-                // by the compression it promised the model.
-                if runtime.pendingContextRunwayResume {
-                    compressAgentContext(for: runtime, keepRecent: 2)
-                } else {
-                    maybeAutoCompressContext(for: runtime)
-                }
-            }
-            consumeNextQueuedMessageIfNeeded(for: runtime)
-            // Always release the provider slot last so the queue drain
-            // sees a fully cleared `isResponding` and won't refuse to
-            // dispatch a queued user message that's for the same runtime.
-            releaseProviderSlot(
-                for: runtime,
-                claimID: providerSlotClaimID,
-                providerID: configuration.providerID
+            finishAgentLoopTurn(
+                for: runtime, turnID: turnID, providerSlotClaimID: providerSlotClaimID,
+                providerID: configuration.providerID,
+                shouldResumePendingEvents: shouldResumePendingEventsAtTurnEnd
             )
-            // A background job can finish in the tiny window between this
-            // turn's last drain and its end. If one did — and no queued
-            // user message just claimed the runtime above — kick a fresh
-            // turn so the completion isn't stranded until the next message.
-            let wasKernelPreempted = agentKernelPreemptedRuntimeIDs.remove(runtime.id) != nil
-            if shouldResumePendingEventsAtTurnEnd || wasKernelPreempted {
-                resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
-            }
         }
 
         // some.im context headers (session id + workspace id) ride on every
@@ -1207,6 +1152,8 @@ extension AppState {
                         ) { event in
                             await MainActor.run { [weak runtime] in
                                 guard let runtime,
+                                      !Task.isCancelled,
+                                      runtime.acceptsResponseEvents(for: turnID),
                                       let index = runtime.messages.firstIndex(where: { $0.id == assistantID }) else {
                                     return
                                 }
@@ -1254,11 +1201,15 @@ extension AppState {
                                 }
                             }
                         }
+                        try Task.checkCancellation()
+                        guard runtime.acceptsResponseEvents(for: turnID) else { throw CancellationError() }
                         break
                     } catch is CancellationError {
                         throw CancellationError()
                     } catch {
                         streamBuffer.flushPending()
+                        try Task.checkCancellation()
+                        guard runtime.acceptsResponseEvents(for: turnID) else { throw CancellationError() }
                         guard shouldRetryTransientNetworkError(
                             error,
                             for: runtime,
@@ -1318,7 +1269,8 @@ extension AppState {
             } catch {
                 shouldResumePendingEventsAtTurnEnd = false
                 streamBuffer.flushPending()
-                if Self.isStoppedTurnCancellation(error, runtime: runtime, turnID: turnID) {
+                if Task.isCancelled || !runtime.acceptsResponseEvents(for: turnID)
+                    || Self.isStoppedTurnCancellation(error, runtime: runtime, turnID: turnID) {
                     agentKernelPreemptedRuntimeIDs.remove(runtime.id)
                     turnTelemetry.noteCancelled(reason: telemetryCancellationReason(for: runtime, turnID: turnID))
                     finalizeInterruptedAssistantMessage(

@@ -40,31 +40,31 @@ nonisolated enum AgentStreamIdleGuard {
             let task = Task {
                 let lastPayloadAt = IdleClock()
                 await lastPayloadAt.touch()
-                let watchdog = Task {
-                    let interval = UInt64(min(idleTimeout, 5) * 1_000_000_000)
-                    while !Task.isCancelled {
-                        try await Task.sleep(nanoseconds: interval)
-                        if await lastPayloadAt.idleSeconds() >= idleTimeout {
-                            throw AgentClientError.streamStalled(idleSeconds: idleTimeout)
-                        }
-                    }
-                }
-                defer { watchdog.cancel() }
                 do {
                     try await withThrowingTaskGroup(of: Void.self) { group in
+                        defer { group.cancelAll() }
                         group.addTask {
                             for try await line in lines {
+                                try Task.checkCancellation()
                                 if isPayloadLine(line) { await lastPayloadAt.touch() }
                                 continuation.yield(line)
                             }
                         }
+                        // The timer must be a child of the group. Awaiting an
+                        // unstructured watchdog.value does not cancel that
+                        // watchdog when the reader ends or Stop is pressed.
                         group.addTask {
-                            try await watchdog.value
+                            let interval = UInt64(min(idleTimeout, 5) * 1_000_000_000)
+                            while !Task.isCancelled {
+                                try await Task.sleep(nanoseconds: interval)
+                                if await lastPayloadAt.idleSeconds() >= idleTimeout {
+                                    throw AgentClientError.streamStalled(idleSeconds: idleTimeout)
+                                }
+                            }
                         }
                         // Whichever finishes first: the reader on end of
                         // stream, or the watchdog by throwing.
                         try await group.next()
-                        group.cancelAll()
                     }
                     continuation.finish()
                 } catch {

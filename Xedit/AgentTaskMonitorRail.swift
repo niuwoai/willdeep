@@ -753,7 +753,14 @@ struct AgentSemanticActivityStatusLine: View {
 
     @ViewBuilder
     var body: some View {
-        if style == .composer, let fleet = currentFleet {
+        if appState.activeRuntime?.isStoppingResponse == true {
+            Label(L10n.Composer.stopped, systemImage: "stop.circle")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, style == .composer ? 12 : 0)
+                .frame(height: style == .composer ? 26 : nil)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if style == .composer, let fleet = currentFleet {
             fleetComposerCard(fleet)
         } else if style == .composer,
            AgentBackgroundTaskComposerCardVisibility.shouldShow(
@@ -994,7 +1001,7 @@ struct AgentSemanticActivityStatusLine: View {
             // subjects land here — a running tool or Worker already shows
             // its name and a clock above.
             if let quiet = appState.activeRuntime?.quietReassurance,
-               let label = L10n.TurnWatchdog.reassurance(subject: quiet.subject) {
+               let label = L10n.TurnWatchdog.reassurance(subject: quiet.subject, isOverdue: quiet.isOverdue) {
                 return AgentActivityPhase(label: label, systemImage: "brain", tint: .secondary)
             }
             if let headline = appState.agentCurrentActivityHeadline {

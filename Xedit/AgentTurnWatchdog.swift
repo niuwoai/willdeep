@@ -214,7 +214,10 @@ extension AppState {
                 now: now
             ) != nil
             if isQuiet, let since = runtime.lastVisibleOutputAt {
-                let reassurance = AgentQuietReassurance(subject: watchdogStallSubject(for: runtime), since: since)
+                let reassurance = AgentQuietReassurance(
+                    subject: watchdogStallSubject(for: runtime), since: since,
+                    isOverdue: now.timeIntervalSince(since) >= AgentTurnWatchdogPolicy.stallThreshold
+                )
                 if runtime.quietReassurance != reassurance { runtime.quietReassurance = reassurance }
             } else if runtime.quietReassurance != nil {
                 runtime.quietReassurance = nil

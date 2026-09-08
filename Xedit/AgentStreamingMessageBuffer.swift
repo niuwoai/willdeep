@@ -110,6 +110,7 @@ final class AgentStreamingMessageBuffer {
 
     private weak var runtime: AgentRuntime?
     private let assistantID: AgentMessage.ID
+    private let turnID: UUID?
     private var pendingContent = ""
     private var pendingReasoning = ""
     private var flushTask: Task<Void, Never>?
@@ -120,13 +121,14 @@ final class AgentStreamingMessageBuffer {
     init(runtime: AgentRuntime, assistantID: AgentMessage.ID) {
         self.runtime = runtime
         self.assistantID = assistantID
+        self.turnID = runtime.activeTurnID
         let message = runtime.messages.first(where: { $0.id == assistantID })
         streamedCharacterCount = message?.content.count ?? 0
         streamedCharacterCount += message?.reasoningContent?.count ?? 0
     }
 
     func appendTextDelta(_ delta: String) {
-        guard !delta.isEmpty else { return }
+        guard acceptsNewEvents, !delta.isEmpty else { return }
         pendingContent += delta
         streamedCharacterCount += delta.count
         scheduleFlush()
@@ -134,7 +136,7 @@ final class AgentStreamingMessageBuffer {
     }
 
     func appendReasoningDelta(_ delta: String) {
-        guard !delta.isEmpty else { return }
+        guard acceptsNewEvents, !delta.isEmpty else { return }
         pendingReasoning += delta
         streamedCharacterCount += delta.count
         scheduleFlush()
@@ -150,6 +152,7 @@ final class AgentStreamingMessageBuffer {
     /// array immediately, so the live activity timeline mounts each call
     /// promptly while its argument tail updates at 1 Hz.
     func updateToolCalls(_ calls: [AgentMessageToolCall]) {
+        guard acceptsNewEvents else { return }
         // Drain pending text first so overlay ordering matches the event
         // stream (text delta → tool calls), same as the old flushPending().
         flushTask?.cancel()
@@ -191,6 +194,12 @@ final class AgentStreamingMessageBuffer {
         canonicalFlushTask?.cancel()
         canonicalFlushTask = nil
         syncCanonicalIfNeeded()
+    }
+
+    private var acceptsNewEvents: Bool {
+        guard let runtime else { return false }
+        guard let turnID else { return runtime.activeTurnID == nil }
+        return runtime.acceptsResponseEvents(for: turnID)
     }
 
     private func scheduleFlush() {

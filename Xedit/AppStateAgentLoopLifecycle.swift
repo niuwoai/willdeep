@@ -8,6 +8,23 @@
 import Foundation
 
 extension AppState {
+    @MainActor
+    func telemetryCancellationReason(
+        for runtime: AgentRuntime,
+        turnID: UUID
+    ) -> TelemetryCancellationReason {
+        if runtime.userStoppedTurnID == turnID {
+            return .userStop
+        }
+        if runtime.shouldConsumeQueueAfterStop {
+            return .queuedMessageTakeover
+        }
+        if runtime.activeTurnID != turnID {
+            return .runtimeReplaced
+        }
+        return .taskCancelled
+    }
+
     func clearAgentConversation() {
         agentRequestTask?.cancel()
         if let runtime = activeRuntime {
@@ -107,5 +124,76 @@ extension AppState {
         runtime.sidePanelState = sidePanelState
         persistAgentSidePanelState(runtime: runtime)
         return canRevealPanel
+    }
+
+    /// A cancelled transport may unwind after the stop fallback started a new turn.
+    /// Only the current owner may clear runtime state or schedule continuations.
+    func finishAgentLoopTurn(
+        for runtime: AgentRuntime, turnID: UUID, providerSlotClaimID: UUID,
+        providerID: String, shouldResumePendingEvents: Bool
+    ) {
+        guard runtime.activeTurnID == turnID else {
+            releaseProviderSlot(for: runtime, claimID: providerSlotClaimID, providerID: providerID)
+            return
+        }
+        let shouldConsumeQueueAfterStop = runtime.shouldConsumeQueueAfterStop
+        let wasUserStopped = runtime.userStoppedTurnID == turnID
+        runtime.isResponding = false
+        runtime.turnStartedAt = nil
+        runtime.requestTask = nil
+        runtime.activeTurnID = nil
+        runtime.activeTurnConfiguration = nil
+        runtime.goalTurnRecoveryCheckpoint = nil
+        runtime.shouldConsumeQueueAfterStop = false
+        auditDelegationPolicyForFinishedTurn(in: runtime)
+        // Turn finished — one fewer concurrent worker on this checkout.
+        refreshAgentWorkspaceCollision()
+        if !wasUserStopped {
+            captureAgentPlanFromLatestMessage(for: runtime)
+            let didDefineGoal = captureAgentGoalDefinitionFromLatestMessage(for: runtime)
+            // Only the successful prose-only reply path may evaluate a
+            // completed Plan and advance it into a fresh planning cycle.
+            startAgentGoalPlanningAfterCaptureIfNeeded(didDefineGoal, for: runtime)
+        }
+        // A turn that ended with a tool call nobody executed is not a
+        // finished turn. Say so and resume it; see AgentTurnWatchdog.
+        noteAgentTurnEnded(for: runtime, turnID: turnID)
+        // The watchdog must observe the stop marker before it is cleared;
+        // otherwise pending tool calls are mistaken for a crash and resumed.
+        runtime.userStoppedTurnID = nil
+        persistAgentSession(runtime: runtime)
+        // Runs after the persist so the record reads the same settled
+        // state the session file just captured. No-op for anything a
+        // human started.
+        recordRoutineRunCompletionIfNeeded(for: runtime)
+        if !wasUserStopped, !shouldConsumeQueueAfterStop {
+            // A runway stop means the window is already at 90%, well past
+            // the ordinary 75% trigger — but `shouldAutoCompressNow` can
+            // still refuse (too few messages, a tail that will not split).
+            // Ask for it explicitly so the ordered stop is always followed
+            // by the compression it promised the model.
+            if runtime.pendingContextRunwayResume {
+                compressAgentContext(for: runtime, keepRecent: 2)
+            } else {
+                maybeAutoCompressContext(for: runtime)
+            }
+        }
+        consumeNextQueuedMessageIfNeeded(for: runtime)
+        // Always release the provider slot last so the queue drain
+        // sees a fully cleared `isResponding` and won't refuse to
+        // dispatch a queued user message that's for the same runtime.
+        releaseProviderSlot(
+            for: runtime,
+            claimID: providerSlotClaimID,
+            providerID: providerID
+        )
+        // A background job can finish in the tiny window between this
+        // turn's last drain and its end. If one did — and no queued
+        // user message just claimed the runtime above — kick a fresh
+        // turn so the completion isn't stranded until the next message.
+        let wasKernelPreempted = agentKernelPreemptedRuntimeIDs.remove(runtime.id) != nil
+        if !wasUserStopped && (shouldResumePendingEvents || wasKernelPreempted) {
+            resumeAgentLoopForPendingBackgroundCompletions(for: runtime)
+        }
     }
 }

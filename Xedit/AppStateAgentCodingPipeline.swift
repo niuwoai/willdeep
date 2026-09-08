@@ -528,6 +528,10 @@ extension AppState {
         providerSlotClaimID: UUID,
         turnID: UUID
     ) {
+        guard runtime.activeTurnID == turnID else {
+            releaseProviderSlot(for: runtime, claimID: providerSlotClaimID, providerID: configuration.providerID)
+            return
+        }
         runtime.messages.append(AgentMessage(
             role: .assistant,
             content: message,

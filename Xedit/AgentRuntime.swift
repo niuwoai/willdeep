@@ -35,6 +35,7 @@ nonisolated enum AgentBannerSeverity: Equatable {
 nonisolated struct AgentQuietReassurance: Equatable {
     var subject: AgentTurnWatchdogPolicy.StallSubject
     var since: Date
+    var isOverdue = false
 }
 
 @MainActor
@@ -345,6 +346,15 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// `CancellationError`; the turn id lets the loop distinguish that from
     /// an unrelated network failure.
     var userStoppedTurnID: UUID?
+
+    var isStoppingResponse: Bool {
+        guard let activeTurnID else { return false }
+        return userStoppedTurnID == activeTurnID
+    }
+
+    func acceptsResponseEvents(for turnID: UUID) -> Bool {
+        activeTurnID == turnID && !isStoppingResponse
+    }
     /// Host-side cleanup can outlive the provider stream briefly while an AI
     /// judge decides which jobs from each stopped turn to terminate. Keep one
     /// task per turn so stopping a newer turn cannot strand an older cleanup.
