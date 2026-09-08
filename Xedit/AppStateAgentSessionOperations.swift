@@ -183,6 +183,9 @@ extension AppState {
         moveToFront: Bool = true
     ) {
         guard let index = agentSessions.firstIndex(where: { $0.id == runtime.id }) else { return }
+        if runtime.session.presentationScope == .workspace {
+            runtime.session.projectID = AgentProjectResolver.projectID(for: runtime.session, in: agentProjects)
+        }
         synchronizeApprovalKernelEvents(for: runtime)
         if runtime.managedRouting != nil {
             // Managed routing resolves a model per-turn; there is no single

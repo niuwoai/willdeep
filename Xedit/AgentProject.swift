@@ -105,6 +105,18 @@ nonisolated struct AgentProject: Codable, Equatable, Identifiable, Sendable {
 // MARK: - Ownership resolution
 
 nonisolated enum AgentProjectResolver {
+    /// Keep a valid explicit owner; otherwise resolve the current local
+    /// sidebar root, including conversations rebound after their creation.
+    static func projectID(for session: AgentSession, in projects: [AgentProject]) -> UUID? {
+        if case .remote? = session.workspaceLocation { return nil }
+        let path = AgentProjectRemoval.sessionPath(session)
+        if let current = session.projectID,
+           projects.first(where: { $0.id == current })?.contains(path: path ?? "") == true {
+            return current
+        }
+        return project(for: path, in: projects)?.id
+    }
+
     /// Which project owns `path`.
     ///
     /// A folder may belong to several projects, so ties need a deterministic

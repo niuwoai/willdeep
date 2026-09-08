@@ -5,6 +5,24 @@ import Testing
 @Suite
 @MainActor
 struct AgentProjectTests {
+    @Test("归属跟随目录变化，同时保留仍有效的显式项目与 worktree 根目录")
+    func ownershipFollowsCurrentWorkspace() {
+        let first = AgentProject(displayName: "same", folderPaths: ["/tmp/one"])
+        let second = AgentProject(displayName: "same", folderPaths: ["/tmp/two"])
+        let nested = AgentProject(displayName: "nested", folderPaths: ["/tmp/one/sub"])
+        var session = AgentSession(title: "test", workspaceRootPath: "/tmp/two", projectID: first.id)
+        #expect(AgentProjectResolver.projectID(for: session, in: [first, second]) == second.id)
+        session.workspaceRootPath = "/tmp/one/sub"
+        session.workspaceLocation = .local(path: "/tmp/one/sub")
+        #expect(AgentProjectResolver.projectID(for: session, in: [first, nested]) == first.id)
+        session.workspaceRootPath = "/tmp/worktrees/isolated"
+        session.workspaceLocation = .local(path: "/tmp/worktrees/isolated")
+        session.sidebarWorkspaceRootPath = "/tmp/one"
+        #expect(AgentProjectResolver.projectID(for: session, in: [first]) == first.id)
+        session.workspaceLocation = .remote(runtimeID: UUID(), path: "/tmp/one")
+        #expect(AgentProjectResolver.projectID(for: session, in: [first]) == nil)
+    }
+
     private func project(
         name: String,
         folders: [String],
