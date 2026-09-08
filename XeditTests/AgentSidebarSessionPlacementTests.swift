@@ -16,6 +16,30 @@ struct AgentSessionContextMenuSupportTests {
 
 @Suite("Sidebar session placement")
 struct AgentSidebarSessionPlacementTests {
+    @MainActor
+    @Test("新聊天选择已有项目目录立即绑定，保存后不会出现裸目录分组")
+    func directoryPickerBindsExistingProject() throws {
+        let state = AppState()
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let project = try #require(state.createAgentProject(displayName: "sso", folderPaths: [folder.path]))
+        let session = state.startNewAgentSession(inWorkspaceAt: nil)
+        let selected = state.moveActiveAgentSessionToWorkspace(at: folder.path)
+        #expect(selected.id == session.id)
+        #expect(selected.projectID == project.id)
+        #expect(selected.workspaceSidebarGroupKey == AgentSession.projectSidebarGroupKeyPrefix + project.id.uuidString)
+        let stored = try #require(AgentSessionStore.load(id: session.id))
+        #expect(stored.projectID == project.id)
+        let runtime = try #require(state.activeRuntime)
+        runtime.session.projectID = nil
+        let originalDate = runtime.session.updatedAt
+        let healed = state.moveActiveAgentSessionToWorkspace(at: folder.path)
+        #expect(healed.id == session.id)
+        #expect(healed.projectID == project.id)
+        #expect(healed.updatedAt == originalDate)
+    }
+
     private static func session(
         title: String,
         createdAt: Date,

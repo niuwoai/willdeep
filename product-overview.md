@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-08 | Current version: v1.342.0-rc14
+> Last updated: 2026-09-08 | Current version: v1.342.0-rc17
+
+聊天选择已有项目目录后立即归入原项目；保存和启动恢复同步项目归属，避免同一路径同时显示为项目和裸文件夹。重新选择当前目录可修复遗留归属且保留聊天时间与内容。
 
 本版修复 Agent 响应结束后仍等待空闲计时器、Responses 终止事件后继续等待连接关闭的问题。Composer 停止后拒绝迟到输出，取消收尾保留用户停止意图，避免 watchdog 自动续跑；等待提示改为描述客户端实际收到的输出，长时间无输出时明确标记尚未确认结束。
 

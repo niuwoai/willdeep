@@ -154,18 +154,7 @@ extension AppState {
 
         for index in agentSessions.indices {
             let session = agentSessions[index]
-            let resolved = AgentProjectResolver.project(
-                for: AgentProjectRemoval.sessionPath(session),
-                in: projects
-            )?.id
-            // A session already bound to a project that still claims it keeps
-            // that binding — re-resolution must not shuffle settled work.
-            if let current = session.projectID,
-               projects.contains(where: { $0.id == current }),
-               projects.first(where: { $0.id == current })?
-                   .contains(path: AgentProjectRemoval.sessionPath(session) ?? "") == true {
-                continue
-            }
+            let resolved = AgentProjectResolver.projectID(for: session, in: projects)
             guard session.projectID != resolved else { continue }
             agentSessions[index].projectID = resolved
             changed = true

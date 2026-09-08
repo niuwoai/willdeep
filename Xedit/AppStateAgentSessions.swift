@@ -1994,6 +1994,11 @@ extension AppState {
                 // Selecting the checked/current workspace is a true no-op.
                 // A history-bearing runtime used to fall through and create a
                 // duplicate session, followed by another filesystem/Git scan.
+                let owner = AgentProjectResolver.projectID(for: runtime.session, in: agentProjects)
+                if runtime.session.projectID != owner {
+                    runtime.session.projectID = owner
+                    persistAgentSession(runtime: runtime, touchUpdatedAt: false, moveToFront: false)
+                }
                 unhideWorkspace(key: runtime.session.workspaceSidebarGroupKey)
                 return runtime.session
             }
