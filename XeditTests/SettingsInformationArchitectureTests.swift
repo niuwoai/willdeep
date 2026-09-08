@@ -115,8 +115,6 @@ struct SettingsInformationArchitectureTests {
         let groupedTabs = SettingsGroup.allCases.flatMap(\.tabs)
         #expect(Set(groupedTabs).count == groupedTabs.count)
         #expect(groupedTabs.contains(.updates))
-        #expect(!groupedTabs.contains(.editing))
-        #expect(!groupedTabs.contains(.workspace))
         #expect(groupedTabs.contains(.agentAppearance))
         #expect(groupedTabs.contains(.subagents))
     }

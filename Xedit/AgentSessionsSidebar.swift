@@ -546,7 +546,7 @@ struct AgentSessionsSidebar: View {
             onOpenLogin: { openSomeIMSettings(autogenerateBrowserLogin: true) },
             onRefreshAccount: refreshSomeIMAccount,
             onOpenSettings: {
-                EditorSettingsNavigation.shared.open(.typography, appState: appState)
+                EditorSettingsNavigation.shared.openWindow(appState: appState)
             },
             onLogOut: {
                 SomeIMIntegrationStore.logout()

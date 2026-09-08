@@ -63,54 +63,6 @@ extension EditorSettingsView {
             ?? L10n.About.unknownValue
     }
 
-    var typographySettings: some View {
-        Form {
-            Section(L10n.Settings.sectionEditorText) {
-                Picker(L10n.Settings.labelFont, selection: setting(\.fontID)) {
-                    ForEach(EditorFontChoice.allCases) { font in
-                        Text(font.displayName).tag(font.id)
-                    }
-                }
-
-                HStack {
-                    Slider(value: setting(\.fontSize), in: 10...28, step: 1)
-                    Text("\(Int(appState.editorSettings.fontSize)) pt")
-                        .monospacedDigit()
-                        .frame(width: 48, alignment: .trailing)
-                }
-
-                HStack {
-                    Slider(value: setting(\.lineHeightMultiple), in: 1.0...1.8, step: 0.05)
-                    Text(String(format: "%.2fx", appState.editorSettings.lineHeightMultiple))
-                        .monospacedDigit()
-                        .frame(width: 56, alignment: .trailing)
-                }
-            }
-
-            Section(L10n.Settings.sectionWorkspaceText) {
-                LabeledContent(L10n.Settings.labelTextSize) {
-                    HStack {
-                        Slider(value: setting(\.fileTreeFontSize), in: 10...16, step: 1)
-                        Text("\(Int(appState.editorSettings.fileTreeFontSize)) pt")
-                            .monospacedDigit()
-                            .frame(width: 48, alignment: .trailing)
-                    }
-                }
-
-                LabeledContent(L10n.Settings.labelLineHeight) {
-                    HStack {
-                        Slider(value: setting(\.fileTreeLineHeightMultiple), in: 1.0...2.0, step: 0.05)
-                        Text(String(format: "%.2fx", appState.editorSettings.fileTreeLineHeightMultiple))
-                            .monospacedDigit()
-                            .frame(width: 56, alignment: .trailing)
-                    }
-                }
-            }
-
-        }
-        .formStyle(.grouped)
-    }
-
     var agentAppearanceSettings: some View {
         Form {
             agentBackgroundSelectionSection
@@ -172,80 +124,6 @@ extension EditorSettingsView {
         .formStyle(.grouped)
     }
 
-    /// 「编辑」标签：编辑行为类设置的唯一归属——此前行号/当前行高亮混在
-    /// 「外观」的玻璃效果区、保存行为躲在「工作区」里，编辑相关偏好没有
-    /// 一个明确的家。
-    var editingSettings: some View {
-        Form {
-            Section(L10n.Settings.sectionEditor) {
-                Toggle(L10n.Settings.toggleShowLineNumbers, isOn: setting(\.showsLineNumbers))
-                Toggle(L10n.Settings.toggleHighlightCurrentLine, isOn: setting(\.highlightsCurrentLine))
-            }
-
-            Section(L10n.Settings.sectionSave) {
-                Toggle(L10n.Settings.toggleTrimTrailingWhitespace, isOn: setting(\.trimsTrailingWhitespaceOnSave))
-                Toggle(L10n.Settings.toggleEnsureFinalNewline, isOn: setting(\.ensuresFinalNewlineOnSave))
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    var appearanceSettings: some View {
-        Form {
-            appearanceSections
-            editorSurfaceSection
-        }
-        .formStyle(.grouped)
-    }
-
-    @ViewBuilder
-    var appearanceSections: some View {
-        Section {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 158, maximum: 220), spacing: 12)],
-                alignment: .leading,
-                spacing: 12
-            ) {
-                ForEach(EditorInterfaceSkin.allCases) { skin in
-                    InterfaceSkinCard(
-                        skin: skin,
-                        isSelected: appState.editorSettings.interfaceSkinID == skin.id
-                    ) {
-                        selectInterfaceSkin(skin)
-                    }
-                }
-            }
-            .padding(.vertical, 4)
-
-            Text(L10n.Settings.interfaceSkinHelp)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } header: {
-            Text(L10n.Settings.sectionInterfaceSkin)
-        }
-
-        Section(L10n.Settings.sectionColorStyle) {
-            Picker(L10n.Settings.labelTheme, selection: setting(\.themeID)) {
-                ForEach(EditorTheme.all) { theme in
-                    Text(theme.displayName).tag(theme.id)
-                }
-            }
-
-            HStack(spacing: 8) {
-                ForEach(EditorTheme.all) { theme in
-                    Button {
-                        update(\.themeID, theme.id)
-                    } label: {
-                        ThemeSwatch(theme: theme)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(theme.displayName)
-                }
-            }
-            .padding(.vertical, 4)
-        }
-    }
-
     @ViewBuilder
     var agentBackgroundSelectionSection: some View {
         Section {
@@ -301,61 +179,6 @@ extension EditorSettingsView {
         } header: {
             Text(L10n.Settings.backgroundChoices)
         }
-    }
-
-    @ViewBuilder
-    var editorSurfaceSection: some View {
-        // 行号/当前行高亮已迁往「编辑」标签；这里只留纯外观的玻璃效果。
-        Section(L10n.Settings.sectionEditor) {
-            Toggle(L10n.Settings.toggleGlassEditorBackground, isOn: setting(\.editorGlassEnabled))
-
-            Picker(L10n.Settings.labelGlassMaterial, selection: setting(\.editorGlassMaterial)) {
-                ForEach(EditorGlassMaterial.allCases) { material in
-                    Text(material.displayName).tag(material)
-                }
-            }
-            .disabled(!appState.editorSettings.editorGlassEnabled)
-
-            LabeledContent(L10n.Settings.labelGlassStrength) {
-                HStack {
-                    Slider(value: setting(\.editorGlassOpacity), in: 0...1, step: 0.05)
-                    Text("\(Int(appState.editorSettings.editorGlassOpacity * 100))%")
-                        .monospacedDigit()
-                        .frame(width: 44, alignment: .trailing)
-                }
-            }
-            .disabled(!appState.editorSettings.editorGlassEnabled)
-
-            LabeledContent(L10n.Settings.labelEditorSurface) {
-                HStack {
-                    Slider(value: setting(\.editorSurfaceOpacity), in: 0.25...1, step: 0.05)
-                    Text("\(Int(appState.editorSettings.editorSurfaceOpacity * 100))%")
-                        .monospacedDigit()
-                        .frame(width: 44, alignment: .trailing)
-                }
-            }
-            .disabled(!appState.editorSettings.editorGlassEnabled)
-        }
-    }
-
-    var workspaceSettings: some View {
-        Form {
-            Section(L10n.Settings.sectionInspector) {
-                Picker(L10n.Settings.labelDefaultView, selection: setting(\.preferredInspectorMode)) {
-                    ForEach(EditorInspectorMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-
-                Picker(L10n.Settings.labelViewOrder, selection: setting(\.inspectorPanelOrder)) {
-                    ForEach(EditorInspectorPanelOrder.allCases) { order in
-                        Text(order.displayName).tag(order)
-                    }
-                }
-            }
-
-        }
-        .formStyle(.grouped)
     }
 
     var backgroundImageLabel: String {

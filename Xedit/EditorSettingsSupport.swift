@@ -74,10 +74,6 @@ private struct CompatibleChangeModifier<Value: Equatable>: ViewModifier {
 enum EditorSettingsTab: Hashable {
     case updates
     case privacy
-    case editing
-    case typography
-    case appearance
-    case workspace
     case agentAppearance
     case agent
     case localModels
@@ -108,10 +104,6 @@ extension EditorSettingsTab {
     var group: SettingsGroup {
         switch self {
         case .updates, .privacy: return .general
-        // Everything that shapes the editor itself lives under one Editor
-        // tab. Workspace wallpaper is Agent-owned and therefore no longer
-        // appears as a duplicate Editor pane.
-        case .editing, .typography, .appearance, .workspace: return .editor
         case .agentAppearance: return .agentAppearance
         case .localModels: return .localModels
         case .agent, .notifications, .memory, .rules: return .ai
@@ -136,10 +128,6 @@ extension EditorSettingsTab {
         switch self {
         case .updates: return L10n.Settings.tabUpdates
         case .privacy: return L10n.Telemetry.tabTitle
-        case .editing: return L10n.Settings.tabEditing
-        case .typography: return L10n.Settings.tabTypography
-        case .appearance: return L10n.Settings.tabAppearance
-        case .workspace: return L10n.Settings.tabWorkspace
         case .agentAppearance: return L10n.Settings.tabAgentAppearance
         case .localModels: return L10n.Settings.LocalModel.pageTitle
         case .agent: return L10n.Settings.tabAgent
@@ -175,7 +163,6 @@ enum SettingsGroup: Hashable, Identifiable {
     case integrations
     case terminal
     case pet
-    case editor
     case agentAppearance
     case general
 
@@ -200,8 +187,6 @@ enum SettingsGroup: Hashable, Identifiable {
     var tabs: [EditorSettingsTab] {
         switch self {
         case .general: return [.updates, .privacy]
-        // Wallpaper is configured exclusively under Agent Appearance.
-        case .editor: return [.editing, .appearance, .typography, .workspace]
         case .agentAppearance: return [.agentAppearance]
         case .pet: return [.pet]
         case .localModels: return [.localModels]
@@ -220,7 +205,6 @@ enum SettingsGroup: Hashable, Identifiable {
     var title: String {
         switch self {
         case .general: return L10n.Settings.tabUpdates
-        case .editor: return L10n.Settings.groupEditor
         case .agentAppearance: return L10n.Settings.groupAgentAppearance
         case .pet: return L10n.DesktopPet.settingsTabTitle
         case .localModels: return L10n.Settings.LocalModel.pageTitle
@@ -237,7 +221,6 @@ enum SettingsGroup: Hashable, Identifiable {
     var icon: String {
         switch self {
         case .general: return "arrow.triangle.2.circlepath"
-        case .editor: return "pencil.line"
         case .agentAppearance: return "textformat.size"
         case .pet: return "pawprint.fill"
         case .localModels: return "cpu"
