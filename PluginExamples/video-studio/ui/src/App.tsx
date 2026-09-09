@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { CHARACTER_DRAFT_FIELDS, EPISODES_FENCE, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, SHOTS_FENCE, SHOT_FENCE, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkill, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, episodeBatches, parseFencedDraft, parseFencedEpisodes, parseFencedPassage, parseFencedShot, parseFencedShots, parsePlanWithReason, shotDigestLines, passageContext, relativeTime, requestBudget, resetCreativeSkill, saveCreativeSkill, visibleStream } from './bridge';
 import { Dropdown } from './Dropdown';
@@ -1357,8 +1358,8 @@ export default function App() {
     return AppShell(<main className="library"><header className="library-head"><div><p className="eyebrow">{t('workspace')}</p><h1>{t('libraryTitle')}</h1><p>{t('librarySubtitle')}</p></div><button className="primary" onClick={openPlanning}>{t('createDrama')}</button></header><div className="library-toolbar"><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchDrama')} aria-label={t('searchDrama')} /><div className="status-filters">{(['all', 'planning', 'production', 'completed'] as DramaStatusFilter[]).map((status) => { const count = status === 'all' ? dramas.length : dramas.filter((item) => item.status === status).length; return <button key={status} className={statusFilter === status ? 'active' : ''} disabled={count === 0 && statusFilter !== status} onClick={() => setStatusFilter(status)}>{t(`status_${status}`)}<span className="filter-count">{count}</span></button>; })}</div></div>{recent && !query && statusFilter === 'all' && <section className="recent-project"><div className="recent-cover">{recent.coverURL ? <img src={recent.coverURL} alt={recent.title} /> : <span>{t('noCover')}</span>}</div><div><p className="eyebrow">{t('continueCreating')}</p><h2>{recent.title}</h2><p>{recent.logline || t('noLogline')}</p><small>{t('episodeCount', { count: recent.episodes.length })}</small></div><button className="ghost" onClick={() => enterProject(recent)}>{t('continueButton')}</button></section>}<section className="drama-list">{visibleDramas.map((item) => <article className="drama-row" key={item.id}><button className="row-cover" onClick={() => enterProject(item)}>{item.coverURL ? <img src={item.coverURL} alt={item.title} /> : <span>{t('noCover')}</span>}</button><div className="row-copy"><div><h2>{item.title}</h2><span className={`status-pill status-${item.status}`}>{t(`status_${item.status}`)}</span></div><p>{item.logline || t('noLogline')}</p><small>{item.genre} · {item.format} · {t('episodeCount', { count: item.episodes.length })}</small></div><button className="ghost" onClick={() => enterProject(item)}>{t('continueButton')}</button></article>)}{visibleDramas.length === 0 && <div className="empty-library"><h2>{t('emptyLibrary')}</h2><p>{t(query ? 'emptySearchHint' : 'emptyLibraryHint')}</p><button className="primary" onClick={openPlanning}>{t('createDrama')}</button></div>}</section></main>);
   }
 
-  function ModelRouting() {
-    return <div className="routing"><label>{t('chatProvider')}<Dropdown ariaLabel={t('chatProvider')} value={assistantProvider} options={providers.map((item) => ({ value: item.providerID, label: item.displayName }))} onChange={(next) => { setAssistantProvider(next); setAssistantModel(providers.find(item => item.providerID === next)?.flashModel || providers.find(item => item.providerID === next)?.models[0] || ''); }} /></label><label>{t('chatModel')}<Dropdown ariaLabel={t('chatModel')} value={assistantModel} options={(provider?.models ?? []).map((item) => ({ value: item, label: item }))} onChange={setAssistantModel} allowCustom disabled={loadingModels} customLabel={t('customModel')} customPlaceholder={t('customModelHint')} placeholder={t('chatModel')} /></label></div>;
+  function ModelRouting(variant: 'full' | 'compact' = 'full') {
+    return <div className={variant === 'compact' ? 'routing compact' : 'routing'}><label>{t('chatProvider')}<Dropdown ariaLabel={t('chatProvider')} value={assistantProvider} options={providers.map((item) => ({ value: item.providerID, label: item.displayName }))} onChange={(next) => { setAssistantProvider(next); setAssistantModel(providers.find(item => item.providerID === next)?.flashModel || providers.find(item => item.providerID === next)?.models[0] || ''); }} /></label><label>{t('chatModel')}<Dropdown ariaLabel={t('chatModel')} value={assistantModel} options={(provider?.models ?? []).map((item) => ({ value: item, label: item }))} onChange={setAssistantModel} allowCustom disabled={loadingModels} customLabel={t('customModel')} customPlaceholder={t('customModelHint')} placeholder={t('chatModel')} /></label></div>;
   }
 
   function Planning() {
@@ -1439,11 +1440,11 @@ export default function App() {
         </section>
         <section className="chat-panel character-chat">
           <div className="section-title"><p className="eyebrow">{t('characterCoCreation')}</p><h2>{current ? current.name || t('newCharacter') : t('selectCharacterFirst')}</h2><p>{t('characterCoCreationHint')}</p></div>
-          {ModelRouting()}
           <div className="chat-history" aria-live="polite">{chatForObject.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'characterAssistant')}</strong><p>{message.content}</p></div>)}</div>
           <div className="composer">
             {busy === 'character-ask' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('characterBusy')}</span>}<button className="ghost" onClick={() => stopCharacterRequest()}>{t('stopRequest')}</button></div>}{busy === 'character-ask' && ReasoningLine()}
             <div className="composer-input"><textarea className="idea-box" value={characterInput} placeholder={t('characterAskPlaceholder')} disabled={!current} onChange={(event) => setCharacterInput(event.target.value)} /></div>
+            {ModelRouting('compact')}
             <button className="primary" disabled={!current || busy === 'character-ask'} onClick={() => void askCharacter()}>{t('askCharacter')}</button>
           </div>
         </section>
@@ -1479,6 +1480,7 @@ export default function App() {
     return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}
       <div className="page-heading"><div><p className="eyebrow">{t('stage_script')}</p><h1>{t('scriptTitle')}</h1><p>{t('scriptHint')}</p></div>
         <div className="heading-actions">
+          {ModelRouting('compact')}
           <button
             className="ghost"
             disabled={busy === 'episodes-batch' || busy === 'script-ask'}
@@ -1512,11 +1514,11 @@ export default function App() {
         <aside className="script-guide">
           <div className="chat-panel script-chat">
             <div className="section-title"><p className="eyebrow">{t('scriptCoCreation')}</p><h2>{episode ? t('episodeNumber', { number: episode.order }) : t('selectEpisodeFirst')}</h2><p>{t('scriptCoCreationHint')}</p></div>
-            {ModelRouting()}
             <div className="chat-history" aria-live="polite">{chatForObject.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'scriptAssistant')}</strong><p>{message.content}</p></div>)}</div>
             <div className="composer">
               {busy === 'script-ask' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('scriptBusy')}</span>}<button className="ghost" onClick={() => stopScriptRequest()}>{t('stopRequest')}</button></div>}{(busy === 'script-ask' || busy === 'episodes-batch') && ReasoningLine()}
               <div className="composer-input"><textarea className="idea-box" value={scriptInput} placeholder={t(selectedLength > 0 ? 'passageAskPlaceholder' : 'scriptAskPlaceholder')} disabled={!episode} onChange={(event) => setScriptInput(event.target.value)} /></div>
+              {ModelRouting('compact')}
               <div className="actions">
                 <button className="ghost" disabled={!episode || busy === 'script-ask'} onClick={() => { const question = scriptInput.trim() || t('episodeFirstDraftRequest'); setScriptInput(''); void runEpisodeRequest(question, 'full'); }}>{t(view.script.trim() ? 'rewriteEpisode' : 'draftEpisode')}</button>
                 <button className="primary" disabled={!episode || busy === 'script-ask' || selectedLength === 0 || !scriptInput.trim()} onClick={() => { const question = scriptInput.trim(); setScriptInput(''); void runEpisodeRequest(question, 'passage'); }}>{t('rewritePassage')}</button>
@@ -1560,7 +1562,6 @@ export default function App() {
             </button>
           </div>
           <p>{t(shotScope === 'single' ? 'shotCoCreationSingleHint' : 'shotCoCreationEpisodeHint')}</p>
-          {ModelRouting()}
         </div>
         <div className="chat-history" aria-live="polite">{chatForObject.map((message) => (
           <div className={`chat-message ${message.role}`} key={message.id}>
@@ -1588,6 +1589,7 @@ export default function App() {
               onChange={(event) => setShotInput(event.target.value)}
             />
           </div>
+          {ModelRouting('compact')}
           <button
             className="primary"
             disabled={!episode || busy === 'shot-ask' || !shotInput.trim()}
@@ -1670,7 +1672,9 @@ export default function App() {
         </button>
       )}
     </div>
-  )}{zoomed && (
+  )}{zoomed && createPortal(
+    // 挂到 body 而不是留在组件树里：祖先只要有 transform/filter，
+    // position: fixed 就会改按那个祖先定位，图层会落到页面中段去。
     <div className="lightbox" role="dialog" aria-modal="true" aria-label={zoomed.label} onClick={() => setZoomed(null)}>
       {/* 点图片本身不关，只有背景和 X 关：放大就是为了看清，误触关掉很烦。 */}
       <img src={zoomed.url} alt={zoomed.label} onClick={(event) => event.stopPropagation()} />
@@ -1678,6 +1682,6 @@ export default function App() {
         <span aria-hidden="true">×</span>
         <span className="visually-hidden">{t('closeZoom')}</span>
       </button>
-    </div>
+    </div>, document.body
   )}</>;
 }

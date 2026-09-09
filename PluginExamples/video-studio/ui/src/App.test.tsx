@@ -317,6 +317,33 @@ describe('Short Drama Studio', () => {
     });
   });
 
+  // ---- 模型选择器的位置 ----
+
+  /// 面板顶部那份会随页面滚走，用户滚到按钮跟前时已经看不见了。
+  it('剧本页在串起全季那颗按钮旁边和写作按钮上方各有一组模型选择', async () => {
+    await openScript(episodeFixture());
+    await screen.findByRole('button', { name: 'AI 写这一集' });
+
+    const heading = document.querySelector('.heading-actions .routing.compact');
+    expect(heading).not.toBeNull();
+    // 「AI 串起全部 N 集」和选择器在同一排。
+    expect(document.querySelector('.heading-actions')?.textContent).toContain('串起全部');
+
+    const composer = document.querySelector('.composer .routing.compact');
+    expect(composer).not.toBeNull();
+    // 选择器排在按钮之前，读到按钮时模型已经定了。
+    expect(composer!.compareDocumentPosition(document.querySelector('.composer .actions')!))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('角色页和分镜页的选择器也贴着各自的发送按钮', async () => {
+    await openCharacters(characterFixture());
+    const inCharacterComposer = document.querySelector('.character-chat .composer .routing.compact');
+    expect(inCharacterComposer).not.toBeNull();
+    // 顶部标题区不再挂一份，避免同一页出现两组指向同一状态的选择器。
+    expect(document.querySelector('.character-chat > .routing')).toBeNull();
+  });
+
   // ---- 头像放大 ----
 
   /// 定妆照那张头像在列表里只有 50 像素，点开才能看清脸有没有跑。

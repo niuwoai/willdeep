@@ -109,6 +109,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .idea-box { width: 100%; min-height: 92px; margin: 0 0 12px; }
 .routing { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
 .routing select { margin-top: 5px; }
+/* 紧凑变体：贴着触发它的那排按钮放。面板顶部那份会随页面滚走，
+   等用户滚到按钮跟前时已经看不见了。 */
+.routing.compact { gap: 8px; margin: 12px 0 0; }
+.routing.compact label { font-size: 11px; color: var(--text-muted); }
+.heading-actions .routing.compact { margin: 0; width: min(340px, 44vw); }
 .chat-panel > small { display: block; margin-top: 12px; color: var(--text-muted); line-height: 1.5; }
 .plan-card { background: var(--surface-subtle); padding: 38px clamp(30px, 4vw, 58px); }
 .plan-summary { min-height: 150px; padding: 24px; border-radius: 10px; display: flex; flex-direction: column; justify-content: end; background: var(--surface); border: 1px solid var(--border); }
@@ -390,8 +395,11 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .reasoning-line p { margin: 6px 0 0; white-space: pre-wrap; max-height: 160px; overflow-y: auto; line-height: 1.6; }
 
 /* 放大查看图层。盖住整个视口，图片按视口留白收缩，不裁切。 */
-.lightbox { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 40px; background: #000000cc; cursor: zoom-out; }
-.lightbox img { max-width: min(920px, 100%); max-height: 100%; object-fit: contain; border-radius: 10px; box-shadow: 0 24px 70px #00000066; cursor: default; }
+/* 靠上放而不是垂直居中：竖屏定妆照本来就高，居中会把它压到视口下半段。
+   高度上限用视口单位而不是百分比——百分比要落到一个由内容决定高度的
+   格子上，解析不出来就等于没写，图片会直接顶出视口。 */
+.lightbox { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-start; justify-content: center; padding: 56px 40px 40px; background: #000000cc; cursor: zoom-out; overflow: auto; }
+.lightbox img { max-width: min(920px, 100%); max-height: calc(100dvh - 96px); object-fit: contain; border-radius: 10px; box-shadow: 0 24px 70px #00000066; cursor: default; }
 .lightbox-close { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #ffffff44; border-radius: 99px; background: #00000066; color: #fff; font-size: 20px; line-height: 1; cursor: pointer; }
 .lightbox-close:hover { background: #ffffff26; }
 .lightbox-close:active { transform: scale(0.94); }
