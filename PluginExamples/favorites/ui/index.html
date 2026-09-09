@@ -92,18 +92,22 @@
 
       /* ── 卡片网格 ────────────────────────────────────────── */
       /*
-       * 用插件内容区自己的宽度排版，而不是拿整块屏幕宽度猜断点。
-       * auto-fill 会保留空轨道：只有一条收藏时，它也只占一张卡，不会再次
-       * 横跨两千像素；容器收窄到放不下两张时则自然退回单列。
+       * 瀑布流而不是网格。
+       *
+       * 网格的行高由那一行最高的卡决定，而收藏的长度天差地别：一条
+       * 「Nginx 访问日志」旁边站一条二十行的备案公告，短卡下面就空出
+       * 一大片。多列布局按列独立堆叠，矮卡后面紧跟下一张。
+       *
+       * `columns: 400px` 让列数随容器宽度自己算：宽就多列，窄到放不下
+       * 两列时自然退回一列，不需要断点。卡片必须 `break-inside: avoid`，
+       * 否则一张卡会被从中间劈开、上半截留在这一列、下半截跑到下一列。
        */
       ul {
         list-style: none;
         margin: 0;
         padding: 0;
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
-        gap: var(--gap);
-        align-items: start;
+        columns: 400px;
+        column-gap: var(--gap);
       }
       li.card {
         border: 1px solid var(--border);
@@ -112,6 +116,10 @@
         padding: 12px 14px 10px;
         position: relative;
         min-width: 0;
+        /* 多列里的间距靠 margin，column-gap 只管列与列之间。 */
+        margin-bottom: var(--gap);
+        break-inside: avoid;
+        -webkit-column-break-inside: avoid;
       }
       li.card[data-pinned="true"] { border-color: color-mix(in srgb, var(--pin) 45%, var(--border)); }
       li.card[data-pinned="true"]::before {
@@ -223,14 +231,15 @@
       }
       .state .retry { margin-top: 12px; }
       .skeleton {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
-        gap: var(--gap);
+        columns: 400px;
+        column-gap: var(--gap);
       }
       .skeleton div {
         height: 64px;
         border-radius: var(--radius);
         background: var(--surface);
+        margin-bottom: var(--gap);
+        break-inside: avoid;
         animation: pulse 1.4s ease-in-out infinite;
       }
       .skeleton div:nth-child(2) { animation-delay: .18s; }
