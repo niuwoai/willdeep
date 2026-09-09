@@ -353,7 +353,13 @@ extension AppState {
     func runPluginAICompletion(
         pluginID: AgentPluginID,
         request: AgentPluginAIRequest,
-        onDelta: (@Sendable (String) -> Void)? = nil
+        onDelta: (@Sendable (String) -> Void)? = nil,
+        /// 思考增量。插件页面上一次结构化生成要等十几秒到几十秒，期间正文
+        /// 还没开始写，页面除了一个转圈没有别的可显示。推理模型这段时间
+        /// 其实一直在输出思考文本，把它露出来，等待就有了内容。
+        ///
+        /// 与正文分开一条通道：页面要把它显示成「思考」而不是当成结果。
+        onReasoning: (@Sendable (String) -> Void)? = nil
     ) async throws -> AgentPluginAIResult {
         guard AgentPluginRegistry.shared.hasPermission(.aiChat, pluginID: pluginID) else {
             throw AgentPluginAIError.permissionDenied
@@ -372,9 +378,16 @@ extension AppState {
         let messages = outbound.map { AgentMessage(role: $0.role, content: $0.content) }
         let buffer = AgentPluginAITextBuffer()
         try await AgentClient(configuration: configuration).streamChat(messages: messages) { event in
-            if case .textDelta(let delta) = event {
+            switch event {
+            case .textDelta(let delta):
                 await buffer.append(delta)
                 onDelta?(delta)
+            case .reasoningDelta(let delta):
+                // 只转发，不累进结果缓冲：思考不是模型交出的答案，混进正文
+                // 会把它一起解析成结构化内容。
+                onReasoning?(delta)
+            default:
+                break
             }
         }
         // 取消是正常收场，不是「模型什么也没回」。先认取消再判空，

@@ -317,6 +317,68 @@ describe('Short Drama Studio', () => {
     });
   });
 
+  // ---- 技能维护 ----
+
+  it('设置页里选一份技能，能看到正文并保存回去', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    executeCommand.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'skill.list') {
+        return JSON.stringify({ ok: true, skills: saved.length ? [{ ...skillFixtures[0]!, customized: true }, ...skillFixtures.slice(1)] : skillFixtures });
+      }
+      if (command === 'skill.get') return JSON.stringify({ ok: true, skill: { ...skillFixtures[0]!, body: '# 短剧策划\n原来的正文' } });
+      if (command === 'skill.save') { saved.push(args ?? {}); return JSON.stringify({ ok: true, skill: { ...skillFixtures[0]!, customized: true, body: String(args?.body ?? '') } }); }
+      return JSON.stringify({ ok: true });
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    const row = await screen.findByRole('button', { name: /短剧策划/ });
+    fireEvent.click(row);
+    const body = await screen.findByLabelText('短剧策划 的正文') as HTMLTextAreaElement;
+    expect(body.value).toContain('原来的正文');
+
+    // 恢复内置只在这份技能真被改过时才可点，否则那个按钮什么也做不了。
+    expect(screen.getByRole('button', { name: '恢复内置版本' }).hasAttribute('disabled')).toBe(true);
+
+    fireEvent.change(body, { target: { value: '# 短剧策划\n我自己写的正文' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存技能' }));
+    await waitFor(() => expect(saved).toEqual([{ id: 'planning', body: '# 短剧策划\n我自己写的正文' }]));
+    // 保存后重新拉清单，「已修改」标记与恢复按钮同时活过来。
+    await waitFor(() => expect(screen.getByRole('button', { name: '恢复内置版本' }).hasAttribute('disabled')).toBe(false));
+    expect(screen.getByRole('button', { name: /短剧策划/ }).textContent).toContain('已修改');
+  });
+
+  it('恢复内置版本把编辑框换回模板正文', async () => {
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'skill.list') return JSON.stringify({ ok: true, skills: [{ ...skillFixtures[0]!, customized: true }] });
+      if (command === 'skill.get') return JSON.stringify({ ok: true, skill: { ...skillFixtures[0]!, customized: true, body: '我改过的正文' } });
+      if (command === 'skill.reset') return JSON.stringify({ ok: true, skill: { ...skillFixtures[0]!, customized: false, body: '内置正文' } });
+      return JSON.stringify({ ok: true });
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    fireEvent.click(await screen.findByRole('button', { name: /短剧策划/ }));
+    const body = await screen.findByLabelText('短剧策划 的正文') as HTMLTextAreaElement;
+    expect(body.value).toBe('我改过的正文');
+    fireEvent.click(screen.getByRole('button', { name: '恢复内置版本' }));
+    await waitFor(() => expect((screen.getByLabelText('短剧策划 的正文') as HTMLTextAreaElement).value).toBe('内置正文'));
+  });
+
+  it('没选技能时不显示编辑框', async () => {
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'skill.list') return JSON.stringify({ ok: true, skills: skillFixtures });
+      return JSON.stringify({ ok: true });
+    });
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    await screen.findByRole('button', { name: /短剧策划/ });
+    expect(screen.queryByRole('button', { name: '保存技能' })).toBeNull();
+  });
+
   // ---- 提示消息 ----
 
   it('多条提示并存，最新那条在最下面，各带相对时间', async () => {
@@ -454,6 +516,83 @@ describe('Short Drama Studio', () => {
   });
 
 
+
+
+  // ---- 思考过程与模型选择 ----
+
+  it('思考流按 streamID 显示，请求结束后清掉', async () => {
+    let settle: ((value: unknown) => void) | undefined;
+    complete.mockImplementation(() => new Promise((resolve) => { settle = resolve; }));
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('user', 'x');
+      if (command === 'skill.compose') return JSON.stringify({ ok: true, system: '# 角色设定' });
+      return JSON.stringify({ ok: true });
+    });
+    await openCharacters(characterFixture());
+    fireEvent.change(screen.getByPlaceholderText(/让她更冷一点/), { target: { value: '更冷一点' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    const streamID = await waitFor(() => {
+      const id = complete.mock.calls.at(-1)?.[0].streamID;
+      expect(typeof id).toBe('string');
+      return id as string;
+    });
+
+    // 正文还没开始，思考先到。
+    window.dispatchEvent(new CustomEvent('willdeep:ai-reasoning', { detail: { streamID, delta: '先看角色表里的说话习惯' } }));
+    expect(await screen.findByText(/先看角色表里的说话习惯/)).toBeTruthy();
+
+    // 别人的 streamID 不该串台。
+    window.dispatchEvent(new CustomEvent('willdeep:ai-reasoning', { detail: { streamID: 'other', delta: '不该出现' } }));
+    expect(screen.queryByText(/不该出现/)).toBeNull();
+
+    settle?.({ text: '```short_drama_character\n{"description":"话少"}\n```', model: 'fast', providerID: 'chat-a' });
+    // 请求收尾后思考区消失：它是过程不是结果。
+    await waitFor(() => expect(screen.queryByText(/先看角色表里的说话习惯/)).toBeNull());
+  });
+
+  it('没有思考文本时不显示折叠框', async () => {
+    complete.mockResolvedValue({ text: '你想让她冷到什么程度？', model: 'fast', providerID: 'chat-a' });
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('assistant', 'x');
+      return JSON.stringify({ ok: true });
+    });
+    await openCharacters(characterFixture());
+    fireEvent.change(screen.getByPlaceholderText(/让她更冷一点/), { target: { value: '问一下' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    // 不是每个模型都给思考，空着的时候多一个折叠框只是噪声。
+    expect(document.querySelector('.reasoning-line')).toBeNull();
+  });
+
+  it('角色页也能选模型，选完对这一阶段的请求生效', async () => {
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('user', 'x');
+      if (command === 'drama.saveDraft') return JSON.stringify({ ok: true, drama: dramas[0] });
+      return JSON.stringify({ ok: true });
+    });
+    complete.mockResolvedValue({ text: '```short_drama_character\n{"description":"话少"}\n```', model: 'pro', providerID: 'chat-a' });
+    await openCharacters(characterFixture());
+
+    // 共创面板里就有模型选择，不用回设置页。
+    const pickers = screen.getAllByLabelText('聊天模型');
+    expect(pickers.length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByPlaceholderText(/让她更冷一点/), { target: { value: '更冷一点' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => {
+      const call = complete.mock.calls.at(-1)?.[0];
+      // provider 与 model 跟着全局选择走，各阶段共用同一份偏好。
+      expect(call).toHaveProperty('provider');
+      expect(call).toHaveProperty('model');
+    });
+  });
 
   // ---- 分镜共创 ----
 

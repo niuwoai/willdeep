@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { CHARACTER_DRAFT_FIELDS, EPISODES_FENCE, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, SHOTS_FENCE, SHOT_FENCE, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, episodeBatches, parseFencedDraft, parseFencedEpisodes, parseFencedPassage, parseFencedShot, parseFencedShots, parsePlanWithReason, shotDigestLines, passageContext, relativeTime, requestBudget, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODES_FENCE, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, SHOTS_FENCE, SHOT_FENCE, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkill, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, episodeBatches, parseFencedDraft, parseFencedEpisodes, parseFencedPassage, parseFencedShot, parseFencedShots, parsePlanWithReason, shotDigestLines, passageContext, relativeTime, requestBudget, resetCreativeSkill, saveCreativeSkill, visibleStream } from './bridge';
 import { Dropdown } from './Dropdown';
 import { createTranslator, localeFromContext } from './i18n';
 import type { ChatMessage, Character, CharacterDraft, CreativeSkill, Drama, DramaPlan, Episode, EpisodeDraftFields, ImageModel, ProviderEntry, Shot, SkillEntry, SkillStage, Stage } from './types';
@@ -131,6 +131,9 @@ export default function App() {
   const [characterInput, setCharacterInput] = useState('');
   const [characterStreamID, setCharacterStreamID] = useState('');
   const [structuredStreaming, setStructuredStreaming] = useState(false);
+  // 思考文本。结构化生成的头十几秒正文一个字都没有，推理模型这段时间一直
+  // 在输出思考，露出来等待就有了内容。和正文分开显示：它不是结果。
+  const [reasoningText, setReasoningText] = useState('');
   const [staleCandidate, setStaleCandidate] = useState<{ characterID: string; draft: CharacterDraft; note: string } | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
@@ -152,6 +155,9 @@ export default function App() {
   // 全局的，和技能本身一样——它决定「这次创作要不要额外守某套写法」。
   const [creativeSkills, setCreativeSkills] = useState<CreativeSkill[]>([]);
   const [selectedCommonSkills, setSelectedCommonSkills] = useState<string[]>([]);
+  // 技能编辑：打开哪一份、正在编辑的正文。
+  const [editingSkillID, setEditingSkillID] = useState('');
+  const [skillBody, setSkillBody] = useState('');
   const [episodeDraft, setEpisodeDraft] = useState({ title: '', summary: '', script: '' });
   const [shotDraft, setShotDraft] = useState<Shot>(emptyShot(1));
   const [busy, setBusy] = useState('');
@@ -263,7 +269,7 @@ export default function App() {
   }
 
   function Settings() {
-    return AppShell(<main className="content"><h1>{t('nav_settings')}</h1><section className="editor-card"><h2>{t('planningTitle')}</h2><p>{t('modelCatalogHint')}</p>{ModelRouting()}<div className="actions"><button disabled={loadingModels} onClick={() => void refreshModels()}>{t(loadingModels ? 'loadingModels' : 'refreshModels')}</button><button className="primary" disabled={loadingModels || !assistantModel} onClick={() => void savePreferences()}>{t('saveSettings')}</button></div></section></main>);
+    return AppShell(<main className="content"><h1>{t('nav_settings')}</h1><section className="editor-card"><h2>{t('planningTitle')}</h2><p>{t('modelCatalogHint')}</p>{ModelRouting()}<div className="actions"><button disabled={loadingModels} onClick={() => void refreshModels()}>{t(loadingModels ? 'loadingModels' : 'refreshModels')}</button><button className="primary" disabled={loadingModels || !assistantModel} onClick={() => void savePreferences()}>{t('saveSettings')}</button></div></section>{SkillSettings()}</main>);
   }
 
   useEffect(() => { document.title = t('appName'); }, [t]);
@@ -353,6 +359,7 @@ export default function App() {
       setStreamingText(visible.text.slice(-1200));
     };
     window.addEventListener('willdeep:ai-delta', onDelta);
+    const stopReasoning = listenReasoning(streamID);
     // 这一轮失败就把问题退回输入框，并把刚追加的那条用户消息撤掉。
     // 早先两样都不回滚：输入框空了、消息留在历史里，用户只能重新打一遍，
     // 而每次重试又往历史里多堆一条一模一样的话。
@@ -383,6 +390,7 @@ export default function App() {
     }
     finally {
       window.removeEventListener('willdeep:ai-delta', onDelta);
+      stopReasoning();
       setStreamingText(''); setStructuredStreaming(false); setPlannerStreamID(''); setBusy('');
     }
   }
@@ -575,6 +583,7 @@ export default function App() {
       setStreamingText(visible.text.slice(-1200));
     };
     window.addEventListener('willdeep:ai-delta', onDelta);
+    const stopReasoning = listenReasoning(streamID);
     try {
       const response = await window.willdeep?.ai?.complete({
         system, messages,
@@ -601,6 +610,7 @@ export default function App() {
       setFailure(message.includes('cancel') ? t('requestStopped') : message);
     } finally {
       window.removeEventListener('willdeep:ai-delta', onDelta);
+      stopReasoning();
       setStreamingText(''); setStructuredStreaming(false); setCharacterStreamID(''); setBusy('');
     }
   }
@@ -735,6 +745,7 @@ export default function App() {
           setStreamingText(visible.text.slice(-1200));
         };
         window.addEventListener('willdeep:ai-delta', onDelta);
+        const stopReasoning = listenReasoning(streamID);
         try {
           const response = await window.willdeep?.ai?.complete({
             system, messages,
@@ -752,6 +763,7 @@ export default function App() {
           written += payload.applied?.length ?? 0;
         } finally {
           window.removeEventListener('willdeep:ai-delta', onDelta);
+          stopReasoning();
           setStreamingText(''); setStructuredStreaming(false); setScriptStreamID('');
         }
       }
@@ -845,6 +857,7 @@ export default function App() {
       setStreamingText(visible.text.slice(-1200));
     };
     window.addEventListener('willdeep:ai-delta', onDelta);
+    const stopReasoning = listenReasoning(streamID);
     try {
       const response = await window.willdeep?.ai?.complete({
         system, messages,
@@ -874,6 +887,7 @@ export default function App() {
       setFailure(message.toLowerCase().includes('cancel') ? t('requestStopped') : message);
     } finally {
       window.removeEventListener('willdeep:ai-delta', onDelta);
+      stopReasoning();
       setStreamingText(''); setStructuredStreaming(false); setShotStreamID(''); setBusy('');
     }
   }
@@ -969,6 +983,77 @@ export default function App() {
     })();
   }, []);
 
+  async function openSkillEditor(id: string) {
+    setBusy('skill');
+    try {
+      const skill = await loadCreativeSkill(id);
+      if (!skill) throw new Error(t('operationFailed'));
+      setEditingSkillID(id);
+      setSkillBody(skill.body ?? '');
+    } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
+  }
+
+  async function persistSkill() {
+    if (!editingSkillID) return;
+    setBusy('skill');
+    try {
+      await saveCreativeSkill(editingSkillID, skillBody);
+      setCreativeSkills(await loadCreativeSkills());
+      setNotice(t('skillSaved'));
+    } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
+  }
+
+  /// 恢复内置版本。做成显式操作而不是随插件更新静默覆盖：那等于替用户把
+  /// 他的修改删了。
+  async function restoreSkill() {
+    if (!editingSkillID) return;
+    setBusy('skill');
+    try {
+      const skill = await resetCreativeSkill(editingSkillID);
+      setSkillBody(skill?.body ?? '');
+      setCreativeSkills(await loadCreativeSkills());
+      setNotice(t('skillRestored'));
+    } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
+  }
+
+  /// 技能维护。技能是全局一份，改了对所有短剧生效，所以放在设置页而不是
+  /// 某部剧的流程里。
+  function SkillSettings() {
+    const editing = creativeSkills.find((item) => item.id === editingSkillID);
+    return (
+      <section className="editor-card">
+        <h2>{t('skillSettingsTitle')}</h2>
+        <p>{t('skillSettingsHint')}</p>
+        <div className="skill-catalog">{creativeSkills.map((skill) => (
+          <button
+            className={`skill-row ${skill.id === editingSkillID ? 'chosen' : ''}`}
+            key={skill.id}
+            type="button"
+            aria-pressed={skill.id === editingSkillID}
+            disabled={busy === 'skill'}
+            onClick={() => void openSkillEditor(skill.id)}
+          >
+            <span className="skill-row-name">{skill.name}</span>
+            <span className="skill-row-kind">{t(skill.kind === 'common' ? 'skillKindCommon' : 'skillKindStage')}</span>
+            {skill.customized && <span className="skill-row-badge">{t('skillCustomized')}</span>}
+            <span className="skill-row-desc">{skill.description}</span>
+          </button>
+        ))}</div>
+        {editing && (
+          <>
+            <label>{t('skillBodyLabel', { name: editing.name })}
+              <textarea className="skill-body" value={skillBody} onChange={(event) => setSkillBody(event.target.value)} />
+            </label>
+            <div className="actions">
+              <button className="ghost" disabled={busy === 'skill' || !editing.customized} onClick={() => void restoreSkill()}>{t('skillRestore')}</button>
+              <button className="primary" disabled={busy === 'skill'} onClick={() => void persistSkill()}>{t('skillSave')}</button>
+            </div>
+          </>
+        )}
+      </section>
+    );
+  }
+
   function toggleCommonSkill(id: string) {
     setSelectedCommonSkills((current) => {
       const next = current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id];
@@ -986,6 +1071,37 @@ export default function App() {
   async function stageSystemPrompt(stage: SkillStage, fallbackKey: string): Promise<string> {
     const composed = await composeSkillPrompt(stage, selectedCommonSkills);
     return composed ?? t(fallbackKey);
+  }
+
+  /// 挂上思考流的监听，返回一个撤销函数。四处请求共用同一套。
+  ///
+  /// 桥 2.4.0 起宿主会把推理模型的思考增量按 streamID 推过来。旧宿主不发这个
+  /// 事件，监听挂上去也只是空转，所以不需要判断版本。
+  function listenReasoning(streamID: string): () => void {
+    let buffer = '';
+    const onReasoning = (event: Event) => {
+      const detail = (event as CustomEvent<{ streamID?: string; delta?: string }>).detail;
+      if (detail?.streamID !== streamID || typeof detail.delta !== 'string') return;
+      buffer += detail.delta;
+      setReasoningText(buffer.slice(-600));
+    };
+    window.addEventListener('willdeep:ai-reasoning', onReasoning);
+    return () => {
+      window.removeEventListener('willdeep:ai-reasoning', onReasoning);
+      setReasoningText('');
+    };
+  }
+
+  /// 思考过程。只在真的收到思考文本时出现——不是每个模型都会给，空着的
+  /// 时候多一个折叠框只是噪声。
+  function ReasoningLine() {
+    if (!reasoningText.trim()) return null;
+    return (
+      <details className="reasoning-line">
+        <summary>{t('reasoningLabel')}</summary>
+        <p>{reasoningText}</p>
+      </details>
+    );
   }
 
   function stopScriptRequest() {
@@ -1053,6 +1169,7 @@ export default function App() {
       setStreamingText(visible.text.slice(-1200));
     };
     window.addEventListener('willdeep:ai-delta', onDelta);
+    const stopReasoning = listenReasoning(streamID);
     try {
       const response = await window.willdeep?.ai?.complete({
         system, messages,
@@ -1095,6 +1212,7 @@ export default function App() {
       setFailure(message.toLowerCase().includes('cancel') ? t('requestStopped') : message);
     } finally {
       window.removeEventListener('willdeep:ai-delta', onDelta);
+      stopReasoning();
       setStreamingText(''); setStructuredStreaming(false); setScriptStreamID(''); setBusy('');
     }
   }
@@ -1233,7 +1351,7 @@ export default function App() {
   }
 
   function Planning() {
-    return AppShell(<main className="planning-shell"><header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{t('planningTitle')}</span></div></header><div className="planning-grid"><section className="chat-panel"><div className="section-title"><p className="eyebrow">{t('aiPlanning')}</p><h1>{t('tellStory')}</h1><p>{t('planningHint')}</p></div><div className="chat-history" aria-live="polite"><div className="chat-message assistant"><strong>{t('plannerName')}</strong><p>{t('plannerWelcome')}</p></div>{plannerMessages.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'plannerName')}</strong><p>{message.display}</p></div>)}</div><div className="composer">{busy === 'plan' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming && !streamingText ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('planningBusy')}</span>}<button className="ghost" onClick={() => stopPlanner()}>{t('stopRequest')}</button></div>}{commonSkills.length > 0 && <div className="common-skills"><p className="group-label">{t('commonSkillsLabel')}</p><div className="common-skill-list">{commonSkills.map((skill) => {
+    return AppShell(<main className="planning-shell"><header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{t('planningTitle')}</span></div></header><div className="planning-grid"><section className="chat-panel"><div className="section-title"><p className="eyebrow">{t('aiPlanning')}</p><h1>{t('tellStory')}</h1><p>{t('planningHint')}</p></div><div className="chat-history" aria-live="polite"><div className="chat-message assistant"><strong>{t('plannerName')}</strong><p>{t('plannerWelcome')}</p></div>{plannerMessages.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'plannerName')}</strong><p>{message.display}</p></div>)}</div><div className="composer">{busy === 'plan' && <><div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming && !streamingText ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('planningBusy')}</span>}<button className="ghost" onClick={() => stopPlanner()}>{t('stopRequest')}</button></div>{ReasoningLine()}</>}{commonSkills.length > 0 && <div className="common-skills"><p className="group-label">{t('commonSkillsLabel')}</p><div className="common-skill-list">{commonSkills.map((skill) => {
               const on = selectedCommonSkills.includes(skill.id);
               return (
                 <button
@@ -1310,9 +1428,10 @@ export default function App() {
         </section>
         <section className="chat-panel character-chat">
           <div className="section-title"><p className="eyebrow">{t('characterCoCreation')}</p><h2>{current ? current.name || t('newCharacter') : t('selectCharacterFirst')}</h2><p>{t('characterCoCreationHint')}</p></div>
+          {ModelRouting()}
           <div className="chat-history" aria-live="polite">{chatForObject.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'characterAssistant')}</strong><p>{message.content}</p></div>)}</div>
           <div className="composer">
-            {busy === 'character-ask' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('characterBusy')}</span>}<button className="ghost" onClick={() => stopCharacterRequest()}>{t('stopRequest')}</button></div>}
+            {busy === 'character-ask' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('characterBusy')}</span>}<button className="ghost" onClick={() => stopCharacterRequest()}>{t('stopRequest')}</button></div>}{busy === 'character-ask' && ReasoningLine()}
             <div className="composer-input"><textarea className="idea-box" value={characterInput} placeholder={t('characterAskPlaceholder')} disabled={!current} onChange={(event) => setCharacterInput(event.target.value)} /></div>
             <button className="primary" disabled={!current || busy === 'character-ask'} onClick={() => void askCharacter()}>{t('askCharacter')}</button>
           </div>
@@ -1382,9 +1501,10 @@ export default function App() {
         <aside className="script-guide">
           <div className="chat-panel script-chat">
             <div className="section-title"><p className="eyebrow">{t('scriptCoCreation')}</p><h2>{episode ? t('episodeNumber', { number: episode.order }) : t('selectEpisodeFirst')}</h2><p>{t('scriptCoCreationHint')}</p></div>
+            {ModelRouting()}
             <div className="chat-history" aria-live="polite">{chatForObject.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'scriptAssistant')}</strong><p>{message.content}</p></div>)}</div>
             <div className="composer">
-              {busy === 'script-ask' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('scriptBusy')}</span>}<button className="ghost" onClick={() => stopScriptRequest()}>{t('stopRequest')}</button></div>}
+              {busy === 'script-ask' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('scriptBusy')}</span>}<button className="ghost" onClick={() => stopScriptRequest()}>{t('stopRequest')}</button></div>}{(busy === 'script-ask' || busy === 'episodes-batch') && ReasoningLine()}
               <div className="composer-input"><textarea className="idea-box" value={scriptInput} placeholder={t(selectedLength > 0 ? 'passageAskPlaceholder' : 'scriptAskPlaceholder')} disabled={!episode} onChange={(event) => setScriptInput(event.target.value)} /></div>
               <div className="actions">
                 <button className="ghost" disabled={!episode || busy === 'script-ask'} onClick={() => { const question = scriptInput.trim() || t('episodeFirstDraftRequest'); setScriptInput(''); void runEpisodeRequest(question, 'full'); }}>{t(view.script.trim() ? 'rewriteEpisode' : 'draftEpisode')}</button>
@@ -1429,6 +1549,7 @@ export default function App() {
             </button>
           </div>
           <p>{t(shotScope === 'single' ? 'shotCoCreationSingleHint' : 'shotCoCreationEpisodeHint')}</p>
+          {ModelRouting()}
         </div>
         <div className="chat-history" aria-live="polite">{chatForObject.map((message) => (
           <div className={`chat-message ${message.role}`} key={message.id}>
@@ -1446,6 +1567,7 @@ export default function App() {
               <button className="ghost" onClick={() => stopShotRequest()}>{t('stopRequest')}</button>
             </div>
           )}
+          {busy === 'shot-ask' && ReasoningLine()}
           <div className="composer-input">
             <textarea
               className="idea-box"

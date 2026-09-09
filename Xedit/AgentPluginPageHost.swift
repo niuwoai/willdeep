@@ -1082,6 +1082,11 @@ private struct AgentPluginWebView: NSViewRepresentable {
                                 { [weak self] delta in
                                     Task { @MainActor in self?.sendAIDelta(streamID: id, delta: delta) }
                                 }
+                            },
+                            onReasoning: streamID.map { id in
+                                { [weak self] delta in
+                                    Task { @MainActor in self?.sendAIReasoning(streamID: id, delta: delta) }
+                                }
                             }
                         )
                         self.finishAIRequest(requestID: requestID)
@@ -1173,6 +1178,23 @@ private struct AgentPluginWebView: NSViewRepresentable {
                     }
                 }
             }
+        }
+
+        /// 思考增量。和正文分开一条事件，页面要把它显示成「思考」而不是结果。
+        ///
+        /// 结构化生成的头十几秒正文一个字都没有，页面除了转圈没有别的可显示。
+        /// 推理模型这段时间一直在输出思考文本，露出来等待就有了内容。
+        private func sendAIReasoning(streamID: String, delta: String) {
+            let detail: [String: Any] = ["streamID": streamID, "delta": String(delta.prefix(4_000))]
+            guard let webView,
+                  JSONSerialization.isValidJSONObject(detail),
+                  let data = try? JSONSerialization.data(withJSONObject: detail),
+                  let json = String(data: data, encoding: .utf8) else {
+                return
+            }
+            webView.evaluateJavaScript(
+                "window.dispatchEvent(new CustomEvent('willdeep:ai-reasoning', {detail: \(json)}));"
+            )
         }
 
         /// 流式增量。和 bridge-result 分开一条事件，避免页面把中间态当成结果。
