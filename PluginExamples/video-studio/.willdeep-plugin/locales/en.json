@@ -45,5 +45,7 @@
   "command.skill.save": "Save a creative skill",
   "command.skill.reset": "Restore the bundled skill",
   "command.skill.compose": "Compose the stage prompt",
-  "command.drama.saveEpisodeDrafts": "Save many episode drafts"
+  "command.drama.saveEpisodeDrafts": "Save many episode drafts",
+  "command.drama.listShots": "List storyboard shots",
+  "command.drama.saveShotDrafts": "Save many shot drafts"
 }

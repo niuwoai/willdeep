@@ -12,6 +12,9 @@ class DramaService
   # 预算装下；更多的话模型会开始偷工，每集只剩一句空话。
   MAX_BATCH_EPISODES = 30
 
+  # 一次批量最多写多少镜。一集二十镜上下，三十给足余量。
+  MAX_BATCH_SHOTS = 40
+
   # 找不到目标时抛出，message 即对外错误码。刻意不复用 ArgumentError：
   # positive / integer 这类转换也会抛 ArgumentError，混在一起会把
   # "参数格式不对" 误报成 "找不到对象"。
@@ -262,6 +265,86 @@ class DramaService
         node["draftRev"] = node["draftRev"].to_i + 1
       end
       { "ok" => true, "drama" => drama }
+    end
+  end
+
+  # 一集的分镜清单。给模型看的那份：只带它需要判断和引用的字段，不带候选图
+  # 与选定状态。
+  #
+  # 分镜的完整对象里塞着每一镜的首尾帧候选图数组，一集二十镜就是几十条
+  # 候选记录。整份丢给模型既撑爆预算，又让它以为那些是可以改的东西。
+  def list_shots(arguments)
+    guarded do
+      drama = @store.find(arguments["dramaID"])
+      raise NotFound, "drama_not_found" unless drama
+      episode = drama["episodes"].find { |entry| entry["id"] == arguments["episodeID"].to_s }
+      raise NotFound, "episode_not_found" unless episode
+
+      shots = episode["shots"].sort_by { |entry| entry["order"].to_i }.map do |shot|
+        {
+          "id" => shot["id"],
+          "order" => shot["order"],
+          "title" => shot["title"],
+          "summary" => shot["summary"],
+          "dialogue" => shot["dialogue"],
+          "actionStart" => shot["actionStart"],
+          "actionEnd" => shot["actionEnd"],
+          "cameraIntent" => shot["cameraIntent"],
+          "duration" => shot["duration"],
+          "rev" => shot["rev"].to_i,
+          "draftRev" => shot["draftRev"].to_i,
+          "hasDraft" => shot["draft"].is_a?(Hash) && !shot["draft"].empty?,
+          "startCandidateCount" => Array(shot["startCandidates"]).length,
+          "endCandidateCount" => Array(shot["endCandidates"]).length
+        }
+      end
+      { "ok" => true, "episodeID" => episode["id"], "order" => episode["order"], "shots" => shots }
+    end
+  end
+
+  # 一次写多镜的草稿，按镜号对齐。理由与分集批量相同：逐镜调用是多轮全量
+  # 覆写，中途失败会留下一半写进去的状态；而模型手上只有镜号。
+  def save_shot_drafts(arguments)
+    guarded do
+      entries = arguments["shots"]
+      return failure("invalid_shots", "An array of shot drafts is required.") unless entries.is_a?(Array)
+      return failure("empty_shots", "No shot drafts were provided.") if entries.empty?
+
+      applied = []
+      skipped = []
+      drama = mutate_episode(arguments) do |episode|
+        by_order = {}
+        episode["shots"].each { |shot| by_order[shot["order"].to_i] = shot }
+
+        entries.first(MAX_BATCH_SHOTS).each do |entry|
+          next skipped << { "reason" => "not_an_object" } unless entry.is_a?(Hash)
+          order = entry["order"].to_i
+          shot = by_order[order]
+          next skipped << { "order" => order, "reason" => "shot_not_found" } unless shot
+
+          draft = shot["draft"].is_a?(Hash) ? deep_copy(shot["draft"]) : {}
+          touched = false
+          DRAFT_TEXT_FIELDS.fetch("shot").each do |key, limit|
+            next unless entry.key?(key)
+            draft[key] = clipped(entry[key], limit)
+            touched = true
+          end
+          if entry.key?("dialogue")
+            draft["dialogue"] = normalize_dialogue(entry["dialogue"])
+            touched = true
+          end
+          if entry.key?("duration")
+            draft["duration"] = positive(entry["duration"], shot["duration"].to_i)
+            touched = true
+          end
+          next skipped << { "order" => order, "reason" => "no_writable_field" } unless touched
+
+          shot["draft"] = draft
+          shot["draftRev"] = shot["draftRev"].to_i + 1
+          applied << order
+        end
+      end
+      { "ok" => true, "drama" => drama, "applied" => applied, "skipped" => skipped }
     end
   end
 

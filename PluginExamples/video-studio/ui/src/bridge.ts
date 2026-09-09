@@ -144,7 +144,15 @@ export type FencedResult<T> = { kind: 'chat' } | { kind: 'draft'; value: T; note
 /// 只认第一个围栏。模型偶尔会把同一份内容重发一遍，认最后一个会让
 /// 「改了又改回去」这种输出以后一个为准，用户看到的却是前一个。
 export function extractFenced(raw: string, fence: string): { body: string; note: string } | null {
-  const pattern = new RegExp('```' + fence + '\\s*([\\s\\S]*?)```', 'i');
+  // 围栏名后面必须是空白或行尾，不能直接接别的字母。
+  //
+  // `short_drama_shot` 是 `short_drama_shots` 的前缀，没有这道边界时单镜
+  // 解析器会把整集的围栏认下来——一句「整集微调」的输出会被当成只改一镜，
+  // 而它带的是 shots 数组，于是解析失败或者只写进去一镜。
+  //
+  // 允许围栏名后面跟别的词（旧提示词诱导出的 ```short_drama_plan JSON``
+  // 就是这种形状），只是不允许紧接着字母数字下划线。
+  const pattern = new RegExp('```' + fence + '(?![A-Za-z0-9_])\\s*([\\s\\S]*?)```', 'i');
   const match = raw.match(pattern);
   if (!match) return null;
   return { body: match[1] ?? '', note: (raw.slice(0, match.index ?? 0) + raw.slice((match.index ?? 0) + match[0].length)).trim() };
@@ -525,4 +533,115 @@ export function episodeBatches(total: number, size = EPISODE_BATCH_SIZE): Array<
     batches.push({ from, to: Math.min(total, from + size - 1) });
   }
   return batches;
+}
+
+/// 分镜的两个围栏：改一整集的镜列表，或只改一镜。
+export const SHOTS_FENCE = 'short_drama_shots';
+export const SHOT_FENCE = 'short_drama_shot';
+
+export type ShotDraftEntry = {
+  order: number;
+  title?: string;
+  summary?: string;
+  actionStart?: string;
+  actionEnd?: string;
+  cameraIntent?: string;
+  startPrompt?: string;
+  endPrompt?: string;
+  dialogue?: Array<{ speaker: string; text: string }>;
+  duration?: number;
+};
+
+const SHOT_TEXT_KEYS = ['title', 'summary', 'actionStart', 'actionEnd', 'cameraIntent', 'startPrompt', 'endPrompt'] as const;
+
+function pickShotEntry(raw: unknown, fallbackOrder?: number): ShotDraftEntry | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const source = raw as Record<string, unknown>;
+  const order = Number(source.order ?? fallbackOrder);
+  // 镜号是唯一能把内容对回正确一镜的东西。没有它宁可丢掉，也不能填错镜。
+  if (!Number.isInteger(order) || order < 1) return null;
+  const entry: ShotDraftEntry = { order };
+  for (const key of SHOT_TEXT_KEYS) {
+    const value = source[key];
+    if (typeof value === 'string' && value.trim()) entry[key] = value.trim();
+  }
+  if (Array.isArray(source.dialogue)) {
+    const lines = source.dialogue.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [];
+      const line = item as { speaker?: unknown; text?: unknown };
+      const text = typeof line.text === 'string' ? line.text.trim() : '';
+      if (!text) return [];
+      return [{ speaker: typeof line.speaker === 'string' ? line.speaker.trim() : '', text }];
+    });
+    // 空数组是合法的意图（这一镜不要台词），所以不能用「非空才写」来判。
+    entry.dialogue = lines;
+  }
+  const duration = Number(source.duration);
+  if (Number.isFinite(duration) && duration > 0) entry.duration = Math.round(duration);
+  const written = Object.keys(entry).filter((key) => key !== 'order');
+  return written.length > 0 ? entry : null;
+}
+
+/// 一次改多镜。
+export function parseFencedShots(raw: string): FencedResult<{ shots: ShotDraftEntry[] }> {
+  const found = extractFenced(raw, SHOTS_FENCE);
+  if (!found) return { kind: 'chat' };
+  try {
+    const value = firstJSONObject(found.body);
+    const list = (value as { shots?: unknown } | null)?.shots;
+    if (!Array.isArray(list)) return { kind: 'invalid', note: found.note };
+    const shots = list.flatMap((item) => {
+      const entry = pickShotEntry(item);
+      return entry ? [entry] : [];
+    });
+    if (shots.length === 0) return { kind: 'invalid', note: found.note };
+    return { kind: 'draft', value: { shots }, note: found.note };
+  } catch {
+    return { kind: 'invalid', note: found.note };
+  }
+}
+
+/// 只改一镜。围栏里可以省掉 order，用当前选中那一镜的镜号补上。
+export function parseFencedShot(raw: string, fallbackOrder: number): FencedResult<{ shots: ShotDraftEntry[] }> {
+  const found = extractFenced(raw, SHOT_FENCE);
+  if (!found) return { kind: 'chat' };
+  try {
+    const entry = pickShotEntry(firstJSONObject(found.body), fallbackOrder);
+    if (!entry) return { kind: 'invalid', note: found.note };
+    return { kind: 'draft', value: { shots: [entry] }, note: found.note };
+  } catch {
+    return { kind: 'invalid', note: found.note };
+  }
+}
+
+/// 分镜清单里给模型看的一行。刻意不带候选图：一集二十镜就是几十条候选记录，
+/// 整份丢过去既撑爆预算，又让模型以为那些是可以改的东西。
+export type ShotDigest = {
+  id: string;
+  order: number;
+  title: string;
+  summary: string;
+  dialogue: Array<{ speaker: string; text: string }>;
+  actionStart: string;
+  actionEnd: string;
+  cameraIntent: string;
+  duration: number;
+  rev: number;
+  draftRev: number;
+  hasDraft: boolean;
+  startCandidateCount: number;
+  endCandidateCount: number;
+};
+
+export function shotDigestLines(shots: ShotDigest[]): string {
+  return shots.map((shot) => {
+    const lines = shot.dialogue.map((line) => `${line.speaker}：${line.text}`).join(' / ');
+    return [
+      `第 ${shot.order} 镜 ${shot.title}（${shot.duration} 秒，${shot.cameraIntent || '未定运镜'}）`,
+      shot.summary ? `  剧情：${shot.summary}` : '',
+      lines ? `  台词：${lines}` : '',
+      shot.actionStart ? `  开场：${shot.actionStart}` : '',
+      shot.actionEnd ? `  收尾：${shot.actionEnd}` : '',
+    ].filter(Boolean).join('\n');
+  }).join('\n');
 }

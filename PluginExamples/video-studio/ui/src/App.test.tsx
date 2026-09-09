@@ -454,6 +454,105 @@ describe('Short Drama Studio', () => {
   });
 
 
+
+  // ---- 分镜共创 ----
+
+  const shotFixture = (order: number, overrides: Record<string, unknown> = {}) => ({
+    id: `s${order}`, order, title: `第 ${order} 镜`, summary: '', dialogue: [],
+    actionStart: '', actionEnd: '', cameraIntent: '', duration: 4,
+    startPrompt: '', endPrompt: '', startCandidates: [], endCandidates: [],
+    selectedStartID: null, selectedEndID: null,
+    rev: 0, draftRev: 0, draft: null, ...overrides,
+  });
+
+  async function openStoryboard(shots: Array<Record<string, unknown>>) {
+    const episode = { ...episodeFixture({ script: '林晚：你走。' }), shots };
+    dramas = [{ ...scriptDramaFixture(episode), episodes: [episode] }];
+    executeCommand.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('assistant', 'x');
+      if (command === 'skill.list') return JSON.stringify({ ok: true, skills: [] });
+      if (command === 'skill.compose') return JSON.stringify({ ok: true, system: '# 分镜' });
+      if (command === 'drama.listShots') {
+        return JSON.stringify({
+          ok: true,
+          shots: shots.map((entry) => ({
+            ...entry, rev: 0, draftRev: 0, hasDraft: false,
+            startCandidateCount: 0, endCandidateCount: 0,
+          })),
+        });
+      }
+      if (command === 'drama.saveShotDrafts') {
+        const list = (args?.shots ?? []) as Array<{ order: number }>;
+        return JSON.stringify({ ok: true, drama: dramas[0], applied: list.map((item) => item.order) });
+      }
+      return JSON.stringify({ ok: true });
+    });
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '继续创作' }))[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: /分镜/ }))[0]!);
+  }
+
+  it('默认只改当前一镜，围栏里省掉镜号也能对上', async () => {
+    complete.mockResolvedValue({
+      text: '砍到 4 秒了。\n```short_drama_shot\n{"duration":4,"actionEnd":"她已经站起来"}\n```',
+      model: 'fast', providerID: 'chat-a',
+    });
+    await openStoryboard([shotFixture(1), shotFixture(2)]);
+
+    // 粒度默认是单镜。
+    const single = await screen.findByRole('button', { name: /只改第 1 镜/ });
+    expect(single.getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.change(screen.getByPlaceholderText(/这一镜太长了/), { target: { value: '砍到 4 秒' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      const call = executeCommand.mock.calls.find(([command]) => command === 'drama.saveShotDrafts');
+      expect(call?.[1]).toMatchObject({
+        episodeID: 'e1',
+        shots: [{ order: 1, duration: 4, actionEnd: '她已经站起来' }],
+      });
+    });
+  });
+
+  it('切到整集微调后一次写多镜', async () => {
+    complete.mockResolvedValue({
+      text: '```short_drama_shots\n{"shots":[{"order":1,"duration":3},{"order":2,"cameraIntent":"固定"}]}\n```',
+      model: 'fast', providerID: 'chat-a',
+    });
+    await openStoryboard([shotFixture(1), shotFixture(2)]);
+
+    fireEvent.click(await screen.findByRole('button', { name: '整集微调' }));
+    fireEvent.change(await screen.findByPlaceholderText(/把前三镜的节奏压紧/), { target: { value: '压紧节奏' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      const call = executeCommand.mock.calls.find(([command]) => command === 'drama.saveShotDrafts');
+      const shots = (call?.[1] as { shots: Array<{ order: number }> }).shots;
+      expect(shots.map((item) => item.order)).toEqual([1, 2]);
+    });
+  });
+
+  it('模型只是提问时不动草稿', async () => {
+    complete.mockResolvedValue({ text: '你希望这一镜的收尾是站起来还是转身？', model: 'fast', providerID: 'chat-a' });
+    await openStoryboard([shotFixture(1)]);
+    fireEvent.change(await screen.findByPlaceholderText(/这一镜太长了/), { target: { value: '调一下' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => expect(executeCommand.mock.calls.some(([c]) => c === 'chat.append')).toBe(true));
+    expect(executeCommand.mock.calls.some(([command]) => command === 'drama.saveShotDrafts')).toBe(false);
+  });
+
+  it('这一集没有分镜时给提示而不是空跑', async () => {
+    await openStoryboard([]);
+    fireEvent.change(await screen.findByPlaceholderText(/这一镜太长了/), { target: { value: '调一下' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    expect(await screen.findByText(/还没有分镜/)).toBeTruthy();
+    expect(complete).not.toHaveBeenCalled();
+  });
+
   // ---- 批量丰富多集 ----
 
   it('分批串行写入，一批格式坏了其余批次继续', async () => {

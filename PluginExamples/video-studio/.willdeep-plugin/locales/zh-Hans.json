@@ -45,5 +45,7 @@
   "command.skill.save": "保存创作技能",
   "command.skill.reset": "恢复内置技能",
   "command.skill.compose": "拼装阶段提示词",
-  "command.drama.saveEpisodeDrafts": "批量保存分集草稿"
+  "command.drama.saveEpisodeDrafts": "批量保存分集草稿",
+  "command.drama.listShots": "读取分镜清单",
+  "command.drama.saveShotDrafts": "批量保存分镜草稿"
 }

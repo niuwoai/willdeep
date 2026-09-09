@@ -429,6 +429,92 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
     raise "cap not applied" unless response["applied"].length == DramaService::MAX_BATCH_EPISODES
   end
 
+  # ---- 分镜清单与批量写入 ----
+
+  check.call("the shot listing is trimmed for the model and hides candidate arrays") do
+    created = service.confirm_plan("plan" => { "title" => "分镜清单", "episodeCount" => 1 })
+    id = created.dig("drama", "id")
+    episode_id = created.dig("drama", "episodes", 0, "id")
+    service.save_shot("dramaID" => id, "episodeID" => episode_id, "order" => 2, "title" => "第二镜")
+    service.save_shot("dramaID" => id, "episodeID" => episode_id, "order" => 1, "title" => "第一镜",
+                      "dialogue" => [{ "speaker" => "林晚", "text" => "你走" }])
+    shot_id = service.get("id" => id).dig("drama", "episodes", 0, "shots").find { |s| s["order"] == 1 }["id"]
+    service.record_image(
+      "dramaID" => id, "episodeID" => episode_id, "shotID" => shot_id, "kind" => "start",
+      "model" => "gpt-image-2", "filePath" => File.join(media_root, "a.png"),
+      "mediaURL" => "willdeep-plugin://bundle/__media__/a.png", "prompt" => "首帧"
+    )
+
+    listed = service.list_shots("dramaID" => id, "episodeID" => episode_id)
+    raise "listing failed" unless listed["ok"]
+    shots = listed["shots"]
+    raise "expected two shots" unless shots.length == 2
+    # 按镜号排序，模型才能按顺序理解这一集。
+    raise "not sorted by order" unless shots.map { |shot| shot["order"] } == [1, 2]
+    raise "dialogue lost" unless shots[0].dig("dialogue", 0, "text") == "你走"
+    # 候选图数组不能进这份清单：一集二十镜就是几十条候选记录，整份丢给模型
+    # 既撑爆预算，又让它以为那些是可以改的东西。
+    raise "candidates leaked" if shots[0].key?("startCandidates") || shots[0].key?("endCandidates")
+    raise "selection leaked" if shots[0].key?("selectedStartID")
+    raise "candidate count missing" unless shots[0]["startCandidateCount"] == 1
+    raise "revision missing" unless shots[0].key?("rev") && shots[0].key?("draftRev")
+  end
+
+  check.call("a shot batch writes many drafts matched by order") do
+    created = service.confirm_plan("plan" => { "title" => "批量分镜", "episodeCount" => 1 })
+    id = created.dig("drama", "id")
+    episode_id = created.dig("drama", "episodes", 0, "id")
+    (1..3).each { |order| service.save_shot("dramaID" => id, "episodeID" => episode_id, "order" => order, "title" => "第 #{order} 镜") }
+
+    response = service.save_shot_drafts(
+      "dramaID" => id, "episodeID" => episode_id,
+      "shots" => [
+        { "order" => 1, "summary" => "改第一镜", "duration" => 6 },
+        { "order" => 3, "cameraIntent" => "固定", "dialogue" => [{ "speaker" => "周野", "text" => "别走" }] },
+        { "order" => 9, "summary" => "没有这一镜" }
+      ]
+    )
+    raise "batch failed" unless response["ok"]
+    raise "applied wrong set: #{response['applied']}" unless response["applied"].sort == [1, 3]
+    raise "missing shot not reported" unless response["skipped"].any? { |entry| entry["reason"] == "shot_not_found" }
+
+    shots = service.get("id" => id).dig("drama", "episodes", 0, "shots").sort_by { |shot| shot["order"] }
+    raise "draft missing" unless shots[0].dig("draft", "summary") == "改第一镜"
+    raise "duration draft missing" unless shots[0].dig("draft", "duration") == 6
+    raise "dialogue draft missing" unless shots[2].dig("draft", "dialogue", 0, "text") == "别走"
+    # 正式内容不能被批量动到，它只写草稿。
+    raise "committed title changed" unless shots[0]["title"] == "第 1 镜"
+    raise "untouched shot modified" unless shots[1]["draft"].nil?
+  end
+
+  check.call("a shot batch refuses a bad payload and reports fieldless entries") do
+    created = service.confirm_plan("plan" => { "title" => "分镜坏载荷", "episodeCount" => 1 })
+    id = created.dig("drama", "id")
+    episode_id = created.dig("drama", "episodes", 0, "id")
+    service.save_shot("dramaID" => id, "episodeID" => episode_id, "order" => 1, "title" => "第一镜")
+
+    bad = service.save_shot_drafts("dramaID" => id, "episodeID" => episode_id, "shots" => "第一镜")
+    raise "string payload accepted" if bad["ok"]
+    raise "wrong code" unless bad.dig("error", "code") == "invalid_shots"
+
+    empty = service.save_shot_drafts("dramaID" => id, "episodeID" => episode_id, "shots" => [])
+    raise "empty payload accepted" if empty["ok"]
+    raise "wrong code" unless empty.dig("error", "code") == "empty_shots"
+
+    fieldless = service.save_shot_drafts("dramaID" => id, "episodeID" => episode_id, "shots" => [{ "order" => 1 }])
+    raise "fieldless entry not reported" unless fieldless["skipped"].any? { |entry| entry["reason"] == "no_writable_field" }
+    raise "draft should stay nil" unless service.get("id" => id).dig("drama", "episodes", 0, "shots", 0, "draft").nil?
+  end
+
+  check.call("listing a missing episode or drama reports the right code") do
+    created = service.confirm_plan("plan" => { "title" => "分镜找不到", "episodeCount" => 1 })
+    id = created.dig("drama", "id")
+    missing_episode = service.list_shots("dramaID" => id, "episodeID" => "nope")
+    raise "wrong code" unless missing_episode.dig("error", "code") == "episode_not_found"
+    missing_drama = service.list_shots("dramaID" => "nope", "episodeID" => "nope")
+    raise "wrong code" unless missing_drama.dig("error", "code") == "drama_not_found"
+  end
+
   # ---- 共创聊天：一部剧一个文件 ----
 
   chat = ChatStore.new(File.join(directory, "chats"))

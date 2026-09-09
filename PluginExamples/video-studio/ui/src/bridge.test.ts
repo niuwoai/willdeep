@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CHARACTER_DRAFT_FIELDS, EPISODE_BATCH_SIZE, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_LIMIT, episodeBatches, parseFencedEpisodes, applyPassage, appendNotice, mapWithConcurrency, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, streamingFieldValue, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODE_BATCH_SIZE, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_LIMIT, episodeBatches, parseFencedEpisodes, parseFencedShot, parseFencedShots, shotDigestLines, applyPassage, appendNotice, mapWithConcurrency, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, streamingFieldValue, visibleStream } from './bridge';
 import type { Notice } from './bridge';
 import type { CharacterDraft } from './types';
 
@@ -548,5 +548,99 @@ describe('批量丰富多集', () => {
     expect(parseFencedEpisodes('这一批你想先定哪条线？')).toEqual({ kind: 'chat' });
     expect(parseFencedEpisodes('```short_drama_episodes\n{"episodes":"第一集"}\n```')).toMatchObject({ kind: 'invalid' });
     expect(parseFencedEpisodes('```short_drama_episodes\n{"episodes":[]}\n```')).toMatchObject({ kind: 'invalid' });
+  });
+});
+
+describe('分镜的两种粒度', () => {
+  it('整集微调按镜号对齐', () => {
+    const raw = '压紧了前两镜。\n```short_drama_shots\n{"shots":[{"order":1,"duration":4},{"order":2,"cameraIntent":"固定","summary":"改了剧情"}]}\n```';
+    const parsed = parseFencedShots(raw);
+    expect(parsed).toMatchObject({ kind: 'draft', note: '压紧了前两镜。' });
+    if (parsed.kind !== 'draft') return;
+    expect(parsed.value.shots).toEqual([
+      { order: 1, duration: 4 },
+      { order: 2, cameraIntent: '固定', summary: '改了剧情' },
+    ]);
+  });
+
+  it('只改一镜时可以省掉镜号，用当前选中那镜补上', () => {
+    const parsed = parseFencedShot('```short_drama_shot\n{"duration":6,"actionEnd":"她已经站起来"}\n```', 7);
+    if (parsed.kind !== 'draft') throw new Error('expected a draft');
+    expect(parsed.value.shots).toEqual([{ order: 7, duration: 6, actionEnd: '她已经站起来' }]);
+  });
+
+  it('围栏里显式给的镜号优先于当前选中', () => {
+    const parsed = parseFencedShot('```short_drama_shot\n{"order":3,"summary":"改第三镜"}\n```', 7);
+    if (parsed.kind !== 'draft') throw new Error('expected a draft');
+    expect(parsed.value.shots[0]!.order).toBe(3);
+  });
+
+  it('台词空数组是合法意图，不能当成没写', () => {
+    // 「这一镜不要台词」和「这一镜台词没动」是两件事。
+    const parsed = parseFencedShot('```short_drama_shot\n{"dialogue":[]}\n```', 2);
+    if (parsed.kind !== 'draft') throw new Error('expected a draft');
+    expect(parsed.value.shots[0]).toEqual({ order: 2, dialogue: [] });
+  });
+
+  it('台词里没有正文的行被丢掉', () => {
+    const parsed = parseFencedShot('```short_drama_shot\n{"dialogue":[{"speaker":"林晚","text":"你走"},{"speaker":"周野","text":"   "},{"text":"没有说话人"}]}\n```', 1);
+    if (parsed.kind !== 'draft') throw new Error('expected a draft');
+    expect(parsed.value.shots[0]!.dialogue).toEqual([
+      { speaker: '林晚', text: '你走' },
+      { speaker: '', text: '没有说话人' },
+    ]);
+  });
+
+  it('没有镜号又没有兜底时丢掉，不填错镜', () => {
+    const parsed = parseFencedShots('```short_drama_shots\n{"shots":[{"summary":"不知道第几镜"},{"order":2,"summary":"能用"}]}\n```');
+    if (parsed.kind !== 'draft') throw new Error('expected a draft');
+    expect(parsed.value.shots).toEqual([{ order: 2, summary: '能用' }]);
+  });
+
+  it('只有镜号没有内容的条目算格式错', () => {
+    expect(parseFencedShots('```short_drama_shots\n{"shots":[{"order":1}]}\n```').kind).toBe('invalid');
+    expect(parseFencedShot('```short_drama_shot\n{}\n```', 1).kind).toBe('invalid');
+  });
+
+  it('时长必须是正数，非法值不写', () => {
+    const parsed = parseFencedShot('```short_drama_shot\n{"duration":-3,"summary":"负时长"}\n```', 1);
+    if (parsed.kind !== 'draft') throw new Error('expected a draft');
+    expect(parsed.value.shots[0]!.duration).toBeUndefined();
+    expect(parsed.value.shots[0]!.summary).toBe('负时长');
+  });
+
+  it('两个围栏互不串台', () => {
+    // 整集的围栏不该被单镜解析器认出来，反之亦然，否则一句「只改这一镜」
+    // 可能被当成整集覆写。
+    expect(parseFencedShots('```short_drama_shot\n{"order":1,"duration":4}\n```').kind).toBe('chat');
+    expect(parseFencedShot('```short_drama_shots\n{"shots":[{"order":1}]}\n```', 1).kind).toBe('chat');
+  });
+});
+
+describe('shotDigestLines', () => {
+  it('把分镜清单压成模型能读的行，不带候选图', () => {
+    const digest = [{
+      id: 's1', order: 1, title: '开场', summary: '他收到短信',
+      dialogue: [{ speaker: '林晚', text: '你走' }],
+      actionStart: '坐在楼梯口', actionEnd: '站起来',
+      cameraIntent: '固定', duration: 5,
+      rev: 0, draftRev: 0, hasDraft: false, startCandidateCount: 4, endCandidateCount: 0,
+    }];
+    const text = shotDigestLines(digest);
+    expect(text).toContain('第 1 镜 开场（5 秒，固定）');
+    expect(text).toContain('台词：林晚：你走');
+    expect(text).toContain('开场：坐在楼梯口');
+    // 候选图数量不进给模型的文本：它不该以为那些是可以改的东西。
+    expect(text).not.toContain('4');
+  });
+
+  it('空字段不占行', () => {
+    const text = shotDigestLines([{
+      id: 's1', order: 2, title: '', summary: '', dialogue: [],
+      actionStart: '', actionEnd: '', cameraIntent: '', duration: 3,
+      rev: 0, draftRev: 0, hasDraft: false, startCandidateCount: 0, endCandidateCount: 0,
+    }]);
+    expect(text.split('\n')).toHaveLength(1);
+    expect(text).toContain('未定运镜');
   });
 });

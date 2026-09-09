@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { CHARACTER_DRAFT_FIELDS, EPISODES_FENCE, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, episodeBatches, parseFencedDraft, parseFencedEpisodes, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODES_FENCE, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, SHOTS_FENCE, SHOT_FENCE, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, episodeBatches, parseFencedDraft, parseFencedEpisodes, parseFencedPassage, parseFencedShot, parseFencedShots, parsePlanWithReason, shotDigestLines, passageContext, relativeTime, requestBudget, visibleStream } from './bridge';
 import { Dropdown } from './Dropdown';
 import { createTranslator, localeFromContext } from './i18n';
 import type { ChatMessage, Character, CharacterDraft, CreativeSkill, Drama, DramaPlan, Episode, EpisodeDraftFields, ImageModel, ProviderEntry, Shot, SkillEntry, SkillStage, Stage } from './types';
+import type { ShotDigest } from './bridge';
 import type { Notice } from './bridge';
 import './styles.css';
 
@@ -142,6 +143,11 @@ export default function App() {
   const [scriptStreamID, setScriptStreamID] = useState('');
   const [scriptSelection, setScriptSelection] = useState<{ start: number; end: number } | null>(null);
   const [showEpisodeDiff, setShowEpisodeDiff] = useState(false);
+  // 分镜共创：聊天、清单快照、以及「这一轮改整集还是改一镜」。
+  const [shotChat, setShotChat] = useState<ChatMessage[]>([]);
+  const [shotInput, setShotInput] = useState('');
+  const [shotStreamID, setShotStreamID] = useState('');
+  const [shotScope, setShotScope] = useState<'episode' | 'single'>('single');
   // 创作技能：阶段技能每阶段固定一份，通用技能由用户勾选后追加。勾选是
   // 全局的，和技能本身一样——它决定「这次创作要不要额外守某套写法」。
   const [creativeSkills, setCreativeSkills] = useState<CreativeSkill[]>([]);
@@ -291,6 +297,7 @@ export default function App() {
     if (!shot) { setShotDraft(emptyShot((episode?.shots.length ?? 0) + 1)); return; }
     setShotID(shot.id);
     setShotDraft(structuredClone(shot));
+    void loadShotChat(drama?.id ?? '');
   }, [shot?.id, episode?.id]);
 
   const provider = providers.find((item) => item.providerID === assistantProvider);
@@ -753,6 +760,121 @@ export default function App() {
       setFailure(errorMessage(error));
     } finally {
       setBatchProgress(null); setBusy('');
+    }
+  }
+
+  // ---- 分镜共创 ----
+
+  async function loadShotChat(id: string) {
+    if (!id) { setShotChat([]); return; }
+    try {
+      const payload = await callCommand<{ ok: boolean; messages?: ChatMessage[] }>('chat.list', { dramaID: id, stage: 'storyboard' });
+      setShotChat(payload.messages ?? []);
+    } catch { setShotChat([]); }
+  }
+
+  async function appendShotChat(role: 'user' | 'assistant', content: string, objectID: string, draftRev: number) {
+    try {
+      const payload = await callCommand<{ ok: boolean; message?: ChatMessage }>('chat.append', {
+        dramaID: drama?.id, stage: 'storyboard', message: { role, content, objectID, draftRev },
+      });
+      if (payload.message) setShotChat((current) => [...current, payload.message as ChatMessage]);
+    } catch (error) { setFailure(errorMessage(error)); }
+  }
+
+  function stopShotRequest() {
+    const cancel = window.willdeep?.ai?.cancel;
+    if (cancel && shotStreamID) void cancel(shotStreamID);
+  }
+
+  /// 聊着改分镜。整集微调与只改一镜共用一条链路，区别在围栏与上下文。
+  ///
+  /// 上下文给的是裁剪过的分镜清单（后端 list_shots 那份），不带候选图数组：
+  /// 一集二十镜就是几十条候选记录，整份丢过去既撑爆预算，又让模型以为那些
+  /// 是可以改的东西。
+  async function runShotRequest(question: string) {
+    if (!drama || !episode) { setFailure(t('selectEpisodeFirst')); return; }
+    const single = shotScope === 'single';
+    // 先判这一集有没有分镜，再判有没有选中一镜。顺序反了的话，一集空分镜
+    // 会提示「请先选中一个分镜」，让用户去左边找一个不存在的东西。
+    if (episode.shots.length === 0) { setFailure(t('noShotsYet')); return; }
+    if (single && !shot) { setFailure(t('selectShotFirst')); return; }
+
+    const listed = await callCommand<{ ok: boolean; shots?: ShotDigest[]; error?: { message?: string } }>(
+      'drama.listShots', { dramaID: drama.id, episodeID: episode.id }
+    );
+    if (!listed.ok) { setFailure(listed.error?.message || t('operationFailed')); return; }
+    const digests = listed.shots ?? [];
+    if (digests.length === 0) { setFailure(t('noShotsYet')); return; }
+
+    const objectID = single ? (shot?.id ?? episode.id) : episode.id;
+    const baseDraftRev = (single ? shot?.draftRev : episode.draftRev) ?? 0;
+    const system = await stageSystemPrompt(single ? 'shot' : 'storyboard', 'storyboardSystem');
+    const cast = drama.characters.map((item) => {
+      const view = characterView(item);
+      return `${view.name}：${view.visualPrompt || view.description || t('noBackstoryYet')}`;
+    }).join('\n');
+    const view = episodeView(episode);
+    const context = [
+      `${t('contextDramaLabel')}: ${drama.title} / ${drama.genre} / ${drama.tone}`,
+      `${t('contextCastLabel')}:\n${cast || t('noCharactersYet')}`,
+      `${t('contextEpisodeLabel', { number: episode.order })}: ${view.title} / ${view.summary}`,
+      `${t('contextShotListLabel')}:\n${shotDigestLines(digests)}`,
+      single && shot ? `${t('contextCurrentShotLabel', { number: shot.order })}` : '',
+    ].filter(Boolean).join('\n\n');
+
+    const history = shotChat.filter((item) => !item.objectID || item.objectID === objectID).slice(-6)
+      .map(({ role, content }) => ({ role, content }));
+    const messages = [...history, { role: 'user' as const, content: `${context}\n\n${question}` }];
+    const budget = requestBudget(system, messages);
+    if (!budget.withinLimits) { setFailure(t('requestTooLarge', { characters: budget.characters })); return; }
+
+    setBusy('shot-ask'); setFailure(''); setStreamingText(''); setStructuredStreaming(false);
+    void appendShotChat('user', question, objectID, baseDraftRev);
+
+    const streamID = localID();
+    setShotStreamID(streamID);
+    const fence = single ? SHOT_FENCE : SHOTS_FENCE;
+    let buffer = '';
+    const onDelta = (event: Event) => {
+      const detail = (event as CustomEvent<{ streamID?: string; delta?: string }>).detail;
+      if (detail?.streamID !== streamID || typeof detail.delta !== 'string') return;
+      buffer += detail.delta;
+      const visible = visibleStream(buffer, fence, ['summary', 'actionStart', 'actionEnd', 'title']);
+      setStructuredStreaming(visible.structured);
+      setStreamingText(visible.text.slice(-1200));
+    };
+    window.addEventListener('willdeep:ai-delta', onDelta);
+    try {
+      const response = await window.willdeep?.ai?.complete({
+        system, messages,
+        provider: assistantProvider || undefined, model: assistantModel || undefined,
+        skills: attachedSkills.map((item) => item.identifier), streamID,
+      });
+      if (!response) throw new Error(t('operationFailed'));
+      const parsed = single
+        ? parseFencedShot(response.text, shot?.order ?? 1)
+        : parseFencedShots(response.text);
+      if (parsed.kind === 'chat') { await appendShotChat('assistant', response.text, objectID, baseDraftRev); return; }
+      if (parsed.kind === 'invalid') {
+        await appendShotChat('assistant', response.text, objectID, baseDraftRev);
+        setFailure(t('shotDraftInvalid'));
+        return;
+      }
+      const payload = await callCommand<{ ok: boolean; drama?: Drama; applied?: number[]; error?: { message?: string } }>(
+        'drama.saveShotDrafts', { dramaID: drama.id, episodeID: episode.id, shots: parsed.value.shots }
+      );
+      if (!payload.ok || !payload.drama) throw new Error(payload.error?.message || t('operationFailed'));
+      applyDrama(payload.drama);
+      const applied = payload.applied?.length ?? 0;
+      await appendShotChat('assistant', parsed.note || t('shotDraftReady', { count: applied }), objectID, baseDraftRev);
+      setNotice(t('shotDraftReady', { count: applied }));
+    } catch (error) {
+      const message = errorMessage(error);
+      setFailure(message.toLowerCase().includes('cancel') ? t('requestStopped') : message);
+    } finally {
+      window.removeEventListener('willdeep:ai-delta', onDelta);
+      setStreamingText(''); setStructuredStreaming(false); setShotStreamID(''); setBusy('');
     }
   }
 
@@ -1278,8 +1400,75 @@ export default function App() {
     </main></div>);
   }
 
+  /// 分镜的聊天微调。整集与单镜两种粒度用同一条链路，切换只改围栏与上下文。
+  function ShotCoCreation() {
+    const chatForObject = shotChat.filter((item) => {
+      if (!item.objectID) return true;
+      return shotScope === 'single' ? item.objectID === shot?.id : item.objectID === episode?.id;
+    });
+    return (
+      <div className="chat-panel shot-chat">
+        <div className="section-title">
+          <p className="eyebrow">{t('shotCoCreation')}</p>
+          <div className="scope-toggle">
+            <button
+              className={`skill-toggle ${shotScope === 'single' ? 'on' : ''}`}
+              type="button"
+              aria-pressed={shotScope === 'single'}
+              onClick={() => setShotScope('single')}
+            >
+              {t('scopeSingleShot', { number: shot?.order ?? shotDraft.order })}
+            </button>
+            <button
+              className={`skill-toggle ${shotScope === 'episode' ? 'on' : ''}`}
+              type="button"
+              aria-pressed={shotScope === 'episode'}
+              onClick={() => setShotScope('episode')}
+            >
+              {t('scopeWholeEpisode')}
+            </button>
+          </div>
+          <p>{t(shotScope === 'single' ? 'shotCoCreationSingleHint' : 'shotCoCreationEpisodeHint')}</p>
+        </div>
+        <div className="chat-history" aria-live="polite">{chatForObject.map((message) => (
+          <div className={`chat-message ${message.role}`} key={message.id}>
+            <strong>{t(message.role === 'user' ? 'you' : 'shotAssistant')}</strong>
+            <p>{message.content}</p>
+          </div>
+        ))}</div>
+        <div className="composer">
+          {busy === 'shot-ask' && (
+            <div className="stream-line" role="status" aria-live="polite">
+              <span className="stream-dot" aria-hidden="true" />
+              {structuredStreaming
+                ? <span className="stream-text muted">{t('structuredIncoming')}</span>
+                : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('shotBusy')}</span>}
+              <button className="ghost" onClick={() => stopShotRequest()}>{t('stopRequest')}</button>
+            </div>
+          )}
+          <div className="composer-input">
+            <textarea
+              className="idea-box"
+              value={shotInput}
+              placeholder={t(shotScope === 'single' ? 'shotAskSinglePlaceholder' : 'shotAskEpisodePlaceholder')}
+              disabled={!episode}
+              onChange={(event) => setShotInput(event.target.value)}
+            />
+          </div>
+          <button
+            className="primary"
+            disabled={!episode || busy === 'shot-ask' || !shotInput.trim()}
+            onClick={() => { const question = shotInput.trim(); setShotInput(''); void runShotRequest(question); }}
+          >
+            {t('askShot')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   function Storyboard() {
-    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor"><div className="page-heading compact"><div><p className="eyebrow">{t('shotNumber', { number: shotDraft.order })}</p><h1>{t('storyboardTitle')}</h1></div><button className="primary" disabled={busy === 'shot'} onClick={() => void saveShot()}>{t('saveShot')}</button></div><div className="two-col"><label>{t('shotTitle')}<input value={shotDraft.title} onChange={(event) => setShotDraft({ ...shotDraft, title: event.target.value })} /></label><label>{t('durationSeconds')}<input type="number" value={shotDraft.duration} onChange={(event) => setShotDraft({ ...shotDraft, duration: Number(event.target.value) })} /></label></div><label>{t('shotStory')}<textarea value={shotDraft.summary} onChange={(event) => setShotDraft({ ...shotDraft, summary: event.target.value })} /></label><div className="dialogue-head"><strong>{t('dialogue')}</strong><button className="ghost" onClick={() => setShotDraft({ ...shotDraft, dialogue: [...shotDraft.dialogue, { id: localID(), speaker: '', text: '' }] })}>{t('addLine')}</button></div>{shotDraft.dialogue.map((line, index) => <div className="dialogue-row" key={line.id}><input value={line.speaker} placeholder={t('speaker')} onChange={(event) => { const lines = [...shotDraft.dialogue]; lines[index] = { ...line, speaker: event.target.value }; setShotDraft({ ...shotDraft, dialogue: lines }); }} /><textarea value={line.text} placeholder={t('lineText')} onChange={(event) => { const lines = [...shotDraft.dialogue]; lines[index] = { ...line, text: event.target.value }; setShotDraft({ ...shotDraft, dialogue: lines }); }} /></div>)}<div className="three-col"><label>{t('startAction')}<textarea value={shotDraft.actionStart} onChange={(event) => setShotDraft({ ...shotDraft, actionStart: event.target.value })} /></label><label>{t('endAction')}<textarea value={shotDraft.actionEnd} onChange={(event) => setShotDraft({ ...shotDraft, actionEnd: event.target.value })} /></label><label>{t('cameraIntent')}<textarea value={shotDraft.cameraIntent} onChange={(event) => setShotDraft({ ...shotDraft, cameraIntent: event.target.value })} /></label></div></section></div></main></div>);
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor"><div className="page-heading compact"><div><p className="eyebrow">{t('shotNumber', { number: shotDraft.order })}</p><h1>{t('storyboardTitle')}</h1></div><button className="primary" disabled={busy === 'shot'} onClick={() => void saveShot()}>{t('saveShot')}</button></div><div className="two-col"><label>{t('shotTitle')}<input value={shotDraft.title} onChange={(event) => setShotDraft({ ...shotDraft, title: event.target.value })} /></label><label>{t('durationSeconds')}<input type="number" value={shotDraft.duration} onChange={(event) => setShotDraft({ ...shotDraft, duration: Number(event.target.value) })} /></label></div><label>{t('shotStory')}<textarea value={shotDraft.summary} onChange={(event) => setShotDraft({ ...shotDraft, summary: event.target.value })} /></label><div className="dialogue-head"><strong>{t('dialogue')}</strong><button className="ghost" onClick={() => setShotDraft({ ...shotDraft, dialogue: [...shotDraft.dialogue, { id: localID(), speaker: '', text: '' }] })}>{t('addLine')}</button></div>{shotDraft.dialogue.map((line, index) => <div className="dialogue-row" key={line.id}><input value={line.speaker} placeholder={t('speaker')} onChange={(event) => { const lines = [...shotDraft.dialogue]; lines[index] = { ...line, speaker: event.target.value }; setShotDraft({ ...shotDraft, dialogue: lines }); }} /><textarea value={line.text} placeholder={t('lineText')} onChange={(event) => { const lines = [...shotDraft.dialogue]; lines[index] = { ...line, text: event.target.value }; setShotDraft({ ...shotDraft, dialogue: lines }); }} /></div>)}<div className="three-col"><label>{t('startAction')}<textarea value={shotDraft.actionStart} onChange={(event) => setShotDraft({ ...shotDraft, actionStart: event.target.value })} /></label><label>{t('endAction')}<textarea value={shotDraft.actionEnd} onChange={(event) => setShotDraft({ ...shotDraft, actionEnd: event.target.value })} /></label><label>{t('cameraIntent')}<textarea value={shotDraft.cameraIntent} onChange={(event) => setShotDraft({ ...shotDraft, cameraIntent: event.target.value })} /></label></div>{ShotCoCreation()}</section></div></main></div>);
   }
 
   function FrameColumn(kind: 'start' | 'end') {
