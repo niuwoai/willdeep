@@ -237,6 +237,7 @@ struct AgentContextBuilderPromptTests {
         // Same FNV-guard idea as the core profiles: a merge eating half a
         // block must fail loudly, not ship silently.
         let hashes = [
+            AgentContextBuilder.sandboxCapabilityBlock,
             AgentContextBuilder.browserUICapabilityBlock,
             AgentContextBuilder.webCodingCapabilityBlock,
             AgentContextBuilder.computerUseCapabilityBlock,

@@ -1337,17 +1337,66 @@ enum AgentSandboxPolicy {
             .appendingPathComponent("willdeep-agent-sandbox-tmp", isDirectory: true)
     }
 
-    /// The empty synthetic HOME that `redirectsHome` modes run under. Exposed
-    /// so the model-facing failure note can name the real path: a bare
-    /// "HOME is different" without the path reads like a guess.
-    nonisolated static var sandboxHomeDirectoryURL: URL {
-        sandboxTemporaryDirectoryURL
-            .appendingPathComponent("willdeep-agent-sandbox-home", isDirectory: true)
-    }
+    /// 现在恒为 false：每一档都用真实 HOME。
+    ///
+    /// 这堵墙和拒网络是同一类假墙，而且更假：seatbelt 的 `(allow file-read*)`
+    /// 无条件放行，`/Users/<you>/.ssh/id_rsa` 在任何一档下都读得到——改写
+    /// `HOME` 挡住的只是**按名字找**，挡不住按路径读。挡不住恶意，却挡死了
+    /// 正事：`~/.npmrc`、`~/.kube/config`、corepack 缓存、`~/.cargo` 全部查无
+    /// 此人，工具表现得像刚装完系统，于是重新下载、重新登录、重新配置。
+    ///
+    /// 换掉它的是两样**真**的东西，都在 seatbelt 里，见 `seatbeltProfile`：
+    /// 主目录整体只读（写入白名单只有 workspace、临时目录和一小撮缓存/包
+    /// 目录），以及 `credentialReadDenials` 那组 `(deny file-read* …)`——凭据
+    /// 目录在非凭证档是**内核级**拒绝，比今天严。
+    ///
+    /// 保留这个函数是因为失败提示和测试都读它；它现在只回答"有没有改写过
+    /// HOME"，答案永远是没有。
+    nonisolated static func redirectsHome(_ mode: AgentSandboxMode) -> Bool { false }
 
-    /// Whether commands in `mode` see the synthetic HOME instead of the
-    /// user's. Only the credentialed tier and escalation keep the real one.
-    nonisolated static func redirectsHome(_ mode: AgentSandboxMode) -> Bool {
+    /// 非凭证档下被 seatbelt 拒读的凭据路径（相对真实主目录）。
+    ///
+    /// 名单刻意短：只收**纯凭据存放点**，不收带 token 的普通配置。
+    /// `~/.npmrc`、`~/.kube/config`、`~/.gitconfig` 不在其中——它们正是用户
+    /// 希望能用起来的东西，而真正的私钥/长期凭据在下面这几条里。
+    nonisolated static let credentialReadDenials: [String] = [
+        ".ssh",
+        ".aws",
+        ".gnupg",
+        ".netrc",
+        ".git-credentials",
+        ".pypirc",
+        ".gem/credentials",
+        ".docker/config.json",
+        ".config/gh",
+        "Library/Keychains",
+    ]
+
+    /// 主目录下允许写入的缓存与包目录。
+    ///
+    /// 必须有：合成 HOME 时代这些写入落在 `TMPDIR` 底下，是**成功**的（只是
+    /// 每次都冷）。HOME 指回真实主目录后，不开这个口子它们会从"慢"变成
+    /// EPERM——那是比原来更糟的结果。名单只收缓存与包存放点，主目录其余
+    /// 部分保持只读。
+    nonisolated static let homeCacheWriteAllowances: [String] = [
+        ".cache",
+        ".npm",
+        ".yarn",
+        ".pnpm-store",
+        ".bun",
+        ".deno",
+        ".cargo",
+        ".rustup",
+        ".gradle",
+        ".m2/repository",
+        "go/pkg/mod",
+        "Library/Caches",
+        "Library/pnpm",
+    ]
+
+    /// 是否对 `mode` 施加凭据读拒绝。凭证档就是"给钥匙"那一档，escalated
+    /// 根本不套 seatbelt。
+    nonisolated static func deniesCredentialReads(_ mode: AgentSandboxMode) -> Bool {
         switch mode {
         case .readOnly, .readOnlyNetwork, .workspaceWrite, .workspaceWriteNetwork:
             return true
@@ -1375,40 +1424,12 @@ enum AgentSandboxPolicy {
                 at: sandboxTemporaryDirectory,
                 withIntermediateDirectories: true
             )
-            let sandboxHome = sandboxHomeDirectoryURL
-            try? FileManager.default.createDirectory(at: sandboxHome, withIntermediateDirectories: true)
-            // 凭证档保留真实 HOME：seatbelt 的 `file-read*` 本来就全放行，
-            // 真正挡住 ssh 读 `~/.ssh` 的从来只是这一行改写的 HOME。写入限制
-            // 由 seatbelt 独立把守，不受影响。
-            if redirectsHome(mode) {
-                environment["HOME"] = sandboxHome.path
-            }
-            // A synthetic HOME makes a successful global Git inspection
-            // return somebody else's answer: usually an empty config. Keep
-            // HOME isolated, but point Git at the operator's real global file
-            // only for a statically proven read-only `git config --global`
-            // command. This grants neither SSH context nor write permission.
-            if let command,
-               isReadOnlyGlobalGitConfigInspection(command) {
-                environment["GIT_CONFIG_GLOBAL"] = FileManager.default
-                    .homeDirectoryForCurrentUser
-                    .appendingPathComponent(".gitconfig")
-                    .path
-            }
-            // 同一个道理，kubectl 找的是 `$HOME/.kube/config`。合成 HOME 让它
-            // 报 "current-context is not set" 并回落到 localhost:8080，于是
-            // 一个装好了 kubeconfig 的机器上，连 `kubectl get pods` 都跑不了；
-            // agent 只能绕去可见终端。这里只给静态证明是只读的调用指一次
-            // 真实 kubeconfig，既不放开整个 HOME，也不给写权限——`get secret`
-            // 和 `config view --raw` 在 SafeCommand 里本就判为危险，走不到这。
-            if let command, isReadOnlyKubectlInspection(command) {
-                let kubeconfig = FileManager.default
-                    .homeDirectoryForCurrentUser
-                    .appendingPathComponent(".kube/config")
-                if FileManager.default.fileExists(atPath: kubeconfig.path) {
-                    environment["KUBECONFIG"] = kubeconfig.path
-                }
-            }
+            // HOME 不再改写：见 `redirectsHome`。挡凭据的活交给 seatbelt 的
+            // `credentialReadDenials`，那是内核级的，比改一个环境变量真。
+            //
+            // `GIT_CONFIG_GLOBAL` / `KUBECONFIG` 这两处旧的窄例外随之作废：
+            // 它们当初存在，就是为了在合成 HOME 下把某一个工具单独领回真实
+            // 配置。现在整个主目录都读得到，打这两个补丁反而是多余的分叉。
             // Node/Playwright inherit the GUI process' TMPDIR by default. On
             // macOS that path can be a parent of Foundation's actual
             // temporaryDirectory, while the seatbelt profile only allows the
@@ -1429,67 +1450,6 @@ enum AgentSandboxPolicy {
             environment["GH_TOKEN"] = nil
         }
         return environment
-    }
-
-    nonisolated static func isReadOnlyGlobalGitConfigInspection(_ command: String) -> Bool {
-        guard SafeCommand.classify(command: command) == .alwaysSafe,
-              let resolution = SafeCommand.resolveProvablySafeShellExpansions(in: command),
-              !resolution.requiresJudgment,
-              let chain = AgentShellCommandParser.parse(resolution.command),
-              !chain.segments.isEmpty else {
-            return false
-        }
-        return chain.segments.contains { segment in
-            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text),
-                  let invocation = shellInvocation(from: rawTokens) else {
-                return false
-            }
-            let tokens = invocation.commandTokens.map { $0.lowercased() }
-            guard invocation.head == "git",
-                  let subcommandIndex = gitSubcommandIndex(tokens: tokens),
-                  tokens[subcommandIndex] == "config" else {
-                return false
-            }
-            return tokens.contains("--global")
-                && (tokens.contains("--list") || tokens.contains("-l"))
-        }
-    }
-
-    /// 静态证明「这条命令只读集群」。判据和 git 那条一致：整条命令必须被
-    /// SafeCommand 判为 alwaysSafe（`get` / `describe` / `logs` /
-    /// `rollout status` / `config current-context` 这些），展开可证，而且每一
-    /// 段都得是 kubectl。任何一段不是，就不注入——否则
-    /// `kubectl get pods && rm -rf x` 里那半条也蹭到了凭证。
-    nonisolated static func isReadOnlyKubectlInspection(_ command: String) -> Bool {
-        guard SafeCommand.classify(command: command) == .alwaysSafe,
-              let resolution = SafeCommand.resolveProvablySafeShellExpansions(in: command),
-              !resolution.requiresJudgment,
-              let chain = AgentShellCommandParser.parse(resolution.command),
-              !chain.segments.isEmpty else {
-            return false
-        }
-        var sawKubectl = false
-        for segment in chain.segments {
-            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text) else {
-                return false
-            }
-            // `NS=tokenhub; kubectl -n $NS get job x` 这种前置赋值段没有命令头，
-            // 跳过它而不是把整条命令判掉——它正是运维实际会敲的形态。
-            if rawTokens.allSatisfy(isEnvironmentAssignment) { continue }
-            guard let invocation = shellInvocation(from: rawTokens) else {
-                return false
-            }
-            if invocation.head == "kubectl" {
-                sawKubectl = true
-                continue
-            }
-            // 只读的收尾管道（`| grep`、`| head`）不该把整条命令挡在外面，
-            // 但它们自己也必须是 SafeCommand 认过的只读头。
-            guard SafeCommand.classify(command: segment.text) == .alwaysSafe else {
-                return false
-            }
-        }
-        return sawKubectl
     }
 
     nonisolated static func shellLaunch(
@@ -1751,28 +1711,22 @@ enum AgentSandboxPolicy {
         switch effectiveMode {
         case .escalated:
             return nil
-        case .readOnly:
-            restrictions = "reads allowed everywhere; writes denied except the temp dir; network allowed; HOME redirected to an empty sandbox home"
-        case .readOnlyNetwork:
-            restrictions = "reads allowed everywhere; writes denied except the temp dir; network allowed; HOME redirected to an empty sandbox home"
-        case .workspaceWrite:
-            restrictions = "writes allowed only inside the workspace and temp dir; network allowed; HOME redirected to an empty sandbox home"
-        case .workspaceWriteNetwork:
-            restrictions = "writes allowed only inside the workspace and temp dir; network allowed; HOME redirected to an empty sandbox home"
+        case .readOnly, .readOnlyNetwork:
+            restrictions = "reads allowed except a short credential list; writes denied except the temp dir and the caches under ~; network allowed; the real HOME is readable"
+        case .workspaceWrite, .workspaceWriteNetwork:
+            restrictions = "writes allowed only inside the workspace, the temp dir and the caches under ~; network allowed; the real HOME is readable except a short credential list"
         case .workspaceWriteNetworkCredentialed:
-            restrictions = "writes allowed only inside the workspace and temp dir; network allowed; the real HOME and ssh-agent are available, so ~/.ssh keys and host config work"
+            restrictions = "writes allowed only inside the workspace, the temp dir and the caches under ~; network allowed; the real HOME, ~/.ssh and ssh-agent are all available"
         }
         let networkNote = deniesNetwork(effectiveMode)
             ? " Network is denied in this mode, and seatbelt expresses that as a name-resolution or connect failure: errors such as 'no such host', 'nodename nor servname provided', 'getaddrinfo ENOTFOUND', 'could not resolve host', or 'connect EPERM 127.0.0.1:<port>' (a local proxy refused) mean the sandbox blocked the connection — the machine's DNS and proxy are fine. Do not debug DNS, proxies, HTTP(S)_PROXY, or /etc/resolv.conf."
             : ""
-        // The second most misleading effect after network: every mode except
-        // the credentialed tier runs under an empty synthetic HOME, so a tool
-        // that keeps its cache or login under ~ behaves as if the machine
-        // were freshly installed. corepack could not see yarn 4.12.0 in
-        // ~/.cache and tried to download it; read cold, that looks like a
-        // cache bug or a network outage, and neither is true.
-        let homeNote = redirectsHome(effectiveMode)
-            ? " HOME was redirected to an empty sandbox home (\(sandboxHomeDirectoryURL.path)), so nothing under the real ~ is found by name: ~/.npmrc, ~/.docker, ~/.kube, ~/.cache (corepack, yarn, pip), ~/go/pkg/mod and ~/.cargo all look missing. A tool that suddenly wants to log in again, re-downloads a toolchain it already has, or reports an empty config is hitting this redirection, not a broken machine — do not reinstall, re-login, or reconfigure anything."
+        // The real HOME is visible now, but a short credential list is denied
+        // at the kernel. Naming it matters: a bare "operation not permitted"
+        // on ~/.ssh reads like a broken key or a permissions mistake on the
+        // machine, and the fix for that is nothing like the fix for this.
+        let homeNote = deniesCredentialReads(effectiveMode)
+            ? " The real HOME is readable, but these are denied by the sandbox itself: \(credentialReadDenials.map { "~/" + $0 }.joined(separator: ", ")). A permission error on one of those is this rule, not a broken key or a machine misconfiguration — do not chmod anything, regenerate a key, or re-run ssh-add. Say in one line that the command needs credentials so the host can re-run it with them."
             : ""
         return "[sandbox] This command ran inside WillDeep's macOS sandbox (\(effectiveMode.rawValue): \(restrictions)).\(networkNote)\(homeNote) If the failure above looks like 'permission denied' / 'operation not permitted', do NOT retry the identical command — the sandbox will deny it again. Instead: use read_file/edit_file/create_file for file work, keep paths inside the workspace, or say in one line that the command needs the network or the user's real home so the host can run it outside the sandbox."
     }
@@ -1835,7 +1789,39 @@ enum AgentSandboxPolicy {
                 allowSubpath(rootURL)
             }
         }
+        // 主目录下的缓存与包目录。每一档都给，包括只读档：合成 HOME 时代
+        // 这些写入落在 TMPDIR 里本来就是成功的，只读档也不例外（`go list`
+        // 会写 build cache）。不给的话，HOME 指回真实主目录反而让它们从
+        // "慢"变成 EPERM。主目录其余部分保持只读。
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        for relative in homeCacheWriteAllowances {
+            allowSubpath(home.appendingPathComponent(relative))
+        }
         let writeRule = "(allow file-write* \(writeAllows.joined(separator: " ")))"
+        // SBPL 后匹配优先，所以这组 deny 必须排在 `(allow file-read*)` 之后
+        // 才生效。这是仓库里**第一条真正的读限制**——在此之前主目录的私钥
+        // 在每一档下都读得到，挡住它的只是一个改写过的 HOME 环境变量。
+        var readDenies = ""
+        if deniesCredentialReads(mode) {
+            var denyTargets: [String] = []
+            var seenDenies = Set<String>()
+            for relative in credentialReadDenials {
+                let url = home.appendingPathComponent(relative)
+                let standardized = url.standardizedFileURL.path
+                var paths = [standardized]
+                if let resolvedPointer = realpath(standardized, nil) {
+                    paths.append(String(cString: resolvedPointer))
+                    free(resolvedPointer)
+                }
+                for path in paths where seenDenies.insert(path).inserted {
+                    // subpath 覆盖目录，literal 覆盖单文件（`.netrc`、
+                    // `.docker/config.json`）；两条都发，多余的那条无害。
+                    denyTargets.append("(subpath \(profileString(path)))")
+                    denyTargets.append("(literal \(profileString(path)))")
+                }
+            }
+            readDenies = "\n(deny file-read* \(denyTargets.joined(separator: " ")))"
+        }
         // 恒放行，理由见 `deniesNetwork`。这两个必须一起改：`deniesNetwork`
         // 是失败提示和拒绝识别读的那份"沙箱现在拦了什么"，与 profile 说的
         // 不一致就会去解释一个并不存在的拒绝。
@@ -1846,7 +1832,7 @@ enum AgentSandboxPolicy {
         (allow process*)
         (allow signal (target self))
         (allow sysctl-read)
-        (allow file-read*)
+        (allow file-read*)\(readDenies)
         \(writeRule)
         (allow ipc*)
         (allow mach-lookup)

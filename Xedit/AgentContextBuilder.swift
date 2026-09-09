@@ -21,20 +21,35 @@ nonisolated struct AgentPromptCapabilities: Equatable, Sendable {
     /// Native-app computer-use protocol. Gated on Accessibility trust
     /// already being granted: before that, the tools cannot act anyway.
     var computerUse = false
+    /// Shell commands run under the macOS sandbox for this session. The model
+    /// needs the boundary **before** it writes a command, not after seatbelt
+    /// denies one: the failure note already explains a denial well, but by
+    /// then a build has been started, a path has been chosen, and the retry
+    /// costs a round trip. Off when the session has /no-sandbox.
+    var sandbox = false
 
     static let none = AgentPromptCapabilities()
-    static let all = AgentPromptCapabilities(browserUI: true, webCoding: true, computerUse: true)
+    static let all = AgentPromptCapabilities(
+        browserUI: true, webCoding: true, computerUse: true, sandbox: true
+    )
 
-    init(browserUI: Bool = false, webCoding: Bool = false, computerUse: Bool = false) {
+    init(
+        browserUI: Bool = false,
+        webCoding: Bool = false,
+        computerUse: Bool = false,
+        sandbox: Bool = false
+    ) {
         self.browserUI = browserUI
         self.webCoding = webCoding
         self.computerUse = computerUse
+        self.sandbox = sandbox
     }
 
-    init(activeExperts: Set<AgentExpert>, computerUseGranted: Bool) {
+    init(activeExperts: Set<AgentExpert>, computerUseGranted: Bool, sandboxEnabled: Bool = false) {
         browserUI = activeExperts.contains(.browserOps) || activeExperts.contains(.webCoding)
         webCoding = activeExperts.contains(.webCoding)
         computerUse = computerUseGranted
+        sandbox = sandboxEnabled
     }
 }
 
@@ -143,6 +158,7 @@ enum AgentContextBuilder {
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [
+        "de0913b455cef3e8",
         "9f59cf6a76a09f84",
         "194138f1960f9dfa",
         "596d1256f025a84e",
@@ -682,6 +698,10 @@ enum AgentContextBuilder {
     /// the prompt snapshot tests.
     static func capabilityAppendix(_ capabilities: AgentPromptCapabilities) -> String {
         var blocks: [String] = []
+        // First: it frames every shell command the other blocks talk about.
+        if capabilities.sandbox {
+            blocks.append(sandboxCapabilityBlock)
+        }
         if capabilities.browserUI {
             blocks.append(browserUICapabilityBlock)
         }
@@ -695,6 +715,16 @@ enum AgentContextBuilder {
         return (["=== Capability guidance (active for this session) ==="] + blocks)
             .joined(separator: "\n\n")
     }
+
+    static let sandboxCapabilityBlock = """
+    Shell sandbox (macOS seatbelt), active for this session:
+    - Every run_command / terminal_send_command runs inside it unless it was escalated. The child process sees WILLDEEP_AGENT_SANDBOX set to the mode name.
+    - Writes are the only thing restricted: allowed inside the workspace, the temp dir, and the caches under the home directory. A write anywhere else fails with EPERM even though the same path is readable.
+    - Reads and network are NOT restricted. A DNS or connection failure is a real one — never explain it as a sandbox denial, and do not go debugging resolvers or proxies on that theory.
+    - The real home directory is visible, so ~/.npmrc, ~/.kube/config, ~/.gitconfig and the toolchain caches all work. A short credential list (~/.ssh, ~/.aws, ~/.gnupg, ~/.netrc, ~/.git-credentials, ~/.pypirc, ~/.gem/credentials, ~/.docker/config.json, ~/.config/gh, ~/Library/Keychains) is denied by the kernel. ssh-agent is not forwarded.
+    - Scripts inside a folder the user has marked as trusted run OUTSIDE the sandbox, with everything above lifted.
+    - On a permission failure: do not retry the identical command, and do not work around it by chmod, sudo, reinstalling, re-logging-in, or writing somewhere else. Say in one line what the command needs (a path outside the workspace, credentials, the user's keys); the host offers an unsandboxed re-run, and under smart approval it happens automatically.
+    """
 
     static let browserUICapabilityBlock = """
     Browser and UI QA:

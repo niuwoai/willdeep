@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.358.0-rc2 - 2026-09-10
+
+### Changed
+- 沙箱不再使用合成 HOME，各档一律看到真实主目录。合成 HOME 从来挡不住什么——`(allow file-read*)` 无条件放行，写绝对路径即可读到私钥——却让 `~/.npmrc`、`~/.kube/config`、corepack 缓存、`~/.cargo` 全部查无此人。
+- 换上两条真规则：非凭证档由 seatbelt **内核级**拒读 `~/.ssh`、`~/.aws`、`~/.gnupg`、`~/.netrc`、`~/.git-credentials`、`~/.pypirc`、`~/.gem/credentials`、`~/.docker/config.json`、`~/.config/gh`、`~/Library/Keychains`（SBPL 后匹配优先，deny 排在 allow 之后）；主目录下的缓存与包目录（`~/.cache`、`~/.npm`、`~/.cargo`、`~/go/pkg/mod`、`~/Library/Caches` 等）在每一档都可写，主目录其余部分只读。凭证档与 escalated 不下读拒绝。
+- 沙箱失败提示改为点名被拒的凭据路径，并明确「这不是钥匙坏了，别去 chmod 或重新生成」。
+
+### Added
+- 新增沙箱能力块（`AgentPromptCapabilities.sandbox`），在会话启用沙箱时把写入边界、读与网络不受限、以及权限失败后的正确反应写进系统提示词。放在能力块而非稳定前缀，核心三档提示词哈希未变，提示缓存不受影响。
+
+### Removed
+- 删除 `GIT_CONFIG_GLOBAL` 与 `KUBECONFIG` 的按命令静态判定注入及其判定函数 `isReadOnlyGlobalGitConfigInspection` / `isReadOnlyKubectlInspection`。它们只为在合成 HOME 下把单个工具领回真实配置而存在；主目录整体可读后成为多余分叉。
+
+### Docs
+- `docs/STARTUP_AND_SANDBOX.md` 更新六档模式表与 profile 摘要，新增「3.7 让模型事前就知道自己在沙箱里」。
+
+### Tests
+- 新增凭据读拒绝回归：非凭证档的 profile 必须在 `(allow file-read*)` 之后出现 deny 且覆盖 `~/.ssh`/`~/.aws`/`~/.git-credentials`，凭证档不得出现 deny，`~/.npmrc`、`~/.kube/config`、`~/.gitconfig` 不得进入拒绝名单。
+- 新增主目录缓存可写回归：各档写入规则须覆盖常见缓存目录，且主目录整体与 `~/.ssh` 不得可写。
+- 更新环境相关用例：非凭证档保留真实 HOME、仍然断开 ssh-agent。
+
 ## 1.358.0-rc1 - 2026-09-10
 
 ### Added

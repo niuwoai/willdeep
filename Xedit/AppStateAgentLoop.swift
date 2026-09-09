@@ -877,7 +877,8 @@ extension AppState {
             // the protocol text would be dead weight on every request.
             let promptCapabilities = AgentPromptCapabilities(
                 activeExperts: activeExperts,
-                computerUseGranted: AgentComputerUseBridge.accessibilityEverGranted
+                computerUseGranted: AgentComputerUseBridge.accessibilityEverGranted,
+                sandboxEnabled: !runtime.localSandboxDisabled
             )
             var assembledPrompt = AgentContextBuilder.systemPrompt(
                 rootDirectory: workspaceURL,

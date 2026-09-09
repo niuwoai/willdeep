@@ -254,7 +254,8 @@ extension AppState {
             // the loop will actually send.
             capabilities: AgentPromptCapabilities(
                 activeExperts: agentActiveExperts,
-                computerUseGranted: AgentComputerUseBridge.accessibilityEverGranted
+                computerUseGranted: AgentComputerUseBridge.accessibilityEverGranted,
+                sandboxEnabled: activeRuntime.map { !$0.localSandboxDisabled } ?? true
             )
         )
         let settings = AgentMemorySettingsStore.loadSettings()

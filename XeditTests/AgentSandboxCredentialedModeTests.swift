@@ -50,7 +50,10 @@ struct AgentSandboxCredentialedModeTests {
         #expect(env["SSH_AUTH_SOCK"] == "/private/tmp/ssh-agent.sock")
     }
 
-    @Test("普通网络档仍然把 HOME 换掉、断掉 ssh-agent")
+    /// 1.358.0-rc1：HOME 不再被换掉（合成 HOME 是假墙，见 `redirectsHome`）。
+    /// 区分凭证档的从此是两样真东西：ssh-agent 断不断，以及 seatbelt 对
+    /// `~/.ssh` 那一撮下不下读拒绝。
+    @Test("普通网络档保留真实 HOME，但断掉 ssh-agent 并拒读凭据")
     func plainNetworkModeStillScrubsCredentials() {
         let base = [
             "HOME": "/Users/tester",
@@ -61,8 +64,9 @@ struct AgentSandboxCredentialedModeTests {
             rootDirectory: workspace,
             base: base
         )
-        #expect(env["HOME"] != "/Users/tester")
+        #expect(env["HOME"] == "/Users/tester")
         #expect(env["SSH_AUTH_SOCK"] == nil)
+        #expect(AgentSandboxPolicy.deniesCredentialReads(.workspaceWriteNetwork))
     }
 
     @Test("凭证档仍然剥掉 token 类环境变量")
@@ -179,7 +183,73 @@ struct AgentSandboxCredentialedModeTests {
             rootDirectory: workspace
         )
         #expect(decision.mode != .workspaceWriteNetworkCredentialed)
-        // 真实 HOME 仍然只给凭证档：放开网络没有顺带放开凭证。
-        #expect(AgentSandboxPolicy.redirectsHome(decision.mode))
+        // 钥匙仍然只给凭证档：主目录读得到，但 `~/.ssh` 这一撮被 seatbelt
+        // 内核级拒掉，ssh-agent 也照旧断开。
+        #expect(AgentSandboxPolicy.deniesCredentialReads(decision.mode))
+    }
+
+
+    /// 测试拿 profile 的既有路子：从 `shellLaunch` 的 argv 里取 `-p` 后面
+    /// 那一项。命令必须是**每一档都会被套沙箱**的那种——`mkdir`、`touch`
+    /// 这类在 `.readOnly` 下会整个跳过 seatbelt，拿回来的就不是 profile 而是
+    /// 命令本身。网络头永远保留 profile。
+    private func seatbeltProfile(for mode: AgentSandboxMode) -> String {
+        let launch = AgentSandboxPolicy.shellLaunch(
+            command: "curl -sI https://example.com",
+            mode: mode,
+            rootDirectory: workspace
+        )
+        #expect(launch.executableURL.lastPathComponent == "sandbox-exec", "\(mode.rawValue)")
+        return launch.arguments.dropFirst().first ?? ""
+    }
+
+    // MARK: - 真墙：主目录只读 + 凭据内核级拒读（1.358.0-rc1）
+
+    /// 在此之前仓库里**没有任何读限制**：`(allow file-read*)` 无条件放行，
+    /// `~/.ssh/id_rsa` 在每一档下都读得到，挡住它的只是一个改写过的 HOME
+    /// 环境变量——写绝对路径就绕过去了。这组用例钉的是那条真的规则。
+    @Test("非凭证档对凭据路径下内核级读拒绝，凭证档不下")
+    func credentialPathsAreDeniedInTheKernel() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        for mode in [AgentSandboxMode.readOnly, .readOnlyNetwork, .workspaceWrite, .workspaceWriteNetwork] {
+            #expect(AgentSandboxPolicy.deniesCredentialReads(mode), "\(mode.rawValue)")
+            let profile = seatbeltProfile(for: mode)
+            // SBPL 后匹配优先，deny 必须排在 allow 之后才生效。
+            let allowIndex = try? #require(profile.range(of: "(allow file-read*)"))
+            let denyIndex = try? #require(profile.range(of: "(deny file-read*"))
+            if let allowIndex, let denyIndex {
+                #expect(allowIndex.upperBound <= denyIndex.lowerBound, "\(mode.rawValue): deny 必须在 allow 之后")
+            }
+            #expect(profile.contains("\(home)/.ssh"), "\(mode.rawValue)")
+            #expect(profile.contains("\(home)/.aws"), "\(mode.rawValue)")
+            #expect(profile.contains("\(home)/.git-credentials"), "\(mode.rawValue)")
+        }
+        // 凭证档就是"给钥匙"那一档，不能自己把钥匙锁上。
+        #expect(!AgentSandboxPolicy.deniesCredentialReads(.workspaceWriteNetworkCredentialed))
+        let credentialed = seatbeltProfile(for: .workspaceWriteNetworkCredentialed)
+        #expect(!credentialed.contains("(deny file-read*"))
+        // 名单只收纯凭据存放点：这几个是用户希望能用起来的配置，不许进名单。
+        for keep in [".npmrc", ".kube/config", ".gitconfig"] {
+            #expect(!AgentSandboxPolicy.credentialReadDenials.contains(keep), "\(keep)")
+        }
+    }
+
+    /// 合成 HOME 时代这些写入落在 TMPDIR 里，是成功的。HOME 指回真实主目录
+    /// 后不开口子，它们会从"每次都冷"变成 EPERM——那比原来更糟。
+    @Test("主目录下的缓存目录每一档都可写，其余部分只读")
+    func homeCachesStayWritableInEveryMode() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        for mode in [AgentSandboxMode.readOnly, .readOnlyNetwork, .workspaceWrite,
+                     .workspaceWriteNetwork, .workspaceWriteNetworkCredentialed] {
+            let profile = seatbeltProfile(for: mode)
+            let writeRule = profile.split(separator: "\n").first { $0.hasPrefix("(allow file-write*") }
+            let rule = String(try! #require(writeRule))
+            for cache in [".cache", ".npm", ".cargo", "go/pkg/mod", "Library/Caches"] {
+                #expect(rule.contains("\(home)/\(cache)"), "\(mode.rawValue): \(cache)")
+            }
+            // 主目录整体不可写，凭据目录更不可写。
+            #expect(!rule.contains("(subpath \"\(home)\")"), "\(mode.rawValue)")
+            #expect(!rule.contains("\(home)/.ssh"), "\(mode.rawValue)")
+        }
     }
 }

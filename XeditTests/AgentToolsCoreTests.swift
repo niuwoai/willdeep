@@ -2000,28 +2000,25 @@ struct AgentToolsCoreTests {
         )
         #expect(note?.contains("[sandbox]") == true)
         #expect(note?.contains("do NOT retry the identical command") == true)
-        // The synthetic HOME is the effect the model most often misreads as a
-        // cache or login problem, so every redirecting mode names it — with
-        // the real path — and points at the concrete casualties.
-        #expect(note?.contains("HOME was redirected to an empty sandbox home") == true)
-        #expect(note?.contains(AgentSandboxPolicy.sandboxHomeDirectoryURL.path) == true)
-        #expect(note?.contains("corepack") == true)
-        // A denied-network mode also names the local-proxy shape of the
-        // failure, so `connect EPERM 127.0.0.1:7890` is not chased as a proxy
-        // outage.
-        #expect(note?.contains("connect EPERM 127.0.0.1:<port>") == true)
+        // 主目录现在是真的，被挡住的是一小撮凭据路径。提示必须点名它们：
+        // `~/.ssh` 上一个 permission denied，读起来像钥匙坏了或者机器权限
+        // 配错了，而那两种的修法和这条规则的修法毫无关系。
+        #expect(note?.contains("The real HOME is readable") == true)
+        #expect(note?.contains("~/.ssh") == true)
+        #expect(note?.contains("do not chmod anything") == true)
+        // 网络已放行，提示里不该再留任何「网络被拒」的说法。
+        #expect(note?.contains("Network is denied") == false)
+        #expect(note?.contains("connect EPERM") == false)
 
-        // The credentialed tier keeps the real HOME — the note must not
-        // claim otherwise, or the model starts doubting a working config.
+        // 凭证档就是「给钥匙」那一档：不加凭据拒绝，也不该声称加了。
         let credentialedNote = AgentSandboxPolicy.sandboxedFailureNote(
             toolName: "run_command",
             command: "yarn install --immutable",
             effectiveMode: .workspaceWriteNetworkCredentialed
         )
         #expect(credentialedNote?.contains("[sandbox]") == true)
-        #expect(credentialedNote?.contains("HOME was redirected") == false)
-        #expect(credentialedNote?.contains("the real HOME and ssh-agent are available") == true)
-
+        #expect(credentialedNote?.contains("denied by the sandbox itself") == false)
+        #expect(credentialedNote?.contains("the real HOME, ~/.ssh and ssh-agent are all available") == true)
         // alwaysSafe read-only commands skip seatbelt entirely — no note.
         #expect(AgentSandboxPolicy.sandboxedFailureNote(
             toolName: "run_command",

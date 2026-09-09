@@ -66,12 +66,12 @@
 
 | 模式 | 写 | 网络 | 凭证/HOME |
 | --- | --- | --- | --- |
-| `readOnly` | ✗ | ✓ | 屏蔽 |
-| `readOnlyNetwork` | ✗ | ✓ | 屏蔽 |
-| `workspaceWrite` | 仅 workspace + temp | ✓ | 屏蔽 |
-| `workspaceWriteNetwork` | 仅 workspace + temp | ✓ | 屏蔽 |
-| `workspaceWriteNetworkCredentialed` | 仅 workspace + temp | ✓ | 真实 HOME / SSH agent，敏感环境变量仍剥离 |
-| `escalated` | 不沙箱 | ✓ | 真实 HOME/凭证 |
+| `readOnly` | 仅 temp + ~ 下缓存 | ✓ | 真实 HOME；凭据路径内核级拒读，无 ssh-agent |
+| `readOnlyNetwork` | 仅 temp + ~ 下缓存 | ✓ | 同上 |
+| `workspaceWrite` | workspace + temp + ~ 下缓存 | ✓ | 同上 |
+| `workspaceWriteNetwork` | workspace + temp + ~ 下缓存 | ✓ | 同上 |
+| `workspaceWriteNetworkCredentialed` | workspace + temp + ~ 下缓存 | ✓ | 真实 HOME + `~/.ssh` + ssh-agent；敏感环境变量仍剥离 |
+| `escalated` | 不沙箱 | ✓ | 全部放开 |
 
 最终用哪档由 [AppStateAgentToolDecisions.swift](../Xedit/AppStateAgentToolDecisions.swift) `sandboxModeForToolExecution()` 依据「命令风险 + 审批来源」决定。
 
@@ -96,13 +96,18 @@
 (version 1)
 (deny default)
 (allow process*) (allow signal (target self)) (allow sysctl-read)
-(allow file-read*)                 ← 读不受限
-(allow file-write* (subpath <temp>) [(subpath <workspace>)])
+(allow file-read*)                 ← 读默认不受限
+(deny file-read* <凭据路径…>)       ← 非凭证档：~/.ssh、~/.aws… 内核级拒读
+(allow file-write* (subpath <temp>) (subpath <~ 下缓存目录…>) [(subpath <workspace>)])
 (allow ipc*) (allow mach-lookup)
 (allow network*)                   ← 所有档位放行（见上）
 ```
 
-> ⚠️ **边界的真相**：沙箱限制的只有**写**，读和网络都不受限 —— Agent 在沙箱里仍能读到 workspace 之外的文件，也能出网。真正拦住外泄的是「凭据路径命中即人工确认 + 命令输出脱敏 + 敏感环境变量剥离 + 非凭证档屏蔽真实 HOME」。
+> ⚠️ **边界的真相（1.358.0-rc2 起）**：沙箱限制的是**写**，外加一小撮凭据路径的**读**。其余的读和网络都不受限。真正拦住外泄的是「`credentialReadDenials` 内核级拒读 + 凭据路径命中即人工确认 + 命令输出脱敏 + 敏感环境变量剥离 + 非凭证档不转发 ssh-agent」。
+
+> **1.358.0-rc2：合成 HOME 拆除，换成两条真规则。** 之前非凭证档把 `HOME` 指到一个空的临时目录。它挡不住任何东西——`(allow file-read*)` 无条件放行，写绝对路径 `/Users/<you>/.ssh/id_rsa` 照读不误——却让 `~/.npmrc`、`~/.kube/config`、corepack 缓存、`~/.cargo` 全部查无此人，工具表现得像刚装完系统。现在 `HOME` 始终是真实主目录，换上的是：`credentialReadDenials`（`~/.ssh`、`~/.aws`、`~/.gnupg`、`~/.netrc`、`~/.git-credentials`、`~/.pypirc`、`~/.gem/credentials`、`~/.docker/config.json`、`~/.config/gh`、`~/Library/Keychains`）在非凭证档由 seatbelt **内核级**拒读，SBPL 后匹配优先所以这组 deny 排在 `(allow file-read*)` 之后；以及 `homeCacheWriteAllowances`（`~/.cache`、`~/.npm`、`~/.cargo`、`~/go/pkg/mod`、`~/Library/Caches` 等）在每一档都可写——合成 HOME 时代这些写入落在 `TMPDIR` 里本来就是成功的，不开口子会让它们从「每次都冷」变成 EPERM。主目录其余部分只读。凭证档与 escalated 不下读拒绝。
+>
+> 随之删除的还有两处窄例外：`GIT_CONFIG_GLOBAL` 与 `KUBECONFIG` 的按命令静态判定注入（`isReadOnlyGlobalGitConfigInspection` / `isReadOnlyKubectlInspection`）。它们当初存在只是为了在合成 HOME 下把某一个工具单独领回真实配置；主目录整体可读之后，这两个补丁是多余的分叉。
 >
 > ⚠️ `escalated` 模式**完全不套 seatbelt**；系统若没有 `sandbox-exec` 也会回退到裸 `/bin/sh`（macOS 上一直存在，实际不触发）。
 
@@ -162,6 +167,14 @@
 
 > ⚠️ 这份信任是**位置性**的，不读脚本内容：Agent 自己写进 workspace 的脚本，和用户提交的脚本一样匹配。挡住这条路的是"这个目录用户确认过"这一层，不是文件的来源。
 
+### 3.7 让模型事前就知道自己在沙箱里（1.358.0-rc2）
+
+失败之后那半段一直是全的：[looksLikeSandboxDenial](../Xedit/AgentToolAuthorization.swift) 认拒绝形状、`sandboxedFailureNote` 讲清这一档限制了什么、[runToolHandlingSandboxEscalation](../Xedit/AppStateAgentSandboxEscalation.swift) 负责脱沙箱重跑（智能审核档下自动）。缺的是**写命令那一刻**——模型并不知道有这么一堵墙，于是选了一条注定 EPERM 的路径，白跑一个来回。
+
+现在 `AgentPromptCapabilities.sandbox` 会在会话启用沙箱时挂上 `sandboxCapabilityBlock`，讲三件事：写入边界在哪、读和网络**不**受限（所以 DNS 失败是真的）、以及权限失败时不要 chmod/sudo/换地方写，一句话说清缺什么，宿主会给脱沙箱重跑。
+
+放能力块而不是写进稳定前缀，是为了不破提示缓存：核心三档的 hash 快照一个都没动，只多录了一条 `capabilityBlockSnapshotHashes`。子进程环境里的 `WILLDEEP_AGENT_SANDBOX` 变量保留，脚本可以自己判断。
+
 ### 4. 文件写入边界（写不出 workspace）
 
 `apply_patch` / `edit_file` / `create_file` 三条写路径，落盘前一律过 `resolveAgentPatchURL()`（[AppStateAgentPatches.swift](../Xedit/AppStateAgentPatches.swift:337)）：
@@ -198,4 +211,4 @@ guard url.path == rootPath || url.path.hasPrefix(rootPath + "/") else {
 ## 一句话总结
 
 - **启动**：入口 `WillDeepApp` → AppDelegate 装监听 → 每窗口一个 `AppState`，同步读几份小 JSON、会话只加载 metadata（懒物化）、空草稿清理，其余活后台化；退出前 flush 会话写队列。
-- **沙箱**：六档沙箱模式 + macOS seatbelt（**只限写，读与网络都不限**）+ 环境剥敏；被用户确认为可信的目录，其自带脚本直接脱沙箱执行（§3.6）；命令走「白名单 → LLM 评委 → 手敲 confirm」三层，写文件严格锁在 workspace 内，输出脱敏，子 Agent 只读且不能嵌套。**审批档位有四种**，其中静默模式是唯一黑名单式的一档，保护强度以恶意命令黑名单为地基（§3.5）。
+- **沙箱**：六档沙箱模式 + macOS seatbelt（**限写 + 拒读一小撮凭据路径，其余读与网络不限**）+ 环境剥敏；被用户确认为可信的目录，其自带脚本直接脱沙箱执行（§3.6）；命令走「白名单 → LLM 评委 → 手敲 confirm」三层，写文件严格锁在 workspace 内，输出脱敏，子 Agent 只读且不能嵌套。**审批档位有四种**，其中静默模式是唯一黑名单式的一档，保护强度以恶意命令黑名单为地基（§3.5）。

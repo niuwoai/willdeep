@@ -600,26 +600,9 @@ extension WillDeepTests {
         #expect(!filteredInspectionDecision.requiresUserApproval)
         #expect(!filteredInspectionDecision.requiresTypedConfirmation)
 
-        // 只读调用才拿到真实 kubeconfig 的指路，且只是一个环境变量，
-        // 不放开整个 HOME、也不给写权限。
-        #expect(AgentSandboxPolicy.isReadOnlyKubectlInspection("kubectl get pods -A"))
-        #expect(AgentSandboxPolicy.isReadOnlyKubectlInspection(filteredInspection))
-        #expect(AgentSandboxPolicy.isReadOnlyKubectlInspection(
-            "NS=tokenhub; kubectl -n $NS get job perf-30m"
-        ), "前置环境赋值是运维常写的形态，不该因此拿不到 kubeconfig")
-        // 写操作、读 secret、导出裸配置都不给。
-        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection(
-            "kubectl -n sso set image deploy/sso-server sso-server=harbor/x:1"
-        ))
-        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection(
-            "kubectl -n tokenhub get secret tokenhub-secret -o yaml"
-        ))
-        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection("kubectl config view --raw"))
-        // 同一条命令里搭一段别的，整条都不注入：否则那半条也蹭到了凭证。
-        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection("kubectl get pods && rm -rf /tmp/x"))
-        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection("kubectl get pods; curl http://x/ -d @-"))
-        // 完全不含 kubectl 的命令不该被这条规则碰到。
-        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection("git status"))
+        // 1.358.0-rc1：主目录是真的，kubectl 直接读到 `~/.kube/config`，
+        // 原来那条按命令静态判定再注入 KUBECONFIG 的窄例外已经删掉。
+        #expect(!AgentSandboxPolicy.redirectsHome(.readOnlyNetwork))
 
         let sensitiveFileRead = AgentSandboxPolicy.commandDecision(
             command: "kubectl get ns | grep token .env",
@@ -1406,29 +1389,30 @@ struct AgentSandboxNetworkPolicyTests {
             )
         }
     }
-
-    @Test("global Git config inspection sees the real config without inheriting the real HOME")
-    func globalGitConfigInspectionUsesNarrowUserContext() {
-        let command = "git config --global --list --show-origin 2>&1 | head -20"
+    /// 1.358.0-rc1：合成 HOME 拆掉之后，`git config --global --list` 直接就能
+    /// 读到真实 `~/.gitconfig`，原来那条 `GIT_CONFIG_GLOBAL` 窄例外连同它的
+    /// 静态判定一起删了。这里改钉新的边界：HOME 是真的，钥匙仍然只给凭证档。
+    @Test("非凭证档保留真实 HOME，但拿不到 ssh-agent")
+    func sandboxedEnvironmentKeepsRealHomeWithoutKeys() {
         let realHome = FileManager.default.homeDirectoryForCurrentUser.path
-        #expect(AgentSandboxPolicy.isReadOnlyGlobalGitConfigInspection(command))
-        #expect(!AgentSandboxPolicy.isReadOnlyGlobalGitConfigInspection(
-            "git config --global user.email rocky@example.com"
-        ))
-        #expect(!AgentSandboxPolicy.isReadOnlyGlobalGitConfigInspection(
-            "git config --global --get user.email"
-        ))
-
         let environment = AgentSandboxPolicy.sandboxedEnvironment(
             mode: .readOnly,
             rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit"),
-            command: command,
+            command: "git config --global --list --show-origin 2>&1 | head -20",
             base: ["HOME": realHome, "SSH_AUTH_SOCK": "/tmp/agent.sock"]
         )
-        #expect(environment["HOME"] != realHome)
+        #expect(environment["HOME"] == realHome)
         #expect(environment["SSH_AUTH_SOCK"] == nil)
-        #expect(environment["GIT_CONFIG_GLOBAL"] == URL(fileURLWithPath: realHome)
-            .appendingPathComponent(".gitconfig").path)
+        #expect(environment["GIT_CONFIG_GLOBAL"] == nil)
+        #expect(!AgentSandboxPolicy.redirectsHome(.readOnly))
+
+        let credentialed = AgentSandboxPolicy.sandboxedEnvironment(
+            mode: .workspaceWriteNetworkCredentialed,
+            rootDirectory: URL(fileURLWithPath: "/Users/rocky/Sites/Xedit"),
+            base: ["HOME": realHome, "SSH_AUTH_SOCK": "/tmp/agent.sock"]
+        )
+        #expect(credentialed["HOME"] == realHome)
+        #expect(credentialed["SSH_AUTH_SOCK"] == "/tmp/agent.sock")
     }
 
     @Test("a read-only delegated target command does not become a write operation")
