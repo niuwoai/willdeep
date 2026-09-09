@@ -1,5 +1,7 @@
 # WillDeep Plugin Examples
 
+- `workshop-run`：内置「车间大暴走」漫画风离线游戏，老哥对战 AI 班长，含投掷、冲刺、隐藏、休息、收集通行章与逃出结算。**随 App 发行**：只复制双清单、本地化与 `ui/dist/client`；自动批准启用，通过插件中心进入，不强制固定侧栏。游戏自身版本独立于宿主版本。
+
 - `project-overview`：原生声明式侧栏 + 包内 React/TypeScript 页面；`ui/dist` 是已构建且可直接安装的产物。
 - `issue-panel`：原生 Issue 侧栏 + MCP App 页面 + Ruby stdio MCP Resource/Tool 服务。
 - `tetris`：可直接游玩的俄罗斯方块目的地；左侧原生侧栏切换难度，React 中央页支持键盘/按钮操作、幽灵落点、计分、等级、暂停和中英双语。macOS 发行构建会把它的运行时文件精简复制到 App 的 `BundledPlugins`，默认随 WillDeep 提供。
