@@ -317,6 +317,51 @@ describe('Short Drama Studio', () => {
     });
   });
 
+  // ---- 首稿必须带正文 ----
+
+  /// 阶段提示词里那句「只写你这次真正要改的字段」对小修小补是对的，
+  /// 首稿场景下模型会只回一段梗概就交卷。
+  it('这一集还没有正文时，请求里明确要 script', async () => {
+    await openScript(episodeFixture({ script: '' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 写这一集' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    const sent = complete.mock.calls.at(-1)![0].messages.at(-1).content;
+    expect(sent).toContain('必须给出 script 字段');
+  });
+
+  it('已有正文时不加这句，免得一次小改动就把整集重写', async () => {
+    await openScript(episodeFixture({ script: '林晚：你走。' }));
+    fireEvent.change(screen.getByPlaceholderText(/把开场三秒的钩子/), { target: { value: '梗概改短一点' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 重写这一集' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    const sent = complete.mock.calls.at(-1)![0].messages.at(-1).content;
+    expect(sent).not.toContain('必须给出 script 字段');
+  });
+
+  it('模型只回梗概时说清正文没写，而不是报一句已更新草稿', async () => {
+    complete.mockResolvedValue({
+      text: '写好了。\n```short_drama_episode\n{"summary":"他匿名报警"}\n```',
+      model: 'fast', providerID: 'chat-a',
+    });
+    const updated = scriptDramaFixture(episodeFixture({ script: '', draftRev: 1, draft: { summary: '他匿名报警' } }));
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('user', 'x');
+      if (command === 'drama.saveDraft') return JSON.stringify({ ok: true, drama: updated });
+      return JSON.stringify({ ok: true });
+    });
+    await openScript(episodeFixture({ script: '' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 写这一集' }));
+
+    // 梗概照样存进草稿，不白跑一趟。
+    await waitFor(() => {
+      const call = executeCommand.mock.calls.find(([command]) => command === 'drama.saveDraft');
+      expect(call?.[1]).toMatchObject({ draft: { summary: '他匿名报警' } });
+    });
+    await waitFor(() => expect(document.querySelector('.toast-item.error')?.textContent).toContain('没给剧本正文'));
+  });
+
   // ---- 分集选择 ----
 
   /// 二十四集塞进一个下拉，要选第几集全靠滚，标题也看不全。

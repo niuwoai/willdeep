@@ -1154,7 +1154,13 @@ export default function App() {
 
     const history = scriptChat.filter((item) => !item.objectID || item.objectID === objectID).slice(-6)
       .map(({ role, content }) => ({ role, content }));
-    const messages = [...history, { role: 'user' as const, content: `${context}\n\n${question}` }];
+    // 这一集还没有正文时，明确要 script。阶段提示词里那句「只写你这次真正
+    // 要改的字段」对小修小补是对的，但首稿场景下模型常常只回一段梗概就
+    // 交卷，用户点的却是「AI 写这一集」。已有正文时不加，免得一次小改动
+    // 就把整集重写一遍。
+    const needsScript = mode === 'full' && !view.script.trim();
+    const demand = needsScript ? `\n\n${t('episodeScriptRequired')}` : '';
+    const messages = [...history, { role: 'user' as const, content: `${context}\n\n${question}${demand}` }];
     const budget = requestBudget(system, messages);
     if (!budget.withinLimits) { setFailure(t('requestTooLarge', { characters: budget.characters })); return; }
 
@@ -1212,7 +1218,13 @@ export default function App() {
       }
       await appendScriptChat('assistant', parsed.note || t('episodeDraftReady'), objectID, baseDraftRev);
       const written = await saveEpisodeDraft(parsed.value, baseDraftRev);
-      if (written) { setShowEpisodeDiff(true); return; }
+      if (written) {
+        setShowEpisodeDiff(true);
+        // 只回梗概不算写成了这一集：分镜阶段读的是正文，说一句比让用户
+        // 自己发现正文还是空的好。
+        if (needsScript && !parsed.value.script?.trim()) setFailure(t('episodeScriptMissing'));
+        return;
+      }
       setFailure(t('episodeDraftStale'));
     } catch (error) {
       const message = errorMessage(error);
