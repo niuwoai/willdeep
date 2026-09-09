@@ -1240,7 +1240,7 @@ struct AgentToolsCoreTests {
         #expect(sendCommand?.description.contains("automatically appends a bounded follow-up screen snapshot") == true)
         #expect(sendCommand?.description.contains("Never label the terminal unstable") == true)
         #expect(snapshot?.description.contains("ACTIVE Agent Terminal side-panel tab") == true)
-        #expect(sendCommand?.description.contains("never send a local-intended command into an SSH tab") == true)
+        #expect(sendCommand?.description.contains("Never send a local-intended command into a remote tab") == true)
         #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_upload_paths" && $0.type == .stringArray }) == true)
         #expect(sendCommand?.parameters.contains(where: { $0.name == "zmodem_download_directory" && $0.type == .string }) == true)
 
@@ -1938,6 +1938,38 @@ struct AgentToolsCoreTests {
                 sandboxMode: .workspaceWrite
             )
         )
+        // Node/undici phrase a seatbelt-refused socket as `connect EPERM
+        // <host>:<port>` with `code: 'EPERM'` — no colon after EPERM, so the
+        // older `eperm:` marker never matched. This is verbatim corepack
+        // output from a workspaceWrite run that then went undiagnosed.
+        let corepackDenial = """
+        ! Corepack is about to download https://repo.yarnpkg.com/4.12.0/packages/yarnpkg-cli/bin/yarn.js
+        Error: Error when performing the request to https://repo.yarnpkg.com/4.12.0/packages/yarnpkg-cli/bin/yarn.js
+          [cause]: TypeError: fetch failed
+            [cause]: Error: connect EPERM 127.0.0.1:7890 - Local (0.0.0.0:0)
+                at internalConnect (node:net:1110:16) {
+              errno: -1,
+              code: 'EPERM',
+              syscall: 'connect',
+              address: '127.0.0.1',
+              port: 7890
+            }
+        Node.js v24.8.0
+        """
+        #expect(
+            AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: corepackDenial,
+                sandboxMode: .workspaceWrite
+            )
+        )
+        #expect(
+            AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 1,
+                output: "Error: connect EPERM 127.0.0.1:7890 - Local (0.0.0.0:0)",
+                sandboxMode: .workspaceWriteNetworkCredentialed
+            )
+        )
         // Long logs only count "permission denied" when it sits near the end.
         let longNoise = String(repeating: "ok\n", count: 80) + "permission denied\n"
         #expect(
@@ -1968,6 +2000,27 @@ struct AgentToolsCoreTests {
         )
         #expect(note?.contains("[sandbox]") == true)
         #expect(note?.contains("do NOT retry the identical command") == true)
+        // The synthetic HOME is the effect the model most often misreads as a
+        // cache or login problem, so every redirecting mode names it — with
+        // the real path — and points at the concrete casualties.
+        #expect(note?.contains("HOME was redirected to an empty sandbox home") == true)
+        #expect(note?.contains(AgentSandboxPolicy.sandboxHomeDirectoryURL.path) == true)
+        #expect(note?.contains("corepack") == true)
+        // A denied-network mode also names the local-proxy shape of the
+        // failure, so `connect EPERM 127.0.0.1:7890` is not chased as a proxy
+        // outage.
+        #expect(note?.contains("connect EPERM 127.0.0.1:<port>") == true)
+
+        // The credentialed tier keeps the real HOME — the note must not
+        // claim otherwise, or the model starts doubting a working config.
+        let credentialedNote = AgentSandboxPolicy.sandboxedFailureNote(
+            toolName: "run_command",
+            command: "yarn install --immutable",
+            effectiveMode: .workspaceWriteNetworkCredentialed
+        )
+        #expect(credentialedNote?.contains("[sandbox]") == true)
+        #expect(credentialedNote?.contains("HOME was redirected") == false)
+        #expect(credentialedNote?.contains("the real HOME and ssh-agent are available") == true)
 
         // alwaysSafe read-only commands skip seatbelt entirely — no note.
         #expect(AgentSandboxPolicy.sandboxedFailureNote(

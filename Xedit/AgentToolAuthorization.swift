@@ -1284,6 +1284,32 @@ enum AgentSandboxPolicy {
         return guiOrClipboardTerms.contains(where: lowered.contains)
     }
 
+    /// Host-owned temp directory every non-escalated command is pointed at
+    /// (`TMPDIR` and friends). Also the parent of the synthetic HOME.
+    nonisolated static var sandboxTemporaryDirectoryURL: URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("willdeep-agent-sandbox-tmp", isDirectory: true)
+    }
+
+    /// The empty synthetic HOME that `redirectsHome` modes run under. Exposed
+    /// so the model-facing failure note can name the real path: a bare
+    /// "HOME is different" without the path reads like a guess.
+    nonisolated static var sandboxHomeDirectoryURL: URL {
+        sandboxTemporaryDirectoryURL
+            .appendingPathComponent("willdeep-agent-sandbox-home", isDirectory: true)
+    }
+
+    /// Whether commands in `mode` see the synthetic HOME instead of the
+    /// user's. Only the credentialed tier and escalation keep the real one.
+    nonisolated static func redirectsHome(_ mode: AgentSandboxMode) -> Bool {
+        switch mode {
+        case .readOnly, .readOnlyNetwork, .workspaceWrite, .workspaceWriteNetwork:
+            return true
+        case .workspaceWriteNetworkCredentialed, .escalated:
+            return false
+        }
+    }
+
     nonisolated static func sandboxedEnvironment(
         mode: AgentSandboxMode,
         rootDirectory: URL?,
@@ -1298,19 +1324,17 @@ enum AgentSandboxPolicy {
         environment["WILLDEEP_WORKSPACE_ROOT"] = rootDirectory?.standardizedFileURL.path ?? ""
 
         if mode != .escalated {
-            let sandboxTemporaryDirectory = FileManager.default.temporaryDirectory
-                .appendingPathComponent("willdeep-agent-sandbox-tmp", isDirectory: true)
+            let sandboxTemporaryDirectory = sandboxTemporaryDirectoryURL
             try? FileManager.default.createDirectory(
                 at: sandboxTemporaryDirectory,
                 withIntermediateDirectories: true
             )
-            let sandboxHome = sandboxTemporaryDirectory
-                .appendingPathComponent("willdeep-agent-sandbox-home", isDirectory: true)
+            let sandboxHome = sandboxHomeDirectoryURL
             try? FileManager.default.createDirectory(at: sandboxHome, withIntermediateDirectories: true)
             // 凭证档保留真实 HOME：seatbelt 的 `file-read*` 本来就全放行，
             // 真正挡住 ssh 读 `~/.ssh` 的从来只是这一行改写的 HOME。写入限制
             // 由 seatbelt 独立把守，不受影响。
-            if mode != .workspaceWriteNetworkCredentialed {
+            if redirectsHome(mode) {
                 environment["HOME"] = sandboxHome.path
             }
             // A synthetic HOME makes a successful global Git inspection
@@ -1610,6 +1634,15 @@ enum AgentSandboxPolicy {
             "read-only file system",
             "eperm:",
             "eacces:",
+            // Node/undici report a seatbelt-refused socket as
+            // `connect EPERM 127.0.0.1:7890` (typically the local proxy) and
+            // carry `code: 'EPERM'` in the error object — neither form has the
+            // colon the two markers above rely on. corepack downloading yarn
+            // through the proxy died exactly like this and was read as a
+            // proxy problem for fourteen minutes.
+            "connect eperm",
+            "code: 'eperm'",
+            "code: 'eacces'",
             "npm err! code eacces",
             "you don't have permission",
             "you don’t have permission",
@@ -1666,20 +1699,29 @@ enum AgentSandboxPolicy {
         case .escalated:
             return nil
         case .readOnly:
-            restrictions = "reads allowed everywhere; writes denied except the temp dir; network denied"
+            restrictions = "reads allowed everywhere; writes denied except the temp dir; network denied; HOME redirected to an empty sandbox home"
         case .readOnlyNetwork:
-            restrictions = "reads allowed everywhere; writes denied except the temp dir; network allowed"
+            restrictions = "reads allowed everywhere; writes denied except the temp dir; network allowed; HOME redirected to an empty sandbox home"
         case .workspaceWrite:
-            restrictions = "writes allowed only inside the workspace and temp dir; network denied"
+            restrictions = "writes allowed only inside the workspace and temp dir; network denied; HOME redirected to an empty sandbox home"
         case .workspaceWriteNetwork:
-            restrictions = "writes allowed only inside the workspace and temp dir; network allowed"
+            restrictions = "writes allowed only inside the workspace and temp dir; network allowed; HOME redirected to an empty sandbox home"
         case .workspaceWriteNetworkCredentialed:
             restrictions = "writes allowed only inside the workspace and temp dir; network allowed; the real HOME and ssh-agent are available, so ~/.ssh keys and host config work"
         }
         let networkNote = deniesNetwork(effectiveMode)
-            ? " Network is denied in this mode, and seatbelt expresses that as a name-resolution failure: errors such as 'no such host', 'nodename nor servname provided', 'getaddrinfo ENOTFOUND' or 'could not resolve host' mean the sandbox blocked the connection — the machine's DNS is fine. Do not debug DNS, proxies, or /etc/resolv.conf."
+            ? " Network is denied in this mode, and seatbelt expresses that as a name-resolution or connect failure: errors such as 'no such host', 'nodename nor servname provided', 'getaddrinfo ENOTFOUND', 'could not resolve host', or 'connect EPERM 127.0.0.1:<port>' (a local proxy refused) mean the sandbox blocked the connection — the machine's DNS and proxy are fine. Do not debug DNS, proxies, HTTP(S)_PROXY, or /etc/resolv.conf."
             : ""
-        return "[sandbox] This command ran inside WillDeep's macOS sandbox (\(effectiveMode.rawValue): \(restrictions)).\(networkNote) If the failure above looks like 'permission denied' / 'operation not permitted', do NOT retry the identical command — the sandbox will deny it again. Instead: use read_file/edit_file/create_file for file work, keep paths inside the workspace, or briefly tell the user why the command must run outside the sandbox so they can approve escalation."
+        // The second most misleading effect after network: every mode except
+        // the credentialed tier runs under an empty synthetic HOME, so a tool
+        // that keeps its cache or login under ~ behaves as if the machine
+        // were freshly installed. corepack could not see yarn 4.12.0 in
+        // ~/.cache and tried to download it; read cold, that looks like a
+        // cache bug or a network outage, and neither is true.
+        let homeNote = redirectsHome(effectiveMode)
+            ? " HOME was redirected to an empty sandbox home (\(sandboxHomeDirectoryURL.path)), so nothing under the real ~ is found by name: ~/.npmrc, ~/.docker, ~/.kube, ~/.cache (corepack, yarn, pip), ~/go/pkg/mod and ~/.cargo all look missing. A tool that suddenly wants to log in again, re-downloads a toolchain it already has, or reports an empty config is hitting this redirection, not a broken machine — do not reinstall, re-login, or reconfigure anything."
+            : ""
+        return "[sandbox] This command ran inside WillDeep's macOS sandbox (\(effectiveMode.rawValue): \(restrictions)).\(networkNote)\(homeNote) If the failure above looks like 'permission denied' / 'operation not permitted', do NOT retry the identical command — the sandbox will deny it again. Instead: use read_file/edit_file/create_file for file work, keep paths inside the workspace, or say in one line that the command needs the network or the user's real home so the host can run it outside the sandbox."
     }
 
     /// Argument flag stamped onto a tool call while waiting for the user to
