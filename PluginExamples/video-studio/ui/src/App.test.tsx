@@ -222,6 +222,49 @@ describe('Short Drama Studio', () => {
     await waitFor(() => expect((screen.getByPlaceholderText(/一个落魄程序员/) as HTMLTextAreaElement).value).toBe('先别急，我再想想'));
   });
 
+
+  // ---- 剧本里的新面孔 ----
+
+  it('剧本里说过两句的新名字会被提示，点一下只建名字', async () => {
+    const script = '林晚：你怎么又来了。\n周野：我收到一条短信。\n林晚：那不可能。\n周野：你看时间戳。\n护士：请关掉手机。';
+    const episode = {
+      id: 'e1', order: 1, title: '第 1 集', summary: '', script,
+      status: 'draft', shots: [], rev: 0, draftRev: 0, draft: null,
+    };
+    dramas = [{
+      id: 'd1', title: '错时来信', genre: '悬疑', format: '竖屏', episodeCount: 1, episodeDurationSeconds: 90,
+      logline: '', coreConflict: '', audience: '', tone: '', arc: '', status: 'planning',
+      rev: 0, draftRev: 0, draft: null,
+      characters: [{
+        id: 'c1', name: '林晚', description: '', visualPrompt: '', identityVersion: 1,
+        candidates: [], selectedCandidateID: null, rev: 0, draftRev: 0, draft: null,
+      }],
+      episodes: [episode],
+      createdAt: '2026-09-09T00:00:00Z', updatedAt: '2026-09-09T00:00:00Z',
+    }];
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'drama.saveCharacter') return JSON.stringify({ ok: true, drama: dramas[0] });
+      return JSON.stringify({ ok: true });
+    });
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '继续创作' }))[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: /分集剧本/ }))[0]!);
+
+    // 林晚已在角色表里，护士是功能性称谓且只说一句，都不该出现。
+    expect(await screen.findByRole('button', { name: '建「周野」' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '建「林晚」' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '建「护士」' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '建「周野」' }));
+    await waitFor(() => {
+      const call = executeCommand.mock.calls.find(([command]) => command === 'drama.saveCharacter');
+      expect(call?.[1]).toEqual({ dramaID: 'd1', name: '周野' });
+    });
+  });
+
   // ---- 角色共创 ----
 
   const characterFixture = (overrides: Record<string, unknown> = {}) => ({

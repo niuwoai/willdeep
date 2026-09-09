@@ -359,7 +359,7 @@ ARGF.each_line do |line|
              {
                protocolVersion: "2025-06-18",
                capabilities: { tools: {} },
-               serverInfo: { name: "video-studio", version: "0.5.0" }
+               serverInfo: { name: "video-studio", version: "0.6.0" }
              }
            when "tools/list"
              { tools: TOOLS }

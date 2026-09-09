@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CHARACTER_DRAFT_FIELDS, callCommand, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parsePlanWithReason, requestBudget, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parsePlanWithReason, requestBudget, visibleStream } from './bridge';
 import type { CharacterDraft } from './types';
 
 describe('parseDramaPlan', () => {
@@ -203,5 +203,61 @@ describe('策划带出的角色骨架', () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.plan.characters).toEqual([]);
+  });
+});
+
+describe('detectUnknownCharacters', () => {
+  const script = [
+    '内景 医院走廊 日',
+    '林晚：你怎么又来了。',
+    '周野：我收到一条三天后的短信。',
+    '护士：请把手机关掉。',
+    '林晚：那不可能。',
+    '周野：你看这个时间戳。',
+    '路人：让一让。',
+    '陈医生：谁是家属？',
+  ].join('\n');
+
+  it('找出剧本里出现两次以上的新名字', () => {
+    expect(detectUnknownCharacters(script, [])).toEqual(['林晚', '周野']);
+  });
+
+  it('已经在角色表里的不再报', () => {
+    expect(detectUnknownCharacters(script, ['林晚'])).toEqual(['周野']);
+    expect(detectUnknownCharacters(script, ['林晚', '周野'])).toEqual([]);
+  });
+
+  it('只说一句话的人不算角色', () => {
+    // 这条挡掉的比别的规则加起来都多。自动把它们建成角色，角色表就成了
+    // 一堆只有名字的空壳。
+    expect(detectUnknownCharacters(script, [])).not.toContain('陈医生');
+  });
+
+  it('功能性称谓不算角色', () => {
+    const repeated = '护士：一句。\n护士：又一句。\n路人：一句。\n路人：又一句。';
+    expect(detectUnknownCharacters(repeated, [])).toEqual([]);
+  });
+
+  it('场景标记与旁白不算角色', () => {
+    const marked = '内景：医院走廊。\n内景：病房。\n旁白：三天后。\n旁白：她并不知道。';
+    expect(detectUnknownCharacters(marked, [])).toEqual([]);
+  });
+
+  it('冒号后没有台词的标题行不算', () => {
+    expect(detectUnknownCharacters('第一场：\n第二场：\n第三场：', [])).toEqual([]);
+  });
+
+  it('名字太长或带标点的行不算', () => {
+    const noisy = '他缓缓抬起头说：这不可能。\n他缓缓抬起头说：真的。\n2026：一年。\n2026：又一年。';
+    expect(detectUnknownCharacters(noisy, [])).toEqual([]);
+  });
+
+  it('按出现次数从多到少排', () => {
+    const ordered = '周野：一。\n周野：二。\n周野：三。\n林晚：一。\n林晚：二。';
+    expect(detectUnknownCharacters(ordered, [])).toEqual(['周野', '林晚']);
+  });
+
+  it('英文名字也认', () => {
+    expect(detectUnknownCharacters('Alex: one.\nAlex: two.', [])).toEqual(['Alex']);
   });
 });

@@ -187,3 +187,40 @@ export function visibleStream(buffer: string, fence: string): { text: string; st
   if (loose < 0) return { text: buffer, structured: false };
   return { text: buffer.slice(0, loose).trim(), structured: true };
 }
+
+/// 剧本里出现了角色表里没有的人。
+///
+/// 只认台词行首那个「名字：」的写法，这是剧本最稳定的结构特征。刻意**不**
+/// 调模型：模型很乐意把「路人」「护士」「司机」都报成新角色，自动建会把
+/// 角色表撑成一堆空壳，而这正是要避免的事。
+///
+/// 三道过滤，宁可漏不可滥：
+/// 1. 名字长度 2 到 6 个字，且只含中文或字母——排掉「内景 日」这种场景标记
+///    和把整句话写在冒号前的行。
+/// 2. 功能性称谓直接丢：它们是职业不是角色。
+/// 3. 至少出现两次。只说一句话的人几乎都是路人，这条挡掉的比前两条加起来还多。
+const FUNCTIONAL_ROLES = new Set([
+  '路人', '护士', '医生', '司机', '店员', '服务员', '保安', '警察', '快递员',
+  '同事', '邻居', '老板', '客人', '乘客', '观众', '记者', '秘书', '助理',
+  '男人', '女人', '男孩', '女孩', '老人', '孩子', '众人', '旁白', '画外音',
+  '声音', '广播', '手机', '短信', '字幕', '镜头', '场景', '内景', '外景',
+]);
+
+export function detectUnknownCharacters(script: string, knownNames: string[]): string[] {
+  const known = new Set(knownNames.map((name) => name.trim()).filter(Boolean));
+  const counts = new Map<string, number>();
+  for (const line of script.split(/\r?\n/)) {
+    // 全角冒号和半角冒号都认；冒号后必须真的有台词，否则那是个标题行。
+    const match = line.trim().match(/^([^\s:：]{2,6})[:：]\s*\S/);
+    const name = match?.[1];
+    if (!name) continue;
+    if (known.has(name)) continue;
+    if (FUNCTIONAL_ROLES.has(name)) continue;
+    if (!/^[\u4e00-\u9fa5A-Za-z]+$/.test(name)) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((left, right) => right[1] - left[1])
+    .map(([name]) => name);
+}

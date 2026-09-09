@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { CHARACTER_DRAFT_FIELDS, callCommand, loadDramas, loadProviders, parseFencedDraft, parsePlanWithReason, requestBudget, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, callCommand, detectUnknownCharacters, loadDramas, loadProviders, parseFencedDraft, parsePlanWithReason, requestBudget, visibleStream } from './bridge';
 import { Dropdown } from './Dropdown';
 import { createTranslator, localeFromContext } from './i18n';
 import type { ChatMessage, Character, CharacterDraft, Drama, DramaPlan, ImageModel, ProviderEntry, Shot, SkillEntry, Stage } from './types';
@@ -566,6 +566,21 @@ export default function App() {
     await reload(drama.id);
   }
 
+  /// 把剧本里发现的名字建成角色骨架。只写名字：小传和视觉提示词回角色
+  /// 阶段用「AI 出第一稿」补，这里替用户猜等于凭一句台词编一个人。
+  async function addDetectedCharacter(name: string) {
+    if (!drama) return;
+    setBusy('detected-character');
+    try {
+      const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { message?: string } }>(
+        'drama.saveCharacter', { dramaID: drama.id, name }
+      );
+      if (!payload.ok || !payload.drama) throw new Error(payload.error?.message || t('operationFailed'));
+      applyDrama(payload.drama);
+      setNotice(t('detectedCharacterAdded', { name }));
+    } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
+  }
+
   async function saveEpisode() {
     if (!drama || !episode) return;
     setBusy('episode');
@@ -729,8 +744,27 @@ export default function App() {
     </main></div>);
   }
 
+  /// 剧本里出现但角色表里没有的人。刻意只提示不自动建：模型和手写的剧本
+  /// 里都会冒出一次性的功能性人物，自动建会把角色表撑成一堆空壳。
+  function DetectedCast() {
+    const known = drama?.characters.map((item) => item.name) ?? [];
+    const detected = detectUnknownCharacters(episodeDraft.script, known);
+    if (detected.length === 0) return null;
+    return (
+      <div className="detected-cast">
+        <h3>{t('detectedCastTitle')}</h3>
+        <p>{t('detectedCastHint')}</p>
+        <div className="detected-list">{detected.map((name) => (
+          <button className="ghost" key={name} disabled={busy === 'detected-character'} onClick={() => void addDetectedCharacter(name)}>
+            {t('addDetectedCharacter', { name })}
+          </button>
+        ))}</div>
+      </div>
+    );
+  }
+
   function Script() {
-    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="page-heading"><div><p className="eyebrow">{t('stage_script')}</p><h1>{t('scriptTitle')}</h1><p>{t('scriptHint')}</p></div><button className="primary" disabled={busy === 'episode'} onClick={() => void saveEpisode()}>{t('saveEpisode')}</button></div><div className="script-grid"><section className="editor-card"><label>{t('episodeTitle')}<input value={episodeDraft.title} onChange={(event) => setEpisodeDraft({ ...episodeDraft, title: event.target.value })} /></label><label>{t('episodeSummary')}<textarea value={episodeDraft.summary} onChange={(event) => setEpisodeDraft({ ...episodeDraft, summary: event.target.value })} /></label><label>{t('episodeScript')}<textarea className="script-area" value={episodeDraft.script} onChange={(event) => setEpisodeDraft({ ...episodeDraft, script: event.target.value })} /></label></section><aside className="script-guide"><h3>{t('episodeChecklist')}</h3><p>{t('checkHook')}</p><p>{t('checkConflict')}</p><p>{t('checkCliffhanger')}</p><button className="ghost" onClick={() => setStage('storyboard')}>{t('goStoryboard')}</button></aside></div></main></div>);
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="page-heading"><div><p className="eyebrow">{t('stage_script')}</p><h1>{t('scriptTitle')}</h1><p>{t('scriptHint')}</p></div><button className="primary" disabled={busy === 'episode'} onClick={() => void saveEpisode()}>{t('saveEpisode')}</button></div><div className="script-grid"><section className="editor-card"><label>{t('episodeTitle')}<input value={episodeDraft.title} onChange={(event) => setEpisodeDraft({ ...episodeDraft, title: event.target.value })} /></label><label>{t('episodeSummary')}<textarea value={episodeDraft.summary} onChange={(event) => setEpisodeDraft({ ...episodeDraft, summary: event.target.value })} /></label><label>{t('episodeScript')}<textarea className="script-area" value={episodeDraft.script} onChange={(event) => setEpisodeDraft({ ...episodeDraft, script: event.target.value })} /></label></section><aside className="script-guide">{DetectedCast()}<h3>{t('episodeChecklist')}</h3><p>{t('checkHook')}</p><p>{t('checkConflict')}</p><p>{t('checkCliffhanger')}</p><button className="ghost" onClick={() => setStage('storyboard')}>{t('goStoryboard')}</button></aside></div></main></div>);
   }
 
   function Storyboard() {
