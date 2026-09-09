@@ -318,4 +318,90 @@ struct AgentTurnWatchdogTests {
         #expect(past.contains(AgentTurnWatchdogPolicy.formatIdle(0)))
         #expect(AgentTurnWatchdogPolicy.automaticReconnectAt > AgentTurnWatchdogPolicy.stallThreshold)
     }
+
+    // MARK: 时钟锚点（横幅报出 150 分 39 秒的那次）
+
+    /// 上一轮 20:21 结束，两个半小时后用户发了新消息，横幅立刻说
+    /// 「spawn_agent 已经 150 分 39 秒 没有返回」——数的是上一轮的旧戳。
+    /// 回合再静默也不可能比它自己的年龄更久。
+    @Test("旧回合留下的活动戳被钳到本回合起点")
+    func staleActivityStampIsClampedToTheTurnStart() {
+        let previousTurn = now.addingTimeInterval(-9_039)
+        // 回合刚开始：即便旧戳来自两个半小时前，也不是停摆。
+        #expect(AgentTurnWatchdogPolicy.stalledSeconds(
+            isResponding: true, isAwaitingProviderSlot: false, isCompressingContext: false,
+            hasBlockingDecision: false, lastActivityAt: previousTurn,
+            turnStartedAt: now.addingTimeInterval(-3), now: now
+        ) == nil)
+        // 本回合自己静默够久了，报的是本回合的时长，不是旧戳的。
+        #expect(AgentTurnWatchdogPolicy.stalledSeconds(
+            isResponding: true, isAwaitingProviderSlot: false, isCompressingContext: false,
+            hasBlockingDecision: false, lastActivityAt: previousTurn,
+            turnStartedAt: now.addingTimeInterval(-200), now: now
+        ) == 200)
+        // 同一条钳制也管安抚条，否则状态条会提前跳到「未确认」。
+        #expect(AgentTurnWatchdogPolicy.quietSeconds(
+            isResponding: true, isAwaitingProviderSlot: false, isCompressingContext: false,
+            hasBlockingDecision: false, lastVisibleOutputAt: previousTurn,
+            turnStartedAt: now.addingTimeInterval(-3), now: now
+        ) == nil)
+    }
+
+    @Test("早于本回合的运行中工具不算本回合在跑")
+    func runningRowsFromEarlierTurnsAreNotThisTurn() {
+        #expect(!AgentTurnWatchdogPolicy.isRunningInCurrentTurn(
+            toolStartedAt: now.addingTimeInterval(-9_039), turnStartedAt: now.addingTimeInterval(-3)
+        ))
+        #expect(AgentTurnWatchdogPolicy.isRunningInCurrentTurn(
+            toolStartedAt: now.addingTimeInterval(-30), turnStartedAt: now.addingTimeInterval(-60)
+        ))
+        // 没有回合起点可比时不做判断，维持旧行为。
+        #expect(AgentTurnWatchdogPolicy.isRunningInCurrentTurn(
+            toolStartedAt: now.addingTimeInterval(-9_039), turnStartedAt: nil
+        ))
+    }
+
+    /// 整条复现：台账里躺着上一轮没结算的 spawn_agent，活动戳停在两个半小时前，
+    /// 用户刚发出新消息。修好之前这里会立刻弹出那条横幅。
+    @Test("刚发出的回合不会被判成停摆两个半小时")
+    @MainActor
+    func freshTurnIsNotReportedAsStalledSinceThePreviousTurn() throws {
+        let (app, runtime) = try fixture()
+        defer { AgentSessionStore.delete(id: runtime.id) }
+        let previousTurn = now.addingTimeInterval(-9_039)
+        runtime.messages = [AgentMessage(role: .user, content: "跑一下这个脚本", source: .operatorInput)]
+        runtime.toolCalls = [
+            AgentToolCall(
+                messageID: runtime.messages[0].id, externalID: "leftover", toolName: "spawn_agent",
+                arguments: [:], risk: .read, status: .running, startedAt: previousTurn
+            ),
+        ]
+        runtime.lastActivityAt = previousTurn
+        runtime.isResponding = true
+        runtime.turnStartedAt = now.addingTimeInterval(-2)
+
+        app.scanAgentTurnsForStalls(now: now)
+
+        #expect(runtime.errorMessage == nil)
+        #expect(!runtime.isShowingWatchdogStallNotice)
+        runtime.isResponding = false
+    }
+
+    @Test("回合结束会把活动戳和可见输出戳一起清掉")
+    @MainActor
+    func turnEndClearsBothClocks() throws {
+        let (app, runtime) = try fixture()
+        defer { AgentSessionStore.delete(id: runtime.id) }
+        runtime.messages = [
+            AgentMessage(role: .user, content: "go", source: .operatorInput),
+            AgentMessage(role: .assistant, content: "done"),
+        ]
+        runtime.lastActivityAt = now
+        runtime.lastVisibleOutputAt = now
+
+        app.noteAgentTurnEnded(for: runtime, turnID: UUID())
+
+        #expect(runtime.lastActivityAt == nil)
+        #expect(runtime.lastVisibleOutputAt == nil)
+    }
 }

@@ -48,6 +48,20 @@ nonisolated enum AgentTurnWatchdogPolicy {
     /// queued copy the same way the goal planner does.
     static let resumePromptPrefix = "=== TURN INTERRUPTED — RESUME ==="
 
+    /// No turn can have been silent for longer than it has existed. Both
+    /// clocks are stamped inside the round loop, well after `isResponding`
+    /// goes true, and neither is cleared on every path a turn can end on —
+    /// so between two turns they hold the previous turn's value. The
+    /// thirty-second scheduler tick lands in that window often enough that
+    /// a freshly sent message was once greeted with "spawn_agent 已经 150 分
+    /// 39 秒 没有返回", counted from a turn that had finished two and a half
+    /// hours earlier. Clamping to the turn's own start makes the stale value
+    /// harmless instead of alarming.
+    private static func anchor(_ stamp: Date, turnStartedAt: Date?) -> Date {
+        guard let turnStartedAt else { return stamp }
+        return max(stamp, turnStartedAt)
+    }
+
     /// Visible silence long enough for tier-one reassurance, nil when the
     /// turn is either showing output or legitimately parked.
     static func quietSeconds(
@@ -56,11 +70,12 @@ nonisolated enum AgentTurnWatchdogPolicy {
         isCompressingContext: Bool,
         hasBlockingDecision: Bool,
         lastVisibleOutputAt: Date?,
+        turnStartedAt: Date? = nil,
         now: Date
     ) -> TimeInterval? {
         guard isResponding, !isAwaitingProviderSlot, !isCompressingContext, !hasBlockingDecision,
               let lastVisibleOutputAt else { return nil }
-        let quiet = now.timeIntervalSince(lastVisibleOutputAt)
+        let quiet = now.timeIntervalSince(anchor(lastVisibleOutputAt, turnStartedAt: turnStartedAt))
         return quiet >= reassuranceThreshold ? quiet : nil
     }
 
@@ -72,11 +87,12 @@ nonisolated enum AgentTurnWatchdogPolicy {
         isCompressingContext: Bool,
         hasBlockingDecision: Bool,
         lastActivityAt: Date?,
+        turnStartedAt: Date? = nil,
         now: Date
     ) -> TimeInterval? {
         guard isResponding, !isAwaitingProviderSlot, !isCompressingContext, !hasBlockingDecision,
               let lastActivityAt else { return nil }
-        let idle = now.timeIntervalSince(lastActivityAt)
+        let idle = now.timeIntervalSince(anchor(lastActivityAt, turnStartedAt: turnStartedAt))
         return idle >= stallThreshold ? idle : nil
     }
 
@@ -95,6 +111,17 @@ nonisolated enum AgentTurnWatchdogPolicy {
         case modelFirstToken
         /// Text was already streaming and then stopped.
         case modelMidStream
+    }
+
+    /// Whether a `.running` ledger row belongs to the turn being reported on.
+    /// The tool-call ledger spans the whole session, and three early returns
+    /// in `noteAgentTurnEnded` leave a broken turn's rows unsettled — so the
+    /// newest `.running` row can be hours old and owned by nobody. Naming it
+    /// blames a tool that is not running, which is how a stalled *model*
+    /// round came out as "the spawn_agent tool has not returned".
+    static func isRunningInCurrentTurn(toolStartedAt: Date, turnStartedAt: Date?) -> Bool {
+        guard let turnStartedAt else { return true }
+        return toolStartedAt >= turnStartedAt
     }
 
     /// Pure so the four branches can be tested without a runtime.
@@ -205,18 +232,22 @@ extension AppState {
             let blocking = runtime.toolCalls.contains { $0.status.isBlockingForUserDecision }
             // Tier one: alive but showing nothing. Only ever changes the
             // strip label, and only publishes when the label would change.
-            let isQuiet = AgentTurnWatchdogPolicy.quietSeconds(
+            let quiet = AgentTurnWatchdogPolicy.quietSeconds(
                 isResponding: runtime.isResponding,
                 isAwaitingProviderSlot: runtime.isAwaitingProviderSlot,
                 isCompressingContext: runtime.isCompressingContext,
                 hasBlockingDecision: blocking,
                 lastVisibleOutputAt: runtime.lastVisibleOutputAt,
+                turnStartedAt: runtime.turnStartedAt,
                 now: now
-            ) != nil
-            if isQuiet, let since = runtime.lastVisibleOutputAt {
+            )
+            if let quiet {
+                // Anchored, so `since` is the clamped start of the silence
+                // rather than a stamp left over from an earlier turn.
                 let reassurance = AgentQuietReassurance(
-                    subject: watchdogStallSubject(for: runtime), since: since,
-                    isOverdue: now.timeIntervalSince(since) >= AgentTurnWatchdogPolicy.stallThreshold
+                    subject: watchdogStallSubject(for: runtime),
+                    since: now.addingTimeInterval(-quiet),
+                    isOverdue: quiet >= AgentTurnWatchdogPolicy.stallThreshold
                 )
                 if runtime.quietReassurance != reassurance { runtime.quietReassurance = reassurance }
             } else if runtime.quietReassurance != nil {
@@ -228,6 +259,7 @@ extension AppState {
                 isCompressingContext: runtime.isCompressingContext,
                 hasBlockingDecision: blocking,
                 lastActivityAt: runtime.lastActivityAt,
+                turnStartedAt: runtime.turnStartedAt,
                 now: now
             ) else { continue }
             // Never paint over a real error; the stall notice is the mild
@@ -244,7 +276,12 @@ extension AppState {
     }
 
     private func watchdogStallSubject(for runtime: AgentRuntime) -> AgentTurnWatchdogPolicy.StallSubject {
-        let running = runtime.toolCalls.last(where: { $0.status == .running })
+        let running = runtime.toolCalls.last {
+            $0.status == .running
+                && AgentTurnWatchdogPolicy.isRunningInCurrentTurn(
+                    toolStartedAt: $0.startedAt, turnStartedAt: runtime.turnStartedAt
+                )
+        }
         let worker = running?.toolName == "spawn_agent"
             ? (running?.subagentWorkerName ?? running?.subagentLiveActivity?.workerName)
             : nil
@@ -293,6 +330,10 @@ extension AppState {
         runtime.isShowingWatchdogStallNotice = false
         runtime.quietReassurance = nil
         runtime.lastVisibleOutputAt = nil
+        // Both clocks die with the turn. Leaving this one behind is what let
+        // the next turn be reported as silent since the last one — the two
+        // fields are read together and must be cleared together.
+        runtime.lastActivityAt = nil
         updateAgentStallTicker()
         if runtime.retryAfterStopRequested {
             runtime.retryAfterStopRequested = false
