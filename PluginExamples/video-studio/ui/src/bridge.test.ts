@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CHARACTER_DRAFT_FIELDS, callCommand, loadDramas, parseDramaPlan, parseFencedDraft, requestBudget, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, callCommand, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parsePlanWithReason, requestBudget, visibleStream } from './bridge';
 import type { CharacterDraft } from './types';
 
 describe('parseDramaPlan', () => {
@@ -112,5 +112,70 @@ describe('visibleStream', () => {
 
   it('hides a partial fence marker too, so no stray backticks flash', () => {
     expect(visibleStream('好的\n```', 'short_drama_character')).toEqual({ text: '好的', structured: true });
+  });
+});
+
+describe('parsePlanWithReason', () => {
+  const plan = '{"title":"错时来信","episodeCount":8}';
+
+  it('survives prose that itself contains braces', () => {
+    const raw = `我先说下思路：主角收到的短信格式像 {sender, body}。\n\`\`\`short_drama_plan\n${plan}\n\`\`\``;
+    expect(parsePlanWithReason(raw)).toMatchObject({ ok: true, plan: { title: '错时来信' } });
+  });
+
+  it('accepts a json fence when the model ignores the agreed tag', () => {
+    expect(parsePlanWithReason('```json\n' + plan + '\n```')).toMatchObject({ ok: true });
+  });
+
+  it('accepts a bare fence with no language tag', () => {
+    expect(parsePlanWithReason('```\n' + plan + '\n```')).toMatchObject({ ok: true });
+  });
+
+  it('accepts the tag the old prompt invited, short_drama_plan JSON', () => {
+    expect(parsePlanWithReason('```short_drama_plan JSON\n' + plan + '\n```')).toMatchObject({ ok: true });
+  });
+
+  it('ignores trailing prose after the object', () => {
+    expect(parsePlanWithReason(plan + '\n\n还需要我细化第 3 集吗？{可以}')).toMatchObject({ ok: true });
+  });
+
+  it('reports a cut-off reply as truncated rather than malformed', () => {
+    const raw = '```short_drama_plan\n{"title":"错时来信","episodes":[{"title":"第 1 集","summary":"开场';
+    expect(parsePlanWithReason(raw)).toEqual({ ok: false, reason: 'truncated' });
+  });
+
+  it('reports a reply with no object at all', () => {
+    expect(parsePlanWithReason('你想要几集？先说下受众。')).toEqual({ ok: false, reason: 'no_json' });
+  });
+
+  it('reports a malformed object separately from a missing one', () => {
+    expect(parsePlanWithReason('```short_drama_plan\n{"title": 断了,}\n```')).toEqual({ ok: false, reason: 'malformed_json' });
+  });
+
+  it('reports an empty title instead of pretending the plan parsed', () => {
+    expect(parsePlanWithReason('{"title":"   ","genre":"悬疑"}')).toEqual({ ok: false, reason: 'missing_title' });
+  });
+
+  it('keeps parseDramaPlan as the nullable wrapper', () => {
+    expect(parseDramaPlan('nope')).toBeNull();
+    expect(parseDramaPlan(plan)).toMatchObject({ title: '错时来信' });
+  });
+});
+
+describe('firstBalancedObject', () => {
+  it('skips braces that live inside strings', () => {
+    const found = firstBalancedObject('{"title":"带 { 的剧名","genre":"悬疑"}');
+    expect(found).toMatchObject({ truncated: false });
+    expect(JSON.parse(found!.json)).toMatchObject({ title: '带 { 的剧名' });
+  });
+
+  it('is not fooled by an escaped quote before a brace', () => {
+    const found = firstBalancedObject('{"title":"引号\\"与 }","x":1}');
+    expect(found?.truncated).toBe(false);
+    expect(JSON.parse(found!.json)).toMatchObject({ x: 1 });
+  });
+
+  it('flags an unbalanced object as truncated', () => {
+    expect(firstBalancedObject('{"title":"半截')).toMatchObject({ truncated: true });
   });
 });

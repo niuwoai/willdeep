@@ -37,23 +37,92 @@ export async function loadProviders(): Promise<ProviderEntry[]> {
   return (await window.willdeep?.ai?.providers())?.providers ?? [];
 }
 
+/// 从一段文字里切出第一个**括号配平**的 JSON 对象。
+///
+/// 早先是 `indexOf('{')` 到 `lastIndexOf('}')`。模型只要在 JSON 前后写一句
+/// 解释而那句话里带了花括号，或者末尾又补了一段说明，切出来的片段就不是
+/// 合法 JSON，整轮策划直接判失败。字符串内的括号和转义要跳过，否则
+/// 剧名里一个「{」就能把配平算歪。
+export function firstBalancedObject(text: string): { json: string; truncated: boolean } | null {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const character = text[index];
+    if (escaped) { escaped = false; continue; }
+    if (character === '\\') { escaped = true; continue; }
+    if (character === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (character === '{') depth += 1;
+    else if (character === '}') {
+      depth -= 1;
+      if (depth === 0) return { json: text.slice(start, index + 1), truncated: false };
+    }
+  }
+  // 有开头没配平的结尾，基本就是输出被截断了。
+  return { json: text.slice(start), truncated: true };
+}
+
+/// 候选片段，按可信度从高到低：约定的围栏、任意带语言标记的围栏、裸围栏、
+/// 整段原文。模型把 ```short_drama_plan 写成 ```json 的概率不低，而系统
+/// 提示词里那句「```short_drama_plan JSON```」本身就在诱导它这么写。
+export function planCandidates(raw: string): string[] {
+  const candidates: string[] = [];
+  const named = raw.match(/```[ \t]*short_drama_plan[^\n]*\n([\s\S]*?)```/i);
+  if (named?.[1]) candidates.push(named[1]);
+  const fenced = raw.matchAll(/```[^\n]*\n([\s\S]*?)```/g);
+  for (const match of fenced) if (match[1]) candidates.push(match[1]);
+  const unterminated = raw.match(/```[^\n]*\n([\s\S]*)$/);
+  if (unterminated?.[1]) candidates.push(unterminated[1]);
+  candidates.push(raw);
+  return candidates;
+}
+
+export type PlanFailure = 'no_json' | 'malformed_json' | 'truncated' | 'missing_title';
+export type PlanParse = { ok: true; plan: DramaPlan } | { ok: false; reason: PlanFailure };
+
+function normalizePlan(value: Partial<DramaPlan>): DramaPlan | null {
+  if (!value.title?.trim()) return null;
+  return {
+    title: value.title.trim(), genre: value.genre?.trim() || '', format: value.format?.trim() || '',
+    episodeCount: Math.min(100, Math.max(1, Number(value.episodeCount) || 12)),
+    episodeDurationSeconds: Math.min(600, Math.max(15, Number(value.episodeDurationSeconds) || 90)),
+    logline: value.logline?.trim() || '', coreConflict: value.coreConflict?.trim() || '',
+    audience: value.audience?.trim() || '', tone: value.tone?.trim() || '', arc: value.arc?.trim() || '',
+    episodes: Array.isArray(value.episodes) ? value.episodes : [],
+  };
+}
+
+/// 带原因的解析。失败原因要能区分开：截断该建议减少集数，格式错该让模型
+/// 重发，缺标题是内容问题。一句「没有有效数据块」把三种都盖住了，用户
+/// 只能反复重试同一件必然失败的事。
+export function parsePlanWithReason(raw: string): PlanParse {
+  let sawJSON = false;
+  let sawTruncation = false;
+  for (const candidate of planCandidates(raw)) {
+    const found = firstBalancedObject(candidate);
+    if (!found) continue;
+    sawJSON = true;
+    if (found.truncated) { sawTruncation = true; continue; }
+    let parsed: Partial<DramaPlan> | null = null;
+    try {
+      parsed = JSON.parse(found.json) as Partial<DramaPlan>;
+    } catch {
+      continue;
+    }
+    const plan = normalizePlan(parsed);
+    if (plan) return { ok: true, plan };
+    return { ok: false, reason: 'missing_title' };
+  }
+  if (sawTruncation) return { ok: false, reason: 'truncated' };
+  return { ok: false, reason: sawJSON ? 'malformed_json' : 'no_json' };
+}
+
 export function parseDramaPlan(raw: string): DramaPlan | null {
-  const block = raw.match(/```short_drama_plan\s*([\s\S]*?)```/i)?.[1] ?? raw;
-  const start = block.indexOf('{');
-  const end = block.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    const value = JSON.parse(block.slice(start, end + 1)) as Partial<DramaPlan>;
-    if (!value.title?.trim()) return null;
-    return {
-      title: value.title.trim(), genre: value.genre?.trim() || '', format: value.format?.trim() || '',
-      episodeCount: Math.min(100, Math.max(1, Number(value.episodeCount) || 12)),
-      episodeDurationSeconds: Math.min(600, Math.max(15, Number(value.episodeDurationSeconds) || 90)),
-      logline: value.logline?.trim() || '', coreConflict: value.coreConflict?.trim() || '',
-      audience: value.audience?.trim() || '', tone: value.tone?.trim() || '', arc: value.arc?.trim() || '',
-      episodes: Array.isArray(value.episodes) ? value.episodes : [],
-    };
-  } catch { return null; }
+  const result = parsePlanWithReason(raw);
+  return result.ok ? result.plan : null;
 }
 
 /// 宿主对一次请求的硬上限：24 条消息、合计 32000 字符，system 也算在内。

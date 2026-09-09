@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { CHARACTER_DRAFT_FIELDS, callCommand, loadDramas, loadProviders, parseDramaPlan, parseFencedDraft, requestBudget, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, callCommand, loadDramas, loadProviders, parseFencedDraft, parsePlanWithReason, requestBudget, visibleStream } from './bridge';
 import { Dropdown } from './Dropdown';
 import { createTranslator, localeFromContext } from './i18n';
 import type { ChatMessage, Character, CharacterDraft, Drama, DramaPlan, ImageModel, ProviderEntry, Shot, SkillEntry, Stage } from './types';
@@ -96,6 +96,7 @@ export default function App() {
   const [idea, setIdea] = useState('');
   const [plannerMessages, setPlannerMessages] = useState<PlannerMessage[]>([]);
   const [plan, setPlan] = useState<DramaPlan | null>(null);
+  const [plannerStreamID, setPlannerStreamID] = useState('');
   const [character, setCharacter] = useState({ id: '', name: '', description: '', visualPrompt: '' });
   // 共创：当前选中的角色、这一阶段的聊天、以及基准过期时留在内存里的候选。
   const [characterID, setCharacterID] = useState('');
@@ -244,8 +245,9 @@ export default function App() {
   }
 
   async function askPlanner() {
-    if (!idea.trim()) { setFailure(t('ideaRequired')); return; }
-    const userMessage: PlannerMessage = { id: localID(), role: 'user', content: idea.trim(), display: idea.trim() };
+    const question = idea.trim();
+    if (!question) { setFailure(t('ideaRequired')); return; }
+    const userMessage: PlannerMessage = { id: localID(), role: 'user', content: question, display: question };
     const requestMessages = [...plannerMessages, userMessage];
     setPlannerMessages(requestMessages);
     setIdea('');
@@ -253,27 +255,49 @@ export default function App() {
     // 策划一次要十几秒。宿主按 streamID 把增量推回来，贴着输入框滚动显示，
     // 用户至少知道模型在动，而不是对着一个转圈干等。
     const streamID = localID();
+    setPlannerStreamID(streamID);
     const onDelta = (event: Event) => {
       const detail = (event as CustomEvent<{ streamID?: string; delta?: string }>).detail;
       if (detail?.streamID !== streamID || typeof detail.delta !== 'string') return;
       setStreamingText((current) => (current + detail.delta).slice(-1200));
     };
     window.addEventListener('willdeep:ai-delta', onDelta);
+    // 这一轮失败就把问题退回输入框，并把刚追加的那条用户消息撤掉。
+    // 早先两样都不回滚：输入框空了、消息留在历史里，用户只能重新打一遍，
+    // 而每次重试又往历史里多堆一条一模一样的话。
+    const rollback = () => { setPlannerMessages(plannerMessages); setIdea(question); };
     try {
       const response = await window.willdeep?.ai?.complete({
         system: t('plannerSystem'), messages: requestMessages.map(({ role, content }) => ({ role, content })),
         provider: assistantProvider || undefined, model: assistantModel || undefined,
         skills: attachedSkills.map((item) => item.identifier), streamID,
       });
-      const parsed = response && parseDramaPlan(response.text);
-      if (!parsed) throw new Error(t('planInvalid'));
-      setPlan(parsed);
-      setPlannerMessages([...requestMessages, { id: localID(), role: 'assistant', content: response.text, display: t('planGeneratedMessage', { title: parsed.title }) }]);
-    } catch (error) { setFailure(errorMessage(error)); }
+      if (!response) { rollback(); setFailure(t('operationFailed')); return; }
+      const parsed = parsePlanWithReason(response.text);
+      if (!parsed.ok) {
+        // 模型原文留进聊天记录。早先直接丢掉，用户和我们都看不到它到底
+        // 回了什么，只能对着一句「没有有效数据块」反复重试。
+        setPlannerMessages([...plannerMessages, { id: localID(), role: 'assistant', content: response.text, display: `${t(`planFailure_${parsed.reason}`)}\n\n${response.text.slice(0, 1200)}` }]);
+        setIdea(question);
+        setFailure(t(`planFailure_${parsed.reason}`));
+        return;
+      }
+      setPlan(parsed.plan);
+      setPlannerMessages([...requestMessages, { id: localID(), role: 'assistant', content: response.text, display: t('planGeneratedMessage', { title: parsed.plan.title }) }]);
+    } catch (error) {
+      rollback();
+      const message = errorMessage(error);
+      setFailure(message.toLowerCase().includes('cancel') ? t('requestStopped') : message);
+    }
     finally {
       window.removeEventListener('willdeep:ai-delta', onDelta);
-      setStreamingText(''); setBusy('');
+      setStreamingText(''); setPlannerStreamID(''); setBusy('');
     }
+  }
+
+  function stopPlanner() {
+    const cancel = window.willdeep?.ai?.cancel;
+    if (cancel && plannerStreamID) void cancel(plannerStreamID);
   }
 
   async function confirmPlan() {
@@ -624,7 +648,7 @@ export default function App() {
   }
 
   function Planning() {
-    return AppShell(<main className="planning-shell"><header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{t('planningTitle')}</span></div></header><div className="planning-grid"><section className="chat-panel"><div className="section-title"><p className="eyebrow">{t('aiPlanning')}</p><h1>{t('tellStory')}</h1><p>{t('planningHint')}</p></div><div className="chat-history" aria-live="polite"><div className="chat-message assistant"><strong>{t('plannerName')}</strong><p>{t('plannerWelcome')}</p></div>{plannerMessages.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'plannerName')}</strong><p>{message.display}</p></div>)}</div><div className="composer">{busy === 'plan' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('planningBusy')}</span>}</div>}{attachedSkills.length > 0 && <div className="skill-strip" aria-label={t('attachedSkills')}>{attachedSkills.map((item) => <span className="skill-chip" key={item.identifier}>{item.name}<button type="button" onClick={() => setAttachedSkills((current) => current.filter((entry) => entry.identifier !== item.identifier))} aria-label={t('detachSkill', { name: item.name })}>\u00d7</button></span>)}</div>}<div className="composer-input"><textarea className="idea-box" value={idea} placeholder={t(plan ? 'revisionPlaceholder' : 'ideaPlaceholder')} onChange={(event) => { setIdea(event.target.value); setSkillQuery(skills.length > 0 ? skillQueryAt(event.target.value, event.target.selectionStart ?? event.target.value.length) : null); }} onKeyDown={(event) => { if (event.key === 'Escape' && skillQuery !== null) { event.preventDefault(); setSkillQuery(null); } if (event.key === 'Enter' && skillQuery !== null && skillMatches[0]) { event.preventDefault(); attachSkill(skillMatches[0]); } }} onBlur={() => window.setTimeout(() => setSkillQuery(null), 120)} />{skillQuery !== null && <div className="skill-menu" role="listbox" aria-label={t('skillPicker')}>{skillMatches.length === 0 ? <p className="skill-empty">{t('noSkillMatch')}</p> : skillMatches.map((item) => <button type="button" role="option" aria-selected={false} key={item.identifier} onMouseDown={(event) => { event.preventDefault(); attachSkill(item); }}><strong>{item.name}</strong><span>{item.description}</span><small>{item.identifier}</small></button>)}</div>}</div>{ModelRouting()}<button className="primary wide" disabled={busy === 'plan'} onClick={() => void askPlanner()}>{busy === 'plan' ? t('planningBusy') : t(plan ? 'revisePlan' : 'generatePlan')}</button><small>{t('markdownContract')}</small></div></section><section className="plan-card">{plan ? <><div className="plan-summary"><span>{plan.genre}</span><h2>{plan.title}</h2><small>{plan.format}</small></div><div className="plan-body"><div className="facts"><span>{t('episodeCount', { count: plan.episodeCount })}</span><span>{t('minutesPerEpisode', { count: Math.round(plan.episodeDurationSeconds / 60) })}</span><span>{plan.audience}</span></div><h3>{t('logline')}</h3><p>{plan.logline}</p><h3>{t('coreConflict')}</h3><p>{plan.coreConflict}</p><h3>{t('seriesArc')}</h3><p>{plan.arc}</p><div className="actions"><button className="ghost" onClick={() => setIdea(t('revisionStarter'))}>{t('revise')}</button><button className="primary" disabled={busy === 'confirm'} onClick={() => void confirmPlan()}>{t('confirmAndSave')}</button></div></div></> : <div className="empty-plan"><h2>{t('planWaiting')}</h2><p>{t('planWaitingHint')}</p></div>}</section></div></main>);
+    return AppShell(<main className="planning-shell"><header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{t('planningTitle')}</span></div></header><div className="planning-grid"><section className="chat-panel"><div className="section-title"><p className="eyebrow">{t('aiPlanning')}</p><h1>{t('tellStory')}</h1><p>{t('planningHint')}</p></div><div className="chat-history" aria-live="polite"><div className="chat-message assistant"><strong>{t('plannerName')}</strong><p>{t('plannerWelcome')}</p></div>{plannerMessages.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'plannerName')}</strong><p>{message.display}</p></div>)}</div><div className="composer">{busy === 'plan' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('planningBusy')}</span>}<button className="ghost" onClick={() => stopPlanner()}>{t('stopRequest')}</button></div>}{attachedSkills.length > 0 && <div className="skill-strip" aria-label={t('attachedSkills')}>{attachedSkills.map((item) => <span className="skill-chip" key={item.identifier}>{item.name}<button type="button" onClick={() => setAttachedSkills((current) => current.filter((entry) => entry.identifier !== item.identifier))} aria-label={t('detachSkill', { name: item.name })}>\u00d7</button></span>)}</div>}<div className="composer-input"><textarea className="idea-box" value={idea} placeholder={t(plan ? 'revisionPlaceholder' : 'ideaPlaceholder')} onChange={(event) => { setIdea(event.target.value); setSkillQuery(skills.length > 0 ? skillQueryAt(event.target.value, event.target.selectionStart ?? event.target.value.length) : null); }} onKeyDown={(event) => { if (event.key === 'Escape' && skillQuery !== null) { event.preventDefault(); setSkillQuery(null); } if (event.key === 'Enter' && skillQuery !== null && skillMatches[0]) { event.preventDefault(); attachSkill(skillMatches[0]); } }} onBlur={() => window.setTimeout(() => setSkillQuery(null), 120)} />{skillQuery !== null && <div className="skill-menu" role="listbox" aria-label={t('skillPicker')}>{skillMatches.length === 0 ? <p className="skill-empty">{t('noSkillMatch')}</p> : skillMatches.map((item) => <button type="button" role="option" aria-selected={false} key={item.identifier} onMouseDown={(event) => { event.preventDefault(); attachSkill(item); }}><strong>{item.name}</strong><span>{item.description}</span><small>{item.identifier}</small></button>)}</div>}</div>{ModelRouting()}<button className="primary wide" disabled={busy === 'plan'} onClick={() => void askPlanner()}>{busy === 'plan' ? t('planningBusy') : t(plan ? 'revisePlan' : 'generatePlan')}</button><small>{t('markdownContract')}</small></div></section><section className="plan-card">{plan ? <><div className="plan-summary"><span>{plan.genre}</span><h2>{plan.title}</h2><small>{plan.format}</small></div><div className="plan-body"><div className="facts"><span>{t('episodeCount', { count: plan.episodeCount })}</span><span>{t('minutesPerEpisode', { count: Math.round(plan.episodeDurationSeconds / 60) })}</span><span>{plan.audience}</span></div><h3>{t('logline')}</h3><p>{plan.logline}</p><h3>{t('coreConflict')}</h3><p>{plan.coreConflict}</p><h3>{t('seriesArc')}</h3><p>{plan.arc}</p><div className="actions"><button className="ghost" onClick={() => setIdea(t('revisionStarter'))}>{t('revise')}</button><button className="primary" disabled={busy === 'confirm'} onClick={() => void confirmPlan()}>{t('confirmAndSave')}</button></div></div></> : <div className="empty-plan"><h2>{t('planWaiting')}</h2><p>{t('planWaitingHint')}</p></div>}</section></div></main>);
   }
 
   function Characters() {

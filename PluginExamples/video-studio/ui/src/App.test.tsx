@@ -176,6 +176,52 @@ describe('Short Drama Studio', () => {
   });
 
 
+
+  it('puts the question back in the box and does not stack history when planning fails', async () => {
+    complete.mockResolvedValue({ text: '你想要几集？先说下受众。', model: 'fast', providerID: 'chat-a' });
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '策划新短剧' }))[0]!);
+    const box = screen.getByPlaceholderText(/一个落魄程序员/);
+    fireEvent.change(box, { target: { value: '一个落魄的程序员，可以收到三天后的短信' } });
+    fireEvent.click(screen.getByRole('button', { name: '生成短剧策划卡' }));
+
+    // 失败后问题退回输入框，用户不必重新打一遍。
+    await waitFor(() => expect((screen.getByPlaceholderText(/一个落魄程序员/) as HTMLTextAreaElement).value)
+      .toBe('一个落魄的程序员，可以收到三天后的短信'));
+    // 那条用户消息不留在聊天历史里，否则重试几次就是几条一模一样的话。
+    // 只看聊天气泡，输入框自己的 value 不算。
+    const bubbles = Array.from(document.querySelectorAll('.chat-message.user p')).map((node) => node.textContent);
+    expect(bubbles).not.toContain('一个落魄的程序员，可以收到三天后的短信');
+    // 模型原文要看得到，而不是只剩一句「没有有效数据块」。
+    expect(screen.getByText(/你想要几集/)).toBeTruthy();
+  });
+
+  it('tells the user an output was cut off instead of blaming the format', async () => {
+    complete.mockResolvedValue({
+      text: '```short_drama_plan\n{"title":"错时来信","episodes":[{"title":"第 1 集","summary":"开场',
+      model: 'fast', providerID: 'chat-a',
+    });
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '策划新短剧' }))[0]!);
+    fireEvent.change(screen.getByPlaceholderText(/一个落魄程序员/), { target: { value: '给我 30 集' } });
+    fireEvent.click(screen.getByRole('button', { name: '生成短剧策划卡' }));
+
+    // 截断提示同时出现在错误条和聊天气泡里，两处都算对。
+    expect((await screen.findAllByText(/输出被截断/)).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the question when the planning request is stopped', async () => {
+    const cancel = vi.fn().mockResolvedValue({ cancelled: true });
+    window.willdeep!.ai!.cancel = cancel;
+    complete.mockRejectedValue(new Error('The request was cancelled.'));
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '策划新短剧' }))[0]!);
+    fireEvent.change(screen.getByPlaceholderText(/一个落魄程序员/), { target: { value: '先别急，我再想想' } });
+    fireEvent.click(screen.getByRole('button', { name: '生成短剧策划卡' }));
+
+    await waitFor(() => expect((screen.getByPlaceholderText(/一个落魄程序员/) as HTMLTextAreaElement).value).toBe('先别急，我再想想'));
+  });
+
   // ---- 角色共创 ----
 
   const characterFixture = (overrides: Record<string, unknown> = {}) => ({
