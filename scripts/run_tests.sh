@@ -21,6 +21,7 @@
 #   - media_task_refresh_report.* 媒体任务刷新/聊天接力契约报告
 #   - video_studio_server_report.* Video Studio 异步提交/轮询/下载契约报告
 #   - video_studio_drama_report.json 短剧存储/局部更新/媒体路径契约报告（跑在 /usr/bin/ruby 2.6 上）
+#   - video_studio_skill_report.json  创作技能存储契约报告（同样跑在 2.6 上）
 #   - media_import_context_report.* manifest 导回/聊天接力契约报告
 #   - production_gap_actions_report.* 短剧制作缺口动作/聊天接力契约报告
 #   - short_drama_mvp_tryout_package_report.* 短剧 MVP 本地试用包生成报告
@@ -70,6 +71,9 @@ ruby "${ROOT_DIR}/scripts/video_studio_server_test.rb" "${OUT_DIR}/video_studio_
 # 用 macOS 自带的 /usr/bin/ruby（2.6）跑短剧存储契约：mcp.json 把插件解释器钉死
 # 成它，拿 homebrew 的 3.x 跑绿过一次 filter_map，用户机器上直接 NoMethodError。
 /usr/bin/ruby "${ROOT_DIR}/scripts/video_studio_drama_test.rb" > "${OUT_DIR}/video_studio_drama_report.json"
+# 创作技能的存储契约（模板只读、用户副本、reset、compose 顺序、路径逃逸）。
+# 同样钉死 2.6 解释器：技能存储跑在插件的 MCP 进程里。
+/usr/bin/ruby "${ROOT_DIR}/scripts/video_studio_skill_test.rb" > "${OUT_DIR}/video_studio_skill_report.json"
 ruby "${ROOT_DIR}/scripts/media_import_context_contract_test.rb" "${OUT_DIR}/media_import_context_report.md" "${OUT_DIR}/media_import_context_report.json"
 ruby "${ROOT_DIR}/scripts/production_gap_actions_contract_test.rb" "${OUT_DIR}/production_gap_actions_report.md" "${OUT_DIR}/production_gap_actions_report.json"
 ruby "${ROOT_DIR}/scripts/short_drama_mvp_tryout_package.rb" "${OUT_DIR}/short_drama_mvp_tryout_package" "${OUT_DIR}/short_drama_mvp_tryout_package_report.md" "${OUT_DIR}/short_drama_mvp_tryout_package_report.json"

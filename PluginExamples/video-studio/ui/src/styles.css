@@ -358,3 +358,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .identity-candidates button:not(:disabled):hover { border-color: rgba(127, 127, 127, 0.5); }
 .identity-candidates button.chosen { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .candidate-badge { position: absolute; right: 6px; bottom: 6px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--surface); font-size: 13px; font-weight: 700; }
+
+/* 通用技能的勾选。选中态必须一眼看出来：它决定这一轮生成守哪套写法。 */
+.common-skills { display: grid; gap: 6px; margin-bottom: 10px; }
+.common-skill-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.skill-toggle { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+.skill-toggle.on { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }

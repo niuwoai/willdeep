@@ -39,5 +39,10 @@
   "command.drama.discardDraft": "Discard draft",
   "command.chat.append": "Append co-creation message",
   "command.chat.list": "Read co-creation messages",
-  "command.chat.clear": "Clear co-creation messages"
+  "command.chat.clear": "Clear co-creation messages",
+  "command.skill.list": "List creative skills",
+  "command.skill.get": "Read a creative skill",
+  "command.skill.save": "Save a creative skill",
+  "command.skill.reset": "Restore the bundled skill",
+  "command.skill.compose": "Compose the stage prompt"
 }

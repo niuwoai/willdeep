@@ -1,4 +1,4 @@
-import type { CharacterDraft, Drama, DramaPlan, EpisodeDraftFields, ProviderEntry } from './types';
+import type { CharacterDraft, CreativeSkill, Drama, DramaPlan, EpisodeDraftFields, ProviderEntry, SkillStage } from './types';
 
 /// 宿主的 executeCommand 对 mcpTool 类命令回的是**完整的 MCP result**，
 /// 形如 {"content":[{"type":"text","text":"{\"ok\":true,…}"}]}，工具真正的
@@ -425,4 +425,53 @@ export async function mapWithConcurrency<T, R>(
   });
   await Promise.all(workers);
   return results;
+}
+
+/// 阶段的系统提示词从技能文件拼出来，不再写死在字典里。
+///
+/// 拼装放在后端：阶段技能与通用技能的拼接顺序、以及「阶段技能不能被当成
+/// 通用技能挂上去」这条约束都由存储层保证，前端只管把勾选传过去。
+export async function composeSkillPrompt(
+  stage: SkillStage,
+  common: string[]
+): Promise<string | null> {
+  try {
+    const payload = await callCommand<{ ok: boolean; system?: string }>('skill.compose', { stage, common });
+    const system = payload.system?.trim();
+    return system ? system : null;
+  } catch {
+    // 技能读不出来时回落到字典里那份内置提示词，而不是发一个没有系统提示
+    // 的请求——后者会让模型完全不知道输出格式，整轮白跑。
+    return null;
+  }
+}
+
+export async function loadCreativeSkills(): Promise<CreativeSkill[]> {
+  try {
+    const payload = await callCommand<{ ok: boolean; skills?: CreativeSkill[] }>('skill.list');
+    return payload.skills ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function loadCreativeSkill(id: string): Promise<CreativeSkill | null> {
+  const payload = await callCommand<{ ok: boolean; skill?: CreativeSkill }>('skill.get', { id });
+  return payload.skill ?? null;
+}
+
+export async function saveCreativeSkill(id: string, body: string): Promise<CreativeSkill | null> {
+  const payload = await callCommand<{ ok: boolean; skill?: CreativeSkill; error?: { message?: string } }>(
+    'skill.save', { id, body }
+  );
+  if (!payload.ok) throw new Error(payload.error?.message || 'skill_save_failed');
+  return payload.skill ?? null;
+}
+
+export async function resetCreativeSkill(id: string): Promise<CreativeSkill | null> {
+  const payload = await callCommand<{ ok: boolean; skill?: CreativeSkill; error?: { message?: string } }>(
+    'skill.reset', { id }
+  );
+  if (!payload.ok) throw new Error(payload.error?.message || 'skill_reset_failed');
+  return payload.skill ?? null;
 }

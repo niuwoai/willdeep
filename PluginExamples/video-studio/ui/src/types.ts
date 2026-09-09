@@ -7,6 +7,19 @@ export type EpisodeDraftFields = Partial<Pick<Episode, 'title' | 'summary' | 'sc
 export type ShotDraftFields = Partial<Pick<Shot, 'title' | 'summary' | 'actionStart' | 'actionEnd' | 'cameraIntent' | 'startPrompt' | 'endPrompt' | 'dialogue' | 'duration'>>;
 export type DraftScope = 'drama' | 'character' | 'episode' | 'shot';
 export type ChatStage = 'planning' | 'characters' | 'script' | 'storyboard' | 'frames';
+/// 创作技能。阶段技能每阶段固定用一份，通用技能由用户勾选后追加。
+export type CreativeSkill = {
+  id: string;
+  kind: 'stage' | 'common';
+  name: string;
+  description: string;
+  stage?: string | null;
+  customized: boolean;
+  updatedAt?: string | null;
+  body?: string;
+};
+/// 技能拼装的阶段键。与后端 STAGE_SKILLS 的键一致。
+export type SkillStage = 'planning' | 'characters' | 'episodes' | 'script' | 'passage' | 'storyboard' | 'shot';
 export type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string; objectID: string; draftRev: number; createdAt: string };
 export type Shot = Revised & {
   id: string; order: number; title: string; summary: string; dialogue: DialogueLine[];

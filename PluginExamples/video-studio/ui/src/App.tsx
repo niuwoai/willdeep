@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { CHARACTER_DRAFT_FIELDS, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, detectUnknownCharacters, loadDramas, loadProviders, mapWithConcurrency, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, visibleStream } from './bridge';
 import { Dropdown } from './Dropdown';
 import { createTranslator, localeFromContext } from './i18n';
-import type { ChatMessage, Character, CharacterDraft, Drama, DramaPlan, Episode, EpisodeDraftFields, ImageModel, ProviderEntry, Shot, SkillEntry, Stage } from './types';
+import type { ChatMessage, Character, CharacterDraft, CreativeSkill, Drama, DramaPlan, Episode, EpisodeDraftFields, ImageModel, ProviderEntry, Shot, SkillEntry, SkillStage, Stage } from './types';
 import type { Notice } from './bridge';
 import './styles.css';
 
@@ -142,6 +142,10 @@ export default function App() {
   const [scriptStreamID, setScriptStreamID] = useState('');
   const [scriptSelection, setScriptSelection] = useState<{ start: number; end: number } | null>(null);
   const [showEpisodeDiff, setShowEpisodeDiff] = useState(false);
+  // 创作技能：阶段技能每阶段固定一份，通用技能由用户勾选后追加。勾选是
+  // 全局的，和技能本身一样——它决定「这次创作要不要额外守某套写法」。
+  const [creativeSkills, setCreativeSkills] = useState<CreativeSkill[]>([]);
+  const [selectedCommonSkills, setSelectedCommonSkills] = useState<string[]>([]);
   const [episodeDraft, setEpisodeDraft] = useState({ title: '', summary: '', script: '' });
   const [shotDraft, setShotDraft] = useState<Shot>(emptyShot(1));
   const [busy, setBusy] = useState('');
@@ -347,8 +351,9 @@ export default function App() {
     // 而每次重试又往历史里多堆一条一模一样的话。
     const rollback = () => { setPlannerMessages(plannerMessages); setIdea(question); };
     try {
+      const system = await stageSystemPrompt('planning', 'plannerSystem');
       const response = await window.willdeep?.ai?.complete({
-        system: t('plannerSystem'), messages: requestMessages.map(({ role, content }) => ({ role, content })),
+        system, messages: requestMessages.map(({ role, content }) => ({ role, content })),
         provider: assistantProvider || undefined, model: assistantModel || undefined,
         skills: attachedSkills.map((item) => item.identifier), streamID,
       });
@@ -530,7 +535,7 @@ export default function App() {
     const view = characterView(selectedCharacter);
     const baseDraftRev = selectedCharacter.draftRev ?? 0;
     const objectID = selectedCharacter.id;
-    const system = t('characterSystem');
+    const system = await stageSystemPrompt('characters', 'characterSystem');
     // 装配顺序：本轮要求 → 当前对象 → 相关上游 → 近期对话。整部剧的资料
     // 按需取，不是每次都全塞进去。
     const context = [
@@ -734,6 +739,42 @@ export default function App() {
     setScriptSelection(end > start ? { start, end } : null);
   }
 
+  useEffect(() => {
+    void (async () => {
+      const skills = await loadCreativeSkills();
+      setCreativeSkills(skills);
+      // 勾选记在宿主的插件存储里：它是「这次创作守哪套写法」的偏好，
+      // 换一部剧不该重新勾一遍。
+      try {
+        const stored = await window.willdeep?.storage?.get('common-skills');
+        const value = stored?.value;
+        if (Array.isArray(value)) {
+          const known = new Set(skills.filter((item) => item.kind === 'common').map((item) => item.id));
+          setSelectedCommonSkills(value.filter((entry): entry is string => typeof entry === 'string' && known.has(entry)));
+        }
+      } catch { /* 存储读不出来就当没勾 */ }
+    })();
+  }, []);
+
+  function toggleCommonSkill(id: string) {
+    setSelectedCommonSkills((current) => {
+      const next = current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id];
+      void window.willdeep?.storage?.set('common-skills', next);
+      return next;
+    });
+  }
+
+  const commonSkills = creativeSkills.filter((item) => item.kind === 'common');
+
+  /// 阶段的系统提示词。技能文件优先，读不出来才回落字典里那份内置提示词。
+  ///
+  /// 回落而不是报错：技能读不出来时发一个没有系统提示的请求，模型完全不知道
+  /// 输出格式，整轮白跑；而字典里那份至少还能用。
+  async function stageSystemPrompt(stage: SkillStage, fallbackKey: string): Promise<string> {
+    const composed = await composeSkillPrompt(stage, selectedCommonSkills);
+    return composed ?? t(fallbackKey);
+  }
+
   function stopScriptRequest() {
     const cancel = window.willdeep?.ai?.cancel;
     if (cancel && scriptStreamID) void cancel(scriptStreamID);
@@ -754,7 +795,7 @@ export default function App() {
       : null;
     if (mode === 'passage' && !passage?.selection.trim()) { setFailure(t('selectPassageFirst')); return; }
 
-    const system = t(mode === 'passage' ? 'passageSystem' : 'episodeSystem');
+    const system = await stageSystemPrompt(mode === 'passage' ? 'passage' : 'script', mode === 'passage' ? 'passageSystem' : 'episodeSystem');
     const cast = drama.characters.map((item) => {
       const character = characterView(item);
       return `${character.name}：${character.description || t('noBackstoryYet')}`;
@@ -979,7 +1020,21 @@ export default function App() {
   }
 
   function Planning() {
-    return AppShell(<main className="planning-shell"><header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{t('planningTitle')}</span></div></header><div className="planning-grid"><section className="chat-panel"><div className="section-title"><p className="eyebrow">{t('aiPlanning')}</p><h1>{t('tellStory')}</h1><p>{t('planningHint')}</p></div><div className="chat-history" aria-live="polite"><div className="chat-message assistant"><strong>{t('plannerName')}</strong><p>{t('plannerWelcome')}</p></div>{plannerMessages.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'plannerName')}</strong><p>{message.display}</p></div>)}</div><div className="composer">{busy === 'plan' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming && !streamingText ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('planningBusy')}</span>}<button className="ghost" onClick={() => stopPlanner()}>{t('stopRequest')}</button></div>}{attachedSkills.length > 0 && <div className="skill-strip" aria-label={t('attachedSkills')}>{attachedSkills.map((item) => <span className="skill-chip" key={item.identifier}>{item.name}<button type="button" onClick={() => setAttachedSkills((current) => current.filter((entry) => entry.identifier !== item.identifier))} aria-label={t('detachSkill', { name: item.name })}>\u00d7</button></span>)}</div>}<div className="composer-input"><textarea className="idea-box" value={idea} placeholder={t(plan ? 'revisionPlaceholder' : 'ideaPlaceholder')} onChange={(event) => { setIdea(event.target.value); setSkillQuery(skills.length > 0 ? skillQueryAt(event.target.value, event.target.selectionStart ?? event.target.value.length) : null); }} onKeyDown={(event) => { if (event.key === 'Escape' && skillQuery !== null) { event.preventDefault(); setSkillQuery(null); } if (event.key === 'Enter' && skillQuery !== null && skillMatches[0]) { event.preventDefault(); attachSkill(skillMatches[0]); } }} onBlur={() => window.setTimeout(() => setSkillQuery(null), 120)} />{skillQuery !== null && <div className="skill-menu" role="listbox" aria-label={t('skillPicker')}>{skillMatches.length === 0 ? <p className="skill-empty">{t('noSkillMatch')}</p> : skillMatches.map((item) => <button type="button" role="option" aria-selected={false} key={item.identifier} onMouseDown={(event) => { event.preventDefault(); attachSkill(item); }}><strong>{item.name}</strong><span>{item.description}</span><small>{item.identifier}</small></button>)}</div>}</div>{ModelRouting()}<button className="primary wide" disabled={busy === 'plan'} onClick={() => void askPlanner()}>{busy === 'plan' ? t('planningBusy') : t(plan ? 'revisePlan' : 'generatePlan')}</button><small>{t('markdownContract')}</small></div></section><section className="plan-card">{plan ? <><div className="plan-summary"><span>{plan.genre}</span><h2>{plan.title}</h2><small>{plan.format}</small></div><div className="plan-body"><div className="facts"><span>{t('episodeCount', { count: plan.episodeCount })}</span><span>{t('minutesPerEpisode', { count: Math.round(plan.episodeDurationSeconds / 60) })}</span><span>{plan.audience}</span></div><h3>{t('logline')}</h3><p>{plan.logline}</p><h3>{t('coreConflict')}</h3><p>{plan.coreConflict}</p><h3>{t('seriesArc')}</h3><p>{plan.arc}</p><div className="actions"><button className="ghost" onClick={() => setIdea(t('revisionStarter'))}>{t('revise')}</button><button className="primary" disabled={busy === 'confirm'} onClick={() => void confirmPlan()}>{t('confirmAndSave')}</button></div></div></> : <div className="empty-plan"><h2>{t('planWaiting')}</h2><p>{t('planWaitingHint')}</p></div>}</section></div></main>);
+    return AppShell(<main className="planning-shell"><header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{t('planningTitle')}</span></div></header><div className="planning-grid"><section className="chat-panel"><div className="section-title"><p className="eyebrow">{t('aiPlanning')}</p><h1>{t('tellStory')}</h1><p>{t('planningHint')}</p></div><div className="chat-history" aria-live="polite"><div className="chat-message assistant"><strong>{t('plannerName')}</strong><p>{t('plannerWelcome')}</p></div>{plannerMessages.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'plannerName')}</strong><p>{message.display}</p></div>)}</div><div className="composer">{busy === 'plan' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming && !streamingText ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('planningBusy')}</span>}<button className="ghost" onClick={() => stopPlanner()}>{t('stopRequest')}</button></div>}{commonSkills.length > 0 && <div className="common-skills"><p className="group-label">{t('commonSkillsLabel')}</p><div className="common-skill-list">{commonSkills.map((skill) => {
+              const on = selectedCommonSkills.includes(skill.id);
+              return (
+                <button
+                  className={`skill-toggle ${on ? 'on' : ''}`}
+                  key={skill.id}
+                  type="button"
+                  aria-pressed={on}
+                  title={skill.description}
+                  onClick={() => toggleCommonSkill(skill.id)}
+                >
+                  {on ? '✓ ' : ''}{skill.name}
+                </button>
+              );
+            })}</div></div>}{attachedSkills.length > 0 && <div className="skill-strip" aria-label={t('attachedSkills')}>{attachedSkills.map((item) => <span className="skill-chip" key={item.identifier}>{item.name}<button type="button" onClick={() => setAttachedSkills((current) => current.filter((entry) => entry.identifier !== item.identifier))} aria-label={t('detachSkill', { name: item.name })}>\u00d7</button></span>)}</div>}<div className="composer-input"><textarea className="idea-box" value={idea} placeholder={t(plan ? 'revisionPlaceholder' : 'ideaPlaceholder')} onChange={(event) => { setIdea(event.target.value); setSkillQuery(skills.length > 0 ? skillQueryAt(event.target.value, event.target.selectionStart ?? event.target.value.length) : null); }} onKeyDown={(event) => { if (event.key === 'Escape' && skillQuery !== null) { event.preventDefault(); setSkillQuery(null); } if (event.key === 'Enter' && skillQuery !== null && skillMatches[0]) { event.preventDefault(); attachSkill(skillMatches[0]); } }} onBlur={() => window.setTimeout(() => setSkillQuery(null), 120)} />{skillQuery !== null && <div className="skill-menu" role="listbox" aria-label={t('skillPicker')}>{skillMatches.length === 0 ? <p className="skill-empty">{t('noSkillMatch')}</p> : skillMatches.map((item) => <button type="button" role="option" aria-selected={false} key={item.identifier} onMouseDown={(event) => { event.preventDefault(); attachSkill(item); }}><strong>{item.name}</strong><span>{item.description}</span><small>{item.identifier}</small></button>)}</div>}</div>{ModelRouting()}<button className="primary wide" disabled={busy === 'plan'} onClick={() => void askPlanner()}>{busy === 'plan' ? t('planningBusy') : t(plan ? 'revisePlan' : 'generatePlan')}</button><small>{t('markdownContract')}</small></div></section><section className="plan-card">{plan ? <><div className="plan-summary"><span>{plan.genre}</span><h2>{plan.title}</h2><small>{plan.format}</small></div><div className="plan-body"><div className="facts"><span>{t('episodeCount', { count: plan.episodeCount })}</span><span>{t('minutesPerEpisode', { count: Math.round(plan.episodeDurationSeconds / 60) })}</span><span>{plan.audience}</span></div><h3>{t('logline')}</h3><p>{plan.logline}</p><h3>{t('coreConflict')}</h3><p>{plan.coreConflict}</p><h3>{t('seriesArc')}</h3><p>{plan.arc}</p><div className="actions"><button className="ghost" onClick={() => setIdea(t('revisionStarter'))}>{t('revise')}</button><button className="primary" disabled={busy === 'confirm'} onClick={() => void confirmPlan()}>{t('confirmAndSave')}</button></div></div></> : <div className="empty-plan"><h2>{t('planWaiting')}</h2><p>{t('planWaitingHint')}</p></div>}</section></div></main>);
   }
 
   function Characters() {

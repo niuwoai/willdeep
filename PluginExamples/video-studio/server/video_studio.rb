@@ -16,6 +16,7 @@ require_relative "lib/video_service"
 require_relative "lib/drama_store"
 require_relative "lib/drama_service"
 require_relative "lib/chat_store"
+require_relative "lib/creative_skill_store"
 
 # 宿主按 pluginID 给每个插件分一个目录，本插件的 pluginID 是
 # willdeep-video-studio，生成的图片也由宿主写进这个目录。任务存档早先落在
@@ -66,6 +67,16 @@ def chat_store_directory
   ENV["VIDEO_STUDIO_CHAT_STORE"] || File.join(plugin_data_directory, "chats")
 end
 
+# 创作技能：插件包里那份是只读模板，用户编辑的副本落在数据目录。技能是
+# 全局一份，改了对所有短剧生效。
+def creative_skill_template_root
+  File.join(__dir__, "..", "skills", "creative")
+end
+
+def creative_skill_user_root
+  ENV["VIDEO_STUDIO_SKILL_STORE"] || File.join(plugin_data_directory, "creative-skills")
+end
+
 migrate_legacy_video_store
 STORE = VideoStore.new(video_store_path)
 # 选定 provider 就用它自己的地址，选「自定义」才回落到手填的 API Base。
@@ -102,6 +113,41 @@ DRAMA_SERVICE = DramaService.new(
   media_root: ENV["VIDEO_STUDIO_MEDIA_ROOT"] || generated_media_directory
 )
 CHAT_STORE = ChatStore.new(chat_store_directory)
+CREATIVE_SKILLS = CreativeSkillStore.new(
+  template_root: creative_skill_template_root,
+  user_root: creative_skill_user_root
+)
+
+def creative_skill_list
+  CREATIVE_SKILLS.list.merge("ok" => true)
+end
+
+def creative_skill_get(arguments)
+  entry = CREATIVE_SKILLS.get(arguments["id"])
+  entry ? { "ok" => true, "skill" => entry } : failure_payload("skill_not_found", "Creative skill was not found.")
+end
+
+def creative_skill_save(arguments)
+  entry = CREATIVE_SKILLS.save(arguments["id"], arguments["body"])
+  { "ok" => true, "skill" => entry }
+rescue ArgumentError => error
+  failure_payload("invalid_skill", error.message)
+end
+
+def creative_skill_reset(arguments)
+  entry = CREATIVE_SKILLS.reset(arguments["id"])
+  { "ok" => true, "skill" => entry }
+rescue ArgumentError => error
+  failure_payload("invalid_skill", error.message)
+end
+
+def creative_skill_compose(arguments)
+  CREATIVE_SKILLS.compose(stage: arguments["stage"], common: arguments["common"])
+end
+
+def failure_payload(code, message)
+  { "ok" => false, "error" => { "code" => code, "message" => message } }
+end
 
 def chat_append(arguments)
   entry = CHAT_STORE.append(arguments["dramaID"], arguments["stage"], arguments["message"])
@@ -166,6 +212,31 @@ TOOLS = [
     name: "drama.discard_draft",
     description: "Throw away the working draft of one object and leave committed content untouched.",
     inputSchema: { type: "object", properties: { dramaID: { type: "string" }, scope: { type: "string", enum: DramaService::DRAFT_SCOPES }, characterID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, expectedDraftRev: { type: "integer" } }, required: %w[dramaID scope] }
+  },
+  {
+    name: "skill.list",
+    description: "List the creative skills that drive each stage's system prompt, plus the optional common skills a user can attach. Returns metadata only; body comes from skill.get.",
+    inputSchema: { type: "object", properties: {} }
+  },
+  {
+    name: "skill.get",
+    description: "Read one creative skill's markdown body. Falls back to the bundled template and materialises a user copy on first read.",
+    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] }
+  },
+  {
+    name: "skill.save",
+    description: "Overwrite one creative skill's markdown body. The bundled template is never touched, so skill.reset can always restore it.",
+    inputSchema: { type: "object", properties: { id: { type: "string" }, body: { type: "string" } }, required: %w[id body] }
+  },
+  {
+    name: "skill.reset",
+    description: "Drop the user copy of one creative skill and fall back to the bundled template.",
+    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] }
+  },
+  {
+    name: "skill.compose",
+    description: "Build the system prompt for one stage: the stage skill first, then the selected common skills appended in order.",
+    inputSchema: { type: "object", properties: { stage: { type: "string", enum: CreativeSkillStore::STAGE_SKILLS.keys }, common: { type: "array", items: { type: "string" } } }, required: ["stage"] }
   },
   {
     name: "chat.append",
@@ -319,6 +390,11 @@ def call_tool(name, arguments)
   when "drama.save_draft" then DRAMA_SERVICE.save_draft(arguments)
   when "drama.commit_draft" then DRAMA_SERVICE.commit_draft(arguments)
   when "drama.discard_draft" then DRAMA_SERVICE.discard_draft(arguments)
+  when "skill.list" then creative_skill_list
+  when "skill.get" then creative_skill_get(arguments)
+  when "skill.save" then creative_skill_save(arguments)
+  when "skill.reset" then creative_skill_reset(arguments)
+  when "skill.compose" then creative_skill_compose(arguments)
   when "chat.append" then chat_append(arguments)
   when "chat.list" then chat_list(arguments)
   when "chat.clear" then chat_clear(arguments)
@@ -359,7 +435,7 @@ ARGF.each_line do |line|
              {
                protocolVersion: "2025-06-18",
                capabilities: { tools: {} },
-               serverInfo: { name: "video-studio", version: "0.8.0" }
+               serverInfo: { name: "video-studio", version: "0.9.0" }
              }
            when "tools/list"
              { tools: TOOLS }
@@ -376,7 +452,7 @@ rescue JSON::ParserError
   warn "video-studio: invalid JSON-RPC request"
 rescue UnknownMethod => error
   respond_error(defined?(request) ? request : nil, -32_601, "Method not found: #{error.message}")
-rescue VideoStore::Unavailable, DramaStore::Unavailable, ChatStore::Unavailable => error
+rescue VideoStore::Unavailable, DramaStore::Unavailable, ChatStore::Unavailable, CreativeSkillStore::Unavailable => error
   # 存档读不出来时刻意不静默重建：写入是全量覆写，一次误判就会把用户的
   # 短剧和任务记录抹平。把原因如实告诉调用方，让人去看那个文件。
   warn "video-studio: #{error.class}: #{error.message}"

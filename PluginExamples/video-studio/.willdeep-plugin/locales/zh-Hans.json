@@ -39,5 +39,10 @@
   "command.drama.discardDraft": "丢弃草稿",
   "command.chat.append": "追加共创消息",
   "command.chat.list": "读取共创消息",
-  "command.chat.clear": "清空共创消息"
+  "command.chat.clear": "清空共创消息",
+  "command.skill.list": "列出创作技能",
+  "command.skill.get": "读取创作技能",
+  "command.skill.save": "保存创作技能",
+  "command.skill.reset": "恢复内置技能",
+  "command.skill.compose": "拼装阶段提示词"
 }

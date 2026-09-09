@@ -225,6 +225,98 @@ describe('Short Drama Studio', () => {
 
 
 
+
+  // ---- 创作技能 ----
+
+  const skillFixtures = [
+    { id: 'planning', kind: 'stage', name: '短剧策划', description: '定位与冲突', customized: false },
+    { id: 'common/de-ai-flavor', kind: 'common', name: '去 AI 味', description: '删掉套话结构', customized: false },
+    { id: 'common/romance', kind: 'common', name: '言情', description: '感情线的写法', customized: false },
+  ];
+
+  it('策划请求用技能拼出来的提示词，勾选的通用技能一起传下去', async () => {
+    const set = vi.fn().mockResolvedValue({ ok: true });
+    window.willdeep!.storage = { get: vi.fn().mockResolvedValue({ value: null }), set };
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'skill.list') return JSON.stringify({ ok: true, skills: skillFixtures });
+      if (command === 'skill.compose') return JSON.stringify({ ok: true, system: '# 短剧策划\n技能里那份提示词' });
+      return JSON.stringify({ ok: true });
+    });
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '策划新短剧' }))[0]!);
+
+    // 通用技能显示成可勾选的胶囊。
+    const toggle = await screen.findByRole('button', { name: /去 AI 味/ });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(toggle);
+    await waitFor(() => expect(set).toHaveBeenCalledWith('common-skills', ['common/de-ai-flavor']));
+
+    fireEvent.change(screen.getByPlaceholderText(/一个落魄程序员/), { target: { value: '写个短剧' } });
+    fireEvent.click(screen.getByRole('button', { name: '生成短剧策划卡' }));
+
+    await waitFor(() => {
+      const call = executeCommand.mock.calls.find(([command]) => command === 'skill.compose');
+      expect(call?.[1]).toEqual({ stage: 'planning', common: ['common/de-ai-flavor'] });
+    });
+    // 发给模型的 system 是技能拼出来的那份，不是字典里的内置提示词。
+    await waitFor(() => {
+      expect(complete.mock.calls.at(-1)?.[0].system).toContain('技能里那份提示词');
+    });
+  });
+
+  it('技能读不出来时回落到内置提示词，而不是发一个没有 system 的请求', async () => {
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'skill.list') return JSON.stringify({ ok: true, skills: skillFixtures });
+      // 技能拼装失败：文件损坏、权限、或者插件后端没起来。
+      if (command === 'skill.compose') throw new Error('skill store unavailable');
+      return JSON.stringify({ ok: true });
+    });
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '策划新短剧' }))[0]!);
+    fireEvent.change(await screen.findByPlaceholderText(/一个落魄程序员/), { target: { value: '写个短剧' } });
+    fireEvent.click(screen.getByRole('button', { name: '生成短剧策划卡' }));
+
+    await waitFor(() => {
+      const system = complete.mock.calls.at(-1)?.[0].system ?? '';
+      // 回落的那份必须还带着输出格式要求，否则模型不知道要写围栏，整轮白跑。
+      expect(system).toContain('short_drama_plan');
+      expect(system.length).toBeGreaterThan(50);
+    });
+  });
+
+  it('存储里记着的勾选在下次打开时恢复，不认的条目被丢掉', async () => {
+    window.willdeep!.storage = {
+      get: vi.fn().mockResolvedValue({ value: ['common/romance', 'common/no-such-skill', 42] }),
+      set: vi.fn().mockResolvedValue({ ok: true }),
+    };
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'skill.list') return JSON.stringify({ ok: true, skills: skillFixtures });
+      if (command === 'skill.compose') return JSON.stringify({ ok: true, system: '# 短剧策划' });
+      return JSON.stringify({ ok: true });
+    });
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '策划新短剧' }))[0]!);
+    // 存过的技能恢复成选中；已经不存在的那个和不是字符串的那个都被丢掉，
+    // 否则会把一个后端不认的 id 传下去。
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /言情/ }).getAttribute('aria-pressed')).toBe('true');
+    });
+    expect(screen.getByRole('button', { name: /去 AI 味/ }).getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.change(screen.getByPlaceholderText(/一个落魄程序员/), { target: { value: '写个短剧' } });
+    fireEvent.click(screen.getByRole('button', { name: '生成短剧策划卡' }));
+    await waitFor(() => {
+      const call = executeCommand.mock.calls.find(([command]) => command === 'skill.compose');
+      expect(call?.[1]).toEqual({ stage: 'planning', common: ['common/romance'] });
+    });
+  });
+
   // ---- 提示消息 ----
 
   it('多条提示并存，最新那条在最下面，各带相对时间', async () => {
