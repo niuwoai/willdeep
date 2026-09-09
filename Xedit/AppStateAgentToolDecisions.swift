@@ -895,7 +895,10 @@ extension AppState {
 
         if sandboxDecision.mode == .workspaceWrite
             || sandboxDecision.mode == .workspaceWriteNetwork
-            || sandboxDecision.mode == .workspaceWriteNetworkCredentialed {
+            || sandboxDecision.mode == .workspaceWriteNetworkCredentialed
+            // 项目仓库脚本落在 `.escalated`（脱 seatbelt），成因是"这是本项目
+            // 的代码"。静态免批照旧适用，下面那道命令链体检一步不少。
+            || (sandboxDecision.mode == .escalated && sandboxDecision.workspaceScriptTrusted) {
             // Smart review treats workspace containment as the local write
             // boundary. Git remains useful for recovery, but its absence must
             // not turn every in-workspace change into a user approval card.

@@ -55,6 +55,12 @@ struct AgentSandboxDecision: Equatable {
     /// 此标记的命令在任何声明下仍然只认人工——凭据外读是注入攻击的终点站，
     /// 这道门不接受任何来自模型侧的说服。
     var credentialSensitive: Bool = false
+    /// 命令跑的是**项目自己仓库里的脚本**（见 `AgentWorkspaceScriptPolicy`），
+    /// 因此走 `.escalated` 是为了脱开 seatbelt，而不是因为它可疑。两者在
+    /// mode 上没法区分，但放行策略必须区分：可疑的 escalated 不进静态免批
+    /// 名单，项目脚本进——否则本来免批的 `./build.sh` 会突然要人点确认。
+    /// 只在没有任何危险信号（破坏性命令、凭据路径、越界路径）时才置位。
+    var workspaceScriptTrusted: Bool = false
 
     var risk: AgentToolRisk {
         if requiresTypedConfirmation { return .danger }
@@ -618,6 +624,9 @@ enum AgentSandboxPolicy {
         var needsEscalation = expansionResolution.requiresJudgment
         var needsConfirmation = false
         var credentialSensitive = false
+        /// 命令链里至少有一段跑的是本仓库脚本；只有在整条链都没有踩到危险
+        /// 信号时才生效（危险信号会先走下面的 `needsEscalation` 分支）。
+        var hasTrustedWorkspaceScript = false
         var reasons: [String] = expansionResolution.requiresJudgment
             ? ["A bounded read-only command substitution requires intelligent review of the complete command."]
             : []
@@ -881,9 +890,25 @@ enum AgentSandboxPolicy {
                 // workspace-write profile and needs the registry. Global
                 // installs are excluded — they write outside the workspace,
                 // which the sandbox denies regardless of the network rule.
-                if (networkCapableBuildHeads.contains(head)
-                    || AgentWorkspaceScriptPolicy.matches(tokens: tokens, workingDirectory: workingDirectory,
-                        roots: [rootDirectory].compactMap { $0 } + additionalWorkspaceRoots)),
+                let isWorkspaceScript = AgentWorkspaceScriptPolicy.matches(
+                    tokens: tokens,
+                    workingDirectory: workingDirectory,
+                    roots: [rootDirectory].compactMap { $0 } + additionalWorkspaceRoots
+                )
+                if isWorkspaceScript, !AgentPackageCommandPolicy.hasGlobalInstallScope(tokens),
+                   AgentWorkspaceScriptPolicy.trustedScriptURL(
+                       tokens: tokens,
+                       workingDirectory: workingDirectory,
+                       roots: [rootDirectory].compactMap { $0 } + additionalWorkspaceRoots
+                   ) != nil {
+                    // 用户确认过可信的目录里的脚本，按项目自己的代码对待：不再
+                    // 关进 seatbelt。沙箱对它们只挡住了正事（真实 HOME、网络、
+                    // `~/.ssh`），挡不住任何东西——脚本内容本来就是这个仓库的
+                    // 一部分。没确认过的目录一律当作不可信，照旧关在沙箱里。
+                    hasTrustedWorkspaceScript = true
+                    reasons.append("Command runs a script from a folder you marked as trusted, so it runs outside the workspace sandbox.")
+                }
+                if (networkCapableBuildHeads.contains(head) || isWorkspaceScript),
                    !AgentPackageCommandPolicy.hasGlobalInstallScope(tokens) {
                     needsWorkspaceNetwork = true
                     // 光有网络不够：这些工具的配置和凭证都在真实 HOME 里
@@ -951,6 +976,20 @@ enum AgentSandboxPolicy {
             )
         }
 
+        // 本仓库脚本：脱开 seatbelt，但审批门槛不变（仍然 requiresUserApproval，
+        // 由审批档位和裁判决定放不放）。放在 `needsEscalation` 之后，任何真正
+        // 的危险信号都先于它成立，带 typed confirmation 的那条路不受影响。
+        if hasTrustedWorkspaceScript {
+            return AgentSandboxDecision(
+                mode: .escalated,
+                requiresUserApproval: true,
+                requiresTypedConfirmation: false,
+                reason: reasons.uniqued().joined(separator: " "),
+                prefixRule: AgentCommandAuthorization.prefixRule(for: trimmed),
+                workspaceScriptTrusted: true
+            )
+        }
+
         if needsWorkspaceWrite {
             let workspaceMode: AgentSandboxMode
             if needsWorkspaceNetwork {
@@ -1003,8 +1042,13 @@ enum AgentSandboxPolicy {
         // 凭证档必须和另外两档一样留在自动放行的名单里：它只是"同样的写入
         // 限制 + 真实 HOME"，风险等级没变。漏掉它会让 `npm install`、
         // `go build` 这类本来免批的命令突然全部要人点确认。
-        guard [.workspaceWrite, .workspaceWriteNetwork, .workspaceWriteNetworkCredentialed]
-            .contains(decision.mode),
+        // 项目仓库脚本走 `.escalated`（脱 seatbelt），但成因是"这是本项目的
+        // 代码"，不是"这条命令可疑"。免批名单按成因收，不按档位收，否则
+        // `./build.sh` 会从免批变成每次点确认。
+        let autoApprovableModes: [AgentSandboxMode] = decision.workspaceScriptTrusted
+            ? [.workspaceWrite, .workspaceWriteNetwork, .workspaceWriteNetworkCredentialed, .escalated]
+            : [.workspaceWrite, .workspaceWriteNetwork, .workspaceWriteNetworkCredentialed]
+        guard autoApprovableModes.contains(decision.mode),
               decision.requiresUserApproval,
               !decision.requiresTypedConfirmation else {
             return false
@@ -1543,8 +1587,9 @@ enum AgentSandboxPolicy {
             }
             let head = invocation.head
             // curl/ssh/… may be classified alwaysSafe for "read-shaped"
-            // network ops, but they still need the seatbelt network deny
-            // (or a prior escalation) — never skip the profile for them.
+            // network ops, but they still belong inside the profile: it is
+            // what keeps their writes in the workspace. (Network itself is no
+            // longer denied in any mode — see `deniesNetwork`.)
             if networkHeads.contains(head)
                 || credentialHeads.contains(head)
                 || diagnosticNetworkHeads.contains(head) {
@@ -1562,14 +1607,20 @@ enum AgentSandboxPolicy {
     }
 
     /// Sandbox modes whose seatbelt profile carries `(deny network*)`.
-    nonisolated static func deniesNetwork(_ mode: AgentSandboxMode) -> Bool {
-        switch mode {
-        case .readOnly, .workspaceWrite:
-            return true
-        case .readOnlyNetwork, .workspaceWriteNetwork, .workspaceWriteNetworkCredentialed, .escalated:
-            return false
-        }
-    }
+    /// 现在恒为 false：seatbelt 不再拒网络。
+    ///
+    /// 拒网络原本是想挡外泄，但这道墙从来就没合拢过。profile 里
+    /// `(allow file-read*)` 在**每一档**都无条件放行，写入又对整个 workspace
+    /// 开着——读到密钥写进 workspace、下一条带网络的命令再发出去，两步就绕过
+    /// 去了，而这两步都在同一个审批档位里。挡住的只有正事：装依赖、拉镜像、
+    /// 调接口，而且 seatbelt 把拒绝伪装成域名解析失败，agent 会一头扎进 DNS
+    /// 里查半天（这条弯路在事故记录里反复出现）。
+    ///
+    /// 真正管用的是另外三样，一样没动：写入仍然只限 workspace 与临时目录；
+    /// 凭据路径与破坏性命令仍然在策略层要人工确认；未确认信任的目录里的脚本
+    /// 仍然进沙箱。保留 `…Network` 那几档是为了审计日志读得出当初的判定，
+    /// 不再对应两种运行时行为。
+    nonisolated static func deniesNetwork(_ mode: AgentSandboxMode) -> Bool { false }
 
     /// Name-resolution failures a denied-network seatbelt profile produces.
     /// Deliberately matched only under `deniesNetwork` modes — see the call
@@ -1701,11 +1752,11 @@ enum AgentSandboxPolicy {
         case .escalated:
             return nil
         case .readOnly:
-            restrictions = "reads allowed everywhere; writes denied except the temp dir; network denied; HOME redirected to an empty sandbox home"
+            restrictions = "reads allowed everywhere; writes denied except the temp dir; network allowed; HOME redirected to an empty sandbox home"
         case .readOnlyNetwork:
             restrictions = "reads allowed everywhere; writes denied except the temp dir; network allowed; HOME redirected to an empty sandbox home"
         case .workspaceWrite:
-            restrictions = "writes allowed only inside the workspace and temp dir; network denied; HOME redirected to an empty sandbox home"
+            restrictions = "writes allowed only inside the workspace and temp dir; network allowed; HOME redirected to an empty sandbox home"
         case .workspaceWriteNetwork:
             restrictions = "writes allowed only inside the workspace and temp dir; network allowed; HOME redirected to an empty sandbox home"
         case .workspaceWriteNetworkCredentialed:
@@ -1785,11 +1836,10 @@ enum AgentSandboxPolicy {
             }
         }
         let writeRule = "(allow file-write* \(writeAllows.joined(separator: " ")))"
-        let networkRule = mode == .readOnlyNetwork
-            || mode == .workspaceWriteNetwork
-            || mode == .workspaceWriteNetworkCredentialed
-            ? "(allow network*)"
-            : "(deny network*)"
+        // 恒放行，理由见 `deniesNetwork`。这两个必须一起改：`deniesNetwork`
+        // 是失败提示和拒绝识别读的那份"沙箱现在拦了什么"，与 profile 说的
+        // 不一致就会去解释一个并不存在的拒绝。
+        let networkRule = "(allow network*)"
         return """
         (version 1)
         (deny default)

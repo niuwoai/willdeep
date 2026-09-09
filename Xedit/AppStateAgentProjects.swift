@@ -348,7 +348,12 @@ extension AppState {
 
     private func activateAgentProjectFolderAccess(projectID: UUID) {
         guard let session = agentSessions.first(where: { $0.projectID == projectID }) else { return }
-        for url in agentWorkspaceRoots(for: session) where Self.isExistingDirectory(url) {
+        let roots = agentWorkspaceRoots(for: session).filter { Self.isExistingDirectory($0) }
+        // Adding a folder to a project is the moment to ask about it, and the
+        // whole project is one question — a per-folder prompt three times in a
+        // row is how a prompt turns into something people click through.
+        confirmWorkspaceTrustIfNeeded(forRoots: roots)
+        for url in roots {
             _ = activateSecurityScope(for: url)
         }
     }

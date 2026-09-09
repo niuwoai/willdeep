@@ -54,27 +54,71 @@ struct AgentSessionSandboxControlTests {
             arguments: ["command": .string("sudo shutdown -h now")], rootDirectory: nil).requiresTypedConfirmation)
     }
 
-    @Test("workspace scripts keep credentials without granting outside scripts access")
+    /// 项目仓库里的脚本按项目自己的代码对待：脱开 seatbelt 跑，并且照旧留在
+    /// 静态免批名单里。仓库外的脚本、`-c` 载荷、符号链接出去的一个都不沾。
+    @Test("workspace scripts run outside the sandbox without granting outside scripts access")
     func scripts() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let workspace = root.appendingPathComponent("workspace")
-        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let scripts = workspace.appendingPathComponent("scripts")
+        try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: true)
         let script = workspace.appendingPathComponent("build.sh")
         try "#!/bin/sh\nexit 0\n".write(to: script, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
-        for command in ["./build.sh", "sh build.sh", "bash ./build.sh", "zsh ./build.sh", script.path] {
+        // 解释器形态：`.rb` / `.py` / `.js` 不需要可执行位。
+        for name in ["check.rb", "check.py", "check.js"] {
+            try "\n".write(to: scripts.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+        let commands = [
+            "./build.sh", "sh build.sh", "bash ./build.sh", "zsh ./build.sh", script.path,
+            "ruby scripts/check.rb", "python3 scripts/check.py --verbose", "node scripts/check.js",
+            "/opt/homebrew/bin/ruby scripts/check.rb",
+        ]
+
+        let defaults = try #require(UserDefaults(suiteName: "willdeep-workspace-trust-\(UUID().uuidString)"))
+        AgentWorkspaceTrustStore._setTestDefaultsOverride(defaults)
+        defer { AgentWorkspaceTrustStore._setTestDefaultsOverride(nil) }
+
+        // 没确认过的目录：脚本照旧关在沙箱里，一条都不放。
+        for command in commands {
             let decision = AgentSandboxPolicy.decision(toolName: "run_command",
                 arguments: ["command": .string(command)], rootDirectory: workspace)
+            #expect(!decision.workspaceScriptTrusted, "\(command)")
             #expect(decision.mode == .workspaceWriteNetworkCredentialed, "\(command)")
         }
+
+        AgentWorkspaceTrustStore.record(true, for: workspace)
+        for command in commands {
+            let decision = AgentSandboxPolicy.decision(toolName: "run_command",
+                arguments: ["command": .string(command)], rootDirectory: workspace)
+            #expect(decision.mode == .escalated, "\(command)")
+            #expect(decision.workspaceScriptTrusted, "\(command)")
+            #expect(!decision.requiresTypedConfirmation, "\(command)")
+            // 脱沙箱不等于多一道审批：静态免批照旧。
+            #expect(AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+                command: command, rootDirectory: workspace), "\(command)")
+            #expect(AgentSandboxPolicy.shouldRunWithoutSeatbelt(command: command, mode: decision.mode), "\(command)")
+        }
+        // 危险信号仍然先成立：本仓库脚本的名义不能给破坏性命令带路。
+        let destructive = AgentSandboxPolicy.decision(toolName: "run_command",
+            arguments: ["command": .string("bash build.sh && rm -rf /")], rootDirectory: workspace)
+        #expect(destructive.mode == .escalated)
+        #expect(!destructive.workspaceScriptTrusted)
+        #expect(destructive.requiresTypedConfirmation)
+        #expect(!AgentSandboxPolicy.canAutoApproveWorkspaceWriteCommand(
+            command: "bash build.sh && rm -rf /", rootDirectory: workspace))
+
         let outside = root.appendingPathComponent("outside.sh")
         try "exit 0\n".write(to: outside, atomically: true, encoding: .utf8)
         try FileManager.default.createSymbolicLink(at: workspace.appendingPathComponent("link.sh"),
             withDestinationURL: outside)
-        for tokens in [["sh", "../outside.sh"], ["sh", "link.sh"], ["sh", "-c", "echo hi"], ["./missing.sh"]] {
-            #expect(!AgentWorkspaceScriptPolicy.matches(tokens: tokens, workingDirectory: workspace, roots: [workspace]))
+        for tokens in [["sh", "../outside.sh"], ["sh", "link.sh"], ["sh", "-c", "echo hi"], ["./missing.sh"],
+                       ["ruby", "-e", "puts 1"], ["python3", "-m", "http.server"], ["ruby", "../outside.rb"],
+                       ["node", "$SCRIPT"], ["ruby", "~/evil.rb"]] {
+            #expect(!AgentWorkspaceScriptPolicy.matches(tokens: tokens, workingDirectory: workspace, roots: [workspace]),
+                    "\(tokens)")
         }
     }
 }

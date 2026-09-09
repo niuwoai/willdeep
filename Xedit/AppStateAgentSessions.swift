@@ -1983,6 +1983,7 @@ extension AppState {
         if Self.isExistingDirectory(url) {
             // 1.85.0-rc9：agent 选 folder 不再联动 editor 窗口的 rootDirectory。
             // 只为 agent 子进程拿读取权限 + 写 recents,editor 侧保持原样。
+            confirmWorkspaceTrustIfNeeded(for: url)
             _ = activateSecurityScope(for: url)
             registerRecentFolder(url)
         }
@@ -2184,6 +2185,13 @@ extension AppState {
             return false
         }
         agentSessionLoadFailure = nil
+        // Projects that predate folder trust have no answer on record. The
+        // first time the user actually enters one is when to ask; doing it on
+        // the catalog load instead would greet a launch with a queue of
+        // prompts for every folder the app has ever seen.
+        confirmWorkspaceTrustIfNeeded(
+            forRoots: agentWorkspaceRoots(for: targetSession).filter { Self.isExistingDirectory($0) }
+        )
         activeAgentSessionID = id
         subscribeToActiveRuntime()
         evictInactiveAgentRuntimesIfNeeded()

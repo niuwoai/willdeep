@@ -1510,6 +1510,10 @@ final class AppState: ObservableObject {
     }
 
     func openFolderURL(_ url: URL, openInNewWindow: ((URL) -> Void)? = nil) {
+        // Before anything reads this folder's code, ask once whether the user
+        // trusts it. Opening is not the same act as authorizing its scripts
+        // to run outside the sandbox.
+        confirmWorkspaceTrustIfNeeded(for: url)
         registerRecentFolder(url)
 
         if let openInNewWindow {

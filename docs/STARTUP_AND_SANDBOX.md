@@ -66,14 +66,16 @@
 
 | 模式 | 写 | 网络 | 凭证/HOME |
 | --- | --- | --- | --- |
-| `readOnly` | ✗ | ✗ | 屏蔽 |
+| `readOnly` | ✗ | ✓ | 屏蔽 |
 | `readOnlyNetwork` | ✗ | ✓ | 屏蔽 |
-| `workspaceWrite` | 仅 workspace + temp | ✗ | 屏蔽 |
+| `workspaceWrite` | 仅 workspace + temp | ✓ | 屏蔽 |
 | `workspaceWriteNetwork` | 仅 workspace + temp | ✓ | 屏蔽 |
 | `workspaceWriteNetworkCredentialed` | 仅 workspace + temp | ✓ | 真实 HOME / SSH agent，敏感环境变量仍剥离 |
 | `escalated` | 不沙箱 | ✓ | 真实 HOME/凭证 |
 
 最终用哪档由 [AppStateAgentToolDecisions.swift](../Xedit/AppStateAgentToolDecisions.swift) `sandboxModeForToolExecution()` 依据「命令风险 + 审批来源」决定。
+
+> **1.358.0-rc1：seatbelt 不再拒网络，`deniesNetwork()` 恒 false。** 这堵墙从来没合拢过——`(allow file-read*)` 在每一档都无条件放行，写入又对整个 workspace 开着，读到密钥写进 workspace、下一条带网络的命令再发出去，两步就绕过去，而两步在同一个审批档位里。挡住的只有正事（装依赖、拉镜像、调接口），还因为 seatbelt 把拒绝伪装成域名解析失败，反复把排查引进 DNS。带 `Network` 的档位名保留下来是为了审计日志读得出当初的判定，不再对应两种运行时行为。真正在防外泄的是：写入只限 workspace、凭据路径与破坏性命令在策略层要人工确认、输出脱敏、敏感环境变量剥离。
 
 ### 2. shell 命令怎么被关起来（seatbelt）
 
@@ -97,10 +99,10 @@
 (allow file-read*)                 ← 读不受限
 (allow file-write* (subpath <temp>) [(subpath <workspace>)])
 (allow ipc*) (allow mach-lookup)
-(allow|deny network*)              ← 仅 workspaceWriteNetwork 放行
+(allow network*)                   ← 所有档位放行（见上）
 ```
 
-> ⚠️ **边界的真相**：沙箱限制的是**写和网络**，**读不受限**（`file-read*` 全放行）—— Agent 在沙箱里仍能读到 workspace 之外的文件。真正拦住外泄的是「网络默认拒绝 + 命令输出脱敏 + 敏感环境变量剥离」。
+> ⚠️ **边界的真相**：沙箱限制的只有**写**，读和网络都不受限 —— Agent 在沙箱里仍能读到 workspace 之外的文件，也能出网。真正拦住外泄的是「凭据路径命中即人工确认 + 命令输出脱敏 + 敏感环境变量剥离 + 非凭证档屏蔽真实 HOME」。
 >
 > ⚠️ `escalated` 模式**完全不套 seatbelt**；系统若没有 `sandbox-exec` 也会回退到裸 `/bin/sh`（macOS 上一直存在，实际不触发）。
 
@@ -117,7 +119,7 @@
 
 ### 2.6 沙箱失真识别
 
-`looksLikeSandboxDenial` 除了识别 `sandbox-exec`、EPERM/EACCES、read-only filesystem 和 permission denied，也会在当前 profile 明确 deny network 时，把 `no such host`、`ENOTFOUND`、`Could not resolve host` 等解释成沙箱拒绝，而不是贸然诊断为真实 DNS 故障；同样文本在 network-enabled / escalated 档不会误报。成功但空输出无法靠退出码通用判断，因此对依赖用户上下文的已知查询应在执行前给最小必要上下文（本次先覆盖全局 Git 配置），而不是等空结果后猜。
+`looksLikeSandboxDenial` 除了识别 `sandbox-exec`、EPERM/EACCES、read-only filesystem 和 permission denied，原本还会在 profile deny network 时把 `no such host`、`ENOTFOUND`、`Could not resolve host` 解释成沙箱拒绝；1.358.0-rc1 起沙箱不再拒网络，这条分支由 `deniesNetwork()` 恒 false 自动失效，任何档位下的解析失败都按真实 DNS 故障报。成功但空输出无法靠退出码通用判断，因此对依赖用户上下文的已知查询应在执行前给最小必要上下文（本次先覆盖全局 Git 配置），而不是等空结果后猜。
 
 ### 3. 命令审批的三层闸门
 
@@ -145,6 +147,20 @@
 刻意**不**收进黑名单的（这一档存在的意义就是让它们别再问）：`rm -rf node_modules`、`git reset --hard`、`git push --force` 到功能分支、`docker compose down -v`、本地库 `DROP TABLE`、`cat .env`。它们可能让人心跳一下，但都不是恶意，而且都在用户自己的工作区语义里。
 
 **Always-allow**：只对 write 级生效，按命令**签名**（如 `git push`、`mcp:server:tool`）pin；文件写工具故意**不可 pin**（blast radius 依赖路径）。见 [AgentToolAuthorizationSupport.swift](../Xedit/AgentToolAuthorizationSupport.swift)。
+
+### 3.6 文件夹信任与本仓库脚本（1.358.0-rc1）
+
+项目自己仓库里的脚本，是这个仓库的一部分——和 Agent 已经能读能改的代码同源。把它们关进 seatbelt 换不来安全（脚本内容本来就在仓库里），只换来一堆坏掉的正事：合成 HOME 让 `~/.ssh`、`~/.npmrc`、`~/.kube/config` 全部查无此人，一次 30 分钟的 Harbor 发布就是这么废掉的。
+
+所以现在：**被用户确认为可信的目录里的脚本，直接脱沙箱跑**（落到 `.escalated`，`shouldRunWithoutSeatbelt` 恒 true）。
+
+- **谁算脚本**（[AgentWorkspaceScriptPolicy.swift](../Xedit/AgentWorkspaceScriptPolicy.swift)）：三种调用形态——直接执行（`./build.sh`，要求可执行位）、shell 包装（`sh/bash/zsh <路径>`）、解释器（`ruby`/`python[23]`/`node`/`deno`/`bun`/`perl`/`php`/`tsx`/`ts-node`/`osascript` + 首个非选项参数）。守卫一条不少：`-c`/`-m`/`-e` 载荷不解释，路径含 `$` 或 `~` 不认，符号链接解析后必须严格落在某个 workspace root 之内。
+- **谁说了算**（[AgentWorkspaceTrustStore.swift](../Xedit/AgentWorkspaceTrustStore.swift)）：按目录记录用户的答复，UserDefaults `com.willdeep.workspaceTrust.v1`。**没问过 = 不信任**，两种答案都留痕（只记"信任"会让用户每次开同一个文件夹都被问一遍，然后学会闭眼点）。记录覆盖整棵子树，嵌套目录的记录压过祖先的——所以可以信任 `~/Sites` 而单独把其中一个仓库标成不可信。
+- **什么时候问**（[AppStateWorkspaceTrust.swift](../Xedit/AppStateWorkspaceTrust.swift)）：打开文件夹（`openFolderURL`）、Agent 侧切换工作区（`moveActiveAgentSessionToWorkspace`）、项目增删目录（`activateAgentProjectFolderAccess`，一个项目只问一次、覆盖它的所有目录）、点进一个还没答复过的旧项目（`selectAgentSession`）。刻意**不**挂在启动期的 catalog 加载和 `migrateAgentWorkspacesToProjects()` 上——那会让一次启动弹出一串弹窗。测试进程里一律不弹（弹了就是挂死），并且把目录留在 unknown，不替用户默认答"信任"。
+- **危险信号照旧先成立**：`bash build.sh && rm -rf /` 走的仍然是破坏性命令那条路（`.escalated` + 打字确认 + 不进免批名单）。只有整条命令链干干净净时 `workspaceScriptTrusted` 才置位。
+- **脱沙箱 ≠ 多一道审批**：`workspaceScriptTrusted` 的 `.escalated` 仍留在 `canAutoApproveWorkspaceWriteCommand` 的静态免批名单里，否则本来免批的 `./build.sh` 会突然每次都要点确认。免批名单按**成因**收，不按档位收。
+
+> ⚠️ 这份信任是**位置性**的，不读脚本内容：Agent 自己写进 workspace 的脚本，和用户提交的脚本一样匹配。挡住这条路的是"这个目录用户确认过"这一层，不是文件的来源。
 
 ### 4. 文件写入边界（写不出 workspace）
 
@@ -182,4 +198,4 @@ guard url.path == rootPath || url.path.hasPrefix(rootPath + "/") else {
 ## 一句话总结
 
 - **启动**：入口 `WillDeepApp` → AppDelegate 装监听 → 每窗口一个 `AppState`，同步读几份小 JSON、会话只加载 metadata（懒物化）、空草稿清理，其余活后台化；退出前 flush 会话写队列。
-- **沙箱**：四档沙箱模式 + macOS seatbelt（**限写/限网、不限读**）+ 环境剥敏；命令走「白名单 → LLM 评委 → 手敲 confirm」三层，写文件严格锁在 workspace 内，输出脱敏，子 Agent 只读且不能嵌套。**审批档位有四种**，其中静默模式是唯一黑名单式的一档，保护强度以恶意命令黑名单为地基（§3.5）。
+- **沙箱**：六档沙箱模式 + macOS seatbelt（**只限写，读与网络都不限**）+ 环境剥敏；被用户确认为可信的目录，其自带脚本直接脱沙箱执行（§3.6）；命令走「白名单 → LLM 评委 → 手敲 confirm」三层，写文件严格锁在 workspace 内，输出脱敏，子 Agent 只读且不能嵌套。**审批档位有四种**，其中静默模式是唯一黑名单式的一档，保护强度以恶意命令黑名单为地基（§3.5）。

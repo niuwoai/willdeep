@@ -1459,11 +1459,11 @@ struct AgentSandboxNetworkPolicyTests {
         ))
     }
 
-    /// Seatbelt reports a denied connection as a name-resolution failure, so
-    /// these outputs must be recognised as sandbox denials rather than being
-    /// handed to the model as a genuine DNS fault.
-    @Test("denied-network DNS failures are recognised as sandbox denials")
-    func dnsShapedFailuresCountAsSandboxDenial() {
+    /// 1.358.0-rc1 起沙箱不再拒网络，所以"域名解析失败"在任何档位下都只能
+    /// 是真的解析失败。反过来解释会把排查引进一堵不存在的墙——这条弯路正是
+    /// 当初加这层识别要避免的，只是墙拆了之后，识别本身成了那堵墙。
+    @Test("网络已放行，DNS 形状的失败在任何档位都不算沙箱拒绝")
+    func dnsShapedFailuresAreNeverSandboxDenials() {
         let outputs = [
             "dial tcp: lookup proxy.golang.org: no such host",
             "socket.gaierror: [Errno 8] nodename nor servname provided, or not known",
@@ -1471,32 +1471,19 @@ struct AgentSandboxNetworkPolicyTests {
             "curl: (6) Could not resolve host: goproxy.cn"
         ]
 
-        for output in outputs {
-            #expect(
-                AgentSandboxPolicy.looksLikeSandboxDenial(
-                    exitStatus: 1,
-                    output: output,
-                    sandboxMode: .workspaceWrite
-                ),
-                "\(output) under a denied-network profile is a sandbox denial"
-            )
-            // The same text under an allowed-network profile is a real
-            // network fault and must not be blamed on the sandbox.
-            #expect(
-                !AgentSandboxPolicy.looksLikeSandboxDenial(
-                    exitStatus: 1,
-                    output: output,
-                    sandboxMode: .workspaceWriteNetwork
-                ),
-                "\(output) with network allowed is a genuine failure"
-            )
-            #expect(
-                !AgentSandboxPolicy.looksLikeSandboxDenial(
-                    exitStatus: 1,
-                    output: output,
-                    sandboxMode: .escalated
+        for mode in [AgentSandboxMode.readOnly, .readOnlyNetwork, .workspaceWrite,
+                     .workspaceWriteNetwork, .workspaceWriteNetworkCredentialed, .escalated] {
+            #expect(!AgentSandboxPolicy.deniesNetwork(mode), "\(mode.rawValue)")
+            for output in outputs {
+                #expect(
+                    !AgentSandboxPolicy.looksLikeSandboxDenial(
+                        exitStatus: 1,
+                        output: output,
+                        sandboxMode: mode
+                    ),
+                    "\(output) under \(mode.rawValue) is a genuine network failure"
                 )
-            )
+            }
         }
     }
 

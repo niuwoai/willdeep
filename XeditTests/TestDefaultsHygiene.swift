@@ -40,6 +40,7 @@ enum TestDefaultsHygiene {
         "willdeep-profiles-",
         "willdeep-runtime-store-",
         "willdeep-telemetry-",
+        "willdeep-workspace-trust-",
     ]
 
     /// once 语义：进程内首次访问时扫一遍 ~/Library/Preferences，删掉

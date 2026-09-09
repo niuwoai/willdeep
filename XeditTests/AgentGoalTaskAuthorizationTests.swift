@@ -314,7 +314,8 @@ struct AgentGoalTaskAuthorizationTests {
         let mode = f.app.sandboxModeForToolExecution(risk: .write, approvalSource: .taskGrant,
                                                    sandboxDecision: decision, isUnattendedDispatchTask: true)
         #expect(mode == .workspaceWrite)
-        #expect(AgentSandboxPolicy.deniesNetwork(mode))
+        // 收窄的是写入范围和凭证，不是网络：沙箱已不再拒网络。
+        #expect(AgentSandboxPolicy.redirectsHome(mode))
         let launch = AgentSandboxPolicy.shellLaunch(command: "ruby verify_test.rb", mode: mode, rootDirectory: f.root)
         #expect(launch.executableURL.path == "/usr/bin/sandbox-exec")
         #expect(!AgentSandboxPolicy.canEnforceLocalTaskVerification(command: "ruby verify_test.rb", mode: .escalated))

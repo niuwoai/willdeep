@@ -102,21 +102,20 @@ struct AgentSandboxCredentialedModeTests {
         ))
     }
 
-    @Test("凭证档算作放行网络")
-    func credentialedModeAllowsNetwork() {
-        #expect(!AgentSandboxPolicy.deniesNetwork(.workspaceWriteNetworkCredentialed))
-        // 因此 DNS 失败在这一档下是**真的** DNS 失败，不该再被报成沙箱拒绝。
-        #expect(!AgentSandboxPolicy.looksLikeSandboxDenial(
-            exitStatus: 255,
-            output: "ssh: Could not resolve hostname h1.example.com: nodename nor servname provided",
-            sandboxMode: .workspaceWriteNetworkCredentialed
-        ))
-        // 对照：网络被拒的档位下，同样的文本必须判定为沙箱拒绝。
-        #expect(AgentSandboxPolicy.looksLikeSandboxDenial(
-            exitStatus: 255,
-            output: "ssh: Could not resolve hostname h1.example.com: nodename nor servname provided",
-            sandboxMode: .workspaceWrite
-        ))
+    /// 沙箱不再拒网络（见 `deniesNetwork` 的说明）。于是"域名解析失败"在
+    /// **任何**档位下都只能是真的解析失败，不能再被解释成沙箱拒绝——那条
+    /// 解释会把 agent 引去查一堵并不存在的墙。
+    @Test("所有档位都放行网络，DNS 失败不再被当成沙箱拒绝")
+    func everyModeAllowsNetwork() {
+        for mode in [AgentSandboxMode.readOnly, .readOnlyNetwork, .workspaceWrite,
+                     .workspaceWriteNetwork, .workspaceWriteNetworkCredentialed, .escalated] {
+            #expect(!AgentSandboxPolicy.deniesNetwork(mode), "\(mode.rawValue)")
+            #expect(!AgentSandboxPolicy.looksLikeSandboxDenial(
+                exitStatus: 255,
+                output: "ssh: Could not resolve hostname h1.example.com: nodename nor servname provided",
+                sandboxMode: mode
+            ), "\(mode.rawValue)")
+        }
     }
 
     // MARK: - 路由：无人值守任务不能"有网没钥匙"
@@ -180,6 +179,7 @@ struct AgentSandboxCredentialedModeTests {
             rootDirectory: workspace
         )
         #expect(decision.mode != .workspaceWriteNetworkCredentialed)
-        #expect(AgentSandboxPolicy.deniesNetwork(decision.mode))
+        // 真实 HOME 仍然只给凭证档：放开网络没有顺带放开凭证。
+        #expect(AgentSandboxPolicy.redirectsHome(decision.mode))
     }
 }
