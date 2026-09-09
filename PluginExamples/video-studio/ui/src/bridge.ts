@@ -1,4 +1,5 @@
 import type { CharacterDraft, CreativeSkill, Drama, DramaPlan, EpisodeDraftFields, ProviderEntry, SkillStage } from './types';
+import { validCreative } from './creative-schema';
 
 /// 宿主的 executeCommand 对 mcpTool 类命令回的是**完整的 MCP result**，
 /// 形如 {"content":[{"type":"text","text":"{\"ok\":true,…}"}]}，工具真正的
@@ -114,7 +115,7 @@ export function parsePlanWithReason(raw: string): PlanParse {
       continue;
     }
     const plan = normalizePlan(parsed);
-    if (plan) return { ok: true, plan };
+    if (plan) return validCreative('plan', plan) ? { ok: true, plan } : { ok: false, reason: 'malformed_json' };
     return { ok: false, reason: 'missing_title' };
   }
   if (sawTruncation) return { ok: false, reason: 'truncated' };
@@ -179,6 +180,8 @@ export function parseFencedDraft<T extends object>(raw: string, fence: string, a
       if (typeof entry === 'string' && entry.trim()) picked[key] = entry.trim();
     }
     if (Object.keys(picked).length === 0) return { kind: 'invalid', note: found.note };
+    const kind = fence === 'short_drama_character' ? 'character' : fence === 'short_drama_frames' ? 'frames' : 'episode';
+    if (!validCreative(kind, value) || !validCreative(kind, picked)) return { kind: 'invalid', note: found.note };
     return { kind: 'draft', value: picked as T, note: found.note };
   } catch {
     return { kind: 'invalid', note: found.note };
@@ -302,6 +305,7 @@ export function parseFencedPassage(raw: string): FencedResult<{ replacement: str
     const value = firstJSONObject(found.body);
     if (!value || typeof value !== 'object') return { kind: 'invalid', note: found.note };
     const replacement = (value as { replacement?: unknown }).replacement;
+    if (!validCreative('passage', value)) return { kind: 'invalid', note: found.note };
     if (typeof replacement !== 'string' || !replacement.trim()) {
       return { kind: 'invalid', note: found.note };
     }
@@ -515,7 +519,7 @@ export function parseFencedEpisodes(raw: string): FencedResult<{ episodes: Episo
       if (next.title === undefined && next.summary === undefined) continue;
       episodes.push(next);
     }
-    if (episodes.length === 0) return { kind: 'invalid', note: found.note };
+    if (episodes.length === 0 || episodes.length > 30 || !episodes.every((entry) => validCreative('episode', entry))) return { kind: 'invalid', note: found.note };
     return { kind: 'draft', value: { episodes }, note: found.note };
   } catch {
     return { kind: 'invalid', note: found.note };
@@ -579,7 +583,7 @@ function pickShotEntry(raw: unknown, fallbackOrder?: number): ShotDraftEntry | n
   const duration = Number(source.duration);
   if (Number.isFinite(duration) && duration > 0) entry.duration = Math.round(duration);
   const written = Object.keys(entry).filter((key) => key !== 'order');
-  return written.length > 0 ? entry : null;
+  return written.length > 0 && validCreative('shot', entry) ? entry : null;
 }
 
 /// 一次改多镜。
@@ -594,7 +598,7 @@ export function parseFencedShots(raw: string): FencedResult<{ shots: ShotDraftEn
       const entry = pickShotEntry(item);
       return entry ? [entry] : [];
     });
-    if (shots.length === 0) return { kind: 'invalid', note: found.note };
+    if (shots.length === 0 || shots.length > 40 || new Set(shots.map((entry) => entry.order)).size !== shots.length) return { kind: 'invalid', note: found.note };
     return { kind: 'draft', value: { shots }, note: found.note };
   } catch {
     return { kind: 'invalid', note: found.note };

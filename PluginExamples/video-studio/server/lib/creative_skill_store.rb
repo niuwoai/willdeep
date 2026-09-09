@@ -25,7 +25,8 @@ class CreativeSkillStore
     "script" => "episode",
     "passage" => "passage",
     "storyboard" => "storyboard",
-    "shot" => "storyboard"
+    "shot" => "storyboard",
+    "frames" => "frames"
   }.freeze
 
   MAX_BODY = 40_000

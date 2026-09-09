@@ -3,6 +3,7 @@
 require "json"
 require "securerandom"
 require "time"
+require_relative "creative_schema"
 
 class DramaService
   IMAGE_MODELS = %w[gpt-image-2 nano-banana-2].freeze
@@ -99,6 +100,7 @@ class DramaService
     plan = arguments["plan"]
     return failure("invalid_plan", "A structured short-drama plan is required.") unless plan.is_a?(Hash)
     return failure("missing_title", "The short drama title is required.") if plan["title"].to_s.strip.empty?
+    return failure("invalid_plan", "Plan fields do not match creative-v1.") unless CreativeSchema.valid?("plan", plan)
     # 模型超时重试不该多出一部一模一样的短剧。requestID 由调用方给，
     # 没给就退回原来的「每次都新建」。
     request_id = clipped(arguments["requestID"], 200)
@@ -153,6 +155,7 @@ class DramaService
       entries = arguments["episodes"]
       return failure("invalid_episodes", "An array of episode drafts is required.") unless entries.is_a?(Array)
       return failure("empty_episodes", "No episode drafts were provided.") if entries.empty?
+      return failure("invalid_episodes", "Episode fields do not match creative-v1.") unless entries.all? { |entry| CreativeSchema.valid?("episode", entry) }
 
       applied = []
       skipped = []
@@ -220,6 +223,9 @@ class DramaService
         check_revision(node, arguments["expectedDraftRev"], "draftRev")
         patch = arguments["draft"]
         raise NotFound, "invalid_draft" unless patch.is_a?(Hash)
+        if %w[character episode shot].include?(scope) && !CreativeSchema.valid?(scope, patch)
+          raise NotFound, "invalid_draft"
+        end
 
         node["draft"] = merge_draft(scope, node, patch)
         node["draftRev"] = node["draftRev"].to_i + 1
@@ -238,12 +244,15 @@ class DramaService
       scope = draft_scope(arguments["scope"])
       return failure("invalid_scope", "Unknown draft scope.") unless scope
 
-      drama = mutate_scope(scope, arguments) do |node|
+      drama = mutate_scope(scope, arguments) do |node, item|
         check_revision(node, arguments["expectedRev"])
+        check_revision(node, arguments["expectedDraftRev"], "draftRev")
         draft = node["draft"]
         raise NotFound, "empty_draft" unless draft.is_a?(Hash) && !draft.empty?
 
         apply_draft(scope, node, draft)
+        node.delete("draftOnly") if scope == "shot"
+        item["status"] = "production" if scope == "shot" && item && item["status"] == "planning"
         node["draft"] = nil
         node["rev"] = node["rev"].to_i + 1
         # 草稿清空本身也是一次草稿变更。draftRev 继续往前走，在跑的那条
@@ -258,6 +267,21 @@ class DramaService
     guarded do
       scope = draft_scope(arguments["scope"])
       return failure("invalid_scope", "Unknown draft scope.") unless scope
+
+      if scope == "shot"
+        drama = mutate_episode(arguments) do |episode|
+          node = episode["shots"].find { |entry| entry["id"] == arguments["shotID"] }
+          raise NotFound, "shot_not_found" unless node
+          check_revision(node, arguments["expectedDraftRev"], "draftRev")
+          if node["draftOnly"]
+            episode["shots"].delete(node)
+          else
+            node["draft"] = nil
+            node["draftRev"] = node["draftRev"].to_i + 1
+          end
+        end
+        return { "ok" => true, "drama" => drama }
+      end
 
       drama = mutate_scope(scope, arguments) do |node|
         check_revision(node, arguments["expectedDraftRev"], "draftRev")
@@ -281,6 +305,7 @@ class DramaService
       raise NotFound, "episode_not_found" unless episode
 
       shots = episode["shots"].sort_by { |entry| entry["order"].to_i }.map do |shot|
+        shot = shot.merge(shot["draft"].is_a?(Hash) ? shot["draft"] : {})
         {
           "id" => shot["id"],
           "order" => shot["order"],
@@ -309,17 +334,50 @@ class DramaService
       entries = arguments["shots"]
       return failure("invalid_shots", "An array of shot drafts is required.") unless entries.is_a?(Array)
       return failure("empty_shots", "No shot drafts were provided.") if entries.empty?
+      return failure("invalid_shots", "Shot fields do not match creative-v1.") unless entries.all? { |entry| CreativeSchema.valid?("shot", entry) }
+      return failure("invalid_shots", "Too many storyboard shots.") if entries.length > MAX_BATCH_SHOTS
+      orders = entries.map { |entry| entry.is_a?(Hash) ? entry["order"] : nil }
+      unless orders.all? { |order| order.is_a?(Integer) && order.positive? } && orders.uniq.length == orders.length
+        return failure("invalid_shots", "Shot orders must be unique positive integers.")
+      end
 
       applied = []
       skipped = []
       drama = mutate_episode(arguments) do |episode|
+        check_revision(episode, arguments["expectedEpisodeRev"])
+        check_revision(episode, arguments["expectedEpisodeDraftRev"], "draftRev")
+        creating = arguments["create"] == true
+        if creating && !episode["shots"].empty?
+          raise Conflict.new("shots", 0, episode["shots"].length)
+        end
+        if creating && entries.any? { |entry| entry["summary"].to_s.strip.empty? }
+          raise NotFound, "invalid_draft"
+        end
         by_order = {}
         episode["shots"].each { |shot| by_order[shot["order"].to_i] = shot }
+        # Check every base revision before writing any member of the batch.
+        expected = arguments["expectedShots"]
+        if arguments.key?("expectedShots") && (!expected.is_a?(Array) || !expected.all? { |value| value.is_a?(Hash) && value["id"].is_a?(String) && value["rev"].is_a?(Integer) && value["draftRev"].is_a?(Integer) })
+          raise NotFound, "invalid_shots"
+        end
+        if expected.is_a?(Array)
+          entries.each do |entry|
+            node = by_order[entry["order"]]
+            base = expected.find { |value| value["id"] == node&.fetch("id") }
+            raise Conflict.new("shots", entries.length, expected.length) unless node && base
+            check_revision(node, base["rev"])
+            check_revision(node, base["draftRev"], "draftRev")
+          end
+        end
 
         entries.first(MAX_BATCH_SHOTS).each do |entry|
           next skipped << { "reason" => "not_an_object" } unless entry.is_a?(Hash)
           order = entry["order"].to_i
           shot = by_order[order]
+          if !shot && creating
+            shot = deep_copy(SHOT_DEFAULTS).merge("id" => SecureRandom.uuid, "order" => order, "draftOnly" => true)
+            episode["shots"] << shot
+          end
           next skipped << { "order" => order, "reason" => "shot_not_found" } unless shot
 
           draft = shot["draft"].is_a?(Hash) ? deep_copy(shot["draft"]) : {}
@@ -489,10 +547,10 @@ class DramaService
   end
 
   def mutate_shot(arguments)
-    mutate_episode(arguments) do |episode|
+    mutate_episode(arguments) do |episode, drama|
       shot = episode["shots"].find { |entry| entry["id"] == arguments["shotID"].to_s }
       raise NotFound, "shot_not_found" unless shot
-      yield shot
+      yield shot, drama
     end
   end
 

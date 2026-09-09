@@ -2,12 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { CHARACTER_DRAFT_FIELDS, EPISODES_FENCE, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, SHOTS_FENCE, SHOT_FENCE, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkill, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, episodeBatches, parseFencedDraft, parseFencedEpisodes, parseFencedPassage, parseFencedShot, parseFencedShots, parsePlanWithReason, shotDigestLines, passageContext, relativeTime, requestBudget, resetCreativeSkill, saveCreativeSkill, visibleStream } from './bridge';
+import { creativeContract } from './creative-schema';
+import type { CreativeKind } from './creative-schema';
+import { FrameCoCreation } from './FrameCoCreation';
 import { Dropdown } from './Dropdown';
 import { createTranslator, localeFromContext } from './i18n';
 import type { ChatMessage, Character, CharacterDraft, CreativeSkill, Drama, DramaPlan, Episode, EpisodeDraftFields, ImageModel, ProviderEntry, Shot, SkillEntry, SkillStage, Stage } from './types';
 import type { ShotDigest } from './bridge';
 import type { Notice } from './bridge';
 import './styles.css';
+import './co-creation.css';
 
 const imageModels: ImageModel[] = ['gpt-image-2', 'nano-banana-2'];
 
@@ -81,6 +85,12 @@ type PlannerMessage = { id: string; role: 'user' | 'assistant'; content: string;
 function emptyShot(order: number): Shot {
   return { id: '', order, title: '', summary: '', dialogue: [{ id: localID(), speaker: '', text: '' }], actionStart: '', actionEnd: '', cameraIntent: '', duration: 4, startPrompt: '', endPrompt: '', startCandidates: [], endCandidates: [] };
 }
+
+function shotView(entry: Shot): Shot {
+  return structuredClone({ ...entry, ...entry.draft });
+}
+
+const SHOT_EDIT_FIELDS = ['title', 'summary', 'dialogue', 'duration', 'actionStart', 'actionEnd', 'cameraIntent', 'startPrompt', 'endPrompt'] as const;
 
 // 光标前最近的一个 `$` 到光标之间的文字，就是技能查询词。要求 `$` 在开头或
 // 紧跟空白，避免把 shell 变量、价格、路径里的 $ 当成触发；查询词里出现空白就
@@ -309,9 +319,9 @@ export default function App() {
   useEffect(() => {
     if (!shot) { setShotDraft(emptyShot((episode?.shots.length ?? 0) + 1)); return; }
     setShotID(shot.id);
-    setShotDraft(structuredClone(shot));
+    setShotDraft(shotView(shot));
     void loadShotChat(drama?.id ?? '');
-  }, [shot?.id, episode?.id]);
+  }, [shot?.id, shot?.rev, shot?.draftRev, episode?.id]);
 
   const provider = providers.find((item) => item.providerID === assistantProvider);
 
@@ -483,10 +493,10 @@ export default function App() {
     setBusy('commit');
     try {
       const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { code?: string; message?: string } }>('drama.commitDraft', {
-        dramaID: drama.id, scope: 'character', characterID, expectedRev: selectedCharacter.rev ?? 0,
+        dramaID: drama.id, scope: 'character', characterID, expectedRev: selectedCharacter.rev ?? 0, expectedDraftRev: selectedCharacter.draftRev ?? 0,
       });
       // 重复确认拿到的就是这条冲突：第一次已经写进去了，不该报错也不该再写一遍。
-      if (!payload.ok && payload.error?.code === 'revision_conflict') { await reload(drama.id); setNotice(t('draftAlreadyAdopted')); return; }
+      if (!payload.ok && payload.error?.code === 'revision_conflict') { await reload(drama.id); setFailure(t('draftChanged')); return; }
       if (!payload.ok) throw new Error(payload.error?.message || t('operationFailed'));
       applyDrama(payload.drama);
       setShowDiff(false);
@@ -813,10 +823,12 @@ export default function App() {
   /// 是可以改的东西。
   async function runShotRequest(question: string) {
     if (!drama || !episode) { setFailure(t('selectEpisodeFirst')); return; }
-    const single = shotScope === 'single';
+    if (hasUnsavedShot()) { setFailure(t('saveChangesBeforeAdopting')); return; }
+    const creating = episode.shots.length === 0;
+    const single = !creating && shotScope === 'single';
+    if (creating) setShotScope('episode');
     // 先判这一集有没有分镜，再判有没有选中一镜。顺序反了的话，一集空分镜
     // 会提示「请先选中一个分镜」，让用户去左边找一个不存在的东西。
-    if (episode.shots.length === 0) { setFailure(t('noShotsYet')); return; }
     if (single && !shot) { setFailure(t('selectShotFirst')); return; }
 
     const listed = await callCommand<{ ok: boolean; shots?: ShotDigest[]; error?: { message?: string } }>(
@@ -824,7 +836,6 @@ export default function App() {
     );
     if (!listed.ok) { setFailure(listed.error?.message || t('operationFailed')); return; }
     const digests = listed.shots ?? [];
-    if (digests.length === 0) { setFailure(t('noShotsYet')); return; }
 
     const objectID = single ? (shot?.id ?? episode.id) : episode.id;
     const baseDraftRev = (single ? shot?.draftRev : episode.draftRev) ?? 0;
@@ -838,6 +849,8 @@ export default function App() {
       `${t('contextDramaLabel')}: ${drama.title} / ${drama.genre} / ${drama.tone}`,
       `${t('contextCastLabel')}:\n${cast || t('noCharactersYet')}`,
       `${t('contextEpisodeLabel', { number: episode.order })}: ${view.title} / ${view.summary}`,
+      view.script,
+      creating ? t('generateStoryboardInstruction') : '',
       `${t('contextShotListLabel')}:\n${shotDigestLines(digests)}`,
       single && shot ? `${t('contextCurrentShotLabel', { number: shot.order })}` : '',
     ].filter(Boolean).join('\n\n');
@@ -881,12 +894,22 @@ export default function App() {
         setFailure(t('shotDraftInvalid'));
         return;
       }
+      if (single && parsed.value.shots.some((entry) => entry.order !== shot?.order)) {
+        setFailure(t('shotDraftInvalid'));
+        return;
+      }
       const payload = await callCommand<{ ok: boolean; drama?: Drama; applied?: number[]; error?: { message?: string } }>(
-        'drama.saveShotDrafts', { dramaID: drama.id, episodeID: episode.id, shots: parsed.value.shots }
+        'drama.saveShotDrafts', {
+          dramaID: drama.id, episodeID: episode.id, shots: parsed.value.shots,
+          create: creating,
+          expectedEpisodeRev: episode.rev ?? 0, expectedEpisodeDraftRev: episode.draftRev ?? 0,
+          ...(creating ? {} : { expectedShots: digests.map(({ id, rev, draftRev }) => ({ id, rev, draftRev })) }),
+        }
       );
       if (!payload.ok || !payload.drama) throw new Error(payload.error?.message || t('operationFailed'));
       applyDrama(payload.drama);
       const applied = payload.applied?.length ?? 0;
+      if (applied === 0) throw new Error(t('shotDraftInvalid'));
       await appendShotChat('assistant', parsed.note || t('shotDraftReady', { count: applied }), objectID, baseDraftRev);
       setNotice(t('shotDraftReady', { count: applied }));
     } catch (error) {
@@ -936,10 +959,10 @@ export default function App() {
     setBusy('episode');
     try {
       const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { code?: string; message?: string } }>('drama.commitDraft', {
-        dramaID: drama.id, scope: 'episode', episodeID: episode.id, expectedRev: episode.rev ?? 0,
+        dramaID: drama.id, scope: 'episode', episodeID: episode.id, expectedRev: episode.rev ?? 0, expectedDraftRev: episode.draftRev ?? 0,
       });
       // 重复确认按「刚才已经成了」处理，与角色阶段同一个约定。
-      if (!payload.ok && payload.error?.code === 'revision_conflict') { await reload(drama.id); setNotice(t('draftAlreadyAdopted')); return; }
+      if (!payload.ok && payload.error?.code === 'revision_conflict') { await reload(drama.id); setFailure(t('draftChanged')); return; }
       if (!payload.ok) throw new Error(payload.error?.message || t('operationFailed'));
       applyDrama(payload.drama);
       setShowEpisodeDiff(false);
@@ -1077,7 +1100,8 @@ export default function App() {
   /// 输出格式，整轮白跑；而字典里那份至少还能用。
   async function stageSystemPrompt(stage: SkillStage, fallbackKey: string): Promise<string> {
     const composed = await composeSkillPrompt(stage, selectedCommonSkills);
-    return composed ?? t(fallbackKey);
+    const kinds: Record<SkillStage, CreativeKind> = { planning: 'plan', characters: 'character', episodes: 'episode', script: 'episode', passage: 'passage', storyboard: 'shot', shot: 'shot', frames: 'frames' };
+    return `${composed ?? t(fallbackKey)}\n${creativeContract(kinds[stage])}`;
   }
 
   /// 挂上思考流的监听，返回一个撤销函数。四处请求共用同一套。
@@ -1274,14 +1298,58 @@ export default function App() {
   async function saveShot(): Promise<string | undefined> {
     setBusy('shot');
     try {
+      if (shot) {
+        const { title, summary, dialogue, actionStart, actionEnd, cameraIntent, duration, startPrompt, endPrompt } = shotDraft;
+        const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { message?: string } }>('drama.saveDraft', {
+          dramaID: drama?.id, episodeID: episode?.id, shotID: shot.id, scope: 'shot', expectedDraftRev: shot.draftRev ?? 0,
+          draft: { title, summary, dialogue, actionStart, actionEnd, cameraIntent, duration, startPrompt, endPrompt },
+        });
+        if (!payload.ok) throw new Error(payload.error?.message || t('operationFailed'));
+        applyDrama(payload.drama);
+        setNotice(t('draftSaved'));
+        return shot.id;
+      }
       const id = await persistShot();
       if (id) setNotice(t('shotSaved'));
       return id;
     } catch (error) { setFailure(errorMessage(error)); return undefined; } finally { setBusy(''); }
   }
 
+  function hasUnsavedShot() {
+    return !!shot && SHOT_EDIT_FIELDS.some((field) => JSON.stringify(shotDraft[field]) !== JSON.stringify(shotView(shot)[field]));
+  }
+
+  async function resolveShotDraft(adopt: boolean) {
+    if (!drama || !episode || !shot) return;
+    setBusy('shot-resolve');
+    try {
+      const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { message?: string } }>(adopt ? 'drama.commitDraft' : 'drama.discardDraft', {
+        dramaID: drama.id, episodeID: episode.id, shotID: shot.id, scope: 'shot',
+        expectedRev: shot.rev ?? 0, expectedDraftRev: shot.draftRev ?? 0,
+      });
+      if (!payload.ok) throw new Error(payload.error?.message || t('operationFailed'));
+      applyDrama(payload.drama);
+    } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
+  }
+
+  function ShotDraftReview() {
+    if (!shot?.draft) return null;
+    const labels: Record<string, string> = { title: 'shotTitle', summary: 'shotStory', dialogue: 'dialogue', duration: 'durationSeconds', actionStart: 'startAction', actionEnd: 'endAction', cameraIntent: 'cameraIntent', startPrompt: 'startFrame', endPrompt: 'endFrame' };
+    const fields = Object.keys(labels) as Array<keyof typeof shot.draft>;
+    const unsaved = fields.some((field) => JSON.stringify(shotDraft[field]) !== JSON.stringify(shotView(shot)[field]));
+    return <section className="draft-review" aria-label={t('shotDraftReview')}>
+      <p>{t('shotDraftReview')}</p>
+      <details><summary>{t('reviewChanges')}</summary>{fields.filter((field) => field in (shot.draft ?? {})).map((field) => <div className="draft-diff-row" key={field}>
+        <strong>{t(labels[field] ?? field)}</strong><div className="two-col"><pre>{typeof shot[field] === 'string' ? shot[field] : JSON.stringify(shot[field], null, 2)}</pre><pre>{typeof shot.draft?.[field] === 'string' ? shot.draft[field] : JSON.stringify(shot.draft?.[field], null, 2)}</pre></div>
+      </div>)}</details>
+      {unsaved && <p>{t('saveChangesBeforeAdopting')}</p>}
+      <div className="draft-actions"><button disabled={!!busy} onClick={() => void resolveShotDraft(false)}>{t('discardDraft')}</button><button className="primary" disabled={!!busy || unsaved} onClick={() => void resolveShotDraft(true)}>{t('adoptShotDraft')}</button></div>
+    </section>;
+  }
+
   async function generateFrames(kind: 'start' | 'end') {
     if (!drama || !episode) return;
+    if (!shot || shot.draftOnly || shot.draft) { setFailure(t('adoptShotBeforeMedia')); return; }
     const prompt = kind === 'start' ? shotDraft.startPrompt : shotDraft.endPrompt;
     if (!prompt.trim()) { setFailure(t('framePromptRequired')); return; }
     setBusy(kind); setFailure('');
@@ -1306,6 +1374,7 @@ export default function App() {
 
   async function generateVideos() {
     if (!shot) return;
+    if (shot.draftOnly || shot.draft) { setFailure(t('adoptShotBeforeMedia')); return; }
     const start = selectedCandidate(shot, 'start');
     if (!start) { setFailure(t('selectStartFirst')); return; }
     setBusy('video'); setFailure('');
@@ -1391,7 +1460,7 @@ export default function App() {
 
   function ShotRail() {
     if (!episode) return null;
-    return <aside className="shot-rail"><div className="rail-title"><strong>{t('shots')}</strong><button onClick={() => { setDraftingNewShot(true); setShotID(''); setShotDraft(emptyShot(episode.shots.length + 1)); }}>{t('addShot')}</button></div>{episode.shots.map((item) => <button key={item.id} className={shot?.id === item.id ? 'selected' : ''} onClick={() => { setDraftingNewShot(false); setShotID(item.id); }}><span>{String(item.order).padStart(2, '0')}</span><div><strong>{item.title || t('untitledShot')}</strong><small>{item.duration}s · {item.dialogue?.length ?? 0} {t('dialogueLines')}</small></div></button>)}</aside>;
+    return <aside className="shot-rail"><div className="rail-title"><strong>{t('shots')}</strong><button onClick={() => { setDraftingNewShot(true); setShotID(''); setShotDraft(emptyShot(episode.shots.length + 1)); }}>{t('addShot')}</button></div>{episode.shots.map((item) => <button key={item.id} className={shot?.id === item.id ? 'selected' : ''} onClick={() => { setDraftingNewShot(false); setShotID(item.id); }}><span>{String(item.order).padStart(2, '0')}</span><div><strong>{shotView(item).title || t('untitledShot')}</strong>{item.draft && <small>{t('draftBadge')}</small>}<small>{item.duration}s · {item.dialogue?.length ?? 0} {t('dialogueLines')}</small></div></button>)}</aside>;
   }
 
   function Library() {
@@ -1588,6 +1657,7 @@ export default function App() {
     });
     return (
       <div className="chat-panel shot-chat">
+        {episode?.shots.length === 0 && <button className="primary" disabled={busy === 'shot-ask'} onClick={() => void runShotRequest(t('generateStoryboard'))}>{t('generateStoryboard')}</button>}
         <div className="section-title">
           <p className="eyebrow">{t('shotCoCreation')}</p>
           <div className="scope-toggle">
@@ -1650,23 +1720,23 @@ export default function App() {
   }
 
   function Storyboard() {
-    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor"><div className="page-heading compact"><div><p className="eyebrow">{t('shotNumber', { number: shotDraft.order })}</p><h1>{t('storyboardTitle')}</h1></div><button className="primary" disabled={busy === 'shot'} onClick={() => void saveShot()}>{t('saveShot')}</button></div><div className="two-col"><label>{t('shotTitle')}<input value={shotDraft.title} onChange={(event) => setShotDraft({ ...shotDraft, title: event.target.value })} /></label><label>{t('durationSeconds')}<input type="number" value={shotDraft.duration} onChange={(event) => setShotDraft({ ...shotDraft, duration: Number(event.target.value) })} /></label></div><label>{t('shotStory')}<textarea value={shotDraft.summary} onChange={(event) => setShotDraft({ ...shotDraft, summary: event.target.value })} /></label><div className="dialogue-head"><strong>{t('dialogue')}</strong><button className="ghost" onClick={() => setShotDraft({ ...shotDraft, dialogue: [...shotDraft.dialogue, { id: localID(), speaker: '', text: '' }] })}>{t('addLine')}</button></div>{shotDraft.dialogue.map((line, index) => <div className="dialogue-row" key={line.id}><input value={line.speaker} placeholder={t('speaker')} onChange={(event) => { const lines = [...shotDraft.dialogue]; lines[index] = { ...line, speaker: event.target.value }; setShotDraft({ ...shotDraft, dialogue: lines }); }} /><textarea value={line.text} placeholder={t('lineText')} onChange={(event) => { const lines = [...shotDraft.dialogue]; lines[index] = { ...line, text: event.target.value }; setShotDraft({ ...shotDraft, dialogue: lines }); }} /></div>)}<div className="three-col"><label>{t('startAction')}<textarea value={shotDraft.actionStart} onChange={(event) => setShotDraft({ ...shotDraft, actionStart: event.target.value })} /></label><label>{t('endAction')}<textarea value={shotDraft.actionEnd} onChange={(event) => setShotDraft({ ...shotDraft, actionEnd: event.target.value })} /></label><label>{t('cameraIntent')}<textarea value={shotDraft.cameraIntent} onChange={(event) => setShotDraft({ ...shotDraft, cameraIntent: event.target.value })} /></label></div>{ShotCoCreation()}</section></div></main></div>);
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor co-creation-workspace"><div className="shot-content">{ShotDraftReview()}<div className="page-heading compact"><div><p className="eyebrow">{t('shotNumber', { number: shotDraft.order })}</p><h1>{t('storyboardTitle')}</h1></div><button className="primary" disabled={busy === 'shot'} onClick={() => void saveShot()}>{t('saveShot')}</button></div><div className="two-col"><label>{t('shotTitle')}<input disabled={busy === 'shot-ask' || busy === 'frame-ask'} value={shotDraft.title} onChange={(event) => setShotDraft({ ...shotDraft, title: event.target.value })} /></label><label>{t('durationSeconds')}<input disabled={busy === 'shot-ask' || busy === 'frame-ask'} type="number" value={shotDraft.duration} onChange={(event) => setShotDraft({ ...shotDraft, duration: Number(event.target.value) })} /></label></div><label>{t('shotStory')}<textarea disabled={busy === 'shot-ask' || busy === 'frame-ask'} value={shotDraft.summary} onChange={(event) => setShotDraft({ ...shotDraft, summary: event.target.value })} /></label><div className="dialogue-head"><strong>{t('dialogue')}</strong><button className="ghost" onClick={() => setShotDraft({ ...shotDraft, dialogue: [...shotDraft.dialogue, { id: localID(), speaker: '', text: '' }] })}>{t('addLine')}</button></div>{shotDraft.dialogue.map((line, index) => <div className="dialogue-row" key={line.id}><input disabled={busy === 'shot-ask' || busy === 'frame-ask'} value={line.speaker} placeholder={t('speaker')} onChange={(event) => { const lines = [...shotDraft.dialogue]; lines[index] = { ...line, speaker: event.target.value }; setShotDraft({ ...shotDraft, dialogue: lines }); }} /><textarea disabled={busy === 'shot-ask' || busy === 'frame-ask'} value={line.text} placeholder={t('lineText')} onChange={(event) => { const lines = [...shotDraft.dialogue]; lines[index] = { ...line, text: event.target.value }; setShotDraft({ ...shotDraft, dialogue: lines }); }} /></div>)}<div className="three-col"><label>{t('startAction')}<textarea disabled={busy === 'shot-ask' || busy === 'frame-ask'} value={shotDraft.actionStart} onChange={(event) => setShotDraft({ ...shotDraft, actionStart: event.target.value })} /></label><label>{t('endAction')}<textarea disabled={busy === 'shot-ask' || busy === 'frame-ask'} value={shotDraft.actionEnd} onChange={(event) => setShotDraft({ ...shotDraft, actionEnd: event.target.value })} /></label><label>{t('cameraIntent')}<textarea disabled={busy === 'shot-ask' || busy === 'frame-ask'} value={shotDraft.cameraIntent} onChange={(event) => setShotDraft({ ...shotDraft, cameraIntent: event.target.value })} /></label></div></div>{ShotCoCreation()}</section></div></main></div>);
   }
 
   function FrameColumn(kind: 'start' | 'end') {
     const candidates = kind === 'start' ? shot?.startCandidates ?? [] : shot?.endCandidates ?? [];
     const selectedID = kind === 'start' ? shot?.selectedStartID : shot?.selectedEndID;
     const prompt = kind === 'start' ? shotDraft.startPrompt : shotDraft.endPrompt;
-    return <section className="frame-column"><div className="frame-title"><div><span>{kind === 'start' ? t('startLabel') : t('endLabel')}</span><div><h2>{t(kind === 'start' ? 'startFrame' : 'endFrame')}</h2><p>{t(kind === 'start' ? 'startFrameHint' : 'endFrameHint')}</p></div></div><small>{candidates.length} {t('candidates')}</small></div><textarea className="prompt-box" value={prompt} placeholder={t('framePromptPlaceholder')} onChange={(event) => setShotDraft({ ...shotDraft, [kind === 'start' ? 'startPrompt' : 'endPrompt']: event.target.value })} /><div className="candidate-grid">{candidates.map((candidate) => <button className={selectedID === candidate.id ? 'chosen' : ''} key={candidate.id} onClick={() => void chooseFrame(kind, candidate.id)}><img src={candidate.mediaURL} alt={t('frameCandidate')} /><span>{selectedID === candidate.id ? t('selected') : t('select')}</span></button>)}{candidates.length === 0 && <div className="candidate-empty">{t('noCandidates')}</div>}</div><button className="primary wide" disabled={busy === kind} onClick={() => void generateFrames(kind)}>{busy === kind ? t('generatingImages') : t('generateCandidates', { count: candidateCount })}</button></section>;
+    return <section className="frame-column"><div className="frame-title"><div><span>{kind === 'start' ? t('startLabel') : t('endLabel')}</span><div><h2>{t(kind === 'start' ? 'startFrame' : 'endFrame')}</h2><p>{t(kind === 'start' ? 'startFrameHint' : 'endFrameHint')}</p></div></div><small>{candidates.length} {t('candidates')}</small></div><textarea disabled={busy === 'shot-ask' || busy === 'frame-ask'} className="prompt-box" value={prompt} placeholder={t('framePromptPlaceholder')} onChange={(event) => setShotDraft({ ...shotDraft, [kind === 'start' ? 'startPrompt' : 'endPrompt']: event.target.value })} /><div className="candidate-grid">{candidates.map((candidate) => <button className={selectedID === candidate.id ? 'chosen' : ''} key={candidate.id} onClick={() => void chooseFrame(kind, candidate.id)}><img src={candidate.mediaURL} alt={t('frameCandidate')} /><span>{selectedID === candidate.id ? t('selected') : t('select')}</span></button>)}{candidates.length === 0 && <div className="candidate-empty">{t('noCandidates')}</div>}</div><button className="primary wide" disabled={!!busy || !shot || !!shot.draft || !!shot.draftOnly} onClick={() => void generateFrames(kind)}>{busy === kind ? t('generatingImages') : t('generateCandidates', { count: candidateCount })}</button></section>;
   }
 
   function Frames() {
-    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor"><div className="page-heading compact"><div><p className="eyebrow">{shot?.title || t('selectShot')}</p><h1>{t('frameTitle')}</h1><p>{t('frameHint')}</p></div><div className="generation-controls"><Dropdown ariaLabel={t('imageModel')} value={imageModel} options={imageModels.map((model) => ({ value: model, label: model }))} onChange={(next) => setImageModel(next as ImageModel)} /><Dropdown ariaLabel={t('imageCount')} value={String(candidateCount)} options={[1, 2, 4, 6].map((count) => ({ value: String(count), label: t('countImages', { count }) }))} onChange={(next) => setCandidateCount(Number(next))} /></div></div><div className="frames-grid">{FrameColumn('start')}{FrameColumn('end')}</div></section></div></main></div>);
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor co-creation-workspace"><div className="shot-content">{ShotDraftReview()}<div className="page-heading compact"><div><p className="eyebrow">{shot?.title || t('selectShot')}</p><h1>{t('frameTitle')}</h1><p>{t('frameHint')}</p></div><div className="generation-controls"><Dropdown ariaLabel={t('imageModel')} value={imageModel} options={imageModels.map((model) => ({ value: model, label: model }))} onChange={(next) => setImageModel(next as ImageModel)} /><Dropdown ariaLabel={t('imageCount')} value={String(candidateCount)} options={[1, 2, 4, 6].map((count) => ({ value: String(count), label: t('countImages', { count }) }))} onChange={(next) => setCandidateCount(Number(next))} /></div></div><button className="ghost" disabled={!shot || !!busy} onClick={() => void saveShot()}>{t('saveFrameDraft')}</button><div className="frames-grid">{FrameColumn('start')}{FrameColumn('end')}</div></div>{drama && episode && shot && <FrameCoCreation key={shot.id} drama={drama} episode={episode} shot={shot} provider={assistantProvider} model={assistantModel} routing={ModelRouting('compact')} t={t} onUpdate={applyDrama} blocked={hasUnsavedShot()} buildSystem={() => stageSystemPrompt('frames', 'frameCoCreationSystem')} onBusyChange={(running) => setBusy(running ? 'frame-ask' : '')} />}</section></div></main></div>);
   }
 
   function Video() {
     const start = selectedCandidate(shot, 'start'); const end = selectedCandidate(shot, 'end');
-    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor"><div className="page-heading compact"><div><p className="eyebrow">{shot?.title || t('selectShot')}</p><h1>{t('videoTitle')}</h1><p>{t('videoHint')}</p></div></div><div className="video-flow"><div className="anchor-card"><span>{t('selectedStart')}</span>{start ? <img src={start.mediaURL} alt={t('startFrame')} /> : <div>{t('notSelected')}</div>}</div><div className="flow-duration"><strong>{t('durationValue', { count: shot?.duration ?? 4 })}</strong><small>{t('frameTransition')}</small></div><div className="anchor-card muted"><span>{t('selectedEnd')}</span>{end ? <img src={end.mediaURL} alt={t('endFrame')} /> : <div>{t('optional')}</div>}</div></div><div className="capability-note"><strong>{t('providerCapability')}</strong><p>{t('firstFrameOnly')}</p></div><div className="mode-grid"><label className="mode active"><input type="radio" checked readOnly /><strong>{t('firstFrameMode')}</strong><span>{t('firstFrameModeHint')}</span></label><label className="mode disabled"><input type="radio" disabled /><strong>{t('lockedEndsMode')}</strong><span>{t('lockedEndsModeHint')}</span></label></div><div className="submit-row"><label>{t('videoDrawCount')}<Dropdown ariaLabel={t('videoDrawCount')} value={String(videoCount)} options={[1, 2, 3, 4].map((count) => ({ value: String(count), label: t('countVideos', { count }) }))} onChange={(next) => setVideoCount(Number(next))} /></label><button className="primary" disabled={busy === 'video' || !start} onClick={() => void generateVideos()}>{t('submitVideo')}</button></div></section></div></main></div>);
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="board-layout">{ShotRail()}<section className="shot-editor"><div className="page-heading compact"><div><p className="eyebrow">{shot?.title || t('selectShot')}</p><h1>{t('videoTitle')}</h1><p>{t('videoHint')}</p></div></div><div className="video-flow"><div className="anchor-card"><span>{t('selectedStart')}</span>{start ? <img src={start.mediaURL} alt={t('startFrame')} /> : <div>{t('notSelected')}</div>}</div><div className="flow-duration"><strong>{t('durationValue', { count: shot?.duration ?? 4 })}</strong><small>{t('frameTransition')}</small></div><div className="anchor-card muted"><span>{t('selectedEnd')}</span>{end ? <img src={end.mediaURL} alt={t('endFrame')} /> : <div>{t('optional')}</div>}</div></div><div className="capability-note"><strong>{t('providerCapability')}</strong><p>{t('firstFrameOnly')}</p></div><div className="mode-grid"><label className="mode active"><input type="radio" checked readOnly /><strong>{t('firstFrameMode')}</strong><span>{t('firstFrameModeHint')}</span></label><label className="mode disabled"><input type="radio" disabled /><strong>{t('lockedEndsMode')}</strong><span>{t('lockedEndsModeHint')}</span></label></div><div className="submit-row"><label>{t('videoDrawCount')}<Dropdown ariaLabel={t('videoDrawCount')} value={String(videoCount)} options={[1, 2, 3, 4].map((count) => ({ value: String(count), label: t('countVideos', { count }) }))} onChange={(next) => setVideoCount(Number(next))} /></label><button className="primary" disabled={busy === 'video' || !start || !!shot?.draft || !!shot?.draftOnly} onClick={() => void generateVideos()}>{t('submitVideo')}</button></div></section></div></main></div>);
   }
 
   let body = Library();

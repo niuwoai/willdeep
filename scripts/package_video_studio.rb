@@ -21,7 +21,7 @@ name = manifest.fetch("name")
 version = manifest.fetch("version")
 abort "Invalid plugin identity" unless name.match?(/\A[a-z0-9-]+\z/) && version.match?(/\A\d+\.\d+\.\d+(?:-[a-z0-9.]+)?\z/)
 output = File.join(root, "build", "plugins", "#{name}-#{version}.zip")
-runtime_paths = %w[.codex-plugin .willdeep-plugin mcp.json server skills ui/dist README.md CHANGELOG.md]
+runtime_paths = %w[.codex-plugin .willdeep-plugin mcp.json server skills schemas ui/dist README.md CHANGELOG.md]
 
 Dir.mktmpdir("video-studio-package-") do |temporary|
   package = File.join(temporary, name)

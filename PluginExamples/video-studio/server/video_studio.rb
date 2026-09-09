@@ -211,7 +211,7 @@ TOOLS = [
   {
     name: "drama.save_shot_drafts",
     description: "Write drafts for many shots at once, matched by shot order. Atomic: either every listed shot is written or none is. Shots whose order is not found are reported in `skipped` rather than dropped silently.",
-    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, episodeID: { type: "string" }, shots: { type: "array", items: { type: "object", properties: { order: { type: "integer" }, title: { type: "string" }, summary: { type: "string" }, actionStart: { type: "string" }, actionEnd: { type: "string" }, cameraIntent: { type: "string" }, startPrompt: { type: "string" }, endPrompt: { type: "string" }, dialogue: { type: "array", items: { type: "object" } }, duration: { type: "integer" } }, required: ["order"] } } }, required: %w[dramaID episodeID shots] }
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, episodeID: { type: "string" }, create: { type: "boolean" }, expectedEpisodeRev: { type: "integer" }, expectedEpisodeDraftRev: { type: "integer" }, expectedShots: { type: "array", items: { type: "object", properties: { id: { type: "string" }, rev: { type: "integer" }, draftRev: { type: "integer" } }, required: %w[id rev draftRev] } }, shots: { type: "array", items: { type: "object", properties: { order: { type: "integer" }, title: { type: "string" }, summary: { type: "string" }, actionStart: { type: "string" }, actionEnd: { type: "string" }, cameraIntent: { type: "string" }, startPrompt: { type: "string" }, endPrompt: { type: "string" }, dialogue: { type: "array", items: { type: "object" } }, duration: { type: "integer" } }, required: ["order"] } } }, required: %w[dramaID episodeID shots] }
   },
   {
     name: "drama.save_episode_drafts",
@@ -221,7 +221,7 @@ TOOLS = [
   {
     name: "drama.commit_draft",
     description: "Adopt the working draft into committed content, clear the draft, and bump rev. A second call with the same expectedRev returns revision_conflict, which callers should read as 'already committed'.",
-    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, scope: { type: "string", enum: DramaService::DRAFT_SCOPES }, characterID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, expectedRev: { type: "integer" } }, required: %w[dramaID scope] }
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, scope: { type: "string", enum: DramaService::DRAFT_SCOPES }, characterID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, expectedRev: { type: "integer" }, expectedDraftRev: { type: "integer" } }, required: %w[dramaID scope] }
   },
   {
     name: "drama.discard_draft",
@@ -453,7 +453,7 @@ ARGF.each_line do |line|
              {
                protocolVersion: "2025-06-18",
                capabilities: { tools: {} },
-               serverInfo: { name: "video-studio", version: "0.14.1" }
+               serverInfo: { name: "video-studio", version: "0.15.0" }
              }
            when "tools/list"
              { tools: TOOLS }
