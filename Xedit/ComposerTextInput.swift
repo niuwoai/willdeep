@@ -388,12 +388,16 @@ struct ComposerTextEditor: NSViewRepresentable {
                 historyIndex = nil
                 lastHistoryString = nil
             }
-            updateSlashMenuVisibility(for: newValue)
+            updateSlashMenuVisibility(for: textView)
             // Keep the slash palette's filter in sync. rc482: the composer
             // no longer repaints through `appState` on each keystroke, so the
             // palette filters off this pushed query instead of reading
             // `appState.agentInput` in `body`.
-            onSlashQueryChange(newValue)
+            //
+            // 推的是光标所在那个斜杠 token（带回斜杠，面板的过滤器认这个
+            // 形状），不是整个缓冲区。斜杠不在开头时，整个缓冲区喂给过滤器
+            // 会被它的 `hasPrefix("/")` 判掉。
+            onSlashQueryChange(currentSlashQuery(in: textView).map { "/" + $0 } ?? "")
             updateAtMenuVisibility(for: textView)
             updateSkillMenuVisibility(for: textView)
             textView.needsDisplay = true
@@ -563,15 +567,11 @@ struct ComposerTextEditor: NSViewRepresentable {
             textView.needsDisplay = true
         }
 
-        private func updateSlashMenuVisibility(for newValue: String) {
-            // Show the palette only when the buffer starts with "/" and
-            // the user is still editing the command token. The first
-            // whitespace starts argument entry and dismisses the palette.
-            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
-            let shouldShow = newValue.hasPrefix("/")
-                && !newValue.contains("\n")
-                && !trimmed.isEmpty
-                && !newValue.dropFirst().contains(where: { $0.isWhitespace })
+        private func updateSlashMenuVisibility(for textView: NSTextView) {
+            // 光标是不是正停在一个斜杠 token 里。此前看的是整个缓冲区是否以
+            // "/" 开头，于是斜杠后一有空格面板就消失，标记类的斜杠词也就写
+            // 不到句尾去。
+            let shouldShow = currentSlashQuery(in: textView) != nil
             if slashMenuVisible.wrappedValue != shouldShow {
                 slashMenuVisible.wrappedValue = shouldShow
                 if shouldShow {
@@ -622,6 +622,27 @@ struct ComposerTextEditor: NSViewRepresentable {
 
         fileprivate func currentSkillQuery(in textView: NSTextView) -> String? {
             currentTriggerQuery(in: textView, trigger: 0x24)
+        }
+
+        /// 斜杠 token。和 `@` / `$` 用同一条通用判定，再加两道防误触。
+        ///
+        /// 斜杠此前只在整条消息开头才认，理由说得通：多数斜杠命令就是整条
+        /// 消息本身（`/code-review` 后面跟的是参数不是自然语言）。但像
+        /// `/no-subagent` 这种只是个标记，写在句尾比写在开头自然得多，而旧
+        /// 规则把标记类和命令类按同一套管，于是「把这批测试跑一遍
+        /// /no-subagent」根本唤不起面板。
+        ///
+        /// 放宽的代价是路径会误触发，所以加两条：token 里只允许字母、数字、
+        /// 连字符、下划线（`/Users/rocky` 一旦出现第二个斜杠就不再是候选），
+        /// 且整段里不能有第二个斜杠。`src/App.tsx` 本来就被通用判定挡住了
+        /// ——它的斜杠前面是字母不是空白。
+        fileprivate func currentSlashQuery(in textView: NSTextView) -> String? {
+            guard let token = currentTriggerQuery(in: textView, trigger: 0x2F) else { return nil }
+            let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+            guard token.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
+            // 第二个斜杠意味着这是一条路径，不是命令。
+            guard textView.string.filter({ $0 == "/" }).count == 1 else { return nil }
+            return token
         }
 
         private func updateAtMenuVisibility(for textView: NSTextView) {

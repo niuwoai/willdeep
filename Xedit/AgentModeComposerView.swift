@@ -1180,7 +1180,12 @@ private struct ComposerCard: View {
         let command = commands[safeIndex]
         // 先把当前 raw input 里的 args 切出来 —— workflow 命令需要它，
         // core 命令忽略。然后再清空输入框。
-        let args = SlashCommand.argsForCommand(appState.agentInput)
+        //
+        // 斜杠词写在句尾时正文在它前面，按第一个空格切会把整句连标记一起
+        // 当成正文，发出去的消息里就带着一个没被消费掉的 `/no-subagent`。
+        let args = SlashCommand.hasLeadingSlash(appState.agentInput)
+            ? SlashCommand.argsForCommand(appState.agentInput)
+            : SlashCommand.argsByRemovingTrailingCommand(appState.agentInput, token: command.title)
         if command.argumentMode.acceptsArguments && args.isEmpty {
             stageSlashCommandForArguments(command)
             return true

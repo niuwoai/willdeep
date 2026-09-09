@@ -212,6 +212,31 @@ struct SlashCommand: Identifiable {
             .trimmingCharacters(in: .whitespaces)
     }
 
+    /// 斜杠词写在句尾时，正文是「去掉那个词剩下的部分」。
+    ///
+    /// `/no-subagent` 这类命令的参数就是正文（它的 action 拿 args 当用户
+    /// 消息发出去），所以旧规则要求「斜杠开头 + 后面跟正文」。但用户实际
+    /// 想写的是「把这批测试跑一遍 /no-subagent」——正文在前、标记在后。
+    /// 那种写法下按第一个空格切 args 会把整句连标记一起当成正文，于是
+    /// 发出去的消息里带着一个没被消费掉的 `/no-subagent`。
+    ///
+    /// 这里按位置摘掉那一个 token，其余原样保留（包括中间的换行与多余
+    /// 空格之外的排版）。
+    static func argsByRemovingTrailingCommand(_ rawInput: String, token: String) -> String {
+        guard let range = rawInput.range(of: token, options: .backwards) else {
+            return rawInput.trimmingCharacters(in: .whitespaces)
+        }
+        let head = rawInput[..<range.lowerBound]
+        let tail = rawInput[range.upperBound...]
+        return (String(head) + String(tail))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 光标所在的斜杠 token 是不是写在正文中间（而不是整条消息的开头）。
+    static func hasLeadingSlash(_ rawInput: String) -> Bool {
+        rawInput.trimmingCharacters(in: .whitespaces).hasPrefix("/")
+    }
+
     /// Finds an exact slash-command invocation in the composer. Arguments
     /// are deliberately excluded from matching so `/research topic` resolves
     /// to `/research`, while ordinary prose beginning with `/` falls through.
