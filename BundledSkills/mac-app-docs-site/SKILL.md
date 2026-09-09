@@ -1,6 +1,7 @@
 ---
 name: mac-app-docs-site
 description: Capture real macOS app interfaces and end-to-end workflows with the available Computer Use skill, turn the evidence into an illustrated Markdown tutorial directory, and integrate that directory into a tested documentation website. Use when documenting or re-documenting a Mac app, creating screenshot-based help/tutorial pages, refreshing docs after UI changes, converting an existing Markdown tutorial directory into web routes, or auditing that screenshots, Markdown, navigation, and website rendering still agree.
+effects: host-control
 ---
 
 # Mac App Docs Site

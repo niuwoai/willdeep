@@ -1,6 +1,7 @@
 ---
 name: system-info
 description: Get system information — OS version, disk usage, memory, running processes, network status. Use when users ask about their computer status or system health.
+effects: read-only
 ---
 
 # System Info Skill

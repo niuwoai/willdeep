@@ -1,6 +1,7 @@
 ---
 name: music-listener
 description: Inspect a local audio file's metadata and technical properties, and use a configured audio-analysis or transcription MCP tool when semantic listening is required. Use for duration, codec, channels, tags, transcription, lyrics, genre, mood, or tempo questions.
+effects: outbound-query
 ---
 
 # Music and Audio Inspection

@@ -1,6 +1,7 @@
 ---
 name: figma-swiftui
 description: Translate between Figma designs and SwiftUI code for iOS, iPadOS, and macOS projects. Use when the user asks to implement, reproduce, convert, or synchronize a Figma design in Swift/SwiftUI, or to push SwiftUI screens, components, or design tokens back into Figma. Trigger when a Figma URL or Figma design is paired with Swift, SwiftUI, iOS, iPhone, iPad, macOS, .swift files, or an Xcode project. Use configured Figma MCP tools when available; otherwise fall back safely to attached screenshots and local code without inventing inaccessible design details.
+effects: outbound-query
 ---
 
 # Figma ↔ SwiftUI

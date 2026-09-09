@@ -1,6 +1,7 @@
 ---
 name: thread-management
 description: Inspect WillDeep sessions in the current workspace and improve the current session title with supported session tools. Use when the user asks which workspace conversations exist or wants the current conversation renamed.
+effects: read-only
 ---
 
 # Session Management

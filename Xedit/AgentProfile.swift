@@ -68,7 +68,12 @@ nonisolated struct AgentProfileCapability: Codable, Equatable, Sendable {
     /// anything at all (a one-round worker cannot read then answer); the
     /// ceiling keeps a stuck loop from billing indefinitely — the child pays
     /// per round and nobody is watching it.
-    static let roundBudgetRange: ClosedRange<Int> = 1...64
+    ///
+    /// 天花板从 64 提到 256：它一直是计费闸，不是窗口约束，而真正拦住长
+    /// 任务的是上下文——worker 以前撞窗即失败，前面几十轮的钱全白花。加了
+    /// 撞窗前自动压缩之后，长任务能跑完，这个数才有意义放开。它仍然是闸：
+    /// 没人盯着子 Agent，一个卡住的循环必须有个尽头。
+    static let roundBudgetRange: ClosedRange<Int> = 1...256
 
     /// Clamp rather than reject: a stored value from an older build (or a
     /// hand-edited defaults blob) must still produce a runnable trade.

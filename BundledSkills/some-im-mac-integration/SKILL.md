@@ -1,6 +1,7 @@
 ---
 name: some-im-mac-integration
 description: Guide WillDeep macOS app integration with some.im. Use when modifying or reviewing some.im account login, browser pairing, Keychain credential storage, Agent provider library sync, image/video generation routing, VL/image-understanding fallback, onboarding, or Settings some.im flows.
+effects: read-only
 ---
 
 # some.im Mac Integration

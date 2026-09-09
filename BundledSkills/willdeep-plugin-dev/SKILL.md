@@ -1,6 +1,7 @@
 ---
 name: willdeep-plugin-dev
 description: WillDeep 宿主机理说明与插件开发指南。解释 WillDeep 自身如何运行（目的地导航、会话与 Agent 回合、工具与审批、MCP/Skill/Workflow 的分工），以及如何为它开发插件：包结构、`.willdeep-plugin/plugin.json` 清单字段、页面运行时（localWeb / mcpApp / declarative）、`window.willdeep.*` 页面 API、命令与菜单贡献点、权限模型、安装与审批流程、体积与安全上限。当用户要写/改/调试 WillDeep 插件，问某个清单字段、插件页面能调什么 API、插件为什么装不上或命令为什么被拒，或想了解 WillDeep 内部是怎么运转的时候使用。Use when developing, debugging, or explaining WillDeep plugins, the plugin manifest schema, the in-page bridge API, plugin permissions and install approval, or WillDeep's own runtime architecture.
+effects: read-only
 ---
 
 # WillDeep 机理与插件开发

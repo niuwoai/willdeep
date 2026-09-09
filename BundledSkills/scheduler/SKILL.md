@@ -1,6 +1,7 @@
 ---
 name: scheduler
 description: Create recurring WillDeep tasks that run at a fixed minute interval or a daily local time, and complete goal-based scheduled tasks when their goal is met. Use for periodic checks, recurring summaries, monitors, and daily reminders.
+effects: side-effects
 ---
 
 # Scheduler

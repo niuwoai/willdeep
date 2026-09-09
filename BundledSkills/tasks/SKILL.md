@@ -1,6 +1,7 @@
 ---
 name: tasks
 description: "Route multi-step work to WillDeep's supported task mechanisms: a workspace todo file for current work, a scheduled task for recurring follow-up, and session metadata for workspace conversations. Use when work spans several steps or turns."
+effects: side-effects
 ---
 
 # Task Coordination

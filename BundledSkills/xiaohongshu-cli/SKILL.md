@@ -1,6 +1,7 @@
 ---
 name: xiaohongshu-cli
 description: "Use for ANY Xiaohongshu / 小红书 / Rednote / Little Red Book task: login, account status, search notes/users/topics, read note details/comments, browse feed and hot lists, like/favorite/comment/reply, follow/unfollow, check favorites/notifications/my-notes, post image notes, and delete your own notes."
+effects: side-effects
 ---
 
 # Xiaohongshu CLI Skill

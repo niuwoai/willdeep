@@ -1,6 +1,7 @@
 ---
 name: discord
 description: Operate Discord through a Discord MCP server or connector configured in WillDeep. Use for sending messages or files, reading channels, reactions, and server moderation only after discovering the exact available tools and confirming consequential actions.
+effects: side-effects
 ---
 
 # Discord

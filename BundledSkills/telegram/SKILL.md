@@ -1,6 +1,7 @@
 ---
 name: telegram
 description: Operate Telegram through a Telegram MCP server or connector configured in WillDeep. Use for sending messages or media, reading chats, reactions, and group administration only after discovering the exact available tools and confirming consequential actions.
+effects: side-effects
 ---
 
 # Telegram

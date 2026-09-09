@@ -1,6 +1,7 @@
 ---
 name: web-fetch
 description: Fetch and read a known public web page or HTTP API with WillDeep's built-in web tool, using Chrome or the Embedded Browser only when authentication or interaction is required. Use when the user provides a URL or a search result needs full-page content.
+effects: outbound-query
 ---
 
 # Web Fetch

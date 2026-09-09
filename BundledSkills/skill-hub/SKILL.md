@@ -1,6 +1,7 @@
 ---
 name: skill-hub
 description: Inspect and maintain WillDeep's built-in, user-created, and plugin-provided skills with the supported skill tools. Use when the user wants to browse skills, read instructions, create or update a reusable user skill, or remove a user skill.
+effects: host-control
 ---
 
 # WillDeep Skill Hub

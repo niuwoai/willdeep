@@ -1,6 +1,7 @@
 ---
 name: browser
 description: Automate websites with WillDeep's built-in Chrome Relay or Embedded Browser, and use a configured browser MCP server for structured QA. Use for navigation, page reading, form filling, clicking, screenshots, console or network inspection, and authenticated browser work.
+effects: host-control
 ---
 
 # Browser Automation

@@ -1,6 +1,7 @@
 ---
 name: selfie
 description: Create a photorealistic self-portrait or selfie with WillDeep's image tools, optionally preserving a user-provided reference image. Use when the user asks to generate or edit a selfie, avatar, or personal portrait.
+effects: side-effects
 ---
 
 # Selfie and Portrait Generation

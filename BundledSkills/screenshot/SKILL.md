@@ -1,6 +1,7 @@
 ---
 name: screenshot
 description: Capture a Mac display, Android device, iOS Simulator, Chrome tab, Embedded Browser page, or native app window with WillDeep's screenshot tools. Use for user-requested captures and visual verification after UI changes.
+effects: host-control
 ---
 
 # Screenshots

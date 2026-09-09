@@ -1,6 +1,7 @@
 ---
 name: twitter-media
 description: Read and summarize public Twitter/X posts and their media through WillDeep's web, browser, and file tools. Use when the user shares an x.com or twitter.com status URL or asks to inspect a public post.
+effects: outbound-query
 ---
 
 # Twitter/X Media

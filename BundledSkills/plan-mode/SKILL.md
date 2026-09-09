@@ -1,6 +1,7 @@
 ---
 name: plan-mode
 description: Produce a structured, evidence-based implementation plan without changing files or external state. Use when the user asks to plan, evaluate approaches, identify risks, or review a complex task before execution.
+effects: read-only
 ---
 
 # Planning

@@ -1,6 +1,7 @@
 ---
 name: computer-use
 description: Control native macOS applications through WillDeep's separate Computer Use helper. It can inspect Accessibility elements, capture the selected app window, click, right-click, scroll, drag, type, and send keys. Use for native apps, not web pages.
+effects: host-control
 ---
 
 # WillDeep Computer Use

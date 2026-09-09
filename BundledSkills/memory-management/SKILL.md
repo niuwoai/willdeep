@@ -1,6 +1,7 @@
 ---
 name: memory-management
 description: Save durable user preferences, project rules, recurring facts, or reusable constraints with WillDeep's memory tool, and explain the limits of currently recalled context. Use when the user says “remember this” or establishes a rule that should affect future turns.
+effects: host-control
 ---
 
 # Memory Management

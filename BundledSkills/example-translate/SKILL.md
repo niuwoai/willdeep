@@ -1,6 +1,7 @@
 ---
 name: example-translate
 description: Example declarative workflow shipped with WillDeep. Run `/translate-cn <text>` to translate anything into Simplified Chinese. Use this file as a template — copy it to `~/.willdeep/skills/my-skill/` and edit `workflow.yaml`.
+effects: read-only
 ---
 
 # Example Translate Skill

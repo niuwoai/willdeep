@@ -1,6 +1,7 @@
 ---
 name: music-gen
 description: Generate music only through a music-generation MCP server explicitly configured in WillDeep. Use for songs, instrumentals, lyrics-to-music, or vocal generation after discovering the exact provider tools; otherwise report the missing capability and suggest an integration.
+effects: side-effects
 ---
 
 # Music Generation

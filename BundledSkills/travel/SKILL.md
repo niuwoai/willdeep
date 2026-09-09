@@ -1,6 +1,7 @@
 ---
 name: travel
 description: Research and plan real travel with WillDeep's web and browser tools. Use for destination comparisons, itineraries, current weather or opening information, transport, lodging research, local food, budgets, and travel checklists.
+effects: host-control
 ---
 
 # Travel Research and Planning

@@ -1,6 +1,7 @@
 ---
 name: send-file
 description: Deliver a local file, image, audio clip, video, or document through the current WillDeep conversation. Use when the user asks to see, open, download, or receive a generated or existing artifact.
+effects: side-effects
 ---
 
 # Send a File

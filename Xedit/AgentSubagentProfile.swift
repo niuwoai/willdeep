@@ -365,12 +365,18 @@ nonisolated enum AgentSubagentProfileCatalog {
         id: implementerID,
         purpose: "Implement a bounded multi-file feature or refactor across at most 16 declared existing or new paths on a deployable 256K model.",
         modelBinding: implementerBinding,
+        // 技能与 git_status 是实现工种真正缺的两样：一份写好的流程比让它
+        // 现场推导便宜得多，而改代码前看一眼工作树状态是基本功。联网刻意
+        // 不给——查文档的收益抵不过一个实现器被搜索结果带跑偏的代价。
         toolNames: [
             "search_files", "grep_files", "list_directory", "read_file",
             "create_file", "apply_patch", "run_command",
+            "git_status", "list_skills", "read_skill",
         ],
         capabilityPromptSection: AgentSubagentJobPrompts.implementer,
-        maxRounds: 18,
+        // 一个路径读一遍再改一遍就是两轮，声明上限是 16 个路径。18 轮连
+        // 半数文件都走不完，写到一半被预算掐断比没开始更糟。
+        maxRounds: 32,
         toolPayloadCharacterLimit: implementerPayloadCharacterLimit,
         escalation: .retryWithParentModel,
         requiresWriteAccess: true
@@ -527,7 +533,13 @@ nonisolated enum AgentSubagentProfileCatalog {
         // immediately after the decisive command returned.
         maxRounds: 32,
         toolPayloadCharacterLimit: workerPayloadCharacterLimit,
-        escalation: .retryWithParentModel
+        escalation: .retryWithParentModel,
+        // 唯一一个自带预加载技能的内置工种。挂的是跨项目通用的变更纪律
+        // （先备份、一步一验证、失败就停、回滚命令写进汇报），刻意不挂任何
+        // 项目特定的发版流程：那种流程挂死在工种上，它去动另一个项目时会
+        // 照着错的流程走，比没有流程更危险。项目流程走 task.skill 按任务点名。
+        // 用户仍可在设置里覆盖这份清单。
+        skillIdentifiers: ["ops-discipline"]
     )
 
     static let terminalOperator = AgentSubagentProfile(
@@ -571,7 +583,9 @@ nonisolated enum AgentSubagentProfileCatalog {
             .union(terminalOperatorToolNames)
             .union(generalistExtraToolNames),
         capabilityPromptSection: AgentSubagentJobPrompts.generalist,
-        maxRounds: 14,
+        // 兜底工种接的是「不属于其它任何工种」的活，形状事先不知道，
+        // 预算给窄了它只能半途汇报「还没查完」。
+        maxRounds: 24,
         toolPayloadCharacterLimit: generalistPayloadCharacterLimit,
         escalation: .retryWithParentModel
     )

@@ -1,6 +1,7 @@
 ---
 name: file-manager
 description: Find, inspect, organize, rename, move, compress, or clean up files with WillDeep's workspace tools and approved macOS app control. Use for file searches and file operations with explicit, bounded targets.
+effects: side-effects
 ---
 
 # File Management

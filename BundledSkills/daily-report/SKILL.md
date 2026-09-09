@@ -1,6 +1,7 @@
 ---
 name: daily-report
 description: Build an evidence-based work report for a day or date range from the current WillDeep workspace, Git history, working-tree changes, and visible session metadata. Use for daily reports, weekly recaps, work journals, and questions such as “我今天做了什么”.
+effects: read-only
 ---
 
 # Daily Report

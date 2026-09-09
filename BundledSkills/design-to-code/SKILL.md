@@ -1,6 +1,7 @@
 ---
 name: design-to-code
 description: Implement a selected screenshot, mockup, Figma frame, generated design, or other visual reference as a faithful, responsive, interactive web frontend. Use when the user asks to turn a visible design into code, recreate or clone a UI from an image, reproduce a mockup in React/HTML/CSS, or says design to code, screenshot to code, 截图转代码, 照着实现, 还原页面, or 复刻界面. Require an identifiable visual target before editing. Prefer the existing project stack; for a new web frontend prefer React and TypeScript. Route native SwiftUI targets to figma-swiftui instead.
+effects: read-only
 ---
 
 # Design to Code

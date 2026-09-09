@@ -1,6 +1,7 @@
 ---
 name: video-reader
 description: Inspect local video or audio files with WillDeep and available system tools, extracting metadata, representative frames, and optional transcription through a configured provider. Use when the user asks what a video contains or says.
+effects: read-only
 ---
 
 # Video and Audio Inspection

@@ -1,6 +1,7 @@
 ---
 name: reactions
 description: Add an emoji reaction through a messaging MCP server configured in WillDeep, or through the built-in Lark CLI for Feishu when available. Use only when the target platform, conversation, message, and reaction are known.
+effects: side-effects
 ---
 
 # Message Reactions

@@ -1,6 +1,7 @@
 ---
 name: self-reflection
 description: Help the user write a grounded reflection or journal entry from the current conversation and explicitly provided evidence. Use when the user asks for reflection, lessons learned, a retrospective, or a diary-style summary.
+effects: read-only
 ---
 
 # Reflection

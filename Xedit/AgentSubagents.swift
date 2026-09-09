@@ -1113,6 +1113,10 @@ enum AgentSubagentRunner {
         runtimeDescriptor: RuntimeDescriptor? = nil,
         workspaceLocation: WorkspaceLocation? = nil,
         someIMContext: SomeIMRequestContext? = nil,
+        /// 压缩用哪个模型。不传就用 worker 自己的——能跑完总比撞窗失败好，
+        /// 但那通常是 advanced/expert 档，拿它做摘要偏贵。有 AppState 的
+        /// 调用方应该把压缩档传下来（WorkflowEngine 那条路径没有 AppState）。
+        compressionConfiguration: AgentConfiguration? = nil,
         outputSchema: AgentStructuredSchema? = nil,
         profile: AgentSubagentProfile = AgentSubagentProfileCatalog.deep,
         writeAccess: AgentSubagentWriteAccess? = nil,
@@ -1263,6 +1267,10 @@ enum AgentSubagentRunner {
         // Flipped after the first request streams to completion; until then
         // each request is under the first-contact clock.
         var hasCompletedFirstRequest = false
+        // 本次 run 压过几次，以及上一次的摘要（下一次压缩要把它折进去而不是
+        // 丢掉，否则每次压缩都会把更早的历史彻底忘掉）。
+        var compressionsUsed = 0
+        var lastCompressionSummary: String?
         while round <= roundLimit {
             try Task.checkCancellation()
         try executionBudget?.checkCurrentOwner()
@@ -1278,7 +1286,37 @@ enum AgentSubagentRunner {
             var toolCalls: [AgentMessageToolCall] = []
             let collector = SubagentTurnCollector()
 
-            try AgentWorkerContextBudget.validate(messages: transcript, tools: toolList, limit: inputLimit)
+            // 撞窗前先压一次，压完再验。此前这里直接抛错终止整个 run：
+            // 前面几十轮的钱白花，而错误只能建议用户「拆任务或换更大的档」，
+            // 尽管宿主自己有一条现成的压缩管线。压缩失败或压不出空间时才
+            // 抛原来那个错——那时它确实是准确的诊断。
+            if (try? AgentWorkerContextBudget.validate(
+                messages: transcript, tools: toolList, limit: inputLimit
+            )) == nil {
+                if compressionsUsed < AgentWorkerTranscriptCompression.maximumCompressionsPerRun {
+                    compressionsUsed += 1
+                    publishProgress(round: round, activity: .thinking)
+                    let outcome = try? await AgentWorkerTranscriptCompression.compress(
+                        transcript: transcript,
+                        priorSummary: lastCompressionSummary,
+                        configuration: compressionConfiguration ?? configuration,
+                        someIMContext: someIMContext,
+                        requestLedger: nil,
+                        executionBudget: executionBudget
+                    )
+                    if let outcome {
+                        agentSubagentLog.info(
+                            "subagent compressed transcript profile=\(profile.id, privacy: .public) round=\(round, privacy: .public) before=\(transcript.count, privacy: .public) after=\(outcome.transcript.count, privacy: .public) attempt=\(compressionsUsed, privacy: .public)"
+                        )
+                        transcript = outcome.transcript
+                        lastCompressionSummary = outcome.summary
+                    }
+                }
+                // 压过之后仍然超限就如实失败：再跑一轮只会撞同一面墙。
+                try AgentWorkerContextBudget.validate(
+                    messages: transcript, tools: toolList, limit: inputLimit
+                )
+            }
 
             let performRequest: @Sendable () async throws -> Void = {
                 if let interventionChannel {

@@ -1,6 +1,7 @@
 ---
 name: self-management
 description: Inspect or change WillDeep preferences, models, integrations, permissions, updates, and current session settings through supported WillDeep tools and the app's Settings UI. Use when the user asks to configure WillDeep itself.
+effects: host-control
 ---
 
 # WillDeep Settings

@@ -1,6 +1,7 @@
 ---
 name: todo
 description: Maintain a structured Markdown checklist inside the current workspace for complex multi-step work. Use when the task needs explicit progress, blockers, or a resumable plan tied to repository files.
+effects: read-only
 ---
 
 # Workspace Todo

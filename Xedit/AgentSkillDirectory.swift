@@ -34,7 +34,10 @@ enum AgentSkillCatalog {
             // made before the body is read: `tier=worker` → package a task
             // packet and spawn the matching trade instead of running inline.
             let tier = record.tier.map { " | tier=\($0.rawValue)" } ?? ""
-            return "- \(record.identifier) | name=\(AgentSkillLocalization.displayName(for: record))\(tier) | \(AgentSkillLocalization.displayDescription(for: record))"
+            // 副作用面也进清单：挂技能、派工种之前就该知道代价，而不是
+            // 读完正文才发现这份流程会往外发文件或花钱。
+            let effects = record.effects.map { " | effects=\($0.rawValue)" } ?? ""
+            return "- \(record.identifier) | name=\(AgentSkillLocalization.displayName(for: record))\(tier)\(effects) | \(AgentSkillLocalization.displayDescription(for: record))"
         }
         var payload = lines.isEmpty
             ? "No installed Codex skills found."
@@ -144,6 +147,49 @@ nonisolated enum AgentSkillTier: String, Sendable {
     }
 }
 
+/// 这个技能跑起来会碰到什么（`effects:` in SKILL.md frontmatter）。
+///
+/// 刻意不是二元的「安全 / 不安全」：那一刀切不开真实差异。`web-search`
+/// 只读却会把查询词发到外网；`send-file` 会把用户的文件发出去；`image-gen`
+/// 会花钱；`computer-use` 能操作整台机器。二元标注会把这四个归成同一类，
+/// 于是任何据此做的放行判断都是错的。
+///
+/// 这四档是**声明**，不是强制：真正的闸门仍然是工具白名单与审批。它的用途
+/// 是让人和模型在挂技能、派工种之前就知道代价。
+nonisolated enum AgentSkillEffects: String, Sendable, CaseIterable {
+    /// 只读本机、只做分析。没有外发、没有花费、不改任何外部状态。
+    case readOnly = "read-only"
+    /// 会向外发请求，但不改变外部状态。查询词本身就是外发的信息。
+    case outboundQuery = "outbound-query"
+    /// 会改变外部状态或产生费用：发消息、发文件、建任务、调用计费模型。
+    case sideEffects = "side-effects"
+    /// 能操作宿主自身：桌面、系统设置、浏览器会话、应用偏好。
+    case hostControl = "host-control"
+
+    /// 拼写不认就是 nil，和 tier 同一个规矩：别人家工具写的技能不该在这里
+    /// 炸掉发现流程。
+    static func parse(_ value: String) -> AgentSkillEffects? {
+        let token = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch token {
+        case "read-only", "readonly", "read_only": return .readOnly
+        case "outbound-query", "outbound", "network": return .outboundQuery
+        case "side-effects", "side-effect", "mutating": return .sideEffects
+        case "host-control", "host", "desktop": return .hostControl
+        default: return nil
+        }
+    }
+
+    /// 给界面用的一句话。
+    var localizedSummary: String {
+        switch self {
+        case .readOnly: return "只读"
+        case .outboundQuery: return "外发查询"
+        case .sideEffects: return "有副作用"
+        case .hostControl: return "控制宿主"
+        }
+    }
+}
+
 nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable {
     let identifier: String
     let name: String
@@ -152,6 +198,9 @@ nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable {
     /// to nil so the dozens of existing construction sites (tests included)
     /// stay valid — an untagged skill is the common case, not an error.
     let tier: AgentSkillTier?
+    /// 声明的副作用面。未标注是常态（用户自己写的技能、别的工具带来的
+    /// 技能都可能没有），所以默认 nil，且 nil 一律按「未知」呈现，不当成只读。
+    let effects: AgentSkillEffects?
     let url: URL
     let source: AgentSkillSource
     let isEnabled: Bool
@@ -161,6 +210,7 @@ nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable {
         name: String,
         description: String,
         tier: AgentSkillTier? = nil,
+        effects: AgentSkillEffects? = nil,
         url: URL,
         source: AgentSkillSource,
         isEnabled: Bool
@@ -169,6 +219,7 @@ nonisolated struct AgentSkillEntry: Identifiable, Equatable, Sendable {
         self.name = name
         self.description = description
         self.tier = tier
+        self.effects = effects
         self.url = url
         self.source = source
         self.isEnabled = isEnabled
@@ -345,6 +396,7 @@ nonisolated enum AgentSkillDirectory {
                 name: metadata.name.isEmpty ? trimmed : metadata.name,
                 description: metadata.description.isEmpty ? "(no description)" : metadata.description,
                 tier: metadata.tier,
+                effects: metadata.effects,
                 url: url,
                 source: .bundled,
                 isEnabled: isEnabled
@@ -424,6 +476,7 @@ nonisolated enum AgentSkillDirectory {
                 name: name,
                 description: metadata.description.isEmpty ? "(no description)" : metadata.description,
                 tier: metadata.tier,
+                effects: metadata.effects,
                 url: url,
                 source: root.source,
                 isEnabled: true
@@ -448,13 +501,14 @@ nonisolated enum AgentSkillDirectory {
 
     static func parseMetadata(
         from text: String
-    ) -> (name: String, description: String, tier: AgentSkillTier?) {
+    ) -> (name: String, description: String, tier: AgentSkillTier?, effects: AgentSkillEffects?) {
         let lines = text.components(separatedBy: .newlines)
-        guard lines.first == "---" else { return ("", "", nil) }
+        guard lines.first == "---" else { return ("", "", nil, nil) }
 
         var name = ""
         var description = ""
         var tier: AgentSkillTier?
+        var effects: AgentSkillEffects?
         for line in lines.dropFirst() {
             if line == "---" { break }
             if let value = yamlValue(line, key: "name") {
@@ -463,9 +517,11 @@ nonisolated enum AgentSkillDirectory {
                 description = value
             } else if let value = yamlValue(line, key: "tier") {
                 tier = AgentSkillTier.parse(value)
+            } else if let value = yamlValue(line, key: "effects") {
+                effects = AgentSkillEffects.parse(value)
             }
         }
-        return (name, description, tier)
+        return (name, description, tier, effects)
     }
 
     private static func yamlValue(_ line: String, key: String) -> String? {

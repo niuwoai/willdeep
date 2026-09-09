@@ -1,6 +1,7 @@
 ---
 name: voice
 description: Create a local text-to-speech audio file with macOS system voices, or use a configured TTS MCP provider when higher-quality speech is requested. Use when the user asks for narration, a voice reply, or an audio rendering of text.
+effects: side-effects
 ---
 
 # Text to Speech

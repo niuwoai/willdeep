@@ -1,6 +1,7 @@
 ---
 name: swiftui-hang-diagnose
 description: 诊断并修复 macOS/iOS 原生 Swift App（SwiftUI / AppKit / UIKit）的主线程卡死、转圈、Beachball（彩虹圈）、CPU 跑满空转、界面无响应、"进程像死了一样"。当用户说 App 卡住了 / 卡死 / 转圈 / 没响应 / 假死 / 风火轮 / beachball / spinning / CPU 100% / 占用很高 / 进程死掉了 / 帮我采样一下 / sample 一下 / 为什么这么卡 / SwiftUI 列表卡顿 / 滚动卡 等，且目标是一个本机正在运行（或刚崩溃）的原生 Swift/Objective-C App 时使用。用 macOS 的 sample / spindump 采样定位热点，按"SwiftUI 卡死模式库"判读调用栈给出根因与修复，最后善后（kill）。不负责：网页/Electron/JVM 应用调优、远程服务器进程、纯算法性能优化（这类不走本 skill）。
+effects: host-control
 ---
 
 # Swift App 主线程卡死诊断手册

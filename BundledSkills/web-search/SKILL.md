@@ -1,6 +1,7 @@
 ---
 name: web-search
 description: Search the public web with WillDeep's built-in search provider for current information, primary documentation, error messages, releases, research, and fact-checking. Use whenever freshness or external verification matters.
+effects: outbound-query
 ---
 
 # Web Search

@@ -1,6 +1,7 @@
 ---
 name: some-im-client-services
 description: Integrate WillDeep macOS client features with some.im / muchtoken backend, admin console, customer/public APIs, managed web search, update server metadata, client download/update flows, shared some.im login/session, and related i18n/version/changelog work. Use when Codex needs to add or maintain WillDeep features backed by some.im services, especially API-key fallback services, public app update feeds, admin settings pages, or client UI affordances in the some.im account area.
+effects: side-effects
 ---
 
 # some.im Client Services

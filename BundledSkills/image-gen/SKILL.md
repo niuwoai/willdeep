@@ -1,6 +1,7 @@
 ---
 name: image-gen
 description: Generate and edit images with WillDeep's built-in some.im image tools. Use for text-to-image, reference-image editing, background or object changes, masks, upscaling, and presenting several image candidates.
+effects: side-effects
 ---
 
 # Image Generation and Editing

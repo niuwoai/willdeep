@@ -1,6 +1,7 @@
 ---
 name: notebook
 description: Inspect and edit Jupyter notebook files with WillDeep's file tools while preserving valid notebook JSON and cell structure. Use for inserting, replacing, deleting, or reviewing cells in .ipynb files.
+effects: read-only
 ---
 
 # Jupyter Notebook Editing

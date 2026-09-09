@@ -1,6 +1,7 @@
 ---
 name: zmodem-terminal-transfers
 description: Transfer files between the local Mac and a remote SSH host through WillDeep's side-panel terminal using rz/sz ZMODEM. Use when the user asks to upload or download files over the visible terminal's SSH session, or when scp/rsync is unavailable and the terminal is the only channel to the host.
+effects: side-effects
 ---
 
 # ZMODEM transfers in the side-panel terminal

@@ -1,6 +1,7 @@
 ---
 name: skill-search
 description: Find the best installed WillDeep skill for a task, then identify whether a missing capability should be handled by a new user skill or an MCP integration. Use when the current workflow or tool set is insufficient.
+effects: read-only
 ---
 
 # Skill Search

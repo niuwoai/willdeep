@@ -355,11 +355,9 @@ extension AppState {
     /// Fold the transcript in budget-sized chunks, then fold the partial
     /// summaries again until a single summary remains.
     ///
-    /// Compression used to post the whole head as one request. That request
-    /// grows with the very thing compression exists to shrink, so once a
-    /// session filled its window the summariser overflowed too and returned
-    /// 400 — the only escape hatch jammed exactly when it was needed. Chunking
-    /// keeps every request bounded regardless of transcript size.
+    /// 折叠逻辑本身搬到了 `AgentContextCompressionFolder`：子 Agent 也要用
+    /// 它，而它对 AppState 的依赖只有账本、执行预算和辅助请求记账三样。
+    /// 这里保留一层薄封装，把那三样接上去。
     @MainActor
     private func summarizeForCompression(
         segments: [String],
@@ -367,43 +365,16 @@ extension AppState {
         someIMContext: SomeIMRequestContext?,
         runtimeID: UUID
     ) async throws -> String {
-        let window = Self.agentContextWindow(
-            model: configuration.model,
-            providerID: configuration.providerID
-        )
-        var budget = Self.compressionChunkTokenBudget(contextWindow: window)
-        var current = segments
-        var foldDepth = 0
-
-        while true {
-            let chunks = Self.compressionChunks(segments: current, tokenBudget: budget)
-            guard !chunks.isEmpty else { return "" }
-            do {
-                let summaries = try await summarizeChunks(
-                    chunks,
-                    configuration: configuration,
-                    someIMContext: someIMContext,
-                    runtimeID: runtimeID
-                )
-                if chunks.count == 1 || summaries.count <= 1 {
-                    return summaries.first ?? ""
-                }
-                foldDepth += 1
-                guard foldDepth < Self.maximumCompressionFoldDepth else {
-                    // Converging too slowly. Joined part summaries are still a
-                    // large win over the raw transcript, and shipping them
-                    // beats failing the compression outright.
-                    return summaries.joined(separator: "\n\n")
-                }
-                current = summaries.enumerated().map { "PART \($0.offset + 1) SUMMARY:\n\($0.element)" }
-            } catch let error where Self.isContextOverflowError(error) && budget > Self.minimumCompressionChunkTokens {
-                // The heuristic still under-counted this provider's tokenizer.
-                // Halve and refold rather than surfacing a 400 the user has no
-                // way to act on.
-                budget /= 2
-                continue
+        try await AgentContextCompressionFolder.fold(
+            segments: segments,
+            configuration: configuration,
+            someIMContext: someIMContext,
+            requestLedger: agentRuntimes[runtimeID].flatMap { modelRequestLedger(for: $0) },
+            executionBudget: agentRuntimes[runtimeID].flatMap { toolExecutionBudget(for: $0) },
+            recordAuxiliary: { [weak self] record in
+                await MainActor.run { self?.recordAuxiliaryModelRequest(record, runtimeID: runtimeID) }
             }
-        }
+        )
     }
 
     /// Hand the interrupted work back to the model after a runway stop.
@@ -445,126 +416,6 @@ extension AppState {
         )
     }
 
-    /// Summarize every chunk of one fold, concurrently, in transcript order.
-    ///
-    /// The chunk count scales with how full the session got, so walking them
-    /// one at a time made compression slowest exactly when the user was most
-    /// blocked on it: six chunks meant six generate-and-wait round trips back
-    /// to back, with the session frozen for the whole train. The requests are
-    /// independent — the only thing that has to survive is putting the part
-    /// summaries back in transcript order before the next fold reads them.
-    ///
-    /// Concurrency is capped: fanning a 40-chunk transcript out at once would
-    /// earn a 429 from the provider instead of a summary, and the retry storm
-    /// would be slower than the serial walk this replaces.
-    @MainActor
-    private func summarizeChunks(
-        _ chunks: [String],
-        configuration: AgentConfiguration,
-        someIMContext: SomeIMRequestContext?,
-        runtimeID: UUID
-    ) async throws -> [String] {
-        if chunks.count == 1 {
-            let summary = try await requestCompressionSummary(
-                transcript: chunks[0],
-                configuration: configuration,
-                someIMContext: someIMContext,
-                runtimeID: runtimeID,
-                part: 1,
-                partCount: 1
-            )
-            return summary.isEmpty ? [] : [summary]
-        }
-
-        var ordered = [String?](repeating: nil, count: chunks.count)
-        let partCount = chunks.count
-        try await withThrowingTaskGroup(of: (Int, String).self) { group in
-            var next = 0
-            func addTask(at index: Int) {
-                let transcript = chunks[index]
-                group.addTask {
-                    let summary = try await self.requestCompressionSummary(
-                        transcript: transcript,
-                        configuration: configuration,
-                        someIMContext: someIMContext,
-                        runtimeID: runtimeID,
-                        part: index + 1,
-                        partCount: partCount
-                    )
-                    return (index, summary)
-                }
-            }
-            while next < min(Self.maximumConcurrentCompressionRequests, chunks.count) {
-                addTask(at: next)
-                next += 1
-            }
-            while let (index, summary) = try await group.next() {
-                ordered[index] = summary
-                if next < chunks.count {
-                    addTask(at: next)
-                    next += 1
-                }
-            }
-        }
-        return ordered.compactMap { $0 }.filter { !$0.isEmpty }
-    }
-
-    @MainActor
-    private func requestCompressionSummary(
-        transcript: String,
-        configuration: AgentConfiguration,
-        someIMContext: SomeIMRequestContext?,
-        runtimeID: UUID,
-        part: Int,
-        partCount: Int
-    ) async throws -> String {
-        let context = configuration.providerID == AgentProviderPreset.someIMID
-            ? someIMContext
-            : nil
-        let client = AgentClient(configuration: configuration, someIMContext: context,
-            requestLedger: agentRuntimes[runtimeID].flatMap { modelRequestLedger(for: $0) })
-        let executionBudget = agentRuntimes[runtimeID].flatMap { toolExecutionBudget(for: $0) }
-        let collector = CompressionSummaryCollector()
-        let measurement = AgentAuxiliaryRequestMeasurement()
-        let messages = Self.compressionRequestMessages(
-            transcript: transcript,
-            configuration: configuration,
-            part: part,
-            partCount: partCount
-        )
-        do {
-            try await client.streamChat(messages: messages, executionBudget: executionBudget) { event in
-                await measurement.consume(event)
-                if case .textDelta(let delta) = event {
-                    await collector.append(delta)
-                }
-            }
-            let summary = await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
-            recordAuxiliaryModelRequest(
-                await measurement.record(
-                    purpose: .contextCompression,
-                    providerID: configuration.providerID,
-                    modelID: configuration.model,
-                    isLocal: AgentLocalModelPrompting.isLocalProvider(configuration),
-                    succeeded: !summary.isEmpty
-                ),
-                runtimeID: runtimeID
-            )
-            return summary
-        } catch {
-            recordAuxiliaryModelRequest(
-                await measurement.record(
-                    purpose: .contextCompression,
-                    providerID: configuration.providerID,
-                    modelID: configuration.model,
-                    isLocal: AgentLocalModelPrompting.isLocalProvider(configuration),
-                    succeeded: false
-                ),
-                runtimeID: runtimeID
-            )
-            throw error
-        }
-    }
 
     /// The exact messages one compression request carries.
     ///
