@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CHARACTER_DRAFT_FIELDS, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_LIMIT, applyPassage, appendNotice, mapWithConcurrency, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, streamingFieldValue, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODE_BATCH_SIZE, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_LIMIT, episodeBatches, parseFencedEpisodes, applyPassage, appendNotice, mapWithConcurrency, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, streamingFieldValue, visibleStream } from './bridge';
 import type { Notice } from './bridge';
 import type { CharacterDraft } from './types';
 
@@ -502,5 +502,51 @@ describe('生图节流', () => {
   it('默认间隔是一秒', () => {
     // 相对十几秒的生成时间，一秒几乎不影响总耗时，但足以把一簇请求摊开。
     expect(IMAGE_MIN_INTERVAL_MS).toBe(1000);
+  });
+});
+
+describe('批量丰富多集', () => {
+  it('按批切分整季，最后一批不补齐', () => {
+    expect(episodeBatches(24, 10)).toEqual([
+      { from: 1, to: 10 }, { from: 11, to: 20 }, { from: 21, to: 24 },
+    ]);
+    expect(episodeBatches(10, 10)).toEqual([{ from: 1, to: 10 }]);
+    expect(episodeBatches(3, 10)).toEqual([{ from: 1, to: 3 }]);
+    expect(episodeBatches(0, 10)).toEqual([]);
+  });
+
+  it('默认一批十集', () => {
+    // 一次超过二十集模型会开始偷工：前几集写得细，后面每集只剩一句空话。
+    expect(EPISODE_BATCH_SIZE).toBe(10);
+  });
+
+  it('解析一批分集，按集号对齐', () => {
+    const raw = '写好了。\n```short_drama_episodes\n{"episodes":[{"order":1,"summary":"第一集"},{"order":2,"title":"标题","summary":"第二集"}]}\n```';
+    const parsed = parseFencedEpisodes(raw);
+    expect(parsed).toMatchObject({ kind: 'draft', note: '写好了。' });
+    if (parsed.kind !== 'draft') return;
+    expect(parsed.value.episodes).toEqual([
+      { order: 1, summary: '第一集' },
+      { order: 2, title: '标题', summary: '第二集' },
+    ]);
+  });
+
+  it('没有集号的条目直接丢，宁可少写一集也不填错集', () => {
+    const raw = '```short_drama_episodes\n{"episodes":[{"summary":"不知道是第几集"},{"order":"三","summary":"集号不是数字"},{"order":0,"summary":"集号不合法"},{"order":2,"summary":"这条能用"}]}\n```';
+    const parsed = parseFencedEpisodes(raw);
+    if (parsed.kind !== 'draft') throw new Error('expected a draft');
+    expect(parsed.value.episodes).toEqual([{ order: 2, summary: '这条能用' }]);
+  });
+
+  it('只有集号没有内容的条目也丢掉', () => {
+    // 它会让后端记一次 draftRev 自增却什么都没改。
+    const parsed = parseFencedEpisodes('```short_drama_episodes\n{"episodes":[{"order":1}]}\n```');
+    expect(parsed.kind).toBe('invalid');
+  });
+
+  it('没有围栏当闲聊，格式坏了报格式错', () => {
+    expect(parseFencedEpisodes('这一批你想先定哪条线？')).toEqual({ kind: 'chat' });
+    expect(parseFencedEpisodes('```short_drama_episodes\n{"episodes":"第一集"}\n```')).toMatchObject({ kind: 'invalid' });
+    expect(parseFencedEpisodes('```short_drama_episodes\n{"episodes":[]}\n```')).toMatchObject({ kind: 'invalid' });
   });
 });

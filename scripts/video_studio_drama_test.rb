@@ -347,6 +347,88 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
     raise "draft missing" unless fetch_character.call(response).dig("draft", "description") == "旧档也能共创"
   end
 
+  # ---- 批量写多集草稿 ----
+
+  check.call("a batch writes many episode drafts in one shot, matched by order") do
+    created = service.confirm_plan("plan" => { "title" => "批量测试", "episodeCount" => 5 })
+    batch_drama = created["drama"]
+    response = service.save_episode_drafts(
+      "dramaID" => batch_drama["id"],
+      "episodes" => [
+        { "order" => 1, "summary" => "第一集梗概" },
+        { "order" => 3, "summary" => "第三集梗概", "title" => "第三集标题" },
+        { "order" => 5, "summary" => "第五集梗概" }
+      ]
+    )
+    raise "batch failed" unless response["ok"]
+    raise "applied wrong set: #{response['applied']}" unless response["applied"] == [1, 3, 5]
+    episodes = response.dig("drama", "episodes")
+    raise "order 1 draft missing" unless episodes[0].dig("draft", "summary") == "第一集梗概"
+    raise "order 3 title missing" unless episodes[2].dig("draft", "title") == "第三集标题"
+    raise "order 5 draft missing" unless episodes[4].dig("draft", "summary") == "第五集梗概"
+    # 没在这一批里的集不能被碰。
+    raise "untouched episode was modified" unless episodes[1]["draft"].nil?
+    raise "committed content changed" unless episodes[0]["summary"] == ""
+    raise "draftRev did not advance" unless episodes[0]["draftRev"] == 1
+  end
+
+  check.call("an unknown order is reported, not silently dropped") do
+    created = service.confirm_plan("plan" => { "title" => "集号对齐", "episodeCount" => 2 })
+    response = service.save_episode_drafts(
+      "dramaID" => created.dig("drama", "id"),
+      "episodes" => [
+        { "order" => 1, "summary" => "有这一集" },
+        { "order" => 99, "summary" => "没有这一集" },
+        { "order" => 2 },
+        "不是对象"
+      ]
+    )
+    raise "batch failed" unless response["ok"]
+    raise "applied wrong set" unless response["applied"] == [1]
+    reasons = response["skipped"].map { |entry| entry["reason"] }
+    # 静默丢会让用户以为整批都写好了。
+    raise "missing episode not reported" unless reasons.include?("episode_not_found")
+    raise "fieldless entry not reported" unless reasons.include?("no_writable_field")
+    raise "non-object not reported" unless reasons.include?("not_an_object")
+  end
+
+  check.call("a batch layers onto an existing draft instead of replacing it") do
+    created = service.confirm_plan("plan" => { "title" => "叠加测试", "episodeCount" => 1 })
+    id = created.dig("drama", "id")
+    service.save_draft(
+      "dramaID" => id, "scope" => "episode",
+      "episodeID" => created.dig("drama", "episodes", 0, "id"),
+      "draft" => { "title" => "先写的标题" }
+    )
+    response = service.save_episode_drafts(
+      "dramaID" => id, "episodes" => [{ "order" => 1, "summary" => "后写的梗概" }]
+    )
+    draft = response.dig("drama", "episodes", 0, "draft")
+    raise "earlier field lost" unless draft["title"] == "先写的标题"
+    raise "new field missing" unless draft["summary"] == "后写的梗概"
+  end
+
+  check.call("a batch refuses a bad payload without touching anything") do
+    created = service.confirm_plan("plan" => { "title" => "坏载荷", "episodeCount" => 1 })
+    id = created.dig("drama", "id")
+    %w[not_an_array].each do
+      response = service.save_episode_drafts("dramaID" => id, "episodes" => "第一集")
+      raise "string payload accepted" if response["ok"]
+      raise "wrong code" unless response.dig("error", "code") == "invalid_episodes"
+    end
+    empty = service.save_episode_drafts("dramaID" => id, "episodes" => [])
+    raise "empty payload accepted" if empty["ok"]
+    raise "wrong code" unless empty.dig("error", "code") == "empty_episodes"
+    raise "draft should still be nil" unless service.get("id" => id).dig("drama", "episodes", 0, "draft").nil?
+  end
+
+  check.call("a batch is capped so one call cannot rewrite an unbounded number of episodes") do
+    created = service.confirm_plan("plan" => { "title" => "上限", "episodeCount" => 100 })
+    entries = (1..60).map { |order| { "order" => order, "summary" => "第 #{order} 集" } }
+    response = service.save_episode_drafts("dramaID" => created.dig("drama", "id"), "episodes" => entries)
+    raise "cap not applied" unless response["applied"].length == DramaService::MAX_BATCH_EPISODES
+  end
+
   # ---- 共创聊天：一部剧一个文件 ----
 
   chat = ChatStore.new(File.join(directory, "chats"))

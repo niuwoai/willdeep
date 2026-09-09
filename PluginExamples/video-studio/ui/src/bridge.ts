@@ -475,3 +475,54 @@ export async function resetCreativeSkill(id: string): Promise<CreativeSkill | nu
   if (!payload.ok) throw new Error(payload.error?.message || 'skill_reset_failed');
   return payload.skill ?? null;
 }
+
+/// 批量丰富多集的围栏。
+export const EPISODES_FENCE = 'short_drama_episodes';
+/// 一批多少集。二十集是「一批」的合理规模：够串起一段完整的走向，又不至于
+/// 让模型开始偷工——集数太多时它会给每集只写一句空话。
+export const EPISODE_BATCH_SIZE = 10;
+
+export type EpisodeDraftEntry = { order: number; title?: string; summary?: string };
+
+/// 解析一批分集。
+///
+/// 每个元素必须带 `order`：模型手上只有集号，而集号是唯一能把内容对回正确
+/// 一集的东西。没有 order 的条目直接丢，宁可少写一集也不能填错集。
+export function parseFencedEpisodes(raw: string): FencedResult<{ episodes: EpisodeDraftEntry[] }> {
+  const found = extractFenced(raw, EPISODES_FENCE);
+  if (!found) return { kind: 'chat' };
+  try {
+    const value = firstJSONObject(found.body);
+    const list = (value as { episodes?: unknown } | null)?.episodes;
+    if (!Array.isArray(list)) return { kind: 'invalid', note: found.note };
+    const episodes: EpisodeDraftEntry[] = [];
+    for (const item of list) {
+      if (!item || typeof item !== 'object') continue;
+      const entry = item as { order?: unknown; title?: unknown; summary?: unknown };
+      const order = Number(entry.order);
+      if (!Number.isInteger(order) || order < 1) continue;
+      const next: EpisodeDraftEntry = { order };
+      if (typeof entry.title === 'string' && entry.title.trim()) next.title = entry.title.trim();
+      if (typeof entry.summary === 'string' && entry.summary.trim()) next.summary = entry.summary.trim();
+      if (next.title === undefined && next.summary === undefined) continue;
+      episodes.push(next);
+    }
+    if (episodes.length === 0) return { kind: 'invalid', note: found.note };
+    return { kind: 'draft', value: { episodes }, note: found.note };
+  } catch {
+    return { kind: 'invalid', note: found.note };
+  }
+}
+
+/// 把整季切成一批批。
+///
+/// 分批不是为了省 token，是因为一次让模型写完二十集以上时它会开始偷工：
+/// 前几集写得细，后面每集只剩一句空话。分批之后每批都能拿到完整的注意力，
+/// 而批与批之间靠相邻批次的梗概衔接。
+export function episodeBatches(total: number, size = EPISODE_BATCH_SIZE): Array<{ from: number; to: number }> {
+  const batches: Array<{ from: number; to: number }> = [];
+  for (let from = 1; from <= total; from += size) {
+    batches.push({ from, to: Math.min(total, from + size - 1) });
+  }
+  return batches;
+}

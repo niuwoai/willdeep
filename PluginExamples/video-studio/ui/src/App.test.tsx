@@ -453,6 +453,70 @@ describe('Short Drama Studio', () => {
     expect(screen.getByRole('button', { name: '只改选中这段' })).toBeDisabled();
   });
 
+
+  // ---- 批量丰富多集 ----
+
+  it('分批串行写入，一批格式坏了其余批次继续', async () => {
+    const episodes = Array.from({ length: 24 }, (_, index) => ({
+      id: `e${index + 1}`, order: index + 1, title: `第 ${index + 1} 集`, summary: '',
+      script: '', status: 'draft', shots: [], rev: 0, draftRev: 0, draft: null,
+    }));
+    dramas = [{ ...scriptDramaFixture(episodes[0]!), episodes }];
+
+    let batch = 0;
+    complete.mockImplementation(async () => {
+      batch += 1;
+      // 第二批返回坏格式，用来验证它不会中断整轮。
+      if (batch === 2) return { text: '我先问一下这一批要不要加感情线。', model: 'fast', providerID: 'chat-a' };
+      const from = (batch - 1) * 10 + 1;
+      const list = [{ order: from, summary: `第 ${from} 集梗概` }];
+      return {
+        text: '```short_drama_episodes\n' + JSON.stringify({ episodes: list }) + '\n```',
+        model: 'fast', providerID: 'chat-a',
+      };
+    });
+    executeCommand.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'skill.list') return JSON.stringify({ ok: true, skills: [] });
+      if (command === 'skill.compose') return JSON.stringify({ ok: true, system: '# 多集剧情串联' });
+      if (command === 'drama.saveEpisodeDrafts') {
+        const list = (args?.episodes ?? []) as Array<{ order: number }>;
+        return JSON.stringify({ ok: true, drama: dramas[0], applied: list.map((item) => item.order) });
+      }
+      return JSON.stringify({ ok: true });
+    });
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '继续创作' }))[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: /分集剧本/ }))[0]!);
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 串起全部 24 集' }));
+
+    // 24 集切成三批，三批都发出去了——第二批坏格式没有中断后面那批。
+    await waitFor(() => expect(complete).toHaveBeenCalledTimes(3), { timeout: 4000 });
+    const writes = executeCommand.mock.calls.filter(([command]) => command === 'drama.saveEpisodeDrafts');
+    expect(writes).toHaveLength(2);
+    // 写入按集号对齐，第一批写第 1 集、第三批写第 21 集。
+    expect((writes[0]![1] as { episodes: Array<{ order: number }> }).episodes[0]!.order).toBe(1);
+    expect((writes[1]![1] as { episodes: Array<{ order: number }> }).episodes[0]!.order).toBe(21);
+  });
+
+  it('没有分集时给出提示而不是空跑', async () => {
+    dramas = [{ ...scriptDramaFixture(episodeFixture()), episodes: [] }];
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      return JSON.stringify({ ok: true });
+    });
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '继续创作' }))[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: /分集剧本/ }))[0]!);
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 串起全部 0 集' }));
+
+    expect(await screen.findByText(/还没有分集/)).toBeTruthy();
+    expect(complete).not.toHaveBeenCalled();
+  });
+
   // ---- 剧本里的新面孔 ----
 
   it('剧本里说过两句的新名字会被提示，点一下只建名字', async () => {

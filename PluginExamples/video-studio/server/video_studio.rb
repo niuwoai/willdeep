@@ -204,6 +204,11 @@ TOOLS = [
     inputSchema: { type: "object", properties: { dramaID: { type: "string" }, scope: { type: "string", enum: DramaService::DRAFT_SCOPES }, characterID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, draft: { type: "object" }, expectedDraftRev: { type: "integer" } }, required: %w[dramaID scope draft] }
   },
   {
+    name: "drama.save_episode_drafts",
+    description: "Write drafts for many episodes at once, matched by episode order. Atomic: either every listed episode is written or none is. Episodes whose order is not found are reported in `skipped` rather than dropped silently.",
+    inputSchema: { type: "object", properties: { dramaID: { type: "string" }, episodes: { type: "array", items: { type: "object", properties: { order: { type: "integer" }, title: { type: "string" }, summary: { type: "string" }, script: { type: "string" } }, required: ["order"] } } }, required: %w[dramaID episodes] }
+  },
+  {
     name: "drama.commit_draft",
     description: "Adopt the working draft into committed content, clear the draft, and bump rev. A second call with the same expectedRev returns revision_conflict, which callers should read as 'already committed'.",
     inputSchema: { type: "object", properties: { dramaID: { type: "string" }, scope: { type: "string", enum: DramaService::DRAFT_SCOPES }, characterID: { type: "string" }, episodeID: { type: "string" }, shotID: { type: "string" }, expectedRev: { type: "integer" } }, required: %w[dramaID scope] }
@@ -388,6 +393,7 @@ def call_tool(name, arguments)
   when "drama.save_episode" then DRAMA_SERVICE.save_episode(arguments)
   when "drama.save_shot" then DRAMA_SERVICE.save_shot(arguments)
   when "drama.save_draft" then DRAMA_SERVICE.save_draft(arguments)
+  when "drama.save_episode_drafts" then DRAMA_SERVICE.save_episode_drafts(arguments)
   when "drama.commit_draft" then DRAMA_SERVICE.commit_draft(arguments)
   when "drama.discard_draft" then DRAMA_SERVICE.discard_draft(arguments)
   when "skill.list" then creative_skill_list
@@ -435,7 +441,7 @@ ARGF.each_line do |line|
              {
                protocolVersion: "2025-06-18",
                capabilities: { tools: {} },
-               serverInfo: { name: "video-studio", version: "0.9.0" }
+               serverInfo: { name: "video-studio", version: "0.10.0" }
              }
            when "tools/list"
              { tools: TOOLS }

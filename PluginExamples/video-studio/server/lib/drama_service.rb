@@ -8,6 +8,10 @@ class DramaService
   IMAGE_MODELS = %w[gpt-image-2 nano-banana-2].freeze
   FRAME_KINDS = %w[start end].freeze
 
+  # 一次批量最多写多少集。二十集是「一批」的合理规模，也够一次请求的输出
+  # 预算装下；更多的话模型会开始偷工，每集只剩一句空话。
+  MAX_BATCH_EPISODES = 30
+
   # 找不到目标时抛出，message 即对外错误码。刻意不复用 ArgumentError：
   # positive / integer 这类转换也会抛 ArgumentError，混在一起会把
   # "参数格式不对" 误报成 "找不到对象"。
@@ -128,6 +132,52 @@ class DramaService
         assign(episode, "script", arguments["script"], 20_000)
       end
       { "ok" => true, "drama" => drama }
+    end
+  end
+
+  # 一次写多集的草稿。
+  #
+  # 批量丰富十到二十集时，逐集调 saveDraft 有两个问题：每次都是「读全量、改、
+  # 全量覆写」加一次文件锁，二十集就是二十轮；而且中途失败会留下一半写进去
+  # 一半没写的状态，用户看不出哪几集是新的。这里在一次 mutate 里写完，
+  # 要么全成要么全不成。
+  #
+  # 按 order 对齐而不是按 episodeID：模型手上只有集号，让它记住二十个 UUID
+  # 既不现实也没必要。集号找不到的条目跳过并在结果里报出来，不静默丢——
+  # 静默丢会让用户以为二十集都写好了。
+  def save_episode_drafts(arguments)
+    guarded do
+      entries = arguments["episodes"]
+      return failure("invalid_episodes", "An array of episode drafts is required.") unless entries.is_a?(Array)
+      return failure("empty_episodes", "No episode drafts were provided.") if entries.empty?
+
+      applied = []
+      skipped = []
+      drama = mutate_drama(arguments) do |item|
+        by_order = {}
+        item["episodes"].each { |episode| by_order[episode["order"].to_i] = episode }
+
+        entries.first(MAX_BATCH_EPISODES).each do |entry|
+          next skipped << { "reason" => "not_an_object" } unless entry.is_a?(Hash)
+          order = entry["order"].to_i
+          episode = by_order[order]
+          next skipped << { "order" => order, "reason" => "episode_not_found" } unless episode
+
+          draft = episode["draft"].is_a?(Hash) ? deep_copy(episode["draft"]) : {}
+          touched = false
+          DRAFT_TEXT_FIELDS.fetch("episode").each do |key, limit|
+            next unless entry.key?(key)
+            draft[key] = clipped(entry[key], limit)
+            touched = true
+          end
+          next skipped << { "order" => order, "reason" => "no_writable_field" } unless touched
+
+          episode["draft"] = draft
+          episode["draftRev"] = episode["draftRev"].to_i + 1
+          applied << order
+        end
+      end
+      { "ok" => true, "drama" => drama, "applied" => applied, "skipped" => skipped }
     end
   end
 

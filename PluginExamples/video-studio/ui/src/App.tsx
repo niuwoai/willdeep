@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { CHARACTER_DRAFT_FIELDS, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODES_FENCE, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, episodeBatches, parseFencedDraft, parseFencedEpisodes, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, visibleStream } from './bridge';
 import { Dropdown } from './Dropdown';
 import { createTranslator, localeFromContext } from './i18n';
 import type { ChatMessage, Character, CharacterDraft, CreativeSkill, Drama, DramaPlan, Episode, EpisodeDraftFields, ImageModel, ProviderEntry, Shot, SkillEntry, SkillStage, Stage } from './types';
@@ -665,6 +665,97 @@ export default function App() {
 
   // ---- 分集剧本共创 ----
 
+  /// 批量丰富多集。
+  ///
+  /// 分批串行，不是一次让模型写完整季：一次超过二十集它会开始偷工，前几集
+  /// 写得细、后面每集只剩一句空话。每批都带上相邻批次已有的梗概做衔接，
+  /// 所以批与批之间的伏笔和人物能对上。
+  ///
+  /// 写入走 saveEpisodeDrafts 一次性落一批：逐集调 saveDraft 是二十轮
+  /// 「读全量、改、全量覆写」，而且中途失败会留下一半写进去一半没写的状态。
+  async function enrichEpisodesInBatches() {
+    if (!drama) return;
+    const total = drama.episodes.length;
+    if (total === 0) { setFailure(t('noEpisodesYet')); return; }
+
+    const batches = episodeBatches(total, EPISODE_BATCH_SIZE);
+    setBusy('episodes-batch'); setFailure('');
+    setBatchProgress({ done: 0, total: batches.length });
+    const system = await stageSystemPrompt('episodes', 'episodesBatchSystem');
+    const cast = drama.characters.map((item) => {
+      const view = characterView(item);
+      return `${view.name}：${view.description || t('noBackstoryYet')}`;
+    }).join('\n');
+
+    let written = 0;
+    try {
+      for (const [index, batch] of batches.entries()) {
+        setBatchProgress({ done: index, total: batches.length });
+        // 每一批都从最新的 dramas 里重取：上一批写完后 draftRev 变了，
+        // 而且这一批要看到上一批刚写的梗概才能接得上。
+        const latest = dramas.find((item) => item.id === drama.id) ?? drama;
+        const inBatch = latest.episodes.filter((item) => item.order >= batch.from && item.order <= batch.to);
+        const neighbours = latest.episodes
+          .filter((item) => item.order === batch.from - 1 || item.order === batch.to + 1)
+          .map((item) => `${t('episodeNumber', { number: item.order })}：${episodeView(item).summary || t('emptySummary')}`)
+          .join('\n');
+        const existing = inBatch
+          .map((item) => `${t('episodeNumber', { number: item.order })}：${episodeView(item).summary || t('emptySummary')}`)
+          .join('\n');
+
+        const context = [
+          `${t('contextDramaLabel')}: ${latest.title} / ${latest.genre} / ${latest.tone}`,
+          `${t('contextLoglineLabel')}: ${latest.logline}`,
+          `${t('contextArcLabel')}: ${latest.arc}`,
+          `${t('contextCastLabel')}:\n${cast || t('noCharactersYet')}`,
+          `${t('contextBatchLabel', { from: batch.from, to: batch.to })}:\n${existing}`,
+          neighbours ? `${t('contextNeighbourLabel')}:\n${neighbours}` : '',
+        ].filter(Boolean).join('\n\n');
+
+        const messages = [{ role: 'user' as const, content: `${context}\n\n${t('enrichBatchRequest', { from: batch.from, to: batch.to })}` }];
+        const budget = requestBudget(system, messages);
+        if (!budget.withinLimits) { setFailure(t('requestTooLarge', { characters: budget.characters })); break; }
+
+        const streamID = localID();
+        setScriptStreamID(streamID);
+        let buffer = '';
+        const onDelta = (event: Event) => {
+          const detail = (event as CustomEvent<{ streamID?: string; delta?: string }>).detail;
+          if (detail?.streamID !== streamID || typeof detail.delta !== 'string') return;
+          buffer += detail.delta;
+          const visible = visibleStream(buffer, EPISODES_FENCE, ['summary', 'title']);
+          setStructuredStreaming(visible.structured);
+          setStreamingText(visible.text.slice(-1200));
+        };
+        window.addEventListener('willdeep:ai-delta', onDelta);
+        try {
+          const response = await window.willdeep?.ai?.complete({
+            system, messages,
+            provider: assistantProvider || undefined, model: assistantModel || undefined,
+            skills: attachedSkills.map((item) => item.identifier), streamID,
+          });
+          if (!response) throw new Error(t('operationFailed'));
+          const parsed = parseFencedEpisodes(response.text);
+          if (parsed.kind !== 'draft') { setFailure(t('episodesBatchInvalid', { from: batch.from, to: batch.to })); continue; }
+          const payload = await callCommand<{ ok: boolean; drama?: Drama; applied?: number[]; error?: { message?: string } }>(
+            'drama.saveEpisodeDrafts', { dramaID: latest.id, episodes: parsed.value.episodes }
+          );
+          if (!payload.ok || !payload.drama) throw new Error(payload.error?.message || t('operationFailed'));
+          applyDrama(payload.drama);
+          written += payload.applied?.length ?? 0;
+        } finally {
+          window.removeEventListener('willdeep:ai-delta', onDelta);
+          setStreamingText(''); setStructuredStreaming(false); setScriptStreamID('');
+        }
+      }
+      setNotice(t('episodesBatchDone', { count: written }));
+    } catch (error) {
+      setFailure(errorMessage(error));
+    } finally {
+      setBatchProgress(null); setBusy('');
+    }
+  }
+
   async function loadScriptChat(id: string) {
     if (!id) { setScriptChat([]); return; }
     try {
@@ -1136,6 +1227,15 @@ export default function App() {
     return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}
       <div className="page-heading"><div><p className="eyebrow">{t('stage_script')}</p><h1>{t('scriptTitle')}</h1><p>{t('scriptHint')}</p></div>
         <div className="heading-actions">
+          <button
+            className="ghost"
+            disabled={busy === 'episodes-batch' || busy === 'script-ask'}
+            onClick={() => void enrichEpisodesInBatches()}
+          >
+            {busy === 'episodes-batch' && batchProgress
+              ? t('episodesBatchProgress', { done: batchProgress.done + 1, total: batchProgress.total })
+              : t('enrichEpisodes', { count: drama?.episodes.length ?? 0 })}
+          </button>
           {hasDraft && <button className="ghost" onClick={() => setShowEpisodeDiff((value) => !value)}>{t(showEpisodeDiff ? 'hideDiff' : 'showDiff')}</button>}
           {hasDraft && <button className="ghost" onClick={() => void discardEpisodeDraft()}>{t('discardDraft')}</button>}
           {hasDraft

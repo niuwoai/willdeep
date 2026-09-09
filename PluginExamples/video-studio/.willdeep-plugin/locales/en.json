@@ -44,5 +44,6 @@
   "command.skill.get": "Read a creative skill",
   "command.skill.save": "Save a creative skill",
   "command.skill.reset": "Restore the bundled skill",
-  "command.skill.compose": "Compose the stage prompt"
+  "command.skill.compose": "Compose the stage prompt",
+  "command.drama.saveEpisodeDrafts": "Save many episode drafts"
 }
