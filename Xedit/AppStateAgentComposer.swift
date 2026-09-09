@@ -908,7 +908,8 @@ extension AppState {
                 risk: risk,
                 approvalSource: approvalSource,
                 sandboxDecision: sandboxDecision,
-                isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
+                isUnattendedDispatchTask: runtime.isUnattendedDispatchTask,
+                localSandboxDisabled: runtime.localSandboxDisabled
             ),
             automaticBackgroundSandboxRetryApprovalSource: Self
                 .automaticBackgroundSandboxRetryApprovalSource(

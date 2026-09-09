@@ -2273,7 +2273,8 @@ extension AppState {
                                     risk: risk,
                                     approvalSource: autoApproval,
                                     sandboxDecision: sandboxDecision,
-                                    isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
+                                    isUnattendedDispatchTask: runtime.isUnattendedDispatchTask,
+                                    localSandboxDisabled: runtime.localSandboxDisabled
                                 ),
                                 patchAutoApplySource: nil
                             )
@@ -2545,7 +2546,8 @@ extension AppState {
                         risk: risk,
                         approvalSource: currentApprovalSource,
                         sandboxDecision: sandboxDecision,
-                        isUnattendedDispatchTask: runtime.isUnattendedDispatchTask
+                        isUnattendedDispatchTask: runtime.isUnattendedDispatchTask,
+                        localSandboxDisabled: runtime.localSandboxDisabled
                     ),
                     patchAutoApplySource: patchAutoApplySource,
                     taskAuthorizationSource: currentApprovalSource,

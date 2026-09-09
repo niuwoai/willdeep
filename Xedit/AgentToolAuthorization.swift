@@ -881,7 +881,9 @@ enum AgentSandboxPolicy {
                 // workspace-write profile and needs the registry. Global
                 // installs are excluded — they write outside the workspace,
                 // which the sandbox denies regardless of the network rule.
-                if networkCapableBuildHeads.contains(head),
+                if (networkCapableBuildHeads.contains(head)
+                    || AgentWorkspaceScriptPolicy.matches(tokens: tokens, workingDirectory: workingDirectory,
+                        roots: [rootDirectory].compactMap { $0 } + additionalWorkspaceRoots)),
                    !AgentPackageCommandPolicy.hasGlobalInstallScope(tokens) {
                     needsWorkspaceNetwork = true
                     // 光有网络不够：这些工具的配置和凭证都在真实 HOME 里

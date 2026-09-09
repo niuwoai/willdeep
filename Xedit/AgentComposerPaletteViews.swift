@@ -102,6 +102,14 @@ struct SlashCommand: Identifiable {
 
     static func builtIn(state: AppState) -> [SlashCommand] {
         let core: [SlashCommand] = [
+            SlashCommand(id: "no-sandbox", title: "/no-sandbox", subtitle: L10n.SessionSandbox.disable,
+                         symbol: "shield.slash", argumentMode: .optional(placeholder: L10n.SessionSandbox.prompt)) { args in
+                state.setLocalSandboxDisabled(true, text: args)
+            },
+            SlashCommand(id: "sandbox", title: "/sandbox", subtitle: L10n.SessionSandbox.enable,
+                         symbol: "shield", argumentMode: .optional(placeholder: L10n.SessionSandbox.prompt)) { args in
+                state.setLocalSandboxDisabled(false, text: args)
+            },
             SlashCommand(id: "new", title: "/new", subtitle: "Start a fresh chat in this workspace", symbol: "square.and.pencil") { _ in
                 state.startNewAgentSession()
             },

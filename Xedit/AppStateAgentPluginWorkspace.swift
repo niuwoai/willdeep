@@ -178,7 +178,8 @@ extension AppState {
             sandboxMode: sandboxModeForToolExecution(
                 risk: risk,
                 approvalSource: nil,
-                sandboxDecision: sandboxDecision
+                sandboxDecision: sandboxDecision,
+                localSandboxDisabled: runtime.localSandboxDisabled
             )
         )
         let result = try await AgentToolRunner.runCommand(

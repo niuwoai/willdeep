@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-09 | Current version: v1.356.0-rc4
+> Last updated: 2026-09-09 | Current version: v1.357.0-rc1
+
+当前聊天可用 `/no-sandbox [消息]` 暂时关闭本地执行沙箱，以 `/sandbox [消息]` 恢复；不继承到其他会话或应用重启，危险操作审批继续生效。工作区脚本自动获得网络和真实 HOME，仍限制写入范围。普通聊天的临时模型故障在无输出时最多重试三次。
 
 短剧工坊设置支持刷新服务商聊天模型列表和保存默认策划模型。
 

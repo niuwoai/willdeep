@@ -1348,13 +1348,15 @@ extension AppState {
         risk: AgentToolRisk,
         approvalSource: AgentToolApprovalSource?,
         sandboxDecision: AgentSandboxDecision,
-        isUnattendedDispatchTask: Bool = false
+        isUnattendedDispatchTask: Bool = false,
+        localSandboxDisabled: Bool = false
     ) -> AgentSandboxMode {
         // A scoped grant cannot be widened by an unattended flag or retry.
         // The execution-time guard separately rejects a changed decision.
         if approvalSource == .taskGrant {
             return sandboxDecision.mode == .readOnly ? .readOnly : .workspaceWrite
         }
+        if localSandboxDisabled { return .escalated }
         if sandboxDecision.mode == .escalated {
             return .escalated
         }

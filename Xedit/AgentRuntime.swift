@@ -61,6 +61,8 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Conversation state
 
     @Published var messages: [AgentMessage] = []
+    /// Explicit user switch, scoped to this live session and never persisted.
+    @Published var localSandboxDisabled = false
     /// Live text of the currently-streaming assistant message. Fed by
     /// `AgentStreamingMessageBuffer` at bubble cadence (~10 Hz) and observed
     /// ONLY by the transcript's streaming bubble subtree. Deliberately a
