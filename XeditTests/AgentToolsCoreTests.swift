@@ -1782,8 +1782,10 @@ struct AgentToolsCoreTests {
         }
     }
 
+    /// 1.358.0-rc2：HOME 不再被换掉（合成 HOME 是假墙，凭据改由 seatbelt
+    /// 内核级拒读把守）。剥密钥和改 TMPDIR 这两件事一件没变。
     @Test
-    func sandboxedEnvironmentScrubsSecretsAndUsesTemporaryHome() {
+    func sandboxedEnvironmentScrubsSecretsAndKeepsRealHome() {
         let root = URL(fileURLWithPath: "/tmp/willdeep-workspace")
         let env = AgentSandboxPolicy.sandboxedEnvironment(
             mode: .workspaceWriteNetwork,
@@ -1799,7 +1801,7 @@ struct AgentToolsCoreTests {
         #expect(env["GITHUB_TOKEN"] == nil)
         #expect(env["MY_SECRET"] == nil)
         #expect(env["LANG"] == "en_US.UTF-8")
-        #expect(env["HOME"] != "/Users/real")
+        #expect(env["HOME"] == "/Users/real")
         #expect(env["TMPDIR"] == env["TMP"])
         #expect(env["TMPDIR"] == env["TEMP"])
         #expect(env["TMPDIR"]?.contains("willdeep-agent-sandbox-tmp") == true)
