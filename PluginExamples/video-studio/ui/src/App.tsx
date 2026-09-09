@@ -106,6 +106,7 @@ export default function App() {
   const [structuredStreaming, setStructuredStreaming] = useState(false);
   const [staleCandidate, setStaleCandidate] = useState<{ characterID: string; draft: CharacterDraft; note: string } | null>(null);
   const [showDiff, setShowDiff] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [episodeDraft, setEpisodeDraft] = useState({ title: '', summary: '', script: '' });
   const [shotDraft, setShotDraft] = useState<Shot>(emptyShot(1));
   const [busy, setBusy] = useState('');
@@ -405,10 +406,47 @@ export default function App() {
     if (cancel && characterStreamID) void cancel(characterStreamID);
   }
 
+  /// 让 AI 给一个角色出第一稿。和继续对话走同一条链路，区别只是请求文本
+  /// 由固定指令给出，不需要用户先打字。
+  async function draftCharacter(entry: Character) {
+    setCharacterID(entry.id);
+    const view = characterView(entry);
+    setCharacter({ id: entry.id, name: view.name, description: view.description, visualPrompt: view.visualPrompt });
+    await runCharacterRequest(entry, t('characterFirstDraftRequest', { name: view.name }));
+  }
+
+  /// 给还空着的角色批量出第一稿。刻意串行：宿主对一个插件页面同时在跑的
+  /// AI 请求有上限（2 条），并发发出去只会被当场拒掉一半。
+  async function draftAllCharacters() {
+    if (!drama) return;
+    const pending = drama.characters.filter((item) => {
+      const view = characterView(item);
+      return !view.description.trim() || !view.visualPrompt.trim();
+    });
+    if (pending.length === 0) { setNotice(t('allCharactersDrafted')); return; }
+    setBatchProgress({ done: 0, total: pending.length });
+    for (const [index, entry] of pending.entries()) {
+      setBatchProgress({ done: index, total: pending.length });
+      // 每轮都从最新的 dramas 里重取：上一轮写完草稿后 draftRev 变了，
+      // 拿旧对象发请求会被版本检查判成冲突。
+      const latest = dramas.find((item) => item.id === drama.id)?.characters.find((item) => item.id === entry.id);
+      await runCharacterRequest(latest ?? entry, t('characterFirstDraftRequest', { name: (latest ?? entry).name }));
+    }
+    setBatchProgress(null);
+    setNotice(t('batchDraftDone', { count: pending.length }));
+  }
+
   async function askCharacter() {
     if (!drama || !selectedCharacter) { setFailure(t('selectCharacterFirst')); return; }
     const question = characterInput.trim();
     if (!question) { setFailure(t('characterAskRequired')); return; }
+    setCharacterInput('');
+    await runCharacterRequest(selectedCharacter, question);
+  }
+
+  async function runCharacterRequest(target: Character, question: string) {
+    if (!drama) return;
+    const selectedCharacter = target;
 
     const view = characterView(selectedCharacter);
     const baseDraftRev = selectedCharacter.draftRev ?? 0;
@@ -430,7 +468,6 @@ export default function App() {
     const budget = requestBudget(system, messages);
     if (!budget.withinLimits) { setFailure(t('requestTooLarge', { characters: budget.characters })); return; }
 
-    setCharacterInput('');
     setBusy('character-ask'); setFailure(''); setStreamingText(''); setStructuredStreaming(false);
     void appendCharacterChat('user', question, objectID, baseDraftRev);
 
@@ -658,9 +695,9 @@ export default function App() {
     const hasDraft = differences.length > 0;
     const chatForObject = characterChat.filter((item) => !item.objectID || item.objectID === characterID);
     return AppShell(<div className="page">{ProjectHeader()}<main className="content">
-      <div className="page-heading"><div><p className="eyebrow">{t('stage_characters')}</p><h1>{t('characterTitle')}</h1><p>{t('characterHint')}</p></div><button className="ghost" onClick={() => { setCharacterID(''); setCharacter({ id: '', name: '', description: '', visualPrompt: '' }); setShowDiff(false); setStaleCandidate(null); }}>{t('newCharacter')}</button></div>
+      <div className="page-heading"><div><p className="eyebrow">{t('stage_characters')}</p><h1>{t('characterTitle')}</h1><p>{t('characterHint')}</p></div><div className="heading-actions">{(drama?.characters.length ?? 0) > 0 && <button className="ghost" disabled={busy === 'character-ask' || batchProgress !== null} onClick={() => void draftAllCharacters()}>{batchProgress ? t('batchDraftProgress', { done: batchProgress.done + 1, total: batchProgress.total }) : t('draftAllCharacters')}</button>}<button className="ghost" onClick={() => { setCharacterID(''); setCharacter({ id: '', name: '', description: '', visualPrompt: '' }); setShowDiff(false); setStaleCandidate(null); }}>{t('newCharacter')}</button></div></div>
       <div className="character-grid">
-        <section className="character-list">{drama?.characters.map((item) => <button key={item.id} className={item.id === characterID ? 'chosen' : ''} aria-current={item.id === characterID} onClick={() => void selectCharacter(item)}>{item.candidates?.find((candidate) => candidate.id === item.selectedCandidateID) ? <img className="avatar photo" src={item.candidates.find((candidate) => candidate.id === item.selectedCandidateID)?.mediaURL} alt={item.name} /> : <div className="avatar">{item.name.slice(0, 1)}</div>}<div><strong>{item.name}</strong><p>{item.description}</p><small>{t('identityVersion', { version: item.identityVersion })}{draftDifferences(item).length > 0 ? ` \u00b7 ${t('draftBadge')}` : ''}</small></div></button>)}</section>
+        <section className="character-list">{(drama?.characters.length ?? 0) === 0 && <p className="empty-hint">{t('noCharactersYet')}</p>}{drama?.characters.map((item) => <button key={item.id} className={item.id === characterID ? 'chosen' : ''} aria-current={item.id === characterID} onClick={() => void selectCharacter(item)}>{item.candidates?.find((candidate) => candidate.id === item.selectedCandidateID) ? <img className="avatar photo" src={item.candidates.find((candidate) => candidate.id === item.selectedCandidateID)?.mediaURL} alt={item.name} /> : <div className="avatar">{item.name.slice(0, 1)}</div>}<div><strong>{item.name}</strong><p>{item.description}</p><small>{t('identityVersion', { version: item.identityVersion })}{draftDifferences(item).length > 0 ? ` \u00b7 ${t('draftBadge')}` : ''}</small></div></button>)}</section>
         <section className="editor-card">
           {hasDraft && <div className="identity-note draft-note"><strong>{t('draftPending')}</strong><span>{t('draftPendingHint')}</span><button className="ghost" onClick={() => setShowDiff((value) => !value)}>{t(showDiff ? 'hideDiff' : 'showDiff')}</button></div>}
           {hasDraft && showDiff && <div className="diff-list">{differences.map((row) => <div className="diff-row" key={row.field}><strong>{t(row.field === 'name' ? 'characterName' : row.field === 'description' ? 'characterDescription' : 'identityPrompt')}</strong><p className="diff-before">{row.before || t('diffEmpty')}</p><p className="diff-after">{row.after}</p></div>)}</div>}
@@ -672,6 +709,7 @@ export default function App() {
           <div className="generation-controls"><Dropdown ariaLabel={t('imageModel')} value={imageModel} options={imageModels.map((model) => ({ value: model, label: model }))} onChange={(next) => setImageModel(next as ImageModel)} /><Dropdown ariaLabel={t('imageCount')} value={String(candidateCount)} options={[1, 2, 4, 6].map((count) => ({ value: String(count), label: t('countImages', { count }) }))} onChange={(next) => setCandidateCount(Number(next))} /></div>
           {current && <div className="identity-candidates">{current.candidates.map((candidate) => <button className={candidate.id === current.selectedCandidateID ? 'chosen' : ''} key={candidate.id} onClick={() => void chooseCharacterImage(candidate.id)}><img src={candidate.mediaURL} alt={current.name} /></button>)}</div>}
           <div className="actions">
+            {current && <button className="ghost" disabled={busy === 'character-ask'} onClick={() => void draftCharacter(current)}>{t(view.description.trim() || view.visualPrompt.trim() ? 'redraftCharacter' : 'draftCharacter')}</button>}
             <button className="ghost" disabled={busy === 'characterImage'} onClick={() => void generateCharacterImages()}>{t('generateIdentity')}</button>
             {hasDraft && <button className="ghost" onClick={() => void discardCharacterDraft()}>{t('discardDraft')}</button>}
             {hasDraft ? <button className="primary" disabled={busy === 'commit'} onClick={() => void commitCharacterDraft()}>{t('adoptDraft')}</button>

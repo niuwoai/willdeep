@@ -21,8 +21,13 @@ export type DramaPlan = {
   title: string; genre: string; format: string; episodeCount: number; episodeDurationSeconds: number;
   logline: string; coreConflict: string; audience: string; tone: string; arc: string;
   episodes?: Array<{ title?: string; summary?: string; script?: string }>;
+  /// 策划带出来的角色骨架：名字加一句话定位。小传与视觉提示词留空，
+  /// 等角色阶段单独出第一稿。
+  characters?: Array<{ name?: string; role?: string }>;
 };
-export type Drama = Omit<DramaPlan, 'episodes'> & Revised & {
+// characters 与 episodes 都要去掉：策划里它们是骨架（名字加一句话），
+// 落库后是完整对象，两者同名但结构不同。
+export type Drama = Omit<DramaPlan, 'episodes' | 'characters'> & Revised & {
   id: string; status: string; draft?: Partial<Omit<DramaPlan, 'episodes'>> | null; coverURL?: string | null; characters: Character[]; episodes: Episode[];
   createdAt: string; updatedAt: string;
 };

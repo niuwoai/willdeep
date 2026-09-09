@@ -56,7 +56,7 @@ class DramaStore
         "draftRev" => 0,
         "draft" => nil,
         "coverURL" => nil,
-        "characters" => [],
+        "characters" => build_characters(plan),
         "episodes" => build_episodes(plan),
         "createdAt" => now,
         "updatedAt" => now
@@ -108,6 +108,37 @@ class DramaStore
 
   def empty_data
     { "version" => VERSION, "dramas" => [] }
+  end
+
+  # 策划里带出来的角色骨架：只有名字和一句话定位，小传与视觉提示词留空，
+  # 等角色阶段单独出第一稿。视觉提示词要求很具体（年龄、脸型、发型、体态、
+  # 标志服饰、不可改变项），塞进策划那一轮会两边都写不细。
+  def build_characters(plan)
+    requested = plan["characters"]
+    return [] unless requested.is_a?(Array)
+
+    seen = {}
+    requested.map do |source|
+      next nil unless source.is_a?(Hash)
+      name = text(source["name"], 120, "")
+      next nil if name.empty?
+      # 模型偶尔会把同一个角色写两遍，或者把「路人」这类泛称当角色。
+      # 重名直接丢后一个，别在角色表里堆出两个同名条目。
+      next nil if seen[name]
+      seen[name] = true
+      {
+        "id" => SecureRandom.uuid,
+        "name" => name,
+        "description" => text(source["role"] || source["description"], 2_000, ""),
+        "visualPrompt" => "",
+        "identityVersion" => 1,
+        "candidates" => [],
+        "selectedCandidateID" => nil,
+        "rev" => 0,
+        "draftRev" => 0,
+        "draft" => nil
+      }
+    end.compact.first(20)
   end
 
   def build_episodes(plan)

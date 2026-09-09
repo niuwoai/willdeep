@@ -179,3 +179,29 @@ describe('firstBalancedObject', () => {
     expect(firstBalancedObject('{"title":"半截')).toMatchObject({ truncated: true });
   });
 });
+
+describe('策划带出的角色骨架', () => {
+  it('解析 characters 数组', () => {
+    const raw = '```short_drama_plan\n{"title":"错时来信","characters":[{"name":"林晚","role":"夜班护士"},{"name":"周野","role":"落魄程序员"}]}\n```';
+    const parsed = parsePlanWithReason(raw);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.plan.characters).toHaveLength(2);
+    expect(parsed.plan.characters?.[0]).toMatchObject({ name: '林晚', role: '夜班护士' });
+  });
+
+  it('没给 characters 时是空数组而不是 undefined', () => {
+    const parsed = parsePlanWithReason('{"title":"错时来信"}');
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    // 落库那边直接遍历这个字段，undefined 会让确认策划整条崩掉。
+    expect(parsed.plan.characters).toEqual([]);
+  });
+
+  it('characters 不是数组时也收敛成空数组', () => {
+    const parsed = parsePlanWithReason('{"title":"错时来信","characters":"林晚、周野"}');
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.plan.characters).toEqual([]);
+  });
+});

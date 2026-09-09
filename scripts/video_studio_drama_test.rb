@@ -144,6 +144,49 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
     raise "wrong code #{response.dig('error', 'code')}" unless response.dig("error", "code") == "candidate_not_found"
   end
 
+  # ---- 策划带出的角色骨架 ----
+
+  check.call("a confirmed plan creates the named cast as skeletons") do
+    response = service.confirm_plan("plan" => {
+      "title" => "月港追光", "episodeCount" => 1,
+      "characters" => [
+        { "name" => "沈青", "role" => "胶片修复师" },
+        { "name" => "陆铭", "role" => "出资的旧同学" }
+      ]
+    })
+    cast = response.dig("drama", "characters")
+    raise "cast not created" unless cast.length == 2
+    raise "name lost" unless cast.map { |entry| entry["name"] } == %w[沈青 陆铭]
+    raise "role not stored as description" unless cast[0]["description"] == "胶片修复师"
+    # 骨架就是骨架：视觉提示词留空，等角色阶段单独出第一稿。
+    raise "visualPrompt should stay empty" unless cast[0]["visualPrompt"] == ""
+    raise "revisions missing" unless cast[0]["rev"] == 0 && cast[0]["draftRev"] == 0
+    raise "draft should be nil" unless cast[0]["draft"].nil?
+    raise "id missing" if cast.any? { |entry| entry["id"].to_s.empty? }
+  end
+
+  check.call("a duplicate or nameless cast entry is dropped, not stacked") do
+    response = service.confirm_plan("plan" => {
+      "title" => "重名测试", "episodeCount" => 1,
+      "characters" => [
+        { "name" => "林晚", "role" => "护士" },
+        { "name" => "林晚", "role" => "又写了一遍" },
+        { "name" => "  ", "role" => "没名字" },
+        { "role" => "只有定位" },
+        "不是对象"
+      ]
+    })
+    cast = response.dig("drama", "characters")
+    raise "expected one usable character, got #{cast.length}" unless cast.length == 1
+    raise "wrong survivor" unless cast[0]["name"] == "林晚" && cast[0]["description"] == "护士"
+  end
+
+  check.call("a plan without a cast still confirms") do
+    response = service.confirm_plan("plan" => { "title" => "没有角色表", "episodeCount" => 1 })
+    raise "confirm failed" unless response["ok"]
+    raise "characters should be an empty array" unless response.dig("drama", "characters") == []
+  end
+
   # ---- 共创草稿：手改与 AI 结果都写这里，正式内容一步不动 ----
 
   # 这部剧前面的用例已经塞过角色和分镜，固定索引会拿错对象，一律按 ID 定位。
@@ -356,6 +399,9 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
     raise "unsafe mode" unless (File.stat(path).mode & 0o777) == 0o600
   end
   check.call("an unreadable store refuses to write instead of wiping the archive") do
+    # 数量不写死：上面每加一条 confirm_plan 用例都会多一部剧，写死的期望
+    # 会让这条无关的守卫跟着红，真正的问题（存档被抹）反而被噪声盖住。
+    expected_count = service.list["dramas"].length
     before = File.read(path, encoding: "UTF-8")
     File.write(path, '{"version":1,"dramas":[{"id":"a","ti', encoding: "UTF-8")
     begin
@@ -366,7 +412,7 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
     end
     raise "corrupt file was rewritten" unless File.read(path, encoding: "UTF-8") == '{"version":1,"dramas":[{"id":"a","ti'
     File.write(path, before, encoding: "UTF-8")
-    raise "archive lost" unless service.list["dramas"].length == 2
+    raise "archive lost" unless service.list["dramas"].length == expected_count
   end
 end
 

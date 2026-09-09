@@ -92,6 +92,7 @@ function normalizePlan(value: Partial<DramaPlan>): DramaPlan | null {
     logline: value.logline?.trim() || '', coreConflict: value.coreConflict?.trim() || '',
     audience: value.audience?.trim() || '', tone: value.tone?.trim() || '', arc: value.arc?.trim() || '',
     episodes: Array.isArray(value.episodes) ? value.episodes : [],
+    characters: Array.isArray(value.characters) ? value.characters : [],
   };
 }
 
