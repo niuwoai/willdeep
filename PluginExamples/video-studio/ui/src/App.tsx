@@ -21,6 +21,8 @@ function localID(): string {
 }
 // 宿主对一次请求最多接受 3 个技能，这里跟它保持一致，超了不如早点拦住。
 const MAX_ATTACHED_SKILLS = 3;
+// 分集选择一段列十集。十集正好三行铺开，再多一屏就吃不下了。
+const EPISODES_PER_RANGE = 10;
 const stageOrder: Stage[] = ['planning', 'characters', 'script', 'storyboard', 'frames', 'video'];
 const CHARACTER_FENCE = 'short_drama_character';
 const EPISODE_FENCE = 'short_drama_episode';
@@ -159,6 +161,8 @@ export default function App() {
   // 技能编辑：打开哪一份、正在编辑的正文。
   const [editingSkillID, setEditingSkillID] = useState('');
   const [skillBody, setSkillBody] = useState('');
+  // 分集选择停在第几段。null = 跟着当前选中那一集走。
+  const [episodeRangeStart, setEpisodeRangeStart] = useState<number | null>(null);
   // 放大查看的那张图。null 表示没开图层。
   const [zoomed, setZoomed] = useState<{ url: string; label: string } | null>(null);
   const [episodeDraft, setEpisodeDraft] = useState({ title: '', summary: '', script: '' });
@@ -1337,9 +1341,40 @@ export default function App() {
     return <header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{drama.title}</span></div><span className={`status-pill status-${drama.status}`}>{t(`status_${drama.status}`)}</span></header>;
   }
 
+  /// 分集选择：先用下拉挑一段十集，再把这十集的标题铺开。二十四集塞进一个
+  /// 下拉，要选第几集全靠滚，标题也看不全。
   function EpisodeSwitcher() {
     if (!drama) return null;
-    return <div className="episode-switcher"><label>{t('episode')}</label><Dropdown ariaLabel={t('episode')} value={episode?.id ?? ''} options={drama.episodes.map((item) => ({ value: item.id, label: `${t('episodeNumber', { number: item.order })} · ${item.title}` }))} onChange={(next) => { setEpisodeID(next); setShotID(''); }} /><span>{t('episodeProgress', { current: episode?.order ?? 0, total: drama.episodes.length })}</span></div>;
+    const all = drama.episodes;
+    const index = all.findIndex((item) => item.id === episodeID);
+    // 用户挑过段就停在那一段；没挑过、或换了剧使段落越界，才跟着当前集走。
+    const auto = index >= 0 ? Math.floor(index / EPISODES_PER_RANGE) * EPISODES_PER_RANGE : 0;
+    const start = episodeRangeStart !== null && episodeRangeStart < all.length ? episodeRangeStart : auto;
+    const starts: number[] = [];
+    for (let from = 0; from < all.length; from += EPISODES_PER_RANGE) starts.push(from);
+    return <div className="episode-switcher">
+      <div className="episode-switcher-head">
+        <label>{t('episode')}</label>
+        {starts.length > 1 && <Dropdown
+          ariaLabel={t('episodeRange')}
+          value={String(start)}
+          options={starts.map((from) => ({ value: String(from), label: t('episodeRangeLabel', { from: from + 1, to: Math.min(from + EPISODES_PER_RANGE, all.length) }) }))}
+          onChange={(next) => setEpisodeRangeStart(Number(next))}
+        />}
+        <span>{t('episodeProgress', { current: episode?.order ?? 0, total: all.length })}</span>
+      </div>
+      <div className="episode-picker">{all.slice(start, start + EPISODES_PER_RANGE).map((item) => (
+        <button
+          key={item.id}
+          className={item.id === episodeID ? 'chosen' : ''}
+          aria-current={item.id === episodeID}
+          onClick={() => { setEpisodeID(item.id); setShotID(''); }}
+        >
+          <strong>{t('episodeNumber', { number: item.order })}</strong>
+          <span>{item.title || t('untitledEpisode')}</span>
+        </button>
+      ))}</div>
+    </div>;
   }
 
   function ShotRail() {

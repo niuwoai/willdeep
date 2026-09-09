@@ -317,6 +317,44 @@ describe('Short Drama Studio', () => {
     });
   });
 
+  // ---- 分集选择 ----
+
+  /// 二十四集塞进一个下拉，要选第几集全靠滚，标题也看不全。
+  it('分集按十集一段列出标题，选段只换列表不换当前集', async () => {
+    const many = Array.from({ length: 24 }, (_, at) => episodeFixture({
+      id: `e${at + 1}`, order: at + 1, title: `标题${at + 1}`,
+    }));
+    dramas = [{ ...scriptDramaFixture(many[0]!), episodes: many, episodeCount: 24 }];
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '继续创作' }))[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: /分集剧本/ }))[0]!);
+
+    // 第一段列出 1 到 10 集的标题，第 11 集不在里面。
+    await waitFor(() => expect(screen.getByRole('button', { name: /标题1$/ })).not.toBeNull());
+    expect(document.querySelectorAll('.episode-picker button').length).toBe(10);
+    expect(screen.queryByRole('button', { name: /标题11/ })).toBeNull();
+    expect(screen.getByRole('button', { name: '分集范围' }).textContent).toContain('1-10 集');
+
+    // 挑到第三段：列表换成 21 到 24 集，当前集还是第 1 集。
+    fireEvent.click(screen.getByRole('button', { name: '分集范围' }));
+    fireEvent.mouseDown(screen.getByRole('option', { name: '21-24 集' }));
+    await waitFor(() => expect(document.querySelectorAll('.episode-picker button').length).toBe(4));
+    expect(screen.queryByRole('button', { name: /标题1$/ })).toBeNull();
+    expect((screen.getByLabelText('本集标题') as HTMLInputElement).value).toBe('标题1');
+
+    // 点第 22 集才换当前集。
+    fireEvent.click(screen.getByRole('button', { name: /标题22/ }));
+    await waitFor(() => expect((screen.getByLabelText('本集标题') as HTMLInputElement).value).toBe('标题22'));
+    expect(screen.getByRole('button', { name: /标题22/ }).getAttribute('aria-current')).toBe('true');
+  });
+
+  it('只有一段时不出范围下拉，没写标题的集有占位文案', async () => {
+    await openScript(episodeFixture({ title: '' }));
+    await waitFor(() => expect(document.querySelectorAll('.episode-picker button').length).toBe(1));
+    expect(screen.queryByRole('button', { name: '分集范围' })).toBeNull();
+    expect(document.querySelector('.episode-picker button')?.textContent).toContain('（还没写标题）');
+  });
+
   // ---- 模型选择器的位置 ----
 
   /// 面板顶部那份会随页面滚走，用户滚到按钮跟前时已经看不见了。
