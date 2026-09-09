@@ -317,6 +317,61 @@ describe('Short Drama Studio', () => {
     });
   });
 
+  // ---- 头像放大 ----
+
+  /// 定妆照那张头像在列表里只有 50 像素，点开才能看清脸有没有跑。
+  it('点头像开放大图层，点背景、X、Esc 三种方式都能关掉', async () => {
+    const withPortrait = characterFixture({
+      candidates: [{ id: 'cand-1', mediaURL: 'https://example.test/linwan.png' }],
+      selectedCandidateID: 'cand-1',
+    });
+    await openCharacters(withPortrait);
+
+    const zoom = screen.getByRole('button', { name: '放大查看头像' });
+    fireEvent.click(zoom);
+    const layer = await screen.findByRole('dialog');
+    expect(layer.querySelector('img')?.getAttribute('src')).toBe('https://example.test/linwan.png');
+
+    // 点图片本身不关：放大就是为了看清，误触关掉很烦。
+    fireEvent.click(layer.querySelector('img')!);
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭放大图' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    fireEvent.click(zoom);
+    fireEvent.click(await screen.findByRole('dialog'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    fireEvent.click(zoom);
+    await screen.findByRole('dialog');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('放大头像不会顺带切换选中的角色，没有定妆照时也没有放大按钮', async () => {
+    const second = { ...characterFixture(), id: 'c2', name: '周野', description: '夜市摊主' };
+    const withPortrait = characterFixture({
+      candidates: [{ id: 'cand-1', mediaURL: 'https://example.test/linwan.png' }],
+      selectedCandidateID: 'cand-1',
+    });
+    chatSeq = 0;
+    dramas = [dramaFixture(withPortrait)];
+    dramas[0]!.characters = [withPortrait, second];
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '继续创作' }))[0]!);
+    // 先选中第二个角色，再点第一个角色的头像。
+    fireEvent.click((await screen.findAllByRole('button', { name: /周野/ }))[0]!);
+    await waitFor(() => expect((screen.getByLabelText('角色名') as HTMLInputElement).value).toBe('周野'));
+
+    fireEvent.click(screen.getByRole('button', { name: '放大查看头像' }));
+    await screen.findByRole('dialog');
+    // 头像按钮和选角按钮是两个按钮，放大不该把编辑区换成林晚。
+    expect((screen.getByLabelText('角色名') as HTMLInputElement).value).toBe('周野');
+    // 周野没有定妆照，所以整页只有林晚那一个放大按钮。
+    expect(screen.getAllByRole('button', { name: '放大查看头像' }).length).toBe(1);
+  });
+
   // ---- 技能维护 ----
 
   it('设置页里选一份技能，能看到正文并保存回去', async () => {

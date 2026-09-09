@@ -158,6 +158,8 @@ export default function App() {
   // 技能编辑：打开哪一份、正在编辑的正文。
   const [editingSkillID, setEditingSkillID] = useState('');
   const [skillBody, setSkillBody] = useState('');
+  // 放大查看的那张图。null 表示没开图层。
+  const [zoomed, setZoomed] = useState<{ url: string; label: string } | null>(null);
   const [episodeDraft, setEpisodeDraft] = useState({ title: '', summary: '', script: '' });
   const [shotDraft, setShotDraft] = useState<Shot>(emptyShot(1));
   const [busy, setBusy] = useState('');
@@ -1316,6 +1318,15 @@ export default function App() {
   // 它们定义在 App 函数体内，每次渲染都是新的函数引用；一旦以 JSX 元素的形式
   // 出现，React 就按类型引用比对，于是每个 setState 都会 unmount + remount
   // 整棵子树，所有受控输入框打一个字就掉焦点。
+  // Esc 关掉放大图层。挂在 window 上而不是图层自己身上：焦点可能还在触发它的
+  // 那个头像按钮上，图层拿不到键盘事件。
+  useEffect(() => {
+    if (!zoomed) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setZoomed(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoomed]);
+
   function AppShell(children: ReactNode) {
     return <div className="app-shell">{Sidebar()}<div className="app-main">{children}</div></div>;
   }
@@ -1377,7 +1388,7 @@ export default function App() {
     return AppShell(<div className="page">{ProjectHeader()}<main className="content">
       <div className="page-heading"><div><p className="eyebrow">{t('stage_characters')}</p><h1>{t('characterTitle')}</h1><p>{t('characterHint')}</p></div><div className="heading-actions">{(drama?.characters.length ?? 0) > 0 && <button className="ghost" disabled={busy === 'character-ask' || batchProgress !== null} onClick={() => void draftAllCharacters()}>{batchProgress ? t('batchDraftProgress', { done: batchProgress.done + 1, total: batchProgress.total }) : t('draftAllCharacters')}</button>}<button className="ghost" onClick={() => { setCharacterID(''); setCharacter({ id: '', name: '', description: '', visualPrompt: '' }); setShowDiff(false); setStaleCandidate(null); }}>{t('newCharacter')}</button></div></div>
       <div className="character-grid">
-        <section className="character-list">{(drama?.characters.length ?? 0) === 0 && <p className="empty-hint">{t('noCharactersYet')}</p>}{drama?.characters.map((item) => <button key={item.id} className={item.id === characterID ? 'chosen' : ''} aria-current={item.id === characterID} onClick={() => void selectCharacter(item)}>{item.candidates?.find((candidate) => candidate.id === item.selectedCandidateID) ? <img className="avatar photo" src={item.candidates.find((candidate) => candidate.id === item.selectedCandidateID)?.mediaURL} alt={item.name} /> : <div className="avatar">{item.name.slice(0, 1)}</div>}<div><strong>{item.name}</strong><p>{item.description}</p><small>{t('identityVersion', { version: item.identityVersion })}{draftDifferences(item).length > 0 ? ` \u00b7 ${t('draftBadge')}` : ''}</small></div></button>)}</section>
+        <section className="character-list">{(drama?.characters.length ?? 0) === 0 && <p className="empty-hint">{t('noCharactersYet')}</p>}{drama?.characters.map((item) => { const portrait = item.candidates?.find((candidate) => candidate.id === item.selectedCandidateID); return <div key={item.id} className={`character-row ${item.id === characterID ? 'chosen' : ''}`}>{portrait ? <button className="avatar-zoom" aria-label={t('zoomAvatar')} onClick={() => setZoomed({ url: portrait.mediaURL, label: item.name })}><img className="avatar photo" src={portrait.mediaURL} alt="" /></button> : <div className="avatar">{item.name.slice(0, 1)}</div>}<button className="character-pick" aria-current={item.id === characterID} onClick={() => void selectCharacter(item)}><strong>{item.name}</strong><p>{item.description}</p><small>{t('identityVersion', { version: item.identityVersion })}{draftDifferences(item).length > 0 ? ` \u00b7 ${t('draftBadge')}` : ''}</small></button></div>; })}</section>
         <section className="editor-card">
           {hasDraft && <div className="identity-note draft-note"><strong>{t('draftPending')}</strong><span>{t('draftPendingHint')}</span><button className="ghost" onClick={() => setShowDiff((value) => !value)}>{t(showDiff ? 'hideDiff' : 'showDiff')}</button></div>}
           {hasDraft && showDiff && <div className="diff-list">{differences.map((row) => <div className="diff-row" key={row.field}><strong>{t(row.field === 'name' ? 'characterName' : row.field === 'description' ? 'characterDescription' : 'identityPrompt')}</strong><p className="diff-before">{row.before || t('diffEmpty')}</p><p className="diff-after">{row.after}</p></div>)}</div>}
@@ -1658,6 +1669,15 @@ export default function App() {
           {t(noticesExpanded ? 'noticeCollapse' : 'noticeSummary', { count: notices.length })}
         </button>
       )}
+    </div>
+  )}{zoomed && (
+    <div className="lightbox" role="dialog" aria-modal="true" aria-label={zoomed.label} onClick={() => setZoomed(null)}>
+      {/* 点图片本身不关，只有背景和 X 关：放大就是为了看清，误触关掉很烦。 */}
+      <img src={zoomed.url} alt={zoomed.label} onClick={(event) => event.stopPropagation()} />
+      <button type="button" className="lightbox-close" onClick={() => setZoomed(null)}>
+        <span aria-hidden="true">×</span>
+        <span className="visually-hidden">{t('closeZoom')}</span>
+      </button>
     </div>
   )}</>;
 }
