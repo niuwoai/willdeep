@@ -12,6 +12,7 @@ import Foundation
 /// before producing anything. Pure policy, no runtime state — the caller
 /// decides which lane a turn belongs to (`AppState.transientNetworkRetryLane`).
 nonisolated enum AgentTransientRetryLane: Equatable, Sendable {
+    case chat
     /// Goal mode with a human nearby. Seconds-scale: enough to ride out a
     /// Wi-Fi roam, short enough that a real outage surfaces the error fast.
     case goal
@@ -35,6 +36,7 @@ nonisolated enum AgentTransientRetryLane: Equatable, Sendable {
 
     var maximumRetries: Int {
         switch self {
+        case .chat: return 3
         case .goal: return 5
         case .unattended: return Self.unattendedDelaysNanoseconds.count
         }
@@ -44,6 +46,8 @@ nonisolated enum AgentTransientRetryLane: Equatable, Sendable {
     /// step, so a future bump to `maximumRetries` cannot index out of bounds.
     func delayNanoseconds(attempt: Int) -> UInt64 {
         switch self {
+        case .chat:
+            return UInt64(1 << min(max(attempt - 1, 0), 2)) * 1_000_000_000
         case .goal:
             return Self.goalDelayNanoseconds
         case .unattended:
@@ -407,13 +411,11 @@ extension AppState {
     /// Which self-recovery schedule this turn gets for a transient network
     /// failure, or nil when it gets none and the error card is the answer.
     ///
-    /// An ordinary chat is deliberately excluded: the human is right there,
-    /// the banner appears instantly, and one click is faster and cheaper than
-    /// any backoff we could pick for them.
+    /// Ordinary chat gets a short bounded recovery window too.
     func transientNetworkRetryLane(for runtime: AgentRuntime) -> AgentTransientRetryLane? {
         if runtime.isUnattendedRun { return .unattended }
         if runtime.interactionMode == .goal { return .goal }
-        return nil
+        return .chat
     }
 
     func shouldRetryTransientNetworkError(
@@ -433,6 +435,7 @@ extension AppState {
         return message.content.isEmpty
             && message.toolCalls.isEmpty
             && (message.reasoningContent ?? "").isEmpty
+            && message.sourceReferences.isEmpty
     }
 
     /// How long to wait before replaying `attempt` (1-based). TLS handshake
@@ -489,9 +492,7 @@ extension AppState {
             }
         }
         // An empty stream is usually a transient upstream hiccup; in
-        // autonomous goal mode we retry a bounded number of times before
-        // surfacing the error. (In normal mode there's no auto-retry — the
-        // error card with its 重试 button shows immediately.)
+        // all lanes we retry a bounded number of times before surfacing it.
         if case AgentClientError.emptyStream = error {
             return true
         }

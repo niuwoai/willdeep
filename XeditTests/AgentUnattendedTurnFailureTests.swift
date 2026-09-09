@@ -218,11 +218,10 @@ struct AgentUnattendedTurnFailureTests {
             for: AgentRuntime(session: interactiveSession(interactionMode: .goal))
         ) == .goal)
 
-        // The regression that made the report possible: an ordinary chat is
-        // the only lane with a human on it, and it stays retry-free on purpose.
+        // Foreground chat has its own shorter recovery window.
         #expect(appState.transientNetworkRetryLane(
             for: AgentRuntime(session: interactiveSession())
-        ) == nil)
+        ) == .chat)
     }
 
     @Test("an offline routine turn retries instead of going quiet")
@@ -242,8 +241,8 @@ struct AgentUnattendedTurnFailureTests {
         ), "the 22:00 run got exactly one attempt against a dead network and then went silent")
     }
 
-    @Test("an ordinary chat still surfaces the error immediately")
-    func interactiveTurnIsNotRetried() {
+    @Test("an ordinary chat retries transient failures before any output")
+    func interactiveTurnIsRetried() {
         let appState = AppState()
         let assistant = AgentMessage(role: .assistant, content: "")
         let runtime = AgentRuntime(session: interactiveSession(messages: [
@@ -251,12 +250,29 @@ struct AgentUnattendedTurnFailureTests {
             assistant,
         ]))
 
-        #expect(!appState.shouldRetryTransientNetworkError(
+        #expect(appState.shouldRetryTransientNetworkError(
             URLError(.notConnectedToInternet),
             for: runtime,
             assistantID: assistant.id,
             retryCount: 0
         ))
+    }
+
+    @Test("chat retries transient HTTP statuses with a bounded budget", arguments: [408, 429, 500, 502, 503, 504, 599, 400, 401, 403])
+    func chatHTTPRetryBudget(status: Int) {
+        let app = AppState()
+        let assistant = AgentMessage(role: .assistant, content: "")
+        let runtime = AgentRuntime(session: interactiveSession(messages: [assistant]))
+        let error = AgentClientError.serverStatus(AgentProviderHTTPError(
+            statusCode: status, method: "POST", url: "https://example.invalid/chat",
+            providerID: "test", model: "test", requestSummary: "", requestBody: "", responseBody: ""
+        ))
+        #expect(app.shouldRetryTransientNetworkError(error, for: runtime,
+            assistantID: assistant.id, retryCount: 0) == (status == 408 || status == 429 || status >= 500))
+        #expect(!app.shouldRetryTransientNetworkError(error, for: runtime,
+            assistantID: assistant.id, retryCount: 3))
+        #expect(AgentTransientRetryLane.chat.delayNanoseconds(attempt: 1) == 1_000_000_000)
+        #expect(AgentTransientRetryLane.chat.delayNanoseconds(attempt: 3) == 4_000_000_000)
     }
 
     @Test("a turn that already produced output is never replayed")
