@@ -321,7 +321,7 @@ enum AgentSandboxPolicy {
 
     nonisolated private static let networkHeads: Set<String> = [
         "curl", "wget", "ssh", "scp", "rsync", "gh", "brew",
-        "mysql", "mariadb"
+        "mysql", "mariadb", "kubectl"
     ]
 
     /// Read-only network diagnostics. They resolve names or probe reachability
@@ -1325,6 +1325,20 @@ enum AgentSandboxPolicy {
                     .appendingPathComponent(".gitconfig")
                     .path
             }
+            // 同一个道理，kubectl 找的是 `$HOME/.kube/config`。合成 HOME 让它
+            // 报 "current-context is not set" 并回落到 localhost:8080，于是
+            // 一个装好了 kubeconfig 的机器上，连 `kubectl get pods` 都跑不了；
+            // agent 只能绕去可见终端。这里只给静态证明是只读的调用指一次
+            // 真实 kubeconfig，既不放开整个 HOME，也不给写权限——`get secret`
+            // 和 `config view --raw` 在 SafeCommand 里本就判为危险，走不到这。
+            if let command, isReadOnlyKubectlInspection(command) {
+                let kubeconfig = FileManager.default
+                    .homeDirectoryForCurrentUser
+                    .appendingPathComponent(".kube/config")
+                if FileManager.default.fileExists(atPath: kubeconfig.path) {
+                    environment["KUBECONFIG"] = kubeconfig.path
+                }
+            }
             // Node/Playwright inherit the GUI process' TMPDIR by default. On
             // macOS that path can be a parent of Foundation's actual
             // temporaryDirectory, while the seatbelt profile only allows the
@@ -1369,6 +1383,43 @@ enum AgentSandboxPolicy {
             return tokens.contains("--global")
                 && (tokens.contains("--list") || tokens.contains("-l"))
         }
+    }
+
+    /// 静态证明「这条命令只读集群」。判据和 git 那条一致：整条命令必须被
+    /// SafeCommand 判为 alwaysSafe（`get` / `describe` / `logs` /
+    /// `rollout status` / `config current-context` 这些），展开可证，而且每一
+    /// 段都得是 kubectl。任何一段不是，就不注入——否则
+    /// `kubectl get pods && rm -rf x` 里那半条也蹭到了凭证。
+    nonisolated static func isReadOnlyKubectlInspection(_ command: String) -> Bool {
+        guard SafeCommand.classify(command: command) == .alwaysSafe,
+              let resolution = SafeCommand.resolveProvablySafeShellExpansions(in: command),
+              !resolution.requiresJudgment,
+              let chain = AgentShellCommandParser.parse(resolution.command),
+              !chain.segments.isEmpty else {
+            return false
+        }
+        var sawKubectl = false
+        for segment in chain.segments {
+            guard let rawTokens = AgentCommandAuthorization.shellTokens(from: segment.text) else {
+                return false
+            }
+            // `NS=tokenhub; kubectl -n $NS get job x` 这种前置赋值段没有命令头，
+            // 跳过它而不是把整条命令判掉——它正是运维实际会敲的形态。
+            if rawTokens.allSatisfy(isEnvironmentAssignment) { continue }
+            guard let invocation = shellInvocation(from: rawTokens) else {
+                return false
+            }
+            if invocation.head == "kubectl" {
+                sawKubectl = true
+                continue
+            }
+            // 只读的收尾管道（`| grep`、`| head`）不该把整条命令挡在外面，
+            // 但它们自己也必须是 SafeCommand 认过的只读头。
+            guard SafeCommand.classify(command: segment.text) == .alwaysSafe else {
+                return false
+            }
+        }
+        return sawKubectl
     }
 
     nonisolated static func shellLaunch(
@@ -1854,6 +1905,12 @@ enum AgentSandboxPolicy {
             return classifySSHRemoteCommand(tokens)
         case "mysql", "mariadb":
             return SafeCommand.classifyDatabaseClient(firstToken: head, tokens: tokens)
+        case "kubectl":
+            // kubectl 进这张表只是为了拿到网络，它的读写边界早就由
+            // SafeCommand 分得很细（`get` / `describe` / `rollout status`
+            // 只读，`set image` 送审，`get secret` 直接危险）。走 default
+            // 会把只读巡检也打成需审批，白丢掉一整类免打扰的诊断命令。
+            return SafeCommand.classifyKubectl(tokens: tokens)
         default:
             return .needsJudgment
         }

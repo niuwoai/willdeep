@@ -115,12 +115,24 @@ enum AgentTerminalTools {
         )
     }
 
+    /// 在读这个 tab 之前先把「它现在连在哪」弄清楚。
+    ///
+    /// 这是模型判断「该不该把这条命令发进去」的唯一可靠依据，所以宁可花
+    /// 三秒探一次。探针只在 shell 空闲时发，前台有交互程序时直接跳过。
+    @MainActor
+    private static func resolveHost(controller: AgentInteractiveTerminalController, tabID: UUID?) async {
+        let tab = tabID.flatMap { id in controller.tabs.first { $0.id == id } } ?? controller.activeTab
+        guard let tab, tab.isRunning else { return }
+        _ = await tab.resolveHostIdentity()
+    }
+
     static func snapshot(arguments: [String: AgentJSONValue], context: AgentToolContext) async throws -> AgentToolResult {
         guard let controller = context.terminalController else {
             throw AgentToolError.invalidArgument("Agent Terminal is not available in this context.")
         }
         let maxCharacters = min(max(arguments["max_characters"]?.intValue() ?? 6_000, 500), 12_000)
         let targetTabID = try terminalTabID(arguments)
+        await resolveHost(controller: controller, tabID: targetTabID)
 
         let snapshot: RedactedTerminalSnapshot
         do {
@@ -157,6 +169,7 @@ enum AgentTerminalTools {
                     isZModemTransferActive: raw.isZModemTransferActive,
                     runtimeName: raw.runtimeName,
                     runtimeTarget: raw.runtimeTarget,
+                    hostLine: raw.hostLine,
                     output: trimmed,
                     markedOutput: trimmedMarked,
                     scrollback: trimmedScrollback,
@@ -177,7 +190,7 @@ enum AgentTerminalTools {
         let statusLine: String
         if snapshot.isRunning {
             let target = snapshot.runtimeTarget.isEmpty ? "" : " (\(snapshot.runtimeTarget))"
-            statusLine = "Agent Terminal: connected\nTab ID: \(snapshot.tabID.uuidString)\nRuntime: \(snapshot.runtimeName)\(target)"
+            statusLine = "Agent Terminal: connected\nTab ID: \(snapshot.tabID.uuidString)\nRuntime: \(snapshot.runtimeName)\(target)\nHost: \(snapshot.hostLine)"
         } else {
             statusLine = "Agent Terminal: process has exited (showing its final visible screen)\nTab ID: \(snapshot.tabID.uuidString)\nRuntime: \(snapshot.runtimeName)"
         }
@@ -248,6 +261,7 @@ enum AgentTerminalTools {
         let isZModemTransferActive: Bool
         let runtimeName: String
         let runtimeTarget: String
+        let hostLine: String
         let output: String
         let markedOutput: String
         let scrollback: String
@@ -292,6 +306,7 @@ enum AgentTerminalTools {
         }
         let pathSelection = try zmodemPathSelection(arguments: arguments, rootDirectory: context.rootDirectory)
         let targetTabID = try terminalTabID(arguments)
+        await resolveHost(controller: controller, tabID: targetTabID)
         let dispatch = try await MainActor.run {
             try controller.sendApprovedCommandDispatch(
                 command,
@@ -466,6 +481,9 @@ enum AgentTerminalTools {
             throw AgentToolError.invalidArgument("Agent Terminal is not available in this context.")
         }
         let sessionID = context.runtimeID
+        // 刻意只探活跃 tab：对每一个 tab 都发探针会往用户所有终端里打字，
+        // 而模型下一步要用的几乎总是活跃那个。其余 tab 报 unknown。
+        await resolveHost(controller: controller, tabID: UUID?.none)
         let summaries = await MainActor.run {
             controller.tabs.map { tab in
                 tab.refreshInputState()
@@ -495,6 +513,55 @@ enum AgentTerminalTools {
         )
     }
 
+    /// 这个 tab 当前实际连在哪台机器上。
+    ///
+    /// `kind` 只说明 tab 是怎么创建的：用户在一个 local tab 里手敲 `ssh`
+    /// 之后它永远还是 `local`。所以判本地还是远端只能靠往活着的 shell 里
+    /// 探一次 hostname，再和本机比。探不到就是 `unknown`——刻意不回落成
+    /// `local`：拿着错的身份批准一条命令，比承认不知道危险得多。
+    @MainActor
+    static func hostDescriptor(_ tab: AgentTerminalTab) -> [String: Any] {
+        var descriptor: [String: Any] = [:]
+        if case .ssh(_, _, let target) = tab.kind {
+            // 从 SSH profile 开的 tab，目标是清楚的，但它里面仍可能再跳一层。
+            descriptor["configured_ssh_target"] = target
+        }
+        switch tab.hostState {
+        case .unknown:
+            descriptor["host_kind"] = "unknown"
+        case .local(let identity), .remote(let identity):
+            descriptor["host"] = identity.hostname
+            descriptor["host_kind"] = isLocalHostname(identity.hostname) ? "local" : "remote"
+            if !identity.operatingSystem.isEmpty { descriptor["host_os"] = identity.operatingSystem }
+            if !identity.ipAddress.isEmpty { descriptor["host_ip"] = identity.ipAddress }
+        case .changed(let previous):
+            descriptor["host_kind"] = "unknown"
+            descriptor["host_note"] = "a shell-switching command ran since the last measurement"
+            if let previous { descriptor["last_known_host"] = previous.hostname }
+        case .disconnected(let previous):
+            descriptor["host_kind"] = "unknown"
+            descriptor["host_note"] = "the terminal reported a closed connection"
+            if let previous { descriptor["last_known_host"] = previous.hostname }
+        }
+        return descriptor
+    }
+
+    /// 和本机比对。macOS 的 `hostname` 常带 `.local` 后缀，Bonjour 改名也
+    /// 会变，所以两边都剥掉后缀再比，并且大小写不敏感。
+    nonisolated static func isLocalHostname(_ hostname: String) -> Bool {
+        func normalized(_ value: String) -> String {
+            var token = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            for suffix in [".local", ".lan", ".home", ".localdomain"] where token.hasSuffix(suffix) {
+                token = String(token.dropLast(suffix.count))
+            }
+            return token
+        }
+        let candidate = normalized(hostname)
+        guard !candidate.isEmpty else { return false }
+        if candidate == normalized(ProcessInfo.processInfo.hostName) { return true }
+        return candidate == normalized(Host.current().localizedName ?? "")
+    }
+
     @MainActor
     private static func tabSummary(
         _ tab: AgentTerminalTab,
@@ -507,7 +574,7 @@ enum AgentTerminalTools {
         case .delegatedShell: kind = "delegated"
         case .ssh: kind = "ssh"
         }
-        return [
+        var summary: [String: Any] = [
             "terminal_tab_id": tab.id.uuidString,
             "title": tab.title,
             "kind": kind,
@@ -518,6 +585,8 @@ enum AgentTerminalTools {
             "is_automation_busy": tab.isAutomationBusy,
             "opened_by_this_conversation": sessionID != nil && tab.originAgentSessionID == sessionID
         ]
+        summary.merge(hostDescriptor(tab)) { current, _ in current }
+        return summary
     }
 
     private static func terminalTabID(_ arguments: [String: AgentJSONValue]) throws -> UUID? {

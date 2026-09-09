@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.344.0-rc1 - 2026-09-09
+
+### Added
+- 终端标签页自己维护「现在连在哪台机器上」的状态：从没测过、本机、远端、敲过换壳命令待重探、连接已断待重探。状态缓存住并由事件驱动，不必每次发命令都探一遍。探针只在结论不可信时才真跑，前台有交互程序占着 PTY 时跳过。
+- 换壳命令（`ssh` / `exit` / `su` / `docker exec` / `kubectl exec` / `tmux` 等）让身份结论作废。只看每段的命令头、跳过 `env` 这类包装器、剥掉路径前缀，所以 `grep -rn ssh docs/` 不会白触发一次探测。
+- 终端输出里出现明确的断开信号（`Connection to X closed`、`client_loop: send disconnect` 等）时立即作废结论，不用等下一条命令。跨数据块切断的短语会拼回来再判。
+- `terminal_snapshot` 多一行实测 Host，`terminal_list_tabs` 多 `host` / `host_kind` / `host_note` 字段。此前模型只能看到 `kind: "local"`，而用户在本地标签里手敲 `ssh` 之后它永远还是 local，判断只能靠猜。
+- 终端命令的审批卡直接写明目标主机（远端另有警告标记），裁判上下文也带上它。判决缓存键本来就含上下文，于是换了机器旧判决自然不复用：同一条命令在本机批过，不等于在生产机上也批过。
+- 目标是远端、命令里却带本机工作区或家目录绝对路径时直接落人工审批。这种命令写错了机器，而裁判看不出来——只有宿主知道那个标签页现在连在哪。
+
+### Fixed
+- `kubectl` 进网络放行名单，并给静态证明只读的调用注入指向真实 kubeconfig 的环境变量。此前非提权命令拿到的是合成 HOME，kubectl 找不到 `~/.kube/config`，在一台配好集群的机器上连 `kubectl get pods` 都跑不了：报 `current-context is not set` 并回落到 `localhost:8080`。Agent 只能绕去可见终端，而那里往往需要用户先手动 ssh。放行不打开整个 HOME、也不给写权限，`get secret` 与 `config view --raw` 本就判危险，走不到这条路；写操作仍走审批。
+- 网络分类补上 `kubectl` 分支，委托给 SafeCommand 已有的细分判定。落在 default 会把只读巡检也打成需审批，白丢一整类免打扰的诊断命令。
+
+### Changed
+- `terminal_send_command` 的工具描述与系统提示改成让模型读实测 Host，并明确 `host_kind` 为 unknown 时要当成可能是远端，而不是假设本机。
+
 ## 1.343.0-rc2 - 2026-09-09
 
 ### Fixed

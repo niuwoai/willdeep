@@ -224,7 +224,23 @@ struct AgentToolCallCard: View {
     }
 
     private var approvalDescriptor: AgentApprovalNoticeDescriptor {
-        AgentApprovalNoticeCopy.descriptor(toolName: call.toolName, arguments: call.arguments)
+        AgentApprovalNoticeCopy.descriptor(
+            toolName: call.toolName,
+            arguments: call.arguments,
+            terminalHostLine: approvalTerminalHostLine
+        )
+    }
+
+    /// 这条命令要落在哪台机器上。只对终端那条路有意义，其余工具传 nil。
+    private var approvalTerminalHostLine: String? {
+        guard call.toolName == "terminal_send_command" || call.toolName == "terminal_send_control" else {
+            return nil
+        }
+        let controller = appState.agentTerminalController
+        let requested = call.arguments["terminal_tab_id"]?.stringValue()
+            .flatMap(UUID.init(uuidString:))
+        let tab = requested.flatMap { id in controller.tabs.first { $0.id == id } } ?? controller.activeTab
+        return tab?.hostLine
     }
 
     private var compactAuthorizationDescriptor: AgentCompactAuthorizationDescriptor? {

@@ -485,6 +485,40 @@ extension AppState {
     /// source that approved it, or `nil` to mean "user must decide".
     /// Cheap paths (user allowlist, static SafeCommand) run inline; the
     /// LLM judge round-trips only when nothing cheaper matched.
+    /// 这条终端命令会落在哪台机器上。
+    ///
+    /// 审批判据里最关键但一直缺席的一条。`terminal_send_command` 是把字符
+    /// 写进一个已存在的 PTY，那个 PTY 可能早就 ssh 出去了；沙箱档位在这条
+    /// 路上不施加任何执行约束（见 AgentSandboxPolicy.decision 里那句
+    /// "The visible terminal is not a sandbox boundary"），却仍被当成审批
+    /// 参数用。至少要让裁判和用户知道目标是哪台机器。
+    func terminalHostContext(arguments: [String: AgentJSONValue]) -> (line: String, isRemote: Bool) {
+        let requested = arguments["terminal_tab_id"]?.stringValue()
+            .flatMap(UUID.init(uuidString:))
+        let controller = agentTerminalController
+        let tab = requested.flatMap { id in controller.tabs.first { $0.id == id } } ?? controller.activeTab
+        guard let tab else { return ("no terminal tab is open yet", false) }
+        if case .remote = tab.hostState { return (tab.hostLine, true) }
+        return (tab.hostLine, false)
+    }
+
+    /// 明摆着的张冠李戴：目标在远端，命令里却写着本机工作区的绝对路径。
+    /// 这种命令在远端要么找不到路径，要么更糟——碰到远端一个同名目录。
+    /// 静态放行和裁判都不该处理它，直接交给人。
+    func terminalCommandTargetsLocalPathOnRemoteHost(
+        command: String,
+        rootDirectory: URL?,
+        additionalWorkspaceRoots: [URL]
+    ) -> Bool {
+        var roots: [String] = []
+        if let rootDirectory { roots.append(rootDirectory.standardizedFileURL.path) }
+        roots.append(contentsOf: additionalWorkspaceRoots.map(\.standardizedFileURL.path))
+        roots.append(FileManager.default.homeDirectoryForCurrentUser.path)
+        return roots.contains { root in
+            !root.isEmpty && root != "/" && command.contains(root)
+        }
+    }
+
     func checkedAutoApprovalSource(
         toolName: String,
         arguments: [String: AgentJSONValue],
@@ -797,6 +831,17 @@ extension AppState {
             // 凭据类命中永不因声明放宽——哪怕用户声明"整台机器都是一次性的"。
             // 凭据外读是注入攻击的终点站，这道门不接受来自模型侧的说服。
             let trusted = trustDeclaration != nil && !sandboxDecision.credentialSensitive
+            let host = terminalHostContext(arguments: arguments)
+            // 远端目标 + 本机路径 = 命令写错了机器。别让它静态放行，也别
+            // 拿去问裁判——裁判看不出这个 tab 现在在哪，这是宿主才知道的事。
+            if host.isRemote,
+               terminalCommandTargetsLocalPathOnRemoteHost(
+                   command: command,
+                   rootDirectory: rootDirectory,
+                   additionalWorkspaceRoots: additionalWorkspaceRoots
+               ) {
+                return nil
+            }
             switch SafeCommand.classify(command: command) {
             case .alwaysSafe:
                 // Only context-independent reads are static in a visible
@@ -816,10 +861,13 @@ extension AppState {
             case .needsJudgment:
                 break
             }
+            // 主机拼进 taskContext 而不是另开参数：裁判判决缓存的键里本来
+            // 就含它，于是换了机器旧判决自然不复用——同一条命令在本机批过，
+            // 不等于在生产 master 上也批过。
             return try await checkedSafetyJudgeApproval(
                 toolName: toolName,
                 command: command,
-                taskContext: latestUserMessage,
+                taskContext: "Target host: \(host.line)\n\(latestUserMessage)",
                 trustDeclaration: trustDeclaration, taskRuntime: judgeRuntime
             )
         }

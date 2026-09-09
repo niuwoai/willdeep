@@ -89,6 +89,10 @@ struct AgentTerminalRawSnapshot: Sendable {
     let isZModemTransferActive: Bool
     let runtimeName: String
     let runtimeTarget: String
+    /// 这个 tab 现在实际连在哪台机器上，一句人可读的话。`kind` 只反映
+    /// 创建来源，local tab 里手敲 `ssh` 之后它还是 local，所以判断本地
+    /// 还是远端必须看这一行。
+    let hostLine: String
     let recentCommands: [String]
     /// Off-main source of the visible screen text.
     let mirror: AgentTerminalSnapshotMirror
@@ -223,6 +227,44 @@ enum AgentTerminalTabKind: Equatable {
 /// Replaces SwiftTerm's `LocalProcessTerminalViewDelegate` because the view
 /// is no longer a `LocalProcessTerminalView` (see the class note below), so
 /// its `source:` type would no longer fit.
+/// 这个 tab 当前落在哪台机器上，以及这个结论有多新。
+///
+/// 单独一个布尔「stale」不够用：用户想知道的是「连上去了」还是「断开了」，
+/// 这两种都需要重探，但对模型和审批的含义完全不同——前者可能刚跳进生产机，
+/// 后者可能刚掉回本机。状态由三个来源驱动：探针（权威值）、用户敲的换壳
+/// 命令（可能变了）、终端输出里的断开信号（几乎肯定变了）。
+enum AgentTerminalHostState: Equatable {
+    /// 还没测过。绝不当成本机处理。
+    case unknown
+    /// 探到就是本机。
+    case local(AgentTerminalHostIdentity)
+    /// 探到是另一台机器。
+    case remote(AgentTerminalHostIdentity)
+    /// 敲过 `ssh` / `exit` 这类命令，上一次的结论可能已经不成立。
+    case changed(previous: AgentTerminalHostIdentity?)
+    /// 输出里出现了明确的断开信号。
+    case disconnected(previous: AgentTerminalHostIdentity?)
+
+    /// 可以直接采信的身份。`changed` / `disconnected` 刻意返回 nil：
+    /// 拿着上一台机器的身份批准命令，比承认不知道危险得多。
+    var trustedIdentity: AgentTerminalHostIdentity? {
+        switch self {
+        case .local(let identity), .remote(let identity): return identity
+        case .unknown, .changed, .disconnected: return nil
+        }
+    }
+
+    var lastKnownIdentity: AgentTerminalHostIdentity? {
+        switch self {
+        case .local(let identity), .remote(let identity): return identity
+        case .changed(let previous), .disconnected(let previous): return previous
+        case .unknown: return nil
+        }
+    }
+
+    var needsProbe: Bool { trustedIdentity == nil }
+}
+
 protocol AgentTerminalProcessDelegate: AnyObject {
     func sizeChanged(source: AgentLocalProcessTerminalView, newCols: Int, newRows: Int)
     func setTerminalTitle(source: AgentLocalProcessTerminalView, title: String)
@@ -265,6 +307,9 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
 
     var onUserActivity: (() -> Void)?
     var shouldRecordInput: (() -> Bool)?
+    /// 新到的输出片段。tab 用它盯断开信号，所以只需要能读到文本，不需要
+    /// 完整的屏幕状态——转义序列留着无妨，扫的是几条明文短语。
+    var observeOutput: ((String) -> Void)?
     var onSendToProcess: ((_ data: [UInt8], _ echoEnabled: Bool) -> Void)?
     private lazy var zmodemBridge = TerminalZModemBridge(terminalView: self)
     private var cachedEchoEnabled: Bool?
@@ -574,6 +619,10 @@ final class AgentLocalProcessTerminalView: TerminalView, TerminalViewDelegate, L
                 self.invalidateTerminalEchoCache()
             }
             self.feed(byteArray: renderable[...])
+            if let observeOutput = self.observeOutput,
+               let text = String(bytes: renderable, encoding: .utf8) ?? String(bytes: renderable, encoding: .isoLatin1) {
+                observeOutput(text)
+            }
             self.refreshVisibleTerminalDisplay()
         }
     }
@@ -728,8 +777,17 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     @Published private(set) var shortcutPlaybackState: TerminalShortcutPlaybackState?
     @Published private(set) var shortcutBadgeTitle: String?
     @Published private(set) var isAutomationBusy = false
-    @Published private(set) var hostIdentity: AgentTerminalHostIdentity?
+    /// 这个 tab 落在哪台机器上。缓存住并由事件驱动更新，不必每次发命令都探。
+    @Published private(set) var hostState: AgentTerminalHostState = .unknown
     @Published private(set) var isExtractingHostIdentity = false
+    /// 最近一次状态变化的时间，给人和模型判断这个结论有多新。
+    private(set) var hostStateChangedAt = Date()
+    /// 上一批输出的尾巴，只为把跨 chunk 切断的短语拼回来。
+    private var outputSignalTail = ""
+
+    /// 兼容既有读取点：只在结论可信时才给出身份。
+    var hostIdentity: AgentTerminalHostIdentity? { hostState.trustedIdentity }
+    var hostIdentityIsStale: Bool { hostState.needsProbe && hostState.lastKnownIdentity != nil }
 
     /// Last moment the tab saw user input or fresh process output. Drives
     /// the idle reaper. Not @Published — sampled by a timer, not the UI.
@@ -756,6 +814,17 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         terminalView.processDelegate = self
         terminalView.onUserActivity = { [weak self] in
             self?.lastActivity = Date()
+        }
+        // 断开信号可能被切在两个 chunk 中间，所以留一小段尾巴一起扫。
+        terminalView.observeOutput = { [weak self] text in
+            guard let self else { return }
+            let combined = self.outputSignalTail + text
+            self.outputSignalTail = String(combined.suffix(160))
+            if AgentTerminalTab.outputSignalsDisconnect(combined) {
+                self.noteHostDisconnected()
+                // 别让同一条信号在后续 chunk 里反复触发。
+                self.outputSignalTail = ""
+            }
         }
         terminalView.shouldRecordInput = { [weak self] in
             guard let self else { return false }
@@ -1004,7 +1073,7 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         refreshInputState()
         guard canExtractHostIdentity else { return }
         isExtractingHostIdentity = true
-        recordCommand(Self.hostIdentityProbeCommand)
+        recordProbeCommand(Self.hostIdentityProbeCommand)
         lastActivity = Date()
         terminalView.send(txt: Self.hostIdentityProbeCommand + "\n")
         hostIdentityTask?.cancel()
@@ -1014,14 +1083,58 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
                 try? await Task.sleep(nanoseconds: 400_000_000)
                 guard !Task.isCancelled, let self, self.isExtractingHostIdentity else { return }
                 guard let identity = self.parseHostIdentityFromScreen() else { continue }
-                self.hostIdentity = identity
-                if !identity.hostname.isEmpty {
-                    self.title = String(identity.hostname.prefix(40))
-                }
+                self.adoptProbedIdentity(identity)
                 self.isExtractingHostIdentity = false
                 return
             }
             self?.isExtractingHostIdentity = false
+        }
+    }
+
+    /// Agent 侧的按需探测：缺失或已 stale 才真的探，否则直接返回缓存。
+    /// 超时刻意比 UI 按钮那条短——它挡在「发命令」前面，用户在等。探不到
+    /// 就如实返回 nil，让调用方按「未知主机」处理，绝不假设是本机。
+    func resolveHostIdentity(timeout: Duration = .seconds(3)) async -> AgentTerminalHostIdentity? {
+        if let identity = hostState.trustedIdentity { return identity }
+        refreshInputState()
+        // 前台有交互程序占着 PTY 时探针会打进那个程序里，宁可不探。
+        guard canExtractHostIdentity else { return nil }
+
+        isExtractingHostIdentity = true
+        recordProbeCommand(Self.hostIdentityProbeCommand)
+        lastActivity = Date()
+        terminalView.send(txt: Self.hostIdentityProbeCommand + "\n")
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(250))
+            if let identity = parseHostIdentityFromScreen() {
+                adoptProbedIdentity(identity)
+                isExtractingHostIdentity = false
+                return identity
+            }
+        }
+        isExtractingHostIdentity = false
+        return nil
+    }
+
+    private func adoptProbedIdentity(_ identity: AgentTerminalHostIdentity) {
+        setHostState(
+            AgentTerminalTools.isLocalHostname(identity.hostname)
+                ? .local(identity)
+                : .remote(identity)
+        )
+        if !identity.hostname.isEmpty {
+            title = String(identity.hostname.prefix(40))
+        }
+    }
+
+    /// 探针自己不该把 identity 标 stale——它里面有 `hostname`，而
+    /// `commandMayChangeHost` 认不认它取决于用词，别让它自己把自己作废。
+    private func recordProbeCommand(_ command: String) {
+        recentCommands.removeAll { $0 == command }
+        recentCommands.insert(command, at: 0)
+        if recentCommands.count > maxRecentCommands {
+            recentCommands.removeLast(recentCommands.count - maxRecentCommands)
         }
     }
 
@@ -1157,7 +1270,72 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
         return (terminalView.snapshotMirror, terminal.cols, terminal.rows)
     }
 
+    private func setHostState(_ next: AgentTerminalHostState) {
+        guard hostState != next else { return }
+        hostState = next
+        hostStateChangedAt = Date()
+    }
+
+    /// 用户或 Agent 敲了可能换壳的命令：结论作废，但把上一台记下来。
+    private func markHostContextChanged() {
+        guard hostState != .changed(previous: hostState.lastKnownIdentity) else { return }
+        setHostState(.changed(previous: hostState.lastKnownIdentity))
+    }
+
+    /// 终端输出里出现了明确的断开信号。比等下一条命令更早失效——用户
+    /// 可能什么都不敲就直接让 Agent 继续干活。
+    func noteHostDisconnected() {
+        setHostState(.disconnected(previous: hostState.lastKnownIdentity))
+    }
+
+    /// 从新到的输出里找断开信号。刻意只认几条各系统通用、几乎不会误命中的
+    /// 短语；连接成功不在这里认，那必须由探针给权威答案。
+    nonisolated static func outputSignalsDisconnect(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        if lowered.contains("connection to ") && lowered.contains(" closed") { return true }
+        if lowered.contains("connection closed by ") { return true }
+        if lowered.contains("shared connection to ") && lowered.contains(" closed") { return true }
+        if lowered.contains("client_loop: send disconnect") { return true }
+        if lowered.contains("broken pipe") && lowered.contains("ssh") { return true }
+        return false
+    }
+
+    /// 这条命令有没有可能把 tab 换到另一台机器（或另一个内核命名空间）上。
+    ///
+    /// 只看每一段的**命令头**，不看参数。早先逐词扫，`grep -rn ssh docs/`
+    /// 这种把 ssh 当搜索词的命令就会触发一次白探——探针要往用户终端里打字，
+    /// 误判的代价不是零。反过来漏判的代价更大（拿旧身份批准新机器上的命令），
+    /// 所以名单本身仍然从宽。
+    nonisolated static func commandMayChangeHost(_ command: String) -> Bool {
+        let switchers: Set<String> = [
+            "ssh", "mosh", "telnet", "exit", "logout", "su", "sudo", "doas",
+            "docker", "podman", "nerdctl", "kubectl", "tmux", "screen", "zellij",
+            "distrobox", "toolbox", "lxc", "incus", "vagrant", "multipass", "limactl",
+        ]
+        // 这些只是包装器，真正的命令在它们后面。
+        let wrappers: Set<String> = ["env", "nohup", "time", "command", "exec", "stdbuf", "script"]
+
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if trimmed.hasPrefix("^d") || trimmed == "\u{04}" { return true }
+
+        for segment in trimmed.components(separatedBy: CharacterSet(charactersIn: ";|&\n")) {
+            var words = segment.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
+            while let first = words.first,
+                  first.contains("=") || first.hasPrefix("-") || wrappers.contains(first) {
+                words.removeFirst()
+            }
+            guard let head = words.first else { continue }
+            // 去掉路径前缀：`/usr/bin/ssh` 和 `ssh` 是一回事。
+            let name = head.components(separatedBy: "/").last ?? head
+            if switchers.contains(name) { return true }
+        }
+        return false
+    }
+
     private func recordCommand(_ command: String) {
+        if Self.commandMayChangeHost(command) {
+            markHostContextChanged()
+        }
         recentCommands.removeAll { $0 == command }
         recentCommands.insert(command, at: 0)
         if recentCommands.count > maxRecentCommands {
@@ -1171,6 +1349,31 @@ final class AgentTerminalTab: ObservableObject, Identifiable, AgentTerminalProce
     }
 
     // MARK: Idle bookkeeping
+
+    /// 一句话说清「现在这条命令会落在哪台机器上」。探不到就说不知道，
+    /// 绝不写成本机——审批和模型都会照这句话做判断。
+    var hostLine: String {
+        switch hostState {
+        case .unknown:
+            return "unknown (never measured on this tab)"
+        case .local(let identity):
+            return describe(identity, scope: "local machine")
+        case .remote(let identity):
+            return describe(identity, scope: "REMOTE host")
+        case .changed(let previous):
+            let tail = previous.map { " (last measured as \($0.hostname))" } ?? ""
+            return "unknown — a shell-switching command ran since the last measurement\(tail)"
+        case .disconnected(let previous):
+            let tail = previous.map { " (was \($0.hostname))" } ?? ""
+            return "unknown — the terminal reported a closed connection\(tail)"
+        }
+    }
+
+    private func describe(_ identity: AgentTerminalHostIdentity, scope: String) -> String {
+        var line = "\(identity.hostname) — \(scope)"
+        if !identity.operatingSystem.isEmpty { line += ", \(identity.operatingSystem)" }
+        return line
+    }
 
     var runtimeTarget: String {
         if case .ssh(_, _, let target) = kind { return target }
@@ -2111,6 +2314,7 @@ final class AgentInteractiveTerminalController: ObservableObject {
             isZModemTransferActive: tab.terminalView.isZModemTransferActive,
             runtimeName: tab.title,
             runtimeTarget: tab.runtimeTarget,
+            hostLine: tab.hostLine,
             recentCommands: tab.recentCommands,
             mirror: source.mirror,
             cols: source.cols,

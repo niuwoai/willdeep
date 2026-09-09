@@ -1222,7 +1222,7 @@ nonisolated enum SafeCommand {
     /// a network judge round trip (and a manual approval when that judge is
     /// unavailable), while mutations such as apply/delete/exec/port-forward
     /// still fall through to intelligent review.
-    private static func classifyKubectl(tokens: [String]) -> CommandSafety {
+    static func classifyKubectl(tokens: [String]) -> CommandSafety {
         guard tokens.count >= 2 else { return .alwaysSafe }
 
         let lowered = tokens.map { $0.lowercased() }

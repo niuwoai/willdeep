@@ -347,9 +347,14 @@ nonisolated enum AgentDelegatedCommandApprovalCopy {
 /// Tool-specific copy for the shared authorization notice. Keep this free of
 /// SwiftUI types so its user-facing promises can be covered by unit tests.
 nonisolated enum AgentApprovalNoticeCopy {
+    /// `terminalHostLine` 是「这条命令会落在哪台机器上」的一句话，由调用方
+    /// 从终端 tab 的实测状态取。它只影响终端那张卡的措辞：用户点确认前，
+    /// 最该看到的就是目标主机——同一条 `kubectl set image` 打在本机和打在
+    /// 生产 master 上，是两件完全不同的事。
     static func descriptor(
         toolName: String,
-        arguments: [String: AgentJSONValue]
+        arguments: [String: AgentJSONValue],
+        terminalHostLine: String? = nil
     ) -> AgentApprovalNoticeDescriptor {
         switch toolName {
         case "spawn_agent":
@@ -398,9 +403,9 @@ nonisolated enum AgentApprovalNoticeCopy {
             return AgentApprovalNoticeDescriptor(
                 iconName: "rectangle.rightthird.inset.filled",
                 title: "Agent 准备发送命令到终端",
-                subtitle: "命令会出现在侧边栏终端中，并在确认后执行。",
+                subtitle: terminalSubtitle(hostLine: terminalHostLine),
                 detailTitle: "即将发送",
-                metadata: terminalMetadata(arguments: arguments),
+                metadata: terminalMetadata(arguments: arguments, hostLine: terminalHostLine),
                 explanationTitle: nil,
                 decisionTitle: "发送到这个终端吗？",
                 decisionSubtitle: "执行过程和结果会继续显示在侧边栏。",
@@ -557,13 +562,27 @@ nonisolated enum AgentApprovalNoticeCopy {
         )
     }
 
+    private static func terminalSubtitle(hostLine: String?) -> String {
+        guard let hostLine, !hostLine.isEmpty else {
+            return "命令会出现在侧边栏终端中，并在确认后执行。"
+        }
+        return "命令会在 \(hostLine) 上执行，过程显示在侧边栏终端里。"
+    }
+
     private static func terminalMetadata(
-        arguments: [String: AgentJSONValue]
+        arguments: [String: AgentJSONValue],
+        hostLine: String? = nil
     ) -> [String] {
         let target = arguments.keys.contains("terminal_tab_id")
             ? "指定终端标签"
             : "当前会话终端"
-        return ["侧边栏可见", target, "可随时按 Ctrl-C 中断"]
+        var metadata = ["侧边栏可见", target]
+        // 目标主机排在中断提示前面：它是这张卡上最该先看到的一条。
+        if let hostLine, !hostLine.isEmpty {
+            metadata.append(hostLine.contains("REMOTE") ? "⚠︎ 远端主机" : "本机")
+        }
+        metadata.append("可随时按 Ctrl-C 中断")
+        return metadata
     }
 
     private static func webMetadata(
