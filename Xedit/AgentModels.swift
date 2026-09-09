@@ -174,6 +174,9 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Per-session tool approval behavior. Defaults to smart approval
     /// for backwards compatibility with existing sessions.
     var approvalMode: AgentApprovalMode
+    /// Composer preferences; absent values preserve sandbox and Worker-first defaults.
+    var prefersSubagents: Bool? = nil
+    var sandboxEnabled: Bool? = nil
     /// Which execution backend the composer should use for the next
     /// user turn. Defaults to WillDeep's native agent loop.
     var executionAgent: AgentExecutionAgent
@@ -471,6 +474,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     // currentGoal) loads cleanly — every newer field uses
     // decodeIfPresent with a default.
     enum CodingKeys: String, CodingKey {
+        case prefersSubagents, sandboxEnabled
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, worktreeRecoveryInfo, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
         case providerEntryID, providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
         case createdAt, updatedAt, messages, hostWorkerRuns, coordinatorWorkerRuns, auxiliaryModelRequests, contextSummary, contextSummaryThroughMessageID, contextCheckpoint
@@ -481,6 +485,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        prefersSubagents = try c.decodeIfPresent(Bool.self, forKey: .prefersSubagents)
+        sandboxEnabled = try c.decodeIfPresent(Bool.self, forKey: .sandboxEnabled)
         self.id = try c.decode(UUID.self, forKey: .id)
         self.title = try c.decode(String.self, forKey: .title)
         self.workspaceRootPath = try c.decodeIfPresent(String.self, forKey: .workspaceRootPath)

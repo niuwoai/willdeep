@@ -311,6 +311,7 @@ nonisolated enum AgentRequestRouter {
     ) -> Decision? {
         guard sharedConfig.smallModelRouting != false else { return nil }
         guard delegationPolicy != .forbidden else { return nil }
+        guard delegationPolicy != .agentPreferred else { return nil }
         return classify(request)
     }
 

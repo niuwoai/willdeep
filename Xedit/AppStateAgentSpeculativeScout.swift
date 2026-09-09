@@ -207,6 +207,7 @@ extension AppState {
         userMessageID: UUID
     ) {
         runtime.speculativeScout = nil
+        guard runtime.currentTurnDelegationPolicy != .agentPreferred else { return }
         guard !runtime.isUnattendedDispatchTask else { return }
         guard let profileID = Self.speculativeScoutProfileID(
             decision: runtime.currentTurnRouteDecision,
@@ -304,6 +305,7 @@ extension AppState {
                     prompt: prompt,
                     configuration: childConfiguration,
                     workspaceURL: workspaceURL,
+                    localSandboxDisabled: runtime?.localSandboxDisabled ?? false,
                     runtimeDescriptor: runtimeDescriptor,
                     workspaceLocation: workspaceLocation,
                     someIMContext: someIMContext,

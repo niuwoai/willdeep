@@ -385,8 +385,8 @@ struct ComposerAdaptiveControlStrip: View {
     // 在三套布局变体间按窗口宽度挑一套显示，代价是**每次重渲染都要把每个
     // 变体整建一遍来测量**——composer pill 重建因此成为主线程热点（打字、
     // 窗口切换、焦点变化都中招，采样里占主线程大头）。现在常用的四个
-    // （Workspace / Model / Mode / Approval）固定展示，其余插件入口
-    // 固定收进「更多 …」弹层。执行器固定在输入框顶部上下文栏右侧。
+    // （Workspace / Model / Mode / Approval）固定展示，执行偏好
+    // 收进「更多 …」弹层。执行器固定在输入框顶部上下文栏右侧。
     // 布局不再随宽度变化，每次重建只建一套。
     var body: some View {
         HStack(spacing: 6) {
@@ -398,7 +398,7 @@ struct ComposerAdaptiveControlStrip: View {
             }
             AgentModePickerPill()
             AgentApprovalModePickerPill()
-            ComposerOverflowPill(controls: [.plugins])
+            ComposerOverflowPill(controls: [])
         }
         .focusable(false)
     }
@@ -573,6 +573,7 @@ struct ModelPickerPill: View {
                         ))
                         .lineLimit(1)
                         .truncationMode(.middle)
+                        .frame(maxWidth: AgentModelPickerPresentation.compactLabelMaxWidth)
                     if showsAutomaticUpgradeBadge {
                         Text(L10n.AgentModelPicker.autoUpgrade)
                             .font(AgentDesign.chatSupportingFont(
@@ -2095,6 +2096,8 @@ struct ModelPickerPill: View {
         AgentModelPickerPresentation.pillLabel(
             managedActive: isManagedRoutingActive,
             currentModelLabel: currentModelLabel,
+            providerDisplayName: appState.agentProviderLibrary.entries.count > 1
+                ? appState.activeAgentProviderEntry?.displayName : nil,
             managedLabel: L10n.AgentModelPicker.managed,
             selectModelLabel: L10n.AgentModelPicker.selectModel
         )

@@ -48,6 +48,7 @@ extension AppState {
         // `/no-subagent` means "do all of it yourself this turn". Dispatching
         // a worker anyway would be the one thing the user explicitly refused.
         guard runtime.currentTurnDelegationPolicy != .forbidden else { return nil }
+        guard runtime.currentTurnDelegationPolicy != .agentPreferred else { return nil }
 
         let decision = runtime.currentTurnRouteDecision ?? AgentRequestRouter.classify(requestText)
         guard let profileID = decision.preflightProfileID else { return nil }
@@ -165,6 +166,7 @@ extension AppState {
                 prompt: Self.preflightPrompt(requestText: requestText, profileID: profile.id),
                 configuration: childConfiguration,
                 workspaceURL: workspaceURL,
+                localSandboxDisabled: runtime.localSandboxDisabled,
                 runtimeDescriptor: runtimeDescriptor,
                 workspaceLocation: workspaceLocation,
                 someIMContext: someIMContext,

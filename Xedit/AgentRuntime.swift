@@ -61,7 +61,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Conversation state
 
     @Published var messages: [AgentMessage] = []
-    /// Explicit user switch, scoped to this live session and never persisted.
+    /// Per-session switch; new and legacy sessions default to sandboxed execution.
     @Published var localSandboxDisabled = false
     /// Live text of the currently-streaming assistant message. Fed by
     /// `AgentStreamingMessageBuffer` at bubble cadence (~10 Hz) and observed
@@ -502,6 +502,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     // MARK: - Init
 
     init(session: AgentSession) {
+        self.localSandboxDisabled = !(session.sandboxEnabled ?? true)
         self.id = session.id
         self.session = session
         self.workspaceRootPath = session.workspaceRootPath

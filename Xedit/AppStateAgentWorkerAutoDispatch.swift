@@ -50,6 +50,7 @@ extension AppState {
         // write set was derived from a log we cannot resolve against a real
         // tree. Fall back to the plain hint there.
         guard let workspaceURL, runtimeDescriptor == nil else { return nil }
+        guard runtime.currentTurnDelegationPolicy != .agentPreferred else { return nil }
 
         let plan = AgentWorkerAutoDispatch.plan(
             toolName: toolName,
@@ -188,6 +189,7 @@ extension AppState {
                 prompt: dispatch.prompt,
                 configuration: childConfiguration,
                 workspaceURL: workspaceURL,
+                localSandboxDisabled: runtime.localSandboxDisabled,
                 workspaceLocation: workspaceLocation,
                 profile: profile,
                 writeAccess: writeAccess,

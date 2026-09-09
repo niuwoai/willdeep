@@ -554,6 +554,7 @@ extension AppState {
                     originatingTurnID: runtime.activeTurnID,
                     profile: profile,
                     executionContext: AgentSubagentRegistry.BackgroundExecutionContext(
+                        localSandboxDisabled: runtime.localSandboxDisabled,
                         additionalWorkspaceRoots: backgroundWorkspaceRoots,
                         verifierCommand: verifierCommand,
                         verifierMaxAttempts: taskPacket?.maxAttempts
@@ -876,6 +877,7 @@ extension AppState {
                 prompt: prompt,
                 configuration: configuration,
                 workspaceURL: workspaceURL,
+                localSandboxDisabled: runtime.localSandboxDisabled,
                 // Same folder set the parent measures its own paths against.
                 // Without this a worker in a multi-folder project can only
                 // reach the primary folder, which is what "the subagent cannot

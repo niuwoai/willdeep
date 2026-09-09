@@ -10,7 +10,7 @@ nonisolated enum AgentOpsConvergencePolicy {
 
     static func shouldReturnToParent(profileID: String, background: Bool,
                                     delegation: AgentDelegationPolicy, completed: Bool) -> Bool {
-        completed && !background && delegation == .automatic
+        completed && !background && (delegation == .automatic || delegation == .agentPreferred)
             && profileID == AgentSubagentProfileCatalog.opsRunnerID
     }
 }

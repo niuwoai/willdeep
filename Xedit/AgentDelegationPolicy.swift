@@ -23,6 +23,8 @@ import Foundation
 nonisolated enum AgentDelegationPolicy: String, Codable, Equatable, Sendable {
     /// Default. The model decides whether to spawn subagents.
     case automatic
+    /// Prefer direct execution; bounded delegation remains available when useful.
+    case agentPreferred
     /// `/subagent` — instruction + audit, with write-boundary enforcement for
     /// routes that require delegated execution.
     case required
@@ -37,7 +39,7 @@ nonisolated enum AgentDelegationPolicy: String, Codable, Equatable, Sendable {
     /// True when the user explicitly chose this policy, i.e. it came from a
     /// slash command rather than the default. Drives the transcript marker.
     var isExplicit: Bool {
-        self != .automatic
+        self == .required || self == .forbidden
     }
 
     /// Whether `name` may appear in this turn's tool table. Only
@@ -56,6 +58,8 @@ nonisolated enum AgentDelegationPolicy: String, Codable, Equatable, Sendable {
         switch self {
         case .automatic:
             return nil
+        case .agentPreferred:
+            return "Execution preference: handle this task directly with your own tools first. This overrides the general guidance to prefer spawn_agent. Delegate only a concrete bounded task when doing so materially helps. Do not delegate routine inspection, execution or verification merely because a worker profile exists."
         case .required:
             return """
             Delegation directive (user-selected `/subagent`): the user explicitly asked you to \
@@ -80,7 +84,7 @@ nonisolated enum AgentDelegationPolicy: String, Codable, Equatable, Sendable {
     /// enforced by the tool table, and `.automatic` has nothing to honor.
     func isHonored(spawnCallCount: Int) -> Bool {
         switch self {
-        case .automatic, .forbidden:
+        case .automatic, .agentPreferred, .forbidden:
             return true
         case .required:
             return spawnCallCount > 0
@@ -90,7 +94,7 @@ nonisolated enum AgentDelegationPolicy: String, Codable, Equatable, Sendable {
     /// Short transcript marker shown next to the user's message.
     var markerTitle: String? {
         switch self {
-        case .automatic: return nil
+        case .automatic, .agentPreferred: return nil
         case .required: return L10n.AgentDelegation.markerRequired
         case .forbidden: return L10n.AgentDelegation.markerForbidden
         }
@@ -98,7 +102,7 @@ nonisolated enum AgentDelegationPolicy: String, Codable, Equatable, Sendable {
 
     var markerSymbol: String? {
         switch self {
-        case .automatic: return nil
+        case .automatic, .agentPreferred: return nil
         case .required: return "person.2.badge.gearshape"
         case .forbidden: return "person.2.slash"
         }

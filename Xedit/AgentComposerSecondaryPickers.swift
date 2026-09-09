@@ -160,7 +160,7 @@ struct ComposerOverflowPill: View {
     let controls: [ComposerOverflowControl]
     @State private var isPresented = false
 
-    init(controls: [ComposerOverflowControl] = [.executor, .plugins]) {
+    init(controls: [ComposerOverflowControl] = [.executor]) {
         self.controls = controls
     }
 
@@ -183,7 +183,7 @@ struct ComposerOverflowPill: View {
         .buttonStyle(.plain)
         .focusable(false)
         .fixedSize()
-        .help(L10n.Composer.overflowHelp)
+        .help(L10n.Composer.overflowTitle)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 12) {
                 Text(L10n.Composer.overflowTitle)
@@ -195,9 +195,7 @@ struct ComposerOverflowPill: View {
                 if controls.contains(.executor) {
                     overflowRow(L10n.Composer.overflowExecutor) { AgentExecutionPickerPill() }
                 }
-                if controls.contains(.plugins) {
-                    overflowRow(L10n.Composer.overflowPlugins) { AgentPluginPickerPill() }
-                }
+                AgentComposerExecutionPreferences()
                 let pluginCommands = pluginRegistry.menuCommands(at: "composer.more").filter { $0.command.id != "video.open" }
                 if !pluginCommands.isEmpty {
                     Divider()

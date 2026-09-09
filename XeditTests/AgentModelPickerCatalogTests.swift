@@ -137,6 +137,22 @@ struct AgentModelPickerCatalogTests {
     }
 
     @Test
+    func compactPillRemovesOnlyTheSelectedProviderPrefix() {
+        let label = AgentModelPickerPresentation.pillLabel(
+            managedActive: false,
+            currentModelLabel: "some.im · deepseek-v4-flash",
+            providerDisplayName: "some.im",
+            managedLabel: "Managed", selectModelLabel: "Select model")
+        #expect(label == "deepseek-v4-flash")
+        let modelWithSeparator = AgentModelPickerPresentation.pillLabel(
+            managedActive: false,
+            currentModelLabel: "custom · model",
+            providerDisplayName: "some.im",
+            managedLabel: "Managed", selectModelLabel: "Select model")
+        #expect(modelWithSeparator == "custom · model")
+    }
+
+    @Test
     func codingRecommendationsExposeRequestedSomeIMModelsWithDeepSeekDefaultFirst() {
         let recommendations = ModelPickerPill.codingRecommendations
 

@@ -5,7 +5,7 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct AgentSessionSandboxControlTests {
-    @Test("slash switches are reversible and isolated to the live session")
+    @Test("slash switches are reversible and persist only in their session")
     func switches() throws {
         let app = AppState()
         let commands = SlashCommand.builtIn(state: app)
@@ -13,11 +13,30 @@ struct AgentSessionSandboxControlTests {
         disable.command.action("")
         let runtime = try #require(app.activeRuntime)
         #expect(runtime.localSandboxDisabled)
-        #expect(!AgentRuntime(session: runtime.session).localSandboxDisabled)
+        #expect(AgentRuntime(session: runtime.session).localSandboxDisabled)
         #expect(!AgentRuntime(session: AgentSession(workspaceRootPath: nil)).localSandboxDisabled)
         let enable = try #require(SlashCommand.invocation(in: "/sandbox", commands: commands))
         enable.command.action("")
         #expect(!runtime.localSandboxDisabled)
+        #expect(!AgentRuntime(session: runtime.session).localSandboxDisabled)
+    }
+
+    @Test("composer preferences survive reload and explicit turn directives win")
+    func composerPreferences() throws {
+        var session = AgentSession(workspaceRootPath: nil)
+        #expect(AgentRuntime(session: session).resolvedComposerDelegationPolicy == .automatic)
+        session.prefersSubagents = false
+        session.sandboxEnabled = false
+        let restored = try JSONDecoder().decode(AgentSession.self, from: JSONEncoder().encode(session))
+        let runtime = AgentRuntime(session: restored)
+        #expect(runtime.localSandboxDisabled)
+        #expect(runtime.resolvedComposerDelegationPolicy == .agentPreferred)
+        #expect(AgentDelegationPolicy.agentPreferred.allowsTool(named: "spawn_agent"))
+        #expect(AgentRequestRouter.routedDecision(for: "deploy kubernetes service", delegationPolicy: .agentPreferred) == nil)
+        runtime.pendingDelegationPolicy = .required
+        #expect(runtime.resolvedComposerDelegationPolicy == .required)
+        runtime.pendingDelegationPolicy = .forbidden
+        #expect(runtime.resolvedComposerDelegationPolicy == .forbidden)
     }
 
     @Test("execution switch never widens a scoped task grant")

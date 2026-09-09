@@ -21,7 +21,7 @@ struct AgentDelegationPolicyTests {
 
     @Test("automatic and required both keep spawn_agent available")
     func nonForbiddenPoliciesKeepSpawnAgent() {
-        for policy in [AgentDelegationPolicy.automatic, .required] {
+        for policy in [AgentDelegationPolicy.automatic, .agentPreferred, .required] {
             let tools = AgentToolRegistry.tools(
                 activeExperts: [],
                 delegationPolicy: policy

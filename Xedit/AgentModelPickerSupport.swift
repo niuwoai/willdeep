@@ -27,14 +27,24 @@ enum AgentManagedMarketingStatus: Equatable {
 }
 
 enum AgentModelPickerPresentation {
+    static let compactLabelMaxWidth: CGFloat = 160
+
     static func pillLabel(
         managedActive: Bool,
         currentModelLabel: String,
+        providerDisplayName: String? = nil,
         managedLabel: String,
         selectModelLabel: String
     ) -> String {
         if managedActive { return managedLabel }
-        return currentModelLabel.isEmpty ? selectModelLabel : currentModelLabel
+        let prefix = providerDisplayName.map { "\($0) · " }
+        let modelLabel: String
+        if let prefix, currentModelLabel.hasPrefix(prefix) {
+            modelLabel = String(currentModelLabel.dropFirst(prefix.count))
+        } else {
+            modelLabel = currentModelLabel
+        }
+        return modelLabel.isEmpty ? selectModelLabel : modelLabel
     }
 }
 

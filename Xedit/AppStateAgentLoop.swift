@@ -50,7 +50,7 @@ extension AppState {
         runtime.currentTurnPlanningOnly = source == .operatorInput
             && AgentExecutionIntentPolicy.requestsPlanningOnly(text)
         // Slash-staged delegation directive applies to exactly this turn.
-        let delegationPolicy = runtime.pendingDelegationPolicy
+        let delegationPolicy = runtime.resolvedComposerDelegationPolicy
         runtime.pendingDelegationPolicy = .automatic
         runtime.currentTurnDelegationPolicy = delegationPolicy
         runtime.currentTurnSpawnAgentCallCount = 0

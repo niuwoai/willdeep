@@ -146,6 +146,7 @@ nonisolated struct AgentSubagentStreamingTextOutcome: Equatable, Sendable {
 @MainActor
 final class AgentSubagentRegistry: ObservableObject {
     struct BackgroundExecutionContext {
+        var localSandboxDisabled = false
         var additionalWorkspaceRoots: [URL] = []
         var verifierCommand: String?
         var verifierMaxAttempts = AgentSubagentTaskPacket.defaultMaxAttempts
@@ -202,6 +203,7 @@ final class AgentSubagentRegistry: ObservableObject {
             prompt: prompt,
             configuration: configuration,
             workspaceURL: workspaceURL,
+            localSandboxDisabled: executionContext.localSandboxDisabled,
             additionalWorkspaceRoots: executionContext.additionalWorkspaceRoots,
             runtimeDescriptor: runtimeDescriptor,
             workspaceLocation: workspaceLocation,
@@ -1109,6 +1111,7 @@ enum AgentSubagentRunner {
         prompt: String,
         configuration: AgentConfiguration,
         workspaceURL: URL?,
+        localSandboxDisabled: Bool = false,
         /// The parent's other authorized folders, handed down verbatim. See
         /// `executeToolCall` — the child's boundary is the folder set the user
         /// authorized, not whichever one happens to be primary.
@@ -1566,6 +1569,7 @@ enum AgentSubagentRunner {
                     let verification = await runVerifier(
                         command: verifierCommand,
                         workspaceURL: workspaceURL,
+                        localSandboxDisabled: localSandboxDisabled,
                         additionalWorkspaceRoots: additionalWorkspaceRoots,
                         runtimeDescriptor: runtimeDescriptor,
                         workspaceLocation: workspaceLocation
@@ -1686,6 +1690,7 @@ enum AgentSubagentRunner {
                             try await executeToolCall(
                                 call,
                                 workspaceURL: workspaceURL,
+                                localSandboxDisabled: localSandboxDisabled,
                                 additionalWorkspaceRoots: additionalWorkspaceRoots,
                                 runtimeDescriptor: runtimeDescriptor,
                                 workspaceLocation: workspaceLocation,
@@ -1703,6 +1708,7 @@ enum AgentSubagentRunner {
                         rawPayload = try await executeToolCall(
                             call,
                             workspaceURL: workspaceURL,
+                            localSandboxDisabled: localSandboxDisabled,
                             additionalWorkspaceRoots: additionalWorkspaceRoots,
                             runtimeDescriptor: runtimeDescriptor,
                             workspaceLocation: workspaceLocation,
@@ -1793,6 +1799,7 @@ enum AgentSubagentRunner {
             let verification = await runVerifier(
                 command: verifierCommand,
                 workspaceURL: workspaceURL,
+                localSandboxDisabled: localSandboxDisabled,
                 additionalWorkspaceRoots: additionalWorkspaceRoots,
                 runtimeDescriptor: runtimeDescriptor,
                 workspaceLocation: workspaceLocation
@@ -1948,6 +1955,7 @@ enum AgentSubagentRunner {
     static func runVerifier(
         command: String,
         workspaceURL: URL?,
+        localSandboxDisabled: Bool = false,
         additionalWorkspaceRoots: [URL] = [],
         runtimeDescriptor: RuntimeDescriptor? = nil,
         workspaceLocation: WorkspaceLocation? = nil
@@ -1956,7 +1964,8 @@ enum AgentSubagentRunner {
             rootDirectory: workspaceURL,
             additionalWorkspaceRoots: additionalWorkspaceRoots,
             workspaceLocation: workspaceLocation,
-            runtimeDescriptor: runtimeDescriptor
+            runtimeDescriptor: runtimeDescriptor,
+            sandboxMode: localSandboxDisabled ? .escalated : .readOnly
         )
         do {
             let result = try await AgentToolRunner.run(
@@ -2025,6 +2034,7 @@ enum AgentSubagentRunner {
     private static func executeToolCall(
         _ call: AgentMessageToolCall,
         workspaceURL: URL?,
+        localSandboxDisabled: Bool = false,
         /// The parent's other authorized folders. A child used to be handed
         /// only `workspaceURL`, so every tool it called measured paths against
         /// one root: in a multi-folder project the parent could read the second
@@ -2215,7 +2225,7 @@ enum AgentSubagentRunner {
             workspaceLocation: workspaceLocation,
             runtimeDescriptor: runtimeDescriptor,
             executionBudget: executionBudget,
-            sandboxMode: sandboxMode,
+            sandboxMode: localSandboxDisabled ? .escalated : sandboxMode,
             patchProposalSink: writeAccess == nil ? nil : patchProposalSink,
             // controller 随两个终端工种下发；执行闸门另行保证修改命令必须
             // 经过智能审核或匹配 ops_runner 的精确 target_command。

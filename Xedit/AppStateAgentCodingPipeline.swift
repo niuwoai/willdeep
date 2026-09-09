@@ -465,6 +465,7 @@ extension AppState {
                 prompt: prompt,
                 configuration: configuration,
                 workspaceURL: workspaceURL,
+                localSandboxDisabled: runtime.localSandboxDisabled,
                 workspaceLocation: runtime.workspaceLocation,
                 someIMContext: someIMContext,
                 outputSchema: outputSchema,
