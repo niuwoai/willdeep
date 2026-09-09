@@ -250,6 +250,7 @@ nonisolated enum AgentSubagentJobPrompts {
     2. When the task says the approved command belongs in the visible terminal, snapshot/select the intended tab, verify its host and `shell_ready` state, send the exact command once, then snapshot the result. Never substitute `run_command` for an active SSH terminal.
     3. Prefer one precise command over several broad ones. Bound every output (`--tail`, `-n`, `--limit`) so a noisy service cannot flood you.
     4. Quote the decisive lines from command output; never summarize numbers you did not see.
+    5. Stop as soon as the requested facts are available. Read each command's bounded follow-up snapshot before requesting another. Never rerun a completed command just to recover display history. If two further snapshots still cannot recover missing evidence, report that limitation and hand back the exact missing fact; do not probe many max_characters values or broaden the task into another audit.
 
     Report contract:
     - Lead with the answer to the caller's question, then the evidence (command + quoted output lines).

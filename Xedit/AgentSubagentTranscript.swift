@@ -23,6 +23,7 @@ import Combine
 final class AgentSubagentLiveTranscripts: ObservableObject {
     static let shared = AgentSubagentLiveTranscripts()
     @Published private(set) var records: [UUID: AgentSubagentTranscript] = [:]
+    private var audits: [UUID: AgentWorkerProgressAudit] = [:]
 
     func update(runID: UUID, label: String, prompt: String, model: String,
                 progress: AgentSubagentProgressUpdate) {
@@ -32,6 +33,7 @@ final class AgentSubagentLiveTranscripts: ObservableObject {
             model: model
         )
         guard record.status == .running else { return }
+        recordProgressAudit(runID: runID, progress: progress)
         for round in progress.recordedRounds ?? [] {
             if let index = record.rounds.firstIndex(where: { $0.index == round.index }) {
                 record.rounds[index] = round
@@ -42,12 +44,28 @@ final class AgentSubagentLiveTranscripts: ObservableObject {
         records[runID] = record
     }
 
+    func recordProgressAudit(runID: UUID, progress: AgentSubagentProgressUpdate) {
+        let audit = audits[runID] ?? AgentWorkerProgressAudit()
+        audits[runID] = audit
+        let lines = audit.entries(runID: runID, progress: progress).compactMap(AgentWorkerTimingLog.encodeLine)
+        if !lines.isEmpty {
+            Task { for line in lines { await AgentWorkerTimingLogWriter.shared.append(line) } }
+        }
+    }
+
     func finish(_ transcript: AgentSubagentTranscript) -> AgentSubagentTranscript {
         var final = transcript
         if final.rounds.isEmpty, let live = records[final.runID] {
             final.rounds = live.rounds
         }
         records[final.runID] = final
+        if let audit = audits.removeValue(forKey: final.runID) {
+            let progress = AgentSubagentProgressUpdate(round: final.rounds.last?.index ?? 0,
+                maximumRounds: final.rounds.count, completedToolInvocations: final.toolInvocationCount,
+                activity: .finished, recordedRounds: final.rounds)
+            let lines = audit.entries(runID: final.runID, progress: progress).compactMap(AgentWorkerTimingLog.encodeLine)
+            Task { for line in lines { await AgentWorkerTimingLogWriter.shared.append(line) } }
+        }
         let expired = records.values.filter { $0.status != .running && $0.runID != final.runID }
             .sorted { $0.startedAt > $1.startedAt }.dropFirst(100)
         for record in expired { records.removeValue(forKey: record.runID) }

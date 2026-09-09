@@ -440,6 +440,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// scope validation this turn. Automatic preflights do not enter this set:
     /// preparation is not delegated execution.
     var currentTurnAttemptedWorkerProfiles: Set<String> = []
+    var completedForegroundOpsInspection = false
     /// What this session was observed doing, checked against any `deep`
     /// escalation ticket. Per-session rather than per-turn on purpose: the
     /// worker you ran three turns ago is still evidence that you tried, and

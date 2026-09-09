@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-09 | Current version: v1.357.0-rc1
+> Last updated: 2026-09-09 | Current version: v1.357.0-rc2
+
+Worker 终端结果保留完整有界回读，连续快照探测会收敛为报告。自动同步运维检查完成后由主会话推进剩余工作；实时 JSONL 元数据提供轮次、工具耗时及阶段，便于定位等待。
 
 当前聊天可用 `/no-sandbox [消息]` 暂时关闭本地执行沙箱，以 `/sandbox [消息]` 恢复；不继承到其他会话或应用重启，危险操作审批继续生效。工作区脚本自动获得网络和真实 HOME，仍限制写入范围。普通聊天的临时模型故障在无输出时最多重试三次。
 

@@ -445,6 +445,13 @@ extension AppState {
             .first { $0.id.caseInsensitiveCompare(profile.id) == .orderedSame }?
             .localizedName
             ?? L10n.AgentDelegation.profileName(for: profile.id)
+        if AgentOpsConvergencePolicy.shouldReturnToParent(profileID: profile.id,
+            background: runInBackground, delegation: runtime.currentTurnDelegationPolicy,
+            completed: runtime.completedForegroundOpsInspection) {
+            finishRecord(status: .failed, summary: "continue in parent",
+                payload: AgentOpsConvergencePolicy.handoff, errorMessage: nil)
+            return
+        }
         agentSpawnLog.info(
             "spawn_agent resolved runtime=\(runtime.id.uuidString, privacy: .public) call=\(call.externalID, privacy: .public) profile=\(profile.id, privacy: .public) model=\(childConfiguration.model, privacy: .public) provider=\(childConfiguration.providerID, privacy: .public) background=\(runInBackground ? "true" : "false", privacy: .public) verifier=\(verifierCommand == nil ? "none" : "present", privacy: .public) approvedCommand=\(approvedCommand == nil ? "none" : "present", privacy: .public)"
         )
@@ -969,6 +976,11 @@ extension AppState {
             }
 
             var stats = statsLine(outcome)
+            if profile.id == AgentSubagentProfileCatalog.opsRunnerID {
+                runtime.completedForegroundOpsInspection = true
+                runtime.currentTurnAttemptedWorkerProfiles.insert(profile.id)
+                stats += "\n" + AgentOpsConvergencePolicy.handoff
+            }
             if let escalatedFrom {
                 stats += "\n(escalated from \(escalatedFrom) to \(effectiveModel) after the first attempt stalled)"
             }

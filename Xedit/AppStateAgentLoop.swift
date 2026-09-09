@@ -56,6 +56,7 @@ extension AppState {
         runtime.currentTurnSpawnAgentCallCount = 0
         runtime.currentTurnAutoDispatchedCommands = []
         runtime.currentTurnAttemptedWorkerProfiles = []
+        runtime.completedForegroundOpsInspection = false
         runtime.currentTurnEmittedReadOnlyHandoffHint = false
         // Classified from what the user actually typed. Tool-loop
         // continuations and system notices re-enter here with the same

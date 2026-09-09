@@ -565,6 +565,9 @@ extension AppState {
     ) {
         guard let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) else { return }
 
+        AgentSubagentLiveTranscripts.shared.recordProgressAudit(
+            runID: runtime.toolCalls[index].subagentRunID ?? recordID, progress: update)
+
         // The closing heartbeat only flips liveness. Overwriting round and
         // tool counts with its zeroes would blank a card that should keep
         // showing what the Worker got through.

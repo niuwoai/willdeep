@@ -232,7 +232,7 @@ nonisolated enum AgentSubagentProfileCatalog {
     static let terminalOperatorID = "terminal_operator"
     static let generalistID = "generalist"
 
-    static let workerPayloadCharacterLimit = 4_000
+    static let workerPayloadCharacterLimit = 32_000
     static let balancedPayloadCharacterLimit = 5_000
     static let widePayloadCharacterLimit = 6_000
     static let implementerPayloadCharacterLimit = 16_000

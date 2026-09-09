@@ -1018,7 +1018,10 @@ enum AgentSubagentRunner {
     /// Caps one tool result before it enters the child's history. Unlike the
     /// inspector's cap (storage), this one protects the model's context
     /// window, so the notice has to be legible to the model itself.
-    static func clampedToolPayload(_ payload: String, limit: Int) -> String {
+    static func clampedToolPayload(_ payload: String, limit: Int, toolName: String? = nil) -> String {
+        // Terminal tools already bound and redact their output. A second
+        // prefix crop discards the newest screen after the history/header.
+        if toolName == "terminal_snapshot" || toolName == "terminal_send_command" { return payload }
         guard limit > 0, payload.count > limit else { return payload }
         return String(payload.prefix(limit))
             + "\n...[tool output truncated at \(limit) characters for this subagent trade. Narrow the request — grep for a pattern, or read a specific line range.]"
@@ -1271,12 +1274,21 @@ enum AgentSubagentRunner {
         // 丢掉，否则每次压缩都会把更早的历史彻底忘掉）。
         var compressionsUsed = 0
         var lastCompressionSummary: String?
+        var opsReportOnly = false
         while round <= roundLimit {
             try Task.checkCancellation()
         try executionBudget?.checkCurrentOwner()
             defer { round += 1 }
             interventionChannel?.beginRound(round)
             _ = applyPendingInterventions(effectiveRound: round)
+            if AgentOpsConvergencePolicy.shouldFinishSnapshotLoop(profileID: profile.id,
+                recentTools: recordedRounds.flatMap { $0.toolCalls.map(\.name) }) {
+                opsReportOnly = true
+                roundLimit = round
+                toolList = []
+                transcript.append(AgentMessage(role: .user, content:
+                    "The host stopped repeated terminal snapshot probing. Return a concise report now using the evidence already observed. Explicitly list missing facts and limitations; do not claim unobserved success. No further tool calls are available in this worker."))
+            }
             // Surface the provider wait before the (potentially long)
             // streaming round begins. Never mirror private reasoning text.
             publishProgress(round: round, activity: .thinking)
@@ -1655,6 +1667,7 @@ enum AgentSubagentRunner {
             // 普通工具(read-only / web_search / web_fetch 等)走原路径。schema 模式
             // 下,structured_output 已经在前面拎走处理,这里只剩别的。
             let executableCalls = toolCalls.filter {
+                !opsReportOnly &&
                 $0.toolName != structuredOutputToolName
             }
             var toolStepWasInterrupted = false
@@ -1736,7 +1749,8 @@ enum AgentSubagentRunner {
                 // same tool payloads a 1M-window parent shrugs off.
                 let payload = clampedToolPayload(
                     rawPayload,
-                    limit: profile.toolPayloadCharacterLimit
+                    limit: profile.toolPayloadCharacterLimit,
+                    toolName: call.toolName
                 )
                 transcript.append(AgentMessage(
                     role: .tool,
