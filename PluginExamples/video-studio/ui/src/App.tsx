@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { CHARACTER_DRAFT_FIELDS, callCommand, detectUnknownCharacters, loadDramas, loadProviders, parseFencedDraft, parsePlanWithReason, requestBudget, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODE_DRAFT_FIELDS, PASSAGE_FENCE, applyPassage, callCommand, detectUnknownCharacters, loadDramas, loadProviders, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, requestBudget, visibleStream } from './bridge';
 import { Dropdown } from './Dropdown';
 import { createTranslator, localeFromContext } from './i18n';
-import type { ChatMessage, Character, CharacterDraft, Drama, DramaPlan, ImageModel, ProviderEntry, Shot, SkillEntry, Stage } from './types';
+import type { ChatMessage, Character, CharacterDraft, Drama, DramaPlan, Episode, EpisodeDraftFields, ImageModel, ProviderEntry, Shot, SkillEntry, Stage } from './types';
 import './styles.css';
 
 const imageModels: ImageModel[] = ['gpt-image-2', 'nano-banana-2'];
@@ -20,6 +20,31 @@ function localID(): string {
 const MAX_ATTACHED_SKILLS = 3;
 const stageOrder: Stage[] = ['planning', 'characters', 'script', 'storyboard', 'frames', 'video'];
 const CHARACTER_FENCE = 'short_drama_character';
+const EPISODE_FENCE = 'short_drama_episode';
+
+/// 显示值：有草稿看草稿，没有才看已定稿的。与角色阶段同一个规矩。
+function episodeView(entry: Episode | undefined): { title: string; summary: string; script: string } {
+  const draft = entry?.draft ?? null;
+  return {
+    title: draft?.title ?? entry?.title ?? '',
+    summary: draft?.summary ?? entry?.summary ?? '',
+    script: draft?.script ?? entry?.script ?? '',
+  };
+}
+
+/// 分集的字段差异。长正文只报「改了多少字」而不是整段对照：一集几千字，
+/// 逐字对照铺开来没人看得完，用户真正要判断的是这次动了哪些字段、幅度多大。
+export function episodeDifferences(entry: Episode | undefined): Array<{ field: keyof EpisodeDraftFields & string; before: string; after: string }> {
+  if (!entry?.draft) return [];
+  const rows: Array<{ field: keyof EpisodeDraftFields & string; before: string; after: string }> = [];
+  for (const field of EPISODE_DRAFT_FIELDS) {
+    const after = entry.draft[field];
+    if (typeof after !== 'string') continue;
+    const before = (entry[field] ?? '') as string;
+    if (before !== after) rows.push({ field, before, after });
+  }
+  return rows;
+}
 
 /// 显示值：有草稿就看草稿，没有才看已定稿的内容。共创全程改的是草稿，
 /// 正式内容要等用户按下采用才动。
@@ -107,6 +132,13 @@ export default function App() {
   const [staleCandidate, setStaleCandidate] = useState<{ characterID: string; draft: CharacterDraft; note: string } | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  // 剧本阶段的共创状态。选区记的是字符位置而不是文本：同一句台词在一集里
+  // 出现两次很常见，按文本回找会改错那一处。
+  const [scriptChat, setScriptChat] = useState<ChatMessage[]>([]);
+  const [scriptInput, setScriptInput] = useState('');
+  const [scriptStreamID, setScriptStreamID] = useState('');
+  const [scriptSelection, setScriptSelection] = useState<{ start: number; end: number } | null>(null);
+  const [showEpisodeDiff, setShowEpisodeDiff] = useState(false);
   const [episodeDraft, setEpisodeDraft] = useState({ title: '', summary: '', script: '' });
   const [shotDraft, setShotDraft] = useState<Shot>(emptyShot(1));
   const [busy, setBusy] = useState('');
@@ -207,7 +239,13 @@ export default function App() {
   useEffect(() => {
     if (!episode) return;
     setEpisodeID(episode.id);
-    setEpisodeDraft({ title: episode.title, summary: episode.summary, script: episode.script });
+    // 编辑缓冲初始化自「草稿优先」的显示值，否则切回一集会看到已定稿的
+    // 旧正文，而草稿还在那儿等着采用。
+    const view = episodeView(episode);
+    setEpisodeDraft({ title: view.title, summary: view.summary, script: view.script });
+    setScriptSelection(null);
+    setShowEpisodeDiff(false);
+    void loadScriptChat(drama?.id ?? '');
   }, [episode?.id]);
 
   useEffect(() => {
@@ -252,15 +290,21 @@ export default function App() {
     const requestMessages = [...plannerMessages, userMessage];
     setPlannerMessages(requestMessages);
     setIdea('');
-    setBusy('plan'); setFailure(''); setStreamingText('');
+    setBusy('plan'); setFailure(''); setStreamingText(''); setStructuredStreaming(false);
     // 策划一次要十几秒。宿主按 streamID 把增量推回来，贴着输入框滚动显示，
     // 用户至少知道模型在动，而不是对着一个转圈干等。
     const streamID = localID();
     setPlannerStreamID(streamID);
+    let plannerBuffer = '';
     const onDelta = (event: Event) => {
       const detail = (event as CustomEvent<{ streamID?: string; delta?: string }>).detail;
       if (detail?.streamID !== streamID || typeof detail.delta !== 'string') return;
-      setStreamingText((current) => (current + detail.delta).slice(-1200));
+      plannerBuffer += detail.delta;
+      // 早先是原样刷出来，于是用户看到的是一屏转义后的 JSON。现在只显示
+      // 正在生成的字段值。
+      const visible = visibleStream(plannerBuffer, 'short_drama_plan', ['logline', 'arc', 'coreConflict', 'title']);
+      setStructuredStreaming(visible.structured);
+      setStreamingText(visible.text.slice(-1200));
     };
     window.addEventListener('willdeep:ai-delta', onDelta);
     // 这一轮失败就把问题退回输入框，并把刚追加的那条用户消息撤掉。
@@ -292,7 +336,7 @@ export default function App() {
     }
     finally {
       window.removeEventListener('willdeep:ai-delta', onDelta);
-      setStreamingText(''); setPlannerStreamID(''); setBusy('');
+      setStreamingText(''); setStructuredStreaming(false); setPlannerStreamID(''); setBusy('');
     }
   }
 
@@ -478,7 +522,8 @@ export default function App() {
       const detail = (event as CustomEvent<{ streamID?: string; delta?: string }>).detail;
       if (detail?.streamID !== streamID || typeof detail.delta !== 'string') return;
       buffer += detail.delta;
-      const visible = visibleStream(buffer, CHARACTER_FENCE);
+      // 把正在生成的字段值显示出来，而不是一句「正在生成…」的占位。
+      const visible = visibleStream(buffer, CHARACTER_FENCE, ['description', 'visualPrompt', 'name']);
       setStructuredStreaming(visible.structured);
       setStreamingText(visible.text.slice(-1200));
     };
@@ -564,6 +609,193 @@ export default function App() {
     if (!drama || !character.id) return;
     await callCommand('drama.selectCharacterImage', { dramaID: drama.id, characterID: character.id, candidateID });
     await reload(drama.id);
+  }
+
+  // ---- 分集剧本共创 ----
+
+  async function loadScriptChat(id: string) {
+    if (!id) { setScriptChat([]); return; }
+    try {
+      const payload = await callCommand<{ ok: boolean; messages?: ChatMessage[] }>('chat.list', { dramaID: id, stage: 'script' });
+      setScriptChat(payload.messages ?? []);
+    } catch { setScriptChat([]); }
+  }
+
+  async function appendScriptChat(role: 'user' | 'assistant', content: string, objectID: string, draftRev: number) {
+    try {
+      const payload = await callCommand<{ ok: boolean; message?: ChatMessage }>('chat.append', {
+        dramaID: drama?.id, stage: 'script', message: { role, content, objectID, draftRev },
+      });
+      if (payload.message) setScriptChat((current) => [...current, payload.message as ChatMessage]);
+    } catch (error) { setFailure(errorMessage(error)); }
+  }
+
+  async function saveEpisodeDraft(draft: EpisodeDraftFields, expectedDraftRev: number | undefined) {
+    if (!drama || !episode) return false;
+    try {
+      const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { code?: string; message?: string } }>('drama.saveDraft', {
+        dramaID: drama.id, scope: 'episode', episodeID: episode.id, draft, expectedDraftRev,
+      });
+      if (!payload.ok) {
+        if (payload.error?.code === 'revision_conflict') return false;
+        throw new Error(payload.error?.message || t('operationFailed'));
+      }
+      applyDrama(payload.drama);
+      return true;
+    } catch (error) { setFailure(errorMessage(error)); return false; }
+  }
+
+  async function commitEpisodeDraft() {
+    if (!drama || !episode) return;
+    setBusy('episode');
+    try {
+      const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { code?: string; message?: string } }>('drama.commitDraft', {
+        dramaID: drama.id, scope: 'episode', episodeID: episode.id, expectedRev: episode.rev ?? 0,
+      });
+      // 重复确认按「刚才已经成了」处理，与角色阶段同一个约定。
+      if (!payload.ok && payload.error?.code === 'revision_conflict') { await reload(drama.id); setNotice(t('draftAlreadyAdopted')); return; }
+      if (!payload.ok) throw new Error(payload.error?.message || t('operationFailed'));
+      applyDrama(payload.drama);
+      setShowEpisodeDiff(false);
+      setNotice(t('episodeSaved'));
+    } catch (error) { setFailure(errorMessage(error)); } finally { setBusy(''); }
+  }
+
+  async function discardEpisodeDraft() {
+    if (!drama || !episode) return;
+    try {
+      const payload = await callCommand<{ ok: boolean; drama?: Drama; error?: { message?: string } }>('drama.discardDraft', {
+        dramaID: drama.id, scope: 'episode', episodeID: episode.id, expectedDraftRev: episode.draftRev ?? 0,
+      });
+      if (!payload.ok) throw new Error(payload.error?.message || t('operationFailed'));
+      applyDrama(payload.drama);
+      setShowEpisodeDiff(false);
+      setNotice(t('draftDiscarded'));
+    } catch (error) { setFailure(errorMessage(error)); }
+  }
+
+  /// 记选区的位置而不是文本：同一句台词在一集里出现两次很常见，按文本
+  /// 回找会改错那一处。
+  ///
+  /// 三个事件都挂上：select 是主路径，但鼠标拖选的收尾时机和键盘选择
+  /// （shift 加方向键）在不同输入法与浏览器下并不总是走同一个事件。
+  function captureScriptSelection(event: { target: EventTarget | null }) {
+    const target = event.target as HTMLTextAreaElement | null;
+    if (!target) return;
+    const start = target.selectionStart ?? 0;
+    const end = target.selectionEnd ?? 0;
+    setScriptSelection(end > start ? { start, end } : null);
+  }
+
+  function stopScriptRequest() {
+    const cancel = window.willdeep?.ai?.cancel;
+    if (cancel && scriptStreamID) void cancel(scriptStreamID);
+  }
+
+  /// 整集生成或改一段，走同一条请求链路，区别在围栏和上下文。
+  ///
+  /// 上游资料刻意不含本集正文全文：整集重出时它即将被替换，改一段时只需要
+  /// 选区前后各一小段。一集几千字，加上策划与角色表很容易撞上宿主那 32000
+  /// 字符的硬上限，而撞上是整条请求被拒不是截断。
+  async function runEpisodeRequest(question: string, mode: 'full' | 'passage') {
+    if (!drama || !episode) { setFailure(t('selectEpisodeFirst')); return; }
+    const view = episodeView(episode);
+    const baseDraftRev = episode.draftRev ?? 0;
+    const objectID = episode.id;
+    const passage = mode === 'passage' && scriptSelection
+      ? passageContext(view.script, scriptSelection.start, scriptSelection.end)
+      : null;
+    if (mode === 'passage' && !passage?.selection.trim()) { setFailure(t('selectPassageFirst')); return; }
+
+    const system = t(mode === 'passage' ? 'passageSystem' : 'episodeSystem');
+    const cast = drama.characters.map((item) => {
+      const character = characterView(item);
+      return `${character.name}：${character.description || t('noBackstoryYet')}`;
+    }).join('\n');
+    const neighbours = drama.episodes
+      .filter((item) => Math.abs(item.order - episode.order) === 1)
+      .map((item) => `${t('episodeNumber', { number: item.order })}：${episodeView(item).summary}`)
+      .join('\n');
+    const context = [
+      `${t('contextDramaLabel')}: ${drama.title} / ${drama.genre} / ${drama.tone}`,
+      `${t('contextLoglineLabel')}: ${drama.logline}`,
+      `${t('contextArcLabel')}: ${drama.arc}`,
+      `${t('contextCastLabel')}:\n${cast || t('noCharactersYet')}`,
+      `${t('contextEpisodeLabel', { number: episode.order })}: ${view.title} / ${view.summary}`,
+      neighbours ? `${t('contextNeighbourLabel')}:\n${neighbours}` : '',
+      passage
+        ? `${t('contextPassageLabel')}:\n<before>${passage.before}</before>\n<selection>${passage.selection}</selection>\n<after>${passage.after}</after>`
+        : '',
+    ].filter(Boolean).join('\n\n');
+
+    const history = scriptChat.filter((item) => !item.objectID || item.objectID === objectID).slice(-6)
+      .map(({ role, content }) => ({ role, content }));
+    const messages = [...history, { role: 'user' as const, content: `${context}\n\n${question}` }];
+    const budget = requestBudget(system, messages);
+    if (!budget.withinLimits) { setFailure(t('requestTooLarge', { characters: budget.characters })); return; }
+
+    setBusy('script-ask'); setFailure(''); setStreamingText(''); setStructuredStreaming(false);
+    void appendScriptChat('user', question, objectID, baseDraftRev);
+
+    const streamID = localID();
+    setScriptStreamID(streamID);
+    const fence = mode === 'passage' ? PASSAGE_FENCE : EPISODE_FENCE;
+    let buffer = '';
+    const onDelta = (event: Event) => {
+      const detail = (event as CustomEvent<{ streamID?: string; delta?: string }>).detail;
+      if (detail?.streamID !== streamID || typeof detail.delta !== 'string') return;
+      buffer += detail.delta;
+      // 剧本正文优先：一集要写三十秒以上，看着它一行行冒出来和干等是
+      // 两种体验。改一段时显示的是替换文本。
+      const visible = visibleStream(buffer, fence, mode === 'passage' ? ['replacement'] : ['script', 'summary', 'title']);
+      setStructuredStreaming(visible.structured);
+      setStreamingText(visible.text.slice(-1200));
+    };
+    window.addEventListener('willdeep:ai-delta', onDelta);
+    try {
+      const response = await window.willdeep?.ai?.complete({
+        system, messages,
+        provider: assistantProvider || undefined, model: assistantModel || undefined,
+        skills: attachedSkills.map((item) => item.identifier), streamID,
+      });
+      if (!response) throw new Error(t('operationFailed'));
+
+      if (mode === 'passage') {
+        const parsed = parseFencedPassage(response.text);
+        if (parsed.kind === 'chat') { await appendScriptChat('assistant', response.text, objectID, baseDraftRev); return; }
+        if (parsed.kind === 'invalid') {
+          await appendScriptChat('assistant', response.text, objectID, baseDraftRev);
+          setFailure(t('passageInvalid'));
+          return;
+        }
+        const selection = scriptSelection;
+        if (!selection) { setFailure(t('selectPassageFirst')); return; }
+        const next = applyPassage(view.script, selection.start, selection.end, parsed.value.replacement);
+        await appendScriptChat('assistant', parsed.note || t('passageReady'), objectID, baseDraftRev);
+        const written = await saveEpisodeDraft({ script: next }, baseDraftRev);
+        if (written) { setShowEpisodeDiff(true); setScriptSelection(null); return; }
+        setFailure(t('episodeDraftStale'));
+        return;
+      }
+
+      const parsed = parseFencedDraft<EpisodeDraftFields>(response.text, EPISODE_FENCE, EPISODE_DRAFT_FIELDS);
+      if (parsed.kind === 'chat') { await appendScriptChat('assistant', response.text, objectID, baseDraftRev); return; }
+      if (parsed.kind === 'invalid') {
+        await appendScriptChat('assistant', response.text, objectID, baseDraftRev);
+        setFailure(t('episodeDraftInvalid'));
+        return;
+      }
+      await appendScriptChat('assistant', parsed.note || t('episodeDraftReady'), objectID, baseDraftRev);
+      const written = await saveEpisodeDraft(parsed.value, baseDraftRev);
+      if (written) { setShowEpisodeDiff(true); return; }
+      setFailure(t('episodeDraftStale'));
+    } catch (error) {
+      const message = errorMessage(error);
+      setFailure(message.toLowerCase().includes('cancel') ? t('requestStopped') : message);
+    } finally {
+      window.removeEventListener('willdeep:ai-delta', onDelta);
+      setStreamingText(''); setStructuredStreaming(false); setScriptStreamID(''); setBusy('');
+    }
   }
 
   /// 把剧本里发现的名字建成角色骨架。只写名字：小传和视觉提示词回角色
@@ -700,7 +932,7 @@ export default function App() {
   }
 
   function Planning() {
-    return AppShell(<main className="planning-shell"><header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{t('planningTitle')}</span></div></header><div className="planning-grid"><section className="chat-panel"><div className="section-title"><p className="eyebrow">{t('aiPlanning')}</p><h1>{t('tellStory')}</h1><p>{t('planningHint')}</p></div><div className="chat-history" aria-live="polite"><div className="chat-message assistant"><strong>{t('plannerName')}</strong><p>{t('plannerWelcome')}</p></div>{plannerMessages.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'plannerName')}</strong><p>{message.display}</p></div>)}</div><div className="composer">{busy === 'plan' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('planningBusy')}</span>}<button className="ghost" onClick={() => stopPlanner()}>{t('stopRequest')}</button></div>}{attachedSkills.length > 0 && <div className="skill-strip" aria-label={t('attachedSkills')}>{attachedSkills.map((item) => <span className="skill-chip" key={item.identifier}>{item.name}<button type="button" onClick={() => setAttachedSkills((current) => current.filter((entry) => entry.identifier !== item.identifier))} aria-label={t('detachSkill', { name: item.name })}>\u00d7</button></span>)}</div>}<div className="composer-input"><textarea className="idea-box" value={idea} placeholder={t(plan ? 'revisionPlaceholder' : 'ideaPlaceholder')} onChange={(event) => { setIdea(event.target.value); setSkillQuery(skills.length > 0 ? skillQueryAt(event.target.value, event.target.selectionStart ?? event.target.value.length) : null); }} onKeyDown={(event) => { if (event.key === 'Escape' && skillQuery !== null) { event.preventDefault(); setSkillQuery(null); } if (event.key === 'Enter' && skillQuery !== null && skillMatches[0]) { event.preventDefault(); attachSkill(skillMatches[0]); } }} onBlur={() => window.setTimeout(() => setSkillQuery(null), 120)} />{skillQuery !== null && <div className="skill-menu" role="listbox" aria-label={t('skillPicker')}>{skillMatches.length === 0 ? <p className="skill-empty">{t('noSkillMatch')}</p> : skillMatches.map((item) => <button type="button" role="option" aria-selected={false} key={item.identifier} onMouseDown={(event) => { event.preventDefault(); attachSkill(item); }}><strong>{item.name}</strong><span>{item.description}</span><small>{item.identifier}</small></button>)}</div>}</div>{ModelRouting()}<button className="primary wide" disabled={busy === 'plan'} onClick={() => void askPlanner()}>{busy === 'plan' ? t('planningBusy') : t(plan ? 'revisePlan' : 'generatePlan')}</button><small>{t('markdownContract')}</small></div></section><section className="plan-card">{plan ? <><div className="plan-summary"><span>{plan.genre}</span><h2>{plan.title}</h2><small>{plan.format}</small></div><div className="plan-body"><div className="facts"><span>{t('episodeCount', { count: plan.episodeCount })}</span><span>{t('minutesPerEpisode', { count: Math.round(plan.episodeDurationSeconds / 60) })}</span><span>{plan.audience}</span></div><h3>{t('logline')}</h3><p>{plan.logline}</p><h3>{t('coreConflict')}</h3><p>{plan.coreConflict}</p><h3>{t('seriesArc')}</h3><p>{plan.arc}</p><div className="actions"><button className="ghost" onClick={() => setIdea(t('revisionStarter'))}>{t('revise')}</button><button className="primary" disabled={busy === 'confirm'} onClick={() => void confirmPlan()}>{t('confirmAndSave')}</button></div></div></> : <div className="empty-plan"><h2>{t('planWaiting')}</h2><p>{t('planWaitingHint')}</p></div>}</section></div></main>);
+    return AppShell(<main className="planning-shell"><header className="project-header"><div><button className="breadcrumb" onClick={() => setStage('library')}>{t('allProjects')}</button><span>{t('planningTitle')}</span></div></header><div className="planning-grid"><section className="chat-panel"><div className="section-title"><p className="eyebrow">{t('aiPlanning')}</p><h1>{t('tellStory')}</h1><p>{t('planningHint')}</p></div><div className="chat-history" aria-live="polite"><div className="chat-message assistant"><strong>{t('plannerName')}</strong><p>{t('plannerWelcome')}</p></div>{plannerMessages.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'plannerName')}</strong><p>{message.display}</p></div>)}</div><div className="composer">{busy === 'plan' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming && !streamingText ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('planningBusy')}</span>}<button className="ghost" onClick={() => stopPlanner()}>{t('stopRequest')}</button></div>}{attachedSkills.length > 0 && <div className="skill-strip" aria-label={t('attachedSkills')}>{attachedSkills.map((item) => <span className="skill-chip" key={item.identifier}>{item.name}<button type="button" onClick={() => setAttachedSkills((current) => current.filter((entry) => entry.identifier !== item.identifier))} aria-label={t('detachSkill', { name: item.name })}>\u00d7</button></span>)}</div>}<div className="composer-input"><textarea className="idea-box" value={idea} placeholder={t(plan ? 'revisionPlaceholder' : 'ideaPlaceholder')} onChange={(event) => { setIdea(event.target.value); setSkillQuery(skills.length > 0 ? skillQueryAt(event.target.value, event.target.selectionStart ?? event.target.value.length) : null); }} onKeyDown={(event) => { if (event.key === 'Escape' && skillQuery !== null) { event.preventDefault(); setSkillQuery(null); } if (event.key === 'Enter' && skillQuery !== null && skillMatches[0]) { event.preventDefault(); attachSkill(skillMatches[0]); } }} onBlur={() => window.setTimeout(() => setSkillQuery(null), 120)} />{skillQuery !== null && <div className="skill-menu" role="listbox" aria-label={t('skillPicker')}>{skillMatches.length === 0 ? <p className="skill-empty">{t('noSkillMatch')}</p> : skillMatches.map((item) => <button type="button" role="option" aria-selected={false} key={item.identifier} onMouseDown={(event) => { event.preventDefault(); attachSkill(item); }}><strong>{item.name}</strong><span>{item.description}</span><small>{item.identifier}</small></button>)}</div>}</div>{ModelRouting()}<button className="primary wide" disabled={busy === 'plan'} onClick={() => void askPlanner()}>{busy === 'plan' ? t('planningBusy') : t(plan ? 'revisePlan' : 'generatePlan')}</button><small>{t('markdownContract')}</small></div></section><section className="plan-card">{plan ? <><div className="plan-summary"><span>{plan.genre}</span><h2>{plan.title}</h2><small>{plan.format}</small></div><div className="plan-body"><div className="facts"><span>{t('episodeCount', { count: plan.episodeCount })}</span><span>{t('minutesPerEpisode', { count: Math.round(plan.episodeDurationSeconds / 60) })}</span><span>{plan.audience}</span></div><h3>{t('logline')}</h3><p>{plan.logline}</p><h3>{t('coreConflict')}</h3><p>{plan.coreConflict}</p><h3>{t('seriesArc')}</h3><p>{plan.arc}</p><div className="actions"><button className="ghost" onClick={() => setIdea(t('revisionStarter'))}>{t('revise')}</button><button className="primary" disabled={busy === 'confirm'} onClick={() => void confirmPlan()}>{t('confirmAndSave')}</button></div></div></> : <div className="empty-plan"><h2>{t('planWaiting')}</h2><p>{t('planWaitingHint')}</p></div>}</section></div></main>);
   }
 
   function Characters() {
@@ -764,7 +996,54 @@ export default function App() {
   }
 
   function Script() {
-    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}<div className="page-heading"><div><p className="eyebrow">{t('stage_script')}</p><h1>{t('scriptTitle')}</h1><p>{t('scriptHint')}</p></div><button className="primary" disabled={busy === 'episode'} onClick={() => void saveEpisode()}>{t('saveEpisode')}</button></div><div className="script-grid"><section className="editor-card"><label>{t('episodeTitle')}<input value={episodeDraft.title} onChange={(event) => setEpisodeDraft({ ...episodeDraft, title: event.target.value })} /></label><label>{t('episodeSummary')}<textarea value={episodeDraft.summary} onChange={(event) => setEpisodeDraft({ ...episodeDraft, summary: event.target.value })} /></label><label>{t('episodeScript')}<textarea className="script-area" value={episodeDraft.script} onChange={(event) => setEpisodeDraft({ ...episodeDraft, script: event.target.value })} /></label></section><aside className="script-guide">{DetectedCast()}<h3>{t('episodeChecklist')}</h3><p>{t('checkHook')}</p><p>{t('checkConflict')}</p><p>{t('checkCliffhanger')}</p><button className="ghost" onClick={() => setStage('storyboard')}>{t('goStoryboard')}</button></aside></div></main></div>);
+    const view = episodeView(episode);
+    const differences = episodeDifferences(episode);
+    const hasDraft = differences.length > 0;
+    const chatForObject = scriptChat.filter((item) => !item.objectID || item.objectID === episode?.id);
+    const selectedLength = scriptSelection ? scriptSelection.end - scriptSelection.start : 0;
+    return AppShell(<div className="page">{ProjectHeader()}<main className="content">{EpisodeSwitcher()}
+      <div className="page-heading"><div><p className="eyebrow">{t('stage_script')}</p><h1>{t('scriptTitle')}</h1><p>{t('scriptHint')}</p></div>
+        <div className="heading-actions">
+          {hasDraft && <button className="ghost" onClick={() => setShowEpisodeDiff((value) => !value)}>{t(showEpisodeDiff ? 'hideDiff' : 'showDiff')}</button>}
+          {hasDraft && <button className="ghost" onClick={() => void discardEpisodeDraft()}>{t('discardDraft')}</button>}
+          {hasDraft
+            ? <button className="primary" disabled={busy === 'episode'} onClick={() => void commitEpisodeDraft()}>{t('adoptDraft')}</button>
+            : <button className="primary" disabled={busy === 'episode'} onClick={() => void saveEpisode()}>{t('saveEpisode')}</button>}
+        </div>
+      </div>
+      {hasDraft && <div className="identity-note draft-note"><strong>{t('draftPending')}</strong><span>{t('episodeDraftPendingHint')}</span></div>}
+      {hasDraft && showEpisodeDiff && <div className="diff-list">{differences.map((row) => <div className="diff-row" key={row.field}><strong>{t(row.field === 'title' ? 'episodeTitle' : row.field === 'summary' ? 'episodeSummary' : 'episodeScript')}</strong><p className="diff-before">{t('diffCharCount', { count: row.before.length })}</p><p className="diff-after">{t('diffCharCountAfter', { count: row.after.length })}</p></div>)}</div>}
+      <div className="script-grid">
+        <section className="editor-card">
+          <label>{t('episodeTitle')}<input value={episodeDraft.title} onChange={(event) => setEpisodeDraft({ ...episodeDraft, title: event.target.value })} onBlur={() => { if (episode && episodeDraft.title !== view.title) void saveEpisodeDraft({ title: episodeDraft.title }, episode.draftRev ?? 0); }} /></label>
+          <label>{t('episodeSummary')}<textarea value={episodeDraft.summary} onChange={(event) => setEpisodeDraft({ ...episodeDraft, summary: event.target.value })} onBlur={() => { if (episode && episodeDraft.summary !== view.summary) void saveEpisodeDraft({ summary: episodeDraft.summary }, episode.draftRev ?? 0); }} /></label>
+          <label>{t('episodeScript')}<textarea className="script-area" value={episodeDraft.script}
+            onChange={(event) => setEpisodeDraft({ ...episodeDraft, script: event.target.value })}
+            onBlur={() => { if (episode && episodeDraft.script !== view.script) void saveEpisodeDraft({ script: episodeDraft.script }, episode.draftRev ?? 0); }}
+            onSelect={captureScriptSelection}
+            onMouseUp={captureScriptSelection}
+            onKeyUp={captureScriptSelection} /></label>
+          {selectedLength > 0 && <p className="selection-hint">{t('selectionHint', { count: selectedLength })}</p>}
+        </section>
+        <aside className="script-guide">
+          <div className="chat-panel script-chat">
+            <div className="section-title"><p className="eyebrow">{t('scriptCoCreation')}</p><h2>{episode ? t('episodeNumber', { number: episode.order }) : t('selectEpisodeFirst')}</h2><p>{t('scriptCoCreationHint')}</p></div>
+            <div className="chat-history" aria-live="polite">{chatForObject.map((message) => <div className={`chat-message ${message.role}`} key={message.id}><strong>{t(message.role === 'user' ? 'you' : 'scriptAssistant')}</strong><p>{message.content}</p></div>)}</div>
+            <div className="composer">
+              {busy === 'script-ask' && <div className="stream-line" role="status" aria-live="polite"><span className="stream-dot" aria-hidden="true" />{structuredStreaming ? <span className="stream-text muted">{t('structuredIncoming')}</span> : streamingText ? <span className="stream-text">{streamingText}</span> : <span className="stream-text muted">{t('scriptBusy')}</span>}<button className="ghost" onClick={() => stopScriptRequest()}>{t('stopRequest')}</button></div>}
+              <div className="composer-input"><textarea className="idea-box" value={scriptInput} placeholder={t(selectedLength > 0 ? 'passageAskPlaceholder' : 'scriptAskPlaceholder')} disabled={!episode} onChange={(event) => setScriptInput(event.target.value)} /></div>
+              <div className="actions">
+                <button className="ghost" disabled={!episode || busy === 'script-ask'} onClick={() => { const question = scriptInput.trim() || t('episodeFirstDraftRequest'); setScriptInput(''); void runEpisodeRequest(question, 'full'); }}>{t(view.script.trim() ? 'rewriteEpisode' : 'draftEpisode')}</button>
+                <button className="primary" disabled={!episode || busy === 'script-ask' || selectedLength === 0 || !scriptInput.trim()} onClick={() => { const question = scriptInput.trim(); setScriptInput(''); void runEpisodeRequest(question, 'passage'); }}>{t('rewritePassage')}</button>
+              </div>
+            </div>
+          </div>
+          {DetectedCast()}
+          <h3>{t('episodeChecklist')}</h3><p>{t('checkHook')}</p><p>{t('checkConflict')}</p><p>{t('checkCliffhanger')}</p>
+          <button className="ghost" onClick={() => setStage('storyboard')}>{t('goStoryboard')}</button>
+        </aside>
+      </div>
+    </main></div>);
   }
 
   function Storyboard() {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CHARACTER_DRAFT_FIELDS, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parsePlanWithReason, requestBudget, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, applyPassage, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, requestBudget, streamingFieldValue, visibleStream } from './bridge';
 import type { CharacterDraft } from './types';
 
 describe('parseDramaPlan', () => {
@@ -259,5 +259,106 @@ describe('detectUnknownCharacters', () => {
 
   it('英文名字也认', () => {
     expect(detectUnknownCharacters('Alex: one.\nAlex: two.', [])).toEqual(['Alex']);
+  });
+});
+
+describe('局部改一段', () => {
+  it('解析片段替换', () => {
+    const raw = '收紧了这三句。\n```short_drama_passage\n{"replacement":"林晚：你走。"}\n```';
+    expect(parseFencedPassage(raw)).toMatchObject({
+      kind: 'draft', value: { replacement: '林晚：你走。' }, note: '收紧了这三句。',
+    });
+  });
+
+  it('没有围栏时当闲聊', () => {
+    expect(parseFencedPassage('你想让这段更冷还是更急？')).toEqual({ kind: 'chat' });
+  });
+
+  it('空替换算格式错，不当成删除', () => {
+    // 模型返回空串时若照着替换，用户选中的那段就凭空消失了。
+    expect(parseFencedPassage('```short_drama_passage\n{"replacement":"   "}\n```')).toMatchObject({ kind: 'invalid' });
+    expect(parseFencedPassage('```short_drama_passage\n{}\n```')).toMatchObject({ kind: 'invalid' });
+  });
+
+  it('上下文只取选区前后各一小段，不是全篇', () => {
+    const script = 'A'.repeat(1000) + '选中的这段' + 'B'.repeat(1000);
+    const context = passageContext(script, 1000, 1005, 100);
+    expect(context.selection).toBe('选中的这段');
+    expect(context.before).toHaveLength(100);
+    expect(context.after).toHaveLength(100);
+  });
+
+  it('按位置替换，不按内容搜索', () => {
+    // 同一句台词在一集里出现两次很常见，按内容替换会改错那一处。
+    const script = '林晚：你走。\n周野：别走。\n林晚：你走。';
+    const replaced = applyPassage(script, script.lastIndexOf('林晚：你走。'), script.length, '林晚：留下。');
+    expect(replaced).toBe('林晚：你走。\n周野：别走。\n林晚：留下。');
+  });
+
+  it('越界的选区被夹回正文范围内', () => {
+    expect(applyPassage('短正文', -5, 999, '新的')).toBe('新的');
+    expect(passageContext('短正文', 999, 1000).selection).toBe('');
+  });
+});
+
+describe('streamingFieldValue', () => {
+  it('从没写完的 JSON 里取出已到达的正文', () => {
+    const buffer = '```short_drama_episode\n{"title":"第 1 集","script":"林晚：你怎么又来了。\\n周野：我收';
+    expect(streamingFieldValue(buffer, 'script')).toBe('林晚：你怎么又来了。\n周野：我收');
+  });
+
+  it('字段写完后停在收尾引号，不吃掉后面的键名', () => {
+    const buffer = '{"script":"完整台词。","summary":"梗概"}';
+    expect(streamingFieldValue(buffer, 'script')).toBe('完整台词。');
+  });
+
+  it('转义序列被切在数据块中间时先不显示它', () => {
+    // 半个转义直接显示会冒出一个字面反斜杠，下一块到了自然就完整了。
+    expect(streamingFieldValue('{"script":"第一行\\', 'script')).toBe('第一行');
+  });
+
+  it('还原换行与制表，不显示字面的反斜杠 n', () => {
+    expect(streamingFieldValue('{"script":"甲：一。\\n乙：二。"}', 'script')).toBe('甲：一。\n乙：二。');
+    expect(streamingFieldValue('{"script":"甲\\t乙"}', 'script')).toBe('甲\t乙');
+  });
+
+  it('还原转义的引号', () => {
+    expect(streamingFieldValue('{"script":"他说\\"走\\""}', 'script')).toBe('他说"走"');
+  });
+
+  it('字段还没出现时返回 null', () => {
+    expect(streamingFieldValue('```short_drama_episode\n{"title":"第 1 集"', 'script')).toBeNull();
+    expect(streamingFieldValue('我先想一下这一集怎么写。', 'script')).toBeNull();
+  });
+
+  it('unicode 转义要等四位十六进制到齐', () => {
+    expect(streamingFieldValue('{"script":"\\u674e', 'script')).toBe('李');
+    expect(streamingFieldValue('{"script":"甲\\u67', 'script')).toBe('甲');
+  });
+});
+
+describe('visibleStream 显示正在生成的字段', () => {
+  it('正文一到就显示正文，而不是占位', () => {
+    const buffer = '```short_drama_episode\n{"script":"林晚：你怎么又来了。';
+    expect(visibleStream(buffer, 'short_drama_episode', ['script'])).toEqual({
+      text: '林晚：你怎么又来了。', structured: false,
+    });
+  });
+
+  it('围栏开了但正文还没到，仍然报结构化占位', () => {
+    const buffer = '好的。\n```short_drama_episode\n{"title":"第 1 集"';
+    expect(visibleStream(buffer, 'short_drama_episode', ['script'])).toEqual({
+      text: '好的。', structured: true,
+    });
+  });
+
+  it('按给定顺序挑第一个有内容的字段', () => {
+    const buffer = '{"summary":"她收到短信","script":""}';
+    expect(visibleStream(buffer, 'short_drama_episode', ['script', 'summary']).text).toBe('她收到短信');
+  });
+
+  it('不给字段名时行为和以前一致', () => {
+    expect(visibleStream('好的\n```', 'short_drama_episode')).toEqual({ text: '好的', structured: true });
+    expect(visibleStream('正在想…', 'short_drama_episode')).toEqual({ text: '正在想…', structured: false });
   });
 });

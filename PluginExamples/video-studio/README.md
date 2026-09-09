@@ -17,7 +17,7 @@
 
 ## 安装与配置
 
-1. 运行 `ruby scripts/package_video_studio.rb`，在 WillDeep 插件中心选择生成的 `build/plugins/willdeep-video-studio-0.6.0.zip`。安装包只包含运行文件，不含前端开发依赖和设计稿。
+1. 运行 `ruby scripts/package_video_studio.rb`，在 WillDeep 插件中心选择生成的 `build/plugins/willdeep-video-studio-0.7.0.zip`。安装包只包含运行文件，不含前端开发依赖和设计稿。
 2. 审核插件声明的进程、网络、凭据、AI 聊天、图片生成、Provider 读取和技能读取权限后安装。
 3. 在插件设置中填写 `Video API Key`。该字段为 `secret`，由宿主安全存储，不写入任务文件或页面。
 4. 默认 API Base 为 `https://hub.tsingfly.com`，默认视频模型为 `MiniMax-H3`，默认输出目录为 `~/Movies/WillDeep Video Studio`。

@@ -223,6 +223,100 @@ describe('Short Drama Studio', () => {
   });
 
 
+
+  // ---- 分集剧本共创 ----
+
+  const episodeFixture = (overrides: Record<string, unknown> = {}) => ({
+    id: 'e1', order: 1, title: '第 1 集', summary: '她收到三天后的短信', script: '',
+    status: 'draft', shots: [], rev: 0, draftRev: 0, draft: null, ...overrides,
+  });
+
+  const scriptDramaFixture = (episode: Record<string, unknown>) => ({
+    id: 'd1', title: '错时来信', genre: '悬疑', format: '竖屏', episodeCount: 1, episodeDurationSeconds: 90,
+    logline: '未来短信改变今天', coreConflict: '', audience: '', tone: '冷峻', arc: '真相逐步揭开',
+    status: 'planning', rev: 0, draftRev: 0, draft: null,
+    characters: [{
+      id: 'c1', name: '林晚', description: '夜班护士', visualPrompt: '', identityVersion: 1,
+      candidates: [], selectedCandidateID: null, rev: 0, draftRev: 0, draft: null,
+    }],
+    episodes: [episode],
+    createdAt: '2026-09-09T00:00:00Z', updatedAt: '2026-09-09T00:00:00Z',
+  });
+
+  async function openScript(episode: Record<string, unknown>) {
+    dramas = [scriptDramaFixture(episode)];
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '继续创作' }))[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: /分集剧本/ }))[0]!);
+  }
+
+  it('整集生成进草稿，正式剧本不动', async () => {
+    complete.mockResolvedValue({
+      text: '写好了。\n```short_drama_episode\n{"script":"林晚：你怎么又来了。"}\n```',
+      model: 'fast', providerID: 'chat-a',
+    });
+    const updated = scriptDramaFixture(episodeFixture({ draftRev: 1, draft: { script: '林晚：你怎么又来了。' } }));
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('assistant', 'x');
+      if (command === 'drama.saveDraft') return JSON.stringify({ ok: true, drama: updated });
+      return JSON.stringify({ ok: true });
+    });
+
+    await openScript(episodeFixture());
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 写这一集' }));
+
+    await waitFor(() => {
+      const call = executeCommand.mock.calls.find(([command]) => command === 'drama.saveDraft');
+      expect(call?.[1]).toMatchObject({ scope: 'episode', episodeID: 'e1', draft: { script: '林晚：你怎么又来了。' } });
+    });
+    // 正式内容只能由「采用草稿」来动。
+    expect(executeCommand.mock.calls.some(([command]) => command === 'drama.saveEpisode')).toBe(false);
+  });
+
+  it('局部改只替换选中那段，同一句台词出现两次也不会改错', async () => {
+    const script = '林晚：你走。\n周野：别走。\n林晚：你走。';
+    complete.mockResolvedValue({
+      text: '```short_drama_passage\n{"replacement":"林晚：留下。"}\n```',
+      model: 'fast', providerID: 'chat-a',
+    });
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('assistant', 'x');
+      if (command === 'drama.saveDraft') return JSON.stringify({ ok: true, drama: dramas[0] });
+      return JSON.stringify({ ok: true });
+    });
+
+    await openScript(episodeFixture({ script }));
+    // 换行让 findByDisplayValue 匹配不上，按类名取那块正文区。
+    await screen.findByRole('button', { name: 'AI 重写这一集' });
+    const area = document.querySelector('textarea.script-area') as HTMLTextAreaElement;
+    expect(area.value).toBe(script);
+    // 选中最后那句「林晚：你走。」
+    const start = script.lastIndexOf('林晚：你走。');
+    (area as HTMLTextAreaElement).setSelectionRange(start, script.length);
+    fireEvent.mouseUp(area);
+    const composer = await screen.findByPlaceholderText(/只会替换选中的部分/);
+    fireEvent.change(composer, { target: { value: '改成留下' } });
+    fireEvent.click(screen.getByRole('button', { name: '只改选中这段' }));
+
+    await waitFor(() => {
+      const call = executeCommand.mock.calls.find(([command]) => command === 'drama.saveDraft');
+      expect(call?.[1]).toMatchObject({
+        scope: 'episode',
+        draft: { script: '林晚：你走。\n周野：别走。\n林晚：留下。' },
+      });
+    });
+  });
+
+  it('没选中内容时不能点局部改', async () => {
+    await openScript(episodeFixture({ script: '林晚：你走。' }));
+    fireEvent.change(await screen.findByPlaceholderText(/把开场三秒的钩子/), { target: { value: '改一下' } });
+    expect(screen.getByRole('button', { name: '只改选中这段' })).toBeDisabled();
+  });
+
   // ---- 剧本里的新面孔 ----
 
   it('剧本里说过两句的新名字会被提示，点一下只建名字', async () => {
