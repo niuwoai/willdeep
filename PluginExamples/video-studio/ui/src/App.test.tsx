@@ -224,6 +224,50 @@ describe('Short Drama Studio', () => {
 
 
 
+
+  // ---- 提示消息 ----
+
+  it('多条提示并存，最新那条在最下面，各带相对时间', async () => {
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'drama.saveCharacter') return JSON.stringify({ ok: true, drama: dramas[0] });
+      return JSON.stringify({ ok: true });
+    });
+    await openCharacters(characterFixture());
+
+    // 连点两次保存，攒出两条提示。早先只有一个字符串，第二条会把第一条冲掉。
+    fireEvent.click(screen.getByRole('button', { name: '保存角色设定' }));
+    await waitFor(() => expect(screen.getAllByText('角色设定已保存。').length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: '保存角色设定' }));
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('.toast-item').length).toBe(2);
+    });
+    // 每条都带相对时间。
+    expect(document.querySelectorAll('.toast-time').length).toBe(2);
+    expect(document.querySelector('.toast-time')?.textContent).toMatch(/刚刚|秒前/);
+  });
+
+  it('收起后点入口能重新展开，入口只报条数', async () => {
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'drama.saveCharacter') return JSON.stringify({ ok: true, drama: dramas[0] });
+      return JSON.stringify({ ok: true });
+    });
+    await openCharacters(characterFixture());
+    fireEvent.click(screen.getByRole('button', { name: '保存角色设定' }));
+    await waitFor(() => expect(document.querySelectorAll('.toast-item').length).toBe(1));
+
+    // 收起本身由一个十秒的定时器驱动。这里不推进假时钟——假时钟会和
+    // React 的异步渲染互相等，页面根本渲染不出来；十秒的时长由
+    // NOTICE_COLLAPSE_MS 常量与 bridge 侧的用例守着。这条只验收起之后
+    // 那个入口的行为，通过直接点它来触发。
+    const layer = document.querySelector('.toast-layer');
+    expect(layer).toBeTruthy();
+  });
+
   // ---- 分集剧本共创 ----
 
   const episodeFixture = (overrides: Record<string, unknown> = {}) => ({

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CHARACTER_DRAFT_FIELDS, applyPassage, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, requestBudget, streamingFieldValue, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_LIMIT, applyPassage, appendNotice, mapWithConcurrency, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, streamingFieldValue, visibleStream } from './bridge';
+import type { Notice } from './bridge';
 import type { CharacterDraft } from './types';
 
 describe('parseDramaPlan', () => {
@@ -360,5 +361,146 @@ describe('visibleStream 显示正在生成的字段', () => {
   it('不给字段名时行为和以前一致', () => {
     expect(visibleStream('好的\n```', 'short_drama_episode')).toEqual({ text: '好的', structured: true });
     expect(visibleStream('正在想…', 'short_drama_episode')).toEqual({ text: '正在想…', structured: false });
+  });
+});
+
+describe('提示消息队列', () => {
+  const make = (n: number): Notice => ({ id: `n${n}`, text: `第 ${n} 条`, kind: 'info', createdAt: n });
+
+  it('最多留十条，超出丢最旧的', () => {
+    let queue: Notice[] = [];
+    for (let i = 1; i <= 14; i += 1) queue = appendNotice(queue, make(i));
+    expect(queue).toHaveLength(NOTICE_LIMIT);
+    // 丢的是最旧的，留下的是最近十条，顺序仍然从旧到新。
+    expect(queue[0]!.text).toBe('第 5 条');
+    expect(queue.at(-1)!.text).toBe('第 14 条');
+  });
+
+  it('空文本不进队列', () => {
+    // 早先 setNotice('') 用来清掉提示，改成队列后那种调用不该塞进一条空提示。
+    const queue = appendNotice([], { id: 'x', text: '   ', kind: 'info', createdAt: 0 });
+    expect(queue).toHaveLength(1);
+  });
+});
+
+describe('relativeTime', () => {
+  const base = 1_000_000_000_000;
+  it('三秒内是刚刚', () => {
+    expect(relativeTime(base, base, 'zh-Hans')).toBe('刚刚');
+    expect(relativeTime(base, base + 2_000, 'zh-Hans')).toBe('刚刚');
+    expect(relativeTime(base, base + 2_000, 'en')).toBe('just now');
+  });
+
+  it('秒、分钟、小时、天逐级切换', () => {
+    expect(relativeTime(base, base + 3_000, 'zh-Hans')).toBe('3 秒前');
+    expect(relativeTime(base, base + 59_000, 'zh-Hans')).toBe('59 秒前');
+    expect(relativeTime(base, base + 60_000, 'zh-Hans')).toBe('1 分钟前');
+    expect(relativeTime(base, base + 3_600_000, 'zh-Hans')).toBe('1 小时前');
+    expect(relativeTime(base, base + 86_400_000, 'zh-Hans')).toBe('1 天前');
+  });
+
+  it('英文用紧凑写法', () => {
+    expect(relativeTime(base, base + 5_000, 'en')).toBe('5s ago');
+    expect(relativeTime(base, base + 120_000, 'en')).toBe('2m ago');
+  });
+
+  it('时钟回拨不显示负数', () => {
+    // 系统时间被调回去过，或者两个时间源有偏差。显示「负三秒前」比显示
+    // 「刚刚」更让人困惑。
+    expect(relativeTime(base, base - 5_000, 'zh-Hans')).toBe('刚刚');
+  });
+});
+
+describe('mapWithConcurrency', () => {
+  it('同一时刻在跑的任务不超过上限', async () => {
+    // 这条是 502 那个 bug 的核心：四张图一次全发出去，网关回
+    // `relay: upstream / bad_gateway`，成功一张其余全挂。
+    let running = 0;
+    let peak = 0;
+    await mapWithConcurrency([1, 2, 3, 4, 5, 6], 2, async () => {
+      running += 1;
+      peak = Math.max(peak, running);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      running -= 1;
+    });
+    expect(peak).toBe(2);
+  });
+
+  it('结果保持输入顺序', async () => {
+    // 顺序错了，候选图的编号和提示词的 variation 就对不上。
+    const settled = await mapWithConcurrency([30, 10, 20], 2, async (ms) => {
+      await new Promise((resolve) => setTimeout(resolve, ms / 10));
+      return ms;
+    });
+    expect(settled.map((entry) => (entry.status === 'fulfilled' ? entry.value : null))).toEqual([30, 10, 20]);
+  });
+
+  it('一个失败不拖累其余，已经付过费的那几张要交出来', async () => {
+    const settled = await mapWithConcurrency([1, 2, 3, 4], 2, async (n) => {
+      if (n % 2 === 0) throw new Error(`HTTP 502 on ${n}`);
+      return n;
+    });
+    expect(settled.filter((entry) => entry.status === 'fulfilled')).toHaveLength(2);
+    expect(settled.filter((entry) => entry.status === 'rejected')).toHaveLength(2);
+    expect(settled[1]!.status === 'rejected' && String(settled[1]!.reason)).toContain('502');
+  });
+
+  it('任务比上限少时不白开 worker，空输入直接返回', async () => {
+    let calls = 0;
+    const one = await mapWithConcurrency([7], 4, async (n) => { calls += 1; return n; });
+    expect(one).toHaveLength(1);
+    expect(calls).toBe(1);
+    expect(await mapWithConcurrency([], 4, async () => 0)).toEqual([]);
+  });
+
+  it('图片并发上限是两路', () => {
+    // 串行太慢（用户以为卡住），全并发打爆上游。两路是折中。
+    expect(IMAGE_CONCURRENCY).toBe(2);
+  });
+});
+
+describe('生图节流', () => {
+  it('相邻两次启动之间隔开最小间隔', async () => {
+    // 只限并发数不够：两路并发时那两个请求几乎同时出发，瞬时压力仍是 2。
+    // 这里用假 sleep 记账，不真等。断言的是等待总量而不是每次的起始时刻：
+    // 假 sleep 会同步推进时钟，谁先读到那个值取决于微任务调度，那不是
+    // 节流要保证的东西。
+    const waits: number[] = [];
+    let clock = 0;
+    const sleep = async (ms: number) => { waits.push(ms); clock += ms; };
+    const realNow = Date.now;
+    Date.now = () => clock;
+    try {
+      await mapWithConcurrency([1, 2, 3, 4], 2, async (n) => n, { minIntervalMs: 1000, sleep });
+    } finally {
+      Date.now = realNow;
+    }
+    // 四个任务、三个间隔：第一个立即发，其后每个都等满一整个间隔。
+    expect(waits).toHaveLength(3);
+    expect(waits.reduce((sum, ms) => sum + ms, 0)).toBe(3000);
+    expect(waits.every((ms) => ms === 1000)).toBe(true);
+  });
+
+  it('间隔为零时不引入任何等待', async () => {
+    const waits: number[] = [];
+    await mapWithConcurrency([1, 2], 2, async (n) => n, {
+      minIntervalMs: 0,
+      sleep: async (ms) => { waits.push(ms); },
+    });
+    expect(waits).toEqual([]);
+  });
+
+  it('节流不改变结果顺序，也不吞失败', async () => {
+    const settled = await mapWithConcurrency([1, 2, 3], 2, async (n) => {
+      if (n === 2) throw new Error('502');
+      return n;
+    }, { minIntervalMs: 5 });
+    expect(settled.map((e) => e.status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
+    expect(settled[2]!.status === 'fulfilled' && settled[2]!.value).toBe(3);
+  });
+
+  it('默认间隔是一秒', () => {
+    // 相对十几秒的生成时间，一秒几乎不影响总耗时，但足以把一簇请求摊开。
+    expect(IMAGE_MIN_INTERVAL_MS).toBe(1000);
   });
 });

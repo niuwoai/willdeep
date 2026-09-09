@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { CHARACTER_DRAFT_FIELDS, EPISODE_DRAFT_FIELDS, PASSAGE_FENCE, applyPassage, callCommand, detectUnknownCharacters, loadDramas, loadProviders, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, requestBudget, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, detectUnknownCharacters, loadDramas, loadProviders, mapWithConcurrency, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, visibleStream } from './bridge';
 import { Dropdown } from './Dropdown';
 import { createTranslator, localeFromContext } from './i18n';
 import type { ChatMessage, Character, CharacterDraft, Drama, DramaPlan, Episode, EpisodeDraftFields, ImageModel, ProviderEntry, Shot, SkillEntry, Stage } from './types';
+import type { Notice } from './bridge';
 import './styles.css';
 
 const imageModels: ImageModel[] = ['gpt-image-2', 'nano-banana-2'];
@@ -132,6 +133,8 @@ export default function App() {
   const [staleCandidate, setStaleCandidate] = useState<{ characterID: string; draft: CharacterDraft; note: string } | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  // 生图进度：按钮上显示第几张，避免用户以为卡住而重复点。
+  const [drawProgress, setDrawProgress] = useState<{ done: number; total: number } | null>(null);
   // 剧本阶段的共创状态。选区记的是字符位置而不是文本：同一句台词在一集里
   // 出现两次很常见，按文本回找会改错那一处。
   const [scriptChat, setScriptChat] = useState<ChatMessage[]>([]);
@@ -142,8 +145,40 @@ export default function App() {
   const [episodeDraft, setEpisodeDraft] = useState({ title: '', summary: '', script: '' });
   const [shotDraft, setShotDraft] = useState<Shot>(emptyShot(1));
   const [busy, setBusy] = useState('');
-  const [notice, setNotice] = useState('');
-  const [failure, setFailure] = useState('');
+  // 提示消息改成队列：早先只有一个字符串，新消息直接冲掉旧的，批量出稿
+  // 那种连着十条通知的场景只能看到最后一条。
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [noticesCollapsed, setNoticesCollapsed] = useState(false);
+  const [noticesExpanded, setNoticesExpanded] = useState(false);
+  // 相对时间要自己走：不重渲染的话「刚刚」会一直停在刚刚。
+  const [noticeClock, setNoticeClock] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (notices.length === 0 || noticesCollapsed) return;
+    const timer = setTimeout(() => setNoticesCollapsed(true), NOTICE_COLLAPSE_MS);
+    return () => clearTimeout(timer);
+  }, [notices, noticesCollapsed]);
+
+  useEffect(() => {
+    if (notices.length === 0) return;
+    // 只在有消息时走表。秒级刷新只影响这一小块文本。
+    const timer = setInterval(() => setNoticeClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [notices.length]);
+
+  const pushNotice = useCallback((text: string, kind: 'info' | 'error') => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setNotices((current) => appendNotice(current, {
+      id: localID(), text: trimmed, kind, createdAt: Date.now(),
+    }));
+    // 新消息到了就重新展开，并重置收起倒计时。
+    setNoticesCollapsed(false);
+    setNoticesExpanded(false);
+  }, []);
+  const setNotice = useCallback((text: string) => pushNotice(text, 'info'), [pushNotice]);
+  const setFailure = useCallback((text: string) => pushNotice(text, 'error'), [pushNotice]);
+
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<DramaStatusFilter>('all');
   const [streamingText, setStreamingText] = useState('');
@@ -576,11 +611,23 @@ export default function App() {
   async function drawImages(prompt: string, count: number) {
     const bridge = window.willdeep?.ai?.generateImage;
     if (!bridge) throw new Error('imageBridgeMissing');
-    const settled = await Promise.allSettled(
-      Array.from({ length: count }, (_, index) => bridge({
-        prompt: variedPrompt(prompt, index), provider: 'some-im', model: imageModel, size: '1024x1536',
-      })),
+    // 早先是 allSettled 一次把 count 张全发出去。实测网关回 502
+    // `relay: upstream / bad_gateway`，成功一张、其余全挂——图片生成本身
+    // 重，上游又是中继，同一时刻并行几路就顶不住。
+    setDrawProgress({ done: 0, total: count });
+    const settled = await mapWithConcurrency(
+      Array.from({ length: count }, (_, index) => index),
+      IMAGE_CONCURRENCY,
+      async (index) => {
+        const image = await bridge({
+          prompt: variedPrompt(prompt, index), provider: 'some-im', model: imageModel, size: '1024x1536',
+        });
+        setDrawProgress((current) => (current ? { ...current, done: current.done + 1 } : current));
+        return image;
+      },
+      { minIntervalMs: IMAGE_MIN_INTERVAL_MS },
     );
+    setDrawProgress(null);
     const done = settled.flatMap((entry) => (entry.status === 'fulfilled' && entry.value ? [entry.value] : []));
     const firstFailure = settled.find((entry) => entry.status === 'rejected');
     return { done, failed: count - done.length, firstFailure: firstFailure?.reason as unknown };
@@ -952,16 +999,46 @@ export default function App() {
           <label>{t('characterName')}<input value={character.name} onChange={(event) => setCharacter({ ...character, name: event.target.value })} onBlur={() => { if (characterID && character.name !== view.name) void saveCharacterDraft({ name: character.name }, current?.draftRev ?? 0, { silent: true }); }} /></label>
           <label>{t('characterDescription')}<textarea value={character.description} onChange={(event) => setCharacter({ ...character, description: event.target.value })} onBlur={() => { if (characterID && character.description !== view.description) void saveCharacterDraft({ description: character.description }, current?.draftRev ?? 0, { silent: true }); }} /></label>
           <label>{t('identityPrompt')}<textarea className="tall" value={character.visualPrompt} onChange={(event) => setCharacter({ ...character, visualPrompt: event.target.value })} onBlur={() => { if (characterID && character.visualPrompt !== view.visualPrompt) void saveCharacterDraft({ visualPrompt: character.visualPrompt }, current?.draftRev ?? 0, { silent: true }); }} placeholder={t('identityPromptHint')} /></label>
-          <div className="identity-note"><strong>{t('identityLock')}</strong><span>{t('identityLockHint')}</span></div>
-          <div className="generation-controls"><Dropdown ariaLabel={t('imageModel')} value={imageModel} options={imageModels.map((model) => ({ value: model, label: model }))} onChange={(next) => setImageModel(next as ImageModel)} /><Dropdown ariaLabel={t('imageCount')} value={String(candidateCount)} options={[1, 2, 4, 6].map((count) => ({ value: String(count), label: t('countImages', { count }) }))} onChange={(next) => setCandidateCount(Number(next))} /></div>
-          {current && <div className="identity-candidates">{current.candidates.map((candidate) => <button className={candidate.id === current.selectedCandidateID ? 'chosen' : ''} key={candidate.id} onClick={() => void chooseCharacterImage(candidate.id)}><img src={candidate.mediaURL} alt={current.name} /></button>)}</div>}
-          <div className="actions">
+          {/* 文字设定的动作紧跟在文字字段之后。它们改的是小传与提示词，
+              和下面那组「按这份设定去生图」是两件事，混在一排里分不清
+              哪个会花钱。 */}
+          <div className="actions text-actions">
             {current && <button className="ghost" disabled={busy === 'character-ask'} onClick={() => void draftCharacter(current)}>{t(view.description.trim() || view.visualPrompt.trim() ? 'redraftCharacter' : 'draftCharacter')}</button>}
-            <button className="ghost" disabled={busy === 'characterImage'} onClick={() => void generateCharacterImages()}>{t('generateIdentity')}</button>
             {hasDraft && <button className="ghost" onClick={() => void discardCharacterDraft()}>{t('discardDraft')}</button>}
             {hasDraft ? <button className="primary" disabled={busy === 'commit'} onClick={() => void commitCharacterDraft()}>{t('adoptDraft')}</button>
                       : <button className="primary" disabled={busy === 'character'} onClick={() => void saveCharacter()}>{t('saveCharacter')}</button>}
           </div>
+
+          <div className="stage-divider" role="separator" aria-label={t('identityImageSection')} />
+          <div className="identity-note"><strong>{t('identityLock')}</strong><span>{t('identityLockHint')}</span></div>
+          <p className="group-label">{t('identityImageSection')}</p>
+          <div className="generation-controls"><Dropdown ariaLabel={t('imageModel')} value={imageModel} options={imageModels.map((model) => ({ value: model, label: model }))} onChange={(next) => setImageModel(next as ImageModel)} /><Dropdown ariaLabel={t('imageCount')} value={String(candidateCount)} options={[1, 2, 4, 6].map((count) => ({ value: String(count), label: t('countImages', { count }) }))} onChange={(next) => setCandidateCount(Number(next))} /></div>
+          <div className="actions image-actions">
+            <button className="ghost" disabled={busy === 'characterImage' || !current} onClick={() => void generateCharacterImages()}>
+              {busy === 'characterImage'
+                ? (drawProgress ? t('drawingProgress', { done: drawProgress.done + 1, total: drawProgress.total }) : t('generatingImages'))
+                : t('generateIdentity')}
+            </button>
+          </div>
+          {current && current.candidates.length > 0 && <>
+            <p className="group-label">{t(current.selectedCandidateID ? 'identityChosenLabel' : 'identityPickLabel')}</p>
+            <div className="identity-candidates">{current.candidates.map((candidate) => {
+              const chosen = candidate.id === current.selectedCandidateID;
+              return (
+                <button
+                  className={chosen ? 'chosen' : ''}
+                  key={candidate.id}
+                  aria-pressed={chosen}
+                  title={t(chosen ? 'identityChosenLabel' : 'identityPickLabel')}
+                  onClick={() => void chooseCharacterImage(candidate.id)}
+                >
+                  <img src={candidate.mediaURL} alt={current.name} />
+                  {chosen && <span className="candidate-badge" aria-hidden="true">✓</span>}
+                </button>
+              );
+            })}</div>
+          </>}
+          {current && current.candidates.length === 0 && <p className="group-label muted-hint">{t('noCandidates')}</p>}
         </section>
         <section className="chat-panel character-chat">
           <div className="section-title"><p className="eyebrow">{t('characterCoCreation')}</p><h2>{current ? current.name || t('newCharacter') : t('selectCharacterFirst')}</h2><p>{t('characterCoCreationHint')}</p></div>
@@ -1075,5 +1152,46 @@ export default function App() {
   if (stage === 'frames') body = Frames();
   if (stage === 'video') body = Video();
   // role="alert" 让屏幕阅读器读出结果；用 button 而不是 div 是为了键盘也能关掉。
-  return <>{body}{(notice || failure) && <div className="toast-layer" role="alert" aria-live={failure ? 'assertive' : 'polite'}><button type="button" className={`toast ${failure ? 'error' : ''}`} onClick={() => { setNotice(''); setFailure(''); }}>{failure || notice}<span className="toast-dismiss" aria-hidden="true">×</span><span className="visually-hidden">{t('dismissNotice')}</span></button></div>}</>;
+  const latestKind = notices.at(-1)?.kind ?? 'info';
+  const noticeList = (
+    <ul className="toast-stack">
+      {notices.slice().reverse().map((item, index) => (
+        <li
+          className={`toast-item ${item.kind === 'error' ? 'error' : ''}`}
+          key={item.id}
+          // 多条时高度上要有差异，否则一叠等高卡片分不出哪条是新的。
+          // 越旧越矮、越淡，最新那条保持满高。
+          style={{ opacity: Math.max(0.45, 1 - index * 0.12) }}
+        >
+          <div className="toast-body">
+            <span className="toast-text">{item.text}</span>
+            <span className="toast-time">{relativeTime(item.createdAt, noticeClock, locale)}</span>
+          </div>
+          <button
+            type="button"
+            className="toast-dismiss"
+            onClick={() => setNotices((current) => current.filter((entry) => entry.id !== item.id))}
+          >
+            <span aria-hidden="true">×</span>
+            <span className="visually-hidden">{t('dismissNotice')}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+
+  return <>{body}{notices.length > 0 && (
+    <div className="toast-layer" role="alert" aria-live={latestKind === 'error' ? 'assertive' : 'polite'}>
+      {(!noticesCollapsed || noticesExpanded) && noticeList}
+      {noticesCollapsed && (
+        <button
+          type="button"
+          className={`toast-summary ${latestKind === 'error' ? 'error' : ''}`}
+          onClick={() => setNoticesExpanded((value) => !value)}
+        >
+          {t(noticesExpanded ? 'noticeCollapse' : 'noticeSummary', { count: notices.length })}
+        </button>
+      )}
+    </div>
+  )}</>;
 }

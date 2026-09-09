@@ -133,7 +133,19 @@ textarea { min-height: 96px; resize: vertical; line-height: 1.55; }
 .tall { min-height: 180px; }
 .script-area { min-height: 430px; }
 label { display: grid; gap: 7px; color: var(--text-muted); font-size: 11px; font-weight: 700; }
-.character-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 22px; }
+.character-grid {
+  display: grid;
+  /* 三个块塞进两列网格时，第三个（角色共创）会换行到第二行第一列，而右边
+     那张编辑卡很高，于是左下空出一大片。显式指定区域，让左列纵向堆叠：
+     角色列表在上，共创紧跟在下。 */
+  grid-template-columns: 1fr 1.3fr;
+  grid-template-areas: "list editor" "chat editor";
+  align-items: start;
+  gap: 22px;
+}
+.character-grid > .character-list { grid-area: list; }
+.character-grid > .editor-card { grid-area: editor; }
+.character-grid > .character-chat { grid-area: chat; }
 .character-list { display: grid; gap: 8px; align-content: start; }
 .character-list button { border: 1px solid var(--border); background: var(--surface); border-radius: 9px; padding: 12px; display: flex; gap: 13px; text-align: left; }
 .character-list p { color: var(--text-muted); margin: 5px 0; }
@@ -203,10 +215,19 @@ label { display: grid; gap: 7px; color: var(--text-muted); font-size: 11px; font
 .mode.disabled { opacity: .48; }
 .submit-row { max-width: 760px; margin: 19px auto; display: flex; justify-content: end; align-items: end; gap: 14px; }
 .submit-row label { width: 170px; }
-.toast-layer { position: fixed; right: 24px; bottom: 24px; max-width: 430px; z-index: 50; }
-.toast { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--accent); padding: 12px 16px; border-radius: 8px; box-shadow: 0 12px 35px #00000025; cursor: pointer; }
-.toast.error { color: var(--danger); border-color: var(--danger); }
-.toast-dismiss { margin-left: auto; opacity: 0.6; }
+.toast-layer { position: fixed; right: 24px; bottom: 24px; max-width: 430px; z-index: 50; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.toast-stack { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; width: 100%; }
+/* 多条并存时高度上要有差异：一叠等高卡片分不出哪条是新的。最新那条在
+   最下面（离鼠标最近），越往上越矮、越淡。 */
+.toast-item { display: flex; align-items: flex-start; gap: 10px; text-align: left; background: var(--surface); border: 1px solid var(--accent); padding: 12px 16px; border-radius: 8px; box-shadow: 0 12px 35px #00000025; }
+.toast-item:not(:last-child) { padding-top: 8px; padding-bottom: 8px; }
+.toast-item.error { color: var(--danger); border-color: var(--danger); }
+.toast-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.toast-text { overflow-wrap: anywhere; }
+.toast-time { font-size: 11px; opacity: 0.55; }
+.toast-dismiss { margin-left: auto; opacity: 0.6; background: none; border: 0; cursor: pointer; color: inherit; padding: 0 2px; }
+.toast-summary { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 7px 14px; font-size: 12px; cursor: pointer; box-shadow: 0 8px 22px #0000001f; }
+.toast-summary.error { border-color: var(--danger); color: var(--danger); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @media (max-width: 1080px) {
   .app-shell { grid-template-columns: 176px minmax(0, 1fr); }
@@ -215,6 +236,11 @@ label { display: grid; gap: 7px; color: var(--text-muted); font-size: 11px; font
   .library-toolbar > input { max-width: none; }
   .status-filters { flex-wrap: wrap; }
   .planning-grid, .character-grid, .script-grid { grid-template-columns: 1fr; }
+  /* 单列时区域名失效，按 DOM 顺序排：列表、编辑卡、共创。 */
+  .character-grid { grid-template-areas: none; }
+  .character-grid > .character-list,
+  .character-grid > .editor-card,
+  .character-grid > .character-chat { grid-area: auto; }
   .chat-panel { border-right: 0; border-bottom: 1px solid var(--border); }
   .frames-grid { grid-template-columns: 1fr; }
 }
@@ -310,3 +336,25 @@ label { display: grid; gap: 7px; color: var(--text-muted); font-size: 11px; font
 .script-chat .chat-history { max-height: 260px; overflow-y: auto; }
 .script-chat .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .selection-hint { margin: 6px 0 0; font-size: 12px; opacity: 0.7; }
+
+/* 角色页的分组：文字设定的动作与生图的动作分开，别让人分不清哪个花钱 */
+.stage-divider { height: 1px; background: rgba(127, 127, 127, 0.2); margin: 4px 0; }
+.group-label { margin: 0; font-size: 12px; letter-spacing: 0.04em; opacity: 0.7; }
+.group-label.muted-hint { opacity: 0.5; }
+.actions.text-actions, .actions.image-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 按钮的三态要分得开：能点、悬停、按下、禁用各一个样子。
+   此前只有默认与 disabled 两态，点下去没有任何反馈，用户不确定点没点上，
+   于是反复点——而每点一次都是一次付费请求。 */
+button { transition: background-color .12s ease, border-color .12s ease, opacity .12s ease, transform .06s ease; }
+button:not(:disabled):hover { border-color: var(--accent); background: var(--surface-muted); }
+button:not(:disabled):active { transform: translateY(1px); }
+button.primary:not(:disabled):hover { opacity: 0.88; }
+button:disabled { opacity: 0.45; cursor: default; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 候选图的选中态要一眼看出来，不能只靠一圈浅边框 */
+.identity-candidates button { position: relative; border: 2px solid transparent; border-radius: 9px; padding: 0; overflow: hidden; }
+.identity-candidates button:not(:disabled):hover { border-color: rgba(127, 127, 127, 0.5); }
+.identity-candidates button.chosen { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.candidate-badge { position: absolute; right: 6px; bottom: 6px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--surface); font-size: 13px; font-weight: 700; }

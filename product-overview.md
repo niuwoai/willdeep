@@ -1,6 +1,6 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-09 | Current version: v1.349.0-rc1
+> Last updated: 2026-09-09 | Current version: v1.350.0-rc1
 
 短剧工坊设置支持刷新服务商聊天模型列表和保存默认策划模型。
 

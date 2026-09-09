@@ -330,3 +330,99 @@ export function applyPassage(script: string, start: number, end: number, replace
   const safeEnd = Math.max(safeStart, Math.min(end, script.length));
   return script.slice(0, safeStart) + replacement + script.slice(safeEnd);
 }
+
+/// 提示消息队列。
+///
+/// 早先只有一个字符串：新消息直接冲掉旧的，批量出稿那种连着十条通知的场景
+/// 只能看到最后一条。改成队列之后要解决三件事——存多少、什么时候收起、
+/// 时间怎么显示——都在这里，界面只负责画。
+export const NOTICE_LIMIT = 10;
+/// 多久之后自动收起成一个入口。够看完一条，又不至于一直挡着右下角。
+export const NOTICE_COLLAPSE_MS = 10_000;
+
+export type NoticeKind = 'info' | 'error';
+export type Notice = { id: string; text: string; kind: NoticeKind; createdAt: number };
+
+/// 最多留 NOTICE_LIMIT 条，超出丢最旧的。刻意不做无限历史：这是提示不是
+/// 日志，留着几百条只会让展开面板变成一个没人读的滚动条。
+export function appendNotice(queue: Notice[], notice: Notice): Notice[] {
+  return [...queue, notice].slice(-NOTICE_LIMIT);
+}
+
+/// 相对时间。用户要的是「刚刚 / 3 秒前 / 1 分钟前」这种，而不是时间戳：
+/// 提示的价值在于「这是不是我刚才那个动作的结果」，绝对时间回答不了。
+export function relativeTime(from: number, now: number, locale: 'zh-Hans' | 'en'): string {
+  const seconds = Math.max(0, Math.floor((now - from) / 1000));
+  const zh = locale === 'zh-Hans';
+  if (seconds < 3) return zh ? '刚刚' : 'just now';
+  if (seconds < 60) return zh ? `${seconds} 秒前` : `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return zh ? `${minutes} 分钟前` : `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return zh ? `${hours} 小时前` : `${hours}h ago`;
+  return zh ? `${Math.floor(hours / 24)} 天前` : `${Math.floor(hours / 24)}d ago`;
+}
+
+/// 图片生成的并发上限。
+///
+/// 四张一次性并发打过去，实测网关回 502 `relay: upstream / bad_gateway`，
+/// 成功一张、其余全挂。图片生成本身重，上游又是中继，同一时刻并行几路
+/// 就顶不住。两路是「比串行快、又不打爆」的折中。
+export const IMAGE_CONCURRENCY = 2;
+
+/// 两次请求发出的最小间隔。
+///
+/// 只限并发数不够：两路并发时那两个请求几乎同时出发，瞬时压力仍是 2。
+/// 把发出的时刻摊开一秒，上游拿到的是稳定的一路一路，而不是一簇。相对
+/// 十几秒的生成时间，这一秒几乎不影响总耗时。
+export const IMAGE_MIN_INTERVAL_MS = 1_000;
+
+/// 有限并发地跑一批任务，保持结果顺序，并保证相邻两次启动之间隔开
+/// `minIntervalMs`。
+///
+/// `Promise.allSettled` 一次全发，`for await` 一次一个：前者打爆上游，
+/// 后者慢到用户以为卡住。这里取中间，并且失败不影响其余任务——已经付过费
+/// 的那几张必须交出来。
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  run: (item: T, index: number) => Promise<R>,
+  options: { minIntervalMs?: number; sleep?: (ms: number) => Promise<void> } = {}
+): Promise<Array<PromiseSettledResult<R>>> {
+  const minInterval = options.minIntervalMs ?? 0;
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const results = new Array<PromiseSettledResult<R>>(items.length);
+  let cursor = 0;
+  // 用 null 而不是 0 表示「还没发过」：0 是一个合法的时间戳，拿它当哨兵
+  // 会在时钟从 0 起算时把每次等待都算成不用等。
+  let lastStart: number | null = null;
+
+  // 取号与「等到可以发」必须是同一段不被打断的逻辑，否则两个 worker 会
+  // 同时算出「现在可以发」然后一起出发，间隔就白设了。
+  async function claim(): Promise<number | null> {
+    const index = cursor;
+    cursor += 1;
+    if (index >= items.length) return null;
+    if (minInterval > 0) {
+      const now = Date.now();
+      const wait = lastStart === null ? 0 : Math.max(0, minInterval - (now - lastStart));
+      lastStart = now + wait;
+      if (wait > 0) await sleep(wait);
+    }
+    return index;
+  }
+
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (true) {
+      const index = await claim();
+      if (index === null) return;
+      try {
+        results[index] = { status: 'fulfilled', value: await run(items[index]!, index) };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
