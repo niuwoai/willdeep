@@ -356,6 +356,7 @@
 				"$(SRCROOT)/PluginExamples/workshop-run/.codex-plugin",
 				"$(SRCROOT)/PluginExamples/workshop-run/.willdeep-plugin",
 				"$(SRCROOT)/PluginExamples/workshop-run/ui/dist/client",
+				"$(SRCROOT)/PluginExamples/video-studio/schemas",
 				"$(SRCROOT)/PluginExamples/favorites/.codex-plugin",
 				"$(SRCROOT)/PluginExamples/favorites/.willdeep-plugin",
 				"$(SRCROOT)/PluginExamples/favorites/mcp.json",
@@ -378,7 +379,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "set -euo pipefail\nbundled_root=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/BundledPlugins\"\n# 每个内置插件只带运行时真正需要的文件。前两个是纯前端产物；收藏夹是无构建\n# 步骤的静态页 + Ruby stdio 服务端；会话体检的页面由服务端当 MCP 资源发\n# （ui://vitality/main），所以清单、本地化、mcp.json 与 server/ 就够。\nbundle_plugin() {\n  plugin_id=\"$1\"\n  shift\n  source_root=\"$SRCROOT/PluginExamples/$plugin_id\"\n  destination_root=\"$bundled_root/$plugin_id\"\n  rm -rf \"$destination_root\"\n  mkdir -p \"$destination_root\"\n  for relative in \"$@\"; do\n    mkdir -p \"$destination_root/$(dirname \"$relative\")\"\n    /usr/bin/ditto \"$source_root/$relative\" \"$destination_root/$relative\"\n  done\n}\nbundle_plugin hive-defense .codex-plugin .willdeep-plugin ui\nbundle_plugin tetris .codex-plugin .willdeep-plugin ui/dist\nbundle_plugin arcade .codex-plugin .willdeep-plugin ui/dist\nbundle_plugin workshop-run .codex-plugin .willdeep-plugin ui/dist/client\nbundle_plugin favorites .codex-plugin .willdeep-plugin mcp.json server ui/index.html\nbundle_plugin session-vitality .codex-plugin .willdeep-plugin mcp.json server\nbundle_plugin todo .codex-plugin .willdeep-plugin mcp.json server ui\n# 短剧工坊：页面是 vite 产物（ui/dist），另有 Ruby stdio 服务端与随包\n# 发行的同名技能，四样缺一不可。\nbundle_plugin video-studio .codex-plugin .willdeep-plugin mcp.json server skills ui/dist\n";
+			shellScript = "set -euo pipefail\nbundled_root=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/BundledPlugins\"\n# 每个内置插件只带运行时真正需要的文件。前两个是纯前端产物；收藏夹是无构建\n# 步骤的静态页 + Ruby stdio 服务端；会话体检的页面由服务端当 MCP 资源发\n# （ui://vitality/main），所以清单、本地化、mcp.json 与 server/ 就够。\nbundle_plugin() {\n  plugin_id=\"$1\"\n  shift\n  source_root=\"$SRCROOT/PluginExamples/$plugin_id\"\n  destination_root=\"$bundled_root/$plugin_id\"\n  rm -rf \"$destination_root\"\n  mkdir -p \"$destination_root\"\n  for relative in \"$@\"; do\n    mkdir -p \"$destination_root/$(dirname \"$relative\")\"\n    /usr/bin/ditto \"$source_root/$relative\" \"$destination_root/$relative\"\n  done\n}\nbundle_plugin hive-defense .codex-plugin .willdeep-plugin ui\nbundle_plugin tetris .codex-plugin .willdeep-plugin ui/dist\nbundle_plugin arcade .codex-plugin .willdeep-plugin ui/dist\nbundle_plugin workshop-run .codex-plugin .willdeep-plugin ui/dist/client\nbundle_plugin favorites .codex-plugin .willdeep-plugin mcp.json server ui/index.html\nbundle_plugin session-vitality .codex-plugin .willdeep-plugin mcp.json server\nbundle_plugin todo .codex-plugin .willdeep-plugin mcp.json server ui\n# 短剧工坊：页面是 vite 产物（ui/dist），另有 Ruby stdio 服务端与随包\n# 发行的同名技能，四样缺一不可。\nbundle_plugin video-studio .codex-plugin .willdeep-plugin mcp.json server schemas skills ui/dist\n";
 		};
 		5CA6B0B72FE10A01006DFCCC /* Build willdeep-agent */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -512,7 +513,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 710;
+				CURRENT_PROJECT_VERSION = 712;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -533,7 +534,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.357.0-rc3;
+				MARKETING_VERSION = 1.357.0-rc5;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -557,7 +558,7 @@
 				CODE_SIGN_ENTITLEMENTS = Xedit/WillDeep.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 710;
+				CURRENT_PROJECT_VERSION = 712;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -578,7 +579,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(inherited)";
-				MARKETING_VERSION = 1.357.0-rc3;
+				MARKETING_VERSION = 1.357.0-rc5;
 				OTHER_LDFLAGS = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app;
 				PRODUCT_NAME = WillDeep;
@@ -718,11 +719,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 710;
+				CURRENT_PROJECT_VERSION = 712;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.357.0-rc3;
+				MARKETING_VERSION = 1.357.0-rc5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -739,11 +740,11 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 710;
+				CURRENT_PROJECT_VERSION = 712;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.7;
-				MARKETING_VERSION = 1.357.0-rc3;
+				MARKETING_VERSION = 1.357.0-rc5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -759,10 +760,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 710;
+				CURRENT_PROJECT_VERSION = 712;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.357.0-rc3;
+				MARKETING_VERSION = 1.357.0-rc5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -778,10 +779,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 710;
+				CURRENT_PROJECT_VERSION = 712;
 				DEVELOPMENT_TEAM = ZH2S7D6PL6;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.357.0-rc3;
+				MARKETING_VERSION = 1.357.0-rc5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.willdeep.app.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

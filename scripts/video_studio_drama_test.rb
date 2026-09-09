@@ -172,8 +172,7 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
         { "name" => "林晚", "role" => "护士" },
         { "name" => "林晚", "role" => "又写了一遍" },
         { "name" => "  ", "role" => "没名字" },
-        { "role" => "只有定位" },
-        "不是对象"
+        { "role" => "只有定位" }
       ]
     })
     cast = response.dig("drama", "characters")
@@ -379,8 +378,7 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
       "episodes" => [
         { "order" => 1, "summary" => "有这一集" },
         { "order" => 99, "summary" => "没有这一集" },
-        { "order" => 2 },
-        "不是对象"
+        { "order" => 2 }
       ]
     )
     raise "batch failed" unless response["ok"]
@@ -389,7 +387,6 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
     # 静默丢会让用户以为整批都写好了。
     raise "missing episode not reported" unless reasons.include?("episode_not_found")
     raise "fieldless entry not reported" unless reasons.include?("no_writable_field")
-    raise "non-object not reported" unless reasons.include?("not_an_object")
   end
 
   check.call("a batch layers onto an existing draft instead of replacing it") do
@@ -518,6 +515,56 @@ Dir.mktmpdir("willdeep-drama-test-") do |directory|
   # ---- 共创聊天：一部剧一个文件 ----
 
   chat = ChatStore.new(File.join(directory, "chats"))
+
+  check.call("first storyboard is persisted as drafts and can be adopted or discarded") do
+    fresh = service.confirm_plan("plan" => plan)["drama"]
+    ids = { "dramaID" => fresh["id"], "episodeID" => fresh["episodes"][0]["id"] }
+    result = service.save_shot_drafts(ids.merge("create" => true, "shots" => [
+      { "order" => 1, "title" => "短信", "summary" => "旧手机亮起", "dialogue" => [] },
+      { "order" => 2, "title" => "预警", "summary" => "他看到未来日期" }
+    ]))
+    raise "generation failed" unless result["ok"]
+    shots = result.dig("drama", "episodes", 0, "shots")
+    raise "prematurely approved" unless shots.all? { |entry| entry["draftOnly"] && entry["title"].empty? }
+    raise "draft hidden from model" unless service.list_shots(ids).dig("shots", 0, "title") == "短信"
+    adopted = service.commit_draft(ids.merge("scope" => "shot", "shotID" => shots[0]["id"], "expectedRev" => 0, "expectedDraftRev" => 1))
+    first = adopted.dig("drama", "episodes", 0, "shots", 0)
+    raise "not adopted" unless first["title"] == "短信" && !first["draftOnly"] && first["draft"].nil?
+    raise "adoption did not enter production" unless adopted.dig("drama", "status") == "production"
+    discarded = service.discard_draft(ids.merge("scope" => "shot", "shotID" => shots[1]["id"], "expectedDraftRev" => 1))
+    raise "discard left an empty shot" unless discarded.dig("drama", "episodes", 0, "shots").length == 1
+    retry_result = service.save_shot_drafts(ids.merge("create" => true, "shots" => [{ "order" => 1, "title" => "重复" }]))
+    raise "repeat generated over existing work" unless retry_result.dig("error", "code") == "revision_conflict"
+  end
+
+  check.call("a stale batch and stale adoption cannot overwrite newer shot drafts") do
+    fresh = service.confirm_plan("plan" => plan)["drama"]
+    ids = { "dramaID" => fresh["id"], "episodeID" => fresh["episodes"][0]["id"] }
+    (1..2).each { |order| service.save_shot(ids.merge("order" => order, "title" => "镜#{order}")) }
+    original = service.list_shots(ids)["shots"]
+    service.save_draft(ids.merge("scope" => "shot", "shotID" => original[1]["id"], "draft" => { "summary" => "用户刚改" }))
+    result = service.save_shot_drafts(ids.merge("expectedShots" => original, "shots" => [{ "order" => 1, "summary" => "慢结果" }, { "order" => 2, "summary" => "旧结果" }]))
+    raise "stale batch accepted" unless result.dig("error", "code") == "revision_conflict"
+    current = service.get("id" => fresh["id"]).dig("drama", "episodes", 0, "shots")
+    raise "batch partially wrote" unless current[0]["draft"].nil? && current[1].dig("draft", "summary") == "用户刚改"
+    result = service.commit_draft(ids.merge("scope" => "shot", "shotID" => original[1]["id"], "expectedDraftRev" => 0))
+    raise "unreviewed draft adopted" unless result.dig("error", "code") == "revision_conflict"
+  end
+
+  check.call("shared schemas reject malformed draft fields without changing data") do
+    fresh = service.confirm_plan("plan" => plan)["drama"]
+    ids = { "dramaID" => fresh["id"], "episodeID" => fresh["episodes"][0]["id"] }
+    result = service.save_shot_drafts(ids.merge("create" => true, "shots" => [{ "order" => 1, "dialogue" => "not an array" }]))
+    raise "wrong type accepted" if result["ok"]
+    result = service.save_draft(ids.merge("scope" => "episode", "draft" => { "script" => "x" * 20_001 }))
+    raise "oversized draft accepted" if result["ok"]
+    raise "mutated rejected draft" unless service.get("id" => fresh["id"]).dig("drama", "episodes", 0, "draft").nil?
+    result = service.save_episode_drafts("dramaID" => fresh["id"], "episodes" => [{ "order" => 1, "summary" => "不会局部写入" }, "不是对象"])
+    raise "malformed episode batch accepted" if result["ok"]
+    raise "partial batch written" unless service.get("id" => fresh["id"]).dig("drama", "episodes", 0, "draft").nil?
+    result = service.confirm_plan("plan" => plan.merge("characters" => ["不是对象"]))
+    raise "malformed cast accepted" if result["ok"]
+  end
 
   check.call("chat is stored per drama and per stage") do
     chat.append(drama["id"], "characters", "role" => "user", "content" => "把她写得更冷一点",

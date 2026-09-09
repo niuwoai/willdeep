@@ -298,16 +298,23 @@ static void AIPipeSignalHandler(int signal);
 }
 
 - (void)setupExceptionHandler {
-    self.previousExceptionHandler = NSGetUncaughtExceptionHandler();
-    AIPipePreviousExceptionHandler = self.previousExceptionHandler;
-    NSSetUncaughtExceptionHandler(&AIPipeUncaughtExceptionHandler);
+    @synchronized ([AIPipe class]) {
+        NSUncaughtExceptionHandler *current = NSGetUncaughtExceptionHandler();
+        // Reinitializing the SDK must not chain our handler back to itself.
+        if (current == &AIPipeUncaughtExceptionHandler) {
+            return;
+        }
+        self.previousExceptionHandler = current;
+        AIPipePreviousExceptionHandler = current;
+        NSSetUncaughtExceptionHandler(&AIPipeUncaughtExceptionHandler);
+    }
 }
 
 static void AIPipeUncaughtExceptionHandler(NSException *exception) {
     [AIPipe logException:exception];
     [AIPipe flush];
 
-    if (AIPipePreviousExceptionHandler) {
+    if (AIPipePreviousExceptionHandler && AIPipePreviousExceptionHandler != &AIPipeUncaughtExceptionHandler) {
         AIPipePreviousExceptionHandler(exception);
     }
 }

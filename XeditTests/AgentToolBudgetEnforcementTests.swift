@@ -35,7 +35,9 @@ struct AgentToolBudgetEnforcementTests {
             toolName: call.toolName, arguments: [:], risk: .read, status: .running)
         runtime.toolCalls = [record]
         await app.executeSpawnAgentToolCall(call, recordID: record.id,
-            arguments: ["prompt": .string("Inspect a bounded fixture"), "profile": .string("scout"), "run_in_background": .bool(true)],
+            arguments: ["prompt": .string("Inspect a bounded fixture"), "profile": .string("scout"),
+                "run_in_background": .bool(true), "independent_task": .bool(true),
+                "parent_parallel_work": .string("Inspect a separate fixture while the worker runs")],
             runtime: runtime, configuration: .default, workspaceURL: nil,
             runtimeDescriptor: nil, workspaceLocation: nil)
         try #require(runtime.toolCalls.first?.status == .succeeded)

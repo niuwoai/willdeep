@@ -19,9 +19,10 @@ export type CreativeSkill = {
   body?: string;
 };
 /// 技能拼装的阶段键。与后端 STAGE_SKILLS 的键一致。
-export type SkillStage = 'planning' | 'characters' | 'episodes' | 'script' | 'passage' | 'storyboard' | 'shot';
+export type SkillStage = 'planning' | 'characters' | 'episodes' | 'script' | 'passage' | 'storyboard' | 'shot' | 'frames';
 export type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string; objectID: string; draftRev: number; createdAt: string };
 export type Shot = Revised & {
+  draftOnly?: boolean;
   id: string; order: number; title: string; summary: string; dialogue: DialogueLine[];
   actionStart: string; actionEnd: string; cameraIntent: string; duration: number;
   startPrompt: string; endPrompt: string; startCandidates: FrameCandidate[]; endCandidates: FrameCandidate[];

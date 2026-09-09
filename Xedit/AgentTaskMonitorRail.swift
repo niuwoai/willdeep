@@ -1207,6 +1207,7 @@ private struct AgentSubagentFleetPopover: View {
                         Image(systemName: "stop.circle")
                     }
                     .buttonStyle(.borderless)
+                    .focusable(false)
                     .help(L10n.Consultation.stop)
                     .accessibilityLabel(L10n.Consultation.stop)
                     .accessibilityIdentifier("stop-worker-\(runID.uuidString)")

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:willdeep:creative:v1",
+  "$defs": {
+    "character": { "type": "object", "minProperties": 1, "properties": { "name": { "type": "string", "maxLength": 120 }, "description": { "type": "string", "maxLength": 2000 }, "visualPrompt": { "type": "string", "maxLength": 8000 } } },
+    "episode": { "type": "object", "minProperties": 1, "properties": { "order": { "type": "integer", "minimum": 1 }, "title": { "type": "string", "maxLength": 160 }, "summary": { "type": "string", "maxLength": 2000 }, "script": { "type": "string", "maxLength": 20000 } } },
+    "shot": { "type": "object", "minProperties": 1, "properties": {
+      "order": { "type": "integer", "minimum": 1 }, "title": { "type": "string", "maxLength": 160 }, "summary": { "type": "string", "maxLength": 2000 },
+      "actionStart": { "type": "string", "maxLength": 2000 }, "actionEnd": { "type": "string", "maxLength": 2000 }, "cameraIntent": { "type": "string", "maxLength": 1000 },
+      "startPrompt": { "type": "string", "maxLength": 8000 }, "endPrompt": { "type": "string", "maxLength": 8000 }, "duration": { "type": "number", "exclusiveMinimum": 0, "maximum": 600 },
+      "dialogue": { "type": "array", "maxItems": 100, "items": { "type": "object", "required": ["speaker", "text"], "properties": { "speaker": { "type": "string", "maxLength": 120 }, "text": { "type": "string", "maxLength": 2000 } } } }
+    } },
+    "frames": { "type": "object", "minProperties": 1, "additionalProperties": false, "properties": { "startPrompt": { "type": "string", "maxLength": 8000 }, "endPrompt": { "type": "string", "maxLength": 8000 } } },
+    "passage": { "type": "object", "required": ["replacement"], "properties": { "replacement": { "type": "string", "maxLength": 20000 } } },
+    "plan": { "type": "object", "required": ["title"], "properties": {
+      "title": { "type": "string", "minLength": 1, "maxLength": 160 }, "genre": { "type": "string", "maxLength": 80 }, "format": { "type": "string", "maxLength": 80 },
+      "logline": { "type": "string", "maxLength": 1200 }, "coreConflict": { "type": "string", "maxLength": 1200 }, "audience": { "type": "string", "maxLength": 300 }, "tone": { "type": "string", "maxLength": 300 }, "arc": { "type": "string", "maxLength": 4000 },
+      "episodeCount": { "type": "integer", "minimum": 1, "maximum": 100 }, "episodeDurationSeconds": { "type": "integer", "minimum": 15, "maximum": 600 },
+      "characters": { "type": "array", "maxItems": 100, "items": { "type": "object", "properties": { "name": { "type": "string", "maxLength": 120 }, "role": { "type": "string", "maxLength": 2000 } } } },
+      "episodes": { "type": "array", "maxItems": 100, "items": { "type": "object", "properties": { "title": { "type": "string", "maxLength": 160 }, "summary": { "type": "string", "maxLength": 2000 }, "script": { "type": "string", "maxLength": 20000 } } } }
+    } }
+  }
+}

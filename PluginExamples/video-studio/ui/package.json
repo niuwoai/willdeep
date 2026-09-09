@@ -1,6 +1,6 @@
 {
   "name": "willdeep-video-studio-ui",
-  "version": "0.2.0",
+  "version": "0.15.0",
   "private": true,
   "packageManager": "yarn@1.22.22",
   "type": "module",

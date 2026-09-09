@@ -137,9 +137,9 @@ enum AgentContextBuilder {
     /// the snapshot tests once to get the new values from the failure
     /// output. Without all three, compact/extended drift (a merge eating
     /// half a sentence) ships silently.
-    static let stablePrefixSnapshotHash = "b37d96580566d3fb"
+    static let stablePrefixSnapshotHash = "fa2c9c90eefd6398"
     static let compactPrefixSnapshotHash = "e0e86848b3dfcf78"
-    static let extendedPrefixSnapshotHash = "f04475f6ded9f535"
+    static let extendedPrefixSnapshotHash = "7dda24f35b0a11c6"
     /// Byte-level hashes for the three capability appendix blocks, in
     /// browserUI / webCoding / computerUse order.
     static let capabilityBlockSnapshotHashes = [

@@ -849,15 +849,60 @@ describe('Short Drama Studio', () => {
     expect(executeCommand.mock.calls.some(([command]) => command === 'drama.saveShotDrafts')).toBe(false);
   });
 
-  it('这一集没有分镜时给提示而不是空跑', async () => {
+  it('空分镜可以直接用本集正文生成第一稿', async () => {
     await openStoryboard([]);
-    fireEvent.change(await screen.findByPlaceholderText(/这一镜太长了/), { target: { value: '调一下' } });
-    fireEvent.click(screen.getByRole('button', { name: '发送' }));
-    expect(await screen.findByText(/还没有分镜/)).toBeTruthy();
-    expect(complete).not.toHaveBeenCalled();
+    complete.mockResolvedValue({ text: '```short_drama_shots\n{"shots":[{"order":1,"title":"告别","summary":"林晚说你走"}]}\n```', model: 'fast', providerID: 'chat-a' });
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 从剧本生成分镜' }));
+    await waitFor(() => expect(executeCommand).toHaveBeenCalledWith('drama.saveShotDrafts', expect.objectContaining({ create: true, shots: [{ order: 1, title: '告别', summary: '林晚说你走' }] })));
+    expect(complete.mock.calls[0]?.[0].messages.at(-1).content).toContain('林晚：你走。');
   });
 
   // ---- 批量丰富多集 ----
+  it('分镜草稿显示在正文中，采用会校验两个修订号', async () => {
+    const entry = shotFixture(1, { summary: '原剧情', draftRev: 2, draft: { summary: '修改后的剧情' } });
+    await openStoryboard([entry]);
+    expect(await screen.findByDisplayValue('修改后的剧情')).toBeTruthy();
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.commitDraft') {
+        const adopted = { ...entry, summary: '修改后的剧情', draft: null, rev: 1, draftRev: 3 };
+        return JSON.stringify({ ok: true, drama: { ...dramas[0], episodes: [{ ...episodeFixture(), shots: [adopted] }] } });
+      }
+      return JSON.stringify({ ok: true, messages: [] });
+    });
+    fireEvent.click(screen.getByRole('button', { name: '采用分镜草稿' }));
+    await waitFor(() => expect(executeCommand).toHaveBeenCalledWith('drama.commitDraft', expect.objectContaining({ scope: 'shot', shotID: 's1', expectedRev: 0, expectedDraftRev: 2 })));
+    await waitFor(() => expect(screen.queryByRole('button', { name: '采用分镜草稿' })).toBeNull());
+    expect(screen.getByDisplayValue('修改后的剧情')).toBeTruthy();
+  });
+
+  it('首尾帧共创保存独立聊天，生成描述先进入草稿', async () => {
+    await openStoryboard([shotFixture(1, { summary: '手机亮起', startPrompt: '原首帧' })]);
+    fireEvent.click(screen.getByRole('button', { name: /05 首尾帧/ }));
+    complete.mockResolvedValue({ text: '```short_drama_frames\n{"startPrompt":"手机冷光照亮脸部","endPrompt":"他抬头望向窗外"}\n```', model: 'fast', providerID: 'chat-a' });
+    executeCommand.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('assistant', '已生成描述');
+      if (command === 'drama.saveDraft') return JSON.stringify({ ok: true, drama: { ...dramas[0], episodes: [{ ...episodeFixture(), shots: [shotFixture(1, { summary: '手机亮起', startPrompt: '原首帧', draftRev: 1, draft: args?.draft })] }] } });
+      return JSON.stringify({ ok: true });
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 共创描述' }));
+    await waitFor(() => expect(executeCommand).toHaveBeenCalledWith('chat.append', expect.objectContaining({ stage: 'frames' })));
+    expect(await screen.findByDisplayValue('手机冷光照亮脸部')).toBeTruthy();
+    expect(screen.getByDisplayValue('他抬头望向窗外')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '采用分镜草稿' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: '生成 4 张候选' }).every((button) => button.hasAttribute('disabled'))).toBe(true);
+    expect(executeCommand.mock.calls.some(([command]) => command === 'drama.commitDraft')).toBe(false);
+  });
+
+  it('只改一镜时拒绝模型偷偷修改其他镜号', async () => {
+    await openStoryboard([shotFixture(1), shotFixture(2)]);
+    complete.mockResolvedValue({ text: '```short_drama_shot\n{"order":2,"summary":"不应写入"}\n```', model: 'fast', providerID: 'chat-a' });
+    fireEvent.change(screen.getByPlaceholderText(/这一镜太长了/), { target: { value: '只改当前镜' } });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(complete).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByText('正在调整分镜…')).toBeNull());
+    expect(executeCommand.mock.calls.some(([command]) => command === 'drama.saveShotDrafts')).toBe(false);
+  });
 
   it('分批串行写入，一批格式坏了其余批次继续', async () => {
     const episodes = Array.from({ length: 24 }, (_, index) => ({
@@ -1072,7 +1117,7 @@ describe('Short Drama Studio', () => {
     });
   });
 
-  it('reads a repeated confirmation as already adopted instead of an error', async () => {
+  it('does not report an ambiguous revision conflict as successful adoption', async () => {
     executeCommand.mockImplementation(async (command: string) => {
       if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
       if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
@@ -1083,7 +1128,8 @@ describe('Short Drama Studio', () => {
     await openCharacters(characterFixture({ rev: 2, draftRev: 4, draft: { description: '话少，句子短' } }));
     fireEvent.click(await screen.findByRole('button', { name: '采用草稿' }));
 
-    expect(await screen.findByText('这一版刚才已经采用过了。')).toBeTruthy();
+    expect(await screen.findByText('内容或草稿已经变化，请重新查看后再采用。')).toBeTruthy();
+    expect(screen.queryByText('这一版刚才已经采用过了。')).toBeNull();
   });
 
   it('stops a running request through the host cancel bridge', async () => {

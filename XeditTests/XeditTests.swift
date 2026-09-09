@@ -2163,7 +2163,9 @@ struct WillDeepTests {
         // character-class estimator: tool schemas are symbol- and
         // whitespace-dense, exactly the text the old口径 under-counted, so the
         // same registry now prices ~30% higher without having grown.
-        let maximumExpectedToolSchemaTokens = 48_000
+        // Measured terminal-host metadata intentionally added to the registry
+        // brings the complete surface to 48,008 tokens; retain a narrow ceiling.
+        let maximumExpectedToolSchemaTokens = 48_512
         let messages = [AgentMessage(role: .user, content: "hi")]
         let withoutTools = AppState.estimateAgentTokens(messages: messages, tools: [])
         let withTools = AppState.estimateAgentTokens(messages: messages, tools: AgentToolRegistry.all)

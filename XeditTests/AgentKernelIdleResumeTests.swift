@@ -62,7 +62,26 @@ struct AgentKernelIdleResumeTests {
         let token: String
         let session: URLSession
 
+        func cancelRequestAndWait() async {
+            // Remove the wake source first: releasing a cancelled request's
+            // provider slot can otherwise immediately start another request.
+            app.agentExternalWakeRetryTasks.removeValue(forKey: sessionID)?.cancel()
+            kernel.removeEvents(for: sessionID)
+            if let task = runtime.requestTask {
+                task.cancel()
+                await task.value
+            }
+            #expect(runtime.requestTask == nil)
+            #expect(!runtime.isResponding)
+        }
+
         func cleanup() {
+            // A failed request returns its event to pending and can reserve a
+            // delayed automatic wake even after the request task was joined.
+            // Tear down that source before invalidating the fixture transport.
+            app.agentExternalWakeRetryTasks.removeValue(forKey: sessionID)?.cancel()
+            kernel.removeEvents(for: sessionID)
+            runtime.requestTask?.cancel()
             app.stopAgentResponse(for: runtime)
             session.invalidateAndCancel()
             IdleResumeFailingURLProtocol.remove(token)
@@ -145,9 +164,6 @@ struct AgentKernelIdleResumeTests {
             providerSlotClaimID: UUID(),
             turnID: turnID
         )
-        f.runtime.isResponding = false
-        f.runtime.requestTask = nil
-
         #expect(
             IdleResumeFailingURLProtocol.requestCount(f.token) > 0,
             "no request was attempted, so no transport could have failed"
@@ -162,6 +178,7 @@ struct AgentKernelIdleResumeTests {
             restored.updatedAt > publishedAt,
             "the turn never leased the event, so nothing was released"
         )
+        await f.cancelRequestAndWait()
     }
 
     /// Slot release is one of the three idle-resume call sites. An untrusted
@@ -243,11 +260,6 @@ struct AgentKernelIdleResumeTests {
         }
         #expect(woke, "a host event no longer wakes an idle runtime")
 
-        if let task = f.runtime.requestTask {
-            task.cancel()
-            await task.value
-        }
-        f.runtime.isResponding = false
-        f.runtime.requestTask = nil
+        await f.cancelRequestAndWait()
     }
 }
