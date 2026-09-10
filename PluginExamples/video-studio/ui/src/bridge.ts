@@ -159,6 +159,48 @@ export function extractFenced(raw: string, fence: string): { body: string; note:
   return { body: match[1] ?? '', note: (raw.slice(0, match.index ?? 0) + raw.slice((match.index ?? 0) + match[0].length)).trim() };
 }
 
+/// 命名围栏找不到时的兜底。
+///
+/// 提示词要求 ```short_drama_episode，模型却经常回一个普通的 ```json——
+/// 于是整块内容被当成「模型在正常说话」原样贴进对话，草稿一个字没动，
+/// 用户看到右边明明有 script 字段，左边「完整剧本」却还是空的，并且连
+/// 「有草稿待采用」都不会提示。这是纯粹的格式合同失效，而这一层救得了。
+///
+/// 只认信息串为空或恰好是 `json` 的围栏：`short_drama_shots` 这类别的
+/// 命名围栏不能从这里溜进来，否则单镜解析器又会把整集的块认下来（见
+/// `extractFenced` 里那段边界注释）。采不采纳最终由调用方的形状检查决定，
+/// 所以一个只是用来举例说明数据结构的 ```json 块不会被当成产出。
+function extractGeneric(raw: string): { body: string; note: string } | null {
+  const pattern = /(^|\n)```[ \t]*(?:json)?[ \t]*\r?\n([\s\S]*?)```/i;
+  const match = raw.match(pattern);
+  if (match?.index === undefined) return null;
+  const start = match.index + (match[1]?.length ?? 0);
+  const end = match.index + match[0].length;
+  return { body: match[2] ?? '', note: (raw.slice(0, start) + raw.slice(end)).trim() };
+}
+
+/// 先找命名围栏，找不到再看通用块是否通过 `shaped`。形状检查由每个阶段
+/// 自己给：分段替换只认 `replacement`，批量集只认 `episodes` 数组，所以
+/// 各阶段之间不会互相把对方的块认走。
+export function extractFencedOrShaped(
+  raw: string,
+  fence: string,
+  shaped: (value: unknown) => boolean,
+): { body: string; note: string } | null {
+  const named = extractFenced(raw, fence);
+  if (named) return named;
+  const generic = extractGeneric(raw);
+  if (!generic) return null;
+  let value: unknown;
+  try {
+    value = firstJSONObject(generic.body);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== 'object') return null;
+  return shaped(value) ? generic : null;
+}
+
 function firstJSONObject(body: string): unknown {
   const start = body.indexOf('{');
   const end = body.lastIndexOf('}');
@@ -169,7 +211,16 @@ function firstJSONObject(body: string): unknown {
 /// 围栏内的 JSON 解析加白名单裁剪。白名单在这里而不是靠提示词：模型返回
 /// 整个对象，表外的键一律丢掉，它就改不动 id、候选图和身份版本。
 export function parseFencedDraft<T extends object>(raw: string, fence: string, allowed: Array<keyof T & string>): FencedResult<T> {
-  const found = extractFenced(raw, fence);
+  // 通用块要被采纳，键必须**全部**落在白名单内。只要求「至少命中一个」
+  // 会把模型顺手举例的 JSON 也吞进来；全落在表内的块基本只能是产出。
+  const found = extractFencedOrShaped(raw, fence, (value) => {
+    const keys = Object.keys(value as Record<string, unknown>);
+    if (keys.length === 0 || !keys.every((key) => (allowed as string[]).includes(key))) return false;
+    return keys.some((key) => {
+      const entry = (value as Record<string, unknown>)[key];
+      return typeof entry === 'string' && entry.trim().length > 0;
+    });
+  });
   if (!found) return { kind: 'chat' };
   try {
     const value = firstJSONObject(found.body);
@@ -299,7 +350,12 @@ export function detectUnknownCharacters(script: string, knownNames: string[]): s
 export const PASSAGE_FENCE = 'short_drama_passage';
 
 export function parseFencedPassage(raw: string): FencedResult<{ replacement: string }> {
-  const found = extractFenced(raw, PASSAGE_FENCE);
+  const found = extractFencedOrShaped(raw, PASSAGE_FENCE, (value) => {
+    const keys = Object.keys(value as Record<string, unknown>);
+    const replacement = (value as { replacement?: unknown }).replacement;
+    return keys.length === 1 && keys[0] === 'replacement'
+      && typeof replacement === 'string' && replacement.trim().length > 0;
+  });
   if (!found) return { kind: 'chat' };
   try {
     const value = firstJSONObject(found.body);
@@ -501,7 +557,8 @@ export type EpisodeDraftEntry = { order: number; title?: string; summary?: strin
 /// 每个元素必须带 `order`：模型手上只有集号，而集号是唯一能把内容对回正确
 /// 一集的东西。没有 order 的条目直接丢，宁可少写一集也不能填错集。
 export function parseFencedEpisodes(raw: string): FencedResult<{ episodes: EpisodeDraftEntry[] }> {
-  const found = extractFenced(raw, EPISODES_FENCE);
+  const found = extractFencedOrShaped(raw, EPISODES_FENCE, (value) =>
+    Array.isArray((value as { episodes?: unknown }).episodes));
   if (!found) return { kind: 'chat' };
   try {
     const value = firstJSONObject(found.body);
@@ -588,7 +645,8 @@ function pickShotEntry(raw: unknown, fallbackOrder?: number): ShotDraftEntry | n
 
 /// 一次改多镜。
 export function parseFencedShots(raw: string): FencedResult<{ shots: ShotDraftEntry[] }> {
-  const found = extractFenced(raw, SHOTS_FENCE);
+  const found = extractFencedOrShaped(raw, SHOTS_FENCE, (value) =>
+    Array.isArray((value as { shots?: unknown }).shots));
   if (!found) return { kind: 'chat' };
   try {
     const value = firstJSONObject(found.body);
@@ -607,7 +665,12 @@ export function parseFencedShots(raw: string): FencedResult<{ shots: ShotDraftEn
 
 /// 只改一镜。围栏里可以省掉 order，用当前选中那一镜的镜号补上。
 export function parseFencedShot(raw: string, fallbackOrder: number): FencedResult<{ shots: ShotDraftEntry[] }> {
-  const found = extractFenced(raw, SHOT_FENCE);
+  // 带 `shots` 数组的通用块是整集分镜，不是单镜：让它落到 parseFencedShots
+  // 去，否则一句「整集微调」会被当成只改一镜——命名围栏那条前缀边界防的
+  // 就是这个，兜底这一层不能把它放回来。
+  const found = extractFencedOrShaped(raw, SHOT_FENCE, (value) =>
+    !Array.isArray((value as { shots?: unknown }).shots)
+      && pickShotEntry(value, fallbackOrder) !== null);
   if (!found) return { kind: 'chat' };
   try {
     const entry = pickShotEntry(firstJSONObject(found.body), fallbackOrder);

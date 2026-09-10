@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CHARACTER_DRAFT_FIELDS, EPISODE_BATCH_SIZE, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_LIMIT, episodeBatches, parseFencedEpisodes, parseFencedShot, parseFencedShots, shotDigestLines, applyPassage, appendNotice, mapWithConcurrency, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, streamingFieldValue, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_LIMIT, episodeBatches, parseFencedEpisodes, parseFencedShot, parseFencedShots, shotDigestLines, applyPassage, appendNotice, mapWithConcurrency, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, streamingFieldValue, visibleStream } from './bridge';
 import type { Notice } from './bridge';
 import type { CharacterDraft } from './types';
 
@@ -642,5 +642,69 @@ describe('shotDigestLines', () => {
     }]);
     expect(text.split('\n')).toHaveLength(1);
     expect(text).toContain('未定运镜');
+  });
+});
+
+/// 提示词要求命名围栏，模型经常回一个普通的 ```json。在此之前那整块内容被
+/// 当成「模型在正常说话」原样贴进对话，草稿一个字没动——用户看到右边有
+/// script 字段，左边「完整剧本」却是空的，还不会有任何提示。
+describe('generic json fence fallback', () => {
+  const EPISODE_FENCE = 'short_drama_episode';
+
+  it('adopts a plain ```json block whose keys all sit inside the whitelist', () => {
+    const raw = '写好了。\n```json\n{"title":"钢轨之下","summary":"他把自己送进了监控头","script":"内景 陈默出租屋 日\\n\\n陈默：喂？"}\n```';
+    const parsed = parseFencedDraft(raw, EPISODE_FENCE, EPISODE_DRAFT_FIELDS);
+    expect(parsed.kind).toBe('draft');
+    if (parsed.kind !== 'draft') return;
+    expect(parsed.value.script).toContain('陈默：喂？');
+    expect(parsed.value.title).toBe('钢轨之下');
+  });
+
+  it('still prefers the named fence when both are present', () => {
+    const raw = '```json\n{"script":"通用块"}\n```\n```short_drama_episode\n{"script":"命名块"}\n```';
+    const parsed = parseFencedDraft(raw, EPISODE_FENCE, EPISODE_DRAFT_FIELDS);
+    expect(parsed.kind).toBe('draft');
+    if (parsed.kind !== 'draft') return;
+    expect(parsed.value.script).toBe('命名块');
+  });
+
+  /// 兜底不能把模型顺手举的例子当成产出。多一个表外的键就足以否掉它。
+  it('leaves an illustrative json block alone when it carries keys outside the whitelist', () => {
+    const raw = '数据结构大概是这样：\n```json\n{"script":"示例","shots":[],"id":"abc"}\n```';
+    expect(parseFencedDraft(raw, EPISODE_FENCE, EPISODE_DRAFT_FIELDS).kind).toBe('chat');
+  });
+
+  it('rejects a whitelist-shaped block whose values are all blank', () => {
+    const raw = '```json\n{"script":"   ","summary":""}\n```';
+    expect(parseFencedDraft(raw, EPISODE_FENCE, EPISODE_DRAFT_FIELDS).kind).toBe('chat');
+  });
+
+  /// 别的命名围栏不能从通用兜底溜进来：`short_drama_shots` 被单镜解析器认下
+  /// 来正是命名围栏那条前缀边界要防的事。
+  it('does not let another named fence in through the generic path', () => {
+    const raw = '```short_drama_shots\n{"shots":[{"order":1,"title":"一"}]}\n```';
+    expect(parseFencedDraft(raw, EPISODE_FENCE, EPISODE_DRAFT_FIELDS).kind).toBe('chat');
+    expect(parseFencedShot(raw, 1).kind).toBe('chat');
+    expect(parseFencedShots(raw).kind).toBe('draft');
+  });
+
+  it('routes a generic shots array to the whole-episode parser, not the single shot one', () => {
+    const raw = '```json\n{"shots":[{"order":1,"title":"一","summary":"开场"}]}\n```';
+    expect(parseFencedShot(raw, 1).kind).toBe('chat');
+    expect(parseFencedShots(raw).kind).toBe('draft');
+  });
+
+  it('adopts a generic passage block only when replacement is its only key', () => {
+    expect(parseFencedPassage('```json\n{"replacement":"她已经收到短信。"}\n```').kind).toBe('draft');
+    expect(parseFencedPassage('```json\n{"replacement":"改这段","script":"整集"}\n```').kind).toBe('chat');
+  });
+
+  it('adopts a generic episodes batch block', () => {
+    const raw = '```json\n{"episodes":[{"order":1,"summary":"第一集"}]}\n```';
+    expect(parseFencedEpisodes(raw).kind).toBe('draft');
+  });
+
+  it('leaves prose without any fence as chat', () => {
+    expect(parseFencedDraft('这一集你想怎么改？', EPISODE_FENCE, EPISODE_DRAFT_FIELDS).kind).toBe('chat');
   });
 });
