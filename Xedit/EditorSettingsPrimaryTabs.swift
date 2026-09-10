@@ -120,6 +120,18 @@ extension EditorSettingsView {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section(L10n.SpecGateSettings.sectionTitle) {
+                Toggle(L10n.SpecGateSettings.detectionToggle, isOn: $appState.agentSpecGateEnabled)
+                Text(L10n.SpecGateSettings.detectionFootnote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle(L10n.SpecGateSettings.enforcementToggle, isOn: $appState.agentSpecGateEnforcement)
+                    .disabled(!appState.agentSpecGateEnabled)
+                Text(L10n.SpecGateSettings.enforcementFootnote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }

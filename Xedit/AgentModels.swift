@@ -174,6 +174,13 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// Per-session tool approval behavior. Defaults to smart approval
     /// for backwards compatibility with existing sessions.
     var approvalMode: AgentApprovalMode
+    /// Design gate state. Persisted because the gate deliberately outlives the
+    /// turn that raised it: the operator may quit between the document being
+    /// written and their answer. Sessions written before this feature decode
+    /// to `.inactive`.
+    var specGateState: AgentSpecGateState = .inactive
+    /// The design proposal awaiting an answer, if any.
+    var specProposal: AgentSpecProposal? = nil
     /// Composer preferences; absent values preserve sandbox and Worker-first defaults.
     var prefersSubagents: Bool? = nil
     var sandboxEnabled: Bool? = nil
@@ -289,6 +296,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         agentArtifactPaths: [String] = [],
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
+        specGateState: AgentSpecGateState = .inactive,
+        specProposal: AgentSpecProposal? = nil,
         executionAgent: AgentExecutionAgent = .willDeep,
         delegatedTaskRuns: [AgentDelegatedTaskRun] = [],
         activeExperts: Set<AgentExpert> = [],
@@ -341,6 +350,8 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.agentArtifactPaths = agentArtifactPaths
         self.interactionMode = interactionMode
         self.approvalMode = approvalMode
+        self.specGateState = specGateState
+        self.specProposal = specProposal
         self.executionAgent = executionAgent
         self.delegatedTaskRuns = delegatedTaskRuns
         self.activeExperts = activeExperts

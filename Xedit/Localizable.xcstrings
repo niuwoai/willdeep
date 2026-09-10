@@ -77664,6 +77664,18 @@
         }
       }
     },
+    "spec-gate-card.accept" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Build from this" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "按这份做" } } } },
+    "spec-gate-card.accepted" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Building from this design" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "按这份设计在做了" } } } },
+    "spec-gate-card.dismiss" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Skip it, just build" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "跳过，直接做" } } } },
+    "spec-gate-card.dismissed" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Skipped" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已跳过" } } } },
+    "spec-gate-card.more-signals" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "and %lld more" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "还有 %lld 条" } } } },
+    "spec-gate-card.open-document" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Open document" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开文档" } } } },
+    "spec-gate-card.title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Design written first" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "先写了设计" } } } },
+    "spec-gate-settings.detection-footnote" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Records what it would have caught, without interrupting." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "只记录它本来会拦下什么，不打扰你。" } } } },
+    "spec-gate-settings.detection-toggle" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Notice requests that want a design first" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "认出那些该先写设计的需求" } } } },
+    "spec-gate-settings.enforcement-footnote" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The agent writes a document under docs/ and waits for you. You can skip it on any card." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 会在 docs/ 下写一份文档然后等你。每张卡片上都能跳过。" } } } },
+    "spec-gate-settings.enforcement-toggle" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Pause and write the design before making changes" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "先停下来写设计，再动代码" } } } },
+    "spec-gate-settings.section-title" : { "extractionState" : "manual", "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Design before code" } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "先写设计再写代码" } } } },
     "split-editor.default-title" : {
       "comment" : "Default title for split editor pane when no file is open",
       "extractionState" : "manual",

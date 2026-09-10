@@ -124,6 +124,12 @@ struct AgentModeMessageView: View {
             } else {
                 EmptyView()
             }
+        case .specProposal:
+            if let proposal = message.specProposal {
+                AgentSpecProposalCardView(proposal: proposal)
+            } else {
+                EmptyView()
+            }
         }
     }
 

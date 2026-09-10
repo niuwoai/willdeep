@@ -193,6 +193,19 @@ enum AgentChatHistoryRenderer {
                 hasher.combine(sub.label)
             }
         }
+        // 同理,设计门卡片的 content 也恒为空,而且它的状态**会变**
+        // (待决定 → 已采纳 / 已跳过)。widget 和 scheduledTask 没进 hash
+        // 是因为那两个是不可变快照,这个不是。
+        if let proposal = m.specProposal {
+            hasher.combine(proposal.id)
+            hasher.combine(proposal.documentPath)
+            hasher.combine(proposal.choice?.rawValue ?? "")
+            hasher.combine(proposal.signals.count)
+            for signal in proposal.signals {
+                hasher.combine(signal.kind.rawValue)
+                hasher.combine(signal.evidence)
+            }
+        }
         return hasher.finalize()
     }
 
@@ -1967,7 +1980,7 @@ enum AgentChatHistoryRenderer {
             width = layoutWidth
                 - AgentChatHistoryLayoutMetrics.userBodyHeadIndent(for: layoutWidth)
                 - abs(AgentChatHistoryLayoutMetrics.userBodyTailIndent)
-        case .assistant, .system, .tool, .workflowReport, .widget, .scheduledTask:
+        case .assistant, .system, .tool, .workflowReport, .widget, .scheduledTask, .specProposal:
             width = layoutWidth
                 - AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
                 - AgentChatHistoryLayoutMetrics.assistantContentTailInset

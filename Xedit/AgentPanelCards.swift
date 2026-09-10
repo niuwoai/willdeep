@@ -505,7 +505,7 @@ struct AgentMessageBubble: View {
 
     private var shouldShowFooter: Bool {
         switch message.role {
-        case .system, .tool, .workflowReport, .widget, .scheduledTask: return false
+        case .system, .tool, .workflowReport, .widget, .scheduledTask, .specProposal: return false
         case .user, .assistant:
             return !message.content.isEmpty || !message.textAttachments.isEmpty || !message.images.isEmpty
         }
@@ -586,6 +586,7 @@ struct AgentMessageBubble: View {
         case .workflowReport: return "Workflow"
         case .widget: return "Widget"
         case .scheduledTask: return "Scheduled task"
+        case .specProposal: return "Design proposal"
         }
     }
 
@@ -597,7 +598,7 @@ struct AgentMessageBubble: View {
             return Color.primary.opacity(AgentChatHistoryLayoutMetrics.userBubbleFillOpacity)
         case .assistant:
             return .clear
-        case .tool, .workflowReport, .widget, .scheduledTask:
+        case .tool, .workflowReport, .widget, .scheduledTask, .specProposal:
             return Color(nsColor: .controlBackgroundColor).opacity(0.4)
         }
     }

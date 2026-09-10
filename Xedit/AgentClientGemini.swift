@@ -665,7 +665,7 @@ struct GeminiAdapter {
                     pendingToolVisualParts.removeAll(keepingCapacity: true)
                 }
 
-            case .workflowReport, .widget, .scheduledTask:
+            case .workflowReport, .widget, .scheduledTask, .specProposal:
                 // Workflow / widget / scheduled-task card 不发给模型，跳过。
                 continue
             }

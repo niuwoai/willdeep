@@ -45,9 +45,15 @@ struct AgentSpecGateVerdict: Codable, Equatable, Sendable {
         case shadowOnly
         /// The model reviewer said this is a local change after all.
         case judgeDowngraded
-        /// The reviewer timed out, truncated, or had no usable provider.
-        /// Fails open — see the invariant below.
+        /// The reviewer was asked and did not answer usably: timed out,
+        /// truncated, or returned something unparseable. Fails open.
         case judgeUnavailable
+        /// There was no reviewer to ask — no warm local model, no managed
+        /// routing, no spare key. Distinct from `judgeUnavailable` because it
+        /// is not a failure: it is the ordinary state for many users, and
+        /// treating it as one would silently switch the whole gate off for
+        /// them. Falls back to the host's own signals.
+        case judgeUnconfigured
         /// Cleared the bar and survived review.
         case confirmed
         /// The user already released this session.
@@ -108,12 +114,14 @@ nonisolated enum AgentSpecGateAuditLog {
     static func record(
         verdict: AgentSpecGateVerdict,
         sessionID: UUID,
-        requestLength: Int
+        requestLength: Int,
+        userChoice: String? = nil
     ) {
         // `disabled` and `excluded` are the quiet majority of turns. Writing
         // them would turn a population log into a per-message trace and bury
-        // the rows that matter.
-        guard verdict.reason != .disabled, verdict.reason != .excluded else { return }
+        // the rows that matter. A row carrying the operator's own choice is
+        // always kept — that is the numerator of the false-positive rate.
+        guard userChoice != nil || (verdict.reason != .disabled && verdict.reason != .excluded) else { return }
 
         let entry = Entry(
             timestamp: Date(),
@@ -125,7 +133,7 @@ nonisolated enum AgentSpecGateAuditLog {
             requestLength: requestLength,
             judgeModel: verdict.judgeModel,
             judgeLatencyMS: verdict.judgeLatencyMS,
-            userChoice: nil
+            userChoice: userChoice
         )
         append(entry)
     }

@@ -945,6 +945,10 @@ private struct AgentScrollToLatestButton: View {
             if message.role == .workflowReport { return message }
             if message.role == .widget { return message }
             if message.role == .scheduledTask { return message }
+            // The design gate's card. Without this it falls through to the
+            // guard below and is filtered out as chrome — the gate would
+            // then be waiting on a decision the user has no way to see.
+            if message.role == .specProposal { return message }
             guard message.role != .tool,
                   message.role != .system,
                   !message.isHostInstruction,
@@ -1367,6 +1371,8 @@ private struct AgentScrollToLatestButton: View {
             return L10n.Transcript.olderHistoryRoleWidget
         case .scheduledTask:
             return L10n.Transcript.olderHistoryRoleScheduledTask
+        case .specProposal:
+            return L10n.SpecGateCard.title
         }
     }
 }

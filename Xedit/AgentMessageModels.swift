@@ -42,6 +42,14 @@ nonisolated enum AgentRole: String, Codable {
     /// AgentScheduledTaskCardView。与 widget 一样**不发给 LLM**，但**会
     /// 持久化**（是一次操作记录，重开会话应保留）。
     case scheduledTask
+    /// 设计门拦下一个回合、模型写完设计文档之后塞进 transcript 的卡片。
+    /// `content` 留空，文档路径与命中的信号挂在 `specProposal` 字段上，
+    /// 渲染走 AgentSpecProposalCardView。与 scheduledTask 一样**不发给
+    /// LLM**且**会持久化**——用户可能关掉 App 明天再来决定。
+    ///
+    /// 与前两种卡片不同的是它**状态可变**（待决定 → 已采纳 / 已跳过），
+    /// 所以它的展示字段必须进 messageHash，否则卡片会永远停在初始状态。
+    case specProposal
 }
 
 nonisolated enum AgentMessageOrigin: String, Codable, Equatable {
@@ -767,6 +775,9 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
     /// 与 widget 不同，此字段**进 CodingKeys 持久化**，
     /// 让"我在这里安排了一个定时任务"的记录随会话保留。
     var scheduledTask: AgentScheduledTaskCard?
+    /// role == .specProposal 时挂载的设计门提案。其它 role 一定 nil。
+    /// 进 CodingKeys 持久化：门可能跨 App 重启等着用户回答。
+    var specProposal: AgentSpecProposal?
     /// Explicit `/subagent` / `/no-subagent` choice for the turn this user
     /// message started. Nil on every message that didn't carry an explicit
     /// directive (including all older sessions), so the transcript marker
@@ -878,7 +889,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         case origin, originLabel, requestModelID, requestProviderID, requestProviderDisplayName
         case requestPrefixHash, requestStablePrefixCharacters
         case managedRoute, workflowReport
-        case scheduledTask
+        case scheduledTask, specProposal
         case delegationPolicy, delegationPolicyUnhonored
         case createdAt
     }
@@ -921,6 +932,7 @@ nonisolated struct AgentMessage: Identifiable, Codable, Equatable {
         managedRoute = try container.decodeIfPresent(AgentManagedRouteDecision.self, forKey: .managedRoute)
         workflowReport = try container.decodeIfPresent(WorkflowReport.self, forKey: .workflowReport)
         scheduledTask = try container.decodeIfPresent(AgentScheduledTaskCard.self, forKey: .scheduledTask)
+        specProposal = try container.decodeIfPresent(AgentSpecProposal.self, forKey: .specProposal)
         delegationPolicy = try container.decodeIfPresent(AgentDelegationPolicy.self, forKey: .delegationPolicy)
         delegationPolicyUnhonored = try container.decodeIfPresent(Bool.self, forKey: .delegationPolicyUnhonored)
         createdAt = try container.decode(Date.self, forKey: .createdAt)

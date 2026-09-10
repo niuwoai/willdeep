@@ -194,6 +194,11 @@ final class AgentRuntime: ObservableObject, Identifiable {
 
     @Published var interactionMode: AgentInteractionMode = .normal
     @Published var approvalMode: AgentApprovalMode = .smart
+    /// Design gate state. Session-scoped, not per-turn: the operator may quit
+    /// the app between "write the document" and "yes, go ahead".
+    @Published var specGateState: AgentSpecGateState = .inactive
+    /// The proposal awaiting an answer, if any. Drives the card.
+    @Published var specProposal: AgentSpecProposal?
     @Published var executionAgent: AgentExecutionAgent = .willDeep
     @Published var delegatedTaskRuns: [AgentDelegatedTaskRun] = []
     @Published var activeExperts: Set<AgentExpert> = []
@@ -720,6 +725,8 @@ final class AgentRuntime: ObservableObject, Identifiable {
         session.agentArtifactPaths = agentArtifactPaths.sorted()
         session.interactionMode = interactionMode
         session.approvalMode = approvalMode
+        session.specGateState = specGateState
+        session.specProposal = specProposal
         session.executionAgent = executionAgent
         session.delegatedTaskRuns = delegatedTaskRuns
         session.activeExperts = activeExperts

@@ -290,6 +290,21 @@ final class AppState: ObservableObject {
             AgentFontSmoothing.apply(enabled: agentFontSmoothingEnabled)
         }
     }
+    /// 判定「这个需求要不要先写设计文档」。默认开，因为它只记录不打扰。
+    @Published var agentSpecGateEnabled: Bool = AgentSettingsStore.loadSpecGateEnabled() {
+        didSet {
+            guard oldValue != agentSpecGateEnabled else { return }
+            AgentSettingsStore.saveSpecGateEnabled(agentSpecGateEnabled)
+        }
+    }
+    /// 判定命中后要不要真的停下来等设计文档。**默认关**——上一次这个
+    /// 功能就是因为误判打断用户而被整个移除的，装门这件事得用户自己点头。
+    @Published var agentSpecGateEnforcement: Bool = AgentSettingsStore.loadSpecGateEnforcement() {
+        didSet {
+            guard oldValue != agentSpecGateEnforcement else { return }
+            AgentSettingsStore.saveSpecGateEnforcement(agentSpecGateEnforcement)
+        }
+    }
     @Published var agentChatLineHeightMultiple: CGFloat = AgentSettingsStore.loadAgentChatLineHeightMultiple() {
         didSet {
             let clamped = AgentSettingsStore.clampChatLineHeightMultiple(agentChatLineHeightMultiple)

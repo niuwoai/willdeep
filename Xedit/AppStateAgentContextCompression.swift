@@ -512,6 +512,7 @@ extension AppState {
             case .workflowReport: label = "WORKFLOW(\(message.workflowReport?.workflowName ?? "?"))"
             case .widget: label = "WIDGET(\(message.widget?.title ?? "?"))"
             case .scheduledTask: label = "SCHEDULED_TASK(\(message.scheduledTask?.title ?? "?"))"
+            case .specProposal: label = "DESIGN_PROPOSAL(\(message.specProposal?.documentPath ?? "?"))"
             }
             let body: String
             if message.role == .tool {

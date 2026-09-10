@@ -65,6 +65,7 @@ enum AgentSettingsStore {
     private static let anthropicMaxOutputTokensKey = "com.willdeep.agentSettings.anthropicMaxOutputTokens.v1"
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
     private static let specGateEnabledKey = "com.willdeep.agentSettings.specGate.v1"
+    private static let specGateEnforcementKey = "com.willdeep.agentSettings.specGateEnforcement.v1"
     private static let localModelSettingsKey = "com.willdeep.agentSettings.localModelSettings.v1"
 
     /// Hard bounds for the Agent chat base font slider. The lower
@@ -392,6 +393,22 @@ enum AgentSettingsStore {
 
     static func saveSpecGateEnabled(_ enabled: Bool) {
         defaults.set(enabled, forKey: specGateEnabledKey)
+    }
+
+    /// 判定命中之后要不要真的拦下来，先写设计文档再动手。
+    ///
+    /// **默认关**，和上面那个判定开关刻意分开。判定只是记录，装门是打断
+    /// 用户——上一次这个功能就是因为误判打断人而被整个移除的。所以门要
+    /// 用户自己开，而且开之前最好先让判定跑一阵子，看 `spec-gate.jsonl`
+    /// 里的误报率。见 docs/SPEC_FIRST_GATE_DESIGN.md §11。
+    ///
+    /// 关着的时候判定照常跑、照常记录，只是不拦人。
+    static func loadSpecGateEnforcement() -> Bool {
+        defaults.bool(forKey: specGateEnforcementKey)
+    }
+
+    static func saveSpecGateEnforcement(_ enabled: Bool) {
+        defaults.set(enabled, forKey: specGateEnforcementKey)
     }
 
     /// 插件页面允不允许挂 Safari 的网页检查器。

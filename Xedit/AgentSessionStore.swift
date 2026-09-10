@@ -260,6 +260,8 @@ nonisolated enum AgentSessionStore {
         let agentEditedPaths: [String]
         let interactionMode: AgentInteractionMode
         let approvalMode: AgentApprovalMode
+        let specGateState: AgentSpecGateState
+        let specProposal: AgentSpecProposal?
         let executionAgent: AgentExecutionAgent
         let activeExperts: Set<AgentExpert>
         let currentPlan: AgentPlan?
@@ -287,6 +289,7 @@ nonisolated enum AgentSessionStore {
             case didEditFiles, agentEditedPaths, interactionMode, approvalMode, executionAgent, activeExperts
             case currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall
             case pinnedAt, archivedAt, titleIsUserSet
+            case specGateState, specProposal
         }
 
         init(from decoder: Decoder) throws {
@@ -307,6 +310,11 @@ nonisolated enum AgentSessionStore {
             agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []
             interactionMode = try c.decodeIfPresent(AgentInteractionMode.self, forKey: .interactionMode) ?? .normal
             approvalMode = try c.decodeIfPresent(AgentApprovalMode.self, forKey: .approvalMode) ?? .smart
+            // Belt and braces with AgentSpecGateState's own tolerant decoder:
+            // a session that fails to decode does not degrade, it disappears
+            // from the sidebar.
+            specGateState = (try? c.decodeIfPresent(AgentSpecGateState.self, forKey: .specGateState)) ?? .inactive
+            specProposal = try? c.decodeIfPresent(AgentSpecProposal.self, forKey: .specProposal)
             executionAgent = try c.decodeIfPresent(AgentExecutionAgent.self, forKey: .executionAgent) ?? .willDeep
             activeExperts = try c.decodeIfPresent(Set<AgentExpert>.self, forKey: .activeExperts) ?? []
             currentPlan = try c.decodeIfPresent(AgentPlan.self, forKey: .currentPlan)
@@ -358,6 +366,8 @@ nonisolated enum AgentSessionStore {
                 agentEditedPaths: agentEditedPaths,
                 interactionMode: interactionMode,
                 approvalMode: approvalMode,
+                specGateState: specGateState,
+                specProposal: specProposal,
                 executionAgent: executionAgent,
                 activeExperts: activeExperts,
                 currentPlan: currentPlan,

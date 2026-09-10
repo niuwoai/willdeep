@@ -148,6 +148,10 @@ extension AgentChatHistoryRenderer {
             label = "Scheduled task"
             avatar = "TSK"
             color = NSColor.systemIndigo
+        case .specProposal:
+            label = "Design proposal"
+            avatar = "DSN"
+            color = NSColor.systemOrange
         }
 
         let headerStart = result.length
@@ -160,7 +164,7 @@ extension AgentChatHistoryRenderer {
                     .foregroundColor: secondaryColor,
                 ]
             ))
-        case .system, .assistant, .tool, .workflowReport, .widget, .scheduledTask:
+        case .system, .assistant, .tool, .workflowReport, .widget, .scheduledTask, .specProposal:
             result.append(avatarToken(label: avatar, fill: color))
             result.append(NSAttributedString(
                 string: " " + label + "\n",
@@ -192,7 +196,7 @@ extension AgentChatHistoryRenderer {
             return .user
         case .assistant:
             return .assistant
-        case .tool, .workflowReport, .widget, .scheduledTask:
+        case .tool, .workflowReport, .widget, .scheduledTask, .specProposal:
             return .tool
         }
     }
@@ -212,7 +216,7 @@ extension AgentChatHistoryRenderer {
             style.headIndent = headIndent
             style.firstLineHeadIndent = headIndent
             style.tailIndent = AgentChatHistoryLayoutMetrics.userBodyTailIndent
-        case .assistant, .system, .tool, .workflowReport, .widget, .scheduledTask:
+        case .assistant, .system, .tool, .workflowReport, .widget, .scheduledTask, .specProposal:
             style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
             style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
             style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset
@@ -243,7 +247,7 @@ extension AgentChatHistoryRenderer {
             style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
             style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
             style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset
-        case .system, .tool, .workflowReport, .widget, .scheduledTask:
+        case .system, .tool, .workflowReport, .widget, .scheduledTask, .specProposal:
             style.headIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
             style.firstLineHeadIndent = AgentChatHistoryLayoutMetrics.assistantContentHeadIndent
             style.tailIndent = -AgentChatHistoryLayoutMetrics.assistantContentTailInset
@@ -558,7 +562,7 @@ extension AgentChatHistoryRenderer {
             // 已结束的 workflow 卡片带最终报告(summary)时给 copy 按钮 ——
             // 研究报告/评审结论是用户最想带走的产物。
             return !message.copyableContent.isEmpty
-        case .system, .tool, .widget, .scheduledTask:
+        case .system, .tool, .widget, .scheduledTask, .specProposal:
             return false
         }
     }

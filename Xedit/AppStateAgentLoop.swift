@@ -318,12 +318,11 @@ extension AppState {
                     for: runtime,
                     requestText: text
                 )
-                // Spec gate, phase 1: decide whether this request wanted a
-                // written design first, write the decision to spec-gate.jsonl,
-                // and change nothing about the turn. The threshold ships as a
-                // guess and the log is how it stops being one.
-                // See docs/SPEC_FIRST_GATE_DESIGN.md §11.
-                self.evaluateSpecGate(for: runtime, requestText: text)
+                // Design gate: decide whether this request wanted a written
+                // design first. Records every decision to spec-gate.jsonl;
+                // only interrupts when the operator turned enforcement on.
+                // See docs/SPEC_FIRST_GATE_DESIGN.md.
+                await self.evaluateSpecGate(for: runtime, requestText: text)
                 let codingPlan = await self.runReadOnlyPreflightIfNeeded(
                     for: runtime,
                     requestText: text,
@@ -473,6 +472,12 @@ extension AppState {
                     )
                 }
             }
+            // Design gate: hand over the card, or stand down. Runs before the
+            // turn is finished off so the card is in the transcript by the
+            // time the composer becomes available again — a gate that locks
+            // write tools without showing what it is waiting for is just a
+            // broken session.
+            finalizeSpecGateTurn(for: runtime)
             finishAgentLoopTurn(
                 for: runtime, turnID: turnID, providerSlotClaimID: providerSlotClaimID,
                 providerID: configuration.providerID,
@@ -985,6 +990,13 @@ extension AppState {
             // words.
             if let routeSteering = runtime.currentTurnRouteSteering {
                 assembledPrompt += "\n\n\(routeSteering)"
+            }
+            // Design gate. Appended here rather than inside
+            // AgentContextBuilder.systemPrompt so it lands after the dynamic
+            // context marker: the cached stable prefix is untouched and none
+            // of the three profile snapshot hashes move.
+            if let gateBlock = runtime.specGateState.systemPromptBlock {
+                assembledPrompt += "\n\n\(gateBlock)"
             }
             let promptComponents = AgentContextBuilder.requestComponents(from: assembledPrompt)
             // allowRefresh only on the dispatch's first round: rounds 2+ of
@@ -1948,6 +1960,32 @@ extension AppState {
                         source: .systemNotice,
                         outcomeStatus: .denied,
                         errorMessage: "Planning-only request"
+                    )
+                    continue
+                }
+
+                // Design gate. Same shape as planning-only above and
+                // deliberately a separate branch: the two states want
+                // different things from the model, and collapsing them would
+                // tell a gated turn to "return the plan and stop" when what
+                // it owes is a document. File tools are `.read` risk, so this
+                // never blocks writing the design itself.
+                if runtime.specGateState.blocksExecution,
+                   AgentExecutionIntentPolicy.blocksExecution(risk: risk) {
+                    anyDenied = true
+                    if let index = runtime.toolCalls.firstIndex(where: { $0.id == recordID }) {
+                        runtime.toolCalls[index].status = .denied
+                        runtime.toolCalls[index].errorMessage = "Design gate"
+                    }
+                    appendToolMessage(
+                        for: runtime,
+                        toolCallID: call.externalID,
+                        payload: runtime.specGateState == .awaitingUserReview
+                            ? "Blocked: the design document is written and the operator has not answered yet. Do not implement and do not ask for approval — they answer on the card."
+                            : "Blocked: this task was gated for a written design first. Create the design document under `docs/`, then stop. Do not ask for approval and do not start implementing.",
+                        source: .systemNotice,
+                        outcomeStatus: .denied,
+                        errorMessage: "Design gate"
                     )
                     continue
                 }

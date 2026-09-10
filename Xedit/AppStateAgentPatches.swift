@@ -798,6 +798,17 @@ extension AppState {
             }
             trackingRuntime?.agentEditedPaths = edited
             trackingRuntime?.agentArtifactPaths = artifacts
+            // Design gate: the document it has been holding the turn for just
+            // landed. Noticing it here, at the write, rather than by scanning
+            // the session's edited paths at end of turn, means the gate never
+            // has to guess which of several documents was the one it asked
+            // for.
+            if let gated = trackingRuntime, gated.specGateState == .awaitingDocument,
+               let documentPath = pendingWrites
+                   .map(\.relativePath)
+                   .first(where: { AgentSpecGateDocument.qualifies(path: $0) }) {
+                noteSpecGateDocument(documentPath, for: gated)
+            }
             if let trackingRuntime {
                 persistAgentSession(runtime: trackingRuntime)
             } else {
