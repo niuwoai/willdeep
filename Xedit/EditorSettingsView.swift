@@ -287,6 +287,7 @@ struct EditorSettingsView: View {
         switch tab {
         case .updates: updatesSettings
         case .privacy: TelemetrySettingsView()
+        case .diagnostics: AgentDiagnosticsSettingsView()
         case .agentAppearance: agentAppearanceSettings
         case .localModels: Form { AgentLocalModelSettingsSection() }.formStyle(.grouped).tint(.primary)
         case .agent: agentSettings

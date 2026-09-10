@@ -99,13 +99,20 @@ enum AgentSandboxAuditLog {
         return toolName
     }
 
-    private static func auditURL() -> URL? {
+    /// The directory holding every audit log — `sandbox.jsonl`,
+    /// `judge.jsonl` and the Worker timing log are siblings. Exposed so the
+    /// diagnostics export reads one definition of where they live instead of
+    /// rebuilding the path and drifting from it.
+    static var directory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base
             .appendingPathComponent("WillDeep", isDirectory: true)
             .appendingPathComponent("AgentAudit", isDirectory: true)
-            .appendingPathComponent("sandbox.jsonl")
+    }
+
+    private static func auditURL() -> URL? {
+        directory.appendingPathComponent("sandbox.jsonl")
     }
 
     // MARK: - Reading prior decisions (judge few-shot history)

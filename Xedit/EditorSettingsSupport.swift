@@ -74,6 +74,7 @@ private struct CompatibleChangeModifier<Value: Equatable>: ViewModifier {
 enum EditorSettingsTab: Hashable {
     case updates
     case privacy
+    case diagnostics
     case agentAppearance
     case agent
     case localModels
@@ -103,7 +104,7 @@ extension EditorSettingsTab {
     /// (e.g. `selectedTab = .mobileGateway`) still resolve to the right group.
     var group: SettingsGroup {
         switch self {
-        case .updates, .privacy: return .general
+        case .updates, .privacy, .diagnostics: return .general
         case .agentAppearance: return .agentAppearance
         case .localModels: return .localModels
         case .agent, .notifications, .memory, .rules: return .ai
@@ -128,6 +129,7 @@ extension EditorSettingsTab {
         switch self {
         case .updates: return L10n.Settings.tabUpdates
         case .privacy: return L10n.Telemetry.tabTitle
+        case .diagnostics: return L10n.Diagnostics.tabTitle
         case .agentAppearance: return L10n.Settings.tabAgentAppearance
         case .localModels: return L10n.Settings.LocalModel.pageTitle
         case .agent: return L10n.Settings.tabAgent
@@ -186,7 +188,7 @@ enum SettingsGroup: Hashable, Identifiable {
     /// pane a freshly-selected group falls back to.
     var tabs: [EditorSettingsTab] {
         switch self {
-        case .general: return [.updates, .privacy]
+        case .general: return [.updates, .privacy, .diagnostics]
         case .agentAppearance: return [.agentAppearance]
         case .pet: return [.pet]
         case .localModels: return [.localModels]
