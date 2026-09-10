@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
-import { CHARACTER_DRAFT_FIELDS, EPISODES_FENCE, EPISODE_TOOL, EPISODE_TOOL_SPEC, PASSAGE_TOOL, PASSAGE_TOOL_SPEC, SHOT_TOOL_SPEC, draftFromToolCall, shotFromToolCall, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, SHOTS_FENCE, SHOT_FENCE, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkill, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, episodeBatches, parseFencedDraft, parseFencedEpisodes, parseFencedPassage, parseFencedShot, parseFencedShots, parsePlanWithReason, shotDigestLines, passageContext, relativeTime, requestBudget, resetCreativeSkill, saveCreativeSkill, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODES_FENCE, EPISODE_TOOL, EPISODE_TOOL_SPEC, PASSAGE_TOOL, PASSAGE_TOOL_SPEC, SHOT_TOOL_SPEC, draftFromToolCall, shotFromToolCall, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, SHOTS_FENCE, SHOT_FENCE, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, NOTICE_VISIBLE_LIMIT, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkill, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, episodeBatches, parseFencedDraft, parseFencedEpisodes, parseFencedPassage, parseFencedShot, parseFencedShots, parsePlanWithReason, shotDigestLines, passageContext, relativeTime, requestBudget, resetCreativeSkill, saveCreativeSkill, visibleStream } from './bridge';
 import { creativeContract } from './creative-schema';
 import type { CreativeKind } from './creative-schema';
 import { FrameCoCreation } from './FrameCoCreation';
@@ -1757,9 +1757,12 @@ export default function App() {
   if (stage === 'video') body = Video();
   // role="alert" 让屏幕阅读器读出结果；用 button 而不是 div 是为了键盘也能关掉。
   const latestKind = notices.at(-1)?.kind ?? 'info';
+  // 展开时给全部，未展开时只给最新几条。切片在 reverse 之后取前 N 条，
+  // 取的是最新的那几条而不是最旧的。
+  const visibleNotices = notices.slice().reverse();
   const noticeList = (
     <ul className="toast-stack">
-      {notices.slice().reverse().map((item, index) => (
+      {(noticesExpanded ? visibleNotices : visibleNotices.slice(0, NOTICE_VISIBLE_LIMIT)).map((item, index) => (
         <li
           className={`toast-item ${item.kind === 'error' ? 'error' : ''}`}
           key={item.id}

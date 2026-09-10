@@ -171,4 +171,61 @@ struct AgentPluginAuditLogTests {
             #expect(decoded.count == lines.count)
         }
     }
+
+    /// `executeCommand` 是页面调宿主命令那条路。它以前一行不记，于是页面
+    /// 报「JSON Parse error: Unterminated string」时，除了一句 toast 什么
+    /// 线索都没有。记尺寸而不是内容：这类故障要问的是「回了多少字节」。
+    @Test("宿主命令调用记尺寸和结果，不记参数与返回内容")
+    func hostCallEntryRecordsSizesNotContent() async throws {
+        try await withRoot { root in
+            AgentPluginAuditLog.recordHostCall(.init(
+                recordedAt: Date(), pluginID: "video-studio", commandID: "drama.list",
+                argumentCount: 1, argumentBytes: 42, resultBytes: 2_960_028,
+                seconds: 1.8, outcome: "succeeded", errorDescription: nil
+            ), root: root)
+            let url = AgentPluginAuditLog.directory(forPluginID: "video-studio", root: root)
+                .appendingPathComponent(AgentPluginAuditLog.hostCallsFileName)
+            #expect(await waitForFile(url))
+            let text = try String(contentsOf: url, encoding: .utf8)
+            let entry = try decoder.decode(
+                AgentPluginAuditLog.HostCall.self,
+                from: Data(text.split(separator: "\n")[0].utf8)
+            )
+            #expect(entry.kind == "plugin_host_call")
+            #expect(entry.commandID == "drama.list")
+            #expect(entry.resultBytes == 2_960_028)
+            // 内容一个字都不该在里面。
+            #expect(!text.contains("dramas"))
+        }
+    }
+
+    /// 三类记录各走各的文件，互不覆盖——否则一个插件跑得频繁，另外两类就
+    /// 被挤出轮转窗口了。
+    @Test("三类记录落在同一目录的三个文件里")
+    func threeKindsOfRecordStayInTheirOwnFiles() async throws {
+        try await withRoot { root in
+            AgentPluginAuditLog.recordAICall(.init(
+                recordedAt: Date(), pluginID: "video-studio", providerID: "some.im", model: "m",
+                seconds: 1, messageCount: 1, promptCharacters: 10, skillCount: 0,
+                declaredTools: [], toolCalls: [], responseCharacters: 5,
+                outcome: "succeeded", errorDescription: nil
+            ), root: root)
+            AgentPluginAuditLog.recordCommandRun(.init(
+                recordedAt: Date(), pluginID: "video-studio", command: "yarn build",
+                sandboxMode: "workspaceWrite", approval: "confirmed",
+                seconds: 1, outcome: "succeeded", errorDescription: nil
+            ), root: root)
+            AgentPluginAuditLog.recordHostCall(.init(
+                recordedAt: Date(), pluginID: "video-studio", commandID: "drama.saveShot",
+                argumentCount: 3, argumentBytes: 900, resultBytes: 120,
+                seconds: 0.2, outcome: "succeeded", errorDescription: nil
+            ), root: root)
+            let directory = AgentPluginAuditLog.directory(forPluginID: "video-studio", root: root)
+            for name in [AgentPluginAuditLog.aiFileName,
+                         AgentPluginAuditLog.commandsFileName,
+                         AgentPluginAuditLog.hostCallsFileName] {
+                #expect(await waitForFile(directory.appendingPathComponent(name)), "\(name)")
+            }
+        }
+    }
 }

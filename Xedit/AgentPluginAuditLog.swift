@@ -34,6 +34,7 @@ import Foundation
 nonisolated enum AgentPluginAuditLog {
     static let aiFileName = "ai.jsonl"
     static let commandsFileName = "commands.jsonl"
+    static let hostCallsFileName = "host-calls.jsonl"
     static let rotatedSuffix = ".1.jsonl"
     static let rotationThresholdBytes: UInt64 = 8 * 1024 * 1024
     /// 命令原文的截断长度。审计要的是「跑了什么」，不是把一整段 heredoc
@@ -77,6 +78,30 @@ nonisolated enum AgentPluginAuditLog {
         let seconds: Double
         let outcome: String
         let errorDescription: String?
+    }
+
+    /// 页面调宿主命令（`executeCommand`）。
+    ///
+    /// 只记尺寸和结果，不记参数与返回的内容——那里面是剧本正文和整份短剧
+    /// 数据。而这条路最常见的故障恰好是尺寸问题：页面 `JSON.parse` 抛
+    /// 「Unterminated string」，说明拿到的不是完整 JSON，那时要问的是
+    /// 「回了多少字节」，不是「回了什么」。
+    struct HostCall: Codable, Equatable, Sendable {
+        var kind = "plugin_host_call"
+        let recordedAt: Date
+        let pluginID: String
+        let commandID: String
+        let argumentCount: Int
+        let argumentBytes: Int
+        /// 回给页面的 JSON 字节数。命令没有返回值时为 0。
+        let resultBytes: Int
+        let seconds: Double
+        let outcome: String
+        let errorDescription: String?
+    }
+
+    static func recordHostCall(_ entry: HostCall, root: URL = AgentSandboxAuditLog.directory) {
+        append(entry, to: directory(forPluginID: entry.pluginID, root: root).appendingPathComponent(hostCallsFileName))
     }
 
     /// 插件 ID 直接当目录名不安全：它来自插件清单，可能带斜杠或 `..`。

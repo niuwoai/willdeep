@@ -501,8 +501,13 @@ export function applyPassage(script: string, start: number, end: number, replace
 /// 只能看到最后一条。改成队列之后要解决三件事——存多少、什么时候收起、
 /// 时间怎么显示——都在这里，界面只负责画。
 export const NOTICE_LIMIT = 10;
-/// 多久之后自动收起成一个入口。够看完一条，又不至于一直挡着右下角。
-export const NOTICE_COLLAPSE_MS = 10_000;
+/// 多久之后自动收起成一个入口。三秒够看完一条，再久就是挡着右下角不走。
+/// 收起不是删除：队列仍留 NOTICE_LIMIT 条，点开还能翻回前面几条——批量
+/// 出稿会连着来十条通知，那种场景下「只剩最后一条」等于什么都没说。
+export const NOTICE_COLLAPSE_MS = 3_000;
+/// 未展开时最多同时画几条。十条堆在右下角是一堵墙，不是提示；再多的留在
+/// 队列里，点开看。
+export const NOTICE_VISIBLE_LIMIT = 3;
 
 export type NoticeKind = 'info' | 'error';
 export type Notice = { id: string; text: string; kind: NoticeKind; createdAt: number };

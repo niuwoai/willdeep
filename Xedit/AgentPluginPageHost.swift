@@ -952,26 +952,71 @@ private struct AgentPluginWebView: NSViewRepresentable {
         }
 
         private func executeCommand(_ body: [String: Any]) {
-            guard let commandID = body["commandID"] as? String,
-                  commandID.count <= 160 else { return }
             let requestID = (body["requestID"] as? String).map { String($0.prefix(160)) } ?? UUID().uuidString
+            let pluginID = destination.pluginID
             let rawArguments = body["arguments"] as? [String: Any] ?? [:]
-            guard rawArguments.count <= 64,
-                  JSONSerialization.isValidJSONObject(rawArguments),
-                  let encodedArguments = try? JSONSerialization.data(withJSONObject: rawArguments),
-                  encodedArguments.count <= 65_536 else { return }
+            let encodedArguments = JSONSerialization.isValidJSONObject(rawArguments)
+                ? try? JSONSerialization.data(withJSONObject: rawArguments)
+                : nil
+            let argumentBytes = encodedArguments?.count ?? 0
+
+            func record(commandID: String, resultBytes: Int, seconds: Double, outcome: String, error: String?) {
+                AgentPluginAuditLog.recordHostCall(AgentPluginAuditLog.HostCall(
+                    recordedAt: Date(),
+                    pluginID: pluginID,
+                    commandID: String(commandID.prefix(160)),
+                    argumentCount: rawArguments.count,
+                    argumentBytes: argumentBytes,
+                    resultBytes: resultBytes,
+                    seconds: seconds,
+                    outcome: outcome,
+                    errorDescription: error.map { String($0.prefix(240)) }
+                ))
+            }
+
+            // 这几道门槛原先是**静默 return**：页面的 promise 永远不落地，
+            // 表现是按钮一直转，既没有结果也没有错误。既然现在要记这条路，
+            // 就一并把它改成回一个错误——留痕一个「什么都没发生」的调用，
+            // 不如让调用方知道自己被拒了。
+            guard let commandID = body["commandID"] as? String, commandID.count <= 160 else {
+                record(commandID: "", resultBytes: 0, seconds: 0, outcome: "rejected", error: "invalid commandID")
+                sendCommandResult(requestID: requestID, result: nil, error: "Invalid command identifier")
+                return
+            }
+            guard rawArguments.count <= 64, let encodedArguments, encodedArguments.count <= 65_536 else {
+                record(
+                    commandID: commandID, resultBytes: 0, seconds: 0, outcome: "rejected",
+                    error: "arguments too large: \(rawArguments.count) keys, \(argumentBytes) bytes"
+                )
+                sendCommandResult(requestID: requestID, result: nil, error: "Command arguments are too large")
+                return
+            }
+            let startedAt = Date()
             Task { @MainActor [weak self] in
                 guard let self, let appState = self.appState else { return }
                 do {
                     let result = try await AgentPluginCommandExecutor.executeJSON(
-                        pluginID: self.destination.pluginID,
+                        pluginID: pluginID,
                         commandID: commandID,
                         arguments: rawArguments,
                         destinationID: self.destination.qualifiedID,
                         appState: appState
                     )
+                    // 字节数而不是内容：这条路最常见的故障是页面 JSON.parse
+                    // 抛「Unterminated string」，那时要问的是回了多少字节。
+                    record(
+                        commandID: commandID,
+                        resultBytes: result?.utf8.count ?? 0,
+                        seconds: Date().timeIntervalSince(startedAt),
+                        outcome: "succeeded", error: nil
+                    )
                     self.sendCommandResult(requestID: requestID, result: result, error: nil)
                 } catch {
+                    record(
+                        commandID: commandID, resultBytes: 0,
+                        seconds: Date().timeIntervalSince(startedAt),
+                        outcome: "failed", error: error.localizedDescription
+                    )
                     self.sendCommandResult(requestID: requestID, result: nil, error: error.localizedDescription)
                 }
             }

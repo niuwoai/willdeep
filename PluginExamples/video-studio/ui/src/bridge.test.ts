@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CHARACTER_DRAFT_FIELDS, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, EPISODE_TOOL, PASSAGE_TOOL, SHOT_TOOL, draftFromToolCall, shotFromToolCall, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_LIMIT, episodeBatches, parseFencedEpisodes, parseFencedShot, parseFencedShots, shotDigestLines, applyPassage, appendNotice, mapWithConcurrency, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, streamingFieldValue, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, EPISODE_TOOL, PASSAGE_TOOL, SHOT_TOOL, draftFromToolCall, shotFromToolCall, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, NOTICE_LIMIT, NOTICE_VISIBLE_LIMIT, episodeBatches, parseFencedEpisodes, parseFencedShot, parseFencedShots, shotDigestLines, applyPassage, appendNotice, mapWithConcurrency, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, streamingFieldValue, visibleStream } from './bridge';
 import type { Notice } from './bridge';
 import type { CharacterDraft } from './types';
 
@@ -773,5 +773,28 @@ describe('tool call output', () => {
 
   it('returns null for the shot tool when the model did not call it', () => {
     expect(shotFromToolCall({ toolCalls: [] }, 1)).toBeNull();
+  });
+});
+
+/// 十条通知堆在右下角是一堵墙，不是提示；停十秒也太久。但收起不能等于
+/// 删除——批量出稿会连着来十条，「只剩最后一条」等于什么都没说。
+describe('toast pacing', () => {
+  it('collapses after three seconds and shows at most three at once', () => {
+    expect(NOTICE_COLLAPSE_MS).toBe(3_000);
+    expect(NOTICE_VISIBLE_LIMIT).toBe(3);
+  });
+
+  /// 可见上限只管画几条，队列该留多少还留多少。两个数字混成一个，点开就
+  /// 什么也翻不到了。
+  it('keeps the full queue behind the visible limit', () => {
+    expect(NOTICE_LIMIT).toBeGreaterThan(NOTICE_VISIBLE_LIMIT);
+    let queue: Notice[] = [];
+    for (let index = 1; index <= 8; index += 1) {
+      queue = appendNotice(queue, { id: String(index), text: `第 ${index} 条`, kind: 'info', createdAt: index });
+    }
+    expect(queue).toHaveLength(8);
+    // 画出来的是最新那三条，不是最旧的三条。
+    const visible = queue.slice().reverse().slice(0, NOTICE_VISIBLE_LIMIT);
+    expect(visible.map((entry) => entry.text)).toEqual(['第 8 条', '第 7 条', '第 6 条']);
   });
 });
