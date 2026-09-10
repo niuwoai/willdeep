@@ -82,6 +82,16 @@ extension L10n {
             return String(format: template, oldModel, newModel)
         }
 
+        /// 跟在「模型已从 X 改为 Y」后面的一句。说的是事实，不预测秒数——
+        /// 冷预填有多慢取决于 provider 的吞吐，给一个站不住的数字比不给更糟。
+        static func modelChangedCacheWarning(_ approximateTokens: String) -> String {
+            let template = String(
+                localized: "agent-model-picker.model-changed-cache-warning",
+                defaultValue: "This discards the prompt cache: the next turn reprocesses about %@ tokens cold, so its first response will take noticeably longer."
+            )
+            return String(format: template, approximateTokens)
+        }
+
         static func modelCount(_ count: Int) -> String {
             let template = String(localized: "agent-model-picker.model-count", defaultValue: "%lld models")
             return String(format: template, Int64(count))

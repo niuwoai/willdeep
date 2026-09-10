@@ -2578,10 +2578,23 @@ extension AppState {
               let runtime = activeRuntime else {
             return
         }
+        // 换模型会让 provider 的提示缓存作废，下一轮整段历史冷预填。切换那一刻
+        // 看起来是免费的，代价一轮之后才到，用户没法把两件事连起来——所以在
+        // 这里就说清楚。锚定 provider 报的 prompt_tokens：本地字符估算会把一个
+        // 真实 58 万 token 的会话读到阈值以下，等于这句话永远不出现。
+        let cacheWarning = AgentModelSwitchCachePolicy.cacheWarning(
+            usedTokens: Self.providerAnchoredUsedTokens(
+                messages: runtime.messages,
+                contextSummaryThroughMessageID: runtime.contextSummaryThroughMessageID
+            )
+        )
+        let notice = [L10n.AgentModelPicker.modelChanged(from: old, to: new), cacheWarning]
+            .compactMap { $0 }
+            .joined(separator: " ")
         runtime.messages.append(
             AgentMessage(
                 role: .system,
-                content: L10n.AgentModelPicker.modelChanged(from: old, to: new),
+                content: notice,
                 transcriptEvent: .modelChanged
             )
         )
