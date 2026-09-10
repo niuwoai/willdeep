@@ -318,6 +318,12 @@ extension AppState {
                     for: runtime,
                     requestText: text
                 )
+                // Spec gate, phase 1: decide whether this request wanted a
+                // written design first, write the decision to spec-gate.jsonl,
+                // and change nothing about the turn. The threshold ships as a
+                // guess and the log is how it stops being one.
+                // See docs/SPEC_FIRST_GATE_DESIGN.md §11.
+                self.evaluateSpecGate(for: runtime, requestText: text)
                 let codingPlan = await self.runReadOnlyPreflightIfNeeded(
                     for: runtime,
                     requestText: text,

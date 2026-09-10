@@ -64,6 +64,7 @@ enum AgentSettingsStore {
     private static let chatLineHeightMultipleKey = "com.willdeep.agentSettings.chatLineHeightMultiple.v1"
     private static let anthropicMaxOutputTokensKey = "com.willdeep.agentSettings.anthropicMaxOutputTokens.v1"
     private static let webSearchProviderKey = "com.willdeep.agentSettings.webSearchProvider.v1"
+    private static let specGateEnabledKey = "com.willdeep.agentSettings.specGate.v1"
     private static let localModelSettingsKey = "com.willdeep.agentSettings.localModelSettings.v1"
 
     /// Hard bounds for the Agent chat base font slider. The lower
@@ -375,6 +376,22 @@ enum AgentSettingsStore {
 
     static func saveFontSmoothingEnabled(_ enabled: Bool) {
         defaults.set(enabled, forKey: fontSmoothingEnabledKey)
+    }
+
+    /// 开工前的「先写设计文档」判定要不要跑。
+    ///
+    /// 默认开，因为当前阶段它只记录不拦人：判定结果落
+    /// `spec-gate.jsonl`，用来算误报率，用户完全感知不到。等阻断档真
+    /// 装上（设计文档 §11 的 P3），阻断本身另有一个默认关的开关，
+    /// 那时才需要设置界面。现在给这个 key 是留一个逃生阀——判定万一
+    /// 在某些输入上开销异常，可以不发版就关掉。
+    static func loadSpecGateEnabled() -> Bool {
+        guard defaults.object(forKey: specGateEnabledKey) != nil else { return true }
+        return defaults.bool(forKey: specGateEnabledKey)
+    }
+
+    static func saveSpecGateEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: specGateEnabledKey)
     }
 
     /// 插件页面允不允许挂 Safari 的网页检查器。
