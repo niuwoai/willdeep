@@ -131,14 +131,31 @@ extension AppState {
         // 只读命令直接跑；其余要么此前被记住过，要么弹确认框。
         // 一律**不看审批档位**：完全访问是用户对「自己指挥的 Agent」的
         // 授权，不是对第三方页面的授权，两者不该共用一个开关。
-        if SafeCommand.classify(command: trimmed) != .alwaysSafe,
-           !AgentPluginCommandApprovalStore.isRemembered(
-               command: trimmed,
-               pluginID: pluginID,
-               packageDigest: AgentPluginRegistry.shared.packageDigest(for: pluginID)
-           ) {
+        //
+        // `approval` 一路带到审计行里：「以后不再询问」之后的每一次执行都
+        // 要能被数出来，否则记住一次等于此后无痕。
+        var approval = "alwaysSafe"
+        if SafeCommand.classify(command: trimmed) != .alwaysSafe {
+            if AgentPluginCommandApprovalStore.isRemembered(
+                command: trimmed,
+                pluginID: pluginID,
+                packageDigest: AgentPluginRegistry.shared.packageDigest(for: pluginID)
+            ) {
+                approval = "remembered"
+            } else {
+            approval = "confirmed"
             let outcome = confirmPluginCommand(trimmed, pluginID: pluginID, workspaceRoot: root)
             guard outcome.approved else {
+                AgentPluginAuditLog.recordCommandRun(AgentPluginAuditLog.CommandRun(
+                    recordedAt: Date(),
+                    pluginID: pluginID,
+                    command: AgentSandboxPolicy.scrub(String(trimmed.prefix(AgentPluginAuditLog.maximumCommandCharacters))),
+                    sandboxMode: "",
+                    approval: "declined",
+                    seconds: 0,
+                    outcome: "declined",
+                    errorDescription: nil
+                ))
                 throw AgentPluginCapabilityError.commandDeclined
             }
             if outcome.remember {
@@ -147,6 +164,7 @@ extension AppState {
                     pluginID: pluginID,
                     packageDigest: AgentPluginRegistry.shared.packageDigest(for: pluginID)
                 )
+            }
             }
         }
 
@@ -182,12 +200,36 @@ extension AppState {
                 localSandboxDisabled: runtime.localSandboxDisabled
             )
         )
-        let result = try await AgentToolRunner.runCommand(
-            arguments: arguments,
-            context: context,
-            foregroundMaxTimeout: Self.pluginCommandTimeout
+        // 主 Agent 跑同一条命令会写进 sandbox.jsonl；插件页面这条路以前
+        // 一行都不写。补上，落在这个插件自己的目录里。
+        let startedAt = Date()
+        let scrubbed = AgentSandboxPolicy.scrub(
+            String(trimmed.prefix(AgentPluginAuditLog.maximumCommandCharacters))
         )
-        return ["summary": result.summary, "output": result.payload]
+        func recordRun(outcome: String, error: Error?) {
+            AgentPluginAuditLog.recordCommandRun(AgentPluginAuditLog.CommandRun(
+                recordedAt: Date(),
+                pluginID: pluginID,
+                command: scrubbed,
+                sandboxMode: context.sandboxMode.rawValue,
+                approval: approval,
+                seconds: Date().timeIntervalSince(startedAt),
+                outcome: outcome,
+                errorDescription: error.map { String($0.localizedDescription.prefix(240)) }
+            ))
+        }
+        do {
+            let result = try await AgentToolRunner.runCommand(
+                arguments: arguments,
+                context: context,
+                foregroundMaxTimeout: Self.pluginCommandTimeout
+            )
+            recordRun(outcome: "succeeded", error: nil)
+            return ["summary": result.summary, "output": result.payload]
+        } catch {
+            recordRun(outcome: error is CancellationError ? "cancelled" : "failed", error: error)
+            throw error
+        }
     }
 
     /// 非只读命令的确认框。把插件名、完整命令和工作目录摊开给用户看——

@@ -463,7 +463,30 @@ extension AppState {
             outbound.insert(preamble, at: 0)
         }
         let messages = outbound.map { AgentMessage(role: $0.role, content: $0.content) }
+        // 每次调用都留痕：在此之前插件问一次模型，耗时、token、花费一律
+        // 无迹可寻，客户报「这个插件慢」时导出的诊断包是空的。
+        let startedAt = Date()
+        let promptCharacters = outbound.reduce(0) { $0 + $1.content.count }
+        func record(outcome: String, responseCharacters: Int, toolCalls: [String], error: Error?) {
+            AgentPluginAuditLog.recordAICall(AgentPluginAuditLog.AICall(
+                recordedAt: Date(),
+                pluginID: pluginID,
+                providerID: configuration.providerID,
+                model: configuration.model,
+                seconds: Date().timeIntervalSince(startedAt),
+                messageCount: outbound.count,
+                promptCharacters: promptCharacters,
+                skillCount: request.skillIdentifiers.count,
+                declaredTools: request.tools.map(\.name),
+                toolCalls: toolCalls,
+                responseCharacters: responseCharacters,
+                outcome: outcome,
+                errorDescription: error.map { String($0.localizedDescription.prefix(240)) }
+            ))
+        }
+
         let buffer = AgentPluginAITextBuffer()
+        do {
         try await AgentClient(configuration: configuration).streamChat(
             messages: messages,
             tools: request.tools.map(\.descriptor)
@@ -484,16 +507,35 @@ extension AppState {
                 break
             }
         }
+        } catch {
+            record(
+                outcome: error is CancellationError ? "cancelled" : "failed",
+                responseCharacters: 0, toolCalls: [], error: error
+            )
+            throw error
+        }
         // 取消是正常收场，不是「模型什么也没回」。先认取消再判空，
         // 否则页面按停止键会收到一条误导性的 emptyResponse。
-        try Task.checkCancellation()
+        do { try Task.checkCancellation() } catch {
+            record(outcome: "cancelled", responseCharacters: 0, toolCalls: [], error: nil)
+            throw error
+        }
         let text = await buffer.value().trimmingCharacters(in: .whitespacesAndNewlines)
         let toolCalls = await buffer.toolCalls().map {
             AgentPluginAIToolCall(name: $0.toolName, argumentsJSON: $0.argumentsJSON)
         }
         // 填了工具参数就是给了答案，哪怕一个字的正文都没有——这是工具调用
         // 最常见的形状。只有两样都空才算模型什么也没回。
-        guard !text.isEmpty || !toolCalls.isEmpty else { throw AgentPluginAIError.emptyResponse }
+        guard !text.isEmpty || !toolCalls.isEmpty else {
+            record(outcome: "failed", responseCharacters: 0, toolCalls: [], error: AgentPluginAIError.emptyResponse)
+            throw AgentPluginAIError.emptyResponse
+        }
+        record(
+            outcome: "succeeded",
+            responseCharacters: text.count,
+            toolCalls: toolCalls.map(\.name),
+            error: nil
+        )
         return AgentPluginAIResult(
             text: text,
             model: configuration.model,

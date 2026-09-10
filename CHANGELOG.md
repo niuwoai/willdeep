@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.362.0-rc1 - 2026-09-10
+
+### Added
+- 插件的模型调用与命令执行开始落盘，一插件一目录：`AgentAudit/plugins/<插件ID>/ai.jsonl` 与 `commands.jsonl`。在此之前两者都无迹可寻——问模型走 `AgentClient` 直连，跑命令走和 Agent 同一套沙箱却没有任何一次 `AgentSandboxAuditLog.append`，同一条 `npm install` Agent 跑留痕、页面跑不留痕。
+- `ai.jsonl` 只记标识符、计数与耗时（provider、模型、耗时、消息条数、提示字符数、声明的工具名、模型实际填了哪几个、响应字符数、结果），不含提示词与回复正文，与 `worker-timing.jsonl` 同一条规矩，因此可以直接交给他人。
+- `commands.jsonl` 记命令原文（经 `AgentSandboxPolicy.scrub` 脱敏并截断至 2000 字）、沙箱档位、放行方式与耗时。放行方式区分 `alwaysSafe` / `remembered` / `confirmed` / `declined`——勾过「以后不再询问」之后的每一次执行仍然可数，这正是原先的审计缺口。
+- 单独建目录而不并入 Agent 的日志：插件的活没有会话也没有项目，硬塞进 `worker-timing.jsonl` 的形状只会得到一列空值和一个永远匹配不到的过滤条件。
+
+### Notes
+- 插件 ID 来自插件清单，可能带斜杠或 `..`，作目录名前只保留字母数字与 `.-_`，其余换成下划线，空的退回 `unknown`。
+- 单文件超过 8 MB 轮转一次，与 `worker-timing.jsonl` 同一套；写入串行化，避免两个插件页面把两条 JSON 交错进同一行。
+- 尚未覆盖 `executeCommand`（插件调用宿主命令）这条路径。
+
+### Tests
+- 新增 `AgentPluginAuditLogTests`：目录名不会被插件 ID 带出 plugins 目录、一插件一目录且两类记录分开、AI 记录不含正文、命令记录带原文与放行方式（四种都可数）、并发写入不会把两条记录搅在一行。
+
 ## 1.361.0-rc2 - 2026-09-10
 
 ### Fixed
