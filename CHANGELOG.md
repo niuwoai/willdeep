@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.364.0-rc1 - 2026-09-10
+
+### Changed
+- Release 构建钉为 arm64 单架构（项目级 `ARCHS = arm64`），不再产出 Intel 切片。仓库里既有的「Thin embedded executables for ARM-only builds」脚本随之生效，会把内嵌的 `willdeep-agent` 与 ComputerUseHelper 一并瘦成单架构并重签。
+- 顺带绕开一个已知编译器缺陷：swift-frontend 在 Release x86_64 上 EarlyPerfInliner 崩溃，不再产出该切片后不会再遇到。
+
+### Notes
+- **Intel 用户请使用旧版本下载**。appcast 没有按架构分发的标准字段，本版及之后的更新在 Intel 机器上无法运行；历史版本的版本化 DMG 仍保留在 OSS 上可直接下载。该决定基于当前已无 Intel 用户。
+- Debug 配置不受影响，仍按本机架构构建。
+
 ## 1.363.0-rc2 - 2026-09-10
 
 ### Fixed
