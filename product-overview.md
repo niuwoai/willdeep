@@ -1,6 +1,8 @@
 # WillDeep Product Overview
 
-> Last updated: 2026-09-09 | Current version: v1.365.0-rc2
+> Last updated: 2026-09-10 | Current version: v1.365.0-rc3
+
+插件命令支持最高 32 MiB 的 JSON 参数传输，可容纳待办 10 MiB 附件的 Base64 与 JSON 转义开销。
 
 本次整合已通过完整 macOS 回归：4,027 项（4,026 通过、0 失败、1 项既有条件跳过），日志与结果包计数一致；两个工坊另有前端、Ruby 服务、真实打包和页面交互验证。
 

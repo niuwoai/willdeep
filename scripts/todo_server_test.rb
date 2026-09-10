@@ -156,6 +156,15 @@ Dir.mktmpdir do |dir|
     check(escaped_path && !escaped_path.include?("/../"),
           "带 ../ 的文件名被清洗，写不出附件目录。", results)
 
+    large_bytes = "\x89PNG\r\n\x1a\n".b + "x".b * (10 * 1024 * 1024 - 8)
+    large_attachment = tool.call("todo.attach", {
+      "id" => attached["item"]["id"], "name" => "large.png", "mimeType" => "image/png",
+      "dataBase64" => [large_bytes].pack("m0")
+    })
+    large_path = large_attachment && large_attachment.dig("attachment", "path")
+    check(large_attachment && large_attachment["ok"] == true && large_path && File.binread(large_path) == large_bytes,
+          "10 MiB 附件经 MCP JSON 传输后完整落盘。", results)
+
     oversize = tool.call("todo.attach", {
       "id" => attached["item"]["id"], "name" => "big.bin",
       "dataBase64" => ["a".b * (10 * 1024 * 1024 + 1)].pack("m0")

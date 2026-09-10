@@ -983,7 +983,9 @@ private struct AgentPluginWebView: NSViewRepresentable {
                 sendCommandResult(requestID: requestID, result: nil, error: "Invalid command identifier")
                 return
             }
-            guard rawArguments.count <= 64, let encodedArguments, encodedArguments.count <= 65_536 else {
+            guard AgentPluginCommandArgumentPolicy.accepts(
+                keyCount: rawArguments.count, encodedArguments: encodedArguments
+            ) else {
                 record(
                     commandID: commandID, resultBytes: 0, seconds: 0, outcome: "rejected",
                     error: "arguments too large: \(rawArguments.count) keys, \(argumentBytes) bytes"

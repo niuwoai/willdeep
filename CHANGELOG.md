@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.365.0-rc3 - 2026-09-10
+
+### Fixed
+- 修复带图待办触发「Command arguments are too large」：插件 JSON 参数上限从 64 KiB 调整为 32 MiB，容纳 10 MiB 附件的 Base64 与转义开销，保留参数数量及单附件限制。
+
+### Tests
+- 新增参数大小边界、最大附件编码完整性和服务端 10 MiB 附件落盘回归测试。
+
 ## 1.365.0-rc2 - 2026-09-10
 
 ### Fixed
