@@ -41,7 +41,19 @@ extension L10n {
 
         /// Tier one, composer strip. Only the model subjects get a line: a
         /// running tool or Worker already shows its own name and clock.
-        static func reassurance(subject: AgentTurnWatchdogPolicy.StallSubject, isOverdue: Bool = false) -> String? {
+        static func reassurance(
+            subject: AgentTurnWatchdogPolicy.StallSubject,
+            isOverdue: Bool = false,
+            isThinking: Bool = false
+        ) -> String? {
+            // 推理增量正在到达：宿主收到了东西，只是还没有正文。说「未收到
+            // 新输出」会让人以为线路断了，去按停止或者重发——而模型正在干活。
+            if isThinking, subject == .modelFirstToken || subject == .modelMidStream {
+                return String(
+                    localized: "turn-watchdog.reassure-model-thinking",
+                    defaultValue: "The model is thinking; no text yet"
+                )
+            }
             if isOverdue, subject == .modelFirstToken || subject == .modelMidStream {
                 return String(
                     localized: "turn-watchdog.response-completion-unconfirmed",

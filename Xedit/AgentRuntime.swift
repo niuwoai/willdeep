@@ -36,6 +36,9 @@ nonisolated struct AgentQuietReassurance: Equatable {
     var subject: AgentTurnWatchdogPolicy.StallSubject
     var since: Date
     var isOverdue = false
+    /// 推理增量正在到达。它不算「可见输出」，所以静默时钟照走，但把这段
+    /// 说成「未收到新输出」是不准的——宿主收到了，只是还没有正文。
+    var isThinking = false
 }
 
 @MainActor
@@ -128,6 +131,10 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// deltas and other invisible events; the gap between the two clocks is
     /// exactly the stretch where the user needs reassurance, not alarm.
     var lastVisibleOutputAt: Date?
+    /// 最近一次推理增量。推理模型可以思考一两分钟才写出第一个字，那段时间
+    /// `lastVisibleOutputAt` 不动，状态条只好说「未收到新输出」。有了这个
+    /// 戳就能分开两种沉默：模型在想，和线路那头什么也没有。
+    var lastReasoningAt: Date?
     /// Tier-one liveness copy for the composer strip: the turn is alive but
     /// has shown nothing for a while. Nil whenever output is flowing.
     @Published var quietReassurance: AgentQuietReassurance?

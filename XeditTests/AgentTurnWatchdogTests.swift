@@ -404,4 +404,97 @@ struct AgentTurnWatchdogTests {
         #expect(runtime.lastActivityAt == nil)
         #expect(runtime.lastVisibleOutputAt == nil)
     }
+
+    // MARK: 思考期的沉默（1.361.0-rc2）
+
+    /// 推理模型可以思考一两分钟才写出第一个字。那段时间只有 reasoning 增量，
+    /// 而 `noteAgentVisibleOutput` 只认文本增量，于是状态条说「未收到新输出」
+    /// 并在 90 秒后升级成「完成状态未确认」——宿主其实一直在收东西。这句话
+    /// 会让人以为线路断了，去按停止或者重发，而模型正在干活。
+    @Test("推理增量在到达时说「正在思考」，而不是「未收到新输出」")
+    @MainActor
+    func thinkingSilenceReadsAsThinking() throws {
+        let (app, runtime) = try fixture()
+        defer { AgentSessionStore.delete(id: runtime.id) }
+        runtime.isResponding = true
+        runtime.turnStartedAt = now
+        runtime.lastActivityAt = now
+        runtime.lastVisibleOutputAt = now
+        runtime.lastReasoningAt = now.addingTimeInterval(50)
+
+        app.scanAgentTurnsForStalls(now: now.addingTimeInterval(60))
+        let quiet = try #require(runtime.quietReassurance)
+        #expect(quiet.isThinking)
+        // 有动静就不该升级成「完成状态未确认」：那句话是说给线路那头没动静
+        // 听的。
+        #expect(!quiet.isOverdue)
+        #expect(L10n.TurnWatchdog.reassurance(subject: .modelFirstToken, isThinking: true)
+            != L10n.TurnWatchdog.reassurance(subject: .modelFirstToken))
+        runtime.isResponding = false
+    }
+
+    /// 思考结束后模型可能还要好一会儿才写出正文。那段沉默不能继续冒充思考，
+    /// 否则「正在思考」会挂在一个真的卡死的回合上。
+    @Test("推理停了足够久之后不再冒充思考")
+    @MainActor
+    func staleReasoningStopsClaimingToThink() throws {
+        let (app, runtime) = try fixture()
+        defer { AgentSessionStore.delete(id: runtime.id) }
+        runtime.isResponding = true
+        runtime.turnStartedAt = now
+        runtime.lastActivityAt = now
+        runtime.lastVisibleOutputAt = now
+        runtime.lastReasoningAt = now
+
+        let stale = now.addingTimeInterval(AgentTurnWatchdogPolicy.thinkingFreshness + 100)
+        app.scanAgentTurnsForStalls(now: stale)
+        let quiet = try #require(runtime.quietReassurance)
+        #expect(!quiet.isThinking)
+        #expect(quiet.isOverdue)
+        runtime.isResponding = false
+    }
+
+    @Test("从未收到过推理增量时行为不变")
+    @MainActor
+    func noReasoningKeepsTheOldCopy() throws {
+        let (app, runtime) = try fixture()
+        defer { AgentSessionStore.delete(id: runtime.id) }
+        runtime.isResponding = true
+        runtime.turnStartedAt = now
+        runtime.lastActivityAt = now
+        runtime.lastVisibleOutputAt = now
+
+        app.scanAgentTurnsForStalls(now: now.addingTimeInterval(20))
+        #expect(runtime.quietReassurance?.isThinking == false)
+        #expect(runtime.quietReassurance?.isOverdue == false)
+        runtime.isResponding = false
+    }
+
+    @Test("回合结束时推理戳和另外两个时钟一起清空")
+    @MainActor
+    func turnEndClearsTheReasoningClock() throws {
+        let (app, runtime) = try fixture()
+        defer { AgentSessionStore.delete(id: runtime.id) }
+        runtime.messages = [
+            AgentMessage(role: .user, content: "go", source: .operatorInput),
+            AgentMessage(role: .assistant, content: "done"),
+        ]
+        runtime.lastActivityAt = now
+        runtime.lastVisibleOutputAt = now
+        runtime.lastReasoningAt = now
+
+        app.noteAgentTurnEnded(for: runtime, turnID: UUID())
+
+        #expect(runtime.lastReasoningAt == nil)
+        #expect(runtime.lastActivityAt == nil)
+        #expect(runtime.lastVisibleOutputAt == nil)
+    }
+
+    /// 工具和 Worker 在状态条上本来就有名字和秒表，思考这条线只给模型两档。
+    @Test("思考文案只给模型两档，工具和 Worker 不变")
+    func thinkingCopyIsModelOnly() {
+        #expect(L10n.TurnWatchdog.reassurance(subject: .tool("run_command"), isThinking: true) == nil)
+        #expect(L10n.TurnWatchdog.reassurance(subject: .worker("调查员"), isThinking: true) == nil)
+        #expect(L10n.TurnWatchdog.reassurance(subject: .modelMidStream, isThinking: true) != nil)
+    }
 }

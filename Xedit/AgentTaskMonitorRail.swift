@@ -1001,7 +1001,9 @@ struct AgentSemanticActivityStatusLine: View {
             // subjects land here — a running tool or Worker already shows
             // its name and a clock above.
             if let quiet = appState.activeRuntime?.quietReassurance,
-               let label = L10n.TurnWatchdog.reassurance(subject: quiet.subject, isOverdue: quiet.isOverdue) {
+               let label = L10n.TurnWatchdog.reassurance(
+                   subject: quiet.subject, isOverdue: quiet.isOverdue, isThinking: quiet.isThinking
+               ) {
                 return AgentActivityPhase(label: label, systemImage: "brain", tint: .secondary)
             }
             if let headline = appState.agentCurrentActivityHeadline {

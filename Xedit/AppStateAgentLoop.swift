@@ -1173,6 +1173,11 @@ extension AppState {
                                     }
                                     streamBuffer.appendTextDelta(delta)
                                 case .reasoningDelta(let delta):
+                                    // 推理不是可见输出（把它算进去，状态条会在
+                                    // 一屏思考文本上宣布「已经在写了」），但它
+                                    // 证明模型在动。分开记一个戳，让状态条能说
+                                    // 「正在思考」而不是「什么也没收到」。
+                                    if !delta.isEmpty { runtime.lastReasoningAt = Date() }
                                     if !delta.isEmpty, runtime.messages[index].firstResponseSeconds == nil {
                                         runtime.messages[index].firstResponseSeconds = Date().timeIntervalSince(turnStartedAt)
                                         runtime.currentTurnTiming?.noteFirstToken()

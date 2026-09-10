@@ -36,6 +36,10 @@ nonisolated enum AgentTurnWatchdogPolicy {
     /// actually wrong: reasoning models routinely take a minute or two to
     /// show their first character.
     static let reassuranceThreshold: TimeInterval = 15
+    /// 推理增量多久没来就不再说「正在思考」。推理流是断续的，两段之间隔
+    /// 十几秒很常见；但思考结束后模型可能还要好一会儿才写出正文，那段沉默
+    /// 不能继续冒充思考。二十秒够宽，也不至于把结束后的等待说成还在想。
+    static let thinkingFreshness: TimeInterval = 20
     /// Silence at which the stream idle guard cuts the connection and the
     /// transient ladder reconnects. The stall banner counts down to it so
     /// the user knows the host will act without them.
@@ -242,12 +246,19 @@ extension AppState {
                 now: now
             )
             if let quiet {
+                // 推理正在到达时，这段沉默是「在想」，不是「没消息」。也因此
+                // 不升级成「完成状态未确认」——那句话是说给「线路那头没动静」
+                // 听的，而这里明明有动静。
+                let isThinking = runtime.lastReasoningAt.map {
+                    now.timeIntervalSince($0) <= AgentTurnWatchdogPolicy.thinkingFreshness
+                } ?? false
                 // Anchored, so `since` is the clamped start of the silence
                 // rather than a stamp left over from an earlier turn.
                 let reassurance = AgentQuietReassurance(
                     subject: watchdogStallSubject(for: runtime),
                     since: now.addingTimeInterval(-quiet),
-                    isOverdue: quiet >= AgentTurnWatchdogPolicy.stallThreshold
+                    isOverdue: !isThinking && quiet >= AgentTurnWatchdogPolicy.stallThreshold,
+                    isThinking: isThinking
                 )
                 if runtime.quietReassurance != reassurance { runtime.quietReassurance = reassurance }
             } else if runtime.quietReassurance != nil {
@@ -330,6 +341,7 @@ extension AppState {
         runtime.isShowingWatchdogStallNotice = false
         runtime.quietReassurance = nil
         runtime.lastVisibleOutputAt = nil
+        runtime.lastReasoningAt = nil
         // Both clocks die with the turn. Leaving this one behind is what let
         // the next turn be reported as silent since the last one — the two
         // fields are read together and must be cleared together.
