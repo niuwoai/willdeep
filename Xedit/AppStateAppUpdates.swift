@@ -27,7 +27,16 @@ extension AppState {
     func refreshAvailableAppUpdate() async {
         let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
         do {
-            availableAppUpdate = try await AppUpdateChecker.fetchAvailableUpdate(currentVersion: currentVersion)
+            let update = try await AppUpdateChecker.fetchAvailableUpdate(currentVersion: currentVersion)
+            // The banner is the only affordance this update has, and clicking
+            // it runs a user-initiated Sparkle check, which erases the skip
+            // record. So a banner that ignores skipping does not merely annoy
+            // — it undoes the skip. See AppUpdateSkipState.
+            if let update, AppUpdateSkipState.skipsUpdate(candidateBundleVersion: update.bundleVersion) {
+                availableAppUpdate = nil
+            } else {
+                availableAppUpdate = update
+            }
         } catch {
             #if DEBUG
             NSLog("[WillDeep] managed update check failed: %@", error.localizedDescription)

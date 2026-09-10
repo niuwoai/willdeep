@@ -15,10 +15,18 @@ struct AppUpdateMeta: Decodable {
     let title: String?
     let notes: String?
     let minimumSystemVersion: String?
+    /// The appcast's `sparkle:version` — this app's integer build number.
+    /// Carried purely so the banner can compare against what Sparkle records
+    /// when the user skips a version; Sparkle stores the build number, never
+    /// the display version. Optional because the banner must still work if a
+    /// server ever stops sending it.
+    let bundleVersion: Int?
 
     enum CodingKeys: String, CodingKey {
         case version
         case latest_version
+        case bundleVersion
+        case bundle_version
         case downloadURL
         case downloadUrl
         case download_url
@@ -38,7 +46,8 @@ struct AppUpdateMeta: Decodable {
         releaseNotesURL: URL? = nil,
         title: String? = nil,
         notes: String? = nil,
-        minimumSystemVersion: String? = nil
+        minimumSystemVersion: String? = nil,
+        bundleVersion: Int? = nil
     ) {
         self.version = version
         self.downloadURL = downloadURL
@@ -46,6 +55,7 @@ struct AppUpdateMeta: Decodable {
         self.title = title
         self.notes = notes
         self.minimumSystemVersion = minimumSystemVersion
+        self.bundleVersion = bundleVersion
     }
 
     nonisolated init(from decoder: Decoder) throws {
@@ -66,6 +76,32 @@ struct AppUpdateMeta: Decodable {
             ?? container.decodeIfPresent(String.self, forKey: .release_notes)
         minimumSystemVersion = try container.decodeIfPresent(String.self, forKey: .minimumSystemVersion)
             ?? container.decodeIfPresent(String.self, forKey: .minimum_system_version)
+        bundleVersion = Self.decodeBundleVersion(from: container)
+    }
+
+    /// Reads `bundle_version` whether the server sends it as a number or as a
+    /// quoted string.
+    ///
+    /// `decodeIfPresent(Int.self,…)` *throws* on a type mismatch rather than
+    /// returning nil, so chaining the two attempts with `??` never reaches the
+    /// second one — the first attempt takes the whole initializer down. Each
+    /// attempt therefore has to swallow its own mismatch.
+    private nonisolated static func decodeBundleVersion(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) -> Int? {
+        // `try?` flattens the double optional here, so a missing key and a
+        // type mismatch both arrive as nil — which is what this loop wants
+        // either way: try the next shape, then the next key.
+        for key in [CodingKeys.bundleVersion, .bundle_version] {
+            if let numeric = try? container.decodeIfPresent(Int.self, forKey: key) {
+                return numeric
+            }
+            if let text = try? container.decodeIfPresent(String.self, forKey: key),
+               let parsed = Int(text.trimmingCharacters(in: .whitespaces)) {
+                return parsed
+            }
+        }
+        return nil
     }
 
     private nonisolated static func decodeURL(
