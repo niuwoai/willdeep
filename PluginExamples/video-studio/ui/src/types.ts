@@ -1,3 +1,17 @@
+/// 一个「产出形状」。宿主不会执行它：schema 交给模型，模型填好的参数原样
+/// 递回页面。围栏是口头约定，这个是协议——provider 那一侧强制字段名和类型。
+export interface PluginAITool {
+  name: string;
+  description: string;
+  parameters: Array<{ name: string; type: 'string' | 'integer' | 'boolean' | 'stringArray'; description: string; required?: boolean }>;
+}
+
+/// `arguments` 是 JSON 字符串，宿主不解读内容。
+export interface PluginAIToolCall {
+  name: string;
+  arguments: string;
+}
+
 export type FrameCandidate = { id: string; mediaURL: string; filePath: string; prompt: string; model: ImageModel; createdAt: string };
 export type DialogueLine = { id: string; speaker: string; text: string };
 /** 共创的两个修订号加一份草稿。旧存档没有这几个字段，读出来按 0 / null 处理。 */
@@ -62,7 +76,7 @@ declare global {
       };
       executeCommand(command: string, arguments?: Record<string, unknown>): Promise<string | undefined>;
       ai?: {
-        complete(request: { system: string; messages: Array<{ role: 'user' | 'assistant'; content: string }>; provider?: string; model?: string; skills?: string[]; streamID?: string }): Promise<{ text: string; model: string; providerID: string }>;
+        complete(request: { system: string; messages: Array<{ role: 'user' | 'assistant'; content: string }>; provider?: string; model?: string; skills?: string[]; streamID?: string; tools?: PluginAITool[] }): Promise<{ text: string; model: string; providerID: string; toolCalls?: PluginAIToolCall[] }>;
         /** 按 streamID 停一条在跑的对话。桥 2.3.0 起可用，旧宿主上是 undefined。 */
         cancel?(streamID: string): Promise<{ cancelled: boolean }>;
         providers(): Promise<{ providers: ProviderEntry[] }>;

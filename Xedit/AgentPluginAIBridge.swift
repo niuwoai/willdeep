@@ -33,6 +33,8 @@ nonisolated struct AgentPluginAIRequest: Equatable, Sendable {
     /// 页面自己生成的流式标识。非空时宿主把模型的增量文本按这个 id 回推给
     /// 页面，让它能一边等一边显示，而不是对着一个转圈等十几秒。
     var streamID: String?
+    /// 页面声明的产出形状。空数组时行为和以前完全一致。
+    var tools: [AgentPluginAITool] = []
 
     static let maximumMessages = 24
     static let maximumCharacters = 32_000
@@ -43,6 +45,54 @@ nonisolated struct AgentPluginAIRequest: Equatable, Sendable {
     /// 挂 N 个，N × 24k 全进 prompt。这条通道是给插件页面的，一开始就封死。
     static let maximumSkills = 3
     static let maximumSkillCharacters = 8_000
+    /// 一次请求最多几个工具。页面每个阶段只需要一个「交出这一段产出」的
+    /// 工具，四个已经宽裕；上限存在是因为工具定义整份进 prompt。
+    static let maximumTools = 4
+    static let maximumToolParameters = 12
+}
+
+/// 页面声明的一个「产出形状」。
+///
+/// **它不会被执行。** 宿主只是把它的 schema 交给模型，再把模型填好的参数
+/// 原样递回页面——这是一个带类型的返回信封，不是一次工具调用的前半段。
+/// 页面拿不到任何执行能力，也没有对应的执行器。
+///
+/// 存在的理由：在此之前页面靠围栏约定收结构化产出（「只输出一个
+/// ```short_drama_episode 代码块」），而模型隔三差五回一个普通的 ```json，
+/// 于是整块内容被当成闲聊，草稿一个字没改。围栏是口头约定，工具 schema
+/// 是协议——provider 那一侧会强制字段名和类型。
+nonisolated struct AgentPluginAITool: Equatable, Sendable {
+    struct Parameter: Equatable, Sendable {
+        let name: String
+        let type: AgentToolParameter.ParameterType
+        let description: String
+        let required: Bool
+    }
+
+    let name: String
+    let description: String
+    let parameters: [Parameter]
+
+    var descriptor: AgentToolDescriptor {
+        AgentToolDescriptor(
+            name: name,
+            description: description,
+            // 只读：这些工具什么也不做，审批与沙箱层面没有任何可授予的权限。
+            risk: .read,
+            parameters: parameters.map {
+                AgentToolParameter(name: $0.name, type: $0.type, description: $0.description, required: $0.required)
+            }
+        )
+    }
+}
+
+/// 模型填好的一份产出。`argumentsJSON` 原样递给页面，由页面按自己的
+/// schema 解读——宿主不认识 `script` 或 `replacement` 是什么。
+nonisolated struct AgentPluginAIToolCall: Equatable, Sendable {
+    let name: String
+    let argumentsJSON: String
+
+    var jsonObject: [String: Any] { ["name": name, "arguments": argumentsJSON] }
 }
 
 /// 递给页面的技能描述。刻意不带 `url`：技能在磁盘上的位置是宿主的事，
@@ -70,6 +120,9 @@ nonisolated struct AgentPluginAIResult: Equatable, Sendable {
     let text: String
     let model: String
     let providerID: String
+    /// 模型这一轮填好的工具参数。空数组表示它选择用正文回答——页面据此
+    /// 回落到原来的解析路径，而不是把一次正常的提问当成失败。
+    var toolCalls: [AgentPluginAIToolCall] = []
 }
 
 nonisolated struct AgentPluginImageRequest: Equatable, Sendable {
@@ -115,6 +168,7 @@ nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
     case imagePermissionDenied
     case skillPermissionDenied
     case tooManySkills
+    case tooManyTools
     case unknownSkill(String)
     case emptyRequest
     case tooManyMessages
@@ -135,6 +189,7 @@ nonisolated enum AgentPluginAIError: Error, Equatable, LocalizedError {
         case .imagePermissionDenied: return "This plugin did not declare the ai.image permission."
         case .skillPermissionDenied: return "This plugin did not declare the skills.read permission."
         case .tooManySkills: return "At most \(AgentPluginAIRequest.maximumSkills) skills can be attached to one request."
+        case .tooManyTools: return "At most \(AgentPluginAIRequest.maximumTools) tools can be declared on one request."
         case .unknownSkill(let identifier): return "No enabled skill matches: \(identifier)"
         case .emptyRequest: return "The request carried no messages."
         case .tooManyMessages: return "Too many messages in one request."
@@ -227,6 +282,35 @@ nonisolated enum AgentPluginAIRequestValidator {
             .prefix(160)
             .description
             .nilWhenEmpty
+
+        var tools: [AgentPluginAITool] = []
+        for entry in raw["tools"] as? [[String: Any]] ?? [] {
+            // 名字必须是模型侧合法的工具名。不合规的整条丢掉而不是修正：
+            // 一个被改过名的工具，页面按原名去认返回值会认不到。
+            guard let name = (entry["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !name.isEmpty, name.count <= 48,
+                  name.allSatisfy({ $0.isLowercase && $0.isLetter || $0.isNumber || $0 == "_" }),
+                  !tools.contains(where: { $0.name == name }) else { continue }
+            let description = String(((entry["description"] as? String) ?? "").prefix(400))
+            var parameters: [AgentPluginAITool.Parameter] = []
+            for field in entry["parameters"] as? [[String: Any]] ?? [] {
+                guard let fieldName = (field["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !fieldName.isEmpty, fieldName.count <= 48,
+                      let type = AgentToolParameter.ParameterType(rawValue: (field["type"] as? String) ?? "string"),
+                      !parameters.contains(where: { $0.name == fieldName }) else { continue }
+                parameters.append(AgentPluginAITool.Parameter(
+                    name: fieldName,
+                    type: type,
+                    description: String(((field["description"] as? String) ?? "").prefix(240)),
+                    required: (field["required"] as? Bool) ?? false
+                ))
+            }
+            guard !parameters.isEmpty,
+                  parameters.count <= AgentPluginAIRequest.maximumToolParameters else { continue }
+            tools.append(AgentPluginAITool(name: name, description: description, parameters: parameters))
+        }
+        guard tools.count <= AgentPluginAIRequest.maximumTools else { return .failure(.tooManyTools) }
+        request.tools = tools
         return .success(request)
     }
 }
@@ -237,8 +321,11 @@ nonisolated private extension String {
 
 private actor AgentPluginAITextBuffer {
     private var text = ""
+    private var calls: [AgentMessageToolCall] = []
     func append(_ delta: String) { text += delta }
     func value() -> String { text }
+    func replaceToolCalls(_ next: [AgentMessageToolCall]) { calls = next }
+    func toolCalls() -> [AgentMessageToolCall] { calls }
 }
 
 @MainActor
@@ -377,7 +464,10 @@ extension AppState {
         }
         let messages = outbound.map { AgentMessage(role: $0.role, content: $0.content) }
         let buffer = AgentPluginAITextBuffer()
-        try await AgentClient(configuration: configuration).streamChat(messages: messages) { event in
+        try await AgentClient(configuration: configuration).streamChat(
+            messages: messages,
+            tools: request.tools.map(\.descriptor)
+        ) { event in
             switch event {
             case .textDelta(let delta):
                 await buffer.append(delta)
@@ -386,6 +476,10 @@ extension AppState {
                 // 只转发，不累进结果缓冲：思考不是模型交出的答案，混进正文
                 // 会把它一起解析成结构化内容。
                 onReasoning?(delta)
+            case .toolCallsUpdated(let calls):
+                // 累积事件：每次带的是到目前为止的**全量**，所以整份替换
+                // 而不是追加，否则流式过程中同一个调用会攒出好几份。
+                await buffer.replaceToolCalls(calls)
             default:
                 break
             }
@@ -394,11 +488,17 @@ extension AppState {
         // 否则页面按停止键会收到一条误导性的 emptyResponse。
         try Task.checkCancellation()
         let text = await buffer.value().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { throw AgentPluginAIError.emptyResponse }
+        let toolCalls = await buffer.toolCalls().map {
+            AgentPluginAIToolCall(name: $0.toolName, argumentsJSON: $0.argumentsJSON)
+        }
+        // 填了工具参数就是给了答案，哪怕一个字的正文都没有——这是工具调用
+        // 最常见的形状。只有两样都空才算模型什么也没回。
+        guard !text.isEmpty || !toolCalls.isEmpty else { throw AgentPluginAIError.emptyResponse }
         return AgentPluginAIResult(
             text: text,
             model: configuration.model,
-            providerID: configuration.providerID
+            providerID: configuration.providerID,
+            toolCalls: toolCalls
         )
     }
 

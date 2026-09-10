@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CHARACTER_DRAFT_FIELDS, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_LIMIT, episodeBatches, parseFencedEpisodes, parseFencedShot, parseFencedShots, shotDigestLines, applyPassage, appendNotice, mapWithConcurrency, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, streamingFieldValue, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, EPISODE_TOOL, PASSAGE_TOOL, SHOT_TOOL, draftFromToolCall, shotFromToolCall, IMAGE_CONCURRENCY, IMAGE_MIN_INTERVAL_MS, NOTICE_LIMIT, episodeBatches, parseFencedEpisodes, parseFencedShot, parseFencedShots, shotDigestLines, applyPassage, appendNotice, mapWithConcurrency, callCommand, detectUnknownCharacters, firstBalancedObject, loadDramas, parseDramaPlan, parseFencedDraft, parseFencedPassage, parsePlanWithReason, passageContext, relativeTime, requestBudget, streamingFieldValue, visibleStream } from './bridge';
 import type { Notice } from './bridge';
 import type { CharacterDraft } from './types';
 
@@ -706,5 +706,72 @@ describe('generic json fence fallback', () => {
 
   it('leaves prose without any fence as chat', () => {
     expect(parseFencedDraft('这一集你想怎么改？', EPISODE_FENCE, EPISODE_DRAFT_FIELDS).kind).toBe('chat');
+  });
+});
+
+/// 工具调用是治本那一层：产出形状由 provider 强制，模型填不出别的样子。
+/// 围栏降级成安全网——不支持工具的 provider、只肯写正文的模型都要还能用。
+describe('tool call output', () => {
+  const call = (name: string, args: unknown) => ({ toolCalls: [{ name, arguments: JSON.stringify(args) }] });
+
+  it('takes the episode fields straight off the tool call', () => {
+    const parsed = draftFromToolCall(call(EPISODE_TOOL, { title: '钢轨之下', script: '陈默：喂？' }), EPISODE_TOOL, EPISODE_DRAFT_FIELDS);
+    expect(parsed?.kind).toBe('draft');
+    if (parsed?.kind !== 'draft') return;
+    expect(parsed.value).toEqual({ title: '钢轨之下', script: '陈默：喂？' });
+  });
+
+  /// 白名单照旧裁剪：模型多填的键不能借工具这条路写进草稿。
+  it('drops keys outside the whitelist', () => {
+    const parsed = draftFromToolCall(call(EPISODE_TOOL, { script: '正文', id: 'abc', shots: [] }), EPISODE_TOOL, EPISODE_DRAFT_FIELDS);
+    expect(parsed?.kind).toBe('draft');
+    if (parsed?.kind !== 'draft') return;
+    expect(Object.keys(parsed.value)).toEqual(['script']);
+  });
+
+  /// null 表示「模型没走工具这条路」，和「走了但填错了」是两回事：前者要
+  /// 回落到围栏解析，后者不能——否则一次明确的坏产出会被当成没发生。
+  it('returns null when the model answered with prose instead', () => {
+    expect(draftFromToolCall({ toolCalls: [] }, EPISODE_TOOL, EPISODE_DRAFT_FIELDS)).toBeNull();
+    expect(draftFromToolCall(undefined, EPISODE_TOOL, EPISODE_DRAFT_FIELDS)).toBeNull();
+    expect(draftFromToolCall(call('some_other_tool', { script: 'x' }), EPISODE_TOOL, EPISODE_DRAFT_FIELDS)).toBeNull();
+  });
+
+  it('reports an invalid draft when the tool call carries nothing usable', () => {
+    expect(draftFromToolCall(call(EPISODE_TOOL, { script: '   ' }), EPISODE_TOOL, EPISODE_DRAFT_FIELDS)?.kind).toBe('invalid');
+    expect(draftFromToolCall(call(EPISODE_TOOL, {}), EPISODE_TOOL, EPISODE_DRAFT_FIELDS)?.kind).toBe('invalid');
+  });
+
+  /// 宿主不解读 arguments，坏 JSON 会原样递过来。当成「没走工具」而不是崩掉。
+  it('treats unparsable arguments as no tool call', () => {
+    expect(draftFromToolCall({ toolCalls: [{ name: EPISODE_TOOL, arguments: '{不是 JSON' }] }, EPISODE_TOOL, EPISODE_DRAFT_FIELDS)).toBeNull();
+    expect(draftFromToolCall({ toolCalls: [{ name: EPISODE_TOOL, arguments: '[1,2]' }] }, EPISODE_TOOL, EPISODE_DRAFT_FIELDS)).toBeNull();
+  });
+
+  it('takes the passage replacement off the tool call', () => {
+    const parsed = draftFromToolCall<{ replacement: string }>(call(PASSAGE_TOOL, { replacement: '她已经收到短信。' }), PASSAGE_TOOL, ['replacement']);
+    expect(parsed?.kind).toBe('draft');
+    if (parsed?.kind !== 'draft') return;
+    expect(parsed.value.replacement).toBe('她已经收到短信。');
+  });
+
+  /// 镜号和时长是整数，走不了字符串白名单那条路，所以单镜有自己的出口，
+  /// 并且和围栏路径共用 pickShotEntry，两条路对「什么算一镜」答案一致。
+  it('coerces the shot numbers the same way the fence path does', () => {
+    const parsed = shotFromToolCall(call(SHOT_TOOL, { order: 2, title: '第二镜', summary: '他回拨', duration: 4 }), 1);
+    expect(parsed?.kind).toBe('draft');
+    if (parsed?.kind !== 'draft') return;
+    expect(parsed.value.shots[0]?.order).toBe(2);
+  });
+
+  it('falls back to the shot order the caller supplied', () => {
+    const parsed = shotFromToolCall(call(SHOT_TOOL, { title: '没写镜号', summary: '开场' }), 7);
+    expect(parsed?.kind).toBe('draft');
+    if (parsed?.kind !== 'draft') return;
+    expect(parsed.value.shots[0]?.order).toBe(7);
+  });
+
+  it('returns null for the shot tool when the model did not call it', () => {
+    expect(shotFromToolCall({ toolCalls: [] }, 1)).toBeNull();
   });
 });

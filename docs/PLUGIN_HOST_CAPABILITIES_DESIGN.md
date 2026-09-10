@@ -50,9 +50,48 @@ const result = await window.willdeep.ai.complete({
 
 页面递上来的 `baseURL` 一律不认——否则插件就能把用户的对话发去任意端点。
 
+### 结构化产出：声明工具，不要约定围栏（1.360.0-rc1）
+
+```js
+const result = await window.willdeep.ai.complete({
+  system: '你是短剧编剧',
+  messages: [{ role: 'user', content: '写这一集' }],
+  tools: [{
+    name: 'write_episode',                 // 小写字母、数字、下划线，≤48 字符
+    description: '交出这一集的剧本内容',
+    parameters: [
+      { name: 'title', type: 'string', description: '本集标题' },
+      { name: 'script', type: 'string', description: '完整台词正文', required: true },
+    ],
+  }],
+});
+// → { text, model, providerID, toolCalls: [{ name, arguments }] }
+```
+
+**这些工具不会被执行。** 宿主只是把 schema 交给模型，再把模型填好的参数原样递回页面——
+它是一个带类型的返回信封，不是一次真正的工具调用。页面拿不到任何执行能力，描述符的风险
+等级恒为只读，审批与沙箱层面没有可授予的权限。`arguments` 是模型填的那串 JSON，宿主不
+解读内容，页面自己 `JSON.parse`（要防它解不开）。
+
+存在的理由：在此之前页面靠围栏约定收结构化产出（「只输出一个 ```xxx 代码块」），而模型
+隔三差五回一个普通的 ```json，于是整块产出被当成闲聊丢掉，草稿一个字没改，用户既看不到
+结果也看不到错误。围栏是写在提示词里的口头约定，工具 schema 是协议——字段名和类型由
+provider 那一侧强制。
+
+`toolCalls` 恒在。空数组表示模型选择用正文回答，页面据此回落到自己的文本解析，而不是当成
+失败——不支持工具的 provider 和只肯写正文的模型都还得能用。反过来，模型填了参数但内容
+不可用，是一次**明确的坏产出**，不该回落：那会把一次失败悄悄变成没发生。
+
+**已知边界**：`AgentToolParameter` 只支持 `string` / `integer` / `boolean` / `stringArray`
+四种标量类型，表达不了对象数组。需要返回一批对象的阶段（短剧工坊的批量集、整集分镜）仍走
+围栏路径。要覆盖它们，得先扩展宿主的工具 schema 模型，那会动到主 Agent 的工具描述生成层。
+
 ### 上限
 
-`AgentPluginAIRequest`：最多 24 条消息、总计 32 000 字符、输出 4 096 token。
+`AgentPluginAIRequest`：最多 24 条消息、总计 32 000 字符、输出 4 096 token，
+最多 4 个工具、每个工具最多 12 个参数。工具声明不合规的整条丢弃而**不做修正**——
+页面按自己声明的名字去认返回值，宿主替它改了名它就永远认不到。超出工具数量上限则
+拒绝整条请求（`tooManyTools`）。
 校验是纯函数（`AgentPluginAIRequestValidator`），不起模型、不起 WebView 就能测。
 
 ### 拒绝的理由会原样回到页面
@@ -150,7 +189,7 @@ const { providers } = await window.willdeep.ai.providers();
 
 | 权限 | 给什么 | 状态 |
 | --- | --- | --- |
-| `ai.chat` | `window.willdeep.ai.complete`，问一次模型 | 1.300.0-rc5 |
+| `ai.chat` | `window.willdeep.ai.complete`，问一次模型；1.360.0-rc1 起可声明 `tools` 收结构化产出 | 1.300.0-rc5 |
 | `providers.read` | `window.willdeep.ai.providers`，只读的 provider/模型清单 | 1.300.0-rc5 |
 | `schedule.run` | 清单里的 `schedules` 到点被宿主执行 | 设计中 |
 

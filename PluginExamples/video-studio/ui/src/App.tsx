@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
-import { CHARACTER_DRAFT_FIELDS, EPISODES_FENCE, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, SHOTS_FENCE, SHOT_FENCE, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkill, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, episodeBatches, parseFencedDraft, parseFencedEpisodes, parseFencedPassage, parseFencedShot, parseFencedShots, parsePlanWithReason, shotDigestLines, passageContext, relativeTime, requestBudget, resetCreativeSkill, saveCreativeSkill, visibleStream } from './bridge';
+import { CHARACTER_DRAFT_FIELDS, EPISODES_FENCE, EPISODE_TOOL, EPISODE_TOOL_SPEC, PASSAGE_TOOL, PASSAGE_TOOL_SPEC, SHOT_TOOL_SPEC, draftFromToolCall, shotFromToolCall, EPISODE_BATCH_SIZE, EPISODE_DRAFT_FIELDS, IMAGE_CONCURRENCY, SHOTS_FENCE, SHOT_FENCE, IMAGE_MIN_INTERVAL_MS, NOTICE_COLLAPSE_MS, PASSAGE_FENCE, applyPassage, appendNotice, callCommand, composeSkillPrompt, detectUnknownCharacters, loadCreativeSkill, loadCreativeSkills, loadDramas, loadProviders, mapWithConcurrency, episodeBatches, parseFencedDraft, parseFencedEpisodes, parseFencedPassage, parseFencedShot, parseFencedShots, parsePlanWithReason, shotDigestLines, passageContext, relativeTime, requestBudget, resetCreativeSkill, saveCreativeSkill, visibleStream } from './bridge';
 import { creativeContract } from './creative-schema';
 import type { CreativeKind } from './creative-schema';
 import { FrameCoCreation } from './FrameCoCreation';
@@ -883,10 +883,13 @@ export default function App() {
         system, messages,
         provider: assistantProvider || undefined, model: assistantModel || undefined,
         skills: attachedSkills.map((item) => item.identifier), streamID,
+        // 单镜的形状能用工具精确表达，整集分镜要的是对象数组、表达不了，
+        // 所以只有单镜声明工具，整集仍走围栏。
+        tools: single ? [SHOT_TOOL_SPEC] : undefined,
       });
       if (!response) throw new Error(t('operationFailed'));
       const parsed = single
-        ? parseFencedShot(response.text, shot?.order ?? 1)
+        ? (shotFromToolCall(response, shot?.order ?? 1) ?? parseFencedShot(response.text, shot?.order ?? 1))
         : parseFencedShots(response.text);
       if (parsed.kind === 'chat') { await appendShotChat('assistant', response.text, objectID, baseDraftRev); return; }
       if (parsed.kind === 'invalid') {
@@ -1212,11 +1215,15 @@ export default function App() {
         system, messages,
         provider: assistantProvider || undefined, model: assistantModel || undefined,
         skills: attachedSkills.map((item) => item.identifier), streamID,
+        // 工具优先：产出形状由 provider 强制，模型填不出别的样子。围栏留作
+        // 回落——不支持工具的 provider 和只肯写正文的模型都还能用。
+        tools: [mode === 'passage' ? PASSAGE_TOOL_SPEC : EPISODE_TOOL_SPEC],
       });
       if (!response) throw new Error(t('operationFailed'));
 
       if (mode === 'passage') {
-        const parsed = parseFencedPassage(response.text);
+        const parsed = draftFromToolCall<{ replacement: string }>(response, PASSAGE_TOOL, ['replacement'])
+          ?? parseFencedPassage(response.text);
         if (parsed.kind === 'chat') { await appendScriptChat('assistant', response.text, objectID, baseDraftRev); return; }
         if (parsed.kind === 'invalid') {
           await appendScriptChat('assistant', response.text, objectID, baseDraftRev);
@@ -1233,7 +1240,8 @@ export default function App() {
         return;
       }
 
-      const parsed = parseFencedDraft<EpisodeDraftFields>(response.text, EPISODE_FENCE, EPISODE_DRAFT_FIELDS);
+      const parsed = draftFromToolCall<EpisodeDraftFields>(response, EPISODE_TOOL, EPISODE_DRAFT_FIELDS)
+        ?? parseFencedDraft<EpisodeDraftFields>(response.text, EPISODE_FENCE, EPISODE_DRAFT_FIELDS);
       if (parsed.kind === 'chat') { await appendScriptChat('assistant', response.text, objectID, baseDraftRev); return; }
       if (parsed.kind === 'invalid') {
         await appendScriptChat('assistant', response.text, objectID, baseDraftRev);

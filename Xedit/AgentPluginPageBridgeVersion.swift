@@ -19,7 +19,7 @@ import Foundation
 
 nonisolated enum AgentPluginPageBridge {
     /// 桥的语义化版本。加能力升 minor，改既有调用签名升 major。
-    static let version = "2.4.0"
+    static let version = "2.5.0"
 
     /// 页面可用的能力标识。与注入的 `window.willdeep.*` 一一对应。
     static let capabilities: [String] = [
@@ -27,6 +27,7 @@ nonisolated enum AgentPluginPageBridge {
         "commands",
         "conversation.open",
         "ai.complete",
+        "ai.tools",
         "ai.cancel",
         "ai.reasoning",
         "ai.image",

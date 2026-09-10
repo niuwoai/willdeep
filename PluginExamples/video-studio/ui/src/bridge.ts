@@ -1,4 +1,4 @@
-import type { CharacterDraft, CreativeSkill, Drama, DramaPlan, EpisodeDraftFields, ProviderEntry, SkillStage } from './types';
+import type { CharacterDraft, CreativeSkill, Drama, DramaPlan, EpisodeDraftFields, PluginAITool, PluginAIToolCall, ProviderEntry, SkillStage } from './types';
 import { validCreative } from './creative-schema';
 
 /// 宿主的 executeCommand 对 mcpTool 类命令回的是**完整的 MCP result**，
@@ -157,6 +157,102 @@ export function extractFenced(raw: string, fence: string): { body: string; note:
   const match = raw.match(pattern);
   if (!match) return null;
   return { body: match[1] ?? '', note: (raw.slice(0, match.index ?? 0) + raw.slice((match.index ?? 0) + match[0].length)).trim() };
+}
+
+/// 三个阶段的产出形状，声明成工具而不是围栏约定。
+///
+/// 围栏是写在系统提示里的口头约定，模型隔三差五就回一个普通的 ```json，
+/// 于是整块产出被当成闲聊丢掉。工具 schema 是协议：字段名和类型由 provider
+/// 那一侧强制，模型填不出别的形状。
+///
+/// 只覆盖参数是标量的三个阶段。批量集与整集分镜要的是对象数组，宿主的
+/// `AgentToolParameter` 只支持 string / integer / boolean / stringArray，
+/// 表达不了，仍走围栏路径——这是已知边界，不是遗漏。
+export const EPISODE_TOOL = 'write_episode';
+export const PASSAGE_TOOL = 'replace_passage';
+export const SHOT_TOOL = 'write_shot';
+
+export const EPISODE_TOOL_SPEC: PluginAITool = {
+  name: EPISODE_TOOL,
+  description: '交出这一集的剧本内容。只填你这次真正要改的字段。',
+  parameters: [
+    { name: 'title', type: 'string', description: '本集标题' },
+    { name: 'summary', type: 'string', description: '本集梗概，一到三句' },
+    { name: 'script', type: 'string', description: '完整台词正文，每行写成「角色名：台词」' },
+  ],
+};
+
+export const PASSAGE_TOOL_SPEC: PluginAITool = {
+  name: PASSAGE_TOOL,
+  description: '交出用来替换用户选中那一段的新文本。不要输出整集。',
+  parameters: [
+    { name: 'replacement', type: 'string', description: '替换 selection 的新文本', required: true },
+  ],
+};
+
+export const SHOT_TOOL_SPEC: PluginAITool = {
+  name: SHOT_TOOL,
+  description: '交出这一镜的内容。',
+  parameters: [
+    { name: 'order', type: 'integer', description: '镜号' },
+    { name: 'title', type: 'string', description: '这一镜的名字' },
+    { name: 'summary', type: 'string', description: '这一镜发生了什么' },
+    { name: 'dialogue', type: 'string', description: '这一镜的台词' },
+    { name: 'actionStart', type: 'string', description: '起始动作' },
+    { name: 'actionEnd', type: 'string', description: '结束动作' },
+    { name: 'cameraIntent', type: 'string', description: '镜头意图' },
+    { name: 'duration', type: 'integer', description: '时长（秒）' },
+  ],
+};
+
+/// 从宿主回传的工具调用里取出参数对象。
+///
+/// 宿主不解读 `arguments`，它就是模型填的那串 JSON——所以这里要防它解不开。
+/// 名字对不上的调用一律忽略：模型偶尔会自己发明一个工具名，认下来等于让它
+/// 决定写进哪个字段。
+export function toolCallArguments(
+  result: { toolCalls?: PluginAIToolCall[] } | null | undefined,
+  name: string,
+): Record<string, unknown> | null {
+  const call = result?.toolCalls?.find((entry) => entry?.name === name);
+  if (!call) return null;
+  try {
+    const value = JSON.parse(call.arguments) as unknown;
+    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/// 工具参数走和围栏产出同一条出口，调用方因此只多一行、不用分两套分支。
+/// 白名单裁剪照旧：模型填了表外的键也进不来。
+export function draftFromToolCall<T extends object>(
+  result: { toolCalls?: PluginAIToolCall[] } | null | undefined,
+  name: string,
+  allowed: Array<keyof T & string>,
+): FencedResult<T> | null {
+  const args = toolCallArguments(result, name);
+  if (!args) return null;
+  const picked: Record<string, unknown> = {};
+  for (const key of allowed) {
+    const entry = args[key];
+    if (typeof entry === 'string' && entry.trim()) picked[key] = entry.trim();
+  }
+  if (Object.keys(picked).length === 0) return { kind: 'invalid', note: '' };
+  return { kind: 'draft', value: picked as T, note: '' };
+}
+
+/// 单镜的工具出口。不能复用 `draftFromToolCall`：那个只收字符串，而镜号和
+/// 时长是整数。交给 `pickShotEntry` 做类型收敛，和围栏路径共用同一套校验，
+/// 免得两条路对「什么算一镜」给出不同答案。
+export function shotFromToolCall(
+  result: { toolCalls?: PluginAIToolCall[] } | null | undefined,
+  fallbackOrder: number,
+): FencedResult<{ shots: ShotDraftEntry[] }> | null {
+  const args = toolCallArguments(result, SHOT_TOOL);
+  if (!args) return null;
+  const entry = pickShotEntry(args, fallbackOrder);
+  return entry ? { kind: 'draft', value: { shots: [entry] }, note: '' } : { kind: 'invalid', note: '' };
 }
 
 /// 命名围栏找不到时的兜底。

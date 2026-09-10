@@ -1096,6 +1096,9 @@ private struct AgentPluginWebView: NSViewRepresentable {
                                 "text": result.text,
                                 "model": result.model,
                                 "providerID": result.providerID,
+                                // 恒在，空数组表示模型选择用正文回答。页面据此
+                                // 回落到自己的文本解析，而不是当成失败。
+                                "toolCalls": result.toolCalls.map(\.jsonObject),
                             ],
                             error: nil
                         )
