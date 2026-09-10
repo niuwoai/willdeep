@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.15.2] - 2026-09-10
+
+### Fixed
+- 表单字段名与输入框之间的空隙不再由右侧共创栏的长度决定：`label` 与编辑卡补 `align-content: start`，`.script-grid` 补 `align-items: start`。
+
 ## [0.15.1] - 2026-09-10
 
 ### Fixed
