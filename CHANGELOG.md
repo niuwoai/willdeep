@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.364.0-rc2 - 2026-09-10
+
+### Fixed
+- 短剧工坊「AI 串起全部 N 集」丢正文：批量解析器只挑 `order`、`title`、`summary` 三个字段，模型在 JSON 里给出的 `script` 被静默扔掉，跑完一轮左边「完整剧本」仍然是空的。而它下面每一层都收得下正文——`creative-v1` 的 episode 有 `script`，`drama.save_episode_drafts` 的入参 schema 有 `script`，服务端 `DRAFT_TEXT_FIELDS` 给了它两万字额度——数据只在这一行断掉。
+
+### Changed
+- 批量分集的请求会标出哪几集还没有正文（`［正文还没写］`），系统提示词相应允许并要求为这些集给出 `script`；已有正文的集不重发正文。此前提示词只要求「每集一到三句」的梗概，模型没有理由写正文。
+
 ## 1.364.0-rc1 - 2026-09-10
 
 ### Changed

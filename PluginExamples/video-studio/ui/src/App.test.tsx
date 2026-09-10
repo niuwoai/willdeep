@@ -949,6 +949,55 @@ describe('Short Drama Studio', () => {
     expect((writes[1]![1] as { episodes: Array<{ order: number }> }).episodes[0]!.order).toBe(21);
   });
 
+  it('串起全部分集时，正文一路写到底', async () => {
+    // 用户点的是「AI 串起全部 24 集」，模型在 JSON 里给了 script，可正文
+    // 到不了服务端，左边「完整剧本」一直是空的。两件事一起守：请求里要
+    // 告诉模型哪几集还没正文，回来的正文要原样送进 saveEpisodeDrafts。
+    const episodes = Array.from({ length: 10 }, (_, index) => ({
+      id: `e${index + 1}`, order: index + 1, title: `第 ${index + 1} 集`, summary: '',
+      script: index === 0 ? '陈默：已经写过了。' : '', status: 'draft', shots: [],
+      rev: 0, draftRev: 0, draft: null,
+    }));
+    dramas = [{ ...scriptDramaFixture(episodes[0]!), episodes }];
+
+    complete.mockResolvedValue({
+      text: '```short_drama_episodes\n' + JSON.stringify({
+        episodes: [{ order: 2, summary: '第 2 集梗概', script: '陈默：这钱不能要。' }],
+      }) + '\n```',
+      model: 'fast', providerID: 'chat-a',
+    });
+    executeCommand.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'skill.list') return JSON.stringify({ ok: true, skills: [] });
+      if (command === 'skill.compose') return JSON.stringify({ ok: true, system: '# 多集剧情串联' });
+      if (command === 'drama.saveEpisodeDrafts') {
+        const list = (args?.episodes ?? []) as Array<{ order: number }>;
+        return JSON.stringify({ ok: true, drama: dramas[0], applied: list.map((item) => item.order) });
+      }
+      return JSON.stringify({ ok: true });
+    });
+
+    render(<App />);
+    fireEvent.click((await screen.findAllByRole('button', { name: '继续创作' }))[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: /分集剧本/ }))[0]!);
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 串起全部 10 集' }));
+
+    await waitFor(() => expect(complete).toHaveBeenCalled(), { timeout: 4000 });
+    const request = complete.mock.calls[0]![0] as { messages: Array<{ content: string }> };
+    const sent = request.messages.map((item) => item.content).join('\n');
+    // 第 1 集已有正文，不挂记号；第 2 集空着，要挂。
+    expect(sent).toContain('第 2 集 ［正文还没写］');
+    expect(sent).not.toContain('第 1 集 ［正文还没写］');
+
+    await waitFor(() => {
+      const writes = executeCommand.mock.calls.filter(([command]) => command === 'drama.saveEpisodeDrafts');
+      expect(writes).toHaveLength(1);
+      expect((writes[0]![1] as { episodes: Array<{ script?: string }> }).episodes[0]!.script)
+        .toBe('陈默：这钱不能要。');
+    }, { timeout: 4000 });
+  });
+
   it('没有分集时给出提示而不是空跑', async () => {
     dramas = [{ ...scriptDramaFixture(episodeFixture()), episodes: [] }];
     executeCommand.mockImplementation(async (command: string) => {
