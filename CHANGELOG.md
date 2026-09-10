@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.366.0-rc2 - 2026-09-11
+
+### Changed
+
+- **Intel 回来了。** Release 恢复双架构（`ARCHS = $(ARCHS_STANDARD)`），主程序、内嵌的 `willdeep-agent` 和 Computer Use Helper 三个二进制都重新带上 x86_64 与 arm64 两个切片。
+  - 1.364.0-rc1 钉成 arm64 单架构，是为了绕开 swift-frontend 在 Release x86_64 上 `EarlyPerfInliner` 的段错误——它崩在为 `NSHostingView` 泛型子类合成 deinit 做特化的时候。本次实测已不再复现：`DesktopPetWindow.swift` 两个架构都编过，整份 Release 构建零错误。所以恢复双架构没有动那个子类，改的只是配置。
+  - 仓库里那个「Thin embedded executables for ARM-only builds」瘦身脚本不用改：它第一行就自检，只要 `ARCHS` 里出现 x86_64 就直接退出，不会再去剥切片。
+  - **撤回 1.364.0-rc1 的那条说明**：Intel 用户不必再停留在旧版本，本版起可以正常更新。
+
+### Notes
+
+- Debug 配置一直没有受架构限制影响，本次也未改动。
+
 ## 1.366.0-rc1 - 2026-09-10
 
 ### Added
