@@ -132,10 +132,12 @@ enum AgentMCPBridge {
         arguments: [String: Any]
     ) async throws -> String {
         let server = try AgentMCPServerDirectory.pluginServer(pluginID: pluginID, named: serverName)
+        // 页面消费者是 JSON.parse：完整或报错，不要半份。
         return try await runRequest(
             server: server,
             method: "tools/call",
-            params: ["name": toolName, "arguments": arguments]
+            params: ["name": toolName, "arguments": arguments],
+            rendering: .pageFacing
         )
     }
 
@@ -171,14 +173,19 @@ enum AgentMCPBridge {
     private static func runRequest(
         server: AgentMCPServerConfig,
         method: String,
-        params: [String: Any]
+        params: [String: Any],
+        rendering: ResultRendering = .modelFacing
     ) async throws -> String {
         switch server.transport {
         case .stdio:
             let paramsData = try JSONSerialization.data(withJSONObject: params, options: [])
-            return try await stdioConnectionPool.request(server: server, method: method, paramsData: paramsData)
+            return try await stdioConnectionPool.request(
+                server: server, method: method, paramsData: paramsData, rendering: rendering
+            )
         case .streamableHTTP:
-            return try await runStreamableHTTPRequest(server: server, method: method, params: params)
+            return try await runStreamableHTTPRequest(
+                server: server, method: method, params: params, rendering: rendering
+            )
         }
     }
 
@@ -186,12 +193,15 @@ enum AgentMCPBridge {
         private let lock = NSLock()
         private var connections: [String: MCPStdioConnection] = [:]
 
-        func request(server: AgentMCPServerConfig, method: String, paramsData: Data) async throws -> String {
+        func request(server: AgentMCPServerConfig, method: String, paramsData: Data,
+                     rendering: AgentMCPBridge.ResultRendering = .modelFacing) async throws -> String {
             let key = connectionKey(for: server)
             let connection = connection(for: key, server: server)
 
             do {
-                return try await connection.request(method: method, paramsData: paramsData)
+                return try await connection.request(
+                    method: method, paramsData: paramsData, rendering: rendering
+                )
             } catch {
                 remove(connection: connection, for: key)
                 connection.invalidate()
@@ -249,11 +259,14 @@ enum AgentMCPBridge {
             self.queue = DispatchQueue(label: "com.willdeep.mcp.stdio.\(server.id)")
         }
 
-        func request(method: String, paramsData: Data) async throws -> String {
+        func request(method: String, paramsData: Data,
+                     rendering: AgentMCPBridge.ResultRendering = .modelFacing) async throws -> String {
             try await withCheckedThrowingContinuation { continuation in
                 queue.async {
                     do {
-                        let result = try self.requestSync(method: method, paramsData: paramsData)
+                        let result = try self.requestSync(
+                            method: method, paramsData: paramsData, rendering: rendering
+                        )
                         continuation.resume(returning: result)
                     } catch {
                         continuation.resume(throwing: error)
@@ -268,7 +281,8 @@ enum AgentMCPBridge {
             }
         }
 
-        private func requestSync(method: String, paramsData: Data) throws -> String {
+        private func requestSync(method: String, paramsData: Data,
+                                 rendering: AgentMCPBridge.ResultRendering) throws -> String {
             try ensureStarted()
             if method == "resources/subscribe", !supportsResourceSubscriptions {
                 return "{}"
@@ -293,9 +307,9 @@ enum AgentMCPBridge {
                 process: process
             )
             if let result = response["result"] {
-                return AgentMCPBridge.prettyJSON(result)
+                return try AgentMCPBridge.render(result, as: rendering)
             }
-            return AgentMCPBridge.prettyJSON(response)
+            return try AgentMCPBridge.render(response, as: rendering)
         }
 
         private func ensureStarted() throws {
@@ -397,7 +411,8 @@ enum AgentMCPBridge {
     private static func runStreamableHTTPRequest(
         server: AgentMCPServerConfig,
         method: String,
-        params: [String: Any]
+        params: [String: Any],
+        rendering: ResultRendering = .modelFacing
     ) async throws -> String {
         guard let url = URL(string: server.url) else {
             throw AgentToolError.invalidArgument("Invalid MCP server URL: \(server.url)")
@@ -447,9 +462,9 @@ enum AgentMCPBridge {
             session: session
         )
         if let result = response.object["result"] {
-            return prettyJSON(result)
+            return try render(result, as: rendering)
         }
-        return prettyJSON(response.object)
+        return try render(response.object, as: rendering)
     }
 
     private static func sendHTTPRequest(
@@ -597,6 +612,49 @@ enum AgentMCPBridge {
             throw AgentToolError.commandTimeout
         }
         throw AgentToolError.commandFailed(-1, stderrText)
+    }
+
+    /// 谁在读这份结果。
+    ///
+    /// 两个消费者的要求正好相反。模型那头要省上下文，读得懂 `[truncated]`，
+    /// 半份 JSON 对它只是信息少了一点。插件页面那头是 `JSON.parse`，半份
+    /// JSON 直接抛 `Unterminated string`——切口落在字符串里的时候尤其像
+    /// 「服务挂了」，而实际上服务好好的，是宿主把它的回答剪断了。
+    ///
+    /// 这个区分本来不存在：`prettyJSON` 是给模型写的，后来被顺手用在了
+    /// 页面这条路上。短剧工坊一集剧本加候选图的数据轻松过 48000 字符，
+    /// 于是「生成首尾帧」必然报解析错误。
+    nonisolated enum ResultRendering {
+        /// 缩进 + 排序 + 48000 字符截断。
+        case modelFacing
+        /// 紧凑、完整。宁可报错也不交出半份 JSON。
+        case pageFacing
+    }
+
+    /// 页面那条路的硬上限。超过就抛错，**不截断**：一个明确的失败可以查，
+    /// 一份看着像 JSON 的半截数据只会让人去查错的地方。
+    nonisolated static let pageFacingResultLimit = 32 * 1024 * 1024
+
+    nonisolated static func compactJSON(_ value: Any) throws -> String {
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else {
+            throw AgentToolError.invalidArgument("MCP result is not representable as JSON")
+        }
+        guard data.count <= pageFacingResultLimit else {
+            throw AgentToolError.commandFailed(
+                -1,
+                "MCP result is \(data.count) bytes, over the \(pageFacingResultLimit) byte page limit"
+            )
+        }
+        return text
+    }
+
+    nonisolated static func render(_ value: Any, as rendering: ResultRendering) throws -> String {
+        switch rendering {
+        case .modelFacing: return prettyJSON(value)
+        case .pageFacing: return try compactJSON(value)
+        }
     }
 
     nonisolated static func prettyJSON(_ value: Any) -> String {
