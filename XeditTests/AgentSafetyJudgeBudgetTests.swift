@@ -83,6 +83,38 @@ struct AgentSafetyJudgeBudgetTests {
         return try JSONSerialization.data(withJSONObject: object)
     }
 
+    @Test("智能审核通过 SSH 诊断后子 worker 不产生人工等待")
+    func workerSSHDiagnosticApproval() async throws {
+        let f = try fixture(); defer { f.cleanup() }
+        f.runtime.approvalMode = .smart
+        f.app.safetyJudgeInferenceEnvironment = ([configuration("openai")], f.session)
+        let payload = try reply("openai")
+        var count = 0
+        GoalLoopURLProtocol.install(f.token) { _ in count += 1; return payload }
+        let command = #"echo "AUTH_SOCK=$SSH_AUTH_SOCK"; ls -la ~/.ssh/agent ~/.ssh/sockets 2>&1; ssh-add -l 2>&1; echo "EXIT=$?""#
+        let arguments: [String: AgentJSONValue] = ["command": .string(command)]
+        let decision = AgentSandboxPolicy.commandDecision(command: command, rootDirectory: nil)
+        try #require(!decision.requiresTypedConfirmation)
+        let source = try await f.app.checkedAutoApprovalSource(
+            toolName: "run_command", arguments: arguments, risk: decision.risk,
+            rootDirectory: nil, approvalMode: .smart, budgetRuntime: f.runtime
+        )
+        try #require(source == .llmJudge)
+        let strictSource = try await f.app.checkedAutoApprovalSource(
+            toolName: "run_command", arguments: arguments, risk: decision.risk,
+            rootDirectory: nil, approvalMode: .requestEveryTime, budgetRuntime: f.runtime
+        )
+        #expect(strictSource == nil)
+        let approved = try await f.app.resolveSubagentToolApproval(
+            toolName: "run_command", arguments: arguments, risk: decision.risk,
+            workerName: "ops-fixture", runtime: f.runtime, messageID: UUID(), rootDirectory: nil
+        )
+        #expect(approved)
+        #expect(count == 1) // The worker reuses the verdict for the same command and context.
+        #expect(f.runtime.toolDecisionWaiters.isEmpty)
+        #expect(f.runtime.toolCalls.last?.approvalSource == .llmJudge)
+    }
+
     @Test("四协议实际请求记录用量且耗尽后不再发包", arguments: ["openai", "openai-responses", "claude", "gemini"])
     func actualTransport(_ kind: String) async throws {
         let f = try fixture(); defer { f.cleanup() }

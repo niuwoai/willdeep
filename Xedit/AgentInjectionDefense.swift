@@ -258,6 +258,13 @@ enum AgentInjectionDefense {
     including several such read-only statements chained with semicolons — \
     provided they do not expose credentials or request locks or file output.
 
+    Local SSH Agent diagnostics such as printing SSH_AUTH_SOCK, listing \
+    .ssh/agent or .ssh/sockets directory metadata, and `ssh-add -l` (loaded \
+    key fingerprints) can be YES. These do not read private-key contents \
+    or modify the agent. Do not deny solely because a path contains .ssh. \
+    Reading private keys, exporting credentials, adding/removing identities, \
+    and any additional chained action must be evaluated separately.
+
     Credential values in HTTP commands are replaced locally with \
     `[REDACTED]` before you receive them. Treat that placeholder as evidence \
     that authentication is present, not as a reason by itself to deny. \

@@ -923,7 +923,8 @@ enum AgentSandboxPolicy {
                 }
             }
 
-            if credentialScanTokens(head: head, tokens: tokens)
+            if !isSSHAgentDirectoryListing(tokens),
+               credentialScanTokens(head: head, tokens: tokens)
                 .contains(where: { token in
                     referencesSensitivePath(token)
                         && !AgentWorkspaceTemplatePolicy.isPublicTemplate(
@@ -2113,6 +2114,29 @@ enum AgentSandboxPolicy {
         let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
         let base = workingDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
         return base.appendingPathComponent(cleaned, isDirectory: true).standardizedFileURL
+    }
+
+    /// Listing these directories exposes names/metadata, not private-key bytes.
+    /// Only remove the mandatory credential prompt: normal Smart review still
+    /// judges the whole command, including ssh-add and every chained segment.
+    nonisolated private static func isSSHAgentDirectoryListing(_ tokens: [String]) -> Bool {
+        guard let head = tokens.first, head == "ls" || head == "/bin/ls" else { return false }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let roots = ["~", "$HOME", "${HOME}", home]
+        let paths = Set(roots.flatMap { root in
+            ["\(root)/.ssh", "\(root)/.ssh/agent", "\(root)/.ssh/sockets"]
+        })
+        let metadataFlags = Set("aAldhF1")
+        var hasPath = false
+        for token in tokens.dropFirst() {
+            if token == "2>&1" || token == "2>/dev/null" { continue }
+            if token.hasPrefix("-"), token.count > 1,
+               token.dropFirst().allSatisfy({ metadataFlags.contains($0) }) { continue }
+            let path = token.hasSuffix("/") ? String(token.dropLast()) : token
+            guard paths.contains(path) else { return false }
+            hasPath = true
+        }
+        return hasPath
     }
 
     nonisolated private static func referencesSensitivePath(_ token: String) -> Bool {
