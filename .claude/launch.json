@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "video-studio-ui",
+      "runtimeExecutable": "yarn",
+      "runtimeArgs": ["--cwd", "PluginExamples/video-studio/ui", "dev", "--port", "5273", "--strictPort"],
+      "port": 5273
+    }
+  ]
+}

@@ -733,8 +733,15 @@ export default function App() {
           .filter((item) => item.order === batch.from - 1 || item.order === batch.to + 1)
           .map((item) => `${t('episodeNumber', { number: item.order })}：${episodeView(item).summary || t('emptySummary')}`)
           .join('\n');
+        // 正文空着的集在这里挂个记号。模型看不到左边的编辑器，不告诉它哪几
+        // 集还没有正文，它就只会按「串一串梗概」办事，而这个按钮写的是「AI
+        // 串起全部 N 集」，用户等的是这一集能拍。
         const existing = inBatch
-          .map((item) => `${t('episodeNumber', { number: item.order })}：${episodeView(item).summary || t('emptySummary')}`)
+          .map((item) => {
+            const view = episodeView(item);
+            const mark = view.script.trim() ? '' : ` ${t('emptyScriptMark')}`;
+            return `${t('episodeNumber', { number: item.order })}${mark}：${view.summary || t('emptySummary')}`;
+          })
           .join('\n');
 
         const context = [

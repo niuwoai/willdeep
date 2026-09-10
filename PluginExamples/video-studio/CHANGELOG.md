@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.15.2] - 2026-09-10
+
+### Fixed
+- 表单字段名与输入框之间的空隙不再由右侧共创栏的长度决定：`label` 与编辑卡补 `align-content: start`，`.script-grid` 补 `align-items: start`。
+
+## [0.15.1] - 2026-09-10
+
+### Fixed
+- 「AI 串起全部 N 集」不再丢正文：批量解析器只挑 order、title、summary，模型给出的 script 被静默扔掉，一轮跑完「完整剧本」仍是空的。
+
+### Changed
+- 批量请求标出还没有正文的集，系统提示词要求为这些集给出 script；已有正文的集不重发。
+
 ## [0.15.0] - 2026-09-09
 
 ### Added

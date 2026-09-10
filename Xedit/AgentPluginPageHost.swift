@@ -1894,6 +1894,12 @@ private final class AgentPluginSchemeHandler: NSObject, WKURLSchemeHandler {
             urlSchemeTask.didReceive(data)
             urlSchemeTask.didFinish()
         } catch {
+            // 页面那头只知道「这张图挂了」——它的 error 监听器报得出 IMG 和
+            // URL，报不出原因。原因只有这里知道，而这里以前一句不说，于是
+            // 「插件里看不到图」在日志里只剩一条 resource-error，查不下去。
+            pluginPageLog.error(
+                "plugin resource failed: plugin=\(self.pluginID, privacy: .public) path=\(urlSchemeTask.request.url?.path ?? "nil", privacy: .public) reason=\(String(describing: error), privacy: .public)"
+            )
             urlSchemeTask.didFailWithError(error)
         }
     }

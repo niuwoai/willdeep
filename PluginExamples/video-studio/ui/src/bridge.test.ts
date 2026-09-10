@@ -538,6 +538,23 @@ describe('批量丰富多集', () => {
     expect(parsed.value.episodes).toEqual([{ order: 2, summary: '这条能用' }]);
   });
 
+  it('批量集给了正文就收下正文', () => {
+    // 真实故障：点「AI 串起全部 24 集」，模型在 JSON 里给了 script，左边
+    // 「完整剧本」还是空的。下面每一层都收得下 script——creative-v1 有它、
+    // save_episode_drafts 的入参有它、服务端给了它两万字额度——只有这个
+    // 解析器把它挑掉了。
+    const raw = '```short_drama_episodes\n{"episodes":[{"order":1,"summary":"梗概","script":"陈默：这钱不能要。"}]}\n```';
+    const parsed = parseFencedEpisodes(raw);
+    if (parsed.kind !== 'draft') throw new Error('expected a draft');
+    expect(parsed.value.episodes).toEqual([{ order: 1, summary: '梗概', script: '陈默：这钱不能要。' }]);
+  });
+
+  it('只给正文不给梗概也算一条能写的集', () => {
+    const parsed = parseFencedEpisodes('```short_drama_episodes\n{"episodes":[{"order":3,"script":"陈默：照做。"}]}\n```');
+    if (parsed.kind !== 'draft') throw new Error('expected a draft');
+    expect(parsed.value.episodes).toEqual([{ order: 3, script: '陈默：照做。' }]);
+  });
+
   it('只有集号没有内容的条目也丢掉', () => {
     // 它会让后端记一次 draftRev 自增却什么都没改。
     const parsed = parseFencedEpisodes('```short_drama_episodes\n{"episodes":[{"order":1}]}\n```');

@@ -651,12 +651,18 @@ export const EPISODES_FENCE = 'short_drama_episodes';
 /// 让模型开始偷工——集数太多时它会给每集只写一句空话。
 export const EPISODE_BATCH_SIZE = 10;
 
-export type EpisodeDraftEntry = { order: number; title?: string; summary?: string };
+export type EpisodeDraftEntry = { order: number; title?: string; summary?: string; script?: string };
 
 /// 解析一批分集。
 ///
 /// 每个元素必须带 `order`：模型手上只有集号，而集号是唯一能把内容对回正确
 /// 一集的东西。没有 order 的条目直接丢，宁可少写一集也不能填错集。
+///
+/// `script` 必须一起收下。这里曾经只挑 title 和 summary，模型给了正文也当
+/// 没看见——而下面每一层都收得下它：`creative-v1` 的 episode 有 script，
+/// `drama.save_episode_drafts` 的入参 schema 有 script，服务端的
+/// `DRAFT_TEXT_FIELDS` 给了它两万字的额度。只有这一行把它扔了，于是「AI 串
+/// 起全部 24 集」跑完，右边的 JSON 里明明有正文，左边「完整剧本」还是空的。
 export function parseFencedEpisodes(raw: string): FencedResult<{ episodes: EpisodeDraftEntry[] }> {
   const found = extractFencedOrShaped(raw, EPISODES_FENCE, (value) =>
     Array.isArray((value as { episodes?: unknown }).episodes));
@@ -668,13 +674,14 @@ export function parseFencedEpisodes(raw: string): FencedResult<{ episodes: Episo
     const episodes: EpisodeDraftEntry[] = [];
     for (const item of list) {
       if (!item || typeof item !== 'object') continue;
-      const entry = item as { order?: unknown; title?: unknown; summary?: unknown };
+      const entry = item as { order?: unknown; title?: unknown; summary?: unknown; script?: unknown };
       const order = Number(entry.order);
       if (!Number.isInteger(order) || order < 1) continue;
       const next: EpisodeDraftEntry = { order };
       if (typeof entry.title === 'string' && entry.title.trim()) next.title = entry.title.trim();
       if (typeof entry.summary === 'string' && entry.summary.trim()) next.summary = entry.summary.trim();
-      if (next.title === undefined && next.summary === undefined) continue;
+      if (typeof entry.script === 'string' && entry.script.trim()) next.script = entry.script.trim();
+      if (next.title === undefined && next.summary === undefined && next.script === undefined) continue;
       episodes.push(next);
     }
     if (episodes.length === 0 || episodes.length > 30 || !episodes.every((entry) => validCreative('episode', entry))) return { kind: 'invalid', note: found.note };
