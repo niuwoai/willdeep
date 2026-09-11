@@ -115,59 +115,50 @@ struct AgentPluginProviderCatalogTests {
 
     // MARK: - 免费模型分组
 
-    /// 价格早就是公开的：`/api/v1/public/model-pricing` 不要凭据，56 条里
-    /// 八条全零价，和按名字猜出来的那八条完全对上。所以免费分组不需要动
-    /// 服务端，客户端读这份价目表就够。
+    /// 网关 0.237.0-rc1 起把单价随能力一起下发。判据是「这一行公布的每一项
+    /// 价格都是零」：输入、输出、缓存读写、按张、按次、按秒、最低消费全算。
     @MainActor
     @Test("全零价算免费，任一项非零就不算")
     func freeModelsComeFromEveryPriceBeingZero() throws {
         let payload = Data("""
-        {"code":0,"data":{"items":[
-          {"model":"someim-free","input_price_per_1m":"0.00","output_price_per_1m":"0.00",
-           "cache_write_price_per_1m":"0.00","cache_read_price_per_1m":"0.00",
-           "price_per_image":"0.00","price_per_request":"0.00",
-           "price_per_output_second":"0.00","min_charge_per_request":"0.00"},
-          {"model":"kimi-k3","input_price_per_1m":"0.00","output_price_per_1m":"2.50",
-           "price_per_request":"0.00"},
-          {"model":"per-request-only","input_price_per_1m":"0.00","output_price_per_1m":"0.00",
-           "price_per_request":"0.02"}
-        ]}}
+        {"object":"list","data":[
+          {"id":"someim-free","capability_kinds":["llm"],"context_window":128000,
+           "billing_mode":"llm_token",
+           "input_price_per_1m":"0","output_price_per_1m":"0",
+           "cache_write_price_per_1m":"0","cache_read_price_per_1m":"0",
+           "price_per_image":"0","price_per_request":"0",
+           "price_per_output_second":"0","min_charge_per_request":"0"},
+          {"id":"kimi-k3","capability_kinds":["llm"],"context_window":1000000,
+           "input_price_per_1m":"0","output_price_per_1m":"2.5"},
+          {"id":"per-request-only","capability_kinds":["llm"],
+           "input_price_per_1m":"0","output_price_per_1m":"0","price_per_request":"0.02"}
+        ]}
         """.utf8)
 
-        let free = try AgentSomeIMPublicPricing.freeModelIDs(from: payload)
+        let found = try AgentSomeIMModelCapabilities.discoveries(from: payload)
+        let free = Set(found.filter { $0.isFree == true }.map(\.id))
         #expect(free == ["someim-free"])
-        // 输入输出都是 0 但按次要钱，不是免费。
-        #expect(!free.contains("per-request-only"))
+        // token 免费但按次要钱，不是免费模型。
+        #expect(found.first { $0.id == "per-request-only" }?.isFree == false)
+        #expect(found.first { $0.id == "kimi-k3" }?.isFree == false)
+        // 价格和上下文窗口来自同一次响应，不用第二个请求。
+        #expect(found.first { $0.id == "kimi-k3" }?.contextWindowTokens == 1_000_000)
     }
 
     /// 「没有价目表」和「不免费」必须分得开。把未知当成免费，等于把付费
-    /// 模型摆进免费分组。
+    /// 模型摆进免费分组。旧网关的响应里一个价格字段都没有。
     @MainActor
     @Test("读不出价格的行算未知，不算免费")
     func unreadablePricesAreNotFree() throws {
         let payload = Data("""
-        {"code":0,"data":{"items":[
-          {"model":"no-prices-at-all"},
-          {"model":"blank-prices","input_price_per_1m":"","output_price_per_1m":""}
-        ]}}
+        {"object":"list","data":[
+          {"id":"legacy-gateway-row","capability_kinds":["llm"],"context_window":128000},
+          {"id":"blank-prices","capability_kinds":["llm"],
+           "input_price_per_1m":"","output_price_per_1m":""}
+        ]}
         """.utf8)
-        #expect(try AgentSomeIMPublicPricing.freeModelIDs(from: payload).isEmpty)
-    }
-
-    @MainActor
-    @Test("价目表地址按 baseURL 的源推导，不钉死生产域名")
-    func pricingEndpointFollowsTheConfiguredHost() {
-        #expect(
-            AgentSomeIMPublicPricing.endpoint(forBaseURL: "https://some.im/v1")?.absoluteString
-                == "https://some.im/api/v1/public/model-pricing"
-        )
-        // 自建/预发中继解析到自己的域名和端口。
-        #expect(
-            AgentSomeIMPublicPricing.endpoint(forBaseURL: "http://staging.example.com:8080/v1")?.absoluteString
-                == "http://staging.example.com:8080/api/v1/public/model-pricing"
-        )
-        #expect(AgentSomeIMPublicPricing.endpoint(forBaseURL: "   ") == nil)
-        #expect(AgentSomeIMPublicPricing.endpoint(forBaseURL: "not a url") == nil)
+        let found = try AgentSomeIMModelCapabilities.discoveries(from: payload)
+        #expect(found.allSatisfy { $0.isFree == nil })
     }
 
     /// 分组只能装价目表明确报过免费的模型。

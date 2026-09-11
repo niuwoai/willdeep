@@ -461,40 +461,16 @@ struct OpenAIChatAdapter {
         for entry in fromModels {
             let key = entry.id.lowercased()
             guard var existing = merged[key] else { merged[key] = entry; continue }
-            // Badges only `/v1/models` knows; window only capabilities does.
+            // Badges only `/v1/models` knows; window and price only
+            // capabilities does, so those keep the capabilities answer.
             existing.isHot = entry.isHot
             existing.isNew = entry.isNew
             existing.contextWindowTokens = existing.contextWindowTokens ?? entry.contextWindowTokens
+            existing.isFree = existing.isFree ?? entry.isFree
             merged[key] = existing
-        }
-        // Free-model marking is best effort and never gates the catalogue: the
-        // price list failing must not cost the user their model list, it only
-        // costs them the free group.
-        if let free = try? await someIMFreeModelIDs(), !free.isEmpty {
-            for (key, var entry) in merged {
-                entry.isFree = free.contains(key)
-                merged[key] = entry
-            }
         }
         return merged.values
             .sorted { $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending }
-    }
-
-    /// Ids some.im's public price list says cost nothing.
-    private func someIMFreeModelIDs() async throws -> Set<String> {
-        guard let endpoint = AgentSomeIMPublicPricing.endpoint(forBaseURL: configuration.baseURL) else {
-            return []
-        }
-        var request = URLRequest(url: endpoint)
-        request.timeoutInterval = AgentNetworkSupport.requestTimeout
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
-            throw AgentClientError.invalidResponse
-        }
-        return try AgentSomeIMPublicPricing.freeModelIDs(from: data)
     }
 
     private func someIMModelsDiscoveries() async throws -> [AgentModelDiscovery] {
@@ -516,14 +492,11 @@ struct OpenAIChatAdapter {
         } catch {
             throw AgentModelListResponseFormatError.wrapping(
                 error, data: data,
-                expectedSchema: #"{"data":[{"id":"model-id","context_window":128000}]}"#
+                expectedSchema: #"{"data":[{"id":"model-id","context_window":128000,"input_price_per_1m":"0.3"}]}"#
             )
         }
     }
 
-    /// One GET against a catalogue endpoint. The credential is attached when
-    /// there is one and omitted when there is not, which is what lets
-    /// `model-capabilities` answer for a signed-out client.
     private func modelCatalogPayload(suffix: String) async throws -> Data {
         let endpoint = try AgentNetworkSupport.endpoint(from: configuration.baseURL, suffix: suffix)
         var request = URLRequest(url: endpoint)
@@ -1067,105 +1040,6 @@ private struct ChatCompletionChunk: Decodable {
 /// that demonstrably take tool calls (`gpt-5.6-sol` returns false and answers
 /// a `write_episode` call anyway), so treating either as authority would cap
 /// working models or switch off a working feature.
-/// some.im's public price list, served keyless at
-/// `/api/v1/public/model-pricing` — the same rows that back the model plaza.
-///
-/// Used only to answer "does this model cost anything", so that the picker can
-/// group the free ones. A model counts as free when every price the row
-/// publishes is zero; one non-zero price anywhere makes it paid. Rows whose
-/// prices cannot be read at all are reported as unknown rather than free,
-/// because a free group built out of unknowns advertises paid models as free.
-enum AgentSomeIMPublicPricing {
-    /// The subset of `models` that this price list says costs nothing.
-    /// A model absent from the list is absent from the result: unpriced is
-    /// not the same claim as free.
-    nonisolated static func freeModelIDs(from data: Data) throws -> Set<String> {
-        let body = try JSONDecoder().decode(Response.self, from: data)
-        var free: Set<String> = []
-        for row in body.data.items {
-            let id = row.model.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !id.isEmpty, let isFree = row.isFree, isFree else { continue }
-            free.insert(id.lowercased())
-        }
-        return free
-    }
-
-    /// The price list lives on the site's API host, not under the chat
-    /// provider's `/v1` base. Derived from the configured base URL's origin so
-    /// a staging relay resolves against its own host rather than production.
-    nonisolated static func endpoint(forBaseURL raw: String) -> URL? {
-        guard var components = URLComponents(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)),
-              components.scheme != nil, components.host != nil else { return nil }
-        components.path = "/api/v1/public/model-pricing"
-        components.query = nil
-        components.fragment = nil
-        return components.url
-    }
-
-    private struct Response: Decodable {
-        let data: Payload
-        struct Payload: Decodable { let items: [Row] }
-    }
-
-    private struct Row: Decodable {
-        let model: String
-        /// nil when the row publishes no readable price at all.
-        let isFree: Bool?
-
-        /// Prices arrive as decimal strings ("0.00"), and older rows have sent
-        /// numbers. Both are accepted; anything else counts as unreadable.
-        private static func amount(_ value: PriceValue?) -> Double? {
-            switch value {
-            case .none: return nil
-            case .number(let number): return number
-            case .text(let text):
-                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty ? nil : Double(trimmed)
-            }
-        }
-
-        init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            model = (try? container.decode(String.self, forKey: .model)) ?? ""
-            let fields: [CodingKeys] = [
-                .inputPrice, .outputPrice, .cacheWritePrice, .cacheReadPrice,
-                .pricePerImage, .pricePerRequest, .pricePerOutputSecond, .minChargePerRequest,
-            ]
-            var readable = false
-            var chargesSomething = false
-            for field in fields {
-                guard let amount = Row.amount(try? container.decode(PriceValue.self, forKey: field)) else { continue }
-                readable = true
-                if amount > 0 { chargesSomething = true }
-            }
-            isFree = readable ? !chargesSomething : nil
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case model
-            case inputPrice = "input_price_per_1m"
-            case outputPrice = "output_price_per_1m"
-            case cacheWritePrice = "cache_write_price_per_1m"
-            case cacheReadPrice = "cache_read_price_per_1m"
-            case pricePerImage = "price_per_image"
-            case pricePerRequest = "price_per_request"
-            case pricePerOutputSecond = "price_per_output_second"
-            case minChargePerRequest = "min_charge_per_request"
-        }
-
-        private enum PriceValue: Decodable {
-            case number(Double)
-            case text(String)
-
-            init(from decoder: Decoder) throws {
-                let single = try decoder.singleValueContainer()
-                if let number = try? single.decode(Double.self) { self = .number(number); return }
-                self = .text(try single.decode(String.self))
-            }
-        }
-    }
-}
-
 enum AgentSomeIMModelCapabilities {
     /// Decode one `/v1/model-capabilities` body into discoveries, sorted by
     /// id, non-conversational products dropped.
@@ -1187,6 +1061,10 @@ struct SomeIMModelCapabilitiesResponse: Decodable {
         let id: String
         let contextWindow: Int?
         let capabilityKinds: [String]?
+        /// nil when the row publishes no readable price at all. Unknown must
+        /// stay distinguishable from "not free": a free group built out of
+        /// unknowns advertises paid models as free.
+        let isFree: Bool?
 
         /// Every entry is `["llm"]` today. The field is read anyway so that an
         /// image or speech product appearing later does not land in a chat
@@ -1202,14 +1080,69 @@ struct SomeIMModelCapabilitiesResponse: Decodable {
                 id: id.trimmingCharacters(in: .whitespacesAndNewlines),
                 isHot: false,
                 isNew: false,
-                contextWindowTokens: (contextWindow ?? 0) > 0 ? contextWindow : nil
+                contextWindowTokens: (contextWindow ?? 0) > 0 ? contextWindow : nil,
+                isFree: isFree
             )
+        }
+
+        /// Prices arrive as decimal strings ("0.00"); numbers are accepted too
+        /// in case an older gateway sends them. Anything else is unreadable.
+        private static func amount(_ value: PriceValue?) -> Double? {
+            switch value {
+            case .none: return nil
+            case .number(let number): return number
+            case .text(let text):
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : Double(trimmed)
+            }
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            contextWindow = try? container.decodeIfPresent(Int.self, forKey: .contextWindow)
+            capabilityKinds = try? container.decodeIfPresent([String].self, forKey: .capabilityKinds)
+
+            // Free means every price this row publishes is zero. One non-zero
+            // price anywhere makes it paid — a model whose tokens are free but
+            // whose requests are billed is not a free model.
+            let priceFields: [CodingKeys] = [
+                .inputPrice, .outputPrice, .cacheWritePrice, .cacheReadPrice,
+                .pricePerImage, .pricePerRequest, .pricePerOutputSecond, .minChargePerRequest,
+            ]
+            var readable = false
+            var chargesSomething = false
+            for field in priceFields {
+                guard let amount = Model.amount(try? container.decode(PriceValue.self, forKey: field)) else { continue }
+                readable = true
+                if amount > 0 { chargesSomething = true }
+            }
+            isFree = readable ? !chargesSomething : nil
         }
 
         private enum CodingKeys: String, CodingKey {
             case id
             case contextWindow = "context_window"
             case capabilityKinds = "capability_kinds"
+            case inputPrice = "input_price_per_1m"
+            case outputPrice = "output_price_per_1m"
+            case cacheWritePrice = "cache_write_price_per_1m"
+            case cacheReadPrice = "cache_read_price_per_1m"
+            case pricePerImage = "price_per_image"
+            case pricePerRequest = "price_per_request"
+            case pricePerOutputSecond = "price_per_output_second"
+            case minChargePerRequest = "min_charge_per_request"
+        }
+
+        private enum PriceValue: Decodable {
+            case number(Double)
+            case text(String)
+
+            init(from decoder: Decoder) throws {
+                let single = try decoder.singleValueContainer()
+                if let number = try? single.decode(Double.self) { self = .number(number); return }
+                self = .text(try single.decode(String.self))
+            }
         }
     }
 }
