@@ -304,6 +304,17 @@ export default function App() {
     return () => window.removeEventListener('willdeep:context-changed', apply);
   }, []);
 
+  // rev 和 draftRev 必须在依赖里，不能只看 id。左边三个输入框绑的是
+  // `episodeDraft` 这个编辑缓冲，不是 `episodeView(episode)`：只按 id 同步
+  // 时，AI 写完这一集（或「串起全部 N 集」写到当前这一集）以后 draftRev
+  // 变了、id 没变，缓冲一个字不动——草稿里明明有正文，「完整剧本」还是空
+  // 的。切到别的集再切回来就好了，于是看起来像「只有当前这一集写不进去」。
+  //
+  // 比看不见更糟的是会丢：空缓冲一旦被碰一下再失焦，onBlur 判定
+  // `episodeDraft.script !== view.script` 成立，把空字符串当成用户的编辑
+  // 存进草稿，刚写好的正文就此覆盖掉；再点「保存本集」就连草稿都没了。
+  // 分镜那个缓冲（下面一条 effect）一开始就把 rev/draftRev 带上了，这里
+  // 是漏的。
   useEffect(() => {
     if (!episode) return;
     setEpisodeID(episode.id);
@@ -312,9 +323,13 @@ export default function App() {
     const view = episodeView(episode);
     setEpisodeDraft({ title: view.title, summary: view.summary, script: view.script });
     setScriptSelection(null);
-    setShowEpisodeDiff(false);
     void loadScriptChat(drama?.id ?? '');
-  }, [episode?.id]);
+  }, [episode?.id, episode?.rev, episode?.draftRev]);
+
+  // 换集时收起差异面板。和上面那条分开：draftRev 变化（AI 刚写完草稿）时
+  // 差异面板该留着，runEpisodeRequest 正是靠 setShowEpisodeDiff(true) 把它
+  // 打开的，合在一起会被这次同步立刻关掉。
+  useEffect(() => { setShowEpisodeDiff(false); }, [episode?.id]);
 
   useEffect(() => {
     if (!shot) { setShotDraft(emptyShot((episode?.shots.length ?? 0) + 1)); return; }

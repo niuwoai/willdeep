@@ -638,6 +638,57 @@ describe('Short Drama Studio', () => {
     expect(executeCommand.mock.calls.some(([command]) => command === 'drama.saveEpisode')).toBe(false);
   });
 
+  /// 真实故障：站在第 2 集点「AI 写这一集」，草稿里明明有正文，左边「完整
+  /// 剧本」还是空的——编辑缓冲只按 episode.id 同步，draftRev 变了 id 没变，
+  /// 缓冲一个字不动。切到别的集再切回来就出来了，于是看起来像「只有当前
+  /// 这一集写不进去」。
+  it('AI 写完这一集，不换集也要在正文框里看见', async () => {
+    const script = '陈默：这号码是三天后的。';
+    complete.mockResolvedValue({
+      text: '写好了。\n```short_drama_episode\n{"script":"' + script + '"}\n```',
+      model: 'fast', providerID: 'chat-a',
+    });
+    const updated = scriptDramaFixture(episodeFixture({ script: '', draftRev: 1, draft: { script } }));
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('assistant', 'x');
+      if (command === 'drama.saveDraft') return JSON.stringify({ ok: true, drama: updated });
+      return JSON.stringify({ ok: true });
+    });
+
+    await openScript(episodeFixture({ script: '' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 写这一集' }));
+    await waitFor(() => {
+      expect((document.querySelector('textarea.script-area') as HTMLTextAreaElement).value).toBe(script);
+    });
+    // 差异面板是这次生成打开的，同步不该把它关掉。
+    expect(document.querySelector('.diff-list')).not.toBeNull();
+  });
+
+  /// 「AI 串起全部 N 集」写到当前选中那一集时，同一条缓冲同一个毛病。
+  it('串起全季写到当前这一集，正文框跟着更新', async () => {
+    const script = '陈默：八百多万到账了。';
+    complete.mockResolvedValue({
+      text: '```short_drama_episodes\n{"episodes":[{"order":1,"summary":"奖金到账","script":"' + script + '"}]}\n```',
+      model: 'fast', providerID: 'chat-a',
+    });
+    const updated = scriptDramaFixture(episodeFixture({ script: '', draftRev: 1, draft: { summary: '奖金到账', script } }));
+    executeCommand.mockImplementation(async (command: string) => {
+      if (command === 'drama.list') return JSON.stringify({ ok: true, dramas });
+      if (command === 'chat.list') return JSON.stringify({ ok: true, messages: [] });
+      if (command === 'chat.append') return appendedMessage('assistant', 'x');
+      if (command === 'drama.saveEpisodeDrafts') return JSON.stringify({ ok: true, drama: updated, applied: [1] });
+      return JSON.stringify({ ok: true });
+    });
+
+    await openScript(episodeFixture({ script: '' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'AI 串起全部 1 集' }));
+    await waitFor(() => {
+      expect((document.querySelector('textarea.script-area') as HTMLTextAreaElement).value).toBe(script);
+    });
+  });
+
   it('局部改只替换选中那段，同一句台词出现两次也不会改错', async () => {
     const script = '林晚：你走。\n周野：别走。\n林晚：你走。';
     complete.mockResolvedValue({
