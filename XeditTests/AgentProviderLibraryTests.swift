@@ -877,8 +877,13 @@ struct AgentProviderLibraryTests {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+        // 读 dispatch 那个文件，不是 loop 那个：`dispatchAgentMessage` 在
+        // AppStateAgentLoop.swift 破了 3000 行硬上限时被整体搬进
+        // AppStateAgentLoopDispatch.swift。这条断言守的是「活的请求入口先修
+        // 凭据、再取配置」这个不变量，不是那段代码住在哪个文件里；文件一改
+        // 名它就静默变红，而红的是断言没跟上，不是不变量破了。
         let loopSource = try String(
-            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AppStateAgentLoop.swift"),
+            contentsOf: repositoryRoot.appendingPathComponent("Xedit/AppStateAgentLoopDispatch.swift"),
             encoding: .utf8
         )
         let retrySource = try String(
@@ -891,7 +896,7 @@ struct AgentProviderLibraryTests {
         """
 
         // Background wakeups now re-enter the same durable-kernel dispatch
-        // path, so AppStateAgentLoop has one shared request entry point.
+        // path, so there is one shared request entry point.
         let liveRepairBeforeSnapshot = """
         if agentLoopInferenceEnvironment == nil {
                     reconcileSomeIMProviderFromSharedSession()

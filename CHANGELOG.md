@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.368.0-rc3 - 2026-09-11
+
+### Changed
+
+- **`AppStateAgentLoop.swift` 拆到 3000 行以下，本地门禁的 complexity_guard 恢复绿色。** 该文件 3046 行，破了硬上限；而 `run_tests.sh` 用 `set -e`，它一红就掐断整条门禁，真正的单测一条都跑不到。现在 `hard=0`。
+  - 拆法是把 `dispatchAgentMessage` 整体搬进新文件 `AppStateAgentLoopDispatch.swift`，函数体一行没改。剩下 2705 行。
+  - **`runAgentLoop` 没有动。** 它一个函数就有约 2600 行，再拆是切开函数体而不是搬移声明，那是需要配套测试的重构，不是文件移动。留在原处，头注释里写清了。
+  - 顺带修一条被这次移动打断的源码扫描断言：`AgentProviderLibraryTests` 里那条「活的请求入口先修凭据、再取配置」读的是 `AppStateAgentLoop.swift` 的文本，而那段代码跟着函数搬走了。断言改读它现在真实所在的文件——守的是不变量，不是代码住在哪个文件里。
+
+### Notes
+
+- 全量单测 4135 条，1 条红：`AgentWorkerFirstContactTests` 的 2 秒硬窗口实测 2.57 秒。该文件本次未改动，单独复跑全绿，属计时类 flaky，未在本版调整。
+
 ## 1.368.0-rc2 - 2026-09-11
 
 ### Changed
