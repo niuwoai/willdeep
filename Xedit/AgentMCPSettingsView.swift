@@ -107,6 +107,13 @@ struct AgentMCPSettingsView: View {
             serverSection(title: L10n.Settings.MCP.userServers, source: .user)
             serverSection(title: L10n.Settings.MCP.cursorServers, source: .cursor)
             serverSection(title: L10n.Settings.MCP.codexServers, source: .codex)
+            // 插件带的 MCP 服务器此前完全不出现在这一页：启用插件就已经把它
+            // 注册进总列表（AgentMCPServerDirectory.list()）、进程也是宿主自己
+            // 拉起的，但界面上找不到它，于是既看不出它在跑，也调不了信任级别。
+            // 这一档不给编辑和删除——它的定义来自插件包里的 mcp.json，改这里
+            // 改不动那份文件；serverRow 里那些编辑分支本来就按 source == .user
+            // 卡着，所以复用同一行是安全的。
+            pluginServerSection
         }
         .formStyle(.grouped)
         .safeAreaInset(edge: .bottom) {
@@ -191,6 +198,28 @@ struct AgentMCPSettingsView: View {
             }
         } header: {
             Text(L10n.Settings.MCP.recommendedServers)
+        }
+    }
+
+    /// 插件来源的 MCP 服务器。
+    ///
+    /// 没有插件带 MCP 时整段不出现，而不是显示一个「暂无」空壳——绝大多数
+    /// 用户的插件都不带 MCP，常驻一行空提示只是噪声。
+    @ViewBuilder
+    private var pluginServerSection: some View {
+        let pluginServers = servers.filter { $0.source == .plugin }
+        if !pluginServers.isEmpty {
+            Section {
+                ForEach(pluginServers) { server in
+                    serverRow(server)
+                }
+            } header: {
+                Text(L10n.Settings.MCP.pluginServers)
+            } footer: {
+                Text(L10n.Settings.MCP.pluginServersFooter)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -413,6 +442,17 @@ struct AgentMCPSettingsView: View {
             do {
                 let result = try await AgentMCPBridge.listTools(arguments: ["server": .string(server.name)])
                 let count = AgentMCPBridge.parseToolCount(from: result.payload) ?? 0
+                // 顺手把插件 MCP 的工具目录刷一遍：模型看到的一等工具就是从
+                // 这份缓存来的，不在这里更新就只能等模型自己调一次
+                // list_mcp_tools。
+                if server.source == .plugin, let pluginID = AgentPluginMCPToolCatalog.pluginID(fromServerID: server.id) {
+                    AgentPluginMCPToolCatalog.record(
+                        serverID: server.id,
+                        pluginID: pluginID,
+                        serverName: server.name,
+                        listToolsPayload: result.payload
+                    )
+                }
                 await MainActor.run {
                     toolCounts[server.id] = count
                     serverMessages[server.id] = L10n.Settings.MCP.lastChecked(Date.now.formatted(date: .omitted, time: .shortened))

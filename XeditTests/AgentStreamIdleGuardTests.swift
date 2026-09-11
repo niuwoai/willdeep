@@ -76,12 +76,20 @@ struct AgentStreamIdleGuardTests {
         #expect(Date().timeIntervalSince(started) < 6)
     }
 
+    /// 判据是两条同时成立：每一段间隔都短于空转上限（所以时钟被续上），而
+    /// 整条流的总时长超过空转上限（所以「没续命也能过」被排除）。
+    ///
+    /// 余量刻意拉到十倍。原本是 4 个 payload × 150ms 对 0.4s 上限，余量 2.7
+    /// 倍，满载时一次 `Task.sleep` 被拖过线就误报 streamStalled——满载跑全量
+    /// 时它就是这么红的。现在 20 × 100ms 对 1.0s：间隔要被拖慢十倍才会误报，
+    /// 而总时长 2s 仍是上限的两倍，判据没有被削弱。
     @Test("payload arriving in time keeps the stream alive")
     func payloadResetsTheClock() async throws {
+        let payloadCount = 20
         let source = AsyncStream<String> { continuation in
             let producer = Task {
-                for index in 0..<4 {
-                    try? await Task.sleep(nanoseconds: 150_000_000)
+                for index in 0..<payloadCount {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
                     continuation.yield("data: \(index)")
                 }
                 continuation.finish()
@@ -89,10 +97,10 @@ struct AgentStreamIdleGuardTests {
             continuation.onTermination = { _ in producer.cancel() }
         }
         var count = 0
-        for try await _ in AgentStreamIdleGuard.lines(source, idleTimeout: 0.4) {
+        for try await _ in AgentStreamIdleGuard.lines(source, idleTimeout: 1.0) {
             count += 1
         }
-        #expect(count == 4)
+        #expect(count == payloadCount)
     }
 
     @Test("the stall error names the idle limit")

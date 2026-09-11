@@ -312,6 +312,9 @@ final class AgentRuntime: ObservableObject, Identifiable {
     /// card so it shows only files Agent touched — never the user's own
     /// uncommitted edits or untracked junk like `__pycache__/*.pyc`.
     @Published var agentEditedPaths: Set<String> = []
+    /// 见 AgentFileObservationLedger。不标 @Published：它不驱动任何界面，
+    /// 每次读文件都发一次变更通知只会白触发 SwiftUI 重算。
+    var fileObservations: [String: AgentFileObservation] = [:]
     /// User-facing files created during this conversation. Kept separately
     /// from Git state so committing an output does not make it disappear from
     /// the right-rail artifact list.
@@ -531,6 +534,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         self.contextSummaryThroughMessageID = session.contextSummaryThroughMessageID
         self.didEditFiles = session.didEditFiles
         self.agentEditedPaths = Set(session.agentEditedPaths)
+        self.fileObservations = session.fileObservations
         self.agentArtifactPaths = Set(session.agentArtifactPaths)
         self.interactionMode = session.interactionMode
         self.approvalMode = session.approvalMode
@@ -722,6 +726,7 @@ final class AgentRuntime: ObservableObject, Identifiable {
         }
         session.didEditFiles = didEditFiles
         session.agentEditedPaths = agentEditedPaths.sorted()
+        session.fileObservations = fileObservations
         session.agentArtifactPaths = agentArtifactPaths.sorted()
         session.interactionMode = interactionMode
         session.approvalMode = approvalMode

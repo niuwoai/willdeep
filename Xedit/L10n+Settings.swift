@@ -748,6 +748,14 @@ extension L10n {
             static let userServers = String(localized: "settings.mcp.user-servers", defaultValue: "User MCP Servers")
             static let cursorServers = String(localized: "settings.mcp.cursor-servers", defaultValue: "Cursor MCP Servers")
             static let codexServers = String(localized: "settings.mcp.codex-servers", defaultValue: "Codex MCP Servers")
+            static let pluginServers = String(
+                localized: "settings.mcp.plugin-servers",
+                defaultValue: "Plugin MCP Servers"
+            )
+            static let pluginServersFooter = String(
+                localized: "settings.mcp.plugin-servers-footer",
+                defaultValue: "Provided by enabled plugins. They register while the plugin is enabled and disappear when it is turned off. Their definitions live in the plugin package, so they cannot be edited or deleted here."
+            )
             static let noServers = String(localized: "settings.mcp.no-servers", defaultValue: "No servers in this group.")
             static let logout = String(localized: "settings.mcp.logout", defaultValue: "Logout")
             static func toolsEnabled(_ a1: String) -> String {

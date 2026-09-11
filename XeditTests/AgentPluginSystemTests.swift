@@ -459,6 +459,20 @@ struct AgentPluginSystemTests {
         ])
         #expect(try AgentMCPServerDirectory.pluginServer(pluginID: "first-plugin", named: "shared-server").id
             == "plugin:first-plugin:shared-server")
+
+        // 停用插件时要按 id 前缀回收它的 stdio 子进程。前缀由
+        // AgentMCPBridge.pluginConnectionIDPrefix 造，服务器 id 由
+        // loadPluginServers 造——两者对不上时回收会静默匹配不到任何连接，
+        // 进程留着跑而没有任何报错。这里把两个来源钉在一起。
+        let prefix = AgentMCPBridge.pluginConnectionIDPrefix(pluginID: "first-plugin")
+        #expect(prefix == "plugin:first-plugin:")
+        #expect(servers.filter { $0.id.hasPrefix(prefix ?? "\u{0}") }.map(\.id)
+            == ["plugin:first-plugin:shared-server"])
+        // 前缀必须以分隔符收尾，否则 `first-plugin` 的回收会连带打到
+        // `first-plugin-extra` 这种同前缀插件。
+        #expect(AgentMCPBridge.pluginConnectionIDPrefix(pluginID: "first")
+            .map { "plugin:first-plugin:shared-server".hasPrefix($0) } == false)
+        #expect(AgentMCPBridge.pluginConnectionIDPrefix(pluginID: "  ") == nil)
     }
 
     @Test @MainActor

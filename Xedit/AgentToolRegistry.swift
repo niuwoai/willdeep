@@ -1920,7 +1920,10 @@ enum AgentToolRegistry {
         interactionMode: AgentInteractionMode = .normal,
         executionAgent: AgentExecutionAgent = .willDeep,
         delegationPolicy: AgentDelegationPolicy = .automatic,
-        loadedPacks: Set<AgentToolPackID>? = nil
+        loadedPacks: Set<AgentToolPackID>? = nil,
+        /// 已启用插件带来的 MCP 工具。由调用方传进来而不是在这里查，是为了
+        /// 不让一个纯粹的表过滤函数去碰 UserDefaults 与服务器目录。
+        pluginMCPTools: [AgentToolDescriptor] = []
     ) -> [AgentToolDescriptor] {
         let effectiveLoadedPacks = loadedPacks.map {
             AgentToolPackCatalog.effectiveLoadedPacks(
@@ -1929,7 +1932,12 @@ enum AgentToolRegistry {
                 delegationPolicy: delegationPolicy
             )
         }
-        return all.filter { descriptor in
+        let pluginMCPNames = Set(pluginMCPTools.map(\.name))
+        return (all + pluginMCPTools).filter { descriptor in
+            // 插件 MCP 工具不归任何工具包。它们的门禁是插件自己的启用开关，
+            // 调用方传进来就说明该暴露；不在这里放行的话，惰性注册模式下
+            // 「没有 packID」这一条会把它们全部过滤掉，于是永远不出现。
+            if pluginMCPNames.contains(descriptor.name) { return true }
             // `/no-subagent` is enforced here rather than by prompt, so a
             // model that ignores the instruction still cannot delegate.
             if !delegationPolicy.allowsTool(named: descriptor.name) {

@@ -700,7 +700,12 @@ extension AppState {
                 interactionMode: runtime.interactionMode,
                 executionAgent: runtime.executionAgent,
                 delegationPolicy: runtime.currentTurnDelegationPolicy,
-                loadedPacks: runtime.loadedToolPacks
+                loadedPacks: runtime.loadedToolPacks,
+                // 已启用插件带的 MCP 工具，从缓存读，不在这里拉 tools/list：
+                // 那会把 stdio 子进程拉起来，而这是每回合都走的路径。
+                pluginMCPTools: AgentPluginMCPToolCatalog.descriptors(
+                    activeServers: AgentMCPServerDirectory.list()
+                )
             )
             let requestWithoutRunwayHandoff = [AgentMessage(role: .system, content: systemPrompt)]
                 + collapsedHistory
@@ -2345,6 +2350,21 @@ extension AppState {
                         }
                     }
 
+                    // 写入前查一次台账：这个文件在本会话读过之后被外部改过吗。
+                    // 只取证不拦路（设计文档 §5 第 1 条）——台账误报时最坏是
+                    // 模型多看一句话，不是用户改不了文件。必须在工具执行**之前**
+                    // 取，否则 Agent 自己刚写的那一笔会被当成外部漂移。
+                    let pendingDriftNotice: String? = {
+                        guard Self.fileWritingToolNames.contains(call.toolName),
+                              let path = argsDict["path"]?.stringValue() else { return nil }
+                        guard let root = workspaceURL
+                            ?? runtime.workspaceRootPath.map({ URL(fileURLWithPath: $0) }) else { return nil }
+                        let absolute = path.hasPrefix("/")
+                            ? path
+                            : root.appendingPathComponent(path).standardizedFileURL.path
+                        return fileDriftNotice(for: runtime, absolutePath: absolute)
+                    }()
+
                     let producesArtifacts = Self.toolProducesSessionArtifacts(call.toolName)
                     var toolBaselineSnapshot = turnBaselineSnapshot
                     if producesArtifacts, let workspaceURL {
@@ -2448,6 +2468,9 @@ extension AppState {
                         }
                         runtime.toolCalls[index].arguments[AgentSandboxPolicy.sandboxEscalationRequestArgumentKey] = .bool(false)
                     }
+                    recordFileObservations(
+                        for: runtime, toolName: call.toolName, arguments: argsDict, result: result
+                    )
                     runtime.recordComputerUseActivity(toolName: call.toolName, images: result.images)
                     runtime.deepAdmissionObservation.recordToolSuccess(call.toolName)
                     let agentCreatedTerminalTabs = agentTerminalController.tabs.filter {
@@ -2496,7 +2519,10 @@ extension AppState {
                     appendToolMessage(
                         for: runtime,
                         toolCallID: call.externalID,
-                        payload: result.payload,
+                        // 漂移说明追加在正文末尾而不是改 result：AgentToolResult
+                        // 的 payload 是 let，而且这句话是宿主的交代，不是工具
+                        // 自己的输出。
+                        payload: pendingDriftNotice.map { "\(result.payload)\n\n\($0)" } ?? result.payload,
                         images: result.images,
                         outcomeStatus: .succeeded,
                         toolName: call.toolName,

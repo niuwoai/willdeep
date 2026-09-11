@@ -1105,6 +1105,9 @@ nonisolated enum AgentSessionStore {
         copy.documentAttachments = []
         copy.knowledgeFolders = []
         copy.sidePanelState = .empty
+        // 台账只服务本会话内部的归属判定，侧边栏目录一行都不读。不清掉的话
+        // 每次 persist 都往侧车多写一份——会话侧车 70% 废字节就是这么攒的。
+        copy.fileObservations = [:]
         return copy
     }
 

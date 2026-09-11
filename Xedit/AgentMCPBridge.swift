@@ -22,6 +22,31 @@ nonisolated enum AgentMCPResourceNotificationKey {
 enum AgentMCPBridge {
     private static let stdioConnectionPool = MCPStdioConnectionPool()
 
+    /// 停用或卸载插件后回收它的 stdio 子进程。
+    ///
+    /// 停用插件时 `AgentMCPServerDirectory.list()` 立刻不再返回它的服务器，
+    /// 但连接池里已经起好的进程没人管：池子的存活周期是整个 App，而它只在
+    /// 请求出错时自己 `invalidate()`。于是停用一个插件之后，它的 MCP 子进程
+    /// 还在后台跑着，直到退出 App。
+    ///
+    /// 按 id 前缀清：插件服务器的 id 形如 `plugin:<插件ID>:<服务名>`，一个
+    /// 插件可以声明多个服务器，所以匹配的是前缀而不是某一个 id。
+    static func invalidatePluginConnections(pluginID: String) {
+        guard let prefix = pluginConnectionIDPrefix(pluginID: pluginID) else { return }
+        stdioConnectionPool.invalidateAll(idPrefix: prefix)
+    }
+
+    /// 回收时用来匹配连接的 id 前缀。
+    ///
+    /// 单独拿出来是为了让它和 `AgentMCPServerDirectory.loadPluginServers()` 造
+    /// 出的 id 形状咬在同一处，并且可以被测试直接钉住：这俩一旦对不上，回收
+    /// 会静默地什么都不匹配——子进程照样留着，而没有任何报错。
+    nonisolated static func pluginConnectionIDPrefix(pluginID: String) -> String? {
+        let trimmed = pluginID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return "plugin:\(trimmed):"
+    }
+
     static func listServers() throws -> AgentToolResult {
         let servers = AgentMCPServerDirectory.list()
         guard !servers.isEmpty else {
@@ -48,6 +73,17 @@ enum AgentMCPBridge {
     static func listTools(arguments: [String: AgentJSONValue]) async throws -> AgentToolResult {
         let server = try AgentMCPServerDirectory.server(named: requiredString("server", in: arguments))
         let result = try await runRequest(server: server, method: "tools/list", params: [:])
+        // 模型自己问过一次，就把插件 MCP 的工具目录一并更新——下一回合起这些
+        // 工具就是一等的，不用再走三段式。
+        if server.source == .plugin,
+           let pluginID = AgentPluginMCPToolCatalog.pluginID(fromServerID: server.id) {
+            AgentPluginMCPToolCatalog.record(
+                serverID: server.id,
+                pluginID: pluginID,
+                serverName: server.name,
+                listToolsPayload: result
+            )
+        }
         return AgentToolResult(summary: "tools from \(server.name)", payload: result)
     }
 
@@ -226,6 +262,20 @@ enum AgentMCPBridge {
             if connections[key] === connection {
                 connections.removeValue(forKey: key)
             }
+        }
+
+        /// 关掉 id 以某前缀开头的全部连接。
+        ///
+        /// key 的第一段就是 `server.id`（见下面 connectionKey），所以前缀匹配
+        /// 直接落在 key 上。先从字典里摘掉再 invalidate：invalidate 是把重置
+        /// 派到连接自己的队列上异步做的，留在字典里会被下一次请求捞出来复用
+        /// 一个正在关的连接。
+        func invalidateAll(idPrefix: String) {
+            lock.lock()
+            let doomed = connections.filter { $0.key.hasPrefix(idPrefix) }
+            for key in doomed.keys { connections.removeValue(forKey: key) }
+            lock.unlock()
+            for connection in doomed.values { connection.invalidate() }
         }
 
         private func connectionKey(for server: AgentMCPServerConfig) -> String {

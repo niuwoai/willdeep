@@ -164,6 +164,14 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
     /// session. The worktree-change card reads from this — anything not
     /// in here (user's own diffs, untracked `.pyc` etc.) is filtered out.
     var agentEditedPaths: [String]
+    /// 本会话看过 / 写过哪些文件，以及当时它们是什么样。
+    ///
+    /// 写集只记得动过哪些路径，记不住动成什么样，所以说不出「文件时间戳是
+    /// 20:29」这种证据。设计见 docs/FILE_CHANGE_PROVENANCE_DESIGN.md。
+    /// 上限 500 条由 AgentFileObservationLedger 负责，且**必须**被
+    /// AgentSessionStore.metadataSession 清空，否则目录侧车每次 persist 都白
+    /// 背一份无人读的字节。
+    var fileObservations: [String: AgentFileObservation]
     /// Workspace-relative, user-facing files created by the Agent in this
     /// conversation. Unlike `agentEditedPaths`, this is an artifact ledger:
     /// it survives Git commits and excludes transient build/cache output.
@@ -293,6 +301,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         contextSummaryThroughMessageID: AgentMessage.ID? = nil,
         didEditFiles: Bool = false,
         agentEditedPaths: [String] = [],
+        fileObservations: [String: AgentFileObservation] = [:],
         agentArtifactPaths: [String] = [],
         interactionMode: AgentInteractionMode = .normal,
         approvalMode: AgentApprovalMode = .smart,
@@ -347,6 +356,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.contextSummaryThroughMessageID = contextSummaryThroughMessageID
         self.didEditFiles = didEditFiles
         self.agentEditedPaths = agentEditedPaths
+        self.fileObservations = fileObservations
         self.agentArtifactPaths = agentArtifactPaths
         self.interactionMode = interactionMode
         self.approvalMode = approvalMode
@@ -489,7 +499,7 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         case id, title, workspaceRootPath, workspaceLocation, sidebarWorkspaceRootPath, worktreeRecoveryInfo, projectID, presentationScope, dispatchParentProjectID, dispatchTaskID, localWorkspaceIdentity, modelID
         case providerEntryID, providerID, providerDisplayName, openAIResponsesContinuation, managedRouting
         case createdAt, updatedAt, messages, hostWorkerRuns, coordinatorWorkerRuns, auxiliaryModelRequests, contextSummary, contextSummaryThroughMessageID, contextCheckpoint
-        case didEditFiles, agentEditedPaths, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
+        case didEditFiles, agentEditedPaths, fileObservations, agentArtifactPaths, interactionMode, approvalMode, executionAgent, delegatedTaskRuns, activeExperts, currentPlan, currentGoal, goalPlanningState, goalRoadmap, goalTurnRecoveryCheckpoint, learningEvents, latestTurnRecall, documentAttachments, knowledgeFolders, documentTaskMode, redactSensitiveAttachmentContent, sidePanelState
         case pinnedAt, archivedAt, titleIsUserSet
         case originRoutineID, lastTurnFailure
     }
@@ -535,6 +545,11 @@ nonisolated struct AgentSession: Identifiable, Codable, Equatable {
         self.contextSummaryThroughMessageID = try c.decodeIfPresent(AgentMessage.ID.self, forKey: .contextSummaryThroughMessageID)
         self.didEditFiles = try c.decodeIfPresent(Bool.self, forKey: .didEditFiles) ?? false
         self.agentEditedPaths = try c.decodeIfPresent([String].self, forKey: .agentEditedPaths) ?? []
+        // 用 try? 而不是 try：台账是辅助证据，一条坏掉的记录不该让整段对话
+        // 打不开。同 lastTurnFailure / goalRoadmap 的既有取舍。
+        self.fileObservations = (try? c.decodeIfPresent(
+            [String: AgentFileObservation].self, forKey: .fileObservations
+        )) ?? [:]
         self.agentArtifactPaths = try c.decodeIfPresent([String].self, forKey: .agentArtifactPaths) ?? []
         self.interactionMode = try c.decodeIfPresent(AgentInteractionMode.self, forKey: .interactionMode) ?? .normal
         self.approvalMode = try c.decodeIfPresent(AgentApprovalMode.self, forKey: .approvalMode) ?? .smart

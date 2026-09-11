@@ -765,7 +765,24 @@ extension AppState {
                 current: snapshot
             )
             : []
-        let attributedPaths = runtime.agentEditedPaths.union(changedPaths)
+        // 台账能指认的外部改动不并进写集。
+        //
+        // `changedPaths` 来自工具执行窗口内的快照对比：工具跑的那几秒里用户
+        // 手改了文件，这笔本来会被算成 Agent 的。台账里若记着这个路径是本会话
+        // **读**过的、且磁盘现在比读的时候新，那它是外部动的，不是我们动的。
+        // 只排除能指认的那些——台账里没有的路径照旧并进来，缺凭据不等于不是
+        // 我们改的（设计文档 §5 第 2 条的反向：不得因为没证据就甩锅）。
+        let externallyChanged = changedPaths.filter { path in
+            guard let observation = runtime.fileObservations[
+                AgentFileObservationLedger.normalize(path)
+            ] else { return false }
+            guard observation.kind == .read, observation.source == .disk else { return false }
+            let absolute = workspaceURL.appendingPathComponent(path).standardizedFileURL.path
+            guard let metadata = Self.fileSignatureMetadata(atPath: absolute) else { return false }
+            return metadata.modified > observation.modifiedAt.timeIntervalSince1970
+        }
+        let attributedPaths = runtime.agentEditedPaths
+            .union(changedPaths.subtracting(externallyChanged))
 
         let filteredChanges = snapshot.changes.filtering(paths: attributedPaths)
         if runtime.worktreeChanges != filteredChanges {

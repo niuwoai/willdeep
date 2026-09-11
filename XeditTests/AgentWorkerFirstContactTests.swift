@@ -16,13 +16,20 @@ struct AgentWorkerFirstContactTests {
                 timeout: 0.2,
                 hasMadeContact: { false },
                 operation: { () async throws -> Int in
-                    try await Task.sleep(nanoseconds: 5_000_000_000)
+                    // 六十秒而不是五秒：证据窗口和它的差距越大，判定越不受
+                    // 机器负载影响。race 会在 0.2s 的超时上返回，并不真等它。
+                    try await Task.sleep(nanoseconds: 60_000_000_000)
                     return 1
                 }
             )
         }
-        // It did not wait for the five-second operation.
-        #expect(Date().timeIntervalSince(started) < 2)
+        // 没有去等那个六十秒的操作。
+        //
+        // 窗口从 2 秒放宽到 10 秒：原来的 2 秒在满载时被调度饥饿击穿过（实测
+        // 3.6 秒），而放宽窗口不削弱判据——操作本身要六十秒，十秒内返回同样
+        // 只能是超时路径走通了。要卡住的是「有没有去等那个操作」，不是「返回
+        // 得有多快」。
+        #expect(Date().timeIntervalSince(started) < 10)
     }
 
     @Test("the error names the deadline and is not a cancellation")

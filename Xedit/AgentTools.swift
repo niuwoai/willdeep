@@ -695,7 +695,26 @@ enum AgentToolRunner {
                 result = try await AgentEmbeddedBrowserTools.failedResources(arguments: activeArguments, runtimeID: activeContext.runtimeID)
             case "embedded_browser_capture_screenshot":
                 result = try await AgentEmbeddedBrowserTools.captureScreenshot(arguments: activeArguments, runtimeID: activeContext.runtimeID)
-            case "list_mcp_servers":
+            case let mcpTool where mcpTool.hasPrefix(AgentPluginMCPToolCatalog.exposedNamePrefix):
+            // 插件 MCP 工具的一等入口。解不回来就报错而不是静默回落到别的
+            // 工具：名字对不上通常是缓存过期，让模型看见比让它以为调过更好。
+            guard let route = AgentPluginMCPToolCatalog.route(exposedName: mcpTool) else {
+                throw AgentToolError.invalidArgument(
+                    "Unknown plugin MCP tool \(mcpTool). Its plugin may have been disabled; use list_mcp_servers to see what is available now."
+                )
+            }
+            let rawArguments = activeArguments["arguments_json"]?.stringValue() ?? "{}"
+            let parsed = (try? JSONSerialization.jsonObject(
+                with: Data(rawArguments.utf8), options: []
+            )) as? [String: Any] ?? [:]
+            let payload = try await AgentMCPBridge.callPluginTool(
+                pluginID: route.pluginID,
+                serverName: route.serverName,
+                toolName: route.toolName,
+                arguments: parsed
+            )
+            return AgentToolResult(summary: "\(route.serverName)/\(route.toolName)", payload: payload)
+        case "list_mcp_servers":
                 result = try AgentMCPBridge.listServers()
             case "list_mcp_tools":
                 result = try await AgentMCPBridge.listTools(arguments: activeArguments)

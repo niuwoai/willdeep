@@ -241,6 +241,13 @@ final class AgentPluginRegistry: ObservableObject {
         }
         state.disabledPluginIDs = disabled.sorted()
         persistAndRebuild()
+        // 停用后 AgentMCPServerDirectory.list() 立刻不再返回它的服务器，但连接
+        // 池的存活周期是整个 App，已经起好的 stdio 子进程没人回收——停用一个
+        // 插件之后它还在后台跑着，直到退出 App。
+        if !enabled {
+            AgentMCPBridge.invalidatePluginConnections(pluginID: pluginID)
+            AgentPluginMCPToolCatalog.invalidate(pluginID: pluginID)
+        }
     }
 
     func approve(package: AgentPluginPackage, source: AgentPluginInstallSourceRecord) {
@@ -292,6 +299,9 @@ final class AgentPluginRegistry: ObservableObject {
         state.disabledPluginIDs.removeAll { $0 == pluginID }
         state.pinnedDestinationIDs.removeAll { $0.hasPrefix("\(pluginID):") }
         persistAndRebuild()
+        // 卸载同理：包都没了，它的子进程更没有理由还在跑。
+        AgentMCPBridge.invalidatePluginConnections(pluginID: pluginID)
+        AgentPluginMCPToolCatalog.invalidate(pluginID: pluginID)
     }
 
     func installSource(for package: AgentPluginPackage) -> AgentPluginInstallSourceRecord? {
